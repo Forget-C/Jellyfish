@@ -17,6 +17,7 @@ import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
+  FileTextOutlined,
   VideoCameraOutlined,
   MergeCellsOutlined,
   EyeInvisibleOutlined,
@@ -132,6 +133,19 @@ const ChapterManagement: React.FC = () => {
       dataIndex: 'title',
       key: 'title',
       ellipsis: true,
+      render: (title: string, record) => (
+        <Link
+          to={`/projects/${projectId}/chapters/${record.id}/prep`}
+          onClick={(e) => {
+            // 避免被 Table 行选择/点击行为吞掉
+            e.stopPropagation()
+          }}
+          className="block truncate text-blue-600 hover:text-blue-800"
+          title="进入章节编辑"
+        >
+          {title}
+        </Link>
+      ),
     },
     {
       title: '内容摘要',
@@ -169,6 +183,14 @@ const ChapterManagement: React.FC = () => {
         <Space>
           <Button type="link" size="small" icon={<EditOutlined />} onClick={() => openEditModal(record)}>
             编辑
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            icon={<FileTextOutlined />}
+            onClick={() => navigate(`/projects/${projectId}/chapters/${record.id}/prep`)}
+          >
+            章节编辑
           </Button>
           <Button type="link" size="small" danger icon={<DeleteOutlined />}>
             删除

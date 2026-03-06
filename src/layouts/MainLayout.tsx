@@ -55,6 +55,7 @@ const MainLayout: React.FC = () => {
       settings: t('menu.settings'),
       chapters: '章节管理',
       studio: '分镜工作室',
+      prep: '章节编辑',
       editor: '视频剪辑',
       edit: '编辑',
     }
