@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "lint": "eslint . --ext .ts,.tsx",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "openapi:fetch": "curl -sSf http://127.0.0.1:8000/openapi.json -o ./openapi.json",
+    "openapi:gen": "pnpm exec -- openapi --input ./openapi.json --output ./src/services/generated --client fetch --useOptions --useUnionTypes",
+    "openapi:update": "pnpm run openapi:fetch && pnpm run openapi:gen"
   },
   "dependencies": {
     "@ant-design/icons": "^5.2.6",
@@ -23,17 +26,18 @@
     "zustand": "^5.0.11"
   },
   "devDependencies": {
-    "@types/react-beautiful-dnd": "^13.1.8",
     "@types/react": "^18.2.37",
+    "@types/react-beautiful-dnd": "^13.1.8",
     "@types/react-dom": "^18.2.15",
     "@typescript-eslint/eslint-plugin": "^6.13.2",
     "@typescript-eslint/parser": "^6.13.2",
     "@vitejs/plugin-react": "^4.2.1",
-    "msw": "^2.6.6",
     "autoprefixer": "^10.4.16",
     "eslint": "^8.54.0",
     "eslint-plugin-react": "^7.33.2",
     "eslint-plugin-react-hooks": "^4.6.0",
+    "msw": "^2.6.6",
+    "openapi-typescript-codegen": "^0.30.0",
     "postcss": "^8.4.32",
     "tailwindcss": "^3.3.6",
     "typescript": "^5.2.2",

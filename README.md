@@ -58,6 +58,22 @@
 - 后端（可选开源部分）：Node.js / NestJS / FastAPI / Spring Boot
 - AI 生成层：对接多种大模型 API（OpenAI / Anthropic / Midjourney / Runway / Kling / Luma 等）
 
+## 🔁 前端 OpenAPI 请求/类型生成与更新
+
+前端请求函数与数据结构由后端 OpenAPI 文档生成，生成目录为 `front/src/services/generated/`，OpenAPI 文档缓存为 `front/openapi.json`。
+
+在后端开发服务已启动（默认 `http://127.0.0.1:8000`）时，在前端目录执行：
+
+```bash
+cd front
+pnpm run openapi:update
+```
+
+说明：
+
+- `openapi:update` 会先拉取 `http://127.0.0.1:8000/openapi.json` 到 `front/openapi.json`，再生成代码到 `front/src/services/generated/`
+- 如需修改请求基础地址（默认同源 `/api`），可在应用启动处调用 `initOpenAPI('http://127.0.0.1:8000')`，配置文件见 `front/src/services/openapi.ts`
+
 
 ## 🚧 当前状态
 项目原型规划中

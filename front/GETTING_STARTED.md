@@ -81,6 +81,21 @@ src/
 
 ## 常见开发任务
 
+### 更新前端 OpenAPI 请求函数与类型
+
+后端开发服务启动后（默认 `http://127.0.0.1:8000`），在前端目录执行：
+
+```bash
+pnpm run openapi:update
+```
+
+生成目录：
+
+- `src/services/generated/`：生成的请求函数与类型定义
+- `openapi.json`：从后端拉取的 OpenAPI 文档缓存
+
+默认请求基础地址为同源 `/api`（见 `src/services/openapi.ts`），如需直连本地后端，可在应用启动时调用 `initOpenAPI('http://127.0.0.1:8000')`。
+
 ### 创建新组件
 
 在 `src/components/` 目录创建新组件文件：
