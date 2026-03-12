@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
   Badge,
   Button,
@@ -7,6 +7,7 @@ import {
   Divider,
   Dropdown,
   Empty,
+  Checkbox,
   Input,
   Layout,
   List,
@@ -16,6 +17,7 @@ import {
   Space,
   Switch,
   Tag,
+  Tabs,
   Tooltip,
   message,
 } from 'antd'
@@ -38,7 +40,6 @@ import {
   VideoCameraOutlined,
 } from '@ant-design/icons'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import api from '../../../services/aiStudioApi'
 import { StudioChaptersService } from '../../../services/generated'
 import type { ChapterRead } from '../../../services/generated'
 import type { Chapter } from '../../../mocks/data'
@@ -93,26 +94,18 @@ type ExtractResults = {
   props: PropItem[]
 }
 
-type Version = {
-  id: string
-  label: string
-  at: number
-  text: string
+// TODO: 后续接入“章节草稿/版本历史/智能精简”等接口后，可移除当前页面的 Mock 逻辑与预置数据。
+
+type EntityKind = 'roles' | 'scenes' | 'props'
+
+type ExistingEntities = {
+  roles: string[]
+  scenes: string[]
+  props: string[]
 }
 
-function nowLabel() {
-  const d = new Date()
-  const hh = String(d.getHours()).padStart(2, '0')
-  const mm = String(d.getMinutes()).padStart(2, '0')
-  return `${hh}:${mm}`
-}
-
-function storageKey(chapterId: string) {
-  return `jellyfish_chapter_prep_v1:${chapterId}`
-}
-
-function versionsKey(chapterId: string) {
-  return `jellyfish_chapter_prep_versions_v1:${chapterId}`
+function entitiesStorageKey(projectId: string) {
+  return `jellyfish_project_entities_v1:${projectId}`
 }
 
 function extractMock(text: string): ExtractResults {
@@ -195,27 +188,37 @@ const ChapterPrep: React.FC = () => {
   const [titleEditing, setTitleEditing] = useState(false)
   const [titleValue, setTitleValue] = useState('')
 
-  const [text, setText] = useState('')
-  const [originalText, setOriginalText] = useState('')
-  const [simplifiedText, setSimplifiedText] = useState<string | null>(null)
-  const [compareMode, setCompareMode] = useState(false)
+  type EditorMode = 'raw' | 'condensed' | 'compare'
+  const [mode, setMode] = useState<EditorMode>('raw')
+  const [rawText, setRawText] = useState('')
+  const [condensedText, setCondensedText] = useState('')
+  const [editorText, setEditorText] = useState('')
+  const [compareRaw, setCompareRaw] = useState('')
+  const [compareCondensed, setCompareCondensed] = useState('')
 
   const [saving, setSaving] = useState(false)
-  const saveTimerRef = useRef<number | null>(null)
 
   const [editorModalOpen, setEditorModalOpen] = useState(false)
+  const [historyModalOpen, setHistoryModalOpen] = useState(false)
 
-  const [versions, setVersions] = useState<Version[]>([])
   const [extracting, setExtracting] = useState(false)
   const [results, setResults] = useState<ExtractResults>({ storyboards: [], roles: [], scenes: [], props: [] })
+  const [extractReviewOpen, setExtractReviewOpen] = useState(false)
+  const [extractReviewTab, setExtractReviewTab] = useState<EntityKind>('roles')
+  const [existingEntities, setExistingEntities] = useState<ExistingEntities>({ roles: [], scenes: [], props: [] })
+  const [selectedEntityKeys, setSelectedEntityKeys] = useState<Record<EntityKind, string[]>>({
+    roles: [],
+    scenes: [],
+    props: [],
+  })
 
   const [selectedKind, setSelectedKind] = useState<ExtractKind>('storyboards')
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
   const [agent, setAgent] = useState<'default' | 'plot_v2' | 'role_v13'>('default')
 
-  const plainWordCount = useMemo(() => text.trim().length, [text])
-  const paragraphCount = useMemo(() => text.split(/\n\s*\n/).filter((p) => p.trim()).length, [text])
+  const plainWordCount = useMemo(() => editorText.trim().length, [editorText])
+  const paragraphCount = useMemo(() => editorText.split(/\n\s*\n/).filter((p) => p.trim()).length, [editorText])
 
   useEffect(() => {
     if (!chapterId) return
@@ -229,89 +232,84 @@ const ChapterPrep: React.FC = () => {
         const ui = toUIChapter(data)
         setChapter(ui)
         setTitleValue(ui.title)
+
+        const nextRaw = data.raw_text ?? ''
+        const nextCondensed = data.condensed_text ?? ''
+        setRawText(nextRaw)
+        setCondensedText(nextCondensed)
+        setMode('raw')
+        setEditorText(nextRaw)
+        setResults(extractMock(nextRaw))
       })
       .catch(() => {
         setChapter(null)
       })
   }, [chapterId])
 
-  // load draft
   useEffect(() => {
-    if (!chapterId) return
+    if (!projectId) return
     try {
-      const raw = window.localStorage.getItem(storageKey(chapterId))
-      const vraw = window.localStorage.getItem(versionsKey(chapterId))
-      const savedText = raw ? String(raw) : ''
-      const savedVersions = vraw ? (JSON.parse(vraw) as Version[]) : []
-      setText(savedText)
-      setOriginalText(savedText)
-      setVersions(Array.isArray(savedVersions) ? savedVersions : [])
-      setResults(extractMock(savedText))
+      const raw = window.localStorage.getItem(entitiesStorageKey(projectId))
+      const parsed = raw ? (JSON.parse(raw) as ExistingEntities) : null
+      if (parsed && typeof parsed === 'object') {
+        setExistingEntities({
+          roles: Array.isArray(parsed.roles) ? parsed.roles : [],
+          scenes: Array.isArray(parsed.scenes) ? parsed.scenes : [],
+          props: Array.isArray(parsed.props) ? parsed.props : [],
+        })
+      }
     } catch {
       // ignore
     }
-  }, [chapterId])
+  }, [projectId])
 
-  // auto save
   useEffect(() => {
-    if (!chapterId) return
-    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
-    setSaving(true)
-    saveTimerRef.current = window.setTimeout(() => {
-      try {
-        window.localStorage.setItem(storageKey(chapterId), text)
-        window.localStorage.setItem(versionsKey(chapterId), JSON.stringify(versions.slice(0, 20)))
-      } catch {
-        // ignore
-      }
-      setSaving(false)
-      saveTimerRef.current = null
-    }, 3200)
-    return () => {
-      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
-      saveTimerRef.current = null
+    if (!projectId) return
+    try {
+      window.localStorage.setItem(entitiesStorageKey(projectId), JSON.stringify(existingEntities))
+    } catch {
+      // ignore
     }
-  }, [chapterId, text, versions])
+  }, [projectId, existingEntities])
 
-  const pushVersion = (label: string, nextText: string) => {
-    const v: Version = {
-      id: `v-${Date.now()}`,
-      label,
-      at: Date.now(),
-      text: nextText,
-    }
-    setVersions((prev) => [v, ...prev].slice(0, 20))
-  }
+  // TODO: 后续可在此接入“章节草稿/版本历史”接口，替换掉当前预置数据与本地状态实现。
 
   const handleSmartSimplify = async () => {
-    if (!text.trim()) {
+    if (!rawText.trim()) {
       message.warning('请先粘贴或输入原文')
       return
     }
     setExtracting(true)
     try {
-      await new Promise((r) => setTimeout(r, 800))
-      const simplified =
-        text.length > 320
-          ? `${text.slice(0, 320)}\n\n[已智能精简：保留关键主线内容 · Agent：${agent}]`
-          : `${text}\n\n[已智能精简：Agent：${agent}]`
-      setSimplifiedText(simplified)
-      pushVersion(`智能精简（${nowLabel()}）`, simplified)
-      setText(simplified)
+      // TODO: 智能精简接口未接入，后续在此替换为真实接口调用，并将返回结果写入 condensedText
+      await new Promise((r) => setTimeout(r, 500))
+      const simplified = '已精简'
+      setCondensedText(simplified)
+      if (mode === 'compare') {
+        // 对比模式下不切换编辑区：只更新右侧精简内容输入框
+        setCompareCondensed(simplified)
+      } else {
+        setMode('condensed')
+        setEditorText(simplified)
+      }
       message.success('智能精简完成')
     } finally {
       setExtracting(false)
     }
   }
 
-  const handleRestoreOriginal = () => {
-    if (!originalText.trim()) {
-      message.info('暂无可恢复的原文')
+  const handleBackToRaw = () => {
+    setMode('raw')
+    setEditorText(rawText)
+  }
+
+  const handleViewCondensed = () => {
+    if (!condensedText.trim()) {
+      message.info('暂无精简内容')
       return
     }
-    pushVersion(`恢复原文（${nowLabel()}）`, originalText)
-    setText(originalText)
-    setSimplifiedText(null)
+    setMode('condensed')
+    setEditorText(condensedText)
   }
 
   const extractMenuItems: MenuProps['items'] = [
@@ -324,14 +322,14 @@ const ChapterPrep: React.FC = () => {
   ]
 
   const runExtract = async (kind: 'all' | ExtractKind) => {
-    if (!text.trim()) {
+    if (!rawText.trim()) {
       message.warning('请先粘贴或输入原文')
       return
     }
     setExtracting(true)
     try {
       await new Promise((r) => setTimeout(r, 900))
-      const next = extractMock(text)
+      const next = extractMock(rawText)
       setResults((prev) => {
         if (kind === 'all') return next
         switch (kind) {
@@ -348,9 +346,72 @@ const ChapterPrep: React.FC = () => {
         }
       })
       message.success('提取完成（Mock）')
+
+      // 打开提取回显浮窗
+      if (kind === 'roles' || kind === 'scenes' || kind === 'props') {
+        setExtractReviewTab(kind)
+      } else {
+        setExtractReviewTab('roles')
+      }
+      setSelectedEntityKeys({ roles: [], scenes: [], props: [] })
+      setExtractReviewOpen(true)
     } finally {
       setExtracting(false)
     }
+  }
+
+  const existingSet = useMemo(() => {
+    return {
+      roles: new Set(existingEntities.roles),
+      scenes: new Set(existingEntities.scenes),
+      props: new Set(existingEntities.props),
+    }
+  }, [existingEntities])
+
+  const addSelectedEntities = (kind: EntityKind) => {
+    const selected = selectedEntityKeys[kind]
+    if (selected.length === 0) {
+      message.info('请先选择要添加的内容')
+      return
+    }
+    const duplicates = selected.filter((name) => existingSet[kind].has(name))
+    const uniques = selected.filter((name) => !existingSet[kind].has(name))
+
+    const doAdd = () => {
+      if (uniques.length === 0) {
+        message.info('所选内容均已存在，无需添加')
+        return
+      }
+      setExistingEntities((prev) => ({
+        ...prev,
+        [kind]: Array.from(new Set([...(prev[kind] as string[]), ...uniques])),
+      }))
+      setSelectedEntityKeys((prev) => ({ ...prev, [kind]: [] }))
+      message.success(`已添加 ${uniques.length} 项`)
+    }
+
+    if (duplicates.length > 0) {
+      Modal.confirm({
+        title: '存在重复内容',
+        content: `你选择的内容中有 ${duplicates.length} 项已存在，将自动跳过重复项，是否继续添加其余内容？`,
+        okText: '继续添加',
+        cancelText: '取消',
+        onOk: doAdd,
+      })
+      return
+    }
+    doAdd()
+  }
+
+  const toggleSelectAllNew = (kind: EntityKind) => {
+    const items =
+      kind === 'roles'
+        ? results.roles.map((r) => r.name)
+        : kind === 'scenes'
+          ? results.scenes.map((s) => s.name)
+          : results.props.map((p) => p.name)
+    const newOnes = items.filter((name) => !existingSet[kind].has(name))
+    setSelectedEntityKeys((prev) => ({ ...prev, [kind]: newOnes }))
   }
 
   const currentItemsCount = useMemo(() => {
@@ -400,19 +461,76 @@ const ChapterPrep: React.FC = () => {
     })
   }
 
-  const versionsMenuItems: MenuProps['items'] = versions.map((v) => ({
-    key: v.id,
-    label: (
-      <div className="min-w-[260px]">
-        <div className="text-sm font-medium">{v.label}</div>
-        <div className="text-xs text-gray-500">{new Date(v.at).toLocaleString()}</div>
-      </div>
-    ),
-    onClick: () => {
-      setText(v.text)
-      message.success('已回滚到该版本')
-    },
-  }))
+  const mockHistory = useMemo(
+    () => [
+      {
+        id: 'h-1',
+        at: Date.now() - 1000 * 60 * 60 * 2,
+        rawText: '【原文】示例版本 1（预置数据）',
+        condensedText: '【精简】示例版本 1（预置数据）',
+      },
+      {
+        id: 'h-2',
+        at: Date.now() - 1000 * 60 * 22,
+        rawText: '【原文】示例版本 2（预置数据）',
+        condensedText: '【精简】示例版本 2（预置数据）',
+      },
+    ],
+    [],
+  )
+
+  const handleSaveEditor = async () => {
+    if (!chapterId) return
+    if (mode === 'raw') {
+      setSaving(true)
+      try {
+        await StudioChaptersService.updateChapterApiV1StudioChaptersChapterIdPatch({
+          chapterId,
+          requestBody: { raw_text: editorText },
+        })
+        setRawText(editorText)
+        message.success('原文已保存')
+      } catch {
+        message.error('保存失败')
+      } finally {
+        setSaving(false)
+      }
+      return
+    }
+
+    if (mode === 'condensed') {
+      setSaving(true)
+      try {
+        await StudioChaptersService.updateChapterApiV1StudioChaptersChapterIdPatch({
+          chapterId,
+          requestBody: { condensed_text: editorText },
+        })
+        setCondensedText(editorText)
+        message.success('精简内容已保存')
+      } catch {
+        message.error('保存失败')
+      } finally {
+        setSaving(false)
+      }
+      return
+    }
+
+    // compare
+    setSaving(true)
+    try {
+      await StudioChaptersService.updateChapterApiV1StudioChaptersChapterIdPatch({
+        chapterId,
+        requestBody: { raw_text: compareRaw, condensed_text: compareCondensed },
+      })
+      setRawText(compareRaw)
+      setCondensedText(compareCondensed)
+      message.success('已保存')
+    } catch {
+      message.error('保存失败')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <Layout style={{ height: '100%', minHeight: 0, background: '#eef2f7' }}>
@@ -808,25 +926,62 @@ const ChapterPrep: React.FC = () => {
         title={
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2">
-              <FileTextOutlined /> 原文编辑区
+              <FileTextOutlined />{' '}
+              {mode === 'raw'
+                ? '原文编辑区'
+                : mode === 'condensed'
+                  ? '精简内容编辑区'
+                  : '对比模式'}
               <Tag color="blue">{plainWordCount} 字</Tag>
               <Tag color="default">{paragraphCount} 段</Tag>
             </div>
             <Space size="small">
+              <Button
+                size="small"
+                type="primary"
+                icon={<SaveOutlined />}
+                loading={saving}
+                onClick={() => void handleSaveEditor()}
+              >
+                保存
+              </Button>
               <Button size="small" icon={<ThunderboltOutlined />} loading={extracting} onClick={() => void handleSmartSimplify()}>
                 智能精简
               </Button>
-              <Button size="small" icon={<ReloadOutlined />} onClick={handleRestoreOriginal}>
-                恢复原文
-              </Button>
-              <Button size="small" icon={<DiffOutlined />} type={compareMode ? 'primary' : 'default'} onClick={() => setCompareMode(!compareMode)}>
+              {mode === 'condensed' ? (
+                <Button size="small" icon={<ReloadOutlined />} onClick={handleBackToRaw}>
+                  回到原文
+                </Button>
+              ) : (
+                <Button
+                  size="small"
+                  icon={<ReloadOutlined />}
+                  disabled={!condensedText.trim()}
+                  onClick={handleViewCondensed}
+                >
+                  查看精简
+                </Button>
+              )}
+              <Button
+                size="small"
+                icon={<DiffOutlined />}
+                type={mode === 'compare' ? 'primary' : 'default'}
+                onClick={() => {
+                  if (mode === 'compare') {
+                    setMode('raw')
+                    setEditorText(rawText)
+                    return
+                  }
+                  setCompareRaw(rawText)
+                  setCompareCondensed(condensedText)
+                  setMode('compare')
+                }}
+              >
                 对比模式
               </Button>
-              <Dropdown menu={{ items: versionsMenuItems.length ? versionsMenuItems : [{ key: 'empty', label: '暂无版本', disabled: true }] }}>
-                <Button size="small" icon={<HistoryOutlined />}>
-                  版本历史 <DownOutlined />
-                </Button>
-              </Dropdown>
+              <Button size="small" icon={<HistoryOutlined />} onClick={() => setHistoryModalOpen(true)}>
+                版本历史
+              </Button>
             </Space>
           </div>
         }
@@ -840,25 +995,22 @@ const ChapterPrep: React.FC = () => {
         }
         styles={{ body: { maxHeight: '70vh', overflow: 'auto', paddingTop: 12 } }}
       >
-        {compareMode ? (
+        {mode === 'compare' ? (
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col">
               <div className="text-xs text-gray-500 mb-2">原文</div>
               <Input.TextArea
-                value={originalText}
-                onChange={(e) => {
-                  setOriginalText(e.target.value)
-                  setText(e.target.value)
-                }}
+                value={compareRaw}
+                onChange={(e) => setCompareRaw(e.target.value)}
                 rows={14}
                 style={{ resize: 'none', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}
               />
             </div>
             <div className="flex flex-col">
-              <div className="text-xs text-gray-500 mb-2">精简版</div>
+              <div className="text-xs text-gray-500 mb-2">精简内容</div>
               <Input.TextArea
-                value={simplifiedText ?? ''}
-                onChange={(e) => setSimplifiedText(e.target.value)}
+                value={compareCondensed}
+                onChange={(e) => setCompareCondensed(e.target.value)}
                 rows={14}
                 style={{ resize: 'none', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}
               />
@@ -866,13 +1018,232 @@ const ChapterPrep: React.FC = () => {
           </div>
         ) : (
           <Input.TextArea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="粘贴或输入章节原文…"
+            value={editorText}
+            onChange={(e) => {
+              const v = e.target.value
+              setEditorText(v)
+              if (mode === 'raw') setRawText(v)
+              if (mode === 'condensed') setCondensedText(v)
+            }}
+            placeholder={mode === 'raw' ? '编辑章节原文…' : '编辑精简内容…'}
             rows={16}
             style={{ resize: 'none', background: '#fdfdfd' }}
           />
         )}
+      </Modal>
+
+      {/* 历史版本（Mock） */}
+      <Modal
+        title={
+          <div className="flex items-center gap-2">
+            <HistoryOutlined /> 历史版本
+          </div>
+        }
+        open={historyModalOpen}
+        onCancel={() => setHistoryModalOpen(false)}
+        width={920}
+        footer={
+          <Button type="primary" onClick={() => setHistoryModalOpen(false)}>
+            关闭
+          </Button>
+        }
+        styles={{ body: { maxHeight: '70vh', overflow: 'auto' } }}
+      >
+        {/* TODO: 历史版本接口未接入，当前为预置数据；后续接入后按时间线渲染即可 */}
+        <div className="text-xs text-gray-500 mb-3">内容默认折叠，仅展示时间线节点。</div>
+        <div className="space-y-3">
+          {mockHistory.map((h) => (
+            <div key={h.id} className="border border-gray-200 rounded-lg p-3 bg-white">
+              <div className="text-sm font-medium mb-2">{new Date(h.at).toLocaleString()}</div>
+              <Collapse
+                items={[
+                  {
+                    key: 'content',
+                    label: '展开查看内容',
+                    children: (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <div className="text-xs text-gray-500 mb-2">原文内容</div>
+                          <Input.TextArea
+                            value={h.rawText}
+                            readOnly
+                            rows={8}
+                            style={{ resize: 'none', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}
+                          />
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-500 mb-2">精简内容</div>
+                          <Input.TextArea
+                            value={h.condensedText}
+                            readOnly
+                            rows={8}
+                            style={{ resize: 'none', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}
+                          />
+                        </div>
+                      </div>
+                    ),
+                  },
+                ]}
+              />
+            </div>
+          ))}
+        </div>
+      </Modal>
+
+      {/* 提取结果回显浮窗 */}
+      <Modal
+        title="提取结果"
+        open={extractReviewOpen}
+        onCancel={() => setExtractReviewOpen(false)}
+        width={860}
+        footer={
+          <Space>
+            <Button onClick={() => setExtractReviewOpen(false)}>关闭</Button>
+          </Space>
+        }
+        styles={{ body: { maxHeight: '70vh', overflow: 'auto' } }}
+      >
+        <Tabs
+          activeKey={extractReviewTab}
+          onChange={(k) => setExtractReviewTab(k as EntityKind)}
+          items={[
+            {
+              key: 'roles',
+              label: `角色（${results.roles.length}）`,
+              children: (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs text-gray-500">勾选后可添加到“已存在”集合（本地 Mock）。</div>
+                    <Space size="small">
+                      <Button size="small" onClick={() => toggleSelectAllNew('roles')}>
+                        全选新项
+                      </Button>
+                      <Button size="small" type="primary" onClick={() => addSelectedEntities('roles')}>
+                        添加所选
+                      </Button>
+                    </Space>
+                  </div>
+                  <Checkbox.Group
+                    value={selectedEntityKeys.roles}
+                    onChange={(vals) => setSelectedEntityKeys((prev) => ({ ...prev, roles: vals as string[] }))}
+                    className="w-full"
+                  >
+                    <List
+                      dataSource={results.roles}
+                      locale={{ emptyText: <Empty description="暂无角色" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
+                      renderItem={(it) => {
+                        const existed = existingSet.roles.has(it.name)
+                        return (
+                          <List.Item>
+                            <div className="flex items-center justify-between w-full">
+                              <Checkbox value={it.name}>
+                                <span className="font-medium">{it.name}</span>
+                                {it.aliases?.length ? (
+                                  <span className="text-xs text-gray-500 ml-2">别名：{it.aliases.join('、')}</span>
+                                ) : null}
+                              </Checkbox>
+                              {existed ? <Tag color="default">已存在</Tag> : <Tag color="green">新</Tag>}
+                            </div>
+                          </List.Item>
+                        )
+                      }}
+                    />
+                  </Checkbox.Group>
+                </div>
+              ),
+            },
+            {
+              key: 'scenes',
+              label: `场景（${results.scenes.length}）`,
+              children: (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs text-gray-500">勾选后可添加到“已存在”集合（本地 Mock）。</div>
+                    <Space size="small">
+                      <Button size="small" onClick={() => toggleSelectAllNew('scenes')}>
+                        全选新项
+                      </Button>
+                      <Button size="small" type="primary" onClick={() => addSelectedEntities('scenes')}>
+                        添加所选
+                      </Button>
+                    </Space>
+                  </div>
+                  <Checkbox.Group
+                    value={selectedEntityKeys.scenes}
+                    onChange={(vals) => setSelectedEntityKeys((prev) => ({ ...prev, scenes: vals as string[] }))}
+                    className="w-full"
+                  >
+                    <List
+                      dataSource={results.scenes}
+                      locale={{ emptyText: <Empty description="暂无场景" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
+                      renderItem={(it) => {
+                        const existed = existingSet.scenes.has(it.name)
+                        return (
+                          <List.Item>
+                            <div className="flex items-center justify-between w-full">
+                              <Checkbox value={it.name}>
+                                <span className="font-medium">{it.name}</span>
+                                <span className="text-xs text-gray-500 ml-2">
+                                  {it.indoorOutdoor} · {it.time}
+                                </span>
+                              </Checkbox>
+                              {existed ? <Tag color="default">已存在</Tag> : <Tag color="green">新</Tag>}
+                            </div>
+                          </List.Item>
+                        )
+                      }}
+                    />
+                  </Checkbox.Group>
+                </div>
+              ),
+            },
+            {
+              key: 'props',
+              label: `道具（${results.props.length}）`,
+              children: (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs text-gray-500">勾选后可添加到“已存在”集合（本地 Mock）。</div>
+                    <Space size="small">
+                      <Button size="small" onClick={() => toggleSelectAllNew('props')}>
+                        全选新项
+                      </Button>
+                      <Button size="small" type="primary" onClick={() => addSelectedEntities('props')}>
+                        添加所选
+                      </Button>
+                    </Space>
+                  </div>
+                  <Checkbox.Group
+                    value={selectedEntityKeys.props}
+                    onChange={(vals) => setSelectedEntityKeys((prev) => ({ ...prev, props: vals as string[] }))}
+                    className="w-full"
+                  >
+                    <List
+                      dataSource={results.props}
+                      locale={{ emptyText: <Empty description="暂无道具" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
+                      renderItem={(it) => {
+                        const existed = existingSet.props.has(it.name)
+                        return (
+                          <List.Item>
+                            <div className="flex items-center justify-between w-full">
+                              <Checkbox value={it.name}>
+                                <span className="font-medium">{it.name}</span>
+                                <span className="text-xs text-gray-500 ml-2">
+                                  出现 {it.count} 次{it.key ? ' · 关键道具' : ''}
+                                </span>
+                              </Checkbox>
+                              {existed ? <Tag color="default">已存在</Tag> : <Tag color="green">新</Tag>}
+                            </div>
+                          </List.Item>
+                        )
+                      }}
+                    />
+                  </Checkbox.Group>
+                </div>
+              ),
+            },
+          ]}
+        />
       </Modal>
     </Layout>
   )
