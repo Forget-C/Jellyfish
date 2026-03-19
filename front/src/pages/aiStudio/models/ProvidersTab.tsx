@@ -34,7 +34,7 @@ import {
 } from '@ant-design/icons'
 import { LlmService } from '../../../services/generated/services/LlmService'
 import type { ProviderRead, ProviderStatus } from '../../../services/generated'
-import { PROVIDER_STATUS_MAP, SORT_OPTIONS, maskUrl } from './constants'
+import { PROVIDER_PRESETS, PROVIDER_STATUS_MAP, SORT_OPTIONS, maskUrl } from './constants'
 
 export default function ProvidersTab() {
   const [providers, setProviders] = useState<ProviderRead[]>([])
@@ -558,11 +558,13 @@ export default function ProvidersTab() {
           <Form.Item name="name" label="名称" rules={[{ required: true, message: '请选择供应商' }]}>
             <Select
               placeholder="选择供应商"
-              options={[
-                { label: 'OpenAI', value: 'OpenAI' },
-                { label: '火山引擎', value: '火山引擎' },
-                { label: '阿里百炼', value: '阿里百炼' },
-              ]}
+              options={Object.keys(PROVIDER_PRESETS).map((name) => ({ label: name, value: name }))}
+              onChange={(name: string) => {
+                const preset = PROVIDER_PRESETS[name]
+                if (preset && !providerEditing) {
+                  form.setFieldsValue({ base_url: preset.baseUrl, description: preset.description })
+                }
+              }}
             />
           </Form.Item>
           <Form.Item

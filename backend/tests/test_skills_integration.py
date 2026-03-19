@@ -197,20 +197,34 @@ class TestSkillsPipelineIntegration:
 
 
 def _build_real_llm() -> Runnable:
-    """根据环境变量构建 ChatOpenAI：支持 OPENAI_BASE_URL、OPENAI_MODEL。"""
+    """根据环境变量构建 ChatOpenAI：支持 OpenAI 和 MiniMax。
+
+    优先使用 OPENAI_API_KEY；若未设置，尝试使用 MINIMAX_API_KEY。
+    MiniMax 通过 OpenAI 兼容 API 接入（base_url 指向 MiniMax 端点）。
+    """
     langchain_openai = pytest.importorskip("langchain_openai")
-    base_url = os.environ.get("OPENAI_BASE_URL") or None
-    model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
-    kwargs: dict = {"model": model, "temperature": 0}
-    if base_url:
-        kwargs["base_url"] = base_url
+    if os.environ.get("OPENAI_API_KEY"):
+        base_url = os.environ.get("OPENAI_BASE_URL") or None
+        model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+        kwargs: dict = {"model": model, "temperature": 0}
+        if base_url:
+            kwargs["base_url"] = base_url
+    elif os.environ.get("MINIMAX_API_KEY"):
+        kwargs = {
+            "model": os.environ.get("MINIMAX_MODEL", "MiniMax-M2.5"),
+            "temperature": 0,
+            "api_key": os.environ["MINIMAX_API_KEY"],
+            "base_url": os.environ.get("MINIMAX_BASE_URL", "https://api.minimax.io/v1"),
+        }
+    else:
+        pytest.skip("No LLM API key set")
     return langchain_openai.ChatOpenAI(**kwargs)
 
 
 @pytest.mark.integration
 @pytest.mark.skipif(
-    not os.environ.get("OPENAI_API_KEY"),
-    reason="OPENAI_API_KEY not set; skip real LLM integration",
+    not (os.environ.get("OPENAI_API_KEY") or os.environ.get("MINIMAX_API_KEY")),
+    reason="OPENAI_API_KEY or MINIMAX_API_KEY not set; skip real LLM integration",
 )
 class TestRealLLMIntegration:
     """使用真实 LLM 的集成测试；未设置 OPENAI_API_KEY 时跳过。支持 OPENAI_BASE_URL、OPENAI_MODEL。"""

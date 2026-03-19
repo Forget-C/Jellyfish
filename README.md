@@ -37,7 +37,7 @@
 | 提示词模板库       | 分镜/角色/场景/视频/配乐/音效/综合提示词模板                            | 一键初始化新章节                              |
 | 视频后期剪辑       | 时间线编辑、多轨视频/音频、素材库拖拽、最终导出                         | 从 AI 片段直接剪辑成完整短剧                  |
 | Agent 工作流       | 剧情提取 / 角色提取 / 分镜建议 等可定制 Agent，支持可视化编排与测试     | 类似 Dify 的节点式工作流编辑器                |
-| 模型管理           | 多供应商（OpenAI/Claude/通义/混元等）管理、模型分类（文本/图/视频）     | 每类可设默认模型、快速测试连接                |
+| 模型管理           | 多供应商（OpenAI/MiniMax/Claude/通义/混元等）管理、模型分类（文本/图/视频） | 每类可设默认模型、快速测试连接                |
 | 生成素材管理       | 图片/视频统一预览、标签标记、过滤、批量导出                             | 支持优质素材快速复用                          |
 
 ## 🎯 适用场景
@@ -56,7 +56,7 @@
 - 视频播放器：Video.js / Plyr
 - 富文本/代码编辑：Monaco Editor / React Quill
 - 后端（可选开源部分）：Node.js / NestJS / FastAPI / Spring Boot
-- AI 生成层：对接多种大模型 API（OpenAI / Anthropic / Midjourney / Runway / Kling / Luma 等）
+- AI 生成层：对接多种大模型 API（OpenAI / MiniMax / Anthropic / Midjourney / Runway / Kling / Luma 等）
 
 ## 🔁 前端 OpenAPI 请求/类型生成与更新
 

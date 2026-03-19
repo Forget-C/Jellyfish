@@ -22,6 +22,28 @@ export const SORT_OPTIONS = [
   { value: 'category', label: '类别' },
 ]
 
+/**
+ * 供应商预设：快速填充常用 AI 供应商的 Base URL 与描述。
+ */
+export const PROVIDER_PRESETS: Record<string, { baseUrl: string; description: string }> = {
+  OpenAI: {
+    baseUrl: 'https://api.openai.com/v1',
+    description: '支持 GPT-4o / GPT-4o-mini / o1 / o3 等模型',
+  },
+  MiniMax: {
+    baseUrl: 'https://api.minimax.io/v1',
+    description: '支持 MiniMax-M2.7 / MiniMax-M2.5 等模型（OpenAI 兼容）',
+  },
+  火山引擎: {
+    baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+    description: '支持豆包（Doubao）等模型',
+  },
+  阿里百炼: {
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    description: '支持通义千问（Qwen）等模型',
+  },
+}
+
 export function maskUrl(url: string): string {
   if (!url) return '—'
   try {

@@ -23,12 +23,35 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
+def _resolve_llm_provider() -> str:
+    """根据 LLM_PROVIDER 或已配置的 API Key 确定供应商。"""
+    if settings.llm_provider:
+        return settings.llm_provider.lower()
+    if settings.openai_api_key:
+        return "openai"
+    if settings.minimax_api_key:
+        return "minimax"
+    return ""
+
+
 def get_llm() -> Runnable:
-    """提供 LLM（ChatOpenAI），用于影视技能抽取。未配置 OPENAI_API_KEY 时抛出 503。"""
-    if not settings.openai_api_key:
+    """提供 LLM（ChatOpenAI 兼容），用于影视技能抽取。
+
+    支持的供应商：
+    - openai（默认）：使用 OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL
+    - minimax：使用 MINIMAX_API_KEY / MINIMAX_BASE_URL / MINIMAX_MODEL
+      MiniMax 提供 OpenAI 兼容 API，通过 ChatOpenAI 的 base_url 参数接入。
+
+    优先级：LLM_PROVIDER 环境变量 > 已配置的 API Key 自动检测。
+    """
+    provider = _resolve_llm_provider()
+    if not provider:
         raise HTTPException(
             status_code=503,
-            detail="OPENAI_API_KEY not configured; set it in .env to use film extraction endpoints",
+            detail=(
+                "No LLM provider configured; "
+                "set OPENAI_API_KEY or MINIMAX_API_KEY in .env to use film extraction endpoints"
+            ),
         )
     try:
         from langchain_openai import ChatOpenAI
@@ -37,13 +60,22 @@ def get_llm() -> Runnable:
             status_code=503,
             detail="Install langchain-openai (e.g. uv sync --group dev) to use film extraction endpoints",
         ) from e
-    kwargs: dict = {
-        "model": settings.openai_model,
-        "temperature": 0,
-        "api_key": settings.openai_api_key,
+
+    if provider == "minimax":
+        kwargs: dict = {
+            "model": settings.minimax_model,
+            "temperature": 0,
+            "api_key": settings.minimax_api_key,
+            "base_url": settings.minimax_base_url,
         }
-    if settings.openai_base_url:
-        kwargs["base_url"] = settings.openai_base_url
+    else:
+        kwargs = {
+            "model": settings.openai_model,
+            "temperature": 0,
+            "api_key": settings.openai_api_key,
+        }
+        if settings.openai_base_url:
+            kwargs["base_url"] = settings.openai_base_url
     return ChatOpenAI(**kwargs)
 
 
