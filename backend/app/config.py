@@ -30,9 +30,18 @@ class Settings(BaseSettings):
     ]
 
     # LLM（影视技能抽取用，可选）
+    # 当设置 LLM_PROVIDER 时，自动选择对应供应商配置；
+    # 未设置时根据已配置的 API Key 自动检测（优先 OPENAI，其次 MINIMAX）。
+    llm_provider: str | None = None
+
     openai_api_key: str | None = None
     openai_base_url: str | None = None
     openai_model: str = "gpt-4o-mini"
+
+    # MiniMax（OpenAI 兼容 API，可替代 OpenAI 用于影视技能抽取）
+    minimax_api_key: str | None = None
+    minimax_base_url: str = "https://api.minimax.io/v1"
+    minimax_model: str = "MiniMax-M2.5"
 
     # 图片生成（技能生成类：演员/角色/道具/场景/服装/镜头帧图片）
     image_api_provider: str | None = None
