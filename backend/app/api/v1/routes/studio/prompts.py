@@ -51,9 +51,10 @@ _PROMPT_CATEGORY_ZH: dict[PromptCategory, tuple[str, str]] = {
     PromptCategory.frame_key_prompt: ("关键帧图片提示词", "用于生成关键帧图片文案的提示词"),
     PromptCategory.video_prompt: ("视频提示词", "用于视频生成的整体提示词"),
     PromptCategory.storyboard_prompt: ("分镜提示词", "用于分镜拆解与描述的提示词"),
-    PromptCategory.combined: ("组合提示词", "用于组合多段提示词的模板"),
-    PromptCategory.bgm: ("背景音乐提示词", "用于生成背景音乐描述的提示词"),
-    PromptCategory.sfx: ("音效提示词", "用于生成音效描述的提示词"),
+    # 暂不启用
+    # PromptCategory.combined: ("组合提示词", "用于组合多段提示词的模板"),
+    # PromptCategory.bgm: ("背景音乐提示词", "用于生成背景音乐描述的提示词"),
+    # PromptCategory.sfx: ("音效提示词", "用于生成音效描述的提示词"),
 }
 
 
