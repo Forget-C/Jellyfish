@@ -207,13 +207,29 @@ def test_list_supported_providers_returns_capability_matrix(client: TestClient) 
     assert "aliyun_bailian" in keys
 
 
-def test_list_supported_providers_text_contains_aliyun_bailian(client: TestClient) -> None:
+def test_list_supported_providers_text_contains_aliyun_bailian_and_volcengine(client: TestClient) -> None:
     response = client.get("/api/v1/llm/providers/supported", params={"category": "text"})
     assert response.status_code == 200
     body = response.json()
     assert body["code"] == 200
     keys = {item["key"] for item in (body["data"] or [])}
     assert "aliyun_bailian" in keys
+    assert "volcengine" in keys
+
+
+def test_list_supported_providers_image_contains_aliyun_bailian(client: TestClient) -> None:
+    response = client.get("/api/v1/llm/providers/supported", params={"category": "image"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["code"] == 200
+    keys = {item["key"] for item in (body["data"] or [])}
+    assert "aliyun_bailian" in keys
+    for item in body["data"] or []:
+        if item["key"] == "aliyun_bailian":
+            assert "image" in item["supported_categories"]
+            break
+    else:
+        pytest.fail("aliyun_bailian not in image provider list")
 
 
 def test_list_supported_providers_can_filter_by_category(client: TestClient) -> None:
@@ -224,6 +240,14 @@ def test_list_supported_providers_can_filter_by_category(client: TestClient) -> 
     assert isinstance(body["data"], list)
     for item in body["data"]:
         assert "video" in item["supported_categories"]
+
+
+def test_list_supported_providers_video_contains_aliyun_bailian(client: TestClient) -> None:
+    response = client.get("/api/v1/llm/providers/supported", params={"category": "video"})
+    assert response.status_code == 200
+    body = response.json()
+    keys = {item["key"] for item in (body["data"] or [])}
+    assert "aliyun_bailian" in keys
 
 
 def test_get_video_generation_options_returns_ratio_capability(client: TestClient) -> None:

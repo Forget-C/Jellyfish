@@ -145,7 +145,7 @@ export function useRelationTaskNotification({
 
   useEffect(() => {
     if (!settledTask) return
-    const settledKey = `${settledTask.taskId}:${settledTask.status}:${settledTask.finishedAtTs ?? ''}`
+    const settledKey = `${settledTask.taskId}:${settledTask.status}:${settledTask.finishedAtTs ?? ''}:${settledTask.error ?? ''}`
     if (previousSettledKeyRef.current === settledKey) return
     previousSettledKeyRef.current = settledKey
 
@@ -157,12 +157,17 @@ export function useRelationTaskNotification({
       startedAtLabel ? `开始于 ${startedAtLabel}` : null,
     ].filter(Boolean)
 
+    const failedMainDescription =
+      settledTask.status === 'failed' && settledTask.error?.trim()
+        ? settledTask.error.trim()
+        : failedDescription || '任务执行失败，请稍后重试。'
+
     const statusMeta =
       settledTask.status === 'succeeded'
         ? { message: `${title}已完成`, description: successDescription || '任务已执行完成。', duration: 3.5 as number }
         : settledTask.status === 'cancelled'
           ? { message: `${title}已取消`, description: cancelledDescription || '任务已停止执行。', duration: 4.5 as number }
-          : { message: `${title}失败`, description: failedDescription || '任务执行失败，请稍后重试。', duration: 6 as number }
+          : { message: `${title}失败`, description: failedMainDescription, duration: 8 as number }
 
     upsertTask({
       taskId: settledTask.taskId,

@@ -27,5 +27,9 @@ export type TaskStatusRead = {
      * 任务累计执行耗时（毫秒）
      */
     elapsed_ms?: (number | null);
+    /**
+     * 失败时的错误信息（成功/进行中通常为空）
+     */
+    error?: string;
 };
 

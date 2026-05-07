@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ApiResponse_list_TimelineClipRead__ } from '../models/ApiResponse_list_TimelineClipRead__';
 import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
 import type { ApiResponse_PaginatedData_ProjectRead__ } from '../models/ApiResponse_PaginatedData_ProjectRead__';
 import type { ApiResponse_ProjectRead_ } from '../models/ApiResponse_ProjectRead_';
@@ -80,6 +81,31 @@ export class StudioProjectsService {
             url: '/api/v1/studio/projects',
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * 项目时间线片段列表
+     * 返回项目关联的时间线片段。
+     *
+     * 说明：`timeline_clips` 表当前无 `project_id` 字段，无法在数据库层按项目过滤；
+     * 在引入归属字段或关联表之前，对已存在的项目返回空列表（接口可用，不再 404）。
+     * @returns ApiResponse_list_TimelineClipRead__ Successful Response
+     * @throws ApiError
+     */
+    public static listProjectTimelineApiV1StudioProjectsProjectIdTimelineGet({
+        projectId,
+    }: {
+        projectId: string,
+    }): CancelablePromise<ApiResponse_list_TimelineClipRead__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/timeline',
+            path: {
+                'project_id': projectId,
+            },
             errors: {
                 422: `Validation Error`,
             },

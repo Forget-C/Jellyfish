@@ -230,3 +230,25 @@ def test_resolve_effective_base_url_prefers_category_specific_url() -> None:
         == "https://video-gateway.example/v1"
     )
 
+
+def test_resolve_effective_base_url_supports_custom_provider() -> None:
+    provider = Provider(
+        id="p-custom",
+        name="自定义网关",
+        base_url="https://gateway.example/v1",
+        image_base_url="https://image-gateway.example/v1",
+        api_key="k",
+    )
+
+    assert (
+        resolve_effective_base_url(provider=provider, category=ModelCategoryKey.text)
+        == "https://gateway.example/v1"
+    )
+    assert (
+        resolve_effective_base_url(provider=provider, category=ModelCategoryKey.image)
+        == "https://image-gateway.example/v1"
+    )
+    assert (
+        resolve_effective_base_url(provider=provider, category=ModelCategoryKey.video)
+        == "https://gateway.example/v1"
+    )

@@ -7,8 +7,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # System deps for common wheels / TLS
+# ffmpeg/ffprobe：章节时间线导出 Worker 与 API 共用镜像时需可用的拼接探测工具
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates curl \
+  && apt-get install -y --no-install-recommends ca-certificates curl ffmpeg \
   && rm -rf /var/lib/apt/lists/*
 
 # Install uv (Python package manager)

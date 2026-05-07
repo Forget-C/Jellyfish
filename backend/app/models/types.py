@@ -144,6 +144,7 @@ class FileUsageKind(str, Enum):
 
     shot_frame = "shot_frame"
     generated_video = "generated_video"
+    chapter_master_video = "chapter_master_video"
     character_image = "character_image"
     asset_image = "asset_image"
     task_link = "task_link"

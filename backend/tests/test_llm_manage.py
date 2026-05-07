@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from fastapi import HTTPException
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -12,6 +11,7 @@ from app.services.llm.manage import (
     create_model,
     create_provider,
     get_image_generation_options,
+    get_video_generation_options,
     get_or_create_settings,
     list_models_paginated,
     update_model,
@@ -143,36 +143,65 @@ async def test_list_models_paginated_returns_filtered_items() -> None:
 
 
 @pytest.mark.asyncio
-async def test_create_model_rejects_unsupported_category_for_provider() -> None:
+async def test_create_model_allows_volcengine_text_category() -> None:
     db, engine = await _build_session()
     async with db:
         await create_provider(
             db,
             body=ProviderCreate(
-                id="p-bailian",
-                name="阿里百炼",
-                base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+                id="p-volc",
+                name="火山引擎",
+                base_url="https://ark.cn-beijing.volces.com/api/v3",
                 api_key="k",
             ),
         )
 
-        with pytest.raises(HTTPException) as exc_info:
-            await create_model(
-                db,
-                body=ModelCreate(
-                    id="m-video-invalid",
-                    name="qwen-vl-video",
-                    category=ModelCategoryKey.video,
-                    provider_id="p-bailian",
-                ),
-            )
-        assert exc_info.value.status_code == 400
-        assert "does not support category=video" in str(exc_info.value.detail)
+        created = await create_model(
+            db,
+            body=ModelCreate(
+                id="m-text-valid",
+                name="doubao-text",
+                category=ModelCategoryKey.text,
+                provider_id="p-volc",
+            ),
+        )
+
+        assert created.provider_id == "p-volc"
+        assert created.category == ModelCategoryKey.text
     await engine.dispose()
 
 
 @pytest.mark.asyncio
-async def test_update_model_rejects_switch_to_unsupported_provider_category_combo() -> None:
+async def test_create_model_allows_custom_provider_category_binding() -> None:
+    db, engine = await _build_session()
+    async with db:
+        await create_provider(
+            db,
+            body=ProviderCreate(
+                id="p-custom",
+                name="自定义网关",
+                base_url="https://gateway.example/v1",
+                api_key="k",
+            ),
+        )
+
+        created = await create_model(
+            db,
+            body=ModelCreate(
+                id="m-custom-video",
+                name="custom-video-model",
+                category=ModelCategoryKey.video,
+                provider_id="p-custom",
+            ),
+        )
+
+        assert created.provider_id == "p-custom"
+        assert created.category == ModelCategoryKey.video
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_update_model_allows_switch_to_volcengine_for_text_model() -> None:
     db, engine = await _build_session()
     async with db:
         await create_provider(
@@ -187,30 +216,71 @@ async def test_update_model_rejects_switch_to_unsupported_provider_category_comb
         await create_provider(
             db,
             body=ProviderCreate(
-                id="p-bailian",
-                name="阿里百炼",
-                base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+                id="p-volc",
+                name="火山引擎",
+                base_url="https://ark.cn-beijing.volces.com/api/v3",
                 api_key="k",
             ),
         )
         await create_model(
             db,
             body=ModelCreate(
-                id="m-video-ok",
+                id="m-text-ok",
+                name="gpt-4",
+                category=ModelCategoryKey.text,
+                provider_id="p-openai",
+            ),
+        )
+
+        updated = await update_model(
+            db,
+            model_id="m-text-ok",
+            body=ModelUpdate(provider_id="p-volc"),
+        )
+        assert updated.provider_id == "p-volc"
+        assert updated.category == ModelCategoryKey.text
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_update_model_allows_switch_to_custom_provider() -> None:
+    db, engine = await _build_session()
+    async with db:
+        await create_provider(
+            db,
+            body=ProviderCreate(
+                id="p-openai",
+                name="OpenAI",
+                base_url="https://api.openai.com/v1",
+                api_key="k",
+            ),
+        )
+        await create_provider(
+            db,
+            body=ProviderCreate(
+                id="p-custom",
+                name="自定义网关",
+                base_url="https://gateway.example/v1",
+                api_key="k",
+            ),
+        )
+        await create_model(
+            db,
+            body=ModelCreate(
+                id="m-video",
                 name="sora",
                 category=ModelCategoryKey.video,
                 provider_id="p-openai",
             ),
         )
 
-        with pytest.raises(HTTPException) as exc_info:
-            await update_model(
-                db,
-                model_id="m-video-ok",
-                body=ModelUpdate(provider_id="p-bailian"),
-            )
-        assert exc_info.value.status_code == 400
-        assert "does not support category=video" in str(exc_info.value.detail)
+        updated = await update_model(
+            db,
+            model_id="m-video",
+            body=ModelUpdate(provider_id="p-custom"),
+        )
+
+        assert updated.provider_id == "p-custom"
     await engine.dispose()
 
 
@@ -248,4 +318,55 @@ async def test_get_image_generation_options_uses_default_image_model_capability(
         assert options.default_resolution_profile == "standard"
         assert options.ratio_size_profiles["9:16"]["standard"] == "1600x2848"
         assert options.ratio_size_profiles["21:9"]["high"] == "4704x2016"
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_generation_options_fall_back_for_custom_default_models() -> None:
+    db, engine = await _build_session()
+    async with db:
+        await create_provider(
+            db,
+            body=ProviderCreate(
+                id="p-custom",
+                name="自定义网关",
+                base_url="https://gateway.example/v1",
+                api_key="k",
+            ),
+        )
+        await create_model(
+            db,
+            body=ModelCreate(
+                id="m-custom-image",
+                name="custom-image",
+                category=ModelCategoryKey.image,
+                provider_id="p-custom",
+            ),
+        )
+        await create_model(
+            db,
+            body=ModelCreate(
+                id="m-custom-video",
+                name="custom-video",
+                category=ModelCategoryKey.video,
+                provider_id="p-custom",
+            ),
+        )
+        await update_model_settings(
+            db,
+            body=ModelSettingsUpdate(
+                default_image_model_id="m-custom-image",
+                default_video_model_id="m-custom-video",
+            ),
+        )
+
+        image_options = await get_image_generation_options(db)
+        video_options = await get_video_generation_options(db)
+
+        assert image_options.provider == "自定义网关"
+        assert image_options.default_resolution_profile == "standard"
+        assert image_options.ratio_size_profiles["16:9"]["standard"] == "1792x1024"
+        assert video_options.provider == "自定义网关"
+        assert video_options.allowed_ratios == ["16:9"]
+        assert video_options.default_ratio == "16:9"
     await engine.dispose()

@@ -18,6 +18,25 @@ import {
 // 可变的项目列表，支持创建/编辑/删除（会话内生效）
 let projectsList: Project[] = [...initialProjects]
 let chaptersList: Chapter[] = [...chapters]
+
+/** MSW：章节剪辑时间线内存状态（按 chapter_id） */
+let chapterTimelineMocks: Record<
+  string,
+  {
+    layout_version: number
+    segments: Array<{
+      id: string
+      shot_id: string
+      position: number
+      clip_status: 'ready' | 'missing_video' | 'file_missing'
+      label?: string
+      file_id?: string | null
+      trim_start_ms?: number | null
+      trim_end_ms?: number | null
+    }>
+    preview_note?: string
+  }
+> = {}
 let agentsList: Agent[] = [...initialAgents]
 let providersList: Provider[] = [...initialProviders]
 let modelsList: Model[] = [...llmModels]
@@ -268,6 +287,57 @@ export const handlers = [
     return ok(toChapterRead(newChapter), 200, 'Created')
   }),
 
+  http.get('/api/v1/studio/chapters/:chapter_id/timeline', ({ params }) => {
+    const { chapter_id } = params as { chapter_id: string }
+    const chapter = chaptersList.find((c) => c.id === chapter_id)
+    if (!chapter) return notFound('章节不存在')
+    const existing = chapterTimelineMocks[chapter_id]
+    const data = existing ?? {
+      layout_version: 1,
+      segments: [],
+      preview_note: 'Mock：连续预览未开启',
+    }
+    return ok(data)
+  }),
+
+  http.put('/api/v1/studio/chapters/:chapter_id/timeline', async ({ params, request }) => {
+    const { chapter_id } = params as { chapter_id: string }
+    const chapter = chaptersList.find((c) => c.id === chapter_id)
+    if (!chapter) return notFound('章节不存在')
+    const body = (await request.json()) as {
+      layout_version?: number
+      segments: Array<{ shot_id: string; trim_start_ms?: number | null; trim_end_ms?: number | null }>
+    }
+    const prevVersion = chapterTimelineMocks[chapter_id]?.layout_version ?? 1
+    if (body.layout_version != null && body.layout_version !== prevVersion) {
+      return HttpResponse.json({ code: 409, message: 'layout_version conflict', data: null }, { status: 409 })
+    }
+    const nextVersion = prevVersion + 1
+    const segments = body.segments.map((row, i) => ({
+      id: row.shot_id ? `seg-${row.shot_id}` : '',
+      shot_id: row.shot_id,
+      position: i,
+      clip_status: 'ready' as const,
+      label: `镜头 ${row.shot_id}`,
+      file_id: null,
+      trim_start_ms: row.trim_start_ms ?? null,
+      trim_end_ms: row.trim_end_ms ?? null,
+    }))
+    chapterTimelineMocks[chapter_id] = {
+      layout_version: nextVersion,
+      segments,
+      preview_note: 'Mock：连续预览未开启',
+    }
+    return ok(chapterTimelineMocks[chapter_id])
+  }),
+
+  http.post('/api/v1/studio/chapters/:chapter_id/timeline/export', ({ params }) => {
+    const { chapter_id } = params as { chapter_id: string }
+    const chapter = chaptersList.find((c) => c.id === chapter_id)
+    if (!chapter) return notFound('章节不存在')
+    return ok({ task_id: `mock-timeline-export-${chapter_id}-${Date.now()}` }, 201, 'success')
+  }),
+
   http.get('/api/v1/studio/chapters/:chapter_id', ({ params }) => {
     const { chapter_id } = params as { chapter_id: string }
     const chapter = chaptersList.find((c) => c.id === chapter_id)
@@ -430,9 +500,18 @@ export const handlers = [
     return HttpResponse.json(files, { status: 200 })
   }),
 
-  // 某项目的时间线数据
-  http.get('/api/projects/:projectId/timeline', () => {
-    return HttpResponse.json(timelineClips, { status: 200 })
+  // 某项目的时间线数据（与 Studio OpenAPI 一致：统一响应包一层 data）
+  http.get('/api/v1/studio/projects/:project_id/timeline', () => {
+    const data = timelineClips.map((c) => ({
+      id: c.id,
+      type: c.type,
+      source_id: c.sourceId,
+      label: c.label,
+      start: c.start,
+      end: c.end,
+      track: c.track,
+    }))
+    return HttpResponse.json({ code: 200, message: 'success', data, meta: null }, { status: 200 })
   }),
 
   // Agent 列表

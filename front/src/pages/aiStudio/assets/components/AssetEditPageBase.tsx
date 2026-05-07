@@ -24,7 +24,12 @@ import { buildFileDownloadUrl } from '../utils'
 import { DisplayImageCard } from './DisplayImageCard'
 import { ProjectVisualStyleAndStyleFields } from '../../project/ProjectVisualStyleAndStyleFields'
 import { useProjectStyleOptions } from '../../project/useProjectStyleOptions'
-import { defaultTaskActionErrorMessage, executeAsyncTaskCreate, executeTaskCancel, notifyExistingTask } from '../../components/taskActionHelpers'
+import {
+  defaultTaskActionErrorMessage,
+  executeAsyncTaskCreate,
+  executeTaskCancel,
+  notifyExistingTask,
+} from '../../components/taskActionHelpers'
 import { handleTaskResultSafely } from '../../components/taskResultHelpers'
 import { useRelationTaskNotification } from '../../components/taskNotificationHelpers'
 import { useTaskPageContext } from '../../components/taskPageContext'
@@ -102,6 +107,7 @@ export type AssetEditPageBaseProps<TAsset extends BaseAsset, TImage extends Base
   updateAsset: (assetId: string, payload: AssetUpdate) => Promise<TAsset | null>
   listImages: (assetId: string) => Promise<TImage[]>
   createImageSlot: (assetId: string, angle: AssetViewAngle) => Promise<void>
+  deleteImageSlot: (assetId: string, imageId: number) => Promise<void>
   updateImage: (assetId: string, imageId: number, payload: { file_id: string; width?: number | null; height?: number | null; format?: string | null }) => Promise<void>
   renderPrompt: (assetId: string, imageId: number) => Promise<{ prompt: string; images: string[] }>
   createGenerationTask: (assetId: string, imageId: number, payload: { prompt: string; images: string[] }) => Promise<string | null>
@@ -166,6 +172,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
   updateAsset,
   listImages,
   createImageSlot,
+  deleteImageSlot,
   updateImage,
   renderPrompt,
   createGenerationTask,
@@ -216,14 +223,19 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
         images: Array.isArray(result.images) ? result.images.filter(Boolean) : [],
       }
     },
-    submit: async ({ context, derived }) => {
+    submit: async ({ base, context, derived }) => {
       if (!assetId || !context.imageId) {
         throw new Error('asset image slot is required')
       }
+      const mergedPrompt = (base.prompt || '').trim() || (derived.prompt || '').trim()
+      const referenceImages = (derived.images || []).slice(0, 3)
       const taskId = await createGenerationTask(assetId, context.imageId, {
-        prompt: (derived.prompt || '').trim(),
-        images: derived.images,
+        prompt: mergedPrompt,
+        images: referenceImages,
       })
+      if (!taskId) {
+        throw new Error('创建图片任务未返回任务 ID，请检查网关/代理是否剥离响应体或更新前端 OpenAPI 客户端')
+      }
       return { taskId }
     },
   })
@@ -376,7 +388,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
     })
   }, [formViewCount, images])
 
-  const minViewCount = useMemo(() => clampViewCount(asset?.view_count), [asset?.view_count])
+  const minViewCount = 1
 
   const handleSaveBaseInfo = async () => {
     if (!assetId || !asset) return
@@ -388,6 +400,12 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
     setSavingBase(true)
     try {
       const nextViewCount = Math.max(minViewCount, clampViewCount(formViewCount))
+      const nextAngles = new Set(DEFAULT_ANGLES.slice(0, nextViewCount))
+      const latestImages = await listImages(assetId)
+      const staleSlots = latestImages.filter((img) => img.view_angle && !nextAngles.has(img.view_angle))
+      for (const stale of staleSlots) {
+        await deleteImageSlot(assetId, stale.id)
+      }
       const payload: AssetUpdate = {
         name: formName.trim(),
         description: formDesc.trim(),
@@ -601,7 +619,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
       const submitted = await promptDraft.submitNow()
       const taskId = submitted?.taskId
       if (!taskId) {
-        message.error('生成任务创建失败：缺少任务 ID')
+        message.error('生成任务创建失败：服务端未返回任务 ID')
         return
       }
       setGenerationTask({
@@ -635,11 +653,16 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
         setPromptPreviewOpen(false)
         setPromptPreviewImage(null)
         await loadData()
-      } else if (finalStatus !== 'failed' && finalStatus !== 'cancelled') {
+      } else if (finalStatus === 'failed') {
+        const err = finalTaskState?.error?.trim()
+        message.error(err ? `图片生成失败：${err}` : '图片生成失败，请查看任务中心或稍后重试')
+      } else if (finalStatus === 'cancelled') {
+        message.warning('图片生成已取消')
+      } else {
         message.warning('生成任务仍在执行，请稍后刷新')
       }
-    } catch {
-      message.error('发起生成失败')
+    } catch (e) {
+      message.error(defaultTaskActionErrorMessage(e, '发起生成失败'))
     } finally {
       setGeneratingByImageId((prev) => ({ ...prev, [promptPreviewImage.id]: false }))
     }
@@ -816,7 +839,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
                   <Input value={formTags} onChange={(e) => setFormTags(e.target.value)} disabled={smartDetectBusy || savingBase} />
                 </div>
                 <div>
-                  <div className="text-gray-600 text-sm mb-1">镜头数（仅可增加，最大 4）</div>
+                  <div className="text-gray-600 text-sm mb-1">镜头数（可增减，范围 1~4）</div>
                   <InputNumber
                     min={minViewCount}
                     max={4}
@@ -959,19 +982,45 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
           <div className="space-y-3">
             <div>
               <div className="text-xs text-gray-500 mb-2">关联图片（参考图）</div>
+              <div className="text-[11px] text-gray-400 mb-2">最多使用 3 张参考图，超出部分会自动截断。</div>
               {promptPreviewRefFileIds.length === 0 ? (
                 <div className="text-xs text-gray-400">暂无关联图片</div>
               ) : (
                 <div className="flex gap-2 overflow-x-auto pb-1">
+                  <Button
+                    size="small"
+                    onClick={() =>
+                      promptDraft.replaceContext({
+                        imageId: promptDraft.context.imageId,
+                        images: [],
+                      })
+                    }
+                  >
+                    清空参考图
+                  </Button>
                   <Image.PreviewGroup>
                     {promptPreviewRefFileIds.map((fid) => (
-                      <Image
-                        key={fid}
-                        width={72}
-                        height={72}
-                        style={{ objectFit: 'cover', borderRadius: 8 }}
-                        src={buildFileDownloadUrl(fid)}
-                      />
+                      <div key={fid} className="relative">
+                        <Image
+                          width={72}
+                          height={72}
+                          style={{ objectFit: 'cover', borderRadius: 8 }}
+                          src={buildFileDownloadUrl(fid)}
+                        />
+                        <Button
+                          size="small"
+                          danger
+                          className="absolute -top-2 -right-2"
+                          onClick={() =>
+                            promptDraft.replaceContext({
+                              imageId: promptDraft.context.imageId,
+                              images: promptPreviewRefFileIds.filter((x) => x !== fid),
+                            })
+                          }
+                        >
+                          移除
+                        </Button>
+                      </div>
                     ))}
                   </Image.PreviewGroup>
                 </div>

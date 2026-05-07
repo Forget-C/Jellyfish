@@ -102,7 +102,11 @@ import type {
 import { listTaskLinksNormalized } from '../../../services/filmTaskLinks'
 import { buildFileDownloadUrl, resolveAssetUrl } from '../assets/utils'
 import type { Chapter } from '../../../mocks/data'
-import { executeTaskCancel } from '../components/taskActionHelpers'
+import {
+  defaultTaskActionErrorMessage,
+  executeTaskCancel,
+  extractTaskIdFromApiEnvelope,
+} from '../components/taskActionHelpers'
 import { useRelationTaskNotification } from '../components/taskNotificationHelpers'
 import { TASK_COPY } from '../components/taskCopy'
 import { ChapterStudioBatchToolbar } from './components/ChapterStudioBatchToolbar'
@@ -3026,6 +3030,7 @@ function Inspector(props: {
   const [keyframePromptPreviewLoading, setKeyframePromptPreviewLoading] = useState(false)
   const [keyframePromptActionLoading, setKeyframePromptActionLoading] = useState(false)
   const [keyframePromptPreviewFrameType, setKeyframePromptPreviewFrameType] = useState<PromptFrameType>('key')
+  const [keyframePromptRefManualTouched, setKeyframePromptRefManualTouched] = useState(false)
   const [keyframePromptDebugContext, setKeyframePromptDebugContext] = useState<ShotFramePromptDebugContext | null>(null)
   const [keyframePromptDebugCollapsed, setKeyframePromptDebugCollapsed] = useState(true)
   const [keyframeDirectiveCollapsed, setKeyframeDirectiveCollapsed] = useState(true)
@@ -3966,8 +3971,50 @@ function Inspector(props: {
     const current = keyframePromptPreviewRefFileIds
     if (fromIndex < 0 || toIndex < 0 || fromIndex >= current.length || toIndex >= current.length) return
     const next = reorder(current, fromIndex, toIndex)
+    setKeyframePromptRefManualTouched(true)
     keyframePromptDraft.setContext({ refFileIds: next })
   }, [keyframePromptDraft, keyframePromptPreviewRefFileIds])
+
+  const allSelectableKeyframeRefFileIds = useMemo(() => {
+    const out: string[] = []
+    const seen = new Set<string>()
+    const push = (fid: string) => {
+      const normalized = String(fid || '').trim()
+      if (!normalized || seen.has(normalized)) return
+      seen.add(normalized)
+      out.push(normalized)
+    }
+    autoKeyframeRefFileIds.forEach(push)
+    keyframePromptPreviewRefFileIds.forEach(push)
+    return out
+  }, [autoKeyframeRefFileIds, keyframePromptPreviewRefFileIds])
+
+  const addKeyframePromptRefFile = useCallback((fid: string) => {
+    const normalized = String(fid || '').trim()
+    if (!normalized) return
+    if (keyframePromptPreviewRefFileIds.includes(normalized)) return
+    setKeyframePromptRefManualTouched(true)
+    keyframePromptDraft.replaceContext({ refFileIds: [...keyframePromptPreviewRefFileIds, normalized] })
+  }, [keyframePromptDraft, keyframePromptPreviewRefFileIds])
+
+  const removeKeyframePromptRefFile = useCallback((fid: string) => {
+    const normalized = String(fid || '').trim()
+    if (!normalized) return
+    setKeyframePromptRefManualTouched(true)
+    keyframePromptDraft.replaceContext({
+      refFileIds: keyframePromptPreviewRefFileIds.filter((item) => item !== normalized),
+    })
+  }, [keyframePromptDraft, keyframePromptPreviewRefFileIds])
+
+  const resetKeyframePromptRefFiles = useCallback(() => {
+    setKeyframePromptRefManualTouched(false)
+    keyframePromptDraft.replaceContext({ refFileIds: autoKeyframeRefFileIds })
+  }, [autoKeyframeRefFileIds, keyframePromptDraft])
+
+  const clearKeyframePromptRefFiles = useCallback(() => {
+    setKeyframePromptRefManualTouched(true)
+    keyframePromptDraft.replaceContext({ refFileIds: [] })
+  }, [keyframePromptDraft])
 
   const loadProjectRoleOptions = async () => {
     if (!projectId) {
@@ -4300,7 +4347,7 @@ function Inspector(props: {
       const submitted = await videoPromptDraft.submitNow()
       const taskId = submitted?.taskId
       if (!taskId) {
-        message.error('视频生成任务创建失败：缺少任务 ID')
+        message.error('视频生成任务创建失败：服务端未返回任务 ID')
         return
       }
       setVideoTaskId(taskId)
@@ -4314,8 +4361,8 @@ function Inspector(props: {
       })
       setVideoSettledTask(null)
       setVideoPromptPreviewOpen(false)
-    } catch {
-      message.error('发起视频生成失败')
+    } catch (e) {
+      message.error(defaultTaskActionErrorMessage(e, '发起视频生成失败'))
     } finally {
       setVideoPromptPreviewSubmitting(false)
     }
@@ -4427,6 +4474,7 @@ function Inspector(props: {
       setKeyframePromptPreviewLoading(true)
       setKeyframePromptPreviewOpen(true)
       setKeyframePromptPreviewFrameType(frameType)
+      setKeyframePromptRefManualTouched(false)
       setKeyframePromptDebugCollapsed(true)
       setKeyframeDirectiveCollapsed(true)
       setKeyframePromptDecisionCollapsed(true)
@@ -4471,9 +4519,9 @@ function Inspector(props: {
           frame_type: frameType,
         },
       })
-      const taskId = created.data?.task_id
+      const taskId = extractTaskIdFromApiEnvelope(created)
       if (!taskId) {
-        message.error('生成任务创建失败：缺少任务 ID')
+        message.error('生成任务创建失败：服务端未返回任务 ID')
         return
       }
       setPromptTask({
@@ -4557,8 +4605,8 @@ function Inspector(props: {
         refFileIds: keyframePromptPreviewRefFileIds.length > 0 ? keyframePromptPreviewRefFileIds : autoKeyframeRefFileIds,
       })
       message.success('提示词已生成')
-    } catch {
-      message.error('生成提示词失败')
+    } catch (e) {
+      message.error(defaultTaskActionErrorMessage(e, '生成提示词失败'))
     } finally {
       setKeyframePromptActionLoading(false)
     }
@@ -4567,10 +4615,11 @@ function Inspector(props: {
   useEffect(() => {
     // 弹窗打开时，若当前没有参考图，则自动填充为分镜关联实体的参考图
     if (!keyframePromptPreviewOpen) return
+    if (keyframePromptRefManualTouched) return
     if (keyframePromptPreviewRefFileIds.length > 0) return
     if (autoKeyframeRefFileIds.length === 0) return
     keyframePromptDraft.setContext({ refFileIds: autoKeyframeRefFileIds })
-  }, [autoKeyframeRefFileIds, keyframePromptPreviewOpen, keyframePromptPreviewRefFileIds.length])
+  }, [autoKeyframeRefFileIds, keyframePromptPreviewOpen, keyframePromptPreviewRefFileIds.length, keyframePromptRefManualTouched])
 
   useEffect(() => {
     if (!keyframePromptPreviewOpen) return
@@ -4619,7 +4668,7 @@ function Inspector(props: {
       const submitted = await keyframePromptDraft.submitNow()
       const taskId = submitted?.taskId
       if (!taskId) {
-        message.error('生成任务创建失败：缺少任务 ID')
+        message.error('生成任务创建失败：服务端未返回任务 ID')
         updateCardState(frameType, { loading: false, taskStatus: 'failed' })
         return
       }
@@ -4660,12 +4709,19 @@ function Inspector(props: {
         const latestSlotId = await getLatestFrameSlotId(frameType)
         await loadCardThumbs(frameType, latestSlotId, 5)
         setKeyframePromptPreviewOpen(false)
-      } else if (finalStatus !== 'failed' && finalStatus !== 'cancelled') {
+      } else if (finalStatus === 'failed') {
+        const err = finalTaskState?.error?.trim()
+        message.error(
+          err ? `${frameLabel[frameType]}生成失败：${err}` : `${frameLabel[frameType]}生成失败，请查看任务中心或稍后重试`,
+        )
+      } else if (finalStatus === 'cancelled') {
+        message.warning(`${frameLabel[frameType]}生成已取消`)
+      } else {
         message.warning('生成任务仍在执行，请稍后刷新')
       }
-    } catch {
+    } catch (e) {
       updateCardState(frameType, { taskStatus: 'failed' })
-      message.error(`${frameLabel[frameType]}生成失败`)
+      message.error(defaultTaskActionErrorMessage(e, `${frameLabel[frameType]}生成失败`))
     } finally {
       updateCardState(frameType, { loading: false })
       setKeyframePromptActionLoading(false)
@@ -5528,23 +5584,32 @@ function Inspector(props: {
                     {generatedVideos.length === 0 ? (
                       <div className="text-xs text-gray-400">当前分镜暂无已生成视频</div>
                     ) : (
-                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                      <div className="flex flex-col gap-3">
                         {generatedVideos.map((item, idx) => (
-                          <div key={`${item.linkId}-${item.fileId}`} className="border rounded p-2">
-                            <video
-                              src={item.url}
-                              className="w-full h-20 rounded object-cover bg-black"
-                              preload="metadata"
-                              muted
-                              onClick={() => onSelectPreviewVideo(item.fileId)}
-                              style={{ cursor: 'pointer' }}
-                            />
-                            <div className="mt-2 flex items-center justify-between gap-2">
-                              <span className="text-xs text-gray-500">视频 {idx + 1}</span>
+                          <div
+                            key={`${item.linkId}-${item.fileId}`}
+                            className="rounded-lg border border-gray-200 p-2 sm:p-3"
+                          >
+                            <div className="relative w-full overflow-hidden rounded-md bg-black aspect-video">
+                              <video
+                                src={item.url}
+                                className="absolute inset-0 h-full w-full object-cover"
+                                preload="metadata"
+                                muted
+                                onClick={() => onSelectPreviewVideo(item.fileId)}
+                                style={{ cursor: 'pointer' }}
+                              />
+                            </div>
+                            <div className="mt-2 flex min-w-0 items-center justify-between gap-3">
+                              <span className="text-xs text-gray-600 whitespace-nowrap shrink-0">
+                                视频 {idx + 1}
+                              </span>
                               <Tooltip title="下载视频">
                                 <Button
                                   size="small"
+                                  type="default"
                                   icon={<DownloadOutlined />}
+                                  className="shrink-0"
                                   onClick={() => {
                                     if (!item.url) return
                                     window.open(item.url, '_blank', 'noopener,noreferrer')
@@ -5702,7 +5767,24 @@ function Inspector(props: {
                         图片顺序会直接决定最终提示词中的图1、图2映射关系，并影响模型生成结果。
                       </div>
                     </div>
-                    <Tag color="gold">顺序影响图1/图2</Tag>
+                    <Space size="small">
+                      <Tag color="gold">顺序影响图1/图2</Tag>
+                      <Button
+                        size="small"
+                        disabled={keyframePromptActionLoading || shotRenderPromptLoading || autoKeyframeRefFileIds.length === 0}
+                        onClick={resetKeyframePromptRefFiles}
+                      >
+                        自动填充
+                      </Button>
+                      <Button
+                        size="small"
+                        danger
+                        disabled={keyframePromptActionLoading || shotRenderPromptLoading || keyframePromptPreviewRefFileIds.length === 0}
+                        onClick={clearKeyframePromptRefFiles}
+                      >
+                        清空
+                      </Button>
+                    </Space>
                   </div>
                   {keyframePromptPreviewRefFileIds.length === 0 ? (
                     <div className="text-xs text-gray-400">暂无关联图片</div>
@@ -5744,12 +5826,53 @@ function Inspector(props: {
                               >
                                 右移
                               </Button>
+                              <Button
+                                size="small"
+                                danger
+                                disabled={keyframePromptActionLoading || shotRenderPromptLoading}
+                                onClick={() => removeKeyframePromptRefFile(fid)}
+                              >
+                                移除
+                              </Button>
                             </div>
                           </div>
                         ))}
                       </Image.PreviewGroup>
                     </div>
                   )}
+                  {allSelectableKeyframeRefFileIds.filter((fid) => !keyframePromptPreviewRefFileIds.includes(fid)).length > 0 ? (
+                    <div className="mt-3 border-t border-slate-100 pt-3">
+                      <div className="mb-2 text-xs text-slate-500">可选参考图（点击添加）</div>
+                      <div className="flex gap-3 overflow-x-auto pb-1">
+                        {allSelectableKeyframeRefFileIds
+                          .filter((fid) => !keyframePromptPreviewRefFileIds.includes(fid))
+                          .map((fid) => (
+                            <div key={`candidate_${fid}`} className="w-[92px] shrink-0">
+                              <Tooltip title={shotLinkedAssetNameByFileId.get(fid) ?? fid}>
+                                <Image
+                                  width={72}
+                                  height={72}
+                                  style={{ objectFit: 'cover', borderRadius: 8, border: '1px solid #e2e8f0' }}
+                                  src={buildFileDownloadUrl(fid)}
+                                />
+                              </Tooltip>
+                              <div className="mt-1 truncate text-[11px] text-gray-700">
+                                {shotLinkedAssetNameByFileId.get(fid) ?? fid}
+                              </div>
+                              <Button
+                                className="mt-1"
+                                block
+                                size="small"
+                                disabled={keyframePromptActionLoading || shotRenderPromptLoading}
+                                onClick={() => addKeyframePromptRefFile(fid)}
+                              >
+                                添加
+                              </Button>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
 
               <div className="rounded-xl border border-slate-200 bg-white p-4">

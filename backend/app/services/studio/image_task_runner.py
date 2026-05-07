@@ -341,6 +341,11 @@ async def run_image_generation_task(
             await task.run()
             result = await task.get_result()
             if result is None:
+                # AbstractImageGenerationTask 会将适配层异常吞入 status.error，避免此处丢失真实原因（如上游 404）。
+                status_payload = await task.status()
+                upstream_err = str(status_payload.get("error") or "").strip()
+                if upstream_err:
+                    raise RuntimeError(upstream_err)
                 raise RuntimeError("Image generation task returned no result")
             if await cancel_if_requested_async(store=store, task_id=task_id, session=session):
                 log_task_event("image_generation", task_id, "cancelled", stage="after_execute")

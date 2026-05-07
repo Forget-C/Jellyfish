@@ -10,11 +10,14 @@ from app.models.llm import ModelCategoryKey
 from app.schemas.common import ApiResponse, PaginatedData, created_response, empty_response, success_response
 from app.schemas.llm import (
     ImageGenerationOptionsRead,
+    ModelChatTestRead,
+    ModelChatTestRequest,
     ModelCreate,
     ModelRead,
     ModelSettingsRead,
     ModelSettingsUpdate,
     ModelUpdate,
+    ModelVerifyRead,
     ProviderCreate,
     ProviderRead,
     ProviderSupportedRead,
@@ -38,6 +41,8 @@ from app.services.llm.manage import (
     update_model_settings as update_model_settings_service,
     update_provider as update_provider_service,
 )
+from app.services.llm.model_chat_test import chat_test_with_model as chat_test_with_model_service
+from app.services.llm.model_verify import verify_model_config as verify_model_config_service
 
 router = APIRouter()
 
@@ -45,7 +50,8 @@ router = APIRouter()
 PROVIDER_ORDER_FIELDS = {"name", "created_at", "updated_at"}
 MODEL_ORDER_FIELDS = {"name", "category", "created_at", "updated_at"}
 DEFAULT_PAGE_SIZE = 10
-MAX_PAGE_SIZE = 100
+# 管理端列表可能一次拉较多供应商/模型（如筛选项、统计）；略高于通用列表上限 100。
+MAX_PAGE_SIZE = 200
 
 
 # ---------- Provider ----------
@@ -209,6 +215,39 @@ async def create_model(
 ) -> ApiResponse[ModelRead]:
     model = await create_model_service(db, body=body)
     return created_response(ModelRead.model_validate(model))
+
+
+@router.post(
+    "/models/{model_id}/verify",
+    response_model=ApiResponse[ModelVerifyRead],
+    summary="验证模型配置（同步探测，不创建生成任务）",
+)
+async def verify_llm_model(
+    model_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[ModelVerifyRead]:
+    """对已保存模型做一次短超时探测：文本走极小对话；图/视频走列表接口鉴权与模型名匹配。"""
+    data = await verify_model_config_service(db, model_id=model_id)
+    return success_response(data)
+
+
+@router.post(
+    "/models/{model_id}/chat-test",
+    response_model=ApiResponse[ModelChatTestRead],
+    summary="文本模型试聊（管理页调试发消息）",
+)
+async def chat_test_llm_model(
+    model_id: str,
+    body: ModelChatTestRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[ModelChatTestRead]:
+    """对已保存的文本模型发送一条用户消息并返回模型回复（不计入业务任务）。"""
+    data = await chat_test_with_model_service(
+        db,
+        model_id=model_id,
+        user_message=body.message,
+    )
+    return success_response(data)
 
 
 @router.get(

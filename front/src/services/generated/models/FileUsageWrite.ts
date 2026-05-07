@@ -19,7 +19,7 @@ export type FileUsageWrite = {
      */
     shot_id?: (string | null);
     /**
-     * 用途：shot_frame / generated_video / character_image / asset_image / upload / api 等
+     * 用途：shot_frame / generated_video / chapter_master_video / character_image / asset_image / upload / api 等
      */
     usage_kind: string;
     /**

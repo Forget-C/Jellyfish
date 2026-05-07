@@ -102,6 +102,30 @@ async def get_provider_by_model_or_id(db: AsyncSession, model_or_id: Model | str
     return provider
 
 
+def build_chat_model_for_model(
+    *,
+    provider: Provider,
+    model: Model,
+    thinking: bool = False,
+) -> BaseChatModel:
+    """按已解析的 Model + Provider 构造 ChatOpenAI（用于脚本外显式模型，如配置验证）。
+
+    与 ``build_chat_model_from_provider`` 不同：后者会选取该供应商下任意一条最新文本模型，
+    本函数严格使用传入的 ``model``（须为 ``text`` 类别）。
+    """
+    if model.category != ModelCategoryKey.text:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Not a text model: model_id={model.id} category={model.category.value}",
+        )
+    return _build_chat_openai_model(
+        provider=provider,
+        model=model,
+        thinking=thinking,
+        import_error_detail="Install langchain-openai to verify text model configuration",
+    )
+
+
 async def build_chat_model_from_provider(
     db: AsyncSession,
     provider_or_id: Provider | str,

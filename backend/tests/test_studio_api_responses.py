@@ -229,6 +229,31 @@ def test_get_project_not_found_returns_api_response(client: TestClient) -> None:
     assert response.json() == {"code": 404, "message": "Project not found", "data": None, "meta": None}
 
 
+def test_list_project_timeline_returns_empty_envelope(client: TestClient) -> None:
+    db = _FakeStudioDB()
+    _seed_project(db, "proj-timeline")
+    app.dependency_overrides[get_db] = _override_db(db)
+    try:
+        response = client.get("/api/v1/studio/projects/proj-timeline/timeline")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {"code": 200, "message": "success", "data": [], "meta": None}
+
+
+def test_list_project_timeline_not_found_returns_api_response(client: TestClient) -> None:
+    db = _FakeStudioDB()
+    app.dependency_overrides[get_db] = _override_db(db)
+    try:
+        response = client.get("/api/v1/studio/projects/missing/timeline")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 404
+    assert response.json() == {"code": 404, "message": "Project not found", "data": None, "meta": None}
+
+
 def test_delete_project_returns_empty_envelope(client: TestClient) -> None:
     db = _FakeStudioDB()
     _seed_project(db, "proj-delete")

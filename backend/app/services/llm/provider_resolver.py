@@ -11,7 +11,7 @@ from app.bootstrap import bootstrap_all_registries
 from app.services.llm.provider_registry import (
     get_provider_spec,
     is_provider_category_supported,
-    resolve_provider_key_from_name,
+    try_resolve_provider_key_from_name,
 )
 
 
@@ -58,7 +58,12 @@ def resolve_provider_config_from_provider(
 ) -> ResolvedProviderConfig:
     bootstrap_all_registries()
     _validate_provider_status(provider)
-    provider_key = resolve_provider_key_from_name(provider.name)
+    provider_key = try_resolve_provider_key_from_name(provider.name)
+    if provider_key is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Custom provider has no registered task adapter: provider_id={provider.id}",
+        )
     if not is_provider_category_supported(provider_key, category):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -91,19 +96,20 @@ def resolve_effective_base_url(
     category: ModelCategoryKey,
     provider_key: str | None = None,
 ) -> str | None:
-    """按类别解析 Provider 实际 base_url：类别覆盖 > 通用 > 内置默认。"""
+    """按类别解析 Provider 实际 base_url；自定义供应商没有内置默认值。"""
     bootstrap_all_registries()
-    key = provider_key or resolve_provider_key_from_name(provider.name)
-    spec = get_provider_spec(key)
+    key = provider_key or try_resolve_provider_key_from_name(provider.name)
+    spec = get_provider_spec(key) if key else None
+    default_base_url = spec.default_base_url if spec else None
     common_base = (provider.base_url or "").strip()
     image_base = (provider.image_base_url or "").strip()
     video_base = (provider.video_base_url or "").strip()
     if category == ModelCategoryKey.image:
-        return image_base or common_base or spec.default_base_url
+        return image_base or common_base or default_base_url
     if category == ModelCategoryKey.video:
-        return video_base or common_base or spec.default_base_url
+        return video_base or common_base or default_base_url
     # text 仍使用通用 base_url；保留内置默认值兜底。
-    return common_base or spec.default_base_url
+    return common_base or default_base_url
 
 
 async def resolve_provider_config_by_model(

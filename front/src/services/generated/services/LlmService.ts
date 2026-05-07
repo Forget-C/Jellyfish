@@ -4,14 +4,17 @@
 /* eslint-disable */
 import type { ApiResponse_ImageGenerationOptionsRead_ } from '../models/ApiResponse_ImageGenerationOptionsRead_';
 import type { ApiResponse_list_ProviderSupportedRead__ } from '../models/ApiResponse_list_ProviderSupportedRead__';
+import type { ApiResponse_ModelChatTestRead_ } from '../models/ApiResponse_ModelChatTestRead_';
 import type { ApiResponse_ModelRead_ } from '../models/ApiResponse_ModelRead_';
 import type { ApiResponse_ModelSettingsRead_ } from '../models/ApiResponse_ModelSettingsRead_';
+import type { ApiResponse_ModelVerifyRead_ } from '../models/ApiResponse_ModelVerifyRead_';
 import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
 import type { ApiResponse_PaginatedData_ModelRead__ } from '../models/ApiResponse_PaginatedData_ModelRead__';
 import type { ApiResponse_PaginatedData_ProviderRead__ } from '../models/ApiResponse_PaginatedData_ProviderRead__';
 import type { ApiResponse_ProviderRead_ } from '../models/ApiResponse_ProviderRead_';
 import type { ApiResponse_VideoGenerationOptionsRead_ } from '../models/ApiResponse_VideoGenerationOptionsRead_';
 import type { ModelCategoryKey } from '../models/ModelCategoryKey';
+import type { ModelChatTestRequest } from '../models/ModelChatTestRequest';
 import type { ModelCreate } from '../models/ModelCreate';
 import type { ModelSettingsUpdate } from '../models/ModelSettingsUpdate';
 import type { ModelUpdate } from '../models/ModelUpdate';
@@ -275,6 +278,54 @@ export class LlmService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/llm/models',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * 验证模型配置（同步探测，不创建生成任务）
+     * 对已保存模型做一次短超时探测：文本走极小对话；图/视频走列表接口鉴权与模型名匹配。
+     * @returns ApiResponse_ModelVerifyRead_ Successful Response
+     * @throws ApiError
+     */
+    public static verifyLlmModelApiV1LlmModelsModelIdVerifyPost({
+        modelId,
+    }: {
+        modelId: string,
+    }): CancelablePromise<ApiResponse_ModelVerifyRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/llm/models/{model_id}/verify',
+            path: {
+                'model_id': modelId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * 文本模型试聊（管理页调试发消息）
+     * 对已保存的文本模型发送一条用户消息并返回模型回复（不计入业务任务）。
+     * @returns ApiResponse_ModelChatTestRead_ Successful Response
+     * @throws ApiError
+     */
+    public static chatTestLlmModelApiV1LlmModelsModelIdChatTestPost({
+        modelId,
+        requestBody,
+    }: {
+        modelId: string,
+        requestBody: ModelChatTestRequest,
+    }): CancelablePromise<ApiResponse_ModelChatTestRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/llm/models/{model_id}/chat-test',
+            path: {
+                'model_id': modelId,
+            },
             body: requestBody,
             mediaType: 'application/json',
             errors: {

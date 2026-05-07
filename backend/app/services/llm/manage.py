@@ -29,7 +29,7 @@ from app.schemas.llm import (
 from app.services.llm.provider_registry import (
     is_provider_category_supported,
     list_registered_providers,
-    resolve_provider_key_from_name,
+    try_resolve_provider_key_from_name,
 )
 from app.bootstrap import bootstrap_all_registries
 from app.services.common import (
@@ -300,7 +300,15 @@ async def get_video_generation_options(
 
     model = await get_or_404(db, Model, model_id, detail=entity_not_found("Model"))
     provider = await get_or_404(db, Provider, model.provider_id, detail=entity_not_found("Provider"))
-    provider_key = resolve_provider_key_from_name(provider.name)
+    provider_key = try_resolve_provider_key_from_name(provider.name)
+    if provider_key is None:
+        return VideoGenerationOptionsRead(
+            provider=provider.name,
+            model_id=model.id,
+            model_name=model.name,
+            allowed_ratios=["16:9"],
+            default_ratio="16:9",
+        )
     capability = resolve_video_capability(provider=provider_key, model=model.name)
     allowed_ratios = sorted(capability.allowed_ratios or {"16:9"})
     default_ratio = resolve_default_ratio(provider=provider_key, model=model.name) or allowed_ratios[0]
@@ -334,7 +342,16 @@ async def get_image_generation_options(
 
     model = await get_or_404(db, Model, model_id, detail=entity_not_found("Model"))
     provider = await get_or_404(db, Provider, model.provider_id, detail=entity_not_found("Provider"))
-    provider_key = resolve_provider_key_from_name(provider.name)
+    provider_key = try_resolve_provider_key_from_name(provider.name)
+    if provider_key is None:
+        return ImageGenerationOptionsRead(
+            provider=provider.name,
+            model_id=model.id,
+            model_name=model.name,
+            supported_ratios=sorted(DEFAULT_VIDEO_REFERENCE_RATIO_SIZE_MAP.keys()),
+            default_resolution_profile="standard",
+            ratio_size_profiles=DEFAULT_VIDEO_REFERENCE_RATIO_SIZE_MAP,
+        )
     capability = resolve_image_capability(provider=provider_key, model=model.name)
     ratio_size_profiles = capability.ratio_size_profiles or DEFAULT_VIDEO_REFERENCE_RATIO_SIZE_MAP
     supported_ratios = sorted(capability.supported_ratios or ratio_size_profiles.keys())
@@ -375,7 +392,9 @@ def _ensure_provider_supports_category(*, provider: Provider, category: ModelCat
         if isinstance(category, ModelCategoryKey)
         else ModelCategoryKey((str(category or "")).strip().lower())
     )
-    provider_key = resolve_provider_key_from_name(provider.name)
+    provider_key = try_resolve_provider_key_from_name(provider.name)
+    if provider_key is None:
+        return
     if not is_provider_category_supported(provider_key, normalized_category):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

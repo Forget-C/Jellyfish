@@ -33,7 +33,12 @@ import type { ShotRead, ShotRuntimeSummaryRead, ShotStatus } from '../../../serv
 import { ScriptProcessingService, StudioChaptersService, StudioShotsService } from '../../../services/generated'
 import { executeAsyncTaskCreate, executeTaskCancel } from '../components/taskActionHelpers'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
-import { getChapterShotEditPath, getChapterShotsPath, getChapterStudioPath } from '../project/ProjectWorkbench/routes'
+import {
+  getChapterShotEditPath,
+  getChapterShotsPath,
+  getChapterStudioPath,
+  getChapterTimelinePath,
+} from '../project/ProjectWorkbench/routes'
 import { useCancelableRelationTask } from '../project/ProjectWorkbench/chapterDivisionTasks'
 import { useRelationTaskNotification } from '../components/taskNotificationHelpers'
 import { useTaskPageContext } from '../components/taskPageContext'
@@ -561,23 +566,31 @@ export function ChapterShotsPage() {
           </Typography.Text>
         </div>
 
-        {shots.length > 0 ? (
-          <Space>
-            <Button
-              type="primary"
-              icon={<FileSearchOutlined />}
-              onClick={() => navigate(getChapterStudioPath(projectId, chapterId))}
-            >
-              进入分镜工作室
-            </Button>
-            <Button
-              icon={<VideoCameraOutlined />}
-              onClick={() => navigate(getChapterStudioPath(projectId, chapterId))}
-            >
-              继续当前镜头
-            </Button>
-          </Space>
-        ) : null}
+        <Space>
+          <Button
+            icon={<ScissorOutlined />}
+            onClick={() => navigate(getChapterTimelinePath(projectId, chapterId))}
+          >
+            章节剪辑
+          </Button>
+          {shots.length > 0 ? (
+            <>
+              <Button
+                type="primary"
+                icon={<FileSearchOutlined />}
+                onClick={() => navigate(getChapterStudioPath(projectId, chapterId))}
+              >
+                进入分镜工作室
+              </Button>
+              <Button
+                icon={<VideoCameraOutlined />}
+                onClick={() => navigate(getChapterStudioPath(projectId, chapterId))}
+              >
+                继续当前镜头
+              </Button>
+            </>
+          ) : null}
+        </Space>
       </Header>
 
       <Content

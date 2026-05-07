@@ -63,7 +63,8 @@ description: "如何在代码中注册内置供应商能力，并与异步任务
 ## 与数据库里配置的 Provider 的关系
 
 - **内置注册表**：定义「系统认识哪些供应商 key、类别、默认 URL」，不替代数据库中的 `Provider` 实例（API Key、环境特定 base_url 等仍存 DB）。
-- **用户/运维在 UI 创建的 Provider**：通常应选用 `supported` 列表中的 key或与别名解析一致的名称，以便 `resolve_provider_key_from_name` 能落到统一 key；任务执行时再按 key 查找已注册的适配器。
+- **用户/运维在 UI 创建的 Provider**：可以选择 `supported` 列表中的内置供应商，也可以输入自定义名称。
+- **自定义 Provider**：配置阶段允许关联任意类别模型；文本模型按 OpenAI-compatible `base_url` 使用，图片/视频生成任务仍需要后续注册对应任务适配器。
 
 ### Base URL 优先级（按类别解析）
 
@@ -78,6 +79,12 @@ description: "如何在代码中注册内置供应商能力，并与异步任务
 - image：`image_base_url` > `base_url` > `ProviderSpec.default_base_url`
 - video：`video_base_url` > `base_url` > `ProviderSpec.default_base_url`
 - text：`base_url` > `ProviderSpec.default_base_url`
+
+自定义 Provider 不存在 `ProviderSpec.default_base_url`，因此只使用数据库中的 URL 字段。
+
+## 阿里百炼图片：线下验证
+
+图片任务走 DashScope 原生 HTTP，与兼容模式下的 Chat Completions 不是同一路径。部署或改模型后，建议先按 **[线下验证阿里百炼文生图](/docs/guide/verify-aliyun-bailian-image/)** 用脚本直连确认 Key 与模型可用，再排 Celery / 前端问题。
 
 ## 测试提示
 

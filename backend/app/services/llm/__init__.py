@@ -1,3 +1,4 @@
+from app.services.llm.model_verify import verify_model_config
 from app.services.llm.manage import (
     create_model,
     create_provider,
@@ -16,6 +17,7 @@ from app.services.llm.manage import (
 )
 from app.services.llm.resolver import (
     build_default_text_llm,
+    build_chat_model_for_model,
     build_chat_model_from_provider,
     get_default_model_by_category,
     get_model_by_category,
@@ -30,6 +32,7 @@ from app.services.llm.provider_registry import (
     register_many,
     register_provider,
     resolve_provider_key_from_name,
+    try_resolve_provider_key_from_name,
 )
 from app.services.llm.provider_resolver import (
     ResolvedProviderConfig,
@@ -38,6 +41,7 @@ from app.services.llm.provider_resolver import (
 )
 
 __all__ = [
+    "verify_model_config",
     "create_model",
     "create_provider",
     "get_default_model_by_category",
@@ -56,6 +60,7 @@ __all__ = [
     "update_model",
     "update_model_settings",
     "update_provider",
+    "build_chat_model_for_model",
     "build_chat_model_from_provider",
     "build_default_text_llm",
     "ProviderSpec",
@@ -66,6 +71,7 @@ __all__ = [
     "register_many",
     "register_provider",
     "resolve_provider_key_from_name",
+    "try_resolve_provider_key_from_name",
     "resolve_provider_config",
     "resolve_provider_config_by_model",
 ]

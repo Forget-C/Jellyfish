@@ -12,6 +12,7 @@ from app.models.types import ChapterStatus, ProjectStyle, ProjectVisualStyle
 if TYPE_CHECKING:
     from app.models.studio_assets import Actor, Character, Costume, Prop, Scene
     from app.models.studio_shots import Shot
+    from app.models.studio_timeline_chapter import ChapterTimelineSegment, ChapterTimelineState
 
 
 class Project(Base, TimestampMixin):
@@ -122,6 +123,20 @@ class Chapter(Base, TimestampMixin):
         back_populates="chapter",
         cascade="all, delete-orphan",
         passive_deletes=True,
+    )
+    timeline_state: Mapped["ChapterTimelineState | None"] = relationship(
+        "ChapterTimelineState",
+        back_populates="chapter",
+        uselist=False,
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    timeline_segments: Mapped[list["ChapterTimelineSegment"]] = relationship(
+        "ChapterTimelineSegment",
+        back_populates="chapter",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="ChapterTimelineSegment.position",
     )
 
     __table_args__ = (

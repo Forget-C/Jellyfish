@@ -11,6 +11,7 @@ description: "聚焦怎么开发、怎么协作、怎么接入前后端能力的
 - [OpenAPI](/docs/guide/openapi/)
 - [AI 工作流](/docs/guide/ai-workflow/)
 - [LLM 供应商注册与扩展](/docs/guide/llm-provider-registration/)
+- [线下验证阿里百炼文生图](/docs/guide/verify-aliyun-bailian-image/)
 
 相关文档已拆分到独立栏目：
 

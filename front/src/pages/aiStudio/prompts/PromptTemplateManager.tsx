@@ -4,6 +4,7 @@ import { Card, Tree, Input, Row, Col, Tag, Pagination, Button, Modal, Form, Sele
 import type { DataNode } from 'antd/es/tree'
 import { StudioPromptsService } from '../../../services/generated'
 import type { PromptCategory, PromptTemplateRead } from '../../../services/generated'
+import { ScrollablePage } from '../components/ScrollablePage'
 
 const fallbackCategoryLabels: Record<string, string> = {
   frame_head_image: '首帧图片',
@@ -347,138 +348,140 @@ const PromptTemplateManager: FC = () => {
   }
 
   return (
-    <div className="space-y-4">
-      <Card
-        title="提示词模板管理"
-        loading={loading && templates.length === 0}
-        extra={<Button type="primary" onClick={openCreateModal}>添加提示词</Button>}
-      >
-        <Input.Search
-          placeholder="搜索模板名称或预览"
-          allowClear
-          className="mb-4 max-w-md"
-          value={searchText}
-          onSearch={handleSearch}
-          onChange={(e) => {
-            const value = e.target.value
-            setSearchText(value)
-            if (!value) {
-              handleSearch('')
-            }
-          }}
-        />
-        <Row gutter={16}>
-          <Col xs={24} md={10}>
-            <Tree
-              showLine
-              defaultExpandAll
-              blockNode
-              treeData={treeData}
-              onSelect={onSelect}
-              fieldNames={{ title: 'title', key: 'key', children: 'children' }}
-            />
-            <div className="mt-4 flex justify-end">
-              <Pagination
-                current={page}
-                pageSize={PAGE_SIZE}
-                total={total}
-                showSizeChanger={false}
-                onChange={handlePageChange}
+    <ScrollablePage className="pr-1">
+      <div className="space-y-4">
+        <Card
+          title="提示词模板管理"
+          loading={loading && templates.length === 0}
+          extra={<Button type="primary" onClick={openCreateModal}>添加提示词</Button>}
+        >
+          <Input.Search
+            placeholder="搜索模板名称或预览"
+            allowClear
+            className="mb-4 max-w-md"
+            value={searchText}
+            onSearch={handleSearch}
+            onChange={(e) => {
+              const value = e.target.value
+              setSearchText(value)
+              if (!value) {
+                handleSearch('')
+              }
+            }}
+          />
+          <Row gutter={16}>
+            <Col xs={24} md={10}>
+              <Tree
+                showLine
+                defaultExpandAll
+                blockNode
+                treeData={treeData}
+                onSelect={onSelect}
+                fieldNames={{ title: 'title', key: 'key', children: 'children' }}
               />
-            </div>
-          </Col>
-          <Col xs={24} md={14}>
-            {selected ? (
-              <Card
-                title={selected.name}
-                size="small"
-                extra={(
-                  <div className="flex gap-2">
-                    <Button size="small" onClick={() => openEditModal(selected)}>编辑</Button>
-                    <Button size="small" danger onClick={() => handleDeleteTemplate(selected)}>
-                      删除
-                    </Button>
+              <div className="mt-4 flex justify-end">
+                <Pagination
+                  current={page}
+                  pageSize={PAGE_SIZE}
+                  total={total}
+                  showSizeChanger={false}
+                  onChange={handlePageChange}
+                />
+              </div>
+            </Col>
+            <Col xs={24} md={14}>
+              {selected ? (
+                <Card
+                  title={selected.name}
+                  size="small"
+                  extra={(
+                    <div className="flex gap-2">
+                      <Button size="small" onClick={() => openEditModal(selected)}>编辑</Button>
+                      <Button size="small" danger onClick={() => handleDeleteTemplate(selected)}>
+                        删除
+                      </Button>
+                    </div>
+                  )}
+                >
+                  <Tag>{categoryLabels[selected.category] || selected.category}</Tag>
+                  <p className="text-gray-600 text-sm mt-2">{selected.preview}</p>
+                  <pre className="mt-3 p-3 bg-gray-50 rounded text-xs overflow-auto max-h-48">
+                    {selected.content}
+                  </pre>
+                  {selected.variables.length > 0 && (
+                    <div className="mt-2 text-xs text-gray-500">
+                      变量：{selected.variables.join(', ')}
+                    </div>
+                  )}
+                  <div className="mt-3 flex gap-2">
+                    {selected.is_system && <Tag color="gold">系统预置</Tag>}
+                    {selected.is_default && <Tag color="blue">默认提示词</Tag>}
                   </div>
-                )}
-              >
-                <Tag>{categoryLabels[selected.category] || selected.category}</Tag>
-                <p className="text-gray-600 text-sm mt-2">{selected.preview}</p>
-                <pre className="mt-3 p-3 bg-gray-50 rounded text-xs overflow-auto max-h-48">
-                  {selected.content}
-                </pre>
-                {selected.variables.length > 0 && (
-                  <div className="mt-2 text-xs text-gray-500">
-                    变量：{selected.variables.join(', ')}
+                </Card>
+              ) : (
+                <Card>
+                  <div className="text-gray-500 text-center py-8">
+                    左侧选择模板查看详情
                   </div>
-                )}
-                <div className="mt-3 flex gap-2">
-                  {selected.is_system && <Tag color="gold">系统预置</Tag>}
-                  {selected.is_default && <Tag color="blue">默认提示词</Tag>}
-                </div>
-              </Card>
-            ) : (
-              <Card>
-                <div className="text-gray-500 text-center py-8">
-                  左侧选择模板查看详情
-                </div>
-              </Card>
-            )}
-          </Col>
-        </Row>
-      </Card>
+                </Card>
+              )}
+            </Col>
+          </Row>
+        </Card>
 
-      <Modal
-        title={modalMode === 'create' ? '添加提示词' : '编辑提示词'}
-        open={formOpen}
-        onCancel={() => {
-          setFormOpen(false)
-          setEditingTemplateId(null)
-        }}
-        onOk={handleFormSubmit}
-        okText="保存"
-        cancelText="取消"
-        confirmLoading={submitting}
-        destroyOnClose
-      >
-        <Form layout="vertical" form={createForm}>
-          <Form.Item
-            label="模板类别"
-            name="category"
-            rules={[{ required: true, message: '请选择模板类别' }]}
-          >
-            <Select options={categoryOptions} placeholder="请选择类别" />
-          </Form.Item>
-          <Form.Item
-            label="模板名称"
-            name="name"
-            rules={[{ required: true, message: '请输入模板名称' }]}
-          >
-            <Input maxLength={255} placeholder="例如：分镜基础提示词" />
-          </Form.Item>
-          <Form.Item label="预览文案" name="preview">
-            <Input.TextArea rows={2} maxLength={500} placeholder="用于列表预览的简短说明" />
-          </Form.Item>
-          <Form.Item
-            label="模板内容"
-            name="content"
-            rules={[{ required: true, message: '请输入模板内容' }]}
-          >
-            <Input.TextArea rows={6} placeholder="请输入提示词模板内容" />
-          </Form.Item>
-          <Form.Item label="变量（回车添加）" name="variables">
-            <Select
-              mode="tags"
-              tokenSeparators={[',', '，']}
-              open={false}
-              placeholder="例如：subject, style, lighting"
-            />
-          </Form.Item>
-          <Form.Item label="设为默认提示词" name="is_default" valuePropName="checked">
-            <Switch />
-          </Form.Item>
-        </Form>
-      </Modal>
-    </div>
+        <Modal
+          title={modalMode === 'create' ? '添加提示词' : '编辑提示词'}
+          open={formOpen}
+          onCancel={() => {
+            setFormOpen(false)
+            setEditingTemplateId(null)
+          }}
+          onOk={handleFormSubmit}
+          okText="保存"
+          cancelText="取消"
+          confirmLoading={submitting}
+          destroyOnClose
+        >
+          <Form layout="vertical" form={createForm}>
+            <Form.Item
+              label="模板类别"
+              name="category"
+              rules={[{ required: true, message: '请选择模板类别' }]}
+            >
+              <Select options={categoryOptions} placeholder="请选择类别" />
+            </Form.Item>
+            <Form.Item
+              label="模板名称"
+              name="name"
+              rules={[{ required: true, message: '请输入模板名称' }]}
+            >
+              <Input maxLength={255} placeholder="例如：分镜基础提示词" />
+            </Form.Item>
+            <Form.Item label="预览文案" name="preview">
+              <Input.TextArea rows={2} maxLength={500} placeholder="用于列表预览的简短说明" />
+            </Form.Item>
+            <Form.Item
+              label="模板内容"
+              name="content"
+              rules={[{ required: true, message: '请输入模板内容' }]}
+            >
+              <Input.TextArea rows={6} placeholder="请输入提示词模板内容" />
+            </Form.Item>
+            <Form.Item label="变量（回车添加）" name="variables">
+              <Select
+                mode="tags"
+                tokenSeparators={[',', '，']}
+                open={false}
+                placeholder="例如：subject, style, lighting"
+              />
+            </Form.Item>
+            <Form.Item label="设为默认提示词" name="is_default" valuePropName="checked">
+              <Switch />
+            </Form.Item>
+          </Form>
+        </Modal>
+      </div>
+    </ScrollablePage>
   )
 }
 

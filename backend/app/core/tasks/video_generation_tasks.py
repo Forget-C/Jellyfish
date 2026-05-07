@@ -9,6 +9,7 @@ import asyncio
 from abc import ABC, abstractmethod
 from typing import Any, AsyncIterator
 
+from app.core.integrations.aliyun.dashscope_videos import DashScopeVideoApiAdapter, _dashscope_task_failure_detail
 from app.core.integrations.openai.video import OpenAIVideoApiAdapter
 from app.core.integrations.volcengine.video import VolcengineVideoApiAdapter
 from app.core.contracts.provider import ProviderConfig
@@ -22,6 +23,7 @@ __all__ = [
     "AbstractVideoGenerationTask",
     "OpenAIVideoGenerationTask",
     "VolcengineVideoGenerationTask",
+    "DashScopeVideoGenerationTask",
     "VideoGenerationTask",
 ]
 
@@ -206,6 +208,91 @@ class VolcengineVideoGenerationTask(AbstractVideoGenerationTask):
         )
 
 
+def _extract_dashscope_video_url(meta: dict[str, Any]) -> str | None:
+    """从 DashScope 任务查询响应中提取视频 URL。"""
+    for key in ("video_url", "url"):
+        value = meta.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    output = meta.get("output")
+    if isinstance(output, dict):
+        for key in ("video_url", "url"):
+            value = output.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        results = output.get("results")
+        if isinstance(results, list):
+            for item in results:
+                if not isinstance(item, dict):
+                    continue
+                for key in ("video_url", "url"):
+                    value = item.get(key)
+                    if isinstance(value, str) and value.strip():
+                        return value.strip()
+    return None
+
+
+class DashScopeVideoGenerationTask(AbstractVideoGenerationTask):
+    """DashScope 原生视频：创建异步任务并轮询 `/api/v1/tasks/{task_id}`。"""
+
+    def __init__(
+        self,
+        *,
+        adapter: DashScopeVideoApiAdapter | None = None,
+        provider_config: ProviderConfig,
+        input_: VideoGenerationInput,
+        poll_interval_s: float = 3.0,
+        timeout_s: float = 600.0,
+    ) -> None:
+        super().__init__(
+            provider_config=provider_config,
+            input_=input_,
+            poll_interval_s=poll_interval_s,
+            timeout_s=timeout_s,
+        )
+        self._adapter = adapter or DashScopeVideoApiAdapter()
+
+    async def _create_task(self) -> None:
+        self._provider_task_id = await self._adapter.create_video_task(
+            cfg=self._cfg,
+            input_=self._input,
+            timeout_s=self._timeout_s,
+        )
+
+    async def _poll_and_get_result(self) -> VideoGenerationResult:
+        task_id = self._provider_task_id or ""
+        if not task_id:
+            raise RuntimeError("DashScope poll missing provider task id")
+
+        while True:
+            meta = await self._adapter.get_video_task(
+                cfg=self._cfg,
+                task_id=task_id,
+                timeout_s=self._timeout_s,
+            )
+            output = meta.get("output") if isinstance(meta.get("output"), dict) else {}
+            status_val = str(output.get("task_status") or meta.get("status") or "").upper()
+
+            if status_val in {"SUCCEEDED", "COMPLETED"}:
+                video_url = _extract_dashscope_video_url(meta)
+                if not video_url:
+                    raise RuntimeError(f"DashScope video task succeeded but no video url: {meta!r}")
+                return VideoGenerationResult(
+                    url=video_url,
+                    file_id=None,
+                    provider_task_id=task_id,
+                    provider="aliyun_bailian",
+                    status=status_val,
+                )
+            if status_val in {"FAILED", "CANCELED", "CANCELLED", "UNKNOWN"}:
+                detail = _dashscope_task_failure_detail(meta)
+                if detail:
+                    raise RuntimeError(detail)
+                raise RuntimeError(f"DashScope video task not succeeded: status={status_val!r} meta={meta!r}")
+            await self._sleep_poll()
+
+
 class VideoGenerationTask(BaseTask):
     """按 provider 分派到 OpenAI / 火山实现；对外构造函数签名保持不变。"""
 
@@ -256,6 +343,23 @@ class VideoGenerationTask(BaseTask):
             input_=input_,
             poll_interval_s=poll_interval_s,
             timeout_s=timeout_s,
+        )
+
+    @staticmethod
+    def _build_aliyun_bailian_impl(
+        *,
+        provider_config: ProviderConfig,
+        input_: VideoGenerationInput,
+        poll_interval_s: float = 3.0,
+        timeout_s: float = 120.0,
+    ) -> AbstractVideoGenerationTask:
+        # DashScope 视频任务一般耗时更长，保证超时时间不低于 10 分钟。
+        effective_timeout = max(float(timeout_s), 600.0)
+        return DashScopeVideoGenerationTask(
+            provider_config=provider_config,
+            input_=input_,
+            poll_interval_s=poll_interval_s,
+            timeout_s=effective_timeout,
         )
 
     async def run(self, *args: Any, **kwargs: Any) -> AsyncIterator[Any] | None:  # type: ignore[override]

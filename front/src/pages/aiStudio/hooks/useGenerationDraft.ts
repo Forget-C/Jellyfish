@@ -135,7 +135,9 @@ export function useGenerationDraft<TBase, TContext, TDerived, TSubmitResult = vo
       (state !== 'derived' && state !== 'submitted')
     if (needsDerive) {
       nextDerived = await deriveNow()
-      if (!nextDerived) return null
+      if (!nextDerived) {
+        throw new Error('提示词预览生成失败，请稍后重试')
+      }
     }
     const stableDerived = nextDerived as TDerived
     setState('submitting')
@@ -146,8 +148,9 @@ export function useGenerationDraft<TBase, TContext, TDerived, TSubmitResult = vo
       return result
     } catch (err) {
       setState('error')
-      setError(err instanceof Error ? err.message : 'submit failed')
-      return null
+      const msg = err instanceof Error ? err.message : 'submit failed'
+      setError(msg)
+      throw err instanceof Error ? err : new Error(msg)
     }
   }, [base, context, deriveNow, derived, submit])
 

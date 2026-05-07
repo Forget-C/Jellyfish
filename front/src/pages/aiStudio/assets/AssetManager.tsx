@@ -5,6 +5,7 @@ import { ActorsTab } from './tabs/ActorsTab'
 import { ScenesTab } from './tabs/ScenesTab'
 import { PropsTab } from './tabs/PropsTab'
 import { CostumesTab } from './tabs/CostumesTab'
+import { ScrollablePage } from '../components/ScrollablePage'
 
 const TAB_PARAM = 'tab'
 type AssetTabKey = 'actor' | 'scene' | 'prop' | 'costume'
@@ -46,22 +47,24 @@ const AssetManager = () => {
   }
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <Tabs
-          activeKey={activeTab}
-          onChange={(k) => {
-            if (isValidTab(k)) setTabInUrl(k)
-          }}
-          items={[
-            { key: 'actor', label: '演员', children: <ActorsTab /> },
-            { key: 'scene', label: '场景', children: <ScenesTab /> },
-            { key: 'prop', label: '道具', children: <PropsTab /> },
-            { key: 'costume', label: '服装', children: <CostumesTab /> },
-          ]}
-        />
-      </Card>
-    </div>
+    <ScrollablePage className="pr-1">
+      <div className="space-y-4">
+        <Card>
+          <Tabs
+            activeKey={activeTab}
+            onChange={(k) => {
+              if (isValidTab(k)) setTabInUrl(k)
+            }}
+            items={[
+              { key: 'actor', label: '演员', children: <ActorsTab /> },
+              { key: 'scene', label: '场景', children: <ScenesTab /> },
+              { key: 'prop', label: '道具', children: <PropsTab /> },
+              { key: 'costume', label: '服装', children: <CostumesTab /> },
+            ]}
+          />
+        </Card>
+      </div>
+    </ScrollablePage>
   )
 }
 
