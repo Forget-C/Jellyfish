@@ -34,6 +34,7 @@ from app.models.studio_shots import (
     ShotDialogLine,
     ShotFrameImage,
 )
+from app.models.studio_timeline_chapter import ChapterTimelineSegment, ChapterTimelineState
 from app.models.types import (
     AssetQualityLevel,
     AssetViewAngle,
@@ -106,4 +107,6 @@ __all__ = [
     "FileItem",
     "FileUsage",
     "TimelineClip",
+    "ChapterTimelineState",
+    "ChapterTimelineSegment",
 ]

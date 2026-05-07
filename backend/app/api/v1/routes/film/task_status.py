@@ -148,6 +148,7 @@ async def get_task_status(
             started_at_ts=view.started_at_ts,
             finished_at_ts=view.finished_at_ts,
             elapsed_ms=view.elapsed_ms,
+            error=view.error or "",
         )
     )
 

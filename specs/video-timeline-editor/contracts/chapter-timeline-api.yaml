@@ -1,0 +1,135 @@
+# 片段：章节时间线 API（合并入主 OpenAPI 时放在 paths/components）
+openapi: 3.0.3
+info:
+  title: Jellyfish — Chapter Timeline (fragment)
+  version: 0.1.0
+paths:
+  /api/v1/studio/chapters/{chapter_id}/timeline:
+    get:
+      tags: [studio/chapters]
+      summary: 获取章节剪辑时间线（含镜头成片解析状态）
+      operationId: get_chapter_timeline
+      parameters:
+        - name: chapter_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 统一 ApiResponse，data 为时间线 DTO
+    put:
+      tags: [studio/chapters]
+      summary: 全量保存章节时间线片段顺序
+      operationId: put_chapter_timeline
+      parameters:
+        - name: chapter_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChapterTimelineWrite"
+      responses:
+        "200":
+          description: 保存成功
+        "409":
+          description: 版本冲突（若启用 layout_version）
+  /api/v1/studio/chapters/{chapter_id}/timeline/export:
+    post:
+      tags: [studio/chapters]
+      summary: 发起章节时间线拼接导出任务
+      operationId: post_chapter_timeline_export
+      parameters:
+        - name: chapter_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChapterTimelineExportRequest"
+      responses:
+        "201":
+          description: 创建任务，data 含 task_id
+        "400":
+          description: 存在缺失/异常片段，禁止导出
+components:
+  schemas:
+    ChapterTimelineWrite:
+      type: object
+      required: [segments]
+      properties:
+        layout_version:
+          type: integer
+          description: 可选，与 get 返回对应，用于乐观锁
+        segments:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChapterTimelineSegmentWrite"
+    ChapterTimelineSegmentWrite:
+      type: object
+      required: [shot_id]
+      properties:
+        shot_id:
+          type: string
+        trim_start_ms:
+          type: integer
+          nullable: true
+        trim_end_ms:
+          type: integer
+          nullable: true
+    ChapterTimelineExportRequest:
+      type: object
+      properties:
+        idempotency_key:
+          type: string
+          description: 可选，防重复导出
+        encode_mode:
+          type: string
+          enum: [uniform_transcode, lossless_concat_only]
+          default: uniform_transcode
+          description: 默认统一转码；lossless 仅在片段编码一致时无损拼接，否则任务失败
+    ChapterTimelineSegmentRead:
+      type: object
+      properties:
+        id:
+          type: string
+        shot_id:
+          type: string
+        position:
+          type: integer
+        trim_start_ms:
+          type: integer
+          nullable: true
+        trim_end_ms:
+          type: integer
+          nullable: true
+        clip_status:
+          type: string
+          enum: [ready, missing_video, file_missing]
+        file_id:
+          type: string
+          nullable: true
+        label:
+          type: string
+          description: 镜头标题等展示字段
+    ChapterTimelineRead:
+      type: object
+      properties:
+        layout_version:
+          type: integer
+        segments:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChapterTimelineSegmentRead"
+        preview_note:
+          type: string
+          description: 例如本期是否支持连续预览的说明文案

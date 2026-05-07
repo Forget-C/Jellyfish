@@ -7,7 +7,6 @@ import type {
   Asset,
   PromptTemplate,
   FileItem,
-  TimelineClip,
   Agent,
 } from '../mocks/data'
 
@@ -35,10 +34,6 @@ const api = {
   },
   files: {
     list: () => get<FileItem[]>('/files'),
-  },
-  timeline: {
-    get: (projectId: string) =>
-      get<TimelineClip[]>(`/projects/${projectId}/timeline`),
   },
   agents: {
     list: () => get<Agent[]>('/agents'),

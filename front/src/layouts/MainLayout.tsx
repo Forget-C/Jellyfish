@@ -57,6 +57,7 @@ const MainLayout: React.FC = () => {
       studio: '分镜工作室',
       prep: '章节编辑',
       shots: '分镜',
+      timeline: '章节剪辑',
       editor: '视频剪辑',
       edit: '编辑',
     }

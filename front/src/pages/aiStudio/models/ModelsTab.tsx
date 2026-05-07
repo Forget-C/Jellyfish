@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import {
   Alert,
   Layout,
@@ -18,6 +18,7 @@ import {
   Tooltip,
   Empty,
   Grid,
+  Collapse,
 } from 'antd'
 import type { TableColumnsType } from 'antd'
 import {
@@ -33,9 +34,11 @@ import {
   ThunderboltOutlined,
 } from '@ant-design/icons'
 import { LlmService } from '../../../services/generated/services/LlmService'
+import { ApiError, CancelError } from '../../../services/generated'
 import type {
   ModelRead,
   ModelCategoryKey,
+  ModelVerifyRead,
   ProviderRead,
   ProviderSupportedRead,
 } from '../../../services/generated'
@@ -64,10 +67,62 @@ export default function ModelsTab() {
   const [modelModalOpen, setModelModalOpen] = useState(false)
   const [modelEditing, setModelEditing] = useState<ModelRead | null>(null)
   const [providerOptionsLoading, setProviderOptionsLoading] = useState(true)
+  const [verifyModalOpen, setVerifyModalOpen] = useState(false)
+  const [verifyResult, setVerifyResult] = useState<ModelVerifyRead | null>(null)
+  const [verifyLoading, setVerifyLoading] = useState(false)
+  const [verifyingId, setVerifyingId] = useState<string | null>(null)
+  const verifyPromiseRef = useRef<ReturnType<
+    typeof LlmService.verifyLlmModelApiV1LlmModelsModelIdVerifyPost
+  > | null>(null)
   const [form] = Form.useForm()
   const selectedFormCategory = Form.useWatch<ModelCategoryKey | undefined>('category', form)
   const { lg } = Grid.useBreakpoint()
   const isLargeScreen = lg ?? false
+
+  useEffect(() => {
+    return () => {
+      verifyPromiseRef.current?.cancel()
+    }
+  }, [])
+
+  /** 对已保存模型发起同步配置验证；重复点击忽略；卸载时取消进行中的请求。 */
+  const handleVerifyModel = (record: ModelRead, e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    if (verifyLoading) return
+    setVerifyLoading(true)
+    setVerifyingId(record.id)
+    const p = LlmService.verifyLlmModelApiV1LlmModelsModelIdVerifyPost({ modelId: record.id })
+    verifyPromiseRef.current = p
+    void p
+      .then((res) => {
+        const payload = res.data
+        if (!payload) {
+          message.error('未返回验证结果')
+          return
+        }
+        setVerifyResult(payload)
+        setVerifyModalOpen(true)
+        if (payload.ok) {
+          message.success(payload.message || '验证通过')
+        } else {
+          message.warning(payload.message || '验证未通过')
+        }
+      })
+      .catch((err: unknown) => {
+        if (err instanceof CancelError) return
+        if (err instanceof ApiError) {
+          const b = err.body as { message?: string } | undefined
+          message.error(b?.message ?? err.message)
+          return
+        }
+        message.error('验证请求失败')
+      })
+      .finally(() => {
+        setVerifyLoading(false)
+        setVerifyingId(null)
+        verifyPromiseRef.current = null
+      })
+  }
 
   const load = async () => {
     setLoading(true)
@@ -129,14 +184,27 @@ export default function ModelsTab() {
       (spec) => spec.display_name === providerName || (spec.aliases?.length && spec.aliases.includes(providerName)),
     )
 
+  /** 判断供应商是否可用于当前类别；自定义供应商不在内置能力表中，配置阶段允许关联。 */
+  const canUseProviderForCategory = (provider: ProviderRead, category: ModelCategoryKey | undefined) => {
+    if (!category) return true
+    const spec = resolveProviderSpec(provider.name)
+    return !spec || (spec.supported_categories?.includes(category) ?? false)
+  }
+
+  /** 生成模型表单的供应商选项，并把自定义供应商显式标识出来。 */
+  const providerToOption = (provider: ProviderRead) => {
+    const spec = resolveProviderSpec(provider.name)
+    return {
+      label: spec ? provider.name : `${provider.name}（自定义）`,
+      value: provider.id,
+    }
+  }
+
   const filteredProviderOptions = useMemo(() => {
-    if (!selectedFormCategory) return providers.map((p) => ({ label: p.name, value: p.id }))
+    if (!selectedFormCategory) return providers.map(providerToOption)
     return providers
-      .filter((provider) => {
-        const spec = resolveProviderSpec(provider.name)
-        return !!spec?.supported_categories?.includes(selectedFormCategory)
-      })
-      .map((p) => ({ label: p.name, value: p.id }))
+      .filter((provider) => canUseProviderForCategory(provider, selectedFormCategory))
+      .map(providerToOption)
   }, [providers, selectedFormCategory, supportedProviders])
 
   const editingUnsupportedProviderOption = useMemo(() => {
@@ -355,8 +423,9 @@ export default function ModelsTab() {
               size="small"
               className={TABLE_ACTION_BTN_TEST_CLASS}
               icon={<ThunderboltOutlined />}
+              loading={verifyLoading && verifyingId === record.id}
               onClick={(e) => {
-                e.stopPropagation()
+                handleVerifyModel(record, e)
               }}
             />
           </Tooltip>
@@ -543,7 +612,16 @@ export default function ModelsTab() {
                     >
                       编辑
                     </Button>,
-                    <Button key="test" type="text" size="small" icon={<ThunderboltOutlined />}>
+                    <Button
+                      key="test"
+                      type="text"
+                      size="small"
+                      icon={<ThunderboltOutlined />}
+                      loading={verifyLoading && verifyingId === m.id}
+                      onClick={(e) => {
+                        handleVerifyModel(m, e)
+                      }}
+                    >
                       测试生成
                     </Button>,
                     <Dropdown
@@ -641,7 +719,13 @@ export default function ModelsTab() {
                 >
                   编辑
                 </Button>
-                <Button icon={<ThunderboltOutlined />}>快速测试</Button>
+                <Button
+                  icon={<ThunderboltOutlined />}
+                  loading={verifyLoading && verifyingId === selectedModel.id}
+                  onClick={() => handleVerifyModel(selectedModel)}
+                >
+                  快速测试
+                </Button>
               </Space>
             </div>
           </div>
@@ -674,12 +758,63 @@ export default function ModelsTab() {
                 >
                   编辑
                 </Button>
-                <Button icon={<ThunderboltOutlined />}>快速测试</Button>
+                <Button
+                  icon={<ThunderboltOutlined />}
+                  loading={verifyLoading && verifyingId === selectedModel.id}
+                  onClick={() => handleVerifyModel(selectedModel)}
+                >
+                  快速测试
+                </Button>
               </Space>
             </div>
           </Drawer>
         )}
       </Layout>
+
+      <Modal
+        title="模型配置验证"
+        open={verifyModalOpen}
+        onCancel={() => {
+          setVerifyModalOpen(false)
+          setVerifyResult(null)
+        }}
+        footer={
+          <Button
+            type="primary"
+            onClick={() => {
+              setVerifyModalOpen(false)
+              setVerifyResult(null)
+            }}
+          >
+            关闭
+          </Button>
+        }
+        width={520}
+        destroyOnClose
+      >
+        {verifyResult ? (
+          <div className="space-y-3">
+            <Alert type={verifyResult.ok ? 'success' : 'warning'} showIcon message={verifyResult.message} />
+            <div className="text-sm text-gray-500">耗时 {verifyResult.elapsed_ms} ms · 类别 {verifyResult.category}</div>
+            {verifyResult.detail && Object.keys(verifyResult.detail).length > 0 ? (
+              <Collapse
+                bordered={false}
+                items={[
+                  {
+                    key: 'detail',
+                    label: '详情（已脱敏，不含密钥）',
+                    children: (
+                      <pre className="text-xs bg-gray-50 p-2 rounded overflow-auto max-h-64 whitespace-pre-wrap break-all">
+                        {JSON.stringify(verifyResult.detail, null, 2)}
+                      </pre>
+                    ),
+                  },
+                ]}
+              />
+            ) : null}
+          </div>
+        ) : null}
+      </Modal>
 
       <Modal
         title={modelEditing ? '编辑模型' : '添加模型'}
@@ -709,7 +844,7 @@ export default function ModelsTab() {
               loading={providerOptionsLoading}
               placeholder={
                 selectedFormCategory
-                  ? `选择支持${categoryLabelMap[selectedFormCategory]}的供应商`
+                  ? `选择支持${categoryLabelMap[selectedFormCategory]}的供应商或自定义供应商`
                   : '选择供应商（请先添加供应商）'
               }
               options={providerSelectOptions}
@@ -717,7 +852,7 @@ export default function ModelsTab() {
                 providerOptionsLoading
                   ? '加载中…'
                   : selectedFormCategory
-                    ? '暂无支持该类别的供应商'
+                    ? '暂无支持该类别的内置供应商或自定义供应商'
                     : '暂无供应商'
               }
             />

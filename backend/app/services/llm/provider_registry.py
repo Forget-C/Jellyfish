@@ -101,6 +101,18 @@ def resolve_provider_key_from_name(name: str) -> str:
     )
 
 
+def try_resolve_provider_key_from_name(name: str) -> str | None:
+    """解析已注册供应商 key；未知名称视为自定义供应商并返回 None。"""
+    try:
+        return resolve_provider_key_from_name(name)
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_503_SERVICE_UNAVAILABLE and str(exc.detail).startswith(
+            "Unsupported provider name:"
+        ):
+            return None
+        raise
+
+
 def is_provider_category_supported(provider_key: str, category: ModelCategoryKey) -> bool:
     spec = get_provider_spec(provider_key)
     return category in spec.supported_categories

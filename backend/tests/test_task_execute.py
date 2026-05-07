@@ -400,8 +400,11 @@ def test_sync_executor_marks_failed_on_boundary_timeout(tmp_path) -> None:
 def test_task_executor_registry_resolves_sync_and_async_executor_types() -> None:
     divide_executor = task_executor_registry.resolve("script_divide")
     video_executor = task_executor_registry.resolve("video_generation")
+    chapter_export_executor = task_executor_registry.resolve("chapter_timeline_export")
 
     assert isinstance(divide_executor, AbstractWorkerTaskExecutor)
     assert divide_executor.task_kind == "script_divide"
     assert isinstance(video_executor, AbstractAsyncDelegatingExecutor)
     assert video_executor.task_kind == "video_generation"
+    assert isinstance(chapter_export_executor, AbstractAsyncDelegatingExecutor)
+    assert chapter_export_executor.task_kind == "chapter_timeline_export"

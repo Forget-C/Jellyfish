@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 from app.services.film.generated_video import run_video_generation_task
+from app.services.studio.chapter_timeline_export_task import run_chapter_timeline_export_task
 from app.services.film.shot_frame_prompt_tasks import run_shot_frame_prompt_task
 from app.services.script_processing_worker import (
     CharacterPortraitTaskExecutor,
@@ -56,6 +57,14 @@ task_executor_registry.register(
         task_kind="video_generation",
         runner=run_video_generation_task,
         timeout_seconds=3600.0,
+    ),
+)
+task_executor_registry.register(
+    "chapter_timeline_export",
+    AbstractAsyncDelegatingExecutor(
+        task_kind="chapter_timeline_export",
+        runner=run_chapter_timeline_export_task,
+        timeout_seconds=7200.0,
     ),
 )
 task_executor_registry.register(

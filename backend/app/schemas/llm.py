@@ -131,6 +131,37 @@ class ModelRead(ModelBase):
     id: str = Field(..., description="模型 ID")
 
 
+class ModelVerifyRead(BaseModel):
+    """模型配置验证结果（同步探测；不含任何密钥明文）。"""
+
+    ok: bool = Field(..., description="是否探测通过")
+    category: ModelCategoryKey = Field(..., description="被验证模型的类别")
+    message: str = Field(..., description="面向用户的主提示")
+    elapsed_ms: int = Field(..., description="服务端探测耗时（毫秒）")
+    detail: dict[str, Any] | None = Field(
+        None,
+        description="脱敏后的诊断信息（如 provider_key、上游 HTTP 状态、回复摘要）；无 RBAC 时仍不得包含密钥",
+    )
+
+
+class ModelChatTestRequest(BaseModel):
+    """模型试聊请求（仅文本模型）。"""
+
+    message: str = Field(
+        ...,
+        min_length=1,
+        max_length=8000,
+        description="用户输入；服务端会做长度截断与超时保护",
+    )
+
+
+class ModelChatTestRead(BaseModel):
+    """模型试聊响应（仅返回正文与耗时，不回显密钥）。"""
+
+    reply: str = Field("", description="模型回复正文")
+    elapsed_ms: int = Field(..., description="服务端调用耗时（毫秒）")
+
+
 class ModelSettingsBase(BaseModel):
     """模型全局设置通用字段。"""
 

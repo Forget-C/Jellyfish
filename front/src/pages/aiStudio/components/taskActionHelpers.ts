@@ -1,5 +1,5 @@
 import { message } from 'antd'
-import { FilmService } from '../../../services/generated'
+import { ApiError, FilmService } from '../../../services/generated'
 import type { TaskStatus } from '../../../services/generated'
 import type { RelationTaskState } from '../project/ProjectWorkbench/chapterDivisionTasks'
 
@@ -29,6 +29,10 @@ type ExecuteAsyncTaskCreateOptions<T extends AsyncTaskCreateLike> = {
 
 export function defaultTaskActionErrorMessage(error: unknown, fallbackErrorMessage: string): string {
   if (!error) return fallbackErrorMessage
+  if (error instanceof ApiError && error.body && typeof error.body === 'object') {
+    const msg = (error.body as { message?: unknown }).message
+    if (typeof msg === 'string' && msg.trim()) return msg.trim()
+  }
   if (typeof error === 'string' && error.trim()) return error
   if (typeof error === 'object') {
     const maybeAny = error as {
@@ -126,4 +130,21 @@ export function notifyExistingTask(
   if (!task) return false
   message.info(task.cancelRequested ? options.cancellingMessage : options.runningMessage)
   return true
+}
+
+/**
+ * 从统一 ApiResponse 信封或扁平结构中读取 task_id（兼容代理剥离 Content-Type、字段别名等）。
+ */
+export function extractTaskIdFromApiEnvelope(body: unknown): string | null {
+  if (!body || typeof body !== 'object') return null
+  const o = body as Record<string, unknown>
+  const nested = o.data
+  if (nested && typeof nested === 'object') {
+    const d = nested as Record<string, unknown>
+    const id = d.task_id ?? d.taskId
+    if (typeof id === 'string' && id.trim().length > 0) return id.trim()
+  }
+  const flat = o.task_id ?? o.taskId
+  if (typeof flat === 'string' && flat.trim().length > 0) return flat.trim()
+  return null
 }

@@ -41,7 +41,9 @@ def _build_s3_client():
         region_name=settings.s3_region_name,
         aws_access_key_id=settings.s3_access_key_id,
         aws_secret_access_key=settings.s3_secret_access_key,
-        config=BotoConfig(s3={"addressing_style": "virtual"}),
+        # 对 MinIO/RustFS 等自建 S3 兼容服务，优先使用 path-style，
+        # 避免解析出 <bucket>.<endpoint-host> 导致容器内 DNS 失败。
+        config=BotoConfig(s3={"addressing_style": "path"}),
     )
     return client
 

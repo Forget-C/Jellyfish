@@ -20,6 +20,8 @@ export type RelationTaskState = {
   startedAtTs?: number | null
   finishedAtTs?: number | null
   elapsedMs?: number | null
+  /** 任务失败时由轮询接口返回，便于直接展示给用户 */
+  error?: string | null
 }
 
 export type ChapterDivisionTaskState = RelationTaskState
@@ -80,6 +82,7 @@ export function toRelationTaskStateFromStatusRead(
     | 'started_at_ts'
     | 'finished_at_ts'
     | 'elapsed_ms'
+    | 'error'
   >,
 ): RelationTaskState {
   return {
@@ -90,6 +93,7 @@ export function toRelationTaskStateFromStatusRead(
     startedAtTs: data.started_at_ts,
     finishedAtTs: data.finished_at_ts,
     elapsedMs: data.elapsed_ms,
+    error: data.error?.trim() ? data.error.trim() : null,
   }
 }
 
@@ -105,6 +109,7 @@ export function applyCancelToRelationTaskState(
     startedAtTs: currentTask.startedAtTs,
     finishedAtTs: currentTask.finishedAtTs,
     elapsedMs: currentTask.elapsedMs,
+    error: currentTask.error,
   }
 }
 

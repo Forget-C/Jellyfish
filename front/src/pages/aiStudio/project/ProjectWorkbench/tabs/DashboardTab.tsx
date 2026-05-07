@@ -1,4 +1,4 @@
-import { Card, Button, Statistic, Row, Col, Progress, Space, Spin } from 'antd'
+import { Card, Button, Statistic, Row, Col, Progress, Space, Spin, message } from 'antd'
 import {
   CheckCircleOutlined,
   ClockCircleOutlined,
@@ -8,8 +8,9 @@ import {
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import type { TabKey } from '../constants'
-import { getChapterShotsPath, getChapterStudioPath, getProjectChaptersPath, getProjectEditorPath } from '../routes'
+import { getChapterShotsPath, getChapterStudioPath, getChapterTimelinePath, getProjectChaptersPath } from '../routes'
 import { useProject, useChapters } from '../hooks/useProjectData'
+import { ScrollablePage } from '../../../components/ScrollablePage'
 import { ensureHasShotsBeforeShooting } from '../ensureHasShotsBeforeShooting'
 import { getChapterPreparationState } from '../chapterPreparation'
 import {
@@ -169,7 +170,8 @@ export function DashboardTab({ onSelectTab }: { onSelectTab: (tab: TabKey) => vo
   ] as const
 
   return (
-    <div className="space-y-6">
+    <ScrollablePage className="pr-1">
+      <div className="space-y-6">
       <Card size="small">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="min-w-0">
@@ -182,7 +184,20 @@ export function DashboardTab({ onSelectTab }: { onSelectTab: (tab: TabKey) => vo
           </div>
           <Space wrap>
             <Button onClick={() => onSelectTab('chapters')}>进入章节管理</Button>
-            <Button onClick={() => projectId && navigate(getProjectEditorPath(projectId))}>进入后期剪辑</Button>
+            <Button
+              onClick={() => {
+                if (!projectId) return
+                const target = recommendedChapter ?? chaptersByIndex[0]
+                if (!target) {
+                  message.warning('请先创建章节，再进入章节剪辑')
+                  onSelectTab('chapters')
+                  return
+                }
+                navigate(getChapterTimelinePath(projectId, target.id))
+              }}
+            >
+              进入后期剪辑
+            </Button>
             <Button
               type="primary"
               icon={recommendedState?.primaryIcon ?? <VideoCameraOutlined />}
@@ -355,6 +370,7 @@ export function DashboardTab({ onSelectTab }: { onSelectTab: (tab: TabKey) => vo
           </Card>
         </Col>
       </Row>
-    </div>
+      </div>
+    </ScrollablePage>
   )
 }

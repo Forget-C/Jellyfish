@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -19,6 +20,10 @@ from app.models.types import (
     ShotStatus,
     VFXType,
 )
+
+if TYPE_CHECKING:
+    from app.models.studio_projects import Chapter
+    from app.models.studio_timeline_chapter import ChapterTimelineSegment
 
 
 class Shot(Base,TimestampMixin):
@@ -71,6 +76,13 @@ class Shot(Base,TimestampMixin):
     chapter: Mapped["Chapter"] = relationship(back_populates="shots")
     generated_video_file: Mapped["FileItem | None"] = relationship(
         foreign_keys=[generated_video_file_id]
+    )
+    timeline_segment: Mapped["ChapterTimelineSegment | None"] = relationship(
+        "ChapterTimelineSegment",
+        back_populates="shot",
+        uselist=False,
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
     detail: Mapped["ShotDetail"] = relationship(
         back_populates="shot",

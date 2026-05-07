@@ -82,6 +82,7 @@ class TaskStatusRead(BaseModel):
     started_at_ts: float | None = Field(None, description="任务开始执行时间戳")
     finished_at_ts: float | None = Field(None, description="任务结束时间戳")
     elapsed_ms: int | None = Field(None, description="任务累计执行耗时（毫秒）")
+    error: str = Field("", description="失败时的错误信息（成功/进行中通常为空）")
 
 
 class TaskListItemRead(BaseModel):

@@ -35,7 +35,10 @@ class FileUsageWrite(BaseModel):
     shot_id: str | None = Field(None, description="镜头 ID")
     usage_kind: str = Field(
         ...,
-        description="用途：shot_frame / generated_video / character_image / asset_image / upload / api 等",
+        description=(
+            "用途：shot_frame / generated_video / chapter_master_video / "
+            "character_image / asset_image / upload / api 等"
+        ),
     )
     source_ref: str | None = Field(None, description="幂等键（可选）")
 

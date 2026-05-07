@@ -1,5 +1,6 @@
 import { StudioImageTasksService } from '../../../services/generated'
 import { StudioEntitiesApi } from '../../../services/studioEntities'
+import { extractTaskIdFromApiEnvelope } from '../components/taskActionHelpers'
 import type { AssetEditPageBaseProps, BaseAsset, BaseAssetImage } from './components/AssetEditPageBase'
 
 type AdapterConfig<TAsset extends BaseAsset, TImage extends BaseAssetImage> = Omit<
@@ -42,6 +43,9 @@ export const assetAdapters = {
     createImageSlot: async (id: string, angle) => {
       await StudioEntitiesApi.createImage('character', id, { view_angle: angle })
     },
+    deleteImageSlot: async (id: string, imageId: number) => {
+      await StudioEntitiesApi.deleteImage('character', id, imageId)
+    },
     updateImage: async (id: string, imageId: number, payload) => {
       await StudioEntitiesApi.updateImage('character', id, imageId, normalizeUpdateImagePayload(payload))
     },
@@ -61,7 +65,7 @@ export const assetAdapters = {
         characterId: id,
         requestBody: { image_id: imageId, model_id: null, prompt: payload.prompt, images: payload.images } as any,
       })
-      return res.data?.task_id ?? null
+      return extractTaskIdFromApiEnvelope(res)
     },
   } satisfies AdapterConfig<any, any>,
   actor: {
@@ -84,6 +88,9 @@ export const assetAdapters = {
     createImageSlot: async (id: string, angle) => {
       await StudioEntitiesApi.createImage('actor', id, { view_angle: angle })
     },
+    deleteImageSlot: async (id: string, imageId: number) => {
+      await StudioEntitiesApi.deleteImage('actor', id, imageId)
+    },
     updateImage: async (id: string, imageId: number, payload) => {
       await StudioEntitiesApi.updateImage('actor', id, imageId, normalizeUpdateImagePayload(payload))
     },
@@ -103,7 +110,7 @@ export const assetAdapters = {
         actorId: id,
         requestBody: { image_id: imageId, model_id: null, prompt: payload.prompt, images: payload.images } as any,
       })
-      return res.data?.task_id ?? null
+      return extractTaskIdFromApiEnvelope(res)
     },
   } satisfies AdapterConfig<any, any>,
   scene: {
@@ -126,6 +133,9 @@ export const assetAdapters = {
     createImageSlot: async (id: string, angle) => {
       await StudioEntitiesApi.createImage('scene', id, { view_angle: angle })
     },
+    deleteImageSlot: async (id: string, imageId: number) => {
+      await StudioEntitiesApi.deleteImage('scene', id, imageId)
+    },
     updateImage: async (id: string, imageId: number, payload) => {
       await StudioEntitiesApi.updateImage('scene', id, imageId, normalizeUpdateImagePayload(payload))
     },
@@ -147,7 +157,7 @@ export const assetAdapters = {
         assetId: id,
         requestBody: { image_id: imageId, prompt: payload.prompt, images: payload.images } as any,
       })
-      return res.data?.task_id ?? null
+      return extractTaskIdFromApiEnvelope(res)
     },
   } satisfies AdapterConfig<any, any>,
   prop: {
@@ -170,6 +180,9 @@ export const assetAdapters = {
     createImageSlot: async (id: string, angle) => {
       await StudioEntitiesApi.createImage('prop', id, { view_angle: angle })
     },
+    deleteImageSlot: async (id: string, imageId: number) => {
+      await StudioEntitiesApi.deleteImage('prop', id, imageId)
+    },
     updateImage: async (id: string, imageId: number, payload) => {
       await StudioEntitiesApi.updateImage('prop', id, imageId, normalizeUpdateImagePayload(payload))
     },
@@ -191,7 +204,7 @@ export const assetAdapters = {
         assetId: id,
         requestBody: { image_id: imageId, prompt: payload.prompt, images: payload.images } as any,
       })
-      return res.data?.task_id ?? null
+      return extractTaskIdFromApiEnvelope(res)
     },
   } satisfies AdapterConfig<any, any>,
   costume: {
@@ -214,6 +227,9 @@ export const assetAdapters = {
     createImageSlot: async (id: string, angle) => {
       await StudioEntitiesApi.createImage('costume', id, { view_angle: angle })
     },
+    deleteImageSlot: async (id: string, imageId: number) => {
+      await StudioEntitiesApi.deleteImage('costume', id, imageId)
+    },
     updateImage: async (id: string, imageId: number, payload) => {
       await StudioEntitiesApi.updateImage('costume', id, imageId, normalizeUpdateImagePayload(payload))
     },
@@ -235,7 +251,7 @@ export const assetAdapters = {
         assetId: id,
         requestBody: { image_id: imageId, prompt: payload.prompt, images: payload.images } as any,
       })
-      return res.data?.task_id ?? null
+      return extractTaskIdFromApiEnvelope(res)
     },
   } satisfies AdapterConfig<any, any>,
 }

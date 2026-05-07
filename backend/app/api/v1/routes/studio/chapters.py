@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,11 +21,126 @@ from app.services.common import (
     patch_model,
     require_entity,
 )
+from app.api.v1.routes.film.common import TaskCreated, _CreateOnlyTask
+from app.core.task_manager import DeliveryMode, SqlAlchemyTaskStore, TaskManager
+from app.models.task_links import GenerationTaskLink
+from app.schemas.studio.chapter_timeline import (
+    ChapterTimelineExportRequest,
+    ChapterTimelineRead,
+    ChapterTimelineWrite,
+)
 from app.schemas.studio.projects import ChapterCreate, ChapterRead, ChapterUpdate
+from app.services.studio.chapter_timeline import (
+    TimelineLayoutConflictError,
+    build_timeline_read,
+    replace_timeline_segments,
+)
+from app.services.studio.chapter_timeline_export import (
+    EXPORT_RELATION_TYPE,
+    EXPORT_RESOURCE_TYPE,
+    ensure_timeline_exportable,
+    find_active_chapter_timeline_export_task_id,
+)
+from app.tasks.execute_task import enqueue_task_execution
 
 router = APIRouter()
 
 CHAPTER_ORDER_FIELDS = {"index", "title", "created_at", "updated_at", "storyboard_count", "status"}
+
+
+@router.get(
+    "/{chapter_id}/timeline",
+    response_model=ApiResponse[ChapterTimelineRead],
+    summary="获取章节剪辑时间线（含镜头成片解析状态）",
+)
+async def get_chapter_timeline(
+    chapter_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[ChapterTimelineRead]:
+    await get_or_404(db, Chapter, chapter_id, detail=entity_not_found("Chapter"))
+    data = await build_timeline_read(db, chapter_id)
+    return success_response(data)
+
+
+@router.put(
+    "/{chapter_id}/timeline",
+    response_model=ApiResponse[ChapterTimelineRead],
+    summary="全量保存章节剪辑时间线片段顺序",
+)
+async def put_chapter_timeline(
+    chapter_id: str,
+    body: ChapterTimelineWrite,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[ChapterTimelineRead]:
+    await get_or_404(db, Chapter, chapter_id, detail=entity_not_found("Chapter"))
+    try:
+        data = await replace_timeline_segments(db, chapter_id, body)
+    except TimelineLayoutConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": "layout_version conflict",
+                "server_layout_version": exc.server_version,
+                "client_layout_version": exc.client_version,
+            },
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return success_response(data)
+
+
+@router.post(
+    "/{chapter_id}/timeline/export",
+    response_model=ApiResponse[TaskCreated],
+    status_code=status.HTTP_201_CREATED,
+    summary="发起章节时间线拼接导出任务",
+)
+async def post_chapter_timeline_export(
+    chapter_id: str,
+    body: ChapterTimelineExportRequest | None = Body(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[TaskCreated]:
+    await get_or_404(db, Chapter, chapter_id, detail=entity_not_found("Chapter"))
+    read = await build_timeline_read(db, chapter_id)
+    try:
+        ensure_timeline_exportable(read)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    active = await find_active_chapter_timeline_export_task_id(db, chapter_id)
+    if active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": "章节时间线导出任务进行中",
+                "task_id": active,
+            },
+        )
+
+    eff = body or ChapterTimelineExportRequest()
+    store = SqlAlchemyTaskStore(db)
+    tm = TaskManager(store=store, strategies={})
+    task_record = await tm.create(
+        task=_CreateOnlyTask(),
+        mode=DeliveryMode.async_polling,
+        task_kind="chapter_timeline_export",
+        run_args={
+            "chapter_id": chapter_id,
+            "encode_mode": eff.encode_mode.value,
+            "idempotency_key": eff.idempotency_key,
+        },
+    )
+    db.add(
+        GenerationTaskLink(
+            task_id=task_record.id,
+            resource_type=EXPORT_RESOURCE_TYPE,
+            relation_type=EXPORT_RELATION_TYPE,
+            relation_entity_id=chapter_id,
+        ),
+    )
+    await db.commit()
+    enqueue_task_execution(task_record.id)
+    return created_response(TaskCreated(task_id=task_record.id))
 
 
 @router.get(

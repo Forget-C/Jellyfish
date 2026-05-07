@@ -1,0 +1,69 @@
+# 草案：供 plan/tasks 与后端实现时对齐路径与字段。
+# 最终以应用内生成的 OpenAPI（front/openapi.json）为准，实现后需 pnpm run openapi:update。
+openapi: 3.0.3
+info:
+  title: Jellyfish — LLM Model Verify (draft)
+  version: 0.1.0
+paths:
+  /api/v1/llm/models/{model_id}/verify:
+    post:
+      summary: 验证已保存模型的配置是否可用（同步、短超时）
+      operationId: verifyLlmModelConfig
+      tags:
+        - llm
+      parameters:
+        - name: model_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 探测完成（业务成功或失败均可能 code=200，由 data.ok 区分；或与现有 ApiResponse 错误码约定一致）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseModelVerifyRead"
+components:
+  schemas:
+    ApiResponseModelVerifyRead:
+      type: object
+      required:
+        - code
+        - message
+        - data
+      properties:
+        code:
+          type: integer
+          example: 200
+        message:
+          type: string
+        data:
+          $ref: "#/components/schemas/ModelVerifyRead"
+        meta:
+          type: object
+          nullable: true
+    ModelVerifyRead:
+      type: object
+      required:
+        - ok
+        - category
+        - elapsed_ms
+      properties:
+        ok:
+          type: boolean
+          description: 是否探测通过
+        category:
+          type: string
+          enum: [text, image, video]
+        message:
+          type: string
+          description: 面向用户的主提示（成功或失败大类）
+        elapsed_ms:
+          type: integer
+          format: int64
+        detail:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: 脱敏后的诊断信息；无 RBAC 首期可为 null 或与 message 等价摘要

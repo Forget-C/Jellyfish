@@ -147,7 +147,8 @@ services:
         condition: service_completed_successfully
       mysql-init-sql:
         condition: service_completed_successfully
-    command: ["uv", "run", "celery", "-A", "app.core.celery_app:celery_app", "worker", "-l", "info"]
+    # 直接使用镜像内已安装依赖的虚拟环境，避免运行时 `uv run` 临时拉包导致队列长时间 pending。
+    command: [".venv/bin/celery", "-A", "app.core.celery_app:celery_app", "worker", "-l", "info"]
 
   front:
     build:

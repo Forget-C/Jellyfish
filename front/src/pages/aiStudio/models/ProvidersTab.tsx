@@ -12,6 +12,7 @@ import {
   Modal,
   Form,
   Select,
+  AutoComplete,
   message,
   Tooltip,
   Empty,
@@ -661,14 +662,18 @@ export default function ProvidersTab() {
       >
         <Form form={form} layout="vertical" className="pt-2">
           <Form.Item name="name" label="名称" rules={[{ required: true, message: '请选择供应商' }]}>
-            <Select
-              showSearch
-              optionFilterProp="label"
-              loading={supportedLoading}
-              placeholder={supportedLoading ? '加载供应商清单…' : '选择供应商'}
+            <AutoComplete
+              allowClear
               options={providerNameOptions}
-              notFoundContent={supportedLoading ? '加载中…' : '暂无数据'}
+              placeholder={supportedLoading ? '加载供应商清单…' : '选择或输入自定义供应商'}
+              notFoundContent={supportedLoading ? '加载中…' : '输入后可保存为自定义供应商'}
+              filterOption={(inputValue, option) =>
+                String(option?.label ?? option?.value ?? '')
+                  .toLowerCase()
+                  .includes(inputValue.toLowerCase())
+              }
               onChange={(v) => applyDefaultBaseUrlForDisplayName(String(v))}
+              onSelect={(v) => applyDefaultBaseUrlForDisplayName(String(v))}
             />
           </Form.Item>
           <Form.Item

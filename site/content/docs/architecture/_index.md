@@ -13,6 +13,8 @@ description: "记录当前真实生效的系统结构、状态流转、页面边
 
 - [项目结构](/docs/architecture/project-structure/)
 - [任务执行架构](/docs/architecture/task-execution/)
+- [LLM 供应商与模型管理](/docs/architecture/llm-provider-model-management/)
 - [LLM 默认模型解析](/docs/architecture/llm-default-model-resolution/)
 - [分镜状态流转说明](/docs/architecture/shot-status-flow/)
 - [分镜页面职责边界](/docs/architecture/shot-page-boundary/)
+- [章节时间线与导出成片](/docs/architecture/chapter-timeline-export/)

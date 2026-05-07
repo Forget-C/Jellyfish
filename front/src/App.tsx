@@ -1,5 +1,5 @@
 import type React from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom'
 import MainLayout from './layouts/MainLayout'
 import Settings from './pages/Settings'
 import NotFound from './pages/NotFound'
@@ -22,6 +22,12 @@ import { ChapterShotsPage } from './pages/aiStudio/shots/ChapterShotsPage'
 import { ChapterShotEditPage } from './pages/aiStudio/shots/ChapterShotEditPage'
 import './App.css'
 
+/** 兼容旧链接 `/projects/:projectId/chapters` → 工作台章节 Tab */
+function NavigateToWorkbenchChaptersTab() {
+  const { projectId } = useParams<{ projectId: string }>()
+  return <Navigate to={`/projects/${projectId}?tab=chapters`} replace />
+}
+
 const App: React.FC = () => {
   return (
     <BrowserRouter>
@@ -30,12 +36,14 @@ const App: React.FC = () => {
           <Route index element={<Navigate to="/projects" replace />} />
           <Route path="projects" element={<ProjectLobby />} />
           <Route path="projects/:projectId" element={<ProjectWorkbench />} />
+          <Route path="projects/:projectId/chapters" element={<NavigateToWorkbenchChaptersTab />} />
           <Route path="projects/:projectId/roles/:characterId/edit" element={<RoleDetailPage />} />
           <Route path="projects/:projectId/chapters/:chapterId/prep/*" element={<Navigate to="../shots" replace />} />
           <Route path="projects/:projectId/chapters/:chapterId/studio" element={<ChapterStudio />} />
           <Route path="projects/:projectId/chapters/:chapterId/shots/:shotId/edit" element={<ChapterShotEditPage />} />
           <Route path="projects/:projectId/chapters/:chapterId/shots" element={<ChapterShotsPage />} />
           <Route path="projects/:projectId/chapters/:chapterId/prep-drafts" element={<Navigate to="../shots" replace />} />
+          <Route path="projects/:projectId/chapters/:chapterId/timeline" element={<VideoEditor />} />
           <Route path="projects/:projectId/editor" element={<VideoEditor />} />
           <Route path="assets" element={<AssetManager />} />
           <Route path="assets/actors/:actorImageId/edit" element={<ActorAssetEditPage />} />

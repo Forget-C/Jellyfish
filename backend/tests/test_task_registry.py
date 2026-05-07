@@ -2,8 +2,14 @@ from __future__ import annotations
 
 import pytest
 
+from app.core.contracts.image_generation import ImageGenerationInput
+from app.core.contracts.provider import ProviderConfig
+from app.core.contracts.video_generation import VideoGenerationInput
 from app.core.task_manager.types import BaseTask
+from app.core.tasks.bootstrap import bootstrap_task_adapters
+from app.core.tasks.image_generation_tasks import DashScopeImageGenerationTask, ImageGenerationTask
 from app.core.tasks.registry import register_task_adapter, resolve_task_adapter
+from app.core.tasks.video_generation_tasks import DashScopeVideoGenerationTask, VideoGenerationTask
 
 
 class _DummyTask(BaseTask):
@@ -61,3 +67,42 @@ def test_resolve_task_adapter_raises_for_unknown_key() -> None:
     with pytest.raises(ValueError) as exc_info:
         resolve_task_adapter("not_registered_kind", "not_registered_provider")
     assert "Unsupported provider/task adapter" in str(exc_info.value)
+
+
+def test_image_generation_aliyun_bailian_maps_to_dashscope_impl() -> None:
+    """百炼图片任务使用 DashScope 原生文生图适配。"""
+    bootstrap_task_adapters()
+    factory = resolve_task_adapter("image_generation", "aliyun_bailian")
+    assert factory is ImageGenerationTask._build_aliyun_bailian_impl
+    task = factory(
+        provider_config=ProviderConfig(
+            provider="aliyun_bailian",
+            api_key="x",
+            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        ),
+        input_=ImageGenerationInput(
+            prompt="test",
+            model="qwen-image-test",
+        ),
+    )
+    assert isinstance(task, DashScopeImageGenerationTask)
+
+
+def test_video_generation_aliyun_bailian_maps_to_dashscope_impl() -> None:
+    """百炼视频任务应走 DashScope 原生视频接口实现。"""
+    bootstrap_task_adapters()
+    factory = resolve_task_adapter("video_generation", "aliyun_bailian")
+    assert factory is VideoGenerationTask._build_aliyun_bailian_impl
+    task = factory(
+        provider_config=ProviderConfig(
+            provider="aliyun_bailian",
+            api_key="x",
+            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        ),
+        input_=VideoGenerationInput(
+            prompt="test",
+            ratio="16:9",
+            model="wanx2.1-t2v-plus",
+        ),
+    )
+    assert isinstance(task, DashScopeVideoGenerationTask)

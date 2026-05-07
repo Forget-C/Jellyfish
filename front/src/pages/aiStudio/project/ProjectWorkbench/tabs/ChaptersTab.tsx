@@ -14,7 +14,7 @@ import {
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ScriptProcessingService, StudioChaptersService } from '../../../../../services/generated'
 import { chapterStatusMap } from '../constants'
-import { getChapterShotsPath, getChapterStudioPath } from '../routes'
+import { getChapterShotsPath, getChapterStudioPath, getChapterTimelinePath } from '../routes'
 import { useChapters, newId, type Chapter } from '../hooks/useProjectData'
 import { ChapterRawTextEditorModal } from '../../../chapter/components/ChapterRawTextEditorModal'
 import { ensureHasShotsBeforeShooting } from '../ensureHasShotsBeforeShooting'
@@ -29,6 +29,7 @@ import {
   upsertRelationTaskStateInMap,
   useChapterDivisionTaskMapPolling,
 } from '../chapterDivisionTasks'
+import { ScrollablePage } from '../../../components/ScrollablePage'
 
 const { TextArea } = Input
 const CREATE_PARAM = 'create'
@@ -355,9 +356,15 @@ export function ChaptersTab() {
     const activeTask = chapterDivisionTaskMap[record.id]
     return [
       {
+        key: 'timeline',
+        label: '章节剪辑',
+        icon: <ScissorOutlined />,
+        onClick: () => navigate(getChapterTimelinePath(projectId, record.id)),
+      },
+      {
         key: 'shots',
         label: '查看分镜',
-        icon: <ScissorOutlined />,
+        icon: <FileSearchOutlined />,
         onClick: () => navigate(getChapterShotsPath(projectId, record.id)),
       },
       state.key !== 'prepare_shots' && (record.storyboardCount ?? 0) > 0
@@ -519,15 +526,15 @@ export function ChaptersTab() {
 
   if (chapters.length === 0 && !loading) {
     return (
-      <>
+      <ScrollablePage className="pr-1">
         <Card>
           <Empty description="还没有任何章节，立即创建第一章吧" image={Empty.PRESENTED_IMAGE_SIMPLE}>
-          <Space>
-            <Button type="primary" size="large" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-              创建第一章
-            </Button>
-          </Space>
-        </Empty>
+            <Space>
+              <Button type="primary" size="large" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+                创建第一章
+              </Button>
+            </Space>
+          </Empty>
         </Card>
         <Modal
           title="新建章节"
@@ -559,75 +566,77 @@ export function ChaptersTab() {
             </div>
           </div>
         </Modal>
-      </>
+      </ScrollablePage>
     )
   }
 
   return (
-    <Card
-      title="章节列表"
-      extra={
-        <Space>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-            新建章节
-          </Button>
-        </Space>
-      }
-    >
-      <Table<Chapter>
-        rowKey="id"
-        loading={loading}
-        columns={columns}
-        dataSource={chapters}
-        pagination={{ pageSize: 10 }}
-        size="small"
-      />
-
-      <ChapterRawTextEditorModal
-        open={editOpen}
-        onClose={() => {
-          setEditOpen(false)
-          setEditingChapter(null)
-        }}
-        chapterId={editingChapter?.id}
-        onSaved={(next) => {
-          if (editingChapter?.id && typeof next.rawText === 'string') {
-            patchChapterLocal(editingChapter.id, { rawText: next.rawText })
-          }
-          void refresh()
-        }}
-      />
-
-      <Modal
-        title="新建章节"
-        open={createOpen}
-        onCancel={() => setCreateOpen(false)}
-        onOk={useMock ? handleCreateChapterMock : handleCreateChapter}
-        okText="创建"
-        width={560}
+    <ScrollablePage className="pr-1">
+      <Card
+        title="章节列表"
+        extra={
+          <Space>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+              新建章节
+            </Button>
+          </Space>
+        }
       >
-        <div className="space-y-3">
-          <div>
-            <span className="text-gray-600 text-sm">章节标题</span>
-            <Input
-              placeholder="例如：第1集 出租屋里的争吵"
-              value={createTitle}
-              onChange={(e) => setCreateTitle(e.target.value)}
-              className="mt-1"
-            />
+        <Table<Chapter>
+          rowKey="id"
+          loading={loading}
+          columns={columns}
+          dataSource={chapters}
+          pagination={{ pageSize: 10 }}
+          size="small"
+        />
+
+        <ChapterRawTextEditorModal
+          open={editOpen}
+          onClose={() => {
+            setEditOpen(false)
+            setEditingChapter(null)
+          }}
+          chapterId={editingChapter?.id}
+          onSaved={(next) => {
+            if (editingChapter?.id && typeof next.rawText === 'string') {
+              patchChapterLocal(editingChapter.id, { rawText: next.rawText })
+            }
+            void refresh()
+          }}
+        />
+
+        <Modal
+          title="新建章节"
+          open={createOpen}
+          onCancel={() => setCreateOpen(false)}
+          onOk={useMock ? handleCreateChapterMock : handleCreateChapter}
+          okText="创建"
+          width={560}
+        >
+          <div className="space-y-3">
+            <div>
+              <span className="text-gray-600 text-sm">章节标题</span>
+              <Input
+                placeholder="例如：第1集 出租屋里的争吵"
+                value={createTitle}
+                onChange={(e) => setCreateTitle(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <span className="text-gray-600 text-sm">章节内容（可粘贴剧本）</span>
+              <TextArea
+                rows={6}
+                placeholder="粘贴文学剧本..."
+                value={createContent}
+                onChange={(e) => setCreateContent(e.target.value)}
+                className="mt-1 font-mono text-sm"
+              />
+            </div>
           </div>
-          <div>
-            <span className="text-gray-600 text-sm">章节内容（可粘贴剧本）</span>
-            <TextArea
-              rows={6}
-              placeholder="粘贴文学剧本..."
-              value={createContent}
-              onChange={(e) => setCreateContent(e.target.value)}
-              className="mt-1 font-mono text-sm"
-            />
-          </div>
-        </div>
-      </Modal>
-    </Card>
+        </Modal>
+      </Card>
+    </ScrollablePage>
   )
 }

@@ -28,6 +28,7 @@ from app.schemas.studio.projects import (
     ProjectUpdate,
     StyleOption,
 )
+from app.schemas.studio.timeline import TimelineClipRead
 
 router = APIRouter()
 
@@ -122,6 +123,24 @@ async def create_project(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     obj = await create_and_refresh(db, Project(**body.model_dump()))
     return created_response(ProjectRead.model_validate(obj))
+
+
+@router.get(
+    "/{project_id}/timeline",
+    response_model=ApiResponse[list[TimelineClipRead]],
+    summary="项目时间线片段列表",
+)
+async def list_project_timeline(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[list[TimelineClipRead]]:
+    """返回项目关联的时间线片段。
+
+    说明：`timeline_clips` 表当前无 `project_id` 字段，无法在数据库层按项目过滤；
+    在引入归属字段或关联表之前，对已存在的项目返回空列表（接口可用，不再 404）。
+    """
+    await get_or_404(db, Project, project_id, detail=entity_not_found("Project"))
+    return success_response([])
 
 
 @router.get(

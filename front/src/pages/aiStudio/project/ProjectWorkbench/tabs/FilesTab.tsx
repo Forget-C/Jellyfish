@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Button, Card, Checkbox, Col, Empty, Modal, Pagination, Row, Select, Space, Spin, Tag } from 'antd'
-import { DownloadOutlined, FileImageOutlined, VideoCameraOutlined } from '@ant-design/icons'
+import { Button, Card, Checkbox, Col, Empty, Modal, Pagination, Popconfirm, Row, Select, Space, Spin, Tag, message } from 'antd'
+import { DeleteOutlined, DownloadOutlined, FileImageOutlined, VideoCameraOutlined } from '@ant-design/icons'
 import { useNavigate, useParams } from 'react-router-dom'
 import { StudioFilesService, StudioShotsService } from '../../../../../services/generated'
 import type { FileRead } from '../../../../../services/generated'
 import { DisplayImageCard } from '../../../assets/components/DisplayImageCard'
+import { ScrollablePage } from '../../../components/ScrollablePage'
 import { useChapters } from '../hooks/useProjectData'
 import { buildFileDownloadUrl } from '../../../assets/utils'
 
@@ -126,133 +127,175 @@ export function FilesTab() {
     batchOpenDownloads(urls)
   }
 
+  const handleDeleteOne = async (file: FileRead) => {
+    try {
+      await StudioFilesService.deleteFileApiApiV1StudioFilesFileIdDelete({ fileId: file.id })
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        next.delete(file.id)
+        return next
+      })
+      if (previewVideo?.id === file.id) setPreviewVideo(null)
+      message.success('文件已删除')
+      await loadFiles()
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '删除文件失败')
+    }
+  }
+
   return (
     <>
-      <Card
-        title="项目文件"
-        extra={
-          <Space wrap>
-            {selectedIds.size > 0 ? (
-              <Button type="primary" icon={<DownloadOutlined />} onClick={handleBatchDownload}>
-                批量下载（{selectedIds.size}）
+      <ScrollablePage className="pr-1">
+        <Card
+          title="项目文件"
+          extra={
+            <Space wrap>
+              {selectedIds.size > 0 ? (
+                <Button type="primary" icon={<DownloadOutlined />} onClick={handleBatchDownload}>
+                  批量下载（{selectedIds.size}）
+                </Button>
+              ) : null}
+              <Button onClick={() => navigate(projectId ? `/files?projectId=${encodeURIComponent(projectId)}` : '/files')}>
+                前往文件管理
               </Button>
-            ) : null}
-            <Button onClick={() => navigate('/files')}>前往文件管理</Button>
-          </Space>
-        }
-      >
-        <div className="mb-4">
-          <Space wrap>
-            <Select
-              allowClear
-              placeholder="章节标题"
-              style={{ minWidth: 220 }}
-              value={chapterTitle}
-              options={chapters.map((c) => ({ value: c.title, label: `${c.title}（第${c.index}章）` }))}
-              onChange={(v) => {
-                setChapterTitle(v ?? undefined)
-                setShotTitle(undefined)
-                setPage(1)
-              }}
-              loading={chaptersLoading}
-            />
-            <Select
-              allowClear
-              placeholder="镜头标题"
-              style={{ minWidth: 220 }}
-              value={shotTitle}
-              disabled={!chapterTitle}
-              options={shots.map((s) => ({ value: s.title, label: s.title }))}
-              loading={shotsLoading}
-              onChange={(v) => {
-                setShotTitle(v ?? undefined)
-                setPage(1)
-              }}
-            />
-          </Space>
-        </div>
-
-        <Spin spinning={filesLoading}>
-          {files.length === 0 && !filesLoading ? (
-            <Empty
-              description="暂无文件（仅展示已在项目中产生过关联记录的文件）"
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-            />
-          ) : (
-            <Row gutter={[16, 16]}>
-              {files.map((file) => {
-                const url = fileResourceUrl(file)
-                const checked = selectedIds.has(file.id)
-                const isVideo = file.type === 'video'
-
-                return (
-                  <Col key={file.id} xs={24} sm={12} md={8} lg={6}>
-                    <DisplayImageCard
-                      title={
-                        <div className="flex items-start gap-2 pr-1 min-w-0">
-                          <Checkbox
-                            checked={checked}
-                            onChange={(e) => {
-                              e.stopPropagation()
-                              toggleSelect(file.id, e.target.checked)
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                          <span className="truncate flex-1 min-w-0 text-sm font-normal" title={file.name}>
-                            {file.name}
-                          </span>
-                        </div>
-                      }
-                      imageUrl={url}
-                      imageAlt={file.name}
-                      enablePreview={!isVideo}
-                      onImageClick={isVideo ? () => setPreviewVideo(file) : undefined}
-                      placeholder={
-                        isVideo ? (
-                          <span className="flex flex-col items-center gap-1 text-gray-400">
-                            <VideoCameraOutlined className="text-4xl" />
-                            <span className="text-xs">点击预览</span>
-                          </span>
-                        ) : (
-                          <FileImageOutlined className="text-5xl text-gray-300" />
-                        )
-                      }
-                      meta={<Tag color={isVideo ? 'purple' : 'blue'}>{isVideo ? '视频' : '图片'}</Tag>}
-                      footer={
-                        <Button
-                          block
-                          type="primary"
-                          ghost
-                          icon={<DownloadOutlined />}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            downloadOne(file)
-                          }}
-                        >
-                          下载
-                        </Button>
-                      }
-                    />
-                  </Col>
-                )
-              })}
-            </Row>
-          )}
-        </Spin>
-
-        {total > 0 && (
-          <div className="mt-6 flex justify-end">
-            <Pagination
-              current={page}
-              pageSize={PAGE_SIZE}
-              total={total}
-              showSizeChanger={false}
-              onChange={(p) => setPage(p)}
-              showTotal={(t) => `共 ${t} 条`}
-            />
+            </Space>
+          }
+        >
+          <div className="mb-4">
+            <Space wrap>
+              <Select
+                allowClear
+                placeholder="章节标题"
+                style={{ minWidth: 220 }}
+                value={chapterTitle}
+                options={chapters.map((c) => ({ value: c.title, label: `${c.title}（第${c.index}章）` }))}
+                onChange={(v) => {
+                  setChapterTitle(v ?? undefined)
+                  setShotTitle(undefined)
+                  setPage(1)
+                }}
+                loading={chaptersLoading}
+              />
+              <Select
+                allowClear
+                placeholder="镜头标题"
+                style={{ minWidth: 220 }}
+                value={shotTitle}
+                disabled={!chapterTitle}
+                options={shots.map((s) => ({ value: s.title, label: s.title }))}
+                loading={shotsLoading}
+                onChange={(v) => {
+                  setShotTitle(v ?? undefined)
+                  setPage(1)
+                }}
+              />
+            </Space>
           </div>
-        )}
-      </Card>
+
+          <Spin spinning={filesLoading}>
+            {files.length === 0 && !filesLoading ? (
+              <Empty
+                description="暂无文件（仅展示已在项目中产生过关联记录的文件）"
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+              />
+            ) : (
+              <Row gutter={[16, 16]}>
+                {files.map((file) => {
+                  const url = fileResourceUrl(file)
+                  const checked = selectedIds.has(file.id)
+                  const isVideo = file.type === 'video'
+
+                  return (
+                    <Col key={file.id} xs={24} sm={12} md={8} lg={6}>
+                      <DisplayImageCard
+                        title={
+                          <div className="flex items-start gap-2 pr-1 min-w-0">
+                            <Checkbox
+                              checked={checked}
+                              onChange={(e) => {
+                                e.stopPropagation()
+                                toggleSelect(file.id, e.target.checked)
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                            <span className="truncate flex-1 min-w-0 text-sm font-normal" title={file.name}>
+                              {file.name}
+                            </span>
+                          </div>
+                        }
+                        imageUrl={url}
+                        imageAlt={file.name}
+                        enablePreview={!isVideo}
+                        onImageClick={isVideo ? () => setPreviewVideo(file) : undefined}
+                        placeholder={
+                          isVideo ? (
+                            <span className="flex flex-col items-center gap-1 text-gray-400">
+                              <VideoCameraOutlined className="text-4xl" />
+                              <span className="text-xs">点击预览</span>
+                            </span>
+                          ) : (
+                            <FileImageOutlined className="text-5xl text-gray-300" />
+                          )
+                        }
+                        meta={<Tag color={isVideo ? 'purple' : 'blue'}>{isVideo ? '视频' : '图片'}</Tag>}
+                        footer={
+                          <Space direction="vertical" className="w-full">
+                            <Button
+                              block
+                              type="primary"
+                              ghost
+                              icon={<DownloadOutlined />}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                downloadOne(file)
+                              }}
+                            >
+                              下载
+                            </Button>
+                            <Popconfirm
+                              title="确认删除该文件？"
+                              description="删除后将同时移除文件记录与存储对象。"
+                              okText="删除"
+                              cancelText="取消"
+                              okButtonProps={{ danger: true }}
+                              onConfirm={(e) => {
+                                e?.stopPropagation()
+                                void handleDeleteOne(file)
+                              }}
+                            >
+                              <Button
+                                block
+                                danger
+                                icon={<DeleteOutlined />}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                删除
+                              </Button>
+                            </Popconfirm>
+                          </Space>
+                        }
+                      />
+                    </Col>
+                  )
+                })}
+              </Row>
+            )}
+          </Spin>
+
+          {total > 0 && (
+            <div className="mt-6 flex justify-end">
+              <Pagination
+                current={page}
+                pageSize={PAGE_SIZE}
+                total={total}
+                showSizeChanger={false}
+                onChange={(p) => setPage(p)}
+                showTotal={(t) => `共 ${t} 条`}
+              />
+            </div>
+          )}
+        </Card>
+      </ScrollablePage>
 
       <Modal
         title={previewVideo?.name ?? '视频预览'}

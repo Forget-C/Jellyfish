@@ -16,7 +16,7 @@ from app.core.contracts.video_generation import VideoGenerationInput, VideoGener
 from app.core.tasks import VideoGenerationTask
 from app.models.llm import Model, ModelCategoryKey, ModelSettings
 from app.models.task_links import GenerationTaskLink
-from app.models.studio import FileItem, Shot, ShotDetail, ShotFrameType
+from app.models.studio import FileItem, Shot, ShotDetail, ShotFrameImage, ShotFrameType
 from app.models.types import FileUsageKind
 from app.services.common import entity_not_found
 from app.services.llm.provider_resolver import resolve_provider_config_by_model
@@ -127,6 +127,25 @@ async def load_provider_config_by_model(db: AsyncSession, model: Model) -> Provi
     )
 
 
+async def _pick_fallback_reference_frame_data_url(db: AsyncSession, *, shot_id: str) -> str | None:
+    """当提交参数未携带参考图时，回退选取分镜已存在的一张帧图。"""
+    stmt = select(ShotFrameImage).where(ShotFrameImage.shot_detail_id == shot_id)
+    rows = (await db.execute(stmt)).scalars().all()
+    if not rows:
+        return None
+    order = {
+        ShotFrameType.key: 0,
+        ShotFrameType.first: 1,
+        ShotFrameType.last: 2,
+    }
+    sorted_rows = sorted(rows, key=lambda item: order.get(item.frame_type, 99))
+    for row in sorted_rows:
+        if not row.file_id:
+            continue
+        return await file_id_to_data_url(db, file_id=str(row.file_id))
+    return None
+
+
 def _normalize_optional_text(value: str | None) -> str | None:
     """归一化可选文本参数：空字符串视为未设置。"""
     normalized = (value or "").strip()
@@ -174,6 +193,16 @@ async def build_run_args(
     frame_data_urls = [await file_id_to_data_url(db, file_id=file_id) for file_id in submission.images]
     frame_map = {ft: frame_data_urls[i] for i, ft in enumerate(required_frames)}
 
+    first_frame_b64 = frame_map.get(ShotFrameType.first)
+    last_frame_b64 = frame_map.get(ShotFrameType.last)
+    key_frame_b64 = frame_map.get(ShotFrameType.key)
+    if provider_cfg.provider == "aliyun_bailian":
+        # 帧图用于名称含 i2v 等的图生视频模型；文生视频模型在适配层会忽略帧图，但仍尽量补齐便于切换默认模型。
+        if not any([first_frame_b64, last_frame_b64, key_frame_b64]):
+            fallback_ref = await _pick_fallback_reference_frame_data_url(db, shot_id=shot_id)
+            if fallback_ref:
+                key_frame_b64 = fallback_ref
+
     run_args = {
         "shot_id": shot_id,
         "provider": provider_cfg.provider,
@@ -181,9 +210,9 @@ async def build_run_args(
         "base_url": provider_cfg.base_url,
         "input": {
             "prompt": final_prompt,
-            "first_frame_base64": frame_map.get(ShotFrameType.first),
-            "last_frame_base64": frame_map.get(ShotFrameType.last),
-            "key_frame_base64": frame_map.get(ShotFrameType.key),
+            "first_frame_base64": first_frame_b64,
+            "last_frame_base64": last_frame_b64,
+            "key_frame_base64": key_frame_b64,
             "model": model.name,
             "ratio": resolved_ratio,
             "seconds": shot_detail.duration,

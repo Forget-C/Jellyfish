@@ -421,4 +421,5 @@ def test_get_task_status_returns_timing_fields(client: TestClient, monkeypatch) 
         "started_at_ts": 100.0,
         "finished_at_ts": None,
         "elapsed_ms": 2500,
+        "error": "",
     }

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Card, Button, Tabs, Space, Dropdown, Empty } from 'antd'
+import { Card, Button, Tabs, Space, Dropdown, Empty, message } from 'antd'
 import type { MenuProps } from 'antd'
 import {
   PlusOutlined,
@@ -18,7 +18,7 @@ import { CostumesTab, PropsTab } from './tabs/PropsTab'
 import { FilesTab } from './tabs/FilesTab'
 import { EditTab } from './tabs/EditTab'
 import { SettingsTab } from './tabs/SettingsTab'
-import { getChapterShotsPath, getChapterStudioPath, getProjectEditorPath } from './routes'
+import { getChapterShotsPath, getChapterStudioPath, getChapterTimelinePath } from './routes'
 import { useProject, useChapters } from './hooks/useProjectData'
 import { ensureHasShotsBeforeShooting } from './ensureHasShotsBeforeShooting'
 import { getChapterPreparationState } from './chapterPreparation'
@@ -211,7 +211,19 @@ const ProjectWorkbench: React.FC = () => {
             >
               {primaryCta.label}
             </Button>
-            <Button icon={<VideoCameraFilled />} onClick={() => projectId && navigate(getProjectEditorPath(projectId))}>
+            <Button
+              icon={<VideoCameraFilled />}
+              onClick={() => {
+                if (!projectId) return
+                const target = recommendedChapter ?? chaptersByIndex[0]
+                if (!target) {
+                  message.warning('请先创建章节，再进入章节剪辑')
+                  setTabInUrl('chapters')
+                  return
+                }
+                navigate(getChapterTimelinePath(projectId, target.id))
+              }}
+            >
               进入后期剪辑
             </Button>
             <Dropdown menu={{ items: moreMenuItems }} placement="bottomRight">

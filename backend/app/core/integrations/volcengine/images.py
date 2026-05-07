@@ -5,6 +5,8 @@ from __future__ import annotations
 import time
 from typing import Any
 
+import httpx
+
 from app.core.integrations.http_logging import (
     json_dumps_for_log,
     log_image_http_request,
@@ -21,6 +23,24 @@ from app.core.integrations.image_capabilities import resolve_image_size
 from app.core.integrations.volcengine.image_capabilities import validate_volcengine_image_options
 
 
+def _volcengine_http_error_detail(response: httpx.Response) -> str | None:
+    """从方舟错误 JSON 中提取可读说明（优先于 httpx 默认文案）。"""
+    try:
+        data = response.json()
+    except Exception:  # noqa: BLE001
+        return None
+    err = data.get("error")
+    if isinstance(err, dict):
+        code = err.get("code")
+        msg = err.get("message")
+        parts = [str(x) for x in (code, msg) if x]
+        if parts:
+            return ": ".join(parts) if len(parts) > 1 else parts[0]
+    if isinstance(err, str) and err.strip():
+        return err.strip()
+    return None
+
+
 class VolcengineImageApiAdapter:
     """火山图片生成 HTTP；无状态，可单测替换。"""
 
@@ -31,11 +51,6 @@ class VolcengineImageApiAdapter:
         inp: ImageGenerationInput,
         timeout_s: float,
     ) -> ImageGenerationResult:
-        try:
-            import httpx
-        except ImportError as e:  # pragma: no cover
-            raise RuntimeError("httpx is required for image generation tasks") from e
-
         base_url = (cfg.base_url or "https://ark.cn-beijing.volces.com/api/v3").rstrip("/")
         resolved_size = resolve_image_size(
             provider="volcengine",
@@ -78,6 +93,10 @@ class VolcengineImageApiAdapter:
                 resp_headers=dict(r.headers),
                 resp_text=resp_text,
             )
+            if r.status_code >= 400:
+                detail = _volcengine_http_error_detail(r)
+                if detail:
+                    raise RuntimeError(detail)
             r.raise_for_status()
             data = r.json()
 

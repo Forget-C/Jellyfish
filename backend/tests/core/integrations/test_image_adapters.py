@@ -148,6 +148,31 @@ async def test_volcengine_image_adapter_generations(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.asyncio
+async def test_volcengine_image_adapter_surfaces_json_error_body(monkeypatch: pytest.MonkeyPatch) -> None:
+    """HTTP 4xx 时优先抛出方舟返回的 message，便于任务错误落库与前端展示。"""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            404,
+            json={
+                "error": {
+                    "code": "InvalidEndpointOrModel.NotFound",
+                    "message": "The model or endpoint X does not exist or you do not have access to it.",
+                }
+            },
+        )
+
+    _patch_httpx_client(monkeypatch, httpx.MockTransport(handler))
+    cfg = ProviderConfig(provider="volcengine", api_key="ak-test")
+    inp = ImageGenerationInput(prompt="hi", model="bad-model", n=1)
+    with pytest.raises(RuntimeError) as exc_info:
+        await VolcengineImageApiAdapter().generate(cfg=cfg, inp=inp, timeout_s=30.0)
+    msg = str(exc_info.value)
+    assert "InvalidEndpointOrModel.NotFound" in msg
+    assert "does not exist" in msg
+
+
+@pytest.mark.asyncio
 async def test_openai_image_adapter_rejects_unsupported_watermark(monkeypatch: pytest.MonkeyPatch) -> None:
     """当能力配置不支持 watermark 时，adapter 在发请求前直接拒绝。"""
 
