@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+from typing import Any, cast
 
 from fastapi.testclient import TestClient
 
@@ -271,7 +272,7 @@ def test_create_shot_frame_image_task_renders_prompt_before_submit(client: TestC
 def test_run_image_generation_task_persists_render_context(monkeypatch) -> None:
     from app.services.studio import image_task_runner as runner
 
-    calls: dict[str, object] = {}
+    calls: dict[str, Any] = {}
 
     class _FakeTaskStore:
         def __init__(self, _session):
@@ -372,3 +373,133 @@ def test_run_image_generation_task_persists_render_context(monkeypatch) -> None:
     assert calls["result_payload"]["render_context"]["images"] == ["file-1"]
     assert calls["result_payload"]["render_context"]["selected_guidance_details"][0]["reason_tag"] == "导演主指令"
     assert calls["result_payload"]["render_context"]["dropped_guidance_details"][0]["reason_tag"] == "首帧降轴线"
+
+
+def test_persist_images_to_assets_accepts_data_url_result(monkeypatch) -> None:
+    from app.services.studio import image_task_runner as runner
+
+    calls: dict[str, Any] = {}
+
+    class _FakeSession:
+        async def execute(self, *_args, **_kwargs):
+            class _Result:
+                def scalars(self):
+                    class _Scalars:
+                        def first(self):
+                            return None
+
+                    return _Scalars()
+
+            return _Result()
+
+        async def get(self, *_args, **_kwargs):
+            return None
+
+    class _FakeFile:
+        id = "file-1"
+
+    async def _fake_create_file_from_url_or_b64(_session, **kwargs):
+        calls["file_kwargs"] = kwargs
+        return _FakeFile()
+
+    class _ImageItem:
+        url = "data:image/png;base64,abc"
+        b64_json = None
+
+    class _Result:
+        images = [_ImageItem()]
+
+    monkeypatch.setattr(runner, "create_file_from_url_or_b64", _fake_create_file_from_url_or_b64)
+
+    import asyncio
+
+    asyncio.run(
+        runner._persist_images_to_assets(
+            _FakeSession(),
+            task_id="task-1",
+            relation_type="actor_image",
+            relation_entity_id="1",
+            result=_Result(),
+        )
+    )
+
+    assert calls["file_kwargs"]["b64_data"] == "data:image/png;base64,abc"
+    assert "url" not in calls["file_kwargs"]
+
+
+def test_run_image_generation_task_persists_provider_error_when_result_missing(monkeypatch) -> None:
+    from app.services.studio import image_task_runner as runner
+
+    calls: dict[str, Any] = {}
+
+    class _FakeTaskStore:
+        def __init__(self, _session):
+            pass
+
+        async def set_status(self, task_id, status):
+            calls.setdefault("statuses", []).append((task_id, status))
+
+        async def set_progress(self, *_args, **_kwargs):
+            return None
+
+        async def set_error(self, task_id, error):
+            calls["error"] = (task_id, error)
+
+    class _FakeSession:
+        async def commit(self):
+            return None
+
+        async def rollback(self):
+            return None
+
+    class _FakeSessionContext:
+        async def __aenter__(self):
+            return _FakeSession()
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class _FakeImageTask:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def run(self):
+            return None
+
+        async def get_result(self):
+            return None
+
+        async def status(self):
+            return {"error": "URL too long"}
+
+    async def _fake_cancel_if_requested_async(**_kwargs):
+        return False
+
+    async def _fake_resolve_related_shot_id(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(runner, "SqlAlchemyTaskStore", _FakeTaskStore)
+    monkeypatch.setattr(runner, "async_session_maker", lambda: _FakeSessionContext())
+    monkeypatch.setattr(runner, "ImageGenerationTask", _FakeImageTask)
+    monkeypatch.setattr(runner, "cancel_if_requested_async", _fake_cancel_if_requested_async)
+    monkeypatch.setattr(runner, "_resolve_related_shot_id", _fake_resolve_related_shot_id)
+    monkeypatch.setattr(runner, "log_task_event", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(runner, "log_task_failure", lambda *_args, **_kwargs: None)
+
+    import asyncio
+
+    asyncio.run(
+        runner.run_image_generation_task(
+            "task-1",
+            {
+                "provider": "openai",
+                "api_key": "k",
+                "base_url": None,
+                "relation_type": "actor_image",
+                "relation_entity_id": "1",
+                "input": {"prompt": "portrait", "model": "gpt-image-1"},
+            },
+        )
+    )
+
+    assert calls["error"] == ("task-1", "URL too long")

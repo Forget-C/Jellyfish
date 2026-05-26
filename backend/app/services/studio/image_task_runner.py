@@ -68,12 +68,18 @@ async def _persist_images_to_assets(
         return
 
     item = images[0]
-    if not item.url:
+    image_payload = item.url or item.b64_json
+    if not image_payload:
         return
+    create_file_kwargs: dict[str, str] = (
+        {"b64_data": image_payload}
+        if image_payload.startswith("data:") or item.b64_json
+        else {"url": image_payload}
+    )
 
     file_obj = await create_file_from_url_or_b64(
         session,
-        url=item.url,
+        **create_file_kwargs,
         name=f"{relation_type}-{relation_entity_id}",
         prefix=f"generated-images/{relation_type}/{relation_entity_id}",
     )
@@ -341,6 +347,10 @@ async def run_image_generation_task(
             await task.run()
             result = await task.get_result()
             if result is None:
+                task_status = await task.status()
+                task_error = str(task_status.get("error") or "").strip()
+                if task_error:
+                    raise RuntimeError(task_error)
                 raise RuntimeError("Image generation task returned no result")
             if await cancel_if_requested_async(store=store, task_id=task_id, session=session):
                 log_task_event("image_generation", task_id, "cancelled", stage="after_execute")

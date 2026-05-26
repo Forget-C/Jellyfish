@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.v1 import router as api_v1_router
 from app.bootstrap import bootstrap_all_registries
@@ -84,6 +85,14 @@ app.add_middleware(
 )
 
 app.include_router(api_v1_router, prefix=settings.api_v1_prefix)
+
+# Serve local development storage when S3 is not configured. In production S3 URLs
+# are returned directly and this mount is harmless.
+app.mount(
+    settings.local_storage_url_path,
+    StaticFiles(directory=settings.local_storage_path, check_dir=False),
+    name="local-storage",
+)
 # 影视技能路由同时挂到主应用，保证 /api/v1/film 一定可访问
 
 
