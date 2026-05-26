@@ -7,6 +7,7 @@ import App from './App.tsx'
 import 'antd/dist/reset.css'
 import './index.css'
 import './i18n'
+import { startEnglishDomTranslation } from './i18n-dom-translation'
 import './services/openapi'
 import { useAppStore } from './store/useAppStore'
 
@@ -43,7 +44,7 @@ class AppErrorBoundary extends React.Component<
     if (this.state.hasError && this.state.error) {
       return (
         <div style={{ padding: 24, fontFamily: 'sans-serif' }}>
-          <h2>页面加载出错</h2>
+          <h2>Page failed to load</h2>
           <pre style={{ color: '#c00', overflow: 'auto' }}>
             {this.state.error.message}
           </pre>
@@ -66,7 +67,8 @@ function renderApp() {
   )
 }
 
-// 先立即渲染，避免 MSW 启动阻塞导致白屏
+// Render immediately so MSW startup cannot block the screen.
+startEnglishDomTranslation()
 renderApp()
 
 async function enableMocking() {

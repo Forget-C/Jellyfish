@@ -12,6 +12,14 @@ import enNotFound from './locales/en-US/notFound.json'
 
 export type SupportedLanguage = 'zh-CN' | 'en-US'
 
+/**
+ * Uses Chinese by default and only restores English after an explicit user selection.
+ */
+const getInitialLanguage = (): SupportedLanguage => {
+  if (typeof window === 'undefined') return 'zh-CN'
+  return window.localStorage.getItem('jellyfish_language') === 'en-US' ? 'en-US' : 'zh-CN'
+}
+
 const resources = {
   'zh-CN': {
     common: zhCommon,
@@ -32,6 +40,7 @@ i18n
   .use(initReactI18next)
   .init({
     resources,
+    lng: getInitialLanguage(),
     fallbackLng: 'zh-CN',
     supportedLngs: ['zh-CN', 'en-US'],
     ns: ['common', 'layout', 'settings', 'notFound'],
@@ -40,7 +49,7 @@ i18n
       escapeValue: false,
     },
     detection: {
-      order: ['localStorage', 'navigator', 'htmlTag'],
+      order: ['localStorage'],
       lookupLocalStorage: 'jellyfish_language',
     },
   })

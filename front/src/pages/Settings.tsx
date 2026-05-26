@@ -11,11 +11,11 @@ const Settings: React.FC = () => {
 
   const handleFinish = (values: { name: string; role: string; darkMode: boolean }) => {
     setUser({ name: values.name, role: values.role })
-    message.success(t('settings.updated'))
+    message.success(t('updated'))
   }
 
   return (
-    <Card title={t('settings.title')}>
+    <Card title={t('title')}>
       <Form
         form={form}
         layout="vertical"
@@ -27,35 +27,35 @@ const Settings: React.FC = () => {
         onFinish={handleFinish}
       >
         <Form.Item
-          label={t('settings.nickname')}
+          label={t('nickname')}
           name="name"
-          rules={[{ required: true, message: t('settings.validation.nicknameRequired') }]}
+          rules={[{ required: true, message: t('validation.nicknameRequired') }]}
         >
-          <Input placeholder={t('settings.nickname')} />
+          <Input placeholder={t('nickname')} />
         </Form.Item>
 
         <Form.Item
-          label={t('settings.role')}
+          label={t('role')}
           name="role"
-          rules={[{ required: true, message: t('settings.validation.roleRequired') }]}
+          rules={[{ required: true, message: t('validation.roleRequired') }]}
         >
           <Select
             options={[
-              { label: t('settings.roleOptions.admin'), value: t('settings.roleOptions.admin') },
+              { label: t('roleOptions.admin'), value: t('roleOptions.admin') },
               {
-                label: t('settings.roleOptions.operator'),
-                value: t('settings.roleOptions.operator'),
+                label: t('roleOptions.operator'),
+                value: t('roleOptions.operator'),
               },
-              { label: t('settings.roleOptions.guest'), value: t('settings.roleOptions.guest') },
+              { label: t('roleOptions.guest'), value: t('roleOptions.guest') },
             ]}
           />
         </Form.Item>
 
         <Form.Item
-          label={t('settings.darkMode')}
+          label={t('darkMode')}
           name="darkMode"
           valuePropName="checked"
-          tooltip={t('settings.darkModeTooltip')}
+          tooltip={t('darkModeTooltip')}
         >
           <Switch />
         </Form.Item>
