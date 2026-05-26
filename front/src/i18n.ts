@@ -13,11 +13,11 @@ import enNotFound from './locales/en-US/notFound.json'
 export type SupportedLanguage = 'zh-CN' | 'en-US'
 
 /**
- * Uses Chinese by default and only restores English after an explicit user selection.
+ * Uses English by default while honoring an explicit Simplified Chinese choice.
  */
 const getInitialLanguage = (): SupportedLanguage => {
-  if (typeof window === 'undefined') return 'zh-CN'
-  return window.localStorage.getItem('jellyfish_language') === 'en-US' ? 'en-US' : 'zh-CN'
+  if (typeof window === 'undefined') return 'en-US'
+  return window.localStorage.getItem('jellyfish_language') === 'zh-CN' ? 'zh-CN' : 'en-US'
 }
 
 const resources = {
@@ -41,7 +41,7 @@ i18n
   .init({
     resources,
     lng: getInitialLanguage(),
-    fallbackLng: 'zh-CN',
+    fallbackLng: 'en-US',
     supportedLngs: ['zh-CN', 'en-US'],
     ns: ['common', 'layout', 'settings', 'notFound'],
     defaultNS: 'layout',
