@@ -80,10 +80,10 @@ def map_view_angle_for_prompt(view_angle: AssetViewAngle | str | None) -> str:
         return ""
     raw = view_angle.value if isinstance(view_angle, AssetViewAngle) else str(view_angle)
     view_angle_map = {
-        "RIGH": "纯右側面,严格右侧面，90度纯侧面轮廓，耳朵清晰可见",
-        "RIGHT": "纯右側面,严格右侧面，90度纯侧面轮廓，耳朵清晰可见",
-        "LEFT": "纯左侧面,严格左侧面，90度纯侧面轮廓，耳朵清晰可见",
-        "BACK": "正后方,正后方视角，完全背对镜头，只能看到后脑勺和后背",
+        "RIGH": "strict right side profile, 90-degree side silhouette, ear clearly visible",
+        "RIGHT": "strict right side profile, 90-degree side silhouette, ear clearly visible",
+        "LEFT": "strict left side profile, 90-degree side silhouette, ear clearly visible",
+        "BACK": "direct back view, fully turned away from the camera, only the back of the head and back are visible",
     }
     return view_angle_map.get(raw, raw)
 

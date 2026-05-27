@@ -49,9 +49,23 @@ class AssetImageBaseDraft(GenerationBaseDraft):
     default_images: list[str]
 
 
+PROMPT_VALUE_LABELS = {
+    "现实": "realistic live-action",
+    "动漫": "anime",
+    "真人都市": "live-action urban drama",
+    "真人科幻": "live-action science fiction",
+    "真人古装": "live-action period drama",
+    "动漫科幻": "anime science fiction",
+    "动漫3D": "3D anime",
+    "国漫": "Chinese animation",
+    "水墨画": "ink wash painting",
+}
+
+
 def _enum_value(value: Any) -> str:
     raw = getattr(value, "value", value)
-    return str(raw or "")
+    text = str(raw or "")
+    return PROMPT_VALUE_LABELS.get(text, text)
 
 
 async def _build_asset_prompt(
