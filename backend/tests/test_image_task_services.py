@@ -237,6 +237,51 @@ async def test_build_actor_image_base_draft_front_view_returns_no_refs(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_build_actor_image_base_draft_passes_actor_name_to_prompt(monkeypatch):
+    """Actor prompts need the name so gender presentation can be inferred."""
+
+    actor = SimpleNamespace(
+        id="actor-lara",
+        name="Lara Monteiro",
+        description="young chef, proud, emotional, from a humble coastal family.",
+        tags=[],
+        visual_style="realistic live-action",
+        style="live-action urban drama",
+    )
+    image = SimpleNamespace(
+        id=1,
+        actor_id="actor-lara",
+        view_angle=AssetViewAngle.front,
+        quality_level="high",
+        format="png",
+    )
+    db = _FakeDB(
+        mapping={
+            (Actor, "actor-lara"): actor,
+            (ActorImage, 1): image,
+        }
+    )
+    captured: dict[str, object] = {}
+
+    async def _fake_build_prompt(*_args, **kwargs):
+        captured.update(kwargs)
+        return "rendered Lara prompt"
+
+    monkeypatch.setattr(asset_base, "build_prompt_with_template", _fake_build_prompt)
+
+    await asset_base.build_actor_image_base_draft(
+        db,
+        actor_id="actor-lara",
+        image_id=1,
+    )
+
+    variables = captured["variables"]
+    assert isinstance(variables, dict)
+    assert variables["name"] == "Lara Monteiro"
+    assert variables["description"] == "young chef, proud, emotional, from a humble coastal family."
+
+
+@pytest.mark.asyncio
 async def test_build_character_image_base_draft_combines_actor_and_costume_refs(monkeypatch):
     character = SimpleNamespace(
         id="char-1",
