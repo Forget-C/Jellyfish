@@ -38,6 +38,9 @@ from app.services.worker.task_logging import log_task_event, log_task_failure
 from app.utils.files import create_file_from_url_or_b64
 
 
+IMAGE_GENERATION_TIMEOUT_SECONDS = 1800.0
+
+
 class _CreateOnlyTask:
     """仅用于 TaskManager.create：提供 __class__.__name__，避免传入 lambda。"""
 
@@ -68,12 +71,18 @@ async def _persist_images_to_assets(
         return
 
     item = images[0]
-    if not item.url:
+    image_payload = item.url or item.b64_json
+    if not image_payload:
         return
+    create_file_kwargs: dict[str, str] = (
+        {"b64_data": image_payload}
+        if image_payload.startswith("data:") or item.b64_json
+        else {"url": image_payload}
+    )
 
     file_obj = await create_file_from_url_or_b64(
         session,
-        url=item.url,
+        **create_file_kwargs,
         name=f"{relation_type}-{relation_entity_id}",
         prefix=f"generated-images/{relation_type}/{relation_entity_id}",
     )
@@ -264,6 +273,7 @@ async def create_image_task_and_link(
         "base_url": provider_cfg.base_url,
         "relation_type": relation_type,
         "relation_entity_id": relation_entity_id,
+        "timeout_s": IMAGE_GENERATION_TIMEOUT_SECONDS,
         "input": {
             "prompt": prompt,
             "model": model.name,
@@ -329,6 +339,7 @@ async def run_image_generation_task(
             api_key = str(run_args.get("api_key") or "")
             base_url = run_args.get("base_url")
             input_dict = dict(run_args.get("input") or {})
+            timeout_s = float(run_args.get("timeout_s") or IMAGE_GENERATION_TIMEOUT_SECONDS)
 
             task = ImageGenerationTask(
                 provider_config=ProviderConfig(
@@ -337,10 +348,15 @@ async def run_image_generation_task(
                     base_url=base_url,
                 ),
                 input_=ImageGenerationInput.model_validate(input_dict),
+                timeout_s=timeout_s,
             )
             await task.run()
             result = await task.get_result()
             if result is None:
+                task_status = await task.status()
+                task_error = str(task_status.get("error") or "").strip()
+                if task_error:
+                    raise RuntimeError(task_error)
                 raise RuntimeError("Image generation task returned no result")
             if await cancel_if_requested_async(store=store, task_id=task_id, session=session):
                 log_task_event("image_generation", task_id, "cancelled", stage="after_execute")

@@ -51,7 +51,12 @@ class Settings(BaseSettings):
             return []
         return [x.strip() for x in s.split(",") if x.strip()]
 
-    # S3 / 对象存储（用于素材文件）
+    # Storage
+    # If s3_bucket_name is not configured, files are stored on the local filesystem.
+    local_storage_path: str = str(BACKEND_ROOT / "storage")
+    local_storage_url_path: str = "/media"
+
+    # S3 / 对象存储（用于素材文件）。配置 s3_bucket_name 后切换为 S3 兼容存储。
     s3_endpoint_url: str | None = None
     s3_region_name: str | None = None
     s3_access_key_id: str | None = None

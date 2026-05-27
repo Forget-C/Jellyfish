@@ -67,7 +67,7 @@ class AbstractImageGenerationTask(BaseTask, ABC):
             if self._result is not None:
                 self._provider_task_id = self._result.provider_task_id
         except Exception as exc:  # noqa: BLE001
-            self._error = str(exc)
+            self._error = str(exc) or exc.__class__.__name__
             self._result = None
         return None
 

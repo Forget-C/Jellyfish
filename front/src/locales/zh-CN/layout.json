@@ -3,7 +3,27 @@
   "subtitle": "AI 短剧工作台",
   "welcome": "欢迎使用 Jellyfish",
   "menu": {
+    "projects": "项目列表",
+    "assets": "资产管理",
+    "prompts": "提示词模板",
+    "models": "模型管理",
     "settings": "系统设置"
+  },
+  "breadcrumbs": {
+    "projects": "项目列表",
+    "assets": "资产管理",
+    "prompts": "提示词模板",
+    "files": "文件管理",
+    "agents": "Agent管理",
+    "models": "模型管理",
+    "chapters": "章节管理",
+    "studio": "分镜工作室",
+    "prep": "章节编辑",
+    "shots": "分镜",
+    "editor": "视频剪辑",
+    "edit": "编辑",
+    "projectWorkbench": "项目工作台",
+    "chapter": "章节"
   },
   "user": {
     "profile": "个人中心",
@@ -14,4 +34,3 @@
     "en": "English"
   }
 }
-

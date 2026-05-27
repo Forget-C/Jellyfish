@@ -46,19 +46,19 @@ const MainLayout: React.FC = () => {
     if (path.length === 0) return [{ title: t('title') }]
     const items: { title: React.ReactNode; key: string }[] = []
     const pathLabels: Record<string, string> = {
-      projects: '项目列表',
-      assets: '资产管理',
-      prompts: '提示词模板',
-      files: '文件管理',
-      agents: 'Agent管理',
-      models: '模型管理',
+      projects: t('breadcrumbs.projects'),
+      assets: t('breadcrumbs.assets'),
+      prompts: t('breadcrumbs.prompts'),
+      files: t('breadcrumbs.files'),
+      agents: t('breadcrumbs.agents'),
+      models: t('breadcrumbs.models'),
       settings: t('menu.settings'),
-      chapters: '章节管理',
-      studio: '分镜工作室',
-      prep: '章节编辑',
-      shots: '分镜',
-      editor: '视频剪辑',
-      edit: '编辑',
+      chapters: t('breadcrumbs.chapters'),
+      studio: t('breadcrumbs.studio'),
+      prep: t('breadcrumbs.prep'),
+      shots: t('breadcrumbs.shots'),
+      editor: t('breadcrumbs.editor'),
+      edit: t('breadcrumbs.edit'),
     }
     path.forEach((segment, i) => {
       // 特殊：/projects/:projectId/chapters/:chapterId/* 中的 chapterId 段不展示（避免出现“章节”这一层）
@@ -87,8 +87,8 @@ const MainLayout: React.FC = () => {
       const isLast = i === path.length - 1
       let label = pathLabels[segment]
       if (label === undefined) {
-        if (path[0] === 'projects' && i === 1) label = '项目工作台'
-        else if (path[2] === 'chapters' && i === 3) label = '章节'
+        if (path[0] === 'projects' && i === 1) label = t('breadcrumbs.projectWorkbench')
+        else if (path[2] === 'chapters' && i === 3) label = t('breadcrumbs.chapter')
         else label = segment
       }
       items.push({
@@ -103,22 +103,22 @@ const MainLayout: React.FC = () => {
     {
       key: 'projects',
       icon: <FolderOutlined />,
-      label: <Link to="/projects">项目列表</Link>,
+      label: <Link to="/projects">{t('menu.projects')}</Link>,
     },
     {
       key: 'assets',
       icon: <PictureOutlined />,
-      label: <Link to="/assets">资产管理</Link>,
+      label: <Link to="/assets">{t('menu.assets')}</Link>,
     },
     {
       key: 'prompts',
       icon: <FileTextOutlined />,
-      label: <Link to="/prompts">提示词模板</Link>,
+      label: <Link to="/prompts">{t('menu.prompts')}</Link>,
     },
     {
       key: 'models',
       icon: <ApiOutlined />,
-      label: <Link to="/models">模型管理</Link>,
+      label: <Link to="/models">{t('menu.models')}</Link>,
     },
     {
       key: 'settings',

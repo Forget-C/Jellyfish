@@ -1,6 +1,14 @@
 import { create } from 'zustand'
 import type { SupportedLanguage } from '../i18n'
 
+/**
+ * Keeps English as the default while honoring an explicit Simplified Chinese choice.
+ */
+const getInitialLanguage = (): SupportedLanguage => {
+  if (typeof window === 'undefined') return 'en-US'
+  return window.localStorage.getItem('jellyfish_language') === 'zh-CN' ? 'zh-CN' : 'en-US'
+}
+
 interface UserInfo {
   name: string
   role: string
@@ -19,9 +27,9 @@ export const useAppStore = create<AppState>((set) => ({
   siderCollapsed: false,
   user: {
     name: 'Admin',
-    role: '系统管理员',
+    role: 'System administrator',
   },
-  language: 'zh-CN',
+  language: getInitialLanguage(),
   setUser: (user) =>
     set((state) => ({
       user: {

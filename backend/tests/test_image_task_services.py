@@ -27,6 +27,7 @@ from app.services.studio.image_task_references import (
     resolve_reference_file_ids_and_names_from_linked_items,
     resolve_reference_image_refs_by_file_ids,
 )
+from app.services.studio.image_tasks import map_photo_angle_for_prompt, map_view_angle_for_prompt
 from app.services.studio.image_task_validation import (
     validate_actor_image,
     validate_asset_image_and_relation_type,
@@ -234,6 +235,118 @@ async def test_build_actor_image_base_draft_front_view_returns_no_refs(monkeypat
     assert draft.prompt == "演员渲染提示词"
     assert draft.default_images == []
     assert draft.image_id == 1
+
+
+@pytest.mark.asyncio
+async def test_build_actor_image_base_draft_passes_actor_name_to_prompt(monkeypatch):
+    """Actor prompts need the name so gender presentation can be inferred."""
+
+    actor = SimpleNamespace(
+        id="actor-lara",
+        name="Lara Monteiro",
+        description="young chef, proud, emotional, from a humble coastal family.",
+        tags=[],
+        visual_style="realistic live-action",
+        style="live-action urban drama",
+    )
+    image = SimpleNamespace(
+        id=1,
+        actor_id="actor-lara",
+        view_angle=AssetViewAngle.front,
+        quality_level="high",
+        format="png",
+    )
+    db = _FakeDB(
+        mapping={
+            (Actor, "actor-lara"): actor,
+            (ActorImage, 1): image,
+        }
+    )
+    captured: dict[str, object] = {}
+
+    async def _fake_build_prompt(*_args, **kwargs):
+        captured.update(kwargs)
+        return "rendered Lara prompt"
+
+    monkeypatch.setattr(asset_base, "build_prompt_with_template", _fake_build_prompt)
+
+    await asset_base.build_actor_image_base_draft(
+        db,
+        actor_id="actor-lara",
+        image_id=1,
+    )
+
+    variables = captured["variables"]
+    assert isinstance(variables, dict)
+    assert variables["name"] == "Lara Monteiro"
+    assert variables["description"] == "young chef, proud, emotional, from a humble coastal family."
+
+
+@pytest.mark.asyncio
+async def test_build_actor_image_base_draft_passes_photo_angle_to_prompt(monkeypatch):
+    """Side-view actor prompts need explicit camera-side angle cues."""
+
+    actor = SimpleNamespace(
+        id="actor-lara",
+        name="Lara Monteiro",
+        description="young chef",
+        tags=[],
+        visual_style="realistic live-action",
+        style="live-action urban drama",
+    )
+    image = SimpleNamespace(
+        id=2,
+        actor_id="actor-lara",
+        view_angle=AssetViewAngle.left,
+        quality_level="high",
+        format="png",
+    )
+    db = _FakeDB(
+        mapping={
+            (Actor, "actor-lara"): actor,
+            (ActorImage, 2): image,
+        }
+    )
+    captured: dict[str, object] = {}
+
+    async def _fake_build_prompt(*_args, **kwargs):
+        captured.update(kwargs)
+        return "rendered left profile prompt"
+
+    async def _fake_pick_front_ref(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(asset_base, "build_prompt_with_template", _fake_build_prompt)
+    monkeypatch.setattr(asset_base, "pick_front_ref_file_id", _fake_pick_front_ref)
+
+    await asset_base.build_actor_image_base_draft(
+        db,
+        actor_id="actor-lara",
+        image_id=2,
+    )
+
+    variables = captured["variables"]
+    assert isinstance(variables, dict)
+    assert "LEFT SIDE PROFILE photo angle" in variables["photo_angle"]
+    assert "subject facing toward the right edge" in variables["view_angle"]
+
+
+def test_side_view_prompt_angle_mappings_are_mirror_opposites() -> None:
+    """Left/right mappings must carry opposite camera-side and facing-direction cues."""
+
+    left_photo = map_photo_angle_for_prompt(AssetViewAngle.left)
+    right_photo = map_photo_angle_for_prompt(AssetViewAngle.right)
+    left_view = map_view_angle_for_prompt(AssetViewAngle.left)
+    right_view = map_view_angle_for_prompt(AssetViewAngle.right)
+
+    assert "LEFT SIDE PROFILE" in left_photo
+    assert "subject's left side" in left_photo
+    assert "do not show the right side profile" in left_photo
+    assert "RIGHT SIDE PROFILE" in right_photo
+    assert "subject's right side" in right_photo
+    assert "do not show the left side profile" in right_photo
+    assert "subject facing toward the right edge" in left_view
+    assert "subject facing toward the left edge" in right_view
 
 
 @pytest.mark.asyncio

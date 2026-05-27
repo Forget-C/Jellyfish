@@ -8,6 +8,7 @@ import httpx
 import pytest
 
 from app.core.integrations.openai.images import OpenAIImageApiAdapter
+from app.core.tasks.image_generation_tasks import OpenAIImageGenerationTask
 from app.core.integrations.volcengine.images import VolcengineImageApiAdapter
 from app.core.contracts.image_generation import ImageGenerationInput, InputImageRef
 from app.core.contracts.provider import ProviderConfig
@@ -169,3 +170,24 @@ async def test_openai_image_adapter_rejects_unsupported_watermark(monkeypatch: p
         assert "watermark is not supported" in str(exc_info.value)
     finally:
         clear_image_model_capability_overrides(provider="openai")
+
+
+@pytest.mark.asyncio
+async def test_openai_image_task_reports_blank_exception_class_name() -> None:
+    """Blank provider exceptions still surface a useful error instead of collapsing to no result."""
+
+    class _BlankErrorAdapter:
+        async def generate(self, **_kwargs):  # noqa: ANN001, ANN003
+            raise RuntimeError()
+
+    task = OpenAIImageGenerationTask(
+        adapter=_BlankErrorAdapter(),  # type: ignore[arg-type]
+        provider_config=ProviderConfig(provider="openai", api_key="sk-test"),
+        input_=ImageGenerationInput(prompt="hello", n=1),  # type: ignore[call-arg]
+    )
+
+    await task.run()
+    status = await task.status()
+
+    assert status["has_result"] is False
+    assert status["error"] == "RuntimeError"

@@ -32,6 +32,7 @@ from app.services.studio.image_tasks import (
     asset_prompt_category,
     build_prompt_with_template,
     is_front_view,
+    map_photo_angle_for_prompt,
     map_view_angle_for_prompt,
 )
 
@@ -49,9 +50,23 @@ class AssetImageBaseDraft(GenerationBaseDraft):
     default_images: list[str]
 
 
+PROMPT_VALUE_LABELS = {
+    "现实": "realistic live-action",
+    "动漫": "anime",
+    "真人都市": "live-action urban drama",
+    "真人科幻": "live-action science fiction",
+    "真人古装": "live-action period drama",
+    "动漫科幻": "anime science fiction",
+    "动漫3D": "3D anime",
+    "国漫": "Chinese animation",
+    "水墨画": "ink wash painting",
+}
+
+
 def _enum_value(value: Any) -> str:
     raw = getattr(value, "value", value)
-    return str(raw or "")
+    text = str(raw or "")
+    return PROMPT_VALUE_LABELS.get(text, text)
 
 
 async def _build_asset_prompt(
@@ -79,6 +94,7 @@ async def _build_asset_prompt(
             "visual_style": _enum_value(visual_style),
             "style": _enum_value(style),
             "view_angle": map_view_angle_for_prompt(image_row.view_angle),
+            "photo_angle": map_photo_angle_for_prompt(image_row.view_angle),
             "quality_level": image_row.quality_level,
             "format": image_row.format,
         },
@@ -225,6 +241,7 @@ async def build_character_image_base_draft(
             "visual_style": _enum_value(character.visual_style),
             "style": _enum_value(character.style),
             "view_angle": map_view_angle_for_prompt(image_row.view_angle),
+            "photo_angle": map_photo_angle_for_prompt(image_row.view_angle),
             "quality_level": image_row.quality_level,
             "format": image_row.format,
         },

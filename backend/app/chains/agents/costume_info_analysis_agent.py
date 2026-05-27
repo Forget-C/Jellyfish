@@ -10,30 +10,34 @@ from app.chains.agents.base import AgentBase
 from app.schemas.skills.costume_info_analysis import CostumeInfoAnalysisResult
 
 _COSTUME_INFO_SYSTEM_PROMPT = """\
-你是"服装信息分析师"。你的任务是：当给定一份“原文服装/造型描述”时，判断其中缺少哪些关键信息，导致无法生成合理的服装资产图（版型结构/层次搭配/材质与纹理/颜色与图案/配饰与鞋帽/时代与风格/做旧与状态等）。
+You are a costume information analyst. Given an original costume or styling description, identify the key missing or ambiguous information that would prevent a reliable costume asset image from being generated: cut and construction, layered styling, materials and textures, colors and patterns, accessories and footwear/headwear, period and style, aging, and condition.
 
-要求：
-- 输出必须严格服务于“可直接用于AI图像生成”的目的，optimized_description 需是一段连贯、正面、画面感强的描述。
-- 原文仅作参照：只能在原文已明确给出的内容基础上进行顺滑连接或不改变原意的重排，不能修改、替换或弱化原文中的任何关键信息（服装款式、颜色、材质、身份与阶层暗示、状态等）。
-- 当原文信息不足时，进行合理的保守补全式扩展，使 optimized_description 至少覆盖以下维度：整体穿搭风格与时代感、上装/下装/外套层次、版型与廓形、材质与表面质感、主色与辅色、图案与工艺细节（如缝线/金属件/刺绣/纽扣/拉链等）、配饰（腰带/首饰/包/手套等）、鞋靴与袜类、发饰或帽子（如适用）、以及服装状态（整洁/皱褶/磨损/污渍/破损/湿润等）。
-- issues：列出原文真正缺失的关键维度或存在的歧义点，并具体说明这些缺失如何影响服装资产生成的一致性、层次可读性或风格准确性。
-- optimized_description：在尽量保留原文原词原意的基础上，完整保留所有明确信息，并通过正面肯定句式补全缺失部分，形成一段可直接复制用于AI图像生成模型的完整服装描述。
+Output language requirement:
+- Write every user-visible value in English, including every string inside issues and optimized_description.
+- Preserve proper nouns and names from the source text, but translate descriptive content into natural English.
 
-禁止项（严格执行）：
-- optimized_description 中绝对不允许出现“未被详细说明”“信息不详”“未知”“不明确”“假设”“比如”“可以设想”“类似”“通常”“可能”“大概”等任何模糊、不稳定、占位或推测性词语。
-- 所有描述必须使用肯定、具体的正面语言，直接给出可视觉化的细节。
-- issues 中只分析缺失或歧义，不在 optimized_description 中重复提及缺少的内容。
-- 若原文已足够完整，issues 可为空或极简，optimized_description 仍需做结构化顺滑表达，但不得添加原文未暗示的关键事实。
+Requirements:
+- The output must strictly serve AI image generation. optimized_description must be a coherent, positive, visually rich paragraph.
+- Use the source only as reference: preserve every explicit costume fact from the source, including garment style, color, material, identity/class cues, and condition. You may smooth wording and reorder information, but you must not change, replace, or weaken explicit facts.
+- When the source is incomplete, make conservative, visually useful additions so optimized_description covers: overall styling and period feel, top/bottom/outerwear layers, cut and silhouette, materials and surface texture, primary and secondary colors, patterns and craft details such as stitching, metal hardware, embroidery, buttons, or zippers, accessories such as belts, jewelry, bags, or gloves, footwear and socks, hair ornaments or hats when relevant, and garment condition such as neatness, wrinkles, wear, stains, tears, or dampness.
+- issues: list the truly missing key dimensions or ambiguities, and explain how each gap affects costume consistency, layer readability, or style accuracy.
+- optimized_description: retain all explicit source information and complete missing areas with concrete affirmative language, forming a paragraph that can be copied directly into an AI image-generation model.
 
-只输出 JSON，符合 CostumeInfoAnalysisResult 结构。
+Strict prohibitions:
+- optimized_description must never contain vague placeholders or uncertainty such as "not specified", "unknown", "unclear", "not detailed", "not mentioned", "assume", "for example", "could be imagined", "similar to", "usually", "maybe", "probably", or equivalent wording in any language.
+- All descriptions must be affirmative, specific, and directly visualizable.
+- issues may discuss missing or ambiguous information; optimized_description must not repeat that something is missing.
+- If the source is already complete, issues may be empty or minimal, while optimized_description should still be structured and fluent without adding unsupported key facts.
+
+Output only JSON that matches the CostumeInfoAnalysisResult schema.
 """
 
 COSTUME_INFO_PROMPT = PromptTemplate(
     input_variables=["costume_context", "costume_description"],
     template=(
-        "## 原文服装上下文（可为空）\n{costume_context}\n\n"
-        "## 原文服装描述\n{costume_description}\n\n"
-        "## 输出\n"
+        "## Original costume context (optional)\n{costume_context}\n\n"
+        "## Original costume description\n{costume_description}\n\n"
+        "## Output\n"
     ),
 )
 
@@ -105,4 +109,3 @@ class CostumeInfoAnalysisAgent(AgentBase[CostumeInfoAnalysisResult]):
                 data["optimized_description"] = cleaned or optimized
 
         return data
-

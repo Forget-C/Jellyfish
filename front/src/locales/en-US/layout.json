@@ -3,7 +3,27 @@
   "subtitle": "AI Short-form Studio",
   "welcome": "Welcome to Jellyfish",
   "menu": {
+    "projects": "Projects",
+    "assets": "Assets",
+    "prompts": "Prompt Templates",
+    "models": "Model Management",
     "settings": "Settings"
+  },
+  "breadcrumbs": {
+    "projects": "Projects",
+    "assets": "Assets",
+    "prompts": "Prompt Templates",
+    "files": "Files",
+    "agents": "Agent Management",
+    "models": "Model Management",
+    "chapters": "Chapters",
+    "studio": "Storyboard Studio",
+    "prep": "Chapter Editor",
+    "shots": "Shots",
+    "editor": "Video Editor",
+    "edit": "Edit",
+    "projectWorkbench": "Project Workbench",
+    "chapter": "Chapter"
   },
   "user": {
     "profile": "Profile",
@@ -14,4 +34,3 @@
     "en": "English"
   }
 }
-

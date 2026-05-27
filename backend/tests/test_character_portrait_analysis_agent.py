@@ -6,7 +6,12 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
-from app.chains.agents import CharacterPortraitAnalysisAgent
+from app.chains.agents import (
+    CharacterPortraitAnalysisAgent,
+    CostumeInfoAnalysisAgent,
+    PropInfoAnalysisAgent,
+    SceneInfoAnalysisAgent,
+)
 from app.schemas.skills.character_portrait import CharacterPortraitAnalysisResult
 
 
@@ -22,6 +27,32 @@ class _MockChatModel(BaseChatModel):
     def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:  # type: ignore[override]
         msg = AIMessage(content=self._response)
         return ChatResult(generations=[ChatGeneration(message=msg)])
+
+
+def _contains_cjk(text: str) -> bool:
+    return any("\u4e00" <= char <= "\u9fff" for char in text)
+
+
+def test_smart_detection_prompts_request_english_user_visible_output() -> None:
+    agent_classes = (
+        CharacterPortraitAnalysisAgent,
+        PropInfoAnalysisAgent,
+        SceneInfoAnalysisAgent,
+        CostumeInfoAnalysisAgent,
+    )
+
+    for agent_class in agent_classes:
+        agent = agent_class(_MockChatModel('{"issues": [], "optimized_description": "ok"}'))
+        system_prompt = agent.system_prompt
+        rendered_prompt = agent.prompt_template.format(**{
+            variable: "sample"
+            for variable in agent.prompt_template.input_variables
+        })
+
+        assert "Write every user-visible value in English" in system_prompt
+        assert "Output only JSON" in system_prompt
+        assert not _contains_cjk(system_prompt)
+        assert not _contains_cjk(rendered_prompt)
 
 
 def test_character_portrait_format_output_accepts_unquoted_keys() -> None:
