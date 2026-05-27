@@ -75,17 +75,39 @@ def is_front_view(view_angle: AssetViewAngle | str | None) -> bool:
     return value == AssetViewAngle.front.value
 
 
-def map_view_angle_for_prompt(view_angle: AssetViewAngle | str | None) -> str:
+def _normalize_view_angle(view_angle: AssetViewAngle | str | None) -> str:
+    """Normalize persisted enum/string view-angle values before prompt mapping."""
+
     if view_angle is None:
         return ""
-    raw = view_angle.value if isinstance(view_angle, AssetViewAngle) else str(view_angle)
+    return view_angle.value if isinstance(view_angle, AssetViewAngle) else str(view_angle)
+
+
+def map_view_angle_for_prompt(view_angle: AssetViewAngle | str | None) -> str:
+    """Describe the requested subject-facing direction for image prompts."""
+
+    raw = _normalize_view_angle(view_angle)
     view_angle_map = {
-        "RIGH": "strict right side profile, 90-degree side silhouette, ear clearly visible",
-        "RIGHT": "strict right side profile, 90-degree side silhouette, ear clearly visible",
-        "LEFT": "strict left side profile, 90-degree side silhouette, ear clearly visible",
+        "RIGH": "strict right side profile, 90-degree side silhouette, right ear clearly visible, subject facing toward the left edge of the image",
+        "RIGHT": "strict right side profile, 90-degree side silhouette, right ear clearly visible, subject facing toward the left edge of the image",
+        "LEFT": "strict left side profile, 90-degree side silhouette, left ear clearly visible, subject facing toward the right edge of the image",
         "BACK": "direct back view, fully turned away from the camera, only the back of the head and back are visible",
     }
     return view_angle_map.get(raw, raw)
+
+
+def map_photo_angle_for_prompt(view_angle: AssetViewAngle | str | None) -> str:
+    """Describe the camera position so left/right side renders cannot collapse to the same angle."""
+
+    raw = _normalize_view_angle(view_angle)
+    photo_angle_map = {
+        "FRONT": "front portrait angle; camera directly in front of the subject",
+        "LEFT": "LEFT SIDE PROFILE photo angle; camera positioned on the subject's left side, showing only the left side of the face and left ear; do not show the right side profile",
+        "RIGH": "RIGHT SIDE PROFILE photo angle; camera positioned on the subject's right side, showing only the right side of the face and right ear; do not show the left side profile",
+        "RIGHT": "RIGHT SIDE PROFILE photo angle; camera positioned on the subject's right side, showing only the right side of the face and right ear; do not show the left side profile",
+        "BACK": "back portrait angle; camera directly behind the subject, face turned away and not visible",
+    }
+    return photo_angle_map.get(raw, raw)
 
 
 async def resolve_prompt_template(

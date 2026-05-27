@@ -32,6 +32,7 @@ from app.services.studio.image_tasks import (
     asset_prompt_category,
     build_prompt_with_template,
     is_front_view,
+    map_photo_angle_for_prompt,
     map_view_angle_for_prompt,
 )
 
@@ -93,6 +94,7 @@ async def _build_asset_prompt(
             "visual_style": _enum_value(visual_style),
             "style": _enum_value(style),
             "view_angle": map_view_angle_for_prompt(image_row.view_angle),
+            "photo_angle": map_photo_angle_for_prompt(image_row.view_angle),
             "quality_level": image_row.quality_level,
             "format": image_row.format,
         },
@@ -239,6 +241,7 @@ async def build_character_image_base_draft(
             "visual_style": _enum_value(character.visual_style),
             "style": _enum_value(character.style),
             "view_angle": map_view_angle_for_prompt(image_row.view_angle),
+            "photo_angle": map_photo_angle_for_prompt(image_row.view_angle),
             "quality_level": image_row.quality_level,
             "format": image_row.format,
         },
