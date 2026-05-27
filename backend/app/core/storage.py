@@ -47,7 +47,12 @@ def _build_s3_client():
         region_name=settings.s3_region_name,
         aws_access_key_id=settings.s3_access_key_id,
         aws_secret_access_key=settings.s3_secret_access_key,
-        config=BotoConfig(s3={"addressing_style": "virtual"}),
+        # RustFS/MinIO-compatible local endpoints usually do not provide
+        # wildcard DNS for bucket subdomains (for example
+        # ``jellyfish-assets.rustfs``). Path-style addressing keeps requests on
+        # the configured service host (``rustfs:9000/<bucket>/<key>``), which is
+        # portable across Docker Compose and cloud-compatible S3 services.
+        config=BotoConfig(s3={"addressing_style": "path"}),
     )
     return client
 

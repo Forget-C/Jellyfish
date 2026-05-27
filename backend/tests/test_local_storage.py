@@ -57,3 +57,26 @@ async def test_local_storage_accepts_file_like_objects():
 def test_local_storage_rejects_path_traversal():
     with pytest.raises(ValueError):
         storage._local_path_for_key("../outside.txt")
+
+
+def test_s3_client_uses_path_style_addressing(monkeypatch):
+    """S3-compatible local endpoints should not require bucket DNS names."""
+
+    captured = {}
+
+    def _fake_boto3_client(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return object()
+
+    monkeypatch.setattr(settings, "s3_bucket_name", "jellyfish-assets")
+    monkeypatch.setattr(settings, "s3_endpoint_url", "http://rustfs:9000")
+    monkeypatch.setattr(settings, "s3_region_name", "us-east-1")
+    monkeypatch.setattr(settings, "s3_access_key_id", "access")
+    monkeypatch.setattr(settings, "s3_secret_access_key", "secret")
+    monkeypatch.setattr(storage.boto3, "client", _fake_boto3_client)
+
+    storage._build_s3_client()
+
+    assert captured["args"] == ("s3",)
+    assert captured["kwargs"]["config"].s3["addressing_style"] == "path"
