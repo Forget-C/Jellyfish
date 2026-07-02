@@ -230,3 +230,11 @@ def test_resolve_effective_base_url_prefers_category_specific_url() -> None:
         == "https://video-gateway.example/v1"
     )
 
+
+def test_resolve_effective_base_url_uses_atlascloud_default_text_url() -> None:
+    provider = Provider(id="p-atlascloud", name="Atlas Cloud", base_url="", api_key="k")
+
+    assert (
+        resolve_effective_base_url(provider=provider, category=ModelCategoryKey.text)
+        == "https://api.atlascloud.ai/v1"
+    )

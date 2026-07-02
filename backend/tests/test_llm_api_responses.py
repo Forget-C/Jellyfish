@@ -202,18 +202,24 @@ def test_list_supported_providers_returns_capability_matrix(client: TestClient) 
     assert body["code"] == 200
     assert isinstance(body["data"], list)
     keys = {item["key"] for item in body["data"]}
+    assert "atlascloud" in keys
     assert "openai" in keys
     assert "volcengine" in keys
     assert "aliyun_bailian" in keys
 
 
-def test_list_supported_providers_text_contains_aliyun_bailian(client: TestClient) -> None:
+def test_list_supported_providers_text_contains_openai_compatible_providers(
+    client: TestClient,
+) -> None:
     response = client.get("/api/v1/llm/providers/supported", params={"category": "text"})
     assert response.status_code == 200
     body = response.json()
     assert body["code"] == 200
-    keys = {item["key"] for item in (body["data"] or [])}
+    providers = {item["key"]: item for item in (body["data"] or [])}
+    keys = set(providers)
+    assert "atlascloud" in keys
     assert "aliyun_bailian" in keys
+    assert providers["atlascloud"]["default_base_url"] == "https://api.atlascloud.ai/v1"
 
 
 def test_list_supported_providers_can_filter_by_category(client: TestClient) -> None:

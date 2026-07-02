@@ -32,5 +32,12 @@ def bootstrap_builtin_providers() -> None:
                 supported_categories=(ModelCategoryKey.text,),
                 default_base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
             ),
+            ProviderSpec(
+                key="atlascloud",
+                display_name="Atlas Cloud",
+                aliases=("Atlas Cloud", "atlascloud", "atlas_cloud", "atlas"),
+                supported_categories=(ModelCategoryKey.text,),
+                default_base_url="https://api.atlascloud.ai/v1",
+            ),
         ]
     )
