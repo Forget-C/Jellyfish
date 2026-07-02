@@ -172,6 +172,35 @@ async def test_create_model_rejects_unsupported_category_for_provider() -> None:
 
 
 @pytest.mark.asyncio
+async def test_create_model_allows_atlascloud_text_provider() -> None:
+    db, engine = await _build_session()
+    async with db:
+        await create_provider(
+            db,
+            body=ProviderCreate(
+                id="p-atlascloud",
+                name="Atlas Cloud",
+                base_url="https://api.atlascloud.ai/v1",
+                api_key="k",
+            ),
+        )
+
+        created = await create_model(
+            db,
+            body=ModelCreate(
+                id="m-atlascloud-text",
+                name="deepseek-ai/deepseek-v4-pro",
+                category=ModelCategoryKey.text,
+                provider_id="p-atlascloud",
+            ),
+        )
+
+        assert created.id == "m-atlascloud-text"
+        assert created.provider_id == "p-atlascloud"
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_update_model_rejects_switch_to_unsupported_provider_category_combo() -> None:
     db, engine = await _build_session()
     async with db:
