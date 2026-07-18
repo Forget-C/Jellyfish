@@ -1,0 +1,11 @@
+# Do not let host-installed dependencies overwrite the lockfile-installed
+# dependencies in Docker build stages. Native packages such as esbuild must
+# always be installed for the image platform.
+**/node_modules
+
+# Development-only local state is not part of application build contexts.
+**/.venv
+**/__pycache__
+**/.codegraph
+.git
+**/.env

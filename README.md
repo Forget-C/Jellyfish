@@ -224,11 +224,26 @@ docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.y
 
 ## 🧑‍💻 Local Development
 
+To run the frontend and backend locally while using Compose-managed middleware,
+first copy the matching environment templates and start MySQL, Redis, RustFS,
+and the Compose database-initialization jobs:
+
+```bash
+cp deploy/compose/.env.example deploy/compose/.env
+cp backend/.env.example backend/.env
+cp front/.env.example front/.env
+docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.yml \
+  up -d mysql redis rustfs backend-init-db mysql-init-sql
+```
+
+The default credentials in `backend/.env.example` match
+`deploy/compose/.env.example`. When changing MySQL or RustFS credentials in the
+Compose file, update the corresponding values in `backend/.env` too.
+
 ### Backend
 
 ```bash
 cd backend
-cp .env.example .env
 uv sync
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
@@ -248,4 +263,3 @@ This project is licensed under [Apache-2.0](./LICENSE).
 ## 💬 Community & Feedback
 
 - [GitHub Issues](https://github.com/Forget-C/Jellyfish/issues)
-

@@ -161,18 +161,17 @@ function MyComponent() {
 
 ### 环境变量
 
-创建 `.env` 或 `.env.local` 文件：
+复制项目提供的本地联调配置：
 
+```bash
+cp .env.example .env
 ```
-VITE_API_URL=https://api.example.com
-VITE_APP_NAME=MyApp
-```
 
-在代码中使用：
+默认配置会关闭 Mock 数据，并让 OpenAPI 生成客户端连接 `http://127.0.0.1:8000`：
 
-```tsx
-const apiUrl = import.meta.env.VITE_API_URL
-const appName = import.meta.env.VITE_APP_NAME
+```env
+VITE_USE_MOCK=false
+VITE_BACKEND_URL=http://127.0.0.1:8000
 ```
 
 ## 代码规范
@@ -240,4 +239,3 @@ npm run preview
 ---
 
 祝你开发愉快！🚀
-

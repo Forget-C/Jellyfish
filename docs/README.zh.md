@@ -199,11 +199,22 @@ docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.y
 
 ## 🧑‍💻 开发环境启动（前后端分离）
 
+如需本地启动前后端、复用 Docker Compose 拉起的中间件，先复制配套环境变量，并启动 MySQL、Redis、RustFS 及 Compose 中的数据库初始化任务：
+
+```bash
+cp deploy/compose/.env.example deploy/compose/.env
+cp backend/.env.example backend/.env
+cp front/.env.example front/.env
+docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.yml \
+  up -d mysql redis rustfs backend-init-db mysql-init-sql
+```
+
+`backend/.env.example` 中的默认 MySQL 与 RustFS 凭据已和 `deploy/compose/.env.example` 对齐。如修改 Compose 的对应凭据，也请同步修改本地的 `backend/.env`。
+
 ### 启动后端
 
 ```bash
 cd backend
-cp .env.example .env
 uv sync
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
@@ -223,4 +234,3 @@ pnpm dev
 ## 💬 交流与反馈 / Community
 
 - **[GitHub Issues](https://github.com/Forget-C/Jellyfish/issues)** — 功能建议、Bug 反馈、使用讨论
-
