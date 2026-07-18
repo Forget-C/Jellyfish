@@ -39,48 +39,31 @@ services:
     volumes:
       - rustfs_data:/data
 
-  backend-init-db:
+  backend-migrate:
     build:
       context: ../..
       dockerfile: deploy/docker/backend.Dockerfile
     environment:
       DATABASE_URL: mysql+aiomysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE}
       DEBUG: "false"
-      # S3 / RustFS
-      S3_ENDPOINT_URL: http://rustfs:9000
-      S3_REGION_NAME: us-east-1
-      S3_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY}
-      S3_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY}
-      S3_BUCKET_NAME: ${S3_BUCKET_NAME}
-      # CORS
-      CORS_ORIGINS: http://localhost:7788,http://127.0.0.1:7788
-      # 可选
-      OPENAI_API_KEY: ${OPENAI_API_KEY-}
     depends_on:
       mysql:
         condition: service_healthy
-    command: ["uv", "run", "python", "init_db.py"]
+    command: [".venv/bin/python", "-m", "app.scripts.migrate_database"]
     restart: "no"
 
-  mysql-init-sql:
-    image: mysql:9.0
+  backend-seed-system-data:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/backend.Dockerfile
     depends_on:
       mysql:
         condition: service_healthy
-      backend-init-db:
+      backend-migrate:
         condition: service_completed_successfully
     environment:
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-    volumes:
-      - ../../backend/sql:/sql:ro
-    command:
-      [
-        "bash",
-        "-lc",
-        "set -e; for f in $$(find /sql -maxdepth 1 -type f -name '*.sql' | sort); do echo \"[mysql-init-sql] applying $$f\"; mysql --default-character-set=utf8mb4 -h mysql -u\"$$MYSQL_USER\" -p\"$$MYSQL_PASSWORD\" \"$$MYSQL_DATABASE\" < \"$$f\"; done",
-      ]
+      DATABASE_URL: mysql+aiomysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE}
+    command: [".venv/bin/python", "-m", "app.scripts.seed_system_data"]
     restart: "no"
 
   backend:
@@ -113,9 +96,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      backend-init-db:
+      backend-migrate:
         condition: service_completed_successfully
-      mysql-init-sql:
+      backend-seed-system-data:
         condition: service_completed_successfully
 
   celery-worker:
@@ -143,9 +126,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      backend-init-db:
+      backend-migrate:
         condition: service_completed_successfully
-      mysql-init-sql:
+      backend-seed-system-data:
         condition: service_completed_successfully
     command: ["uv", "run", "celery", "-A", "app.core.celery_app:celery_app", "worker", "-l", "info"]
 

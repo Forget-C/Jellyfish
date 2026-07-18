@@ -93,11 +93,10 @@ cp deploy/compose/.env.example deploy/compose/.env
 docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.yml up --build
 ```
 
-On the first start, `backend/init_db.py` will run once to create tables (`backend-init-db` service).
-After it succeeds, SQL files under `backend/sql/` will be imported automatically in filename order (`mysql-init-sql` service), for example:
-
-- `001-init-prompt-template.sql`
-- `002-add-shot-extracted-candidates.sql`
+On startup, `backend-migrate` runs the Alembic revision chain and records the
+applied revision in `alembic_version`. After it succeeds,
+`backend-seed-system-data` applies idempotent system prompt-template seed data.
+The backend and Celery worker only start after both one-off services complete.
 
 Compose also starts:
 

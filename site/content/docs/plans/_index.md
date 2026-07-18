@@ -13,3 +13,4 @@ description: "记录当前正在推进的开发计划、改造方案与阶段性
 
 - [开发规划](/docs/plans/development-plan/)
 - [任务异步化与取消方案](/docs/plans/task-async-cancellation-plan/)
+- [Alembic 统一数据库迁移方案](/docs/plans/alembic-unified-migration-plan/)

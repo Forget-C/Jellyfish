@@ -134,8 +134,8 @@ redis://[:password@]REDIS_HOST:REDIS_PORT/REDIS_DB
 ```text
 mysql
 → redis
-→ backend-init-db
-→ mysql-init-sql
+→ backend-migrate
+→ backend-seed-system-data
 → backend
 → celery-worker
 → front

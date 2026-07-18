@@ -226,14 +226,14 @@ docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.y
 
 To run the frontend and backend locally while using Compose-managed middleware,
 first copy the matching environment templates and start MySQL, Redis, RustFS,
-and the Compose database-initialization jobs:
+and the Compose migration and system-seed jobs:
 
 ```bash
 cp deploy/compose/.env.example deploy/compose/.env
 cp backend/.env.example backend/.env
 cp front/.env.example front/.env
 docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.yml \
-  up -d mysql redis rustfs backend-init-db mysql-init-sql
+  up -d mysql redis rustfs backend-migrate backend-seed-system-data
 ```
 
 The default credentials in `backend/.env.example` match

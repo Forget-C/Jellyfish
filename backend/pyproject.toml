@@ -5,6 +5,7 @@ description = "Jellyfish AI 短剧工厂 - 后端 API"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "alembic>=1.14.0",
     "celery[redis]>=5.4.0",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
