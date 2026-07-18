@@ -34,10 +34,11 @@ async def resolve_image_model(db: AsyncSession, model_id: str | None) -> Model:
                 detail=f"Configured model_id not found in DB: {model_id}",
             ) from e
         if e.status_code == status.HTTP_503_SERVICE_UNAVAILABLE and not model_id:
-            # 保持既有行为：未传 model_id 时，仅允许读取 ModelSettings.default_image_model_id。
+            # 未传 model_id 时，图片任务只能使用已设置的默认图片模型。
+            # 对调用方提供可执行的配置指引，内部的 ModelSettings/DB 细节留在异常链中。
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="No image model configured in DB (missing explicit model_id and ModelSettings.default_image_model_id)",
+                detail="未配置默认图片生成模型，请前往模型管理添加图片模型并设为默认模型后重试",
             ) from e
         if e.status_code == status.HTTP_503_SERVICE_UNAVAILABLE and model_id:
             raise HTTPException(

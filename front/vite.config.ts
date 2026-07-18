@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react()],
   appType: 'spa',
   server: {
-    port: 7788,
+    port: 5173,
     open: true,
   },
   build: {

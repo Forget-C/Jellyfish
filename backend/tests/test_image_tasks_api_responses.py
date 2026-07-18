@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+import asyncio
 
+import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.api.v1.routes.studio import image_tasks as route
 from app.dependencies import get_db
 from app.main import app
+from app.services.studio.image_tasks import resolve_image_model
 
 
 class _DummyDB:
@@ -41,6 +45,15 @@ def _override_db(db: _DummyDB):
         yield db
 
     return _get_db
+
+
+def test_resolve_image_model_returns_actionable_default_model_message() -> None:
+    """Missing image defaults should guide users to model configuration, not DB internals."""
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(resolve_image_model(_DummyDB(), model_id=None))
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == "未配置默认图片生成模型，请前往模型管理添加图片模型并设为默认模型后重试"
 
 
 def test_create_actor_image_task_requires_prompt(client: TestClient) -> None:
