@@ -261,6 +261,7 @@ async def test_build_character_image_base_draft_combines_actor_and_costume_refs(
         view_angle=AssetViewAngle.front,
         quality_level="high",
         format="png",
+        prompt_overrides={},
     )
     db = _FakeDB(
         mapping={
@@ -272,14 +273,19 @@ async def test_build_character_image_base_draft_combines_actor_and_costume_refs(
     )
 
     async def _fake_build_prompt(*_args, **_kwargs):
-        return "角色合成提示词"
+        return SimpleNamespace(
+            prompt="角色合成提示词",
+            template_id="template-character",
+            template_version=1,
+            merged_variables={"view_angle": "front"},
+        )
 
     async def _fake_pick_ordered(*_args, parent_id: str, **_kwargs):
         if parent_id == "actor-1":
             return ["actor-front", "actor-left"]
         return ["costume-front"]
 
-    monkeypatch.setattr(asset_base, "build_prompt_with_template", _fake_build_prompt)
+    monkeypatch.setattr(asset_base, "build_prompt_with_template_snapshot", _fake_build_prompt)
     monkeypatch.setattr(asset_base, "pick_ordered_ref_file_ids", _fake_pick_ordered)
 
     draft = await asset_base.build_character_image_base_draft(

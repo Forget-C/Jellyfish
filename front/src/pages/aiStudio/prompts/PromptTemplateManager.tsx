@@ -16,15 +16,12 @@ const fallbackCategoryLabels: Record<string, string> = {
   storyboard_prompt: '分镜',
   bgm: '配乐',
   sfx: '音效',
-  character_image_front: '角色正面',
-  character_image_other: '角色其他',
+  character_image: '角色设定图',
   actor_image: '演员设定图',
-  prop_image_front: '道具正面',
-  prop_image_other: '道具其他',
+  prop_image: '道具展示图',
   scene_image_front: '场景正面',
   scene_image_other: '场景其他',
-  costume_image_front: '服装正面',
-  costume_image_other: '服装其他',
+  costume_image: '服装展示图',
   combined: '综合提示词',
 }
 
@@ -41,15 +38,12 @@ const defaultPromptCategories: PromptCategory[] = [
   'storyboard_prompt',
   'bgm',
   'sfx',
-  'character_image_front',
-  'character_image_other',
+  'character_image',
   'actor_image',
-  'prop_image_front',
-  'prop_image_other',
+  'prop_image',
   'scene_image_front',
   'scene_image_other',
-  'costume_image_front',
-  'costume_image_other',
+  'costume_image',
   'combined',
 ]
 
@@ -69,7 +63,7 @@ const groupOrder = [
   'frame',
   'video',
   'audio',
-  'chapter',
+  'character',
   'actor',
   'scene',
   'prop',
@@ -81,9 +75,9 @@ const groupOrder = [
 const groupTitles: Record<(typeof groupOrder)[number], string> = {
   frame: '首/尾/关键帧',
   video: '视频生成 / 分镜',
-  audio: '配乐 / 音效 / 角色',
-  chapter: '角色',
-  actor: '角色形象',
+  audio: '配乐 / 音效',
+  character: '角色设定',
+  actor: '演员设定',
   scene: '场景',
   prop: '道具',
   costume: '服装',
@@ -95,11 +89,11 @@ function getGroupKey(category: string): (typeof groupOrder)[number] {
   if (category.startsWith('frame_')) return 'frame'
   if (category === 'video_prompt' || category === 'storyboard_prompt') return 'video'
   if (['bgm', 'sfx'].includes(category)) return 'audio'
-  if (category.startsWith('character_image_')) return 'chapter'
-  if (category.startsWith('actor_image')) return 'actor'
+  if (category === 'character_image') return 'character'
+  if (category === 'actor_image') return 'actor'
   if (category.startsWith('scene_image_')) return 'scene'
-  if (category.startsWith('prop_image_')) return 'prop'
-  if (category.startsWith('costume_image_')) return 'costume'
+  if (category === 'prop_image') return 'prop'
+  if (category === 'costume_image') return 'costume'
   if (category === 'combined') return 'combined'
   return 'other'
 }
@@ -196,15 +190,17 @@ const PromptTemplateManager: FC = () => {
       grouped.get(key)?.push(template)
     })
 
-    return groupOrder.map((groupKey) => ({
-      title: groupTitles[groupKey],
-      key: groupKey,
-      children: (grouped.get(groupKey) ?? []).map((t) => ({
-        title: t.name,
-        key: t.id,
-        isLeaf: true,
-      })),
-    }))
+    return groupOrder
+      .map((groupKey) => ({
+        title: groupTitles[groupKey],
+        key: groupKey,
+        children: (grouped.get(groupKey) ?? []).map((t) => ({
+          title: t.name,
+          key: t.id,
+          isLeaf: true,
+        })),
+      }))
+      .filter((group) => group.children.length > 0)
   }, [templates])
 
   const handleSearch = (value: string) => {

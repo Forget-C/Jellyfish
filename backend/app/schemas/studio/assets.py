@@ -75,6 +75,7 @@ class AssetImageBase(BaseModel):
     width: int | None = Field(None, description="宽(px)")
     height: int | None = Field(None, description="高(px)")
     format: str = Field("png", description="格式")
+    prompt_overrides: dict[str, str] = Field(default_factory=dict, description="此图片的展示提示词变量覆盖")
 
 
 class AssetImageCreate(BaseModel):
@@ -84,6 +85,7 @@ class AssetImageCreate(BaseModel):
     width: int | None = None
     height: int | None = None
     format: str = "png"
+    prompt_overrides: dict[str, str] = Field(default_factory=dict)
 
 
 class AssetImageUpdate(BaseModel):
@@ -93,6 +95,7 @@ class AssetImageUpdate(BaseModel):
     width: int | None = None
     height: int | None = None
     format: str | None = None
+    prompt_overrides: dict[str, str] | None = None
 
 
 class SceneRead(AssetRead):

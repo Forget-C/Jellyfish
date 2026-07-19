@@ -55,4 +55,6 @@ uv run alembic revision --autogenerate -m "describe schema change"
 
 演员设定图迁移会删除 `actor_image_front` / `actor_image_other` 模板及关联的未完成演员图片任务，并写入唯一的 `actor_image` 系统模板。已完成任务的结果文件和已有演员图片关联不受影响。
 
+角色、道具和服装使用同样的迁移规则：清理各自旧的正面/其他视角模板和未完成图片任务，写入单一默认模板；已生成的图片文件和关联保持不变。
+
 旧的结构迁移 SQL (`002`—`008`) 仅作为历史与短期回退资料保留，不参与当前启动链路。

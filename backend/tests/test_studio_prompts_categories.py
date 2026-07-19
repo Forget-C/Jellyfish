@@ -34,15 +34,12 @@ def test_list_prompt_categories_returns_value_label_description(client: TestClie
         "storyboard_prompt",
         "bgm",
         "sfx",
-        "character_image_front",
-        "character_image_other",
+        "character_image",
         "actor_image",
-        "prop_image_front",
-        "prop_image_other",
+        "prop_image",
         "scene_image_front",
         "scene_image_other",
-        "costume_image_front",
-        "costume_image_other",
+        "costume_image",
         "combined",
     }
     assert "首帧图片" in labels
@@ -52,4 +49,3 @@ def test_list_prompt_categories_returns_value_label_description(client: TestClie
 
 def test_prompt_category_mapping_is_complete() -> None:
     assert set(_PROMPT_CATEGORY_ZH.keys()) == set(PromptCategory)
-

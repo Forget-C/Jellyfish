@@ -307,12 +307,16 @@ def asset_prompt_category(
     relation_type: str,
     is_front_view: bool,
 ) -> PromptCategory:
-    if relation_type == "actor_image":
-        return PromptCategory.actor_image
+    unified_categories = {
+        "actor_image": PromptCategory.actor_image,
+        "character_image": PromptCategory.character_image,
+        "prop_image": PromptCategory.prop_image,
+        "costume_image": PromptCategory.costume_image,
+    }
+    if relation_type in unified_categories:
+        return unified_categories[relation_type]
     mapping = {
-        "prop_image": (PromptCategory.prop_image_front, PromptCategory.prop_image_other),
         "scene_image": (PromptCategory.scene_image_front, PromptCategory.scene_image_other),
-        "costume_image": (PromptCategory.costume_image_front, PromptCategory.costume_image_other),
     }
     front_category, other_category = mapping[relation_type]
     return front_category if is_front_view else other_category

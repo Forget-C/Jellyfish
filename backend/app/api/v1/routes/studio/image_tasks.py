@@ -274,6 +274,12 @@ async def create_asset_image_generation_task(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="prompt is required for asset image generation",
         )
+    base = await _build_asset_image_base_draft_service(
+        db,
+        asset_type=asset_type,
+        asset_id=asset_id,
+        image_id=body.image_id,
+    )
     submission = await _build_asset_image_submission_payload_service(
         db,
         asset_type=asset_type,
@@ -291,6 +297,13 @@ async def create_asset_image_generation_task(
         relation_entity_id=submission.relation_entity_id,
         prompt=submission.prompt,
         images=ref_images if ref_images else None,
+        render_context={
+            "template_id": base.template_id,
+            "template_version": base.template_version,
+            "merged_variables": base.merged_variables,
+            "template_rendered_prompt": base.prompt,
+            "submitted_prompt": submission.prompt,
+        },
     )
     return created_response(TaskCreated(task_id=task_id))
 
@@ -315,7 +328,13 @@ async def render_asset_image_prompt(
     )
     context = _build_asset_image_context_service(base=base)
     derived = _derive_asset_image_preview_service(base=base, context=context)
-    return success_response(RenderedPromptResponse(prompt=derived.prompt, images=derived.images))
+    return success_response(RenderedPromptResponse(
+        prompt=derived.prompt,
+        images=derived.images,
+        template_id=base.template_id,
+        template_version=base.template_version,
+        merged_variables=base.merged_variables,
+    ))
 
 
 @router.post(
@@ -340,6 +359,11 @@ async def create_character_image_generation_task(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="prompt is required for character image generation",
         )
+    base = await _build_character_image_base_draft_service(
+        db,
+        character_id=character_id,
+        image_id=body.image_id,
+    )
     submission = await _build_character_image_submission_payload_service(
         db,
         character_id=character_id,
@@ -355,6 +379,13 @@ async def create_character_image_generation_task(
         relation_entity_id=submission.relation_entity_id,
         prompt=submission.prompt,
         images=ref_images if ref_images else None,
+        render_context={
+            "template_id": base.template_id,
+            "template_version": base.template_version,
+            "merged_variables": base.merged_variables,
+            "template_rendered_prompt": base.prompt,
+            "submitted_prompt": submission.prompt,
+        },
     )
     return created_response(TaskCreated(task_id=task_id))
 
@@ -377,7 +408,13 @@ async def render_character_image_prompt(
     )
     context = _build_asset_image_context_service(base=base)
     derived = _derive_asset_image_preview_service(base=base, context=context)
-    return success_response(RenderedPromptResponse(prompt=derived.prompt, images=derived.images))
+    return success_response(RenderedPromptResponse(
+        prompt=derived.prompt,
+        images=derived.images,
+        template_id=base.template_id,
+        template_version=base.template_version,
+        merged_variables=base.merged_variables,
+    ))
 
 
 @router.post(

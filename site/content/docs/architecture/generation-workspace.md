@@ -237,7 +237,7 @@ front/src/pages/aiStudio/hooks/useGenerationDraft.ts
 
 #### 演员设定图模板
 
-演员图片使用唯一的 `actor_image` 模板类别，不再按正面与侧面/背面拆分模板。渲染时后端锁定演员名称、描述和视角；模板默认变量与 `ActorImage.prompt_overrides` 合并后生成最终提示词。覆盖只属于当前图片槽位，因此不同视角不会互相污染。
+演员、角色、道具和服装分别使用唯一的 `actor_image`、`character_image`、`prop_image`、`costume_image` 模板类别，不再按正面与侧面/背面拆分模板。渲染时后端锁定名称、描述和视角；模板默认变量与对应图片的 `prompt_overrides` 合并后生成最终提示词。覆盖只属于当前图片槽位，因此不同视角不会互相污染。
 
 系统预置模板不可编辑或删除；用户可创建并编辑自定义模板、将其设为默认，也可将系统预置重新设为默认以恢复默认值。
 

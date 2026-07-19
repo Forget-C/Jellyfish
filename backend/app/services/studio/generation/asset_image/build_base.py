@@ -12,7 +12,6 @@ from app.models.studio import (
     Character,
     Costume,
     CostumeImage,
-    PromptCategory,
     Prop,
     PropImage,
     Scene,
@@ -31,7 +30,6 @@ from app.services.studio.image_task_validation import (
 )
 from app.services.studio.image_tasks import (
     asset_prompt_category,
-    build_prompt_with_template,
     is_front_view,
     map_view_angle_for_prompt,
     build_prompt_with_template_snapshot,
@@ -146,7 +144,7 @@ async def build_actor_image_base_draft(
         image_row=image_row,
         template_id=actor.prompt_template_id,
         extra_variables={
-            **(image_row.prompt_overrides or {}),
+            **(getattr(image_row, "prompt_overrides", None) or {}),
             "reference_instruction": (
                 "Use the supplied front-view reference to preserve the same identity, facial structure, hairstyle and costume."
                 if refs
@@ -200,16 +198,6 @@ async def build_asset_image_base_draft(
         parent_field_name = "costume_id"
     if asset is None or image_row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=entity_not_found("AssetImage"))
-    prompt, _, _, _ = await _build_asset_prompt(
-        db,
-        relation_type=relation_type,
-        name=asset.name,
-        description=asset.description,
-        tags=asset.tags,
-        visual_style=asset.visual_style,
-        style=asset.style,
-        image_row=image_row,
-    )
     if not is_front_view(image_row.view_angle):
         refs = await _resolve_front_ref(
             db,
@@ -218,6 +206,21 @@ async def build_asset_image_base_draft(
             parent_id=asset_id,
             preferred_quality_level=image_row.quality_level,
         )
+    prompt, template_id, template_version, merged_variables = await _build_asset_prompt(
+        db,
+        relation_type=relation_type,
+        name=asset.name,
+        description=asset.description,
+        tags=asset.tags,
+        visual_style=asset.visual_style,
+        style=asset.style,
+        image_row=image_row,
+        template_id=asset.prompt_template_id,
+        extra_variables={
+            **(getattr(image_row, "prompt_overrides", None) or {}),
+            "reference_instruction": "Use the supplied front-view reference to preserve the same design and proportions." if refs else "",
+        },
+    )
     return AssetImageBaseDraft(
         entity_type=asset_type.strip().lower(),
         entity_id=asset_id,
@@ -226,6 +229,9 @@ async def build_asset_image_base_draft(
         relation_entity_id=str(relation_entity_id),
         prompt=prompt,
         default_images=refs,
+        template_id=template_id,
+        template_version=template_version,
+        merged_variables=merged_variables,
     )
 
 
@@ -239,21 +245,6 @@ async def build_character_image_base_draft(
     if character is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=entity_not_found("Character"))
     image_row = await validate_character_image(db, character_id=character_id, image_id=image_id)
-    prompt = await build_prompt_with_template(
-        db,
-        category=PromptCategory.combined,
-        variables={
-            "name": character.name,
-            "description": character.description,
-            "visual_style": _enum_value(character.visual_style),
-            "style": _enum_value(character.style),
-            "view_angle": map_view_angle_for_prompt(image_row.view_angle),
-            "quality_level": image_row.quality_level,
-            "format": image_row.format,
-        },
-        fallback_prompt=character.description,
-        not_found_msg="Character.description is empty",
-    )
     refs: list[str] = []
     default_view_angles: tuple[AssetViewAngle, ...] = (
         AssetViewAngle.front,
@@ -281,6 +272,22 @@ async def build_character_image_base_draft(
                 view_angles=default_view_angles,
             )
         )
+    prompt, template_id, template_version, merged_variables = await _build_asset_prompt(
+        db,
+        relation_type="character_image",
+        name=character.name,
+        description=character.description,
+        tags=None,
+        visual_style=character.visual_style,
+        style=character.style,
+        image_row=image_row,
+        # Character 组合资产当前没有独立模板绑定字段；使用该类别默认模板。
+        template_id=None,
+        extra_variables={
+            **(getattr(image_row, "prompt_overrides", None) or {}),
+            "reference_instruction": "Use the supplied actor and costume references to preserve identity and wardrobe." if refs else "",
+        },
+    )
     return AssetImageBaseDraft(
         entity_type="character",
         entity_id=character_id,
@@ -289,4 +296,7 @@ async def build_character_image_base_draft(
         relation_entity_id=str(image_row.id),
         prompt=prompt,
         default_images=refs,
+        template_id=template_id,
+        template_version=template_version,
+        merged_variables=merged_variables,
     )
