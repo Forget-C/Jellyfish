@@ -19,6 +19,11 @@ import { TaskRuntimeProvider } from '../pages/aiStudio/components/TaskRuntimePro
 
 const { Header, Sider, Content } = Layout
 
+/**
+ * Keeps the application chrome at viewport height and provides the route-level
+ * scroll boundary. Pages that need a multi-pane workspace can still use their
+ * own `height: 100%` and local scroll areas inside this boundary.
+ */
 const MainLayout: React.FC = () => {
   const { t, i18n } = useTranslation('layout')
   const location = useLocation()
@@ -156,7 +161,7 @@ const MainLayout: React.FC = () => {
   return (
     <Layout
       style={{
-        height: '100vh',
+        height: '100dvh',
         overflow: 'hidden',
         display: 'flex',
         flexDirection: 'row',
@@ -276,7 +281,7 @@ const MainLayout: React.FC = () => {
               flexDirection: 'column',
             }}
           >
-            <div className="w-full h-full min-h-0 overflow-hidden flex flex-col">
+            <div className="app-route-viewport">
               <Outlet />
             </div>
           </Content>

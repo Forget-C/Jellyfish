@@ -18,6 +18,7 @@ import {
 import { ExperimentComposer } from '../experiment/components/ExperimentComposer'
 import { ExperimentOptionBar } from '../experiment/components/ExperimentOptionBar'
 import { PromptTemplateForm, renderPromptTemplate } from '../experiment/components/PromptTemplateForm'
+import { WorkspaceLayout } from '../../../components'
 
 type LocalMessage = TextLabMessage & { id: string }
 
@@ -119,13 +120,13 @@ export default function TextLabPage() {
   }
 
   return (
-    <Card
-      title="文本实验会话"
-      className="min-h-[680px]"
-      extra={<Button icon={<ClearOutlined />} disabled={!messages.length || submitting} onClick={() => setMessages([])}>清空会话</Button>}
-      bodyStyle={{ display: 'flex', flexDirection: 'column', minHeight: 620 }}
-    >
-      <div className="flex-1 space-y-4 overflow-y-auto pr-1">
+    <WorkspaceLayout>
+      <Card
+        title="文本实验会话"
+        className="app-fill-card"
+        extra={<Button icon={<ClearOutlined />} disabled={!messages.length || submitting} onClick={() => setMessages([])}>清空会话</Button>}
+      >
+        <div className="flex-1 min-h-0 space-y-4 overflow-y-auto pr-1">
         {loading ? <div className="h-72 flex items-center justify-center"><Spin /></div> : null}
         {!loading && messages.length === 0 ? <Empty description="选择模型并输入提示词，开始一轮文本实验" /> : null}
         {messages.map((item) => (
@@ -137,53 +138,54 @@ export default function TextLabPage() {
           </div>
         ))}
         {submitting ? <div className="mr-auto max-w-[85%]"><Tag color="green">模型</Tag><div className="mt-1 rounded-lg bg-gray-50 px-3 py-2"><Spin size="small" /> 正在生成…</div></div> : null}
-      </div>
+        </div>
 
-      <ExperimentComposer
-        submitting={submitting}
-        submitDisabled={loading}
-        onSubmit={() => void handleSubmit()}
-        options={
-          <ExperimentOptionBar
-            models={models.map((model) => ({ id: model.id, name: model.name }))}
-            templates={templates.map((template) => ({ id: template.id, name: template.name, version: template.version, preview: template.preview, category: template.category }))}
-            modelId={modelId}
-            templateId={templateId}
-            loading={loading}
-            disabled={submitting}
-            onModelChange={setModelId}
-            onTemplateChange={handleSelectTemplate}
-          />
-        }
-      >
-        {selectedTemplate ? (
-          <PromptTemplateForm
-            template={selectedTemplate}
-            values={templateValues}
-            disabled={submitting}
-            onValuesChange={setTemplateValues}
-            onUseFreeInput={(renderedPrompt) => {
-              setTemplateId(undefined)
-              setTemplateValues({})
-              setDraft(renderedPrompt)
-            }}
-          />
-        ) : (
-          <Input.TextArea
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onPressEnter={(event) => {
-              if (!event.shiftKey) {
-                event.preventDefault()
-                void handleSubmit()
-              }
-            }}
-            placeholder="输入提示词；Shift + Enter 换行"
-            autoSize={{ minRows: 4, maxRows: 10 }}
-            disabled={submitting || loading}
-          />
-        )}
-      </ExperimentComposer>
-    </Card>
+        <ExperimentComposer
+          submitting={submitting}
+          submitDisabled={loading}
+          onSubmit={() => void handleSubmit()}
+          options={
+            <ExperimentOptionBar
+              models={models.map((model) => ({ id: model.id, name: model.name }))}
+              templates={templates.map((template) => ({ id: template.id, name: template.name, version: template.version, preview: template.preview, category: template.category }))}
+              modelId={modelId}
+              templateId={templateId}
+              loading={loading}
+              disabled={submitting}
+              onModelChange={setModelId}
+              onTemplateChange={handleSelectTemplate}
+            />
+          }
+        >
+          {selectedTemplate ? (
+            <PromptTemplateForm
+              template={selectedTemplate}
+              values={templateValues}
+              disabled={submitting}
+              onValuesChange={setTemplateValues}
+              onUseFreeInput={(renderedPrompt) => {
+                setTemplateId(undefined)
+                setTemplateValues({})
+                setDraft(renderedPrompt)
+              }}
+            />
+          ) : (
+            <Input.TextArea
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onPressEnter={(event) => {
+                if (!event.shiftKey) {
+                  event.preventDefault()
+                  void handleSubmit()
+                }
+              }}
+              placeholder="输入提示词；Shift + Enter 换行"
+              autoSize={{ minRows: 4, maxRows: 10 }}
+              disabled={submitting || loading}
+            />
+          )}
+        </ExperimentComposer>
+      </Card>
+    </WorkspaceLayout>
   )
 }

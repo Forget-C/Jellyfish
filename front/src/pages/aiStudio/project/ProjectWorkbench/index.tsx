@@ -22,6 +22,7 @@ import { getChapterShotsPath, getChapterStudioPath, getProjectEditorPath } from 
 import { useProject, useChapters } from './hooks/useProjectData'
 import { ensureHasShotsBeforeShooting } from './ensureHasShotsBeforeShooting'
 import { getChapterPreparationState } from './chapterPreparation'
+import { WorkspaceLayout, WorkspaceScrollPanel } from '../../../../components'
 
 const TAB_PARAM = 'tab'
 const CREATE_PARAM = 'create'
@@ -182,10 +183,10 @@ const ProjectWorkbench: React.FC = () => {
   }
 
   return (
-    <div className="h-full min-h-0 flex flex-col">
+    <WorkspaceLayout>
       <div
         className="sticky top-0 z-20 bg-white border-b border-gray-200 shadow-sm"
-        style={{ margin: -5, marginBottom: 0, padding: '16px 24px' }}
+        style={{ marginTop: -5, padding: '16px 24px' }}
       >
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-gray-100">
           <Tabs
@@ -224,8 +225,8 @@ const ProjectWorkbench: React.FC = () => {
         </div>
       </div>
 
-      <div
-        className="pt-4 animate-fadeIn flex-1 min-h-0 overflow-hidden"
+      <WorkspaceScrollPanel
+        className="pt-4 animate-fadeIn"
         style={{ animation: 'fadeIn 0.25s ease-out' }}
       >
         {activeTab === 'dashboard' && <DashboardTab onSelectTab={setTabInUrl} />}
@@ -240,8 +241,8 @@ const ProjectWorkbench: React.FC = () => {
         {activeTab === 'files' && <FilesTab />}
         {activeTab === 'edit' && <EditTab />}
         {activeTab === 'settings' && <SettingsTab />}
-      </div>
-    </div>
+      </WorkspaceScrollPanel>
+    </WorkspaceLayout>
   )
 }
 
