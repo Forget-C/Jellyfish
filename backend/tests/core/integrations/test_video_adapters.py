@@ -9,6 +9,9 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.integrations.openai.video import OpenAIVideoApiAdapter
+from app.core.integrations.vidu.video import ViduVideoApiAdapter
+from app.core.integrations.vidu.video_payload import build_create_video_request
+from app.core.tasks.video_generation_tasks import ViduVideoGenerationTask
 from app.core.integrations.volcengine.video import VolcengineVideoApiAdapter
 from app.core.contracts.provider import ProviderConfig
 from app.core.contracts.video_generation import VideoGenerationInput
@@ -87,6 +90,82 @@ async def test_volcengine_video_create_and_get(monkeypatch: pytest.MonkeyPatch) 
     meta = await VolcengineVideoApiAdapter().get_contents_task(cfg=cfg, task_id=tid, timeout_s=30.0)
     assert meta["status"] == "succeeded"
     assert meta["content"]["video_url"] == "https://v.example/out.mp4"
+
+
+@pytest.mark.asyncio
+async def test_vidu_video_create_and_get(monkeypatch: pytest.MonkeyPatch) -> None:
+    """首尾帧输入应选择 Vidu start-end2video，并使用 Token 鉴权。"""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers.get("authorization") == "Token vidu-key"
+        if request.method == "POST":
+            assert request.url.path.endswith("/ent/v2/start-end2video")
+            body = json.loads(request.content.decode())
+            assert body["images"] == [
+                "data:image/png;base64,first",
+                "data:image/png;base64,last",
+            ]
+            return httpx.Response(200, json={"task_id": "vidu-video-1", "state": "created"})
+        assert request.url.path.endswith("/ent/v2/tasks/vidu-video-1/creations")
+        return httpx.Response(200, json={"state": "success", "creations": [{"url": "https://vidu.example/out.mp4"}]})
+
+    _patch_httpx_client(monkeypatch, httpx.MockTransport(handler))
+    cfg = ProviderConfig(provider="vidu", api_key="vidu-key")
+    inp = VideoGenerationInput(
+        prompt="a transition",
+        model="viduq2",
+        ratio="16:9",
+        first_frame_base64="first",
+        last_frame_base64="last",
+    )
+    adapter = ViduVideoApiAdapter()
+    task_id = await adapter.create_video(cfg=cfg, input_=inp, timeout_s=30.0)
+    assert task_id == "vidu-video-1"
+    creation = await adapter.get_creation(cfg=cfg, task_id=task_id, timeout_s=30.0)
+    assert creation["state"] == "success"
+
+
+def test_vidu_video_payload_selects_text_and_reference_endpoints() -> None:
+    """无参考帧走文本端点，多图参考走 reference2video。"""
+    text_path, _ = build_create_video_request(
+        VideoGenerationInput(prompt="a city", model="viduq2", ratio="16:9")
+    )
+    reference_path, reference_body = build_create_video_request(
+        VideoGenerationInput(
+            prompt="same character",
+            model="viduq2",
+            ratio="16:9",
+            first_frame_base64="first",
+            key_frame_base64="key",
+        )
+    )
+    assert text_path == "/ent/v2/text2video"
+    assert reference_path == "/ent/v2/reference2video"
+    assert reference_body["images"] == ["data:image/png;base64,first", "data:image/png;base64,key"]
+
+
+@pytest.mark.asyncio
+async def test_vidu_video_task_polls_creation_to_result() -> None:
+    """Task 层应在 Vidu 成功状态时返回待持久化的视频 URL。"""
+
+    class _Adapter:
+        async def create_video(self, **_: object) -> str:
+            return "vidu-video-2"
+
+        async def get_creation(self, **_: object) -> dict[str, object]:
+            return {"state": "success", "creations": [{"url": "https://vidu.example/video.mp4"}]}
+
+    task = ViduVideoGenerationTask(
+        adapter=_Adapter(),  # type: ignore[arg-type]
+        provider_config=ProviderConfig(provider="vidu", api_key="key"),
+        input_=VideoGenerationInput(prompt="a city", model="viduq2", ratio="16:9"),
+        poll_interval_s=0,
+    )
+    await task.run()
+    result = await task.get_result()
+    assert result is not None
+    assert result.provider == "vidu"
+    assert result.url == "https://vidu.example/video.mp4"
 
 
 def test_video_input_seed_bounds_validation() -> None:

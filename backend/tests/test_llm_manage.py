@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.db import Base
+from app.core.contracts.model_catalog import ProviderModelCandidate
 from app.models.llm import LogLevel, Model, ModelCategoryKey, ModelSettings, Provider
 from app.schemas.llm import ModelCreate, ModelSettingsUpdate, ModelUpdate, ProviderCreate
 from app.services.llm.manage import (
@@ -14,6 +15,7 @@ from app.services.llm.manage import (
     get_image_generation_options,
     get_or_create_settings,
     list_models_paginated,
+    import_provider_models,
     update_model,
     update_model_settings,
 )
@@ -248,4 +250,38 @@ async def test_get_image_generation_options_uses_default_image_model_capability(
         assert options.default_resolution_profile == "standard"
         assert options.ratio_size_profiles["9:16"]["standard"] == "1600x2848"
         assert options.ratio_size_profiles["21:9"]["high"] == "4704x2016"
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_import_provider_models_creates_and_skips_duplicates() -> None:
+    """从供应商目录导入时，同一 Provider、名称、类别的重复模型应被跳过。"""
+    db, engine = await _build_session()
+    async with db:
+        await create_provider(
+            db,
+            body=ProviderCreate(
+                id="p-vidu",
+                name="Vidu",
+                base_url="https://api.vidu.cn",
+                api_key="k",
+            ),
+        )
+        db.add(Model(id="existing", name="viduq2", category=ModelCategoryKey.video, provider_id="p-vidu"))
+        await db.commit()
+
+        result = await import_provider_models(
+            db,
+            provider_id="p-vidu",
+            candidates=[
+                ProviderModelCandidate(name="viduq2", category=ModelCategoryKey.video),
+                ProviderModelCandidate(name="viduq2", category=ModelCategoryKey.image),
+            ],
+        )
+
+        assert [item.name for item in result.created] == ["viduq2"]
+        assert result.created[0].category == ModelCategoryKey.image
+        assert [(item.name, item.category) for item in result.skipped] == [
+            ("viduq2", ModelCategoryKey.video)
+        ]
     await engine.dispose()

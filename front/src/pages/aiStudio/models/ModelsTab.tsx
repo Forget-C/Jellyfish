@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
+import type { Key } from 'react'
 import {
   Alert,
   Layout,
@@ -31,6 +32,7 @@ import {
   DownOutlined,
   RightOutlined,
   ThunderboltOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons'
 import { LlmService } from '../../../services/generated/services/LlmService'
 import type {
@@ -38,6 +40,8 @@ import type {
   ModelCategoryKey,
   ProviderRead,
   ProviderSupportedRead,
+  ProviderModelCandidate,
+  ProviderModelCatalogRead,
 } from '../../../services/generated'
 import {
   MODEL_CATEGORIES,
@@ -64,6 +68,12 @@ export default function ModelsTab() {
   const [modelModalOpen, setModelModalOpen] = useState(false)
   const [modelEditing, setModelEditing] = useState<ModelRead | null>(null)
   const [providerOptionsLoading, setProviderOptionsLoading] = useState(true)
+  const [catalogModalOpen, setCatalogModalOpen] = useState(false)
+  const [catalogProviderId, setCatalogProviderId] = useState<string | undefined>()
+  const [catalog, setCatalog] = useState<ProviderModelCatalogRead | null>(null)
+  const [catalogLoading, setCatalogLoading] = useState(false)
+  const [importingCatalog, setImportingCatalog] = useState(false)
+  const [selectedCatalogKeys, setSelectedCatalogKeys] = useState<Key[]>([])
   const [form] = Form.useForm()
   const selectedFormCategory = Form.useWatch<ModelCategoryKey | undefined>('category', form)
   const { lg } = Grid.useBreakpoint()
@@ -123,6 +133,15 @@ export default function ModelsTab() {
   )
 
   const getProviderName = (id: string) => providers.find((p) => p.id === id)?.name ?? id
+
+  /** 为目录项和已添加模型生成稳定的复合键，允许同名图片/视频模型并存。 */
+  const catalogKey = (providerId: string, candidate: ProviderModelCandidate) =>
+    `${providerId}:${candidate.category}:${candidate.name}`
+
+  const existingCatalogKeys = useMemo(
+    () => new Set(models.map((model) => `${model.provider_id}:${model.category}:${model.name}`)),
+    [models],
+  )
 
   const resolveProviderSpec = (providerName: string) =>
     supportedProviders.find(
@@ -262,6 +281,67 @@ export default function ModelsTab() {
       form.setFieldsValue({ category: 'text' })
     }
     setModelModalOpen(true)
+  }
+
+  /** 打开供应商模型目录，并预选第一个已配置 Provider。 */
+  const openCatalogModal = () => {
+    const initialProviderId = catalogProviderId ?? providers[0]?.id
+    setCatalogProviderId(initialProviderId)
+    setCatalog(null)
+    setSelectedCatalogKeys([])
+    setCatalogModalOpen(true)
+    if (initialProviderId) void loadProviderCatalog(initialProviderId)
+  }
+
+  /** 从后端刷新模型目录；API Key 仅在后端向供应商发起请求。 */
+  const loadProviderCatalog = async (providerId: string) => {
+    setCatalogProviderId(providerId)
+    setCatalogLoading(true)
+    try {
+      const response = await LlmService.getProviderModelCatalogApiV1LlmProvidersProviderIdModelsCatalogGet({
+        providerId,
+      })
+      const data = response.data ?? null
+      setCatalog(data)
+      const selectableKeys = (data?.models ?? [])
+        .filter((candidate) => !existingCatalogKeys.has(catalogKey(providerId, candidate)))
+        .map((candidate) => catalogKey(providerId, candidate))
+      setSelectedCatalogKeys(selectableKeys)
+    } catch {
+      setCatalog(null)
+      setSelectedCatalogKeys([])
+      message.error('更新模型列表失败，请检查供应商配置与 API Key')
+    } finally {
+      setCatalogLoading(false)
+    }
+  }
+
+  /** 导入用户勾选的目录模型，重复项由后端幂等跳过。 */
+  const importSelectedCatalogModels = async () => {
+    if (!catalogProviderId || !catalog) return
+    const selectedModels = (catalog.models ?? []).filter((candidate) =>
+      selectedCatalogKeys.includes(catalogKey(catalogProviderId, candidate)),
+    )
+    if (!selectedModels.length) {
+      message.warning('请至少选择一个尚未添加的模型')
+      return
+    }
+    setImportingCatalog(true)
+    try {
+      const response = await LlmService.importProviderModelsApiV1LlmProvidersProviderIdModelsImportPost({
+        providerId: catalogProviderId,
+        requestBody: { models: selectedModels },
+      })
+      const createdCount = response.data?.created?.length ?? 0
+      const skippedCount = response.data?.skipped?.length ?? 0
+      message.success(`已添加 ${createdCount} 个模型${skippedCount ? `，跳过 ${skippedCount} 个已存在模型` : ''}`)
+      setCatalogModalOpen(false)
+      void load()
+    } catch {
+      message.error('添加模型失败')
+    } finally {
+      setImportingCatalog(false)
+    }
   }
 
   /** 基于已有模型打开「添加模型」浮窗，预填字段，名称追加「-复制」。 */
@@ -408,6 +488,9 @@ export default function ModelsTab() {
           <span className="text-gray-600 text-sm">共 {models.length} 个模型</span>
         </div>
         <Space wrap>
+          <Button icon={<ReloadOutlined />} disabled={!providers.length} onClick={openCatalogModal}>
+            更新模型列表
+          </Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => openModelModal()}>
             添加模型
           </Button>
@@ -737,6 +820,90 @@ export default function ModelsTab() {
             <Input.TextArea rows={2} />
           </Form.Item>
         </Form>
+      </Modal>
+
+      <Modal
+        title="更新模型列表"
+        open={catalogModalOpen}
+        onCancel={() => setCatalogModalOpen(false)}
+        onOk={() => void importSelectedCatalogModels()}
+        okText="添加所选模型"
+        okButtonProps={{ loading: importingCatalog, disabled: !selectedCatalogKeys.length }}
+        width={760}
+        destroyOnClose
+      >
+        <Space wrap className="mb-3">
+          <Select
+            className="min-w-52"
+            value={catalogProviderId}
+            placeholder="选择供应商"
+            options={providers.map((provider) => ({ label: provider.name, value: provider.id }))}
+            onChange={(providerId) => void loadProviderCatalog(providerId)}
+          />
+          <Button
+            icon={<ReloadOutlined />}
+            loading={catalogLoading}
+            disabled={!catalogProviderId}
+            onClick={() => catalogProviderId && void loadProviderCatalog(catalogProviderId)}
+          >
+            刷新
+          </Button>
+        </Space>
+        {catalog && (
+          <Alert
+            className="mb-3"
+            type="info"
+            showIcon
+            message={
+              catalog.source === 'provider_api'
+                ? '已从供应商 API 获取模型列表'
+                : '该供应商未提供模型列表 API，已加载官方模型目录'
+            }
+          />
+        )}
+        <Table<ProviderModelCandidate>
+          rowKey={(candidate) => (catalogProviderId ? catalogKey(catalogProviderId, candidate) : candidate.name)}
+          size="small"
+          loading={catalogLoading}
+          pagination={{ pageSize: 10, hideOnSinglePage: true }}
+          dataSource={catalog?.models ?? []}
+          rowSelection={{
+            selectedRowKeys: selectedCatalogKeys,
+            onChange: setSelectedCatalogKeys,
+            getCheckboxProps: (candidate) => ({
+              disabled: !!catalogProviderId && existingCatalogKeys.has(catalogKey(catalogProviderId, candidate)),
+            }),
+          }}
+          columns={[
+            { title: '模型名称', dataIndex: 'name', key: 'name' },
+            {
+              title: '类别',
+              dataIndex: 'category',
+              key: 'category',
+              width: 96,
+              render: (category: ModelCategoryKey) => (
+                <Tag color={categoryColorMap[category]}>{categoryLabelMap[category]}</Tag>
+              ),
+            },
+            {
+              title: '说明',
+              dataIndex: 'description',
+              key: 'description',
+              render: (description: string | undefined) => description || '—',
+            },
+            {
+              title: '状态',
+              key: 'state',
+              width: 100,
+              render: (_, candidate) =>
+                catalogProviderId && existingCatalogKeys.has(catalogKey(catalogProviderId, candidate)) ? (
+                  <Tag>已添加</Tag>
+                ) : (
+                  <Tag color="green">可添加</Tag>
+                ),
+            },
+          ]}
+        />
       </Modal>
     </>
   )

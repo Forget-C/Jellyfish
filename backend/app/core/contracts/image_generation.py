@@ -110,7 +110,7 @@ class ImageGenerationResult(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     images: list[ImageItem] = Field(..., description="图片列表")
-    provider: ProviderKey = Field(..., description="供应商标识：openai | volcengine")
+    provider: ProviderKey = Field(..., description="供应商标识：openai | volcengine | vidu")
     provider_task_id: Optional[str] = Field(
         None,
         description="供应商内部任务 ID（若存在），用于调试/追踪",

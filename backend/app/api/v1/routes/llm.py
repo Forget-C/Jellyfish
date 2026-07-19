@@ -16,7 +16,11 @@ from app.schemas.llm import (
     ModelSettingsUpdate,
     ModelUpdate,
     ProviderCreate,
+    ProviderCredentialsRead,
     ProviderRead,
+    ProviderModelCatalogRead,
+    ProviderModelImportRequest,
+    ProviderModelImportResult,
     ProviderSupportedRead,
     VideoGenerationOptionsRead,
     ProviderUpdate,
@@ -30,6 +34,7 @@ from app.services.llm.manage import (
     get_model_settings as get_model_settings_service,
     get_provider as get_provider_service,
     get_image_generation_options as get_image_generation_options_service,
+    get_provider_model_catalog as get_provider_model_catalog_service,
     get_video_generation_options as get_video_generation_options_service,
     list_supported_providers as list_supported_providers_service,
     list_models_paginated,
@@ -37,6 +42,7 @@ from app.services.llm.manage import (
     update_model as update_model_service,
     update_model_settings as update_model_settings_service,
     update_provider as update_provider_service,
+    import_provider_models as import_provider_models_service,
 )
 
 router = APIRouter()
@@ -88,6 +94,35 @@ async def list_supported_providers(
 
 
 @router.get(
+    "/providers/{provider_id}/models/catalog",
+    response_model=ApiResponse[ProviderModelCatalogRead],
+    summary="刷新供应商可导入模型列表",
+)
+async def get_provider_model_catalog(
+    provider_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[ProviderModelCatalogRead]:
+    """由后端使用 Provider 密钥刷新目录，避免向浏览器暴露密钥。"""
+    data = await get_provider_model_catalog_service(db, provider_id=provider_id)
+    return success_response(data)
+
+
+@router.post(
+    "/providers/{provider_id}/models/import",
+    response_model=ApiResponse[ProviderModelImportResult],
+    summary="导入已选择的供应商模型",
+)
+async def import_provider_models(
+    provider_id: str,
+    body: ProviderModelImportRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[ProviderModelImportResult]:
+    """批量写入用户选中的目录模型，并返回创建与跳过项。"""
+    data = await import_provider_models_service(db, provider_id=provider_id, candidates=body.models)
+    return success_response(data)
+
+
+@router.get(
     "/image-generation-options",
     response_model=ApiResponse[ImageGenerationOptionsRead],
     summary="获取当前默认图片模型的关键帧规格选项",
@@ -123,6 +158,22 @@ async def create_provider(
 ) -> ApiResponse[ProviderRead]:
     provider = await create_provider_service(db, body=body)
     return created_response(ProviderRead.model_validate(provider))
+
+
+@router.get(
+    "/providers/{provider_id}/credentials",
+    response_model=ApiResponse[ProviderCredentialsRead],
+    summary="获取供应商编辑凭据",
+)
+async def get_provider_credentials(
+    provider_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[ProviderCredentialsRead]:
+    """仅在编辑供应商时按需返回密钥，避免列表和普通详情接口泄露凭据。"""
+    provider = await get_provider_service(db, provider_id=provider_id)
+    return success_response(
+        ProviderCredentialsRead(api_key=provider.api_key or "", api_secret=provider.api_secret or "")
+    )
 
 
 @router.get(

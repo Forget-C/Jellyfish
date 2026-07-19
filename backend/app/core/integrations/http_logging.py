@@ -69,6 +69,18 @@ def safe_body_for_log_volcengine_image(body: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def safe_body_for_log_vidu(body: dict[str, Any]) -> dict[str, Any]:
+    """生成 Vidu 请求日志摘要，避免把参考图的 base64 内容写入日志。"""
+    out = dict(body or {})
+    prompt = out.get("prompt")
+    if isinstance(prompt, str) and len(prompt) > 300:
+        out["prompt"] = prompt[:300] + "...(truncated)"
+    images = out.get("images")
+    if isinstance(images, list):
+        out["images"] = {"count": len(images)}
+    return out
+
+
 def log_image_http_request(*, provider: str, method: str, url: str, headers: dict[str, str], body_log: str) -> None:
     logger.warning(
         "image_generation_http_request provider=%s method=%s url=%s headers=%s body=%s",

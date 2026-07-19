@@ -6,6 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.core.contracts.model_catalog import ModelCatalogSource, ProviderModelCandidate
 from app.models.llm import LogLevel, ModelCategoryKey, ProviderStatus
 
 
@@ -56,6 +57,13 @@ class ProviderRead(ProviderBase):
     id: str = Field(..., description="供应商 ID")
 
 
+class ProviderCredentialsRead(BaseModel):
+    """供应商编辑页按需读取的敏感凭据，不用于列表或详情展示。"""
+
+    api_key: str = Field("", description="API Key")
+    api_secret: str = Field("", description="API Secret")
+
+
 class ProviderSupportedRead(BaseModel):
     """系统支持的供应商能力清单。"""
 
@@ -70,6 +78,28 @@ class ProviderSupportedRead(BaseModel):
     requires_api_key: bool = Field(True, description="是否要求 api_key")
     requires_api_secret: bool = Field(False, description="是否要求 api_secret")
     is_experimental: bool = Field(False, description="是否实验性供应商")
+
+
+class ProviderModelCatalogRead(BaseModel):
+    """指定 Provider 刷新到的可导入模型目录。"""
+
+    provider_id: str = Field(..., description="数据库中的供应商 ID")
+    provider_key: str = Field(..., description="供应商稳定键")
+    source: ModelCatalogSource = Field(..., description="模型列表来源")
+    models: list[ProviderModelCandidate] = Field(default_factory=list, description="可选择导入的模型")
+
+
+class ProviderModelImportRequest(BaseModel):
+    """从已刷新供应商目录中选择并导入模型。"""
+
+    models: list[ProviderModelCandidate] = Field(..., min_length=1, max_length=100, description="用户选中的模型")
+
+
+class ProviderModelImportResult(BaseModel):
+    """模型批量导入结果，重复项不会重复创建。"""
+
+    created: list[ModelRead] = Field(default_factory=list, description="新创建的模型")
+    skipped: list[ProviderModelCandidate] = Field(default_factory=list, description="已存在而跳过的模型")
 
 
 class VideoGenerationOptionsRead(BaseModel):

@@ -9,6 +9,9 @@ import type { ApiResponse_ModelSettingsRead_ } from '../models/ApiResponse_Model
 import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
 import type { ApiResponse_PaginatedData_ModelRead__ } from '../models/ApiResponse_PaginatedData_ModelRead__';
 import type { ApiResponse_PaginatedData_ProviderRead__ } from '../models/ApiResponse_PaginatedData_ProviderRead__';
+import type { ApiResponse_ProviderCredentialsRead_ } from '../models/ApiResponse_ProviderCredentialsRead_';
+import type { ApiResponse_ProviderModelCatalogRead_ } from '../models/ApiResponse_ProviderModelCatalogRead_';
+import type { ApiResponse_ProviderModelImportResult_ } from '../models/ApiResponse_ProviderModelImportResult_';
 import type { ApiResponse_ProviderRead_ } from '../models/ApiResponse_ProviderRead_';
 import type { ApiResponse_VideoGenerationOptionsRead_ } from '../models/ApiResponse_VideoGenerationOptionsRead_';
 import type { ModelCategoryKey } from '../models/ModelCategoryKey';
@@ -16,6 +19,7 @@ import type { ModelCreate } from '../models/ModelCreate';
 import type { ModelSettingsUpdate } from '../models/ModelSettingsUpdate';
 import type { ModelUpdate } from '../models/ModelUpdate';
 import type { ProviderCreate } from '../models/ProviderCreate';
+import type { ProviderModelImportRequest } from '../models/ProviderModelImportRequest';
 import type { ProviderUpdate } from '../models/ProviderUpdate';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
@@ -114,6 +118,54 @@ export class LlmService {
         });
     }
     /**
+     * 刷新供应商可导入模型列表
+     * 由后端使用 Provider 密钥刷新目录，避免向浏览器暴露密钥。
+     * @returns ApiResponse_ProviderModelCatalogRead_ Successful Response
+     * @throws ApiError
+     */
+    public static getProviderModelCatalogApiV1LlmProvidersProviderIdModelsCatalogGet({
+        providerId,
+    }: {
+        providerId: string,
+    }): CancelablePromise<ApiResponse_ProviderModelCatalogRead_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/llm/providers/{provider_id}/models/catalog',
+            path: {
+                'provider_id': providerId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * 导入已选择的供应商模型
+     * 批量写入用户选中的目录模型，并返回创建与跳过项。
+     * @returns ApiResponse_ProviderModelImportResult_ Successful Response
+     * @throws ApiError
+     */
+    public static importProviderModelsApiV1LlmProvidersProviderIdModelsImportPost({
+        providerId,
+        requestBody,
+    }: {
+        providerId: string,
+        requestBody: ProviderModelImportRequest,
+    }): CancelablePromise<ApiResponse_ProviderModelImportResult_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/llm/providers/{provider_id}/models/import',
+            path: {
+                'provider_id': providerId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * 获取当前默认图片模型的关键帧规格选项
      * @returns ApiResponse_ImageGenerationOptionsRead_ Successful Response
      * @throws ApiError
@@ -133,6 +185,28 @@ export class LlmService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/llm/video-generation-options',
+        });
+    }
+    /**
+     * 获取供应商编辑凭据
+     * 仅在编辑供应商时按需返回密钥，避免列表和普通详情接口泄露凭据。
+     * @returns ApiResponse_ProviderCredentialsRead_ Successful Response
+     * @throws ApiError
+     */
+    public static getProviderCredentialsApiV1LlmProvidersProviderIdCredentialsGet({
+        providerId,
+    }: {
+        providerId: string,
+    }): CancelablePromise<ApiResponse_ProviderCredentialsRead_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/llm/providers/{provider_id}/credentials',
+            path: {
+                'provider_id': providerId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
         });
     }
     /**

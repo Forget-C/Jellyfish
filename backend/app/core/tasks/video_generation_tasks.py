@@ -1,4 +1,4 @@
-"""视频生成任务（Task）：对接 OpenAI Videos API 与火山方舟内容生成。
+"""视频生成任务（Task）：对接 OpenAI、火山方舟与 Vidu 视频生成 API。
 
 HTTP 细节在 `app.core.integrations`；本模块保留轮询节奏与 BaseTask 契约。
 """
@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 from typing import Any, AsyncIterator
 
 from app.core.integrations.openai.video import OpenAIVideoApiAdapter
+from app.core.integrations.vidu.video import ViduVideoApiAdapter
 from app.core.integrations.volcengine.video import VolcengineVideoApiAdapter
 from app.core.contracts.provider import ProviderConfig
 from app.core.tasks.registry import resolve_task_adapter
@@ -22,6 +23,7 @@ __all__ = [
     "AbstractVideoGenerationTask",
     "OpenAIVideoGenerationTask",
     "VolcengineVideoGenerationTask",
+    "ViduVideoGenerationTask",
     "VideoGenerationTask",
 ]
 
@@ -206,8 +208,72 @@ class VolcengineVideoGenerationTask(AbstractVideoGenerationTask):
         )
 
 
+class ViduVideoGenerationTask(AbstractVideoGenerationTask):
+    """Vidu 视频任务：根据参考帧选择端点，并轮询统一 creation 查询接口。"""
+
+    def __init__(
+        self,
+        *,
+        adapter: ViduVideoApiAdapter | None = None,
+        provider_config: ProviderConfig,
+        input_: VideoGenerationInput,
+        poll_interval_s: float = 2.0,
+        timeout_s: float = 120.0,
+    ) -> None:
+        super().__init__(
+            provider_config=provider_config,
+            input_=input_,
+            poll_interval_s=poll_interval_s,
+            timeout_s=timeout_s,
+        )
+        self._adapter = adapter or ViduVideoApiAdapter()
+
+    async def _create_task(self) -> None:
+        self._provider_task_id = await self._adapter.create_video(
+            cfg=self._cfg,
+            input_=self._input,
+            timeout_s=self._timeout_s,
+        )
+
+    async def _poll_and_get_result(self) -> VideoGenerationResult:
+        """等待 Vidu 成功并返回第一个生成视频 URL。"""
+        task_id = self._provider_task_id or ""
+        if not task_id:
+            raise RuntimeError("Vidu video poll missing provider task id")
+        while True:
+            creation = await self._adapter.get_creation(
+                cfg=self._cfg,
+                task_id=task_id,
+                timeout_s=self._timeout_s,
+            )
+            state = str(creation.get("state") or "").lower()
+            if state == "success":
+                video_url = next(
+                    (
+                        str(item.get("url"))
+                        for item in (creation.get("creations") or [])
+                        if isinstance(item, dict) and item.get("url")
+                    ),
+                    "",
+                )
+                if not video_url:
+                    raise RuntimeError(f"Vidu video task succeeded without creations: {creation!r}")
+                return VideoGenerationResult(
+                    url=video_url,
+                    file_id=None,
+                    provider_task_id=task_id,
+                    provider="vidu",
+                    status=state,
+                )
+            if state == "failed":
+                raise RuntimeError(
+                    f"Vidu video task failed: err_code={creation.get('err_code')!r} data={creation!r}"
+                )
+            await self._sleep_poll()
+
+
 class VideoGenerationTask(BaseTask):
-    """按 provider 分派到 OpenAI / 火山实现；对外构造函数签名保持不变。"""
+    """按 provider 分派到 OpenAI、火山或 Vidu 实现；对外构造函数签名保持不变。"""
 
     def __init__(
         self,
@@ -252,6 +318,22 @@ class VideoGenerationTask(BaseTask):
         timeout_s: float = 120.0,
     ) -> AbstractVideoGenerationTask:
         return VolcengineVideoGenerationTask(
+            provider_config=provider_config,
+            input_=input_,
+            poll_interval_s=poll_interval_s,
+            timeout_s=timeout_s,
+        )
+
+    @staticmethod
+    def _build_vidu_impl(
+        *,
+        provider_config: ProviderConfig,
+        input_: VideoGenerationInput,
+        poll_interval_s: float = 2.0,
+        timeout_s: float = 120.0,
+    ) -> AbstractVideoGenerationTask:
+        """构造 Vidu 视频任务实现，供 task registry 调用。"""
+        return ViduVideoGenerationTask(
             provider_config=provider_config,
             input_=input_,
             poll_interval_s=poll_interval_s,

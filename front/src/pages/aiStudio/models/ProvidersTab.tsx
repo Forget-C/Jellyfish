@@ -56,6 +56,7 @@ export default function ProvidersTab() {
   const [treeCollapsed, setTreeCollapsed] = useState(false)
   const [providerModalOpen, setProviderModalOpen] = useState(false)
   const [providerEditing, setProviderEditing] = useState<ProviderRead | null>(null)
+  const [credentialsLoading, setCredentialsLoading] = useState(false)
   const [testConnecting, setTestConnecting] = useState(false)
   const [form] = Form.useForm()
   const { lg } = Grid.useBreakpoint()
@@ -228,7 +229,8 @@ export default function ProvidersTab() {
     })
   }
 
-  const openProviderModal = (p?: ProviderRead) => {
+  /** 打开供应商表单，并仅在编辑时按需加载可由密码框显示的真实凭据。 */
+  const openProviderModal = async (p?: ProviderRead) => {
     setProviderEditing(p ?? null)
     if (p) {
       form.setFieldsValue({
@@ -236,15 +238,30 @@ export default function ProvidersTab() {
         base_url: p.base_url,
         image_base_url: p.image_base_url ?? null,
         video_base_url: p.video_base_url ?? null,
-        api_key: '********',
-        api_secret: '********',
+        api_key: '',
+        api_secret: '',
         description: p.description,
         status: p.status ?? 'active',
       })
+      setProviderModalOpen(true)
+      setCredentialsLoading(true)
+      try {
+        const res = await LlmService.getProviderCredentialsApiV1LlmProvidersProviderIdCredentialsGet({
+          providerId: p.id,
+        })
+        form.setFieldsValue({
+          api_key: res.data?.api_key ?? '',
+          api_secret: res.data?.api_secret ?? '',
+        })
+      } catch {
+        message.error('加载供应商密钥失败，请重新填写后保存')
+      } finally {
+        setCredentialsLoading(false)
+      }
     } else {
       form.resetFields()
+      setProviderModalOpen(true)
     }
-    setProviderModalOpen(true)
   }
 
   const providerColumns: TableColumnsType<ProviderRead> = [
@@ -305,7 +322,7 @@ export default function ProvidersTab() {
               icon={<EditOutlined />}
               onClick={(e) => {
                 e.stopPropagation()
-                openProviderModal(record)
+                void openProviderModal(record)
               }}
             />
           </Tooltip>
@@ -363,7 +380,7 @@ export default function ProvidersTab() {
           <span className="text-gray-600 text-sm">共 {providers.length} 个供应商</span>
         </div>
         <Space wrap>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => openProviderModal()}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => void openProviderModal()}>
             添加供应商
           </Button>
           <Input
@@ -441,7 +458,7 @@ export default function ProvidersTab() {
                 }
               >
                 {providers.length === 0 && (
-                  <Button type="primary" icon={<PlusOutlined />} onClick={() => openProviderModal()}>
+                  <Button type="primary" icon={<PlusOutlined />} onClick={() => void openProviderModal()}>
                     添加第一个供应商
                   </Button>
                 )}
@@ -486,7 +503,7 @@ export default function ProvidersTab() {
                       icon={<EditOutlined />}
                       onClick={(e) => {
                         e.stopPropagation()
-                        openProviderModal(p)
+                        void openProviderModal(p)
                       }}
                     >
                       编辑
@@ -586,7 +603,7 @@ export default function ProvidersTab() {
                 <Button
                   type="primary"
                   icon={<EditOutlined />}
-                  onClick={() => openProviderModal(selectedProvider)}
+                  onClick={() => void openProviderModal(selectedProvider)}
                 >
                   编辑
                 </Button>
@@ -631,7 +648,7 @@ export default function ProvidersTab() {
                 <Button
                   type="primary"
                   icon={<EditOutlined />}
-                  onClick={() => openProviderModal(selectedProvider)}
+                  onClick={() => void openProviderModal(selectedProvider)}
                 >
                   编辑
                 </Button>
@@ -685,10 +702,10 @@ export default function ProvidersTab() {
             <Input placeholder="留空则回退到文本/通用 Base URL" />
           </Form.Item>
           <Form.Item name="api_key" label="API Key" help={providerEditing ? '留空则不修改' : '请勿分享密钥'}>
-            <Input.Password placeholder="AK" />
+            <Input.Password placeholder="AK" disabled={credentialsLoading} />
           </Form.Item>
           <Form.Item name="api_secret" label="API Secret" help={providerEditing ? '留空则不修改' : undefined}>
-            <Input.Password placeholder="SK" />
+            <Input.Password placeholder="SK" disabled={credentialsLoading} />
           </Form.Item>
           <Form.Item name="description" label="描述">
             <Input.TextArea rows={2} placeholder="支持 GPT 系列模型" />

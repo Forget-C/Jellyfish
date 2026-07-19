@@ -160,6 +160,23 @@ def test_get_provider_not_found_returns_api_response(client: TestClient) -> None
     }
 
 
+def test_get_provider_credentials_returns_values_only_from_explicit_endpoint(client: TestClient) -> None:
+    """编辑凭据接口返回原值，而常规供应商接口持续保持脱敏。"""
+    db = _FakeLlmDB()
+    _seed_provider(db)
+    llm_app.dependency_overrides[get_db] = _override_db(db)
+    try:
+        response = client.get("/api/v1/llm/providers/p-1/credentials")
+        standard_response = client.get("/api/v1/llm/providers/p-1")
+    finally:
+        llm_app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {"api_key": "secret", "api_secret": ""}
+    assert "api_key" not in standard_response.json()["data"]
+    assert "api_secret" not in standard_response.json()["data"]
+
+
 def test_delete_provider_returns_empty_envelope(client: TestClient) -> None:
     db = _FakeLlmDB()
     _seed_provider(db, "p-delete")
@@ -204,6 +221,7 @@ def test_list_supported_providers_returns_capability_matrix(client: TestClient) 
     keys = {item["key"] for item in body["data"]}
     assert "openai" in keys
     assert "volcengine" in keys
+    assert "vidu" in keys
     assert "aliyun_bailian" in keys
 
 
@@ -224,6 +242,25 @@ def test_list_supported_providers_can_filter_by_category(client: TestClient) -> 
     assert isinstance(body["data"], list)
     for item in body["data"]:
         assert "video" in item["supported_categories"]
+
+
+def test_get_vidu_model_catalog_returns_importable_official_models(client: TestClient) -> None:
+    """Vidu 目录端点应返回无需浏览器持有密钥的官方可导入模型清单。"""
+    db = _FakeLlmDB()
+    provider = _seed_provider(db, "p-vidu-catalog")
+    provider.name = "Vidu"
+    provider.base_url = "https://api.vidu.cn"
+    llm_app.dependency_overrides[get_db] = _override_db(db)
+    try:
+        response = client.get("/api/v1/llm/providers/p-vidu-catalog/models/catalog")
+    finally:
+        llm_app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"]["provider_key"] == "vidu"
+    assert body["data"]["source"] == "provider_catalog"
+    assert {item["name"] for item in body["data"]["models"]} >= {"viduq2", "viduq3-turbo"}
 
 
 def test_get_video_generation_options_returns_ratio_capability(client: TestClient) -> None:

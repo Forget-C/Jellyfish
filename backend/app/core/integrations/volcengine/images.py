@@ -36,7 +36,7 @@ class VolcengineImageApiAdapter:
         except ImportError as e:  # pragma: no cover
             raise RuntimeError("httpx is required for image generation tasks") from e
 
-        base_url = (cfg.base_url or "https://ark.cn-beijing.volces.com/api/v3").rstrip("/")
+        url = build_volcengine_image_generations_url(cfg.base_url)
         resolved_size = resolve_image_size(
             provider="volcengine",
             model=inp.model,
@@ -55,7 +55,6 @@ class VolcengineImageApiAdapter:
         body = _build_image_body(resolved_input)
 
         async with httpx.AsyncClient(timeout=timeout_s) as client:
-            url = f"{base_url}/images/generations"
             t0 = time.perf_counter()
             log_image_http_request(
                 provider="volcengine",
@@ -82,6 +81,21 @@ class VolcengineImageApiAdapter:
             data = r.json()
 
         return _parse_volcengine_images_payload(data)
+
+
+def build_volcengine_image_generations_url(base_url: str | None) -> str:
+    """规范化火山 Ark 基础地址，并返回图片生成的唯一正确端点。
+
+    历史配置可能误将视频子路径 ``/contents/generations`` 保存为 Base URL。
+    图片接口始终位于 Ark v3 根路径下的 ``/images/generations``，因此先移除
+    已包含的图片或视频操作路径，避免拼出重复或跨能力的 URL。
+    """
+    normalized_base = (base_url or "https://ark.cn-beijing.volces.com/api/v3").rstrip("/")
+    for operation_path in ("/contents/generations", "/images/generations"):
+        if normalized_base.endswith(operation_path):
+            normalized_base = normalized_base[: -len(operation_path)]
+            break
+    return f"{normalized_base}/images/generations"
 
 
 def _build_image_body(inp: ImageGenerationInput) -> dict[str, Any]:

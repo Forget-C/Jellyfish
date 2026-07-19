@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from uuid import uuid4
+
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +15,9 @@ from app.core.integrations.image_capabilities import (
     resolve_image_capability,
 )
 from app.core.integrations.video_capabilities import resolve_default_ratio, resolve_video_capability
+from app.core.integrations.model_catalog import discover_provider_models
+from app.core.contracts.model_catalog import ProviderModelCandidate
+from app.core.contracts.provider import ProviderConfig
 from app.schemas.common import ApiResponse, PaginatedData, paginated_response
 from app.schemas.llm import (
     ImageGenerationOptionsRead,
@@ -22,16 +27,20 @@ from app.schemas.llm import (
     ModelUpdate,
     ProviderCreate,
     ProviderRead,
+    ProviderModelCatalogRead,
+    ProviderModelImportResult,
     ProviderSupportedRead,
     VideoGenerationOptionsRead,
     ProviderUpdate,
 )
 from app.services.llm.provider_registry import (
+    get_provider_spec,
     is_provider_category_supported,
     list_registered_providers,
     resolve_provider_key_from_name,
 )
 from app.bootstrap import bootstrap_all_registries
+from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.common import (
     create_and_refresh,
     delete_if_exists,
@@ -133,6 +142,73 @@ async def delete_provider(
 ) -> None:
     """删除供应商。"""
     await delete_if_exists(db, Provider, provider_id)
+
+
+async def get_provider_model_catalog(
+    db: AsyncSession,
+    *,
+    provider_id: str,
+) -> ProviderModelCatalogRead:
+    """刷新指定 Provider 的可导入模型目录，密钥仅用于后端出站请求。"""
+    provider = await get_or_404(db, Provider, provider_id, detail=entity_not_found("Provider"))
+    bootstrap_all_registries()
+    provider_key = resolve_provider_key_from_name(provider.name)
+    spec = get_provider_spec(provider_key)
+    # 使用一个已支持类别触发统一的状态和密钥校验；目录请求始终走通用 Base URL。
+    resolved = resolve_provider_config_from_provider(
+        provider=provider,
+        category=spec.supported_categories[0],
+    )
+    catalog = await discover_provider_models(
+        cfg=ProviderConfig(
+            provider=resolved.provider_key,  # type: ignore[arg-type]
+            api_key=resolved.api_key,
+            base_url=(provider.base_url or spec.default_base_url or "").strip() or None,
+        )
+    )
+    return ProviderModelCatalogRead(
+        provider_id=provider.id,
+        provider_key=catalog.provider_key,
+        source=catalog.source,
+        models=catalog.models,
+    )
+
+
+async def import_provider_models(
+    db: AsyncSession,
+    *,
+    provider_id: str,
+    candidates: list[ProviderModelCandidate],
+) -> ProviderModelImportResult:
+    """将用户从目录中选中的模型写入数据库；同 Provider、名称、类别的重复项跳过。"""
+    provider = await get_or_404(db, Provider, provider_id, detail=entity_not_found("Provider"))
+    existing_rows = (
+        await db.execute(select(Model.name, Model.category).where(Model.provider_id == provider.id))
+    ).all()
+    existing = {(str(name), category.value if isinstance(category, ModelCategoryKey) else str(category)) for name, category in existing_rows}
+    created: list[ModelRead] = []
+    skipped: list[ProviderModelCandidate] = []
+    for candidate in candidates:
+        category_value = candidate.category.value
+        if (candidate.name, category_value) in existing:
+            skipped.append(candidate)
+            continue
+        _ensure_provider_supports_category(provider=provider, category=candidate.category)
+        model = Model(
+            id=uuid4().hex,
+            name=candidate.name,
+            category=candidate.category,
+            provider_id=provider.id,
+            params=candidate.params,
+            description=candidate.description,
+            created_by="model_catalog",
+        )
+        db.add(model)
+        await db.flush()
+        await db.refresh(model)
+        created.append(ModelRead.model_validate(model))
+        existing.add((candidate.name, category_value))
+    return ProviderModelImportResult(created=created, skipped=skipped)
 
 
 async def list_models_paginated(

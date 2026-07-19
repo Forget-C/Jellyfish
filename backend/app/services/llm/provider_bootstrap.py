@@ -26,6 +26,13 @@ def bootstrap_builtin_providers() -> None:
                 default_base_url="https://ark.cn-beijing.volces.com/api/v3",
             ),
             ProviderSpec(
+                key="vidu",
+                display_name="Vidu",
+                aliases=("vidu", "vidu ai", "生数科技"),
+                supported_categories=(ModelCategoryKey.image, ModelCategoryKey.video),
+                default_base_url="https://api.vidu.cn",
+            ),
+            ProviderSpec(
                 key="aliyun_bailian",
                 display_name="阿里百炼",
                 aliases=("阿里百炼", "aliyun", "bailian", "dashscope"),

@@ -103,6 +103,7 @@ def test_resolve_provider_key_from_name_supports_known_aliases() -> None:
     assert resolve_provider_key_from_name("OpenAI") == "openai"
     assert resolve_provider_key_from_name("火山引擎") == "volcengine"
     assert resolve_provider_key_from_name("Doubao Video") == "volcengine"
+    assert resolve_provider_key_from_name("Vidu") == "vidu"
 
 
 @pytest.mark.asyncio

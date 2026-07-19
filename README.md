@@ -248,6 +248,17 @@ uv sync
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+### Celery Worker
+
+图片、视频和脚本处理等异步任务需要单独启动 Celery Worker。保持 Redis 可用后，在另一个终端执行：
+
+```bash
+cd backend
+uv run celery -A app.core.celery_app:celery_app worker -l info
+```
+
+Worker 与后端使用同一份 `backend/.env`：未显式设置 `CELERY_BROKER_URL` 时，会根据 `REDIS_HOST`、`REDIS_PORT` 与 `REDIS_DB` 自动连接 Compose 启动的 Redis。使用完整 Docker Compose 启动时，`celery-worker` 服务会自动运行，无需手动执行该命令。
+
 ### Frontend
 
 ```bash

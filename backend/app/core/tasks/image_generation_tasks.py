@@ -1,4 +1,4 @@
-"""图片生成任务（Task）：对接 OpenAI Images API 与火山引擎（方舟） ImageGenerations。
+"""图片生成任务（Task）：对接 OpenAI、火山引擎与 Vidu 图片生成 API。
 
 供应商 HTTP 实现在 `app.core.integrations`；本模块保留 BaseTask 编排与 registry 分派。
 """
@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 from typing import Any, AsyncIterator
 
 from app.core.integrations.openai.images import OpenAIImageApiAdapter
+from app.core.integrations.vidu.images import ViduImageApiAdapter, parse_vidu_image_creation
 from app.core.integrations.volcengine.images import VolcengineImageApiAdapter
 from app.core.contracts.image_generation import (
     ImageGenerationInput,
@@ -31,6 +32,7 @@ __all__ = [
     "AbstractImageGenerationTask",
     "OpenAIImageGenerationTask",
     "VolcengineImageGenerationTask",
+    "ViduImageGenerationTask",
     "ImageGenerationTask",
 ]
 
@@ -143,8 +145,54 @@ class VolcengineImageGenerationTask(AbstractImageGenerationTask):
         return self._deferred
 
 
+class ViduImageGenerationTask(AbstractImageGenerationTask):
+    """Vidu 图片生成：创建异步任务后轮询到完成状态。"""
+
+    def __init__(
+        self,
+        *,
+        adapter: ViduImageApiAdapter | None = None,
+        provider_config: ProviderConfig,
+        input_: ImageGenerationInput,
+        timeout_s: float = 60.0,
+        poll_interval_s: float = 2.0,
+    ) -> None:
+        super().__init__(provider_config=provider_config, input_=input_, timeout_s=timeout_s)
+        self._adapter = adapter or ViduImageApiAdapter()
+        self._poll_interval_s = poll_interval_s
+
+    async def _create_task(self) -> None:
+        self._provider_task_id = await self._adapter.create_image(
+            cfg=self._cfg,
+            inp=self._input,
+            timeout_s=self._timeout_s,
+        )
+
+    async def _poll_and_get_result(self) -> ImageGenerationResult:
+        """轮询 Vidu creation，成功时将临时 URL 转为项目通用结果。"""
+        import asyncio
+
+        task_id = self._provider_task_id or ""
+        if not task_id:
+            raise RuntimeError("Vidu image poll missing provider task id")
+        while True:
+            creation = await self._adapter.get_creation(
+                cfg=self._cfg,
+                task_id=task_id,
+                timeout_s=self._timeout_s,
+            )
+            state = str(creation.get("state") or "").lower()
+            if state == "success":
+                return parse_vidu_image_creation(task_id=task_id, data=creation)
+            if state == "failed":
+                raise RuntimeError(
+                    f"Vidu image task failed: err_code={creation.get('err_code')!r} data={creation!r}"
+                )
+            await asyncio.sleep(self._poll_interval_s)
+
+
 class ImageGenerationTask(BaseTask):
-    """按 provider 分派到 OpenAI / 火山实现；对外构造函数与原先一致。"""
+    """按 provider 分派到 OpenAI、火山或 Vidu 实现；对外构造函数与原先一致。"""
 
     def __init__(
         self,
@@ -184,6 +232,20 @@ class ImageGenerationTask(BaseTask):
         timeout_s: float = 60.0,
     ) -> AbstractImageGenerationTask:
         return VolcengineImageGenerationTask(
+            provider_config=provider_config,
+            input_=input_,
+            timeout_s=timeout_s,
+        )
+
+    @staticmethod
+    def _build_vidu_impl(
+        *,
+        provider_config: ProviderConfig,
+        input_: ImageGenerationInput,
+        timeout_s: float = 60.0,
+    ) -> AbstractImageGenerationTask:
+        """构造 Vidu 图片任务实现，供 task registry 调用。"""
+        return ViduImageGenerationTask(
             provider_config=provider_config,
             input_=input_,
             timeout_s=timeout_s,

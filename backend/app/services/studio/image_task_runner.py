@@ -341,7 +341,11 @@ async def run_image_generation_task(
             await task.run()
             result = await task.get_result()
             if result is None:
-                raise RuntimeError("Image generation task returned no result")
+                # Task adapter 会捕获供应商异常；将其保留到 GenerationTask.error，
+                # 避免任务中心只看到无法定位的“无结果”兜底文案。
+                task_status = await task.status()
+                adapter_error = str(task_status.get("error") or "")
+                raise RuntimeError(adapter_error or "Image generation task returned no result")
             if await cancel_if_requested_async(store=store, task_id=task_id, session=session):
                 log_task_event("image_generation", task_id, "cancelled", stage="after_execute")
                 return

@@ -18,9 +18,9 @@ description: "如何在代码中注册内置供应商能力，并与异步任务
    实现位于 `app/core/tasks/registry.py`，启动时通过 `app/core/tasks/bootstrap.py` 的 `bootstrap_task_adapters()` 注册。  
    Worker 或内联执行路径会按任务 payload 里的供应商信息解析到具体实现。
 
-3. **出站 HTTP 适配层（`app/core/integrations/`）**  
-   OpenAI / 火山等供应商的 URL、请求体、响应解析集中在 `app/core/integrations/openai/`与 `app/core/integrations/volcengine/`（图片、视频分文件）；`ImageGenerationTask` / `VideoGenerationTask` 只做生命周期与轮询节奏，**不**直接拼 httpx 细节。  
-   与任务输入输出共用的 Pydantic 模型放在 `app/core/tasks/image_generation_types.py`、`video_generation_types.py`，避免 `tasks` 与 `integrations` 循环导入。
+3. **出站 HTTP 适配层（`app/core/integrations/`）**
+   OpenAI / 火山 / Vidu 等供应商的 URL、请求体、响应解析集中在各自目录（图片、视频分文件）；`ImageGenerationTask` / `VideoGenerationTask` 只做生命周期与轮询节奏，**不**直接拼 httpx 细节。
+   与任务输入输出共用的 Pydantic 模型放在 `app/core/contracts/image_generation.py`、`video_generation.py`，避免 `tasks` 与 `integrations` 循环导入。
 
 应用启动时由 `app/bootstrap.py` 的 `bootstrap_all_registries()` **先** bootstrap供应商能力，**再** bootstrap 任务适配器，保证解析供应商 key 时注册表已就绪。
 
@@ -65,6 +65,21 @@ description: "如何在代码中注册内置供应商能力，并与异步任务
 - **内置注册表**：定义「系统认识哪些供应商 key、类别、默认 URL」，不替代数据库中的 `Provider` 实例（API Key、环境特定 base_url 等仍存 DB）。
 - **用户/运维在 UI 创建的 Provider**：通常应选用 `supported` 列表中的 key或与别名解析一致的名称，以便 `resolve_provider_key_from_name` 能落到统一 key；任务执行时再按 key 查找已注册的适配器。
 
+### 配置 Vidu
+
+在模型管理中创建 Provider 时，名称填写 `Vidu`（或 `vidu`），`base_url` 填 `https://api.vidu.cn`，并将 Vidu API Key 填入 `api_key`。随后分别创建图片、视频模型并关联该 Provider：
+
+- 图片：使用 Vidu 文档支持的图片模型名，例如 `viduq2` 或 `viduq1`；`viduq2` 支持纯提示词和 0–7 张参考图。
+- 视频：填写所选 Vidu 视频模型名，例如 `viduq2`、`viduq3` 系列。运行时会按输入选择 `text2video`、`img2video`、`start-end2video` 或 `reference2video`，无需在模型参数中填写端点。
+- 将所需模型设为 `default_image_model_id`、`default_video_model_id` 后，现有分镜工作室即可使用。Vidu 不支持项目通用 `watermark` 参数；带该参数的请求会在调用前被拒绝，避免静默丢参。
+
+### 从供应商目录添加模型
+
+在“模型管理 → 模型”点击“更新模型列表”，选择已配置的 Provider 并刷新。勾选要使用的模型后点击“添加所选模型”：系统会一次创建选中模型，已存在的同名同类别模型会显示为已添加并跳过。
+
+- OpenAI 兼容 Provider 使用其 `/models` API 实时读取目录，需确保 Provider 的 Base URL 与 API Key 有列举模型的权限。
+- Vidu 当前没有公开模型列表 API，页面会显示从其官方 Model Map 维护的目录，并明确标记为官方目录；更新 Vidu 支持模型时应同步更新 `app/core/integrations/model_catalog.py` 与本说明。
+
 ### Base URL 优先级（按类别解析）
 
 当前 `Provider` 支持三组 URL 字段：
@@ -78,6 +93,11 @@ description: "如何在代码中注册内置供应商能力，并与异步任务
 - image：`image_base_url` > `base_url` > `ProviderSpec.default_base_url`
 - video：`video_base_url` > `base_url` > `ProviderSpec.default_base_url`
 - text：`base_url` > `ProviderSpec.default_base_url`
+
+火山引擎使用 Ark v3 时，`base_url` / `image_base_url` 应配置为
+`https://ark.cn-beijing.volces.com/api/v3`。图片生成固定请求
+`/api/v3/images/generations`；不要将视频专用的 `/contents/generations` 写入图片 Base URL。
+运行时会兼容已保存该历史误配的配置并自动规范化，但应在供应商编辑页中改回 v3 根地址。
 
 ## 测试提示
 

@@ -24,3 +24,17 @@ description: "当前生效的 LLM 默认模型来源与解析顺序。"
 
 - 默认模型仅通过 `LLM Model Settings` 接口维护（`/api/v1/llm/model-settings`）。
 - 模型列表（`/api/v1/llm/models`）仅维护模型实体信息（名称、类别、供应商、参数等），不再提供默认切换语义。
+
+## Vidu 图片与视频模型
+
+- Vidu 是当前内置的图片、视频供应商，稳定 key 为 `vidu`，默认 Base URL 为 `https://api.vidu.cn`。
+- 图片模型通过 `POST /ent/v2/reference2image` 创建异步任务；视频模型依据输入自动选择文本、单图、首尾帧或多参考图视频端点。
+- 两类任务均通过 `GET /ent/v2/tasks/{task_id}/creations` 轮询结果。成功响应中的 `creations[*].url` 会立即进入既有的图片/视频资产持久化流程，因为 Vidu 返回的结果 URL 有有效期。
+- Vidu 使用 `Authorization: Token <API Key>`；Provider 列表和普通详情接口不会回显 `api_key` / `api_secret`。模型管理的编辑弹窗会按需调用 `GET /api/v1/llm/providers/{provider_id}/credentials` 回填凭据，使密码框的显示/隐藏按钮能呈现真实值；该接口仅应暴露给具备供应商配置管理权限的调用方。
+
+## 供应商模型目录与导入
+
+- 模型管理页通过 `GET /api/v1/llm/providers/{provider_id}/models/catalog` 刷新一个已配置 Provider 的可导入模型目录；浏览器不会读取或传递 API Key。
+- OpenAI 兼容供应商（当前 OpenAI、火山引擎）从其配置 Base URL 的 `/models` 接口实时读取模型名，并按名称规则归类为 text、image 或 video。
+- Vidu 当前未提供模型枚举 API，因此该入口返回项目维护的 Vidu 官方 Model Map 目录，并在页面明确标注为“官方模型目录”。
+- 用户选择后调用 `POST /api/v1/llm/providers/{provider_id}/models/import` 批量写入；同一 Provider、模型名称和类别的已有记录会跳过，不会被覆盖或重复创建。
