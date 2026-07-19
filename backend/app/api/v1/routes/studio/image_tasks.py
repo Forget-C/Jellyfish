@@ -134,6 +134,9 @@ class RenderedPromptResponse(BaseModel):
         default_factory=list,
         description="参考图 file_id 列表（自动选择；顺序有效）",
     )
+    template_id: str | None = Field(None, description="本次渲染使用的模板 ID；未命中模板时为空")
+    template_version: int | None = Field(None, description="本次渲染使用的模板版本号")
+    merged_variables: dict[str, str] = Field(default_factory=dict, description="模板默认值、业务事实与图片覆盖合并后的变量")
 
 
 async def _load_frame_render_guidance(
@@ -187,6 +190,11 @@ async def create_actor_image_generation_task(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="prompt is required for actor generation",
         )
+    base = await _build_actor_image_base_draft_service(
+        db,
+        actor_id=actor_id,
+        image_id=body.image_id,
+    )
     submission = await _build_actor_image_submission_payload_service(
         db,
         actor_id=actor_id,
@@ -202,6 +210,13 @@ async def create_actor_image_generation_task(
         relation_entity_id=submission.relation_entity_id,
         prompt=submission.prompt,
         images=ref_images if ref_images else None,
+        render_context={
+            "template_id": base.template_id,
+            "template_version": base.template_version,
+            "merged_variables": base.merged_variables,
+            "template_rendered_prompt": base.prompt,
+            "submitted_prompt": submission.prompt,
+        },
     )
     return created_response(TaskCreated(task_id=task_id))
 
@@ -224,7 +239,15 @@ async def render_actor_image_prompt(
     )
     context = _build_asset_image_context_service(base=base)
     derived = _derive_asset_image_preview_service(base=base, context=context)
-    return success_response(RenderedPromptResponse(prompt=derived.prompt, images=derived.images))
+    return success_response(
+        RenderedPromptResponse(
+            prompt=derived.prompt,
+            images=derived.images,
+            template_id=base.template_id,
+            template_version=base.template_version,
+            merged_variables=base.merged_variables,
+        )
+    )
 
 
 @router.post(

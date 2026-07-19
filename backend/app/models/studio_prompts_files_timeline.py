@@ -24,6 +24,13 @@ class PromptTemplate(Base,TimestampMixin):
     preview: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="预览文案")
     content: Mapped[str] = mapped_column(Text, nullable=False, comment="模板内容")
     variables: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list, comment="变量名列表（JSON 数组）")
+    variable_defaults: Mapped[dict[str, str]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+        comment="可配置变量的默认值（JSON 对象）",
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, comment="模板内容版本号（每次内容或变量修改递增）")
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, comment="是否为默认提示词（同类别唯一，应用层保证）")
     is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, comment="是否为系统预置（仅初始化脚本写入，接口层禁止删改）")
 
@@ -87,4 +94,3 @@ class TimelineClip(Base):
 
 
 __all__ = ["PromptTemplate", "FileItem", "TimelineClip"]
-

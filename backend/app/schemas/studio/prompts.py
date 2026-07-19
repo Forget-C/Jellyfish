@@ -25,6 +25,7 @@ class PromptTemplateCreate(BaseModel):
     content: str = Field(..., description="模板内容")
     preview: str = Field("", description="预览文案")
     variables: list[str] = Field(default_factory=list, description="变量名列表")
+    variable_defaults: dict[str, str] = Field(default_factory=dict, description="可配置变量的默认值")
     is_default: bool = Field(False, description="是否为默认提示词")
 
 
@@ -35,6 +36,7 @@ class PromptTemplateUpdate(BaseModel):
     content: str | None = Field(None, description="模板内容")
     preview: str | None = Field(None, description="预览文案")
     variables: list[str] | None = Field(None, description="变量名列表（整体替换）")
+    variable_defaults: dict[str, str] | None = Field(None, description="可配置变量的默认值（整体替换）")
     is_default: bool | None = Field(None, description="是否为默认提示词")
 
 
@@ -49,8 +51,9 @@ class PromptTemplateRead(BaseModel):
     preview: str = Field(..., description="预览文案")
     content: str = Field(..., description="模板内容")
     variables: list[str] = Field(..., description="变量名列表")
+    variable_defaults: dict[str, str] = Field(..., description="可配置变量的默认值")
+    version: int = Field(..., description="模板内容版本号")
     is_default: bool = Field(..., description="是否为默认提示词")
     is_system: bool = Field(..., description="是否为系统预置")
     created_at: datetime = Field(..., description="创建时间")
     updated_at: datetime = Field(..., description="最后更新时间")
-

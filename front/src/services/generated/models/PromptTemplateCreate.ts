@@ -28,6 +28,10 @@ export type PromptTemplateCreate = {
      */
     variables?: Array<string>;
     /**
+     * 可配置变量的默认值
+     */
+    variable_defaults?: Record<string, string>;
+    /**
      * 是否为默认提示词
      */
     is_default?: boolean;

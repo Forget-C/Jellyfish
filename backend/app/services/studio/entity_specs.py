@@ -34,7 +34,7 @@ from app.schemas.studio.assets import (
     SceneImageRead,
 )
 from app.schemas.studio.cast import ActorCreate, ActorRead, ActorUpdate, CharacterCreate, CharacterRead, CharacterUpdate
-from app.schemas.studio.cast_images import ActorImageRead
+from app.schemas.studio.cast_images import ActorImageCreate, ActorImageRead, ActorImageUpdate
 from app.services.common import invalid_choice
 
 DEFAULT_VIEW_ANGLES: tuple[AssetViewAngle, ...] = (
@@ -86,8 +86,8 @@ def entity_spec(entity_type: str) -> EntitySpec:
             create_model=ActorCreate,
             update_model=ActorUpdate,
             image_read_model=ActorImageRead,
-            image_create_model=AssetImageCreate,
-            image_update_model=AssetImageUpdate,
+            image_create_model=ActorImageCreate,
+            image_update_model=ActorImageUpdate,
         )
     if entity_type_norm == "character":
         return EntitySpec(

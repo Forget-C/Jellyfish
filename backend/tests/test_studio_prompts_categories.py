@@ -36,8 +36,7 @@ def test_list_prompt_categories_returns_value_label_description(client: TestClie
         "sfx",
         "character_image_front",
         "character_image_other",
-        "actor_image_front",
-        "actor_image_other",
+        "actor_image",
         "prop_image_front",
         "prop_image_other",
         "scene_image_front",
@@ -53,5 +52,4 @@ def test_list_prompt_categories_returns_value_label_description(client: TestClie
 
 def test_prompt_category_mapping_is_complete() -> None:
     assert set(_PROMPT_CATEGORY_ZH.keys()) == set(PromptCategory)
-
 

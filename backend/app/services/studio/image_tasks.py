@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import mimetypes
+from dataclasses import dataclass
 
 from fastapi import HTTPException, status
 from langchain_core.prompts import PromptTemplate as LcPromptTemplate
@@ -93,13 +94,12 @@ async def resolve_prompt_template(
     db: AsyncSession,
     *,
     category: PromptCategory,
+    template_id: str | None = None,
 ) -> PromptTemplate | None:
-    stmt = (
-        select(PromptTemplate)
-        .where(PromptTemplate.category == category)
-        .order_by(PromptTemplate.is_default.desc(), PromptTemplate.updated_at.desc())
-        .limit(1)
-    )
+    stmt = select(PromptTemplate).where(PromptTemplate.category == category)
+    if template_id:
+        stmt = stmt.where(PromptTemplate.id == template_id)
+    stmt = stmt.order_by(PromptTemplate.is_default.desc(), PromptTemplate.updated_at.desc()).limit(1)
     result = await db.execute(stmt)
     return result.scalars().first()
 
@@ -121,13 +121,54 @@ async def build_prompt_with_template(
     variables: dict[str, object],
     fallback_prompt: str,
     not_found_msg: str,
+    template_id: str | None = None,
 ) -> str:
-    template = await resolve_prompt_template(db, category=category)
+    template = await resolve_prompt_template(db, category=category, template_id=template_id)
     if template is not None and template.content:
         rendered = render_prompt_template_content(template.content, variables=variables)
         if rendered:
             return rendered
     return prompt_from_description(fallback_prompt, not_found_msg=not_found_msg)
+
+
+@dataclass(frozen=True)
+class RenderedTemplatePrompt:
+    """一次模板渲染的可追溯快照，用于写入图片生成任务。"""
+
+    prompt: str
+    template_id: str | None
+    template_version: int | None
+    merged_variables: dict[str, str]
+
+
+async def build_prompt_with_template_snapshot(
+    db: AsyncSession,
+    *,
+    category: PromptCategory,
+    variables: dict[str, object],
+    fallback_prompt: str,
+    not_found_msg: str,
+    template_id: str | None = None,
+) -> RenderedTemplatePrompt:
+    """合并模板默认值与业务变量，返回最终提示词及其可追溯来源。"""
+    template = await resolve_prompt_template(db, category=category, template_id=template_id)
+    if template is not None and template.content:
+        merged = {str(k): str(v) for k, v in (template.variable_defaults or {}).items()}
+        merged.update({str(k): str(v) for k, v in variables.items() if v is not None})
+        rendered = render_prompt_template_content(template.content, variables=merged)
+        if rendered:
+            return RenderedTemplatePrompt(
+                prompt=rendered,
+                template_id=template.id,
+                template_version=template.version,
+                merged_variables=merged,
+            )
+    return RenderedTemplatePrompt(
+        prompt=prompt_from_description(fallback_prompt, not_found_msg=not_found_msg),
+        template_id=None,
+        template_version=None,
+        merged_variables={str(k): str(v) for k, v in variables.items() if v is not None},
+    )
 
 
 async def resolve_front_image_ref(
@@ -266,8 +307,9 @@ def asset_prompt_category(
     relation_type: str,
     is_front_view: bool,
 ) -> PromptCategory:
+    if relation_type == "actor_image":
+        return PromptCategory.actor_image
     mapping = {
-        "actor_image": (PromptCategory.actor_image_front, PromptCategory.actor_image_other),
         "prop_image": (PromptCategory.prop_image_front, PromptCategory.prop_image_other),
         "scene_image": (PromptCategory.scene_image_front, PromptCategory.scene_image_other),
         "costume_image": (PromptCategory.costume_image_front, PromptCategory.costume_image_other),

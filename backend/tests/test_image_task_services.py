@@ -204,6 +204,7 @@ async def test_build_actor_image_base_draft_front_view_returns_no_refs(monkeypat
         tags=["成熟", "都市"],
         visual_style="写实",
         style="影视",
+        prompt_template_id=None,
     )
     image = SimpleNamespace(
         id=1,
@@ -211,6 +212,7 @@ async def test_build_actor_image_base_draft_front_view_returns_no_refs(monkeypat
         view_angle=AssetViewAngle.front,
         quality_level="high",
         format="png",
+        prompt_overrides={},
     )
     db = _FakeDB(
         mapping={
@@ -220,9 +222,14 @@ async def test_build_actor_image_base_draft_front_view_returns_no_refs(monkeypat
     )
 
     async def _fake_build_prompt(*_args, **_kwargs):
-        return "演员渲染提示词"
+        return SimpleNamespace(
+            prompt="演员渲染提示词",
+            template_id="template-1",
+            template_version=2,
+            merged_variables={"view_angle": "front"},
+        )
 
-    monkeypatch.setattr(asset_base, "build_prompt_with_template", _fake_build_prompt)
+    monkeypatch.setattr(asset_base, "build_prompt_with_template_snapshot", _fake_build_prompt)
     monkeypatch.setattr(asset_base, "asset_prompt_category", lambda **_kwargs: "actor_front")
 
     draft = await asset_base.build_actor_image_base_draft(
@@ -234,6 +241,7 @@ async def test_build_actor_image_base_draft_front_view_returns_no_refs(monkeypat
     assert draft.prompt == "演员渲染提示词"
     assert draft.default_images == []
     assert draft.image_id == 1
+    assert draft.template_version == 2
 
 
 @pytest.mark.asyncio

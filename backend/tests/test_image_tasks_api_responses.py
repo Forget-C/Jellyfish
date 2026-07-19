@@ -86,6 +86,9 @@ def test_render_actor_image_prompt_returns_success_envelope(client: TestClient, 
         entity_id = "actor-1"
         relation_type = "actor_image"
         relation_entity_id = "1"
+        template_id = "template-1"
+        template_version = 2
+        merged_variables = {"view_angle": "front"}
 
     class _Derived:
         prompt = "渲染后的演员提示词"
@@ -114,6 +117,7 @@ def test_render_actor_image_prompt_returns_success_envelope(client: TestClient, 
     assert body["message"] == "success"
     assert body["data"]["prompt"] == "渲染后的演员提示词"
     assert body["data"]["images"] == ["file-1", "file-2"]
+    assert body["data"]["template_version"] == 2
 
 
 def test_create_shot_frame_image_task_requires_prompt(client: TestClient) -> None:

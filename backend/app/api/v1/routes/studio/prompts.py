@@ -38,8 +38,7 @@ _PROMPT_CATEGORY_ZH: dict[PromptCategory, tuple[str, str]] = {
     PromptCategory.frame_key_image: ("关键帧图片", "用于生成关键帧图片的提示词"),
     PromptCategory.character_image_front: ("角色正面图片", "用于生成角色正面图片的提示词"),
     PromptCategory.character_image_other: ("角色侧面/背面图片", "用于生成角色侧面或背面图片的提示词"),
-    PromptCategory.actor_image_front: ("演员正面图片", "用于生成演员正面图片的提示词"),
-    PromptCategory.actor_image_other: ("演员侧面/背面图片", "用于生成演员侧面或背面图片的提示词"),
+    PromptCategory.actor_image: ("演员设定图", "用于生成演员不同视角身份肖像的统一提示词"),
     PromptCategory.prop_image_front: ("道具正面图片", "用于生成道具正面图片的提示词"),
     PromptCategory.prop_image_other: ("道具侧面/背面图片", "用于生成道具侧面或背面图片的提示词"),
     PromptCategory.scene_image_front: ("场景正面图片", "用于生成场景正面图片的提示词"),
@@ -171,6 +170,8 @@ async def create_prompt_template(
         content=body.content,
         preview=body.preview,
         variables=body.variables,
+        variable_defaults=body.variable_defaults,
+        version=1,
         is_default=body.is_default,
         is_system=False,  # 客户端不可设置
     )
@@ -195,14 +196,17 @@ async def update_prompt_template(
     obj = await db.get(PromptTemplate, template_id)
     if obj is None:
         raise HTTPException(status_code=404, detail=entity_not_found("PromptTemplate"))
-    if obj.is_system:
+    update_data = body.model_dump(exclude_unset=True)
+    if obj.is_system and set(update_data) != {"is_default"}:
         raise HTTPException(status_code=403, detail="系统预置提示词不可修改")
 
     # 若将当前记录设为默认，先清除同类别其他默认
     if body.is_default is True:
         await _clear_category_default(db, category=cast(PromptCategory, cast(object, obj.category)), exclude_id=template_id)
 
-    update_data = body.model_dump(exclude_unset=True)
+    # 模板的任何可编辑字段变化都会产生新的可追溯版本；不维护历史版本实体。
+    if update_data:
+        obj.version += 1
     for field, value in update_data.items():
         setattr(obj, field, value)
 

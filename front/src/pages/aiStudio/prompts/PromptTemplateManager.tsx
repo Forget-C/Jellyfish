@@ -18,8 +18,7 @@ const fallbackCategoryLabels: Record<string, string> = {
   sfx: '音效',
   character_image_front: '角色正面',
   character_image_other: '角色其他',
-  actor_image_front: '角色形象正面',
-  actor_image_other: '角色形象其他',
+  actor_image: '演员设定图',
   prop_image_front: '道具正面',
   prop_image_other: '道具其他',
   scene_image_front: '场景正面',
@@ -44,8 +43,7 @@ const defaultPromptCategories: PromptCategory[] = [
   'sfx',
   'character_image_front',
   'character_image_other',
-  'actor_image_front',
-  'actor_image_other',
+  'actor_image',
   'prop_image_front',
   'prop_image_other',
   'scene_image_front',
@@ -61,6 +59,7 @@ type CreatePromptForm = {
   content: string
   preview?: string
   variables?: string[]
+  variable_defaults_json?: string
   is_default?: boolean
 }
 
@@ -247,19 +246,34 @@ const PromptTemplateManager: FC = () => {
       preview: template.preview,
       content: template.content,
       variables: template.variables,
+      variable_defaults_json: JSON.stringify(template.variable_defaults ?? {}, null, 2),
       is_default: template.is_default,
     })
     setFormOpen(true)
   }
 
-  const buildPayload = (values: CreatePromptForm) => ({
-    category: values.category,
-    name: values.name.trim(),
-    content: values.content.trim(),
-    preview: values.preview?.trim() || undefined,
-    variables: (values.variables ?? []).map((v) => v.trim()).filter(Boolean),
-    is_default: values.is_default ?? false,
-  })
+  const buildPayload = (values: CreatePromptForm) => {
+    let variableDefaults: Record<string, string> = {}
+    const rawDefaults = values.variable_defaults_json?.trim()
+    if (rawDefaults) {
+      const parsed = JSON.parse(rawDefaults)
+      if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
+        throw new Error('变量默认值必须是 JSON 对象')
+      }
+      variableDefaults = Object.fromEntries(
+        Object.entries(parsed).map(([key, value]) => [key, String(value)]),
+      )
+    }
+    return {
+      category: values.category,
+      name: values.name.trim(),
+      content: values.content.trim(),
+      preview: values.preview?.trim() || undefined,
+      variables: (values.variables ?? []).map((v) => v.trim()).filter(Boolean),
+      variable_defaults: variableDefaults,
+      is_default: values.is_default ?? false,
+    }
+  }
 
   const handleFormSubmit = async () => {
     try {
@@ -346,6 +360,21 @@ const PromptTemplateManager: FC = () => {
     })
   }
 
+  const restoreSystemDefault = async (template: PromptTemplateRead) => {
+    try {
+      const res = await StudioPromptsService.updatePromptTemplateApiV1StudioPromptsTemplateIdPatch({
+        templateId: template.id,
+        requestBody: { is_default: true },
+      })
+      if (!res.data) return
+      message.success('已恢复系统默认模板')
+      setSelected(res.data)
+      void loadTemplates(page, query)
+    } catch {
+      message.error('恢复系统默认模板失败')
+    }
+  }
+
   return (
     <div className="space-y-4">
       <Card
@@ -394,10 +423,15 @@ const PromptTemplateManager: FC = () => {
                 size="small"
                 extra={(
                   <div className="flex gap-2">
-                    <Button size="small" onClick={() => openEditModal(selected)}>编辑</Button>
-                    <Button size="small" danger onClick={() => handleDeleteTemplate(selected)}>
-                      删除
-                    </Button>
+                    {!selected.is_system && <Button size="small" onClick={() => openEditModal(selected)}>编辑</Button>}
+                    {selected.is_system && !selected.is_default && (
+                      <Button size="small" onClick={() => void restoreSystemDefault(selected)}>恢复默认</Button>
+                    )}
+                    {!selected.is_system && (
+                      <Button size="small" danger onClick={() => handleDeleteTemplate(selected)}>
+                        删除
+                      </Button>
+                    )}
                   </div>
                 )}
               >
@@ -410,6 +444,11 @@ const PromptTemplateManager: FC = () => {
                   <div className="mt-2 text-xs text-gray-500">
                     变量：{selected.variables.join(', ')}
                   </div>
+                )}
+                {Object.keys(selected.variable_defaults ?? {}).length > 0 && (
+                  <pre className="mt-2 p-3 bg-gray-50 rounded text-xs overflow-auto max-h-32">
+                    默认变量：{JSON.stringify(selected.variable_defaults, null, 2)}
+                  </pre>
                 )}
                 <div className="mt-3 flex gap-2">
                   {selected.is_system && <Tag color="gold">系统预置</Tag>}
@@ -472,6 +511,9 @@ const PromptTemplateManager: FC = () => {
               open={false}
               placeholder="例如：subject, style, lighting"
             />
+          </Form.Item>
+          <Form.Item label="变量默认值（JSON 对象）" name="variable_defaults_json">
+            <Input.TextArea rows={4} placeholder={'例如：{\n  "background_instruction": "Plain studio background"\n}'} />
           </Form.Item>
           <Form.Item label="设为默认提示词" name="is_default" valuePropName="checked">
             <Switch />

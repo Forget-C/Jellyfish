@@ -23,6 +23,10 @@ export type PromptTemplateUpdate = {
      */
     variables?: (Array<string> | null);
     /**
+     * 可配置变量的默认值（整体替换）
+     */
+    variable_defaults?: (Record<string, string> | null);
+    /**
      * 是否为默认提示词
      */
     is_default?: (boolean | null);

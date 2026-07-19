@@ -53,4 +53,6 @@ uv run alembic revision --autogenerate -m "describe schema change"
 - 删除操作仅限 `is_system = 1` 的固定系统模板，用户模板不会被删除；
 - seed 源数据暂时保留在 `backend/sql/001-init-prompt-template.sql`，它不再被 Compose 按目录扫描执行。
 
+演员设定图迁移会删除 `actor_image_front` / `actor_image_other` 模板及关联的未完成演员图片任务，并写入唯一的 `actor_image` 系统模板。已完成任务的结果文件和已有演员图片关联不受影响。
+
 旧的结构迁移 SQL (`002`—`008`) 仅作为历史与短期回退资料保留，不参与当前启动链路。

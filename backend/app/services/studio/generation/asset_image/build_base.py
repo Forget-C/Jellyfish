@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import HTTPException, status
+from pydantic import Field
 
 from app.models.studio import (
     Actor,
@@ -33,6 +34,7 @@ from app.services.studio.image_tasks import (
     build_prompt_with_template,
     is_front_view,
     map_view_angle_for_prompt,
+    build_prompt_with_template_snapshot,
 )
 
 
@@ -47,6 +49,9 @@ class AssetImageBaseDraft(GenerationBaseDraft):
     relation_entity_id: str
     prompt: str
     default_images: list[str]
+    template_id: str | None = None
+    template_version: int | None = None
+    merged_variables: dict[str, str] = Field(default_factory=dict)
 
 
 def _enum_value(value: Any) -> str:
@@ -64,27 +69,33 @@ async def _build_asset_prompt(
     visual_style: Any,
     style: Any,
     image_row: Any,
-) -> str:
+    template_id: str | None = None,
+    extra_variables: dict[str, str] | None = None,
+) -> tuple[str, str | None, int | None, dict[str, str]]:
     category = asset_prompt_category(
         relation_type=relation_type,
         is_front_view=is_front_view(image_row.view_angle),
     )
-    return await build_prompt_with_template(
+    variables: dict[str, object] = {
+        "name": name,
+        "description": description,
+        "tags": ", ".join(tags or []),
+        "visual_style": _enum_value(visual_style),
+        "style": _enum_value(style),
+        "view_angle": map_view_angle_for_prompt(image_row.view_angle),
+        "quality_level": image_row.quality_level,
+        "format": image_row.format,
+    }
+    variables.update(extra_variables or {})
+    rendered = await build_prompt_with_template_snapshot(
         db,
         category=category,
-        variables={
-            "name": name,
-            "description": description,
-            "tags": ", ".join(tags or []),
-            "visual_style": _enum_value(visual_style),
-            "style": _enum_value(style),
-            "view_angle": map_view_angle_for_prompt(image_row.view_angle),
-            "quality_level": image_row.quality_level,
-            "format": image_row.format,
-        },
+        variables=variables,
         fallback_prompt=description,
         not_found_msg=f"{relation_type}.description is empty",
+        template_id=template_id,
     )
+    return rendered.prompt, rendered.template_id, rendered.template_version, rendered.merged_variables
 
 
 async def _resolve_front_ref(
@@ -115,16 +126,6 @@ async def build_actor_image_base_draft(
     if actor is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=entity_not_found("Actor"))
     image_row = await validate_actor_image(db, actor_id=actor_id, image_id=image_id)
-    prompt = await _build_asset_prompt(
-        db,
-        relation_type="actor_image",
-        name=actor.name,
-        description=actor.description,
-        tags=actor.tags,
-        visual_style=actor.visual_style,
-        style=actor.style,
-        image_row=image_row,
-    )
     refs = []
     if not is_front_view(image_row.view_angle):
         refs = await _resolve_front_ref(
@@ -134,6 +135,25 @@ async def build_actor_image_base_draft(
             parent_id=actor_id,
             preferred_quality_level=image_row.quality_level,
         )
+    prompt, template_id, template_version, merged_variables = await _build_asset_prompt(
+        db,
+        relation_type="actor_image",
+        name=actor.name,
+        description=actor.description,
+        tags=actor.tags,
+        visual_style=actor.visual_style,
+        style=actor.style,
+        image_row=image_row,
+        template_id=actor.prompt_template_id,
+        extra_variables={
+            **(image_row.prompt_overrides or {}),
+            "reference_instruction": (
+                "Use the supplied front-view reference to preserve the same identity, facial structure, hairstyle and costume."
+                if refs
+                else ""
+            ),
+        },
+    )
     return AssetImageBaseDraft(
         entity_type="actor",
         entity_id=actor_id,
@@ -142,6 +162,9 @@ async def build_actor_image_base_draft(
         relation_entity_id=str(image_row.id),
         prompt=prompt,
         default_images=refs,
+        template_id=template_id,
+        template_version=template_version,
+        merged_variables=merged_variables,
     )
 
 
@@ -177,7 +200,7 @@ async def build_asset_image_base_draft(
         parent_field_name = "costume_id"
     if asset is None or image_row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=entity_not_found("AssetImage"))
-    prompt = await _build_asset_prompt(
+    prompt, _, _, _ = await _build_asset_prompt(
         db,
         relation_type=relation_type,
         name=asset.name,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -109,6 +109,12 @@ class ActorImage(Base, TimestampMixin):
     width: Mapped[int | None] = mapped_column(Integer, nullable=True, comment="宽（px）")
     height: Mapped[int | None] = mapped_column(Integer, nullable=True, comment="高（px）")
     format: Mapped[str] = mapped_column(String(32), nullable=False, default="png", comment="格式")
+    prompt_overrides: Mapped[dict[str, str]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+        comment="此图片的展示提示词变量覆盖；不影响同一演员的其他视角",
+    )
 
     actor: Mapped["Actor"] = relationship(back_populates="images")
 
@@ -272,4 +278,3 @@ __all__ = [
     "PropImage",
     "CostumeImage",
 ]
-
