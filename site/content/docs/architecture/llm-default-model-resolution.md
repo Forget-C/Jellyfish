@@ -22,8 +22,9 @@ description: "当前生效的 LLM 默认模型来源与解析顺序。"
 
 ## 管理入口
 
-- 默认模型仅通过 `LLM Model Settings` 接口维护（`/api/v1/llm/model-settings`）。
-- 模型列表（`/api/v1/llm/models`）仅维护模型实体信息（名称、类别、供应商、参数等），不再提供默认切换语义。
+- 默认模型仍仅通过 `LLM Model Settings` 接口维护（`/api/v1/llm/model-settings`），但管理 UI 已迁入“模型”页顶部的“全局默认模型”区域。
+- 模型页按 text / image / video 展示可选模型，并可独立更新各类别的默认模型；这不会修改模型实体本身。
+- “运行设置”页仅维护 API 超时与日志级别，避免将全局运行参数混入单个模型配置。
 
 ## Vidu 图片与视频模型
 
@@ -34,7 +35,9 @@ description: "当前生效的 LLM 默认模型来源与解析顺序。"
 
 ## 供应商模型目录与导入
 
-- 模型管理页通过 `GET /api/v1/llm/providers/{provider_id}/models/catalog` 刷新一个已配置 Provider 的可导入模型目录；浏览器不会读取或传递 API Key。
+- 模型管理页的“添加模型”采用供应商优先流程：先选择 Provider，再选择该 Provider 支持的模型类别，最后从目录多选模型名称或手动输入名称；编辑模型仍为单条编辑。
+- 目录模型和手动输入模型都通过 `POST /api/v1/llm/providers/{provider_id}/models/import` 批量导入，重复的 Provider + 类别 + 名称组合由后端幂等跳过。
+- 页面通过 `GET /api/v1/llm/providers/{provider_id}/models/catalog` 获取已配置 Provider 的可导入模型目录；浏览器不会读取或传递 API Key。
 - OpenAI 兼容供应商（当前 OpenAI、火山引擎）从其配置 Base URL 的 `/models` 接口实时读取模型名，并按名称规则归类为 text、image 或 video。
 - Vidu 当前未提供模型枚举 API，因此该入口返回项目维护的 Vidu 官方 Model Map 目录，并在页面明确标注为“官方模型目录”。
 - 用户选择后调用 `POST /api/v1/llm/providers/{provider_id}/models/import` 批量写入；同一 Provider、模型名称和类别的已有记录会跳过，不会被覆盖或重复创建。

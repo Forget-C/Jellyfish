@@ -20,7 +20,7 @@ export default function ModelManagement() {
           items={[
             { key: 'providers', label: '供应商' },
             { key: 'models', label: '模型' },
-            { key: 'settings', label: '设置' },
+            { key: 'settings', label: '运行设置' },
           ]}
         />
       </div>
