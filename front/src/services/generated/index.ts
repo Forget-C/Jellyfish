@@ -79,6 +79,7 @@ export type { ApiResponse_TaskCreated_ } from './models/ApiResponse_TaskCreated_
 export type { ApiResponse_TaskLinkAdoptRead_ } from './models/ApiResponse_TaskLinkAdoptRead_';
 export type { ApiResponse_TaskResultRead_ } from './models/ApiResponse_TaskResultRead_';
 export type { ApiResponse_TaskStatusRead_ } from './models/ApiResponse_TaskStatusRead_';
+export type { ApiResponse_TextLabGenerateResponse_ } from './models/ApiResponse_TextLabGenerateResponse_';
 export type { ApiResponse_VariantAnalysisResult_ } from './models/ApiResponse_VariantAnalysisResult_';
 export type { ApiResponse_VideoGenerationOptionsRead_ } from './models/ApiResponse_VideoGenerationOptionsRead_';
 export type { ApiResponse_VideoPromptPreviewResponse_ } from './models/ApiResponse_VideoPromptPreviewResponse_';
@@ -247,6 +248,9 @@ export type { TaskListItemRead } from './models/TaskListItemRead';
 export type { TaskResultRead } from './models/TaskResultRead';
 export type { TaskStatus } from './models/TaskStatus';
 export type { TaskStatusRead } from './models/TaskStatusRead';
+export type { TextLabGenerateRequest } from './models/TextLabGenerateRequest';
+export type { TextLabGenerateResponse } from './models/TextLabGenerateResponse';
+export type { TextLabMessage } from './models/TextLabMessage';
 export type { ValidationError } from './models/ValidationError';
 export type { VariantAnalysisRequest } from './models/VariantAnalysisRequest';
 export type { VariantAnalysisResult } from './models/VariantAnalysisResult';
@@ -273,3 +277,4 @@ export { StudioShotDialogLinesService } from './services/StudioShotDialogLinesSe
 export { StudioShotFrameImagesService } from './services/StudioShotFrameImagesService';
 export { StudioShotLinksService } from './services/StudioShotLinksService';
 export { StudioShotsService } from './services/StudioShotsService';
+export { StudioTextLabService } from './services/StudioTextLabService';

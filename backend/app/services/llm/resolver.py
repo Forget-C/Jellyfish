@@ -146,6 +146,27 @@ async def build_default_text_llm(
     )
 
 
+async def build_text_chat_model(
+    db: AsyncSession,
+    *,
+    model_id: str,
+    thinking: bool = False,
+) -> BaseChatModel:
+    """根据显式选择的已登记文本模型构造对话客户端。
+
+    生成实验室不能依赖全局默认模型：调用时必须校验用户选择的模型属于文本类别，
+    并以其关联供应商的凭据和参数创建客户端。
+    """
+    model = await get_model_by_category(db, ModelCategoryKey.text, model_or_id=model_id)
+    provider = await get_provider_by_model_or_id(db, model)
+    return _build_chat_openai_model(
+        provider=provider,
+        model=model,
+        thinking=thinking,
+        import_error_detail="Install langchain-openai to use text laboratory endpoints",
+    )
+
+
 def _build_chat_openai_model(
     *,
     provider: Provider,
