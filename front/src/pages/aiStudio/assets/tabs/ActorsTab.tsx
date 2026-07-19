@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Card, Empty, Input, Modal, Pagination, Space, Tag, message } from 'antd'
-import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons'
+import { Button, Card, Empty, Input, Modal, Pagination, Space, message } from 'antd'
+import { PlusOutlined, ReloadOutlined } from '@ant-design/icons'
 import { StudioEntitiesApi } from '../../../../services/studioEntities'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { resolveAssetUrl } from '../utils'
-import { DisplayImageCard } from '../components/DisplayImageCard'
+import { assetAdapters } from '../assetAdapters'
+import { AssetImageCard } from '../components/AssetImageCard'
 import { ActorEntityFormModal, type ActorEntityLike } from '../components/ActorEntityFormModal'
 
 export function ActorsTab() {
@@ -133,55 +133,33 @@ export function ActorsTab() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {filtered.map((a) => (
-            <DisplayImageCard
+            <AssetImageCard
               key={a.id}
-              title={<div className="truncate">{a.name}</div>}
-              imageUrl={resolveAssetUrl(a.thumbnail)}
-              imageAlt={a.name}
-              extra={
-                <Space>
-                  <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(a)}>
-                    编辑
-                  </Button>
-                  <Button size="small" onClick={() => navigate(`/assets/actors/${a.id}/edit`)}>
-                    详情
-                  </Button>
-                  <Button
-                    danger
-                    size="small"
-                    icon={<DeleteOutlined />}
-                    onClick={() => {
-                      Modal.confirm({
-                        title: `删除演员「${a.name}」？`,
-                        okText: '删除',
-                        cancelText: '取消',
-                        okButtonProps: { danger: true },
-                        onOk: async () => {
-                          try {
-                            await StudioEntitiesApi.remove('actor', a.id)
-                            message.success('已删除')
-                            void load()
-                          } catch {
-                            message.error('删除失败')
-                          }
-                        },
-                      })
-                    }}
-                  />
-                </Space>
-              }
-              meta={
-                <div>
-                  {a.description && <div className="text-xs text-gray-600 line-clamp-2">{a.description}</div>}
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {(a.tags ?? []).slice(0, 6).map((t: string) => (
-                      <Tag key={t} className="m-0">
-                        {t}
-                      </Tag>
-                    ))}
-                  </div>
-                </div>
-              }
+              asset={a}
+              assetLabel="演员"
+              listImages={assetAdapters.actor.listImages}
+              createImageSlot={assetAdapters.actor.createImageSlot as any}
+              renderPrompt={assetAdapters.actor.renderPrompt}
+              createGenerationTask={assetAdapters.actor.createGenerationTask}
+              onEdit={() => openEdit(a)}
+              onDetails={() => navigate(`/assets/actors/${a.id}/edit`)}
+              onDelete={() => {
+                Modal.confirm({
+                  title: `删除演员「${a.name}」？`,
+                  okText: '删除',
+                  cancelText: '取消',
+                  okButtonProps: { danger: true },
+                  onOk: async () => {
+                    try {
+                      await StudioEntitiesApi.remove('actor', a.id)
+                      message.success('已删除')
+                      void load()
+                    } catch {
+                      message.error('删除失败')
+                    }
+                  },
+                })
+              }}
             />
           ))}
         </div>

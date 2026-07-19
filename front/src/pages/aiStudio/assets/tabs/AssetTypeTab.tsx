@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Card, Input, Row, Col, Tag, Button, message, Modal, Space, Pagination } from 'antd'
-import { EditOutlined, DeleteOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons'
+import { Card, Input, Row, Col, Button, message, Modal, Space, Pagination } from 'antd'
+import { PlusOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useSearchParams } from 'react-router-dom'
-import { resolveAssetUrl } from '../utils'
-import { DisplayImageCard } from '../components/DisplayImageCard'
+import { assetAdapters } from '../assetAdapters'
+import { AssetImageCard } from '../components/AssetImageCard'
 import {
   StudioAssetTypeFormModal,
   normalizeStudioAsset,
@@ -67,10 +67,6 @@ export function AssetTypeTab({
     chapterId: string
     shotId: string
   } | null>(null)
-
-  const [previewOpen, setPreviewOpen] = useState(false)
-  const [previewUrl, setPreviewUrl] = useState('')
-  const [previewTitle, setPreviewTitle] = useState('')
 
   const load = async (opts?: { page?: number; pageSize?: number; q?: string }) => {
     setLoading(true)
@@ -188,16 +184,7 @@ export function AssetTypeTab({
     })
   }
 
-  const openPreview = (asset: StudioAssetLike) => {
-    const thumbnailUrl = resolveAssetUrl(asset.thumbnail)
-    if (!thumbnailUrl) {
-      message.info('未生成图片')
-      return
-    }
-    setPreviewTitle(asset.name)
-    setPreviewUrl(thumbnailUrl)
-    setPreviewOpen(true)
-  }
+  const adapter = assetAdapters[tabKey]
 
   return (
     <div className="space-y-4">
@@ -231,43 +218,17 @@ export function AssetTypeTab({
             </Col>
           ) : (
             filtered.map((a) => {
-              const thumbnailUrl = resolveAssetUrl(a.thumbnail)
               return (
                 <Col xs={24} sm={12} md={8} lg={6} key={a.id}>
-                  <DisplayImageCard
-                    title={<span className="truncate">{a.name}</span>}
-                    imageUrl={thumbnailUrl}
-                    imageAlt={a.name}
-                    placeholder="未生成"
-                    onImageClick={() => openPreview(a)}
-                    extra={
-                      <Space size="small">
-                        <Button size="small" type="link" icon={<EditOutlined />} onClick={() => handleEdit(a)}>
-                          编辑
-                        </Button>
-                      </Space>
-                    }
-                    actions={[
-                      <Button
-                        type="text"
-                        key="del"
-                        danger
-                        icon={<DeleteOutlined />}
-                        size="small"
-                        onClick={() => handleDelete(a)}
-                      />,
-                    ]}
-                    meta={
-                      <>
-                        <div className="text-xs text-gray-500 mb-2 line-clamp-2">{a.description || '暂无描述'}</div>
-                        <div className="flex flex-wrap gap-1">
-                          {typeof a.view_count === 'number' && <Tag color="blue">镜头 {a.view_count}</Tag>}
-                          {(a.tags ?? []).slice(0, 3).map((t) => (
-                            <Tag key={t}>{t}</Tag>
-                          ))}
-                        </div>
-                      </>
-                    }
+                  <AssetImageCard
+                    asset={a}
+                    assetLabel={label}
+                    listImages={adapter.listImages}
+                    createImageSlot={adapter.createImageSlot as any}
+                    renderPrompt={adapter.renderPrompt}
+                    createGenerationTask={adapter.createGenerationTask}
+                    onEdit={() => handleEdit(a)}
+                    onDelete={() => handleDelete(a)}
                   />
                 </Col>
               )
@@ -322,18 +283,6 @@ export function AssetTypeTab({
           }
         }}
       />
-
-      <Modal
-        title={previewTitle}
-        open={previewOpen}
-        onCancel={() => setPreviewOpen(false)}
-        footer={null}
-        width={880}
-      >
-        <div className="w-full flex justify-center bg-gray-50 rounded-md overflow-hidden">
-          <img src={previewUrl} alt={previewTitle} className="max-h-[70vh] object-contain" />
-        </div>
-      </Modal>
     </div>
   )
 }
