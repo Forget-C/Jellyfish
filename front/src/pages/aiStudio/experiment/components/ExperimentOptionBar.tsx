@@ -13,6 +13,8 @@ type ExperimentOptionBarProps = {
   templateId?: string
   loading?: boolean
   disabled?: boolean
+  modelLabel?: string
+  modelPlaceholder?: string
   onModelChange: (modelId?: string) => void
   onTemplateChange: (templateId?: string) => void
 }
@@ -25,6 +27,8 @@ export function ExperimentOptionBar({
   templateId,
   loading = false,
   disabled = false,
+  modelLabel = '模型',
+  modelPlaceholder = '选择已登记的模型',
   onModelChange,
   onTemplateChange,
 }: ExperimentOptionBarProps) {
@@ -37,10 +41,10 @@ export function ExperimentOptionBar({
         trigger="click"
         content={
           <div className="w-72">
-            <Typography.Text strong>文本模型</Typography.Text>
+            <Typography.Text strong>{modelLabel}</Typography.Text>
             <Select
               className="w-full mt-2"
-              placeholder="选择已登记的文本模型"
+              placeholder={modelPlaceholder}
               loading={loading}
               value={modelId}
               onChange={onModelChange}

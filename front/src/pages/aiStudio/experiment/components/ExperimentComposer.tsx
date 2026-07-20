@@ -5,6 +5,7 @@ import { SendOutlined } from '@ant-design/icons'
 
 type ExperimentComposerProps = {
   options: ReactNode
+  contextActions?: ReactNode
   children: ReactNode
   submitting?: boolean
   submitDisabled?: boolean
@@ -12,9 +13,14 @@ type ExperimentComposerProps = {
   submitLabel?: string
 }
 
-/** Places shared options, modality-specific input, and a consistent submit action in one composer. */
+/**
+ * 将输入、上下文附件、模型配置与提交动作收纳为单个实验输入框。
+ *
+ * 选项始终位于底部工具栏，避免模型或提示词选择与当前输入内容脱节。
+ */
 export function ExperimentComposer({
   options,
+  contextActions,
   children,
   submitting = false,
   submitDisabled = false,
@@ -22,10 +28,15 @@ export function ExperimentComposer({
   submitLabel = '发送',
 }: ExperimentComposerProps) {
   return (
-    <div className="pt-4 mt-4 border-t border-gray-100 space-y-3">
-      <div>{options}</div>
-      {children}
-      <div className="flex justify-end">
+    <div className="mt-5 overflow-hidden rounded-2xl border-2 border-slate-300 bg-slate-50/80 text-slate-900 shadow-md transition-colors focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-100">
+      <div className="p-4">
+        {children}
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-100/80 px-4 py-3">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          {options}
+          {contextActions}
+        </div>
         <Button type="primary" icon={<SendOutlined />} loading={submitting} disabled={submitDisabled} onClick={onSubmit}>
           {submitLabel}
         </Button>

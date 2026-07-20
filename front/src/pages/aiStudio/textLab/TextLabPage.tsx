@@ -5,7 +5,7 @@
  * 从而可被后续图片和视频实验室复用。
  */
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Card, Empty, Input, Spin, Tag, message } from 'antd'
+import { Button, Spin, Tag, message } from 'antd'
 import { ClearOutlined } from '@ant-design/icons'
 import {
   LlmService,
@@ -16,9 +16,11 @@ import {
   type TextLabMessage,
 } from '../../../services/generated'
 import { ExperimentComposer } from '../experiment/components/ExperimentComposer'
+import { ExperimentEmptyState } from '../experiment/components/ExperimentEmptyState'
+import { ExperimentLabLayout } from '../experiment/components/ExperimentLabLayout'
 import { ExperimentOptionBar } from '../experiment/components/ExperimentOptionBar'
-import { PromptTemplateForm, renderPromptTemplate } from '../experiment/components/PromptTemplateForm'
-import { WorkspaceLayout } from '../../../components'
+import { ExperimentPromptEditor } from '../experiment/components/ExperimentPromptEditor'
+import { createPromptTemplateValues, renderPromptTemplate } from '../experiment/components/PromptTemplateForm'
 
 type LocalMessage = TextLabMessage & { id: string }
 
@@ -42,15 +44,6 @@ const textPromptCategoryLabels: Record<string, string> = {
 /** Builds a stable local identifier for a browser-only laboratory message. */
 function createMessageId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-}
-
-/** Uses a template's declared default values to initialize one non-persistent experiment run. */
-function initialTemplateValues(template: PromptTemplateRead): Record<string, string> {
-  const defaults = template.variable_defaults ?? {}
-  return Array.from(new Set([...(template.variables ?? []), ...Object.keys(defaults)])).reduce<Record<string, string>>(
-    (result, variable) => ({ ...result, [variable]: defaults[variable] ?? '' }),
-    {},
-  )
 }
 
 export default function TextLabPage() {
@@ -100,7 +93,7 @@ export default function TextLabPage() {
   const handleSelectTemplate = (nextTemplateId?: string) => {
     setTemplateId(nextTemplateId)
     const template = templates.find((item) => item.id === nextTemplateId)
-    setTemplateValues(template ? initialTemplateValues(template) : {})
+    setTemplateValues(template ? createPromptTemplateValues(template) : {})
     if (template) setDraft('')
   }
 
@@ -143,15 +136,12 @@ export default function TextLabPage() {
   }
 
   return (
-    <WorkspaceLayout>
-      <Card
-        title="文本实验会话"
-        className="app-fill-card"
-        extra={<Button icon={<ClearOutlined />} disabled={!messages.length || submitting} onClick={() => setMessages([])}>清空会话</Button>}
-      >
-        <div className="flex-1 min-h-0 space-y-4 overflow-y-auto pr-1">
+    <ExperimentLabLayout
+      title="文本实验会话"
+      extra={<Button icon={<ClearOutlined />} disabled={!messages.length || submitting} onClick={() => setMessages([])}>清空会话</Button>}
+      history={<>
         {loading ? <div className="h-72 flex items-center justify-center"><Spin /></div> : null}
-        {!loading && messages.length === 0 ? <Empty description="选择模型并输入提示词，开始一轮文本实验" /> : null}
+        {!loading && messages.length === 0 ? <ExperimentEmptyState description="选择模型并输入提示词，开始一轮文本实验" /> : null}
         {messages.map((item) => (
           <div key={item.id} className={item.role === 'user' ? 'ml-auto max-w-[85%]' : 'mr-auto max-w-[85%]'}>
             <Tag color={item.role === 'user' ? 'blue' : 'green'}>{item.role === 'user' ? '你' : '模型'}</Tag>
@@ -161,9 +151,8 @@ export default function TextLabPage() {
           </div>
         ))}
         {submitting ? <div className="mr-auto max-w-[85%]"><Tag color="green">模型</Tag><div className="mt-1 rounded-lg bg-gray-50 px-3 py-2"><Spin size="small" /> 正在生成…</div></div> : null}
-        </div>
-
-        <ExperimentComposer
+      </>}
+      composer={<ExperimentComposer
           submitting={submitting}
           submitDisabled={loading}
           onSubmit={() => void handleSubmit()}
@@ -181,40 +170,31 @@ export default function TextLabPage() {
               templateId={templateId}
               loading={loading}
               disabled={submitting}
+              modelLabel="文本模型"
+              modelPlaceholder="选择已登记的文本模型"
               onModelChange={setModelId}
               onTemplateChange={handleSelectTemplate}
             />
           }
         >
-          {selectedTemplate ? (
-            <PromptTemplateForm
-              template={selectedTemplate}
-              values={templateValues}
-              disabled={submitting}
-              onValuesChange={setTemplateValues}
-              onUseFreeInput={(renderedPrompt) => {
-                setTemplateId(undefined)
-                setTemplateValues({})
-                setDraft(renderedPrompt)
-              }}
-            />
-          ) : (
-            <Input.TextArea
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              onPressEnter={(event) => {
-                if (!event.shiftKey) {
-                  event.preventDefault()
-                  void handleSubmit()
-                }
-              }}
-              placeholder="输入提示词；Shift + Enter 换行"
-              autoSize={{ minRows: 4, maxRows: 10 }}
-              disabled={submitting || loading}
-            />
-          )}
-        </ExperimentComposer>
-      </Card>
-    </WorkspaceLayout>
+          <ExperimentPromptEditor
+            template={selectedTemplate}
+            templateValues={templateValues}
+            draft={draft}
+            placeholder="输入提示词；Shift + Enter 换行"
+            minRows={5}
+            disabled={submitting || loading}
+            submitOnEnter
+            onDraftChange={setDraft}
+            onTemplateValuesChange={setTemplateValues}
+            onUseFreeInput={(renderedPrompt) => {
+              setTemplateId(undefined)
+              setTemplateValues({})
+              setDraft(renderedPrompt)
+            }}
+            onSubmit={() => void handleSubmit()}
+          />
+        </ExperimentComposer>}
+    />
   )
 }

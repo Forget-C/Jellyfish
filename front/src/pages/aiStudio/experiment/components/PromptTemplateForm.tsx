@@ -13,6 +13,8 @@ export type PromptTemplateFormTemplate = {
   variable_defaults?: Record<string, string>
 }
 
+type PromptTemplateDefaults = Pick<PromptTemplateFormTemplate, 'variables' | 'variable_defaults'>
+
 type PromptTemplateFormProps = {
   template: PromptTemplateFormTemplate
   values: Record<string, string>
@@ -24,6 +26,15 @@ type PromptTemplateFormProps = {
 /** Replaces the {{variable}} placeholders in a template using the values of the current experiment. */
 export function renderPromptTemplate(content: string, values: Record<string, string>): string {
   return content.replace(/{{\s*([^{}\s]+)\s*}}/g, (_match, variableName: string) => values[variableName] ?? '')
+}
+
+/** Creates the initial variable map for one non-persistent template experiment. */
+export function createPromptTemplateValues(template: PromptTemplateDefaults): Record<string, string> {
+  const defaults = template.variable_defaults ?? {}
+  return Array.from(new Set([...(template.variables ?? []), ...Object.keys(defaults)])).reduce<Record<string, string>>(
+    (result, variable) => ({ ...result, [variable]: defaults[variable] ?? '' }),
+    {},
+  )
 }
 
 /** Provides a non-destructive form editor for template variables and a final rendered-prompt preview. */

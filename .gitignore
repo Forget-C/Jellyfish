@@ -2,6 +2,7 @@ node_modules/
 dist/
 .env
 .env.local
+.env.swp
 .DS_Store
 *.log
 .pnpm-store/

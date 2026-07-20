@@ -62,7 +62,7 @@ async def _persist_images_to_assets(
     relation_entity_id: str,
     result: ImageGenerationResult,
 ) -> None:
-    """将图片生成结果落库到 FileItem 与业务图片表。"""
+    """将图片生成结果落库到 FileItem，并在有业务归属时回写对应图片表。"""
     images = result.images or []
     if not images:
         return

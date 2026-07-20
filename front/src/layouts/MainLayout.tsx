@@ -44,6 +44,7 @@ const MainLayout: React.FC = () => {
     if (location.pathname.startsWith('/agents')) return ['agents']
     if (location.pathname.startsWith('/models')) return ['models']
     if (location.pathname.startsWith('/text-lab')) return ['text-lab']
+    if (location.pathname.startsWith('/image-lab')) return ['image-lab']
     if (location.pathname.startsWith('/settings')) return ['settings']
     return []
   }, [location.pathname])
@@ -60,6 +61,7 @@ const MainLayout: React.FC = () => {
       agents: 'Agent管理',
       models: '模型管理',
       'text-lab': '文本实验室',
+      'image-lab': '图片实验室',
       settings: t('menu.settings'),
       chapters: '章节管理',
       studio: '分镜工作室',
@@ -132,6 +134,11 @@ const MainLayout: React.FC = () => {
       key: 'text-lab',
       icon: <MessageOutlined />,
       label: <Link to="/text-lab">文本实验室</Link>,
+    },
+    {
+      key: 'image-lab',
+      icon: <PictureOutlined />,
+      label: <Link to="/image-lab">图片实验室</Link>,
     },
     {
       key: 'settings',
