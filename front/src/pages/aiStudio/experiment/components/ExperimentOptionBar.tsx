@@ -66,7 +66,10 @@ export function ExperimentOptionBar({
               placeholder="自由输入或选择提示词模板"
               value={templateId}
               onChange={onTemplateChange}
-              options={templates.map((template) => ({ value: template.id, label: `${template.name} · v${template.version}` }))}
+              options={templates.map((template) => ({
+                value: template.id,
+                label: `${template.category ?? '提示词模板'} · ${template.name} · v${template.version}`,
+              }))}
             />
             {selectedTemplate ? (
               <div className="mt-2 text-xs text-gray-500">

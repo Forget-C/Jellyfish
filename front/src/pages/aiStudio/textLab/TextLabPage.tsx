@@ -22,6 +22,23 @@ import { WorkspaceLayout } from '../../../components'
 
 type LocalMessage = TextLabMessage & { id: string }
 
+/** 文本实验室可使用的模板类别，均用于向文本模型生成或整理文案。 */
+const textPromptCategories = [
+  'frame_head_prompt',
+  'frame_tail_prompt',
+  'frame_key_prompt',
+  'video_prompt',
+  'storyboard_prompt',
+] as const
+
+const textPromptCategoryLabels: Record<string, string> = {
+  frame_head_prompt: '首帧图片提示词',
+  frame_tail_prompt: '尾帧图片提示词',
+  frame_key_prompt: '关键帧图片提示词',
+  video_prompt: '视频提示词',
+  storyboard_prompt: '分镜提示词',
+}
+
 /** Builds a stable local identifier for a browser-only laboratory message. */
 function createMessageId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -57,13 +74,19 @@ export default function TextLabPage() {
     const loadOptions = async () => {
       setLoading(true)
       try {
-        const [modelsResponse, templatesResponse] = await Promise.all([
+        const [modelsResponse, ...templateResponses] = await Promise.all([
           LlmService.listModelsApiV1LlmModelsGet({ category: 'text', page: 1, pageSize: 100, order: 'updated_at', isDesc: true }),
-          StudioPromptsService.listPromptTemplatesApiV1StudioPromptsGet({ page: 1, pageSize: 100, order: 'updated_at', isDesc: true }),
+          ...textPromptCategories.map((category) => StudioPromptsService.listPromptTemplatesApiV1StudioPromptsGet({
+            category,
+            page: 1,
+            pageSize: 100,
+            order: 'updated_at',
+            isDesc: true,
+          })),
         ])
         const textModels = modelsResponse.data?.items ?? []
         setModels(textModels)
-        setTemplates(templatesResponse.data?.items ?? [])
+        setTemplates(templateResponses.flatMap((response) => response.data?.items ?? []))
         if (textModels.length === 1) setModelId(textModels[0].id)
       } catch {
         message.error('加载文本实验室配置失败')
@@ -147,7 +170,13 @@ export default function TextLabPage() {
           options={
             <ExperimentOptionBar
               models={models.map((model) => ({ id: model.id, name: model.name }))}
-              templates={templates.map((template) => ({ id: template.id, name: template.name, version: template.version, preview: template.preview, category: template.category }))}
+              templates={templates.map((template) => ({
+                id: template.id,
+                name: template.name,
+                version: template.version,
+                preview: template.preview,
+                category: textPromptCategoryLabels[template.category],
+              }))}
               modelId={modelId}
               templateId={templateId}
               loading={loading}

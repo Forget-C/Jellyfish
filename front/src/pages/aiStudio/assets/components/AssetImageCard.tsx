@@ -19,7 +19,7 @@ type AssetImage = {
 export type AssetCardAsset = {
   id: string
   name: string
-  description?: string
+  description?: string | null
   tags?: string[]
   thumbnail?: string
   view_count?: number | null

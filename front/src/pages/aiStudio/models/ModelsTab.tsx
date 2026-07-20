@@ -54,6 +54,16 @@ import {
   SORT_OPTIONS,
 } from './constants'
 
+/** 模型编辑表单的字段约束，确保提交数据与后端导入契约一致。 */
+interface ModelFormValues {
+  provider_id: string
+  category: ModelCategoryKey
+  name?: string
+  names?: string[]
+  description?: string
+  params?: string
+}
+
 export default function ModelsTab() {
   const [providers, setProviders] = useState<ProviderRead[]>([])
   const [supportedProviders, setSupportedProviders] = useState<ProviderSupportedRead[]>([])
@@ -76,7 +86,7 @@ export default function ModelsTab() {
   const [formCatalog, setFormCatalog] = useState<ProviderModelCatalogRead | null>(null)
   const [formCatalogLoading, setFormCatalogLoading] = useState(false)
   const [importingModels, setImportingModels] = useState(false)
-  const [form] = Form.useForm()
+  const [form] = Form.useForm<ModelFormValues>()
   const selectedFormCategory = Form.useWatch<ModelCategoryKey | undefined>('category', form)
   const selectedFormProviderId = Form.useWatch<string | undefined>('provider_id', form)
   const { lg } = Grid.useBreakpoint()
@@ -196,7 +206,7 @@ export default function ModelsTab() {
   const supportedFormCategories = useMemo(() => {
     const spec = selectedFormProvider ? resolveProviderSpec(selectedFormProvider.name) : null
     if (!spec) return []
-    return spec.supported_categories
+    return spec.supported_categories ?? []
   }, [selectedFormProvider, supportedProviders])
   const categorySelectOptions = useMemo(
     () => MODEL_CATEGORIES
@@ -207,7 +217,7 @@ export default function ModelsTab() {
   const unsupportedProviderWarning = useMemo(() => {
     if (!selectedFormProvider || !selectedFormCategory) return null
     const spec = resolveProviderSpec(selectedFormProvider.name)
-    if (!spec || spec.supported_categories.includes(selectedFormCategory)) return null
+    if (!spec || (spec.supported_categories ?? []).includes(selectedFormCategory)) return null
     const categoryLabel = categoryLabelMap[selectedFormCategory]
     return `供应商「${selectedFormProvider.name}」不支持「${categoryLabel}」类别，请调整供应商或类别。`
   }, [selectedFormCategory, selectedFormProvider, supportedProviders])
@@ -229,10 +239,14 @@ export default function ModelsTab() {
         return
       }
       if (modelEditing) {
+        if (!values.name?.trim()) {
+          message.error('请输入模型名称')
+          return
+        }
         await LlmService.updateModelApiV1LlmModelsModelIdPatch({
           modelId: modelEditing.id,
           requestBody: {
-            name: values.name,
+            name: values.name.trim(),
             category: values.category,
             provider_id: values.provider_id,
             description: values.description ?? null,
@@ -241,7 +255,7 @@ export default function ModelsTab() {
         })
         message.success('模型已更新')
       } else {
-        const modelNames = [...new Set((values.names ?? []).map((name: string) => name.trim()).filter(Boolean))]
+        const modelNames = [...new Set((values.names ?? []).map((name) => name.trim()).filter(Boolean))]
         if (!modelNames.length) {
           message.warning('请至少选择或填写一个模型名称')
           return
@@ -775,7 +789,10 @@ export default function ModelsTab() {
                     label: `${model.name} · ${getProviderName(model.provider_id)}`,
                     value: model.id,
                   }))}
-                  onChange={(modelId) => void updateDefaultModel(category.key, modelId)}
+                  onChange={(modelId) => void updateDefaultModel(
+                    category.key,
+                    typeof modelId === 'string' ? modelId : undefined,
+                  )}
                 />
               </div>
             )
