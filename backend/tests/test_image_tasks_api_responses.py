@@ -303,12 +303,27 @@ def test_run_image_generation_task_persists_render_context(monkeypatch) -> None:
         async def set_result(self, _task_id, payload):
             calls["result_payload"] = payload
 
+        async def set_error(self, *_args, **_kwargs):
+            return None
+
+    class _FakeExecuteResult:
+        """模拟实验室任务气泡查询未命中的最小 SQLAlchemy 结果。"""
+
+        def scalars(self):
+            return self
+
+        def first(self):
+            return None
+
     class _FakeSession:
         async def commit(self):
             return None
 
         async def rollback(self):
             return None
+
+        async def execute(self, *_args, **_kwargs):
+            return _FakeExecuteResult()
 
     class _FakeSessionContext:
         async def __aenter__(self):

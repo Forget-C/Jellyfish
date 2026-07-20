@@ -5,6 +5,7 @@
  * 并以对话任务气泡展示独立视频生成的过程和结果。
  */
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Button, Dropdown, Empty, Modal, Select, Spin, Tag, Upload, message } from 'antd'
 import { ClearOutlined, CloseOutlined, FolderOpenOutlined, PictureOutlined, UploadOutlined } from '@ant-design/icons'
 import type { UploadFile } from 'antd'
@@ -14,9 +15,12 @@ import {
   StudioFilesService,
   StudioPromptsService,
   StudioVideoLabService,
+  StudioExperimentSessionsService,
   type FileRead,
   type ModelRead,
   type PromptTemplateRead,
+  type ExperimentMessageRead,
+  type ExperimentSessionRead,
 } from '../../../services/generated'
 import { buildFileDownloadUrl } from '../assets/utils'
 import { ExperimentComposer } from '../experiment/components/ExperimentComposer'
@@ -24,6 +28,8 @@ import { ExperimentEmptyState } from '../experiment/components/ExperimentEmptySt
 import { ExperimentLabLayout } from '../experiment/components/ExperimentLabLayout'
 import { ExperimentOptionBar } from '../experiment/components/ExperimentOptionBar'
 import { ExperimentPromptEditor } from '../experiment/components/ExperimentPromptEditor'
+import { ExperimentSessionControls } from '../experiment/components/ExperimentSessionControls'
+import { ExperimentHistoryReferences } from '../experiment/components/ExperimentHistoryReferences'
 import { createPromptTemplateValues, renderPromptTemplate } from '../experiment/components/PromptTemplateForm'
 
 type FrameSlot = 'first' | 'last' | 'key'
@@ -38,21 +44,40 @@ type VideoLabMessage = {
   progress?: number
   videoUrl?: string
   error?: string
+  ratio?: string
+  frameFileIds?: Partial<Record<FrameSlot, string>>
 }
 
 const frameLabels: Record<FrameSlot, string> = { first: '首帧', last: '尾帧', key: '关键帧' }
 const ratioOptions: VideoRatio[] = ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']
-
-/** 为仅在浏览器中保存的视频实验室消息生成稳定标识。 */
-function createMessageId(): string {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-}
 
 /** 从视频任务结果中优先读取资料库文件地址，再回退到供应商返回地址。 */
 function extractVideoUrl(result: Record<string, unknown> | null | undefined): string | undefined {
   if (!result) return undefined
   if (typeof result.file_id === 'string' && result.file_id) return buildFileDownloadUrl(result.file_id)
   return typeof result.url === 'string' && result.url ? result.url : undefined
+}
+
+/** 将服务端持久化消息转换为视频实验室所需的展示快照。 */
+function toVideoLabMessage(item: ExperimentMessageRead): VideoLabMessage {
+  const payload = item.payload ?? {}
+  const frameFileIds: Partial<Record<FrameSlot, string>> = {}
+  ;(['first', 'last', 'key'] as FrameSlot[]).forEach((slot) => {
+    const value = payload[`${slot}_frame_file_id`]
+    if (typeof value === 'string') frameFileIds[slot] = value
+  })
+  return {
+    id: item.id,
+    role: item.role === 'user' ? 'user' : 'assistant',
+    content: item.content ?? '',
+    taskId: item.task_id ?? undefined,
+    status: item.status ?? undefined,
+    progress: typeof payload.progress === 'number' ? payload.progress : undefined,
+    videoUrl: extractVideoUrl(payload.result as Record<string, unknown> | undefined),
+    error: typeof payload.error === 'string' ? payload.error : undefined,
+    ratio: typeof payload.ratio === 'string' ? payload.ratio : undefined,
+    frameFileIds,
+  }
 }
 
 type FrameReferenceControlProps = {
@@ -95,6 +120,7 @@ function FrameReferenceControl({ slot, file, disabled, uploading, onUpload, onOp
 }
 
 export default function VideoLabPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [models, setModels] = useState<ModelRead[]>([])
   const [templates, setTemplates] = useState<PromptTemplateRead[]>([])
   const [files, setFiles] = useState<FileRead[]>([])
@@ -105,6 +131,10 @@ export default function VideoLabPage() {
   const [ratio, setRatio] = useState<VideoRatio>('16:9')
   const [frameFileIds, setFrameFileIds] = useState<Partial<Record<FrameSlot, string>>>({})
   const [messages, setMessages] = useState<VideoLabMessage[]>([])
+  const [sessions, setSessions] = useState<ExperimentSessionRead[]>([])
+  const [sessionId, setSessionId] = useState<string>()
+  const [historyPage, setHistoryPage] = useState(1)
+  const [hasMoreHistory, setHasMoreHistory] = useState(false)
   const [loading, setLoading] = useState(true)
   const [uploadingSlot, setUploadingSlot] = useState<FrameSlot | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -142,6 +172,52 @@ export default function VideoLabPage() {
     }
     void loadOptions()
   }, [])
+
+  useEffect(() => {
+    /** 加载最近视频实验会话；首次进入时创建独立空会话。 */
+    const loadSessions = async () => {
+      try {
+        const response = await StudioExperimentSessionsService.listExperimentSessionsApiV1StudioExperimentSessionsGet({ labType: 'video' })
+        const items = response.data ?? []
+        const current = items.find((item) => item.id === searchParams.get('session')) ?? items[0] ?? (await StudioExperimentSessionsService.createExperimentSessionApiV1StudioExperimentSessionsPost({ requestBody: { lab_type: 'video', title: '新视频会话' } })).data
+        if (!current) throw new Error('创建视频会话失败')
+        setSessions(current.id === items[0]?.id ? items : [current, ...items])
+        setSessionId(current.id)
+      } catch { message.error('加载视频会话失败') }
+    }
+    void loadSessions()
+  }, [])
+
+  useEffect(() => {
+    if (!sessionId || searchParams.get('session') === sessionId) return
+    setSearchParams({ session: sessionId }, { replace: true })
+  }, [searchParams, sessionId, setSearchParams])
+
+  useEffect(() => {
+    if (!sessionId) return
+    const loadMessages = async () => {
+      try {
+        const response = await StudioExperimentSessionsService.listExperimentMessagesApiV1StudioExperimentSessionsSessionIdMessagesGet({ sessionId, page: 1, pageSize: 50 })
+        setMessages((response.data ?? []).map(toVideoLabMessage))
+        setHistoryPage(1)
+        setHasMoreHistory((response.data?.length ?? 0) === 50)
+      } catch { message.error('加载视频历史失败') }
+    }
+    void loadMessages()
+  }, [sessionId])
+
+  /** 读取当前视频会话更早的一页历史。 */
+  const loadMoreHistory = async () => {
+    if (!sessionId || !hasMoreHistory) return
+    const nextPage = historyPage + 1
+    try {
+      const response = await StudioExperimentSessionsService.listExperimentMessagesApiV1StudioExperimentSessionsSessionIdMessagesGet({ sessionId, page: nextPage, pageSize: 50 })
+      const older = (response.data ?? []).map(toVideoLabMessage)
+      setMessages((current) => [...older, ...current])
+      setHistoryPage(nextPage)
+      setHasMoreHistory((response.data?.length ?? 0) === 50)
+    } catch { message.error('加载更早历史失败') }
+  }
 
   useEffect(() => {
     if (!runningTask?.taskId) return
@@ -212,14 +288,13 @@ export default function VideoLabPage() {
   const handleSubmit = async () => {
     if (!modelId) return message.warning('请选择视频模型')
     if (!currentPrompt) return message.warning(selectedTemplate ? '请填写模板变量，生成有效提示词' : '请输入视频提示词')
-    const userMessage: VideoLabMessage = { id: createMessageId(), role: 'user', content: currentPrompt }
-    setMessages((current) => [...current, userMessage])
+    if (!sessionId) return message.warning('会话尚未准备完成')
     if (!selectedTemplate) setDraft('')
     setSubmitting(true)
     try {
       const response = await StudioVideoLabService.createVideoLabTaskApiV1StudioVideoLabTasksPost({
         requestBody: {
-          model_id: modelId,
+          session_id: sessionId, model_id: modelId,
           prompt: currentPrompt,
           ratio,
           first_frame_file_id: frameFileIds.first,
@@ -229,22 +304,56 @@ export default function VideoLabPage() {
       })
       const taskId = response.data?.task_id
       if (!taskId) throw new Error('创建视频任务失败')
-      setMessages((current) => [...current, { id: createMessageId(), role: 'assistant', content: '视频生成任务已提交，正在等待生成结果。', taskId, status: 'pending', progress: 0 }])
+      const history = await StudioExperimentSessionsService.listExperimentMessagesApiV1StudioExperimentSessionsSessionIdMessagesGet({ sessionId, page: 1, pageSize: 50 })
+      setMessages((history.data ?? []).map(toVideoLabMessage))
+      setHistoryPage(1)
+      setHasMoreHistory((history.data?.length ?? 0) === 50)
       message.success('视频生成任务已创建')
     } catch {
-      setMessages((current) => current.map((item) => item.id === userMessage.id ? { ...item, content: `${item.content}\n\n（任务提交失败）` } : item))
       message.error('创建视频生成任务失败，请检查模型、关键帧和服务配置')
     } finally {
       setSubmitting(false)
     }
   }
 
+  /** 创建并切换到空视频会话，保留旧会话任务的后台执行。 */
+  const handleCreateSession = async () => {
+    try {
+      const response = await StudioExperimentSessionsService.createExperimentSessionApiV1StudioExperimentSessionsPost({ requestBody: { lab_type: 'video', title: '新视频会话' } })
+      const session = response.data
+      if (!session) throw new Error('未返回会话')
+      setSessions((current) => [session, ...current])
+      setSessionId(session.id)
+      setMessages([])
+      setFrameFileIds({})
+    } catch { message.error('新建会话失败') }
+  }
+
+  /** 更新当前视频会话标题并同步列表。 */
+  const handleRenameSession = async (title: string) => {
+    if (!sessionId) return
+    const response = await StudioExperimentSessionsService.updateExperimentSessionApiV1StudioExperimentSessionsSessionIdPatch({ sessionId, requestBody: { title } })
+    const updated = response.data
+    if (updated) setSessions((current) => current.map((item) => item.id === updated.id ? updated : item))
+  }
+
+  /** 删除当前视频会话后切换到最近剩余会话或创建空会话。 */
+  const handleDeleteSession = async () => {
+    if (!sessionId) return
+    await StudioExperimentSessionsService.deleteExperimentSessionApiV1StudioExperimentSessionsSessionIdDelete({ sessionId })
+    const remaining = sessions.filter((item) => item.id !== sessionId)
+    setSessions(remaining)
+    if (remaining[0]) setSessionId(remaining[0].id)
+    else await handleCreateSession()
+  }
+
   return (
     <ExperimentLabLayout
       title="视频实验室"
-      extra={<Button icon={<ClearOutlined />} disabled={!messages.length || controlsDisabled} onClick={() => setMessages([])}>清空历史</Button>}
+      extra={<div className="flex items-center gap-2"><ExperimentSessionControls value={sessionId} sessions={sessions} disabled={controlsDisabled} onChange={setSessionId} onCreate={() => void handleCreateSession()} onRename={handleRenameSession} onDelete={handleDeleteSession} /><Button icon={<ClearOutlined />} disabled={!messages.length || controlsDisabled} onClick={() => { if (sessionId) void StudioExperimentSessionsService.clearExperimentMessagesApiV1StudioExperimentSessionsSessionIdMessagesDelete({ sessionId }).then(() => setMessages([])).catch(() => message.error('清空历史失败；含生成任务的会话不可清空')) }}>清空历史</Button></div>}
       history={<>
         {loading ? <div className="h-72 flex items-center justify-center"><Spin /></div> : null}
+        {hasMoreHistory ? <Button size="small" onClick={() => void loadMoreHistory()}>加载更早消息</Button> : null}
         {!loading && messages.length === 0 ? <ExperimentEmptyState description="选择视频模型并输入提示词，可按需添加首帧、尾帧或关键帧" /> : null}
         {messages.map((item) => {
           const isUser = item.role === 'user'
@@ -254,6 +363,10 @@ export default function VideoLabPage() {
             <Tag color={isUser ? 'blue' : item.status === 'failed' ? 'red' : 'green'}>{isUser ? '你' : '视频生成'}</Tag>
             <div className={`mt-1 rounded-lg px-3 py-2 ${isUser ? 'whitespace-pre-wrap bg-blue-50' : 'bg-gray-50'}`}>
               <div className="whitespace-pre-wrap">{item.content}</div>
+              {isUser ? <>
+                <ExperimentHistoryReferences files={files} references={(['first', 'last', 'key'] as FrameSlot[]).flatMap((slot) => item.frameFileIds?.[slot] ? [{ id: item.frameFileIds[slot]!, label: frameLabels[slot] }] : [])} />
+                {item.ratio ? <div className="mt-2 text-xs text-slate-500">画幅：{item.ratio}</div> : null}
+              </> : null}
               {item.taskId ? <div className="mt-2 flex items-center gap-2 text-sm text-slate-600">{isRunning ? <Spin size="small" /> : null}<span>任务状态：{statusText}{typeof item.progress === 'number' ? `（${item.progress}%）` : ''}</span></div> : null}
               {item.error ? <div className="mt-2 text-sm text-red-600">{item.error}</div> : null}
               {item.videoUrl ? <button type="button" className="group relative mt-3 block h-36 w-64 max-w-full overflow-hidden rounded-lg border border-slate-200 bg-slate-900 text-left" onClick={() => { if (item.videoUrl) setPreviewVideoUrl(item.videoUrl) }} aria-label="打开视频预览">

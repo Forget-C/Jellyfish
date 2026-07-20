@@ -21,6 +21,7 @@ from app.models.studio import (
     ShotFrameImage,
 )
 from app.models.task_links import GenerationTaskLink
+from app.models.experiment_sessions import ExperimentMessage
 from app.models.types import FileUsageKind
 from app.services.studio.file_usages import (
     first_project_id_for_actor,
@@ -61,19 +62,20 @@ async def _persist_images_to_assets(
     relation_type: str,
     relation_entity_id: str,
     result: ImageGenerationResult,
-) -> None:
-    """将图片生成结果落库到 FileItem，并在有业务归属时回写对应图片表。"""
+) -> str | None:
+    """将首张图片结果落库并返回 file_id，供实验会话恢复稳定预览。"""
     images = result.images or []
     if not images:
-        return
+        return None
 
     item = images[0]
-    if not item.url:
-        return
+    if not item.url and not item.b64_json:
+        return None
 
     file_obj = await create_file_from_url_or_b64(
         session,
         url=item.url,
+        b64_data=item.b64_json,
         name=f"{relation_type}-{relation_entity_id}",
         prefix=f"generated-images/{relation_type}/{relation_entity_id}",
     )
@@ -221,6 +223,7 @@ async def _persist_images_to_assets(
                     usage_kind=FileUsageKind.shot_frame,
                     source_ref=f"shot_frame_image:{image_row.id}",
                 )
+    return file_id
 
 
 async def _resolve_related_shot_id(
@@ -250,6 +253,8 @@ async def create_image_task_and_link(
     resolution_profile: str | None = None,
     purpose: str = "generic",
     render_context: dict | None = None,
+    commit: bool = True,
+    enqueue: bool = True,
 ) -> str:
     """创建图片生成任务，并建立任务关联。"""
     store = SqlAlchemyTaskStore(db)
@@ -299,11 +304,12 @@ async def create_image_task_and_link(
     )
     if related_shot_id:
         await mark_shot_generating(db, shot_id=related_shot_id)
-    await db.commit()
+    if commit:
+        await db.commit()
+    if enqueue:
+        from app.tasks.execute_task import enqueue_task_execution
 
-    from app.tasks.execute_task import enqueue_task_execution
-
-    enqueue_task_execution(task_record.id)
+        enqueue_task_execution(task_record.id)
     return task_record.id
 
 
@@ -354,19 +360,26 @@ async def run_image_generation_task(
             render_context = run_args.get("render_context")
             if isinstance(render_context, dict):
                 result_payload["render_context"] = render_context
-            await store.set_result(task_id, result_payload)
-            await _persist_images_to_assets(
+            generated_file_id = await _persist_images_to_assets(
                 session,
                 task_id=task_id,
                 relation_type=relation_type,
                 relation_entity_id=relation_entity_id,
                 result=result,
             )
+            if generated_file_id:
+                result_payload["file_id"] = generated_file_id
+            # 归档完成后再写任务结果，保证轮询接口和会话气泡共享同一 file_id 快照。
+            await store.set_result(task_id, result_payload)
             if await cancel_if_requested_async(store=store, task_id=task_id, session=session):
                 log_task_event("image_generation", task_id, "cancelled", stage="after_persist")
                 return
             await store.set_progress(task_id, 100)
             await store.set_status(task_id, TaskStatus.succeeded)
+            message_row = (await session.execute(select(ExperimentMessage).where(ExperimentMessage.task_id == task_id))).scalars().first()
+            if message_row is not None:
+                message_row.status = "succeeded"
+                message_row.payload = {**message_row.payload, "result": result_payload}
             related_shot_id = await _resolve_related_shot_id(
                 session,
                 relation_type=relation_type,
@@ -382,6 +395,10 @@ async def run_image_generation_task(
                 store = SqlAlchemyTaskStore(s2)
                 await store.set_error(task_id, str(exc))
                 await store.set_status(task_id, TaskStatus.failed)
+                message_row = (await s2.execute(select(ExperimentMessage).where(ExperimentMessage.task_id == task_id))).scalars().first()
+                if message_row is not None:
+                    message_row.status = "failed"
+                    message_row.payload = {**message_row.payload, "error": str(exc)}
                 related_shot_id = await _resolve_related_shot_id(
                     s2,
                     relation_type=relation_type,

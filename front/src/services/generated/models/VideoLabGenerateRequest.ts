@@ -11,6 +11,10 @@ export type VideoLabGenerateRequest = {
      */
     model_id: string;
     /**
+     * 所属实验会话 ID
+     */
+    session_id: string;
+    /**
      * 最终提交给视频模型的提示词
      */
     prompt: string;

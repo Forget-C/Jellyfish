@@ -16,6 +16,7 @@ from app.core.contracts.video_generation import VideoGenerationInput, VideoGener
 from app.core.tasks import VideoGenerationTask
 from app.models.llm import Model, ModelCategoryKey, ModelSettings
 from app.models.task_links import GenerationTaskLink
+from app.models.experiment_sessions import ExperimentMessage
 from app.models.studio import FileItem, Shot, ShotDetail, ShotFrameType
 from app.models.types import FileUsageKind
 from app.services.common import entity_not_found
@@ -403,6 +404,10 @@ async def run_video_generation_task(
                 return
             await store.set_progress(task_id, 100)
             await store.set_status(task_id, TaskStatus.succeeded)
+            message_row = (await session.execute(select(ExperimentMessage).where(ExperimentMessage.task_id == task_id))).scalars().first()
+            if message_row is not None:
+                message_row.status = "succeeded"
+                message_row.payload = {**message_row.payload, "result": result_payload, "progress": 100}
             if shot_id:
                 await recompute_shot_status(session, shot_id=shot_id)
             await session.commit()
@@ -413,6 +418,10 @@ async def run_video_generation_task(
                 store = SqlAlchemyTaskStore(s2)
                 await store.set_error(task_id, str(exc))
                 await store.set_status(task_id, TaskStatus.failed)
+                message_row = (await s2.execute(select(ExperimentMessage).where(ExperimentMessage.task_id == task_id))).scalars().first()
+                if message_row is not None:
+                    message_row.status = "failed"
+                    message_row.payload = {**message_row.payload, "error": str(exc)}
                 shot_id = str(run_args.get("shot_id") or "")
                 if shot_id:
                     await recompute_shot_status(s2, shot_id=shot_id)

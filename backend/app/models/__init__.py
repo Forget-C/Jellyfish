@@ -6,6 +6,7 @@ from app.models.base import TimestampMixin
 from app.models.llm import Model, ModelSettings, Provider
 from app.models.task import GenerationTask
 from app.models.task_links import GenerationTaskLink
+from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
 from app.models.types import FileUsageKind
 
 from app.models.studio import (
@@ -36,6 +37,8 @@ from app.models.studio import (
     ProjectPropLink,
     ProjectSceneLink,
     TimelineClip,
+    ExperimentSession,
+    ExperimentMessage,
 )
 
 __all__ = [
@@ -74,4 +77,6 @@ __all__ = [
     "ModelSettings",
     "GenerationTask",
     "GenerationTaskLink",
+    "ExperimentSession",
+    "ExperimentMessage",
 ]

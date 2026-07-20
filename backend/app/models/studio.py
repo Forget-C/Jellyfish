@@ -17,6 +17,7 @@ from app.models.studio_asset_images import (
 )
 from app.models.studio_prompts_files_timeline import FileItem, PromptTemplate, TimelineClip
 from app.models.studio_file_usages import FileUsage
+from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
 from app.models.studio_projects import (
     Chapter,
     Project,
@@ -106,4 +107,6 @@ __all__ = [
     "FileItem",
     "FileUsage",
     "TimelineClip",
+    "ExperimentSession",
+    "ExperimentMessage",
 ]

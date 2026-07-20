@@ -11,6 +11,7 @@ from app.core.task_manager import SqlAlchemyTaskStore
 from app.core.task_manager.types import TaskStatus
 from app.dependencies import get_db
 from app.models.task_links import GenerationTaskLink
+from app.models.experiment_sessions import ExperimentMessage
 from app.schemas.common import ApiResponse, PaginatedData, created_response, empty_response, paginated_response, success_response
 from app.services.common import entity_not_found
 from app.tasks.execute_task import revoke_task_execution
@@ -201,6 +202,12 @@ async def cancel_task(
         if rec is None:
             raise HTTPException(status_code=404, detail=entity_not_found("Task"))
         effective_immediately = True
+    if rec.status == TaskStatus.cancelled:
+        message_row = (await db.execute(select(ExperimentMessage).where(ExperimentMessage.task_id == task_id))).scalars().first()
+        if message_row is not None:
+            message_row.status = "cancelled"
+            message_row.payload = {**message_row.payload, "error": body.reason or "任务已取消"}
+            await db.commit()
     return success_response(
         TaskCancelRead(
             task_id=rec.id,

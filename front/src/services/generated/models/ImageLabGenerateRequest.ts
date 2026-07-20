@@ -11,6 +11,10 @@ export type ImageLabGenerateRequest = {
      */
     model_id: string;
     /**
+     * 所属实验会话 ID
+     */
+    session_id: string;
+    /**
      * 最终提交给图片模型的提示词
      */
     prompt: string;

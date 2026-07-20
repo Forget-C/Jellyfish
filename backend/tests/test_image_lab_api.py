@@ -12,6 +12,18 @@ from app.main import app
 class _DummyDB:
     """图片实验室路由测试所需的最小数据库替身。"""
 
+    def __init__(self) -> None:
+        self.experiment_session = type("ExperimentSessionStub", (), {"updated_at": None})()
+
+    async def get(self, *_args):
+        return self.experiment_session
+
+    def add_all(self, _items):
+        return None
+
+    async def commit(self):
+        return None
+
 
 async def _override_db():
     """为请求注入最小数据库替身，避免测试依赖真实数据库。"""
@@ -37,12 +49,14 @@ def test_create_image_lab_task_uses_selected_references(client: TestClient, monk
 
     monkeypatch.setattr(route, "resolve_reference_image_refs_by_file_ids", _fake_resolve_references)
     monkeypatch.setattr(route, "create_image_task_and_link", _fake_create_task)
+    monkeypatch.setattr("app.tasks.execute_task.enqueue_task_execution", lambda _task_id: None)
     app.dependency_overrides[get_db] = _override_db
     try:
         response = client.post(
             "/api/v1/studio/image-lab/tasks",
             json={
-                "model_id": "image-model-1",
+            "model_id": "image-model-1",
+                "session_id": "session-1",
                 "prompt": "一只水彩风格的鲸鱼",
                 "images": ["reference-1"],
                 "target_ratio": "1:1",

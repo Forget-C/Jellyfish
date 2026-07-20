@@ -28,9 +28,16 @@ class _DummyDB:
     def __init__(self) -> None:
         self.added: list[object] = []
         self.committed = False
+        self.experiment_session = type("ExperimentSessionStub", (), {"updated_at": None})()
 
     def add(self, value: object) -> None:
         self.added.append(value)
+
+    def add_all(self, values: list[object]) -> None:
+        self.added.extend(values)
+
+    async def get(self, *_args) -> object:
+        return self.experiment_session
 
     async def commit(self) -> None:
         self.committed = True
@@ -61,6 +68,7 @@ def test_create_video_lab_task_maps_typed_frames(client: TestClient, monkeypatch
             "/api/v1/studio/video-lab/tasks",
             json={
                 "model_id": "video-model-1",
+                "session_id": "session-1",
                 "prompt": "白发少女在雨夜回头",
                 "ratio": "16:9",
                 "first_frame_file_id": "first-file",

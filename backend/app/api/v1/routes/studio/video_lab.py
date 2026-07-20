@@ -5,12 +5,14 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.routes.film.common import TaskCreated, _CreateOnlyTask
 from app.core.task_manager import DeliveryMode, SqlAlchemyTaskStore, TaskManager
 from app.dependencies import get_db
 from app.models.task_links import GenerationTaskLink
+from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
 from app.schemas.common import ApiResponse, created_response
 from app.schemas.studio.video_lab import VideoLabGenerateRequest
 from app.services.film.generated_video import build_video_lab_run_args
@@ -33,6 +35,12 @@ async def create_video_lab_task(
     prompt = body.prompt.strip()
     if not prompt:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="prompt is required for video generation")
+    experiment_session = await db.get(ExperimentSession, body.session_id)
+    if experiment_session is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Experiment session not found")
+    user_message = ExperimentMessage(id=uuid.uuid4().hex, session_id=body.session_id, role="user", content=prompt, payload={"model_id": body.model_id, "ratio": body.ratio, "first_frame_file_id": body.first_frame_file_id, "last_frame_file_id": body.last_frame_file_id, "key_frame_file_id": body.key_frame_file_id})
+    task_message = ExperimentMessage(id=uuid.uuid4().hex, session_id=body.session_id, role="task", content="视频生成任务已提交，正在等待生成结果。", status="pending", payload={"model_id": body.model_id, "ratio": body.ratio, "first_frame_file_id": body.first_frame_file_id, "last_frame_file_id": body.last_frame_file_id, "key_frame_file_id": body.key_frame_file_id})
+    db.add_all([user_message, task_message])
 
     run_args = await build_video_lab_run_args(
         db,
@@ -56,9 +64,11 @@ async def create_video_lab_task(
             task_id=task_record.id,
             resource_type="video",
             relation_type="video_lab",
-            relation_entity_id=uuid.uuid4().hex,
+            relation_entity_id=task_message.id,
         )
     )
+    task_message.task_id = task_record.id
+    experiment_session.updated_at = func.now()
     await db.commit()
     enqueue_task_execution(task_record.id)
     return created_response(TaskCreated(task_id=task_record.id))

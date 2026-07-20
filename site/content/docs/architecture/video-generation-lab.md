@@ -21,9 +21,9 @@ description: 独立视频模型、提示词与关键帧的调试架构。
 
 ## 任务接口与执行
 
-请求使用 `POST /api/v1/studio/video-lab/tasks`，提交已登记的视频模型 ID、提示词、画幅比例和三个可选帧文件 ID。接口会验证模型类别为 `video`，将图片文件转换为 data URL，并创建通用的 `video_generation` 异步任务；任务关联类型为 `video_lab`，不会读取或回写任何 `Shot`。
+请求使用 `POST /api/v1/studio/video-lab/tasks`，提交 `session_id`、已登记的视频模型 ID、提示词、画幅比例和三个可选帧文件 ID。接口会验证模型类别为 `video`，将图片文件转换为 data URL，并在同一事务中创建用户消息、通用的 `video_generation` 异步任务和任务气泡；任务关联类型为 `video_lab`，不会读取或回写任何 `Shot`。
 
-任务结果通过 `GET /api/v1/film/tasks/{task_id}/result` 轮询。成功成片会下载并归档到全局资料库，任务结果同时返回 `file_id` 和供应商视频 URL；前端优先使用资料库下载地址播放。
+任务结果通过 `GET /api/v1/film/tasks/{task_id}/result` 轮询。Worker 将成功、失败和取消状态、进度与产物快照回写会话任务气泡。成功成片会下载并归档到全局资料库，任务结果同时返回 `file_id` 和供应商视频 URL；前端优先使用资料库下载地址播放，并可从历史恢复关键帧、画幅和视频预览。
 
 ## 与分镜视频生成的边界
 
