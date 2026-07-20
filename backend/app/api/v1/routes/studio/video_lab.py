@@ -1,0 +1,64 @@
+"""独立视频生成实验室接口。"""
+
+from __future__ import annotations
+
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.v1.routes.film.common import TaskCreated, _CreateOnlyTask
+from app.core.task_manager import DeliveryMode, SqlAlchemyTaskStore, TaskManager
+from app.dependencies import get_db
+from app.models.task_links import GenerationTaskLink
+from app.schemas.common import ApiResponse, created_response
+from app.schemas.studio.video_lab import VideoLabGenerateRequest
+from app.services.film.generated_video import build_video_lab_run_args
+from app.tasks.execute_task import enqueue_task_execution
+
+router = APIRouter()
+
+
+@router.post(
+    "/tasks",
+    response_model=ApiResponse[TaskCreated],
+    status_code=status.HTTP_201_CREATED,
+    summary="创建独立视频实验任务",
+)
+async def create_video_lab_task(
+    body: VideoLabGenerateRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[TaskCreated]:
+    """创建不绑定镜头的视频任务，并把生成结果归档到全局资料库。"""
+    prompt = body.prompt.strip()
+    if not prompt:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="prompt is required for video generation")
+
+    run_args = await build_video_lab_run_args(
+        db,
+        model_id=body.model_id,
+        prompt=prompt,
+        ratio=body.ratio,
+        first_frame_file_id=body.first_frame_file_id,
+        last_frame_file_id=body.last_frame_file_id,
+        key_frame_file_id=body.key_frame_file_id,
+    )
+    store = SqlAlchemyTaskStore(db)
+    task_manager = TaskManager(store=store, strategies={})
+    task_record = await task_manager.create(
+        task=_CreateOnlyTask(),
+        mode=DeliveryMode.async_polling,
+        task_kind="video_generation",
+        run_args=run_args,
+    )
+    db.add(
+        GenerationTaskLink(
+            task_id=task_record.id,
+            resource_type="video",
+            relation_type="video_lab",
+            relation_entity_id=uuid.uuid4().hex,
+        )
+    )
+    await db.commit()
+    enqueue_task_execution(task_record.id)
+    return created_response(TaskCreated(task_id=task_record.id))

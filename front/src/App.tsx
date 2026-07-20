@@ -20,6 +20,7 @@ import AgentEdit from './pages/aiStudio/agents/AgentEdit.tsx'
 import ModelManagement from './pages/aiStudio/models/ModelManagement'
 import TextLabPage from './pages/aiStudio/textLab/TextLabPage'
 import ImageLabPage from './pages/aiStudio/imageLab/ImageLabPage'
+import VideoLabPage from './pages/aiStudio/videoLab/VideoLabPage'
 import { ChapterShotsPage } from './pages/aiStudio/shots/ChapterShotsPage'
 import { ChapterShotEditPage } from './pages/aiStudio/shots/ChapterShotEditPage'
 import './App.css'
@@ -51,6 +52,7 @@ const App: React.FC = () => {
           <Route path="models" element={<ModelManagement />} />
           <Route path="text-lab" element={<TextLabPage />} />
           <Route path="image-lab" element={<ImageLabPage />} />
+          <Route path="video-lab" element={<VideoLabPage />} />
           <Route path="settings" element={<Settings />} />
           <Route path="*" element={<NotFound />} />
         </Route>

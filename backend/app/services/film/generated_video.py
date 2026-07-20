@@ -81,7 +81,7 @@ async def preview_prompt_and_images(
     prompt: str | None,
     images: list[str] | None = None,
 ) -> tuple[str, list[str], dict | None]:
-    shot_detail = await validate_shot_and_duration(db, shot_id)
+    await validate_shot_and_duration(db, shot_id)
     base = build_video_base_draft(shot_id=shot_id, prompt=prompt)
     context = await build_video_context(
         db,
@@ -115,6 +115,16 @@ async def resolve_default_video_model(db: AsyncSession) -> Model:
             status_code=503,
             detail=f"Configured default video model is not video category: {model_id} (category={model.category})",
         )
+    return model
+
+
+async def resolve_video_model_by_id(db: AsyncSession, *, model_id: str) -> Model:
+    """解析实验室主动选择的视频模型，并确保类别与供应商配置可用。"""
+    model = await db.get(Model, model_id)
+    if model is None:
+        raise HTTPException(status_code=404, detail=f"Video model not found: {model_id}")
+    if model.category != ModelCategoryKey.video:
+        raise HTTPException(status_code=400, detail=f"Configured model is not video category: {model_id}")
     return model
 
 
@@ -195,6 +205,43 @@ async def build_run_args(
     return run_args
 
 
+async def build_video_lab_run_args(
+    db: AsyncSession,
+    *,
+    model_id: str,
+    prompt: str,
+    ratio: str,
+    first_frame_file_id: str | None,
+    last_frame_file_id: str | None,
+    key_frame_file_id: str | None,
+) -> dict:
+    """为独立视频实验构建可异步执行的供应商输入，不读取或修改镜头数据。"""
+    model = await resolve_video_model_by_id(db, model_id=model_id)
+    provider_cfg = await load_provider_config_by_model(db, model)
+    resolved_ratio = await resolve_effective_video_options(requested_ratio=ratio)
+    frame_ids = {
+        "first_frame_base64": first_frame_file_id,
+        "last_frame_base64": last_frame_file_id,
+        "key_frame_base64": key_frame_file_id,
+    }
+    input_payload = {
+        "prompt": prompt.strip(),
+        "model": model.name,
+        "ratio": resolved_ratio,
+    }
+    for field_name, file_id in frame_ids.items():
+        if file_id:
+            input_payload[field_name] = await file_id_to_data_url(db, file_id=file_id)
+    VideoGenerationInput.model_validate(input_payload)
+    return {
+        "source": "video_lab",
+        "provider": provider_cfg.provider,
+        "api_key": provider_cfg.api_key,
+        "base_url": provider_cfg.base_url,
+        "input": input_payload,
+    }
+
+
 async def persist_generated_video_to_shot(
     session: AsyncSession,
     *,
@@ -250,6 +297,42 @@ async def persist_generated_video_to_shot(
     return file_obj
 
 
+async def persist_generated_video_to_library(
+    session: AsyncSession,
+    *,
+    task_id: str,
+    result: VideoGenerationResult,
+    provider: str,
+    api_key: str,
+) -> FileItem:
+    """将实验室视频写入全局资料库，并更新其任务关联记录。"""
+    url = (result.url or "").strip()
+    if not url:
+        raise RuntimeError("Video generation result has no download url")
+    url_headers = {"Authorization": f"Bearer {api_key}"} if provider == "openai" else None
+    file_obj = await create_file_from_url_or_b64(
+        session,
+        url=url,
+        name=f"video-lab-{task_id}",
+        prefix="generated-videos/video-lab",
+        url_request_headers=url_headers,
+        httpx_timeout=600.0,
+    )
+    link_stmt = (
+        select(GenerationTaskLink)
+        .where(
+            GenerationTaskLink.task_id == task_id,
+            GenerationTaskLink.resource_type == "video",
+            GenerationTaskLink.relation_type == "video_lab",
+        )
+        .limit(1)
+    )
+    link_row = (await session.execute(link_stmt)).scalars().first()
+    if link_row is not None:
+        link_row.file_id = file_obj.id
+    return file_obj
+
+
 async def run_video_generation_task(
     task_id: str,
     run_args: dict,
@@ -292,17 +375,25 @@ async def run_video_generation_task(
                 return
 
             shot_id = str(run_args.get("shot_id") or "")
-            if not shot_id:
-                raise RuntimeError("run_args missing shot_id for video persistence")
-
-            file_obj = await persist_generated_video_to_shot(
-                session,
-                task_id=task_id,
-                shot_id=shot_id,
-                result=result,
-                provider=provider,
-                api_key=api_key,
-            )
+            if shot_id:
+                file_obj = await persist_generated_video_to_shot(
+                    session,
+                    task_id=task_id,
+                    shot_id=shot_id,
+                    result=result,
+                    provider=provider,
+                    api_key=api_key,
+                )
+            elif run_args.get("source") == "video_lab":
+                file_obj = await persist_generated_video_to_library(
+                    session,
+                    task_id=task_id,
+                    result=result,
+                    provider=provider,
+                    api_key=api_key,
+                )
+            else:
+                raise RuntimeError("run_args missing video generation source")
 
             result_payload = result.model_dump()
             result_payload["file_id"] = file_obj.id
@@ -312,7 +403,8 @@ async def run_video_generation_task(
                 return
             await store.set_progress(task_id, 100)
             await store.set_status(task_id, TaskStatus.succeeded)
-            await recompute_shot_status(session, shot_id=shot_id)
+            if shot_id:
+                await recompute_shot_status(session, shot_id=shot_id)
             await session.commit()
             log_task_event("video_generation", task_id, "succeeded")
         except Exception as exc:  # noqa: BLE001

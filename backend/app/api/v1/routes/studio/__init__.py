@@ -11,6 +11,7 @@ from app.api.v1.routes.studio import (
     projects,
     prompts,
     text_lab,
+    video_lab,
     shots,
     timeline,
     shot_character_links,
@@ -31,6 +32,7 @@ router.include_router(entities.router, prefix="/entities", tags=["studio/entitie
 router.include_router(prompts.router, prefix="/prompts", tags=["studio/prompts"])
 router.include_router(text_lab.router, prefix="/text-lab", tags=["studio/text-lab"])
 router.include_router(image_lab.router, prefix="/image-lab", tags=["studio/image-lab"])
+router.include_router(video_lab.router, prefix="/video-lab", tags=["studio/video-lab"])
 router.include_router(files.router, prefix="/files", tags=["studio/files"])
 router.include_router(timeline.router, prefix="/timeline", tags=["studio/timeline"])
 router.include_router(image_tasks.router, prefix="/image-tasks", tags=["studio/image-tasks"])

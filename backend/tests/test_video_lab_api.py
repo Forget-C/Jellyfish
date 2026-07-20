@@ -1,0 +1,83 @@
+"""视频实验室接口测试。"""
+
+from __future__ import annotations
+
+from fastapi.testclient import TestClient
+
+from app.api.v1.routes.studio import video_lab as route
+from app.dependencies import get_db
+from app.main import app
+
+
+class _DummyTaskRecord:
+    """模拟任务管理器返回的异步任务记录。"""
+
+    id = "video-lab-task-1"
+
+
+class _DummyTaskManager:
+    """捕获任务创建调用，避免路由测试依赖真实任务存储。"""
+
+    async def create(self, **_kwargs) -> _DummyTaskRecord:
+        return _DummyTaskRecord()
+
+
+class _DummyDB:
+    """视频实验室路由测试所需的最小数据库替身。"""
+
+    def __init__(self) -> None:
+        self.added: list[object] = []
+        self.committed = False
+
+    def add(self, value: object) -> None:
+        self.added.append(value)
+
+    async def commit(self) -> None:
+        self.committed = True
+
+
+async def _override_db():
+    """为请求注入最小数据库替身，避免测试依赖真实数据库。"""
+    yield _DummyDB()
+
+
+def test_create_video_lab_task_maps_typed_frames(client: TestClient, monkeypatch) -> None:
+    """视频实验室应将具名首尾关键帧和已选模型交给独立任务构建器。"""
+    captured: dict = {}
+
+    async def _fake_build_run_args(_db, **kwargs):
+        captured.update(kwargs)
+        return {"source": "video_lab", "input": {"prompt": kwargs["prompt"]}}
+
+    def _fake_task_manager(*_args, **_kwargs):
+        return _DummyTaskManager()
+
+    monkeypatch.setattr(route, "build_video_lab_run_args", _fake_build_run_args)
+    monkeypatch.setattr(route, "TaskManager", _fake_task_manager)
+    monkeypatch.setattr(route, "enqueue_task_execution", lambda _task_id: None)
+    app.dependency_overrides[get_db] = _override_db
+    try:
+        response = client.post(
+            "/api/v1/studio/video-lab/tasks",
+            json={
+                "model_id": "video-model-1",
+                "prompt": "白发少女在雨夜回头",
+                "ratio": "16:9",
+                "first_frame_file_id": "first-file",
+                "last_frame_file_id": "last-file",
+                "key_frame_file_id": "key-file",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 201
+    assert response.json()["data"]["task_id"] == "video-lab-task-1"
+    assert captured == {
+        "model_id": "video-model-1",
+        "prompt": "白发少女在雨夜回头",
+        "ratio": "16:9",
+        "first_frame_file_id": "first-file",
+        "last_frame_file_id": "last-file",
+        "key_frame_file_id": "key-file",
+    }

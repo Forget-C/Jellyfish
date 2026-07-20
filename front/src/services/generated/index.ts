@@ -259,6 +259,7 @@ export type { VariantSuggestion } from './models/VariantSuggestion';
 export type { VFXType } from './models/VFXType';
 export type { VideoGenerationOptionsRead } from './models/VideoGenerationOptionsRead';
 export type { VideoGenerationTaskRequest } from './models/VideoGenerationTaskRequest';
+export type { VideoLabGenerateRequest } from './models/VideoLabGenerateRequest';
 export type { VideoPromptPreviewResponse } from './models/VideoPromptPreviewResponse';
 
 export { DefaultService } from './services/DefaultService';
@@ -280,3 +281,4 @@ export { StudioShotFrameImagesService } from './services/StudioShotFrameImagesSe
 export { StudioShotLinksService } from './services/StudioShotLinksService';
 export { StudioShotsService } from './services/StudioShotsService';
 export { StudioTextLabService } from './services/StudioTextLabService';
+export { StudioVideoLabService } from './services/StudioVideoLabService';
