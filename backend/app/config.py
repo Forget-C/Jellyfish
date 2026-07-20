@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -57,6 +58,8 @@ class Settings(BaseSettings):
     s3_access_key_id: str | None = None
     s3_secret_access_key: str | None = None
     s3_bucket_name: str | None = None
+    # auto：本地/回环 endpoint 使用 path，其余 endpoint 使用 virtual；可按供应商显式覆盖。
+    s3_addressing_style: Literal["auto", "path", "virtual"] = "auto"
     # 可选：统一前缀，方便按环境/项目隔离，如 "jellyfish/dev"
     s3_base_path: str = ""
     # 可选：对外访问基址（CDN 或自定义域名），为空则使用 S3 自带 URL 或预签名 URL

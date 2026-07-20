@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, BinaryIO
+from urllib.parse import urlparse
 
 from anyio import to_thread
 import boto3
@@ -31,6 +32,19 @@ class StoredFileInfo:
     extra: dict[str, Any] | None = None
 
 
+def _resolve_s3_addressing_style() -> str:
+    """为本地 MinIO 与云端 S3 端点选择兼容的 bucket 寻址方式。"""
+    configured = settings.s3_addressing_style
+    if configured != "auto":
+        return configured
+
+    endpoint = settings.s3_endpoint_url or ""
+    hostname = urlparse(endpoint).hostname
+    if hostname in {"localhost", "127.0.0.1", "::1"}:
+        return "path"
+    return "virtual"
+
+
 def _build_s3_client():
     if not settings.s3_bucket_name:
         raise RuntimeError("S3 未配置：请在配置中设置 s3_bucket_name 等必要字段")
@@ -41,7 +55,7 @@ def _build_s3_client():
         region_name=settings.s3_region_name,
         aws_access_key_id=settings.s3_access_key_id,
         aws_secret_access_key=settings.s3_secret_access_key,
-        config=BotoConfig(s3={"addressing_style": "virtual"}),
+        config=BotoConfig(s3={"addressing_style": _resolve_s3_addressing_style()}),
     )
     return client
 
@@ -123,7 +137,7 @@ async def upload_file(
     - key：逻辑 key（不需要带 base_path，会自动拼接）；
     - data：字节内容或类文件对象；
     - content_type：MIME 类型，例如 image/png；
-    - extra_args：透传给 boto3 的 ExtraArgs，如 {"ACL": "public-read"}。
+    - extra_args：透传给 boto3 的 ExtraArgs；默认不设置对象 ACL，以兼容禁用 ACL 的 S3 bucket。
     """
 
     client = _build_s3_client()
@@ -241,4 +255,3 @@ async def delete_file(*, key: str) -> None:
         client.delete_object(Bucket=bucket, Key=s3_key)
 
     await to_thread.run_sync(_delete)
-

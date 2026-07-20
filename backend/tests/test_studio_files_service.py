@@ -4,6 +4,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.db import Base
+from app.core.storage import StoredFileInfo
 from app.models.studio import (
     Chapter,
     FileItem,
@@ -14,8 +15,9 @@ from app.models.studio import (
     ProjectVisualStyle,
     Shot,
 )
-from app.schemas.studio.files import FileUpdate
+from app.services.studio import files as files_service
 from app.services.studio.files import get_file_detail, list_files_paginated, update_file_meta
+from app.schemas.studio.files import FileUpdate
 
 
 async def _build_session() -> tuple[AsyncSession, object]:
@@ -164,4 +166,32 @@ async def test_update_file_meta_updates_fields_and_upserts_usage() -> None:
         assert len(detail.usages) == 1
         assert detail.usages[0].usage_kind == FileUsageKind.asset_image
         assert detail.usages[0].source_ref == "slot-1"
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_upload_file_does_not_force_public_acl(monkeypatch) -> None:
+    """上传应兼容禁用对象 ACL 的 S3 bucket，访问控制由 bucket 策略或下载接口处理。"""
+    class _Upload:
+        filename = "reference.png"
+        content_type = "image/png"
+
+        async def read(self) -> bytes:
+            return b"png-content"
+
+    captured: dict[str, object] = {}
+
+    async def _fake_upload_file(**kwargs):
+        captured.update(kwargs)
+        return StoredFileInfo(key=str(kwargs["key"]), url="https://storage.example/files/reference.png")
+
+    monkeypatch.setattr(files_service.storage, "upload_file", _fake_upload_file)
+    db, engine = await _build_session()
+    async with db:
+        uploaded = await files_service.upload_file(db, file=_Upload())
+
+        assert uploaded.type == FileType.image
+        assert captured["key"] == "files/reference.png"
+        assert captured["content_type"] == "image/png"
+        assert "extra_args" not in captured
     await engine.dispose()

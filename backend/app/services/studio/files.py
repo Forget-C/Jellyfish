@@ -153,7 +153,6 @@ async def upload_file(
         key=key,
         data=content,
         content_type=file.content_type,
-        extra_args={"ACL": "public-read"},
     )
 
     file_item = await create_and_refresh(

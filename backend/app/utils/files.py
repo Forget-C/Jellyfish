@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """文件相关工具：从 URL 或 base64 内容创建 FileItem，并上传到对象存储。"""
+
+from __future__ import annotations
 
 import base64
 import os
@@ -114,7 +114,6 @@ async def create_file_from_url_or_b64(
         key=key,
         data=content,
         content_type=content_type,
-        extra_args={"ACL": "public-read"},
     )
 
     file_id = str(uuid.uuid4())
@@ -144,4 +143,3 @@ async def create_file_from_url_or_b64(
         )
 
     return file_obj
-

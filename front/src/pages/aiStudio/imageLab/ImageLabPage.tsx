@@ -5,7 +5,7 @@
  * 上传和资料库图片都会先转换为 FileItem，再以 file_id 提交给后端任务。
  */
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Empty, Modal, Spin, Tag, Upload, message } from 'antd'
+import { Button, Dropdown, Empty, Modal, Spin, Tag, Upload, message } from 'antd'
 import { ClearOutlined, CloseOutlined, FolderOpenOutlined, PictureOutlined, UploadOutlined } from '@ant-design/icons'
 import type { UploadFile } from 'antd'
 import {
@@ -50,6 +50,21 @@ const imagePromptCategoryLabels: Record<string, string> = {
   costume_image: '服装展示图',
 }
 
+type ImageLabMessage = {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  taskId?: string
+  status?: string
+  resultUrls?: string[]
+  error?: string
+}
+
+/** 为仅在浏览器中保存的图片实验室消息生成稳定标识。 */
+function createMessageId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
 /** 将图片任务结果转换为浏览器可直接预览的 URL。 */
 function extractImageUrls(result: Record<string, unknown> | null | undefined): string[] {
   const images = result && Array.isArray(result.images) ? result.images : []
@@ -74,9 +89,7 @@ export default function ImageLabPage() {
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [taskId, setTaskId] = useState<string | null>(null)
-  const [taskStatus, setTaskStatus] = useState<string | null>(null)
-  const [resultUrls, setResultUrls] = useState<string[]>([])
+  const [messages, setMessages] = useState<ImageLabMessage[]>([])
   const [libraryOpen, setLibraryOpen] = useState(false)
 
   const selectedTemplate = useMemo(
@@ -90,6 +103,7 @@ export default function ImageLabPage() {
   const currentPrompt = selectedTemplate
     ? renderPromptTemplate(selectedTemplate.content, templateValues).trim()
     : draft.trim()
+  const runningTask = messages.find((item) => item.taskId && !['succeeded', 'failed', 'cancelled'].includes(item.status ?? 'pending'))
 
   useEffect(() => {
     /** 加载图片实验可选择的模型、模板和资料库图片。 */
@@ -122,16 +136,22 @@ export default function ImageLabPage() {
   }, [])
 
   useEffect(() => {
-    if (!taskId || taskStatus === 'succeeded' || taskStatus === 'failed' || taskStatus === 'cancelled') return
+    if (!runningTask?.taskId) return
     let cancelled = false
+    const taskId = runningTask.taskId
+
+    /** 将轮询到的任务结果回写到对应的历史任务气泡。 */
     const poll = async () => {
       try {
         const response = await FilmService.getTaskResultApiV1FilmTasksTaskIdResultGet({ taskId })
         if (cancelled) return
         const task = response.data
-        setTaskStatus(task?.status ?? null)
-        if (task?.status === 'succeeded') setResultUrls(extractImageUrls(task.result))
-        if (task?.status === 'failed') message.error(task.error || '图片生成失败，请检查模型与供应商配置')
+        const status = task?.status ?? 'pending'
+        const error = task?.error ?? undefined
+        setMessages((current) => current.map((item) => item.taskId === taskId
+          ? { ...item, status, error, resultUrls: status === 'succeeded' ? extractImageUrls(task?.result) : item.resultUrls }
+          : item))
+        if (status === 'failed') message.error(error || '图片生成失败，请检查模型与供应商配置')
       } catch {
         if (!cancelled) message.error('获取图片生成任务状态失败')
       }
@@ -142,7 +162,7 @@ export default function ImageLabPage() {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [taskId, taskStatus])
+  }, [runningTask?.taskId])
 
   /** 选择模板时重置变量，并清空自由输入避免两种来源混用。 */
   const handleSelectTemplate = (nextTemplateId?: string) => {
@@ -188,57 +208,88 @@ export default function ImageLabPage() {
     if (!modelId) return message.warning('请选择图片模型')
     if (!currentPrompt) return message.warning(selectedTemplate ? '请填写模板变量，生成有效提示词' : '请输入图片提示词')
     setSubmitting(true)
-    setTaskId(null)
-    setTaskStatus('pending')
-    setResultUrls([])
+    const userMessage: ImageLabMessage = { id: createMessageId(), role: 'user', content: currentPrompt }
+    setMessages((current) => [...current, userMessage])
+    if (!selectedTemplate) setDraft('')
     try {
       const response = await StudioImageLabService.createImageLabTaskApiV1StudioImageLabTasksPost({
         requestBody: { model_id: modelId, prompt: currentPrompt, images: referenceFileIds },
       })
       const nextTaskId = response.data?.task_id
       if (!nextTaskId) throw new Error('创建图片任务失败')
-      setTaskId(nextTaskId)
+      setMessages((current) => [...current, {
+        id: createMessageId(),
+        role: 'assistant',
+        content: '图片生成任务已提交，正在等待生成结果。',
+        taskId: nextTaskId,
+        status: 'pending',
+      }])
       message.success('图片生成任务已创建')
     } catch {
-      setTaskStatus(null)
+      setMessages((current) => current.map((item) => item.id === userMessage.id
+        ? { ...item, content: `${item.content}\n\n（任务提交失败）` }
+        : item))
       message.error('创建图片生成任务失败，请检查模型、参考图和服务配置')
     } finally {
       setSubmitting(false)
     }
   }
 
-  /** 清除当前实验结果，使图片实验室与文本会话拥有相同的重置入口。 */
+  /** 清除图片生成对话与任务历史，使图片实验室与文本会话拥有相同的重置入口。 */
   const handleClearResults = () => {
-    setTaskId(null)
-    setTaskStatus(null)
-    setResultUrls([])
+    setMessages([])
   }
 
   return (
     <ExperimentLabLayout
       title="图片实验室"
-      extra={<Button icon={<ClearOutlined />} disabled={!resultUrls.length || submitting} onClick={handleClearResults}>清空结果</Button>}
+      extra={<Button icon={<ClearOutlined />} disabled={!messages.length || submitting || Boolean(runningTask)} onClick={handleClearResults}>清空历史</Button>}
       history={<>
         {loading ? <div className="h-72 flex items-center justify-center"><Spin /></div> : null}
-          {!loading && resultUrls.length === 0 ? <ExperimentEmptyState description="选择图片模型并输入提示词，开始一轮图片实验" /> : null}
-          {resultUrls.length > 0 ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {resultUrls.map((url, index) => <img key={`${url}-${index}`} src={url} alt={`生成结果 ${index + 1}`} className="w-full rounded-lg border border-gray-200 object-contain" />)}
+        {!loading && messages.length === 0 ? <ExperimentEmptyState description="选择图片模型并输入提示词，开始一轮图片实验" /> : null}
+        {messages.map((item) => {
+          const isUser = item.role === 'user'
+          const isRunning = Boolean(item.taskId && !['succeeded', 'failed', 'cancelled'].includes(item.status ?? 'pending'))
+          const statusText = item.status === 'succeeded' ? '已完成' : item.status === 'failed' ? '失败' : item.status === 'cancelled' ? '已取消' : '生成中'
+          return (
+            <div key={item.id} className={isUser ? 'ml-auto max-w-[85%]' : 'mr-auto max-w-[85%]'}>
+              <Tag color={isUser ? 'blue' : item.status === 'failed' ? 'red' : 'green'}>{isUser ? '你' : '图片生成'}</Tag>
+              <div className={`mt-1 rounded-lg px-3 py-2 ${isUser ? 'whitespace-pre-wrap bg-blue-50' : 'bg-gray-50'}`}>
+                <div className="whitespace-pre-wrap">{item.content}</div>
+                {item.taskId ? <div className="mt-2 flex items-center gap-2 text-sm text-slate-600">
+                  {isRunning ? <Spin size="small" /> : null}
+                  <span>任务状态：{statusText}</span>
+                </div> : null}
+                {item.error ? <div className="mt-2 text-sm text-red-600">{item.error}</div> : null}
+                {item.resultUrls?.length ? <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {item.resultUrls.map((url, index) => <img key={`${url}-${index}`} src={url} alt={`生成结果 ${index + 1}`} className="w-full rounded-lg border border-gray-200 object-contain" />)}
+                </div> : null}
+              </div>
             </div>
-          ) : null}
-          {taskStatus && taskStatus !== 'succeeded' ? <Tag color={taskStatus === 'failed' ? 'red' : 'blue'}>生成任务：{taskStatus === 'failed' ? '失败' : '进行中'}</Tag> : null}
+          )
+        })}
       </>}
       composer={<ExperimentComposer
-          submitting={submitting || Boolean(taskId && taskStatus && !['succeeded', 'failed', 'cancelled'].includes(taskStatus))}
-          submitDisabled={loading}
+          submitting={submitting || Boolean(runningTask)}
+          submitDisabled={loading || Boolean(runningTask)}
           submitLabel="生成图片"
           onSubmit={() => void handleSubmit()}
           contextActions={
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 border-l border-slate-200 pl-2">
-              <span className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600">
-                <PictureOutlined />
-                参考图
-              </span>
+              <Dropdown
+                trigger={['click']}
+                disabled={uploading || submitting || Boolean(runningTask)}
+                dropdownRender={() => (
+                  <div className="min-w-40 rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
+                    <Upload className="block w-full" accept="image/*" showUploadList={false} beforeUpload={handleUploadReference} disabled={uploading || submitting || Boolean(runningTask)}>
+                      <Button type="text" block icon={<UploadOutlined />} loading={uploading} className="!justify-start">上传图片</Button>
+                    </Upload>
+                    <Button type="text" block icon={<FolderOpenOutlined />} className="!justify-start" onClick={() => setLibraryOpen(true)}>从资料库选择</Button>
+                  </div>
+                )}
+              >
+                <Button size="small" icon={<PictureOutlined />} loading={uploading}>参考图</Button>
+              </Dropdown>
               {selectedReferences.map((file) => (
                 <div key={file.id} className="group relative h-9 w-9 overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm" title={file.name}>
                   <img src={buildFileDownloadUrl(file.id)} alt={file.name} className="h-full w-full object-cover" />
@@ -252,12 +303,7 @@ export default function ImageLabPage() {
                   </button>
                 </div>
               ))}
-              {!selectedReferences.length ? <span className="text-sm text-slate-400">添加图片</span> : null}
-              <Upload accept="image/*" showUploadList={false} beforeUpload={handleUploadReference} disabled={uploading || submitting}>
-                <Button size="small" icon={<UploadOutlined />} loading={uploading}>上传</Button>
-              </Upload>
-              <Button size="small" icon={<FolderOpenOutlined />} onClick={() => setLibraryOpen(true)} disabled={loading || submitting}>资料库</Button>
-              {referenceFileIds.length ? <Button size="small" type="text" onClick={() => setReferenceFileIds([])} disabled={submitting}>清空</Button> : null}
+              {referenceFileIds.length ? <Button size="small" type="text" onClick={() => setReferenceFileIds([])} disabled={submitting || Boolean(runningTask)}>清空</Button> : null}
             </div>
           }
           options={
@@ -273,7 +319,7 @@ export default function ImageLabPage() {
               modelId={modelId}
               templateId={templateId}
               loading={loading}
-              disabled={submitting}
+              disabled={submitting || Boolean(runningTask)}
               modelLabel="图片模型"
               modelPlaceholder="选择已登记的图片模型"
               onModelChange={setModelId}
@@ -287,7 +333,7 @@ export default function ImageLabPage() {
             draft={draft}
             placeholder="描述你想生成的图片…"
             minRows={5}
-            disabled={submitting || loading}
+            disabled={submitting || loading || Boolean(runningTask)}
             onDraftChange={setDraft}
             onTemplateValuesChange={setTemplateValues}
             onUseFreeInput={(renderedPrompt) => {
