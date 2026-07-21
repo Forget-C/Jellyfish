@@ -222,6 +222,7 @@ def test_list_supported_providers_returns_capability_matrix(client: TestClient) 
     assert "openai" in keys
     assert "volcengine" in keys
     assert "vidu" in keys
+    assert "kling" in keys
     assert "aliyun_bailian" in keys
 
 

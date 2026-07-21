@@ -9,12 +9,21 @@ from app.core.contracts.provider import ProviderConfig
 
 
 async def discover_provider_models(*, cfg: ProviderConfig) -> ProviderModelCatalog:
-    """按供应商协议获取可导入模型，Vidu 使用其未提供列表 API 时的官方目录。"""
+    """按供应商协议获取可导入模型。
+
+    无模型列表 API 的供应商使用内置官方目录。
+    """
     if cfg.provider == "vidu":
         return ProviderModelCatalog(
             provider_key="vidu",
             source="provider_catalog",
             models=_VIDU_MODELS,
+        )
+    if cfg.provider == "kling":
+        return ProviderModelCatalog(
+            provider_key="kling",
+            source="provider_catalog",
+            models=_KLING_MODELS,
         )
     return await _discover_openai_compatible_models(cfg=cfg)
 
@@ -76,4 +85,24 @@ _VIDU_MODELS = [
     ProviderModelCandidate(name="viduq1", category="video", description="稳定镜头视频"),
     ProviderModelCandidate(name="viduq1-classic", category="video", description="丰富运镜视频"),
     ProviderModelCandidate(name="vidu2.0", category="video", description="Vidu 2.0 视频"),
+]
+
+# 可灵未提供适合管理端导入的标准模型列表接口。
+# 因此保持为经过确认的官方模型白名单。
+_KLING_MODELS = [
+    ProviderModelCandidate(
+        name="kling-3.0-turbo",
+        category="video",
+        description="Kling 3.0 Turbo 文生视频",
+    ),
+    ProviderModelCandidate(
+        name="kling-3.0",
+        category="video",
+        description="Kling 3.0 Omni 文生、首帧和首尾帧图生视频",
+    ),
+    ProviderModelCandidate(
+        name="kling-v3",
+        category="image",
+        description="Kling Image 3.0 Omni 图片生成",
+    ),
 ]

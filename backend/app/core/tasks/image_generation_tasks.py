@@ -9,6 +9,8 @@ from abc import ABC, abstractmethod
 from typing import Any, AsyncIterator
 
 from app.core.integrations.openai.images import OpenAIImageApiAdapter
+from app.core.integrations.kling.images import KlingImageApiAdapter, parse_kling_image_creation
+from app.core.integrations.kling.task_api import normalize_image_state
 from app.core.integrations.vidu.images import ViduImageApiAdapter, parse_vidu_image_creation
 from app.core.integrations.volcengine.images import VolcengineImageApiAdapter
 from app.core.contracts.image_generation import (
@@ -31,6 +33,7 @@ __all__ = [
     "ResponseFormat",
     "AbstractImageGenerationTask",
     "OpenAIImageGenerationTask",
+    "KlingImageGenerationTask",
     "VolcengineImageGenerationTask",
     "ViduImageGenerationTask",
     "ImageGenerationTask",
@@ -191,6 +194,53 @@ class ViduImageGenerationTask(AbstractImageGenerationTask):
             await asyncio.sleep(self._poll_interval_s)
 
 
+class KlingImageGenerationTask(AbstractImageGenerationTask):
+    """可灵图片任务：提交异步任务并使用图片专用查询接口轮询。"""
+
+    def __init__(
+        self,
+        *,
+        adapter: KlingImageApiAdapter | None = None,
+        provider_config: ProviderConfig,
+        input_: ImageGenerationInput,
+        timeout_s: float = 60.0,
+        poll_interval_s: float = 2.0,
+    ) -> None:
+        """初始化可灵图片适配器及轮询参数。"""
+        super().__init__(provider_config=provider_config, input_=input_, timeout_s=timeout_s)
+        self._adapter = adapter or KlingImageApiAdapter()
+        self._poll_interval_s = poll_interval_s
+
+    async def _create_task(self) -> None:
+        """提交可灵图片任务，并保存供应商 task_id。"""
+        self._provider_task_id = await self._adapter.create_image(
+            cfg=self._cfg,
+            inp=self._input,
+            timeout_s=self._timeout_s,
+        )
+
+    async def _poll_and_get_result(self) -> ImageGenerationResult:
+        """轮询可灵图片任务，成功时转换为项目统一图片结果。"""
+        import asyncio
+
+        task_id = self._provider_task_id or ""
+        if not task_id:
+            raise RuntimeError("Kling image poll missing provider task id")
+        while True:
+            payload = await self._adapter.get_creation(
+                cfg=self._cfg,
+                task_id=task_id,
+                timeout_s=self._timeout_s,
+            )
+            state = normalize_image_state(payload)
+            if state == "succeeded":
+                return parse_kling_image_creation(task_id=task_id, data=payload)
+            if state == "failed":
+                task = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+                raise RuntimeError(f"Kling image task failed: {task.get('task_status_msg')!r}")
+            await asyncio.sleep(self._poll_interval_s)
+
+
 class ImageGenerationTask(BaseTask):
     """按 provider 分派到 OpenAI、火山或 Vidu 实现；对外构造函数与原先一致。"""
 
@@ -246,6 +296,20 @@ class ImageGenerationTask(BaseTask):
     ) -> AbstractImageGenerationTask:
         """构造 Vidu 图片任务实现，供 task registry 调用。"""
         return ViduImageGenerationTask(
+            provider_config=provider_config,
+            input_=input_,
+            timeout_s=timeout_s,
+        )
+
+    @staticmethod
+    def _build_kling_impl(
+        *,
+        provider_config: ProviderConfig,
+        input_: ImageGenerationInput,
+        timeout_s: float = 60.0,
+    ) -> AbstractImageGenerationTask:
+        """构造可灵图片任务实现，供任务注册表按 provider 分派。"""
+        return KlingImageGenerationTask(
             provider_config=provider_config,
             input_=input_,
             timeout_s=timeout_s,

@@ -86,7 +86,8 @@ export default function ExperimentLabPage() {
       sidebar={<ExperimentSessionSidebar
         value={selectedSessionId}
         sessions={sessions}
-        disabled={Boolean(slots.disabled)}
+        // 运行中的任务只锁定当前模态输入，不阻断会话恢复或切换；返回该会话后会重新轮询任务状态。
+        disabled={false}
         onChange={handleSelectSession}
         onStartDraft={handleStartDraft}
         onRename={async (sessionId, title) => { await renameSession(sessionId, title) }}
@@ -98,7 +99,7 @@ export default function ExperimentLabPage() {
     />
   )
 
-  if (selectedLabType === 'image') return <ImageExperimentMode key={`image-${selectedSessionId ?? 'draft'}`} sessionId={selectedSessionId} ensureSession={ensureSession} clearSessionMessages={clearSessionMessages} render={renderLayout('图片实验室')} />
-  if (selectedLabType === 'video') return <VideoExperimentMode key={`video-${selectedSessionId ?? 'draft'}`} sessionId={selectedSessionId} ensureSession={ensureSession} clearSessionMessages={clearSessionMessages} render={renderLayout('视频实验室')} />
-  return <TextExperimentMode key={`text-${selectedSessionId ?? 'draft'}`} sessionId={selectedSessionId} ensureSession={ensureSession} onClearSession={clearSessionMessages} render={renderLayout('文本实验室')} />
+  if (selectedLabType === 'image') return <ImageExperimentMode sessionId={selectedSessionId} ensureSession={ensureSession} clearSessionMessages={clearSessionMessages} render={renderLayout('图片实验室')} />
+  if (selectedLabType === 'video') return <VideoExperimentMode sessionId={selectedSessionId} ensureSession={ensureSession} clearSessionMessages={clearSessionMessages} render={renderLayout('视频实验室')} />
+  return <TextExperimentMode sessionId={selectedSessionId} ensureSession={ensureSession} onClearSession={clearSessionMessages} render={renderLayout('文本实验室')} />
 }

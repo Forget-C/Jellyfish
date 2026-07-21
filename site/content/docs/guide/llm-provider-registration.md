@@ -73,12 +73,22 @@ description: "如何在代码中注册内置供应商能力，并与异步任务
 - 视频：填写所选 Vidu 视频模型名，例如 `viduq2`、`viduq3` 系列。运行时会按输入选择 `text2video`、`img2video`、`start-end2video` 或 `reference2video`，无需在模型参数中填写端点。
 - 将所需模型设为 `default_image_model_id`、`default_video_model_id` 后，现有分镜工作室即可使用。Vidu 不支持项目通用 `watermark` 参数；带该参数的请求会在调用前被拒绝，避免静默丢参。
 
+### 配置可灵 AI
+
+在模型管理中创建 Provider 时，名称填写“可灵 AI”或 `kling`，并将 API Key 填入 `api_key`；默认 Base URL 为 `https://api-beijing.klingai.com`，通常无需覆盖。可灵当前只登记图片与视频模型：
+
+- 视频：`kling-3.0-turbo`（仅文生视频）或 `kling-3.0`（文生、首帧与首尾帧图生视频）。
+- 图片：`kling-v3`（Kling Image 3.0 Omni）。
+
+模型列表由服务端维护的官方目录提供，刷新目录时不会调用可灵 `/models`。不要把可灵的专属多镜头、主体库或原生音频参数填入通用模型配置；当前页面只提交项目统一契约能够无损映射的字段。
+
 ### 从供应商目录添加模型
 
 在“模型管理 → 模型”点击“更新模型列表”，选择已配置的 Provider 并刷新。勾选要使用的模型后点击“添加所选模型”：系统会一次创建选中模型，已存在的同名同类别模型会显示为已添加并跳过。
 
 - OpenAI 兼容 Provider 使用其 `/models` API 实时读取目录，需确保 Provider 的 Base URL 与 API Key 有列举模型的权限。
 - Vidu 当前没有公开模型列表 API，页面会显示从其官方 Model Map 维护的目录，并明确标记为官方目录；更新 Vidu 支持模型时应同步更新 `app/core/integrations/model_catalog.py` 与本说明。
+- 可灵同样使用后端维护的固定目录；更新其支持范围时应同步调整 `app/core/integrations/model_catalog.py`、可灵能力矩阵与本说明。
 
 ### Base URL 优先级（按类别解析）
 

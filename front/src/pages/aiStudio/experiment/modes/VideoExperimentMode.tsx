@@ -37,6 +37,12 @@ type VideoMessage = {
   frameFileIds?: Partial<Record<FrameSlot, string>>
 }
 
+/**
+ * 保存尚未被服务端历史确认的任务气泡，跨草稿首提后的路由重挂载保持可见。
+ * 服务端返回相同 task_id 后会立即删除该缓存，避免本地和持久化消息重复展示。
+ */
+const pendingVideoMessagesBySession = new Map<string, VideoMessage[]>()
+
 const frameLabels: Record<FrameSlot, string> = { first: '首帧', last: '尾帧', key: '关键帧' }
 const ratioOptions: VideoRatio[] = ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']
 
@@ -115,6 +121,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
   const [libraryTarget, setLibraryTarget] = useState<FrameSlot | null>(null)
   const [previewVideoUrl, setPreviewVideoUrl] = useState<string | null>(null)
   const [updates, setUpdates] = useState<Record<string, Partial<VideoMessage>>>({})
+  const [optimisticMessages, setOptimisticMessages] = useState<VideoMessage[]>(() => sessionId ? pendingVideoMessagesBySession.get(sessionId) ?? [] : [])
 
   useEffect(() => {
     /** 资料库图片支撑帧槽位；模型和模板保持按需加载。 */
@@ -123,9 +130,27 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
       .catch(() => message.error('加载视频资料库失败'))
   }, [])
 
+  useEffect(() => {
+    setOptimisticMessages(sessionId ? pendingVideoMessagesBySession.get(sessionId) ?? [] : [])
+  }, [sessionId])
+  useEffect(() => {
+    if (!sessionId) return
+    const persistedTaskIds = new Set(history.messages.flatMap((item) => item.task_id ? [item.task_id] : []))
+    if (!persistedTaskIds.size) return
+    setOptimisticMessages((current) => {
+      const next = current.filter((item) => !item.taskId || !persistedTaskIds.has(item.taskId))
+      pendingVideoMessagesBySession.set(sessionId, next)
+      return next
+    })
+  }, [history.messages, sessionId])
+
   const selectedTemplate = useMemo(() => templates.find((item) => item.id === templateId) ?? null, [templateId, templates])
   const currentPrompt = selectedTemplate ? renderPromptTemplate(selectedTemplate.content, templateValues).trim() : draft.trim()
-  const messages = useMemo(() => history.messages.map(toVideoMessage).map((item) => ({ ...item, ...updates[item.id] })), [history.messages, updates])
+  const messages = useMemo(() => {
+    const persisted = history.messages.map(toVideoMessage).map((item) => ({ ...item, ...updates[item.id] }))
+    const persistedTaskIds = new Set(persisted.flatMap((item) => item.taskId ? [item.taskId] : []))
+    return [...persisted, ...optimisticMessages.filter((item) => !item.taskId || !persistedTaskIds.has(item.taskId))]
+  }, [history.messages, optimisticMessages, updates])
   const selectedFrames = useMemo(() => Object.fromEntries(Object.entries(frameFileIds).map(([slot, id]) => [slot, files.find((file) => file.id === id)])) as Partial<Record<FrameSlot, FileRead>>, [files, frameFileIds])
   const runningTask = messages.find((item) => item.taskId && !['succeeded', 'failed', 'cancelled'].includes(item.status ?? 'pending'))
   const disabled = submitting || Boolean(runningTask)
@@ -188,6 +213,13 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
       const session = await ensureSession('video')
       const response = await StudioVideoLabService.createVideoLabTaskApiV1StudioVideoLabTasksPost({ requestBody: { session_id: session.id, model_id: modelId, prompt: currentPrompt, ratio, first_frame_file_id: frameFileIds.first, last_frame_file_id: frameFileIds.last, key_frame_file_id: frameFileIds.key } })
       if (!response.data?.task_id) throw new Error('创建视频任务失败')
+      const optimistic = [
+        { id: `local-user-${response.data.task_id}`, role: 'user' as const, content: currentPrompt, ratio, frameFileIds: { ...frameFileIds } },
+        { id: `local-task-${response.data.task_id}`, role: 'assistant' as const, content: '视频生成任务已创建', taskId: response.data.task_id, status: 'pending' },
+      ]
+      // 先立即显示提交内容和生成占位；随后历史读取以 task_id 去重并接管展示。
+      pendingVideoMessagesBySession.set(session.id, optimistic)
+      setOptimisticMessages(optimistic)
       // 草稿首次提交会由页面壳更新 sessionId，随后 Hook 自动读取新会话历史；
       // 已持久化会话则立即刷新，保证新任务气泡无需等待下一次导航。
       if (sessionId) await history.refresh()

@@ -49,6 +49,14 @@ type ImageLabMessage = {
   referenceFileIds?: string[]
 }
 
+/**
+ * 暂存已提交但尚未被历史接口返回的任务消息。
+ *
+ * 首条草稿提交会使页面壳写入 session 并可能重挂载模态组件；以会话 ID 为键保存
+ * 这段极短的本地状态，确保用户消息和“生成中”占位不会在路由切换期间闪失。
+ */
+const pendingImageMessagesBySession = new Map<string, ImageLabMessage[]>()
+
 export type ImageExperimentModeProps = {
   /** 当前已持久化会话；为空时表示图片草稿。 */
   sessionId?: string
@@ -111,20 +119,37 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
   const [submitting, setSubmitting] = useState(false)
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [taskUpdates, setTaskUpdates] = useState<Record<string, Pick<ImageLabMessage, 'status' | 'error' | 'resultUrls'>>>({})
+  const [optimisticMessages, setOptimisticMessages] = useState<ImageLabMessage[]>(() => sessionId ? pendingImageMessagesBySession.get(sessionId) ?? [] : [])
   const history = useExperimentHistory(activeSessionId)
   const { refresh: refreshHistory } = history
-  const messages = history.messages.map((item) => {
+  const persistedMessages = history.messages.map((item) => {
     const messageItem = toImageLabMessage(item)
     return messageItem.taskId && taskUpdates[messageItem.taskId]
       ? { ...messageItem, ...taskUpdates[messageItem.taskId] }
       : messageItem
   })
+  const persistedTaskIds = new Set(persistedMessages.flatMap((item) => item.taskId ? [item.taskId] : []))
+  // 服务端历史一旦含有同一 task_id，服务端消息即为唯一事实来源。
+  const messages = [...persistedMessages, ...optimisticMessages.filter((item) => !item.taskId || !persistedTaskIds.has(item.taskId))]
   const selectedTemplate = useMemo(() => templates.find((item) => item.id === templateId) ?? null, [templateId, templates])
   const selectedReferences = useMemo(() => referenceFileIds.map((id) => files.find((file) => file.id === id)).filter((file): file is FileRead => Boolean(file)), [files, referenceFileIds])
   const currentPrompt = selectedTemplate ? renderPromptTemplate(selectedTemplate.content, templateValues).trim() : draft.trim()
   const runningTask = messages.find((item) => item.taskId && !['succeeded', 'failed', 'cancelled'].includes(item.status ?? 'pending'))
 
   useEffect(() => { setActiveSessionId(sessionId) }, [sessionId])
+  useEffect(() => {
+    setOptimisticMessages(sessionId ? pendingImageMessagesBySession.get(sessionId) ?? [] : [])
+  }, [sessionId])
+  useEffect(() => {
+    if (!activeSessionId) return
+    const persistedTaskIds = new Set(history.messages.flatMap((item) => item.task_id ? [item.task_id] : []))
+    if (!persistedTaskIds.size) return
+    setOptimisticMessages((current) => {
+      const next = current.filter((item) => !item.taskId || !persistedTaskIds.has(item.taskId))
+      pendingImageMessagesBySession.set(activeSessionId, next)
+      return next
+    })
+  }, [activeSessionId, history.messages])
   useEffect(() => {
     void StudioFilesService.listFilesApiApiV1StudioFilesGet({ page: 1, pageSize: 100, order: 'updated_at', isDesc: true })
       .then((response) => setFiles((response.data?.items ?? []).filter((file) => file.type === 'image')))
@@ -217,6 +242,13 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
       setActiveSessionId(targetSessionId)
       const response = await StudioImageLabService.createImageLabTaskApiV1StudioImageLabTasksPost({ requestBody: { session_id: targetSessionId, model_id: modelId, prompt: currentPrompt, images: referenceFileIds } })
       if (!response.data?.task_id) throw new Error('创建图片任务失败')
+      const optimistic = [
+        { id: `local-user-${response.data.task_id}`, role: 'user' as const, content: currentPrompt, referenceFileIds: [...referenceFileIds] },
+        { id: `local-task-${response.data.task_id}`, role: 'assistant' as const, content: '图片生成任务已创建', taskId: response.data.task_id, status: 'pending' },
+      ]
+      // 任务创建成功即先绘制本地气泡；历史接口回来后按 task_id 自动以服务端版本替换。
+      pendingImageMessagesBySession.set(targetSessionId, optimistic)
+      setOptimisticMessages(optimistic)
       // 草稿首次提交时，activeSessionId 的更新会驱动 Hook 为新会话读取历史；
       // 已有会话才可直接使用当前 Hook 实例刷新，避免闭包仍指向旧草稿 ID。
       if (!session) await history.refresh()

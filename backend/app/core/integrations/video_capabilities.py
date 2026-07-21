@@ -48,6 +48,11 @@ def register_video_model_capability(
 
         register_vidu_video_capability(model_prefix=model_prefix, capability=capability)
         return
+    if provider == "kling":
+        from app.core.integrations.kling.video_capabilities import register_kling_video_capability
+
+        register_kling_video_capability(model_prefix=model_prefix, capability=capability)
+        return
     from app.core.integrations.volcengine.video_capabilities import register_volcengine_video_capability
 
     register_volcengine_video_capability(model_prefix=model_prefix, capability=capability)
@@ -58,17 +63,22 @@ def clear_video_model_capability_overrides(*, provider: ProviderKey | None = Non
     from app.core.integrations.openai.video_capabilities import clear_openai_video_capability_overrides
     from app.core.integrations.vidu.video_capabilities import clear_vidu_video_capability_overrides
     from app.core.integrations.volcengine.video_capabilities import clear_volcengine_video_capability_overrides
+    from app.core.integrations.kling.video_capabilities import clear_kling_video_capability_overrides
 
     if provider is None:
         clear_openai_video_capability_overrides()
         clear_volcengine_video_capability_overrides()
         clear_vidu_video_capability_overrides()
+        clear_kling_video_capability_overrides()
         return
     if provider == "openai":
         clear_openai_video_capability_overrides()
         return
     if provider == "vidu":
         clear_vidu_video_capability_overrides()
+        return
+    if provider == "kling":
+        clear_kling_video_capability_overrides()
         return
     clear_volcengine_video_capability_overrides()
 
@@ -82,6 +92,10 @@ def resolve_video_capability(*, provider: ProviderKey, model: str | None) -> Vid
         from app.core.integrations.vidu.video_capabilities import resolve_vidu_video_capability
 
         return resolve_vidu_video_capability(model)
+    if provider == "kling":
+        from app.core.integrations.kling.video_capabilities import resolve_kling_video_capability
+
+        return resolve_kling_video_capability(model)
     from app.core.integrations.volcengine.video_capabilities import resolve_volcengine_video_capability
 
     return resolve_volcengine_video_capability(model)

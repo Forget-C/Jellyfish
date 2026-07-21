@@ -33,6 +33,13 @@ def bootstrap_builtin_providers() -> None:
                 default_base_url="https://api.vidu.cn",
             ),
             ProviderSpec(
+                key="kling",
+                display_name="可灵 AI",
+                aliases=("可灵", "可灵 ai", "kling", "kling ai", "klingai"),
+                supported_categories=(ModelCategoryKey.image, ModelCategoryKey.video),
+                default_base_url="https://api-beijing.klingai.com",
+            ),
+            ProviderSpec(
                 key="aliyun_bailian",
                 display_name="阿里百炼",
                 aliases=("阿里百炼", "aliyun", "bailian", "dashscope"),

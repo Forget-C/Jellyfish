@@ -46,3 +46,15 @@ async def test_vidu_catalog_uses_official_model_map_without_network() -> None:
     assert result.source == "provider_catalog"
     assert ("viduq2", "image") in {(item.name, item.category.value) for item in result.models}
     assert ("viduq3-turbo", "video") in {(item.name, item.category.value) for item in result.models}
+
+
+@pytest.mark.asyncio
+async def test_kling_catalog_uses_static_model_map_without_network() -> None:
+    """可灵仅暴露项目确认的静态模型目录，刷新时不请求 `/models`。"""
+    result = await discover_provider_models(cfg=ProviderConfig(provider="kling", api_key="secret"))
+    assert result.source == "provider_catalog"
+    assert {(item.name, item.category.value) for item in result.models} == {
+        ("kling-3.0-turbo", "video"),
+        ("kling-3.0", "video"),
+        ("kling-v3", "image"),
+    }
