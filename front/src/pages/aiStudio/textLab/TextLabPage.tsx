@@ -5,7 +5,7 @@
  * 从而可被后续图片和视频实验室复用。
  */
 import { useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button, Spin, Tag, message } from 'antd'
 import { ClearOutlined } from '@ant-design/icons'
 import {
@@ -23,7 +23,7 @@ import { ExperimentEmptyState } from '../experiment/components/ExperimentEmptySt
 import { ExperimentLabLayout } from '../experiment/components/ExperimentLabLayout'
 import { ExperimentOptionBar } from '../experiment/components/ExperimentOptionBar'
 import { ExperimentPromptEditor } from '../experiment/components/ExperimentPromptEditor'
-import { ExperimentSessionControls } from '../experiment/components/ExperimentSessionControls'
+import { ExperimentSessionSidebar } from '../experiment/components/ExperimentSessionSidebar'
 import { createPromptTemplateValues, renderPromptTemplate } from '../experiment/components/PromptTemplateForm'
 
 type LocalMessage = TextLabMessage & { id: string }
@@ -51,6 +51,7 @@ function createMessageId(): string {
 }
 
 export default function TextLabPage() {
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [models, setModels] = useState<ModelRead[]>([])
   const [templates, setTemplates] = useState<PromptTemplateRead[]>([])
@@ -63,7 +64,9 @@ export default function TextLabPage() {
   const [sessionId, setSessionId] = useState<string>()
   const [historyPage, setHistoryPage] = useState(1)
   const [hasMoreHistory, setHasMoreHistory] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [sessionsLoading, setSessionsLoading] = useState(true)
+  const [modelsLoading, setModelsLoading] = useState(false)
+  const [templatesLoading, setTemplatesLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   const selectedTemplate = useMemo(
@@ -71,50 +74,48 @@ export default function TextLabPage() {
     [templateId, templates],
   )
 
-  useEffect(() => {
-    /** Loads selectable text models and prompt templates without coupling the lab to a project. */
-    const loadOptions = async () => {
-      setLoading(true)
-      try {
-        const [modelsResponse, ...templateResponses] = await Promise.all([
-          LlmService.listModelsApiV1LlmModelsGet({ category: 'text', page: 1, pageSize: 100, order: 'updated_at', isDesc: true }),
-          ...textPromptCategories.map((category) => StudioPromptsService.listPromptTemplatesApiV1StudioPromptsGet({
-            category,
-            page: 1,
-            pageSize: 100,
-            order: 'updated_at',
-            isDesc: true,
-          })),
-        ])
-        const textModels = modelsResponse.data?.items ?? []
-        setModels(textModels)
-        setTemplates(templateResponses.flatMap((response) => response.data?.items ?? []))
-        if (textModels.length === 1) setModelId(textModels[0].id)
-      } catch {
-        message.error('加载文本实验室配置失败')
-      } finally {
-        setLoading(false)
-      }
-    }
-    void loadOptions()
-  }, [])
+  /** 首次打开模型选择器时读取文本模型，并在本页缓存结果。 */
+  const loadModels = async () => {
+    if (models.length || modelsLoading) return
+    setModelsLoading(true)
+    try {
+      const response = await LlmService.listModelsApiV1LlmModelsGet({ category: 'text', page: 1, pageSize: 100, order: 'updated_at', isDesc: true })
+      const items = response.data?.items ?? []
+      setModels(items)
+      if (items.length === 1) setModelId(items[0].id)
+    } catch { message.error('加载文本模型失败') } finally { setModelsLoading(false) }
+  }
+
+  /** 首次打开提示词选择器时读取可用模板，并在本页缓存结果。 */
+  const loadTemplates = async () => {
+    if (templates.length || templatesLoading) return
+    setTemplatesLoading(true)
+    try {
+      const responses = await Promise.all(textPromptCategories.map((category) => StudioPromptsService.listPromptTemplatesApiV1StudioPromptsGet({ category, page: 1, pageSize: 100, order: 'updated_at', isDesc: true })))
+      setTemplates(responses.flatMap((response) => response.data?.items ?? []))
+    } catch { message.error('加载文本提示词失败') } finally { setTemplatesLoading(false) }
+  }
 
   useEffect(() => {
     /** 加载最近文本实验会话，并恢复当前会话的用户可见历史。 */
     const loadSessions = async () => {
       try {
-        const response = await StudioExperimentSessionsService.listExperimentSessionsApiV1StudioExperimentSessionsGet({ labType: 'text' })
-        const items = response.data ?? []
-        const requestedId = searchParams.get('session')
-        const current = items.find((item) => item.id === requestedId) ?? items[0] ?? (await StudioExperimentSessionsService.createExperimentSessionApiV1StudioExperimentSessionsPost({ requestBody: { lab_type: 'text', title: '新文本会话' } })).data
-        if (!current) throw new Error('创建文本会话失败')
-        setSessions(current.id === items[0]?.id ? items : [current, ...items])
+        const responses = await Promise.all((['text', 'image', 'video'] as ExperimentSessionRead['lab_type'][]).map((labType) => StudioExperimentSessionsService.listExperimentSessionsApiV1StudioExperimentSessionsGet({ labType })))
+        const items = responses.flatMap((response) => response.data ?? []).sort((left, right) => Date.parse(right.updated_at) - Date.parse(left.updated_at))
+        const current = items.find((item) => item.id === searchParams.get('session')) ?? items[0]
+        setSessions(items)
+        if (!current) { setSessionId(undefined); return }
+        if (current.lab_type !== 'text') { navigate(`/${current.lab_type}-lab?session=${current.id}`, { replace: true }); return }
         setSessionId(current.id)
       } catch {
         message.error('加载文本会话失败')
+      } finally {
+        setSessionsLoading(false)
       }
     }
     void loadSessions()
+    // 仅在页面挂载时恢复 URL 指定会话，避免 URL 回写覆盖草稿态。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -171,11 +172,13 @@ export default function TextLabPage() {
       return
     }
 
-    if (!sessionId) return message.warning('会话尚未准备完成')
-
     setSubmitting(true)
     try {
-      const persistedUser = await StudioExperimentSessionsService.createExperimentMessageApiV1StudioExperimentSessionsSessionIdMessagesPost({ sessionId, requestBody: { role: 'user', content: currentPrompt, payload: { model_id: modelId } } })
+      const session = sessionId ? undefined : (await StudioExperimentSessionsService.createExperimentSessionApiV1StudioExperimentSessionsPost({ requestBody: { lab_type: 'text', title: '新文本会话' } })).data
+      const activeSessionId = session?.id ?? sessionId
+      if (!activeSessionId) throw new Error('创建文本会话失败')
+      if (session) { setSessions((current) => [session, ...current]); setSessionId(session.id) }
+      const persistedUser = await StudioExperimentSessionsService.createExperimentMessageApiV1StudioExperimentSessionsSessionIdMessagesPost({ sessionId: activeSessionId, requestBody: { role: 'user', content: currentPrompt, payload: { model_id: modelId } } })
       const userMessage: LocalMessage = { id: persistedUser.data?.id ?? createMessageId(), role: 'user', content: currentPrompt }
       const nextMessages = [...messages, userMessage]
       setMessages(nextMessages)
@@ -188,10 +191,9 @@ export default function TextLabPage() {
       })
       const content = response.data?.content?.trim()
       if (!content) throw new Error('模型未返回文本')
-      const persistedAssistant = await StudioExperimentSessionsService.createExperimentMessageApiV1StudioExperimentSessionsSessionIdMessagesPost({ sessionId, requestBody: { role: 'assistant', content, payload: { model_id: modelId } } })
+      const persistedAssistant = await StudioExperimentSessionsService.createExperimentMessageApiV1StudioExperimentSessionsSessionIdMessagesPost({ sessionId: activeSessionId, requestBody: { role: 'assistant', content, payload: { model_id: modelId } } })
       setMessages((current) => [...current, { id: persistedAssistant.data?.id ?? createMessageId(), role: 'assistant', content }])
     } catch {
-      setMessages(messages)
       if (!selectedTemplate) setDraft(currentPrompt)
       message.error('文本模型调用失败，请检查模型、供应商配置和服务日志')
     } finally {
@@ -208,45 +210,46 @@ export default function TextLabPage() {
     } catch { message.error('清空会话失败；含生成任务的会话不可清空') }
   }
 
-  /** 创建并切换到新的空文本会话。 */
-  const handleCreateSession = async () => {
-    try {
-      const response = await StudioExperimentSessionsService.createExperimentSessionApiV1StudioExperimentSessionsPost({ requestBody: { lab_type: 'text', title: '新文本会话' } })
-      const session = response.data
-      if (!session) throw new Error('未返回会话')
-      setSessions((current) => [session, ...current])
-      setSessionId(session.id)
-      setMessages([])
-      setDraft('')
-    } catch { message.error('新建会话失败') }
+  /** 进入指定模态的未持久化草稿态，首条有效提交时才创建会话。 */
+  const handleCreateSession = (labType: ExperimentSessionRead['lab_type'] = 'text') => {
+    if (labType !== 'text') { navigate(`/${labType}-lab`); return }
+    setSessionId(undefined); setMessages([]); setDraft(''); setTemplateId(undefined); setTemplateValues({}); setSearchParams({}, { replace: true })
   }
 
-  /** 更新当前会话标题并同步下拉列表。 */
-  const handleRenameSession = async (title: string) => {
-    if (!sessionId) return
-    const response = await StudioExperimentSessionsService.updateExperimentSessionApiV1StudioExperimentSessionsSessionIdPatch({ sessionId, requestBody: { title } })
+  /** 更新指定会话标题并同步统一最近会话列表。 */
+  const handleRenameSession = async (targetSessionId: string, title: string) => {
+    const response = await StudioExperimentSessionsService.updateExperimentSessionApiV1StudioExperimentSessionsSessionIdPatch({ sessionId: targetSessionId, requestBody: { title } })
     const updated = response.data
     if (updated) setSessions((current) => current.map((item) => item.id === updated.id ? updated : item))
   }
 
-  /** 删除当前会话后切换到剩余最近会话或创建一个新会话。 */
-  const handleDeleteSession = async () => {
-    if (!sessionId) return
-    await StudioExperimentSessionsService.deleteExperimentSessionApiV1StudioExperimentSessionsSessionIdDelete({ sessionId })
-    const remaining = sessions.filter((item) => item.id !== sessionId)
+  /** 删除指定会话后恢复全局最近历史；没有历史时回到文本草稿态。 */
+  const handleDeleteSession = async (targetSessionId: string) => {
+    await StudioExperimentSessionsService.deleteExperimentSessionApiV1StudioExperimentSessionsSessionIdDelete({ sessionId: targetSessionId })
+    const remaining = sessions.filter((item) => item.id !== targetSessionId)
     setSessions(remaining)
-    if (remaining[0]) setSessionId(remaining[0].id)
-    else await handleCreateSession()
+    if (targetSessionId !== sessionId) return
+    const next = remaining[0]
+    if (next?.lab_type === 'text') setSessionId(next.id)
+    else if (next) navigate(`/${next.lab_type}-lab?session=${next.id}`)
+    else handleCreateSession('text')
+  }
+
+  /** 从统一最近会话列表切换；跨模态会话跳转到对应实验页面。 */
+  const handleSelectSession = (session: ExperimentSessionRead) => {
+    if (session.lab_type !== 'text') { navigate(`/${session.lab_type}-lab?session=${session.id}`); return }
+    setSessionId(session.id)
   }
 
   return (
     <ExperimentLabLayout
       title="文本实验会话"
-      extra={<div className="flex items-center gap-2"><ExperimentSessionControls value={sessionId} sessions={sessions} disabled={submitting} onChange={setSessionId} onCreate={() => void handleCreateSession()} onRename={handleRenameSession} onDelete={handleDeleteSession} /><Button icon={<ClearOutlined />} disabled={!messages.length || submitting} onClick={() => void handleClearSession()}>清空会话</Button></div>}
+      extra={<Button icon={<ClearOutlined />} disabled={!messages.length || submitting} onClick={() => void handleClearSession()}>清空会话</Button>}
+      sidebar={<ExperimentSessionSidebar value={sessionId} sessions={sessions} disabled={submitting} onChange={handleSelectSession} onStartDraft={handleCreateSession} onRename={handleRenameSession} onDelete={handleDeleteSession} />}
       history={<>
-        {loading ? <div className="h-72 flex items-center justify-center"><Spin /></div> : null}
+        {sessionsLoading ? <div className="h-72 flex items-center justify-center"><Spin /></div> : null}
         {hasMoreHistory ? <Button size="small" onClick={() => void loadMoreHistory()}>加载更早消息</Button> : null}
-        {!loading && messages.length === 0 ? <ExperimentEmptyState description="选择模型并输入提示词，开始一轮文本实验" /> : null}
+        {!sessionsLoading && messages.length === 0 ? <ExperimentEmptyState description="选择模型并输入提示词，开始一轮文本实验" /> : null}
         {messages.map((item) => (
           <div key={item.id} className={item.role === 'user' ? 'ml-auto max-w-[85%]' : 'mr-auto max-w-[85%]'}>
             <Tag color={item.role === 'user' ? 'blue' : 'green'}>{item.role === 'user' ? '你' : '模型'}</Tag>
@@ -259,7 +262,7 @@ export default function TextLabPage() {
       </>}
       composer={<ExperimentComposer
           submitting={submitting}
-          submitDisabled={loading}
+          submitDisabled={submitting}
           onSubmit={() => void handleSubmit()}
           options={
             <ExperimentOptionBar
@@ -273,12 +276,15 @@ export default function TextLabPage() {
               }))}
               modelId={modelId}
               templateId={templateId}
-              loading={loading}
+              modelsLoading={modelsLoading}
+              templatesLoading={templatesLoading}
               disabled={submitting}
               modelLabel="文本模型"
               modelPlaceholder="选择已登记的文本模型"
               onModelChange={setModelId}
               onTemplateChange={handleSelectTemplate}
+              onModelOpenChange={(open) => { if (open) void loadModels() }}
+              onTemplateOpenChange={(open) => { if (open) void loadTemplates() }}
             />
           }
         >
@@ -288,7 +294,7 @@ export default function TextLabPage() {
             draft={draft}
             placeholder="输入提示词；Shift + Enter 换行"
             minRows={5}
-            disabled={submitting || loading}
+            disabled={submitting}
             submitOnEnter
             onDraftChange={setDraft}
             onTemplateValuesChange={setTemplateValues}

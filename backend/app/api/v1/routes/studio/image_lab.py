@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func
@@ -37,8 +38,9 @@ async def create_image_lab_task(
     experiment_session = await db.get(ExperimentSession, body.session_id)
     if experiment_session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Experiment session not found")
-    user_message = ExperimentMessage(id=uuid.uuid4().hex, session_id=body.session_id, role="user", content=prompt, payload={"model_id": body.model_id, "reference_file_ids": body.images})
-    task_message = ExperimentMessage(id=uuid.uuid4().hex, session_id=body.session_id, role="task", content="图片生成任务已提交，正在等待生成结果。", status="pending", payload={"model_id": body.model_id, "reference_file_ids": body.images})
+    message_time = datetime.now(UTC)
+    user_message = ExperimentMessage(id=uuid.uuid4().hex, session_id=body.session_id, role="user", content=prompt, payload={"model_id": body.model_id, "reference_file_ids": body.images}, created_at=message_time)
+    task_message = ExperimentMessage(id=uuid.uuid4().hex, session_id=body.session_id, role="task", content="图片生成任务已提交，正在等待生成结果。", status="pending", payload={"model_id": body.model_id, "reference_file_ids": body.images}, created_at=message_time + timedelta(microseconds=1))
     db.add_all([user_message, task_message])
     references = await resolve_reference_image_refs_by_file_ids(db, file_ids=body.images)
     task_id = await create_image_task_and_link(

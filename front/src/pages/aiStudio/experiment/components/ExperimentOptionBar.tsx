@@ -11,12 +11,15 @@ type ExperimentOptionBarProps = {
   templates: ExperimentTemplateOption[]
   modelId?: string
   templateId?: string
-  loading?: boolean
+  modelsLoading?: boolean
+  templatesLoading?: boolean
   disabled?: boolean
   modelLabel?: string
   modelPlaceholder?: string
   onModelChange: (modelId?: string) => void
   onTemplateChange: (templateId?: string) => void
+  onModelOpenChange?: (open: boolean) => void
+  onTemplateOpenChange?: (open: boolean) => void
 }
 
 /** Presents experiment configuration inside popovers so the composer stays focused on input. */
@@ -25,12 +28,15 @@ export function ExperimentOptionBar({
   templates,
   modelId,
   templateId,
-  loading = false,
+  modelsLoading = false,
+  templatesLoading = false,
   disabled = false,
   modelLabel = '模型',
   modelPlaceholder = '选择已登记的模型',
   onModelChange,
   onTemplateChange,
+  onModelOpenChange,
+  onTemplateOpenChange,
 }: ExperimentOptionBarProps) {
   const selectedModel = useMemo(() => models.find((model) => model.id === modelId), [modelId, models])
   const selectedTemplate = useMemo(() => templates.find((template) => template.id === templateId), [templateId, templates])
@@ -39,13 +45,14 @@ export function ExperimentOptionBar({
     <Space wrap size="small">
       <Popover
         trigger="click"
+        onOpenChange={onModelOpenChange}
         content={
           <div className="w-72">
             <Typography.Text strong>{modelLabel}</Typography.Text>
             <Select
               className="w-full mt-2"
               placeholder={modelPlaceholder}
-              loading={loading}
+              loading={modelsLoading}
               value={modelId}
               onChange={onModelChange}
               options={models.map((model) => ({ value: model.id, label: model.name }))}
@@ -59,6 +66,7 @@ export function ExperimentOptionBar({
       </Popover>
       <Popover
         trigger="click"
+        onOpenChange={onTemplateOpenChange}
         content={
           <div className="w-80">
             <Typography.Text strong>提示词来源</Typography.Text>
@@ -68,6 +76,7 @@ export function ExperimentOptionBar({
               optionFilterProp="label"
               className="w-full mt-2"
               placeholder="自由输入或选择提示词模板"
+              loading={templatesLoading}
               value={templateId}
               onChange={onTemplateChange}
               options={templates.map((template) => ({

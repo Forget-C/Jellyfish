@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
@@ -93,7 +94,7 @@ async def list_experiment_messages(session_id: str, db: AsyncSession = Depends(g
     """分页读取一个会话的用户可见消息历史。"""
     if await db.get(ExperimentSession, session_id) is None:
         raise HTTPException(status_code=404, detail="Experiment session not found")
-    rows = (await db.execute(select(ExperimentMessage).where(ExperimentMessage.session_id == session_id).order_by(ExperimentMessage.created_at.desc()).offset((page - 1) * page_size).limit(page_size))).scalars().all()
+    rows = (await db.execute(select(ExperimentMessage).where(ExperimentMessage.session_id == session_id).order_by(ExperimentMessage.created_at.desc(), ExperimentMessage.id.asc()).offset((page - 1) * page_size).limit(page_size))).scalars().all()
     rows.reverse()
     return success_response([ExperimentMessageRead.model_validate(row) for row in rows])
 
@@ -103,7 +104,7 @@ async def create_experiment_message(session_id: str, body: ExperimentMessageCrea
     """追加一条用户可见消息；该数据不会传入模型上下文。"""
     if await db.get(ExperimentSession, session_id) is None:
         raise HTTPException(status_code=404, detail="Experiment session not found")
-    item = ExperimentMessage(id=str(uuid.uuid4()), session_id=session_id, **body.model_dump())
+    item = ExperimentMessage(id=str(uuid.uuid4()), session_id=session_id, created_at=datetime.now(UTC), **body.model_dump())
     db.add(item)
     session = await db.get(ExperimentSession, session_id)
     if session is not None:

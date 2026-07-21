@@ -84,6 +84,27 @@ async def test_experiment_message_pagination_returns_chronological_page_and_sess
 
 
 @pytest.mark.asyncio
+async def test_experiment_message_same_timestamp_uses_stable_order() -> None:
+    """相同时间戳的消息也应按稳定次级字段返回，避免聊天气泡随机翻转。"""
+    db, engine = await _build_session()
+    try:
+        async with db:
+            created = await route.create_experiment_session(ExperimentSessionCreate(lab_type="image", title="排序回归"), db)
+            assert created.data is not None
+            timestamp = datetime(2026, 7, 20, tzinfo=UTC)
+            db.add_all([
+                ExperimentMessage(id="message-user", session_id=created.data.id, role="user", content="用户输入", payload={}, created_at=timestamp),
+                ExperimentMessage(id="message-task", session_id=created.data.id, role="task", content="任务反馈", payload={}, created_at=timestamp),
+            ])
+            await db.commit()
+            messages = await route.list_experiment_messages(created.data.id, db, page=1, page_size=50)
+            assert messages.data is not None
+            assert [item.content for item in messages.data] == ["用户输入", "任务反馈"]
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_experiment_session_clear_and_delete_block_only_active_tasks() -> None:
     """运行中任务保护历史；任务结束后允许清空和删除会话。"""
     db, engine = await _build_session()

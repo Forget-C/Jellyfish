@@ -5,7 +5,7 @@
  * 上传和资料库图片都会先转换为 FileItem，再以 file_id 提交给后端任务。
  */
 import { useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button, Dropdown, Empty, Modal, Spin, Tag, Upload, message } from 'antd'
 import { ClearOutlined, CloseOutlined, FolderOpenOutlined, PictureOutlined, UploadOutlined } from '@ant-design/icons'
 import type { UploadFile } from 'antd'
@@ -28,7 +28,7 @@ import { ExperimentEmptyState } from '../experiment/components/ExperimentEmptySt
 import { ExperimentLabLayout } from '../experiment/components/ExperimentLabLayout'
 import { ExperimentOptionBar } from '../experiment/components/ExperimentOptionBar'
 import { ExperimentPromptEditor } from '../experiment/components/ExperimentPromptEditor'
-import { ExperimentSessionControls } from '../experiment/components/ExperimentSessionControls'
+import { ExperimentSessionSidebar } from '../experiment/components/ExperimentSessionSidebar'
 import { ExperimentHistoryReferences } from '../experiment/components/ExperimentHistoryReferences'
 import { createPromptTemplateValues, renderPromptTemplate } from '../experiment/components/PromptTemplateForm'
 
@@ -101,6 +101,7 @@ function toImageLabMessage(item: ExperimentMessageRead): ImageLabMessage {
 }
 
 export default function ImageLabPage() {
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [models, setModels] = useState<ModelRead[]>([])
   const [templates, setTemplates] = useState<PromptTemplateRead[]>([])
@@ -110,7 +111,9 @@ export default function ImageLabPage() {
   const [templateValues, setTemplateValues] = useState<Record<string, string>>({})
   const [draft, setDraft] = useState('')
   const [referenceFileIds, setReferenceFileIds] = useState<string[]>([])
-  const [loading, setLoading] = useState(true)
+  const [sessionsLoading, setSessionsLoading] = useState(true)
+  const [modelsLoading, setModelsLoading] = useState(false)
+  const [templatesLoading, setTemplatesLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [messages, setMessages] = useState<ImageLabMessage[]>([])
@@ -134,48 +137,42 @@ export default function ImageLabPage() {
   const runningTask = messages.find((item) => item.taskId && !['succeeded', 'failed', 'cancelled'].includes(item.status ?? 'pending'))
 
   useEffect(() => {
-    /** 加载图片实验可选择的模型、模板和资料库图片。 */
-    const loadOptions = async () => {
-      setLoading(true)
-      try {
-        const [modelsResponse, filesResponse, ...templateResponses] = await Promise.all([
-          LlmService.listModelsApiV1LlmModelsGet({ category: 'image', page: 1, pageSize: 100, order: 'updated_at', isDesc: true }),
-          StudioFilesService.listFilesApiApiV1StudioFilesGet({ page: 1, pageSize: 100, order: 'updated_at', isDesc: true }),
-          ...imagePromptCategories.map((category) => StudioPromptsService.listPromptTemplatesApiV1StudioPromptsGet({
-            category,
-            page: 1,
-            pageSize: 100,
-            order: 'updated_at',
-            isDesc: true,
-          })),
-        ])
-        const imageModels = modelsResponse.data?.items ?? []
-        setModels(imageModels)
-        setFiles((filesResponse.data?.items ?? []).filter((file) => file.type === 'image'))
-        setTemplates(templateResponses.flatMap((response) => response.data?.items ?? []))
-        if (imageModels.length === 1) setModelId(imageModels[0].id)
-      } catch {
-        message.error('加载图片实验室配置失败')
-      } finally {
-        setLoading(false)
-      }
-    }
-    void loadOptions()
+    /** 加载资料库图片；模型和提示词由各自的选择器按需读取。 */
+    void StudioFilesService.listFilesApiApiV1StudioFilesGet({ page: 1, pageSize: 100, order: 'updated_at', isDesc: true })
+      .then((response) => setFiles((response.data?.items ?? []).filter((file) => file.type === 'image')))
+      .catch(() => message.error('加载图片资料库失败'))
   }, [])
+
+  /** 首次展开模型选择器时读取图片模型。 */
+  const loadModels = async () => {
+    if (models.length || modelsLoading) return
+    setModelsLoading(true)
+    try { const response = await LlmService.listModelsApiV1LlmModelsGet({ category: 'image', page: 1, pageSize: 100, order: 'updated_at', isDesc: true }); const items = response.data?.items ?? []; setModels(items); if (items.length === 1) setModelId(items[0].id) } catch { message.error('加载图片模型失败') } finally { setModelsLoading(false) }
+  }
+
+  /** 首次展开提示词选择器时读取图片模板。 */
+  const loadTemplates = async () => {
+    if (templates.length || templatesLoading) return
+    setTemplatesLoading(true)
+    try { const responses = await Promise.all(imagePromptCategories.map((category) => StudioPromptsService.listPromptTemplatesApiV1StudioPromptsGet({ category, page: 1, pageSize: 100, order: 'updated_at', isDesc: true }))); setTemplates(responses.flatMap((response) => response.data?.items ?? [])) } catch { message.error('加载图片提示词失败') } finally { setTemplatesLoading(false) }
+  }
 
   useEffect(() => {
     /** 加载最近图片实验会话；首次进入时创建独立空会话。 */
     const loadSessions = async () => {
       try {
-        const response = await StudioExperimentSessionsService.listExperimentSessionsApiV1StudioExperimentSessionsGet({ labType: 'image' })
-        const items = response.data ?? []
-        const current = items.find((item) => item.id === searchParams.get('session')) ?? items[0] ?? (await StudioExperimentSessionsService.createExperimentSessionApiV1StudioExperimentSessionsPost({ requestBody: { lab_type: 'image', title: '新图片会话' } })).data
-        if (!current) throw new Error('创建图片会话失败')
-        setSessions(current.id === items[0]?.id ? items : [current, ...items])
+        const responses = await Promise.all((['text', 'image', 'video'] as ExperimentSessionRead['lab_type'][]).map((labType) => StudioExperimentSessionsService.listExperimentSessionsApiV1StudioExperimentSessionsGet({ labType })))
+        const items = responses.flatMap((response) => response.data ?? []).sort((left, right) => Date.parse(right.updated_at) - Date.parse(left.updated_at))
+        const current = items.find((item) => item.id === searchParams.get('session')) ?? items[0]
+        setSessions(items)
+        if (!current) { setSessionId(undefined); return }
+        if (current.lab_type !== 'image') { navigate(`/${current.lab_type}-lab?session=${current.id}`, { replace: true }); return }
         setSessionId(current.id)
-      } catch { message.error('加载图片会话失败') }
+      } catch { message.error('加载图片会话失败') } finally { setSessionsLoading(false) }
     }
     void loadSessions()
+    // 仅在页面挂载时恢复 URL 指定会话，避免 URL 回写覆盖草稿态。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -281,16 +278,19 @@ export default function ImageLabPage() {
   const handleSubmit = async () => {
     if (!modelId) return message.warning('请选择图片模型')
     if (!currentPrompt) return message.warning(selectedTemplate ? '请填写模板变量，生成有效提示词' : '请输入图片提示词')
-    if (!sessionId) return message.warning('会话尚未准备完成')
     setSubmitting(true)
     if (!selectedTemplate) setDraft('')
     try {
+      const session = sessionId ? undefined : (await StudioExperimentSessionsService.createExperimentSessionApiV1StudioExperimentSessionsPost({ requestBody: { lab_type: 'image', title: '新图片会话' } })).data
+      const activeSessionId = session?.id ?? sessionId
+      if (!activeSessionId) throw new Error('创建图片会话失败')
+      if (session) { setSessions((current) => [session, ...current]); setSessionId(session.id) }
       const response = await StudioImageLabService.createImageLabTaskApiV1StudioImageLabTasksPost({
-        requestBody: { session_id: sessionId, model_id: modelId, prompt: currentPrompt, images: referenceFileIds },
+        requestBody: { session_id: activeSessionId, model_id: modelId, prompt: currentPrompt, images: referenceFileIds },
       })
       const nextTaskId = response.data?.task_id
       if (!nextTaskId) throw new Error('创建图片任务失败')
-      const history = await StudioExperimentSessionsService.listExperimentMessagesApiV1StudioExperimentSessionsSessionIdMessagesGet({ sessionId, page: 1, pageSize: 50 })
+      const history = await StudioExperimentSessionsService.listExperimentMessagesApiV1StudioExperimentSessionsSessionIdMessagesGet({ sessionId: activeSessionId, page: 1, pageSize: 50 })
       setMessages((history.data ?? []).map(toImageLabMessage))
       setHistoryPage(1)
       setHasMoreHistory((history.data?.length ?? 0) === 50)
@@ -310,45 +310,46 @@ export default function ImageLabPage() {
       .catch(() => message.error('清空历史失败；含生成任务的会话不可清空'))
   }
 
-  /** 创建并切换到空图片会话，不影响既有任务的后台执行。 */
-  const handleCreateSession = async () => {
-    try {
-      const response = await StudioExperimentSessionsService.createExperimentSessionApiV1StudioExperimentSessionsPost({ requestBody: { lab_type: 'image', title: '新图片会话' } })
-      const session = response.data
-      if (!session) throw new Error('未返回会话')
-      setSessions((current) => [session, ...current])
-      setSessionId(session.id)
-      setMessages([])
-      setReferenceFileIds([])
-    } catch { message.error('新建会话失败') }
+  /** 进入指定模态的未持久化草稿态，首条有效提交时才创建会话。 */
+  const handleCreateSession = (labType: ExperimentSessionRead['lab_type'] = 'image') => {
+    if (labType !== 'image') { navigate(`/${labType}-lab`); return }
+    setSessionId(undefined); setMessages([]); setReferenceFileIds([]); setDraft(''); setTemplateId(undefined); setTemplateValues({}); setSearchParams({}, { replace: true })
   }
 
-  /** 更新当前图片会话标题并同步列表。 */
-  const handleRenameSession = async (title: string) => {
-    if (!sessionId) return
-    const response = await StudioExperimentSessionsService.updateExperimentSessionApiV1StudioExperimentSessionsSessionIdPatch({ sessionId, requestBody: { title } })
+  /** 更新指定会话标题并同步统一最近会话列表。 */
+  const handleRenameSession = async (targetSessionId: string, title: string) => {
+    const response = await StudioExperimentSessionsService.updateExperimentSessionApiV1StudioExperimentSessionsSessionIdPatch({ sessionId: targetSessionId, requestBody: { title } })
     const updated = response.data
     if (updated) setSessions((current) => current.map((item) => item.id === updated.id ? updated : item))
   }
 
-  /** 删除当前图片会话后切换到最近剩余会话或创建空会话。 */
-  const handleDeleteSession = async () => {
-    if (!sessionId) return
-    await StudioExperimentSessionsService.deleteExperimentSessionApiV1StudioExperimentSessionsSessionIdDelete({ sessionId })
-    const remaining = sessions.filter((item) => item.id !== sessionId)
+  /** 删除指定会话后恢复全局最近历史；没有历史时回到文本草稿态。 */
+  const handleDeleteSession = async (targetSessionId: string) => {
+    await StudioExperimentSessionsService.deleteExperimentSessionApiV1StudioExperimentSessionsSessionIdDelete({ sessionId: targetSessionId })
+    const remaining = sessions.filter((item) => item.id !== targetSessionId)
     setSessions(remaining)
-    if (remaining[0]) setSessionId(remaining[0].id)
-    else await handleCreateSession()
+    if (targetSessionId !== sessionId) return
+    const next = remaining[0]
+    if (next?.lab_type === 'image') setSessionId(next.id)
+    else if (next) navigate(`/${next.lab_type}-lab?session=${next.id}`)
+    else navigate('/text-lab')
+  }
+
+  /** 从统一最近会话列表切换；跨模态会话跳转到对应实验页面。 */
+  const handleSelectSession = (session: ExperimentSessionRead) => {
+    if (session.lab_type !== 'image') { navigate(`/${session.lab_type}-lab?session=${session.id}`); return }
+    setSessionId(session.id)
   }
 
   return (
     <ExperimentLabLayout
       title="图片实验室"
-      extra={<div className="flex items-center gap-2"><ExperimentSessionControls value={sessionId} sessions={sessions} disabled={submitting || Boolean(runningTask)} onChange={setSessionId} onCreate={() => void handleCreateSession()} onRename={handleRenameSession} onDelete={handleDeleteSession} /><Button icon={<ClearOutlined />} disabled={!messages.length || submitting || Boolean(runningTask)} onClick={handleClearResults}>清空历史</Button></div>}
+      extra={<Button icon={<ClearOutlined />} disabled={!messages.length || submitting || Boolean(runningTask)} onClick={handleClearResults}>清空历史</Button>}
+      sidebar={<ExperimentSessionSidebar value={sessionId} sessions={sessions} disabled={submitting || Boolean(runningTask)} onChange={handleSelectSession} onStartDraft={handleCreateSession} onRename={handleRenameSession} onDelete={handleDeleteSession} />}
       history={<>
-        {loading ? <div className="h-72 flex items-center justify-center"><Spin /></div> : null}
+        {sessionsLoading ? <div className="h-72 flex items-center justify-center"><Spin /></div> : null}
         {hasMoreHistory ? <Button size="small" onClick={() => void loadMoreHistory()}>加载更早消息</Button> : null}
-        {!loading && messages.length === 0 ? <ExperimentEmptyState description="选择图片模型并输入提示词，开始一轮图片实验" /> : null}
+        {!sessionsLoading && messages.length === 0 ? <ExperimentEmptyState description="选择图片模型并输入提示词，开始一轮图片实验" /> : null}
         {messages.map((item) => {
           const isUser = item.role === 'user'
           const isRunning = Boolean(item.taskId && !['succeeded', 'failed', 'cancelled'].includes(item.status ?? 'pending'))
@@ -374,7 +375,7 @@ export default function ImageLabPage() {
       </>}
       composer={<ExperimentComposer
           submitting={submitting || Boolean(runningTask)}
-          submitDisabled={loading || Boolean(runningTask)}
+          submitDisabled={submitting || Boolean(runningTask)}
           submitLabel="生成图片"
           onSubmit={() => void handleSubmit()}
           contextActions={
@@ -421,12 +422,15 @@ export default function ImageLabPage() {
               }))}
               modelId={modelId}
               templateId={templateId}
-              loading={loading}
+              modelsLoading={modelsLoading}
+              templatesLoading={templatesLoading}
               disabled={submitting || Boolean(runningTask)}
               modelLabel="图片模型"
               modelPlaceholder="选择已登记的图片模型"
               onModelChange={setModelId}
               onTemplateChange={handleSelectTemplate}
+              onModelOpenChange={(open) => { if (open) void loadModels() }}
+              onTemplateOpenChange={(open) => { if (open) void loadTemplates() }}
             />
           }
         >
@@ -436,7 +440,7 @@ export default function ImageLabPage() {
             draft={draft}
             placeholder="描述你想生成的图片…"
             minRows={5}
-            disabled={submitting || loading || Boolean(runningTask)}
+            disabled={submitting || Boolean(runningTask)}
             onDraftChange={setDraft}
             onTemplateValuesChange={setTemplateValues}
             onUseFreeInput={(renderedPrompt) => {

@@ -1,5 +1,5 @@
 import type React from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import MainLayout from './layouts/MainLayout'
 import Settings from './pages/Settings'
 import NotFound from './pages/NotFound'
@@ -18,12 +18,18 @@ import VideoEditor from './pages/aiStudio/editor/VideoEditor'
 import AgentManagement from './pages/aiStudio/agents/AgentManagement'
 import AgentEdit from './pages/aiStudio/agents/AgentEdit.tsx'
 import ModelManagement from './pages/aiStudio/models/ModelManagement'
-import TextLabPage from './pages/aiStudio/textLab/TextLabPage'
-import ImageLabPage from './pages/aiStudio/imageLab/ImageLabPage'
-import VideoLabPage from './pages/aiStudio/videoLab/VideoLabPage'
+import ExperimentLabPage from './pages/aiStudio/experiment/ExperimentLabPage'
 import { ChapterShotsPage } from './pages/aiStudio/shots/ChapterShotsPage'
 import { ChapterShotEditPage } from './pages/aiStudio/shots/ChapterShotEditPage'
 import './App.css'
+
+/** 兼容旧实验室地址，并保留原 URL 的会话定位参数。 */
+function LegacyLabRedirect({ mode }: { mode: 'text' | 'image' | 'video' }) {
+  const location = useLocation()
+  const params = new URLSearchParams(location.search)
+  if (!params.get('session')) params.set('mode', mode)
+  return <Navigate to={`/lab?${params.toString()}`} replace />
+}
 
 const App: React.FC = () => {
   return (
@@ -50,9 +56,10 @@ const App: React.FC = () => {
           <Route path="agents/:id/edit" element={<AgentEdit />} />
           <Route path="agents" element={<AgentManagement />} />
           <Route path="models" element={<ModelManagement />} />
-          <Route path="text-lab" element={<TextLabPage />} />
-          <Route path="image-lab" element={<ImageLabPage />} />
-          <Route path="video-lab" element={<VideoLabPage />} />
+          <Route path="lab" element={<ExperimentLabPage />} />
+          <Route path="text-lab" element={<LegacyLabRedirect mode="text" />} />
+          <Route path="image-lab" element={<LegacyLabRedirect mode="image" />} />
+          <Route path="video-lab" element={<LegacyLabRedirect mode="video" />} />
           <Route path="settings" element={<Settings />} />
           <Route path="*" element={<NotFound />} />
         </Route>

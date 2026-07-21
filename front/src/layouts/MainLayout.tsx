@@ -1,4 +1,5 @@
-import React, { useMemo } from 'react'
+import { useMemo } from 'react'
+import type React from 'react'
 import { Layout, Menu, theme, Dropdown, Space, Avatar, Select, Breadcrumb } from 'antd'
 import {
   MenuFoldOutlined,
@@ -10,7 +11,6 @@ import {
   FileTextOutlined,
   ApiOutlined,
   MessageOutlined,
-  VideoCameraOutlined,
 } from '@ant-design/icons'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAppStore } from '../store/useAppStore'
@@ -44,9 +44,7 @@ const MainLayout: React.FC = () => {
     if (location.pathname.startsWith('/files')) return ['files']
     if (location.pathname.startsWith('/agents')) return ['agents']
     if (location.pathname.startsWith('/models')) return ['models']
-    if (location.pathname.startsWith('/text-lab')) return ['text-lab']
-    if (location.pathname.startsWith('/image-lab')) return ['image-lab']
-    if (location.pathname.startsWith('/video-lab')) return ['video-lab']
+    if (location.pathname.startsWith('/lab') || location.pathname.startsWith('/text-lab') || location.pathname.startsWith('/image-lab') || location.pathname.startsWith('/video-lab')) return ['lab']
     if (location.pathname.startsWith('/settings')) return ['settings']
     return []
   }, [location.pathname])
@@ -62,9 +60,10 @@ const MainLayout: React.FC = () => {
       files: '文件管理',
       agents: 'Agent管理',
       models: '模型管理',
-      'text-lab': '文本实验室',
-      'image-lab': '图片实验室',
-      'video-lab': '视频实验室',
+      lab: '实验室',
+      'text-lab': '实验室',
+      'image-lab': '实验室',
+      'video-lab': '实验室',
       settings: t('menu.settings'),
       chapters: '章节管理',
       studio: '分镜工作室',
@@ -134,19 +133,9 @@ const MainLayout: React.FC = () => {
       label: <Link to="/models">模型管理</Link>,
     },
     {
-      key: 'text-lab',
+      key: 'lab',
       icon: <MessageOutlined />,
-      label: <Link to="/text-lab">文本实验室</Link>,
-    },
-    {
-      key: 'image-lab',
-      icon: <PictureOutlined />,
-      label: <Link to="/image-lab">图片实验室</Link>,
-    },
-    {
-      key: 'video-lab',
-      icon: <VideoCameraOutlined />,
-      label: <Link to="/video-lab">视频实验室</Link>,
+      label: <Link to="/lab">实验室</Link>,
     },
     {
       key: 'settings',

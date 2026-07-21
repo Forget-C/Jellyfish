@@ -78,6 +78,36 @@ body {
   min-height: 0;
 }
 
+/* 最近会话菜单采用紧凑聊天侧栏样式，保持菜单与参考交互的尺寸和层级。 */
+.experiment-session-dropdown .ant-dropdown-menu {
+  min-width: 180px;
+  padding: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgb(15 23 42 / 14%);
+}
+
+.experiment-session-dropdown .ant-dropdown-menu-item {
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  font-size: 15px;
+}
+
+.experiment-session-dropdown .ant-dropdown-menu-item-icon {
+  font-size: 17px;
+}
+
+/* 生成模态选择只承担入口选择，避免默认弹窗样式抢占三张卡片的视觉重心。 */
+.experiment-create-modal .ant-modal-content {
+  border-radius: 18px;
+  padding: 22px 24px 24px;
+}
+
+.experiment-create-modal .ant-modal-title {
+  font-size: 18px;
+}
+
 /* * {
   @apply border-border;
 } */

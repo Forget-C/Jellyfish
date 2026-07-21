@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func
@@ -38,8 +39,9 @@ async def create_video_lab_task(
     experiment_session = await db.get(ExperimentSession, body.session_id)
     if experiment_session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Experiment session not found")
-    user_message = ExperimentMessage(id=uuid.uuid4().hex, session_id=body.session_id, role="user", content=prompt, payload={"model_id": body.model_id, "ratio": body.ratio, "first_frame_file_id": body.first_frame_file_id, "last_frame_file_id": body.last_frame_file_id, "key_frame_file_id": body.key_frame_file_id})
-    task_message = ExperimentMessage(id=uuid.uuid4().hex, session_id=body.session_id, role="task", content="视频生成任务已提交，正在等待生成结果。", status="pending", payload={"model_id": body.model_id, "ratio": body.ratio, "first_frame_file_id": body.first_frame_file_id, "last_frame_file_id": body.last_frame_file_id, "key_frame_file_id": body.key_frame_file_id})
+    message_time = datetime.now(UTC)
+    user_message = ExperimentMessage(id=uuid.uuid4().hex, session_id=body.session_id, role="user", content=prompt, payload={"model_id": body.model_id, "ratio": body.ratio, "first_frame_file_id": body.first_frame_file_id, "last_frame_file_id": body.last_frame_file_id, "key_frame_file_id": body.key_frame_file_id}, created_at=message_time)
+    task_message = ExperimentMessage(id=uuid.uuid4().hex, session_id=body.session_id, role="task", content="视频生成任务已提交，正在等待生成结果。", status="pending", payload={"model_id": body.model_id, "ratio": body.ratio, "first_frame_file_id": body.first_frame_file_id, "last_frame_file_id": body.last_frame_file_id, "key_frame_file_id": body.key_frame_file_id}, created_at=message_time + timedelta(microseconds=1))
     db.add_all([user_message, task_message])
 
     run_args = await build_video_lab_run_args(
