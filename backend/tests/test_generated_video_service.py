@@ -193,7 +193,7 @@ async def test_build_run_args_maps_reference_images(monkeypatch: pytest.MonkeyPa
         db.add_all([provider, model, settings])
         await db.commit()
 
-        async def _fake_file_id_to_data_url(_db: AsyncSession, *, file_id: str) -> str:
+        async def _fake_file_id_to_data_url(_db: AsyncSession, *, file_id: str, media_kind: str = "image") -> str:
             return f"data:image/png;base64,{file_id}"
 
         monkeypatch.setattr(
@@ -213,9 +213,9 @@ async def test_build_run_args_maps_reference_images(monkeypatch: pytest.MonkeyPa
         assert run_args["provider"] == "openai"
         assert run_args["api_key"] == "k"
         assert run_args["input"]["model"] == "sora-mini"
-        assert run_args["input"]["first_frame_base64"] == "data:image/png;base64,img-first"
-        assert run_args["input"]["last_frame_base64"] == "data:image/png;base64,img-last"
-        assert run_args["input"]["key_frame_base64"] is None
+        assert run_args["input"]["frame_references"]["first_frame"] == "data:image/png;base64,img-first"
+        assert run_args["input"]["frame_references"]["last_frame"] == "data:image/png;base64,img-last"
+        assert run_args["input"]["frame_references"]["key_frames"] == []
         assert run_args["input"]["ratio"] == "9:16"
         assert run_args["input"]["seconds"] == 6
     await engine.dispose()

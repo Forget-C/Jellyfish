@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.api.v1.routes.studio import experiment_sessions as route
 from app.core.db import Base
-from app.models.experiment_sessions import ExperimentMessage
+from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
 from app.models.task import GenerationDeliveryMode, GenerationTask, GenerationTaskStatus
 from app.schemas.studio.experiment_sessions import ExperimentMessageCreate, ExperimentSessionCreate
+from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages
 
 
 def test_experiment_session_routes_are_registered(client: TestClient) -> None:
@@ -26,6 +29,8 @@ def test_experiment_session_routes_are_registered(client: TestClient) -> None:
     assert {parameter["name"] for parameter in message_parameters} >= {"session_id", "page", "page_size"}
     session_schema = response.json()["components"]["schemas"]["ExperimentSessionRead"]
     assert {"last_message_preview", "has_running_task"} <= set(session_schema["properties"])
+    message_schema = response.json()["components"]["schemas"]["ExperimentMessageRead"]
+    assert "sequence" in message_schema["properties"]
 
 
 async def _build_session() -> tuple[AsyncSession, object]:
@@ -52,7 +57,7 @@ async def test_experiment_message_pagination_returns_chronological_page_and_sess
             db.add_all([
                 ExperimentMessage(
                     id=f"message-{index}", session_id=session_id, role="user", content=f"提示词 {index}",
-                    payload={}, created_at=base_time + timedelta(seconds=index),
+                    payload={}, sequence=index + 1, created_at=base_time + timedelta(seconds=index),
                 )
                 for index in range(4)
             ])
@@ -63,7 +68,7 @@ async def test_experiment_message_pagination_returns_chronological_page_and_sess
             db.add(ExperimentMessage(
                 id="task-message", session_id=session_id, role="task", content="图片生成中",
                 task_id="task-running", status="running", payload={},
-                created_at=base_time + timedelta(seconds=5),
+                sequence=5, created_at=base_time + timedelta(seconds=5),
             ))
             await db.commit()
 
@@ -85,7 +90,7 @@ async def test_experiment_message_pagination_returns_chronological_page_and_sess
 
 @pytest.mark.asyncio
 async def test_experiment_message_same_timestamp_uses_stable_order() -> None:
-    """相同时间戳的消息也应按稳定次级字段返回，避免聊天气泡随机翻转。"""
+    """相同时间戳的消息也应按服务端序号返回，避免聊天气泡随机翻转。"""
     db, engine = await _build_session()
     try:
         async with db:
@@ -93,13 +98,84 @@ async def test_experiment_message_same_timestamp_uses_stable_order() -> None:
             assert created.data is not None
             timestamp = datetime(2026, 7, 20, tzinfo=UTC)
             db.add_all([
-                ExperimentMessage(id="message-user", session_id=created.data.id, role="user", content="用户输入", payload={}, created_at=timestamp),
-                ExperimentMessage(id="message-task", session_id=created.data.id, role="task", content="任务反馈", payload={}, created_at=timestamp),
+                ExperimentMessage(id="message-user", session_id=created.data.id, role="user", content="用户输入", payload={}, sequence=1, created_at=timestamp),
+                ExperimentMessage(id="message-task", session_id=created.data.id, role="task", content="任务反馈", payload={}, sequence=2, created_at=timestamp),
             ])
             await db.commit()
             messages = await route.list_experiment_messages(created.data.id, db, page=1, page_size=50)
             assert messages.data is not None
             assert [item.content for item in messages.data] == ["用户输入", "任务反馈"]
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_append_experiment_messages_reserves_continuous_sequences() -> None:
+    """共享消息服务应跨多次追加持续分配连续序号，并同步会话计数器。"""
+    db, engine = await _build_session()
+    try:
+        async with db:
+            created = await route.create_experiment_session(
+                ExperimentSessionCreate(lab_type="video", title="连续序号"), db
+            )
+            assert created.data is not None
+            session_id = created.data.id
+
+            first_batch = await append_experiment_messages(
+                db,
+                session_id=session_id,
+                drafts=[
+                    ExperimentMessageDraft(role="user", content="第一次输入"),
+                    ExperimentMessageDraft(role="task", content="第一次任务", status="pending"),
+                ],
+            )
+            second_batch = await append_experiment_messages(
+                db,
+                session_id=session_id,
+                drafts=[ExperimentMessageDraft(role="user", content="第二次输入")],
+            )
+            await db.commit()
+
+            assert [item.sequence for item in [*first_batch, *second_batch]] == [1, 2, 3]
+            messages = await route.list_experiment_messages(session_id, db, page=1, page_size=50)
+            assert messages.data is not None
+            assert [item.sequence for item in messages.data] == [1, 2, 3]
+            counter = await db.scalar(
+                select(ExperimentSession.message_sequence).where(ExperimentSession.id == session_id)
+            )
+            assert counter == 3
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_message_appends_receive_distinct_sequences(tmp_path) -> None:
+    """不同事务并发追加同一会话时，原子计数器不应分配重复序号。"""
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'concurrent-messages.db'}",
+        future=True,
+    )
+    session_local = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+    async with session_local() as db:
+        db.add(ExperimentSession(id="concurrent-session", lab_type="image", title="并发顺序"))
+        await db.commit()
+
+    async def _append(content: str) -> int:
+        """在独立事务中追加一条消息并返回服务端序号。"""
+        async with session_local() as db:
+            items = await append_experiment_messages(
+                db,
+                session_id="concurrent-session",
+                drafts=[ExperimentMessageDraft(role="user", content=content)],
+            )
+            await db.commit()
+            return items[0].sequence
+
+    try:
+        sequences = await asyncio.gather(_append("并发输入 A"), _append("并发输入 B"))
+        assert sorted(sequences) == [1, 2]
     finally:
         await engine.dispose()
 
@@ -124,7 +200,7 @@ async def test_experiment_session_clear_and_delete_block_only_active_tasks() -> 
             ))
             db.add(ExperimentMessage(
                 id="task-active-message", session_id=session_id, role="task", content="生成中",
-                task_id="task-active", status="pending", payload={},
+                task_id="task-active", status="pending", payload={}, sequence=2,
             ))
             await db.commit()
 

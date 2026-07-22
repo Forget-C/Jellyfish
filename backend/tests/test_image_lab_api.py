@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from fastapi.testclient import TestClient
 
 from app.api.v1.routes.studio import image_lab as route
 from app.dependencies import get_db
 from app.main import app
+from app.models.experiment_sessions import ExperimentMessage
 
 
 class _DummyDB:
@@ -24,6 +27,11 @@ class _DummyDB:
     async def commit(self):
         return None
 
+    async def refresh(self, _value):
+        """消息替身已包含服务端时间字段，无需额外刷新。"""
+
+        return None
+
 
 async def _override_db():
     """为请求注入最小数据库替身，避免测试依赖真实数据库。"""
@@ -32,6 +40,18 @@ async def _override_db():
 
 def test_create_image_lab_task_uses_selected_references(client: TestClient, monkeypatch) -> None:
     """图片实验室应将模型、提示词及参考图传给通用图片任务创建器。"""
+    async def _fake_append_messages(_db, *, session_id, drafts):
+        """返回带稳定顺序的两条服务端权威消息。"""
+        now = datetime.now(UTC)
+        return [
+            ExperimentMessage(
+                id=f"message-{index}", session_id=session_id, sequence=index,
+                role=draft.role, content=draft.content, status=draft.status,
+                payload=draft.payload, created_at=now, updated_at=now,
+            )
+            for index, draft in enumerate(drafts, start=1)
+        ]
+
     async def _fake_resolve_references(_db, *, file_ids: list[str]):
         assert file_ids == ["reference-1"]
         return [{"image_url": "data:image/png;base64,abc"}]
@@ -49,6 +69,7 @@ def test_create_image_lab_task_uses_selected_references(client: TestClient, monk
 
     monkeypatch.setattr(route, "resolve_reference_image_refs_by_file_ids", _fake_resolve_references)
     monkeypatch.setattr(route, "create_image_task_and_link", _fake_create_task)
+    monkeypatch.setattr(route, "append_experiment_messages", _fake_append_messages)
     monkeypatch.setattr("app.tasks.execute_task.enqueue_task_execution", lambda _task_id: None)
     app.dependency_overrides[get_db] = _override_db
     try:
@@ -68,3 +89,6 @@ def test_create_image_lab_task_uses_selected_references(client: TestClient, monk
 
     assert response.status_code == 201
     assert response.json()["data"]["task_id"] == "task-1"
+    assert [item["sequence"] for item in response.json()["data"]["messages"]] == [1, 2]
+    assert [item["role"] for item in response.json()["data"]["messages"]] == ["user", "task"]
+    assert response.json()["data"]["messages"][1]["task_id"] == "task-1"

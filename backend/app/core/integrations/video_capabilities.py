@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.core.contracts.provider import ProviderKey
-from app.core.contracts.video_generation import VideoGenerationInput, VideoRatio
+from app.core.contracts.video_generation import VideoGenerationInput, VideoRatio, _strip_optional_b64
 
 ALLOWED_RATIOS = {"16:9", "4:3", "1:1", "3:4", "9:16", "21:9"}
 DEFAULT_RATIO_TO_SIZE_MAPPING: dict[str, str] = {
@@ -16,6 +16,25 @@ DEFAULT_RATIO_TO_SIZE_MAPPING: dict[str, str] = {
     "9:16": "720x1280",
     "21:9": "1680x720",
 }
+
+
+def infer_ratio_from_size(value: str | None) -> str | None:
+    """将标准比例或宽高像素串归一化为项目支持的视频比例。"""
+    normalized = (value or "").strip()
+    if normalized in ALLOWED_RATIOS:
+        return normalized
+    try:
+        width_text, height_text = normalized.lower().split("x", maxsplit=1)
+        width, height = int(width_text), int(height_text)
+    except ValueError:
+        return None
+    if width <= 0 or height <= 0:
+        return None
+    for ratio, size in DEFAULT_RATIO_TO_SIZE_MAPPING.items():
+        mapping_width, mapping_height = (int(item) for item in size.split("x", maxsplit=1))
+        if width * mapping_height == height * mapping_width:
+            return ratio
+    return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +48,14 @@ class VideoModelCapability:
     ratio_to_size_mapping: dict[str, str] | None = None
     min_seconds: int | None = 1
     max_seconds: int | None = None
+    supports_subject_image_reference: bool = False
+    supports_subject_video_reference: bool = False
+    supports_subject_reference_with_frame_reference: bool = False
+    max_subjects: int | None = None
+    max_images_per_subject: int | None = None
+    max_videos_per_subject: int | None = None
+    max_media_per_subject: int | None = None
+    max_total_subject_videos: int | None = None
 
 
 def register_video_model_capability(
@@ -146,3 +173,35 @@ def validate_video_options(
         raise ValueError(f"seed is not supported by provider={provider} model={model or '<default>'}")
     if input_.watermark is not None and not cap.supports_watermark:
         raise ValueError(f"watermark is not supported by provider={provider} model={model or '<default>'}")
+    subjects = input_.subject_references
+    if not subjects:
+        return
+    has_frame_reference = any(
+        _strip_optional_b64(value)
+        for value in (
+            input_.frame_references.first_frame,
+            input_.frame_references.last_frame,
+            *input_.frame_references.key_frames,
+        )
+    )
+    if has_frame_reference and not cap.supports_subject_reference_with_frame_reference:
+        raise ValueError(
+            f"subject references cannot be combined with frame references for provider={provider} "
+            f"model={model or '<default>'}"
+        )
+    if cap.max_subjects is not None and len(subjects) > cap.max_subjects:
+        raise ValueError(f"subject references must contain at most {cap.max_subjects} subjects")
+    total_subject_videos = sum(len(subject.videos) for subject in subjects)
+    if cap.max_total_subject_videos is not None and total_subject_videos > cap.max_total_subject_videos:
+        raise ValueError(f"subject references support at most {cap.max_total_subject_videos} videos in total")
+    for subject in subjects:
+        if subject.images and not cap.supports_subject_image_reference:
+            raise ValueError(f"subject image references are not supported by provider={provider} model={model or '<default>'}")
+        if subject.videos and not cap.supports_subject_video_reference:
+            raise ValueError(f"subject video references are not supported by provider={provider} model={model or '<default>'}")
+        if cap.max_images_per_subject is not None and len(subject.images) > cap.max_images_per_subject:
+            raise ValueError(f"a subject supports at most {cap.max_images_per_subject} reference images")
+        if cap.max_videos_per_subject is not None and len(subject.videos) > cap.max_videos_per_subject:
+            raise ValueError(f"a subject supports at most {cap.max_videos_per_subject} reference videos")
+        if cap.max_media_per_subject is not None and len(subject.images) + len(subject.videos) > cap.max_media_per_subject:
+            raise ValueError(f"a subject supports at most {cap.max_media_per_subject} reference media items")

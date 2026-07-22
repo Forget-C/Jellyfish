@@ -5,8 +5,8 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button, Dropdown, Empty, Modal, Select, Spin, Tag, Upload, message } from 'antd'
-import { CloseOutlined, FolderOpenOutlined, PictureOutlined, UploadOutlined } from '@ant-design/icons'
+import { Button, Dropdown, Empty, Input, Modal, Select, Spin, Tag, Upload, message } from 'antd'
+import { CloseOutlined, FolderOpenOutlined, PictureOutlined, UploadOutlined, VideoCameraOutlined } from '@ant-design/icons'
 import type { UploadFile } from 'antd'
 import {
   FilmService,
@@ -35,13 +35,17 @@ type VideoMessage = {
   id: string; role: 'user' | 'assistant'; content: string; taskId?: string; status?: string
   progress?: number; videoUrl?: string; error?: string; ratio?: string
   frameFileIds?: Partial<Record<FrameSlot, string>>
+  subjectReferences?: { name: string; imageFileIds: string[]; videoFileIds: string[] }[]
 }
-
-/**
- * 保存尚未被服务端历史确认的任务气泡，跨草稿首提后的路由重挂载保持可见。
- * 服务端返回相同 task_id 后会立即删除该缓存，避免本地和持久化消息重复展示。
- */
-const pendingVideoMessagesBySession = new Map<string, VideoMessage[]>()
+type SubjectMediaKind = 'image' | 'video'
+type SubjectReferenceDraft = { id: string; name: string; imageFileIds: string[]; videoFileIds: string[] }
+type VideoCapability = {
+  allowed_ratios?: string[]; default_ratio?: string
+  supports_subject_image_reference?: boolean; supports_subject_video_reference?: boolean
+  supports_subject_reference_with_frame_reference?: boolean
+  max_subjects?: number | null; max_images_per_subject?: number | null; max_videos_per_subject?: number | null
+  max_media_per_subject?: number | null; max_total_subject_videos?: number | null
+}
 
 const frameLabels: Record<FrameSlot, string> = { first: '首帧', last: '尾帧', key: '关键帧' }
 const ratioOptions: VideoRatio[] = ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']
@@ -57,17 +61,37 @@ function extractVideoUrl(result: Record<string, unknown> | null | undefined): st
 function toVideoMessage(item: ExperimentMessageRead): VideoMessage {
   const payload = item.payload ?? {}
   const frameFileIds: Partial<Record<FrameSlot, string>> = {}
-  ;(['first', 'last', 'key'] as FrameSlot[]).forEach((slot) => {
-    const value = payload[`${slot}_frame_file_id`]
-    if (typeof value === 'string') frameFileIds[slot] = value
-  })
+  const frameReferences = payload.frame_references
+  if (frameReferences && typeof frameReferences === 'object') {
+    const references = frameReferences as Record<string, unknown>
+    if (typeof references.first_frame_file_id === 'string') frameFileIds.first = references.first_frame_file_id
+    if (typeof references.last_frame_file_id === 'string') frameFileIds.last = references.last_frame_file_id
+    const keyFrames = references.key_frame_file_ids
+    if (Array.isArray(keyFrames) && typeof keyFrames[0] === 'string') frameFileIds.key = keyFrames[0]
+  } else {
+    // 兼容已持久化的旧实验消息；新提交始终写入 frame_references。
+    ;(['first', 'last', 'key'] as FrameSlot[]).forEach((slot) => {
+      const value = payload[`${slot}_frame_file_id`]
+      if (typeof value === 'string') frameFileIds[slot] = value
+    })
+  }
+  const subjectReferences = Array.isArray(payload.subject_references) ? payload.subject_references.flatMap((value) => {
+    if (!value || typeof value !== 'object') return []
+    const subject = value as Record<string, unknown>
+    const name = typeof subject.name === 'string' ? subject.name : '主体'
+    return [{
+      name,
+      imageFileIds: Array.isArray(subject.image_file_ids) ? subject.image_file_ids.filter((id): id is string => typeof id === 'string') : [],
+      videoFileIds: Array.isArray(subject.video_file_ids) ? subject.video_file_ids.filter((id): id is string => typeof id === 'string') : [],
+    }]
+  }) : []
   return {
     id: item.id, role: item.role === 'user' ? 'user' : 'assistant', content: item.content ?? '',
     taskId: item.task_id ?? undefined, status: item.status ?? undefined,
     progress: typeof payload.progress === 'number' ? payload.progress : undefined,
     videoUrl: extractVideoUrl(payload.result as Record<string, unknown> | undefined),
     error: typeof payload.error === 'string' ? payload.error : undefined,
-    ratio: typeof payload.ratio === 'string' ? payload.ratio : undefined, frameFileIds,
+    ratio: typeof payload.ratio === 'string' ? payload.ratio : undefined, frameFileIds, subjectReferences,
   }
 }
 
@@ -102,9 +126,26 @@ function FrameControl({ slot, file, disabled, uploading, onUpload, onOpenLibrary
   </div>
 }
 
+/** 管理一个命名主体的图片或视频素材；主体与关键帧始终分属两种生成语义。 */
+function SubjectMediaControl({ kind, disabled, uploading, onUpload, onOpenLibrary }: {
+  kind: SubjectMediaKind; disabled: boolean; uploading: boolean
+  onUpload: (file: UploadFile) => Promise<boolean>; onOpenLibrary: () => void
+}) {
+  const isImage = kind === 'image'
+  return <Dropdown trigger={['click']} disabled={disabled} dropdownRender={() => <div className="min-w-40 rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
+    <Upload className="block w-full" accept={isImage ? 'image/*' : 'video/mp4,video/quicktime,video/x-msvideo'} showUploadList={false} disabled={disabled} beforeUpload={onUpload}>
+      <Button type="text" block icon={<UploadOutlined />} loading={uploading} className="!justify-start">上传{isImage ? '图片' : '视频'}</Button>
+    </Upload>
+    <Button type="text" block icon={<FolderOpenOutlined />} className="!justify-start" onClick={onOpenLibrary}>从资料库选择</Button>
+  </div>}>
+    <Button size="small" icon={isImage ? <PictureOutlined /> : <VideoCameraOutlined />} loading={uploading}>主体{isImage ? '图片' : '视频'}</Button>
+  </Dropdown>
+}
+
 /** 组合视频模态的输入、历史和任务轮询，并交给统一实验室页面壳渲染。 */
 export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMessages, render }: VideoExperimentModeProps) {
   const history = useExperimentHistory(sessionId)
+  const { refresh: refreshHistory } = history
   const [models, setModels] = useState<ModelRead[]>([])
   const [templates, setTemplates] = useState<PromptTemplateRead[]>([])
   const [files, setFiles] = useState<FileRead[]>([])
@@ -114,44 +155,35 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
   const [draft, setDraft] = useState('')
   const [ratio, setRatio] = useState<VideoRatio>('16:9')
   const [frameFileIds, setFrameFileIds] = useState<Partial<Record<FrameSlot, string>>>({})
+  const [subjectReferences, setSubjectReferences] = useState<SubjectReferenceDraft[]>([])
+  const [capability, setCapability] = useState<VideoCapability>()
   const [modelsLoading, setModelsLoading] = useState(false)
   const [templatesLoading, setTemplatesLoading] = useState(false)
   const [uploadingSlot, setUploadingSlot] = useState<FrameSlot | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [libraryTarget, setLibraryTarget] = useState<FrameSlot | null>(null)
+  const [subjectLibraryTarget, setSubjectLibraryTarget] = useState<{ subjectId: string; kind: SubjectMediaKind } | null>(null)
   const [previewVideoUrl, setPreviewVideoUrl] = useState<string | null>(null)
   const [updates, setUpdates] = useState<Record<string, Partial<VideoMessage>>>({})
-  const [optimisticMessages, setOptimisticMessages] = useState<VideoMessage[]>(() => sessionId ? pendingVideoMessagesBySession.get(sessionId) ?? [] : [])
 
   useEffect(() => {
-    /** 资料库图片支撑帧槽位；模型和模板保持按需加载。 */
+    /** 帧槽位与主体参考共用资料库，但按文件类型在各自入口过滤。 */
     void StudioFilesService.listFilesApiApiV1StudioFilesGet({ page: 1, pageSize: 100, order: 'updated_at', isDesc: true })
-      .then((response) => setFiles((response.data?.items ?? []).filter((file) => file.type === 'image')))
+      .then((response) => setFiles(response.data?.items ?? []))
       .catch(() => message.error('加载视频资料库失败'))
   }, [])
-
-  useEffect(() => {
-    setOptimisticMessages(sessionId ? pendingVideoMessagesBySession.get(sessionId) ?? [] : [])
-  }, [sessionId])
-  useEffect(() => {
-    if (!sessionId) return
-    const persistedTaskIds = new Set(history.messages.flatMap((item) => item.task_id ? [item.task_id] : []))
-    if (!persistedTaskIds.size) return
-    setOptimisticMessages((current) => {
-      const next = current.filter((item) => !item.taskId || !persistedTaskIds.has(item.taskId))
-      pendingVideoMessagesBySession.set(sessionId, next)
-      return next
-    })
-  }, [history.messages, sessionId])
 
   const selectedTemplate = useMemo(() => templates.find((item) => item.id === templateId) ?? null, [templateId, templates])
   const currentPrompt = selectedTemplate ? renderPromptTemplate(selectedTemplate.content, templateValues).trim() : draft.trim()
   const messages = useMemo(() => {
-    const persisted = history.messages.map(toVideoMessage).map((item) => ({ ...item, ...updates[item.id] }))
-    const persistedTaskIds = new Set(persisted.flatMap((item) => item.taskId ? [item.taskId] : []))
-    return [...persisted, ...optimisticMessages.filter((item) => !item.taskId || !persistedTaskIds.has(item.taskId))]
-  }, [history.messages, optimisticMessages, updates])
+    // 正式消息保持服务端 sequence 顺序，轮询只以 task_id 覆盖瞬时任务字段。
+    return history.messages.map(toVideoMessage).map((item) => ({ ...item, ...(item.taskId ? updates[item.taskId] : undefined) }))
+  }, [history.messages, updates])
   const selectedFrames = useMemo(() => Object.fromEntries(Object.entries(frameFileIds).map(([slot, id]) => [slot, files.find((file) => file.id === id)])) as Partial<Record<FrameSlot, FileRead>>, [files, frameFileIds])
+  const imageFiles = useMemo(() => files.filter((file) => file.type === 'image'), [files])
+  const videoFiles = useMemo(() => files.filter((file) => file.type === 'video'), [files])
+  const hasSubjectReferences = subjectReferences.length > 0
+  const hasFrameReferences = Object.values(frameFileIds).some(Boolean)
   const runningTask = messages.find((item) => item.taskId && !['succeeded', 'failed', 'cancelled'].includes(item.status ?? 'pending'))
   const disabled = submitting || Boolean(runningTask)
 
@@ -162,8 +194,24 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
     try {
       const response = await LlmService.listModelsApiV1LlmModelsGet({ category: 'video', page: 1, pageSize: 100, order: 'updated_at', isDesc: true })
       const items = response.data?.items ?? []; setModels(items)
-      if (items.length === 1) setModelId(items[0].id)
+      if (items.length === 1) { setModelId(items[0].id); void loadCapability(items[0].id) }
     } catch { message.error('加载视频模型失败') } finally { setModelsLoading(false) }
+  }
+
+  /** 读取当前选择模型的能力，防止将主体输入误发给不支持的供应商模型。 */
+  const loadCapability = async (nextModelId?: string) => {
+    if (!nextModelId) { setCapability(undefined); return }
+    try {
+      const response = await LlmService.getVideoGenerationOptionsApiV1LlmVideoGenerationOptionsGet({ modelId: nextModelId })
+      const next = response.data
+      setCapability(next ?? undefined)
+      if (next?.allowed_ratios?.length && !next.allowed_ratios.includes(ratio)) {
+        setRatio((next.default_ratio ?? next.allowed_ratios[0]) as VideoRatio)
+      }
+    } catch {
+      setCapability(undefined)
+      message.error('加载视频模型能力失败')
+    }
   }
 
   /** 首次展开时加载视频提示词模板。 */
@@ -182,13 +230,14 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
         const response = await FilmService.getTaskResultApiV1FilmTasksTaskIdResultGet({ taskId })
         if (cancelled) return
         const task = response.data; const status = task?.status ?? 'pending'
-        setUpdates((current) => ({ ...current, [runningTask.id]: { status, error: task?.error ?? undefined, progress: task?.progress, videoUrl: status === 'succeeded' ? extractVideoUrl(task?.result) : current[runningTask.id]?.videoUrl } }))
+        setUpdates((current) => ({ ...current, [taskId]: { status, error: task?.error ?? undefined, progress: task?.progress, videoUrl: status === 'succeeded' ? extractVideoUrl(task?.result) : current[taskId]?.videoUrl } }))
         if (status === 'failed') message.error(task?.error || '视频生成失败，请检查模型与供应商配置')
+        if (['succeeded', 'failed', 'cancelled'].includes(status)) await refreshHistory()
       } catch { if (!cancelled) message.error('获取视频生成任务状态失败') }
     }
     void poll(); const timer = window.setInterval(() => void poll(), 1500)
     return () => { cancelled = true; window.clearInterval(timer) }
-  }, [runningTask?.id, runningTask?.taskId])
+  }, [refreshHistory, runningTask?.taskId])
 
   /** 上传图片并把返回的资料库文件绑定到选定帧槽位。 */
   const uploadFrame = async (slot: FrameSlot, file: UploadFile): Promise<boolean> => {
@@ -203,26 +252,85 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
     return false
   }
 
+  /** 上传主体介质并写入对应命名主体，避免主体素材落入关键帧字段。 */
+  const uploadSubjectMedia = async (subjectId: string, kind: SubjectMediaKind, file: UploadFile): Promise<boolean> => {
+    if (!file.type?.startsWith(`${kind}/`)) { message.warning(`只能上传${kind === 'image' ? '图片' : '视频'}作为主体参考`); return false }
+    if (kind === 'image' && !capability?.supports_subject_image_reference) return false
+    if (kind === 'video' && !capability?.supports_subject_video_reference) return false
+    const subject = subjectReferences.find((item) => item.id === subjectId)
+    if (!subject) return false
+    if (kind === 'image' && capability?.max_images_per_subject != null && subject.imageFileIds.length >= capability.max_images_per_subject) return message.warning(`每个主体最多支持 ${capability.max_images_per_subject} 张图片`), false
+    if (kind === 'video' && capability?.max_videos_per_subject != null && subject.videoFileIds.length >= capability.max_videos_per_subject) return message.warning(`每个主体最多支持 ${capability.max_videos_per_subject} 个视频`), false
+    if (capability?.max_media_per_subject != null && subject.imageFileIds.length + subject.videoFileIds.length >= capability.max_media_per_subject) return message.warning(`每个主体最多支持 ${capability.max_media_per_subject} 个参考素材`), false
+    if (kind === 'video' && capability?.max_total_subject_videos != null && subjectReferences.reduce((total, item) => total + item.videoFileIds.length, 0) >= capability.max_total_subject_videos) return message.warning(`当前模型最多支持 ${capability.max_total_subject_videos} 个主体视频`), false
+    setUploadingSlot(null)
+    try {
+      const response = await StudioFilesService.uploadFileApiApiV1StudioFilesUploadPost({ formData: { file: file as unknown as string } })
+      const uploaded = response.data; if (!uploaded) throw new Error('上传未返回文件信息')
+      setFiles((current) => [uploaded, ...current.filter((item) => item.id !== uploaded.id)])
+      setSubjectReferences((current) => current.map((subject) => subject.id !== subjectId ? subject : {
+        ...subject,
+        [kind === 'image' ? 'imageFileIds' : 'videoFileIds']: [...(kind === 'image' ? subject.imageFileIds : subject.videoFileIds), uploaded.id],
+      }))
+      message.success('主体参考已上传')
+    } catch { message.error('主体参考上传失败') }
+    return false
+  }
+
+  /** 判断主体是否还能追加指定介质；上传和资料库选择必须共用此规则。 */
+  const canAppendSubjectMedia = (subjectId: string, kind: SubjectMediaKind): boolean => {
+    const subject = subjectReferences.find((item) => item.id === subjectId)
+    if (!subject) return false
+    if (kind === 'image' && (!capability?.supports_subject_image_reference || (capability.max_images_per_subject != null && subject.imageFileIds.length >= capability.max_images_per_subject))) return false
+    if (kind === 'video' && (!capability?.supports_subject_video_reference || (capability.max_videos_per_subject != null && subject.videoFileIds.length >= capability.max_videos_per_subject))) return false
+    if (capability?.max_media_per_subject != null && subject.imageFileIds.length + subject.videoFileIds.length >= capability.max_media_per_subject) return false
+    return !(kind === 'video' && capability?.max_total_subject_videos != null && subjectReferences.reduce((total, item) => total + item.videoFileIds.length, 0) >= capability.max_total_subject_videos)
+  }
+
+  /** 切换模型时重置不兼容的参考模式，保持主体和关键帧不可同时提交。 */
+  const selectModel = (nextModelId?: string) => {
+    setModelId(nextModelId)
+    void loadCapability(nextModelId)
+  }
+
   /** 先保证会话落库，再创建视频任务，避免草稿态产生空会话。 */
   const submit = async () => {
     if (!modelId) return message.warning('请选择视频模型')
     if (!currentPrompt) return message.warning(selectedTemplate ? '请填写模板变量，生成有效提示词' : '请输入视频提示词')
     if (!selectedTemplate) setDraft('')
+    if (hasSubjectReferences && hasFrameReferences && !capability?.supports_subject_reference_with_frame_reference) {
+      return message.warning('当前模型不支持主体参考与关键帧同时使用')
+    }
+    if (hasSubjectReferences && !capability?.supports_subject_image_reference && !capability?.supports_subject_video_reference) {
+      return message.warning('当前模型不支持主体参考')
+    }
+    if (subjectReferences.some((subject) => !subject.name.trim() || (!subject.imageFileIds.length && !subject.videoFileIds.length))) {
+      return message.warning('每个主体都需要名称和至少一份图片或视频参考')
+    }
+    if (capability?.max_subjects != null && subjectReferences.length > capability.max_subjects) return message.warning(`当前模型最多支持 ${capability.max_subjects} 个主体`)
+    const videoCount = subjectReferences.reduce((total, subject) => total + subject.videoFileIds.length, 0)
+    if (capability?.max_total_subject_videos != null && videoCount > capability.max_total_subject_videos) return message.warning(`当前模型最多支持 ${capability.max_total_subject_videos} 个主体视频`)
+    for (const subject of subjectReferences) {
+      if (capability?.max_images_per_subject != null && subject.imageFileIds.length > capability.max_images_per_subject) return message.warning(`每个主体最多支持 ${capability.max_images_per_subject} 张图片`)
+      if (capability?.max_videos_per_subject != null && subject.videoFileIds.length > capability.max_videos_per_subject) return message.warning(`每个主体最多支持 ${capability.max_videos_per_subject} 个视频`)
+      if (capability?.max_media_per_subject != null && subject.imageFileIds.length + subject.videoFileIds.length > capability.max_media_per_subject) return message.warning(`每个主体最多支持 ${capability.max_media_per_subject} 个参考素材`)
+    }
     setSubmitting(true)
     try {
       const session = await ensureSession('video')
-      const response = await StudioVideoLabService.createVideoLabTaskApiV1StudioVideoLabTasksPost({ requestBody: { session_id: session.id, model_id: modelId, prompt: currentPrompt, ratio, first_frame_file_id: frameFileIds.first, last_frame_file_id: frameFileIds.last, key_frame_file_id: frameFileIds.key } })
-      if (!response.data?.task_id) throw new Error('创建视频任务失败')
-      const optimistic = [
-        { id: `local-user-${response.data.task_id}`, role: 'user' as const, content: currentPrompt, ratio, frameFileIds: { ...frameFileIds } },
-        { id: `local-task-${response.data.task_id}`, role: 'assistant' as const, content: '视频生成任务已创建', taskId: response.data.task_id, status: 'pending' },
-      ]
-      // 先立即显示提交内容和生成占位；随后历史读取以 task_id 去重并接管展示。
-      pendingVideoMessagesBySession.set(session.id, optimistic)
-      setOptimisticMessages(optimistic)
-      // 草稿首次提交会由页面壳更新 sessionId，随后 Hook 自动读取新会话历史；
-      // 已持久化会话则立即刷新，保证新任务气泡无需等待下一次导航。
-      if (sessionId) await history.refresh()
+      const response = await StudioVideoLabService.createVideoLabTaskApiV1StudioVideoLabTasksPost({ requestBody: {
+        session_id: session.id, model_id: modelId, prompt: currentPrompt, ratio,
+        frame_references: {
+          first_frame_file_id: frameFileIds.first ?? null,
+          last_frame_file_id: frameFileIds.last ?? null,
+          key_frame_file_ids: frameFileIds.key ? [frameFileIds.key] : [],
+        },
+        subject_references: subjectReferences.map((subject) => ({ name: subject.name.trim(), image_file_ids: subject.imageFileIds, video_file_ids: subject.videoFileIds })),
+      } })
+      const created = response.data
+      if (!created?.task_id || !created.messages?.length) throw new Error('创建视频任务未返回正式消息')
+      // 创建接口直接返回正式 user/task 消息，共享 Hook 负责跨首提重挂载接管。
+      history.adoptCanonicalMessages(session.id, created.messages)
       message.success('视频生成任务已创建')
     } catch { message.error('创建视频生成任务失败，请检查模型、关键帧和服务配置') } finally { setSubmitting(false) }
   }
@@ -244,7 +352,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
         <Tag color={isUser ? 'blue' : item.status === 'failed' ? 'red' : 'green'}>{isUser ? '你' : '视频生成'}</Tag>
         <div className={`mt-1 rounded-lg px-3 py-2 ${isUser ? 'whitespace-pre-wrap bg-blue-50' : 'bg-gray-50'}`}>
           <div className="whitespace-pre-wrap">{item.content}</div>
-          {isUser ? <><ExperimentHistoryReferences files={files} references={(['first', 'last', 'key'] as FrameSlot[]).flatMap((slot) => item.frameFileIds?.[slot] ? [{ id: item.frameFileIds[slot]!, label: frameLabels[slot] }] : [])} />{item.ratio ? <div className="mt-2 text-xs text-slate-500">画幅：{item.ratio}</div> : null}</> : null}
+          {isUser ? <><ExperimentHistoryReferences files={files} references={[...(['first', 'last', 'key'] as FrameSlot[]).flatMap((slot) => item.frameFileIds?.[slot] ? [{ id: item.frameFileIds[slot]!, label: frameLabels[slot] }] : []), ...(item.subjectReferences ?? []).flatMap((subject) => subject.imageFileIds.map((id) => ({ id, label: `${subject.name}图片` })))]} />{(item.subjectReferences ?? []).flatMap((subject) => subject.videoFileIds.map((id) => <Tag key={id} className="mt-1">{subject.name}视频：{files.find((file) => file.id === id)?.name ?? id}</Tag>))}{item.ratio ? <div className="mt-2 text-xs text-slate-500">画幅：{item.ratio}</div> : null}</> : null}
           {item.taskId ? <div className="mt-2 flex items-center gap-2 text-sm text-slate-600">{isRunning ? <Spin size="small" /> : null}<span>任务状态：{statusText}{typeof item.progress === 'number' ? `（${item.progress}%）` : ''}</span></div> : null}
           {item.error ? <div className="mt-2 text-sm text-red-600">{item.error}</div> : null}
           {item.videoUrl ? <button type="button" className="group relative mt-3 block h-36 w-64 max-w-full overflow-hidden rounded-lg border border-slate-200 bg-slate-900 text-left" onClick={() => setPreviewVideoUrl(item.videoUrl ?? null)} aria-label="打开视频预览"><video muted playsInline preload="metadata" tabIndex={-1} aria-hidden="true" className="pointer-events-none h-full w-full object-cover" src={item.videoUrl} onLoadedMetadata={(event) => { event.currentTarget.currentTime = 0.1 }}>视频缩略图</video><span className="absolute inset-0 flex items-center justify-center bg-slate-950/25 text-sm font-medium text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">点击预览</span></button> : null}
@@ -252,11 +360,22 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
       </div>
     })}
   </>
-  const composer = <ExperimentComposer submitting={disabled} submitDisabled={disabled} submitLabel="生成视频" onSubmit={() => void submit()} options={<ExperimentOptionBar models={models.map((item) => ({ id: item.id, name: item.name }))} templates={templates.map((item) => ({ id: item.id, name: item.name, version: item.version, preview: item.preview, category: '视频提示词' }))} modelId={modelId} templateId={templateId} modelsLoading={modelsLoading} templatesLoading={templatesLoading} disabled={disabled} modelLabel="视频模型" modelPlaceholder="选择已登记的视频模型" onModelChange={setModelId} onTemplateChange={selectTemplate} onModelOpenChange={(open) => { if (open) void loadModels() }} onTemplateOpenChange={(open) => { if (open) void loadTemplates() }} />} contextActions={<div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 border-l border-slate-200 pl-2">{(['first', 'last', 'key'] as FrameSlot[]).map((slot) => <FrameControl key={slot} slot={slot} file={selectedFrames[slot]} disabled={disabled} uploading={uploadingSlot === slot} onUpload={uploadFrame} onOpenLibrary={setLibraryTarget} onRemove={(target) => setFrameFileIds((current) => ({ ...current, [target]: undefined }))} />)}<Select size="small" value={ratio} onChange={setRatio} disabled={disabled} options={ratioOptions.map((value) => ({ value, label: value }))} aria-label="视频比例" /></div>}><ExperimentPromptEditor template={selectedTemplate} templateValues={templateValues} draft={draft} placeholder="描述你想生成的视频…" minRows={5} disabled={disabled} onDraftChange={setDraft} onTemplateValuesChange={setTemplateValues} onUseFreeInput={(prompt) => { setTemplateId(undefined); setTemplateValues({}); setDraft(prompt) }} /></ExperimentComposer>
-  const overlays = <><Modal title={libraryTarget ? `从资料库选择${frameLabels[libraryTarget]}` : '从资料库选择关键帧'} open={Boolean(libraryTarget)} onCancel={() => setLibraryTarget(null)} footer={<Button type="primary" onClick={() => setLibraryTarget(null)}>完成</Button>} width={820}><div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">{files.map((file) => <button key={file.id} type="button" onClick={() => { if (libraryTarget) setFrameFileIds((current) => ({ ...current, [libraryTarget]: file.id })) }} className={`overflow-hidden rounded border text-left ${libraryTarget && frameFileIds[libraryTarget] === file.id ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200'}`}><img src={buildFileDownloadUrl(file.id)} alt={file.name} className="h-28 w-full object-cover" /><div className="truncate p-2 text-xs">{file.name}</div></button>)}</div>{!files.length ? <Empty description="资料库中暂无图片" /> : null}</Modal><Modal title="视频预览" open={Boolean(previewVideoUrl)} onCancel={() => setPreviewVideoUrl(null)} footer={null} destroyOnClose width={900}>{previewVideoUrl ? <video controls autoPlay preload="metadata" className="w-full rounded-lg bg-black" src={previewVideoUrl}>你的浏览器不支持视频预览。</video> : null}</Modal></>
+  const subjectActions = capability?.supports_subject_image_reference || capability?.supports_subject_video_reference ? <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 border-l border-slate-200 pl-2">
+    <Button size="small" disabled={disabled || hasFrameReferences || (capability?.max_subjects != null && subjectReferences.length >= capability.max_subjects)} onClick={() => setSubjectReferences((current) => [...current, { id: crypto.randomUUID(), name: '', imageFileIds: [], videoFileIds: [] }])}>添加主体</Button>
+    {hasFrameReferences ? <span className="text-xs text-slate-500">关键帧已启用，不能添加主体参考</span> : null}
+    {subjectReferences.map((subject, index) => <div key={subject.id} className="flex max-w-full items-center gap-1 rounded border border-slate-200 px-1 py-1">
+      <Input size="small" value={subject.name} disabled={disabled} placeholder={`主体${index + 1}名称`} className="w-24" onChange={(event) => setSubjectReferences((current) => current.map((item) => item.id === subject.id ? { ...item, name: event.target.value } : item))} />
+      {capability?.supports_subject_image_reference ? <SubjectMediaControl kind="image" disabled={disabled} uploading={false} onUpload={(file) => uploadSubjectMedia(subject.id, 'image', file)} onOpenLibrary={() => setSubjectLibraryTarget({ subjectId: subject.id, kind: 'image' })} /> : null}
+      {capability?.supports_subject_video_reference ? <SubjectMediaControl kind="video" disabled={disabled} uploading={false} onUpload={(file) => uploadSubjectMedia(subject.id, 'video', file)} onOpenLibrary={() => setSubjectLibraryTarget({ subjectId: subject.id, kind: 'video' })} /> : null}
+      {[...subject.imageFileIds, ...subject.videoFileIds].map((fileId) => <Tag key={fileId} closable={!disabled} onClose={() => setSubjectReferences((current) => current.map((item) => item.id !== subject.id ? item : { ...item, imageFileIds: item.imageFileIds.filter((id) => id !== fileId), videoFileIds: item.videoFileIds.filter((id) => id !== fileId) }))}>{files.find((file) => file.id === fileId)?.name ?? '主体素材'}</Tag>)}
+      <Button size="small" type="text" aria-label={`移除主体${index + 1}`} icon={<CloseOutlined />} onClick={() => setSubjectReferences((current) => current.filter((item) => item.id !== subject.id))} />
+    </div>)}
+  </div> : null
+  const composer = <ExperimentComposer submitting={disabled} submitDisabled={disabled} submitLabel="生成视频" onSubmit={() => void submit()} options={<ExperimentOptionBar models={models.map((item) => ({ id: item.id, name: item.name }))} templates={templates.map((item) => ({ id: item.id, name: item.name, version: item.version, preview: item.preview, category: '视频提示词' }))} modelId={modelId} templateId={templateId} modelsLoading={modelsLoading} templatesLoading={templatesLoading} disabled={disabled} modelLabel="视频模型" modelPlaceholder="选择已登记的视频模型" onModelChange={selectModel} onTemplateChange={selectTemplate} onModelOpenChange={(open) => { if (open) void loadModels() }} onTemplateOpenChange={(open) => { if (open) void loadTemplates() }} />} contextActions={<div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 border-l border-slate-200 pl-2">{(['first', 'last', 'key'] as FrameSlot[]).map((slot) => <FrameControl key={slot} slot={slot} file={selectedFrames[slot]} disabled={disabled || hasSubjectReferences} uploading={uploadingSlot === slot} onUpload={uploadFrame} onOpenLibrary={setLibraryTarget} onRemove={(target) => setFrameFileIds((current) => ({ ...current, [target]: undefined }))} />)}{hasSubjectReferences ? <span className="text-xs text-slate-500">主体参考已启用，不能添加关键帧</span> : null}<Select size="small" value={ratio} onChange={setRatio} disabled={disabled} options={(capability?.allowed_ratios?.length ? capability.allowed_ratios : ratioOptions).map((value) => ({ value, label: value }))} aria-label="视频比例" />{subjectActions}</div>}><ExperimentPromptEditor template={selectedTemplate} templateValues={templateValues} draft={draft} placeholder="描述你想生成的视频…" minRows={5} disabled={disabled} onDraftChange={setDraft} onTemplateValuesChange={setTemplateValues} onUseFreeInput={(prompt) => { setTemplateId(undefined); setTemplateValues({}); setDraft(prompt) }} /></ExperimentComposer>
+  const overlays = <><Modal title={libraryTarget ? `从资料库选择${frameLabels[libraryTarget]}` : '从资料库选择关键帧'} open={Boolean(libraryTarget)} onCancel={() => setLibraryTarget(null)} footer={<Button type="primary" onClick={() => setLibraryTarget(null)}>完成</Button>} width={820}><div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">{imageFiles.map((file) => <button key={file.id} type="button" onClick={() => { if (libraryTarget) setFrameFileIds((current) => ({ ...current, [libraryTarget]: file.id })) }} className={`overflow-hidden rounded border text-left ${libraryTarget && frameFileIds[libraryTarget] === file.id ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200'}`}><img src={buildFileDownloadUrl(file.id)} alt={file.name} className="h-28 w-full object-cover" /><div className="truncate p-2 text-xs">{file.name}</div></button>)}</div>{!imageFiles.length ? <Empty description="资料库中暂无图片" /> : null}</Modal><Modal title={subjectLibraryTarget ? `从资料库选择主体${subjectLibraryTarget.kind === 'image' ? '图片' : '视频'}` : '选择主体素材'} open={Boolean(subjectLibraryTarget)} onCancel={() => setSubjectLibraryTarget(null)} footer={<Button type="primary" onClick={() => setSubjectLibraryTarget(null)}>完成</Button>} width={820}><div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">{(subjectLibraryTarget?.kind === 'video' ? videoFiles : imageFiles).map((file) => <button key={file.id} type="button" onClick={() => { if (!subjectLibraryTarget) return; const target = subjectLibraryTarget; if (!canAppendSubjectMedia(target.subjectId, target.kind)) return message.warning('已达到当前模型的主体参考上限'); setSubjectReferences((current) => current.map((subject) => subject.id !== target.subjectId ? subject : target.kind === 'image' ? { ...subject, imageFileIds: [...subject.imageFileIds, file.id] } : { ...subject, videoFileIds: [...subject.videoFileIds, file.id] })) }} className="overflow-hidden rounded border border-gray-200 text-left"><div className="flex h-28 items-center justify-center bg-slate-100">{subjectLibraryTarget?.kind === 'image' ? <img src={buildFileDownloadUrl(file.id)} alt={file.name} className="h-full w-full object-cover" /> : <VideoCameraOutlined className="text-2xl text-slate-500" />}</div><div className="truncate p-2 text-xs">{file.name}</div></button>)}</div>{!(subjectLibraryTarget?.kind === 'video' ? videoFiles : imageFiles).length ? <Empty description={`资料库中暂无主体${subjectLibraryTarget?.kind === 'video' ? '视频' : '图片'}`} /> : null}</Modal><Modal title="视频预览" open={Boolean(previewVideoUrl)} onCancel={() => setPreviewVideoUrl(null)} footer={null} destroyOnClose width={900}>{previewVideoUrl ? <video controls autoPlay preload="metadata" className="w-full rounded-lg bg-black" src={previewVideoUrl}>你的浏览器不支持视频预览。</video> : null}</Modal></>
   const clearHistory = async () => {
     if (!sessionId || !clearSessionMessages) return
-    try { await clearSessionMessages(sessionId); await history.refresh() } catch { message.error('清空历史失败；含生成任务的会话不可清空') }
+    try { await clearSessionMessages(sessionId); history.clearLocalHistory(); await history.refresh() } catch { message.error('清空历史失败；含生成任务的会话不可清空') }
   }
   const extra = <Button disabled={!messages.length || disabled || !clearSessionMessages} onClick={() => void clearHistory()}>清空历史</Button>
   return <>{render({ history: historyNode, composer, extra, overlays, disabled })}</>

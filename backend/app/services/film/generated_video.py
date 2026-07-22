@@ -46,16 +46,16 @@ async def validate_shot_and_duration(db: AsyncSession, shot_id: str) -> ShotDeta
     return shot_detail
 
 
-async def file_id_to_data_url(db: AsyncSession, *, file_id: str) -> str:
+async def file_id_to_data_url(db: AsyncSession, *, file_id: str, media_kind: str = "image") -> str:
     file_obj = await db.get(FileItem, file_id)
     if file_obj is None or not file_obj.storage_key:
-        raise HTTPException(status_code=400, detail=f"Invalid image file_id: {file_id}")
+        raise HTTPException(status_code=400, detail=f"Invalid {media_kind} file_id: {file_id}")
     try:
         content = await storage.download_file(key=file_obj.storage_key)
     except Exception:  # noqa: BLE001
-        raise HTTPException(status_code=400, detail=f"Invalid image file_id: {file_id}") from None
+        raise HTTPException(status_code=400, detail=f"Invalid {media_kind} file_id: {file_id}") from None
     if not content:
-        raise HTTPException(status_code=400, detail=f"Invalid image file_id: {file_id}")
+        raise HTTPException(status_code=400, detail=f"Invalid {media_kind} file_id: {file_id}")
 
     content_type: str | None = None
     try:
@@ -66,12 +66,12 @@ async def file_id_to_data_url(db: AsyncSession, *, file_id: str) -> str:
     if not content_type:
         guessed_type, _ = mimetypes.guess_type(file_obj.storage_key)
         content_type = (guessed_type or "").strip().lower() or None
-    if not content_type or not content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail=f"Invalid image file_id: {file_id}")
+    if media_kind not in {"image", "video"} or not content_type or not content_type.startswith(f"{media_kind}/"):
+        raise HTTPException(status_code=400, detail=f"Invalid {media_kind} file_id: {file_id}")
 
-    image_format = content_type.split("/", 1)[1].split(";", 1)[0].strip().lower() or "png"
+    media_format = content_type.split("/", 1)[1].split(";", 1)[0].strip().lower()
     encoded = base64.b64encode(content).decode("ascii")
-    return f"data:image/{image_format};base64,{encoded}"
+    return f"data:{media_kind}/{media_format};base64,{encoded}"
 
 
 async def preview_prompt_and_images(
@@ -192,9 +192,11 @@ async def build_run_args(
         "base_url": provider_cfg.base_url,
         "input": {
             "prompt": final_prompt,
-            "first_frame_base64": frame_map.get(ShotFrameType.first),
-            "last_frame_base64": frame_map.get(ShotFrameType.last),
-            "key_frame_base64": frame_map.get(ShotFrameType.key),
+            "frame_references": {
+                "first_frame": frame_map.get(ShotFrameType.first),
+                "last_frame": frame_map.get(ShotFrameType.last),
+                "key_frames": [frame_map[ShotFrameType.key]] if frame_map.get(ShotFrameType.key) else [],
+            },
             "model": model.name,
             "ratio": resolved_ratio,
             "seconds": shot_detail.duration,
@@ -212,27 +214,38 @@ async def build_video_lab_run_args(
     model_id: str,
     prompt: str,
     ratio: str,
-    first_frame_file_id: str | None,
-    last_frame_file_id: str | None,
-    key_frame_file_id: str | None,
+    frame_references,
+    subject_references: list | None = None,
 ) -> dict:
     """为独立视频实验构建可异步执行的供应商输入，不读取或修改镜头数据。"""
     model = await resolve_video_model_by_id(db, model_id=model_id)
     provider_cfg = await load_provider_config_by_model(db, model)
     resolved_ratio = await resolve_effective_video_options(requested_ratio=ratio)
-    frame_ids = {
-        "first_frame_base64": first_frame_file_id,
-        "last_frame_base64": last_frame_file_id,
-        "key_frame_base64": key_frame_file_id,
-    }
     input_payload = {
         "prompt": prompt.strip(),
         "model": model.name,
         "ratio": resolved_ratio,
     }
-    for field_name, file_id in frame_ids.items():
-        if file_id:
-            input_payload[field_name] = await file_id_to_data_url(db, file_id=file_id)
+    input_payload["frame_references"] = {
+        "first_frame": await file_id_to_data_url(db, file_id=frame_references.first_frame_file_id) if frame_references.first_frame_file_id else None,
+        "last_frame": await file_id_to_data_url(db, file_id=frame_references.last_frame_file_id) if frame_references.last_frame_file_id else None,
+        "key_frames": [await file_id_to_data_url(db, file_id=file_id) for file_id in frame_references.key_frame_file_ids],
+    }
+    if subject_references:
+        input_payload["subject_references"] = [
+            {
+                "name": subject.name,
+                "images": [
+                    await file_id_to_data_url(db, file_id=file_id, media_kind="image")
+                    for file_id in subject.image_file_ids
+                ],
+                "videos": [
+                    await file_id_to_data_url(db, file_id=file_id, media_kind="video")
+                    for file_id in subject.video_file_ids
+                ],
+            }
+            for subject in subject_references
+        ]
     VideoGenerationInput.model_validate(input_payload)
     return {
         "source": "video_lab",

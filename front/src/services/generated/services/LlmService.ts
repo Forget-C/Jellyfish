@@ -181,10 +181,20 @@ export class LlmService {
      * @returns ApiResponse_VideoGenerationOptionsRead_ Successful Response
      * @throws ApiError
      */
-    public static getVideoGenerationOptionsApiV1LlmVideoGenerationOptionsGet(): CancelablePromise<ApiResponse_VideoGenerationOptionsRead_> {
+    public static getVideoGenerationOptionsApiV1LlmVideoGenerationOptionsGet({
+        modelId,
+    }: {
+        modelId?: (string | null),
+    }): CancelablePromise<ApiResponse_VideoGenerationOptionsRead_> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/llm/video-generation-options',
+            query: {
+                'model_id': modelId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
         });
     }
     /**

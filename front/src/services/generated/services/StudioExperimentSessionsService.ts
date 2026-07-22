@@ -87,6 +87,8 @@ export class StudioExperimentSessionsService {
     /**
      * Delete Experiment Session
      * 删除尚未关联任务消息的会话，避免运行任务失去历史归属。
+     *
+     * P2 接入审计后，应在提交成功的同一事务中记录删除事件。
      * @returns ApiResponse_NoneType_ Successful Response
      * @throws ApiError
      */
@@ -165,6 +167,8 @@ export class StudioExperimentSessionsService {
     /**
      * Clear Experiment Messages
      * 清空不含生成任务的会话历史，避免运行任务失去展示归属。
+     *
+     * P2 的保留策略落地前维持物理删除；后续归档策略不能影响运行中任务保护。
      * @returns ApiResponse_NoneType_ Successful Response
      * @throws ApiError
      */

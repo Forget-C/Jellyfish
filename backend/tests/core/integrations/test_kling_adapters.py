@@ -74,7 +74,7 @@ async def test_kling_omni_image_to_video_uses_contents(monkeypatch: pytest.Monke
     task_id = await KlingVideoApiAdapter().create_video(
         cfg=ProviderConfig(provider="kling", api_key="kling-key"),
         input_=VideoGenerationInput(
-            prompt="人物回头", model="kling-3.0", ratio="9:16", first_frame_base64="frame"
+            prompt="人物回头", model="kling-3.0", ratio="9:16", frame_references={"first_frame": "frame"}
         ),
         timeout_s=30,
     )

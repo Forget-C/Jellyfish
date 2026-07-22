@@ -361,20 +361,25 @@ async def update_model_settings(
 
 async def get_video_generation_options(
     db: AsyncSession,
+    *,
+    model_id: str | None = None,
 ) -> VideoGenerationOptionsRead:
-    """返回当前默认视频模型的动态 ratio 枚举。"""
+    """返回指定视频模型（未指定时为默认模型）的能力选项。"""
     settings = await get_or_create_settings(db)
-    model_id = settings.default_video_model_id
-    if not model_id:
+    resolved_model_id = model_id or settings.default_video_model_id
+    if not resolved_model_id:
         return VideoGenerationOptionsRead(
             provider="",
             model_id="",
             model_name="",
             allowed_ratios=["16:9"],
             default_ratio="16:9",
+            supports_subject_image_reference=False,
+            supports_subject_video_reference=False,
+            supports_subject_reference_with_frame_reference=False,
         )
 
-    model = await get_or_404(db, Model, model_id, detail=entity_not_found("Model"))
+    model = await get_or_404(db, Model, resolved_model_id, detail=entity_not_found("Model"))
     provider = await get_or_404(db, Provider, model.provider_id, detail=entity_not_found("Provider"))
     provider_key = resolve_provider_key_from_name(provider.name)
     capability = resolve_video_capability(provider=provider_key, model=model.name)
@@ -389,6 +394,14 @@ async def get_video_generation_options(
         model_name=model.name,
         allowed_ratios=allowed_ratios,
         default_ratio=default_ratio,
+        supports_subject_image_reference=capability.supports_subject_image_reference,
+        supports_subject_video_reference=capability.supports_subject_video_reference,
+        supports_subject_reference_with_frame_reference=capability.supports_subject_reference_with_frame_reference,
+        max_subjects=capability.max_subjects,
+        max_images_per_subject=capability.max_images_per_subject,
+        max_videos_per_subject=capability.max_videos_per_subject,
+        max_media_per_subject=capability.max_media_per_subject,
+        max_total_subject_videos=capability.max_total_subject_videos,
     )
 
 

@@ -110,6 +110,16 @@ class VideoGenerationOptionsRead(BaseModel):
     model_name: str = Field(..., description="默认视频模型名称")
     allowed_ratios: list[str] = Field(default_factory=list, description="当前模型允许的比例选项")
     default_ratio: str = Field(..., description="当前模型默认比例")
+    supports_subject_image_reference: bool = Field(False, description="是否支持参考主体图片")
+    supports_subject_video_reference: bool = Field(False, description="是否支持参考主体视频")
+    supports_subject_reference_with_frame_reference: bool = Field(
+        False, description="是否允许主体参考与首帧/尾帧/关键帧同时提交"
+    )
+    max_subjects: int | None = Field(None, description="主体数量上限")
+    max_images_per_subject: int | None = Field(None, description="单主体图片上限")
+    max_videos_per_subject: int | None = Field(None, description="单主体视频上限")
+    max_media_per_subject: int | None = Field(None, description="单主体图片与视频共享槽位上限")
+    max_total_subject_videos: int | None = Field(None, description="所有主体视频总数上限")
 
 
 class ImageGenerationOptionsRead(BaseModel):

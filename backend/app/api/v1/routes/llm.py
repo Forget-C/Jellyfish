@@ -140,9 +140,10 @@ async def get_image_generation_options(
     summary="获取当前默认视频模型的动态比例选项",
 )
 async def get_video_generation_options(
+    model_id: str | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[VideoGenerationOptionsRead]:
-    data = await get_video_generation_options_service(db)
+    data = await get_video_generation_options_service(db, model_id=model_id)
     return success_response(data)
 
 

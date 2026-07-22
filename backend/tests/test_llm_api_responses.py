@@ -281,6 +281,9 @@ def test_get_video_generation_options_returns_ratio_capability(client: TestClien
     assert body["data"]["model_name"] == "sora-mini"
     assert "16:9" in body["data"]["allowed_ratios"]
     assert body["data"]["default_ratio"] == "16:9"
+    assert body["data"]["supports_subject_image_reference"] is False
+    assert body["data"]["supports_subject_video_reference"] is False
+    assert body["data"]["supports_subject_reference_with_frame_reference"] is False
 
 
 def test_get_image_generation_options_returns_ratio_size_profiles(client: TestClient) -> None:

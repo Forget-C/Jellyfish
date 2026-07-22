@@ -143,6 +143,31 @@ type VideoPromptDerived = {
   images: string[]
   pack: ShotVideoPromptPackRead | null
 }
+type VideoFrameReferences = {
+  first_frame_file_id?: string | null
+  last_frame_file_id?: string | null
+  key_frame_file_ids: string[]
+}
+
+/**
+ * 将既有按 reference_mode 排序的帧文件列表映射为具名帧契约。
+ *
+ * 工作台仍维护原有首帧/尾帧/关键帧流程，映射仅在 API 边界执行，
+ * 以避免将主体参考与镜头构图帧混入同一个数组。
+ */
+function buildVideoFrameReferences(mode: VideoReferenceMode, images: string[]): VideoFrameReferences {
+  const refs = images.filter(Boolean)
+  if (mode === 'first') return { first_frame_file_id: refs[0] ?? null, key_frame_file_ids: [] }
+  if (mode === 'last') return { last_frame_file_id: refs[0] ?? null, key_frame_file_ids: [] }
+  if (mode === 'key') return { key_frame_file_ids: refs.slice(0, 1) }
+  if (mode === 'first_last') {
+    return { first_frame_file_id: refs[0] ?? null, last_frame_file_id: refs[1] ?? null, key_frame_file_ids: [] }
+  }
+  if (mode === 'first_last_key') {
+    return { first_frame_file_id: refs[0] ?? null, last_frame_file_id: refs[1] ?? null, key_frame_file_ids: refs.slice(2, 3) }
+  }
+  return { key_frame_file_ids: [] }
+}
 
 function normalizeFrameExclusiveTags(tags: string[]): string[] {
   const cleaned = (tags || []).map((x) => String(x ?? '').trim()).filter(Boolean)
@@ -3068,9 +3093,9 @@ function Inspector(props: {
           shot_id: selectedShot.id,
           reference_mode: context.referenceMode,
           prompt: (base.prompt || '').trim() || null,
-          images: context.images,
-          ratio,
-        } as any,
+          frame_references: buildVideoFrameReferences(context.referenceMode, context.images),
+          ratio: ratio as '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | '21:9',
+        },
       })
       const data = (res as any)?.data ?? null
       return {
@@ -3092,9 +3117,9 @@ function Inspector(props: {
           shot_id: selectedShot.id,
           reference_mode: context.referenceMode,
           prompt: (derived.prompt || '').trim(),
-          images: derived.images,
-          ratio,
-        } as any,
+          frame_references: buildVideoFrameReferences(context.referenceMode, derived.images),
+          ratio: ratio as '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | '21:9',
+        },
       })
       return {
         taskId: created.data?.task_id ?? null,

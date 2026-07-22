@@ -19,9 +19,9 @@ def to_image_data_url(value: str) -> str:
 def pick_input_reference(input_: VideoGenerationInput) -> dict[str, str] | None:
     """OpenAI 仅支持单一 input_reference；优先级：key > first > last。"""
     for raw in (
-        _strip_optional_b64(input_.key_frame_base64),
-        _strip_optional_b64(input_.first_frame_base64),
-        _strip_optional_b64(input_.last_frame_base64),
+        *[_strip_optional_b64(value) for value in input_.frame_references.key_frames],
+        _strip_optional_b64(input_.frame_references.first_frame),
+        _strip_optional_b64(input_.frame_references.last_frame),
     ):
         if raw:
             return {"image_url": to_image_data_url(raw)}

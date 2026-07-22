@@ -62,10 +62,18 @@ function extractVideoUrl(result: Record<string, unknown> | null | undefined): st
 function toVideoLabMessage(item: ExperimentMessageRead): VideoLabMessage {
   const payload = item.payload ?? {}
   const frameFileIds: Partial<Record<FrameSlot, string>> = {}
-  ;(['first', 'last', 'key'] as FrameSlot[]).forEach((slot) => {
-    const value = payload[`${slot}_frame_file_id`]
-    if (typeof value === 'string') frameFileIds[slot] = value
-  })
+  const frameReferences = payload.frame_references
+  if (frameReferences && typeof frameReferences === 'object') {
+    const references = frameReferences as Record<string, unknown>
+    if (typeof references.first_frame_file_id === 'string') frameFileIds.first = references.first_frame_file_id
+    if (typeof references.last_frame_file_id === 'string') frameFileIds.last = references.last_frame_file_id
+    if (Array.isArray(references.key_frame_file_ids) && typeof references.key_frame_file_ids[0] === 'string') frameFileIds.key = references.key_frame_file_ids[0]
+  } else {
+    ;(['first', 'last', 'key'] as FrameSlot[]).forEach((slot) => {
+      const value = payload[`${slot}_frame_file_id`]
+      if (typeof value === 'string') frameFileIds[slot] = value
+    })
+  }
   return {
     id: item.id,
     role: item.role === 'user' ? 'user' : 'assistant',
@@ -303,9 +311,11 @@ export default function VideoLabPage() {
           session_id: activeSessionId, model_id: modelId,
           prompt: currentPrompt,
           ratio,
-          first_frame_file_id: frameFileIds.first,
-          last_frame_file_id: frameFileIds.last,
-          key_frame_file_id: frameFileIds.key,
+          frame_references: {
+            first_frame_file_id: frameFileIds.first,
+            last_frame_file_id: frameFileIds.last,
+            key_frame_file_ids: frameFileIds.key ? [frameFileIds.key] : [],
+          },
         },
       })
       const taskId = response.data?.task_id

@@ -13,6 +13,10 @@ export type ExperimentMessageRead = {
     task_id?: (string | null);
     id: string;
     session_id: string;
+    /**
+     * 会话内由服务端分配的稳定展示顺序
+     */
+    sequence: number;
     created_at: string;
     updated_at: string;
 };

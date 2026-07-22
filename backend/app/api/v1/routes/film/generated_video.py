@@ -42,7 +42,7 @@ async def preview_video_generation_prompt(
         shot_id=body.shot_id,
         reference_mode=body.reference_mode,
         prompt=body.prompt,
-        images=body.images,
+        images=body.ordered_frame_file_ids(),
     )
     return success_response(VideoPromptPreviewResponse(prompt=prompt, images=images, pack=pack))
 
@@ -66,7 +66,7 @@ async def create_video_generation_task(
         shot_id=body.shot_id,
         reference_mode=body.reference_mode,
         prompt=body.prompt,
-        images=body.images,
+        images=body.ordered_frame_file_ids(),
         ratio=body.ratio,
     )
 

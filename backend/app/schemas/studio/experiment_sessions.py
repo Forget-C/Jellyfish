@@ -60,6 +60,19 @@ class ExperimentMessageRead(ExperimentMessageCreate):
 
     id: str
     session_id: str
+    sequence: int = Field(..., ge=1, description="会话内由服务端分配的稳定展示顺序")
     created_at: datetime
     updated_at: datetime
     model_config = ConfigDict(from_attributes=True)
+
+
+class ExperimentTaskCreated(BaseModel):
+    """创建生成任务后返回任务标识和可直接接管乐观 UI 的权威消息。"""
+
+    task_id: str
+    messages: list[ExperimentMessageRead] = Field(
+        ...,
+        min_length=2,
+        max_length=2,
+        description="本次提交创建的用户消息与任务消息，按 sequence 正序返回",
+    )

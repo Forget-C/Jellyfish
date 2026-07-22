@@ -14,7 +14,7 @@ from app.core.integrations.vidu.video_payload import build_create_video_request
 from app.core.tasks.video_generation_tasks import ViduVideoGenerationTask
 from app.core.integrations.volcengine.video import VolcengineVideoApiAdapter
 from app.core.contracts.provider import ProviderConfig
-from app.core.contracts.video_generation import VideoGenerationInput
+from app.core.contracts.video_generation import VideoGenerationInput, VideoSubjectReference
 
 
 def _patch_httpx_client(monkeypatch: pytest.MonkeyPatch, transport: httpx.MockTransport) -> None:
@@ -115,8 +115,7 @@ async def test_vidu_video_create_and_get(monkeypatch: pytest.MonkeyPatch) -> Non
         prompt="a transition",
         model="viduq2",
         ratio="16:9",
-        first_frame_base64="first",
-        last_frame_base64="last",
+        frame_references={"first_frame": "first", "last_frame": "last"},
     )
     adapter = ViduVideoApiAdapter()
     task_id = await adapter.create_video(cfg=cfg, input_=inp, timeout_s=30.0)
@@ -135,13 +134,34 @@ def test_vidu_video_payload_selects_text_and_reference_endpoints() -> None:
             prompt="same character",
             model="viduq2",
             ratio="16:9",
-            first_frame_base64="first",
-            key_frame_base64="key",
+            frame_references={"first_frame": "first", "key_frames": ["key"]},
         )
     )
     assert text_path == "/ent/v2/text2video"
     assert reference_path == "/ent/v2/reference2video"
     assert reference_body["images"] == ["data:image/png;base64,first", "data:image/png;base64,key"]
+
+
+def test_vidu_video_payload_keeps_subject_references_separate_from_frames() -> None:
+    """主体图片/视频应映射到 Vidu subjects，而不是顶层帧 images/videos。"""
+    path, body = build_create_video_request(
+        VideoGenerationInput(
+            prompt="@hero 与 @pet 在花园散步",
+            model="viduq2-pro",
+            ratio="16:9",
+            subject_references=[
+                VideoSubjectReference(name="hero", images=["https://cdn.example/hero.png"]),
+                VideoSubjectReference(name="pet", videos=["https://cdn.example/pet.mp4"]),
+            ],
+        )
+    )
+    assert path == "/ent/v2/reference2video"
+    assert body["subjects"] == [
+        {"name": "hero", "images": ["https://cdn.example/hero.png"]},
+        {"name": "pet", "videos": ["https://cdn.example/pet.mp4"]},
+    ]
+    assert "images" not in body
+    assert "videos" not in body
 
 
 @pytest.mark.asyncio

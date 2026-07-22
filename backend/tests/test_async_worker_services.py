@@ -47,7 +47,7 @@ async def test_run_video_generation_task_marks_cancelled_before_execute(monkeypa
             ExperimentSession(id="video-session-1", lab_type="video", title="视频任务"),
             ExperimentMessage(
                 id="video-message-1", session_id="video-session-1", role="task", content="生成中",
-                task_id=task.id, status="pending", payload={"ratio": "16:9"},
+                task_id=task.id, status="pending", payload={"ratio": "16:9"}, sequence=1,
             ),
         ])
         await store.request_cancel(task.id, "用户取消")
@@ -95,7 +95,7 @@ async def test_run_image_generation_task_marks_cancelled_before_execute(monkeypa
             ExperimentSession(id="image-session-1", lab_type="image", title="图片任务"),
             ExperimentMessage(
                 id="image-message-1", session_id="image-session-1", role="task", content="生成中",
-                task_id=task.id, status="pending", payload={"reference_file_ids": []},
+                task_id=task.id, status="pending", payload={"reference_file_ids": []}, sequence=1,
             ),
         ])
         await store.request_cancel(task.id, "用户取消")
@@ -141,7 +141,7 @@ async def test_run_image_generation_task_persists_success_to_experiment_message(
             ExperimentSession(id="image-success-session", lab_type="image", title="图片成功任务"),
             ExperimentMessage(
                 id="image-success-message", session_id="image-success-session", role="task", content="生成中",
-                task_id=task.id, status="pending", payload={"reference_file_ids": ["ref-1"]},
+                task_id=task.id, status="pending", payload={"reference_file_ids": ["ref-1"]}, sequence=1,
             ),
         ])
         await db.commit()
@@ -213,7 +213,7 @@ async def test_run_image_generation_task_persists_failure_to_experiment_message(
             ExperimentSession(id="image-failure-session", lab_type="image", title="图片失败任务"),
             ExperimentMessage(
                 id="image-failure-message", session_id="image-failure-session", role="task", content="生成中",
-                task_id=task.id, status="pending", payload={"reference_file_ids": []},
+                task_id=task.id, status="pending", payload={"reference_file_ids": []}, sequence=1,
             ),
         ])
         await db.commit()
@@ -250,7 +250,7 @@ async def test_run_video_generation_task_persists_success_to_experiment_message(
             ExperimentSession(id="video-success-session", lab_type="video", title="视频成功任务"),
             ExperimentMessage(
                 id="video-success-message", session_id="video-success-session", role="task", content="生成中",
-                task_id=task.id, status="pending", payload={"ratio": "16:9"},
+                task_id=task.id, status="pending", payload={"ratio": "16:9"}, sequence=1,
             ),
         ])
         await db.commit()
@@ -313,7 +313,7 @@ async def test_run_video_generation_task_persists_failure_to_experiment_message(
             ExperimentSession(id="video-failure-session", lab_type="video", title="视频失败任务"),
             ExperimentMessage(
                 id="video-failure-message", session_id="video-failure-session", role="task", content="生成中",
-                task_id=task.id, status="pending", payload={"ratio": "16:9"},
+                task_id=task.id, status="pending", payload={"ratio": "16:9"}, sequence=1,
             ),
         ])
         await db.commit()

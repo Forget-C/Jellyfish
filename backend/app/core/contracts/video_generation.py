@@ -19,16 +19,58 @@ def _strip_optional_b64(value: str | None) -> str | None:
 VideoRatio = Literal["16:9", "4:3", "1:1", "3:4", "9:16", "21:9"]
 
 
+class VideoSubjectReference(BaseModel):
+    """视频一致性主体：以命名图片或视频描述生成时应保持一致的对象。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(..., min_length=1, description="主体名称；Vidu 提示词通过 @name 引用")
+    images: list[str] = Field(default_factory=list, description="主体图片 URL 或 data:image/... URL")
+    videos: list[str] = Field(default_factory=list, description="主体视频 URL 或 data:video/... URL")
+
+    @model_validator(mode="after")
+    def require_reference_media(self) -> "VideoSubjectReference":
+        """拒绝没有任何参考介质的主体，避免生成无效供应商请求。"""
+        self.name = self.name.strip()
+        self.images = [value.strip() for value in self.images if value and value.strip()]
+        self.videos = [value.strip() for value in self.videos if value and value.strip()]
+        if not self.name:
+            raise ValueError("subject name must not be blank")
+        if not self.images and not self.videos:
+            raise ValueError("subject requires at least one image or video reference")
+        return self
+
+
+class VideoFrameReferences(BaseModel):
+    """以时间语义表达构图约束，和一致性主体严格分离。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    first_frame: str | None = None
+    last_frame: str | None = None
+    key_frames: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def normalize_frames(self) -> "VideoFrameReferences":
+        """移除空帧值，避免空字符串被误判为有效参考。"""
+        self.first_frame = _strip_optional_b64(self.first_frame)
+        self.last_frame = _strip_optional_b64(self.last_frame)
+        self.key_frames = [value.strip() for value in self.key_frames if value and value.strip()]
+        return self
+
+
 class VideoGenerationInput(BaseModel):
-    """视频生成输入：支持文本提示词 + 可选的三种帧参考图（纯 base64 或 data URL）。"""
+    """视频生成输入：帧参考约束画面，主体参考约束角色/物件的一致性。"""
 
     model_config = ConfigDict(extra="forbid")
 
     prompt: Optional[str] = Field(None, description="文本提示词；可与参考图二选一或同时存在")
 
-    first_frame_base64: Optional[str] = Field(None, description="首帧图：纯 base64 或 data:image/...;base64,...")
-    last_frame_base64: Optional[str] = Field(None, description="尾帧图：纯 base64 或 data URL")
-    key_frame_base64: Optional[str] = Field(None, description="关键帧图：纯 base64 或 data URL")
+    frame_references: VideoFrameReferences = Field(default_factory=VideoFrameReferences)
+    subject_references: list[VideoSubjectReference] = Field(
+        default_factory=list,
+        description="命名主体参考；与首帧/尾帧/关键帧语义独立，由模型能力决定是否可组合",
+    )
 
     model: Optional[str] = Field(None, description="视频模型名称（可选，供应商透传）")
     ratio: VideoRatio = Field(..., description="视频宽高比，业务层唯一主参数")
@@ -46,9 +88,10 @@ class VideoGenerationInput(BaseModel):
         has_prompt = bool((self.prompt or "").strip())
         has_ref = any(
             [
-                _strip_optional_b64(self.first_frame_base64),
-                _strip_optional_b64(self.last_frame_base64),
-                _strip_optional_b64(self.key_frame_base64),
+                _strip_optional_b64(self.frame_references.first_frame),
+                _strip_optional_b64(self.frame_references.last_frame),
+                self.frame_references.key_frames,
+                self.subject_references,
             ]
         )
         if not has_prompt and not has_ref:

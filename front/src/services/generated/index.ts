@@ -18,6 +18,7 @@ export type { ApiResponse_EntityMergeResult_ } from './models/ApiResponse_Entity
 export type { ApiResponse_EntityNameExistenceCheckResponse_ } from './models/ApiResponse_EntityNameExistenceCheckResponse_';
 export type { ApiResponse_ExperimentMessageRead_ } from './models/ApiResponse_ExperimentMessageRead_';
 export type { ApiResponse_ExperimentSessionRead_ } from './models/ApiResponse_ExperimentSessionRead_';
+export type { ApiResponse_ExperimentTaskCreated_ } from './models/ApiResponse_ExperimentTaskCreated_';
 export type { ApiResponse_FileDetailRead_ } from './models/ApiResponse_FileDetailRead_';
 export type { ApiResponse_FileRead_ } from './models/ApiResponse_FileRead_';
 export type { ApiResponse_GenerationTaskLinkRead_ } from './models/ApiResponse_GenerationTaskLinkRead_';
@@ -118,6 +119,7 @@ export type { ExperimentMessageUpdate } from './models/ExperimentMessageUpdate';
 export type { ExperimentSessionCreate } from './models/ExperimentSessionCreate';
 export type { ExperimentSessionRead } from './models/ExperimentSessionRead';
 export type { ExperimentSessionUpdate } from './models/ExperimentSessionUpdate';
+export type { ExperimentTaskCreated } from './models/ExperimentTaskCreated';
 export type { FileDetailRead } from './models/FileDetailRead';
 export type { FileRead } from './models/FileRead';
 export type { FileTypeEnum } from './models/FileTypeEnum';
@@ -267,9 +269,12 @@ export type { VariantAnalysisRequest } from './models/VariantAnalysisRequest';
 export type { VariantAnalysisResult } from './models/VariantAnalysisResult';
 export type { VariantSuggestion } from './models/VariantSuggestion';
 export type { VFXType } from './models/VFXType';
+export type { VideoFrameReferenceFiles } from './models/VideoFrameReferenceFiles';
 export type { VideoGenerationOptionsRead } from './models/VideoGenerationOptionsRead';
 export type { VideoGenerationTaskRequest } from './models/VideoGenerationTaskRequest';
+export type { VideoLabFrameReferenceFiles } from './models/VideoLabFrameReferenceFiles';
 export type { VideoLabGenerateRequest } from './models/VideoLabGenerateRequest';
+export type { VideoLabSubjectReference } from './models/VideoLabSubjectReference';
 export type { VideoPromptPreviewResponse } from './models/VideoPromptPreviewResponse';
 
 export { DefaultService } from './services/DefaultService';

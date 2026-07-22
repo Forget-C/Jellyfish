@@ -88,7 +88,10 @@ def test_preview_video_generation_prompt_returns_success_envelope(client: TestCl
                 "shot_id": "shot-1",
                 "reference_mode": "first_last",
                 "prompt": "生成一个压迫感强的镜头",
-                "images": [],
+                    "frame_references": {
+                        "first_frame_file_id": "file-1",
+                        "last_frame_file_id": "file-2",
+                    },
                 "ratio": "9:16",
             },
         )
@@ -121,8 +124,7 @@ def test_preview_video_generation_prompt_not_found_returns_api_response(
             json={
                 "shot_id": "shot-missing",
                 "reference_mode": "text_only",
-                "prompt": "仅文本生成",
-                "images": [],
+                    "prompt": "仅文本生成",
                 "ratio": "16:9",
             },
         )
@@ -151,7 +153,7 @@ def test_create_video_generation_task_returns_created_envelope(client: TestClien
                 "shot_id": "shot-1",
                 "reference_mode": "first",
                 "prompt": "生成一个节奏紧张的视频片段",
-                "images": [],
+                    "frame_references": {"first_frame_file_id": "file-1"},
                 "ratio": "9:16",
             },
         )

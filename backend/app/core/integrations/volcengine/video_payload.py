@@ -16,7 +16,7 @@ def build_content(input_: VideoGenerationInput) -> list[dict[str, Any]]:
     if prompt:
         items.append({"type": "text", "text": prompt})
 
-    ff = _strip_optional_b64(input_.first_frame_base64)
+    ff = _strip_optional_b64(input_.frame_references.first_frame)
     if ff:
         items.append(
             {
@@ -25,7 +25,7 @@ def build_content(input_: VideoGenerationInput) -> list[dict[str, Any]]:
                 "image_url": {"url": to_image_data_url(ff)},
             }
         )
-    lf = _strip_optional_b64(input_.last_frame_base64)
+    lf = _strip_optional_b64(input_.frame_references.last_frame)
     if lf:
         items.append(
             {
@@ -34,8 +34,9 @@ def build_content(input_: VideoGenerationInput) -> list[dict[str, Any]]:
                 "image_url": {"url": to_image_data_url(lf)},
             }
         )
-    kf = _strip_optional_b64(input_.key_frame_base64)
-    if kf:
+    for kf in (_strip_optional_b64(value) for value in input_.frame_references.key_frames):
+        if not kf:
+            continue
         items.append(
             {
                 "type": "image_url",

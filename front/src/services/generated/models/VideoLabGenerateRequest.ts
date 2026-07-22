@@ -2,6 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { VideoLabFrameReferenceFiles } from './VideoLabFrameReferenceFiles';
+import type { VideoLabSubjectReference } from './VideoLabSubjectReference';
 /**
  * 提交一次不绑定镜头的视频实验，支持三种具名关键帧。
  */
@@ -22,17 +24,10 @@ export type VideoLabGenerateRequest = {
      * 视频画幅比例
      */
     ratio?: '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | '21:9';
+    frame_references?: VideoLabFrameReferenceFiles;
     /**
-     * 可选首帧图片 file_id
+     * 独立于关键帧的命名主体参考
      */
-    first_frame_file_id?: (string | null);
-    /**
-     * 可选尾帧图片 file_id
-     */
-    last_frame_file_id?: (string | null);
-    /**
-     * 可选关键帧图片 file_id
-     */
-    key_frame_file_id?: (string | null);
+    subject_references?: Array<VideoLabSubjectReference>;
 };
 
