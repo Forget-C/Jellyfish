@@ -5,7 +5,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button, Dropdown, Empty, Input, Modal, Select, Spin, Table, Tag, Upload, message } from 'antd'
+import { Button, Dropdown, Empty, Input, Modal, Select, Spin, Table, Tag, Tooltip, Upload, message } from 'antd'
 import { CloseOutlined, FolderOpenOutlined, PictureOutlined, UploadOutlined, VideoCameraOutlined } from '@ant-design/icons'
 import type { UploadFile } from 'antd'
 import {
@@ -126,19 +126,20 @@ function FrameControl({ slot, file, disabled, uploading, onUpload, onOpenLibrary
   </div>
 }
 
-/** 管理一个命名主体的图片或视频素材；主体与关键帧始终分属两种生成语义。 */
-function SubjectMediaControl({ kind, disabled, uploading, onUpload, onOpenLibrary }: {
-  kind: SubjectMediaKind; disabled: boolean; uploading: boolean
-  onUpload: (file: UploadFile) => Promise<boolean>; onOpenLibrary: () => void
+/** 在统一入口中管理主体图片和视频，避免素材类型拆成多个表格列。 */
+function SubjectMediaControl({ disabled, disabledTitle, label, uploadingKind, supportsImage, supportsVideo, onUpload, onOpenLibrary }: {
+  disabled: boolean; disabledTitle?: string; label: string; uploadingKind?: SubjectMediaKind; supportsImage: boolean; supportsVideo: boolean
+  onUpload: (kind: SubjectMediaKind, file: UploadFile) => Promise<boolean>; onOpenLibrary: (kind: SubjectMediaKind) => void
 }) {
-  const isImage = kind === 'image'
   return <Dropdown trigger={['click']} disabled={disabled} dropdownRender={() => <div className="min-w-40 rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
-    <Upload className="block w-full" accept={isImage ? 'image/*' : 'video/mp4,video/quicktime,video/x-msvideo'} showUploadList={false} disabled={disabled} beforeUpload={onUpload}>
-      <Button type="text" block icon={<UploadOutlined />} loading={uploading} className="!justify-start">上传{isImage ? '图片' : '视频'}</Button>
-    </Upload>
-    <Button type="text" block icon={<FolderOpenOutlined />} className="!justify-start" onClick={onOpenLibrary}>从资料库选择</Button>
+    {supportsImage ? <><Upload className="block w-full" accept="image/*" showUploadList={false} disabled={disabled} beforeUpload={(file) => onUpload('image', file)}>
+      <Button type="text" block icon={<UploadOutlined />} loading={uploadingKind === 'image'} className="!justify-start">上传图片</Button>
+    </Upload><Button type="text" block icon={<FolderOpenOutlined />} className="!justify-start" onClick={() => onOpenLibrary('image')}>从资料库选择图片</Button></> : null}
+    {supportsVideo ? <><Upload className="block w-full" accept="video/mp4,video/quicktime,video/x-msvideo" showUploadList={false} disabled={disabled} beforeUpload={(file) => onUpload('video', file)}>
+      <Button type="text" block icon={<UploadOutlined />} loading={uploadingKind === 'video'} className="!justify-start">上传视频</Button>
+    </Upload><Button type="text" block icon={<FolderOpenOutlined />} className="!justify-start" onClick={() => onOpenLibrary('video')}>从资料库选择视频</Button></> : null}
   </div>}>
-    <Button size="small" icon={isImage ? <PictureOutlined /> : <VideoCameraOutlined />} loading={uploading}>主体{isImage ? '图片' : '视频'}</Button>
+    <Button size="small" icon={<UploadOutlined />} loading={Boolean(uploadingKind)} className="!w-24" title={disabledTitle}>{label}</Button>
   </Dropdown>
 }
 
@@ -157,8 +158,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
   const [frameFileIds, setFrameFileIds] = useState<Partial<Record<FrameSlot, string>>>({})
   const [subjectReferences, setSubjectReferences] = useState<SubjectReferenceDraft[]>([])
   const [subjectModalOpen, setSubjectModalOpen] = useState(false)
-  const [editingSubjectNameId, setEditingSubjectNameId] = useState<string | null>(null)
-  const [editingSubjectFilesId, setEditingSubjectFilesId] = useState<string | null>(null)
+  const [uploadingSubjectMedia, setUploadingSubjectMedia] = useState<{ subjectId: string; kind: SubjectMediaKind } | null>(null)
   const [capability, setCapability] = useState<VideoCapability>()
   const [modelsLoading, setModelsLoading] = useState(false)
   const [templatesLoading, setTemplatesLoading] = useState(false)
@@ -276,7 +276,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
     if (kind === 'video' && capability?.max_videos_per_subject != null && subject.videoFileIds.length >= capability.max_videos_per_subject) return message.warning(`每个主体最多支持 ${capability.max_videos_per_subject} 个视频`), false
     if (capability?.max_media_per_subject != null && subject.imageFileIds.length + subject.videoFileIds.length >= capability.max_media_per_subject) return message.warning(`每个主体最多支持 ${capability.max_media_per_subject} 个参考素材`), false
     if (kind === 'video' && capability?.max_total_subject_videos != null && subjectReferences.reduce((total, item) => total + item.videoFileIds.length, 0) >= capability.max_total_subject_videos) return message.warning(`当前模型最多支持 ${capability.max_total_subject_videos} 个主体视频`), false
-    setUploadingSlot(null)
+    setUploadingSubjectMedia({ subjectId, kind })
     try {
       const response = await StudioFilesService.uploadFileApiApiV1StudioFilesUploadPost({ formData: { file: file as unknown as string } })
       const uploaded = response.data; if (!uploaded) throw new Error('上传未返回文件信息')
@@ -286,7 +286,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
         [kind === 'image' ? 'imageFileIds' : 'videoFileIds']: [...(kind === 'image' ? subject.imageFileIds : subject.videoFileIds), uploaded.id],
       }))
       message.success('主体参考已上传')
-    } catch { message.error('主体参考上传失败') }
+    } catch { message.error('主体参考上传失败') } finally { setUploadingSubjectMedia(null) }
     return false
   }
 
@@ -379,29 +379,53 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
     <Button size="small" disabled={disabled || hasFrameReferences} onClick={() => setSubjectModalOpen(true)}>编辑主体参考</Button>
     {hasFrameReferences ? <span className="text-xs text-slate-500">关键帧已启用，不能添加主体参考</span> : null}
   </div> : null
-  const subjectEditor = <Modal title="编辑主体参考" open={subjectModalOpen} onCancel={() => { if (!hasIncompleteSubject) setSubjectModalOpen(false) }} footer={<Button type="primary" disabled={hasIncompleteSubject} onClick={() => setSubjectModalOpen(false)}>完成</Button>} width={820} destroyOnClose={false} maskClosable={!hasIncompleteSubject} keyboard={!hasIncompleteSubject} closable={!hasIncompleteSubject}>
+  const subjectEditor = <Modal title="编辑主体参考" open={subjectModalOpen} onCancel={() => setSubjectModalOpen(false)} footer={<div className="flex justify-end gap-2"><Button onClick={() => setSubjectModalOpen(false)}>稍后完成</Button><Button type="primary" disabled={hasIncompleteSubject} onClick={() => setSubjectModalOpen(false)}>完成</Button></div>} width={820} destroyOnClose={false}>
     <div className="mb-3 flex flex-wrap items-center gap-2 text-sm text-slate-600">
       <span>主体 {subjectReferences.length} 个 · 图片 {subjectImageCount} · 视频 {subjectVideoCount}</span>
       {subjectLimitText ? <span className="text-xs text-slate-500">{subjectLimitText}</span> : null}
-      <Button size="small" disabled={disabled || (capability?.max_subjects != null && subjectReferences.length >= capability.max_subjects)} onClick={() => { const subject = { id: crypto.randomUUID(), name: '', imageFileIds: [], videoFileIds: [] }; setSubjectReferences((current) => [...current, subject]); setEditingSubjectNameId(subject.id) }}>添加主体</Button>
+      <Button size="small" disabled={disabled || (capability?.max_subjects != null && subjectReferences.length >= capability.max_subjects)} onClick={() => { const subject = { id: crypto.randomUUID(), name: '', imageFileIds: [], videoFileIds: [] }; setSubjectReferences((current) => [...current, subject]) }}>添加主体</Button>
     </div>
-    {hasIncompleteSubject ? <div className="mb-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">请为每个主体设置名称并至少上传一份图片或视频参考，完成前不能关闭此窗口。</div> : null}
+    <div className={`mb-3 flex h-10 items-center rounded border px-3 text-sm ${hasIncompleteSubject ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
+      {hasIncompleteSubject ? '请为每个主体设置名称并至少添加一份图片或视频参考。未完成时可稍后继续编辑。' : '主体名称和参考素材已填写完整。'}
+    </div>
     <Table<SubjectReferenceDraft>
       size="small"
       dataSource={subjectReferences}
       rowKey="id"
       pagination={false}
       tableLayout="fixed"
+      scroll={{ x: 748 }}
       locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚未添加主体参考" /> }}
       columns={[
-        { title: '名称', dataIndex: 'name', width: 160, render: (name: string, subject: SubjectReferenceDraft) => editingSubjectNameId === subject.id ? <Input autoFocus size="small" value={name} title={name} disabled={disabled} placeholder="主体名称" className="w-full" onChange={(event) => setSubjectReferences((current) => current.map((item) => item.id === subject.id ? { ...item, name: event.target.value } : item))} onBlur={() => setEditingSubjectNameId(null)} onPressEnter={() => setEditingSubjectNameId(null)} /> : <button type="button" title={name.trim() || '未设置'} className={`block w-full truncate text-left ${name.trim() ? 'text-slate-700' : 'text-amber-600'}`} disabled={disabled} onClick={() => setEditingSubjectNameId(subject.id)}>{name.trim() || '未设置'}</button> },
-        { title: '文件', width: 500, render: (_: unknown, subject: SubjectReferenceDraft) => editingSubjectFilesId === subject.id ? <div className="flex max-w-full flex-wrap items-center gap-1 overflow-hidden"><Button size="small" type="text" onClick={() => setEditingSubjectFilesId(null)}>收起</Button>{capability?.supports_subject_image_reference ? <SubjectMediaControl kind="image" disabled={disabled} uploading={false} onUpload={(file) => uploadSubjectMedia(subject.id, 'image', file)} onOpenLibrary={() => setSubjectLibraryTarget({ subjectId: subject.id, kind: 'image' })} /> : null}{capability?.supports_subject_video_reference ? <SubjectMediaControl kind="video" disabled={disabled} uploading={false} onUpload={(file) => uploadSubjectMedia(subject.id, 'video', file)} onOpenLibrary={() => setSubjectLibraryTarget({ subjectId: subject.id, kind: 'video' })} /> : null}{[...subject.imageFileIds, ...subject.videoFileIds].map((fileId) => { const fileName = files.find((file) => file.id === fileId)?.name ?? '主体素材'; return <Tag key={fileId} title={fileName} closable={!disabled} className="max-w-32" onClose={() => setSubjectReferences((current) => current.map((item) => item.id !== subject.id ? item : { ...item, imageFileIds: item.imageFileIds.filter((id) => id !== fileId), videoFileIds: item.videoFileIds.filter((id) => id !== fileId) }))}><span className="inline-block max-w-24 truncate align-bottom">{fileName}</span></Tag> })}</div> : <button type="button" className={`block w-full truncate text-left ${subject.imageFileIds.length || subject.videoFileIds.length ? 'text-slate-700' : 'text-amber-600'}`} disabled={disabled} onClick={() => setEditingSubjectFilesId(subject.id)}>{subject.imageFileIds.length || subject.videoFileIds.length ? `图片 ${subject.imageFileIds.length} · 视频 ${subject.videoFileIds.length}` : '未上传'}</button> },
-        { title: '操作', width: 72, render: (_: unknown, subject: SubjectReferenceDraft) => <Button size="small" type="text" danger disabled={disabled} onClick={() => setSubjectReferences((current) => current.filter((item) => item.id !== subject.id))}>删除</Button> },
+        { title: '名称', dataIndex: 'name', width: 176, render: (name: string, subject: SubjectReferenceDraft) => <Tooltip title={name.trim() || '未设置名称'} mouseEnterDelay={0.5}><Input size="small" value={name} disabled={disabled} placeholder="输入主体名称" className="w-full truncate" aria-label="主体名称" onChange={(event) => setSubjectReferences((current) => current.map((item) => item.id === subject.id ? { ...item, name: event.target.value } : item))} /></Tooltip> },
+        { title: '素材', width: 380, render: (_: unknown, subject: SubjectReferenceDraft) => {
+          const media = [...subject.imageFileIds, ...subject.videoFileIds].map((fileId) => ({ fileId, fileName: files.find((file) => file.id === fileId)?.name ?? '主体素材' }))
+          if (!media.length) return <span className="text-slate-400">未上传</span>
+          return <div className="flex h-8 items-center gap-1 overflow-x-auto whitespace-nowrap">
+            {media.map(({ fileId, fileName }) => <Tooltip key={fileId} title={fileName} mouseEnterDelay={0.5}>
+              <Tag closable={!disabled} className="!m-0 flex max-w-44 shrink-0 items-center" onClose={() => setSubjectReferences((current) => current.map((item) => item.id !== subject.id ? item : { ...item, imageFileIds: item.imageFileIds.filter((id) => id !== fileId), videoFileIds: item.videoFileIds.filter((id) => id !== fileId) }))}>
+                <span className="inline-block max-w-36 truncate align-bottom">{fileName}</span>
+              </Tag>
+            </Tooltip>)}
+          </div>
+        } },
+        { title: '操作', width: 192, render: (_: unknown, subject: SubjectReferenceDraft) => {
+          const hasMedia = subject.imageFileIds.length + subject.videoFileIds.length > 0
+          const canAddImage = canAppendSubjectMedia(subject.id, 'image')
+          const canAddVideo = canAppendSubjectMedia(subject.id, 'video')
+          const uploadInProgress = Boolean(uploadingSubjectMedia)
+          const uploadDisabled = disabled || uploadInProgress || (!canAddImage && !canAddVideo)
+          const disabledTitle = uploadInProgress ? '素材上传中' : !canAddImage && !canAddVideo ? '已达到当前模型的主体素材上限' : undefined
+          return <div className="flex h-8 items-center gap-2 overflow-hidden">
+            <SubjectMediaControl disabled={uploadDisabled} disabledTitle={disabledTitle} label={hasMedia ? '继续上传' : '上传素材'} uploadingKind={uploadingSubjectMedia?.subjectId === subject.id ? uploadingSubjectMedia.kind : undefined} supportsImage={canAddImage} supportsVideo={canAddVideo} onUpload={(kind, file) => uploadSubjectMedia(subject.id, kind, file)} onOpenLibrary={(kind) => setSubjectLibraryTarget({ subjectId: subject.id, kind })} />
+            <Button size="small" type="text" danger disabled={disabled || uploadInProgress} onClick={() => setSubjectReferences((current) => current.filter((item) => item.id !== subject.id))}>删除</Button>
+          </div>
+        } },
       ]}
     />
   </Modal>
   const composer = <ExperimentComposer submitting={disabled} submitDisabled={disabled} submitLabel="生成视频" onSubmit={() => void submit()} options={<ExperimentOptionBar models={models.map((item) => ({ id: item.id, name: item.name }))} templates={templates.map((item) => ({ id: item.id, name: item.name, version: item.version, preview: item.preview, category: '视频提示词' }))} modelId={modelId} templateId={templateId} modelsLoading={modelsLoading} templatesLoading={templatesLoading} disabled={disabled} modelLabel="视频模型" modelPlaceholder="选择已登记的视频模型" onModelChange={selectModel} onTemplateChange={selectTemplate} onModelOpenChange={(open) => { if (open) void loadModels() }} onTemplateOpenChange={(open) => { if (open) void loadTemplates() }} />} contextActions={<div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 border-l border-slate-200 pl-2">{(['first', 'last', 'key'] as FrameSlot[]).map((slot) => <FrameControl key={slot} slot={slot} file={selectedFrames[slot]} disabled={disabled || hasSubjectReferences} uploading={uploadingSlot === slot} onUpload={uploadFrame} onOpenLibrary={setLibraryTarget} onRemove={(target) => setFrameFileIds((current) => ({ ...current, [target]: undefined }))} />)}{hasSubjectReferences ? <span className="text-xs text-slate-500">主体参考已启用，不能添加关键帧</span> : null}<Select size="small" value={ratio} onChange={setRatio} disabled={disabled} options={(capability?.allowed_ratios?.length ? capability.allowed_ratios : ratioOptions).map((value) => ({ value, label: value }))} aria-label="视频比例" />{subjectActions}</div>}><ExperimentPromptEditor template={selectedTemplate} templateValues={templateValues} draft={draft} placeholder="描述你想生成的视频…" minRows={5} disabled={disabled} onDraftChange={setDraft} onTemplateValuesChange={setTemplateValues} onUseFreeInput={(prompt) => { setTemplateId(undefined); setTemplateValues({}); setDraft(prompt) }} /></ExperimentComposer>
-  const overlays = <><Modal title={libraryTarget ? `从资料库选择${frameLabels[libraryTarget]}` : '从资料库选择关键帧'} open={Boolean(libraryTarget)} onCancel={() => setLibraryTarget(null)} footer={<Button type="primary" onClick={() => setLibraryTarget(null)}>完成</Button>} width={820}><div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">{imageFiles.map((file) => <button key={file.id} type="button" onClick={() => { if (libraryTarget) setFrameFileIds((current) => ({ ...current, [libraryTarget]: file.id })) }} className={`overflow-hidden rounded border text-left ${libraryTarget && frameFileIds[libraryTarget] === file.id ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200'}`}><img src={buildFileDownloadUrl(file.id)} alt={file.name} className="h-28 w-full object-cover" /><div className="truncate p-2 text-xs">{file.name}</div></button>)}</div>{!imageFiles.length ? <Empty description="资料库中暂无图片" /> : null}</Modal><Modal title={subjectLibraryTarget ? `从资料库选择主体${subjectLibraryTarget.kind === 'image' ? '图片' : '视频'}` : '选择主体素材'} open={Boolean(subjectLibraryTarget)} onCancel={() => setSubjectLibraryTarget(null)} footer={<Button type="primary" onClick={() => setSubjectLibraryTarget(null)}>完成</Button>} width={820}><div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">{(subjectLibraryTarget?.kind === 'video' ? videoFiles : imageFiles).map((file) => <button key={file.id} type="button" onClick={() => { if (!subjectLibraryTarget) return; const target = subjectLibraryTarget; if (!canAppendSubjectMedia(target.subjectId, target.kind)) return message.warning('已达到当前模型的主体参考上限'); setSubjectReferences((current) => current.map((subject) => subject.id !== target.subjectId ? subject : target.kind === 'image' ? { ...subject, imageFileIds: [...subject.imageFileIds, file.id] } : { ...subject, videoFileIds: [...subject.videoFileIds, file.id] })) }} className="overflow-hidden rounded border border-gray-200 text-left"><div className="flex h-28 items-center justify-center bg-slate-100">{subjectLibraryTarget?.kind === 'image' ? <img src={buildFileDownloadUrl(file.id)} alt={file.name} className="h-full w-full object-cover" /> : <VideoCameraOutlined className="text-2xl text-slate-500" />}</div><div className="truncate p-2 text-xs">{file.name}</div></button>)}</div>{!(subjectLibraryTarget?.kind === 'video' ? videoFiles : imageFiles).length ? <Empty description={`资料库中暂无主体${subjectLibraryTarget?.kind === 'video' ? '视频' : '图片'}`} /> : null}</Modal><Modal title="视频预览" open={Boolean(previewVideoUrl)} onCancel={() => setPreviewVideoUrl(null)} footer={null} destroyOnClose width={900}>{previewVideoUrl ? <video controls autoPlay preload="metadata" className="w-full rounded-lg bg-black" src={previewVideoUrl}>你的浏览器不支持视频预览。</video> : null}</Modal></>
+  const overlays = <><Modal title={libraryTarget ? `从资料库选择${frameLabels[libraryTarget]}` : '从资料库选择关键帧'} open={Boolean(libraryTarget)} onCancel={() => setLibraryTarget(null)} footer={<Button type="primary" onClick={() => setLibraryTarget(null)}>完成</Button>} width={820}><div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">{imageFiles.map((file) => <button key={file.id} type="button" onClick={() => { if (libraryTarget) setFrameFileIds((current) => ({ ...current, [libraryTarget]: file.id })) }} className={`overflow-hidden rounded border text-left ${libraryTarget && frameFileIds[libraryTarget] === file.id ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200'}`}><img src={buildFileDownloadUrl(file.id)} alt={file.name} className="h-28 w-full object-cover" /><div className="truncate p-2 text-xs">{file.name}</div></button>)}</div>{!imageFiles.length ? <Empty description="资料库中暂无图片" /> : null}</Modal><Modal title={subjectLibraryTarget ? `从资料库选择主体${subjectLibraryTarget.kind === 'image' ? '图片' : '视频'}` : '选择主体素材'} open={Boolean(subjectLibraryTarget)} onCancel={() => setSubjectLibraryTarget(null)} footer={<Button type="primary" onClick={() => setSubjectLibraryTarget(null)}>完成</Button>} width={820}><div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">{(subjectLibraryTarget?.kind === 'video' ? videoFiles : imageFiles).map((file) => <button key={file.id} type="button" onClick={() => { if (!subjectLibraryTarget) return; const target = subjectLibraryTarget; const selectedSubject = subjectReferences.find((subject) => subject.id === target.subjectId); const selectedIds = target.kind === 'image' ? selectedSubject?.imageFileIds : selectedSubject?.videoFileIds; if (selectedIds?.includes(file.id)) return message.info('该素材已添加'); if (!canAppendSubjectMedia(target.subjectId, target.kind)) return message.warning('已达到当前模型的主体参考上限'); setSubjectReferences((current) => current.map((subject) => subject.id !== target.subjectId ? subject : target.kind === 'image' ? { ...subject, imageFileIds: [...subject.imageFileIds, file.id] } : { ...subject, videoFileIds: [...subject.videoFileIds, file.id] })) }} className="overflow-hidden rounded border border-gray-200 text-left"><div className="flex h-28 items-center justify-center bg-slate-100">{subjectLibraryTarget?.kind === 'image' ? <img src={buildFileDownloadUrl(file.id)} alt={file.name} className="h-full w-full object-cover" /> : <VideoCameraOutlined className="text-2xl text-slate-500" />}</div><div className="truncate p-2 text-xs">{file.name}</div></button>)}</div>{!(subjectLibraryTarget?.kind === 'video' ? videoFiles : imageFiles).length ? <Empty description={`资料库中暂无主体${subjectLibraryTarget?.kind === 'video' ? '视频' : '图片'}`} /> : null}</Modal><Modal title="视频预览" open={Boolean(previewVideoUrl)} onCancel={() => setPreviewVideoUrl(null)} footer={null} destroyOnClose width={900}>{previewVideoUrl ? <video controls autoPlay preload="metadata" className="w-full rounded-lg bg-black" src={previewVideoUrl}>你的浏览器不支持视频预览。</video> : null}</Modal></>
   const clearHistory = async () => {
     if (!sessionId || !clearSessionMessages) return
     try { await clearSessionMessages(sessionId); history.clearLocalHistory(); await history.refresh() } catch { message.error('清空历史失败；含生成任务的会话不可清空') }
