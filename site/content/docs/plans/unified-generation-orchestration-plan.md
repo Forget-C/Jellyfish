@@ -45,17 +45,21 @@ weight: 31
 
 | 决策 | 目标行为 |
 |---|---|
-| 迁移方式 | 对外一次性切换；数据库与内部实现采用 expand → migrate → contract，完成新链验证后再删除旧列、旧 DTO 和旧入口。 |
+| 迁移方式 | 允许在正常开发路径中直接修改正在使用的契约，并接受明确标记的阶段性不可运行；数据库与内部实现仍采用 expand → migrate → contract，最终可交付节点一次性恢复完整链路并删除旧列、旧 DTO 和旧入口。 |
+| 阶段交付 | P1 至 P6 每阶段必须形成独立 Git 提交并通过阶段范围内的检查；阶段提交不等于产品可交付，只有文档列出的交付节点必须保证完整系统可运行。 |
+| 临时注释 | 阶段开发中对必改且暂时不完整的代码使用 `TODO(unified-generation:Pn)` 标记原因和闭合点；该阶段完成提交前必须移除临时注释，永久保留的函数、类和关键流程说明不属于临时注释。 |
 | 提示词 | 渲染为独立同步流程；生成只消费最终 `execution_prompt`，不二次渲染。 |
 | 用户编辑 | 允许任意编辑最终提示词和参考资源；提交不校验文本、变量、模板版本或渲染哈希。 |
 | 门禁 | 只校验提交引用的实体：目标、槽位、模型、文件及其归属关系。 |
 | 媒体引用 | 叶子引用统一使用 `file_id + media_kind + ordinal`；帧槽位和具名主体等分组语义由强类型父结构表达。 |
 | 本地资源 | 本地文件和外部 URL 都先导入/上传为 `FileItem`，再参与渲染或生成。 |
 | 交付能力 | `inline`、`streaming`、`async_polling` 是独立交付能力，但可用组合由 operation capability 矩阵明确约束。 |
-| SSE | 流式接口使用固定 `text/event-stream` 路由、类型化事件和统一任务记录，不允许同一路由按请求体动态切换 JSON/SSE。 |
+| SSE | 流式接口使用固定 `text/event-stream` 路由、类型化事件和内部运行记录，不允许同一路由按请求体动态切换 JSON/SSE；流式运行只在实验室对话内展示，不进入任务中心。 |
+| 并发发布 | 业务槽位使用单调递增 `version_id`；提交冻结期望版本，Publisher 通过 CAS 条件更新，版本冲突时只归档产物、不覆盖用户的新选择。 |
+| 开发期恢复 | 不设计数据回滚流程；以每阶段 Git 提交、阶段验证记录和最终可交付节点作为开发期恢复与追溯边界。 |
 | 前端迁移 | 文本实验室固定使用 streaming 完成最小端到端接入，但不提供 delivery 选择；图片/视频与 Agent 继续使用 async_polling，其余页面功能和职责保持等价。 |
 
-前端完全不接 SSE 会同时保留“后端流式链路无人消费”和“文本页面独立 inline 生命周期”两套路径，使事件契约、取消、终态落库和 generated transport 无法通过真实页面端到端回归，并增加后续排障与维护成本。因此本计划允许文本实验室做最小 SSE 接入：复用现有聊天入口、消息区域、取消按钮和任务中心，不新增交付方式选择、独立流式页面、断线续传或调试能力。
+前端完全不接 SSE 会同时保留“后端流式链路无人消费”和“文本页面独立 inline 生命周期”两套路径，使事件契约、取消、终态落库和 generated transport 无法通过真实页面端到端回归，并增加后续排障与维护成本。因此本计划允许文本实验室做最小 SSE 接入：复用现有聊天入口、消息区域和对话内取消能力，不新增交付方式选择、独立流式页面、断线续传或调试能力，也不把文本流式运行暴露到任务中心。
 
 ## 3. 目标架构
 
@@ -216,7 +220,9 @@ class GenerationEntityGate(Protocol):
     ) -> ResolvedGenerationSnapshot: ...
 ```
 
-`ResolvedGenerationSnapshot` 是纯可序列化快照，不携带 ORM 实体或 `AsyncSession`。它固定实际 `model_id`、模型名与配置 revision、canonical target、媒体引用、文件类型与内容版本/哈希。Worker 只按快照重载实体并检查其仍存在、仍可用，不再次执行默认模型选择、目标推导或关系猜测；凭据仍在执行时动态读取，不进入快照。
+`ResolvedGenerationSnapshot` 是纯可序列化快照，不携带 ORM 实体或 `AsyncSession`。它固定实际 `model_id`、模型名与配置 revision、canonical target、目标槽位的 `expected_version_id`、媒体引用、文件类型与内容版本/哈希。Worker 只按快照重载实体并检查其仍存在、仍可用，不再次执行默认模型选择、目标推导或关系猜测；凭据仍在执行时动态读取，不进入快照。
+
+模型与非敏感 Provider endpoint 配置采用不可变 `ModelConfigRevision`，每次修改生成新的单调递增 `version_id`；快照保存明确的 revision ID。凭据仍通过稳定 credential reference 在执行时读取，不复制到 revision 或任务 payload。
 
 门禁只执行以下校验：
 
@@ -325,13 +331,15 @@ class GenerationStreamEvent(BaseModel):
 
 事件顺序固定为 `accepted → delta/progress* → completed|error|cancelled`，终态只能出现一次，业务事件的 `sequence` 单调递增。heartbeat 不进入业务日志；最终文本、usage、模型 revision 与脱敏 Provider request ID 在终态写入任务结果，不逐 token 持久化。
 
-流式入口必须在发送 `accepted` 前提交任务、目标关联和输入快照。流生成器使用短生命周期的独立数据库事务更新状态，不得在整个 SSE 连接期间占用路由注入的 `AsyncSession`。
+流式入口必须在发送 `accepted` 前提交隐藏的运行记录、目标关联和输入快照。流生成器使用短生命周期的独立数据库事务更新状态，不得在整个 SSE 连接期间占用路由注入的 `AsyncSession`。流式运行记录必须带 `delivery = streaming` 和 `visibility = hidden`，只允许实验室通过 `task_id` 查询或取消；任务中心列表固定过滤为 `visibility = task_center`。
+
+流式运行还必须维护 lease/heartbeat。Web 进程崩溃、部署重启或事件循环异常导致 lease 超时时，stale reaper 将记录收敛为 `failed` 或 `cancelled`，并调用 `ExperimentPublisher` 写入对话终态，避免隐藏任务永久停留在 `streaming`。
 
 实现关系：
 
 - `InlineDeliveryAdapter`：直接调用 Executor，返回同步文本结果；不默认创建任务记录。
-- `StreamingDeliveryAdapter`：先创建 `GenerationTask`，再调用 Streaming Executor 输出 SSE；任务记录统一承载取消、终态和最终结果。
-- `AsyncPollingDeliveryAdapter`：在同一事务创建 `GenerationTask`、Target Link、Media Reference 与 Outbox；提交后由 dispatcher 投递，Worker 调用同一个 Executor。
+- `StreamingDeliveryAdapter`：先创建 `visibility = hidden` 的 `GenerationTask`，再调用 Streaming Executor 输出 SSE；运行记录承载对话内取消、终态和最终结果，但不进入任务中心。
+- `AsyncPollingDeliveryAdapter`：在同一事务创建 `visibility = task_center` 的 `GenerationTask`、Target Link、Media Reference 与 Outbox；提交后由 dispatcher 投递，Worker 调用同一个 Executor。
 - `TextChatExecutor`：单轮文本对话。
 - `TextAgentExecutor`：剧本拆分、提取、分析、优化等 Agent 工作流。
 - `ImageGenerationExecutor`：复用 `ImageGenerationTask` 与现有图片 Provider Adapter。
@@ -359,6 +367,8 @@ class GenerationStreamEvent(BaseModel):
 | `file_id` | 图片或视频的 `FileItem` 引用，可空 |
 | `text_content` | 文本产物，可空 |
 | `provider_result` | 脱敏后的供应商结果与 request ID |
+| `publish_status` | `published / conflicted / skipped`，表示是否自动写回业务目标 |
+| `publish_error` | 发布冲突或跳过原因，例如 `target_version_conflict` |
 
 异步产物必须以 `(task_id, ordinal)` 建唯一约束。图片、视频产物必须且只能设置 `file_id`，文本产物必须且只能设置 `text_content`；同步结果如需持久化，则使用稳定的 `generation_run_id`，不能依赖可空 `task_id` 区分重试。
 
@@ -377,14 +387,25 @@ class GenerationResultPublisher(Protocol):
     ) -> None: ...
 ```
 
-`GenerationOutcome` 覆盖 `succeeded / failed / cancelled`。Artifact 归档、业务发布与任务终态必须在同一数据库事务中提交，或共享可重放的幂等键；Publisher 以 `task_id + target + slot` 幂等，重复投递不得重复创建业务记录或覆盖更新后的用户选择。
+`GenerationOutcome` 覆盖 `succeeded / failed / cancelled`。Artifact 归档、业务发布与任务终态必须在同一数据库事务中提交，或共享可重放的幂等键；Publisher 以 `task_id + target + slot` 幂等，重复投递不得重复创建业务记录。
+
+所有可被生成结果自动写回的业务槽位增加单调递增 `version_id`，初始值为 1，任何上传、历史采用、人工替换或 Publisher 写回都必须在同一事务中使其加一。Submitter 将当前值冻结为 `expected_version_id`，Publisher 使用 CAS：
+
+```sql
+UPDATE target_slot
+SET file_id = :file_id, version_id = version_id + 1
+WHERE id = :slot_id AND version_id = :expected_version_id;
+```
+
+影响行数为 0 表示用户已修改目标。此时生成任务和 Artifact 仍可成功，但发布状态记为 `conflicted`、错误码记为 `target_version_conflict`，不得自动覆盖当前槽位。镜头视频若直接写在 `Shot`，使用专门的 `generated_video_version_id`；删除并重建槽位时必须使用新实体 ID 或延续版本，避免 ABA。
 
 多产物与历史采用语义：
 
 - Publisher 默认只将 `ordinal = 0` 的主产物写入目标槽位，其余产物仍完整归档并出现在历史结果中。
 - 用户从历史结果采用图片时，API 必须接收具体 `artifact_id`，校验该 Artifact 属于当前 target 后更新槽位。
+- 默认采用和历史采用均通过 `expected_version_id` 做 CAS；冲突只影响自动采用，不把已经成功的 Provider 生成标记为失败。
 - 当前槽位的 `file_id` 是“正在采用哪个产物”的事实来源；`GenerationTaskLink.status` 不再承担多产物采用状态。
-- 任务中心只展示任务通用状态；产物预览、选择和采用继续留在资产详情或分镜工作室。
+- 任务中心只展示 `async_polling` 任务的通用状态；产物预览、选择和采用继续留在资产详情或分镜工作室，文本 SSE 状态只留在实验室对话。
 
 发布器：
 
@@ -460,7 +481,7 @@ POST /api/v1/projects/{project_id}/script-processing/{operation}/tasks
 POST /api/v1/projects/{project_id}/chapters/{chapter_id}/script-processing/{operation}/tasks
 ```
 
-`/execute` 固定返回 JSON，`/stream` 固定返回 `text/event-stream`，`/tasks` 固定返回 `GenerationAccepted` JSON。不得让同一 POST 根据 body 中的 `delivery` 动态切换 JSON、SSE 和任务响应。实验室路由可在 `GenerationAccepted` 外层返回与当前页面等价的 canonical messages 或 message IDs；协议必须在 P1 定稿，避免前端自行重复写会话消息。旧入口在对应新入口完成切换和验证后移除。
+`/execute` 固定返回 JSON，`/stream` 固定返回 `text/event-stream`，`/tasks` 固定返回 `GenerationAccepted` JSON。不得让同一 POST 根据 body 中的 `delivery` 动态切换 JSON、SSE 和任务响应。文本 `/stream` 在发送 `accepted` 前创建 canonical user message 和隐藏的 streaming 运行记录，`ExperimentPublisher` 在终态写 canonical assistant 或错误消息；图片、视频 `/tasks` 创建 canonical user/task message，并由异步 Publisher 更新终态。协议必须在 P1 定稿，避免前端自行重复写会话消息。旧入口可在开发阶段按计划直接修改或暂时失效，但必须在最终交付节点完成切换和删除。
 
 每个路由只做：解析业务路径、构建内部 `GenerationCommand`、调用 `PromptRenderer` 或 `GenerationSubmitter`、组织响应。外部 body 不接受 target/modality/operation/delivery；路由不得构建 Provider run args、下载文件或发布产物。
 
@@ -468,7 +489,7 @@ SSE 断连规则：
 
 1. 服务端生成器检测 `Request.is_disconnected()` 和生成器关闭。
 2. 断连时 best-effort 取消 Provider 流，将任务标记为 `cancelled`，原因记录为 `client_disconnected`，并禁止 Publisher 发布成功结果。
-3. 客户端 `AbortController` 只关闭 HTTP；用户主动取消仍调用任务 cancel API。
+3. 客户端 `AbortController` 只关闭 HTTP；实验室对话内的用户主动停止仍使用 `accepted.task_id` 调用任务 cancel API，该接口按会话和 target 鉴权，不因 `visibility = hidden` 而拒绝。
 4. 已提交终态后发生的迟到断连不得把 `succeeded` 改成 `cancelled`。
 5. 本阶段不承诺断线续传；若未来支持，需另行定义 `event_id`、事件保留和 replay 协议。
 
@@ -482,12 +503,12 @@ SSE 断连规则：
 2. 用户点击“渲染提示词”，调用 render API；页面继续复用当前已有的提示词、模板变量、参考资源和诊断区域。`variables_snapshot`、`recommended_media` 与 warnings 可进入类型和内部状态，但本阶段不新增统一调试面板。
 3. 用户可编辑提示词、增删或排序帧引用和具名主体媒体组。
 4. 用户点击“生成”，页面提交路由专用的 `GenerationSubmitRequest`；target/modality/operation 由路由 Binder 确定。
-5. 文本实验室固定使用 `streaming`，在当前回复区域增量显示文本；图片、视频和 Agent 继续使用 `async_polling` 与通用任务接口恢复状态。页面不提供 delivery 选择。
-6. 成功后只刷新所属业务查询：资产槽位、镜头帧、视频、实验会话或剧本结果；任务中心继续只展示通用任务状态。
+5. 文本实验室固定使用 `streaming`，在当前回复区域增量显示文本并提供对话内停止；图片、视频和 Agent 继续使用 `async_polling` 与通用任务接口恢复状态。页面不提供 delivery 选择。
+6. 成功后只刷新所属业务查询：资产槽位、镜头帧、视频、实验会话或剧本结果；任务中心只展示 `async_polling` 任务的通用状态。
 
 实验室可跳过第 2 步并直接提交手工提示词；资产详情页和分镜工作室将渲染作为生成准备入口。分镜编辑页继续只负责提取、确认和修正，不接入 ShotFrame/ShotVideo render/submit；镜头未 ready 时，工作室引导返回编辑页。Web 不在浏览器中渲染模板或转换媒体格式。
 
-Submitter 必须为每个 `GenerationTargetKind` 生成稳定的任务来源和导航映射，至少覆盖实验会话、资产详情、章节、镜头和分镜工作室。任务中心使用该映射生成标题、高亮与回跳入口，不读取业务专属上下文。
+Submitter 必须为每个异步 `GenerationTargetKind` 生成稳定的任务来源和导航映射，至少覆盖异步实验会话、资产详情、章节、镜头和分镜工作室。任务中心只使用 `visibility = task_center` 的异步记录生成标题、高亮与回跳入口，不读取业务专属上下文；文本 streaming session 不参与该映射。
 
 ### 6.3 前端同步迁移与最小 SSE 接入
 
@@ -501,7 +522,7 @@ Submitter 必须为每个 `GenerationTargetKind` 生成稳定的任务来源和�
 - 资产详情保留提示词预览与编辑、参考图、生成、取消、状态反馈、历史候选和采用。
 - `ChapterStudio` 保留帧提示词、首/尾/关键帧、视频提示词、参考模式、生成参数、生成/取消、结果刷新和视频准备度，以及现有多选、批量 readiness、跳过阻塞项和逐镜头创建任务流程。
 - `ChapterShotEditPage` 继续只负责提取、确认和修正，不增加生成入口。
-- 任务中心继续只展示通用状态、进度、取消、当前页高亮和来源回跳；业务产物和上下文留在业务页面。
+- 任务中心继续只展示 `async_polling` 任务的通用状态、进度、取消、当前页高亮和来源回跳；文本 streaming 状态、业务产物和上下文留在业务页面。
 
 #### 必须同步修改
 
@@ -511,9 +532,10 @@ Submitter 必须为每个 `GenerationTargetKind` 生成稳定的任务来源和�
    - 每批 API 变更后立即运行 `pnpm run openapi:update`，同步 service、DTO、任务列表与 Artifact 类型。
 
 2. **共享 SSE 状态**
-   - 新增共享 `useGenerationStream`，统一处理 connecting、streaming、completed、failed、cancelled、`task_id`、sequence 去重和组件卸载清理。
+   - 新增实验室专用 `useGenerationStream`，统一处理 connecting、streaming、completed、failed、cancelled、`task_id`、sequence 去重和组件卸载清理。
    - `delta` 只更新当前临时 assistant 消息，不逐 token 写数据库或全局 Store；终态后用 Publisher 持久化消息替换临时状态并刷新会话。
-   - 传输 abort 与业务取消分离；用户主动取消必须同时终止 HTTP 流并调用任务 cancel API。
+   - 该状态只归实验室对话所有，不写 `taskUiStore`、不注册 `TaskRuntimeProvider`，也不触发任务中心或全局任务通知；`task_id` 仅用于当前流的状态、取消和审计。
+   - 传输 abort 与业务取消分离；用户在实验室内主动停止时，先调用 hidden streaming task 的 cancel API，再终止 HTTP 流。组件卸载或切换会话只 abort，由服务端断连规则收敛运行记录。
    - 不实现 `Last-Event-ID`、断线续传、事件回放或跨页面恢复增量 token。
 
 3. **生成草稿状态**
@@ -529,9 +551,11 @@ Submitter 必须为每个 `GenerationTargetKind` 生成稳定的任务来源和�
 5. **统一实验室**
    - 修改 `experiment/modes/TextExperimentMode.tsx`、`ImageExperimentMode.tsx`、`VideoExperimentMode.tsx`，切换到带 `session_id` 路径的 generated API。
    - 文本模式调用 `/stream`，在当前 assistant 消息区域增量显示；不新增模式开关、独立流式页面或额外调试信息。
+   - 本阶段保持当前单轮模型输入：`TextChatInput.messages` 只提交本次 user message；会话历史继续用于展示和持久化，不自动扩展为多轮模型上下文。
+   - 文本状态和停止操作只存在于实验室对话，不注册任务中心条目；失败或取消时保留 canonical user message、移除未持久化的临时 assistant，并按现有样式提示后刷新历史。
    - 图片参考转换为 `ImageMediaInput`；视频帧和具名主体转换为 `VideoMediaInput`，保证主体名称、媒体类型与 ordinal 无损。
-   - 实验路由在事务中创建 canonical user/task message，`ExperimentPublisher` 写 assistant/终态消息；前端只接管返回消息或刷新会话历史，不重复调用消息创建接口。
-   - 保留现有任务轮询、取消、失败提示、结果预览和会话恢复行为。
+   - 文本实验路由在事务中创建 canonical user message 和 hidden stream record；图片、视频实验路由创建 canonical user/task message。`ExperimentPublisher` 写 assistant/终态消息；前端只接管返回消息或刷新会话历史，不重复调用消息创建接口。
+   - 图片、视频保留现有任务轮询、取消、失败提示、结果预览和会话恢复行为；文本只使用 SSE 与终态历史刷新。
 
 6. **资产详情**
    - 修改 `assets/components/AssetEditPageBase.tsx` 及各 asset adapter，使用包含 `slot_id` 的资源化 render/tasks generated API。
@@ -546,8 +570,8 @@ Submitter 必须为每个 `GenerationTargetKind` 生成稳定的任务来源和�
 
 8. **任务中心与任务恢复**
    - 同步修改 `components/taskUiStore.ts`、`taskCenterMeta.ts`、`TaskRuntimeProvider.tsx` 和 `TaskCenter.tsx`，消费新的 target 导航字段。
-   - 实验会话、资产槽位、章节、镜头和分镜工作室必须保持现有标题、状态、进度、取消、高亮和回跳能力。
-   - SSE `accepted` 事件创建或登记的任务继续进入现有任务中心；用户主动取消时，即使页面已注册本地 abort 回调，也必须调用后端任务 cancel API，不能只中断浏览器连接。
+   - 图片、视频、Agent 等异步实验会话、资产槽位、章节、镜头和分镜工作室必须保持现有标题、状态、进度、取消、高亮和回跳能力。
+   - 任务列表 API 默认只返回 `delivery = async_polling` 且 `visibility = task_center` 的记录；`taskUiStore` 和 `TaskRuntimeProvider` 不登记文本 streaming task，过滤必须由后端保证，不能只靠前端隐藏。
    - 页面局部轮询可收敛到现有任务运行时，但不得改变当前提示样式，也不得把 Artifact、prompt 或媒体分组放入任务中心。
 
 9. **历史结果与旧入口**
@@ -558,16 +582,16 @@ Submitter 必须为每个 `GenerationTargetKind` 生成稳定的任务来源和�
 
 - 不新增实验模式、delivery 选择器、独立流式页面、断线续传、事件回放、素材管理器、提示词版本管理、任务详情页或新的批量能力。
 - 不改变实验室、资产详情、分镜编辑页、分镜工作室和任务中心的信息架构。
-- 不让图片、视频或 Agent 在前端获得新的交付方式；文本只使用固定 streaming，不同时维护 inline/async 页面分支。
+- 不让图片、视频或 Agent 在前端获得新的交付方式；文本只使用固定 streaming，不同时维护 inline/async 页面分支，也不进入任务中心。
 - 不改变 `shot.status`、runtime task status 和 video-readiness 的现有三类状态语义。
 
 #### 等价验收
 
 - `pnpm exec tsc --noEmit` 通过，`pnpm run openapi:update` 后 generated 扩展和类型保持完整。
-- 三类实验室的模型、模板/自由提示词、会话、媒体选择、提交、取消、结果和清空历史行为与当前一致；文本回复仅改变为原位置增量显示。
+- 三类实验室的模型、模板/自由提示词、会话、媒体选择、提交、取消、结果和清空历史行为与当前一致；文本只在原回复区域增量显示并在同一对话区域停止。
 - 资产详情的提示词编辑、生成、取消、历史候选和采用行为与当前一致。
 - `ChapterStudio` 的帧、视频、参数、准备度、批量 readiness、跳过阻塞项、批量创建任务和回编辑页引导行为与当前一致；`ChapterShotEditPage` 没有新增生成入口。
-- 任务中心的状态、进度、取消、高亮和回跳行为与当前一致，且不展示业务专属详情。
+- 任务中心的异步任务状态、进度、取消、高亮和回跳行为与当前一致，且不展示文本 streaming 记录或业务专属详情。
 - 编辑 prompt、帧或主体媒体后提交不会再次 render，提交值与界面最终值一致。
 - 生成入口中不存在浏览器模板渲染、URL/Base64 媒体、旧 task-link 产物读取或 `as any` payload。
 
@@ -591,28 +615,58 @@ Worker 不得重新选择默认模型或重新解释 target。它按快照中的
 
 ### 7.3 数据库变更、Outbox 与切换
 
-数据库采用 expand → migrate → contract：
+数据库采用 expand → migrate → contract；它只描述前向 schema 顺序，不代表开发阶段必须兼容旧应用：
 
 1. **Expand**：创建 `generation_artifacts`、`generation_task_media_references`、`generation_dispatch_outbox` 及必要约束；不删除旧列。
 2. **Migrate**：逐入口切换 Writer、Reader 和 Worker，验证 Artifact/Publisher、媒体保护和任务恢复。
-3. **Contract**：确认所有现有 Writer 不再读写 `GenerationTaskLink.file_id`，再删除该列、旧 payload 序列化与旧入口。
+3. **Contract**：在计划指定的切换阶段删除 `GenerationTaskLink.file_id`、旧 payload 序列化与旧入口；允许该提交之后、恢复阶段之前暂时无法运行依赖旧契约的调用方。
 
 Outbox 与幂等规则：
 
 - API 在同一事务创建 `GenerationTask`、Target Link、Media Reference 和 Outbox。
 - Outbox 以 `task_id` 唯一；事务提交后 dispatcher 才投递 Celery，并允许安全重试。
-- Artifact 以 `(task_id, ordinal)` 唯一；Publisher 以 `task_id + target + slot` 幂等。
+- Artifact 以 `(task_id, ordinal)` 唯一；Publisher 以 `task_id + target + slot` 幂等，并通过槽位 `version_id` CAS 防止覆盖并发用户修改。
 - 发布前再次检查取消；Artifact、业务回写和任务终态在同一事务提交。
 
-对外 API 最终版本不保留旧路由或双写。即使本地开发数据允许重置，也必须保留 schema 切换顺序和最小回滚说明，避免中间阶段不可运行。
+开发期数据允许重置，不设计业务数据回滚。Migration 必须可诊断、按既定顺序前向执行；失败时修复后继续前向迁移或重置开发数据库。对外 API 最终版本不保留旧路由、双写或兼容 DTO。
+
+### 7.4 阶段性不可运行与 Git 提交
+
+允许 P1 至 P5 的阶段提交暂时破坏尚未迁移的调用方，但只允许业务链路不可用，不允许留下语法错误、无法导入的模块或无法执行的 migration。阶段内对必改且暂未闭合的代码使用 `TODO(unified-generation:Pn)`，写明原因；完成该阶段提交前必须移除。跨阶段的已知不可用范围写入计划台账和 commit body，不在生产代码中长期保留临时注释。
+
+每个阶段必须单独提交，提交首行使用项目规定格式，并在 commit body 记录：
+
+- `Temporary-Breakage`：该阶段结束后仍不可用的入口；
+- `Restored-By`：负责恢复的后续阶段；
+- `Validation-Passed`：本阶段已经通过的检查；
+- `Known-Failures`：因明确的阶段依赖而暂不通过的检查。
+
+禁止使用 `[wip]`。推荐提交：
+
+1. P1：`[refactor] 新增统一生成契约与数据模型`
+2. P2：`[refactor] 拆分提示词渲染与流式协议`
+3. P3：`[refactor] 接入统一生成提交与任务投递`
+4. P4：`[refactor] 迁移图片与视频生成链路`
+5. P5：`[refactor] 迁移文本与智能体生成链路`
+6. P6：`[refactor] 切换生成前端并清理旧链`
+
+可交付节点：
+
+| 节点 | 阶段 | 必须可用的范围 | 强制验证 |
+|---|---|---|---|
+| D1 后端媒体链 | P4 | 图片、视频新 API、Worker、Artifact、Publisher | 相关后端测试、migration、OpenAPI 生成 |
+| D2 后端完整链 | P5 | 文本、图片、视频、Agent 后端入口 | 后端相关测试、真实 SSE 集成测试、OpenAPI 生成 |
+| D3 全栈交付 | P6 | 全部页面、generated client、任务中心与历史采用 | 后端相关测试、`pnpm run openapi:update`、`pnpm exec tsc --noEmit`、前端等价回归 |
+
+D1、D2 是后端可交付节点，不承诺尚未迁移的前端可用；只有 D3 是产品可交付节点。P1、P2、P3 不得单独发布或脱离后续恢复阶段 cherry-pick。
 
 ## 8. 实施阶段与文件清单
 
-入口迁移必须维护以下台账；每一行只有在新入口、Publisher、页面调用和测试都完成后才允许删除旧入口：
+入口迁移必须维护以下台账。允许在页面切换前删除必要的旧契约，但必须在阶段 commit body 记录不可用范围和恢复阶段；D3 前新入口、Publisher、页面调用和测试必须全部闭合：
 
 | 入口组 | operation | target | delivery | executor | publisher |
 |---|---|---|---|---|---|
-| 文本实验室 | `text_chat` | experiment session | 前端固定 streaming；后端保留 inline / streaming / async 能力 | TextChat / StreamingTextChat | Experiment |
+| 文本实验室 | `text_chat` | experiment session | 前端固定 streaming（hidden，仅实验室）；后端保留 inline / streaming / async 能力 | TextChat / StreamingTextChat | Experiment |
 | 图片实验室 | `image_generation` | experiment session | async | ImageGeneration | Experiment |
 | 视频实验室 | `video_generation` | experiment session | async | VideoGeneration | Experiment |
 | 演员/角色/资产图片 | `image_generation` | asset image slot | async | ImageGeneration | AssetImage |
@@ -629,9 +683,11 @@ Outbox 与幂等规则：
 - 更新现有 `image_generation.py`、`video_generation.py`，去除 URL/Data URL 作为业务输入的表达。
 - 定义路由专用请求、内部 `GenerationCommand`、`ResolvedGenerationSnapshot` 与 operation 判别联合。
 - 保留并优化现有视频帧引用和具名主体引用结构。
+- 新增不可变 `ModelConfigRevision`，模型配置变化时生成单调递增 revision ID。
+- 为可由生成结果写回的槽位增加单调递增 `version_id`，为镜头视频增加 `generated_video_version_id`；为 `GenerationTask` 增加 `visibility = hidden | task_center`。
 - 新增 `GenerationArtifact`、`GenerationTaskMediaReference`、`GenerationDispatchOutbox` 模型及 expand migration；本阶段不删除 `GenerationTaskLink.file_id`。
 
-验收：三模态均可用强类型 DTO 表达最终输入；视频主体名称、多图片、多视频和帧槽位可无损往返；外部请求不接受 target/modality/operation/delivery；任何业务请求 DTO 中不存在 URL/Base64 字段。
+验收：三模态均可用强类型 DTO 表达最终输入；视频主体名称、多图片、多视频和帧槽位可无损往返；外部请求不接受 target/modality/operation/delivery；任何业务请求 DTO 中不存在 URL/Base64 字段；配置 revision、目标 `expected_version_id` 和任务 visibility 可被完整序列化。
 
 ### P2：渲染独立化
 
@@ -640,10 +696,10 @@ Outbox 与幂等规则：
 - 删除 `build_submission` 中对 prompt、guidance、引用的二次派生。
 - 新增固定业务资源 render 路由及 generated client；Renderer、target 和 operation 只能由路径 Binder 选择。
 - 定义 `StreamingGenerationExecutor`、版本化 SSE 事件和 operation capability 矩阵。
-- 扩展 OpenAPI 生成模板/传输层，使 generated client 可增量消费固定 SSE 路由。
+- 扩展 OpenAPI 生成模板/传输层，使 generated client 可增量消费固定 SSE 路由；本阶段使用 mock stream 验证传输，不依赖 P5 的真实文本 Executor。
 - 每次 API 变更后运行 `pnpm run openapi:update`，不得推迟到 P6。
 
-验收：同一渲染结果被原样提交时，执行 prompt 与预览 prompt 字节一致；用户编辑后执行的是编辑后的文本；生成提交不调用 Renderer；render body 不能覆盖路径确定的 Renderer/target/operation，错误路径组合被拒绝；generated streaming client 能在首个 delta 到达时增量返回并支持取消。
+验收：同一渲染结果被原样提交时，执行 prompt 与预览 prompt 字节一致；用户编辑后执行的是编辑后的文本；生成提交不调用 Renderer；render body 不能覆盖路径确定的 Renderer/target/operation，错误路径组合被拒绝；generated streaming client 可通过 mock stream 在首个 delta 到达时增量返回并支持取消。
 
 ### P3：统一提交、实体门禁与媒体解析
 
@@ -659,6 +715,7 @@ Outbox 与幂等规则：
 - 将 `image_task_runner.py` 和 `generated_video.py` 中的通用生命周期迁入 `backend/app/services/generation/runtime/`。
 - 保留并复用 `ImageGenerationTask`、`VideoGenerationTask` 与各 Provider Adapter。
 - 实现幂等的 Asset、ShotFrame、ShotVideo、Experiment Publisher 和多产物 ArtifactStore。
+- 所有 Publisher 和历史采用接口使用 `expected_version_id` CAS；冲突时保留 Artifact、记录 `target_version_conflict`，不覆盖当前槽位。
 - 为视频能力补充 frame role、关键帧数、总帧引用数限制，禁止 Adapter 静默丢引用。
 - 将历史结果查询和采用接口切换为 Artifact 维度，不再依赖 `GenerationTaskLink.file_id/status` 表达单一产物。
 - 全部图片、视频 Writer 切换后，通过 contract migration 删除 `GenerationTaskLink.file_id`。
@@ -672,7 +729,7 @@ Outbox 与幂等规则：
 - 删除文本实验室直连 `ChatOpenAI` 的路由实现，以及 script-processing 的同步/异步重复入口。
 - 每次 API 变更后同步 OpenAPI 与 generated client。
 
-验收：文本聊天可同步、流式或异步，Agent 可异步；SSE 事件顺序、终态、断连取消和资源释放符合契约；三者使用同一模型解析、错误映射、日志与任务恢复规则。
+验收：文本聊天可同步、流式或异步，Agent 可异步；真实 `/stream` 的首 delta、事件顺序、hidden visibility、终态、断连取消、lease 回收和资源释放符合契约；文本实验室仍只把本次 user message 作为模型输入；三者使用同一模型解析、错误映射、日志与任务恢复规则。
 
 ### P6：前端、OpenAPI 与清理
 
@@ -680,12 +737,13 @@ Outbox 与幂等规则：
 - submit 路径不得调用 Renderer；用户编辑 prompt、帧引用和主体分组后原样提交。
 - 删除浏览器端模板渲染、旧 API client、旧页面调用与 Mock 生成逻辑。
 - 文本实验室固定调用 generated `/stream` 并在现有 assistant 回复区域增量更新；图片/视频保持 async，不新增 delivery 选择、独立流式页面或第二套文本异步 UI。
+- 文本 SSE 只在实验室对话内显示状态和停止操作，不写 `taskUiStore`、不注册全局通知；任务中心 API 与页面只消费 `visibility = task_center` 的异步任务。
 - 保持 `ChapterStudio` 现有多选、批量 readiness、跳过阻塞项和逐镜头创建任务流程，只迁移 generated API 与 DTO。
 - 保留旧实验室 URL 到统一 `/lab` 的现有跳转行为。
 - 最终运行 `pnpm run openapi:update` 和生成结果一致性检查。
 - 更新当前架构文档，只记录已生效的最终结构；本计划保留在 plans 并标记完成或归档，不将计划原文移入 architecture。
 
-验收：`pnpm exec tsc --noEmit` 通过；generated streaming client 首个 delta 可在现有回复区域显示，主动取消同时终止 HTTP 流并调用任务 cancel API；前端无手写生成 HTTP 调用和浏览器端模板渲染；提交用户编辑内容时 Renderer 调用次数不增加；三类实验室、资产详情、`ChapterStudio`、任务中心和历史采用通过等价回归；分镜编辑页与工作室职责保持不变；除既有 URL 跳转外，旧接口、旧 DTO 和隐藏兼容分支不存在。
+验收：`pnpm exec tsc --noEmit` 通过；generated streaming client 首个 delta 可在现有回复区域显示，实验室内主动停止同时调用任务 cancel API 并终止 HTTP 流；`taskUiStore`、`TaskRuntimeProvider`、全局通知和任务中心均不存在文本 streaming 条目；前端无手写生成 HTTP 调用和浏览器端模板渲染；提交用户编辑内容时 Renderer 调用次数不增加；三类实验室、资产详情、`ChapterStudio`、任务中心和历史采用通过等价回归；分镜编辑页与工作室职责保持不变；除既有 URL 跳转外，旧接口、旧 DTO 和隐藏兼容分支不存在。
 
 ## 9. 测试策略与完成标准
 
@@ -698,6 +756,8 @@ Outbox 与幂等规则：
 - SSE accepted/delta/progress/terminal 事件顺序、单一终态和断连取消。
 - Text/Image/Video Executor 的 Provider/Agent 适配测试。
 - 每个 Publisher 的多产物、成功、失败、取消和重复投递回写。
+- Publisher 与历史采用的 `version_id` CAS、冲突不覆盖和版本单调递增。
+- streaming lease 超时后的 stale reaper 与 ExperimentPublisher 终态收敛。
 
 ### API 与集成测试
 
@@ -706,9 +766,10 @@ Outbox 与幂等规则：
 - 本地上传 → file_id → 分组提交 → Worker 转换 → 产物回写。
 - 具名主体中多图片、多视频的顺序、归组和 Provider 能力拒绝。
 - SSE API/generated transport 的首个 delta 可在文本实验室现有回复区域增量显示，并覆盖主动取消、网络断连、临时消息替换和终态落库。
+- 文本 streaming `task_id` 可由实验室取消，但不会出现在任务列表、任务中心、`taskUiStore` 或全局任务通知。
 - 异步任务刷新恢复、取消、失败、重复投递和多图结果展示。
 - broker 投递失败后的 Outbox 重试，以及取消与迟到成功竞争。
-- 每类 target 在任务中心的列表出现、当前页高亮和回跳映射。
+- 每类 `async_polling` target 在任务中心的列表出现、当前页高亮和回跳映射，并反向断言 streaming 记录被后端列表过滤。
 - 外部 URL 导入的私网地址、重定向、超限内容和伪造媒体类型拒绝。
 - 任务 payload 中不出现密钥、Data URL 和 `storage_key`。
 
@@ -720,9 +781,10 @@ Outbox 与幂等规则：
 4. 视频帧和具名主体媒体分组可无损保存、校验和执行。
 5. operation capability 明确约束可用交付方式；SSE 使用类型化事件和 generated streaming client。
 6. 业务结果回写全部由 Publisher 完成，通用 Worker 中不存在按业务 `relation_type` 的回写分支。
-7. 异步创建、投递、Artifact 和 Publisher 具备幂等与崩溃恢复语义。
+7. 异步创建、投递、Artifact 和 Publisher 具备幂等与崩溃恢复语义；槽位发布使用单调 `version_id` CAS。
 8. OpenAPI、generated client、相关架构文档和测试同步完成。
-9. 前端现有功能通过等价回归；除文本回复在原位置增量显示外，未新增 delivery 选择、独立页面、页面职责或任务中心能力。
+9. 前端现有功能通过等价回归；文本回复和停止只存在于实验室对话，任务中心仍只展示异步任务，未新增 delivery 选择、独立页面、页面职责或任务中心能力。
+10. P1 至 P6 均有独立 Git 提交；D3 验收时不存在 `TODO(unified-generation:` 临时注释或 commit body 中尚未闭合的 `Temporary-Breakage`。
 
 ## 10. 风险与处理原则
 
@@ -730,8 +792,8 @@ Outbox 与幂等规则：
 - **供应商能力差异**：留在 Image/Video Executor 和 Provider Adapter，不进入实体门禁。
 - **媒体语义丢失**：帧槽位与具名主体使用强类型父结构，叶子 file_id 不承担分组语义。
 - **异步引用文件删除**：通过活动 `GenerationTaskMediaReference`、删除前锁定和版本快照保护待执行引用。
-- **SSE 断连与迟到结果**：统一任务记录、单一终态、断连取消和发布前取消检查。
-- **重复投递与部分提交**：通过 Outbox、Artifact 唯一约束和 Publisher 幂等键恢复。
+- **SSE 断连与迟到结果**：使用隐藏运行记录、lease、stale reaper、单一终态、断连取消和发布前取消检查；不进入任务中心。
+- **重复投递与部分提交**：通过 Outbox、Artifact 唯一约束、Publisher 幂等键和目标槽位 `version_id` CAS 恢复。
 - **外部 URL 导入**：限制协议、地址范围、重定向、大小和媒体类型，防止 SSRF 与资源耗尽。
 - **模板包含敏感变量**：渲染响应脱敏，服务端审计快照按最小必要原则保存。
-- **过大改动面**：按 P1 至 P6 分解研发和测试，数据库先扩展再迁移，删除动作集中到对应入口验证后的 contract 阶段；最终发布版本不保留旧路由、双写或旧 payload。
+- **过大改动面**：按 P1 至 P6 分解研发和测试，允许已记录的阶段性不可运行；每阶段独立提交，D1/D2 验证后端范围，D3 恢复全栈并清零临时注释、旧路由、双写和旧 payload。
