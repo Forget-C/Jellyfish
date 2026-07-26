@@ -113,6 +113,30 @@ async def test_update_model_settings_persists_latest_values() -> None:
 
 
 @pytest.mark.asyncio
+async def test_update_model_settings_preserves_other_modality_defaults() -> None:
+    """分别设置三种模态时，部分更新不得清空先前已保存的默认模型。"""
+    db, engine = await _build_session()
+    async with db:
+        await update_model_settings(
+            db,
+            body=ModelSettingsUpdate(default_text_model_id="m-text"),
+        )
+        await update_model_settings(
+            db,
+            body=ModelSettingsUpdate(default_image_model_id="m-image"),
+        )
+        updated = await update_model_settings(
+            db,
+            body=ModelSettingsUpdate(default_video_model_id="m-video"),
+        )
+
+        assert updated.default_text_model_id == "m-text"
+        assert updated.default_image_model_id == "m-image"
+        assert updated.default_video_model_id == "m-video"
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_list_models_paginated_returns_filtered_items() -> None:
     db, engine = await _build_session()
     async with db:

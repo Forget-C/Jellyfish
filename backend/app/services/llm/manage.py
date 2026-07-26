@@ -353,9 +353,13 @@ async def update_model_settings(
     *,
     body: ModelSettingsUpdate,
 ) -> ModelSettings:
-    """更新模型全局设置。"""
+    """部分更新模型全局设置，保留请求中未出现的模态默认模型。
+
+    前端会按 text、image、video 分别提交默认模型字段。必须只写入显式
+    提交的字段，避免 Pydantic 的 ``None`` 默认值清空其他模态的已配置模型。
+    """
     settings = await get_or_create_settings(db)
-    patch_model(settings, body.model_dump())
+    patch_model(settings, body.model_dump(exclude_unset=True))
     return await flush_and_refresh(db, settings)
 
 

@@ -13,6 +13,7 @@ description: "当前生效的 LLM 默认模型来源与解析顺序。"
   - `default_image_model_id`
   - `default_video_model_id`
 - `models` 表不再承担“默认模型”语义，`models.is_default` 已下线。
+- 管理接口以部分更新方式保存设置：单独更新一个模态时，只会修改对应字段，已经配置的其他模态默认模型会保留。
 
 ## 解析规则
 
