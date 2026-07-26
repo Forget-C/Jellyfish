@@ -9,6 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1.routes.film.common import _CreateOnlyTask
 from app.core.task_manager import DeliveryMode, SqlAlchemyTaskStore, TaskManager
 from app.dependencies import get_db
+from app.core.contracts.experiment import (
+    ExperimentFrameReferences,
+    ExperimentInputSnapshot,
+    ExperimentSubjectReference,
+    ExperimentVideoInputSnapshot,
+)
 from app.models.task_links import GenerationTaskLink
 from app.models.experiment_sessions import ExperimentSession
 from app.schemas.common import ApiResponse, created_response
@@ -38,11 +44,21 @@ async def create_video_lab_task(
     experiment_session = await db.get(ExperimentSession, body.session_id)
     if experiment_session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Experiment session not found")
+    input_snapshot = ExperimentInputSnapshot(
+        model_id=body.model_id,
+        prompt=prompt,
+        video=ExperimentVideoInputSnapshot(
+            ratio=body.ratio,
+            frame_references=ExperimentFrameReferences(**body.frame_references.model_dump()),
+            subject_references=[ExperimentSubjectReference(**item.model_dump()) for item in body.subject_references],
+        ),
+    ).model_dump(exclude_none=True)
     message_payload = {
         "model_id": body.model_id,
         "ratio": body.ratio,
         "frame_references": body.frame_references.model_dump(),
         "subject_references": [item.model_dump() for item in body.subject_references],
+        "input_snapshot": input_snapshot,
     }
     user_message, task_message = await append_experiment_messages(
         db,

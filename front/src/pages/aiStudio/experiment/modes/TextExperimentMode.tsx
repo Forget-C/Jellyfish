@@ -19,10 +19,13 @@ import {
 } from '../../../../services/generated'
 import { ExperimentComposer } from '../components/ExperimentComposer'
 import { ExperimentEmptyState } from '../components/ExperimentEmptyState'
+import { ExperimentHistoryRestoreButton } from '../components/ExperimentHistoryRestoreButton'
+import { ExperimentMessageBubble } from '../components/ExperimentMessageBubble'
 import { ExperimentOptionBar } from '../components/ExperimentOptionBar'
 import { ExperimentPromptEditor } from '../components/ExperimentPromptEditor'
 import { createPromptTemplateValues, renderPromptTemplate } from '../components/PromptTemplateForm'
 import { useExperimentHistory } from '../hooks/useExperimentHistory'
+import { focusExperimentPromptEditor, readExperimentInputSnapshot, type ExperimentInputSnapshot } from '../experimentInputSnapshot'
 
 /** 文本实验室可使用的提示词模板类别。 */
 const textPromptCategories = [
@@ -46,6 +49,7 @@ type LocalMessage = {
   id: string
   role: 'user' | 'assistant'
   content: string
+  inputSnapshot?: ExperimentInputSnapshot
 }
 
 /** 统一页面通过 render-prop 将模态内容填充进共享布局的各个区域。 */
@@ -73,6 +77,7 @@ function toLocalMessages(messages: ExperimentMessageRead[]): LocalMessage[] {
       id: item.id,
       role: item.role === 'assistant' ? 'assistant' : 'user',
       content: item.content ?? '',
+      inputSnapshot: item.role === 'user' ? readExperimentInputSnapshot(item) : undefined,
     }))
 }
 
@@ -204,7 +209,11 @@ export function TextExperimentMode({
       const persistedUser = await StudioExperimentSessionsService
         .createExperimentMessageApiV1StudioExperimentSessionsSessionIdMessagesPost({
           sessionId: session.id,
-          requestBody: { role: 'user', content: currentPrompt, payload: { model_id: modelId } },
+          requestBody: {
+            role: 'user',
+            content: currentPrompt,
+            payload: { model_id: modelId, input_snapshot: { version: 1, model_id: modelId, prompt: currentPrompt } },
+          },
         })
       setLocalMessages((current) => [...current, {
         id: persistedUser.data?.id ?? createMessageId(), role: 'user', content: currentPrompt,
@@ -244,6 +253,18 @@ export function TextExperimentMode({
     }
   }
 
+  /** Restores a prior user message as editable free text without spending another model call. */
+  const restoreUserMessage = (item: LocalMessage) => {
+    if (submitting) return
+    const snapshot = item.inputSnapshot
+    setTemplateId(undefined)
+    setTemplateValues({})
+    setDraft(snapshot?.prompt ?? item.content)
+    if (snapshot?.model_id) setModelId(snapshot.model_id)
+    focusExperimentPromptEditor()
+    message.success('已回填历史输入，可修改后重新发送')
+  }
+
   return render({
     extra: (
       <Button
@@ -266,12 +287,15 @@ export function TextExperimentMode({
           <ExperimentEmptyState description="选择模型并输入提示词，开始一轮文本实验" />
         ) : null}
         {localMessages.map((item) => (
-          <div key={item.id} className={item.role === 'user' ? 'ml-auto max-w-[85%]' : 'mr-auto max-w-[85%]'}>
-            <Tag color={item.role === 'user' ? 'blue' : 'green'}>{item.role === 'user' ? '你' : '模型'}</Tag>
-            <div className={`mt-1 whitespace-pre-wrap rounded-lg px-3 py-2 ${item.role === 'user' ? 'bg-blue-50' : 'bg-gray-50'}`}>
-              {item.content}
-            </div>
-          </div>
+          <ExperimentMessageBubble
+            key={item.id}
+            align={item.role === 'user' ? 'right' : 'left'}
+            footer={item.role === 'user' ? <ExperimentHistoryRestoreButton disabled={submitting} onRestore={() => restoreUserMessage(item)} /> : undefined}
+            header={<Tag color={item.role === 'user' ? 'blue' : 'green'}>{item.role === 'user' ? '你' : '模型'}</Tag>}
+            tone={item.role === 'user' ? 'user' : 'assistant'}
+          >
+            {item.content}
+          </ExperimentMessageBubble>
         ))}
         {submitting ? <div className="mr-auto max-w-[85%]"><Tag color="green">模型</Tag><div className="mt-1 rounded-lg bg-gray-50 px-3 py-2"><Spin size="small" /> 正在生成…</div></div> : null}
       </>

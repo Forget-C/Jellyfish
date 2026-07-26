@@ -23,11 +23,14 @@ import {
 import { buildFileDownloadUrl } from '../../assets/utils'
 import { ExperimentComposer } from '../components/ExperimentComposer'
 import { ExperimentEmptyState } from '../components/ExperimentEmptyState'
+import { ExperimentHistoryRestoreButton } from '../components/ExperimentHistoryRestoreButton'
 import { ExperimentHistoryReferences } from '../components/ExperimentHistoryReferences'
+import { ExperimentMessageBubble } from '../components/ExperimentMessageBubble'
 import { ExperimentOptionBar } from '../components/ExperimentOptionBar'
 import { ExperimentPromptEditor } from '../components/ExperimentPromptEditor'
 import { createPromptTemplateValues, renderPromptTemplate } from '../components/PromptTemplateForm'
 import { useExperimentHistory } from '../hooks/useExperimentHistory'
+import { focusExperimentPromptEditor, readExperimentInputSnapshot, type ExperimentInputSnapshot } from '../experimentInputSnapshot'
 import type { ExperimentLabType } from '../hooks/useExperimentSessions'
 
 const imagePromptCategories = ['frame_head_image', 'frame_tail_image', 'frame_key_image', 'character_image', 'actor_image', 'prop_image', 'scene_image_front', 'scene_image_other', 'costume_image'] as const
@@ -47,6 +50,7 @@ type ImageLabMessage = {
   resultUrls?: string[]
   error?: string
   referenceFileIds?: string[]
+  inputSnapshot?: ExperimentInputSnapshot
 }
 
 export type ImageExperimentModeProps = {
@@ -86,6 +90,7 @@ function toImageLabMessage(item: ExperimentMessageRead): ImageLabMessage {
     error: typeof payload.error === 'string' ? payload.error : undefined,
     referenceFileIds: Array.isArray(payload.reference_file_ids)
       ? payload.reference_file_ids.filter((id): id is string => typeof id === 'string') : [],
+    inputSnapshot: item.role === 'user' ? readExperimentInputSnapshot(item) : undefined,
   }
 }
 
@@ -231,6 +236,24 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
     try { await clearSessionMessages(activeSessionId); history.clearLocalHistory(); await history.refresh() } catch { message.error('清空历史失败；含生成任务的会话不可清空') }
   }
 
+  /** Restores a historical picture request into the current draft without creating a task. */
+  const restoreUserMessage = (item: ImageLabMessage) => {
+    if (disabled) return
+    const snapshot = item.inputSnapshot
+    const referenceIds = snapshot?.image?.reference_file_ids ?? item.referenceFileIds ?? []
+    const availableIds = referenceIds.filter((id) => files.some((file) => file.id === id))
+    const unavailableCount = referenceIds.length - availableIds.length
+    setTemplateId(undefined)
+    setTemplateValues({})
+    setDraft(snapshot?.prompt ?? item.content)
+    if (snapshot?.model_id) setModelId(snapshot.model_id)
+    setReferenceFileIds(availableIds)
+    focusExperimentPromptEditor()
+    message[unavailableCount ? 'warning' : 'success'](
+      unavailableCount ? `已回填输入；${unavailableCount} 张历史参考图不可用` : '已回填历史输入，可修改后重新生成',
+    )
+  }
+
   const disabled = submitting || Boolean(runningTask)
   const extra = <Button icon={<ClearOutlined />} disabled={!messages.length || disabled || !clearSessionMessages} onClick={() => void handleClear}>清空历史</Button>
   const historyContent = <>
@@ -242,16 +265,19 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
         const isUser = item.role === 'user'
         const isRunning = Boolean(item.taskId && !['succeeded', 'failed', 'cancelled'].includes(item.status ?? 'pending'))
         const statusText = item.status === 'succeeded' ? '已完成' : item.status === 'failed' ? '失败' : item.status === 'cancelled' ? '已取消' : '生成中'
-        return <div key={item.id} className={isUser ? 'ml-auto max-w-[85%]' : 'mr-auto max-w-[85%]'}>
-          <Tag color={isUser ? 'blue' : item.status === 'failed' ? 'red' : 'green'}>{isUser ? '你' : '图片生成'}</Tag>
-          <div className={`mt-1 rounded-lg px-3 py-2 ${isUser ? 'whitespace-pre-wrap bg-blue-50' : 'bg-gray-50'}`}>
+        return <ExperimentMessageBubble
+          key={item.id}
+          align={isUser ? 'right' : 'left'}
+          footer={isUser ? <ExperimentHistoryRestoreButton disabled={disabled} onRestore={() => restoreUserMessage(item)} /> : undefined}
+          header={<Tag color={isUser ? 'blue' : item.status === 'failed' ? 'red' : 'green'}>{isUser ? '你' : '图片生成'}</Tag>}
+          tone={isUser ? 'user' : 'assistant'}
+        >
             <div className="whitespace-pre-wrap">{item.content}</div>
             {isUser ? <ExperimentHistoryReferences files={files} references={(item.referenceFileIds ?? []).map((id) => ({ id, label: '参考图' }))} /> : null}
             {item.taskId ? <div className="mt-2 flex items-center gap-2 text-sm text-slate-600">{isRunning ? <Spin size="small" /> : null}<span>任务状态：{statusText}</span></div> : null}
             {item.error ? <div className="mt-2 text-sm text-red-600">{item.error}</div> : null}
             {item.resultUrls?.length ? <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">{item.resultUrls.map((url, index) => <img key={`${url}-${index}`} src={url} alt={`生成结果 ${index + 1}`} className="w-full rounded-lg border border-gray-200 object-contain" />)}</div> : null}
-          </div>
-        </div>
+        </ExperimentMessageBubble>
       })}
     </div>
   </>

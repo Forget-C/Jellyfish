@@ -7,6 +7,7 @@ from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db
+from app.core.contracts.experiment import ExperimentImageInputSnapshot, ExperimentInputSnapshot
 from app.models.experiment_sessions import ExperimentSession
 from app.schemas.common import ApiResponse, created_response
 from app.schemas.studio.experiment_sessions import ExperimentMessageRead, ExperimentTaskCreated
@@ -36,6 +37,20 @@ async def create_image_lab_task(
     experiment_session = await db.get(ExperimentSession, body.session_id)
     if experiment_session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Experiment session not found")
+    input_snapshot = ExperimentInputSnapshot(
+        model_id=body.model_id,
+        prompt=prompt,
+        image=ExperimentImageInputSnapshot(
+            reference_file_ids=body.images,
+            target_ratio=body.target_ratio,
+            resolution_profile=body.resolution_profile,
+        ),
+    ).model_dump(exclude_none=True)
+    message_payload = {
+        "model_id": body.model_id,
+        "reference_file_ids": body.images,
+        "input_snapshot": input_snapshot,
+    }
     user_message, task_message = await append_experiment_messages(
         db,
         session_id=body.session_id,
@@ -43,13 +58,13 @@ async def create_image_lab_task(
             ExperimentMessageDraft(
                 role="user",
                 content=prompt,
-                payload={"model_id": body.model_id, "reference_file_ids": body.images},
+                payload=message_payload,
             ),
             ExperimentMessageDraft(
                 role="task",
                 content="图片生成任务已提交，正在等待生成结果。",
                 status="pending",
-                payload={"model_id": body.model_id, "reference_file_ids": body.images},
+                payload=message_payload,
             ),
         ],
     )

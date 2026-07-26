@@ -92,3 +92,14 @@ def test_create_image_lab_task_uses_selected_references(client: TestClient, monk
     assert [item["sequence"] for item in response.json()["data"]["messages"]] == [1, 2]
     assert [item["role"] for item in response.json()["data"]["messages"]] == ["user", "task"]
     assert response.json()["data"]["messages"][1]["task_id"] == "task-1"
+    snapshot = response.json()["data"]["messages"][0]["payload"]["input_snapshot"]
+    assert snapshot == {
+        "version": 1,
+        "model_id": "image-model-1",
+        "prompt": "一只水彩风格的鲸鱼",
+        "image": {
+            "reference_file_ids": ["reference-1"],
+            "target_ratio": "1:1",
+            "resolution_profile": "high",
+        },
+    }

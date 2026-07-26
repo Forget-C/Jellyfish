@@ -123,3 +123,20 @@ def test_create_video_lab_task_maps_typed_frames(client: TestClient, monkeypatch
     assert [item.model_dump() for item in captured["subject_references"]] == [
         {"name": "少女", "image_file_ids": ["character-file"], "video_file_ids": []}
     ]
+    snapshot = response.json()["data"]["messages"][0]["payload"]["input_snapshot"]
+    assert snapshot == {
+        "version": 1,
+        "model_id": "video-model-1",
+        "prompt": "白发少女在雨夜回头",
+        "video": {
+            "ratio": "16:9",
+            "frame_references": {
+                "first_frame_file_id": "first-file",
+                "last_frame_file_id": "last-file",
+                "key_frame_file_ids": ["key-file"],
+            },
+            "subject_references": [
+                {"name": "少女", "image_file_ids": ["character-file"], "video_file_ids": []}
+            ],
+        },
+    }

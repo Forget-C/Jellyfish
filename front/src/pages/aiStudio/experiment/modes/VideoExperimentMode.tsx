@@ -22,11 +22,14 @@ import {
 import { buildFileDownloadUrl } from '../../assets/utils'
 import { ExperimentComposer } from '../components/ExperimentComposer'
 import { ExperimentEmptyState } from '../components/ExperimentEmptyState'
+import { ExperimentHistoryRestoreButton } from '../components/ExperimentHistoryRestoreButton'
 import { ExperimentHistoryReferences } from '../components/ExperimentHistoryReferences'
+import { ExperimentMessageBubble } from '../components/ExperimentMessageBubble'
 import { ExperimentOptionBar } from '../components/ExperimentOptionBar'
 import { ExperimentPromptEditor } from '../components/ExperimentPromptEditor'
 import { createPromptTemplateValues, renderPromptTemplate } from '../components/PromptTemplateForm'
 import { useExperimentHistory } from '../hooks/useExperimentHistory'
+import { focusExperimentPromptEditor, readExperimentInputSnapshot, type ExperimentInputSnapshot } from '../experimentInputSnapshot'
 import type { ExperimentLabType } from '../hooks/useExperimentSessions'
 
 type FrameSlot = 'first' | 'last' | 'key'
@@ -36,6 +39,7 @@ type VideoMessage = {
   progress?: number; videoUrl?: string; error?: string; ratio?: string
   frameFileIds?: Partial<Record<FrameSlot, string>>
   subjectReferences?: { name: string; imageFileIds: string[]; videoFileIds: string[] }[]
+  inputSnapshot?: ExperimentInputSnapshot
 }
 type SubjectMediaKind = 'image' | 'video'
 type SubjectReferenceDraft = { id: string; name: string; imageFileIds: string[]; videoFileIds: string[] }
@@ -92,6 +96,7 @@ function toVideoMessage(item: ExperimentMessageRead): VideoMessage {
     videoUrl: extractVideoUrl(payload.result as Record<string, unknown> | undefined),
     error: typeof payload.error === 'string' ? payload.error : undefined,
     ratio: typeof payload.ratio === 'string' ? payload.ratio : undefined, frameFileIds, subjectReferences,
+    inputSnapshot: item.role === 'user' ? readExperimentInputSnapshot(item) : undefined,
   }
 }
 
@@ -355,6 +360,40 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
     setTemplateValues(template ? createPromptTemplateValues(template) : {}); if (template) setDraft('')
   }
 
+  /** Restores named frames and subject media into their original video input slots. */
+  const restoreUserMessage = (item: VideoMessage) => {
+    if (disabled) return
+    const snapshot = item.inputSnapshot
+    const video = snapshot?.video
+    const availableFileIds = new Set(files.map((file) => file.id))
+    const references = video?.frame_references
+    const nextFrames: Partial<Record<FrameSlot, string>> = {}
+    if (references?.first_frame_file_id && availableFileIds.has(references.first_frame_file_id)) nextFrames.first = references.first_frame_file_id
+    if (references?.last_frame_file_id && availableFileIds.has(references.last_frame_file_id)) nextFrames.last = references.last_frame_file_id
+    const keyFrameId = references?.key_frame_file_ids?.find((id) => availableFileIds.has(id))
+    if (keyFrameId) nextFrames.key = keyFrameId
+    const restoredSubjects = (video?.subject_references ?? item.subjectReferences ?? []).map((subject) => ({
+      id: crypto.randomUUID(),
+      name: subject.name ?? '',
+      imageFileIds: (subject.image_file_ids ?? subject.imageFileIds ?? []).filter((id) => availableFileIds.has(id)),
+      videoFileIds: (subject.video_file_ids ?? subject.videoFileIds ?? []).filter((id) => availableFileIds.has(id)),
+    })).filter((subject) => subject.name && (subject.imageFileIds.length || subject.videoFileIds.length))
+    const requestedReferenceCount = [references?.first_frame_file_id, references?.last_frame_file_id, ...(references?.key_frame_file_ids ?? [])].filter(Boolean).length
+    const restoredReferenceCount = Object.keys(nextFrames).length
+    const requestedSubjectMediaCount = (video?.subject_references ?? item.subjectReferences ?? []).reduce((total, subject) => total + (subject.image_file_ids ?? subject.imageFileIds ?? []).length + (subject.video_file_ids ?? subject.videoFileIds ?? []).length, 0)
+    const restoredSubjectMediaCount = restoredSubjects.reduce((total, subject) => total + subject.imageFileIds.length + subject.videoFileIds.length, 0)
+    setTemplateId(undefined)
+    setTemplateValues({})
+    setDraft(snapshot?.prompt ?? item.content)
+    if (snapshot?.model_id) { setModelId(snapshot.model_id); void loadCapability(snapshot.model_id) }
+    if (video?.ratio && ratioOptions.includes(video.ratio as VideoRatio)) setRatio(video.ratio as VideoRatio)
+    setFrameFileIds(restoredSubjects.length ? {} : nextFrames)
+    setSubjectReferences(restoredReferenceCount ? [] : restoredSubjects)
+    focusExperimentPromptEditor()
+    const unavailableCount = requestedReferenceCount - restoredReferenceCount + requestedSubjectMediaCount - restoredSubjectMediaCount
+    message[unavailableCount ? 'warning' : 'success'](unavailableCount ? `已回填输入；${unavailableCount} 个历史参考素材不可用` : '已回填历史输入，可修改后重新生成')
+  }
+
   const historyNode = <>
     {history.loading ? <div className="flex h-72 items-center justify-center"><Spin /></div> : null}
     {history.hasMoreHistory ? <Button size="small" loading={history.loadingMore} onClick={() => void history.loadMore()}>加载更早消息</Button> : null}
@@ -362,16 +401,19 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
     {messages.map((item) => {
       const isUser = item.role === 'user'; const isRunning = Boolean(item.taskId && !['succeeded', 'failed', 'cancelled'].includes(item.status ?? 'pending'))
       const statusText = item.status === 'succeeded' ? '已完成' : item.status === 'failed' ? '失败' : item.status === 'cancelled' ? '已取消' : '生成中'
-      return <div key={item.id} className={isUser ? 'ml-auto max-w-[85%]' : 'mr-auto max-w-[85%]'}>
-        <Tag color={isUser ? 'blue' : item.status === 'failed' ? 'red' : 'green'}>{isUser ? '你' : '视频生成'}</Tag>
-        <div className={`mt-1 rounded-lg px-3 py-2 ${isUser ? 'whitespace-pre-wrap bg-blue-50' : 'bg-gray-50'}`}>
+      return <ExperimentMessageBubble
+        key={item.id}
+        align={isUser ? 'right' : 'left'}
+        footer={isUser ? <ExperimentHistoryRestoreButton disabled={disabled} onRestore={() => restoreUserMessage(item)} /> : undefined}
+        header={<Tag color={isUser ? 'blue' : item.status === 'failed' ? 'red' : 'green'}>{isUser ? '你' : '视频生成'}</Tag>}
+        tone={isUser ? 'user' : 'assistant'}
+      >
           <div className="whitespace-pre-wrap">{item.content}</div>
           {isUser ? <><ExperimentHistoryReferences files={files} references={[...(['first', 'last', 'key'] as FrameSlot[]).flatMap((slot) => item.frameFileIds?.[slot] ? [{ id: item.frameFileIds[slot]!, label: frameLabels[slot] }] : []), ...(item.subjectReferences ?? []).flatMap((subject) => subject.imageFileIds.map((id) => ({ id, label: `${subject.name}图片` })))]} />{(item.subjectReferences ?? []).flatMap((subject) => subject.videoFileIds.map((id) => <Tag key={id} className="mt-1">{subject.name}视频：{files.find((file) => file.id === id)?.name ?? id}</Tag>))}{item.ratio ? <div className="mt-2 text-xs text-slate-500">画幅：{item.ratio}</div> : null}</> : null}
           {item.taskId ? <div className="mt-2 flex items-center gap-2 text-sm text-slate-600">{isRunning ? <Spin size="small" /> : null}<span>任务状态：{statusText}{typeof item.progress === 'number' ? `（${item.progress}%）` : ''}</span></div> : null}
           {item.error ? <div className="mt-2 text-sm text-red-600">{item.error}</div> : null}
           {item.videoUrl ? <button type="button" className="group relative mt-3 block h-36 w-64 max-w-full overflow-hidden rounded-lg border border-slate-200 bg-slate-900 text-left" onClick={() => setPreviewVideoUrl(item.videoUrl ?? null)} aria-label="打开视频预览"><video muted playsInline preload="metadata" tabIndex={-1} aria-hidden="true" className="pointer-events-none h-full w-full object-cover" src={item.videoUrl} onLoadedMetadata={(event) => { event.currentTarget.currentTime = 0.1 }}>视频缩略图</video><span className="absolute inset-0 flex items-center justify-center bg-slate-950/25 text-sm font-medium text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">点击预览</span></button> : null}
-        </div>
-      </div>
+      </ExperimentMessageBubble>
     })}
   </>
   const subjectActions = capability?.supports_subject_image_reference || capability?.supports_subject_video_reference ? <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 border-l border-slate-200 pl-2">

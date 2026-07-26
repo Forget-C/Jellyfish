@@ -36,6 +36,7 @@ export function ExperimentPromptEditor({
   }
   return (
     <Input.TextArea
+      id="experiment-prompt-editor"
       bordered={false}
       value={draft}
       onChange={(event) => onDraftChange(event.target.value)}

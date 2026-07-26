@@ -16,3 +16,4 @@ description: "记录当前正在推进的开发计划、改造方案与阶段性
 - [Alembic 统一数据库迁移方案](/docs/plans/alembic-unified-migration-plan/)
 - [统一资产图提示词模板实施计划](/docs/plans/unified-asset-image-template-plan/)
 - [统一生成编排与独立提示词渲染实施计划](/docs/plans/unified-generation-orchestration-plan/)
+- [实验室历史输入回填与重试方案](/docs/plans/experiment-history-retry/)
