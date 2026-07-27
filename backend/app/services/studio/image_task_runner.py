@@ -1,14 +1,23 @@
 from __future__ import annotations
 
+import base64
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import async_session_maker
 from app.core.task_manager import DeliveryMode, SqlAlchemyTaskStore, TaskManager
 from app.core.task_manager.types import TaskStatus
-from app.core.contracts.image_generation import ImageGenerationInput, ImageGenerationResult
+from app.core.contracts.generation import (
+    GenerationTargetKind,
+    ImageGenerationOperationInput,
+    ResolvedGenerationSnapshot,
+)
+from app.core.contracts.image_generation import ImageGenerationInput, ImageGenerationResult, InputImageRef
 from app.core.contracts.provider import ProviderConfig
 from app.core.tasks import ImageGenerationTask
+from app.models.llm import ModelCategoryKey, ModelConfigRevision, Provider, ProviderStatus
+from app.models.task import GenerationTask
 from app.models.studio import (
     ActorImage,
     AssetQualityLevel,
@@ -34,6 +43,9 @@ from app.services.studio.file_usages import (
 )
 from app.services.studio.shot_status import mark_shot_generating, recompute_shot_status
 from app.services.studio.image_tasks import load_provider_config, resolve_image_model
+from app.services.generation.files import FileResolver
+from app.services.generation.publishers import AssetImagePublisher, ShotFramePublisher
+from app.services.generation.runtime import ArtifactStore
 from app.services.worker.async_task_support import cancel_if_requested_async
 from app.services.worker.task_logging import log_task_event, log_task_failure
 from app.utils.files import create_file_from_url_or_b64
@@ -53,6 +65,129 @@ class _CreateOnlyTask:
 
     async def get_result(self) -> object:
         return None
+
+
+async def _resolve_snapshot_provider_config(
+    session: AsyncSession,
+    *,
+    snapshot: ResolvedGenerationSnapshot,
+) -> ProviderConfig:
+    """按冻结图片 revision 与动态 credential_ref 构造执行期 Provider 配置。
+
+    图片任务 payload 不保留 API key 或 endpoint；Worker 仅在执行时读取 revision
+    和被其引用的 Provider，确保队列与日志中没有供应商凭据。
+    """
+    revision = await session.get(ModelConfigRevision, snapshot.model_revision_id)
+    if revision is None or revision.model_id != snapshot.model_id or revision.category != ModelCategoryKey.image:
+        raise RuntimeError("image generation model revision is unavailable")
+    credential_ref = (revision.credential_ref or "").strip()
+    if not credential_ref.startswith("provider:"):
+        raise RuntimeError("image generation credential reference is unavailable")
+    provider_id = credential_ref.removeprefix("provider:").strip()
+    provider = await session.get(Provider, provider_id) if provider_id else None
+    if provider is None or provider.status == ProviderStatus.disabled:
+        raise RuntimeError("image generation provider is unavailable")
+    api_key = (provider.api_key or "").strip()
+    if not api_key:
+        raise RuntimeError("image generation provider credential is unavailable")
+    endpoint_config = dict(revision.endpoint_config or {})
+    base_url = endpoint_config.get("image_base_url") or endpoint_config.get("base_url") or None
+    return ProviderConfig(
+        provider=revision.provider_key,  # type: ignore[arg-type]
+        api_key=api_key,
+        base_url=str(base_url).strip() or None if base_url else None,
+    )
+
+
+async def _resolve_snapshot_image_input(
+    session: AsyncSession,
+    *,
+    snapshot: ResolvedGenerationSnapshot,
+) -> ImageGenerationInput:
+    """将安全的 ``file_id`` 参考图投影为旧 Provider adapter 的内存 Data URL。
+
+    ``InputImageRef`` 的公共契约只允许 ``file_id``。旧 adapter 仍需要 URL 形式
+    的参考图，因此这里有意使用 ``model_construct`` 创建仅在当前进程存活的兼容
+    对象；媒体正文不会回写到任务 payload、Artifact 元数据或日志。
+    """
+    operation_input = snapshot.operation_input
+    if not isinstance(operation_input, ImageGenerationOperationInput):
+        raise RuntimeError("image generation snapshot operation is unavailable")
+    if not snapshot.execution_prompt:
+        raise RuntimeError("image generation snapshot prompt is unavailable")
+    revision = await session.get(ModelConfigRevision, snapshot.model_revision_id)
+    if revision is None:
+        raise RuntimeError("image generation model revision is unavailable")
+
+    references: list[InputImageRef] = []
+    in_memory_image_urls: list[str] = []
+    media = snapshot.media
+    if media is not None:
+        if not hasattr(media, "references"):
+            raise RuntimeError("image generation snapshot media is invalid")
+        resolver = FileResolver(session)
+        for reference in media.references:
+            resolved = await resolver.resolve(reference)
+            content_type = resolved.content_type or "image/png"
+            if not content_type.startswith("image/"):
+                raise RuntimeError(f"resolved media type mismatch for file_id={reference.file_id}")
+            data_url = f"data:{content_type};base64,{base64.b64encode(resolved.content).decode('ascii')}"
+            # 先保留合法 file_id 通过外层 Pydantic 嵌套校验，再在返回前清空它，
+            # 避免 OpenAI adapter 同时把项目 FileItem ID 当作供应商 file_id 发送。
+            references.append(InputImageRef.model_construct(file_id=reference.file_id))
+            in_memory_image_urls.append(data_url)
+
+    purpose = "asset_image" if snapshot.canonical_target.kind is GenerationTargetKind.asset_image_slot else "video_reference"
+    input_ = ImageGenerationInput(
+        prompt=snapshot.execution_prompt,
+        model=revision.model_name,
+        images=references,
+        target_ratio=operation_input.target_ratio,
+        resolution_profile=operation_input.resolution_profile,
+        purpose=purpose,
+        n=operation_input.count,
+    )
+    for reference, data_url in zip(input_.images, in_memory_image_urls):
+        reference.file_id = None  # type: ignore[assignment]
+        object.__setattr__(reference, "image_url", data_url)
+    return input_
+
+
+async def _run_snapshot_image_generation(
+    session: AsyncSession,
+    *,
+    task_id: str,
+    snapshot_payload: dict,
+) -> tuple[dict, ResolvedGenerationSnapshot]:
+    """执行统一提交的图片任务，并通过 Artifact 与 CAS Publisher 发布结果。"""
+    snapshot = ResolvedGenerationSnapshot.model_validate(snapshot_payload)
+    provider_config = await _resolve_snapshot_provider_config(session, snapshot=snapshot)
+    input_ = await _resolve_snapshot_image_input(session, snapshot=snapshot)
+    provider_task = ImageGenerationTask(provider_config=provider_config, input_=input_)
+    await provider_task.run()
+    result = await provider_task.get_result()
+    if result is None:
+        status_payload = await provider_task.status()
+        raise RuntimeError(str(status_payload.get("error") or "Image generation task returned no result"))
+    artifacts = await ArtifactStore().store_images(
+        session,
+        task_id=task_id,
+        result=result,
+        name_prefix=f"image-{snapshot.canonical_target.entity_id}",
+        storage_prefix=f"generated-images/{snapshot.canonical_target.kind.value}",
+    )
+    publisher = {
+        GenerationTargetKind.asset_image_slot: AssetImagePublisher(),
+        GenerationTargetKind.shot_frame_slot: ShotFramePublisher(),
+    }.get(snapshot.canonical_target.kind)
+    if publisher is None:
+        raise RuntimeError("image generation snapshot target is unsupported")
+    await publisher.publish_terminal(session, snapshot=snapshot, artifacts=artifacts)
+    result_payload = result.model_dump()
+    if artifacts:
+        result_payload["file_id"] = artifacts[0].file_id
+        result_payload["publish_status"] = artifacts[0].publish_status.value
+    return result_payload, snapshot
 
 
 async def _persist_images_to_assets(
@@ -317,8 +452,13 @@ async def run_image_generation_task(
     task_id: str,
     run_args: dict,
 ) -> None:
-    relation_type = str(run_args.get("relation_type") or "")
-    relation_entity_id = str(run_args.get("relation_entity_id") or "")
+    """执行图片 Worker；统一任务只从已持久化的安全 snapshot 读取输入。
+
+    ``run_args`` 为 Task 执行器的历史调用签名保留，但不再用于读取供应商凭据、
+    endpoint、prompt 或媒体。没有 snapshot 的旧图片任务会失败，这是本阶段允许
+    的短暂不可用边界，后续执行器/提交入口迁移完成后将不再产生此类任务。
+    """
+    del run_args
 
     async with async_session_maker() as session:
         try:
@@ -331,45 +471,20 @@ async def run_image_generation_task(
                 log_task_event("image_generation", task_id, "cancelled", stage="before_execute")
                 return
 
-            provider = str(run_args.get("provider") or "")
-            api_key = str(run_args.get("api_key") or "")
-            base_url = run_args.get("base_url")
-            input_dict = dict(run_args.get("input") or {})
-
-            task = ImageGenerationTask(
-                provider_config=ProviderConfig(
-                    provider=provider,  # type: ignore[arg-type]
-                    api_key=api_key,
-                    base_url=base_url,
-                ),
-                input_=ImageGenerationInput.model_validate(input_dict),
+            task_row = await session.get(GenerationTask, task_id)
+            snapshot_payload = (task_row.payload or {}).get("snapshot") if task_row is not None else None
+            if not isinstance(snapshot_payload, dict):
+                raise RuntimeError("image generation task snapshot is unavailable")
+            result_payload, snapshot = await _run_snapshot_image_generation(
+                session,
+                task_id=task_id,
+                snapshot_payload=snapshot_payload,
             )
-            await task.run()
-            result = await task.get_result()
-            if result is None:
-                # Task adapter 会捕获供应商异常；将其保留到 GenerationTask.error，
-                # 避免任务中心只看到无法定位的“无结果”兜底文案。
-                task_status = await task.status()
-                adapter_error = str(task_status.get("error") or "")
-                raise RuntimeError(adapter_error or "Image generation task returned no result")
             if await cancel_if_requested_async(store=store, task_id=task_id, session=session):
                 log_task_event("image_generation", task_id, "cancelled", stage="after_execute")
                 return
 
-            result_payload = result.model_dump()
-            render_context = run_args.get("render_context")
-            if isinstance(render_context, dict):
-                result_payload["render_context"] = render_context
-            generated_file_id = await _persist_images_to_assets(
-                session,
-                task_id=task_id,
-                relation_type=relation_type,
-                relation_entity_id=relation_entity_id,
-                result=result,
-            )
-            if generated_file_id:
-                result_payload["file_id"] = generated_file_id
-            # 归档完成后再写任务结果，保证轮询接口和会话气泡共享同一 file_id 快照。
+            # 归档与 CAS 发布完成后再写任务结果，避免轮询读到未发布的文件快照。
             await store.set_result(task_id, result_payload)
             if await cancel_if_requested_async(store=store, task_id=task_id, session=session):
                 log_task_event("image_generation", task_id, "cancelled", stage="after_persist")
@@ -380,13 +495,8 @@ async def run_image_generation_task(
             if message_row is not None:
                 message_row.status = "succeeded"
                 message_row.payload = {**message_row.payload, "result": result_payload}
-            related_shot_id = await _resolve_related_shot_id(
-                session,
-                relation_type=relation_type,
-                relation_entity_id=relation_entity_id,
-            )
-            if related_shot_id:
-                await recompute_shot_status(session, shot_id=related_shot_id)
+            if snapshot.canonical_target.kind is GenerationTargetKind.shot_frame_slot:
+                await recompute_shot_status(session, shot_id=snapshot.canonical_target.entity_id)
             await session.commit()
             log_task_event("image_generation", task_id, "succeeded")
         except Exception as exc:  # noqa: BLE001
@@ -399,12 +509,5 @@ async def run_image_generation_task(
                 if message_row is not None:
                     message_row.status = "failed"
                     message_row.payload = {**message_row.payload, "error": str(exc)}
-                related_shot_id = await _resolve_related_shot_id(
-                    s2,
-                    relation_type=relation_type,
-                    relation_entity_id=relation_entity_id,
-                )
-                if related_shot_id:
-                    await recompute_shot_status(s2, shot_id=related_shot_id)
                 await s2.commit()
             log_task_failure("image_generation", task_id, str(exc))

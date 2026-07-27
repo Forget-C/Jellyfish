@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import mimetypes
+from types import SimpleNamespace
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -12,15 +13,21 @@ from app.core.db import async_session_maker
 from app.core.task_manager import SqlAlchemyTaskStore
 from app.core.task_manager.types import TaskStatus
 from app.core.contracts.provider import ProviderConfig
+from app.core.contracts.generation import ResolvedGenerationSnapshot
+from app.core.contracts.media import VideoMediaInput
 from app.core.contracts.video_generation import VideoGenerationInput, VideoGenerationResult
 from app.core.tasks import VideoGenerationTask
-from app.models.llm import Model, ModelCategoryKey, ModelSettings
+from app.models.llm import Model, ModelCategoryKey, ModelConfigRevision, ModelSettings, Provider, ProviderStatus
 from app.models.task_links import GenerationTaskLink
+from app.models.task import GenerationTask
 from app.models.experiment_sessions import ExperimentMessage
 from app.models.studio import FileItem, Shot, ShotDetail, ShotFrameType
 from app.models.types import FileUsageKind
 from app.services.common import entity_not_found
 from app.services.llm.provider_resolver import resolve_provider_config_by_model
+from app.services.generation.files import FileResolver
+from app.services.generation.publishers import ShotVideoPublisher
+from app.services.generation.runtime import ArtifactStore
 from app.services.studio.file_usages import sync_usage_from_shot_context
 from app.services.studio.generation.video import (
     REQUIRED_FRAMES_BY_MODE,
@@ -33,6 +40,136 @@ from app.services.studio.shot_status import recompute_shot_status
 from app.services.worker.async_task_support import cancel_if_requested_async
 from app.services.worker.task_logging import log_task_event, log_task_failure
 from app.utils.files import create_file_from_url_or_b64
+
+
+async def _resolve_snapshot_provider_config(
+    session: AsyncSession,
+    *,
+    snapshot: ResolvedGenerationSnapshot,
+) -> ProviderConfig:
+    """按冻结 revision 和动态 credential_ref 构造视频 Provider 配置。
+
+    任务 payload 不保存任何凭据或 endpoint；模型名和 endpoint 来自不可变
+    revision，API key 只在 Worker 执行时通过 credential_ref 指向的 Provider 读取。
+    """
+    revision = await session.get(ModelConfigRevision, snapshot.model_revision_id)
+    if revision is None or revision.model_id != snapshot.model_id or revision.category != ModelCategoryKey.video:
+        raise RuntimeError("video generation model revision is unavailable")
+    credential_ref = (revision.credential_ref or "").strip()
+    if not credential_ref.startswith("provider:"):
+        raise RuntimeError("video generation credential reference is unavailable")
+    provider_id = credential_ref.removeprefix("provider:").strip()
+    provider = await session.get(Provider, provider_id) if provider_id else None
+    if provider is None or provider.status == ProviderStatus.disabled:
+        raise RuntimeError("video generation provider is unavailable")
+    api_key = (provider.api_key or "").strip()
+    if not api_key:
+        raise RuntimeError("video generation provider credential is unavailable")
+    endpoint_config = dict(revision.endpoint_config or {})
+    base_url = endpoint_config.get("video_base_url") or endpoint_config.get("base_url") or None
+    return ProviderConfig(
+        provider=revision.provider_key,  # type: ignore[arg-type]
+        api_key=api_key,
+        base_url=str(base_url).strip() or None if base_url else None,
+    )
+
+
+async def _resolve_snapshot_video_input(
+    session: AsyncSession,
+    *,
+    snapshot: ResolvedGenerationSnapshot,
+) -> VideoGenerationInput:
+    """将安全 ``file_id`` 快照在执行期解析为旧 Provider adapter 所需的 data URL。
+
+    Provider adapter 仍消费字符串媒体，因此只在内存中构造兼容投影；下载内容
+    不会进入 GenerationTask payload、日志或 Artifact 元数据。
+    """
+    operation_input = snapshot.operation_input
+    ratio = getattr(operation_input, "ratio", None)
+    if not ratio:
+        raise RuntimeError("video generation snapshot ratio is unavailable")
+    media = snapshot.media
+    if media is not None and not isinstance(media, VideoMediaInput):
+        raise RuntimeError("video generation snapshot media must be video media")
+    resolver = FileResolver(session)
+
+    async def to_data_url(reference) -> str:  # noqa: ANN001
+        resolved = await resolver.resolve(reference)
+        content_type = resolved.content_type or f"{reference.media_kind}/png"
+        if not content_type.startswith(f"{reference.media_kind}/"):
+            raise RuntimeError(f"resolved media type mismatch for file_id={reference.file_id}")
+        encoded = base64.b64encode(resolved.content).decode("ascii")
+        return f"data:{content_type};base64,{encoded}"
+
+    first_frame = last_frame = None
+    key_frames: list[str] = []
+    subjects: list[SimpleNamespace] = []
+    if media is not None:
+        first_frame = await to_data_url(media.frames.first) if media.frames.first else None
+        last_frame = await to_data_url(media.frames.last) if media.frames.last else None
+        key_frames = [await to_data_url(reference) for reference in media.frames.keys]
+        for subject in media.subjects:
+            values = [await to_data_url(reference) for reference in subject.media]
+            subjects.append(
+                SimpleNamespace(
+                    name=subject.name,
+                    images=[value for reference, value in zip(subject.media, values) if reference.media_kind == "image"],
+                    videos=[value for reference, value in zip(subject.media, values) if reference.media_kind == "video"],
+                )
+            )
+    revision = await session.get(ModelConfigRevision, snapshot.model_revision_id)
+    if revision is None:
+        raise RuntimeError("video generation model revision is unavailable")
+    # ``model_construct`` 有意绕过已迁移到 file_id 的 API 契约：此对象仅在
+    # Worker 内存中作为旧 Provider adapter 的短生命周期投影。
+    return VideoGenerationInput.model_construct(
+        prompt=snapshot.execution_prompt,
+        model=revision.model_name,
+        ratio=ratio,
+        seconds=getattr(operation_input, "seconds", None),
+        seed=getattr(operation_input, "seed", None),
+        watermark=None,
+        frame_references=SimpleNamespace(
+            first_frame=first_frame,
+            last_frame=last_frame,
+            key_frames=key_frames,
+        ),
+        subject_references=subjects,
+    )
+
+
+async def _run_snapshot_video_generation(
+    session: AsyncSession,
+    *,
+    task_id: str,
+    snapshot_payload: dict,
+) -> dict:
+    """执行 P3 提交的视频任务，并以 Artifact + CAS Publisher 完成落库。"""
+    snapshot = ResolvedGenerationSnapshot.model_validate(snapshot_payload)
+    provider_config = await _resolve_snapshot_provider_config(session, snapshot=snapshot)
+    input_ = await _resolve_snapshot_video_input(session, snapshot=snapshot)
+    provider_task = VideoGenerationTask(provider_config=provider_config, input_=input_)
+    await provider_task.run()
+    raw_result = await provider_task.get_result()
+    if raw_result is None:
+        status_payload = await provider_task.status()
+        raise RuntimeError(str(status_payload.get("error") or "Video generation task returned no result"))
+    result = VideoGenerationResult.model_validate(raw_result.model_dump())
+    headers = {"Authorization": f"Bearer {provider_config.api_key}"} if provider_config.provider == "openai" else None
+    artifact = await ArtifactStore().store_video(
+        session,
+        task_id=task_id,
+        result=result,
+        name=f"shot-{snapshot.canonical_target.entity_id}-video",
+        storage_prefix=f"generated-videos/shots/{snapshot.canonical_target.entity_id}",
+        url_request_headers=headers,
+        httpx_timeout=600.0,
+    )
+    await ShotVideoPublisher().publish_terminal(session, snapshot=snapshot, artifacts=[artifact])
+    result_payload = result.model_dump()
+    result_payload["file_id"] = artifact.file_id
+    result_payload["publish_status"] = artifact.publish_status.value
+    return result_payload
 
 async def validate_shot_and_duration(db: AsyncSession, shot_id: str) -> ShotDetail:
     shot = await db.get(Shot, shot_id)
@@ -349,8 +486,15 @@ async def persist_generated_video_to_library(
 
 async def run_video_generation_task(
     task_id: str,
-    run_args: dict,
+    run_args: dict,  # pylint: disable=unused-argument
 ) -> None:
+    """执行统一编排的视频快照任务。
+
+    ``GenerationSubmitter`` 已将可执行命令冻结到任务 payload；Worker 必须从
+    snapshot 读取模型、目标和媒体，绝不能读取历史 ``run_args``，以免凭据或
+    Data URL 再次进入任务持久化层。参数仅为当前异步执行器调用约定保留。
+    """
+    shot_id: str | None = None
     async with async_session_maker() as session:
         try:
             store = SqlAlchemyTaskStore(session)
@@ -362,55 +506,20 @@ async def run_video_generation_task(
                 log_task_event("video_generation", task_id, "cancelled", stage="before_execute")
                 return
 
-            provider = str(run_args.get("provider") or "")
-            api_key = str(run_args.get("api_key") or "")
-            base_url = run_args.get("base_url")
-            input_dict = dict(run_args.get("input") or {})
-
-            task = VideoGenerationTask(
-                provider_config=ProviderConfig(
-                    provider=provider,  # type: ignore[arg-type]
-                    api_key=api_key,
-                    base_url=base_url,
-                ),
-                input_=VideoGenerationInput.model_validate(input_dict),
+            task_row = await session.get(GenerationTask, task_id)
+            snapshot_payload = (task_row.payload or {}).get("snapshot") if task_row is not None else None
+            if not isinstance(snapshot_payload, dict):
+                raise RuntimeError("video generation task requires a unified snapshot payload")
+            snapshot = ResolvedGenerationSnapshot.model_validate(snapshot_payload)
+            shot_id = snapshot.canonical_target.entity_id
+            result_payload = await _run_snapshot_video_generation(
+                session,
+                task_id=task_id,
+                snapshot_payload=snapshot_payload,
             )
-            await task.run()
-            result = await task.get_result()
-            if result is None:
-                status_dict = await task.status()
-                detailed_error = ""
-                if isinstance(status_dict, dict):
-                    detailed_error = str(status_dict.get("error") or "")
-                msg = detailed_error or "Video generation task returned no result"
-                raise RuntimeError(msg)
             if await cancel_if_requested_async(store=store, task_id=task_id, session=session):
                 log_task_event("video_generation", task_id, "cancelled", stage="after_execute")
                 return
-
-            shot_id = str(run_args.get("shot_id") or "")
-            if shot_id:
-                file_obj = await persist_generated_video_to_shot(
-                    session,
-                    task_id=task_id,
-                    shot_id=shot_id,
-                    result=result,
-                    provider=provider,
-                    api_key=api_key,
-                )
-            elif run_args.get("source") == "video_lab":
-                file_obj = await persist_generated_video_to_library(
-                    session,
-                    task_id=task_id,
-                    result=result,
-                    provider=provider,
-                    api_key=api_key,
-                )
-            else:
-                raise RuntimeError("run_args missing video generation source")
-
-            result_payload = result.model_dump()
-            result_payload["file_id"] = file_obj.id
             await store.set_result(task_id, result_payload)
             if await cancel_if_requested_async(store=store, task_id=task_id, session=session):
                 log_task_event("video_generation", task_id, "cancelled", stage="after_persist")
@@ -435,7 +544,6 @@ async def run_video_generation_task(
                 if message_row is not None:
                     message_row.status = "failed"
                     message_row.payload = {**message_row.payload, "error": str(exc)}
-                shot_id = str(run_args.get("shot_id") or "")
                 if shot_id:
                     await recompute_shot_status(s2, shot_id=shot_id)
                 await s2.commit()

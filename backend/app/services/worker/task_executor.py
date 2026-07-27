@@ -207,12 +207,14 @@ class AbstractAsyncDelegatingExecutor(AbstractWorkerTaskExecutor):
         task_kind: str,
         runner: Callable[[str, dict[str, Any]], Awaitable[None]],
         timeout_seconds: float | None = 1800.0,
+        require_generation_snapshot: bool = False,
         session_maker: sessionmaker[Session] = sync_session_maker,
     ) -> None:
         super().__init__(session_maker=session_maker)
         self.task_kind = task_kind
         self._runner = runner
         self.timeout_seconds = timeout_seconds
+        self._require_generation_snapshot = require_generation_snapshot
 
     def run(self, task_id: str) -> None:
         started_at = time.monotonic()
@@ -222,9 +224,9 @@ class AbstractAsyncDelegatingExecutor(AbstractWorkerTaskExecutor):
             return
         reset_db_runtime()
         try:
-            run_args = self._load_run_args(task_id)
-            timeout_seconds = self._resolve_timeout_seconds(run_args)
-            asyncio.run(self._run_async_with_runtime(task_id, run_args, timeout_seconds))
+            execution_payload = self._load_execution_payload(task_id)
+            timeout_seconds = self._resolve_timeout_seconds(execution_payload)
+            asyncio.run(self._run_async_with_runtime(task_id, execution_payload, timeout_seconds))
             self._log_event("succeeded", task_id, elapsed_ms=self._elapsed_ms(started_at))
         except TimeoutError as exc:
             error = str(exc)
@@ -235,12 +237,29 @@ class AbstractAsyncDelegatingExecutor(AbstractWorkerTaskExecutor):
             self._log_event("failed", task_id, elapsed_ms=self._elapsed_ms(started_at), error=str(exc))
             raise
 
-    def _load_run_args(self, task_id: str) -> dict[str, Any]:
+    def _load_execution_payload(self, task_id: str) -> dict[str, Any]:
+        """加载 Worker 可消费的任务输入，并阻断已弃用的生成凭据 payload。
+
+        图片和视频任务只能接收 Submitter 生成的 ``command`` + ``snapshot``。
+        这里有意不回退到 ``run_args``，以确保历史 payload 内的 ``api_key``、
+        ``base_url`` 等敏感字段不会再被执行器读取或转交给新的运行时。
+        """
         with self._session_maker() as db:
             row = db.get(GenerationTask, task_id)
             if row is None:
                 raise RuntimeError(f"Task not found: {task_id}")
-            return dict((row.payload or {}).get("run_args") or {})
+            payload = dict(row.payload or {})
+            if not self._require_generation_snapshot:
+                return dict(payload.get("run_args") or {})
+
+            command = payload.get("command")
+            snapshot = payload.get("snapshot")
+            if not isinstance(command, dict) or not isinstance(snapshot, dict):
+                raise RuntimeError(
+                    f"Generation snapshot is required for task_kind={self.task_kind}; "
+                    "legacy run_args payload is unsupported"
+                )
+            return {"command": dict(command), "snapshot": dict(snapshot)}
 
     async def _run_async_with_runtime(
         self,

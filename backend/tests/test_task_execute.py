@@ -201,6 +201,111 @@ def test_async_delegating_executors_use_positional_runner_signature() -> None:
         ), f"{task_kind} runner must accept positional args, got {signature}"
 
 
+def test_generation_async_executor_dispatches_only_submitter_snapshot(monkeypatch, tmp_path) -> None:
+    """图片/视频执行器只将 P3 command 与 snapshot 交给运行时。"""
+    db_path = tmp_path / "snapshot-dispatch.db"
+    sync_engine = create_engine(f"sqlite:///{db_path}", future=True)
+    sync_session_local = sessionmaker(sync_engine, class_=Session, expire_on_commit=False)
+
+    import app.models.task  # noqa: F401
+
+    Base.metadata.create_all(sync_engine)
+    command = {"operation": "video_generation", "delivery": "async_polling"}
+    snapshot = {"model_id": "model-1", "model_revision_id": "revision-1"}
+    with sync_session_local() as db:
+        db.add(
+            GenerationTask(
+                id="task-snapshot",
+                mode="async_polling",
+                task_kind="video_generation",
+                status="pending",
+                progress=0,
+                payload={"command": command, "snapshot": snapshot},
+                result=None,
+                error="",
+            )
+        )
+        db.commit()
+
+    received: dict[str, object] = {}
+
+    async def _runner(task_id: str, execution_payload: dict) -> None:
+        received["task_id"] = task_id
+        received["payload"] = execution_payload
+
+    async def _close_db() -> None:
+        return None
+
+    monkeypatch.setattr("app.services.worker.task_executor.reset_db_runtime", lambda: None)
+    monkeypatch.setattr("app.services.worker.task_executor.close_db", _close_db)
+    executor = AbstractAsyncDelegatingExecutor(
+        task_kind="video_generation",
+        runner=_runner,
+        require_generation_snapshot=True,
+        session_maker=sync_session_local,
+    )
+
+    executor.run("task-snapshot")
+
+    assert received == {
+        "task_id": "task-snapshot",
+        "payload": {"command": command, "snapshot": snapshot},
+    }
+    sync_engine.dispose()
+
+
+def test_generation_async_executor_rejects_legacy_run_args(monkeypatch, tmp_path) -> None:
+    """历史图片/视频 payload 不得再把 Provider 凭据传进 Worker。"""
+    db_path = tmp_path / "legacy-payload.db"
+    sync_engine = create_engine(f"sqlite:///{db_path}", future=True)
+    sync_session_local = sessionmaker(sync_engine, class_=Session, expire_on_commit=False)
+
+    import app.models.task  # noqa: F401
+
+    Base.metadata.create_all(sync_engine)
+    with sync_session_local() as db:
+        db.add(
+            GenerationTask(
+                id="task-legacy",
+                mode="async_polling",
+                task_kind="image_generation",
+                status="pending",
+                progress=0,
+                payload={
+                    "task_kind": "image_generation",
+                    "run_args": {"api_key": "must-not-be-read", "base_url": "https://legacy.invalid"},
+                },
+                result=None,
+                error="",
+            )
+        )
+        db.commit()
+
+    called: list[str] = []
+
+    async def _runner(task_id: str, _execution_payload: dict) -> None:
+        called.append(task_id)
+
+    monkeypatch.setattr("app.services.worker.task_executor.reset_db_runtime", lambda: None)
+    executor = AbstractAsyncDelegatingExecutor(
+        task_kind="image_generation",
+        runner=_runner,
+        require_generation_snapshot=True,
+        session_maker=sync_session_local,
+    )
+
+    with pytest.raises(RuntimeError, match="Generation snapshot is required.*legacy run_args"):
+        executor.run("task-legacy")
+
+    assert called == []
+    with sync_session_local() as db:
+        row = db.get(GenerationTask, "task-legacy")
+        assert row is not None
+        assert row.status == "failed"
+        assert "legacy run_args payload is unsupported" in (row.error or "")
+    sync_engine.dispose()
+
+
 def test_async_delegating_executor_marks_failed_on_timeout(monkeypatch, tmp_path) -> None:
     db_path = tmp_path / "async-executor-timeout.db"
     sync_engine = create_engine(f"sqlite:///{db_path}", future=True)

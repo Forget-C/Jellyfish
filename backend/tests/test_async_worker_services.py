@@ -26,6 +26,60 @@ from app.services.studio.image_task_runner import run_image_generation_task
 
 
 @pytest.mark.asyncio
+async def test_run_video_generation_task_uses_snapshot_instead_of_run_args(monkeypatch, tmp_path) -> None:
+    """视频 Worker 只消费统一快照，忽略历史 run_args 中的敏感字段。"""
+    db_path = tmp_path / "video-worker-snapshot.db"
+    engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}", future=True)
+    session_local = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    snapshot = {
+        "model_id": "video-model-1",
+        "model_revision_id": "video-revision-1",
+        "canonical_target": {"kind": "shot_video", "entity_id": "shot-1"},
+        "expected_version_id": 1,
+        "operation_input": {"kind": "video_generation", "ratio": "16:9"},
+        "execution_prompt": "镜头运动",
+    }
+    async with session_local() as db:
+        task = await SqlAlchemyTaskStore(db).create(
+            payload={"snapshot": snapshot},
+            mode=DeliveryMode.async_polling,
+            task_kind="video_generation",
+        )
+        await db.commit()
+
+    received: dict[str, object] = {}
+
+    async def _run_snapshot(*_args, **kwargs):
+        """记录传入 Worker 的冻结快照，避免真实调用供应商。"""
+        received["snapshot"] = kwargs["snapshot_payload"]
+        return {"file_id": "generated-video-file", "publish_status": "published"}
+
+    async def _skip_status_recompute(*_args, **_kwargs) -> None:
+        """此测试只验证 Worker 输入边界，不建立完整镜头领域数据。"""
+        return None
+
+    monkeypatch.setattr("app.services.film.generated_video.async_session_maker", session_local)
+    monkeypatch.setattr("app.services.film.generated_video._run_snapshot_video_generation", _run_snapshot)
+    monkeypatch.setattr("app.services.film.generated_video.recompute_shot_status", _skip_status_recompute)
+
+    await run_video_generation_task(
+        task.id,
+        {"provider": "openai", "api_key": "must-not-be-read", "base_url": "https://invalid.example"},
+    )
+
+    async with session_local() as db:
+        row = await db.get(GenerationTask, task.id)
+        assert row is not None
+        assert row.status == GenerationTaskStatus.succeeded
+        assert row.result == {"file_id": "generated-video-file", "publish_status": "published"}
+    assert received["snapshot"] == snapshot
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_run_video_generation_task_marks_cancelled_before_execute(monkeypatch, tmp_path) -> None:
     db_path = tmp_path / "video-worker-cancel.db"
     engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}", future=True)
@@ -123,7 +177,7 @@ async def test_run_image_generation_task_marks_cancelled_before_execute(monkeypa
 
 @pytest.mark.asyncio
 async def test_run_image_generation_task_persists_success_to_experiment_message(monkeypatch, tmp_path) -> None:
-    """图片 Worker 成功后应将结果合并写入实验任务气泡。"""
+    """P4 contract 后，缺少 snapshot 的历史图片 payload 必须明确失败。"""
     db_path = tmp_path / "image-worker-session-success.db"
     engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}", future=True)
     session_local = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -184,12 +238,10 @@ async def test_run_image_generation_task_persists_success_to_experiment_message(
         task_row = await db.get(GenerationTask, task.id)
         assert message is not None
         assert task_row is not None
-        assert message.status == "succeeded"
+        assert message.status == "failed"
         assert message.payload["reference_file_ids"] == ["ref-1"]
-        assert message.payload["result"]["file_id"] == "generated-image-file"
-        assert message.payload["result"]["images"][0]["url"] == "https://example.com/image.png"
-        assert task_row.result is not None
-        assert task_row.result["file_id"] == "generated-image-file"
+        assert message.payload["error"] == "image generation task snapshot is unavailable"
+        assert task_row.error == "image generation task snapshot is unavailable"
     await engine.dispose()
 
 
@@ -231,9 +283,9 @@ async def test_run_image_generation_task_persists_failure_to_experiment_message(
 
 
 @pytest.mark.asyncio
-async def test_run_video_generation_task_persists_success_to_experiment_message(monkeypatch, tmp_path) -> None:
-    """视频 Worker 成功后应持久化进度、产物 file_id 与任务气泡状态。"""
-    db_path = tmp_path / "video-worker-session-success.db"
+async def test_run_video_generation_task_rejects_legacy_run_args(monkeypatch, tmp_path) -> None:
+    """P4 切换窗口内，旧视频 payload 应明确失败而非读取持久化凭据。"""
+    db_path = tmp_path / "video-worker-legacy-payload.db"
     engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}", future=True)
     session_local = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with engine.begin() as conn:
@@ -242,7 +294,7 @@ async def test_run_video_generation_task_persists_success_to_experiment_message(
     async with session_local() as db:
         store = SqlAlchemyTaskStore(db)
         task = await store.create(
-            payload={"task_kind": "video_generation", "run_args": {}},
+            payload={"task_kind": "video_generation", "run_args": {"api_key": "legacy-secret"}},
             mode=DeliveryMode.async_polling,
             task_kind="video_generation",
         )
@@ -255,25 +307,7 @@ async def test_run_video_generation_task_persists_success_to_experiment_message(
         ])
         await db.commit()
 
-    class _FakeVideoTask:
-        """替代供应商调用，提供稳定的视频生成结果。"""
-
-        def __init__(self, *_args, **_kwargs) -> None:
-            pass
-
-        async def run(self) -> None:
-            return None
-
-        async def get_result(self):
-            return type("VideoResult", (), {"model_dump": lambda _self: {"url": "https://example.com/video.mp4"}})()
-
-    async def _persist_to_library(*_args, **_kwargs):
-        """实验室结果测试只返回归档文件标识。"""
-        return type("VideoFile", (), {"id": "generated-video-file"})()
-
     monkeypatch.setattr("app.services.film.generated_video.async_session_maker", session_local)
-    monkeypatch.setattr("app.services.film.generated_video.VideoGenerationTask", _FakeVideoTask)
-    monkeypatch.setattr("app.services.film.generated_video.persist_generated_video_to_library", _persist_to_library)
 
     await run_video_generation_task(
         task.id,
@@ -286,10 +320,9 @@ async def test_run_video_generation_task_persists_success_to_experiment_message(
     async with session_local() as db:
         message = await db.get(ExperimentMessage, "video-success-message")
         assert message is not None
-        assert message.status == "succeeded"
+        assert message.status == "failed"
         assert message.payload["ratio"] == "16:9"
-        assert message.payload["progress"] == 100
-        assert message.payload["result"]["file_id"] == "generated-video-file"
+        assert message.payload["error"] == "video generation task requires a unified snapshot payload"
     await engine.dispose()
 
 

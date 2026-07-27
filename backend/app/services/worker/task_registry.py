@@ -56,6 +56,7 @@ task_executor_registry.register(
         task_kind="video_generation",
         runner=run_video_generation_task,
         timeout_seconds=3600.0,
+        require_generation_snapshot=True,
     ),
 )
 task_executor_registry.register(
@@ -64,6 +65,7 @@ task_executor_registry.register(
         task_kind="image_generation",
         runner=run_image_generation_task,
         timeout_seconds=1800.0,
+        require_generation_snapshot=True,
     ),
 )
 task_executor_registry.register(
