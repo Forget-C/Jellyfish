@@ -43,6 +43,8 @@ type VideoMessage = {
 }
 type SubjectMediaKind = 'image' | 'video'
 type SubjectReferenceDraft = { id: string; name: string; imageFileIds: string[]; videoFileIds: string[] }
+type SnapshotSubjectReference = NonNullable<NonNullable<ExperimentInputSnapshot['video']>['subject_references']>[number]
+type RestoredSubjectReference = SnapshotSubjectReference | NonNullable<VideoMessage['subjectReferences']>[number]
 type VideoCapability = {
   allowed_ratios?: string[]; default_ratio?: string
   supports_subject_image_reference?: boolean; supports_subject_video_reference?: boolean
@@ -53,6 +55,16 @@ type VideoCapability = {
 
 const frameLabels: Record<FrameSlot, string> = { first: '首帧', last: '尾帧', key: '关键帧' }
 const ratioOptions: VideoRatio[] = ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']
+
+/** 将新快照的 snake_case 与旧消息的 camelCase 主体引用归一化为编辑态结构。 */
+function normalizeRestoredSubjectReference(subject: RestoredSubjectReference): Omit<SubjectReferenceDraft, 'id'> {
+  if ('imageFileIds' in subject) return subject
+  return {
+    name: subject.name ?? '',
+    imageFileIds: subject.image_file_ids ?? [],
+    videoFileIds: subject.video_file_ids ?? [],
+  }
+}
 
 /** 从任务结果中选择可播放的资料库文件或供应商视频地址。 */
 function extractVideoUrl(result: Record<string, unknown> | null | undefined): string | undefined {
@@ -372,15 +384,22 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
     if (references?.last_frame_file_id && availableFileIds.has(references.last_frame_file_id)) nextFrames.last = references.last_frame_file_id
     const keyFrameId = references?.key_frame_file_ids?.find((id) => availableFileIds.has(id))
     if (keyFrameId) nextFrames.key = keyFrameId
-    const restoredSubjects = (video?.subject_references ?? item.subjectReferences ?? []).map((subject) => ({
-      id: crypto.randomUUID(),
-      name: subject.name ?? '',
-      imageFileIds: (subject.image_file_ids ?? subject.imageFileIds ?? []).filter((id) => availableFileIds.has(id)),
-      videoFileIds: (subject.video_file_ids ?? subject.videoFileIds ?? []).filter((id) => availableFileIds.has(id)),
-    })).filter((subject) => subject.name && (subject.imageFileIds.length || subject.videoFileIds.length))
+    const restoredSubjectReferences = video?.subject_references ?? item.subjectReferences ?? []
+    const restoredSubjects = restoredSubjectReferences.map((reference) => {
+      const subject = normalizeRestoredSubjectReference(reference)
+      return {
+        id: crypto.randomUUID(),
+        name: subject.name,
+        imageFileIds: subject.imageFileIds.filter((id) => availableFileIds.has(id)),
+        videoFileIds: subject.videoFileIds.filter((id) => availableFileIds.has(id)),
+      }
+    }).filter((subject) => subject.name && (subject.imageFileIds.length || subject.videoFileIds.length))
     const requestedReferenceCount = [references?.first_frame_file_id, references?.last_frame_file_id, ...(references?.key_frame_file_ids ?? [])].filter(Boolean).length
     const restoredReferenceCount = Object.keys(nextFrames).length
-    const requestedSubjectMediaCount = (video?.subject_references ?? item.subjectReferences ?? []).reduce((total, subject) => total + (subject.image_file_ids ?? subject.imageFileIds ?? []).length + (subject.video_file_ids ?? subject.videoFileIds ?? []).length, 0)
+    const requestedSubjectMediaCount = restoredSubjectReferences.reduce((total, reference) => {
+      const subject = normalizeRestoredSubjectReference(reference)
+      return total + subject.imageFileIds.length + subject.videoFileIds.length
+    }, 0)
     const restoredSubjectMediaCount = restoredSubjects.reduce((total, subject) => total + subject.imageFileIds.length + subject.videoFileIds.length, 0)
     setTemplateId(undefined)
     setTemplateValues({})

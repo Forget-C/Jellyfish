@@ -12,6 +12,8 @@ export type ExperimentInputSnapshot = {
   }
 }
 
+type VideoInputSnapshot = NonNullable<ExperimentInputSnapshot['video']>
+
 /** Reads the current snapshot first and falls back to legacy message payloads. */
 export function readExperimentInputSnapshot(message: ExperimentMessageRead): ExperimentInputSnapshot {
   const payload = message.payload ?? {}
@@ -29,8 +31,8 @@ export function readExperimentInputSnapshot(message: ExperimentMessageRead): Exp
       : undefined,
     video: {
       ratio: typeof payload.ratio === 'string' ? payload.ratio : undefined,
-      frame_references: payload.frame_references as ExperimentInputSnapshot['video']['frame_references'],
-      subject_references: payload.subject_references as ExperimentInputSnapshot['video']['subject_references'],
+      frame_references: payload.frame_references as VideoInputSnapshot['frame_references'],
+      subject_references: payload.subject_references as VideoInputSnapshot['subject_references'],
     },
   }
 }
