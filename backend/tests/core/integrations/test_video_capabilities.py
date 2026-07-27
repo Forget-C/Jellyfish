@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from app.core.contracts.video_generation import VideoFrameReferences, VideoGenerationInput, VideoSubjectReference
+from app.core.contracts.media import MediaReference
 from app.core.integrations.video_capabilities import (
     VideoModelCapability,
     clear_video_model_capability_overrides,
@@ -60,7 +61,10 @@ def test_validate_video_options_rejects_capability_mismatch() -> None:
 
 def test_vidu_subject_video_is_limited_to_q2_pro_and_conflicts_with_frames() -> None:
     """Vidu 主体视频仅 q2-pro 支持，且主体与构图帧不可混用。"""
-    subject = VideoSubjectReference(name="hero", videos=["https://cdn.example/hero.mp4"])
+    subject = VideoSubjectReference(
+        name="hero",
+        media=[MediaReference(file_id="hero-video", media_kind="video")],
+    )
     q2_pro = VideoGenerationInput(
         prompt="@hero walks into the room",
         model="viduq2-pro",
@@ -73,6 +77,8 @@ def test_vidu_subject_video_is_limited_to_q2_pro_and_conflicts_with_frames() -> 
     with pytest.raises(ValueError, match="subject video references are not supported"):
         validate_video_options(provider="vidu", model=q2.model, input_=q2)
 
-    conflict = q2_pro.model_copy(update={"frame_references": VideoFrameReferences(first_frame="frame")})
+    conflict = q2_pro.model_copy(
+        update={"frame_references": VideoFrameReferences(first_frame=MediaReference(file_id="frame", media_kind="image"))}
+    )
     with pytest.raises(ValueError, match="cannot be combined with frame references"):
         validate_video_options(provider="vidu", model=conflict.model, input_=conflict)

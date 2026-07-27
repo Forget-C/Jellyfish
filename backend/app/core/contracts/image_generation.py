@@ -15,23 +15,21 @@ ImagePurpose = Literal["generic", "video_reference", "asset_image"]
 
 
 class InputImageRef(BaseModel):
-    """参考图片引用：统一映射到 OpenAI images[*] 与火山 image[]。"""
+    """图片参考的业务层引用。
+
+    Provider URL/Data URL 由执行期 FileResolver 投影，本契约不能把它们带入
+    API 或任务 payload。
+    """
 
     model_config = ConfigDict(extra="forbid")
 
-    file_id: Optional[str] = Field(
-        None,
-        description="文件 ID（用于 OpenAI File API；火山可忽略）",
-    )
-    image_url: Optional[str] = Field(
-        None,
-        description="完整 URL 或 base64 data URL；火山 image[] 建议使用该字段",
-    )
+    file_id: str = Field(min_length=1, description="受控 FileItem ID")
 
     @model_validator(mode="after")
-    def _require_one(self) -> "InputImageRef":
-        if not self.file_id and not self.image_url:
-            raise ValueError("InputImageRef 需提供 file_id 或 image_url 至少其一")
+    def _normalize_file_id(self) -> "InputImageRef":
+        self.file_id = self.file_id.strip()
+        if not self.file_id:
+            raise ValueError("file_id must not be blank")
         return self
 
 

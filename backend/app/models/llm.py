@@ -9,7 +9,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from sqlalchemy import JSON, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import JSON, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -116,11 +116,44 @@ class Model(Base, TimestampMixin):
     params: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict, comment="模型参数（JSON）")
     description: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="说明")
     created_by: Mapped[str] = mapped_column(String(64), nullable=False, default="", comment="创建人")
+    current_revision_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("model_config_revisions.id", ondelete="SET NULL"), nullable=True,
+        index=True, comment="当前不可变配置 revision ID",
+    )
 
     provider: Mapped["Provider"] = relationship(back_populates="models")
 
     __table_args__ = (
         Index("ix_models_updated_at", "updated_at"),
+    )
+
+
+class ModelConfigRevision(Base, TimestampMixin):
+    """模型执行配置的不可变快照。
+
+    任务只冻结 revision ID；凭据值始终在执行时通过 credential_ref 解析，绝不
+    复制进任务 payload。
+    """
+
+    __tablename__ = "model_config_revisions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, comment="revision ID")
+    model_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("models.id", ondelete="CASCADE"), nullable=False, index=True,
+        comment="所属模型 ID",
+    )
+    version_id: Mapped[int] = mapped_column(Integer, nullable=False, comment="模型内单调版本")
+    model_name: Mapped[str] = mapped_column(String(255), nullable=False, comment="冻结后的模型名")
+    category: Mapped[ModelCategoryKey] = mapped_column(String(16), nullable=False, comment="冻结后的模态")
+    model_params: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict, comment="冻结参数")
+    provider_key: Mapped[str] = mapped_column(String(64), nullable=False, comment="Provider 标识")
+    endpoint_config: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict, comment="冻结 endpoint 配置")
+    capability_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict, comment="冻结能力")
+    credential_ref: Mapped[str] = mapped_column(String(255), nullable=False, default="", comment="动态凭据引用")
+
+    __table_args__ = (
+        UniqueConstraint("model_id", "version_id", name="uq_model_config_revisions_model_version"),
+        Index("ix_model_config_revisions_model_version", "model_id", "version_id"),
     )
 
 
@@ -159,4 +192,3 @@ class ModelSettings(Base):
     default_text_model: Mapped["Model | None"] = relationship(foreign_keys=[default_text_model_id])
     default_image_model: Mapped["Model | None"] = relationship(foreign_keys=[default_image_model_id])
     default_video_model: Mapped["Model | None"] = relationship(foreign_keys=[default_video_model_id])
-

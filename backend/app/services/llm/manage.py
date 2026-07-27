@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.utils import apply_keyword_filter, apply_order, paginate
-from app.models.llm import Model, ModelCategoryKey, ModelSettings, Provider
+from app.models.llm import Model, ModelCategoryKey, ModelConfigRevision, ModelSettings, Provider
 from app.core.integrations.image_capabilities import (
     DEFAULT_VIDEO_REFERENCE_RATIO_SIZE_MAP,
     resolve_image_capability,
@@ -114,6 +114,49 @@ async def create_provider(
     )
 
 
+async def _create_model_revision(
+    db: AsyncSession,
+    *,
+    model: Model,
+    provider: Provider,
+) -> ModelConfigRevision:
+    """冻结模型及 Provider 的可执行配置，并将模型指向新增 revision。
+
+    凭据只保留稳定引用，执行器随后通过该引用读取当前值；这样任务快照不会
+    包含 API Key 或 API Secret。
+    """
+    latest_version = (
+        await db.execute(
+            select(ModelConfigRevision.version_id)
+            .where(ModelConfigRevision.model_id == model.id)
+            .order_by(ModelConfigRevision.version_id.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    provider_key = resolve_provider_key_from_name(provider.name)
+    revision = ModelConfigRevision(
+        id=uuid4().hex,
+        model_id=model.id,
+        version_id=(latest_version or 0) + 1,
+        model_name=model.name,
+        category=model.category,
+        model_params=dict(model.params or {}),
+        provider_key=provider_key,
+        endpoint_config={
+            "base_url": provider.base_url,
+            "image_base_url": provider.image_base_url,
+            "video_base_url": provider.video_base_url,
+        },
+        capability_snapshot={},
+        credential_ref=f"provider:{provider.id}",
+    )
+    db.add(revision)
+    await db.flush()
+    model.current_revision_id = revision.id
+    await db.flush()
+    return revision
+
+
 async def get_provider(
     db: AsyncSession,
     *,
@@ -132,6 +175,10 @@ async def update_provider(
     """更新供应商。"""
     provider = await get_or_404(db, Provider, provider_id, detail=entity_not_found("Provider"))
     patch_model(provider, body.model_dump(exclude_unset=True))
+    await db.flush()
+    models = (await db.execute(select(Model).where(Model.provider_id == provider.id))).scalars().all()
+    for model in models:
+        await _create_model_revision(db, model=model, provider=provider)
     return await flush_and_refresh(db, provider)
 
 
@@ -205,6 +252,7 @@ async def import_provider_models(
         )
         db.add(model)
         await db.flush()
+        await _create_model_revision(db, model=model, provider=provider)
         await db.refresh(model)
         created.append(ModelRead.model_validate(model))
         existing.add((candidate.name, category_value))
@@ -268,18 +316,19 @@ async def create_model(
         status_code=400,
     )
     _ensure_provider_supports_category(provider=provider, category=body.category)
-    return await create_and_refresh(
-        db,
-        Model(
-            id=body.id,
-            name=body.name,
-            category=body.category,
-            provider_id=body.provider_id,
-            params=body.params,
-            description=body.description,
-            created_by=body.created_by,
-        ),
+    model = Model(
+        id=body.id,
+        name=body.name,
+        category=body.category,
+        provider_id=body.provider_id,
+        params=body.params,
+        description=body.description,
+        created_by=body.created_by,
     )
+    db.add(model)
+    await db.flush()
+    await _create_model_revision(db, model=model, provider=provider)
+    return await flush_and_refresh(db, model)
 
 
 async def get_model(
@@ -319,6 +368,8 @@ async def update_model(
     )
     _ensure_provider_supports_category(provider=target_provider, category=target_category)
     patch_model(model, update_data)
+    await db.flush()
+    await _create_model_revision(db, model=model, provider=target_provider)
     return await flush_and_refresh(db, model)
 
 

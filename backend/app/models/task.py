@@ -33,6 +33,13 @@ class GenerationDeliveryMode(str, Enum):
     async_polling = "async_polling"  # 任务 + 轮询查询状态
 
 
+class GenerationTaskVisibility(str, Enum):
+    """任务是否属于任务中心；SSE 运行仅对实验室可见。"""
+
+    hidden = "hidden"
+    task_center = "task_center"
+
+
 class GenerationTask(Base, TimestampMixin):
     __tablename__ = "generation_tasks"
 
@@ -43,6 +50,10 @@ class GenerationTask(Base, TimestampMixin):
         nullable=False,
         index=True,
         comment="交付方式：streaming / async_polling / ...",
+    )
+    visibility: Mapped[GenerationTaskVisibility] = mapped_column(
+        String(32), nullable=False, default=GenerationTaskVisibility.task_center, index=True,
+        comment="任务可见范围：hidden / task_center",
     )
     task_kind: Mapped[str] = mapped_column(
         String(64),
@@ -123,10 +134,15 @@ class GenerationTask(Base, TimestampMixin):
         nullable=True,
         comment="执行器侧任务 ID，如 celery task id",
     )
+    lease_owner: Mapped[str | None] = mapped_column(String(128), nullable=True, comment="流式运行 lease 持有者")
+    lease_epoch: Mapped[int] = mapped_column(Integer, nullable=False, default=0, comment="lease fencing epoch")
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, comment="lease 过期时间")
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, comment="最近续租时间")
 
     __table_args__ = (
         # 轮询高频：按 id 主键读最常见；列表/后台清理可按状态与更新时间过滤
         Index("ix_generation_tasks_status_updated_at", "status", "updated_at"),
         Index("ix_generation_tasks_mode_updated_at", "mode", "updated_at"),
+        Index("ix_generation_tasks_visibility_updated_at", "visibility", "updated_at"),
         Index("ix_generation_tasks_status_cancel_requested", "status", "cancel_requested"),
     )

@@ -67,6 +67,9 @@ class Shot(Base,TimestampMixin):
         index=True,
         comment="已生成视频关联的文件 ID（FileItem，type=video）",
     )
+    generated_video_version_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, comment="镜头视频 CAS 版本"
+    )
 
     chapter: Mapped["Chapter"] = relationship(back_populates="shots")
     generated_video_file: Mapped["FileItem | None"] = relationship(
@@ -273,6 +276,7 @@ class ShotFrameImage(Base, TimestampMixin):
     width: Mapped[int | None] = mapped_column(Integer, nullable=True, comment="宽（px）")
     height: Mapped[int | None] = mapped_column(Integer, nullable=True, comment="高（px）")
     format: Mapped[str] = mapped_column(String(32), nullable=False, default="png", comment="格式")
+    version_id: Mapped[int] = mapped_column(Integer, nullable=False, default=1, comment="帧槽位 CAS 版本")
 
     shot_detail: Mapped["ShotDetail"] = relationship(back_populates="frame_images")
 

@@ -3,9 +3,10 @@
 from app.core.db import Base
 from app.models.base import TimestampMixin
 
-from app.models.llm import Model, ModelSettings, Provider
+from app.models.llm import Model, ModelConfigRevision, ModelSettings, Provider
 from app.models.task import GenerationTask
 from app.models.task_links import GenerationTaskLink
+from app.models.generation_artifacts import GenerationArtifact, GenerationDispatchOutbox, GenerationTaskMediaReference
 from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
 from app.models.types import FileUsageKind
 
@@ -74,9 +75,13 @@ __all__ = [
     "TimelineClip",
     "Provider",
     "Model",
+    "ModelConfigRevision",
     "ModelSettings",
     "GenerationTask",
     "GenerationTaskLink",
+    "GenerationArtifact",
+    "GenerationTaskMediaReference",
+    "GenerationDispatchOutbox",
     "ExperimentSession",
     "ExperimentMessage",
 ]

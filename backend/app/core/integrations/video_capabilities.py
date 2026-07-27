@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.core.contracts.provider import ProviderKey
-from app.core.contracts.video_generation import VideoGenerationInput, VideoRatio, _strip_optional_b64
+from app.core.contracts.video_generation import VideoGenerationInput, VideoRatio
 
 ALLOWED_RATIOS = {"16:9", "4:3", "1:1", "3:4", "9:16", "21:9"}
 DEFAULT_RATIO_TO_SIZE_MAPPING: dict[str, str] = {
@@ -177,8 +177,7 @@ def validate_video_options(
     if not subjects:
         return
     has_frame_reference = any(
-        _strip_optional_b64(value)
-        for value in (
+        (
             input_.frame_references.first_frame,
             input_.frame_references.last_frame,
             *input_.frame_references.key_frames,
@@ -191,17 +190,22 @@ def validate_video_options(
         )
     if cap.max_subjects is not None and len(subjects) > cap.max_subjects:
         raise ValueError(f"subject references must contain at most {cap.max_subjects} subjects")
-    total_subject_videos = sum(len(subject.videos) for subject in subjects)
+    total_subject_videos = sum(
+        sum(reference.media_kind == "video" for reference in subject.media)
+        for subject in subjects
+    )
     if cap.max_total_subject_videos is not None and total_subject_videos > cap.max_total_subject_videos:
         raise ValueError(f"subject references support at most {cap.max_total_subject_videos} videos in total")
     for subject in subjects:
-        if subject.images and not cap.supports_subject_image_reference:
+        images = [reference for reference in subject.media if reference.media_kind == "image"]
+        videos = [reference for reference in subject.media if reference.media_kind == "video"]
+        if images and not cap.supports_subject_image_reference:
             raise ValueError(f"subject image references are not supported by provider={provider} model={model or '<default>'}")
-        if subject.videos and not cap.supports_subject_video_reference:
+        if videos and not cap.supports_subject_video_reference:
             raise ValueError(f"subject video references are not supported by provider={provider} model={model or '<default>'}")
-        if cap.max_images_per_subject is not None and len(subject.images) > cap.max_images_per_subject:
+        if cap.max_images_per_subject is not None and len(images) > cap.max_images_per_subject:
             raise ValueError(f"a subject supports at most {cap.max_images_per_subject} reference images")
-        if cap.max_videos_per_subject is not None and len(subject.videos) > cap.max_videos_per_subject:
+        if cap.max_videos_per_subject is not None and len(videos) > cap.max_videos_per_subject:
             raise ValueError(f"a subject supports at most {cap.max_videos_per_subject} reference videos")
-        if cap.max_media_per_subject is not None and len(subject.images) + len(subject.videos) > cap.max_media_per_subject:
+        if cap.max_media_per_subject is not None and len(subject.media) > cap.max_media_per_subject:
             raise ValueError(f"a subject supports at most {cap.max_media_per_subject} reference media items")

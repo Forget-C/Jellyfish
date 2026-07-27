@@ -6,37 +6,40 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.core.contracts.media import MediaReference
 from app.core.contracts.provider import ProviderKey
 
 
 def _strip_optional_b64(value: str | None) -> str | None:
+    """兼容 Provider 适配层的空 URL 归一化辅助函数。
+
+    该函数不再属于业务输入契约；P3 的 FileResolver 接入后将由执行期媒体
+    投影取代。保留它可确保尚未迁移的 Provider 模块仍可导入。
+    """
     if value is None:
         return None
-    s = value.strip()
-    return s if s else None
+    stripped = value.strip()
+    return stripped or None
 
 
 VideoRatio = Literal["16:9", "4:3", "1:1", "3:4", "9:16", "21:9"]
 
 
 class VideoSubjectReference(BaseModel):
-    """视频一致性主体：以命名图片或视频描述生成时应保持一致的对象。"""
+    """视频一致性主体：业务层只引用已受控的媒体文件。"""
 
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(..., min_length=1, description="主体名称；Vidu 提示词通过 @name 引用")
-    images: list[str] = Field(default_factory=list, description="主体图片 URL 或 data:image/... URL")
-    videos: list[str] = Field(default_factory=list, description="主体视频 URL 或 data:video/... URL")
+    media: list[MediaReference] = Field(default_factory=list, description="主体图片或视频 FileItem 引用")
 
     @model_validator(mode="after")
     def require_reference_media(self) -> "VideoSubjectReference":
         """拒绝没有任何参考介质的主体，避免生成无效供应商请求。"""
         self.name = self.name.strip()
-        self.images = [value.strip() for value in self.images if value and value.strip()]
-        self.videos = [value.strip() for value in self.videos if value and value.strip()]
         if not self.name:
             raise ValueError("subject name must not be blank")
-        if not self.images and not self.videos:
+        if not self.media:
             raise ValueError("subject requires at least one image or video reference")
         return self
 
@@ -46,16 +49,16 @@ class VideoFrameReferences(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    first_frame: str | None = None
-    last_frame: str | None = None
-    key_frames: list[str] = Field(default_factory=list)
+    first_frame: MediaReference | None = None
+    last_frame: MediaReference | None = None
+    key_frames: list[MediaReference] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def normalize_frames(self) -> "VideoFrameReferences":
-        """移除空帧值，避免空字符串被误判为有效参考。"""
-        self.first_frame = _strip_optional_b64(self.first_frame)
-        self.last_frame = _strip_optional_b64(self.last_frame)
-        self.key_frames = [value.strip() for value in self.key_frames if value and value.strip()]
+        """拒绝视频帧槽位中的非图片引用。"""
+        references = [reference for reference in [self.first_frame, self.last_frame] if reference] + self.key_frames
+        if any(reference.media_kind != "image" for reference in references):
+            raise ValueError("frame references must use image media")
         return self
 
 
@@ -84,12 +87,14 @@ class VideoGenerationInput(BaseModel):
     watermark: Optional[bool] = Field(None, description="是否包含水印，供应商/模型可能有差异")
 
     @model_validator(mode="after")
-    def require_prompt_or_any_reference(self) -> "VideoGenerationInput":
+    def require_prompt_or_any_reference(self) -> "VideoGenerationInput":  # pylint: disable=no-member
+        # Pydantic 在运行期将 FieldInfo 替换为已验证模型；静态检查无法推导该行为。
+        # pylint: disable=no-member
         has_prompt = bool((self.prompt or "").strip())
         has_ref = any(
             [
-                _strip_optional_b64(self.frame_references.first_frame),
-                _strip_optional_b64(self.frame_references.last_frame),
+                self.frame_references.first_frame,
+                self.frame_references.last_frame,
                 self.frame_references.key_frames,
                 self.subject_references,
             ]

@@ -54,6 +54,8 @@ class FileItem(Base, TimestampMixin):
         nullable=False,
         comment="对象存储中的 key（如 files/xxx.png）",
     )
+    content_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, comment="文件内容版本")
+    content_hash: Mapped[str | None] = mapped_column(String(128), nullable=True, comment="文件内容哈希")
 
     usages: Mapped[list["FileUsage"]] = relationship(
         "FileUsage",

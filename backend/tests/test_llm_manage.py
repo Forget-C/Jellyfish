@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.core.db import Base
 from app.core.contracts.model_catalog import ProviderModelCandidate
-from app.models.llm import LogLevel, Model, ModelCategoryKey, ModelSettings, Provider
+from app.models.llm import LogLevel, Model, ModelCategoryKey, ModelConfigRevision, ModelSettings, Provider
 from app.schemas.llm import ModelCreate, ModelSettingsUpdate, ModelUpdate, ProviderCreate
 from app.services.llm.manage import (
     create_model,
@@ -52,6 +52,10 @@ async def test_create_model_persists_with_non_default_flag() -> None:
             ),
         )
         assert created.id == "m1"
+        revision = await db.get(ModelConfigRevision, created.current_revision_id)
+        assert revision is not None
+        assert revision.version_id == 1
+        assert revision.credential_ref == "provider:p1"
     await engine.dispose()
 
 
@@ -77,6 +81,12 @@ async def test_update_model_allows_regular_field_updates() -> None:
             body=ModelUpdate(description="updated"),
         )
         assert updated.description == "updated"
+        revisions = (
+            await db.execute(
+                select(ModelConfigRevision).where(ModelConfigRevision.model_id == "m_text")
+            )
+        ).scalars().all()
+        assert [revision.version_id for revision in revisions] == [1]
     await engine.dispose()
 
 

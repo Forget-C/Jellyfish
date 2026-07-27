@@ -56,6 +56,7 @@ class CharacterImage(Base, TimestampMixin):
         comment="是否主图；应用层需保证同一角色下至多一张主图",
     )
     prompt_overrides: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False, default=dict, comment="此图片的展示提示词变量覆盖")
+    version_id: Mapped[int] = mapped_column(Integer, nullable=False, default=1, comment="槽位 CAS 版本")
 
     character: Mapped["Character"] = relationship(back_populates="images")
 
@@ -116,6 +117,7 @@ class ActorImage(Base, TimestampMixin):
         default=dict,
         comment="此图片的展示提示词变量覆盖；不影响同一演员的其他视角",
     )
+    version_id: Mapped[int] = mapped_column(Integer, nullable=False, default=1, comment="槽位 CAS 版本")
 
     actor: Mapped["Actor"] = relationship(back_populates="images")
 
@@ -166,6 +168,7 @@ class SceneImage(Base, TimestampMixin):
     height: Mapped[int | None] = mapped_column(Integer, nullable=True)
     format: Mapped[str] = mapped_column(String(32), nullable=False, default="png")
     prompt_overrides: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False, default=dict, comment="此图片的展示提示词变量覆盖")
+    version_id: Mapped[int] = mapped_column(Integer, nullable=False, default=1, comment="槽位 CAS 版本")
 
     scene: Mapped["Scene"] = relationship(back_populates="images")
 
@@ -214,6 +217,7 @@ class PropImage(Base, TimestampMixin):
     height: Mapped[int | None] = mapped_column(Integer, nullable=True)
     format: Mapped[str] = mapped_column(String(32), nullable=False, default="png")
     prompt_overrides: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False, default=dict, comment="此图片的展示提示词变量覆盖")
+    version_id: Mapped[int] = mapped_column(Integer, nullable=False, default=1, comment="槽位 CAS 版本")
 
     prop: Mapped["Prop"] = relationship(back_populates="images")
 
@@ -262,6 +266,7 @@ class CostumeImage(Base, TimestampMixin):
     height: Mapped[int | None] = mapped_column(Integer, nullable=True)
     format: Mapped[str] = mapped_column(String(32), nullable=False, default="png")
     prompt_overrides: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False, default=dict, comment="此图片的展示提示词变量覆盖")
+    version_id: Mapped[int] = mapped_column(Integer, nullable=False, default=1, comment="槽位 CAS 版本")
 
     costume: Mapped["Costume"] = relationship(back_populates="images")
 
