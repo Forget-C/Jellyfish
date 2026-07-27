@@ -20,6 +20,21 @@ from app.core.contracts.media import (
     VideoSubjectMediaReference,
 )
 from app.core.contracts.text_generation import ScriptOperationInput, TextChatInput, TextChatMessage
+from app.core.contracts.streaming import (
+    GenerationStreamEvent,
+    GenerationStreamEventSequence,
+    StreamAcceptedData,
+    StreamCancelledData,
+    StreamCompletedData,
+    StreamDeltaData,
+    StreamErrorData,
+    StreamErrorDetail,
+    StreamEventType,
+    StreamGenerationResult,
+    StreamHeartbeatData,
+    StreamMessageData,
+    StreamProgressData,
+)
 
 __all__ = [
     "ProviderConfig",
@@ -52,4 +67,17 @@ __all__ = [
     "TextChatInput",
     "TextChatMessage",
     "ScriptOperationInput",
+    "GenerationStreamEvent",
+    "GenerationStreamEventSequence",
+    "StreamEventType",
+    "StreamMessageData",
+    "StreamGenerationResult",
+    "StreamErrorDetail",
+    "StreamAcceptedData",
+    "StreamDeltaData",
+    "StreamProgressData",
+    "StreamCompletedData",
+    "StreamErrorData",
+    "StreamCancelledData",
+    "StreamHeartbeatData",
 ]
