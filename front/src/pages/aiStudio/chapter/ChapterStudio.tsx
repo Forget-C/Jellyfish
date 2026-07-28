@@ -92,7 +92,7 @@ import type {
   ShotFrameImageRead,
   ShotCharacterLinkRead,
   ProjectPropLinkRead,
-  ShotFramePromptMappingRead,
+  FrameReferenceMappingSnapshot,
   ShotRead,
   ShotVideoReadinessRead,
   ShotRuntimeSummaryRead,
@@ -136,7 +136,7 @@ type FramePromptDerived = {
   selectedGuidanceDetails: Array<{ text: string; category: string; reasonTag: string; reason: string }>
   droppedGuidanceDetails: Array<{ text: string; category: string; reasonTag: string; reason: string }>
   images: string[]
-  mappings: ShotFramePromptMappingRead[]
+  mappings: FrameReferenceMappingSnapshot[]
 }
 type VideoReferenceMode = 'first' | 'last' | 'key' | 'first_last' | 'first_last_key' | 'text_only'
 type VideoPromptDerived = {
@@ -3855,7 +3855,7 @@ function Inspector(props: {
         images: d?.recommended_media && 'references' in d.recommended_media
           ? d.recommended_media.references?.map((reference) => reference.file_id) ?? []
           : [],
-        mappings: (d?.reference_mappings ?? []) as ShotFramePromptMappingRead[],
+        mappings: d?.reference_mappings ?? [],
       }
     },
     [extractFileIdFromThumbnail, selectedShot?.id, shotLinkedAssets],

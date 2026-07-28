@@ -10,7 +10,6 @@ from app.api.v1.routes.studio import (
     generation_tasks,
     lab_generation_tasks,
     generation_prompts,
-    image_tasks,
     projects,
     prompts,
     text_lab,
@@ -39,5 +38,4 @@ router.include_router(generation_prompts.router, prefix="/generation-prompts", t
 router.include_router(generation_tasks.router, prefix="/generation-tasks", tags=["studio/generation-tasks"])
 router.include_router(lab_generation_tasks.router, prefix="/generation-tasks/labs", tags=["studio/generation-tasks"])
 router.include_router(timeline.router, prefix="/timeline", tags=["studio/timeline"])
-router.include_router(image_tasks.router, prefix="/image-tasks", tags=["studio/image-tasks"])
 router.include_router(shot_character_links.router, prefix="/shot-character-links", tags=["studio/shot-character-links"])
