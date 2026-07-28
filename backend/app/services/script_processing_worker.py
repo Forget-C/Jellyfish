@@ -58,6 +58,25 @@ class DivideResultGenerator(AbstractLLMResultGenerator):
         return agent.divide_script(script_text=str(run_args.get("script_text") or ""))
 
 
+class _ScriptProcessingTaskExecutor(AbstractWorkerTaskExecutor):
+    """剧本任务执行基类：只消费统一提交时冻结的 command/snapshot。"""
+
+    def load_run_args(self, ctx: WorkerTaskContext) -> dict[str, Any]:
+        """拒绝非文本 Agent 命令，避免新任务重新依赖可变的路由入参。"""
+
+        payload = dict(ctx.task.payload or {})
+        command = payload.get("command")
+        snapshot = payload.get("snapshot")
+        if not isinstance(command, dict) or not isinstance(snapshot, dict):
+            raise RuntimeError("script task command and snapshot are required")
+        if command.get("operation") != "text_agent":
+            raise RuntimeError("script task command must use text_agent")
+        run_args = snapshot.get("run_args")
+        if not isinstance(run_args, dict):
+            raise RuntimeError("script task snapshot.run_args is required")
+        return dict(run_args)
+
+
 class ExtractResultGenerator(AbstractLLMResultGenerator):
     thinking = False
 
@@ -146,7 +165,7 @@ class ScriptSimplificationResultGenerator(AbstractLLMResultGenerator):
         return agent.extract(script_text=str(run_args.get("script_text") or ""))
 
 
-class DivideTaskExecutor(AbstractWorkerTaskExecutor):
+class DivideTaskExecutor(_ScriptProcessingTaskExecutor):
     task_kind = "script_divide"
     timeout_seconds = 1800.0
 
@@ -167,7 +186,7 @@ class DivideTaskExecutor(AbstractWorkerTaskExecutor):
         apply_division_result(ctx.db, chapter_id=chapter_id, result=result)
 
 
-class ExtractTaskExecutor(AbstractWorkerTaskExecutor):
+class ExtractTaskExecutor(_ScriptProcessingTaskExecutor):
     task_kind = "script_extract"
     timeout_seconds = 1800.0
 
@@ -194,7 +213,7 @@ class ExtractTaskExecutor(AbstractWorkerTaskExecutor):
         apply_extraction_result(ctx.db, chapter_id=chapter_id, draft=draft)
 
 
-class ConsistencyTaskExecutor(AbstractWorkerTaskExecutor):
+class ConsistencyTaskExecutor(_ScriptProcessingTaskExecutor):
     task_kind = "script_consistency"
     succeeded_progress = 100
     timeout_seconds = 900.0
@@ -207,7 +226,7 @@ class ConsistencyTaskExecutor(AbstractWorkerTaskExecutor):
         return self._generator.generate(ctx.db, run_args)
 
 
-class _SimpleLLMTaskExecutor(AbstractWorkerTaskExecutor):
+class _SimpleLLMTaskExecutor(_ScriptProcessingTaskExecutor):
     succeeded_progress = 100
     timeout_seconds = 900.0
     generator_class: type[AbstractLLMResultGenerator]

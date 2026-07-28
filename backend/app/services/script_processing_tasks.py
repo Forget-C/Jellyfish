@@ -78,6 +78,101 @@ class AsyncTaskCreateResult:
     relation_entity_id: str
 
 
+def _build_script_command(
+    *,
+    relation_entity_id: str,
+    operation: str,
+    source_text: str,
+) -> dict[str, object]:
+    """构造剧本 Agent 的统一命令，避免 Worker 从路由语义反推执行意图。"""
+
+    return {
+        "modality": "text",
+        "operation": "text_agent",
+        "delivery": "async_polling",
+        "target": {
+            "kind": "script_processing",
+            "entity_id": relation_entity_id,
+        },
+        "request": {
+            "operation_input": {
+                "kind": "script_operation",
+                "operation": operation,
+                "source_text": source_text,
+            },
+        },
+    }
+
+
+async def _create_script_task(
+    db: AsyncSession,
+    *,
+    task_kind: str,
+    relation_type: str,
+    relation_entity_id: str,
+    operation: str,
+    source_text: str,
+    run_args: dict[str, object],
+) -> AsyncTaskCreateResult:
+    """创建剧本处理任务并冻结 command/snapshot，防止执行期重新推断请求语义。"""
+
+    store = SqlAlchemyTaskStore(db)
+    tm = TaskManager(store=store, strategies={})
+    task_record = await tm.create(
+        task=_CreateOnlyTask(),
+        mode=DeliveryMode.async_polling,
+        task_kind=task_kind,
+        run_args=run_args,
+    )
+    task = await db.get(GenerationTask, task_record.id)
+    if task is None:  # pragma: no cover - TaskManager.create 已在同一事务 flush
+        raise RuntimeError(f"script task not found after creation: {task_record.id}")
+    task.payload = {
+        **dict(task.payload or {}),
+        "command": _build_script_command(
+            relation_entity_id=relation_entity_id,
+            operation=operation,
+            source_text=source_text,
+        ),
+        "snapshot": {
+            "operation": operation,
+            "run_args": run_args,
+        },
+    }
+    db.add(
+        GenerationTaskLink(
+            task_id=task_record.id,
+            resource_type="text",
+            relation_type=relation_type,
+            relation_entity_id=relation_entity_id,
+        )
+    )
+    await db.flush()
+    return AsyncTaskCreateResult(
+        task_id=task_record.id,
+        status=task_record.status,
+        reused=False,
+        relation_type=relation_type,
+        relation_entity_id=relation_entity_id,
+    )
+
+
+def _load_script_run_args(task: GenerationTask) -> dict[str, object]:
+    """只读取冻结快照，拒绝不具备统一提交契约的历史 payload。"""
+
+    payload = dict(task.payload or {})
+    command = payload.get("command")
+    snapshot = payload.get("snapshot")
+    if not isinstance(command, dict) or not isinstance(snapshot, dict):
+        raise RuntimeError("script task command and snapshot are required")
+    if command.get("operation") != "text_agent":
+        raise RuntimeError("script task command must use text_agent")
+    run_args = snapshot.get("run_args")
+    if not isinstance(run_args, dict):
+        raise RuntimeError("script task snapshot.run_args is required")
+    return dict(run_args)
+
+
 async def _cancel_if_requested(
     store: SqlAlchemyTaskStore,
     task_id: str,
@@ -147,35 +242,19 @@ async def create_divide_task(
             relation_entity_id=chapter_id,
         )
 
-    store = SqlAlchemyTaskStore(db)
-    tm = TaskManager(store=store, strategies={})
     run_args = {
         "chapter_id": chapter_id,
         "script_text": script_text,
         "write_to_db": write_to_db,
     }
-    task_record = await tm.create(
-        task=_CreateOnlyTask(),
-        mode=DeliveryMode.async_polling,
+    return await _create_script_task(
+        db,
         task_kind=SCRIPT_DIVIDE_TASK_KIND,
-        run_args=run_args,
-    )
-    db.add(
-        GenerationTaskLink(
-            task_id=task_record.id,
-            resource_type="task_link",
-            relation_type=CHAPTER_DIVISION_RELATION_TYPE,
-            relation_entity_id=chapter_id,
-        )
-    )
-    await db.flush()
-
-    return AsyncTaskCreateResult(
-        task_id=task_record.id,
-        status=task_record.status,
-        reused=False,
         relation_type=CHAPTER_DIVISION_RELATION_TYPE,
         relation_entity_id=chapter_id,
+        operation="divide",
+        source_text=script_text,
+        run_args=run_args,
     )
 def spawn_divide_task(task_id: str) -> None:
     """统一封装后台启动：第一阶段改为通用 Celery 执行入口。"""
@@ -299,8 +378,6 @@ async def create_extract_task(
             relation_entity_id=chapter_id,
         )
 
-    store = SqlAlchemyTaskStore(db)
-    tm = TaskManager(store=store, strategies={})
     run_args = {
         "project_id": project_id,
         "chapter_id": chapter_id,
@@ -308,27 +385,14 @@ async def create_extract_task(
         "consistency": consistency,
         "refresh_cache": refresh_cache,
     }
-    task_record = await tm.create(
-        task=_CreateOnlyTask(),
-        mode=DeliveryMode.async_polling,
+    return await _create_script_task(
+        db,
         task_kind=SCRIPT_EXTRACT_TASK_KIND,
-        run_args=run_args,
-    )
-    db.add(
-        GenerationTaskLink(
-            task_id=task_record.id,
-            resource_type="task_link",
-            relation_type=SCRIPT_EXTRACTION_RELATION_TYPE,
-            relation_entity_id=chapter_id,
-        )
-    )
-    await db.flush()
-    return AsyncTaskCreateResult(
-        task_id=task_record.id,
-        status=task_record.status,
-        reused=False,
         relation_type=SCRIPT_EXTRACTION_RELATION_TYPE,
         relation_entity_id=chapter_id,
+        operation="extract",
+        source_text=json.dumps(script_division, ensure_ascii=False),
+        run_args=run_args,
     )
 
 
@@ -353,8 +417,6 @@ async def create_merge_task(
             relation_entity_id=relation_entity_id,
         )
 
-    store = SqlAlchemyTaskStore(db)
-    tm = TaskManager(store=store, strategies={})
     run_args = {
         "all_shot_extractions": all_shot_extractions,
         "historical_library": historical_library,
@@ -362,27 +424,14 @@ async def create_merge_task(
         "previous_merge": previous_merge,
         "conflict_resolutions": conflict_resolutions,
     }
-    task_record = await tm.create(
-        task=_CreateOnlyTask(),
-        mode=DeliveryMode.async_polling,
+    return await _create_script_task(
+        db,
         task_kind=SCRIPT_MERGE_TASK_KIND,
-        run_args=run_args,
-    )
-    db.add(
-        GenerationTaskLink(
-            task_id=task_record.id,
-            resource_type="task_link",
-            relation_type=ENTITY_MERGE_RELATION_TYPE,
-            relation_entity_id=relation_entity_id,
-        )
-    )
-    await db.flush()
-    return AsyncTaskCreateResult(
-        task_id=task_record.id,
-        status=task_record.status,
-        reused=False,
         relation_type=ENTITY_MERGE_RELATION_TYPE,
         relation_entity_id=relation_entity_id,
+        operation="merge-entities",
+        source_text=json.dumps(all_shot_extractions, ensure_ascii=False),
+        run_args=run_args,
     )
 
 
@@ -403,29 +452,14 @@ async def create_consistency_task(
             relation_entity_id=relation_entity_id,
         )
 
-    store = SqlAlchemyTaskStore(db)
-    tm = TaskManager(store=store, strategies={})
-    task_record = await tm.create(
-        task=_CreateOnlyTask(),
-        mode=DeliveryMode.async_polling,
+    return await _create_script_task(
+        db,
         task_kind=SCRIPT_CONSISTENCY_TASK_KIND,
-        run_args={"script_text": script_text},
-    )
-    db.add(
-        GenerationTaskLink(
-            task_id=task_record.id,
-            resource_type="task_link",
-            relation_type=CONSISTENCY_CHECK_RELATION_TYPE,
-            relation_entity_id=relation_entity_id,
-        )
-    )
-    await db.flush()
-    return AsyncTaskCreateResult(
-        task_id=task_record.id,
-        status=task_record.status,
-        reused=False,
         relation_type=CONSISTENCY_CHECK_RELATION_TYPE,
         relation_entity_id=relation_entity_id,
+        operation="check-consistency",
+        source_text=script_text,
+        run_args={"script_text": script_text},
     )
 
 
@@ -448,33 +482,19 @@ async def create_variant_task(
             relation_entity_id=relation_entity_id,
         )
 
-    store = SqlAlchemyTaskStore(db)
-    tm = TaskManager(store=store, strategies={})
-    task_record = await tm.create(
-        task=_CreateOnlyTask(),
-        mode=DeliveryMode.async_polling,
+    run_args = {
+        "merged_library": merged_library,
+        "all_shot_extractions": all_shot_extractions,
+        "script_division": script_division,
+    }
+    return await _create_script_task(
+        db,
         task_kind=SCRIPT_VARIANT_TASK_KIND,
-        run_args={
-            "merged_library": merged_library,
-            "all_shot_extractions": all_shot_extractions,
-            "script_division": script_division,
-        },
-    )
-    db.add(
-        GenerationTaskLink(
-            task_id=task_record.id,
-            resource_type="task_link",
-            relation_type=VARIANT_ANALYSIS_RELATION_TYPE,
-            relation_entity_id=relation_entity_id,
-        )
-    )
-    await db.flush()
-    return AsyncTaskCreateResult(
-        task_id=task_record.id,
-        status=task_record.status,
-        reused=False,
         relation_type=VARIANT_ANALYSIS_RELATION_TYPE,
         relation_entity_id=relation_entity_id,
+        operation="analyze-variants",
+        source_text=json.dumps(merged_library, ensure_ascii=False),
+        run_args=run_args,
     )
 
 
@@ -484,6 +504,8 @@ async def _create_analysis_task(
     task_kind: str,
     relation_type: str,
     relation_entity_id: str,
+    operation: str,
+    source_text: str,
     run_args: dict,
 ) -> AsyncTaskCreateResult:
     existing = await _find_active_analysis_task(db, relation_type=relation_type, relation_entity_id=relation_entity_id)
@@ -497,29 +519,14 @@ async def _create_analysis_task(
             relation_entity_id=relation_entity_id,
         )
 
-    store = SqlAlchemyTaskStore(db)
-    tm = TaskManager(store=store, strategies={})
-    task_record = await tm.create(
-        task=_CreateOnlyTask(),
-        mode=DeliveryMode.async_polling,
+    return await _create_script_task(
+        db,
         task_kind=task_kind,
-        run_args=run_args,
-    )
-    db.add(
-        GenerationTaskLink(
-            task_id=task_record.id,
-            resource_type="task_link",
-            relation_type=relation_type,
-            relation_entity_id=relation_entity_id,
-        )
-    )
-    await db.flush()
-    return AsyncTaskCreateResult(
-        task_id=task_record.id,
-        status=task_record.status,
-        reused=False,
         relation_type=relation_type,
         relation_entity_id=relation_entity_id,
+        operation=operation,
+        source_text=source_text,
+        run_args=run_args,
     )
 
 
@@ -535,6 +542,8 @@ async def create_character_portrait_task(
         task_kind=SCRIPT_CHARACTER_PORTRAIT_TASK_KIND,
         relation_type=CHARACTER_PORTRAIT_ANALYSIS_RELATION_TYPE,
         relation_entity_id=relation_entity_id,
+        operation="analyze-character-portrait",
+        source_text=character_description,
         run_args={
             "character_context": character_context,
             "character_description": character_description,
@@ -554,6 +563,8 @@ async def create_prop_info_task(
         task_kind=SCRIPT_PROP_INFO_TASK_KIND,
         relation_type=PROP_INFO_ANALYSIS_RELATION_TYPE,
         relation_entity_id=relation_entity_id,
+        operation="analyze-prop-info",
+        source_text=prop_description,
         run_args={
             "prop_context": prop_context,
             "prop_description": prop_description,
@@ -573,6 +584,8 @@ async def create_scene_info_task(
         task_kind=SCRIPT_SCENE_INFO_TASK_KIND,
         relation_type=SCENE_INFO_ANALYSIS_RELATION_TYPE,
         relation_entity_id=relation_entity_id,
+        operation="analyze-scene-info",
+        source_text=scene_description,
         run_args={
             "scene_context": scene_context,
             "scene_description": scene_description,
@@ -592,6 +605,8 @@ async def create_costume_info_task(
         task_kind=SCRIPT_COSTUME_INFO_TASK_KIND,
         relation_type=COSTUME_INFO_ANALYSIS_RELATION_TYPE,
         relation_entity_id=relation_entity_id,
+        operation="analyze-costume-info",
+        source_text=costume_description,
         run_args={
             "costume_context": costume_context,
             "costume_description": costume_description,
@@ -611,6 +626,8 @@ async def create_script_optimization_task(
         task_kind=SCRIPT_OPTIMIZE_TASK_KIND,
         relation_type=SCRIPT_OPTIMIZATION_RELATION_TYPE,
         relation_entity_id=relation_entity_id,
+        operation="optimize-script",
+        source_text=script_text,
         run_args={
             "script_text": script_text,
             "consistency": consistency,
@@ -629,6 +646,8 @@ async def create_script_simplification_task(
         task_kind=SCRIPT_SIMPLIFY_TASK_KIND,
         relation_type=SCRIPT_SIMPLIFICATION_RELATION_TYPE,
         relation_entity_id=relation_entity_id,
+        operation="simplify-script",
+        source_text=script_text,
         run_args={
             "script_text": script_text,
         },
@@ -655,7 +674,7 @@ async def run_merge_task(task_id: str) -> None:
         await store.set_status(task_id, TaskStatus.running)
         await store.set_progress(task_id, 5)
         await db.commit()
-        run_args = task.payload.get("run_args") or {}
+        run_args = _load_script_run_args(task)
 
     try:
         async with async_session_maker() as db:
@@ -709,7 +728,7 @@ async def run_variant_task(task_id: str) -> None:
         await store.set_status(task_id, TaskStatus.running)
         await store.set_progress(task_id, 5)
         await db.commit()
-        run_args = task.payload.get("run_args") or {}
+        run_args = _load_script_run_args(task)
 
     try:
         async with async_session_maker() as db:

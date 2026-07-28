@@ -3,16 +3,10 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * 实验会话中的一条文本消息。
+ * 过渡期同步文本调用使用的一条聊天消息。
  */
 export type TextLabMessage = {
-    /**
-     * 消息角色
-     */
     role: 'system' | 'user' | 'assistant';
-    /**
-     * 消息内容
-     */
     content: string;
 };
 

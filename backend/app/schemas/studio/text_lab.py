@@ -1,28 +1,52 @@
-"""文本生成实验室的请求与响应契约。"""
+"""文本实验室固定执行、流式与取消接口的请求契约。"""
 
 from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class TextLabRunRequest(BaseModel):
+    """提交一轮文本实验的用户输入；会话和交付方式由固定路径绑定。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    model_id: str = Field(..., min_length=1, description="已登记的文本模型 ID")
+    content: str = Field(..., min_length=1, description="本轮用户输入，不接受客户端拼装的历史消息")
 
 
 class TextLabMessage(BaseModel):
-    """实验会话中的一条文本消息。"""
+    """过渡期同步文本调用使用的一条聊天消息。"""
 
-    role: Literal["system", "user", "assistant"] = Field(..., description="消息角色")
-    content: str = Field(..., min_length=1, description="消息内容")
+    role: Literal["system", "user", "assistant"]
+    content: str = Field(..., min_length=1)
 
 
 class TextLabGenerateRequest(BaseModel):
-    """提交一轮文本实验，并指定本轮使用的已登记文本模型。"""
+    """过渡期同步文本调用请求；文本主界面将在 D3 固定切换至 SSE。"""
 
-    model_id: str = Field(..., min_length=1, description="已登记的文本模型 ID")
-    messages: list[TextLabMessage] = Field(..., min_length=1, description="按顺序传递的会话历史")
+    model_id: str = Field(..., min_length=1)
+    messages: list[TextLabMessage] = Field(..., min_length=1)
 
 
 class TextLabGenerateResponse(BaseModel):
-    """文本模型完成一轮调用后返回的标准结果。"""
+    """过渡期同步文本调用响应。"""
 
-    model_id: str = Field(..., description="实际调用的文本模型 ID")
-    content: str = Field(..., description="模型回复文本")
+    model_id: str
+    content: str
+
+
+class TextLabCancelRequest(BaseModel):
+    """请求停止当前实验会话中的隐藏流式运行。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str | None = Field(default=None, max_length=255, description="可选的用户可见取消原因")
+
+
+class TextLabRunStatus(BaseModel):
+    """返回隐藏文本运行的最小状态，不将其暴露到任务中心。"""
+
+    task_id: str = Field(..., min_length=1)
+    status: Literal["streaming", "succeeded", "failed", "cancelled"]

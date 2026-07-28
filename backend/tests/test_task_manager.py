@@ -16,6 +16,7 @@ from app.core.task_manager import (
     TaskManager,
 )
 from app.core.task_manager.types import BaseTask, TaskStatus
+from app.models.task import GenerationTask, GenerationTaskVisibility
 from app.models.task_links import GenerationTaskLink, GenerationTaskLinkStatus
 
 
@@ -217,6 +218,40 @@ async def test_sqlalchemy_store_list_task_views_relation_filter_deduplicates_tas
         assert total == 2
         assert len(items) == 2
         assert {item.id for item in items} == {first.id, second.id}
+
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_sqlalchemy_store_task_center_list_hides_streaming_runs() -> None:
+    """任务中心列表不得包含实验室的 hidden streaming 运行记录。"""
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
+    SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    import app.models.task  # noqa: F401
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    async with SessionLocal() as db:
+        store = SqlAlchemyTaskStore(db)
+        visible = await store.create(payload={}, mode=DeliveryMode.async_polling, task_kind="image_generation")
+        db.add(
+            GenerationTask(
+                id="hidden-text-run",
+                mode="streaming",
+                visibility=GenerationTaskVisibility.hidden,
+                task_kind="text_chat",
+                status="streaming",
+                payload={},
+            )
+        )
+        await db.flush()
+
+        items, total = await store.list_task_views(page=1, page_size=20)
+
+        assert total == 1
+        assert [item.id for item in items] == [visible.id]
 
     await engine.dispose()
 

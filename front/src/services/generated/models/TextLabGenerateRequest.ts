@@ -4,16 +4,10 @@
 /* eslint-disable */
 import type { TextLabMessage } from './TextLabMessage';
 /**
- * 提交一轮文本实验，并指定本轮使用的已登记文本模型。
+ * 过渡期同步文本调用请求；文本主界面将在 D3 固定切换至 SSE。
  */
 export type TextLabGenerateRequest = {
-    /**
-     * 已登记的文本模型 ID
-     */
     model_id: string;
-    /**
-     * 按顺序传递的会话历史
-     */
     messages: Array<TextLabMessage>;
 };
 

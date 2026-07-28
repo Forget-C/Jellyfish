@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.models.studio import ActorImage, CharacterImage, CostumeImage, PropImage, SceneImage, ShotFrameImage
 from app.models.task_links import GenerationTaskLink
-from app.models.task import GenerationDeliveryMode, GenerationTask, GenerationTaskStatus
+from app.models.task import GenerationDeliveryMode, GenerationTask, GenerationTaskStatus, GenerationTaskVisibility
 from app.core.task_manager.types import DeliveryMode, TaskListItemView, TaskRecord, TaskStatus, TaskStatusView
 
 
@@ -454,7 +454,9 @@ class SqlAlchemyTaskStore(TaskStore):
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[list[TaskListItemView], int]:
-        filters = []
+        # 任务中心只读取 async-polling 的可见任务；文本 SSE hidden run 只能由
+        # 实验室专用接口按会话访问，不能因全局列表泄漏到任务中心。
+        filters = [GenerationTask.visibility == GenerationTaskVisibility.task_center]
         cutoff_dt: datetime | None = None
         join_links = relation_type is not None or relation_entity_id is not None
         if relation_type is not None:

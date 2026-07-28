@@ -69,6 +69,28 @@ async def test_create_divide_task_creates_task_and_link() -> None:
 
         task = await db.get(GenerationTask, result.task_id)
         assert task is not None
+        assert task.payload["command"] == {
+            "modality": "text",
+            "operation": "text_agent",
+            "delivery": "async_polling",
+            "target": {"kind": "script_processing", "entity_id": "chapter-1"},
+            "request": {
+                "operation_input": {
+                    "kind": "script_operation",
+                    "operation": "divide",
+                    "source_text": "一段剧本",
+                }
+            },
+        }
+        assert task.payload["snapshot"] == {
+            "operation": "divide",
+            "run_args": {
+                "chapter_id": "chapter-1",
+                "script_text": "一段剧本",
+                "write_to_db": True,
+            },
+        }
+        assert "credential_ref" not in task.payload["snapshot"]
 
         link = (
             await db.execute(
