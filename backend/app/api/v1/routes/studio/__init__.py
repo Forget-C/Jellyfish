@@ -7,6 +7,7 @@ from app.api.v1.routes.studio import (
     entities,
     experiment_sessions,
     files,
+    generation_tasks,
     generation_prompts,
     image_lab,
     image_tasks,
@@ -38,6 +39,7 @@ router.include_router(image_lab.router, prefix="/image-lab", tags=["studio/image
 router.include_router(video_lab.router, prefix="/video-lab", tags=["studio/video-lab"])
 router.include_router(files.router, prefix="/files", tags=["studio/files"])
 router.include_router(generation_prompts.router, prefix="/generation-prompts", tags=["studio/generation-prompts"])
+router.include_router(generation_tasks.router, prefix="/generation-tasks", tags=["studio/generation-tasks"])
 router.include_router(timeline.router, prefix="/timeline", tags=["studio/timeline"])
 router.include_router(image_tasks.router, prefix="/image-tasks", tags=["studio/image-tasks"])
 router.include_router(shot_character_links.router, prefix="/shot-character-links", tags=["studio/shot-character-links"])
