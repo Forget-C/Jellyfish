@@ -1,4 +1,5 @@
-import { StudioImageTasksService } from '../../../services/generated'
+import { StudioGenerationTasksService, StudioImageTasksService } from '../../../services/generated'
+import type { GenerationSubmitRequest } from '../../../services/generated'
 import { StudioEntitiesApi } from '../../../services/studioEntities'
 import type { AssetEditPageBaseProps, BaseAsset, BaseAssetImage } from './components/AssetEditPageBase'
 
@@ -18,6 +19,28 @@ function normalizeUpdateImagePayload(payload: UpdateImagePayload): UpdateImagePa
   return {
     ...payload,
     format: payload.format ?? 'png',
+  }
+}
+
+/**
+ * 将旧提示词预览产出的文件标识转换为统一图片任务请求。
+ *
+ * 预览接口仍负责读取资产事实和渲染提示词；提交阶段只冻结最终提示词与
+ * FileItem 标识，避免把可变 URL 或资产目标再次放入请求体。
+ */
+function createImageGenerationRequest(payload: { prompt: string; images: string[] }): GenerationSubmitRequest {
+  return {
+    model_id: null,
+    execution_prompt: payload.prompt,
+    media: {
+      references: payload.images
+        .filter((fileId) => Boolean(fileId?.trim()))
+        .map((fileId, ordinal) => ({ file_id: fileId, media_kind: 'image', ordinal })),
+    },
+    operation_input: {
+      kind: 'image_generation',
+      count: 1,
+    },
   }
 }
 
@@ -57,9 +80,10 @@ export const assetAdapters = {
       }
     },
     createGenerationTask: async (id: string, imageId: number, payload: { prompt: string; images: string[] }) => {
-      const res = await StudioImageTasksService.createCharacterImageGenerationTaskApiV1StudioImageTasksCharactersCharacterIdImageTasksPost({
+      const res = await StudioGenerationTasksService.submitCharacterImageGenerationTaskApiV1StudioGenerationTasksCharactersCharacterIdSlotsSlotIdTasksPost({
         characterId: id,
-        requestBody: { image_id: imageId, model_id: null, prompt: payload.prompt, images: payload.images } as any,
+        slotId: imageId,
+        requestBody: createImageGenerationRequest(payload),
       })
       return res.data?.task_id ?? null
     },
@@ -99,9 +123,10 @@ export const assetAdapters = {
       }
     },
     createGenerationTask: async (id: string, imageId: number, payload: { prompt: string; images: string[] }) => {
-      const res = await StudioImageTasksService.createActorImageGenerationTaskApiV1StudioImageTasksActorsActorIdImageTasksPost({
+      const res = await StudioGenerationTasksService.submitActorImageGenerationTaskApiV1StudioGenerationTasksActorsActorIdSlotsSlotIdTasksPost({
         actorId: id,
-        requestBody: { image_id: imageId, model_id: null, prompt: payload.prompt, images: payload.images } as any,
+        slotId: imageId,
+        requestBody: createImageGenerationRequest(payload),
       })
       return res.data?.task_id ?? null
     },
@@ -142,10 +167,11 @@ export const assetAdapters = {
       }
     },
     createGenerationTask: async (id: string, imageId: number, payload: { prompt: string; images: string[] }) => {
-      const res = await StudioImageTasksService.createAssetImageGenerationTaskApiV1StudioImageTasksAssetsAssetTypeAssetIdImageTasksPost({
+      const res = await StudioGenerationTasksService.submitAssetImageGenerationTaskApiV1StudioGenerationTasksAssetsAssetTypeAssetIdSlotsSlotIdTasksPost({
         assetType: 'scene',
         assetId: id,
-        requestBody: { image_id: imageId, prompt: payload.prompt, images: payload.images } as any,
+        slotId: imageId,
+        requestBody: createImageGenerationRequest(payload),
       })
       return res.data?.task_id ?? null
     },
@@ -186,10 +212,11 @@ export const assetAdapters = {
       }
     },
     createGenerationTask: async (id: string, imageId: number, payload: { prompt: string; images: string[] }) => {
-      const res = await StudioImageTasksService.createAssetImageGenerationTaskApiV1StudioImageTasksAssetsAssetTypeAssetIdImageTasksPost({
+      const res = await StudioGenerationTasksService.submitAssetImageGenerationTaskApiV1StudioGenerationTasksAssetsAssetTypeAssetIdSlotsSlotIdTasksPost({
         assetType: 'prop',
         assetId: id,
-        requestBody: { image_id: imageId, prompt: payload.prompt, images: payload.images } as any,
+        slotId: imageId,
+        requestBody: createImageGenerationRequest(payload),
       })
       return res.data?.task_id ?? null
     },
@@ -230,10 +257,11 @@ export const assetAdapters = {
       }
     },
     createGenerationTask: async (id: string, imageId: number, payload: { prompt: string; images: string[] }) => {
-      const res = await StudioImageTasksService.createAssetImageGenerationTaskApiV1StudioImageTasksAssetsAssetTypeAssetIdImageTasksPost({
+      const res = await StudioGenerationTasksService.submitAssetImageGenerationTaskApiV1StudioGenerationTasksAssetsAssetTypeAssetIdSlotsSlotIdTasksPost({
         assetType: 'costume',
         assetId: id,
-        requestBody: { image_id: imageId, prompt: payload.prompt, images: payload.images } as any,
+        slotId: imageId,
+        requestBody: createImageGenerationRequest(payload),
       })
       return res.data?.task_id ?? null
     },

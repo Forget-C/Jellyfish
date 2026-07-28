@@ -12,7 +12,7 @@ import {
   FilmService,
   LlmService,
   StudioFilesService,
-  StudioImageLabService,
+  StudioGenerationTasksService,
   StudioPromptsService,
   type ExperimentMessageRead,
   type ExperimentSessionRead,
@@ -210,7 +210,7 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
     return false
   }
 
-  /** 在首条有效输入前创建会话，再提交图片异步任务。 */
+  /** 在首条有效输入前创建会话，再经固定统一入口提交图片异步任务。 */
   const handleSubmit = async () => {
     if (!modelId) return message.warning('请选择图片模型')
     if (!currentPrompt) return message.warning(selectedTemplate ? '请填写模板变量，生成有效提示词' : '请输入图片提示词')
@@ -221,7 +221,17 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
       const targetSessionId = session?.id ?? activeSessionId
       if (!targetSessionId) throw new Error('创建图片会话失败')
       setActiveSessionId(targetSessionId)
-      const response = await StudioImageLabService.createImageLabTaskApiV1StudioImageLabTasksPost({ requestBody: { session_id: targetSessionId, model_id: modelId, prompt: currentPrompt, images: referenceFileIds } })
+      const response = await StudioGenerationTasksService.submitImageLabGenerationTaskApiV1StudioGenerationTasksLabsImageSessionsSessionIdTasksPost({
+        sessionId: targetSessionId,
+        requestBody: {
+          model_id: modelId,
+          execution_prompt: currentPrompt,
+          media: {
+            references: referenceFileIds.map((fileId, ordinal) => ({ file_id: fileId, media_kind: 'image', ordinal })),
+          },
+          operation_input: { kind: 'image_generation' },
+        },
+      })
       const created = response.data
       if (!created?.task_id || !created.messages?.length) throw new Error('创建图片任务未返回正式消息')
       // 创建接口已在同一事务中返回正式 user/task 消息，直接接管，避免本地伪消息重复。

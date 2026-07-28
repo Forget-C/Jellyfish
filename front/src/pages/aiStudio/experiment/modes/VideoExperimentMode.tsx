@@ -13,7 +13,7 @@ import {
   LlmService,
   StudioFilesService,
   StudioPromptsService,
-  StudioVideoLabService,
+  StudioGenerationTasksService,
   type ExperimentMessageRead,
   type FileRead,
   type ModelRead,
@@ -323,7 +323,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
     void loadCapability(nextModelId)
   }
 
-  /** 先保证会话落库，再创建视频任务，避免草稿态产生空会话。 */
+  /** 先保证会话落库，再经固定统一入口创建视频任务，避免草稿态产生空会话。 */
   const submit = async () => {
     if (!modelId) return message.warning('请选择视频模型')
     if (!currentPrompt) return message.warning(selectedTemplate ? '请填写模板变量，生成有效提示词' : '请输入视频提示词')
@@ -348,15 +348,28 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
     setSubmitting(true)
     try {
       const session = await ensureSession('video')
-      const response = await StudioVideoLabService.createVideoLabTaskApiV1StudioVideoLabTasksPost({ requestBody: {
-        session_id: session.id, model_id: modelId, prompt: currentPrompt, ratio,
-        frame_references: {
-          first_frame_file_id: frameFileIds.first ?? null,
-          last_frame_file_id: frameFileIds.last ?? null,
-          key_frame_file_ids: frameFileIds.key ? [frameFileIds.key] : [],
+      const response = await StudioGenerationTasksService.submitVideoLabGenerationTaskApiV1StudioGenerationTasksLabsVideoSessionsSessionIdTasksPost({
+        sessionId: session.id,
+        requestBody: {
+          model_id: modelId,
+          execution_prompt: currentPrompt,
+          media: {
+            frames: {
+              first: frameFileIds.first ? { file_id: frameFileIds.first, media_kind: 'image', ordinal: 0 } : null,
+              last: frameFileIds.last ? { file_id: frameFileIds.last, media_kind: 'image', ordinal: 0 } : null,
+              keys: frameFileIds.key ? [{ file_id: frameFileIds.key, media_kind: 'image', ordinal: 0 }] : [],
+            },
+            subjects: subjectReferences.map((subject) => ({
+              name: subject.name.trim(),
+              media: [
+                ...subject.imageFileIds.map((fileId, ordinal) => ({ file_id: fileId, media_kind: 'image' as const, ordinal })),
+                ...subject.videoFileIds.map((fileId, ordinal) => ({ file_id: fileId, media_kind: 'video' as const, ordinal })),
+              ],
+            })),
+          },
+          operation_input: { kind: 'video_generation', ratio },
         },
-        subject_references: subjectReferences.map((subject) => ({ name: subject.name.trim(), image_file_ids: subject.imageFileIds, video_file_ids: subject.videoFileIds })),
-      } })
+      })
       const created = response.data
       if (!created?.task_id || !created.messages?.length) throw new Error('创建视频任务未返回正式消息')
       // 创建接口直接返回正式 user/task 消息，共享 Hook 负责跨首提重挂载接管。

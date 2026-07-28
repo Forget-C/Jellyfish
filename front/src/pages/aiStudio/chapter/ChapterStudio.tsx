@@ -64,6 +64,7 @@ import {
   StudioChaptersService,
   StudioEntitiesService,
   StudioFilesService,
+  StudioGenerationTasksService,
   StudioImageTasksService,
   StudioProjectsService,
   StudioShotCharacterLinksService,
@@ -1195,16 +1196,26 @@ const ChapterStudio: React.FC = () => {
           .filter(Boolean)
         const targetRatio = resolveShotVideoRatio(d)
         if (!targetRatio) continue
-        await StudioImageTasksService.createShotFrameImageGenerationTaskApiV1StudioImageTasksShotShotIdFrameImageTasksPost({
+        await StudioGenerationTasksService.submitShotFrameGenerationTaskApiV1StudioGenerationTasksShotsShotIdFramesFrameTypePost({
           shotId: id,
+          frameType: target.frame_type,
           requestBody: {
-            frame_type: target.frame_type as any,
             model_id: null,
-            prompt,
-            images: imagesPayload,
-            target_ratio: targetRatio,
-            resolution_profile: keyframeResolutionProfile,
-          } as any,
+            execution_prompt: prompt,
+            media: {
+              references: imagesPayload.filter((image): image is NonNullable<typeof image> => image !== null).map((image, ordinal) => ({
+                file_id: image.file_id,
+                media_kind: 'image' as const,
+                ordinal,
+              })),
+            },
+            operation_input: {
+              kind: 'image_generation',
+              target_ratio: targetRatio,
+              resolution_profile: keyframeResolutionProfile,
+              count: 1,
+            },
+          },
         })
       }
     },
@@ -1375,16 +1386,26 @@ const ChapterStudio: React.FC = () => {
         message.warning('请先设置视频比例')
         return
       }
-      await StudioImageTasksService.createShotFrameImageGenerationTaskApiV1StudioImageTasksShotShotIdFrameImageTasksPost({
+      await StudioGenerationTasksService.submitShotFrameGenerationTaskApiV1StudioGenerationTasksShotsShotIdFramesFrameTypePost({
         shotId: selectedShotId,
+        frameType: target.frame_type,
         requestBody: {
-          frame_type: target.frame_type as any,
           model_id: null,
-          prompt,
-          images: imagesPayload,
-          target_ratio: targetRatio,
-          resolution_profile: keyframeResolutionProfile,
-        } as any,
+          execution_prompt: prompt,
+          media: {
+            references: imagesPayload.filter((image): image is NonNullable<typeof image> => image !== null).map((image, ordinal) => ({
+              file_id: image.file_id,
+              media_kind: 'image' as const,
+              ordinal,
+            })),
+          },
+          operation_input: {
+            kind: 'image_generation',
+            target_ratio: targetRatio,
+            resolution_profile: keyframeResolutionProfile,
+            count: 1,
+          },
+        },
       })
       message.success('已创建生成任务')
     } catch {
@@ -3112,13 +3133,33 @@ function Inspector(props: {
       if (!ratio) {
         throw new Error('video ratio is required')
       }
-      const created = await FilmService.createVideoGenerationTaskApiV1FilmTasksVideoPost({
+      const frameReferences = buildVideoFrameReferences(context.referenceMode, derived.images)
+      const created = await StudioGenerationTasksService.submitShotVideoGenerationTaskApiV1StudioGenerationTasksShotsShotIdVideoPost({
+        shotId: selectedShot.id,
         requestBody: {
-          shot_id: selectedShot.id,
-          reference_mode: context.referenceMode,
-          prompt: (derived.prompt || '').trim(),
-          frame_references: buildVideoFrameReferences(context.referenceMode, derived.images),
-          ratio: ratio as '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | '21:9',
+          model_id: null,
+          execution_prompt: (derived.prompt || '').trim(),
+          media: {
+            frames: {
+              first: frameReferences.first_frame_file_id
+                ? { file_id: frameReferences.first_frame_file_id, media_kind: 'image' }
+                : null,
+              last: frameReferences.last_frame_file_id
+                ? { file_id: frameReferences.last_frame_file_id, media_kind: 'image' }
+                : null,
+              keys: frameReferences.key_frame_file_ids.map((file_id, ordinal) => ({
+                file_id,
+                media_kind: 'image' as const,
+                ordinal,
+              })),
+            },
+            subjects: [],
+          },
+          operation_input: {
+            kind: 'video_generation',
+            ratio,
+            seconds: shotDetail?.duration ?? null,
+          },
         },
       })
       return {
@@ -3867,16 +3908,26 @@ function Inspector(props: {
       if (!ratio) {
         throw new Error('video ratio is required')
       }
-      const created = await StudioImageTasksService.createShotFrameImageGenerationTaskApiV1StudioImageTasksShotShotIdFrameImageTasksPost({
+      const created = await StudioGenerationTasksService.submitShotFrameGenerationTaskApiV1StudioGenerationTasksShotsShotIdFramesFrameTypePost({
         shotId: selectedShot.id,
+        frameType: base.frameType,
         requestBody: {
-          frame_type: base.frameType,
           model_id: null,
-          prompt: (base.prompt || '').trim(),
-          images: resolvedItems as any,
-          target_ratio: ratio,
-          resolution_profile: keyframeResolutionProfile,
-        } as any,
+          execution_prompt: (derived.renderedPrompt || base.prompt || '').trim(),
+          media: {
+            references: resolvedItems.map((image, ordinal) => ({
+              file_id: image.file_id,
+              media_kind: 'image' as const,
+              ordinal,
+            })),
+          },
+          operation_input: {
+            kind: 'image_generation',
+            target_ratio: ratio,
+            resolution_profile: keyframeResolutionProfile,
+            count: 1,
+          },
+        },
       })
       return {
         taskId: created.data?.task_id ?? null,
