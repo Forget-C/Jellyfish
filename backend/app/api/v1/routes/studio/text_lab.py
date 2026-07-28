@@ -10,18 +10,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.streaming import GenerationStreamEvent, StreamEventType
 from app.dependencies import get_db
-from app.schemas.common import ApiResponse, success_response
+from app.schemas.common import ApiResponse, created_response, success_response
+from app.schemas.studio.experiment_sessions import ExperimentMessageRead, ExperimentTaskCreated
 from app.schemas.studio.text_lab import (
     TextLabCancelRequest,
     TextLabRunRequest,
     TextLabRunStatus,
 )
 from app.services.generation.runtime.text_chat_streaming import (
+    create_text_async_task,
     create_text_stream_run,
+    execute_text_inline,
     request_text_stream_cancel,
     stream_text_run,
     subscribe_text_stream,
 )
+from app.tasks.execute_task import enqueue_task_execution
 
 router = APIRouter()
 
@@ -29,6 +33,65 @@ router = APIRouter()
 def _encode_sse(event: GenerationStreamEvent) -> str:
     """将强类型事件编码为标准 SSE 帧，sequence 同时作为稳定 event id。"""
     return f"id: {event.sequence}\nevent: {event.event.value}\ndata: {event.model_dump_json()}\n\n"
+
+
+@router.post(
+    "/sessions/{session_id}/execute",
+    response_model=ApiResponse[list[ExperimentMessageRead]],
+    summary="以固定 JSON 协议执行文本实验会话",
+)
+async def execute_text_lab_response(
+    session_id: str,
+    body: TextLabRunRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[list[ExperimentMessageRead]]:
+    """执行单轮文本并返回已落库的 canonical user/assistant 消息。"""
+    user_message, assistant_message = await execute_text_inline(
+        db,
+        session_id=session_id,
+        model_id=body.model_id,
+        content=body.content,
+    )
+    await db.commit()
+    await db.refresh(user_message)
+    await db.refresh(assistant_message)
+    return success_response([
+        ExperimentMessageRead.model_validate(user_message),
+        ExperimentMessageRead.model_validate(assistant_message),
+    ])
+
+
+@router.post(
+    "/sessions/{session_id}/tasks",
+    response_model=ApiResponse[ExperimentTaskCreated],
+    status_code=201,
+    summary="提交文本实验室统一异步任务",
+)
+async def submit_text_lab_task(
+    session_id: str,
+    body: TextLabRunRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[ExperimentTaskCreated]:
+    """创建文本 canonical 消息和统一 polling 任务，提交成功后才投递 Celery。"""
+    accepted, user_message, task_message = await create_text_async_task(
+        db,
+        session_id=session_id,
+        model_id=body.model_id,
+        content=body.content,
+    )
+    await db.commit()
+    await db.refresh(user_message)
+    await db.refresh(task_message)
+    enqueue_task_execution(accepted.task_id)
+    return created_response(
+        ExperimentTaskCreated(
+            task_id=accepted.task_id,
+            messages=[
+                ExperimentMessageRead.model_validate(user_message),
+                ExperimentMessageRead.model_validate(task_message),
+            ],
+        )
+    )
 
 
 @router.post(

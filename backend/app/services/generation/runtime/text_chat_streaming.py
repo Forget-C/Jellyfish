@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from fastapi import HTTPException, status
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,14 +33,19 @@ from app.core.contracts.streaming import (
     StreamMessageData,
 )
 from app.core.contracts.text_generation import TextChatInput, TextChatMessage
+from app.core.task_manager import SqlAlchemyTaskStore
+from app.core.task_manager.types import TaskStatus
 from app.core.db import async_session_maker
 from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
 from app.models.task import GenerationDeliveryMode, GenerationTask, GenerationTaskStatus, GenerationTaskVisibility
 from app.models.task_links import GenerationTaskLink
 from app.services.generation.gate import GenerationEntityGate
+from app.services.generation.submission import GenerationAccepted, GenerationSubmitter
 from app.services.generation.runtime.text_streaming import TextStreamRunNotFoundError, TextStreamingRuntime
 from app.services.llm.resolver import build_text_chat_model
 from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages
+from app.services.worker.async_task_support import cancel_if_requested_async
+from app.services.worker.task_logging import log_task_event, log_task_failure
 
 _LEASE_SECONDS = 45
 _runtime = TextStreamingRuntime()
@@ -149,6 +154,187 @@ async def create_text_stream_run(
     await db.refresh(user_message)
     accepted = await _runtime.create_run(StreamAcceptedData(task_id=task_id, user_message=_as_message_data(user_message)))
     return task_id, accepted
+
+
+def _text_chat_command(*, session_id: str, model_id: str, content: str, delivery: GenerationDelivery) -> GenerationCommand:
+    """按固定文本实验室路径构造命令，调用方不能从请求体更换交付方式或目标。"""
+    return GenerationCommand(
+        modality=GenerationModality.text,
+        operation=GenerationOperation.text_chat,
+        delivery=delivery,
+        target=GenerationTarget(kind=GenerationTargetKind.experiment_session, entity_id=session_id),
+        request=GenerationSubmitRequest(
+            model_id=model_id,
+            operation_input=TextChatInput(messages=[TextChatMessage(role="user", content=content, sequence=1)]),
+        ),
+    )
+
+
+async def create_text_async_task(
+    db: AsyncSession,
+    *,
+    session_id: str,
+    model_id: str,
+    content: str,
+) -> tuple[GenerationAccepted, ExperimentMessage, ExperimentMessage]:
+    """原子写入文本用户消息、任务消息和可由 Celery 消费的安全快照任务。"""
+    session = await _require_text_session(db, session_id=session_id)
+    command = _text_chat_command(
+        session_id=session_id,
+        model_id=model_id,
+        content=content,
+        delivery=GenerationDelivery.async_polling,
+    )
+    user_message, task_message = await append_experiment_messages(
+        db,
+        session_id=session_id,
+        drafts=[
+            ExperimentMessageDraft(role="user", content=content, payload={"model_id": model_id}),
+            ExperimentMessageDraft(
+                role="task",
+                content="文本生成任务已提交，正在等待生成结果。",
+                status="pending",
+                payload={"model_id": model_id},
+            ),
+        ],
+    )
+    accepted = await GenerationSubmitter(entity_gate=GenerationEntityGate()).submit_async(db, command)
+    task_message.task_id = accepted.task_id
+    session.updated_at = func.now()
+    await db.flush()
+    return accepted, user_message, task_message
+
+
+async def execute_text_inline(
+    db: AsyncSession,
+    *,
+    session_id: str,
+    model_id: str,
+    content: str,
+) -> tuple[ExperimentMessage, ExperimentMessage]:
+    """以固定 JSON 路径执行单轮文本并持久化 canonical user/assistant 消息。"""
+    await _require_text_session(db, session_id=session_id)
+    command = _text_chat_command(
+        session_id=session_id,
+        model_id=model_id,
+        content=content,
+        delivery=GenerationDelivery.inline,
+    )
+    snapshot = await GenerationEntityGate().validate(db, command)
+    user_message = (
+        await append_experiment_messages(
+            db,
+            session_id=session_id,
+            drafts=[ExperimentMessageDraft(role="user", content=content, payload={"model_id": model_id})],
+        )
+    )[0]
+    text = await _invoke_text_snapshot(db, snapshot_payload=snapshot.model_dump(mode="json", exclude={"credential_ref"}))
+    assistant_message = (
+        await append_experiment_messages(
+            db,
+            session_id=session_id,
+            drafts=[ExperimentMessageDraft(role="assistant", content=text, payload={"model_id": snapshot.model_id})],
+        )
+    )[0]
+    return user_message, assistant_message
+
+
+async def _require_text_session(db: AsyncSession, *, session_id: str) -> ExperimentSession:
+    """读取文本实验会话，防止跨实验室写入 canonical 消息。"""
+    session = await db.get(ExperimentSession, session_id)
+    if session is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="target_not_found")
+    if session.lab_type != "text":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="experiment_session_type_invalid")
+    return session
+
+
+def _as_langchain_messages(messages: list[dict[str, object]]) -> list[HumanMessage | AIMessage | SystemMessage]:
+    """将冻结聊天消息映射为 LangChain 消息，拒绝未知角色以保持执行语义封闭。"""
+    result: list[HumanMessage | AIMessage | SystemMessage] = []
+    for message in messages:
+        content = str(message.get("content") or "")
+        role = str(message.get("role") or "")
+        if role == "user":
+            result.append(HumanMessage(content=content))
+        elif role == "assistant":
+            result.append(AIMessage(content=content))
+        elif role == "system":
+            result.append(SystemMessage(content=content))
+        else:
+            raise RuntimeError("text chat snapshot contains an unsupported role")
+    if not result:
+        raise RuntimeError("text chat snapshot contains no messages")
+    return result
+
+
+async def _invoke_text_snapshot(db: AsyncSession, *, snapshot_payload: dict[str, object]) -> str:
+    """仅从无凭据快照读取文本输入，并在执行期按模型 ID 解析供应商凭据。"""
+    operation_input = dict(snapshot_payload.get("operation_input") or {})
+    if operation_input.get("kind") != "text_chat":
+        raise RuntimeError("text chat snapshot operation is unavailable")
+    messages = list(operation_input.get("messages") or [])
+    model_id = str(snapshot_payload.get("model_id") or "")
+    if not model_id:
+        raise RuntimeError("text chat snapshot model is unavailable")
+    model = await build_text_chat_model(db, model_id=model_id, thinking=False)
+    response = await model.ainvoke(_as_langchain_messages(messages))
+    text = _chunk_text(response).strip()
+    if not text:
+        raise RuntimeError("text model returned an empty response")
+    return text
+
+
+async def run_text_chat_task(task_id: str, run_args: dict[str, object]) -> None:
+    """执行 async text_chat 任务，并把生成结果追加为 canonical assistant 消息。"""
+    del run_args
+    async with async_session_maker() as db:
+        try:
+            store = SqlAlchemyTaskStore(db)
+            await store.set_status(task_id, TaskStatus.running)
+            await store.set_progress(task_id, 10)
+            await db.commit()
+            if await cancel_if_requested_async(store=store, task_id=task_id, session=db):
+                log_task_event("text_chat", task_id, "cancelled", stage="before_execute")
+                return
+            task = await db.get(GenerationTask, task_id)
+            snapshot_payload = dict((task.payload or {}).get("snapshot") or {}) if task else {}
+            text = await _invoke_text_snapshot(db, snapshot_payload=snapshot_payload)
+            if await cancel_if_requested_async(store=store, task_id=task_id, session=db):
+                log_task_event("text_chat", task_id, "cancelled", stage="after_execute")
+                return
+            model_id = str(snapshot_payload.get("model_id") or "")
+            link = await db.scalar(select(GenerationTaskLink).where(GenerationTaskLink.task_id == task_id))
+            if link is None or link.relation_type != GenerationTargetKind.experiment_session.value:
+                raise RuntimeError("text chat task target is unavailable")
+            assistant_message = (
+                await append_experiment_messages(
+                    db,
+                    session_id=link.relation_entity_id,
+                    drafts=[ExperimentMessageDraft(role="assistant", content=text, payload={"model_id": model_id}, task_id=None)],
+                )
+            )[0]
+            await store.set_result(task_id, {"text": text, "assistant_message_id": assistant_message.id, "model_id": model_id})
+            task_message = await db.scalar(select(ExperimentMessage).where(ExperimentMessage.task_id == task_id))
+            if task_message is not None:
+                task_message.status = "succeeded"
+                task_message.payload = {**task_message.payload, "assistant_message_id": assistant_message.id}
+            await store.set_progress(task_id, 100)
+            await store.set_status(task_id, TaskStatus.succeeded)
+            await db.commit()
+            log_task_event("text_chat", task_id, "succeeded")
+        except Exception as exc:  # noqa: BLE001
+            await db.rollback()
+            async with async_session_maker() as failed_db:
+                failed_store = SqlAlchemyTaskStore(failed_db)
+                await failed_store.set_error(task_id, str(exc))
+                await failed_store.set_status(task_id, TaskStatus.failed)
+                task_message = await failed_db.scalar(select(ExperimentMessage).where(ExperimentMessage.task_id == task_id))
+                if task_message is not None:
+                    task_message.status = "failed"
+                    task_message.payload = {**task_message.payload, "error": str(exc)}
+                await failed_db.commit()
+            log_task_failure("text_chat", task_id, str(exc))
 
 
 async def stream_text_run(task_id: str) -> None:
@@ -452,9 +638,12 @@ async def reap_expired_text_stream_runs(*, limit: int = 100) -> list[str]:
 
 
 __all__ = [
+    "create_text_async_task",
     "create_text_stream_run",
+    "execute_text_inline",
     "reap_expired_text_stream_runs",
     "request_text_stream_cancel",
+    "run_text_chat_task",
     "stream_text_run",
     "subscribe_text_stream",
 ]

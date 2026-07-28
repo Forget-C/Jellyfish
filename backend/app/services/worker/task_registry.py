@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from app.services.film.generated_video import run_video_generation_task
 from app.services.film.shot_frame_prompt_tasks import run_shot_frame_prompt_task
+from app.services.generation.runtime.text_chat_streaming import run_text_chat_task
 from app.services.script_processing_worker import (
     CharacterPortraitTaskExecutor,
     ConsistencyTaskExecutor,
@@ -54,6 +55,15 @@ task_executor_registry.register("script_scene_info", SceneInfoTaskExecutor())
 task_executor_registry.register("script_costume_info", CostumeInfoTaskExecutor())
 task_executor_registry.register("script_optimize", ScriptOptimizationTaskExecutor())
 task_executor_registry.register("script_simplify", ScriptSimplificationTaskExecutor())
+task_executor_registry.register(
+    "text_chat",
+    AbstractAsyncDelegatingExecutor(
+        task_kind="text_chat",
+        runner=run_text_chat_task,
+        timeout_seconds=600.0,
+        require_generation_snapshot=True,
+    ),
+)
 task_executor_registry.register(
     "video_generation",
     AbstractAsyncDelegatingExecutor(
