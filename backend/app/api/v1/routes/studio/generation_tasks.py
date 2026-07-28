@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,6 +49,30 @@ def _require_video_request(body: GenerationSubmitRequest) -> None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="operation_input_invalid")
     if body.media is not None and not isinstance(body.media, VideoMediaInput):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="media_role_invalid")
+
+
+async def _submit_async_task(
+    db: AsyncSession,
+    *,
+    modality: GenerationModality,
+    operation: GenerationOperation,
+    target: GenerationTarget,
+    body: GenerationSubmitRequest,
+) -> ApiResponse[TaskCreated]:
+    """提交已由资源路径绑定的命令，并在事务提交后才投递 Worker。"""
+    accepted = await GenerationSubmitter(entity_gate=GenerationEntityGate()).submit_async(
+        db,
+        GenerationCommand(
+            modality=modality,
+            operation=operation,
+            delivery=GenerationDelivery.async_polling,
+            target=target,
+            request=body,
+        ),
+    )
+    await db.commit()
+    enqueue_task_execution(accepted.task_id)
+    return created_response(TaskCreated(task_id=accepted.task_id))
 
 
 async def _get_or_create_frame_slot(
@@ -94,23 +120,17 @@ async def submit_shot_frame_generation_task(
     """绑定镜头帧槽位后提交图片任务；最终提示词由客户端先经 render API 确认。"""
     _require_image_request(body)
     slot = await _get_or_create_frame_slot(db, shot_id=shot_id, frame_type=frame_type)
-    accepted = await GenerationSubmitter(entity_gate=GenerationEntityGate()).submit_async(
+    return await _submit_async_task(
         db,
-        GenerationCommand(
-            modality=GenerationModality.image,
-            operation=GenerationOperation.image_generation,
-            delivery=GenerationDelivery.async_polling,
-            target=GenerationTarget(
-                kind=GenerationTargetKind.shot_frame_slot,
-                entity_id=shot_id,
-                slot_id=str(slot.id),
-            ),
-            request=body,
+        modality=GenerationModality.image,
+        operation=GenerationOperation.image_generation,
+        target=GenerationTarget(
+            kind=GenerationTargetKind.shot_frame_slot,
+            entity_id=shot_id,
+            slot_id=str(slot.id),
         ),
+        body=body,
     )
-    await db.commit()
-    enqueue_task_execution(accepted.task_id)
-    return created_response(TaskCreated(task_id=accepted.task_id))
 
 
 @router.post(
@@ -126,16 +146,124 @@ async def submit_shot_video_generation_task(
 ) -> ApiResponse[TaskCreated]:
     """绑定镜头后提交视频任务；视频帧与具名主体媒体的分组直接冻结到快照。"""
     _require_video_request(body)
-    accepted = await GenerationSubmitter(entity_gate=GenerationEntityGate()).submit_async(
+    return await _submit_async_task(
         db,
-        GenerationCommand(
-            modality=GenerationModality.video,
-            operation=GenerationOperation.video_generation,
-            delivery=GenerationDelivery.async_polling,
-            target=GenerationTarget(kind=GenerationTargetKind.shot_video, entity_id=shot_id),
-            request=body,
-        ),
+        modality=GenerationModality.video,
+        operation=GenerationOperation.video_generation,
+        target=GenerationTarget(kind=GenerationTargetKind.shot_video, entity_id=shot_id),
+        body=body,
     )
-    await db.commit()
-    enqueue_task_execution(accepted.task_id)
-    return created_response(TaskCreated(task_id=accepted.task_id))
+
+
+@router.post(
+    "/actors/{actor_id}/slots/{slot_id}/tasks",
+    response_model=ApiResponse[TaskCreated],
+    status_code=status.HTTP_201_CREATED,
+    summary="提交演员图片任务",
+)
+async def submit_actor_image_generation_task(
+    actor_id: str,
+    slot_id: int,
+    body: GenerationSubmitRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[TaskCreated]:
+    """绑定演员图片槽位，防止请求体伪造目标或改变图片执行语义。"""
+    _require_image_request(body)
+    return await _submit_async_task(
+        db,
+        modality=GenerationModality.image,
+        operation=GenerationOperation.image_generation,
+        target=GenerationTarget(kind=GenerationTargetKind.asset_image_slot, entity_id=actor_id, slot_id=str(slot_id)),
+        body=body,
+    )
+
+
+@router.post(
+    "/characters/{character_id}/slots/{slot_id}/tasks",
+    response_model=ApiResponse[TaskCreated],
+    status_code=status.HTTP_201_CREATED,
+    summary="提交角色图片任务",
+)
+async def submit_character_image_generation_task(
+    character_id: str,
+    slot_id: int,
+    body: GenerationSubmitRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[TaskCreated]:
+    """绑定角色图片槽位，统一交由提交器冻结模型与媒体快照。"""
+    _require_image_request(body)
+    return await _submit_async_task(
+        db,
+        modality=GenerationModality.image,
+        operation=GenerationOperation.image_generation,
+        target=GenerationTarget(kind=GenerationTargetKind.asset_image_slot, entity_id=character_id, slot_id=str(slot_id)),
+        body=body,
+    )
+
+
+@router.post(
+    "/assets/{asset_type}/{asset_id}/slots/{slot_id}/tasks",
+    response_model=ApiResponse[TaskCreated],
+    status_code=status.HTTP_201_CREATED,
+    summary="提交资产图片任务",
+)
+async def submit_asset_image_generation_task(
+    asset_type: Literal["prop", "scene", "costume"],
+    asset_id: str,
+    slot_id: int,
+    body: GenerationSubmitRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[TaskCreated]:
+    """绑定道具、场景或服装图片槽位；资产类型仅用于受限路径匹配。"""
+    _require_image_request(body)
+    return await _submit_async_task(
+        db,
+        modality=GenerationModality.image,
+        operation=GenerationOperation.image_generation,
+        target=GenerationTarget(kind=GenerationTargetKind.asset_image_slot, entity_id=asset_id, slot_id=str(slot_id)),
+        body=body,
+    )
+
+
+@router.post(
+    "/labs/image/sessions/{session_id}/tasks",
+    response_model=ApiResponse[TaskCreated],
+    status_code=status.HTTP_201_CREATED,
+    summary="提交图片实验室任务",
+)
+async def submit_image_lab_generation_task(
+    session_id: str,
+    body: GenerationSubmitRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[TaskCreated]:
+    """绑定图片实验会话，确保其始终进入异步图片生成执行链。"""
+    _require_image_request(body)
+    return await _submit_async_task(
+        db,
+        modality=GenerationModality.image,
+        operation=GenerationOperation.image_generation,
+        target=GenerationTarget(kind=GenerationTargetKind.experiment_session, entity_id=session_id),
+        body=body,
+    )
+
+
+@router.post(
+    "/labs/video/sessions/{session_id}/tasks",
+    response_model=ApiResponse[TaskCreated],
+    status_code=status.HTTP_201_CREATED,
+    summary="提交视频实验室任务",
+)
+async def submit_video_lab_generation_task(
+    session_id: str,
+    body: GenerationSubmitRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[TaskCreated]:
+    """绑定视频实验会话，确保其始终进入异步视频生成执行链。"""
+    _require_video_request(body)
+    return await _submit_async_task(
+        db,
+        modality=GenerationModality.video,
+        operation=GenerationOperation.video_generation,
+        target=GenerationTarget(kind=GenerationTargetKind.experiment_session, entity_id=session_id),
+        body=body,
+    )

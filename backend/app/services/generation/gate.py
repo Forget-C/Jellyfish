@@ -115,21 +115,33 @@ class GenerationEntityGate:
             except ValueError:
                 exists = False
         elif target.kind == GenerationTargetKind.asset_image_slot:
-            exists = target.slot_id is not None and await self._asset_slot_exists(db, target.slot_id)
+            exists = target.slot_id is not None and await self._asset_slot_belongs_to(
+                db,
+                slot_id=target.slot_id,
+                entity_id=target.entity_id,
+            )
         elif target.kind == GenerationTargetKind.script_processing:
             exists = bool(target.entity_id)
         if not exists:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="target_not_found")
 
-    async def _asset_slot_exists(self, db: AsyncSession, slot_id: str) -> bool:
-        """资产图片槽位跨五张现有表，门禁只确认其确实存在。"""
+    async def _asset_slot_belongs_to(self, db: AsyncSession, *, slot_id: str, entity_id: str) -> bool:
+        """确认资产图片槽位存在且属于路径绑定的资产，拒绝跨资产写回。"""
         try:
             numeric_id = int(slot_id)
         except ValueError:
             return False
-        for model in (ActorImage, CharacterImage, SceneImage, PropImage, CostumeImage):
-            if await db.get(model, numeric_id) is not None:
-                return True
+        parent_field_by_model = (
+            (ActorImage, "actor_id"),
+            (CharacterImage, "character_id"),
+            (SceneImage, "scene_id"),
+            (PropImage, "prop_id"),
+            (CostumeImage, "costume_id"),
+        )
+        for model, parent_field in parent_field_by_model:
+            row = await db.get(model, numeric_id)
+            if row is not None:
+                return getattr(row, parent_field) == entity_id
         return False
 
     async def _target_version(self, db: AsyncSession, command: GenerationCommand) -> int | None:
