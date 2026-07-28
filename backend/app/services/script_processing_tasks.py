@@ -1,28 +1,16 @@
 from __future__ import annotations
 
-import asyncio
 import json
-import logging
 from dataclasses import dataclass
 
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.chains.agents.script_processing_agents import (
-    EntityMergeResult,
-    VariantAnalysisResult,
-)
-from app.core.db import async_session_maker
 from app.core.task_manager import DeliveryMode, SqlAlchemyTaskStore, TaskManager
 from app.core.task_manager.types import TaskStatus
-from app.dependencies import get_llm
 from app.models.task import GenerationTask, GenerationTaskStatus
 from app.models.task_links import GenerationTaskLink
-from app.chains.agents import EntityMergerAgent, VariantAnalyzerAgent
-
-
-logger = logging.getLogger(__name__)
 
 CHAPTER_DIVISION_RELATION_TYPE = "chapter_division"
 SCRIPT_EXTRACTION_RELATION_TYPE = "script_extraction"
@@ -155,36 +143,6 @@ async def _create_script_task(
         relation_type=relation_type,
         relation_entity_id=relation_entity_id,
     )
-
-
-def _load_script_run_args(task: GenerationTask) -> dict[str, object]:
-    """只读取冻结快照，拒绝不具备统一提交契约的历史 payload。"""
-
-    payload = dict(task.payload or {})
-    command = payload.get("command")
-    snapshot = payload.get("snapshot")
-    if not isinstance(command, dict) or not isinstance(snapshot, dict):
-        raise RuntimeError("script task command and snapshot are required")
-    if command.get("operation") != "text_agent":
-        raise RuntimeError("script task command must use text_agent")
-    run_args = snapshot.get("run_args")
-    if not isinstance(run_args, dict):
-        raise RuntimeError("script task snapshot.run_args is required")
-    return dict(run_args)
-
-
-async def _cancel_if_requested(
-    store: SqlAlchemyTaskStore,
-    task_id: str,
-    db: AsyncSession,
-) -> bool:
-    """在阶段边界检查取消请求，并统一完成 cancelled 收尾。"""
-
-    if not await store.is_cancel_requested(task_id):
-        return False
-    await store.mark_cancelled(task_id)
-    await db.commit()
-    return True
 
 
 async def find_active_divide_task(
@@ -660,106 +618,28 @@ def spawn_extract_task(task_id: str) -> None:
     enqueue_task_execution(task_id)
 
 
-async def run_merge_task(task_id: str) -> None:
-    async with async_session_maker() as db:
-        store = SqlAlchemyTaskStore(db)
-        task = await store.get(task_id)
-        if task is None:
-            logger.warning("merge task not found: %s", task_id)
-            return
-
-        if await _cancel_if_requested(store, task_id, db):
-            return
-
-        await store.set_status(task_id, TaskStatus.running)
-        await store.set_progress(task_id, 5)
-        await db.commit()
-        run_args = _load_script_run_args(task)
-
-    try:
-        async with async_session_maker() as db:
-            store = SqlAlchemyTaskStore(db)
-            if await _cancel_if_requested(store, task_id, db):
-                return
-
-            llm = await get_llm(db)
-            agent = EntityMergerAgent(llm)
-            result: EntityMergeResult = agent.extract(
-                all_extractions_json=json.dumps(run_args.get("all_shot_extractions") or [], ensure_ascii=False),
-                historical_library_json=json.dumps(run_args.get("historical_library") or {}, ensure_ascii=False),
-                script_division_json=json.dumps(run_args.get("script_division") or {}, ensure_ascii=False),
-                previous_merge_json=json.dumps(run_args.get("previous_merge") or {}, ensure_ascii=False),
-                conflict_resolutions_json=json.dumps(run_args.get("conflict_resolutions") or [], ensure_ascii=False),
-            )
-            await store.set_progress(task_id, 100)
-            await store.set_result(task_id, result.model_dump())
-            if await _cancel_if_requested(store, task_id, db):
-                return
-            await store.set_status(task_id, TaskStatus.succeeded)
-            await db.commit()
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("merge task failed: %s", task_id)
-        async with async_session_maker() as db:
-            store = SqlAlchemyTaskStore(db)
-            await store.set_error(task_id, str(exc))
-            await store.set_status(task_id, TaskStatus.failed)
-            await db.commit()
-
-
 def spawn_merge_task(task_id: str) -> None:
-    asyncio.create_task(run_merge_task(task_id))
+    """将实体合并投递到统一 Celery 执行入口。"""
+
+    from app.tasks.execute_task import enqueue_task_execution
+
+    enqueue_task_execution(task_id)
+
+
 def spawn_consistency_task(task_id: str) -> None:
     from app.tasks.execute_task import enqueue_task_execution
 
     enqueue_task_execution(task_id)
 
 
-async def run_variant_task(task_id: str) -> None:
-    async with async_session_maker() as db:
-        store = SqlAlchemyTaskStore(db)
-        task = await store.get(task_id)
-        if task is None:
-            logger.warning("variant task not found: %s", task_id)
-            return
-
-        if await _cancel_if_requested(store, task_id, db):
-            return
-
-        await store.set_status(task_id, TaskStatus.running)
-        await store.set_progress(task_id, 5)
-        await db.commit()
-        run_args = _load_script_run_args(task)
-
-    try:
-        async with async_session_maker() as db:
-            store = SqlAlchemyTaskStore(db)
-            if await _cancel_if_requested(store, task_id, db):
-                return
-
-            llm = await get_llm(db)
-            agent = VariantAnalyzerAgent(llm)
-            result: VariantAnalysisResult = agent.extract(
-                merged_library_json=json.dumps(run_args.get("merged_library") or {}, ensure_ascii=False),
-                all_extractions_json=json.dumps(run_args.get("all_shot_extractions") or [], ensure_ascii=False),
-                script_division_json=json.dumps(run_args.get("script_division") or {}, ensure_ascii=False),
-            )
-            await store.set_progress(task_id, 100)
-            await store.set_result(task_id, result.model_dump())
-            if await _cancel_if_requested(store, task_id, db):
-                return
-            await store.set_status(task_id, TaskStatus.succeeded)
-            await db.commit()
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("variant task failed: %s", task_id)
-        async with async_session_maker() as db:
-            store = SqlAlchemyTaskStore(db)
-            await store.set_error(task_id, str(exc))
-            await store.set_status(task_id, TaskStatus.failed)
-            await db.commit()
-
-
 def spawn_variant_task(task_id: str) -> None:
-    asyncio.create_task(run_variant_task(task_id))
+    """将实体变体分析投递到统一 Celery 执行入口。"""
+
+    from app.tasks.execute_task import enqueue_task_execution
+
+    enqueue_task_execution(task_id)
+
+
 def spawn_character_portrait_task(task_id: str) -> None:
     from app.tasks.execute_task import enqueue_task_execution
 
@@ -782,6 +662,8 @@ def spawn_costume_info_task(task_id: str) -> None:
     from app.tasks.execute_task import enqueue_task_execution
 
     enqueue_task_execution(task_id)
+
+
 def spawn_script_optimization_task(task_id: str) -> None:
     from app.tasks.execute_task import enqueue_task_execution
 

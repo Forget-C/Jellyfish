@@ -14,16 +14,20 @@ from app.chains.agents import (
     CharacterPortraitAnalysisAgent,
     ConsistencyCheckerAgent,
     CostumeInfoAnalysisAgent,
+    EntityMergerAgent,
     PropInfoAnalysisAgent,
     SceneInfoAnalysisAgent,
     ScriptOptimizerAgent,
     ScriptSimplifierAgent,
+    VariantAnalyzerAgent,
 )
 from app.chains.agents.script_processing_agents import (
+    EntityMergeResult,
     ScriptConsistencyCheckResult,
     ScriptDivisionResult,
     ScriptOptimizationResult,
     ScriptSimplificationResult,
+    VariantAnalysisResult,
 )
 from app.core.db_sync import sync_session_maker
 from app.services.script_extraction_cache import (
@@ -100,6 +104,36 @@ class ConsistencyResultGenerator(AbstractLLMResultGenerator):
     def generate_with_llm(self, llm, run_args: dict[str, Any]) -> ScriptConsistencyCheckResult:
         agent = ConsistencyCheckerAgent(llm)
         return agent.extract(script_text=str(run_args.get("script_text") or ""))
+
+
+class MergeResultGenerator(AbstractLLMResultGenerator):
+    """执行冻结的跨镜实体合并输入，产出可持久化的实体库结果。"""
+
+    thinking = True
+
+    def generate_with_llm(self, llm, run_args: dict[str, Any]) -> EntityMergeResult:
+        agent = EntityMergerAgent(llm)
+        return agent.extract(
+            all_extractions_json=json.dumps(run_args.get("all_shot_extractions") or [], ensure_ascii=False),
+            historical_library_json=json.dumps(run_args.get("historical_library") or {}, ensure_ascii=False),
+            script_division_json=json.dumps(run_args.get("script_division") or {}, ensure_ascii=False),
+            previous_merge_json=json.dumps(run_args.get("previous_merge") or {}, ensure_ascii=False),
+            conflict_resolutions_json=json.dumps(run_args.get("conflict_resolutions") or [], ensure_ascii=False),
+        )
+
+
+class VariantResultGenerator(AbstractLLMResultGenerator):
+    """执行冻结的实体变体分析输入，避免 Worker 重新读取路由状态。"""
+
+    thinking = True
+
+    def generate_with_llm(self, llm, run_args: dict[str, Any]) -> VariantAnalysisResult:
+        agent = VariantAnalyzerAgent(llm)
+        return agent.extract(
+            merged_library_json=json.dumps(run_args.get("merged_library") or {}, ensure_ascii=False),
+            all_extractions_json=json.dumps(run_args.get("all_shot_extractions") or [], ensure_ascii=False),
+            script_division_json=json.dumps(run_args.get("script_division") or {}, ensure_ascii=False),
+        )
 
 
 class CharacterPortraitResultGenerator(AbstractLLMResultGenerator):
@@ -226,6 +260,36 @@ class ConsistencyTaskExecutor(_ScriptProcessingTaskExecutor):
         return self._generator.generate(ctx.db, run_args)
 
 
+class MergeTaskExecutor(_ScriptProcessingTaskExecutor):
+    """统一 Celery Worker 中执行实体合并任务。"""
+
+    task_kind = "script_merge"
+    succeeded_progress = 100
+    timeout_seconds = 1800.0
+
+    def __init__(self) -> None:
+        super().__init__(session_maker=sync_session_maker)
+        self._generator = MergeResultGenerator()
+
+    def execute(self, ctx: WorkerTaskContext, run_args: dict[str, Any]) -> EntityMergeResult:
+        return self._generator.generate(ctx.db, run_args)
+
+
+class VariantTaskExecutor(_ScriptProcessingTaskExecutor):
+    """统一 Celery Worker 中执行实体变体分析任务。"""
+
+    task_kind = "script_variant"
+    succeeded_progress = 100
+    timeout_seconds = 900.0
+
+    def __init__(self) -> None:
+        super().__init__(session_maker=sync_session_maker)
+        self._generator = VariantResultGenerator()
+
+    def execute(self, ctx: WorkerTaskContext, run_args: dict[str, Any]) -> VariantAnalysisResult:
+        return self._generator.generate(ctx.db, run_args)
+
+
 class _SimpleLLMTaskExecutor(_ScriptProcessingTaskExecutor):
     succeeded_progress = 100
     timeout_seconds = 900.0
@@ -347,6 +411,18 @@ def run_extract_task_sync(task_id: str) -> None:
 
 def run_consistency_task_sync(task_id: str) -> None:
     ConsistencyTaskExecutor().run(task_id)
+
+
+def run_merge_task_sync(task_id: str) -> None:
+    """由统一 registry 调用实体合并 Worker。"""
+
+    MergeTaskExecutor().run(task_id)
+
+
+def run_variant_task_sync(task_id: str) -> None:
+    """由统一 registry 调用实体变体分析 Worker。"""
+
+    VariantTaskExecutor().run(task_id)
 
 
 def run_character_portrait_task_sync(task_id: str) -> None:

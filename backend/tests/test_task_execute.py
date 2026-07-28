@@ -14,6 +14,7 @@ from app.core.task_manager import DeliveryMode, SqlAlchemyTaskStore, TaskManager
 from app.core.task_manager import SyncSqlAlchemyTaskStore
 from app.core.task_manager.types import TaskStatus
 from app.models.task import GenerationTask
+from app.services.script_processing_worker import MergeTaskExecutor, VariantTaskExecutor
 from app.tasks import execute_task as execute_task_module
 from app.services.worker.task_executor import AbstractAsyncDelegatingExecutor, AbstractWorkerTaskExecutor, WorkerTaskContext
 from app.services.worker.task_registry import task_executor_registry
@@ -504,9 +505,34 @@ def test_sync_executor_marks_failed_on_boundary_timeout(tmp_path) -> None:
 
 def test_task_executor_registry_resolves_sync_and_async_executor_types() -> None:
     divide_executor = task_executor_registry.resolve("script_divide")
+    merge_executor = task_executor_registry.resolve("script_merge")
+    variant_executor = task_executor_registry.resolve("script_variant")
     video_executor = task_executor_registry.resolve("video_generation")
 
     assert isinstance(divide_executor, AbstractWorkerTaskExecutor)
     assert divide_executor.task_kind == "script_divide"
+    assert isinstance(merge_executor, MergeTaskExecutor)
+    assert merge_executor.task_kind == "script_merge"
+    assert isinstance(variant_executor, VariantTaskExecutor)
+    assert variant_executor.task_kind == "script_variant"
     assert isinstance(video_executor, AbstractAsyncDelegatingExecutor)
     assert video_executor.task_kind == "video_generation"
+
+
+def test_script_merge_executor_requires_frozen_text_agent_snapshot() -> None:
+    """实体合并 Worker 不再接受历史 run_args payload。"""
+
+    executor = MergeTaskExecutor()
+    legacy_context = SimpleNamespace(task=SimpleNamespace(payload={"run_args": {"all_shot_extractions": []}}))
+    valid_context = SimpleNamespace(
+        task=SimpleNamespace(
+            payload={
+                "command": {"operation": "text_agent"},
+                "snapshot": {"run_args": {"all_shot_extractions": []}},
+            }
+        )
+    )
+
+    with pytest.raises(RuntimeError, match="command and snapshot are required"):
+        executor.load_run_args(legacy_context)
+    assert executor.load_run_args(valid_context) == {"all_shot_extractions": []}

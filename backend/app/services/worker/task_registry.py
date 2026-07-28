@@ -16,10 +16,12 @@ from app.services.script_processing_worker import (
     CostumeInfoTaskExecutor,
     DivideTaskExecutor,
     ExtractTaskExecutor,
+    MergeTaskExecutor,
     PropInfoTaskExecutor,
     SceneInfoTaskExecutor,
     ScriptOptimizationTaskExecutor,
     ScriptSimplificationTaskExecutor,
+    VariantTaskExecutor,
 )
 from app.services.studio.image_task_runner import run_image_generation_task
 from app.services.worker.task_executor import AbstractAsyncDelegatingExecutor, AbstractWorkerTaskExecutor
@@ -43,7 +45,9 @@ task_executor_registry = TaskExecutorRegistry()
 
 task_executor_registry.register("script_divide", DivideTaskExecutor())
 task_executor_registry.register("script_extract", ExtractTaskExecutor())
+task_executor_registry.register("script_merge", MergeTaskExecutor())
 task_executor_registry.register("script_consistency", ConsistencyTaskExecutor())
+task_executor_registry.register("script_variant", VariantTaskExecutor())
 task_executor_registry.register("script_character_portrait", CharacterPortraitTaskExecutor())
 task_executor_registry.register("script_prop_info", PropInfoTaskExecutor())
 task_executor_registry.register("script_scene_info", SceneInfoTaskExecutor())

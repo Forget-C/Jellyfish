@@ -136,7 +136,6 @@ export type { GenerationTaskLinkUpdate } from './models/GenerationTaskLinkUpdate
 export type { HTTPValidationError } from './models/HTTPValidationError';
 export type { ImageGenerationOperationInput } from './models/ImageGenerationOperationInput';
 export type { ImageGenerationOptionsRead } from './models/ImageGenerationOptionsRead';
-export type { ImageLabGenerateRequest } from './models/ImageLabGenerateRequest';
 export type { ImageMediaInput } from './models/ImageMediaInput';
 export type { JsonValue } from './models/JsonValue';
 export type { LogLevel } from './models/LogLevel';
@@ -288,9 +287,6 @@ export type { VideoFrameReferenceFiles } from './models/VideoFrameReferenceFiles
 export type { VideoGenerationOperationInput } from './models/VideoGenerationOperationInput';
 export type { VideoGenerationOptionsRead } from './models/VideoGenerationOptionsRead';
 export type { VideoGenerationTaskRequest } from './models/VideoGenerationTaskRequest';
-export type { VideoLabFrameReferenceFiles } from './models/VideoLabFrameReferenceFiles';
-export type { VideoLabGenerateRequest } from './models/VideoLabGenerateRequest';
-export type { VideoLabSubjectReference } from './models/VideoLabSubjectReference';
 export type { VideoMediaInput_Input } from './models/VideoMediaInput_Input';
 export type { VideoMediaInput_Output } from './models/VideoMediaInput_Output';
 export type { VideoPromptPreviewResponse } from './models/VideoPromptPreviewResponse';
@@ -307,7 +303,6 @@ export { StudioExperimentSessionsService } from './services/StudioExperimentSess
 export { StudioFilesService } from './services/StudioFilesService';
 export { StudioGenerationPromptsService } from './services/StudioGenerationPromptsService';
 export { StudioGenerationTasksService } from './services/StudioGenerationTasksService';
-export { StudioImageLabService } from './services/StudioImageLabService';
 export { StudioImageTasksService } from './services/StudioImageTasksService';
 export { StudioProjectsService } from './services/StudioProjectsService';
 export { StudioPromptsService } from './services/StudioPromptsService';
@@ -318,4 +313,3 @@ export { StudioShotFrameImagesService } from './services/StudioShotFrameImagesSe
 export { StudioShotLinksService } from './services/StudioShotLinksService';
 export { StudioShotsService } from './services/StudioShotsService';
 export { StudioTextLabService } from './services/StudioTextLabService';
-export { StudioVideoLabService } from './services/StudioVideoLabService';
