@@ -32,7 +32,17 @@ description: 用于验证已登记文本模型与提示词实际输出的独立�
 
 ## 调用链路
 
-页面通过 `POST /api/v1/studio/text-lab/generate` 发送模型 ID 和当前消息。后端会验证模型类别为 `text`，使用该模型关联供应商的配置构造 Chat 模型，然后执行一轮调用并返回文本结果。
+页面固定通过 `POST /api/v1/studio/labs/text/sessions/{session_id}/stream`
+建立 `text/event-stream`。它只提交本轮模型 ID 与用户输入；不会由浏览器
+拼接或持久化聊天历史。前端按增量消费 `accepted → delta/progress* →
+completed|error|cancelled` 事件，并以事件的 `sequence` 作为单调 SSE id。
+
+在发送 `accepted` 前，后端会在同一事务写入 canonical 用户消息、`hidden`
+的 streaming `GenerationTask`、会话关联与冻结快照。`completed` 只会在成功
+写入 canonical 助手消息后发送；失败或取消只更新 hidden run，不创建错误助手
+气泡。用户停止时，页面立即中止流连接，并调用会话绑定的
+`POST /api/v1/studio/labs/text/sessions/{session_id}/runs/{task_id}/cancel`；该
+hidden run 不会出现在任务中心。
 
 ## 持久化会话历史
 

@@ -85,7 +85,6 @@ export type { ApiResponse_TaskCreated_ } from './models/ApiResponse_TaskCreated_
 export type { ApiResponse_TaskLinkAdoptRead_ } from './models/ApiResponse_TaskLinkAdoptRead_';
 export type { ApiResponse_TaskResultRead_ } from './models/ApiResponse_TaskResultRead_';
 export type { ApiResponse_TaskStatusRead_ } from './models/ApiResponse_TaskStatusRead_';
-export type { ApiResponse_TextLabGenerateResponse_ } from './models/ApiResponse_TextLabGenerateResponse_';
 export type { ApiResponse_TextLabRunStatus_ } from './models/ApiResponse_TextLabRunStatus_';
 export type { ApiResponse_VariantAnalysisResult_ } from './models/ApiResponse_VariantAnalysisResult_';
 export type { ApiResponse_VideoGenerationOptionsRead_ } from './models/ApiResponse_VideoGenerationOptionsRead_';
@@ -277,9 +276,6 @@ export type { TaskStatusRead } from './models/TaskStatusRead';
 export type { TextChatInput } from './models/TextChatInput';
 export type { TextChatMessage } from './models/TextChatMessage';
 export type { TextLabCancelRequest } from './models/TextLabCancelRequest';
-export type { TextLabGenerateRequest } from './models/TextLabGenerateRequest';
-export type { TextLabGenerateResponse } from './models/TextLabGenerateResponse';
-export type { TextLabMessage } from './models/TextLabMessage';
 export type { TextLabRunRequest } from './models/TextLabRunRequest';
 export type { TextLabRunStatus } from './models/TextLabRunStatus';
 export type { ValidationError } from './models/ValidationError';

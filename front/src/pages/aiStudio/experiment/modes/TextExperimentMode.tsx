@@ -6,10 +6,9 @@
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Button, Spin, Tag, message } from 'antd'
-import { ClearOutlined } from '@ant-design/icons'
+import { ClearOutlined, StopOutlined } from '@ant-design/icons'
 import {
   LlmService,
-  StudioExperimentSessionsService,
   StudioPromptsService,
   StudioTextLabService,
   type ExperimentMessageRead,
@@ -26,6 +25,7 @@ import { ExperimentPromptEditor } from '../components/ExperimentPromptEditor'
 import { createPromptTemplateValues, renderPromptTemplate } from '../components/PromptTemplateForm'
 import { useExperimentHistory } from '../hooks/useExperimentHistory'
 import { focusExperimentPromptEditor, readExperimentInputSnapshot, type ExperimentInputSnapshot } from '../experimentInputSnapshot'
+import { streamTextLab } from '../../../../services/textLabStream'
 
 /** 文本实验室可使用的提示词模板类别。 */
 const textPromptCategories = [
@@ -110,6 +110,9 @@ export function TextExperimentMode({
   const [submitting, setSubmitting] = useState(false)
   const historyState = useExperimentHistory(sessionId)
   const previousSessionIdRef = useRef(sessionId)
+  const streamAbortRef = useRef<AbortController | null>(null)
+  const streamTaskIdRef = useRef<string | undefined>(undefined)
+  const streamSessionIdRef = useRef<string | undefined>(undefined)
 
   const selectedTemplate = useMemo(
     () => templates.find((template) => template.id === templateId) ?? null,
@@ -188,7 +191,7 @@ export function TextExperimentMode({
     ? renderPromptTemplate(selectedTemplate.content, templateValues).trim()
     : draft.trim()
 
-  /** 首条消息先持久化会话和用户输入，再调用模型并保存模型回复。 */
+  /** 提交固定 SSE 文本运行；服务端是 canonical user/assistant 消息的唯一写入者。 */
   const handleSubmit = async () => {
     if (sessionId && historyState.loading) {
       message.info('正在加载会话历史，请稍后再发送')
@@ -206,38 +209,67 @@ export function TextExperimentMode({
     setSubmitting(true)
     try {
       const session = await ensureSession('text')
-      const persistedUser = await StudioExperimentSessionsService
-        .createExperimentMessageApiV1StudioExperimentSessionsSessionIdMessagesPost({
-          sessionId: session.id,
-          requestBody: {
-            role: 'user',
-            content: currentPrompt,
-            payload: { model_id: modelId, input_snapshot: { version: 1, model_id: modelId, prompt: currentPrompt } },
-          },
-        })
-      setLocalMessages((current) => [...current, {
-        id: persistedUser.data?.id ?? createMessageId(), role: 'user', content: currentPrompt,
-      }])
       if (!selectedTemplate) setDraft('')
-
-      const response = await StudioTextLabService.generateTextLabResponseApiV1StudioTextLabGeneratePost({
-        requestBody: { model_id: modelId, messages: [{ role: 'user', content: currentPrompt }] },
-      })
-      const content = response.data?.content?.trim()
-      if (!content) throw new Error('模型未返回文本')
-      const persistedAssistant = await StudioExperimentSessionsService
-        .createExperimentMessageApiV1StudioExperimentSessionsSessionIdMessagesPost({
-          sessionId: session.id,
-          requestBody: { role: 'assistant', content, payload: { model_id: modelId } },
-        })
-      setLocalMessages((current) => [...current, {
-        id: persistedAssistant.data?.id ?? createMessageId(), role: 'assistant', content,
-      }])
+      const controller = new AbortController()
+      const temporaryAssistantId = `stream-${createMessageId()}`
+      streamAbortRef.current = controller
+      streamSessionIdRef.current = session.id
+      for await (const event of streamTextLab({
+        sessionId: session.id,
+        body: { model_id: modelId, content: currentPrompt },
+        signal: controller.signal,
+      })) {
+        if (event.event === 'accepted') {
+          streamTaskIdRef.current = event.data.task_id
+          setLocalMessages((current) => [
+            ...current,
+            { id: event.data.user_message.id, role: 'user', content: event.data.user_message.content },
+            { id: temporaryAssistantId, role: 'assistant', content: '' },
+          ])
+        } else if (event.event === 'delta') {
+          setLocalMessages((current) => current.map((item) => (
+            item.id === temporaryAssistantId ? { ...item, content: `${item.content}${event.data.text_delta}` } : item
+          )))
+        } else if (event.event === 'completed') {
+          setLocalMessages((current) => current.map((item) => (
+            item.id === temporaryAssistantId
+              ? { id: event.data.assistant_message.id, role: 'assistant', content: event.data.assistant_message.content }
+              : item
+          )))
+          void historyState.refresh()
+        } else if (event.event === 'error') {
+          throw new Error(event.data.error.message)
+        } else if (event.event === 'cancelled') {
+          setLocalMessages((current) => current.filter((item) => item.id !== temporaryAssistantId))
+        }
+      }
     } catch {
       if (!selectedTemplate) setDraft(currentPrompt)
-      message.error('文本模型调用失败，请检查模型、供应商配置和服务日志')
+      if (!(streamAbortRef.current?.signal.aborted)) {
+        message.error('文本模型调用失败，请检查模型、供应商配置和服务日志')
+      }
     } finally {
+      streamAbortRef.current = null
+      streamTaskIdRef.current = undefined
+      streamSessionIdRef.current = undefined
       setSubmitting(false)
+    }
+  }
+
+  /** 先停止本地事件消费，再请求服务端取消已 accepted 的 hidden run。 */
+  const handleStop = async () => {
+    const taskId = streamTaskIdRef.current
+    const activeSessionId = streamSessionIdRef.current
+    streamAbortRef.current?.abort()
+    if (!taskId || !activeSessionId) return
+    try {
+      await StudioTextLabService.cancelTextLabStreamApiV1StudioLabsTextSessionsSessionIdRunsTaskIdCancelPost({
+        sessionId: activeSessionId,
+        taskId,
+        requestBody: { reason: 'user_cancelled' },
+      })
+    } catch {
+      // 断流时服务端也会执行 best-effort 取消；这里不覆盖已停止的本地状态。
     }
   }
 
@@ -267,13 +299,16 @@ export function TextExperimentMode({
 
   return render({
     extra: (
-      <Button
-        icon={<ClearOutlined />}
-        disabled={!sessionId || !localMessages.length || submitting}
-        onClick={() => void handleClearSession()}
-      >
-        清空会话
-      </Button>
+      <div className="flex gap-2">
+        {submitting ? <Button icon={<StopOutlined />} danger onClick={() => void handleStop()}>停止生成</Button> : null}
+        <Button
+          icon={<ClearOutlined />}
+          disabled={!sessionId || !localMessages.length || submitting}
+          onClick={() => void handleClearSession()}
+        >
+          清空会话
+        </Button>
+      </div>
     ),
     history: (
       <>

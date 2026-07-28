@@ -16,27 +16,6 @@ class TextLabRunRequest(BaseModel):
     content: str = Field(..., min_length=1, description="本轮用户输入，不接受客户端拼装的历史消息")
 
 
-class TextLabMessage(BaseModel):
-    """过渡期同步文本调用使用的一条聊天消息。"""
-
-    role: Literal["system", "user", "assistant"]
-    content: str = Field(..., min_length=1)
-
-
-class TextLabGenerateRequest(BaseModel):
-    """过渡期同步文本调用请求；文本主界面将在 D3 固定切换至 SSE。"""
-
-    model_id: str = Field(..., min_length=1)
-    messages: list[TextLabMessage] = Field(..., min_length=1)
-
-
-class TextLabGenerateResponse(BaseModel):
-    """过渡期同步文本调用响应。"""
-
-    model_id: str
-    content: str
-
-
 class TextLabCancelRequest(BaseModel):
     """请求停止当前实验会话中的隐藏流式运行。"""
 
