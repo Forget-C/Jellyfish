@@ -126,6 +126,12 @@ class ShotFramePromptRenderer:
                 "dropped_guidance": preview.dropped_guidance,
             },
             recommended_media=_image_media(preview.images),
+            base_prompt=preview.base_prompt,
+            selected_guidance=preview.selected_guidance,
+            dropped_guidance=preview.dropped_guidance,
+            selected_guidance_details=[item.model_dump() for item in preview.selected_guidance_details],
+            dropped_guidance_details=[item.model_dump() for item in preview.dropped_guidance_details],
+            reference_mappings=[item.model_dump() for item in preview.mappings],
         )
 
 

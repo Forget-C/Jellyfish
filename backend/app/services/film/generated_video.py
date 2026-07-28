@@ -256,16 +256,6 @@ async def resolve_default_video_model(db: AsyncSession) -> Model:
     return model
 
 
-async def resolve_video_model_by_id(db: AsyncSession, *, model_id: str) -> Model:
-    """解析实验室主动选择的视频模型，并确保类别与供应商配置可用。"""
-    model = await db.get(Model, model_id)
-    if model is None:
-        raise HTTPException(status_code=404, detail=f"Video model not found: {model_id}")
-    if model.category != ModelCategoryKey.video:
-        raise HTTPException(status_code=400, detail=f"Configured model is not video category: {model_id}")
-    return model
-
-
 async def load_provider_config_by_model(db: AsyncSession, model: Model) -> ProviderConfig:
     resolved = await resolve_provider_config_by_model(db, model=model)
     return ProviderConfig(
@@ -345,54 +335,6 @@ async def build_run_args(
     return run_args
 
 
-async def build_video_lab_run_args(
-    db: AsyncSession,
-    *,
-    model_id: str,
-    prompt: str,
-    ratio: str,
-    frame_references,
-    subject_references: list | None = None,
-) -> dict:
-    """为独立视频实验构建可异步执行的供应商输入，不读取或修改镜头数据。"""
-    model = await resolve_video_model_by_id(db, model_id=model_id)
-    provider_cfg = await load_provider_config_by_model(db, model)
-    resolved_ratio = await resolve_effective_video_options(requested_ratio=ratio)
-    input_payload = {
-        "prompt": prompt.strip(),
-        "model": model.name,
-        "ratio": resolved_ratio,
-    }
-    input_payload["frame_references"] = {
-        "first_frame": await file_id_to_data_url(db, file_id=frame_references.first_frame_file_id) if frame_references.first_frame_file_id else None,
-        "last_frame": await file_id_to_data_url(db, file_id=frame_references.last_frame_file_id) if frame_references.last_frame_file_id else None,
-        "key_frames": [await file_id_to_data_url(db, file_id=file_id) for file_id in frame_references.key_frame_file_ids],
-    }
-    if subject_references:
-        input_payload["subject_references"] = [
-            {
-                "name": subject.name,
-                "images": [
-                    await file_id_to_data_url(db, file_id=file_id, media_kind="image")
-                    for file_id in subject.image_file_ids
-                ],
-                "videos": [
-                    await file_id_to_data_url(db, file_id=file_id, media_kind="video")
-                    for file_id in subject.video_file_ids
-                ],
-            }
-            for subject in subject_references
-        ]
-    VideoGenerationInput.model_validate(input_payload)
-    return {
-        "source": "video_lab",
-        "provider": provider_cfg.provider,
-        "api_key": provider_cfg.api_key,
-        "base_url": provider_cfg.base_url,
-        "input": input_payload,
-    }
-
-
 async def persist_generated_video_to_shot(
     session: AsyncSession,
     *,
@@ -445,42 +387,6 @@ async def persist_generated_video_to_shot(
         source_ref=f"shot:{shot_id}:generated_video",
     )
 
-    return file_obj
-
-
-async def persist_generated_video_to_library(
-    session: AsyncSession,
-    *,
-    task_id: str,
-    result: VideoGenerationResult,
-    provider: str,
-    api_key: str,
-) -> FileItem:
-    """将实验室视频写入全局资料库，并更新其任务关联记录。"""
-    url = (result.url or "").strip()
-    if not url:
-        raise RuntimeError("Video generation result has no download url")
-    url_headers = {"Authorization": f"Bearer {api_key}"} if provider == "openai" else None
-    file_obj = await create_file_from_url_or_b64(
-        session,
-        url=url,
-        name=f"video-lab-{task_id}",
-        prefix="generated-videos/video-lab",
-        url_request_headers=url_headers,
-        httpx_timeout=600.0,
-    )
-    link_stmt = (
-        select(GenerationTaskLink)
-        .where(
-            GenerationTaskLink.task_id == task_id,
-            GenerationTaskLink.resource_type == "video",
-            GenerationTaskLink.relation_type == "video_lab",
-        )
-        .limit(1)
-    )
-    link_row = (await session.execute(link_stmt)).scalars().first()
-    if link_row is not None:
-        link_row.file_id = file_obj.id
     return file_obj
 
 

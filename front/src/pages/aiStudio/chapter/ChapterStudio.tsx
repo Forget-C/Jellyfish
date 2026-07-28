@@ -64,8 +64,8 @@ import {
   StudioChaptersService,
   StudioEntitiesService,
   StudioFilesService,
+  StudioGenerationPromptsService,
   StudioGenerationTasksService,
-  StudioImageTasksService,
   StudioProjectsService,
   StudioShotCharacterLinksService,
   StudioShotDetailsService,
@@ -3826,46 +3826,36 @@ function Inspector(props: {
         })
         .filter(Boolean)
 
-      const rendered = await StudioImageTasksService.renderShotFramePromptApiV1StudioImageTasksShotShotIdFrameRenderPromptPost({
+      const rendered = await StudioGenerationPromptsService.renderShotFramePromptApiV1StudioGenerationPromptsShotsShotIdFramesFrameTypeRenderPost({
         shotId: selectedShot.id,
+        frameType: base.frameType,
         requestBody: {
-          frame_type: base.frameType,
           prompt: basePrompt,
           images: imagesPayload as any,
         } as any,
       })
-      const d = rendered.data as any
+      const d = rendered.data
       return {
-        basePrompt: typeof d?.base_prompt === 'string' ? d.base_prompt : basePrompt,
-        renderedPrompt: typeof d?.rendered_prompt === 'string' ? d.rendered_prompt : '',
-        selectedGuidance: Array.isArray(d?.selected_guidance)
-          ? d.selected_guidance.map((item: unknown) => String(item ?? '').trim()).filter(Boolean)
+        basePrompt: d?.base_prompt ?? basePrompt,
+        renderedPrompt: d?.execution_prompt ?? '',
+        selectedGuidance: d?.selected_guidance ?? [],
+        droppedGuidance: d?.dropped_guidance ?? [],
+        selectedGuidanceDetails: (d?.selected_guidance_details ?? []).map((item) => ({
+          text: item.text,
+          category: item.category,
+          reasonTag: item.reason_tag ?? '',
+          reason: item.reason,
+        })),
+        droppedGuidanceDetails: (d?.dropped_guidance_details ?? []).map((item) => ({
+          text: item.text,
+          category: item.category,
+          reasonTag: item.reason_tag ?? '',
+          reason: item.reason,
+        })),
+        images: d?.recommended_media && 'references' in d.recommended_media
+          ? d.recommended_media.references?.map((reference) => reference.file_id) ?? []
           : [],
-        droppedGuidance: Array.isArray(d?.dropped_guidance)
-          ? d.dropped_guidance.map((item: unknown) => String(item ?? '').trim()).filter(Boolean)
-          : [],
-        selectedGuidanceDetails: Array.isArray(d?.selected_guidance_details)
-          ? d.selected_guidance_details
-            .map((item: any) => ({
-              text: String(item?.text ?? '').trim(),
-              category: String(item?.category ?? '').trim(),
-              reasonTag: String(item?.reason_tag ?? '').trim(),
-              reason: String(item?.reason ?? '').trim(),
-            }))
-            .filter((item: { text: string }) => item.text)
-          : [],
-        droppedGuidanceDetails: Array.isArray(d?.dropped_guidance_details)
-          ? d.dropped_guidance_details
-            .map((item: any) => ({
-              text: String(item?.text ?? '').trim(),
-              category: String(item?.category ?? '').trim(),
-              reasonTag: String(item?.reason_tag ?? '').trim(),
-              reason: String(item?.reason ?? '').trim(),
-            }))
-            .filter((item: { text: string }) => item.text)
-          : [],
-        images: Array.isArray(d?.images) ? (d.images as string[]).filter(Boolean) : [],
-        mappings: Array.isArray(d?.mappings) ? (d.mappings as ShotFramePromptMappingRead[]) : [],
+        mappings: (d?.reference_mappings ?? []) as ShotFramePromptMappingRead[],
       }
     },
     [extractFileIdFromThumbnail, selectedShot?.id, shotLinkedAssets],

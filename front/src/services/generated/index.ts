@@ -129,6 +129,8 @@ export type { FileUpdate } from './models/FileUpdate';
 export type { FileUsageRead } from './models/FileUsageRead';
 export type { FileUsageWrite } from './models/FileUsageWrite';
 export type { FrameGuidanceDecisionRead } from './models/FrameGuidanceDecisionRead';
+export type { FrameGuidanceDecisionSnapshot } from './models/FrameGuidanceDecisionSnapshot';
+export type { FrameReferenceMappingSnapshot } from './models/FrameReferenceMappingSnapshot';
 export type { GenerationSubmitRequest } from './models/GenerationSubmitRequest';
 export type { GenerationTaskLinkCreate } from './models/GenerationTaskLinkCreate';
 export type { GenerationTaskLinkRead } from './models/GenerationTaskLinkRead';

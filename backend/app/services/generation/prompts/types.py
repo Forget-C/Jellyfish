@@ -77,6 +77,29 @@ class PromptRenderRequest(BaseModel):
     input: PromptRenderInput
 
 
+class FrameGuidanceDecisionSnapshot(BaseModel):
+    """帧提示词渲染中单条 guidance 的保留或压缩决策，供工作室展示诊断。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
+    category: str
+    reason_tag: str = ""
+    reason: str
+
+
+class FrameReferenceMappingSnapshot(BaseModel):
+    """帧提示词引用的资产与 file_id 映射，保持图片顺序可审计。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    token: str
+    type: str
+    id: str
+    name: str
+    file_id: str
+
+
 class RenderedPromptSnapshot(BaseModel):
     """一次同步渲染的可展示、可审计快照，不能携带认证材料。"""
 
@@ -90,6 +113,12 @@ class RenderedPromptSnapshot(BaseModel):
     template_version: int | None = None
     recommended_media: ImageMediaInput | VideoMediaInput | None = None
     warnings: list[str] = Field(default_factory=list)
+    base_prompt: str | None = None
+    selected_guidance: list[str] = Field(default_factory=list)
+    dropped_guidance: list[str] = Field(default_factory=list)
+    selected_guidance_details: list[FrameGuidanceDecisionSnapshot] = Field(default_factory=list)
+    dropped_guidance_details: list[FrameGuidanceDecisionSnapshot] = Field(default_factory=list)
+    reference_mappings: list[FrameReferenceMappingSnapshot] = Field(default_factory=list)
 
 
 class PromptRenderer(Protocol):
