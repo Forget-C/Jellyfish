@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ApiResponse_ExperimentTaskCreated_ } from '../models/ApiResponse_ExperimentTaskCreated_';
 import type { ApiResponse_TaskCreated_ } from '../models/ApiResponse_TaskCreated_';
 import type { GenerationSubmitRequest } from '../models/GenerationSubmitRequest';
 import type { ShotFrameType } from '../models/ShotFrameType';
@@ -155,9 +156,9 @@ export class StudioGenerationTasksService {
         });
     }
     /**
-     * 提交图片实验室任务
-     * 绑定图片实验会话，确保其始终进入异步图片生成执行链。
-     * @returns ApiResponse_TaskCreated_ Successful Response
+     * 提交图片实验室统一任务
+     * 为图片实验会话创建权威消息和安全快照任务。
+     * @returns ApiResponse_ExperimentTaskCreated_ Successful Response
      * @throws ApiError
      */
     public static submitImageLabGenerationTaskApiV1StudioGenerationTasksLabsImageSessionsSessionIdTasksPost({
@@ -166,7 +167,7 @@ export class StudioGenerationTasksService {
     }: {
         sessionId: string,
         requestBody: GenerationSubmitRequest,
-    }): CancelablePromise<ApiResponse_TaskCreated_> {
+    }): CancelablePromise<ApiResponse_ExperimentTaskCreated_> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/studio/generation-tasks/labs/image/sessions/{session_id}/tasks',
@@ -181,9 +182,9 @@ export class StudioGenerationTasksService {
         });
     }
     /**
-     * 提交视频实验室任务
-     * 绑定视频实验会话，确保其始终进入异步视频生成执行链。
-     * @returns ApiResponse_TaskCreated_ Successful Response
+     * 提交视频实验室统一任务
+     * 为视频实验会话创建权威消息和安全快照任务。
+     * @returns ApiResponse_ExperimentTaskCreated_ Successful Response
      * @throws ApiError
      */
     public static submitVideoLabGenerationTaskApiV1StudioGenerationTasksLabsVideoSessionsSessionIdTasksPost({
@@ -192,7 +193,7 @@ export class StudioGenerationTasksService {
     }: {
         sessionId: string,
         requestBody: GenerationSubmitRequest,
-    }): CancelablePromise<ApiResponse_TaskCreated_> {
+    }): CancelablePromise<ApiResponse_ExperimentTaskCreated_> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/studio/generation-tasks/labs/video/sessions/{session_id}/tasks',

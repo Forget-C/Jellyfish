@@ -173,34 +173,3 @@ def test_asset_image_task_routes_bind_asset_slots_from_path(client: TestClient, 
         app.dependency_overrides.clear()
 
     assert db.commits == 3
-
-
-def test_lab_task_routes_bind_experiment_session_and_modality(client: TestClient, monkeypatch) -> None:
-    """图片和视频实验室路径只能提交各自模态的异步实验会话任务。"""
-    db = _DummyDB()
-    monkeypatch.setattr(route, "GenerationSubmitter", _Submitter)
-    monkeypatch.setattr(route, "enqueue_task_execution", lambda _task_id: None)
-    app.dependency_overrides[get_db] = _override_db(db)
-    try:
-        image_response = client.post(
-            "/api/v1/studio/generation-tasks/labs/image/sessions/image-session-1/tasks",
-            json={"execution_prompt": "实验图片", "operation_input": {"kind": "image_generation"}},
-        )
-        assert image_response.status_code == 201
-        assert _Submitter.command.modality.value == "image"
-        assert _Submitter.command.target.kind.value == "experiment_session"
-        assert _Submitter.command.target.entity_id == "image-session-1"
-
-        video_response = client.post(
-            "/api/v1/studio/generation-tasks/labs/video/sessions/video-session-1/tasks",
-            json={"execution_prompt": "实验视频", "operation_input": {"kind": "video_generation", "ratio": "16:9"}},
-        )
-        assert video_response.status_code == 201
-        assert _Submitter.command.modality.value == "video"
-        assert _Submitter.command.operation.value == "video_generation"
-        assert _Submitter.command.target.kind.value == "experiment_session"
-        assert _Submitter.command.target.entity_id == "video-session-1"
-    finally:
-        app.dependency_overrides.clear()
-
-    assert db.commits == 2
