@@ -189,6 +189,17 @@ def test_revoke_task_execution_revokes_celery_task(monkeypatch, tmp_path) -> Non
     sync_engine.dispose()
 
 
+def test_reap_text_streams_celery_runs_async_reaper(monkeypatch) -> None:
+    """Beat 调用必须同步桥接 hidden 文本流的异步过期回收服务。"""
+
+    async def _fake_reaper() -> list[str]:
+        return ["expired-text-task"]
+
+    monkeypatch.setattr(execute_task_module, "reap_expired_text_stream_runs", _fake_reaper)
+
+    assert execute_task_module.reap_text_streams_celery() == ["expired-text-task"]
+
+
 def test_async_delegating_executors_use_positional_runner_signature() -> None:
     for task_kind, executor in task_executor_registry._executors.items():
         if not isinstance(executor, AbstractAsyncDelegatingExecutor):

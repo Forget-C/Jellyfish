@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from celery.result import AsyncResult
@@ -15,6 +16,7 @@ from celery.result import AsyncResult
 from app.core.celery_app import celery_app
 from app.core.db_sync import sync_session_maker
 from app.models.task import GenerationTask
+from app.services.generation.runtime.text_chat_streaming import reap_expired_text_stream_runs
 from app.services.worker.task_registry import task_executor_registry
 
 logger = logging.getLogger(__name__)
@@ -68,3 +70,9 @@ def run_task_celery(task_id: str) -> None:
         task_kind = (row.task_kind or "").strip() or str((row.payload or {}).get("task_kind") or "").strip()
     executor = task_executor_registry.resolve(task_kind)
     executor.run(task_id)
+
+
+@celery_app.task(name="task.reap_text_streams")
+def reap_text_streams_celery() -> list[str]:
+    """由 Celery Beat 周期回收过期的 hidden 文本流，避免重启后任务永久卡在 streaming。"""
+    return asyncio.run(reap_expired_text_stream_runs())

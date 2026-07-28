@@ -26,6 +26,12 @@ celery_app.conf.update(
     task_ignore_result=True,
     timezone="Asia/Shanghai",
     enable_utc=False,
+    beat_schedule={
+        "reap-expired-text-stream-runs": {
+            "task": "task.reap_text_streams",
+            "schedule": 30.0,
+        },
+    },
 )
 
 
