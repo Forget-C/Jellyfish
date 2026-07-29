@@ -2,7 +2,7 @@
 title: "统一生成编排与独立提示词渲染实施计划"
 description: "将文本、图片、视频生成收敛到统一编排层，拆分提示词渲染，并以 file_id 统一媒体引用。"
 weight: 31
-status: in_progress
+status: completed
 ---
 
 > 本文属于“任务计划”文档，描述目标架构与一次性切换的实施步骤。项目仍处于开发期，本文**不保留旧路由、旧 payload、双写或兼容适配层**。
@@ -900,7 +900,7 @@ P5 必须为 `script_merge` 和 `script_variant` 补齐 Executor 与 Worker 注�
 
 ## 11. 执行状态
 
-2026-07-29 交付审查发现可靠投递、媒体冻结、旧 Film 入口与 SSE 终态存在缺口，计划
-重新进入收尾实施阶段。已完成的收口包括：Outbox dispatcher、媒体内容版本冻结、旧 Film
-公开生成入口下线、文本 SSE 无终态 EOF 收敛，以及对应 OpenAPI/client 同步。仍需继续清理
-遗留 Agent 同步入口、未挂载历史源码，并完成全量交付验收后才能标记为完成。
+2026-07-29 已完成最终收口与交付验收：异步任务统一通过 Outbox dispatcher 投递，媒体引用在
+提交时冻结内容版本与哈希，执行期拒绝漂移；旧 Film、图片任务、分镜提示词 Worker、剧本同步
+兼容接口及无副作用投递兼容层均已删除。文本 SSE 对无终态 EOF 做稳定失败收敛；OpenAPI、
+generated client 与当前架构文档已同步。后端全量回归、重点静态检查和前端类型检查均通过。
