@@ -34,8 +34,9 @@ class _FakeResolver:
     def __init__(self, _session: object) -> None:
         """保持与真实 resolver 相同的构造签名。"""
 
-    async def resolve(self, reference: MediaReference) -> SimpleNamespace:
-        """返回仅存在于测试内存中的 PNG 内容。"""
+    async def resolve_task_reference(self, *, task_id: str, reference: MediaReference) -> SimpleNamespace:
+        """模拟按任务冻结快照解析的内存 PNG 内容。"""
+        assert task_id == "task-1"
         self.references.append(reference)
         return SimpleNamespace(content=b"png-bytes", content_type="image/png")
 
@@ -58,7 +59,11 @@ async def test_snapshot_image_input_resolves_file_reference_only_in_worker_memor
         execution_prompt="冻结提示词",
     )
 
-    input_ = await image_task_runner._resolve_snapshot_image_input(_RevisionSession(), snapshot=snapshot)  # type: ignore[arg-type]
+    input_ = await image_task_runner._resolve_snapshot_image_input(  # type: ignore[arg-type]
+        _RevisionSession(),
+        task_id="task-1",
+        snapshot=snapshot,
+    )
 
     assert _FakeResolver.references == [MediaReference(file_id="file-1", media_kind="image")]
     assert input_.prompt == "冻结提示词"
