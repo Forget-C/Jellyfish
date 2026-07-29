@@ -19,6 +19,7 @@ import AgentManagement from './pages/aiStudio/agents/AgentManagement'
 import AgentEdit from './pages/aiStudio/agents/AgentEdit.tsx'
 import ModelManagement from './pages/aiStudio/models/ModelManagement'
 import { ChapterShotsPage } from './pages/aiStudio/shots/ChapterShotsPage'
+import Ep001Workspace from './pages/aiStudio/cas/Ep001Workspace'
 import { ChapterShotEditPage } from './pages/aiStudio/shots/ChapterShotEditPage'
 import './App.css'
 
@@ -35,6 +36,7 @@ const App: React.FC = () => {
           <Route path="projects/:projectId/chapters/:chapterId/studio" element={<ChapterStudio />} />
           <Route path="projects/:projectId/chapters/:chapterId/shots/:shotId/edit" element={<ChapterShotEditPage />} />
           <Route path="projects/:projectId/chapters/:chapterId/shots" element={<ChapterShotsPage />} />
+          <Route path="projects/:projectId/chapters/:chapterId/cas" element={<Ep001Workspace />} />
           <Route path="projects/:projectId/chapters/:chapterId/prep-drafts" element={<Navigate to="../shots" replace />} />
           <Route path="projects/:projectId/editor" element={<VideoEditor />} />
           <Route path="assets" element={<AssetManager />} />

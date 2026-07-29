@@ -25,6 +25,19 @@ class ImportCounts(BaseModel):
     links: int = 0
 
 
+class SubtitleArtifact(BaseModel):
+    """一条字幕产物（WebVTT）在导入结果中的表示。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    file_id: str = Field(..., description="Jellyfish files.id")
+    language_tag: str = Field(..., description="BCP 47 语言标签，如 zh-Hant")
+    storage_key: str = Field(..., description="对象存储 key（确定性）")
+    cue_count: int = Field(..., description="cue 数量")
+    byte_size: int = Field(..., description="WebVTT 字节数")
+    created: bool = Field(..., description="true=本次新建；false=复用既有产物并就地更新")
+
+
 class ImportResult(BaseModel):
     """一次导入（或 dry-run / 重放）的结果摘要。"""
 
@@ -42,6 +55,10 @@ class ImportResult(BaseModel):
     created: ImportCounts = Field(default_factory=ImportCounts, description="本次新建计数")
     reused: ImportCounts = Field(default_factory=ImportCounts, description="本次复用计数")
     warnings: list[str] = Field(default_factory=list, description="非阻断告警（不丢弃数据）")
+    subtitle_artifacts: list[SubtitleArtifact] = Field(
+        default_factory=list,
+        description="本次导入生成/复用的字幕产物（WebVTT）；v1 文档为空列表",
+    )
 
 
-__all__ = ["ImportResult", "ImportCounts"]
+__all__ = ["ImportResult", "ImportCounts", "SubtitleArtifact"]

@@ -23,7 +23,21 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crypto_animal_studio.application.hashing import canonical_payload_hash
-from app.crypto_animal_studio.application.import_result import ImportCounts, ImportResult
+from app.crypto_animal_studio.application.import_result import (
+    ImportCounts,
+    ImportResult,
+    SubtitleArtifact,
+)
+from app.crypto_animal_studio.application.subtitle_artifact import (
+    SubtitleArtifactOutcome,
+    ensure_subtitle_artifacts,
+    lookup_subtitle_artifacts,
+)
+from app.crypto_animal_studio.application.validation import (
+    ValidationIssue,
+    ValidationStage,
+    validate_episode_package,
+)
 from app.crypto_animal_studio.domain import mapping
 from app.crypto_animal_studio.domain.import_ledger import CasImportLedger
 from app.crypto_animal_studio.schemas.episode_package import EpisodePackage
@@ -64,6 +78,20 @@ class IdempotencyConflictError(CasImportError):
 
 class EpisodeAlreadyImportedError(CasImportError):
     """同一 (project, episode) 已在另一幂等键下导入。"""
+
+
+class CasValidationError(CasImportError):
+    """CAS QA 闸门未通过。
+
+    在**构造任何实体之前**抛出，因此校验失败绝不会留下部分写入的数据库记录。
+    """
+
+    def __init__(self, stage: ValidationStage, issues: list[ValidationIssue]) -> None:
+        """记录失败阶段与全部错误项。"""
+        self.stage = stage
+        self.issues = issues
+        summary = "; ".join(f"{item.code} at {item.field_path}" for item in issues)
+        super().__init__(f"CAS QA gate failed at stage '{stage.value}': {summary}")
 
 
 class _EntityResolver:
@@ -158,6 +186,7 @@ async def import_episode(
     package: EpisodePackage,
     idempotency_key: str,
     dry_run: bool = False,
+    validation_stage: ValidationStage = ValidationStage.pre_render_data_lock,
 ) -> ImportResult:
     """把一个已校验的 EpisodePackage 导入为一个 Jellyfish Chapter（含 Shots 等）。
 
@@ -167,11 +196,20 @@ async def import_episode(
         package: 已通过契约校验的 EpisodePackage。
         idempotency_key: 幂等键。
         dry_run: 为真时执行校验/映射/复用查找/告警但不写库。
+        validation_stage: CAS QA 闸门阶段。默认 ``pre_render_data_lock``——导入产出的是
+            将被渲染的生产实体，因此要求事实已锁定；v1 文档不含 v1.1 字段，该阶段对其
+            与 design 等价，故既有 v1 行为不变。
     返回：
         ImportResult 摘要。
     异常：
-        ProjectNotFoundError / IdempotencyConflictError / EpisodeAlreadyImportedError。
+        CasValidationError（QA 闸门失败，零写入）/ ProjectNotFoundError /
+        IdempotencyConflictError / EpisodeAlreadyImportedError。
     """
+    # --- CAS QA 闸门：先于任何实体构造，确保失败时不产生任何部分写入 ---
+    qa = validate_episode_package(package, stage=validation_stage)
+    if not qa.ok:
+        raise CasValidationError(validation_stage, qa.errors)
+
     payload_hash = canonical_payload_hash(package)
 
     project = await db.get(Project, project_id)
@@ -201,6 +239,20 @@ async def import_episode(
                 chapter_id=ledger_row.chapter_id,
                 chapter_index=None,
                 warnings=["idempotent replay: returned existing import result"],
+                # 重放不重建产物，但仍如实报告既有产物（要求 8）。
+                subtitle_artifacts=[
+                    SubtitleArtifact(
+                        file_id=record.file_id,
+                        language_tag=record.language_tag,
+                        storage_key=record.storage_key,
+                        cue_count=record.cue_count,
+                        byte_size=record.byte_size,
+                        created=False,
+                    )
+                    for record in await lookup_subtitle_artifacts(
+                        db, package=package, project_id=project_id
+                    )
+                ],
             )
         # 同 key 不同 payload → 冲突。
         raise IdempotencyConflictError(
@@ -393,6 +445,33 @@ async def import_episode(
             )
             resolver.created.links += 1
 
+    # --- 字幕产物（WebVTT）：放在实体全部就绪之后，尽量缩短「已上传但事务未提交」的窗口 ---
+    artifacts: list[SubtitleArtifact] = []
+    if not dry_run:
+        outcome = SubtitleArtifactOutcome()
+        try:
+            outcome = await ensure_subtitle_artifacts(
+                db, package=package, project_id=project_id, chapter_id=chapter.id
+            )
+        except Exception:
+            # 对象存储不参与数据库事务：先补偿删除本次新建的对象，再让异常继续上抛，
+            # 由调用方回滚事务 → 既不留孤儿对象，也不留部分数据库记录。
+            failed = await outcome.rollback_uploads()
+            if failed:
+                warnings.append(f"orphaned subtitle objects need manual cleanup: {failed}")
+            raise
+        artifacts = [
+            SubtitleArtifact(
+                file_id=record.file_id,
+                language_tag=record.language_tag,
+                storage_key=record.storage_key,
+                cue_count=record.cue_count,
+                byte_size=record.byte_size,
+                created=record.created,
+            )
+            for record in outcome.records
+        ]
+
     if dry_run:
         # 校验/映射/复用查找/告警均已完成；回滚以确保不写库。
         await db.rollback()
@@ -439,12 +518,14 @@ async def import_episode(
         created=resolver.created,
         reused=resolver.reused,
         warnings=warnings,
+        subtitle_artifacts=artifacts,
     )
 
 
 __all__ = [
     "import_episode",
     "CasImportError",
+    "CasValidationError",
     "ProjectNotFoundError",
     "IdempotencyConflictError",
     "EpisodeAlreadyImportedError",

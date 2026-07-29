@@ -17,12 +17,13 @@ Pydantic：与仓库一致使用 Pydantic v2（``pydantic>=2.0``）。
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import ClassVar, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.crypto_animal_studio.domain.episode_package import (
     SCHEMA_VERSION,
+    SCHEMA_VERSION_V1_1,
     CasCameraAngle,
     CasCameraMovement,
     CasShotType,
@@ -234,12 +235,17 @@ class EpisodePackage(BaseModel):
     shots: list[Shot] = Field(..., min_length=1, description="镜头列表（至少一个）")
     metadata: EpisodeMetadata = Field(..., description="生成元信息")
 
+    #: 本模型接受的版本集合。v1 模型只接受 "1.0"；v1.1 子类覆盖为 {"1.1"}。
+    #: 以显式成员判断实现版本分派，避免一个模型「意外地」同时接受两个版本。
+    allowed_schema_versions: ClassVar[frozenset[str]] = frozenset({SCHEMA_VERSION})
+
     @field_validator("schema_version")
     @classmethod
     def _check_schema_version(cls, value: str) -> str:
-        """规则 1：schema_version 必须等于当前契约版本 "1.0"。"""
-        if value != SCHEMA_VERSION:
-            raise ValueError(f'schema_version must equal "{SCHEMA_VERSION}", got "{value}"')
+        """规则 1：schema_version 必须属于本模型允许的版本集合。"""
+        if value not in cls.allowed_schema_versions:
+            expected = " or ".join(f'"{item}"' for item in sorted(cls.allowed_schema_versions))
+            raise ValueError(f'schema_version must equal {expected}, got "{value}"')
         return value
 
     @model_validator(mode="after")
@@ -264,18 +270,9 @@ class EpisodePackage(BaseModel):
         character_key_set = set(character_keys)
 
         # --- 素材键唯一 & 集合 ---
-        actor_keys = [a.actor_key for a in self.assets.actors]
-        scene_keys = [s.scene_key for s in self.assets.scenes]
-        prop_keys = [p.prop_key for p in self.assets.props]
-        costume_keys = [c.costume_key for c in self.assets.costumes]
-        _collect_duplicates(actor_keys, "assets.actors[].actor_key", errors)
-        _collect_duplicates(scene_keys, "assets.scenes[].scene_key", errors)
-        _collect_duplicates(prop_keys, "assets.props[].prop_key", errors)
-        _collect_duplicates(costume_keys, "assets.costumes[].costume_key", errors)
-        actor_key_set = set(actor_keys)
-        scene_key_set = set(scene_keys)
-        prop_key_set = set(prop_keys)
-        costume_key_set = set(costume_keys)
+        actor_key_set, scene_key_set, prop_key_set, costume_key_set = _collect_asset_key_sets(
+            self.assets, errors
+        )
 
         # --- character 对素材的引用 ---
         for character in self.characters:
@@ -332,6 +329,34 @@ class EpisodePackage(BaseModel):
         return self
 
 
+def _collect_asset_key_sets(
+    assets: "AssetLibrary", errors: list[str]
+) -> tuple[set[str], set[str], set[str], set[str]]:
+    """辅助：校验四类素材各自的 key 唯一性（规则 17），并返回四个键集合。
+
+    抽成模块级函数而非在校验器内内联，是为了让 ``assets`` 拥有显式的参数注解：
+    astroid/pylint 依据参数注解解析 ``AssetLibrary`` 的成员，而在模型方法内直接访问
+    ``self.assets`` 时会把 Pydantic v2 的类属性推断为 ``FieldInfo``（误报 E1101）。
+    运行时行为与内联写法完全等价。
+
+    参数：
+        assets: 待检查的素材库。
+        errors: 错误累积列表（就地追加）。
+
+    返回：
+        ``(actor_keys, scene_keys, prop_keys, costume_keys)`` 四个集合。
+    """
+    actor_keys = [a.actor_key for a in assets.actors]
+    scene_keys = [s.scene_key for s in assets.scenes]
+    prop_keys = [p.prop_key for p in assets.props]
+    costume_keys = [c.costume_key for c in assets.costumes]
+    _collect_duplicates(actor_keys, "assets.actors[].actor_key", errors)
+    _collect_duplicates(scene_keys, "assets.scenes[].scene_key", errors)
+    _collect_duplicates(prop_keys, "assets.props[].prop_key", errors)
+    _collect_duplicates(costume_keys, "assets.costumes[].costume_key", errors)
+    return set(actor_keys), set(scene_keys), set(prop_keys), set(costume_keys)
+
+
 def _collect_duplicates(values: list, where: str, errors: list[str]) -> None:
     """辅助：把 ``values`` 中的重复项以可读信息追加到 ``errors``。
 
@@ -349,3 +374,277 @@ def _collect_duplicates(values: list, where: str, errors: list[str]) -> None:
     if dups:
         rendered = ", ".join(str(d) for d in sorted(dups, key=str))
         errors.append(f"{where} contains duplicate values: {rendered}")
+
+
+# --------------------------------------------------------------------------- #
+# EpisodePackage v1.1 —— 附加式扩展（全部可选）
+#
+# 规范：docs/crypto-animal-studio/EpisodePackage-v1.1-proposal.md
+# 决策：docs/adr/ADR-016-episode-package-v1-1.md（Status: Proposed）
+#
+# 纪律：
+# - v1 模型与字段一律不改名、不改类型、不改语义；
+# - 新增字段全部可选，因此 "1.0" 文档在 v1.1 解析器下依然有效；
+# - 不新增第二个连续性字段（沿用 ``shots[].continuity_notes``）；
+# - 不新增第二个运镜字段（沿用 ``shots[].camera.movement``）；
+# - 不引入镜头相对时间（overlay/cue 一律 episode-absolute 毫秒）；
+# - 不引入任何供应商执行字段。
+# --------------------------------------------------------------------------- #
+class SafeArea(BaseModel):
+    """安全区元数据（百分比）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    subtitle_bottom_pct: float = Field(18, ge=0, le=50, description="字幕安全带（画面底部百分比）")
+    margin_pct: float = Field(6, ge=0, le=25, description="通用安全边距（百分比）")
+
+
+class OutputSpec(BaseModel):
+    """输出规格；``*_ms`` 断言永不覆盖派生时长。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    aspect_ratio: str = Field("9:16", description="画面比例，形如 W:H")
+    width: int = Field(1080, gt=0, description="渲染宽度（像素）")
+    height: int = Field(1920, gt=0, description="渲染高度（像素）")
+    fps: int = Field(30, gt=0, description="帧率")
+    orientation: Literal["vertical", "horizontal", "square"] = Field("vertical", description="画面方向")
+    generated_footage_ms: Optional[int] = Field(None, ge=0, description="生成footage总毫秒（可选断言）")
+    total_runtime_ms: Optional[int] = Field(None, gt=0, description="最终成片总毫秒（可选断言）")
+    safe_area: SafeArea = Field(default_factory=SafeArea, description="安全区元数据")
+
+
+class SubtitleCue(BaseModel):
+    """字幕单条 cue；时间为 episode-absolute 整数毫秒。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    cue_id: str = Field(..., min_length=1, description="cue 稳定 ID（轨内唯一）")
+    start_ms: int = Field(..., ge=0, description="入点（episode-absolute 毫秒）")
+    end_ms: int = Field(..., gt=0, description="出点（必须大于 start_ms）")
+    text: str = Field(..., min_length=1, description="译文（非空）")
+    speaker_character_key: Optional[str] = Field(None, description="说话角色键（须存在于 characters）")
+    shot_id: Optional[str] = Field(None, description="关联镜头（仅关联，不构成第二套时间真相）")
+
+    @model_validator(mode="after")
+    def _check_span(self) -> "SubtitleCue":
+        """cue 时长必须为正（禁止零长度/负长度）。"""
+        if self.end_ms <= self.start_ms:
+            raise ValueError(f"cue '{self.cue_id}': end_ms must be greater than start_ms")
+        return self
+
+
+class SubtitleTrack(BaseModel):
+    """一条字幕轨。渲染默认属于后期，不进入 AI 生成。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    language_tag: str = Field(..., min_length=1, description="BCP 47 语言标签，如 zh-Hant")
+    is_primary: bool = Field(False, description="是否为主轨")
+    rendering: Literal["post_production", "burned_in", "sidecar"] = Field(
+        "post_production", description="渲染方式（声明性；默认后期）"
+    )
+    cues: list[SubtitleCue] = Field(..., description="cue 列表（可为空，但后期阶段起视为无效）")
+
+
+class Localization(BaseModel):
+    """口语与字幕本地化。字幕结构上可选；必需语言只来自 required_publish_language_tags。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    spoken_language: Optional[str] = Field(None, description="对白语言（缺省回落到根 language）")
+    required_publish_language_tags: list[str] = Field(
+        default_factory=list, description="发布前必须具备字幕的语言标签；空表示无要求"
+    )
+    subtitle_tracks: list[SubtitleTrack] = Field(default_factory=list, description="字幕轨列表")
+
+
+class FactCardLocalizedCopy(BaseModel):
+    """fact card 的单语言文案。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    language_tag: str = Field(..., min_length=1, description="BCP 47 语言标签")
+    body: list[str] = Field(..., description="教育性正文行（每行非空）")
+    disclaimer: str = Field(..., min_length=1, description="免责声明（非空）")
+    cta: Optional[str] = Field(None, description="可选 CTA")
+
+    @model_validator(mode="after")
+    def _check_body(self) -> "FactCardLocalizedCopy":
+        """正文行必须存在且非空白。"""
+        if not self.body or any(not line.strip() for line in self.body):
+            raise ValueError(f"fact_card localized '{self.language_tag}': body lines must be non-empty")
+        return self
+
+
+class FactCard(BaseModel):
+    """后期 fact card；**永远不是第五个生成镜头**。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    duration_ms: int = Field(..., gt=0, description="卡片时长（毫秒）")
+    placement: Literal["append_after_shots", "overlay_tail"] = Field(
+        "append_after_shots", description="追加式才计入总时长"
+    )
+    readable_text_in_post: Literal[True] = Field(True, description="卡面文字一律后期合成")
+    localized: list[FactCardLocalizedCopy] = Field(..., min_length=1, description="各语言文案")
+
+
+class DataLock(BaseModel):
+    """市场数据锁定状态。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["unresolved", "locked"] = Field("unresolved", description="锁定状态")
+    locked_at_utc: Optional[str] = Field(None, description="锁定时间（ISO-8601）")
+
+
+class MarketData(BaseModel):
+    """市场事实溯源。数值刻意为「可含占位符的字符串」（最小化 v1.1 折衷）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    instrument: str = Field(..., min_length=1, description="标的，如 BTC-USD")
+    timeframe: str = Field(..., min_length=1, description="确认所用周期，如 4h")
+    resistance_level: Optional[str] = Field(None, description="被突破的阻力位")
+    price: Optional[str] = Field(None, description="事件时价格")
+    price_move_pct: Optional[str] = Field(None, description="区间涨跌幅")
+    pullback_pct: Optional[str] = Field(None, description="回撤幅度")
+    event_timestamp_utc: Optional[str] = Field(None, description="事件时间")
+    candle_close_timestamp_utc: Optional[str] = Field(None, description="确认K棒收盘时间")
+    as_of_utc: Optional[str] = Field(None, description="数据 as-of 时间")
+    source_name: Optional[str] = Field(None, description="数据来源名称")
+    source_url: Optional[str] = Field(None, description="公开溯源 URL（仅证据，非执行端点）")
+    factual_note: Optional[str] = Field(None, description="人工核对备注")
+    ath_context: Optional[str] = Field(None, description="可选前高背景")
+    data_lock: DataLock = Field(default_factory=DataLock, description="锁定状态")
+
+
+class ReferenceAsset(BaseModel):
+    """一条参考资产：稳定 asset_id + 可选仓库相对路径（禁止供应商 URL）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    character_key: Optional[str] = Field(None, description="角色键（角色参考用）")
+    scene_key: Optional[str] = Field(None, description="场景键（环境参考用）")
+    prop_key: Optional[str] = Field(None, description="道具键（道具参考用）")
+    asset_id: str = Field(..., min_length=1, description="稳定不透明资产 ID")
+    kind: Literal["identity", "episode"] = Field("identity", description="不可变身份参考 vs 本集专用")
+    view: Optional[str] = Field(None, description="视角提示，如 front")
+    path: Optional[str] = Field(None, description="仓库相对路径；**不得**为供应商 URL")
+
+
+class References(BaseModel):
+    """Bible 版本与参考资产集合。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    bible_version: Optional[str] = Field(None, description="Bible 版本，如 1.0")
+    canon_decision: Optional[str] = Field(None, description="治理决策，如 ADR-015")
+    characters: list[ReferenceAsset] = Field(default_factory=list, description="角色参考")
+    environments: list[ReferenceAsset] = Field(default_factory=list, description="环境参考")
+    props: list[ReferenceAsset] = Field(default_factory=list, description="道具参考")
+
+
+class OverlayLocalizedText(BaseModel):
+    """叠加图形的单语言文案。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    language_tag: str = Field(..., min_length=1, description="BCP 47 语言标签")
+    text: str = Field(..., description="文案")
+
+
+class PostProductionOverlay(BaseModel):
+    """后期叠加图形；时间为 episode-absolute 毫秒，shot_id 仅作关联。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    overlay_id: str = Field(..., min_length=1, description="稳定 ID（被 shots[].overlay_ids 引用）")
+    type: Literal["chart_label", "subtitle", "notification", "fact_card", "disclaimer", "cta", "other"] = Field(
+        ..., description="叠加类型"
+    )
+    shot_id: Optional[str] = Field(None, description="关联镜头（null 表示 episode 级）")
+    start_ms: Optional[int] = Field(None, ge=0, description="入点（episode-absolute 毫秒）")
+    end_ms: Optional[int] = Field(None, gt=0, description="出点（episode-absolute 毫秒）")
+    required: bool = Field(True, description="是否必需（可选叠加允许省略）")
+    anchor: Literal["lower_safe", "upper_safe", "centre", "prop_local"] = Field(
+        "lower_safe", description="安全区锚点"
+    )
+    localized: list[OverlayLocalizedText] = Field(default_factory=list, description="各语言文案")
+
+    @model_validator(mode="after")
+    def _check_span(self) -> "PostProductionOverlay":
+        """两端同时给出时，出点必须大于入点。"""
+        if self.start_ms is not None and self.end_ms is not None and self.end_ms <= self.start_ms:
+            raise ValueError(f"overlay '{self.overlay_id}': end_ms must be greater than start_ms")
+        return self
+
+
+class PostProduction(BaseModel):
+    """后期叠加计划：所有可读金融文字都在这里，不进入生成画面。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    overlays: list[PostProductionOverlay] = Field(default_factory=list, description="叠加列表")
+
+
+class RegenerationFallback(BaseModel):
+    """重生成兜底（仅恢复手段，不是同等生产选项）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    camera_movement: Optional[CasCameraMovement] = Field(None, description="兜底运镜（复用既有枚举）")
+    note: str = Field("", description="适用条件说明")
+
+
+class ShotV11(Shot):
+    """v1.1 镜头：在 v1 ``Shot`` 之上仅新增五个可选字段。
+
+    刻意不新增：连续性字段（用 ``continuity_notes``）、运镜字段（用 ``camera.movement``）、
+    任何镜头相对时间字段。
+    """
+
+    beginning_state: str = Field("", description="起始状态（生成用）")
+    ending_state: str = Field("", description="结束状态（生成用）")
+    generation_risks: list[str] = Field(default_factory=list, description="已知生成风险")
+    regeneration_fallback: Optional[RegenerationFallback] = Field(None, description="仅恢复用兜底方案")
+    overlay_ids: list[str] = Field(default_factory=list, description="关联的后期叠加 ID")
+
+
+class EpisodePackageV11(EpisodePackage):
+    """EpisodePackage v1.1 根对象：v1 全部字段 + 六个可选顶层对象；shots 使用 ShotV11。"""
+
+    allowed_schema_versions: ClassVar[frozenset[str]] = frozenset({SCHEMA_VERSION_V1_1})
+
+    shots: list[ShotV11] = Field(..., min_length=1, description="镜头列表（至少一个）")
+
+    output: Optional[OutputSpec] = Field(None, description="输出规格（缺省时用文档化默认值）")
+    localization: Optional[Localization] = Field(None, description="口语与字幕")
+    fact_card: Optional[FactCard] = Field(None, description="后期 fact card")
+    market_data: Optional[MarketData] = Field(None, description="市场事实溯源")
+    references: Optional[References] = Field(None, description="Bible 与参考资产")
+    post_production: Optional[PostProduction] = Field(None, description="后期叠加计划")
+
+
+#: 缺省 output（仅用于派生视图，绝不写回源文档）。
+DEFAULT_OUTPUT_SPEC = OutputSpec()
+
+
+# --------------------------------------------------------------------------- #
+# 版本联合类型（供 API 请求模型复用）
+#
+# 用法：``episode_package: AnyEpisodePackage = Field(..., union_mode="left_to_right")``
+#
+# 为什么用 left_to_right：
+# - 先尝试 ``EpisodePackageV11``（只接受 "1.1"），再回落到 ``EpisodePackage``（只接受 "1.0"）；
+# - 版本选择依然由各模型的 ``allowed_schema_versions`` 单一真相决定，不重复实现分派逻辑；
+# - 默认的 smart union 会因为 V11 是 EpisodePackage 的子类而可能"降级"匹配到父类
+#   （静默丢弃 v1.1 字段），left_to_right 明确避免这一点；
+# - 缺失 ``schema_version`` 仍产生既有的 ``missing`` 错误；未知版本产生 422 校验错误；
+# - 不改写、不升级、不修改任何 payload。
+# --------------------------------------------------------------------------- #
+AnyEpisodePackage = Union[EpisodePackageV11, EpisodePackage]
+
+#: 请求模型声明该字段时应使用的 union 模式。
+EPISODE_PACKAGE_UNION_MODE = "left_to_right"

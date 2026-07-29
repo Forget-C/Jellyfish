@@ -143,3 +143,75 @@ bear: Back from what.
 - **One transaction**, one commit (owned by the request session `get_db`); any failure → full rollback, no partial Chapter/Shots.
 - **Dry-run** performs validation + mapping + reuse lookup + warnings, then rolls back (writes nothing).
 - **Idempotency** via `cas_import_ledger` (durable): same `(project, key)` + same `payload_hash` → replay existing chapter; same key + different payload → 409; same `(project, episode)` under another key → 409. Ledger design: see **ADR-013**. The ledger row is written on the **same session/transaction** as all imported rows; a ledger insert failure rolls back the entire episode.
+
+---
+
+## v1.1 additions (Step 5)
+
+| EpisodePackage v1.1 field | Jellyfish target | Note |
+|---|---|---|
+| `output.*` (aspect_ratio, fps, safe_area) | *(not persisted)* | Render-time spec; consumed by the CAS production pipeline, not by Jellyfish entities. |
+| `localization.spoken_language` | *(not persisted)* | Dialogue language; `ShotDialogLine.text` holds the spoken (English) line. |
+| `localization.subtitle_tracks[].cues[]` | *(not persisted — by decision)* | Jellyfish has no subtitle/language column. Cues stay in the package, in `Chapter.raw_text` traceability and in the CAS `ArtifactType.subtitle` artifact. Covered by the canonical payload hash. |
+| `fact_card`, `market_data`, `references`, `post_production` | *(not persisted)* | Post-production and provenance metadata; no Jellyfish entity models them. |
+| `shots[].beginning_state` / `ending_state` / `generation_risks[]` / `regeneration_fallback` / `overlay_ids[]` | *(not persisted)* | Generation guidance consumed by the prompt builder. |
+
+**QA gate.** `import_episode()` runs `validate_episode_package(stage=pre_render_data_lock)` before
+any entity is constructed. Failure raises `CasValidationError` → HTTP 422 with **zero** rows written.
+
+**Async path.** `POST /import/async` registers a `cas_import_episode_package` task
+(relation type `cas_episode_import`, entity key = SHA-256 of `project_id:episode_id`, 64 chars to fit
+`relation_entity_id VARCHAR(64)`). No migration is required.
+
+---
+
+## Step 5.1 — subtitle artifact, worker, client contract
+
+### zh-Hant WebVTT artifact
+
+| v1.1 field | WebVTT / Jellyfish target |
+|---|---|
+| `subtitle_tracks[].language_tag` | `Language:` header line + `FileItem.tags` + `file_usages.source_ref` |
+| `cues[].cue_id` | WebVTT cue identifier line |
+| cue order | block order (declared order preserved, never re-sorted) |
+| `cues[].start_ms` / `end_ms` | `HH:MM:SS.mmm --> HH:MM:SS.mmm` |
+| `cues[].text` | cue payload, byte-for-byte |
+| `cues[].shot_id` | `NOTE shot=<id>` before the cue |
+| `cues[].speaker_character_key` | `NOTE speaker=<key>` before the cue |
+
+Storage key is deterministic: `cas/subtitles/{project_id}/{episode_id}/{language_tag}.vtt`.
+Association uses the existing file-linking mechanism — `FileItem` (`type=subtitle`) plus
+`FileUsage(project_id, chapter_id, usage_kind=subtitle, source_ref="cas:{episode_id}:{lang}")`,
+whose `UNIQUE(file_id, usage_kind, source_ref)` gives per-slot idempotency.
+
+**Limitation.** Subtitle cues are **preserved and downloadable** through the existing files
+endpoint, but they are **not editable as native Jellyfish entities** — there is no subtitle table
+or column, by the accepted no-migration decision. Editing requires re-importing a corrected
+Episode Package.
+
+### Consistency (no atomicity claimed)
+
+Object storage does not participate in the DB transaction. The strategy is deterministic key +
+compensating cleanup: object written first, DB rows second; on failure the newly created objects
+are deleted (reused objects from a previous successful import are never deleted). A hard process
+kill can leave one orphan at a deterministic key, which the next successful import overwrites and
+which no DB row references.
+
+### Worker
+
+`task_kind="cas_import_episode_package"` is registered in `app/services/worker/task_registry.py`
+with `AbstractAsyncDelegatingExecutor` (timeout 300 s) and enqueued through the existing
+`enqueue_task_execution` → Celery `task.execute` path. No separate queue or task system.
+
+### Client contract
+
+`front/openapi.json` and `front/src/services/openapi.ts` are checked-in generated artifacts and were
+**not** regenerated (pnpm + `openapi-typescript-codegen` are unavailable offline). Regenerate with:
+
+```bash
+cd front && pnpm run openapi:update   # requires the backend running on :8000
+```
+
+New/changed contract surface to expect: `POST /api/v1/crypto-animal-studio/import/async`
+(request `ImportEpisodeRequest`, response `ApiResponse<CasImportTaskAccepted>`), the
+`subtitle_artifacts[]` field on `ImportResult`, and the widened `FileTypeEnum` (`image|video|subtitle`).

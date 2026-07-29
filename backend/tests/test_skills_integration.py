@@ -14,5 +14,5 @@ class TestAppIntegration:
     def test_health_returns_ok(self, client: TestClient) -> None:
         response = client.get("/health")
         assert response.status_code == 200
-        assert response.json() == {"code": 200, "message": "success", "data": {"status": "ok"}}
+        assert response.json() == {"code": 200, "message": "success", "data": {"status": "ok"}, "meta": None}
 

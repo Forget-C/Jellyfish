@@ -29,6 +29,29 @@ from app.models.studio import (
 )
 
 
+class _EmptyScalars:
+    """``Result.scalars()`` 的最小替身：始终为空。"""
+
+    @staticmethod
+    def first() -> None:
+        """返回 None，表示查询无匹配行。"""
+        return None
+
+    @staticmethod
+    def all() -> list:
+        """返回空列表，表示查询无匹配行。"""
+        return []
+
+
+class _EmptyResult:
+    """``AsyncSession.execute()`` 返回值的最小替身：始终为空结果集。"""
+
+    @staticmethod
+    def scalars() -> _EmptyScalars:
+        """返回空的 scalars 视图。"""
+        return _EmptyScalars()
+
+
 class _FakeShotSubresourceDB:
     """最小 DB 替身：仅覆盖镜头子资源接口测试所需行为。"""
 
@@ -83,6 +106,15 @@ class _FakeShotSubresourceDB:
             self.frame_images[obj.id] = obj
             return
         raise TypeError(f"Unsupported object type: {type(obj)!r}")
+
+    async def execute(self, *_args, **_kwargs) -> "_EmptyResult":
+        """最小 execute 替身。
+
+        删除对白时，路由会调用 ``mark_pending_by_linked_dialog_line`` 查询与该对白关联的
+        ShotExtractedDialogueCandidate。本替身不维护 candidate 集合，因此返回空结果集，
+        等价于「没有已接受的候选关联到该对白」——正是本用例要覆盖的场景。
+        """
+        return _EmptyResult()
 
     async def flush(self) -> None:
         return None

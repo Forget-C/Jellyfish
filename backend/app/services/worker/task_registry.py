@@ -8,6 +8,10 @@
 
 from __future__ import annotations
 
+from app.crypto_animal_studio.application.import_tasks import (
+    CAS_IMPORT_EPISODE_TASK_KIND,
+    run_cas_import_task,
+)
 from app.services.film.generated_video import run_video_generation_task
 from app.services.film.shot_frame_prompt_tasks import run_shot_frame_prompt_task
 from app.services.script_processing_worker import (
@@ -72,5 +76,14 @@ task_executor_registry.register(
         task_kind="shot_frame_prompt",
         runner=run_shot_frame_prompt_task,
         timeout_seconds=600.0,
+    ),
+)
+# CAS：EpisodePackage 导入。纯数据库+对象存储写入，无模型推理，超时取较短值。
+task_executor_registry.register(
+    CAS_IMPORT_EPISODE_TASK_KIND,
+    AbstractAsyncDelegatingExecutor(
+        task_kind=CAS_IMPORT_EPISODE_TASK_KIND,
+        runner=run_cas_import_task,
+        timeout_seconds=300.0,
     ),
 )

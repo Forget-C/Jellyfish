@@ -82,6 +82,20 @@ def _count_hits(text: str, keywords: tuple[str, ...]) -> int:
     return sum(1 for keyword in keywords if keyword in text)
 
 
+def _phase_from_position(index: int, total: int) -> ActionBeatPhase:
+    """位置兜底（无关键词命中时使用）。
+
+    - 首条 -> trigger
+    - 总数 >= 3 时的尾条 -> aftermath
+    - 其余 -> peak
+    """
+    if index == 0:
+        return "trigger"
+    if total >= 3 and index == total - 1:
+        return "aftermath"
+    return "peak"
+
+
 def infer_action_beat_phase(*, text: str, index: int, total: int) -> ActionBeatPhase:
     """为单条动作拍点推断阶段。
 
@@ -110,11 +124,7 @@ def infer_action_beat_phase(*, text: str, index: int, total: int) -> ActionBeatP
     if peak_hits > 0:
         return "peak"
 
-    if index == 0:
-        return "trigger"
-    if total >= 3 and index == total - 1:
-        return "aftermath"
-    return "peak"
+    return _phase_from_position(index, total)
 
 
 def infer_action_beat_sequence(action_beats: list[str] | None) -> list[ActionBeatPhaseItem]:

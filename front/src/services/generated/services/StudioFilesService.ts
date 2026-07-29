@@ -27,6 +27,8 @@ export class StudioFilesService {
         projectId,
         chapterTitle,
         shotTitle,
+        chapterId,
+        usageKind,
     }: {
         /**
          * 关键字，过滤 name
@@ -48,6 +50,14 @@ export class StudioFilesService {
          * 镜头标题（精确匹配，与 project_id 联用）
          */
         shotTitle?: (string | null),
+        /**
+         * 按 file_usages.chapter_id 精确过滤（与 project_id 联用；比标题稳定）
+         */
+        chapterId?: (string | null),
+        /**
+         * 按 file_usages.usage_kind 精确过滤，如 subtitle（与 project_id 联用）
+         */
+        usageKind?: (string | null),
     }): CancelablePromise<ApiResponse_PaginatedData_FileRead__> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -61,6 +71,8 @@ export class StudioFilesService {
                 'project_id': projectId,
                 'chapter_title': chapterTitle,
                 'shot_title': shotTitle,
+                'chapter_id': chapterId,
+                'usage_kind': usageKind,
             },
             errors: {
                 422: `Validation Error`,

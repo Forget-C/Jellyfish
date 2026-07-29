@@ -4,6 +4,56 @@ Chronological log of CAS↔Jellyfish integration sprints. Newest first.
 
 ---
 
+## Sprint 4 — CAS Production MVP Skeleton
+
+Date: 2026-07-26
+
+### Summary
+Added a deterministic, traceable, **mock-only** end-to-end production pipeline that consumes a
+valid EpisodePackage and produces artifacts + a manifest. No real providers, no FFmpeg, no LLM,
+no Celery/Redis. EpisodePackage v1 and the importer contract are unchanged.
+
+### Architecture decisions (see ADR-014)
+- Production state (`cas_production_jobs/shots/artifacts`) is **separate** from creative models;
+  `source_shot_id` is a weak reference, never a replacement Shot.
+- **Artifact First**: every stage output is a DB row + real file with SHA-256 checksum.
+- Providers are **adapters** (`ImageProvider`/`VideoProvider`/`VoiceProvider`/`Composer` →
+  `GeneratedArtifact`); orchestration contains no provider specifics; providers never build paths.
+- **ArtifactManager owns the filesystem** (`storage/cas/productions/{project}/{episode}/{job}/...`,
+  relative POSIX paths in DB, `CAS_STORAGE_ROOT` override, segment sanitization).
+- Retry restarts at the failed stage, reruns it and later stages, and **reuses** earlier artifacts
+  when row+file+checksum are valid. The package hash is re-validated even when resuming.
+
+### Files created
+- `backend/app/crypto_animal_studio/production/{__init__,enums,models,prompt_builder,artifact_manager,orchestrator,cli}.py`
+- `backend/app/crypto_animal_studio/production/providers/{__init__,base,mock}.py`
+- `backend/app/crypto_animal_studio/schemas/production.py`
+- `backend/app/crypto_animal_studio/api/production.py`
+- `backend/sql/010-add-cas-production-tables.sql`
+- `backend/tests/test_cas_production.py`, `backend/tests/test_cas_production_api_cli.py`
+- `samples/cas/demo_episode.json`
+- `docs/adr/ADR-014-cas-production-pipeline.md`, `docs/cas-production-mvp.md`
+
+### Files modified
+- `backend/app/crypto_animal_studio/api/__init__.py` — register production router.
+- `backend/app/core/db.py` — register production models in `init_db()`.
+- `docs/implementation-log.md` — this entry.
+
+### Tests & results
+CAS suite: **68 passed, 0 skipped** (49 existing + 19 new: 14 production + 5 API/CLI).
+
+### Known limitations
+- Synchronous execution; local filesystem storage; mock artifacts are `.txt` placeholders.
+- `music` / `log` artifact types defined but not produced.
+- Deviations from the sprint text (repo conventions win): module lives at
+  `app/crypto_animal_studio/production` (not `app.cas.*`) to avoid a second CAS module; API is
+  mounted at `/api/v1/crypto-animal-studio/production/...` (not `/api/cas/...`).
+- **Sprint 3.5 governance files (CONTRIBUTING/CHANGELOG/ROADMAP/docs/adr/README/.github templates)
+  are absent from the working tree** — they were never committed and were lost; they need to be
+  recreated or restored separately.
+
+---
+
 ## Sprint 3 — EpisodePackage Importer v1
 
 Date: 2026-07-24
@@ -213,3 +263,101 @@ or frontend work was done (per sprint scope).
    - `rm -f docs/implementation-log.md`
 3. No DB/migration/ORM/enum/provider changes were made, so no data or schema rollback is required.
 4. Equivalent via VCS: `git restore backend/app/api/v1/__init__.py` and `git clean -fd backend/app/crypto_animal_studio backend/tests/test_cas_*.py docs/crypto-animal-studio docs/implementation-log.md`.
+
+---
+
+## Step 5 — EP001 Production Vertical Slice
+
+**Objective:** prove one canonical Crypto Animal Studio episode moves from a v1.1 Episode Package
+into Jellyfish's editable production entities.
+
+### Decisions taken before implementation
+1. **Runtime — EP001 stays at 24.0 s.** The Step 5 brief proposed 45–60 s, which conflicts with the
+   approved EP001 design doc (24.0 s) and ADR-016 §7 (15–30 s canonical publish range, enforced by
+   `PUBLISH_MIN/MAX_TOTAL_MS`). Approved canon wins; no ADR was changed.
+2. **World naming — repository canon.** The brief said "Crypto Animal Street"; Bible v1 §2 defines
+   the world as **Block Street** and EP001 §8 locks the location as **The Burrow**. Repository canon
+   used; no replacement invented.
+3. **Subtitles — no migration.** Jellyfish has *no* subtitle/caption/language column anywhere
+   (`grep -rn "subtitle|caption|translation|lang" app/models/*.py` → 0 matches); `shot_dialog_lines`
+   carries a single `text`. v1.1 models subtitles as timed `Localization.subtitle_tracks[].cues[]`.
+   Rather than add a table, the approved decision is: English dialogue maps to
+   `ShotDialogLine.text`; zh-Hant cues stay in the Episode Package, in `Chapter.raw_text`
+   traceability, and in the existing CAS production artifact (`ArtifactType.subtitle`). Subtitles are
+   covered by the canonical payload hash, so they cannot be silently dropped.
+   **Consequence:** subtitles are not editable as Jellyfish entities in this slice.
+
+### Changes
+- **QA gate wired into the importer.** `import_episode()` now runs
+  `validate_episode_package(stage=pre_render_data_lock)` **before constructing any entity** and
+  raises the new typed `CasValidationError`; validation failure therefore writes zero rows. Both
+  existing samples pass this stage, so v1 behaviour is unchanged. API translates it to 422.
+- **Async task center integration.** New `application/import_tasks.py` adds task kind
+  `cas_import_episode_package` and relation type `cas_episode_import`, mirroring
+  `services/script_processing_tasks.py`. **No migration**: `generation_tasks.task_kind` and
+  `generation_task_links.relation_type` are free-form string columns.
+- **New route** `POST /api/v1/crypto-animal-studio/import/async` reusing the *same*
+  `ImportEpisodeRequest`, so contract validation is identical to the sync route.
+- **EP001 production package** at `samples/cas/ep001_btc_breakout.json` (schema 1.1, 24.0 s, 9:16,
+  4 shots, en dialogue + zh-Hant track). Passes all five validation stages.
+
+### Verification (sandbox Python 3.10.12)
+- pytest **480 passed** (464 baseline + 16 new), run in chunks, with
+  `-W error::pytest.PytestUnhandledThreadExceptionWarning` — no such warning.
+- `compileall -q app` → exit 0.
+- `pylint app` → 10.00/10 across all chunks, except 3 known 3.10-only `E0611` artifacts
+  (`datetime.UTC`, `typing.Self` are 3.11+ builtins).
+
+### Remaining gaps before frontend / ComfyUI
+- Subtitles not persisted as editable entities (decision 3 above); revisit if the editor must edit them.
+- No frontend client regeneration (`pnpm run openapi:update`) for the new async route.
+- `run_cas_import_task` is driven directly; no Celery/worker spawn wired yet.
+- `video_prompt` / `negative_prompt` still have no `ShotDetail` field and surface as import warnings.
+
+### Step 5.1 — formal acceptance (supported environment)
+
+Verified on Windows in the repository-supported environment:
+
+| Command | Result | Exit |
+|---|---|---|
+| `uv run python --version` | Python 3.12.13 | 0 |
+| `uv run pytest -W error::pytest.PytestUnhandledThreadExceptionWarning` | 495 passed in 27.92s, no `PytestUnhandledThreadExceptionWarning` | 0 |
+| `uv run pylint app` | 10.00/10 | 0 |
+| `uv run python -m compileall -q app` | — | 0 |
+
+**Step 5.1 is formally accepted.** The subtitle artifact pipeline (deterministic zh-Hant WebVTT via
+`FileItem` + `FileUsage`), the real task-worker registration (`cas_import_episode_package` through
+the existing Celery `task.execute` registry), the EP001 import vertical slice and the Episode
+Package v1.1 contract are all frozen from this point and must not be rebuilt or redesigned.
+
+---
+
+## Step 6 — EP001 Production Workspace: formal acceptance
+
+Verified in the repository-supported environments (Windows; backend Python 3.12.13,
+frontend pnpm 9.15.9 / Node 22).
+
+| Command | Result | Exit |
+|---|---|---|
+| `pnpm exec vitest run` (frontend suite) | all tests passed | 0 |
+| `pnpm run typecheck` | — | 0 |
+| `pnpm run build` | — | 0 |
+| `pnpm exec eslint` (Step 6 scope) | clean, 0 problems | 0 |
+| `pnpm run lint` (repository-wide) | 198 findings, **all pre-existing** | 1 |
+| `uv run pytest -W error::pytest.PytestUnhandledThreadExceptionWarning` | 499 passed | 0 |
+| `uv run pylint app` | — | 0 |
+| `uv run python -m compileall -q app` | — | 0 |
+
+**Repository-wide frontend lint exits 1 on the pre-existing baseline only.** Step 6 introduced
+two findings and both were fixed (`no-irregular-whitespace` in `webvtt.ts`, a literal U+FEFF in
+the BOM regex now written as the escape `\uFEFF`; and `consistent-type-imports` in the workspace test). The
+count moved 200 → 198, matching exactly. No Step 6 file appears in the remaining output.
+
+Of the 198 pre-existing findings, two deserve separate attention as genuine defects rather than
+style debt: `react-hooks/rules-of-hooks` errors at
+`src/pages/aiStudio/shots/ChapterShotEditPage.tsx:1285` and `:1299`, where hooks are called after
+an early return. Not touched here — outside Step 6 scope.
+
+**Step 6 is accepted.** The EP001 production workspace, the `chapter_id` / `usage_kind` file
+filters, the Vitest + React Testing Library infrastructure and the regenerated OpenAPI client are
+frozen alongside the Step 5 / 5.1 importer, subtitle artifact pipeline and worker registration.

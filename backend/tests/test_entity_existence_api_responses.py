@@ -77,6 +77,7 @@ def test_entity_existence_check_returns_success_envelope(client: TestClient, mon
             "scenes": [],
             "costumes": [],
         },
+        "meta": None,
     }
 
 
@@ -106,4 +107,5 @@ def test_entity_existence_check_relation_error_returns_api_response(client: Test
         "code": 404,
         "message": "shot_id does not belong to project_id",
         "data": None,
+        "meta": None,
     }

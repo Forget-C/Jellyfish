@@ -12,8 +12,13 @@ from __future__ import annotations
 from enum import Enum
 from typing import Literal
 
-# EpisodePackage 契约版本。Sprint 2 固定为 "1.0"；升级规则见 docs/episode-package-v1.md。
+# EpisodePackage 契约版本。v1 = "1.0"；v1.1 = "1.1"（附加式扩展，见
+# docs/crypto-animal-studio/EpisodePackage-v1.1-proposal.md 与 docs/adr/ADR-016）。
 SCHEMA_VERSION: str = "1.0"
+SCHEMA_VERSION_V1_1: str = "1.1"
+
+#: 解析器显式支持的版本集合（成员判断，绝不用区间/前缀比较）。
+SUPPORTED_SCHEMA_VERSIONS: frozenset[str] = frozenset({SCHEMA_VERSION, SCHEMA_VERSION_V1_1})
 
 # 新闻/素材来源类型的合法取值。schemas 层以 Literal 复用该集合的语义。
 SourceType = Literal["news", "original", "fictional", "generic"]

@@ -81,7 +81,8 @@ async def preview_prompt_and_images(
     prompt: str | None,
     images: list[str] | None = None,
 ) -> tuple[str, list[str], dict | None]:
-    shot_detail = await validate_shot_and_duration(db, shot_id)
+    # 仅用于校验镜头与时长（副作用）；返回值在本函数中不需要。
+    await validate_shot_and_duration(db, shot_id)
     base = build_video_base_draft(shot_id=shot_id, prompt=prompt)
     context = await build_video_context(
         db,

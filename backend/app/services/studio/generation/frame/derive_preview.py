@@ -72,6 +72,12 @@ def _build_frame_guidance_reason(
     selected: bool,
 ) -> str:
     """生成 guidance 被保留或压缩的可解释原因。"""
+    # 本函数是纯字符串查表：19 个 return 全部为 (selected, category, frame_type) 组合的
+    # 解释文案，且**依赖 guard clause 的先后顺序**（例如 category == "frame" 但 frame_type
+    # 不在 {first,key,last} 时会继续向下匹配）。改写成映射表会破坏这种 fallthrough 语义，
+    # 或需要额外的优先级列表才能等价，可读性反而下降。故按仓库既有的行级注解方式
+    # 窄范围豁免该单条检查（非模块级 disable）。
+    # pylint: disable=too-many-return-statements
     if selected:
         if category == "frame":
             if frame_type == "first":
@@ -122,6 +128,8 @@ def _build_frame_guidance_reason_tag(
     selected: bool,
 ) -> str:
     """生成更适合前端快速阅读的短标签。"""
+    # 同上：纯查表 + 依赖 guard clause 顺序的短标签生成，窄范围豁免该单条检查。
+    # pylint: disable=too-many-return-statements
     if category == "summary":
         return "导演主指令"
     if category == "frame":

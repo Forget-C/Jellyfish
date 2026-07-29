@@ -6,10 +6,11 @@
 
 from fastapi import APIRouter
 
-from app.crypto_animal_studio.api import health, import_episode
+from app.crypto_animal_studio.api import health, import_episode, production
 
 router = APIRouter()
 router.include_router(health.router)
 router.include_router(import_episode.router)
+router.include_router(production.router, prefix="/production", tags=["crypto-animal-studio/production"])
 
 __all__ = ["router"]

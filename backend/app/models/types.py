@@ -137,6 +137,7 @@ class FileType(str, Enum):
 
     image = "image"
     video = "video"
+    subtitle = "subtitle"  # WebVTT 等字幕文本产物（files.type 为 String(16)，新增取值无需迁移）
 
 
 class FileUsageKind(str, Enum):
@@ -149,6 +150,7 @@ class FileUsageKind(str, Enum):
     task_link = "task_link"
     upload = "upload"
     api = "api"
+    subtitle = "subtitle"  # 字幕产物（如 CAS 导入生成的 WebVTT 轨）
 
 
 class TimelineClipType(str, Enum):
