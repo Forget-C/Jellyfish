@@ -217,16 +217,6 @@ async def create_divide_task(
         source_text=script_text,
         run_args=run_args,
     )
-def _defer_dispatch_to_outbox(task_id: str) -> None:
-    """兼容旧路由的启动调用；实际投递统一由已提交的 Outbox dispatcher 处理。"""
-
-    del task_id
-
-
-def spawn_divide_task(task_id: str) -> None:
-    """保留章节拆分旧路由调用，避免绕过 Outbox 直接投递。"""
-
-    _defer_dispatch_to_outbox(task_id)
 
 
 async def find_active_extract_task(
@@ -618,63 +608,3 @@ async def create_script_simplification_task(
             "script_text": script_text,
         },
     )
-
-
-def spawn_extract_task(task_id: str) -> None:
-    """保留章节提取旧路由调用，实际投递延后至 Outbox dispatcher。"""
-
-    _defer_dispatch_to_outbox(task_id)
-
-
-def spawn_merge_task(task_id: str) -> None:
-    """保留实体合并旧路由调用，实际投递延后至 Outbox dispatcher。"""
-
-    _defer_dispatch_to_outbox(task_id)
-
-
-def spawn_consistency_task(task_id: str) -> None:
-    """保留一致性检查旧路由调用，实际投递延后至 Outbox dispatcher。"""
-
-    _defer_dispatch_to_outbox(task_id)
-
-
-def spawn_variant_task(task_id: str) -> None:
-    """保留变体分析旧路由调用，实际投递延后至 Outbox dispatcher。"""
-
-    _defer_dispatch_to_outbox(task_id)
-
-
-def spawn_character_portrait_task(task_id: str) -> None:
-    """保留角色分析旧路由调用，实际投递延后至 Outbox dispatcher。"""
-
-    _defer_dispatch_to_outbox(task_id)
-
-
-def spawn_prop_info_task(task_id: str) -> None:
-    """保留道具分析旧路由调用，实际投递延后至 Outbox dispatcher。"""
-
-    _defer_dispatch_to_outbox(task_id)
-
-
-def spawn_scene_info_task(task_id: str) -> None:
-    """保留场景分析旧路由调用，实际投递延后至 Outbox dispatcher。"""
-
-    _defer_dispatch_to_outbox(task_id)
-
-
-def spawn_costume_info_task(task_id: str) -> None:
-    """保留服装分析旧路由调用，实际投递延后至 Outbox dispatcher。"""
-
-    _defer_dispatch_to_outbox(task_id)
-
-
-def spawn_script_optimization_task(task_id: str) -> None:
-    """保留剧本优化旧路由调用，实际投递延后至 Outbox dispatcher。"""
-
-    _defer_dispatch_to_outbox(task_id)
-
-
-def spawn_script_simplification_task(task_id: str) -> None:
-    """保留剧本简化旧路由调用，实际投递延后至 Outbox dispatcher。"""
-
-    _defer_dispatch_to_outbox(task_id)

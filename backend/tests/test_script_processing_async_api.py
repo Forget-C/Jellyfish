@@ -34,8 +34,6 @@ def _override_db():
 
 
 def test_divide_async_returns_created_task_payload(client, monkeypatch) -> None:
-    called: dict[str, str] = {}
-
     async def _fake_create_divide_task(_db, *, chapter_id: str, script_text: str, write_to_db: bool):
         assert chapter_id == "chapter-1"
         assert script_text == "一段剧本"
@@ -48,11 +46,7 @@ def test_divide_async_returns_created_task_payload(client, monkeypatch) -> None:
             relation_entity_id="chapter-1",
         )
 
-    def _fake_spawn(task_id: str) -> None:
-        called["task_id"] = task_id
-
     monkeypatch.setattr(script_processing_route, "create_divide_task", _fake_create_divide_task)
-    monkeypatch.setattr(script_processing_route, "spawn_divide_task", _fake_spawn)
     app.dependency_overrides[get_db] = _override_db()
     try:
         response = client.post(
@@ -71,12 +65,9 @@ def test_divide_async_returns_created_task_payload(client, monkeypatch) -> None:
     assert body["data"]["task_id"] == "task-1"
     assert body["data"]["status"] == "pending"
     assert body["data"]["reused"] is False
-    assert called["task_id"] == "task-1"
 
 
 def test_extract_async_returns_created_task_payload(client, monkeypatch) -> None:
-    called: dict[str, str] = {}
-
     async def _fake_create_extract_task(
         _db,
         *,
@@ -99,11 +90,7 @@ def test_extract_async_returns_created_task_payload(client, monkeypatch) -> None
             relation_entity_id="chapter-1",
         )
 
-    def _fake_spawn(task_id: str) -> None:
-        called["task_id"] = task_id
-
     monkeypatch.setattr(script_processing_route, "create_extract_task", _fake_create_extract_task)
-    monkeypatch.setattr(script_processing_route, "spawn_extract_task", _fake_spawn)
     app.dependency_overrides[get_db] = _override_db()
     try:
         response = client.post(
@@ -124,12 +111,9 @@ def test_extract_async_returns_created_task_payload(client, monkeypatch) -> None
     assert body["data"]["task_id"] == "task-extract-1"
     assert body["data"]["status"] == "pending"
     assert body["data"]["reused"] is False
-    assert called["task_id"] == "task-extract-1"
 
 
 def test_merge_entities_async_returns_created_task_payload(client, monkeypatch) -> None:
-    called: dict[str, str] = {}
-
     async def _fake_create_merge_task(
         _db,
         *,
@@ -159,12 +143,8 @@ def test_merge_entities_async_returns_created_task_payload(client, monkeypatch) 
         assert project_id == "project-1"
         return "chapter-1"
 
-    def _fake_spawn(task_id: str) -> None:
-        called["task_id"] = task_id
-
     monkeypatch.setattr(script_processing_route, "pick_merge_relation_entity_id", _fake_pick_relation_entity_id)
     monkeypatch.setattr(script_processing_route, "create_merge_task", _fake_create_merge_task)
-    monkeypatch.setattr(script_processing_route, "spawn_merge_task", _fake_spawn)
     app.dependency_overrides[get_db] = _override_db()
     try:
         response = client.post(
@@ -187,12 +167,9 @@ def test_merge_entities_async_returns_created_task_payload(client, monkeypatch) 
     assert body["data"]["task_id"] == "task-merge-1"
     assert body["data"]["status"] == "pending"
     assert body["data"]["reused"] is False
-    assert called["task_id"] == "task-merge-1"
 
 
 def test_check_consistency_async_returns_created_task_payload(client, monkeypatch) -> None:
-    called: dict[str, str] = {}
-
     async def _fake_create_consistency_task(_db, *, relation_entity_id: str, script_text: str):
         assert relation_entity_id == "chapter-1"
         assert script_text == "完整剧本"
@@ -209,12 +186,8 @@ def test_check_consistency_async_returns_created_task_payload(client, monkeypatc
         assert project_id == "project-1"
         return "chapter-1"
 
-    def _fake_spawn(task_id: str) -> None:
-        called["task_id"] = task_id
-
     monkeypatch.setattr(script_processing_route, "pick_consistency_relation_entity_id", _fake_pick_relation_entity_id)
     monkeypatch.setattr(script_processing_route, "create_consistency_task", _fake_create_consistency_task)
-    monkeypatch.setattr(script_processing_route, "spawn_consistency_task", _fake_spawn)
     app.dependency_overrides[get_db] = _override_db()
     try:
         response = client.post(
@@ -233,12 +206,9 @@ def test_check_consistency_async_returns_created_task_payload(client, monkeypatc
     assert body["data"]["task_id"] == "task-consistency-1"
     assert body["data"]["status"] == "pending"
     assert body["data"]["reused"] is False
-    assert called["task_id"] == "task-consistency-1"
 
 
 def test_analyze_variants_async_returns_created_task_payload(client, monkeypatch) -> None:
-    called: dict[str, str] = {}
-
     async def _fake_create_variant_task(
         _db,
         *,
@@ -264,12 +234,8 @@ def test_analyze_variants_async_returns_created_task_payload(client, monkeypatch
         assert project_id == "project-1"
         return "chapter-1"
 
-    def _fake_spawn(task_id: str) -> None:
-        called["task_id"] = task_id
-
     monkeypatch.setattr(script_processing_route, "pick_variant_relation_entity_id", _fake_pick_relation_entity_id)
     monkeypatch.setattr(script_processing_route, "create_variant_task", _fake_create_variant_task)
-    monkeypatch.setattr(script_processing_route, "spawn_variant_task", _fake_spawn)
     app.dependency_overrides[get_db] = _override_db()
     try:
         response = client.post(
@@ -290,12 +256,9 @@ def test_analyze_variants_async_returns_created_task_payload(client, monkeypatch
     assert body["data"]["task_id"] == "task-variant-1"
     assert body["data"]["status"] == "pending"
     assert body["data"]["reused"] is False
-    assert called["task_id"] == "task-variant-1"
 
 
 def test_analyze_character_portrait_async_returns_created_task_payload(client, monkeypatch) -> None:
-    called: dict[str, str] = {}
-
     async def _fake_create(_db, *, relation_entity_id: str, character_context: str | None, character_description: str):
         assert relation_entity_id == "chapter-1"
         assert character_context is None
@@ -309,12 +272,8 @@ def test_analyze_character_portrait_async_returns_created_task_payload(client, m
         assert endpoint == "analyze-character-portrait-async"
         return "chapter-1"
 
-    def _fake_spawn(task_id: str) -> None:
-        called["task_id"] = task_id
-
     monkeypatch.setattr(script_processing_route, "pick_analysis_relation_entity_id", _fake_pick)
     monkeypatch.setattr(script_processing_route, "create_character_portrait_task", _fake_create)
-    monkeypatch.setattr(script_processing_route, "spawn_character_portrait_task", _fake_spawn)
     app.dependency_overrides[get_db] = _override_db()
     try:
         response = client.post("/api/v1/script-processing/analyze-character-portrait-async", json={"project_id": "project-1", "chapter_id": "chapter-1", "character_context": None, "character_description": "人物描述"})
@@ -322,12 +281,9 @@ def test_analyze_character_portrait_async_returns_created_task_payload(client, m
         app.dependency_overrides.clear()
     assert response.status_code == 200
     assert response.json()["data"]["task_id"] == "task-char-1"
-    assert called["task_id"] == "task-char-1"
 
 
 def test_analyze_prop_info_async_returns_created_task_payload(client, monkeypatch) -> None:
-    called: dict[str, str] = {}
-
     async def _fake_create(_db, *, relation_entity_id: str, prop_context: str | None, prop_description: str):
         assert relation_entity_id == "chapter-1"
         assert prop_context is None
@@ -339,12 +295,8 @@ def test_analyze_prop_info_async_returns_created_task_payload(client, monkeypatc
         assert endpoint == "analyze-prop-info-async"
         return "chapter-1"
 
-    def _fake_spawn(task_id: str) -> None:
-        called["task_id"] = task_id
-
     monkeypatch.setattr(script_processing_route, "pick_analysis_relation_entity_id", _fake_pick)
     monkeypatch.setattr(script_processing_route, "create_prop_info_task", _fake_create)
-    monkeypatch.setattr(script_processing_route, "spawn_prop_info_task", _fake_spawn)
     app.dependency_overrides[get_db] = _override_db()
     try:
         response = client.post("/api/v1/script-processing/analyze-prop-info-async", json={"project_id": "project-1", "chapter_id": "chapter-1", "prop_context": None, "prop_description": "道具描述"})
@@ -352,12 +304,9 @@ def test_analyze_prop_info_async_returns_created_task_payload(client, monkeypatc
         app.dependency_overrides.clear()
     assert response.status_code == 200
     assert response.json()["data"]["task_id"] == "task-prop-1"
-    assert called["task_id"] == "task-prop-1"
 
 
 def test_analyze_scene_info_async_returns_created_task_payload(client, monkeypatch) -> None:
-    called: dict[str, str] = {}
-
     async def _fake_create(_db, *, relation_entity_id: str, scene_context: str | None, scene_description: str):
         assert relation_entity_id == "chapter-1"
         assert scene_context is None
@@ -369,12 +318,8 @@ def test_analyze_scene_info_async_returns_created_task_payload(client, monkeypat
         assert endpoint == "analyze-scene-info-async"
         return "chapter-1"
 
-    def _fake_spawn(task_id: str) -> None:
-        called["task_id"] = task_id
-
     monkeypatch.setattr(script_processing_route, "pick_analysis_relation_entity_id", _fake_pick)
     monkeypatch.setattr(script_processing_route, "create_scene_info_task", _fake_create)
-    monkeypatch.setattr(script_processing_route, "spawn_scene_info_task", _fake_spawn)
     app.dependency_overrides[get_db] = _override_db()
     try:
         response = client.post("/api/v1/script-processing/analyze-scene-info-async", json={"project_id": "project-1", "chapter_id": "chapter-1", "scene_context": None, "scene_description": "场景描述"})
@@ -382,12 +327,9 @@ def test_analyze_scene_info_async_returns_created_task_payload(client, monkeypat
         app.dependency_overrides.clear()
     assert response.status_code == 200
     assert response.json()["data"]["task_id"] == "task-scene-1"
-    assert called["task_id"] == "task-scene-1"
 
 
 def test_analyze_costume_info_async_returns_created_task_payload(client, monkeypatch) -> None:
-    called: dict[str, str] = {}
-
     async def _fake_create(_db, *, relation_entity_id: str, costume_context: str | None, costume_description: str):
         assert relation_entity_id == "chapter-1"
         assert costume_context is None
@@ -399,12 +341,8 @@ def test_analyze_costume_info_async_returns_created_task_payload(client, monkeyp
         assert endpoint == "analyze-costume-info-async"
         return "chapter-1"
 
-    def _fake_spawn(task_id: str) -> None:
-        called["task_id"] = task_id
-
     monkeypatch.setattr(script_processing_route, "pick_analysis_relation_entity_id", _fake_pick)
     monkeypatch.setattr(script_processing_route, "create_costume_info_task", _fake_create)
-    monkeypatch.setattr(script_processing_route, "spawn_costume_info_task", _fake_spawn)
     app.dependency_overrides[get_db] = _override_db()
     try:
         response = client.post("/api/v1/script-processing/analyze-costume-info-async", json={"project_id": "project-1", "chapter_id": "chapter-1", "costume_context": None, "costume_description": "服装描述"})
@@ -412,12 +350,9 @@ def test_analyze_costume_info_async_returns_created_task_payload(client, monkeyp
         app.dependency_overrides.clear()
     assert response.status_code == 200
     assert response.json()["data"]["task_id"] == "task-costume-1"
-    assert called["task_id"] == "task-costume-1"
 
 
 def test_optimize_script_async_returns_created_task_payload(client, monkeypatch) -> None:
-    called: dict[str, str] = {}
-
     async def _fake_create(_db, *, relation_entity_id: str, script_text: str, consistency: dict):
         assert relation_entity_id == "chapter-opt"
         assert script_text == "原始剧本"
@@ -428,12 +363,8 @@ def test_optimize_script_async_returns_created_task_payload(client, monkeypatch)
         assert endpoint == "optimize-script-async"
         return "chapter-opt"
 
-    def _fake_spawn(task_id: str) -> None:
-        called["task_id"] = task_id
-
     monkeypatch.setattr(script_processing_route, "pick_analysis_relation_entity_id", _fake_pick)
     monkeypatch.setattr(script_processing_route, "create_script_optimization_task", _fake_create)
-    monkeypatch.setattr(script_processing_route, "spawn_script_optimization_task", _fake_spawn)
     app.dependency_overrides[get_db] = _override_db()
     try:
         response = client.post(
@@ -449,12 +380,9 @@ def test_optimize_script_async_returns_created_task_payload(client, monkeypatch)
         app.dependency_overrides.clear()
     assert response.status_code == 200
     assert response.json()["data"]["task_id"] == "task-opt-1"
-    assert called["task_id"] == "task-opt-1"
 
 
 def test_simplify_script_async_returns_created_task_payload(client, monkeypatch) -> None:
-    called: dict[str, str] = {}
-
     async def _fake_create(_db, *, relation_entity_id: str, script_text: str):
         assert relation_entity_id == "chapter-simplify"
         assert script_text == "原始剧本"
@@ -464,12 +392,8 @@ def test_simplify_script_async_returns_created_task_payload(client, monkeypatch)
         assert endpoint == "simplify-script-async"
         return "chapter-simplify"
 
-    def _fake_spawn(task_id: str) -> None:
-        called["task_id"] = task_id
-
     monkeypatch.setattr(script_processing_route, "pick_analysis_relation_entity_id", _fake_pick)
     monkeypatch.setattr(script_processing_route, "create_script_simplification_task", _fake_create)
-    monkeypatch.setattr(script_processing_route, "spawn_script_simplification_task", _fake_spawn)
     app.dependency_overrides[get_db] = _override_db()
     try:
         response = client.post(
@@ -484,7 +408,6 @@ def test_simplify_script_async_returns_created_task_payload(client, monkeypatch)
         app.dependency_overrides.clear()
     assert response.status_code == 200
     assert response.json()["data"]["task_id"] == "task-simplify-1"
-    assert called["task_id"] == "task-simplify-1"
 
 
 def test_script_optimization_and_simplification_sync_routes_are_not_public(client) -> None:

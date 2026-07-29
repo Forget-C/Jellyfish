@@ -52,17 +52,6 @@ from app.services.script_processing_tasks import (
     pick_merge_relation_entity_id,
     pick_analysis_relation_entity_id,
     pick_variant_relation_entity_id,
-    spawn_consistency_task,
-    spawn_costume_info_task,
-    spawn_divide_task,
-    spawn_extract_task,
-    spawn_character_portrait_task,
-    spawn_merge_task,
-    spawn_prop_info_task,
-    spawn_scene_info_task,
-    spawn_script_optimization_task,
-    spawn_script_simplification_task,
-    spawn_variant_task,
 )
 from app.services.script_extraction_cache import (
     build_script_extract_cache_key,
@@ -117,8 +106,6 @@ async def divide_script_async(
         write_to_db=request.write_to_db,
     )
     await db.commit()
-    if not task_info.reused:
-        spawn_divide_task(task_info.task_id)
     return success_response(
         AsyncTaskCreateRead(
             task_id=task_info.task_id,
@@ -235,8 +222,6 @@ async def merge_entities_async(
         conflict_resolutions=request.conflict_resolutions,
     )
     await db.commit()
-    if not task_info.reused:
-        spawn_merge_task(task_info.task_id)
     return success_response(
         AsyncTaskCreateRead(
             task_id=task_info.task_id,
@@ -342,8 +327,6 @@ async def analyze_variants_async(
         script_division=request.script_division,
     )
     await db.commit()
-    if not task_info.reused:
-        spawn_variant_task(task_info.task_id)
     return success_response(
         AsyncTaskCreateRead(
             task_id=task_info.task_id,
@@ -426,8 +409,6 @@ async def check_consistency_async(
         script_text=request.script_text,
     )
     await db.commit()
-    if not task_info.reused:
-        spawn_consistency_task(task_info.task_id)
     return success_response(
         AsyncTaskCreateRead(
             task_id=task_info.task_id,
@@ -511,8 +492,6 @@ async def analyze_character_portrait_async(
         character_description=request.character_description,
     )
     await db.commit()
-    if not task_info.reused:
-        spawn_character_portrait_task(task_info.task_id)
     return success_response(
         AsyncTaskCreateRead(
             task_id=task_info.task_id,
@@ -588,8 +567,6 @@ async def analyze_prop_info_async(
         prop_description=request.prop_description,
     )
     await db.commit()
-    if not task_info.reused:
-        spawn_prop_info_task(task_info.task_id)
     return success_response(
         AsyncTaskCreateRead(
             task_id=task_info.task_id,
@@ -665,8 +642,6 @@ async def analyze_scene_info_async(
         scene_description=request.scene_description,
     )
     await db.commit()
-    if not task_info.reused:
-        spawn_scene_info_task(task_info.task_id)
     return success_response(
         AsyncTaskCreateRead(
             task_id=task_info.task_id,
@@ -742,8 +717,6 @@ async def analyze_costume_info_async(
         costume_description=request.costume_description,
     )
     await db.commit()
-    if not task_info.reused:
-        spawn_costume_info_task(task_info.task_id)
     return success_response(
         AsyncTaskCreateRead(
             task_id=task_info.task_id,
@@ -822,8 +795,6 @@ async def optimize_script_async(
         consistency=request.consistency,
     )
     await db.commit()
-    if not task_info.reused:
-        spawn_script_optimization_task(task_info.task_id)
     return success_response(
         AsyncTaskCreateRead(
             task_id=task_info.task_id,
@@ -856,8 +827,6 @@ async def simplify_script_async(
         script_text=request.script_text,
     )
     await db.commit()
-    if not task_info.reused:
-        spawn_script_simplification_task(task_info.task_id)
     return success_response(
         AsyncTaskCreateRead(
             task_id=task_info.task_id,
@@ -901,8 +870,6 @@ async def extract_script_async(
         refresh_cache=request.refresh_cache,
     )
     await db.commit()
-    if not task_info.reused:
-        spawn_extract_task(task_info.task_id)
     return success_response(
         AsyncTaskCreateRead(
             task_id=task_info.task_id,
