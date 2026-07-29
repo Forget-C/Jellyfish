@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.task_manager import DeliveryMode, SqlAlchemyTaskStore, TaskManager
 from app.core.task_manager.types import TaskStatus
 from app.models.task import GenerationTask, GenerationTaskStatus
+from app.models.generation_artifacts import GenerationDispatchOutbox
 from app.models.task_links import GenerationTaskLink
 
 CHAPTER_DIVISION_RELATION_TYPE = "chapter_division"
@@ -135,6 +136,8 @@ async def _create_script_task(
             relation_entity_id=relation_entity_id,
         )
     )
+    # 任务、关联与投递记录由调用方在同一事务提交；dispatcher 负责随后可靠投递。
+    db.add(GenerationDispatchOutbox(task_id=task_record.id, payload={"task_id": task_record.id}))
     await db.flush()
     return AsyncTaskCreateResult(
         task_id=task_record.id,
@@ -214,11 +217,16 @@ async def create_divide_task(
         source_text=script_text,
         run_args=run_args,
     )
-def spawn_divide_task(task_id: str) -> None:
-    """统一封装后台启动：第一阶段改为通用 Celery 执行入口。"""
-    from app.tasks.execute_task import enqueue_task_execution
+def _defer_dispatch_to_outbox(task_id: str) -> None:
+    """兼容旧路由的启动调用；实际投递统一由已提交的 Outbox dispatcher 处理。"""
 
-    enqueue_task_execution(task_id)
+    del task_id
+
+
+def spawn_divide_task(task_id: str) -> None:
+    """保留章节拆分旧路由调用，避免绕过 Outbox 直接投递。"""
+
+    _defer_dispatch_to_outbox(task_id)
 
 
 async def find_active_extract_task(
@@ -613,64 +621,60 @@ async def create_script_simplification_task(
 
 
 def spawn_extract_task(task_id: str) -> None:
-    from app.tasks.execute_task import enqueue_task_execution
+    """保留章节提取旧路由调用，实际投递延后至 Outbox dispatcher。"""
 
-    enqueue_task_execution(task_id)
+    _defer_dispatch_to_outbox(task_id)
 
 
 def spawn_merge_task(task_id: str) -> None:
-    """将实体合并投递到统一 Celery 执行入口。"""
+    """保留实体合并旧路由调用，实际投递延后至 Outbox dispatcher。"""
 
-    from app.tasks.execute_task import enqueue_task_execution
-
-    enqueue_task_execution(task_id)
+    _defer_dispatch_to_outbox(task_id)
 
 
 def spawn_consistency_task(task_id: str) -> None:
-    from app.tasks.execute_task import enqueue_task_execution
+    """保留一致性检查旧路由调用，实际投递延后至 Outbox dispatcher。"""
 
-    enqueue_task_execution(task_id)
+    _defer_dispatch_to_outbox(task_id)
 
 
 def spawn_variant_task(task_id: str) -> None:
-    """将实体变体分析投递到统一 Celery 执行入口。"""
+    """保留变体分析旧路由调用，实际投递延后至 Outbox dispatcher。"""
 
-    from app.tasks.execute_task import enqueue_task_execution
-
-    enqueue_task_execution(task_id)
+    _defer_dispatch_to_outbox(task_id)
 
 
 def spawn_character_portrait_task(task_id: str) -> None:
-    from app.tasks.execute_task import enqueue_task_execution
+    """保留角色分析旧路由调用，实际投递延后至 Outbox dispatcher。"""
 
-    enqueue_task_execution(task_id)
+    _defer_dispatch_to_outbox(task_id)
 
 
 def spawn_prop_info_task(task_id: str) -> None:
-    from app.tasks.execute_task import enqueue_task_execution
+    """保留道具分析旧路由调用，实际投递延后至 Outbox dispatcher。"""
 
-    enqueue_task_execution(task_id)
+    _defer_dispatch_to_outbox(task_id)
 
 
 def spawn_scene_info_task(task_id: str) -> None:
-    from app.tasks.execute_task import enqueue_task_execution
+    """保留场景分析旧路由调用，实际投递延后至 Outbox dispatcher。"""
 
-    enqueue_task_execution(task_id)
+    _defer_dispatch_to_outbox(task_id)
 
 
 def spawn_costume_info_task(task_id: str) -> None:
-    from app.tasks.execute_task import enqueue_task_execution
+    """保留服装分析旧路由调用，实际投递延后至 Outbox dispatcher。"""
 
-    enqueue_task_execution(task_id)
+    _defer_dispatch_to_outbox(task_id)
 
 
 def spawn_script_optimization_task(task_id: str) -> None:
-    from app.tasks.execute_task import enqueue_task_execution
+    """保留剧本优化旧路由调用，实际投递延后至 Outbox dispatcher。"""
 
-    enqueue_task_execution(task_id)
+    _defer_dispatch_to_outbox(task_id)
 
 
 def spawn_script_simplification_task(task_id: str) -> None:
-    from app.tasks.execute_task import enqueue_task_execution
+    """保留剧本简化旧路由调用，实际投递延后至 Outbox dispatcher。"""
 
-    enqueue_task_execution(task_id)
+    _defer_dispatch_to_outbox(task_id)

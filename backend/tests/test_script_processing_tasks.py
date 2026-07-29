@@ -11,6 +11,7 @@ from app.core.db import Base
 from app.core.task_manager import DeliveryMode, SqlAlchemyTaskStore
 from app.core.task_manager.types import TaskStatus
 from app.models.task import GenerationTask, GenerationTaskStatus
+from app.models.generation_artifacts import GenerationDispatchOutbox
 from app.models.task_links import GenerationTaskLink
 from app.services.script_processing_worker import run_extract_task_sync
 from app.services.script_processing_tasks import (
@@ -102,6 +103,12 @@ async def test_create_divide_task_creates_task_and_link() -> None:
             )
         ).scalars().first()
         assert link is not None
+        outbox = (
+            await db.execute(
+                select(GenerationDispatchOutbox).where(GenerationDispatchOutbox.task_id == result.task_id)
+            )
+        ).scalars().one()
+        assert outbox.payload == {"task_id": result.task_id}
 
     await engine.dispose()
 
@@ -147,6 +154,16 @@ async def test_create_divide_task_reuses_existing_active_task() -> None:
             .all()
         )
         assert link_count == 1
+        outbox_count = len(
+            (
+                await db.execute(
+                    select(GenerationDispatchOutbox).where(GenerationDispatchOutbox.task_id == first.task_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert outbox_count == 1
 
     await engine.dispose()
 
