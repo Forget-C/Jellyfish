@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -16,6 +17,44 @@ from app.core.integrations.kling.images import KlingImageApiAdapter
 from app.core.integrations.kling.video import KlingVideoApiAdapter
 from app.core.tasks.image_generation_tasks import KlingImageGenerationTask
 from app.core.tasks.video_generation_tasks import KlingVideoGenerationTask
+
+
+def _projected_video_input(
+    *,
+    prompt: str,
+    model: str,
+    ratio: str,
+    first_frame: str | None = None,
+) -> VideoGenerationInput:
+    """构造仅在 Provider 调用期间存在的帧 Data URL 投影。"""
+    return VideoGenerationInput.model_construct(
+        prompt=prompt,
+        model=model,
+        ratio=ratio,
+        seconds=None,
+        seed=None,
+        watermark=None,
+        frame_references=SimpleNamespace(
+            first_frame=first_frame,
+            last_frame=None,
+            key_frames=[],
+        ),
+        subject_references=[],
+    )
+
+
+def _projected_image_reference(image_url: str) -> InputImageRef:
+    """构造仅在 Provider 调用期间存在的参考图 Data URL 投影。"""
+    reference = InputImageRef.model_construct(file_id=None)
+    object.__setattr__(reference, "image_url", image_url)
+    return reference
+
+
+def _with_projected_images(
+    input_: ImageGenerationInput, references: list[InputImageRef]
+) -> ImageGenerationInput:
+    """把执行期 Data URL 投影附加到已通过公共契约校验的图片输入。"""
+    return input_.model_copy(update={"images": references})
 
 
 def _patch_httpx_client(monkeypatch: pytest.MonkeyPatch, transport: httpx.MockTransport) -> None:
@@ -73,8 +112,8 @@ async def test_kling_omni_image_to_video_uses_contents(monkeypatch: pytest.Monke
     _patch_httpx_client(monkeypatch, httpx.MockTransport(handler))
     task_id = await KlingVideoApiAdapter().create_video(
         cfg=ProviderConfig(provider="kling", api_key="kling-key"),
-        input_=VideoGenerationInput(
-            prompt="人物回头", model="kling-3.0", ratio="9:16", frame_references={"first_frame": "frame"}
+        input_=_projected_video_input(
+            prompt="人物回头", model="kling-3.0", ratio="9:16", first_frame="frame"
         ),
         timeout_s=30,
     )
@@ -101,9 +140,9 @@ async def test_kling_image_create_and_query(monkeypatch: pytest.MonkeyPatch) -> 
     inp = ImageGenerationInput(
         prompt="一只猫",
         model="kling-v3",
-        images=[InputImageRef(image_url="data:image/png;base64,raw-image")],
         resolution_profile="high",
     )
+    inp = _with_projected_images(inp, [_projected_image_reference("data:image/png;base64,raw-image")])
     adapter = KlingImageApiAdapter()
     task_id = await adapter.create_image(cfg=cfg, inp=inp, timeout_s=30)
     assert task_id == "image-1"

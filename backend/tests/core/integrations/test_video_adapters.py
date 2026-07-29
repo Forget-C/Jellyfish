@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -14,7 +15,52 @@ from app.core.integrations.vidu.video_payload import build_create_video_request
 from app.core.tasks.video_generation_tasks import ViduVideoGenerationTask
 from app.core.integrations.volcengine.video import VolcengineVideoApiAdapter
 from app.core.contracts.provider import ProviderConfig
-from app.core.contracts.video_generation import VideoGenerationInput, VideoSubjectReference
+from app.core.contracts.media import MediaReference
+from app.core.contracts.video_generation import VideoGenerationInput
+
+
+def _projected_video_input(
+    *,
+    prompt: str,
+    model: str,
+    ratio: str,
+    first_frame: str | None = None,
+    last_frame: str | None = None,
+    key_frames: list[str] | None = None,
+    subject_references: list[SimpleNamespace] | None = None,
+) -> VideoGenerationInput:
+    """构造仅在 Provider 调用期间存在的媒体 URL/Data URL 投影。"""
+    return VideoGenerationInput.model_construct(
+        prompt=prompt,
+        model=model,
+        ratio=ratio,
+        seconds=None,
+        seed=None,
+        watermark=None,
+        frame_references=SimpleNamespace(
+            first_frame=first_frame,
+            last_frame=last_frame,
+            key_frames=key_frames or [],
+        ),
+        subject_references=subject_references or [],
+    )
+
+
+def _projected_subject(
+    *, name: str, images: list[str] | None = None, videos: list[str] | None = None
+) -> SimpleNamespace:
+    """构造 Vidu adapter 使用的短生命周期主体媒体投影。"""
+    image_values = images or []
+    video_values = videos or []
+    return SimpleNamespace(
+        name=name,
+        images=image_values,
+        videos=video_values,
+        media=[
+            *[MediaReference(file_id=f"image-{index}", media_kind="image") for index, _ in enumerate(image_values)],
+            *[MediaReference(file_id=f"video-{index}", media_kind="video") for index, _ in enumerate(video_values)],
+        ],
+    )
 
 
 def _patch_httpx_client(monkeypatch: pytest.MonkeyPatch, transport: httpx.MockTransport) -> None:
@@ -111,11 +157,12 @@ async def test_vidu_video_create_and_get(monkeypatch: pytest.MonkeyPatch) -> Non
 
     _patch_httpx_client(monkeypatch, httpx.MockTransport(handler))
     cfg = ProviderConfig(provider="vidu", api_key="vidu-key")
-    inp = VideoGenerationInput(
+    inp = _projected_video_input(
         prompt="a transition",
         model="viduq2",
         ratio="16:9",
-        frame_references={"first_frame": "first", "last_frame": "last"},
+        first_frame="first",
+        last_frame="last",
     )
     adapter = ViduVideoApiAdapter()
     task_id = await adapter.create_video(cfg=cfg, input_=inp, timeout_s=30.0)
@@ -130,11 +177,12 @@ def test_vidu_video_payload_selects_text_and_reference_endpoints() -> None:
         VideoGenerationInput(prompt="a city", model="viduq2", ratio="16:9")
     )
     reference_path, reference_body = build_create_video_request(
-        VideoGenerationInput(
+        _projected_video_input(
             prompt="same character",
             model="viduq2",
             ratio="16:9",
-            frame_references={"first_frame": "first", "key_frames": ["key"]},
+            first_frame="first",
+            key_frames=["key"],
         )
     )
     assert text_path == "/ent/v2/text2video"
@@ -145,13 +193,13 @@ def test_vidu_video_payload_selects_text_and_reference_endpoints() -> None:
 def test_vidu_video_payload_keeps_subject_references_separate_from_frames() -> None:
     """主体图片/视频应映射到 Vidu subjects，而不是顶层帧 images/videos。"""
     path, body = build_create_video_request(
-        VideoGenerationInput(
+        _projected_video_input(
             prompt="@hero 与 @pet 在花园散步",
             model="viduq2-pro",
             ratio="16:9",
             subject_references=[
-                VideoSubjectReference(name="hero", images=["https://cdn.example/hero.png"]),
-                VideoSubjectReference(name="pet", videos=["https://cdn.example/pet.mp4"]),
+                _projected_subject(name="hero", images=["https://cdn.example/hero.png"]),
+                _projected_subject(name="pet", videos=["https://cdn.example/pet.mp4"]),
             ],
         )
     )

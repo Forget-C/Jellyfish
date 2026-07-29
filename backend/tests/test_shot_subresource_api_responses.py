@@ -22,11 +22,33 @@ from app.models.studio import (
     Shot,
     ShotDetail,
     ShotDialogLine,
+    ShotDialogueCandidateStatus,
+    ShotExtractedDialogueCandidate,
     ShotFrameImage,
     ShotFrameType,
     ShotStatus,
     VFXType,
 )
+
+
+class _FakeScalarRows:
+    """模拟 SQLAlchemy 标量结果，供候选回退查询读取首行。"""
+
+    def __init__(self, rows: list[object]) -> None:
+        self._rows = rows
+
+    def first(self) -> object | None:
+        return self._rows[0] if self._rows else None
+
+
+class _FakeExecuteResult:
+    """模拟 execute 结果，仅暴露本测试所需的 scalars 接口。"""
+
+    def __init__(self, rows: list[object]) -> None:
+        self._rows = rows
+
+    def scalars(self) -> _FakeScalarRows:
+        return _FakeScalarRows(self._rows)
 
 
 class _FakeShotSubresourceDB:
@@ -38,24 +60,22 @@ class _FakeShotSubresourceDB:
         self.shots: dict[str, Shot] = {}
         self.shot_details: dict[str, ShotDetail] = {}
         self.dialog_lines: dict[int, ShotDialogLine] = {}
+        self.dialogue_candidates: dict[int, ShotExtractedDialogueCandidate] = {}
         self.frame_images: dict[int, ShotFrameImage] = {}
         self._line_id = 1
         self._frame_id = 1
 
     async def get(self, model: type, entity_id):  # noqa: ANN001
-        if model is Project:
-            return self.projects.get(entity_id)
-        if model is Chapter:
-            return self.chapters.get(entity_id)
-        if model is Shot:
-            return self.shots.get(entity_id)
-        if model is ShotDetail:
-            return self.shot_details.get(entity_id)
-        if model is ShotDialogLine:
-            return self.dialog_lines.get(entity_id)
-        if model is ShotFrameImage:
-            return self.frame_images.get(entity_id)
-        return None
+        stores = {
+            Project: self.projects,
+            Chapter: self.chapters,
+            Shot: self.shots,
+            ShotDetail: self.shot_details,
+            ShotDialogLine: self.dialog_lines,
+            ShotFrameImage: self.frame_images,
+        }
+        store = stores.get(model)
+        return store.get(entity_id) if store is not None else None
 
     def add(self, obj: object) -> None:
         if isinstance(obj, Project):
@@ -92,6 +112,14 @@ class _FakeShotSubresourceDB:
         if getattr(obj, "created_at", None) is None:
             obj.created_at = now
         obj.updated_at = now
+
+    async def execute(self, statement: object) -> _FakeExecuteResult:
+        """返回与删除对白关联的候选项，覆盖候选回退查询。"""
+        descriptions = getattr(statement, "column_descriptions", [])
+        entity = descriptions[0].get("entity") if descriptions else None
+        if entity is ShotExtractedDialogueCandidate:
+            return _FakeExecuteResult(list(self.dialogue_candidates.values()))
+        return _FakeExecuteResult([])
 
     async def delete(self, obj: object) -> None:
         if isinstance(obj, ShotDetail):
@@ -310,6 +338,19 @@ def test_delete_shot_dialog_line_returns_empty_envelope(client: TestClient) -> N
     line.created_at = datetime.now(UTC)
     line.updated_at = line.created_at
     db.dialog_lines[line.id] = line
+    candidate = ShotExtractedDialogueCandidate(
+        shot_id="shot-1",
+        index=1,
+        text="你好",
+        line_mode=DialogueLineMode.dialogue,
+        speaker_name=None,
+        target_name=None,
+        candidate_status=ShotDialogueCandidateStatus.accepted,
+        linked_dialog_line_id=line.id,
+        confirmed_at=line.created_at,
+    )
+    candidate.id = 1
+    db.dialogue_candidates[candidate.id] = candidate
     app.dependency_overrides[get_db] = _override_db(db)
     try:
         response = client.delete("/api/v1/studio/shot-dialog-lines/1")
@@ -319,6 +360,9 @@ def test_delete_shot_dialog_line_returns_empty_envelope(client: TestClient) -> N
     assert response.status_code == 200
     assert response.json() == {"code": 200, "message": "success", "data": None, "meta": None}
     assert 1 not in db.dialog_lines
+    assert candidate.candidate_status == ShotDialogueCandidateStatus.pending
+    assert candidate.linked_dialog_line_id is None
+    assert candidate.confirmed_at is None
 
 
 def test_create_shot_frame_image_returns_created_envelope(client: TestClient) -> None:

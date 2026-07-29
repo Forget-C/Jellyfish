@@ -23,6 +23,20 @@ from app.core.integrations.image_capabilities import (
 )
 
 
+def _projected_image_reference(image_url: str | None) -> InputImageRef:
+    """构造仅在 Provider 调用期间存在的参考图 URL 投影。"""
+    reference = InputImageRef.model_construct(file_id=None)
+    object.__setattr__(reference, "image_url", image_url)
+    return reference
+
+
+def _with_projected_images(
+    input_: ImageGenerationInput, references: list[InputImageRef]
+) -> ImageGenerationInput:
+    """把执行期 URL 投影附加到已通过公共契约校验的图片输入。"""
+    return input_.model_copy(update={"images": references})
+
+
 def _patch_httpx_client(monkeypatch: pytest.MonkeyPatch, transport: httpx.MockTransport) -> None:
     """让各 adapter 内 `import httpx` 后使用的 AsyncClient 走 MockTransport。"""
 
@@ -75,8 +89,8 @@ async def test_openai_image_adapter_edits_when_references(monkeypatch: pytest.Mo
         prompt="edit me",
         n=1,
         watermark=True,
-        images=[InputImageRef(image_url="https://example.com/ref.png")],
     )
+    inp = _with_projected_images(inp, [_projected_image_reference("https://example.com/ref.png")])
     result = await OpenAIImageApiAdapter().generate(cfg=cfg, inp=inp, timeout_s=30.0)
     body = json.loads(captured["body"])
     assert body["watermark"] is True
@@ -220,13 +234,13 @@ async def test_vidu_image_adapter_exposes_provider_error_summary(monkeypatch: py
         )
 
 
-def test_vidu_image_body_rejects_openai_file_id_reference() -> None:
-    """Vidu 仅接收 URL 或 data URL，不应把 OpenAI file_id 误透传出去。"""
+def test_vidu_image_body_rejects_reference_without_worker_projection() -> None:
+    """Vidu 只能接收 Worker 已投影的 URL 或 data URL。"""
     inp = ImageGenerationInput(
         prompt="a scene",
         model="viduq2",
-        images=[InputImageRef(file_id="file-openai-only")],
     )
+    inp = _with_projected_images(inp, [_projected_image_reference(None)])
     with pytest.raises(ValueError, match="require image_url"):
         build_create_image_body(inp)
 
