@@ -84,7 +84,7 @@ def test_shot_frame_render_binds_path_frame_and_guidance(client: TestClient, mon
         )
 
     monkeypatch.setattr(route.prompt_renderer_registry, "resolve", lambda _name: renderer)
-    monkeypatch.setattr(route, "_load_frame_render_guidance", _guidance)
+    monkeypatch.setattr(route, "load_frame_render_guidance", _guidance)
     app.dependency_overrides[get_db] = _override_db(_DummyDB())
     try:
         response = client.post(
@@ -98,6 +98,16 @@ def test_shot_frame_render_binds_path_frame_and_guidance(client: TestClient, mon
     assert renderer.request.input.shot_id == "shot-1"
     assert renderer.request.input.frame_type.value == "first"
     assert renderer.request.input.director_command_summary == "服务端 guidance"
+
+
+def test_legacy_studio_image_task_endpoint_is_unmounted(client: TestClient) -> None:
+    """旧图片任务路由删除后，调用方不能再绕过统一生成提交链。"""
+    response = client.post(
+        "/api/v1/studio/actors/actor-1/image-tasks",
+        json={"prompt": "旧入口请求"},
+    )
+
+    assert response.status_code == 404
 
 
 def test_shot_video_render_binds_path_shot_and_rejects_delivery_body(client: TestClient, monkeypatch) -> None:

@@ -10,8 +10,6 @@ import type { ApiResponse_PropInfoAnalysisResult_ } from '../models/ApiResponse_
 import type { ApiResponse_SceneInfoAnalysisResult_ } from '../models/ApiResponse_SceneInfoAnalysisResult_';
 import type { ApiResponse_ScriptConsistencyCheckResult_ } from '../models/ApiResponse_ScriptConsistencyCheckResult_';
 import type { ApiResponse_ScriptDivisionResult_ } from '../models/ApiResponse_ScriptDivisionResult_';
-import type { ApiResponse_ScriptOptimizationResult_ } from '../models/ApiResponse_ScriptOptimizationResult_';
-import type { ApiResponse_ScriptSimplificationResult_ } from '../models/ApiResponse_ScriptSimplificationResult_';
 import type { ApiResponse_StudioScriptExtractionDraft_ } from '../models/ApiResponse_StudioScriptExtractionDraft_';
 import type { ApiResponse_VariantAnalysisResult_ } from '../models/ApiResponse_VariantAnalysisResult_';
 import type { CharacterPortraitAnalysisRequest } from '../models/CharacterPortraitAnalysisRequest';
@@ -379,48 +377,6 @@ export class ScriptProcessingService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/script-processing/optimize-script-async',
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * 基于一致性检查优化剧本
-     * 将一致性检查输出及原文作为输入，生成优化后的剧本（尽量少改，只改与角色混淆 issues 相关段落）。当前同步接口主要用于兼容旧调用与调试场景；页面主流程优先使用 optimize-script-async。
-     * @returns ApiResponse_ScriptOptimizationResult_ Successful Response
-     * @throws ApiError
-     */
-    public static optimizeScriptApiV1ScriptProcessingOptimizeScriptPost({
-        requestBody,
-    }: {
-        requestBody: ScriptOptimizeRequest,
-    }): CancelablePromise<ApiResponse_ScriptOptimizationResult_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/script-processing/optimize-script',
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * 智能精简剧本
-     * 在保留剧情主体并保证剧情连续的前提下精简剧本文本。当前同步接口主要用于兼容旧调用与调试场景；页面主流程优先使用 simplify-script-async。
-     * @returns ApiResponse_ScriptSimplificationResult_ Successful Response
-     * @throws ApiError
-     */
-    public static simplifyScriptApiV1ScriptProcessingSimplifyScriptPost({
-        requestBody,
-    }: {
-        requestBody: ScriptSimplifyRequest,
-    }): CancelablePromise<ApiResponse_ScriptSimplificationResult_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/script-processing/simplify-script',
             body: requestBody,
             mediaType: 'application/json',
             errors: {

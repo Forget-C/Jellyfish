@@ -8,7 +8,6 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.routes.studio.image_tasks import _load_frame_render_guidance
 from app.dependencies import get_db
 from app.models.studio import ShotFrameType
 from app.schemas.common import ApiResponse, success_response
@@ -22,6 +21,7 @@ from app.services.generation.prompts import (
     ShotVideoPromptRenderInput,
     prompt_renderer_registry,
 )
+from app.services.generation.prompts.frame_guidance import load_frame_render_guidance
 
 router = APIRouter()
 
@@ -93,7 +93,7 @@ async def render_shot_frame_prompt(
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[RenderedPromptSnapshot]:
     """加载镜头固有 guidance 后渲染指定帧，帧类型只信任路径参数。"""
-    guidance = await _load_frame_render_guidance(db=db, shot_id=shot_id, frame_type=frame_type)
+    guidance = await load_frame_render_guidance(db=db, shot_id=shot_id, frame_type=frame_type)
     snapshot = await prompt_renderer_registry.resolve(PromptRendererName.shot_frame).render(
         db,
         PromptRenderRequest(

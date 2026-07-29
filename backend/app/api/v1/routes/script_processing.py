@@ -21,16 +21,12 @@ from app.chains.agents import (
     ConsistencyCheckerAgent,
     PropInfoAnalysisAgent,
     SceneInfoAnalysisAgent,
-    ScriptOptimizerAgent,
-    ScriptSimplifierAgent,
 )
 from app.chains.agents.script_processing_agents import (
     ScriptDivisionResult,
     EntityMergeResult,
     VariantAnalysisResult,
     ScriptConsistencyCheckResult,
-    ScriptOptimizationResult,
-    ScriptSimplificationResult,
     StudioScriptExtractionDraft,
 )
 from app.dependencies import get_db, get_llm, get_nothinking_llm
@@ -785,7 +781,7 @@ async def analyze_costume_info(
 
 
 # ============================================================================
-# 6. ScriptOptimizerAgent - 剧本优化（非主线，按需触发）
+# 6. 剧本优化与精简（统一异步任务）
 # ============================================================================
 
 class ScriptOptimizeRequest(BaseModel):
@@ -837,57 +833,6 @@ async def optimize_script_async(
             relation_entity_id=task_info.relation_entity_id,
         )
     )
-
-
-@router.post(
-    "/optimize-script",
-    response_model=ApiResponse[ScriptOptimizationResult],
-    summary="基于一致性检查优化剧本",
-    description="将一致性检查输出及原文作为输入，生成优化后的剧本（尽量少改，只改与角色混淆 issues 相关段落）。当前同步接口主要用于兼容旧调用与调试场景；页面主流程优先使用 optimize-script-async。"
-)
-async def optimize_script(
-    request: ScriptOptimizeRequest,
-    llm: BaseChatModel = Depends(get_llm),
-) -> ApiResponse[ScriptOptimizationResult]:
-    """
-    输入原文 + 一致性检查输出，生成优化后的剧本。
-    """
-    try:
-        agent = ScriptOptimizerAgent(llm)
-        result = agent.extract(
-            script_text=request.script_text,
-            consistency_json=json.dumps(request.consistency, ensure_ascii=False),
-        )
-        return success_response(data=result)
-    except Exception as e:
-        logger.error(f"Script optimization failed: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to optimize script: {str(e)}"
-        )
-
-
-@router.post(
-    "/simplify-script",
-    response_model=ApiResponse[ScriptSimplificationResult],
-    summary="智能精简剧本",
-    description="在保留剧情主体并保证剧情连续的前提下精简剧本文本。当前同步接口主要用于兼容旧调用与调试场景；页面主流程优先使用 simplify-script-async。",
-)
-async def simplify_script(
-    request: ScriptSimplifyRequest,
-    llm: BaseChatModel = Depends(get_llm),
-) -> ApiResponse[ScriptSimplificationResult]:
-    """输入原文剧本，输出精简后的文本与精简策略摘要。"""
-    try:
-        agent = ScriptSimplifierAgent(llm)
-        result = agent.extract(script_text=request.script_text)
-        return success_response(data=result)
-    except Exception as e:
-        logger.error(f"Script simplification failed: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to simplify script: {str(e)}",
-        )
 
 
 @router.post(

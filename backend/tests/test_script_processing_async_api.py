@@ -485,3 +485,12 @@ def test_simplify_script_async_returns_created_task_payload(client, monkeypatch)
     assert response.status_code == 200
     assert response.json()["data"]["task_id"] == "task-simplify-1"
     assert called["task_id"] == "task-simplify-1"
+
+
+def test_script_optimization_and_simplification_sync_routes_are_not_public(client) -> None:
+    """防止同步兼容接口重新绕过统一异步任务执行链。"""
+    optimize_response = client.post("/api/v1/script-processing/optimize-script", json={})
+    simplify_response = client.post("/api/v1/script-processing/simplify-script", json={})
+
+    assert optimize_response.status_code == 404
+    assert simplify_response.status_code == 404
