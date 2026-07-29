@@ -76,8 +76,8 @@ def _message(message_id: str, role: str) -> ExperimentMessage:
 
 
 @pytest.mark.anyio
-async def test_image_lab_task_creates_messages_before_snapshot_and_enqueues_after_commit(monkeypatch) -> None:
-    """图片实验室提交必须以消息、快照任务、提交、投递的固定顺序完成。"""
+async def test_image_lab_task_creates_messages_before_snapshot_and_waits_for_outbox(monkeypatch) -> None:
+    """图片实验室提交必须先原子持久化消息与快照，再由 Outbox 投递。"""
 
     db = _DummyDB()
     user_message, task_message = _message("user-1", "user"), _message("task-message-1", "task")
@@ -99,7 +99,6 @@ async def test_image_lab_task_creates_messages_before_snapshot_and_enqueues_afte
     monkeypatch.setattr(route, "append_experiment_messages", _append)
     monkeypatch.setattr(route, "GenerationSubmitter", _Submitter)
     monkeypatch.setattr(_Submitter, "submit_async", _submit)
-    monkeypatch.setattr(route, "enqueue_task_execution", lambda task_id: events.append(f"enqueue:{task_id}:{db.commits}"))
 
     response = await route.submit_image_lab_generation_task(
         "session-1",
@@ -116,7 +115,8 @@ async def test_image_lab_task_creates_messages_before_snapshot_and_enqueues_afte
     assert _Submitter.command.target.kind.value == "experiment_session"
     assert _Submitter.command.target.entity_id == "session-1"
     assert _Submitter.command.modality.value == "image"
-    assert events == ["messages", "task", "enqueue:task-1:1"]
+    assert events == ["messages", "task"]
+    assert db.commits == 1
     assert db.refreshed == [user_message, task_message]
 
 
@@ -132,7 +132,6 @@ async def test_video_lab_task_binds_video_modality_and_rejects_wrong_session_typ
 
     monkeypatch.setattr(route, "append_experiment_messages", _append)
     monkeypatch.setattr(route, "GenerationSubmitter", _Submitter)
-    monkeypatch.setattr(route, "enqueue_task_execution", lambda _task_id: None)
     await route.submit_video_lab_generation_task(
         "session-1",
         GenerationSubmitRequest(

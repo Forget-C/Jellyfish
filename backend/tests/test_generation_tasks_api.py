@@ -62,7 +62,6 @@ def test_shot_frame_task_binds_all_internal_fields_from_path(client: TestClient,
 
     monkeypatch.setattr(route, "GenerationSubmitter", _Submitter)
     monkeypatch.setattr(route, "_get_or_create_frame_slot", _slot)
-    monkeypatch.setattr(route, "enqueue_task_execution", lambda _task_id: None)
     app.dependency_overrides[get_db] = _override_db(db)
     try:
         response = client.post(
@@ -98,7 +97,6 @@ def test_shot_video_task_rejects_image_operation_input(client: TestClient, monke
     """视频路径不能被请求体中的图片 operation 覆盖。"""
     db = _DummyDB()
     monkeypatch.setattr(route, "GenerationSubmitter", _Submitter)
-    monkeypatch.setattr(route, "enqueue_task_execution", lambda _task_id: None)
     app.dependency_overrides[get_db] = _override_db(db)
     try:
         response = client.post(
@@ -115,12 +113,10 @@ def test_shot_video_task_rejects_image_operation_input(client: TestClient, monke
     assert db.commits == 0
 
 
-def test_shot_video_task_binds_video_target_and_commits_before_enqueue(client: TestClient, monkeypatch) -> None:
-    """镜头视频路由固定视频命令，且仅在提交事务后投递执行。"""
+def test_shot_video_task_binds_video_target_and_persists_for_outbox(client: TestClient, monkeypatch) -> None:
+    """镜头视频路由固定视频命令，提交后仅等待 Outbox dispatcher 投递。"""
     db = _DummyDB()
-    enqueue_after_commit: list[bool] = []
     monkeypatch.setattr(route, "GenerationSubmitter", _Submitter)
-    monkeypatch.setattr(route, "enqueue_task_execution", lambda _task_id: enqueue_after_commit.append(db.commits == 1))
     app.dependency_overrides[get_db] = _override_db(db)
     try:
         response = client.post(
@@ -139,14 +135,13 @@ def test_shot_video_task_binds_video_target_and_commits_before_enqueue(client: T
     assert _Submitter.command.delivery.value == "async_polling"
     assert _Submitter.command.target.kind.value == "shot_video"
     assert _Submitter.command.target.entity_id == "shot-1"
-    assert enqueue_after_commit == [True]
+    assert db.commits == 1
 
 
 def test_asset_image_task_routes_bind_asset_slots_from_path(client: TestClient, monkeypatch) -> None:
     """演员、角色与具名资产路径必须固定为同一种资产图片槽位命令。"""
     db = _DummyDB()
     monkeypatch.setattr(route, "GenerationSubmitter", _Submitter)
-    monkeypatch.setattr(route, "enqueue_task_execution", lambda _task_id: None)
     app.dependency_overrides[get_db] = _override_db(db)
     try:
         cases = (

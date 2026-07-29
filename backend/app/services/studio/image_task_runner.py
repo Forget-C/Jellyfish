@@ -102,6 +102,7 @@ async def _resolve_snapshot_provider_config(
 async def _resolve_snapshot_image_input(
     session: AsyncSession,
     *,
+    task_id: str,
     snapshot: ResolvedGenerationSnapshot,
 ) -> ImageGenerationInput:
     """将安全的 ``file_id`` 参考图投影为旧 Provider adapter 的内存 Data URL。
@@ -127,7 +128,7 @@ async def _resolve_snapshot_image_input(
             raise RuntimeError("image generation snapshot media is invalid")
         resolver = FileResolver(session)
         for reference in media.references:
-            resolved = await resolver.resolve(reference)
+            resolved = await resolver.resolve_task_reference(task_id=task_id, reference=reference)
             content_type = resolved.content_type or "image/png"
             if not content_type.startswith("image/"):
                 raise RuntimeError(f"resolved media type mismatch for file_id={reference.file_id}")
@@ -162,7 +163,7 @@ async def _run_snapshot_image_generation(
     """执行统一提交的图片任务，并通过 Artifact 与 CAS Publisher 发布结果。"""
     snapshot = ResolvedGenerationSnapshot.model_validate(snapshot_payload)
     provider_config = await _resolve_snapshot_provider_config(session, snapshot=snapshot)
-    input_ = await _resolve_snapshot_image_input(session, snapshot=snapshot)
+    input_ = await _resolve_snapshot_image_input(session, task_id=task_id, snapshot=snapshot)
     provider_task = ImageGenerationTask(provider_config=provider_config, input_=input_)
     await provider_task.run()
     result = await provider_task.get_result()

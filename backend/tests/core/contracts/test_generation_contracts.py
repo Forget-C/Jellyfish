@@ -16,6 +16,7 @@ from app.core.contracts.generation import (
     VideoGenerationOperationInput,
 )
 from app.core.contracts.media import (
+    ImageMediaInput,
     MediaReference,
     VideoMediaInput,
     VideoSubjectMediaReference,
@@ -55,6 +56,17 @@ def test_video_media_rejects_duplicate_normalized_subject_and_ordinal() -> None:
             subjects=[
                 VideoSubjectMediaReference(name="Hero", media=[reference]),
                 VideoSubjectMediaReference(name=" hero ", media=[MediaReference(file_id="file-2", media_kind="video")]),
+            ]
+        )
+
+
+def test_image_media_rejects_duplicate_ordinals() -> None:
+    """同组图片引用必须有稳定且唯一的 ordinal，避免异步快照冲突。"""
+    with pytest.raises(ValidationError, match="ordinals must be unique"):
+        ImageMediaInput(
+            references=[
+                MediaReference(file_id="file-1", media_kind="image", ordinal=0),
+                MediaReference(file_id="file-2", media_kind="image", ordinal=0),
             ]
         )
 

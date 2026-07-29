@@ -3109,20 +3109,30 @@ function Inspector(props: {
       if (!ratio) {
         throw new Error('video ratio is required')
       }
-      const res = await FilmService.previewVideoGenerationPromptApiV1FilmTasksVideoPreviewPromptPost({
+      const res = await StudioGenerationPromptsService.renderShotVideoPromptApiV1StudioGenerationPromptsShotsShotIdVideoRenderPost({
+        shotId: selectedShot.id,
         requestBody: {
-          shot_id: selectedShot.id,
           reference_mode: context.referenceMode,
           prompt: (base.prompt || '').trim() || null,
-          frame_references: buildVideoFrameReferences(context.referenceMode, context.images),
-          ratio: ratio as '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | '21:9',
+          image_file_ids: context.images,
         },
       })
       const data = (res as any)?.data ?? null
+      const pack =
+        data?.variables_snapshot && typeof data.variables_snapshot === 'object'
+          ? (data.variables_snapshot as Record<string, unknown>).pack ?? null
+          : null
+      const recommendedMedia = data?.recommended_media
+      const images =
+        recommendedMedia && typeof recommendedMedia === 'object' && Array.isArray((recommendedMedia as any).references)
+          ? (recommendedMedia as any).references
+              .map((reference: any) => (typeof reference?.file_id === 'string' ? reference.file_id : ''))
+              .filter(Boolean)
+          : context.images
       return {
-        prompt: typeof data?.prompt === 'string' ? data.prompt : '',
-        images: Array.isArray(data?.images) ? (data.images as string[]).filter(Boolean) : [],
-        pack: data?.pack ?? null,
+        prompt: typeof data?.execution_prompt === 'string' ? data.execution_prompt : '',
+        images,
+        pack: pack as ShotVideoPromptPackRead | null,
       }
     },
     submit: async ({ derived, context }) => {
@@ -3190,8 +3200,6 @@ function Inspector(props: {
   const [videoTaskId, setVideoTaskId] = useState<string | null>(null)
   const [videoTask, setVideoTask] = useState<RelationTaskState | null>(null)
   const [videoSettledTask, setVideoSettledTask] = useState<RelationTaskState | null>(null)
-  const [promptTask, setPromptTask] = useState<RelationTaskState | null>(null)
-  const [promptSettledTask, setPromptSettledTask] = useState<RelationTaskState | null>(null)
   const [frameImageTask, setFrameImageTask] = useState<RelationTaskState | null>(null)
   const [frameImageSettledTask, setFrameImageSettledTask] = useState<RelationTaskState | null>(null)
   const [generatedVideos, setGeneratedVideos] = useState<Array<{ linkId: number; fileId: string; url: string }>>([])
@@ -3230,33 +3238,6 @@ function Inspector(props: {
               cancelledImmediatelyMessage: TASK_COPY.videoGeneration.cancelledImmediatelyMessage,
               cancelRequestedMessage: TASK_COPY.videoGeneration.cancelRequestedMessage,
               fallbackErrorMessage: '取消视频生成任务失败',
-            })
-        : null,
-    onNavigate: () => undefined,
-  })
-  useRelationTaskNotification({
-    task: promptTask,
-    settledTask: promptSettledTask,
-    title: TASK_COPY.shotFramePrompt.title,
-    sourceLabel: selectedShotSourceLabel,
-    runningDescription: TASK_COPY.shotFramePrompt.runningDescription,
-    cancellingDescription: TASK_COPY.shotFramePrompt.cancellingDescription,
-    successDescription: TASK_COPY.shotFramePrompt.successDescription,
-    cancelledDescription: TASK_COPY.shotFramePrompt.cancelledDescription,
-    failedDescription: TASK_COPY.shotFramePrompt.failedDescription,
-    onCancel:
-      promptTask?.taskId
-        ? () =>
-            void executeTaskCancel({
-              taskId: promptTask.taskId,
-              reason: '用户在分镜工作室取消分镜提示词生成任务',
-              applyCancelData: (data) => {
-                setPromptTask((current) => applyTaskCancelState(current, data))
-                return null
-              },
-              cancelledImmediatelyMessage: TASK_COPY.shotFramePrompt.cancelledImmediatelyMessage,
-              cancelRequestedMessage: TASK_COPY.shotFramePrompt.cancelRequestedMessage,
-              fallbackErrorMessage: '取消分镜提示词生成任务失败',
             })
         : null,
     onNavigate: () => undefined,
@@ -4529,102 +4510,21 @@ function Inspector(props: {
       return
     }
     const frameType = keyframePromptPreviewFrameType
+    const basePrompt = getPromptFromDetailByType(frameType).trim()
+    if (!basePrompt) {
+      message.warning('请先输入基础提示词，再渲染最终提示词')
+      return
+    }
     setKeyframePromptActionLoading(true)
     try {
-      const created = await FilmService.createShotFramePromptTaskApiV1FilmTasksShotFramePromptsPost({
-        requestBody: {
-          shot_id: selectedShot.id,
-          frame_type: frameType,
-        },
-      })
-      const taskId = created.data?.task_id
-      if (!taskId) {
-        message.error('生成任务创建失败：缺少任务 ID')
-        return
-      }
-      setPromptTask({
-        taskId,
-        status: 'pending',
-        progress: 0,
-        cancelRequested: false,
-      })
-      setPromptSettledTask(null)
-
-      let finalStatus = 'pending'
-      let finalTaskState: RelationTaskState | null = null
-      for (let i = 0; i < 30; i += 1) {
-        await sleep(2000)
-        const statusRes = await FilmService.getTaskStatusApiV1FilmTasksTaskIdStatusGet({ taskId })
-        const status = statusRes.data?.status
-        if (!status) continue
-        finalStatus = status
-        if (statusRes.data) {
-          finalTaskState = toRelationTaskStateFromStatusRead(statusRes.data)
-          setPromptTask(finalTaskState)
-        }
-        if (status === 'succeeded' || status === 'failed' || status === 'cancelled') break
-      }
-      if (
-        finalTaskState &&
-        (finalTaskState.status === 'succeeded' ||
-          finalTaskState.status === 'failed' ||
-          finalTaskState.status === 'cancelled')
-      ) {
-        setPromptTask(null)
-        setPromptSettledTask(finalTaskState)
-      }
-
-      if (finalStatus !== 'succeeded') {
-        if (finalStatus !== 'failed' && finalStatus !== 'cancelled') {
-          message.warning('生成任务仍在执行，请稍后重试')
-        }
-        return
-      }
-
-      const resultRes = await FilmService.getTaskResultApiV1FilmTasksTaskIdResultGet({ taskId })
-      const result = (resultRes.data?.result ?? null) as Record<string, unknown> | null
-      const generatedPrompt = typeof result?.prompt === 'string' ? result.prompt : ''
-      const debugContext =
-        result && typeof result.debug_context === 'object' && result.debug_context !== null
-          ? (result.debug_context as ShotFramePromptDebugContext)
-          : null
-      const qualityChecks =
-        result &&
-        typeof result.quality_checks === 'object' &&
-        result.quality_checks !== null &&
-        typeof (result.quality_checks as Record<string, unknown>).passed === 'boolean'
-          ? {
-              passed: Boolean((result.quality_checks as Record<string, unknown>).passed),
-              issues: Array.isArray((result.quality_checks as Record<string, unknown>).issues)
-                ? ((result.quality_checks as Record<string, unknown>).issues as unknown[])
-                    .map((item) => (typeof item === 'string' ? item.trim() : ''))
-                    .filter(Boolean)
-                : [],
-            }
-          : null
-      if (!generatedPrompt.trim()) {
-        message.warning('生成完成，但未返回提示词')
-        return
-      }
-      if (frameType === 'first') {
-        onPatchShotDetail({ first_frame_prompt: generatedPrompt })
-      } else if (frameType === 'last') {
-        onPatchShotDetail({ last_frame_prompt: generatedPrompt })
-      } else {
-        onPatchShotDetail({ key_frame_prompt: generatedPrompt })
-      }
-      setKeyframePromptDebugContext(debugContext)
-      setKeyframePromptQualityChecks(qualityChecks)
-      keyframePromptDraft.replaceBase({ frameType, prompt: generatedPrompt })
-      keyframePromptDraft.setState('draft_changed')
       await renderShotPromptToTextarea({
         frameType,
-        prompt: generatedPrompt,
+        prompt: basePrompt,
         refFileIds: keyframePromptPreviewRefFileIds.length > 0 ? keyframePromptPreviewRefFileIds : autoKeyframeRefFileIds,
       })
-      message.success('提示词已生成')
+      message.success('提示词已按统一规则渲染')
     } catch {
-      message.error('生成提示词失败')
+      message.error('渲染提示词失败')
     } finally {
       setKeyframePromptActionLoading(false)
     }
@@ -5837,13 +5737,13 @@ function Inspector(props: {
                       loading={keyframePromptActionLoading}
                       onClick={() => void regenerateKeyframePrompt()}
                     >
-                      AI生成
+                      按规则渲染
                     </Button>
                   </Space>
                 </div>
                 {!hasBasePrompt ? (
                   <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
-                    当前还没有基础提示词。你可以先让 AI 生成一版，再按需修改；也可以直接手动输入。
+                    当前还没有基础提示词。请先手动输入一版描述，再按统一规则渲染并按需修改。
                   </div>
                   ) : null}
                   {hasPromptQualityChecks ? (

@@ -200,6 +200,18 @@ def test_reap_text_streams_celery_runs_async_reaper(monkeypatch) -> None:
     assert execute_task_module.reap_text_streams_celery() == ["expired-text-task"]
 
 
+def test_dispatch_generation_outbox_celery_runs_dispatcher(monkeypatch) -> None:
+    """Beat task 必须调用统一 Outbox dispatcher，而非让路由直接投递。"""
+
+    class _FakeDispatcher:
+        def dispatch_pending(self) -> int:
+            return 3
+
+    monkeypatch.setattr(execute_task_module, "GenerationOutboxDispatcher", _FakeDispatcher)
+
+    assert execute_task_module.dispatch_generation_outbox_celery() == 3
+
+
 def test_async_delegating_executors_use_positional_runner_signature() -> None:
     for task_kind, executor in task_executor_registry._executors.items():
         if not isinstance(executor, AbstractAsyncDelegatingExecutor):

@@ -77,6 +77,7 @@ async def _resolve_snapshot_provider_config(
 async def _resolve_snapshot_video_input(
     session: AsyncSession,
     *,
+    task_id: str,
     snapshot: ResolvedGenerationSnapshot,
 ) -> VideoGenerationInput:
     """将安全 ``file_id`` 快照在执行期解析为旧 Provider adapter 所需的 data URL。
@@ -94,7 +95,7 @@ async def _resolve_snapshot_video_input(
     resolver = FileResolver(session)
 
     async def to_data_url(reference) -> str:  # noqa: ANN001
-        resolved = await resolver.resolve(reference)
+        resolved = await resolver.resolve_task_reference(task_id=task_id, reference=reference)
         content_type = resolved.content_type or f"{reference.media_kind}/png"
         if not content_type.startswith(f"{reference.media_kind}/"):
             raise RuntimeError(f"resolved media type mismatch for file_id={reference.file_id}")
@@ -147,7 +148,7 @@ async def _run_snapshot_video_generation(
     """执行 P3 提交的视频任务，并以 Artifact + CAS Publisher 完成落库。"""
     snapshot = ResolvedGenerationSnapshot.model_validate(snapshot_payload)
     provider_config = await _resolve_snapshot_provider_config(session, snapshot=snapshot)
-    input_ = await _resolve_snapshot_video_input(session, snapshot=snapshot)
+    input_ = await _resolve_snapshot_video_input(session, task_id=task_id, snapshot=snapshot)
     provider_task = VideoGenerationTask(provider_config=provider_config, input_=input_)
     await provider_task.run()
     raw_result = await provider_task.get_result()

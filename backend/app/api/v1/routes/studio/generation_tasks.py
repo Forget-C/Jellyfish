@@ -30,7 +30,6 @@ from app.models.studio import ShotDetail, ShotFrameImage, ShotFrameType
 from app.schemas.common import ApiResponse, created_response
 from app.services.generation.gate import GenerationEntityGate
 from app.services.generation.submission import GenerationSubmitter
-from app.tasks.execute_task import enqueue_task_execution
 
 router = APIRouter()
 
@@ -59,7 +58,7 @@ async def _submit_async_task(
     target: GenerationTarget,
     body: GenerationSubmitRequest,
 ) -> ApiResponse[TaskCreated]:
-    """提交已由资源路径绑定的命令，并在事务提交后才投递 Worker。"""
+    """提交已由资源路径绑定的命令，由 Outbox dispatcher 可靠投递 Worker。"""
     accepted = await GenerationSubmitter(entity_gate=GenerationEntityGate()).submit_async(
         db,
         GenerationCommand(
@@ -71,7 +70,6 @@ async def _submit_async_task(
         ),
     )
     await db.commit()
-    enqueue_task_execution(accepted.task_id)
     return created_response(TaskCreated(task_id=accepted.task_id))
 
 

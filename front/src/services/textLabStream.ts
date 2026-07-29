@@ -154,6 +154,7 @@ export async function* streamTextLab(
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
+  let receivedTerminalEvent = false
   try {
     let hasMoreChunks = true
     while (hasMoreChunks) {
@@ -164,6 +165,7 @@ export async function* streamTextLab(
       for (const frame of frames.frames) {
         const event = parseTextLabSseFrame(frame)
         if (event) {
+          receivedTerminalEvent ||= isTextLabTerminalEvent(event)
           yield event
         }
       }
@@ -175,12 +177,21 @@ export async function* streamTextLab(
     if (buffer.trim()) {
       const event = parseTextLabSseFrame(buffer)
       if (event) {
+        receivedTerminalEvent ||= isTextLabTerminalEvent(event)
         yield event
       }
+    }
+    if (!receivedTerminalEvent) {
+      throw new TextLabStreamTransportError('Text lab stream ended before a terminal event')
     }
   } finally {
     reader.releaseLock()
   }
+}
+
+/** 判断事件是否已明确收敛本次运行；正常 EOF 前必须收到且只能由服务端发出。 */
+function isTextLabTerminalEvent(event: TextLabStreamEvent): boolean {
+  return event.event === 'completed' || event.event === 'error' || event.event === 'cancelled'
 }
 
 /** 将当前 OpenAPI BASE 与固定 SSE 路径组合，避免页面重复拼接服务端地址。 */

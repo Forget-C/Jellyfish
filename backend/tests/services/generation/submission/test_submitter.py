@@ -21,6 +21,7 @@ from app.core.contracts.media import ImageMediaInput, MediaReference
 from app.models.generation_artifacts import GenerationDispatchOutbox, GenerationTaskMediaReference
 from app.models.task import GenerationTask, GenerationTaskVisibility
 from app.models.task_links import GenerationTaskLink
+from app.models.studio import FileItem, FileType
 from app.services.generation.submission import (
     GenerationSubmitter,
     UnsupportedGenerationDeliveryError,
@@ -34,6 +35,22 @@ class RecordingSession:
     def __init__(self) -> None:
         self.added: list[object] = []
         self.flush_count = 0
+        self.files = {
+            "file-1": FileItem(
+                id="file-1",
+                type=FileType.image,
+                name="reference",
+                thumbnail="",
+                tags=[],
+                storage_key="files/file-1",
+                content_version=3,
+                content_hash="sha256:stable",
+            )
+        }
+
+    async def get(self, _model: object, file_id: str) -> FileItem | None:
+        """提供媒体快照冻结所需的最小文件读取能力。"""
+        return self.files.get(file_id)
 
     def add(self, instance: object) -> None:
         """记录待写入对象。"""
@@ -105,6 +122,8 @@ async def test_async_submit_persists_task_link_media_and_outbox_without_secrets(
     assert link.relation_type == "asset_image_slot"
     assert link.relation_entity_id == "slot-1"
     assert media.group_path == "references"
+    assert media.file_content_version == 3
+    assert media.file_content_hash == "sha256:stable"
     assert task.payload.keys() == {"command", "snapshot"}
     assert "credential_ref" not in task.payload["snapshot"]
     assert "storage_key" not in str(task.payload)

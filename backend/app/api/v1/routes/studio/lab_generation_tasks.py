@@ -31,7 +31,6 @@ from app.schemas.studio.experiment_sessions import ExperimentMessageRead, Experi
 from app.services.generation.gate import GenerationEntityGate
 from app.services.generation.submission import GenerationSubmitter
 from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages
-from app.tasks.execute_task import enqueue_task_execution
 
 router = APIRouter()
 
@@ -120,7 +119,6 @@ async def _submit_lab_task(
     await db.commit()
     await db.refresh(user_message)
     await db.refresh(task_message)
-    enqueue_task_execution(accepted.task_id)
     return created_response(
         ExperimentTaskCreated(
             task_id=accepted.task_id,
@@ -164,4 +162,3 @@ async def submit_video_lab_generation_task(
 
     _require_operation_request(body, modality=GenerationModality.video)
     return await _submit_lab_task(db, session_id=session_id, modality=GenerationModality.video, body=body)
-

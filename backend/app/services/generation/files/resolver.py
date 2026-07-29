@@ -5,6 +5,8 @@ from __future__ import annotations
 from app.core import storage
 from app.core.contracts.media import MediaReference
 from app.models.studio import FileItem, FileType
+from app.models.generation_artifacts import GenerationTaskMediaReference
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.generation.files.types import ResolvedMediaContent, ResolvedMediaSnapshot
@@ -51,6 +53,37 @@ class FileResolver:
         ):
             raise FileResolutionError(f"file content changed for file_id={snapshot.file_id}")
         return await self._download(file_item, snapshot)
+
+    async def resolve_task_reference(self, *, task_id: str, reference: MediaReference) -> ResolvedMediaContent:
+        """按任务持久化媒体快照解析引用，拒绝未冻结或已漂移的文件内容。"""
+        rows = list(
+            await self._db.scalars(
+                select(GenerationTaskMediaReference).where(
+                    GenerationTaskMediaReference.task_id == task_id,
+                    GenerationTaskMediaReference.file_id == reference.file_id,
+                    GenerationTaskMediaReference.media_kind == reference.media_kind,
+                    GenerationTaskMediaReference.ordinal == reference.ordinal,
+                )
+            )
+        )
+        if not rows:
+            raise FileResolutionError(f"task media snapshot is missing for file_id={reference.file_id}")
+        snapshots = {
+            (row.file_content_version, row.file_content_hash)
+            for row in rows
+        }
+        if len(snapshots) != 1:
+            raise FileResolutionError(f"task media snapshot is inconsistent for file_id={reference.file_id}")
+        content_version, content_hash = snapshots.pop()
+        return await self.resolve_frozen(
+            ResolvedMediaSnapshot(
+                file_id=reference.file_id,
+                media_kind=reference.media_kind,
+                ordinal=reference.ordinal,
+                file_content_version=content_version,
+                file_content_hash=content_hash,
+            )
+        )
 
     async def _download(
         self,

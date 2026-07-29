@@ -33,9 +33,12 @@ class ImageMediaInput(BaseModel):
 
     @model_validator(mode="after")
     def require_image_references(self) -> "ImageMediaInput":
-        """拒绝把视频引用混入图片 operation，保持 Provider 前的类型边界。"""
+        """拒绝类型或顺序冲突的图片引用，避免数据库唯一约束在提交后才失败。"""
         if any(reference.media_kind != "image" for reference in self.references):
             raise ValueError("image media only accepts image references")
+        ordinals = [reference.ordinal for reference in self.references]
+        if len(ordinals) != len(set(ordinals)):
+            raise ValueError("image media ordinals must be unique")
         return self
 
 

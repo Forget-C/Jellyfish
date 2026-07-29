@@ -207,11 +207,13 @@ export function TextExperimentMode({
     }
 
     setSubmitting(true)
+    let temporaryAssistantId: string | undefined
     try {
       const session = await ensureSession('text')
       if (!selectedTemplate) setDraft('')
       const controller = new AbortController()
-      const temporaryAssistantId = `stream-${createMessageId()}`
+      const activeTemporaryAssistantId = `stream-${createMessageId()}`
+      temporaryAssistantId = activeTemporaryAssistantId
       streamAbortRef.current = controller
       streamSessionIdRef.current = session.id
       for await (const event of streamTextLab({
@@ -224,15 +226,15 @@ export function TextExperimentMode({
           setLocalMessages((current) => [
             ...current,
             { id: event.data.user_message.id, role: 'user', content: event.data.user_message.content },
-            { id: temporaryAssistantId, role: 'assistant', content: '' },
+            { id: activeTemporaryAssistantId, role: 'assistant', content: '' },
           ])
         } else if (event.event === 'delta') {
           setLocalMessages((current) => current.map((item) => (
-            item.id === temporaryAssistantId ? { ...item, content: `${item.content}${event.data.text_delta}` } : item
+            item.id === activeTemporaryAssistantId ? { ...item, content: `${item.content}${event.data.text_delta}` } : item
           )))
         } else if (event.event === 'completed') {
           setLocalMessages((current) => current.map((item) => (
-            item.id === temporaryAssistantId
+            item.id === activeTemporaryAssistantId
               ? { id: event.data.assistant_message.id, role: 'assistant', content: event.data.assistant_message.content }
               : item
           )))
@@ -240,10 +242,14 @@ export function TextExperimentMode({
         } else if (event.event === 'error') {
           throw new Error(event.data.error.message)
         } else if (event.event === 'cancelled') {
-          setLocalMessages((current) => current.filter((item) => item.id !== temporaryAssistantId))
+          setLocalMessages((current) => current.filter((item) => item.id !== activeTemporaryAssistantId))
         }
       }
     } catch {
+      if (temporaryAssistantId) {
+        const messageId = temporaryAssistantId
+        setLocalMessages((current) => current.filter((item) => item.id !== messageId))
+      }
       if (!selectedTemplate) setDraft(currentPrompt)
       if (!(streamAbortRef.current?.signal.aborted)) {
         message.error('文本模型调用失败，请检查模型、供应商配置和服务日志')

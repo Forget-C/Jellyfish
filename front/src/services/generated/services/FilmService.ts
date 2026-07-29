@@ -7,84 +7,18 @@ import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
 import type { ApiResponse_PaginatedData_GenerationTaskLinkRead__ } from '../models/ApiResponse_PaginatedData_GenerationTaskLinkRead__';
 import type { ApiResponse_PaginatedData_TaskListItemRead__ } from '../models/ApiResponse_PaginatedData_TaskListItemRead__';
 import type { ApiResponse_TaskCancelRead_ } from '../models/ApiResponse_TaskCancelRead_';
-import type { ApiResponse_TaskCreated_ } from '../models/ApiResponse_TaskCreated_';
 import type { ApiResponse_TaskLinkAdoptRead_ } from '../models/ApiResponse_TaskLinkAdoptRead_';
 import type { ApiResponse_TaskResultRead_ } from '../models/ApiResponse_TaskResultRead_';
 import type { ApiResponse_TaskStatusRead_ } from '../models/ApiResponse_TaskStatusRead_';
-import type { ApiResponse_VideoPromptPreviewResponse_ } from '../models/ApiResponse_VideoPromptPreviewResponse_';
 import type { GenerationTaskLinkCreate } from '../models/GenerationTaskLinkCreate';
 import type { GenerationTaskLinkUpdate } from '../models/GenerationTaskLinkUpdate';
-import type { ShotFramePromptRequest } from '../models/ShotFramePromptRequest';
 import type { TaskCancelRequest } from '../models/TaskCancelRequest';
 import type { TaskLinkAdoptRequest } from '../models/TaskLinkAdoptRequest';
 import type { TaskStatus } from '../models/TaskStatus';
-import type { VideoGenerationTaskRequest } from '../models/VideoGenerationTaskRequest';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class FilmService {
-    /**
-     * 视频提示词预览
-     * 预览视频生成的提示词与自动关联参考图。
-     * @returns ApiResponse_VideoPromptPreviewResponse_ Successful Response
-     * @throws ApiError
-     */
-    public static previewVideoGenerationPromptApiV1FilmTasksVideoPreviewPromptPost({
-        requestBody,
-    }: {
-        requestBody: VideoGenerationTaskRequest,
-    }): CancelablePromise<ApiResponse_VideoPromptPreviewResponse_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/film/tasks/video/preview-prompt',
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * 视频生成（任务版）
-     * 创建视频生成任务并后台执行，结果通过 /tasks/{task_id}/result 获取。
-     * @returns ApiResponse_TaskCreated_ Successful Response
-     * @throws ApiError
-     */
-    public static createVideoGenerationTaskApiV1FilmTasksVideoPost({
-        requestBody,
-    }: {
-        requestBody: VideoGenerationTaskRequest,
-    }): CancelablePromise<ApiResponse_TaskCreated_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/film/tasks/video',
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * 镜头分镜帧提示词生成（任务版）
-     * @returns ApiResponse_TaskCreated_ Successful Response
-     * @throws ApiError
-     */
-    public static createShotFramePromptTaskApiV1FilmTasksShotFramePromptsPost({
-        requestBody,
-    }: {
-        requestBody: ShotFramePromptRequest,
-    }): CancelablePromise<ApiResponse_TaskCreated_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/film/tasks/shot-frame-prompts',
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
     /**
      * 全局任务列表（任务中心）
      * @returns ApiResponse_PaginatedData_TaskListItemRead__ Successful Response

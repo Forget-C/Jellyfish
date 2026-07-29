@@ -17,6 +17,7 @@ from app.core.contracts.media import ImageMediaInput, MediaReference, VideoMedia
 from app.models.generation_artifacts import GenerationDispatchOutbox, GenerationTaskMediaReference
 from app.models.task import GenerationDeliveryMode, GenerationTask, GenerationTaskStatus, GenerationTaskVisibility
 from app.models.task_links import GenerationTaskLink
+from app.services.generation.files import FileResolver
 from app.services.generation.submission.capabilities import GenerationCapabilityRegistry, generation_capability_registry
 
 
@@ -81,7 +82,9 @@ class GenerationSubmitter:
                 relation_entity_id=snapshot.canonical_target.slot_id or snapshot.canonical_target.entity_id,
             )
         )
+        file_resolver = FileResolver(db)
         for group_path, reference in _iter_media_references(snapshot.media):
+            media_snapshot = await file_resolver.snapshot(reference)
             db.add(
                 GenerationTaskMediaReference(
                     task_id=task_id,
@@ -89,6 +92,8 @@ class GenerationSubmitter:
                     group_path=group_path,
                     ordinal=reference.ordinal,
                     media_kind=reference.media_kind,
+                    file_content_version=media_snapshot.file_content_version,
+                    file_content_hash=media_snapshot.file_content_hash,
                 )
             )
         db.add(GenerationDispatchOutbox(task_id=task_id, payload={"task_id": task_id}))

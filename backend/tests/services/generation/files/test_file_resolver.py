@@ -8,6 +8,7 @@ from app.core import storage
 from app.core.contracts.media import MediaReference
 from app.core.storage import StoredFileInfo
 from app.models.studio import FileItem, FileType
+from app.models.generation_artifacts import GenerationTaskMediaReference
 from app.services.generation.files import FileResolutionError, FileResolver
 
 
@@ -20,6 +21,18 @@ class _FakeDB:
     async def get(self, _model, file_id: str):  # noqa: ANN001
         """按文件 ID 返回预设的 FileItem。"""
         return self._files.get(file_id)
+
+
+class _TaskSnapshotDB(_FakeDB):
+    """补充任务媒体快照查询，验证 Worker 不会跳过冻结版本。"""
+
+    def __init__(self, files: dict[str, FileItem], references: list[GenerationTaskMediaReference]) -> None:
+        super().__init__(files)
+        self._references = references
+
+    async def scalars(self, _statement):  # noqa: ANN001
+        """返回测试预置的任务媒体快照。"""
+        return self._references
 
 
 def _file(*, file_id: str = "file-1", file_type: FileType = FileType.image) -> FileItem:
@@ -98,3 +111,32 @@ async def test_resolve_frozen_rejects_content_version_drift() -> None:
 
     with pytest.raises(FileResolutionError, match="content changed"):
         await resolver.resolve_frozen(snapshot)
+
+
+@pytest.mark.asyncio
+async def test_resolve_task_reference_rejects_drift_from_persisted_snapshot() -> None:
+    """Worker 必须依据任务快照而不是当前文件版本解析媒体。"""
+    file_item = _file()
+    file_item.content_version = 4
+    resolver = FileResolver(
+        _TaskSnapshotDB(
+            {"file-1": file_item},
+            [
+                GenerationTaskMediaReference(
+                    task_id="task-1",
+                    file_id="file-1",
+                    group_path="references",
+                    ordinal=0,
+                    media_kind="image",
+                    file_content_version=3,
+                    file_content_hash="sha256:stable",
+                )
+            ],
+        )
+    )
+
+    with pytest.raises(FileResolutionError, match="content changed"):
+        await resolver.resolve_task_reference(
+            task_id="task-1",
+            reference=MediaReference(file_id="file-1", media_kind="image"),
+        )

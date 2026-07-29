@@ -25,7 +25,6 @@ from app.services.generation.runtime.text_chat_streaming import (
     stream_text_run,
     subscribe_text_stream,
 )
-from app.tasks.execute_task import enqueue_task_execution
 
 router = APIRouter()
 
@@ -72,7 +71,7 @@ async def submit_text_lab_task(
     body: TextLabRunRequest,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[ExperimentTaskCreated]:
-    """创建文本 canonical 消息和统一 polling 任务，提交成功后才投递 Celery。"""
+    """创建文本 canonical 消息和统一 polling 任务，由 Outbox 可靠投递。"""
     accepted, user_message, task_message = await create_text_async_task(
         db,
         session_id=session_id,
@@ -82,7 +81,6 @@ async def submit_text_lab_task(
     await db.commit()
     await db.refresh(user_message)
     await db.refresh(task_message)
-    enqueue_task_execution(accepted.task_id)
     return created_response(
         ExperimentTaskCreated(
             task_id=accepted.task_id,
