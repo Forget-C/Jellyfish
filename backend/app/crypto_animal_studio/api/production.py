@@ -10,6 +10,18 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
+from app.crypto_animal_studio.domain.import_ledger import CasImportLedger
+from app.crypto_animal_studio.application.render_request import build_render_request
+from app.crypto_animal_studio.application.render_tasks import (
+    create_shot_render_task,
+    find_active_render_task,
+)
+from app.crypto_animal_studio.application.render_views import (
+    build_artifact_view,
+    build_render_task_view,
+    latest_render_task,
+)
 from app.crypto_animal_studio.production.enums import ArtifactType
 from app.crypto_animal_studio.production.models import CasProductionArtifact, CasProductionJob, CasProductionShot
 from app.crypto_animal_studio.production.orchestrator import (
@@ -24,6 +36,7 @@ from app.crypto_animal_studio.schemas.production import (
     ProductionArtifactView,
     ProductionJobView,
     ProductionShotView,
+    RenderTaskView,
     RetryProductionJobRequest,
 )
 from app.dependencies import get_db
@@ -42,7 +55,15 @@ async def _build_job_view(db: AsyncSession, job: CasProductionJob) -> Production
     artifacts = list((await db.execute(select(CasProductionArtifact).where(CasProductionArtifact.job_id == job.id))).scalars().all())
     manifest = next((a for a in artifacts if a.artifact_type == ArtifactType.manifest.value), None)
     final = next((a for a in artifacts if a.artifact_type == ArtifactType.final_video.value), None)
+    # Step 7：最近一次单镜头渲染尝试（按镜头顺序取第一个有尝试的镜头，确定性）。
+    render_task_view = None
+    for shot_row in shots:
+        task_row = await latest_render_task(db, production_shot_id=shot_row.id)
+        if task_row is not None:
+            render_task_view = build_render_task_view(task_row)
+            break
     return ProductionJobView(
+        render_task=render_task_view,
         id=job.id,
         project_id=job.project_id,
         episode_id=job.episode_id,
@@ -80,6 +101,45 @@ async def create_production_job(body: CreateProductionJobRequest, db: AsyncSessi
     return success_response(data=await _build_job_view(db, job))
 
 
+@router.get("/jobs", response_model=ApiResponse[list[ProductionJobView]])
+async def list_production_jobs(
+    project_id: str,
+    episode_id: str | None = None,
+    chapter_id: str | None = None,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[list[ProductionJobView]]:
+    """按项目列出生产任务，可按剧集或章节过滤。
+
+    ``chapter_id`` 存在的原因：Jellyfish 的 Chapter **不建模剧集**，``ChapterRead``
+    没有 episode_id，因此前端只有路由里的 chapterId。权威的 章节→剧集 映射保存在
+    ``cas_import_ledger(project_id, episode_id, chapter_id)``（导入时写入），
+    这里在服务端解析它，避免前端猜测或把 chapter.id 当作 episode_id。
+
+    章节没有导入记录时返回空列表（该章节不是由 CAS 导入的剧集）。
+    """
+    stmt = select(CasProductionJob).where(CasProductionJob.project_id == project_id)
+
+    resolved_episode_id = episode_id
+    if resolved_episode_id is None and chapter_id:
+        ledger_stmt = select(CasImportLedger.episode_id).where(
+            CasImportLedger.project_id == project_id,
+            CasImportLedger.chapter_id == chapter_id,
+        )
+        resolved_episode_id = (await db.execute(ledger_stmt)).scalars().first()
+        if resolved_episode_id is None:
+            return success_response(data=[])
+
+    if resolved_episode_id:
+        stmt = stmt.where(CasProductionJob.episode_id == resolved_episode_id)
+    # 全序排序：created_at 可能在同一秒内并列，单靠它不是确定性顺序。
+    # cas_production_jobs 没有自增列（id 是随机 UUID），因此以 id 作次级键构成
+    # **稳定的全序**；并列时的取舍是任意但可复现的。若日后需要「真正的最新」，
+    # 需要一个单调列（需迁移，超出 Step 7 范围）。
+    stmt = stmt.order_by(CasProductionJob.created_at.desc(), CasProductionJob.id.desc())
+    rows = list((await db.execute(stmt)).scalars().all())
+    return success_response(data=[await _build_job_view(db, row) for row in rows])
+
+
 @router.get("/jobs/{job_id}", response_model=ApiResponse[ProductionJobView])
 async def get_production_job(job_id: str, db: AsyncSession = Depends(get_db)) -> ApiResponse[ProductionJobView]:
     """查询生产任务状态。"""
@@ -106,22 +166,65 @@ async def list_production_artifacts(job_id: str, db: AsyncSession = Depends(get_
         .scalars()
         .all()
     )
-    return success_response(
-        data=[
-            ProductionArtifactView(
-                id=a.id,
-                production_shot_id=a.production_shot_id,
-                artifact_type=a.artifact_type,
-                stage=a.stage,
-                provider=a.provider,
-                provider_model=a.provider_model,
-                file_path=a.file_path,
-                mime_type=a.mime_type,
-                checksum=a.checksum,
-            )
-            for a in rows
-        ]
+    # Step 7：统一经 build_artifact_view 投影，补上 file_id / size / download_url 等可选字段。
+    return success_response(data=[build_artifact_view(a) for a in rows])
+
+
+@router.post(
+    "/jobs/{job_id}/shots/{production_shot_id}/render",
+    response_model=ApiResponse[RenderTaskView],
+)
+async def start_shot_render(
+    job_id: str,
+    production_shot_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[RenderTaskView]:
+    """为单个生产镜头发起一次真实渲染尝试（入队后立即返回）。
+
+    既有 Step 6 端点无法表达「渲染某一个镜头」，故新增本路由。
+    实际执行走既有任务中心 + Celery；本路由只登记与入队。
+    """
+    job = await db.get(CasProductionJob, job_id)
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"production job not found: {job_id}"
+        )
+    shot = await db.get(CasProductionShot, production_shot_id)
+    if shot is None or shot.job_id != job_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"production shot not found in job: {production_shot_id}",
+        )
+
+    active = await find_active_render_task(db, production_shot_id=production_shot_id)
+    if active is not None:
+        # 已有进行中的尝试：幂等返回，不重复入队。
+        return success_response(data=build_render_task_view(active))
+
+    # 提示词只在 application 层组装：这里只把镜头已持久化的字段作为上下文传入。
+    render_request = build_render_request(
+        shot,
+        context={"scene": shot.image_prompt or "", "action": shot.video_prompt or ""},
+        ratio="9:16",
+        negative_prompt=shot.negative_prompt or None,
     )
+    task_row, _attempt = await create_shot_render_task(
+        db,
+        job=job,
+        production_shot=shot,
+        render_request=render_request,
+        provider=settings.cas_render_provider,
+        base_url=settings.cas_comfyui_base_url,
+        poll_interval_s=settings.cas_render_poll_interval_s,
+        timeout_s=settings.cas_render_timeout_s,
+    )
+    # 任务行必须先可见，worker 才能按 id 取到它。
+    await db.commit()
+
+    from app.tasks.execute_task import enqueue_task_execution  # 延迟导入，避免导入环
+
+    enqueue_task_execution(task_row.id)
+    return success_response(data=build_render_task_view(task_row))
 
 
 @router.post("/jobs/{job_id}/retry", response_model=ApiResponse[ProductionJobView])

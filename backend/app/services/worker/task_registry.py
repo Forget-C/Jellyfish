@@ -12,6 +12,10 @@ from app.crypto_animal_studio.application.import_tasks import (
     CAS_IMPORT_EPISODE_TASK_KIND,
     run_cas_import_task,
 )
+from app.crypto_animal_studio.application.render_tasks import (
+    CAS_RENDER_SHOT_TASK_KIND,
+    run_cas_shot_render_task,
+)
 from app.services.film.generated_video import run_video_generation_task
 from app.services.film.shot_frame_prompt_tasks import run_shot_frame_prompt_task
 from app.services.script_processing_worker import (
@@ -85,5 +89,14 @@ task_executor_registry.register(
         task_kind=CAS_IMPORT_EPISODE_TASK_KIND,
         runner=run_cas_import_task,
         timeout_seconds=300.0,
+    ),
+)
+# CAS：单镜头真实渲染。复用同一注册表与队列；视频生成耗时长，超时给足余量。
+task_executor_registry.register(
+    CAS_RENDER_SHOT_TASK_KIND,
+    AbstractAsyncDelegatingExecutor(
+        task_kind=CAS_RENDER_SHOT_TASK_KIND,
+        runner=run_cas_shot_render_task,
+        timeout_seconds=3600.0,
     ),
 )

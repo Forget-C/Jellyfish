@@ -41,6 +41,13 @@ import {
   type SubtitleArtifact,
   type TaskStatusView,
 } from '../../../services/casWorkspaceApi'
+import {
+  fetchProductionJobs,
+  findProductionShotId,
+  selectActiveProductionJob,
+  type ProductionJobSummary,
+} from '../../../services/casWorkspaceApi'
+import ShotRenderPanel from './ShotRenderPanel'
 import { parseWebVtt, type ParsedVtt } from './webvtt'
 
 const POLL_INTERVAL_MS = 2000
@@ -66,6 +73,10 @@ export default function Ep001Workspace() {
   const [subtitleError, setSubtitleError] = useState<string | null>(null)
   const [preview, setPreview] = useState<ParsedVtt | null>(null)
   const [artifactFromImport, setArtifactFromImport] = useState<SubtitleArtifact | null>(null)
+
+  // Step 7：选中的镜头（按 index 标识）与其所属的 CAS 生产任务。
+  const [selectedShotIndex, setSelectedShotIndex] = useState<number | null>(null)
+  const [productionJob, setProductionJob] = useState<ProductionJobSummary | null>(null)
 
   const [task, setTask] = useState<TaskStatusView | null>(null)
   const [taskReused, setTaskReused] = useState(false)
@@ -126,6 +137,20 @@ export default function Ep001Workspace() {
     }
   }, [projectId, chapterId])
 
+  // Step 7：定位本剧集的 CAS 生产任务（前端无法凭 chapterId 推出 job_id）。
+  // 用路由里的 chapterId 定位剧集：ChapterRead 不含 episode_id，
+  // 权威的 章节→剧集 映射由后端从 cas_import_ledger 解析。
+  const loadProductionJob = useCallback(async () => {
+    if (!projectId || !chapterId) return
+    try {
+      const jobs = await fetchProductionJobs(projectId, { chapterId })
+      // 不依赖返回数组的位置：在前端再施加一次确定性选取规则。
+      if (mountedRef.current) setProductionJob(selectActiveProductionJob(jobs))
+    } catch {
+      if (mountedRef.current) setProductionJob(null) // 无生产任务不应让整页失败
+    }
+  }, [projectId, chapterId])
+
   useEffect(() => {
     mountedRef.current = true
     void loadWorkspace()
@@ -135,6 +160,10 @@ export default function Ep001Workspace() {
       stopPolling()
     }
   }, [loadWorkspace, loadSubtitle, stopPolling])
+
+  useEffect(() => {
+    void loadProductionJob()
+  }, [loadProductionJob])
 
   // 有界轮询：仅在非终态时继续，卸载/终态即停止。
   const pollTask = useCallback(
@@ -284,6 +313,12 @@ export default function Ep001Workspace() {
         ) : (
           <Collapse
             accordion
+            // 展开某个镜头即视为「选中」；折叠则取消选中并卸载渲染面板。
+            onChange={(key) => {
+              const activeKey = Array.isArray(key) ? key[0] : key
+              const found = shots.find(({ shot }) => shot.id === activeKey)
+              setSelectedShotIndex(found ? (found.shot.index ?? null) : null)
+            }}
             items={shots.map(({ shot, detail, dialogLines }) => ({
               key: shot.id,
               label: (
@@ -337,6 +372,29 @@ export default function Ep001Workspace() {
           />
         )}
       </Card>
+
+      {/* --- Step 7：选中镜头的渲染面板 --- */}
+      {(() => {
+        const productionShotId = findProductionShotId(productionJob, selectedShotIndex ?? undefined)
+        if (selectedShotIndex === null) return null
+        if (!productionJob || !productionShotId) {
+          return (
+            <Alert
+              className="mb-4"
+              type="info"
+              showIcon
+              message="该镜头暂无对应的生产镜头"
+              description="需要先为本剧集创建生产任务（CasProductionJob），渲染面板才会出现。"
+              data-testid="render-panel-unavailable"
+            />
+          )
+        }
+        return (
+          <div className="mb-4">
+            <ShotRenderPanel jobId={productionJob.id} productionShotId={productionShotId} />
+          </div>
+        )
+      })()}
 
       {/* --- 字幕产物 --- */}
       <Card title="zh-Hant 字幕产物（只读）" className="mb-4" data-testid="subtitle-panel">

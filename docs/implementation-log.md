@@ -361,3 +361,95 @@ an early return. Not touched here — outside Step 6 scope.
 **Step 6 is accepted.** The EP001 production workspace, the `chapter_id` / `usage_kind` file
 filters, the Vitest + React Testing Library infrastructure and the regenerated OpenAPI client are
 frozen alongside the Step 5 / 5.1 importer, subtitle artifact pipeline and worker registration.
+
+---
+
+## Step 7 — EP001 First Real Render
+
+### Architecture
+
+```
+CasProductionShot → build_render_request → CasProductionJob
+  → TaskManager (task_kind="cas_render_shot") + GenerationTaskLink("cas_shot_render")
+  → enqueue_task_execution → existing Celery task.execute
+  → registered cas_render_shot executor → run_cas_shot_render_task
+  → existing VideoGenerationTask → resolve_task_adapter("video_generation", "comfyui")
+  → ComfyUI (/prompt → /history → /view)
+  → create_file_from_url_or_b64 → FileItem
+  → CasProductionArtifact → render_views → EP001 Workspace
+```
+
+`cas_render_shot` is a **CAS-specific persistence tail on shared infrastructure** — the same
+`task_executor_registry`, the same `AbstractAsyncDelegatingExecutor`, the same Celery entry point
+and the same `VideoGenerationTask` provider dispatch. It is **not** a second queue, a second
+provider registry or a parallel execution system. The tail differs only because
+`persist_generated_video_to_shot` is hard-wired to the Jellyfish `Shot` model, so reusing it
+verbatim could not link a `CasProductionArtifact`. The Jellyfish film path is untouched.
+
+### Configuration
+
+| Variable | Default | Notes |
+|---|---|---|
+| `CAS_RENDER_PROVIDER` | `comfyui` | `comfyui` / `volcengine` / `openai` |
+| `CAS_COMFYUI_BASE_URL` | *(none)* | e.g. `http://127.0.0.1:8188`; no default, never hard-coded |
+| `CAS_COMFYUI_WORKFLOW_MAPPING` | *(none)* | path to the mapping JSON |
+| `CAS_RENDER_POLL_INTERVAL_S` | `3.0` | provider poll interval |
+| `CAS_RENDER_TIMEOUT_S` | `1800.0` | render timeout → structured failure |
+
+**Startup safety:** the app imports and runs with none of these set. Adapter registration is
+**lazy** (`list_registered_task_adapters` is empty until bootstrap runs inside
+`VideoGenerationTask.__init__`), OpenAI and Volcengine resolve unchanged, and ComfyUI raises
+`WorkflowConfigError` **only when selected**.
+
+**Workflow requirement:** ComfyUI must be exported in **API format**. Node IDs are never assumed;
+a mapping JSON declares `"<logical input>": "<node_id>.<input_name>"` plus `output_node`. See
+`backend/tests/fixtures/comfyui/example_mapping.json`. Only mapped, non-null inputs are injected,
+so workflows lacking negative-prompt / fps / seed still work.
+
+**Startup order:** ComfyUI → API server → Celery worker.
+
+### Status, attempts and the latest-attempt rule
+
+Progress ladder `5 → 20 → 80 → 100` maps to `Worker started → Submitted to render provider →
+Downloading generated video → Completed`. Terminal states: `succeeded`, `failed`, `cancelled`.
+
+**Latest attempt is selected by `GenerationTaskLink.id DESC`, filtered to
+`relation_type == "cas_shot_render"`.** `created_at` plus the random task UUID is explicitly
+**not** used: two attempts created in the same second tie on timestamp, and UUID ordering does not
+represent creation order — that rule was stable but selected the *wrong* attempt, found by the
+end-to-end retry test.
+
+### Artifact lifecycle and limitations
+
+`FileItem` is created through the existing storage abstraction; `CasProductionArtifact` links job +
+production shot. Playback uses the existing controlled endpoint
+`/api/v1/studio/files/{file_id}/download` — never a URL built from `storage_key`, and no public
+static route was added.
+
+- **`checksum` stays `""`** — `FileItem` has no checksum column and the object is not re-downloaded
+  merely to hash it. The DB-level artifact existence check is the explicit idempotency mechanism.
+- **`size_bytes` stays `None`** when no real persisted size exists. Never estimated, never zero.
+- **Redelivery** of a successful task reuses the artifact and does not call the provider again.
+- **Retry** creates a new `GenerationTask` + link with an incremented attempt; earlier successful
+  artifacts are preserved, never overwritten.
+- **Concurrency limitation:** `cas_production_artifacts` has an `Index`, **not** a
+  `UniqueConstraint`. Ordinary redelivery idempotency is tested and works, but two *truly
+  concurrent* transactions could each insert one row. Strict exactly-once is **not** claimed and no
+  migration was added.
+
+### Testing boundaries
+
+Automated E2E fakes exactly two boundaries: provider HTTP (`VideoGenerationTask`) and the external
+object-storage upload — though the storage fake still writes a **real `FileItem` row**. Everything
+else is the real path. **No Celery broker was exercised**, so this is *worker-boundary* E2E, not
+broker-level E2E.
+
+### Status
+
+- **Implementation complete** — backend and frontend source written.
+- **Automated backend verification complete** — see the commands below.
+- **Frontend verification BLOCKED** — `node_modules` cannot be created on this mount.
+- **Real-provider render BLOCKED** — no API-reachable ComfyUI and no compatible workflow.
+
+Real-render acceptance requires exactly one action: start an API-reachable ComfyUI instance and
+export a compatible API-format video workflow JSON together with its node mapping.

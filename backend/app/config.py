@@ -62,6 +62,18 @@ class Settings(BaseSettings):
     # 可选：对外访问基址（CDN 或自定义域名），为空则使用 S3 自带 URL 或预签名 URL
     s3_public_base_url: str | None = None
 
+    # CAS 单镜头渲染（Step 7）。全部通过环境变量提供，仓库内不存放任何地址或凭据。
+    #: 渲染使用的供应商标识：comfyui | volcengine | openai。
+    cas_render_provider: str = "comfyui"
+    #: ComfyUI 实例地址，例如 http://127.0.0.1:8188（无缺省值：未配置即明确失败）。
+    cas_comfyui_base_url: str | None = None
+    #: 工作流「输入/输出映射」JSON 的路径，见 app.core.integrations.comfyui.workflow。
+    cas_comfyui_workflow_mapping: str | None = None
+    #: 轮询间隔（秒）。
+    cas_render_poll_interval_s: float = 3.0
+    #: 单次渲染超时（秒）。视频生成通常远慢于图像，缺省给足余量。
+    cas_render_timeout_s: float = 1800.0
+
     def model_post_init(self, __context: object) -> None:
         if not self.celery_broker_url or not str(self.celery_broker_url).strip():
             password_part = f":{self.redis_password}@" if self.redis_password else ""

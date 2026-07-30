@@ -43,7 +43,7 @@ importers:
         version: 5.0.11(@types/react@18.2.37)(react@18.2.0)
     devDependencies:
       '@testing-library/jest-dom':
-        specifier: ^6.9.1
+        specifier: 6.9.1
         version: 6.9.1
       '@testing-library/react':
         specifier: ^16.1.0
