@@ -65,10 +65,22 @@ class AbstractImageGenerationTask(BaseTask, ABC):
     async def _poll_and_get_result(self) -> ImageGenerationResult:
         """解析为统一结果。"""
 
+    async def create_provider_task(self) -> str | None:
+        """仅发起供应商调用；异步供应商返回可持久化任务 ID。"""
+        await self._create_task()
+        return self._provider_task_id
+
+    async def poll_provider_task(self, *, provider_task_id: str | None = None) -> ImageGenerationResult:
+        """轮询异步任务或读取同步调用的已暂存结果。"""
+        if provider_task_id:
+            self._provider_task_id = provider_task_id
+        self._result = await self._poll_and_get_result()
+        return self._result
+
     async def run(self, *args: Any, **kwargs: Any) -> AsyncIterator[Any] | None:  # type: ignore[override]
         try:
-            await self._create_task()
-            self._result = await self._poll_and_get_result()
+            await self.create_provider_task()
+            self._result = await self.poll_provider_task()
             if self._result is not None:
                 self._provider_task_id = self._result.provider_task_id
         except Exception as exc:  # noqa: BLE001
@@ -326,3 +338,11 @@ class ImageGenerationTask(BaseTask):
 
     async def get_result(self) -> ImageGenerationResult | None:  # type: ignore[override]
         return await self._impl.get_result()
+
+    async def create_provider_task(self) -> str | None:
+        """创建供应商图片任务，供 Worker 在轮询前记录任务 ID。"""
+        return await self._impl.create_provider_task()
+
+    async def poll_provider_task(self, *, provider_task_id: str | None = None) -> ImageGenerationResult:
+        """轮询新建或已持久化的异步图片任务。"""
+        return await self._impl.poll_provider_task(provider_task_id=provider_task_id)

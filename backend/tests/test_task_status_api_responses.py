@@ -96,28 +96,14 @@ def test_cancel_task_returns_success_envelope(client: TestClient, monkeypatch) -
         def __init__(self, _db) -> None:
             pass
 
-        async def request_cancel(self, task_id: str, _reason: str | None = None):
+        async def request_cancel_intent(self, task_id: str, _reason: str | None = None):
             from app.core.task_manager.types import TaskRecord
 
             return TaskRecord(
                 id=task_id,
                 mode=DeliveryMode.async_polling,
                 task_kind="test_task",
-                status=TaskStatus.cancelled,
-                progress=0,
-                payload={},
-                cancel_requested=True,
-                cancel_requested_at_ts=123.0,
-            )
-
-        async def mark_cancelled(self, task_id: str):
-            from app.core.task_manager.types import TaskRecord
-
-            return TaskRecord(
-                id=task_id,
-                mode=DeliveryMode.async_polling,
-                task_kind="test_task",
-                status=TaskStatus.cancelled,
+                status=TaskStatus.pending,
                 progress=0,
                 payload={},
                 cancel_requested=True,
@@ -125,7 +111,6 @@ def test_cancel_task_returns_success_envelope(client: TestClient, monkeypatch) -
             )
 
     monkeypatch.setattr(task_status_route, "SqlAlchemyTaskStore", _FakeStore)
-    monkeypatch.setattr(task_status_route, "revoke_task_execution", lambda _task_id: False)
     db = _FakeTaskDB()
     app.dependency_overrides[get_db] = _override_db(db)
     try:
@@ -136,19 +121,19 @@ def test_cancel_task_returns_success_envelope(client: TestClient, monkeypatch) -
     assert response.status_code == 200
     assert response.json()["data"] == {
         "task_id": "task-1",
-        "status": "cancelled",
+        "status": "pending",
         "cancel_requested": True,
         "cancel_requested_at_ts": 123.0,
-        "effective_immediately": True,
+        "effective_immediately": False,
     }
 
 
-def test_cancel_task_revokes_celery_and_marks_cancelled(client: TestClient, monkeypatch) -> None:
+def test_cancel_task_only_records_intent_for_running_celery_task(client: TestClient, monkeypatch) -> None:
     class _FakeStore:
         def __init__(self, _db) -> None:
             pass
 
-        async def request_cancel(self, task_id: str, _reason: str | None = None):
+        async def request_cancel_intent(self, task_id: str, _reason: str | None = None):
             from app.core.task_manager.types import TaskRecord
 
             return TaskRecord(
@@ -164,24 +149,7 @@ def test_cancel_task_revokes_celery_and_marks_cancelled(client: TestClient, monk
                 executor_task_id="celery-task-2",
             )
 
-        async def mark_cancelled(self, task_id: str):
-            from app.core.task_manager.types import TaskRecord
-
-            return TaskRecord(
-                id=task_id,
-                mode=DeliveryMode.async_polling,
-                task_kind="video_generation",
-                status=TaskStatus.cancelled,
-                progress=40,
-                payload={},
-                cancel_requested=True,
-                cancel_requested_at_ts=456.0,
-                executor_type="celery",
-                executor_task_id="celery-task-2",
-            )
-
     monkeypatch.setattr(task_status_route, "SqlAlchemyTaskStore", _FakeStore)
-    monkeypatch.setattr(task_status_route, "revoke_task_execution", lambda task_id: task_id == "task-2")
     db = _FakeTaskDB()
     app.dependency_overrides[get_db] = _override_db(db)
     try:
@@ -192,10 +160,10 @@ def test_cancel_task_revokes_celery_and_marks_cancelled(client: TestClient, monk
     assert response.status_code == 200
     assert response.json()["data"] == {
         "task_id": "task-2",
-        "status": "cancelled",
+        "status": "running",
         "cancel_requested": True,
         "cancel_requested_at_ts": 456.0,
-        "effective_immediately": True,
+        "effective_immediately": False,
     }
 
 
@@ -379,6 +347,47 @@ def test_get_task_result_returns_success_envelope(client: TestClient) -> None:
     assert body["data"]["started_at_ts"] == started_at.timestamp()
     assert body["data"]["finished_at_ts"] == finished_at.timestamp()
     assert body["data"]["elapsed_ms"] == 0
+    assert body["data"]["generation_delivery"] is None
+
+
+def test_get_task_result_exposes_typed_generation_delivery(client: TestClient) -> None:
+    """图片/视频任务保留旧 result，同时暴露已校验的终态交付契约。"""
+    db = _FakeTaskDB()
+    task = GenerationTask(
+        id="task-generation",
+        mode=GenerationDeliveryMode.async_polling,
+        task_kind="image_generation",
+        status=GenerationTaskStatus.succeeded,
+        progress=100,
+        payload={},
+        result={
+            "outcome": "succeeded",
+            "artifacts": [
+                {
+                    "artifact_id": "artifact-1",
+                    "modality": "image",
+                    "ordinal": 0,
+                    "file_id": "file-1",
+                    "publish_state": "skipped",
+                    "publish_error": "no_target_slot",
+                }
+            ],
+            "primary_file_id": "file-1",
+        },
+        error="",
+    )
+    db.tasks[task.id] = task
+
+    app.dependency_overrides[get_db] = _override_db(db)
+    try:
+        response = client.get("/api/v1/film/tasks/task-generation/result")
+    finally:
+        app.dependency_overrides.clear()
+
+    data = response.json()["data"]
+    assert data["result"]["primary_file_id"] == "file-1"
+    assert data["generation_delivery"]["outcome"] == "succeeded"
+    assert data["generation_delivery"]["artifacts"][0]["artifact_id"] == "artifact-1"
 
 
 def test_get_task_status_returns_timing_fields(client: TestClient, monkeypatch) -> None:

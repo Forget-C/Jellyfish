@@ -100,6 +100,8 @@ export type { CostumeInfoAnalysisRequest } from './models/CostumeInfoAnalysisReq
 export type { CostumeInfoAnalysisResult } from './models/CostumeInfoAnalysisResult';
 export type { CostumeTimeline } from './models/CostumeTimeline';
 export type { CostumeTimelineEntry } from './models/CostumeTimelineEntry';
+export type { DeliveredArtifact } from './models/DeliveredArtifact';
+export type { DeliveredArtifactPublishState } from './models/DeliveredArtifactPublishState';
 export type { DialogueLineMode } from './models/DialogueLineMode';
 export type { EntityEntry } from './models/EntityEntry';
 export type { EntityLibrary } from './models/EntityLibrary';
@@ -125,6 +127,9 @@ export type { FileUsageRead } from './models/FileUsageRead';
 export type { FileUsageWrite } from './models/FileUsageWrite';
 export type { FrameGuidanceDecisionSnapshot } from './models/FrameGuidanceDecisionSnapshot';
 export type { FrameReferenceMappingSnapshot } from './models/FrameReferenceMappingSnapshot';
+export type { GenerationDeliveryResult } from './models/GenerationDeliveryResult';
+export type { GenerationModality } from './models/GenerationModality';
+export type { GenerationOutcome } from './models/GenerationOutcome';
 export type { GenerationSubmitRequest } from './models/GenerationSubmitRequest';
 export type { GenerationTaskLinkCreate } from './models/GenerationTaskLinkCreate';
 export type { GenerationTaskLinkRead } from './models/GenerationTaskLinkRead';

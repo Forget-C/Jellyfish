@@ -106,7 +106,8 @@ class GenerationEntityGate:
             exists = await db.get(ShotDetail, target.entity_id) is not None
         elif target.kind == GenerationTargetKind.shot_frame_slot:
             try:
-                exists = target.slot_id is not None and await db.get(ShotFrameImage, int(target.slot_id)) is not None
+                frame = await db.get(ShotFrameImage, int(target.slot_id)) if target.slot_id is not None else None
+                exists = frame is not None and frame.shot_detail_id == target.entity_id
             except ValueError:
                 exists = False
         elif target.kind == GenerationTargetKind.asset_image_slot:

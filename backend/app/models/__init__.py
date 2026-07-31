@@ -7,6 +7,8 @@ from app.models.llm import Model, ModelSettings, Provider
 from app.models.task import GenerationTask
 from app.models.task_links import GenerationTaskLink
 from app.models.generation_artifacts import GenerationArtifact, GenerationDispatchOutbox, GenerationTaskMediaReference
+from app.models.generation_runs import GenerationRun
+from app.models.generation_run_dispatches import GenerationRunDispatch
 from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
 from app.models.types import FileUsageKind
 
@@ -77,6 +79,8 @@ __all__ = [
     "GenerationTask",
     "GenerationTaskLink",
     "GenerationArtifact",
+    "GenerationRun",
+    "GenerationRunDispatch",
     "GenerationTaskMediaReference",
     "GenerationDispatchOutbox",
     "ExperimentSession",

@@ -64,13 +64,14 @@ export type ImageExperimentModeProps = {
 }
 
 /** 将图片任务结果转换为浏览器可直接预览的 URL。 */
-function extractImageUrls(result: Record<string, unknown> | null | undefined): string[] {
-  const fileId = result?.file_id
+function extractImageUrls(result: unknown): string[] {
+  const data = result && typeof result === 'object' ? result as Record<string, unknown> : {}
+  const fileId = data.primary_file_id ?? data.file_id
   if (typeof fileId === 'string') {
     const url = buildFileDownloadUrl(fileId)
     if (url) return [url]
   }
-  const images = result && Array.isArray(result.images) ? result.images : []
+  const images = Array.isArray(data.images) ? data.images : []
   return images.flatMap((item) => {
     if (!item || typeof item !== 'object') return []
     const image = item as { url?: unknown; b64_json?: unknown }
@@ -170,7 +171,7 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
             [runningTask.taskId!]: {
               status,
               error: response.data?.error ?? undefined,
-              resultUrls: status === 'succeeded' ? extractImageUrls(response.data?.result) : undefined,
+              resultUrls: status === 'succeeded' ? extractImageUrls(response.data?.generation_delivery ?? response.data?.result) : undefined,
             },
           }))
         }

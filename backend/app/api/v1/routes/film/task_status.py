@@ -5,16 +5,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pydantic import BaseModel, Field
+from pydantic import ValidationError
 
 from app.api.utils import apply_order, paginate
 from app.core.task_manager import SqlAlchemyTaskStore
+from app.core.contracts.generation_delivery import GenerationDeliveryResult
 from app.core.task_manager.types import TaskStatus
 from app.dependencies import get_db
 from app.models.task_links import GenerationTaskLink
-from app.models.experiment_sessions import ExperimentMessage
 from app.schemas.common import ApiResponse, PaginatedData, created_response, empty_response, paginated_response, success_response
 from app.services.common import entity_not_found
-from app.tasks.execute_task import revoke_task_execution
 
 from .common import (
     TaskCancelRead,
@@ -172,6 +172,7 @@ async def get_task_result(
             status=rec.status,
             progress=rec.progress,
             result=rec.result,
+            generation_delivery=_generation_delivery_for_task(task_kind=rec.task_kind, result=rec.result),
             error=rec.error,
             cancel_requested=rec.cancel_requested,
             cancel_requested_at_ts=rec.cancel_requested_at_ts,
@@ -180,6 +181,20 @@ async def get_task_result(
             elapsed_ms=rec.elapsed_ms,
         )
     )
+
+
+def _generation_delivery_for_task(
+    *,
+    task_kind: str,
+    result: dict | None,
+) -> GenerationDeliveryResult | None:
+    """仅将已持久化的图片/视频终态结果投影为强类型 API 字段。"""
+    if task_kind not in {"image_generation", "video_generation"} or not isinstance(result, dict):
+        return None
+    try:
+        return GenerationDeliveryResult.model_validate(result)
+    except ValidationError:
+        return None
 
 
 @router.post(
@@ -193,21 +208,12 @@ async def cancel_task(
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[TaskCancelRead]:
     store = SqlAlchemyTaskStore(db)
-    rec = await store.request_cancel(task_id, body.reason)
+    rec = await store.request_cancel_intent(task_id, body.reason)
     if rec is None:
         raise HTTPException(status_code=404, detail=entity_not_found("Task"))
-    effective_immediately = rec.status == TaskStatus.cancelled
-    if not effective_immediately and revoke_task_execution(task_id):
-        rec = await store.mark_cancelled(task_id)
-        if rec is None:
-            raise HTTPException(status_code=404, detail=entity_not_found("Task"))
-        effective_immediately = True
-    if rec.status == TaskStatus.cancelled:
-        message_row = (await db.execute(select(ExperimentMessage).where(ExperimentMessage.task_id == task_id))).scalars().first()
-        if message_row is not None:
-            message_row.status = "cancelled"
-            message_row.payload = {**message_row.payload, "error": body.reason or "任务已取消"}
-            await db.commit()
+    # API 仅持久化取消意图。Executor 会为尚未执行的任务构造 cancelled callback，
+    # 已执行 Provider 的终态同样由 Coordinator 依据当前 Run epoch 条件收口。
+    effective_immediately = False
     return success_response(
         TaskCancelRead(
             task_id=rec.id,

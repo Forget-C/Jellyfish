@@ -8,7 +8,6 @@
 
 from __future__ import annotations
 
-from app.services.film.generated_video import run_video_generation_task
 from app.services.generation.runtime.text_chat_streaming import run_text_chat_task
 from app.services.script_processing_worker import (
     CharacterPortraitTaskExecutor,
@@ -23,7 +22,6 @@ from app.services.script_processing_worker import (
     ScriptSimplificationTaskExecutor,
     VariantTaskExecutor,
 )
-from app.services.studio.image_task_runner import run_image_generation_task
 from app.services.worker.task_executor import AbstractAsyncDelegatingExecutor, AbstractWorkerTaskExecutor
 
 
@@ -60,24 +58,6 @@ task_executor_registry.register(
         task_kind="text_chat",
         runner=run_text_chat_task,
         timeout_seconds=600.0,
-        require_generation_snapshot=True,
-    ),
-)
-task_executor_registry.register(
-    "video_generation",
-    AbstractAsyncDelegatingExecutor(
-        task_kind="video_generation",
-        runner=run_video_generation_task,
-        timeout_seconds=3600.0,
-        require_generation_snapshot=True,
-    ),
-)
-task_executor_registry.register(
-    "image_generation",
-    AbstractAsyncDelegatingExecutor(
-        task_kind="image_generation",
-        runner=run_image_generation_task,
-        timeout_seconds=1800.0,
         require_generation_snapshot=True,
     ),
 )

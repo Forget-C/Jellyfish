@@ -54,10 +54,12 @@ const frameLabels: Record<FrameSlot, string> = { first: '首帧', last: '尾帧'
 const ratioOptions: VideoRatio[] = ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']
 
 /** 从任务结果中选择可播放的资料库文件或供应商视频地址。 */
-function extractVideoUrl(result: Record<string, unknown> | null | undefined): string | undefined {
-  if (!result) return undefined
-  if (typeof result.file_id === 'string' && result.file_id) return buildFileDownloadUrl(result.file_id)
-  return typeof result.url === 'string' && result.url ? result.url : undefined
+function extractVideoUrl(result: unknown): string | undefined {
+  if (!result || typeof result !== 'object') return undefined
+  const data = result as Record<string, unknown>
+  const primaryFileId = data.primary_file_id ?? data.file_id
+  if (typeof primaryFileId === 'string' && primaryFileId) return buildFileDownloadUrl(primaryFileId)
+  return typeof data.url === 'string' && data.url ? data.url : undefined
 }
 
 /** 将通用持久化消息转换为视频展示模型。 */
@@ -246,7 +248,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
         const response = await FilmService.getTaskResultApiV1FilmTasksTaskIdResultGet({ taskId })
         if (cancelled) return
         const task = response.data; const status = task?.status ?? 'pending'
-        setUpdates((current) => ({ ...current, [taskId]: { status, error: task?.error ?? undefined, progress: task?.progress, videoUrl: status === 'succeeded' ? extractVideoUrl(task?.result) : current[taskId]?.videoUrl } }))
+        setUpdates((current) => ({ ...current, [taskId]: { status, error: task?.error ?? undefined, progress: task?.progress, videoUrl: status === 'succeeded' ? extractVideoUrl(task?.generation_delivery ?? task?.result) : current[taskId]?.videoUrl } }))
         if (status === 'failed') message.error(task?.error || '视频生成失败，请检查模型与供应商配置')
         if (['succeeded', 'failed', 'cancelled'].includes(status)) await refreshHistory()
       } catch { if (!cancelled) message.error('获取视频生成任务状态失败') }

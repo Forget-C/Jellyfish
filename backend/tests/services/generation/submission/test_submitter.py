@@ -103,6 +103,26 @@ def test_capability_registry_exposes_only_planned_matrix() -> None:
     )
 
 
+def test_capability_registry_restricts_delivery_by_trusted_target() -> None:
+    """同一异步模态只能提交到已经定义终态交付语义的目标。"""
+    assert generation_capability_registry.supports(
+        operation=GenerationOperation.image_generation,
+        delivery=GenerationDelivery.async_polling,
+        target_kind=GenerationTargetKind.experiment_session,
+    )
+    assert not generation_capability_registry.supports(
+        operation=GenerationOperation.image_generation,
+        delivery=GenerationDelivery.async_polling,
+        target_kind=GenerationTargetKind.shot_video,
+    )
+    with pytest.raises(UnsupportedGenerationDeliveryError, match="target_unsupported"):
+        generation_capability_registry.require_supported(
+            operation=GenerationOperation.video_generation,
+            delivery=GenerationDelivery.async_polling,
+            target_kind=GenerationTargetKind.asset_image_slot,
+        )
+
+
 @pytest.mark.asyncio
 async def test_async_submit_persists_task_link_media_and_outbox_without_secrets() -> None:
     """异步提交在同一会话写齐四类记录，payload 仅包含安全快照。"""

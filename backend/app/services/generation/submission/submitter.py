@@ -19,6 +19,8 @@ from app.models.task import GenerationDeliveryMode, GenerationTask, GenerationTa
 from app.models.task_links import GenerationTaskLink
 from app.services.generation.files import FileResolver
 from app.services.generation.submission.capabilities import GenerationCapabilityRegistry, generation_capability_registry
+from app.services.generation.workflows import GenerationWorkflowSubmissionContext
+from app.services.generation.workflows.defaults import generation_workflow_registry
 
 
 class GenerationEntityGate(Protocol):
@@ -50,9 +52,18 @@ class GenerationSubmitter:
 
     async def submit_async(self, db: AsyncSession, command: GenerationCommand) -> GenerationAccepted:
         """创建轮询任务、目标关联、媒体快照与 Outbox，并交由 dispatcher 投递。"""
-        self._capability_registry.require_supported(operation=command.operation, delivery=command.delivery)
+        self._capability_registry.require_supported(
+            operation=command.operation,
+            delivery=command.delivery,
+            target_kind=command.target.kind,
+        )
         if command.delivery is not GenerationDelivery.async_polling:
             raise ValueError("submit_async requires async_polling delivery")
+        handler = generation_workflow_registry.resolve(
+            operation=command.operation,
+            target_kind=command.target.kind,
+        )
+        await handler.validate_submission(GenerationWorkflowSubmissionContext(data={"db": db, "command": command}))
         snapshot = await self._entity_gate.validate(db, command)
         return await self.persist_async_task(db=db, command=command, snapshot=snapshot)
 

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.db import Base
 from app.core.task_manager import DeliveryMode, SqlAlchemyTaskStore, TaskManager
+from app.models.generation_run_dispatches import GenerationRunDispatch
 from app.models.task import GenerationTask
 from app.services.script_processing_worker import MergeTaskExecutor, VariantTaskExecutor
 from app.tasks import execute_task as execute_task_module
@@ -102,6 +103,42 @@ def test_run_task_celery_routes_by_task_kind(monkeypatch, tmp_path) -> None:
     sync_engine.dispose()
 
 
+def test_run_task_celery_routes_generation_to_lifecycle_coordinator(monkeypatch, tmp_path) -> None:
+    """图片/视频不再经旧注册表，而是进入 Run 生命周期主链。"""
+
+    db_path = tmp_path / "generation-lifecycle-route.db"
+    sync_engine = create_engine(f"sqlite:///{db_path}", future=True)
+    sync_session_local = sessionmaker(sync_engine, class_=Session, expire_on_commit=False)
+    Base.metadata.create_all(sync_engine)
+    with sync_session_local() as db:
+        db.add(
+            GenerationTask(
+                id="task-generation",
+                mode="async_polling",
+                task_kind="image_generation",
+                status="pending",
+                progress=0,
+                payload={"snapshot": {}},
+                result=None,
+                error="",
+            )
+        )
+        db.commit()
+
+    called: list[str] = []
+
+    async def _run_lifecycle(task_id: str, *, work_id: str | None = None) -> None:
+        assert work_id is None
+        called.append(task_id)
+
+    monkeypatch.setattr(execute_task_module, "sync_session_maker", sync_session_local)
+    monkeypatch.setattr(execute_task_module, "_run_generation_lifecycle_task", _run_lifecycle)
+
+    execute_task_module.run_task_celery("task-generation")
+    assert called == ["task-generation"]
+    sync_engine.dispose()
+
+
 def test_enqueue_task_execution_records_executor(monkeypatch, tmp_path) -> None:
     db_path = tmp_path / "task-enqueue.db"
     sync_engine = create_engine(f"sqlite:///{db_path}", future=True)
@@ -140,6 +177,9 @@ def test_enqueue_task_execution_records_executor(monkeypatch, tmp_path) -> None:
         assert row is not None
         assert row.executor_type == "celery"
         assert row.executor_task_id == "celery-task-2"
+        dispatch = db.get(GenerationRunDispatch, "celery-task-2")
+        assert dispatch is not None
+        assert (dispatch.task_id, dispatch.source, dispatch.status) == ("task-2", "outbox", "enqueued")
 
     sync_engine.dispose()
 
@@ -195,8 +235,9 @@ def test_dispatch_generation_outbox_celery_runs_dispatcher(monkeypatch) -> None:
             return 3
 
     monkeypatch.setattr(execute_task_module, "GenerationOutboxDispatcher", _FakeDispatcher)
+    monkeypatch.setattr(execute_task_module, "GenerationRunDispatchDispatcher", _FakeDispatcher)
 
-    assert execute_task_module.dispatch_generation_outbox_celery() == 3
+    assert execute_task_module.dispatch_generation_outbox_celery() == 6
 
 
 def test_async_delegating_executors_use_positional_runner_signature() -> None:
@@ -517,7 +558,6 @@ def test_task_executor_registry_resolves_sync_and_async_executor_types() -> None
     divide_executor = task_executor_registry.resolve("script_divide")
     merge_executor = task_executor_registry.resolve("script_merge")
     variant_executor = task_executor_registry.resolve("script_variant")
-    video_executor = task_executor_registry.resolve("video_generation")
 
     assert isinstance(divide_executor, AbstractWorkerTaskExecutor)
     assert divide_executor.task_kind == "script_divide"
@@ -525,8 +565,8 @@ def test_task_executor_registry_resolves_sync_and_async_executor_types() -> None
     assert merge_executor.task_kind == "script_merge"
     assert isinstance(variant_executor, VariantTaskExecutor)
     assert variant_executor.task_kind == "script_variant"
-    assert isinstance(video_executor, AbstractAsyncDelegatingExecutor)
-    assert video_executor.task_kind == "video_generation"
+    with pytest.raises(RuntimeError, match="Unsupported task_kind: video_generation"):
+        task_executor_registry.resolve("video_generation")
 
 
 def test_script_merge_executor_requires_frozen_text_agent_snapshot() -> None:

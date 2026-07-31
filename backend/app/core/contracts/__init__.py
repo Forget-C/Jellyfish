@@ -15,6 +15,19 @@ from app.core.contracts.generation import (
     GenerationCommand, GenerationDelivery, GenerationModality, GenerationOperation,
     GenerationSubmitRequest, GenerationTarget, GenerationTargetKind, ResolvedGenerationSnapshot,
 )
+from app.core.contracts.generation_delivery import (
+    DeliveredArtifact,
+    DeliveredArtifactPublishState,
+    GenerationDeliveryResult,
+    GenerationOutcome,
+    GenerationTerminalCommand,
+)
+from app.core.contracts.generation_run import (
+    GenerationRunStatus,
+    GenerationWorkerCallback,
+    GenerationWorkerCallbackKind,
+    GenerationWorkerCommand,
+)
 from app.core.contracts.media import (
     ImageMediaInput, MediaReference, VideoFrameMediaReferences, VideoMediaInput,
     VideoSubjectMediaReference,
@@ -59,6 +72,15 @@ __all__ = [
     "GenerationTarget",
     "GenerationTargetKind",
     "ResolvedGenerationSnapshot",
+    "DeliveredArtifact",
+    "DeliveredArtifactPublishState",
+    "GenerationDeliveryResult",
+    "GenerationOutcome",
+    "GenerationTerminalCommand",
+    "GenerationRunStatus",
+    "GenerationWorkerCallback",
+    "GenerationWorkerCallbackKind",
+    "GenerationWorkerCommand",
     "MediaReference",
     "ImageMediaInput",
     "VideoFrameMediaReferences",

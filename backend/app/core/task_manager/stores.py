@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, Optional, Protocol
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
@@ -198,9 +198,12 @@ class TaskStore(Protocol):
     async def set_status(self, task_id: str, status: TaskStatus) -> None: ...
     async def set_progress(self, task_id: str, progress: int) -> None: ...
     async def set_result(self, task_id: str, result: dict[str, Any]) -> None: ...
+    async def complete_success(self, task_id: str, result: dict[str, Any]) -> bool: ...
+    async def complete_failure(self, task_id: str, *, result: dict[str, Any], error: str) -> bool: ...
     async def set_error(self, task_id: str, error: str) -> None: ...
     async def set_executor(self, task_id: str, *, executor_type: str, executor_task_id: str | None = None) -> None: ...
     async def request_cancel(self, task_id: str, reason: str | None = None) -> Optional[TaskRecord]: ...
+    async def request_cancel_intent(self, task_id: str, reason: str | None = None) -> Optional[TaskRecord]: ...
     async def mark_cancelled(self, task_id: str) -> Optional[TaskRecord]: ...
     async def is_cancel_requested(self, task_id: str) -> bool: ...
 
@@ -333,6 +336,38 @@ class InMemoryTaskStore(TaskStore):
     async def set_result(self, task_id: str, result: dict[str, Any]) -> None:
         await self._update(task_id, result=result)
 
+    async def complete_success(self, task_id: str, result: dict[str, Any]) -> bool:
+        """仅在未取消的运行任务上写成功终态，保证取消请求不会被成功覆盖。"""
+
+        async with self._lock:
+            rec = self._data.get(task_id)
+            if rec is None or rec.status is not TaskStatus.running or rec.cancel_requested:
+                return False
+            now_ts = _now_ts()
+            rec.result = result
+            rec.progress = 100
+            rec.status = TaskStatus.succeeded
+            rec.finished_at_ts = rec.finished_at_ts or now_ts
+            rec.elapsed_ms = self._elapsed_ms_for_record(rec)
+            rec.updated_at_ts = now_ts
+            return True
+
+    async def complete_failure(self, task_id: str, *, result: dict[str, Any], error: str) -> bool:
+        """仅在未取消的运行任务上写失败终态，避免覆盖并发取消。"""
+
+        async with self._lock:
+            rec = self._data.get(task_id)
+            if rec is None or rec.status is not TaskStatus.running or rec.cancel_requested:
+                return False
+            now_ts = _now_ts()
+            rec.result = result
+            rec.error = error
+            rec.status = TaskStatus.failed
+            rec.finished_at_ts = rec.finished_at_ts or now_ts
+            rec.elapsed_ms = self._elapsed_ms_for_record(rec)
+            rec.updated_at_ts = now_ts
+            return True
+
     async def set_error(self, task_id: str, error: str) -> None:
         await self._update(task_id, error=error or "")
 
@@ -354,6 +389,21 @@ class InMemoryTaskStore(TaskStore):
                 rec.finished_at_ts = rec.finished_at_ts or now_ts
                 rec.elapsed_ms = self._elapsed_ms_for_record(rec)
             rec.updated_at_ts = now_ts
+            return rec
+
+    async def request_cancel_intent(self, task_id: str, reason: str | None = None) -> Optional[TaskRecord]:
+        """登记取消意图但不决定终态，供生命周期 Coordinator 后续裁决。"""
+        async with self._lock:
+            rec = self._data.get(task_id)
+            if rec is None:
+                return None
+            if _is_terminal_status(rec.status):
+                return rec
+            now = _now_ts()
+            rec.cancel_requested = True
+            rec.cancel_requested_at_ts = now
+            rec.cancel_reason = (reason or "").strip()
+            rec.updated_at_ts = now
             return rec
 
     async def mark_cancelled(self, task_id: str) -> Optional[TaskRecord]:
@@ -571,12 +621,60 @@ class SqlAlchemyTaskStore(TaskStore):
     async def set_status(self, task_id: str, status: TaskStatus) -> None:
         await self._update_columns(task_id, status=_to_db_status(status))
 
+    async def claim_pending(self, task_id: str) -> bool:
+        """原子领取未取消的 pending 任务，阻止重复 Worker 同时调用 Provider。"""
+
+        now = datetime.now(UTC).replace(tzinfo=None)
+        result = await self.db.execute(
+            update(GenerationTask)
+            .where(
+                GenerationTask.id == task_id,
+                GenerationTask.status == GenerationTaskStatus.pending,
+                GenerationTask.cancel_requested.is_(False),
+            )
+            .values(status=GenerationTaskStatus.running, started_at=now)
+        )
+        await self.db.flush()
+        return bool(result.rowcount)
+
     async def set_progress(self, task_id: str, progress: int) -> None:
         p = max(0, min(100, int(progress)))
         await self._update_columns(task_id, progress=p)
 
     async def set_result(self, task_id: str, result: dict[str, Any]) -> None:
         await self._update_columns(task_id, result=result)
+
+    async def complete_success(self, task_id: str, result: dict[str, Any]) -> bool:
+        """条件写入成功终态，拒绝取消后到达的旧 Worker 成功回写。"""
+
+        now = datetime.now(UTC).replace(tzinfo=None)
+        updated = await self.db.execute(
+            update(GenerationTask)
+            .where(
+                GenerationTask.id == task_id,
+                GenerationTask.status == GenerationTaskStatus.running,
+                GenerationTask.cancel_requested.is_(False),
+            )
+            .values(result=result, progress=100, status=GenerationTaskStatus.succeeded, finished_at=now)
+        )
+        await self.db.flush()
+        return bool(updated.rowcount)
+
+    async def complete_failure(self, task_id: str, *, result: dict[str, Any], error: str) -> bool:
+        """条件写入失败终态，拒绝取消后到达的旧 Worker 失败回写。"""
+
+        now = datetime.now(UTC).replace(tzinfo=None)
+        updated = await self.db.execute(
+            update(GenerationTask)
+            .where(
+                GenerationTask.id == task_id,
+                GenerationTask.status == GenerationTaskStatus.running,
+                GenerationTask.cancel_requested.is_(False),
+            )
+            .values(result=result, error=error, status=GenerationTaskStatus.failed, finished_at=now)
+        )
+        await self.db.flush()
+        return bool(updated.rowcount)
 
     async def set_error(self, task_id: str, error: str) -> None:
         await self._update_columns(task_id, error=error or "")
@@ -588,6 +686,8 @@ class SqlAlchemyTaskStore(TaskStore):
         row = await self.db.get(GenerationTask, task_id)
         if row is None:
             return None
+        if _is_terminal_status(_to_app_status(row.status)):
+            return await self.get(task_id)
         now = datetime.now(UTC).replace(tzinfo=None)
         row.cancel_requested = True
         row.cancel_requested_at = now
@@ -600,10 +700,27 @@ class SqlAlchemyTaskStore(TaskStore):
         await self.db.refresh(row)
         return await self.get(task_id)
 
+    async def request_cancel_intent(self, task_id: str, reason: str | None = None) -> Optional[TaskRecord]:
+        """仅保存取消意图；最终 cancelled 必须由 Coordinator 条件写入。"""
+        row = await self.db.get(GenerationTask, task_id)
+        if row is None:
+            return None
+        if _is_terminal_status(_to_app_status(row.status)):
+            return await self.get(task_id)
+        now = datetime.now(UTC).replace(tzinfo=None)
+        row.cancel_requested = True
+        row.cancel_requested_at = now
+        row.cancel_reason = (reason or "").strip() or None
+        await self.db.flush()
+        await self.db.refresh(row)
+        return await self.get(task_id)
+
     async def mark_cancelled(self, task_id: str) -> Optional[TaskRecord]:
         row = await self.db.get(GenerationTask, task_id)
         if row is None:
             return None
+        if _is_terminal_status(_to_app_status(row.status)):
+            return await self.get(task_id)
         now = datetime.now(UTC).replace(tzinfo=None)
         row.status = _to_db_status(TaskStatus.cancelled)
         row.cancel_requested = True
@@ -615,8 +732,10 @@ class SqlAlchemyTaskStore(TaskStore):
         return await self.get(task_id)
 
     async def is_cancel_requested(self, task_id: str) -> bool:
-        row = await self.db.get(GenerationTask, task_id)
-        return bool(row.cancel_requested) if row is not None else False
+        value = await self.db.scalar(
+            select(GenerationTask.cancel_requested).where(GenerationTask.id == task_id).execution_options(populate_existing=True)
+        )
+        return bool(value)
 
 
 class SyncSqlAlchemyTaskStore:
@@ -685,6 +804,21 @@ class SyncSqlAlchemyTaskStore:
             row.cancelled_at = now
             row.finished_at = row.finished_at or now
         self.db.flush()
+        return self.get(task_id)
+
+    def request_cancel_intent(self, task_id: str, reason: str | None = None) -> Optional[TaskRecord]:
+        """同步调用方的纯取消意图登记，不触发任务终态转换。"""
+        row = self.db.get(GenerationTask, task_id)
+        if row is None:
+            return None
+        if _is_terminal_status(_to_app_status(row.status)):
+            return self.get(task_id)
+        now = datetime.now(UTC).replace(tzinfo=None)
+        row.cancel_requested = True
+        row.cancel_requested_at = now
+        row.cancel_reason = (reason or "").strip() or None
+        self.db.flush()
+        self.db.refresh(row)
         return self.get(task_id)
 
     def mark_cancelled(self, task_id: str) -> Optional[TaskRecord]:

@@ -152,6 +152,75 @@ Broker：Redis
 - 启动前取消请求会直接转 `cancelled`
 - 不再进入后续 provider / agent 调用
 
+### 图片与视频的目标工作流
+
+图片和视频的 async worker 现在按“模态执行复用、目标领域交付分离”组织：
+
+```text
+GenerationSubmitter
+  → operation × target.kind × delivery 能力校验
+  → WorkflowHandler 提交期入口
+  → GenerationTask / Outbox
+  → GenerationExecutor / GenerationRun
+  → ImageGenerationWorker 或 VideoGenerationWorker
+  → WorkflowHandler 执行前入口
+  → Provider callback
+  → GenerationLifecycleCoordinator
+  → ArtifactStore / TaskFinalizer / WorkflowHandler 成功交付
+```
+
+`WorkflowHandlerRegistry` 以 `(operation, target.kind)` 选择领域规则。当前图片、视频支持的
+组合是：
+
+- `image_generation × experiment_session`：归档 Artifact，并投影关联 `ExperimentMessage`；不调用
+  资产、分镜或镜头 CAS Publisher。
+- `image_generation × asset_image_slot`：通过 `AssetImagePublisher` CAS 自动采用主产物。
+- `image_generation × shot_frame_slot`：通过 `ShotFramePublisher` CAS 自动采用主产物。
+- `video_generation × experiment_session`：归档 Artifact，并投影关联 `ExperimentMessage`；不读取或修改
+  `Shot`。
+- `video_generation × shot_video`：通过 `ShotVideoPublisher` CAS 自动采用主产物。
+
+实验室 Handler 在提交期和执行期都复核 `ExperimentSession.lab_type` 与 operation 的对应关系；执行期还会
+验证 `ExperimentMessage.task_id` 仍指向同一会话。分镜帧目标的实体门禁同时验证帧槽位属于目标镜头。上述
+复核不比较 CAS 版本，版本变化仍应保留产物并由 Publisher 标记为冲突。
+
+图片、视频任务成功结果使用 Artifact-first 的 `GenerationDeliveryResult`：`outcome` 表示任务终态，
+`primary_file_id` 用于主预览，`artifacts[]` 保留每个文件的 `publish_state` 和冲突原因。实验室消息只投影
+`primary_file_id` 等最小预览字段；完整结果以 `GenerationTask.result` 为准。前端读取新字段时兼容历史
+`file_id`，用于已完成任务的展示。
+
+图片、视频轮询任务由 `GenerationExecutor` 创建并领取 `GenerationRun`：仅一个有效 Run 可以进入
+`executing`，WorkerCommand 必须携带 `run_id + lease_epoch`。重复投递不会再次调用 Provider；Worker 只执行
+Provider 并返回 callback，不直接写 Task、Artifact 或领域投影。Worker 每隔 lease TTL 的三分之一独立续租；
+Celery Beat 每 30 秒回收过期 Run、提升 epoch 并重新投递对应任务，旧执行者的 heartbeat/callback 均会被
+fencing 拒绝。每条新 Run 还保存稳定的本地 `provider_idempotency_key` 用于恢复审计；该键当前不会被假定为
+任何供应商的 HTTP 幂等字段。
+
+对于供应商返回稳定异步任务 ID 的图片、视频能力，Worker 已将 Provider 调用分为创建和轮询两步：创建成功后
+使用当前 Run 的 owner/epoch 条件更新立即保存 `provider_task_id`，再开始轮询。过期 Run 恢复后，Worker 读取
+该 ID 并只轮询原远端任务，避免重复创建。同步图片接口没有可恢复 ID；若创建请求已被供应商受理但进程在本地
+持久化 ID 前退出，系统不会猜测统一幂等 header 或盲目重发创建请求，仍需人工诊断或逐供应商补齐幂等契约。
+
+每次 Celery 投递还会留下 `GenerationRunDispatch` 审计记录：以 Celery `work_id` 为主键，保存投递来源
+（`outbox` 或 `reaper`）与时间；Executor 成功领取后将其绑定到 `task_id`、`generation_run_id` 和
+`lease_epoch`。同一消息的重复执行不会再次调用 Provider，并会在事件上标记为 `ignored`。该记录用于关联
+投递、领取和 epoch 接管。过期 Run 的回收会在同一数据库事务创建 `pending` 事件；独立 dispatcher 在短事务
+中认领事件、以预分配 work id 发布 Celery 消息，再确认 `published`。Broker 失败时事件保留为 `pending` 并
+累计 attempts，以同一 work id 重试；Broker 已接收但发布状态尚未来得及确认时，Run 的条件领取与 epoch fencing
+保证该至少一次窗口不产生第二次有效执行。
+
+`GenerationLifecycleCoordinator` 是图片、视频 callback 的唯一终态写入口。它先校验 Run 的 epoch，再在短
+事务中归档 Artifact、调用内部 `TaskFinalizer`、写入领域投影以及 Run/Task 终态。旧 epoch 或重复 callback
+不读取业务目标也不产生副作用；取消意图先于成功 callback 时，Coordinator 收口为 `cancelled`。
+
+取消 API 只登记 `cancel_requested` 意图，不撤销 Celery、不直写 Task 或 `ExperimentMessage`。尚未调用
+Provider 的任务会由 Executor 生成 fenced cancelled callback；已在运行的任务等待当前 Worker callback，再由
+Coordinator 统一裁决为 cancelled、failed 或 succeeded。
+
+`GenerationTask.result` 已开始保存 `artifacts[]` 的稳定投影，同时保留 `file_id` 作为当前轮询调用方的
+主产物兼容字段。完整产物以 `GenerationArtifact` 为准；`GenerationTaskLink` 仍只承担任务目标关联与
+导航，不承载多产物结果。
+
 ## 当前 Celery 主链路特征
 
 当前主链采用：
@@ -160,7 +229,8 @@ Broker：Redis
 - API 层写入 `task_kind`
 - 通过 `spawn_*_task(...)` 投递到 Celery
 - Celery 统一走 `task.execute(task_id)`
-- worker 通过 `TaskExecutorRegistry` 按 `task_kind` 路由到具体 `WorkerTaskExecutor`
+- 图片/视频在 `task.execute(task_id)` 内走 `GenerationExecutor → Worker → Coordinator`；其他任务仍通过
+  `TaskExecutorRegistry` 按 `task_kind` 路由
 - worker 执行后把状态与结果回写到 MySQL
 - 页面继续通过既有任务状态接口轮询和恢复
 

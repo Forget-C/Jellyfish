@@ -2,12 +2,17 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { GenerationDeliveryResult } from './GenerationDeliveryResult';
 import type { TaskStatus } from './TaskStatus';
 export type TaskResultRead = {
     task_id: string;
     status: TaskStatus;
     progress: number;
     result?: (Record<string, any> | null);
+    /**
+     * 图片/视频生成任务的强类型终态交付；非生成任务或历史结果为 null
+     */
+    generation_delivery?: (GenerationDeliveryResult | null);
     error?: string;
     /**
      * 是否已请求取消

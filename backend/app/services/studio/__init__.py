@@ -46,7 +46,6 @@ from app.services.studio.generation.video import (
     build_video_submission_payload,
     derive_video_preview,
 )
-from app.services.studio.image_task_runner import create_image_task_and_link
 from app.services.studio.image_task_validation import (
     validate_actor_image,
     validate_asset_image_and_relation_type,
@@ -153,7 +152,6 @@ __all__ = [
     "build_video_context",
     "build_video_submission_payload",
     "create_project_asset_link",
-    "create_image_task_and_link",
     "create_shot",
     "delete_file",
     "delete_entity",

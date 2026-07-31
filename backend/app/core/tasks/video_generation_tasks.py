@@ -61,10 +61,22 @@ class AbstractVideoGenerationTask(BaseTask, ABC):
     async def _poll_and_get_result(self) -> VideoGenerationResult:
         """轮询至终态并解析为 VideoGenerationResult。"""
 
+    async def create_provider_task(self) -> str | None:
+        """仅创建供应商任务并返回可持久化 ID，供崩溃恢复在轮询前建立检查点。"""
+        await self._create_task()
+        return self._provider_task_id
+
+    async def poll_provider_task(self, *, provider_task_id: str | None = None) -> VideoGenerationResult:
+        """从已创建或已恢复的供应商任务 ID 轮询到标准化结果。"""
+        if provider_task_id:
+            self._provider_task_id = provider_task_id
+        self._result = await self._poll_and_get_result()
+        return self._result
+
     async def run(self, *args: Any, **kwargs: Any) -> AsyncIterator[Any] | None:  # type: ignore[override]
         try:
-            await self._create_task()
-            self._result = await self._poll_and_get_result()
+            await self.create_provider_task()
+            self._result = await self.poll_provider_task()
             if self._result is not None:
                 self._provider_task_id = self._result.provider_task_id
         except Exception as exc:  # noqa: BLE001
@@ -435,3 +447,11 @@ class VideoGenerationTask(BaseTask):
 
     async def get_result(self) -> VideoGenerationResult | None:  # type: ignore[override]
         return await self._impl.get_result()
+
+    async def create_provider_task(self) -> str | None:
+        """创建供应商任务并暴露恢复所需的稳定任务 ID。"""
+        return await self._impl.create_provider_task()
+
+    async def poll_provider_task(self, *, provider_task_id: str | None = None) -> VideoGenerationResult:
+        """轮询新建或已持久化的供应商任务。"""
+        return await self._impl.poll_provider_task(provider_task_id=provider_task_id)

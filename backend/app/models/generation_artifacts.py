@@ -27,7 +27,12 @@ class GenerationArtifact(Base, TimestampMixin):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     task_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("generation_tasks.id", ondelete="CASCADE"), nullable=True)
-    generation_run_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    generation_run_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("generation_runs.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     modality: Mapped[str] = mapped_column(String(16), nullable=False)
     ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
     file_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("files.id", ondelete="RESTRICT"), nullable=True)
@@ -37,7 +42,7 @@ class GenerationArtifact(Base, TimestampMixin):
     publish_error: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
     __table_args__ = (
-        UniqueConstraint("task_id", "ordinal", name="uq_generation_artifacts_task_ordinal"),
+        UniqueConstraint("generation_run_id", "ordinal", name="uq_generation_artifacts_run_ordinal"),
         CheckConstraint("(file_id IS NOT NULL AND text_content IS NULL) OR (file_id IS NULL AND text_content IS NOT NULL)", name="ck_generation_artifact_single_content"),
         CheckConstraint("(publish_status = 'published' AND publish_error IS NULL) OR (publish_status = 'conflicted' AND publish_error = 'target_version_conflict') OR (publish_status = 'skipped' AND publish_error IS NOT NULL)", name="ck_generation_artifact_publish_status"),
         Index("ix_generation_artifacts_task_ordinal", "task_id", "ordinal"),

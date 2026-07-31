@@ -6,6 +6,8 @@ from typing import Tuple
 
 from fastapi import HTTPException, status
 from pydantic import BaseModel, Field
+
+from app.core.contracts.generation_delivery import GenerationDeliveryResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.studio import Chapter, Project, Shot
@@ -110,6 +112,10 @@ class TaskResultRead(BaseModel):
     status: TaskStatus
     progress: int = Field(..., ge=0, le=100)
     result: dict | None = None
+    generation_delivery: GenerationDeliveryResult | None = Field(
+        None,
+        description="图片/视频生成任务的强类型终态交付；非生成任务或历史结果为 null",
+    )
     error: str = ""
     cancel_requested: bool = Field(False, description="是否已请求取消")
     cancel_requested_at_ts: float | None = Field(None, description="请求取消时间戳")

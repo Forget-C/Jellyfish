@@ -1,50 +1,20 @@
 from __future__ import annotations
 
 import base64
+from collections.abc import Awaitable, Callable
 from types import SimpleNamespace
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.db import async_session_maker
-from app.core.task_manager import SqlAlchemyTaskStore
-from app.core.task_manager.types import TaskStatus
 from app.core.contracts.provider import ProviderConfig
-from app.core.contracts.generation import ResolvedGenerationSnapshot
+from app.core.contracts.generation import GenerationOperation, ResolvedGenerationSnapshot
 from app.core.contracts.media import VideoMediaInput
 from app.core.contracts.video_generation import VideoGenerationInput, VideoGenerationResult
 from app.core.tasks import VideoGenerationTask
 from app.models.llm import Model, ModelCategoryKey, Provider
-from app.models.task import GenerationTask
-from app.models.experiment_sessions import ExperimentMessage
-from app.services.studio.experiment_messages import project_task_message_terminal
 from app.services.generation.files import FileResolver
-from app.services.generation.publishers import ShotVideoPublisher
-from app.services.generation.runtime import ArtifactStore
+from app.services.generation.runtime.delivery import validate_workflow_execution
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
-from app.services.studio.shot_status import recompute_shot_status
-from app.services.worker.async_task_support import cancel_if_requested_async
-from app.services.worker.task_logging import log_task_event, log_task_failure
-
-
-def _project_task_message_terminal(
-    message: ExperimentMessage,
-    *,
-    status: str,
-    result: dict | None = None,
-    error: str | None = None,
-    progress: int | None = None,
-) -> None:
-    """投影视频任务终态，同时保留提交阶段已经写入的展示字段。"""
-    existing_payload = dict(message.payload or {})
-    project_task_message_terminal(
-        message,
-        status=status,
-        result=result,
-        error=error,
-        progress=progress,
-    )
-    message.payload = {**existing_payload, **message.payload}
 
 
 async def _resolve_snapshot_provider_config(
@@ -136,103 +106,26 @@ async def _resolve_snapshot_video_input(
     )
 
 
-async def _run_snapshot_video_generation(
+async def execute_snapshot_video_generation(
     session: AsyncSession,
     *,
     task_id: str,
-    snapshot_payload: dict,
-) -> dict:
-    """执行 P3 提交的视频任务，并以 Artifact + CAS Publisher 完成落库。"""
-    snapshot = ResolvedGenerationSnapshot.model_validate(snapshot_payload)
+    snapshot: ResolvedGenerationSnapshot,
+    provider_task_id: str | None = None,
+    on_provider_accepted: Callable[[str], Awaitable[bool]] | None = None,
+) -> tuple[VideoGenerationResult, ProviderConfig]:
+    """执行或恢复视频 Provider；异步任务在轮询前持久化其供应商 ID。"""
+    await validate_workflow_execution(
+        session,
+        task_id=task_id,
+        operation=GenerationOperation.video_generation,
+        snapshot=snapshot,
+    )
     provider_config = await _resolve_snapshot_provider_config(session, snapshot=snapshot)
     input_ = await _resolve_snapshot_video_input(session, task_id=task_id, snapshot=snapshot)
     provider_task = VideoGenerationTask(provider_config=provider_config, input_=input_)
-    await provider_task.run()
-    raw_result = await provider_task.get_result()
-    if raw_result is None:
-        status_payload = await provider_task.status()
-        raise RuntimeError(str(status_payload.get("error") or "Video generation task returned no result"))
-    result = VideoGenerationResult.model_validate(raw_result.model_dump())
-    headers = {"Authorization": f"Bearer {provider_config.api_key}"} if provider_config.provider == "openai" else None
-    artifact = await ArtifactStore().store_video(
-        session,
-        task_id=task_id,
-        result=result,
-        name=f"shot-{snapshot.canonical_target.entity_id}-video",
-        storage_prefix=f"generated-videos/shots/{snapshot.canonical_target.entity_id}",
-        url_request_headers=headers,
-        httpx_timeout=600.0,
-    )
-    await ShotVideoPublisher().publish_terminal(session, snapshot=snapshot, artifacts=[artifact])
-    result_payload = result.model_dump()
-    result_payload["file_id"] = artifact.file_id
-    result_payload["publish_status"] = artifact.publish_status.value
-    return result_payload
-
-async def run_video_generation_task(
-    task_id: str,
-    run_args: dict,  # pylint: disable=unused-argument
-) -> None:
-    """执行统一编排的视频快照任务。
-
-    ``GenerationSubmitter`` 已将可执行命令冻结到任务 payload；Worker 必须从
-    snapshot 读取模型、目标和媒体，绝不能读取历史 ``run_args``，以免凭据或
-    Data URL 再次进入任务持久化层。参数仅为当前异步执行器调用约定保留。
-    """
-    shot_id: str | None = None
-    async with async_session_maker() as session:
-        try:
-            store = SqlAlchemyTaskStore(session)
-            await store.set_status(task_id, TaskStatus.running)
-            await store.set_progress(task_id, 10)
-            await session.commit()
-            log_task_event("video_generation", task_id, "running")
-            if await cancel_if_requested_async(store=store, task_id=task_id, session=session):
-                log_task_event("video_generation", task_id, "cancelled", stage="before_execute")
-                return
-
-            task_row = await session.get(GenerationTask, task_id)
-            snapshot_payload = (task_row.payload or {}).get("snapshot") if task_row is not None else None
-            if not isinstance(snapshot_payload, dict):
-                raise RuntimeError("video generation task requires a unified snapshot payload")
-            snapshot = ResolvedGenerationSnapshot.model_validate(snapshot_payload)
-            shot_id = snapshot.canonical_target.entity_id
-            result_payload = await _run_snapshot_video_generation(
-                session,
-                task_id=task_id,
-                snapshot_payload=snapshot_payload,
-            )
-            if await cancel_if_requested_async(store=store, task_id=task_id, session=session):
-                log_task_event("video_generation", task_id, "cancelled", stage="after_execute")
-                return
-            await store.set_result(task_id, result_payload)
-            if await cancel_if_requested_async(store=store, task_id=task_id, session=session):
-                log_task_event("video_generation", task_id, "cancelled", stage="after_persist")
-                return
-            await store.set_progress(task_id, 100)
-            await store.set_status(task_id, TaskStatus.succeeded)
-            message_row = (await session.execute(select(ExperimentMessage).where(ExperimentMessage.task_id == task_id))).scalars().first()
-            if message_row is not None:
-                _project_task_message_terminal(
-                    message_row,
-                    status="succeeded",
-                    result=result_payload,
-                    progress=100,
-                )
-            if shot_id:
-                await recompute_shot_status(session, shot_id=shot_id)
-            await session.commit()
-            log_task_event("video_generation", task_id, "succeeded")
-        except Exception as exc:  # noqa: BLE001
-            await session.rollback()
-            async with async_session_maker() as s2:
-                store = SqlAlchemyTaskStore(s2)
-                await store.set_error(task_id, str(exc))
-                await store.set_status(task_id, TaskStatus.failed)
-                message_row = (await s2.execute(select(ExperimentMessage).where(ExperimentMessage.task_id == task_id))).scalars().first()
-                if message_row is not None:
-                    _project_task_message_terminal(message_row, status="failed", error=str(exc))
-                if shot_id:
-                    await recompute_shot_status(s2, shot_id=shot_id)
-                await s2.commit()
-            log_task_failure("video_generation", task_id, str(exc))
+    accepted_id = provider_task_id or await provider_task.create_provider_task()
+    if accepted_id and provider_task_id is None and on_provider_accepted and not await on_provider_accepted(accepted_id):
+        raise RuntimeError("generation run lost provider acceptance lease")
+    result = VideoGenerationResult.model_validate((await provider_task.poll_provider_task(provider_task_id=accepted_id)).model_dump())
+    return result, provider_config

@@ -31,6 +31,10 @@ celery_app.conf.update(
             "task": "task.dispatch_generation_outbox",
             "schedule": 10.0,
         },
+        "reap-expired-generation-runs": {
+            "task": "task.reap_generation_runs",
+            "schedule": 30.0,
+        },
     },
 )
 

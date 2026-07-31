@@ -54,7 +54,7 @@ def project_task_message_terminal(
         display_result = {
             key: value
             for key, value in result.items()
-            if key in {"file_id", "url", "publish_status"} and value is not None
+            if key in {"primary_file_id", "file_id", "url", "publish_status"} and value is not None
         }
         if display_result:
             payload["result"] = display_result

@@ -32,6 +32,7 @@ class ArtifactStore:
         db: AsyncSession,
         *,
         task_id: str,
+        generation_run_id: str | None = None,
         result: ImageGenerationResult,
         name_prefix: str = "generated-image",
         storage_prefix: str = "generated-images",
@@ -40,13 +41,18 @@ class ArtifactStore:
     ) -> list[GenerationArtifact]:
         """归档图片列表并保留 Provider 返回顺序作为稳定 ordinal。
 
-        重复处理同一 ``task_id`` 时，会先返回已存在的 ``ordinal``，从而不会
+        重复处理同一 ``generation_run_id`` 时，会先返回已存在的 ``ordinal``，从而不会
         再次下载或创建 FileItem。发布状态由上层在最终事务中确定；未提供时按
         没有自动目标槽位的纯归档规则保存。
         """
         artifacts: list[GenerationArtifact] = []
         for ordinal, image in enumerate(result.images):
-            existing = await self._find_existing(db, task_id=task_id, ordinal=ordinal)
+            existing = await self._find_existing(
+                db,
+                task_id=task_id,
+                generation_run_id=generation_run_id,
+                ordinal=ordinal,
+            )
             if existing is not None:
                 artifacts.append(existing)
                 continue
@@ -62,6 +68,7 @@ class ArtifactStore:
                 await self._add_file_artifact(
                     db,
                     task_id=task_id,
+                    generation_run_id=generation_run_id,
                     ordinal=ordinal,
                     modality="image",
                     file_item=file_item,
@@ -77,6 +84,7 @@ class ArtifactStore:
         db: AsyncSession,
         *,
         task_id: str,
+        generation_run_id: str | None = None,
         result: VideoGenerationResult,
         name: str = "generated-video",
         storage_prefix: str = "generated-videos",
@@ -90,7 +98,12 @@ class ArtifactStore:
         Provider 返回 URL 时才下载并创建 FileItem；返回 ``file_id`` 时仅验证其
         是视频素材。无论哪种来源，重复 task 都不会创建第二个 Artifact 或文件。
         """
-        existing = await self._find_existing(db, task_id=task_id, ordinal=0)
+        existing = await self._find_existing(
+            db,
+            task_id=task_id,
+            generation_run_id=generation_run_id,
+            ordinal=0,
+        )
         if existing is not None:
             return existing
 
@@ -105,6 +118,7 @@ class ArtifactStore:
         return await self._add_file_artifact(
             db,
             task_id=task_id,
+            generation_run_id=generation_run_id,
             ordinal=0,
             modality="video",
             file_item=file_item,
@@ -113,12 +127,23 @@ class ArtifactStore:
             publish_error=publish_error,
         )
 
-    async def _find_existing(self, db: AsyncSession, *, task_id: str, ordinal: int) -> GenerationArtifact | None:
-        """按数据库幂等键读取已有产物，必须发生在任何外部文件创建前。"""
-        statement = select(GenerationArtifact).where(
-            GenerationArtifact.task_id == task_id,
-            GenerationArtifact.ordinal == ordinal,
-        )
+    async def _find_existing(
+        self,
+        db: AsyncSession,
+        *,
+        task_id: str,
+        generation_run_id: str | None,
+        ordinal: int,
+    ) -> GenerationArtifact | None:
+        """按 Run 幂等键读取已有产物；旧调用保留 task 级兼容查询。"""
+        statement = select(GenerationArtifact).where(GenerationArtifact.ordinal == ordinal)
+        if generation_run_id is not None:
+            statement = statement.where(GenerationArtifact.generation_run_id == generation_run_id)
+        else:
+            statement = statement.where(
+                GenerationArtifact.task_id == task_id,
+                GenerationArtifact.generation_run_id.is_(None),
+            )
         return (await db.execute(statement)).scalar_one_or_none()
 
     async def _resolve_video_file(
@@ -153,6 +178,7 @@ class ArtifactStore:
         db: AsyncSession,
         *,
         task_id: str,
+        generation_run_id: str | None,
         ordinal: int,
         modality: ArtifactModality,
         file_item: FileItem,
@@ -165,6 +191,7 @@ class ArtifactStore:
         artifact = GenerationArtifact(
             id=uuid4().hex,
             task_id=task_id,
+            generation_run_id=generation_run_id,
             modality=modality,
             ordinal=ordinal,
             file_id=file_item.id,

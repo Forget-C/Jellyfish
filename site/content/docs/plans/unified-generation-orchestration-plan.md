@@ -2,7 +2,7 @@
 title: "统一生成编排与独立提示词渲染实施计划"
 description: "将文本、图片、视频生成收敛到统一编排层，拆分提示词渲染，并以 file_id 统一媒体引用。"
 weight: 31
-status: completed
+status: in_progress
 ---
 
 > 本文属于“任务计划”文档，描述目标架构与一次性切换的实施步骤。项目仍处于开发期，本文**不保留旧路由、旧 payload、双写或兼容适配层**。
@@ -900,7 +900,217 @@ P5 必须为 `script_merge` 和 `script_variant` 补齐 Executor 与 Worker 注�
 
 ## 11. 执行状态
 
-2026-07-29 已完成最终收口与交付验收：异步任务统一通过 Outbox dispatcher 投递，媒体引用在
-提交时冻结内容版本与哈希，执行期拒绝漂移；旧 Film、图片任务、分镜提示词 Worker、剧本同步
-兼容接口及无副作用投递兼容层均已删除。文本 SSE 对无终态 EOF 做稳定失败收敛；OpenAPI、
-generated client 与当前架构文档已同步。后端全量回归、重点静态检查和前端类型检查均通过。
+2026-07-29 已完成一轮统一提交、Outbox 投递、媒体快照和大部分 Worker 迁移：异步任务统一通过
+Outbox dispatcher 投递，媒体引用在提交时冻结内容版本与哈希，执行期拒绝漂移；OpenAPI、
+generated client 与当前架构文档已同步。
+
+2026-07-31 发现图片、视频实验室已正确提交 `target=experiment_session`，但图片 Worker 仅能发布
+资产/分镜帧，视频 Worker 无条件调用镜头视频 Publisher。Provider 成功后的 Artifact 归档会因错误的
+槽位发布回滚。以下第 12 节补充 Worker WorkflowHandler 收口计划；在该计划完成前，本文状态保持
+`in_progress`。
+
+2026-07-31 已完成第 12 节阶段 A 至阶段 D 的核心 Worker 收口：目标能力矩阵已升级为
+`operation × target.kind × execution_delivery`；图片、视频 Worker 都已收敛为“执行与 Artifact 归档”后交由
+`TaskFinalizer` 唯一触发 Handler 终态交付。实验室结果只投影到 `ExperimentMessage`，不再调用槽位 CAS
+Publisher；镜头帧和镜头视频的 CAS 发布及镜头派生状态刷新已迁入各自 Handler。实验室 Handler 已在
+提交和执行前复核会话类型、任务消息归属，分镜帧槽位已补齐目标镜头归属门禁。终态领域投影异常现在不会
+阻断 `GenerationTask` 失败或取消的持久化；已移除会创建无快照必失败任务的旧图片提交 API，以及可绕过
+Finalizer 的成功交付入口。图片、视频的稳定结果契约已接入内部终态路径与实验室预览，前端优先读取
+`primary_file_id` 并兼容历史 `file_id`；通用任务结果 API 的强类型响应、执行 lease/幂等仍在推进。
+2026-07-31 已为图片和视频轮询 Worker 增加 `pending && !cancel_requested` 的原子领取，重复 Outbox/Celery
+投递只能有一个 Worker 进入 Provider；本阶段不回收 `running` 任务，也不将 failed 任务重新领取，完整 lease
+续租与 fencing 仍属于后续可靠性工作。
+
+## 12. Worker WorkflowHandler 收口计划
+
+### 12.1 目标与不变量
+
+图片、视频的执行流程必须按模态复用，实验室、资产和分镜之间的差异只能由目标专属
+`WorkflowHandler` 表达。目标结构如下：
+
+```text
+业务路由 Binder
+  → WorkflowHandler.validate_submission()
+  → CommonGenerationGate
+  → GenerationTask + Link + MediaSnapshot + Outbox
+  → Executor
+  → 通用 Worker
+  → WorkflowHandler.validate_execution()
+  → Generation Unit（Provider）
+  → ArtifactStore
+  → TaskFinalizer（委托 WorkflowHandler.deliver_terminal）
+```
+
+各层职责固定：
+
+- **Executor**：管理同步/异步桥接、超时、取消、日志和执行器标识，不理解业务目标。
+- **Worker**：编排一次模态生成，不按页面来源、`relation_type` 或业务实体决定写回。
+- **Generation Unit**：调用 Provider 并返回 Provider 原始结果，不认识任务、会话、镜头或资产。
+- **ArtifactStore**：归档每个真实结果为 `FileItem` 和 `GenerationArtifact`。
+- **WorkflowHandler**：完成特定 `(operation, target.kind)` 的提交期校验、执行前复核和领域终态写回。
+- **TaskFinalizer**：统一写入 `GenerationTask` 终态、结果、错误、进度和用户可见投影；Handler 不得自行
+  commit 或自行决定通用任务状态。
+
+`GenerationTask.payload.snapshot` 是唯一的执行输入；`GenerationTaskLink` 只表示目标关联与导航；
+`GenerationArtifact` 是多产物真相；`ExperimentMessage` 仅是实验室展示投影。`shot.status` 始终只表示
+提取确认状态，不能表示生成运行状态。
+
+### 12.2 初始场景矩阵
+
+| 场景 | operation | target | 提交期校验 | 执行前复核 | 成功写回 | CAS |
+|---|---|---|---|---|---|---|
+| 图片实验室 | `image_generation` | `experiment_session` | 会话存在且为 image，模型和参考图合法 | 会话、任务消息和参考图快照仍有效 | `ExperimentMessage` 图片投影 | 否 |
+| 视频实验室 | `video_generation` | `experiment_session` | 会话存在且为 video，帧/主体媒体合法 | 会话、任务消息和媒体快照仍有效 | `ExperimentMessage` 视频投影 | 否 |
+| 资产图片 | `image_generation` | `asset_image_slot` | 槽位、资产和项目关系合法 | 目标仍存在且可生成 | 资产图片槽位 | 是 |
+| 分镜帧 | `image_generation` | `shot_frame_slot` | 帧、镜头、章节、项目关系合法 | 目标仍存在且可生成 | `ShotFrameImage` 与必要派生状态 | 是 |
+| 分镜视频 | `video_generation` | `shot_video` | 镜头、章节、项目关系和视频准备度合法 | 镜头仍存在且可生成 | `Shot.generated_video_file_id` | 是 |
+
+未声明的 `(operation, target.kind, execution_delivery)` 组合必须在创建任务、Outbox 或 Provider 调用前
+被拒绝。槽位版本改变不属于执行前拒绝条件：任务仍可生成并归档，完成时由 CAS 产出 `conflicted`，不得
+覆盖用户的新选择。
+
+### 12.3 Handler 生命周期
+
+`WorkflowHandlerRegistry` 按 `(operation, target.kind)` 解析 Handler。每个 Handler 必须实现以下生命周期：
+
+1. `validate_submission`：校验会话类型、项目/章节/镜头/槽位归属等领域关系，并为槽位目标冻结
+   `expected_version_id`。模型、FileItem 存在性和媒体类型由 `CommonGenerationGate` 统一校验。
+2. `validate_execution`：在 Provider 调用前复核任务未取消、目标未删除、任务消息仍属于实验会话、输入
+   文件版本未漂移，以及当前目标仍具备执行资格。不得重新派生已冻结的 prompt 或媒体。
+3. `deliver_success`：消费已归档 Artifact，完成领域写回并返回稳定的交付结果。
+4. `deliver_failed` / `deliver_cancelled`：完成领域可见的失败或取消投影；取消 API 不得绕过该路径直接拼写
+   消息 payload。
+
+初始 Handler 为：
+
+- `ExperimentWorkflowHandler`：校验会话类型，成功时投影任务消息；不读取或修改任何 Shot、资产或槽位。
+- `AssetImageWorkflowHandler`：校验资产槽位归属，调用 `AssetImagePublisher` 完成 CAS。
+- `ShotFrameWorkflowHandler`：校验镜头/章节/项目/帧关系，调用 `ShotFramePublisher` 并刷新必要派生状态。
+- `ShotVideoWorkflowHandler`：校验镜头/章节/项目/准备度，调用 `ShotVideoPublisher`；仅该 Handler 可将
+  target entity 作为 shot ID 使用。
+
+### 12.4 阶段 A：语义冻结与框架
+
+**可交付内容**：补齐场景矩阵、红绿回归测试、内部 `WorkflowHandler` 契约和 Registry；能力矩阵从
+`operation × execution_delivery` 扩展为 `operation × target.kind × execution_delivery`。新增
+`GenerationOutcome`、`DeliveredArtifact`、`GenerationDeliveryResult` 和 `GenerationTerminalCommand` 等
+内部 DTO。
+
+**完成条件**：实验室图片/视频、资产图片、分镜帧和分镜视频均有组合测试；非法组合在提交期拒绝；
+`expected_version_id` 仅对槽位目标合法，实验会话为 `None` 合法。该阶段不改变外部 API、数据库 schema
+或现有 Worker 执行行为。
+
+### 12.5 阶段 B：通用终态收口
+
+**可交付内容**：新增 `TaskFinalizer`，使其在一个短数据库事务中协调 Artifact 发布状态、领域投影、
+`GenerationTask.result/status/error` 和实验室消息投影。Artifact 转换为稳定 `DeliveredArtifact[]`，不再由
+图片或视频 Runner 手工拼接单个 `file_id` 和 `publish_status`。
+
+**完成条件**：成功、失败和取消只有一个终态；CAS 冲突保留 Artifact 且任务为 `succeeded`；实验室无自动
+槽位产物可暂保留内部 `skipped/no_target_slot`，但交付结果对外必须是 `projected` 或 `not_applicable`；
+技术发布异常不得伪装为 skipped。该阶段不新增 `generation_result_deliveries` 表。
+
+### 12.6 阶段 C：图片工作流迁移
+
+**可交付内容**：图片 Worker 收敛为：
+
+```text
+Snapshot → Handler.validate_execution → FileResolver → ImageGenerationUnit
+→ ArtifactStore.store_images → TaskFinalizer
+```
+
+删除 `image_task_runner.py` 中本地 Publisher map、实验消息手写投影和按 target 的领域写回分支。图片
+实验室、资产图片和分镜帧共用同一 `ImageGenerationWorker`，只由对应 Handler 写入结果。
+
+**完成条件**：图片实验室不再出现 `target is unsupported`；多图全部归档且结果保留完整 Artifact 列表；
+资产和分镜帧 CAS 行为不变；重复 `task_id` 不重复创建 Artifact 或覆盖槽位。
+
+### 12.7 阶段 D：视频工作流迁移
+
+**可交付内容**：视频 Worker 收敛为：
+
+```text
+Snapshot → Handler.validate_execution → FileResolver → VideoGenerationUnit
+→ ArtifactStore.store_video → TaskFinalizer
+```
+
+删除 `generated_video.py` 中无条件 `ShotVideoPublisher()`、将任何 target entity 当作 shot ID，以及实验室
+任务调用 `recompute_shot_status` 的逻辑。视频实验室和分镜视频共用同一 `VideoGenerationWorker`。
+
+**完成条件**：视频实验室不再出现 `publisher target_kind mismatch`；实验室绝不读取或更新 Shot；分镜视频仍
+使用 `generated_video_version_id` CAS；CAS 冲突后产物可查看和人工采用。
+
+### 12.8 阶段 E：结果 API、前端与旧链路收口
+
+**可交付内容**：将 `GenerationTask.result` 和任务结果 API 升级为版本化结果，至少含
+`primary_file_id`、`artifacts[]`、目标类型和交付 outcome。实验室消息只保留精简预览投影；完整多产物
+结果从任务结果或 Artifact 查询读取。历史采用迁移到 Artifact 维度，完成所有 Writer 迁移后再删除
+`GenerationTaskLink.file_id/status` 的产物职责。
+
+**完成条件**：多图不会丢失；`projected`、`published`、`conflicted` 可稳定区分；运行
+`pnpm run openapi:update` 和 `pnpm exec tsc --noEmit` 通过；任务中心仍只展示通用任务状态，不承载
+实验室或工作台的业务详情。
+
+### 12.9 阶段 F：可靠性与运维增强
+
+**可交付内容**：处理对象存储先上传、数据库事务失败产生孤儿对象的补偿；文件删除前显式检查 Artifact 和
+任务媒体引用；补充包含 `task_id`、`task_kind`、target、Handler、Provider task ID 和失败阶段的可观测性。
+
+仅在需要多目标投递、跨服务写回、独立交付重试或人工重新交付时，才评估新增 target 级 delivery record
+或 `generation_result_deliveries` 表。该表不是阶段 A 至 E 的前置条件。
+
+**完成条件**：注入归档或发布失败时存在清晰诊断和可恢复路径；不删除仍被 Artifact 或任务媒体快照引用的
+文件；重试不会重复调用 Provider 或覆盖用户的新版本。
+
+### 12.10 验证与发布顺序
+
+每阶段先运行定向后端验证：
+
+```bash
+cd backend
+uv run pytest tests/test_lab_generation_tasks_api.py tests/test_async_worker_services.py -q
+uv run pytest tests/services/generation/runtime/test_artifacts.py tests/services/generation/publishers/test_publishers.py -q
+uv run pytest tests/services/generation/submission/test_submitter.py tests/services/generation/dispatch/test_outbox_dispatcher.py -q
+uv run pylint app/services/generation app/services/studio/image_task_runner.py app/services/film/generated_video.py
+```
+
+阶段 E 额外运行 `pnpm run openapi:update` 和 `pnpm exec tsc --noEmit`；最终合并前运行后端全量
+`uv run pytest -q` 与 `uv run pylint app`。阶段 A 至 D 不需要 schema migration；阶段 F 的补偿或独立
+delivery 重试方案如新增持久化记录，必须单独提供 Alembic migration、回滚说明和故障注入测试。
+
+## 13. 生命周期协调器重构（后续主线）
+
+当前 `GenerationTask` 同时承载用户任务、一次执行尝试和终态协调，无法从根本上解决重复投递、取消、
+回调迟到与恢复之间的竞争。后续不得继续把这些语义分散到 Runner、取消路由和 Publisher；统一改为：
+
+```text
+GenerationExecutor → GenerationRun(work_id, lease/epoch) → GenerationWorker
+                   → WorkerCallback → GenerationLifecycleCoordinator
+                   → WorkflowHandler + ArtifactStore + GenerationTask
+```
+
+### 13.1 所有权
+
+- `GenerationTask`：用户可见任务、冻结 Snapshot、最终结果与导航关系；不表示某次执行者。
+- `GenerationRun`：一次执行尝试，记录 `work_id`、状态、lease owner/epoch、心跳、Provider task ID 与诊断。
+- `GenerationExecutor`：唯一领取/续租/取消/重试拥有者；Worker 不得直接领取或改 Task 状态。
+- `GenerationWorker`：仅消费 Snapshot，回调标准 `succeeded / failed / cancelled` 事件。
+- `GenerationLifecycleCoordinator`：唯一终态写入口；以 `run_id + lease_epoch` 条件事务归档、调用 Handler 并写 Task。
+
+### 13.2 状态与不变量
+
+`GenerationRun` 采用 `queued → claimed → executing → terminalizing → terminal`。任何 callback、续租、
+归档和终态写入必须携带当前 epoch；失效 owner 的影响行数为 0 后立即停止。取消仅记录请求并通知 Executor；
+只有 Coordinator 可以决定最终 cancelled、failed 或 succeeded。成功领域投影与任务成功终态在同一 Coordinator
+事务内完成，取消请求与该事务通过 Run lease/epoch 串行化。
+
+### 13.3 分阶段交付
+
+1. **L1：数据模型与契约** — 新增 `generation_runs`、callback DTO、状态机与迁移/回滚测试；不迁移 Worker。
+2. **L2：Executor 与 Coordinator** — 实现 claim、heartbeat、epoch fencing、取消请求和单一终态 API。
+3. **L3：图片/视频迁移** — Worker 改为无状态 Generation Unit；现有 Handler/ArtifactStore 复用。
+4. **L4：可靠恢复** — stale run reaper、Provider 幂等键、孤儿对象补偿、故障注入测试。
+5. **L5：删除旧路径** — 删除 Runner 直接 TaskStore 写入、旧取消直改与兼容 payload。
+
+每个阶段必须先完成其状态机竞争测试，才允许进入下一阶段；`generation_result_deliveries` 仅在需要独立多目标
+重投时再引入，不是 `GenerationRun` 的替代品。
