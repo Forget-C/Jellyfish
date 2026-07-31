@@ -16,7 +16,7 @@ from app.core.contracts.generation import (
 from app.core.contracts.image_generation import ImageGenerationInput, ImageGenerationResult, InputImageRef
 from app.core.contracts.provider import ProviderConfig
 from app.core.tasks import ImageGenerationTask
-from app.models.llm import ModelCategoryKey, ModelConfigRevision, Provider, ProviderStatus
+from app.models.llm import Model, ModelCategoryKey, Provider
 from app.models.task import GenerationTask
 from app.models.studio import (
     ActorImage,
@@ -31,6 +31,7 @@ from app.models.studio import (
 )
 from app.models.task_links import GenerationTaskLink
 from app.models.experiment_sessions import ExperimentMessage
+from app.services.studio.experiment_messages import project_task_message_terminal
 from app.models.types import FileUsageKind
 from app.services.studio.file_usages import (
     first_project_id_for_actor,
@@ -46,9 +47,30 @@ from app.services.studio.image_tasks import load_provider_config, resolve_image_
 from app.services.generation.files import FileResolver
 from app.services.generation.publishers import AssetImagePublisher, ShotFramePublisher
 from app.services.generation.runtime import ArtifactStore
+from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.worker.async_task_support import cancel_if_requested_async
 from app.services.worker.task_logging import log_task_event, log_task_failure
 from app.utils.files import create_file_from_url_or_b64
+
+
+def _project_task_message_terminal(
+    message: ExperimentMessage,
+    *,
+    status: str,
+    result: dict | None = None,
+    error: str | None = None,
+    progress: int | None = None,
+) -> None:
+    """投影图片任务终态，同时保留提交阶段已经写入的展示字段。"""
+    existing_payload = dict(message.payload or {})
+    project_task_message_terminal(
+        message,
+        status=status,
+        result=result,
+        error=error,
+        progress=progress,
+    )
+    message.payload = {**existing_payload, **message.payload}
 
 
 class _CreateOnlyTask:
@@ -72,31 +94,25 @@ async def _resolve_snapshot_provider_config(
     *,
     snapshot: ResolvedGenerationSnapshot,
 ) -> ProviderConfig:
-    """按冻结图片 revision 与动态 credential_ref 构造执行期 Provider 配置。
-
-    图片任务 payload 不保留 API key 或 endpoint；Worker 仅在执行时读取 revision
-    和被其引用的 Provider，确保队列与日志中没有供应商凭据。
-    """
-    revision = await session.get(ModelConfigRevision, snapshot.model_revision_id)
-    if revision is None or revision.model_id != snapshot.model_id or revision.category != ModelCategoryKey.image:
-        raise RuntimeError("image generation model revision is unavailable")
-    credential_ref = (revision.credential_ref or "").strip()
-    if not credential_ref.startswith("provider:"):
-        raise RuntimeError("image generation credential reference is unavailable")
-    provider_id = credential_ref.removeprefix("provider:").strip()
-    provider = await session.get(Provider, provider_id) if provider_id else None
-    if provider is None or provider.status == ProviderStatus.disabled:
+    """在执行期读取当前图片模型与 Provider，保证使用最新配置和密钥。"""
+    model = await _resolve_current_image_model(session, snapshot=snapshot)
+    provider = await session.get(Provider, model.provider_id)
+    if provider is None:
         raise RuntimeError("image generation provider is unavailable")
-    api_key = (provider.api_key or "").strip()
-    if not api_key:
-        raise RuntimeError("image generation provider credential is unavailable")
-    endpoint_config = dict(revision.endpoint_config or {})
-    base_url = endpoint_config.get("image_base_url") or endpoint_config.get("base_url") or None
+    resolved = resolve_provider_config_from_provider(provider=provider, category=ModelCategoryKey.image)
     return ProviderConfig(
-        provider=revision.provider_key,  # type: ignore[arg-type]
-        api_key=api_key,
-        base_url=str(base_url).strip() or None if base_url else None,
+        provider=resolved.provider_key,  # type: ignore[arg-type]
+        api_key=resolved.api_key,
+        base_url=resolved.base_url,
     )
+
+
+async def _resolve_current_image_model(session: AsyncSession, *, snapshot: ResolvedGenerationSnapshot) -> Model:
+    """解析任务指定的当前图片模型，拒绝删除或跨模态配置。"""
+    model = await session.get(Model, snapshot.model_id)
+    if model is None or model.category != ModelCategoryKey.image:
+        raise RuntimeError("image generation model is unavailable")
+    return model
 
 
 async def _resolve_snapshot_image_input(
@@ -116,9 +132,7 @@ async def _resolve_snapshot_image_input(
         raise RuntimeError("image generation snapshot operation is unavailable")
     if not snapshot.execution_prompt:
         raise RuntimeError("image generation snapshot prompt is unavailable")
-    revision = await session.get(ModelConfigRevision, snapshot.model_revision_id)
-    if revision is None:
-        raise RuntimeError("image generation model revision is unavailable")
+    model = await _resolve_current_image_model(session, snapshot=snapshot)
 
     references: list[InputImageRef] = []
     in_memory_image_urls: list[str] = []
@@ -141,7 +155,7 @@ async def _resolve_snapshot_image_input(
     purpose = "asset_image" if snapshot.canonical_target.kind is GenerationTargetKind.asset_image_slot else "video_reference"
     input_ = ImageGenerationInput(
         prompt=snapshot.execution_prompt,
-        model=revision.model_name,
+        model=model.name,
         images=references,
         target_ratio=operation_input.target_ratio,
         resolution_profile=operation_input.resolution_profile,
@@ -494,8 +508,12 @@ async def run_image_generation_task(
             await store.set_status(task_id, TaskStatus.succeeded)
             message_row = (await session.execute(select(ExperimentMessage).where(ExperimentMessage.task_id == task_id))).scalars().first()
             if message_row is not None:
-                message_row.status = "succeeded"
-                message_row.payload = {**message_row.payload, "result": result_payload}
+                _project_task_message_terminal(
+                    message_row,
+                    status="succeeded",
+                    result=result_payload,
+                    progress=100,
+                )
             if snapshot.canonical_target.kind is GenerationTargetKind.shot_frame_slot:
                 await recompute_shot_status(session, shot_id=snapshot.canonical_target.entity_id)
             await session.commit()
@@ -508,7 +526,6 @@ async def run_image_generation_task(
                 await store.set_status(task_id, TaskStatus.failed)
                 message_row = (await s2.execute(select(ExperimentMessage).where(ExperimentMessage.task_id == task_id))).scalars().first()
                 if message_row is not None:
-                    message_row.status = "failed"
-                    message_row.payload = {**message_row.payload, "error": str(exc)}
+                    _project_task_message_terminal(message_row, status="failed", error=str(exc))
                 await s2.commit()
             log_task_failure("image_generation", task_id, str(exc))

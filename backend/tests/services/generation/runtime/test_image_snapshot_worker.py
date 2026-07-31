@@ -13,16 +13,17 @@ from app.core.contracts.generation import (
     ResolvedGenerationSnapshot,
 )
 from app.core.contracts.media import ImageMediaInput, MediaReference
+from app.models.llm import ModelCategoryKey
 from app.services.studio import image_task_runner
 
 
 class _RevisionSession:
-    """为图片输入投影提供最小 revision 查询能力。"""
+    """为图片输入投影提供最小当前模型查询能力。"""
 
     async def get(self, model: object, identifier: str) -> object | None:
-        """只返回冻结模型配置，避免测试依赖真实数据库。"""
-        if identifier == "revision-1":
-            return SimpleNamespace(model_name="image-model")
+        """只返回当前图片模型，避免测试依赖真实数据库。"""
+        if identifier == "model-1":
+            return SimpleNamespace(name="image-model", category=ModelCategoryKey.image)
         return None
 
 
@@ -47,7 +48,6 @@ async def test_snapshot_image_input_resolves_file_reference_only_in_worker_memor
     monkeypatch.setattr(image_task_runner, "FileResolver", _FakeResolver)
     snapshot = ResolvedGenerationSnapshot(
         model_id="model-1",
-        model_revision_id="revision-1",
         canonical_target=GenerationTarget(
             kind=GenerationTargetKind.shot_frame_slot,
             entity_id="shot-1",

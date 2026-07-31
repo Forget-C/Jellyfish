@@ -24,6 +24,48 @@ class ExperimentMessageDraft:
     task_id: str | None = None
 
 
+def task_message_display_payload(*, modality: str) -> dict[str, Any]:
+    """构造异步任务消息的初始展示投影，不复制任务请求快照。
+
+    ``GenerationTask.payload`` 是模型、提示词、媒体和 operation input 的唯一
+    权威来源。实验室消息仅保留让用户识别该消息用途所需的模态信息；终态时再
+    追加产物引用或错误摘要。
+    """
+
+    return {"modality": modality}
+
+
+def project_task_message_terminal(
+    message: ExperimentMessage,
+    *,
+    status: str,
+    result: dict[str, Any] | None = None,
+    error: str | None = None,
+    progress: int | None = None,
+) -> None:
+    """将异步任务的用户可见终态投影回实验室消息。
+
+    只投影稳定的文件引用或 URL，完整结果仍以 ``GenerationTask.result`` 为准。
+    该收口避免消息 payload 演变为第二份执行参数或供应商原始响应。
+    """
+
+    payload = task_message_display_payload(modality=str((message.payload or {}).get("modality") or "generation"))
+    if result:
+        display_result = {
+            key: value
+            for key, value in result.items()
+            if key in {"file_id", "url", "publish_status"} and value is not None
+        }
+        if display_result:
+            payload["result"] = display_result
+    if error:
+        payload["error"] = error
+    if progress is not None:
+        payload["progress"] = progress
+    message.status = status
+    message.payload = payload
+
+
 async def reserve_message_sequences(
     db: AsyncSession,
     *,
@@ -86,4 +128,10 @@ async def append_experiment_messages(
     return messages
 
 
-__all__ = ["ExperimentMessageDraft", "append_experiment_messages", "reserve_message_sequences"]
+__all__ = [
+    "ExperimentMessageDraft",
+    "append_experiment_messages",
+    "project_task_message_terminal",
+    "reserve_message_sequences",
+    "task_message_display_payload",
+]

@@ -11,8 +11,6 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.db import Base
 from app.core.task_manager import DeliveryMode, SqlAlchemyTaskStore, TaskManager
-from app.core.task_manager import SyncSqlAlchemyTaskStore
-from app.core.task_manager.types import TaskStatus
 from app.models.task import GenerationTask
 from app.services.script_processing_worker import MergeTaskExecutor, VariantTaskExecutor
 from app.tasks import execute_task as execute_task_module
@@ -189,17 +187,6 @@ def test_revoke_task_execution_revokes_celery_task(monkeypatch, tmp_path) -> Non
     sync_engine.dispose()
 
 
-def test_reap_text_streams_celery_runs_async_reaper(monkeypatch) -> None:
-    """Beat 调用必须同步桥接 hidden 文本流的异步过期回收服务。"""
-
-    async def _fake_reaper() -> list[str]:
-        return ["expired-text-task"]
-
-    monkeypatch.setattr(execute_task_module, "reap_expired_text_stream_runs", _fake_reaper)
-
-    assert execute_task_module.reap_text_streams_celery() == ["expired-text-task"]
-
-
 def test_dispatch_generation_outbox_celery_runs_dispatcher(monkeypatch) -> None:
     """Beat task 必须调用统一 Outbox dispatcher，而非让路由直接投递。"""
 
@@ -235,7 +222,7 @@ def test_generation_async_executor_dispatches_only_submitter_snapshot(monkeypatc
 
     Base.metadata.create_all(sync_engine)
     command = {"operation": "video_generation", "delivery": "async_polling"}
-    snapshot = {"model_id": "model-1", "model_revision_id": "revision-1"}
+    snapshot = {"model_id": "model-1"}
     with sync_session_local() as db:
         db.add(
             GenerationTask(

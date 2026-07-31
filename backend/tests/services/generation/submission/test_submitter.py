@@ -68,12 +68,10 @@ class FixedGate:
         """根据命令生成不含 URL 或凭据的最小快照。"""
         return ResolvedGenerationSnapshot(
             model_id="model-1",
-            model_revision_id="revision-1",
             canonical_target=command.target,
             media=command.request.media,
             operation_input=command.request.operation_input,
             execution_prompt=command.request.execution_prompt,
-            credential_ref="credential-reference-must-not-persist",
         )
 
 

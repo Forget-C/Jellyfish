@@ -15,7 +15,7 @@ from app.core.contracts.generation import (
 )
 from app.core.contracts.media import ImageMediaInput, MediaReference, VideoMediaInput
 from app.models.experiment_sessions import ExperimentSession
-from app.models.llm import Model, ModelCategoryKey, ModelConfigRevision, ModelSettings, Provider, ProviderStatus
+from app.models.llm import Model, ModelCategoryKey, ModelSettings, Provider, ProviderStatus
 from app.models.studio import Shot, ShotDetail, ShotFrameImage
 from app.models.studio_asset_images import ActorImage, CharacterImage, CostumeImage, PropImage, SceneImage
 from app.models.studio_prompts_files_timeline import FileItem
@@ -50,21 +50,19 @@ class GenerationEntityGate:
     async def validate(self, db: AsyncSession, command: GenerationCommand) -> ResolvedGenerationSnapshot:
         """将可验证的提交命令冻结为不含 ORM/凭据的执行快照。"""
         await self._validate_target(db, command)
-        model, revision = await self._resolve_model(db, command)
+        model = await self._resolve_model(db, command)
         await self._validate_media(db, command.request.media)
         return ResolvedGenerationSnapshot(
             model_id=model.id,
-            model_revision_id=revision.id,
             canonical_target=command.target,
             expected_version_id=await self._target_version(db, command),
             media=command.request.media,
             operation_input=command.request.operation_input,
             execution_prompt=command.request.execution_prompt,
-            credential_ref=revision.credential_ref,
         )
 
-    async def _resolve_model(self, db: AsyncSession, command: GenerationCommand) -> tuple[Model, ModelConfigRevision]:
-        """选择显式或默认模型，并固定当前 revision 而不是可变模型配置。"""
+    async def _resolve_model(self, db: AsyncSession, command: GenerationCommand) -> Model:
+        """选择可用模型并校验其当前 Provider，不冻结可变执行配置。"""
         model_id = command.request.model_id or await self._default_model_id(db, command.modality)
         model = await db.get(Model, model_id) if model_id else None
         expected_category = ModelCategoryKey(command.modality.value)
@@ -73,10 +71,7 @@ class GenerationEntityGate:
         provider = await db.get(Provider, model.provider_id)
         if provider is None or provider.status == ProviderStatus.disabled:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="model_unavailable")
-        revision = await db.get(ModelConfigRevision, model.current_revision_id) if model.current_revision_id else None
-        if revision is None or revision.model_id != model.id:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="model_unavailable")
-        return model, revision
+        return model
 
     async def _default_model_id(self, db: AsyncSession, modality: GenerationModality) -> str | None:
         """按模态读取唯一默认模型；不存在时由统一错误语义处理。"""

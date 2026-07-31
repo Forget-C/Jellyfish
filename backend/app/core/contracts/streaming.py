@@ -36,13 +36,12 @@ class StreamMessageData(BaseModel):
 
 
 class StreamGenerationResult(BaseModel):
-    """完成事件携带的文本生成结果，避免以自由格式字典传递 Provider 输出。"""
+    """完成事件携带的文本结果；同步 SSE 不冻结模型配置 revision。"""
 
     model_config = ConfigDict(extra="forbid")
 
     text: str
     model_id: str = Field(min_length=1)
-    model_revision_id: str = Field(min_length=1)
     provider_request_id: str | None = None
     input_tokens: int | None = Field(default=None, ge=0)
     output_tokens: int | None = Field(default=None, ge=0)

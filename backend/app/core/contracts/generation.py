@@ -118,15 +118,17 @@ class GenerationCommand(BaseModel):
 
 
 class ResolvedGenerationSnapshot(BaseModel):
-    """Entity Gate 冻结的可序列化执行快照，绝不保存凭据值。"""
+    """Entity Gate 生成的异步任务参数快照，绝不保存凭据或模型配置副本。
+
+    Worker 会在真正执行时按 ``model_id`` 读取当前模型与 Provider 配置；快照只
+    保存用户提交的输入，避免待执行任务因模型管理更新而被阻塞。
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     model_id: str
-    model_revision_id: str
     canonical_target: GenerationTarget
     expected_version_id: int | None = Field(default=None, ge=1)
     media: ImageMediaInput | VideoMediaInput | None = None
     operation_input: TypedOperationInput
     execution_prompt: str | None = None
-    credential_ref: str | None = None

@@ -18,7 +18,6 @@ export interface TextLabStreamMessage {
 export interface TextLabStreamResult {
   text: string
   model_id: string
-  model_revision_id: string
   provider_request_id: string | null
   input_tokens: number | null
   output_tokens: number | null
@@ -318,7 +317,6 @@ function parseResult(value: unknown): TextLabStreamResult {
   return {
     text: requireString(result.text, 'result.text'),
     model_id: requireNonEmptyString(result.model_id, 'result.model_id'),
-    model_revision_id: requireNonEmptyString(result.model_revision_id, 'result.model_revision_id'),
     provider_request_id: requireNullableString(result.provider_request_id, 'result.provider_request_id'),
     input_tokens: requireNullableNonNegativeInteger(result.input_tokens, 'result.input_tokens'),
     output_tokens: requireNullableNonNegativeInteger(result.output_tokens, 'result.output_tokens'),

@@ -4,6 +4,11 @@ weight: 45
 description: "为文本、图片和视频实验室提供从用户历史消息恢复输入并再次生成的统一方案。"
 ---
 
+> 本计划中的“用户与任务消息重复保存 `input_snapshot`”方案已被
+> [实验室消息与异步生成任务收口计划](/docs/plans/experiment-message-async-generation-plan/)
+> 替代。后续实现以新计划为准：任务参数以 `GenerationTask.request_snapshot`
+> 为权威来源，`ExperimentMessage` 仅保留对话与任务展示投影。
+
 ## 目标
 
 用户应能从实验室的历史**用户输入**恢复一次生成配置，以便修改提示词或参考素材后再次生成。恢复范围覆盖：

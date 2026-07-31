@@ -31,10 +31,9 @@ class RecordingSession:
 
 
 def _snapshot(kind: GenerationTargetKind, *, entity_id: str = "shot-1", slot_id: str | None = "12") -> ResolvedGenerationSnapshot:
-    """创建具有冻结版本的最小图片快照。"""
+    """创建包含目标版本的最小图片任务快照。"""
     return ResolvedGenerationSnapshot(
         model_id="model-1",
-        model_revision_id="revision-1",
         canonical_target=GenerationTarget(kind=kind, entity_id=entity_id, slot_id=slot_id),
         expected_version_id=3,
         operation_input=ImageGenerationOperationInput(),
@@ -106,4 +105,3 @@ async def test_shot_video_publisher_uses_dedicated_video_version_and_is_idempote
     statement = str(db.statements[0])
     assert "generated_video_file_id" in statement
     assert "generated_video_version_id" in statement
-

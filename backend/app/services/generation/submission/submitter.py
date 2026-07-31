@@ -102,10 +102,10 @@ class GenerationSubmitter:
 
 
 def _task_payload(*, command: GenerationCommand, snapshot: ResolvedGenerationSnapshot) -> dict[str, object]:
-    """仅冻结 command 与可安全重放的 snapshot，排除凭据引用等执行期材料。"""
+    """保存任务输入快照；模型与供应商配置由 Worker 在执行期动态解析。"""
     return {
         "command": command.model_dump(mode="json"),
-        "snapshot": snapshot.model_dump(mode="json", exclude={"credential_ref"}),
+        "snapshot": snapshot.model_dump(mode="json"),
     }
 
 

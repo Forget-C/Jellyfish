@@ -30,7 +30,7 @@ import { ExperimentOptionBar } from '../components/ExperimentOptionBar'
 import { ExperimentPromptEditor } from '../components/ExperimentPromptEditor'
 import { createPromptTemplateValues, renderPromptTemplate } from '../components/PromptTemplateForm'
 import { useExperimentHistory } from '../hooks/useExperimentHistory'
-import { focusExperimentPromptEditor, readExperimentInputSnapshot, type ExperimentInputSnapshot } from '../experimentInputSnapshot'
+import { focusExperimentPromptEditor } from '../experimentInputSnapshot'
 import type { ExperimentLabType } from '../hooks/useExperimentSessions'
 
 const imagePromptCategories = ['frame_head_image', 'frame_tail_image', 'frame_key_image', 'character_image', 'actor_image', 'prop_image', 'scene_image_front', 'scene_image_other', 'costume_image'] as const
@@ -50,7 +50,6 @@ type ImageLabMessage = {
   resultUrls?: string[]
   error?: string
   referenceFileIds?: string[]
-  inputSnapshot?: ExperimentInputSnapshot
 }
 
 export type ImageExperimentModeProps = {
@@ -90,7 +89,6 @@ function toImageLabMessage(item: ExperimentMessageRead): ImageLabMessage {
     error: typeof payload.error === 'string' ? payload.error : undefined,
     referenceFileIds: Array.isArray(payload.reference_file_ids)
       ? payload.reference_file_ids.filter((id): id is string => typeof id === 'string') : [],
-    inputSnapshot: item.role === 'user' ? readExperimentInputSnapshot(item) : undefined,
   }
 }
 
@@ -246,22 +244,15 @@ export function ImageExperimentMode({ sessionId, ensureSession, clearSessionMess
     try { await clearSessionMessages(activeSessionId); history.clearLocalHistory(); await history.refresh() } catch { message.error('清空历史失败；含生成任务的会话不可清空') }
   }
 
-  /** Restores a historical picture request into the current draft without creating a task. */
+  /** 仅回填历史提示词；完整异步参数只保存在关联任务快照中。 */
   const restoreUserMessage = (item: ImageLabMessage) => {
     if (disabled) return
-    const snapshot = item.inputSnapshot
-    const referenceIds = snapshot?.image?.reference_file_ids ?? item.referenceFileIds ?? []
-    const availableIds = referenceIds.filter((id) => files.some((file) => file.id === id))
-    const unavailableCount = referenceIds.length - availableIds.length
     setTemplateId(undefined)
     setTemplateValues({})
-    setDraft(snapshot?.prompt ?? item.content)
-    if (snapshot?.model_id) setModelId(snapshot.model_id)
-    setReferenceFileIds(availableIds)
+    setDraft(item.content)
+    setReferenceFileIds([])
     focusExperimentPromptEditor()
-    message[unavailableCount ? 'warning' : 'success'](
-      unavailableCount ? `已回填输入；${unavailableCount} 张历史参考图不可用` : '已回填历史输入，可修改后重新生成',
-    )
+    message.info('已回填提示词；请重新选择模型和参考图后生成')
   }
 
   const disabled = submitting || Boolean(runningTask)

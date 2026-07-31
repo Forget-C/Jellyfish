@@ -21,10 +21,9 @@ async def test_run_video_generation_task_uses_snapshot_instead_of_run_args(monke
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    snapshot = {
-        "model_id": "video-model-1",
-        "model_revision_id": "video-revision-1",
-        "canonical_target": {"kind": "shot_video", "entity_id": "shot-1"},
+        snapshot = {
+            "model_id": "video-model-1",
+            "canonical_target": {"kind": "shot_video", "entity_id": "shot-1"},
         "expected_version_id": 1,
         "operation_input": {"kind": "video_generation", "ratio": "16:9"},
         "execution_prompt": "镜头运动",

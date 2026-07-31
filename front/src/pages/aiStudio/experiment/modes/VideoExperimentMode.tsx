@@ -29,7 +29,7 @@ import { ExperimentOptionBar } from '../components/ExperimentOptionBar'
 import { ExperimentPromptEditor } from '../components/ExperimentPromptEditor'
 import { createPromptTemplateValues, renderPromptTemplate } from '../components/PromptTemplateForm'
 import { useExperimentHistory } from '../hooks/useExperimentHistory'
-import { focusExperimentPromptEditor, readExperimentInputSnapshot, type ExperimentInputSnapshot } from '../experimentInputSnapshot'
+import { focusExperimentPromptEditor } from '../experimentInputSnapshot'
 import type { ExperimentLabType } from '../hooks/useExperimentSessions'
 
 type FrameSlot = 'first' | 'last' | 'key'
@@ -39,12 +39,9 @@ type VideoMessage = {
   progress?: number; videoUrl?: string; error?: string; ratio?: string
   frameFileIds?: Partial<Record<FrameSlot, string>>
   subjectReferences?: { name: string; imageFileIds: string[]; videoFileIds: string[] }[]
-  inputSnapshot?: ExperimentInputSnapshot
 }
 type SubjectMediaKind = 'image' | 'video'
 type SubjectReferenceDraft = { id: string; name: string; imageFileIds: string[]; videoFileIds: string[] }
-type SnapshotSubjectReference = NonNullable<NonNullable<ExperimentInputSnapshot['video']>['subject_references']>[number]
-type RestoredSubjectReference = SnapshotSubjectReference | NonNullable<VideoMessage['subjectReferences']>[number]
 type VideoCapability = {
   allowed_ratios?: string[]; default_ratio?: string
   supports_subject_image_reference?: boolean; supports_subject_video_reference?: boolean
@@ -55,16 +52,6 @@ type VideoCapability = {
 
 const frameLabels: Record<FrameSlot, string> = { first: '首帧', last: '尾帧', key: '关键帧' }
 const ratioOptions: VideoRatio[] = ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']
-
-/** 将新快照的 snake_case 与旧消息的 camelCase 主体引用归一化为编辑态结构。 */
-function normalizeRestoredSubjectReference(subject: RestoredSubjectReference): Omit<SubjectReferenceDraft, 'id'> {
-  if ('imageFileIds' in subject) return subject
-  return {
-    name: subject.name ?? '',
-    imageFileIds: subject.image_file_ids ?? [],
-    videoFileIds: subject.video_file_ids ?? [],
-  }
-}
 
 /** 从任务结果中选择可播放的资料库文件或供应商视频地址。 */
 function extractVideoUrl(result: Record<string, unknown> | null | undefined): string | undefined {
@@ -108,7 +95,6 @@ function toVideoMessage(item: ExperimentMessageRead): VideoMessage {
     videoUrl: extractVideoUrl(payload.result as Record<string, unknown> | undefined),
     error: typeof payload.error === 'string' ? payload.error : undefined,
     ratio: typeof payload.ratio === 'string' ? payload.ratio : undefined, frameFileIds, subjectReferences,
-    inputSnapshot: item.role === 'user' ? readExperimentInputSnapshot(item) : undefined,
   }
 }
 
@@ -385,45 +371,16 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
     setTemplateValues(template ? createPromptTemplateValues(template) : {}); if (template) setDraft('')
   }
 
-  /** Restores named frames and subject media into their original video input slots. */
+  /** 仅回填历史提示词；完整异步参数只保存在关联任务快照中。 */
   const restoreUserMessage = (item: VideoMessage) => {
     if (disabled) return
-    const snapshot = item.inputSnapshot
-    const video = snapshot?.video
-    const availableFileIds = new Set(files.map((file) => file.id))
-    const references = video?.frame_references
-    const nextFrames: Partial<Record<FrameSlot, string>> = {}
-    if (references?.first_frame_file_id && availableFileIds.has(references.first_frame_file_id)) nextFrames.first = references.first_frame_file_id
-    if (references?.last_frame_file_id && availableFileIds.has(references.last_frame_file_id)) nextFrames.last = references.last_frame_file_id
-    const keyFrameId = references?.key_frame_file_ids?.find((id) => availableFileIds.has(id))
-    if (keyFrameId) nextFrames.key = keyFrameId
-    const restoredSubjectReferences = video?.subject_references ?? item.subjectReferences ?? []
-    const restoredSubjects = restoredSubjectReferences.map((reference) => {
-      const subject = normalizeRestoredSubjectReference(reference)
-      return {
-        id: crypto.randomUUID(),
-        name: subject.name,
-        imageFileIds: subject.imageFileIds.filter((id) => availableFileIds.has(id)),
-        videoFileIds: subject.videoFileIds.filter((id) => availableFileIds.has(id)),
-      }
-    }).filter((subject) => subject.name && (subject.imageFileIds.length || subject.videoFileIds.length))
-    const requestedReferenceCount = [references?.first_frame_file_id, references?.last_frame_file_id, ...(references?.key_frame_file_ids ?? [])].filter(Boolean).length
-    const restoredReferenceCount = Object.keys(nextFrames).length
-    const requestedSubjectMediaCount = restoredSubjectReferences.reduce((total, reference) => {
-      const subject = normalizeRestoredSubjectReference(reference)
-      return total + subject.imageFileIds.length + subject.videoFileIds.length
-    }, 0)
-    const restoredSubjectMediaCount = restoredSubjects.reduce((total, subject) => total + subject.imageFileIds.length + subject.videoFileIds.length, 0)
     setTemplateId(undefined)
     setTemplateValues({})
-    setDraft(snapshot?.prompt ?? item.content)
-    if (snapshot?.model_id) { setModelId(snapshot.model_id); void loadCapability(snapshot.model_id) }
-    if (video?.ratio && ratioOptions.includes(video.ratio as VideoRatio)) setRatio(video.ratio as VideoRatio)
-    setFrameFileIds(restoredSubjects.length ? {} : nextFrames)
-    setSubjectReferences(restoredReferenceCount ? [] : restoredSubjects)
+    setDraft(item.content)
+    setFrameFileIds({})
+    setSubjectReferences([])
     focusExperimentPromptEditor()
-    const unavailableCount = requestedReferenceCount - restoredReferenceCount + requestedSubjectMediaCount - restoredSubjectMediaCount
-    message[unavailableCount ? 'warning' : 'success'](unavailableCount ? `已回填输入；${unavailableCount} 个历史参考素材不可用` : '已回填历史输入，可修改后重新生成')
+    message.info('已回填提示词；请重新选择模型、画幅和参考素材后生成')
   }
 
   const historyNode = <>

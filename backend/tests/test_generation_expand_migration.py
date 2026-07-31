@@ -25,6 +25,20 @@ def _load_migration_module():
     return module
 
 
+def _load_revision_cleanup_migration():
+    """加载 revision 收缩迁移，验证旧库可安全升级到当前结构。"""
+
+    migration_path = (
+        Path(__file__).parents[1]
+        / "alembic/versions/e2b7c6d9f4a3_remove_model_config_revisions.py"
+    )
+    spec = importlib.util.spec_from_file_location("remove_model_config_revisions_migration", migration_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def _create_pre_expand_schema(engine: sa.Engine) -> None:
     """创建 P1 迁移所需的最小旧版表结构。"""
 
@@ -146,5 +160,40 @@ def test_unified_generation_expand_migration_rejects_incomplete_existing_table(t
         migration.op = Operations(MigrationContext.configure(connection))
         with pytest.raises(RuntimeError, match="Existing table 'model_config_revisions' is incompatible"):
             migration.upgrade()
+
+    engine.dispose()
+
+
+def test_revision_cleanup_migration_removes_revision_schema_and_repairs_timestamps(tmp_path) -> None:
+    """收缩迁移应移除旧 revision 结构，并让异步表可依赖数据库时间默认值写入。"""
+
+    engine = sa.create_engine(f"sqlite:///{tmp_path / 'remove-model-config-revisions.db'}", future=True)
+    _create_pre_expand_schema(engine)
+    expand_migration = _load_migration_module()
+    cleanup_migration = _load_revision_cleanup_migration()
+
+    with engine.begin() as connection:
+        expand_migration.op = Operations(MigrationContext.configure(connection))
+        expand_migration.upgrade()
+
+        cleanup_migration.op = Operations(MigrationContext.configure(connection))
+        cleanup_migration.upgrade()
+
+        inspector = sa.inspect(connection)
+        assert "model_config_revisions" not in inspector.get_table_names()
+        assert "current_revision_id" not in {
+            column["name"] for column in inspector.get_columns("models")
+        }
+        for table_name in (
+            "generation_artifacts",
+            "generation_task_media_references",
+            "generation_dispatch_outbox",
+        ):
+            columns = {column["name"]: column for column in inspector.get_columns(table_name)}
+            assert columns["created_at"]["default"] is not None
+            assert columns["updated_at"]["default"] is not None
+
+        with pytest.raises(NotImplementedError, match="irreversible"):
+            cleanup_migration.downgrade()
 
     engine.dispose()

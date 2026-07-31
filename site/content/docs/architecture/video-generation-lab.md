@@ -35,7 +35,7 @@ Vidu 主体参考映射到 `reference2video` 的 `subjects` 参数。当前适�
 
 路径绑定视频模态和 `video_generation` operation。请求体提供已登记的 `model_id`、最终 `execution_prompt`、`ratio`、可选帧槽位和主体参考；服务端校验会话属于视频实验室，且不允许由请求体切换 operation 或媒体结构。
 
-用户消息、携带 `task_id` 的任务消息和统一 `video_generation` 任务在同一事务中创建，提交成功后才投递 Worker。任务目标类型为 `experiment_session`，不会读取或回写任何 `Shot`。任务快照冻结模型修订、提示词、文件 `file_id` 和目标会话，但不保存凭据值。
+用户消息、携带 `task_id` 的任务消息和统一 `video_generation` 任务在同一事务中创建，提交成功后才投递 Worker。任务目标类型为 `experiment_session`，不会读取或回写任何 `Shot`。任务参数快照保存 `model_id`、提示词、文件 `file_id` 和目标会话，但不保存凭据值或模型配置副本；Worker 使用执行时的当前模型配置和 Provider 最新密钥。
 
 前端通过 `GET /api/v1/film/tasks/{task_id}/result` 轮询任务。Worker 将成功、失败或取消状态及结果快照写回同一条任务消息；成功视频由统一产物流程归档到资料库，页面使用结果中的资料库文件信息播放并在刷新后恢复历史输入和预览。
 

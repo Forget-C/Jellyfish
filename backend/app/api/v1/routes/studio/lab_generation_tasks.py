@@ -30,7 +30,11 @@ from app.schemas.common import ApiResponse, created_response
 from app.schemas.studio.experiment_sessions import ExperimentMessageRead, ExperimentTaskCreated
 from app.services.generation.gate import GenerationEntityGate
 from app.services.generation.submission import GenerationSubmitter
-from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages
+from app.services.studio.experiment_messages import (
+    ExperimentMessageDraft,
+    append_experiment_messages,
+    task_message_display_payload,
+)
 
 router = APIRouter()
 
@@ -66,17 +70,6 @@ async def _require_session(
     return session
 
 
-def _message_payload(body: GenerationSubmitRequest) -> dict[str, object]:
-    """投影用户可见的安全提交快照，避免消息记录泄漏执行期凭据。"""
-
-    return {
-        "model_id": body.model_id,
-        "render_id": body.render_id,
-        "operation_input": body.operation_input.model_dump(mode="json"),
-        "media": body.media.model_dump(mode="json") if body.media else None,
-    }
-
-
 async def _submit_lab_task(
     db: AsyncSession,
     *,
@@ -88,19 +81,20 @@ async def _submit_lab_task(
 
     lab_type: Literal["image", "video"] = "image" if modality is GenerationModality.image else "video"
     session = await _require_session(db, session_id=session_id, lab_type=lab_type)
-    payload = _message_payload(body)
     operation = GenerationOperation.image_generation if modality is GenerationModality.image else GenerationOperation.video_generation
     task_label = "图片" if modality is GenerationModality.image else "视频"
     user_message, task_message = await append_experiment_messages(
         db,
         session_id=session_id,
         drafts=[
-            ExperimentMessageDraft(role="user", content=body.execution_prompt or "", payload=payload),
+            # 用户消息只保存可见文本。完整模型、媒体和 operation 参数只存在于
+            # GenerationTask.payload，不能由消息记录反向作为 Worker 输入。
+            ExperimentMessageDraft(role="user", content=body.execution_prompt or ""),
             ExperimentMessageDraft(
                 role="task",
                 content=f"{task_label}生成任务已提交，正在等待生成结果。",
                 status="pending",
-                payload=payload,
+                payload=task_message_display_payload(modality=modality.value),
             ),
         ],
     )

@@ -14,15 +14,37 @@ from app.core.contracts.generation import ResolvedGenerationSnapshot
 from app.core.contracts.media import VideoMediaInput
 from app.core.contracts.video_generation import VideoGenerationInput, VideoGenerationResult
 from app.core.tasks import VideoGenerationTask
-from app.models.llm import ModelCategoryKey, ModelConfigRevision, Provider, ProviderStatus
+from app.models.llm import Model, ModelCategoryKey, Provider
 from app.models.task import GenerationTask
 from app.models.experiment_sessions import ExperimentMessage
+from app.services.studio.experiment_messages import project_task_message_terminal
 from app.services.generation.files import FileResolver
 from app.services.generation.publishers import ShotVideoPublisher
 from app.services.generation.runtime import ArtifactStore
+from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.studio.shot_status import recompute_shot_status
 from app.services.worker.async_task_support import cancel_if_requested_async
 from app.services.worker.task_logging import log_task_event, log_task_failure
+
+
+def _project_task_message_terminal(
+    message: ExperimentMessage,
+    *,
+    status: str,
+    result: dict | None = None,
+    error: str | None = None,
+    progress: int | None = None,
+) -> None:
+    """投影视频任务终态，同时保留提交阶段已经写入的展示字段。"""
+    existing_payload = dict(message.payload or {})
+    project_task_message_terminal(
+        message,
+        status=status,
+        result=result,
+        error=error,
+        progress=progress,
+    )
+    message.payload = {**existing_payload, **message.payload}
 
 
 async def _resolve_snapshot_provider_config(
@@ -30,31 +52,25 @@ async def _resolve_snapshot_provider_config(
     *,
     snapshot: ResolvedGenerationSnapshot,
 ) -> ProviderConfig:
-    """按冻结 revision 和动态 credential_ref 构造视频 Provider 配置。
-
-    任务 payload 不保存任何凭据或 endpoint；模型名和 endpoint 来自不可变
-    revision，API key 只在 Worker 执行时通过 credential_ref 指向的 Provider 读取。
-    """
-    revision = await session.get(ModelConfigRevision, snapshot.model_revision_id)
-    if revision is None or revision.model_id != snapshot.model_id or revision.category != ModelCategoryKey.video:
-        raise RuntimeError("video generation model revision is unavailable")
-    credential_ref = (revision.credential_ref or "").strip()
-    if not credential_ref.startswith("provider:"):
-        raise RuntimeError("video generation credential reference is unavailable")
-    provider_id = credential_ref.removeprefix("provider:").strip()
-    provider = await session.get(Provider, provider_id) if provider_id else None
-    if provider is None or provider.status == ProviderStatus.disabled:
+    """在执行期读取当前视频模型与 Provider，保证使用最新配置和密钥。"""
+    model = await _resolve_current_video_model(session, snapshot=snapshot)
+    provider = await session.get(Provider, model.provider_id)
+    if provider is None:
         raise RuntimeError("video generation provider is unavailable")
-    api_key = (provider.api_key or "").strip()
-    if not api_key:
-        raise RuntimeError("video generation provider credential is unavailable")
-    endpoint_config = dict(revision.endpoint_config or {})
-    base_url = endpoint_config.get("video_base_url") or endpoint_config.get("base_url") or None
+    resolved = resolve_provider_config_from_provider(provider=provider, category=ModelCategoryKey.video)
     return ProviderConfig(
-        provider=revision.provider_key,  # type: ignore[arg-type]
-        api_key=api_key,
-        base_url=str(base_url).strip() or None if base_url else None,
+        provider=resolved.provider_key,  # type: ignore[arg-type]
+        api_key=resolved.api_key,
+        base_url=resolved.base_url,
     )
+
+
+async def _resolve_current_video_model(session: AsyncSession, *, snapshot: ResolvedGenerationSnapshot) -> Model:
+    """解析任务指定的当前视频模型，拒绝删除或跨模态配置。"""
+    model = await session.get(Model, snapshot.model_id)
+    if model is None or model.category != ModelCategoryKey.video:
+        raise RuntimeError("video generation model is unavailable")
+    return model
 
 
 async def _resolve_snapshot_video_input(
@@ -101,14 +117,12 @@ async def _resolve_snapshot_video_input(
                     videos=[value for reference, value in zip(subject.media, values) if reference.media_kind == "video"],
                 )
             )
-    revision = await session.get(ModelConfigRevision, snapshot.model_revision_id)
-    if revision is None:
-        raise RuntimeError("video generation model revision is unavailable")
+    model = await _resolve_current_video_model(session, snapshot=snapshot)
     # ``model_construct`` 有意绕过已迁移到 file_id 的 API 契约：此对象仅在
     # Worker 内存中作为旧 Provider adapter 的短生命周期投影。
     return VideoGenerationInput.model_construct(
         prompt=snapshot.execution_prompt,
-        model=revision.model_name,
+        model=model.name,
         ratio=ratio,
         seconds=getattr(operation_input, "seconds", None),
         seed=getattr(operation_input, "seed", None),
@@ -199,8 +213,12 @@ async def run_video_generation_task(
             await store.set_status(task_id, TaskStatus.succeeded)
             message_row = (await session.execute(select(ExperimentMessage).where(ExperimentMessage.task_id == task_id))).scalars().first()
             if message_row is not None:
-                message_row.status = "succeeded"
-                message_row.payload = {**message_row.payload, "result": result_payload, "progress": 100}
+                _project_task_message_terminal(
+                    message_row,
+                    status="succeeded",
+                    result=result_payload,
+                    progress=100,
+                )
             if shot_id:
                 await recompute_shot_status(session, shot_id=shot_id)
             await session.commit()
@@ -213,8 +231,7 @@ async def run_video_generation_task(
                 await store.set_status(task_id, TaskStatus.failed)
                 message_row = (await s2.execute(select(ExperimentMessage).where(ExperimentMessage.task_id == task_id))).scalars().first()
                 if message_row is not None:
-                    message_row.status = "failed"
-                    message_row.payload = {**message_row.payload, "error": str(exc)}
+                    _project_task_message_terminal(message_row, status="failed", error=str(exc))
                 if shot_id:
                     await recompute_shot_status(s2, shot_id=shot_id)
                 await s2.commit()

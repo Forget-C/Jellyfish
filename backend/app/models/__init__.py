@@ -3,7 +3,7 @@
 from app.core.db import Base
 from app.models.base import TimestampMixin
 
-from app.models.llm import Model, ModelConfigRevision, ModelSettings, Provider
+from app.models.llm import Model, ModelSettings, Provider
 from app.models.task import GenerationTask
 from app.models.task_links import GenerationTaskLink
 from app.models.generation_artifacts import GenerationArtifact, GenerationDispatchOutbox, GenerationTaskMediaReference
@@ -38,8 +38,6 @@ from app.models.studio import (
     ProjectPropLink,
     ProjectSceneLink,
     TimelineClip,
-    ExperimentSession,
-    ExperimentMessage,
 )
 
 __all__ = [
@@ -75,7 +73,6 @@ __all__ = [
     "TimelineClip",
     "Provider",
     "Model",
-    "ModelConfigRevision",
     "ModelSettings",
     "GenerationTask",
     "GenerationTaskLink",

@@ -37,7 +37,7 @@ weight: 7
 
 约束如下：
 
-- `GenerationTask` 仍是任务状态、结果、错误与取消请求的唯一真相源
+- `GenerationTask` 是异步任务的状态、结果、错误、取消请求与参数快照的唯一真相源；同步文本 SSE 不创建该记录
 - `/api/v1/film/tasks` 当前作为前端全局任务中心的主数据源
 - `GenerationTaskLink` 当前承担任务与业务实体的关联信息查询
 - `GenerationTask` 当前也记录运行时指标：`started_at`、`finished_at`
@@ -48,6 +48,8 @@ weight: 7
 - 前端不直接读取 Celery task 状态
 - Celery 只负责执行，不负责对前端暴露业务状态
 - 任务投递统一使用 `task_kind` 识别具体执行器
+
+实验室中的所有用户可见对话由 `ExperimentMessage` 保存。图片、视频等异步生成在消息中通过 `task_id` 关联 `GenerationTask`：任务保存权威执行数据，Worker 将用户可见的状态摘要和产物引用投影回消息；消息 payload 不作为 Worker 输入。文本 SSE 只追加用户与助手消息，不进入任务中心。
 
 全局任务列表接口当前规则：
 

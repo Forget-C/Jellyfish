@@ -27,10 +27,6 @@ celery_app.conf.update(
     timezone="Asia/Shanghai",
     enable_utc=False,
     beat_schedule={
-        "reap-expired-text-stream-runs": {
-            "task": "task.reap_text_streams",
-            "schedule": 30.0,
-        },
         "dispatch-pending-generation-outbox": {
             "task": "task.dispatch_generation_outbox",
             "schedule": 10.0,

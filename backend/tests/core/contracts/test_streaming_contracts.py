@@ -47,7 +47,7 @@ def _completed_data() -> dict[str, object]:
             "created_at": NOW,
             "updated_at": NOW,
         },
-        "result": {"text": "world", "model_id": "model-1", "model_revision_id": "revision-1"},
+        "result": {"text": "world", "model_id": "model-1"},
     }
 
 
