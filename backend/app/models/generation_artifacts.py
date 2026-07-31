@@ -30,7 +30,7 @@ class GenerationArtifact(Base, TimestampMixin):
     generation_run_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     modality: Mapped[str] = mapped_column(String(16), nullable=False)
     ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
-    file_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("files.id", ondelete="SET NULL"), nullable=True)
+    file_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("files.id", ondelete="RESTRICT"), nullable=True)
     text_content: Mapped[str | None] = mapped_column(Text, nullable=True)
     provider_result: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     publish_status: Mapped[GenerationArtifactPublishStatus] = mapped_column(String(16), nullable=False)
