@@ -40,11 +40,11 @@ export type TaskListItemRead = {
      */
     updated_at_ts?: (number | null);
     /**
-     * 执行器类型，如 celery
+     * 最近一次投递的执行器类型，仅用于诊断，如 celery
      */
     executor_type?: (string | null);
     /**
-     * 执行器侧任务 ID
+     * 最近一次执行器 work ID，仅用于诊断，不作为执行真相
      */
     executor_task_id?: (string | null);
     /**

@@ -32,7 +32,7 @@ class GenerationRunRepository:
                 select(GenerationRun)
                 .where(
                     GenerationRun.task_id == task_id,
-                    GenerationRun.status.in_(("queued", "claimed", "executing", "terminalizing")),
+                    GenerationRun.status.in_(("queued", "claimed", "executing", "terminalizing", "delivering")),
                 )
                 .order_by(GenerationRun.attempt_no.desc())
             )

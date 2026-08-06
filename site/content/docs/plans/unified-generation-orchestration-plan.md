@@ -357,6 +357,12 @@ class StreamProgressData(BaseModel):
     progress: int
 
 
+> 状态说明（2026-07-31）：以下 hidden durable streaming 设计尚未实施，不能作为
+> 当前 SSE 行为的描述。当前 `/stream` 是请求内短流：不创建 `GenerationTask`、断线即
+> 取消、重启不恢复。实施本节前必须遵循
+> [生成执行策略 ADR](../generation-execution-policy-adr/) 先落地持久化 Attempt、事件保留、
+> 权限、lease/reaper 与重连语义。
+
 class StreamCancelledData(BaseModel):
     task_id: str
     reason: str | None = None

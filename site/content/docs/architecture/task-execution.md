@@ -37,7 +37,7 @@ weight: 7
 
 约束如下：
 
-- `GenerationTask` 是异步任务的状态、结果、错误、取消请求与参数快照的唯一真相源；同步文本 SSE 不创建该记录
+- `GenerationTask` 是异步任务的状态、结果、错误、取消请求与参数快照的唯一真相源；同步文本 SSE 与 inline 不创建该记录
 - `/api/v1/film/tasks` 当前作为前端全局任务中心的主数据源
 - `GenerationTaskLink` 当前承担任务与业务实体的关联信息查询
 - `GenerationTask` 当前也记录运行时指标：`started_at`、`finished_at`
@@ -49,7 +49,7 @@ weight: 7
 - Celery 只负责执行，不负责对前端暴露业务状态
 - 任务投递统一使用 `task_kind` 识别具体执行器
 
-实验室中的所有用户可见对话由 `ExperimentMessage` 保存。图片、视频等异步生成在消息中通过 `task_id` 关联 `GenerationTask`：任务保存权威执行数据，Worker 将用户可见的状态摘要和产物引用投影回消息；消息 payload 不作为 Worker 输入。文本 SSE 只追加用户与助手消息，不进入任务中心。
+实验室中的所有用户可见对话由 `ExperimentMessage` 保存。图片、视频与 async-polling 文本任务在消息中通过 `task_id` 关联 `GenerationTask`：任务保存权威执行数据，Coordinator 将用户可见的状态摘要和产物引用投影回消息；消息 payload 不作为 Worker 输入。文本 SSE 与 inline 只追加用户与助手消息，不进入任务中心。
 
 全局任务列表接口当前规则：
 
@@ -104,6 +104,7 @@ Broker：Redis
 - `analyze-costume-info`
 - `image-generation`
 - `video-generation`
+- `text-chat`（仅 async-polling；SSE / inline 不进入 Celery）
 - `shot-frame-prompt`
 
 其中又分两类：
@@ -129,29 +130,6 @@ Broker：Redis
 
 执行，不再在 Celery worker 中承载 async DB runtime。
 
-### 已切到 async delegating executor
-
-- `image-generation`
-- `video-generation`
-- `shot-frame-prompt`
-
-这些任务当前也通过 `task.execute(task_id)` 进入统一 Celery 执行层，
-但执行器使用 `AbstractAsyncDelegatingExecutor` 作为桥接：
-
-- 每次任务执行前重建 async DB runtime
-- 在独立 event loop 中运行既有 async service
-- 任务结束后主动释放 async engine
-- 在执行前、结果生成后、结果持久化后执行统一取消检查
-- 通过 executor 统一配置任务超时
-- 输出统一任务事件日志（started / running / cancelled / succeeded / failed）
-
-这样可以先把执行从 Web 进程迁出，同时保持图片 / 视频 provider 调用链的现有 async 实现。
-
-当前这三类 async worker 已补最小专项测试，重点锁定：
-
-- 启动前取消请求会直接转 `cancelled`
-- 不再进入后续 provider / agent 调用
-
 ### 图片与视频的目标工作流
 
 图片和视频的 async worker 现在按“模态执行复用、目标领域交付分离”组织：
@@ -165,8 +143,9 @@ GenerationSubmitter
   → ImageGenerationWorker 或 VideoGenerationWorker
   → WorkflowHandler 执行前入口
   → Provider callback
-  → GenerationLifecycleCoordinator
-  → ArtifactStore / TaskFinalizer / WorkflowHandler 成功交付
+  → GenerationLifecycleCoordinator（逻辑 Artifact / Blob / materialize outbox）
+  → MediaMaterializeWorker（receipt 重取、固定 key 上传、HEAD）
+  → MediaDeliveryCoordinator / TaskFinalizer / WorkflowHandler 成功交付
 ```
 
 `WorkflowHandlerRegistry` 以 `(operation, target.kind)` 选择领域规则。当前图片、视频支持的
@@ -196,10 +175,36 @@ Celery Beat 每 30 秒回收过期 Run、提升 epoch 并重新投递对应任�
 fencing 拒绝。每条新 Run 还保存稳定的本地 `provider_idempotency_key` 用于恢复审计；该键当前不会被假定为
 任何供应商的 HTTP 幂等字段。
 
-对于供应商返回稳定异步任务 ID 的图片、视频能力，Worker 已将 Provider 调用分为创建和轮询两步：创建成功后
+`generation_runs` 同时是当前 durable async 的物理 `ExecutionAttempt` 存储：它保存 task、
+attempt 序号、lease、epoch、heartbeat、dispatch 与终态审计。为保持既有 Artifact 和 dispatch
+外键兼容，数据库表和图片/视频代码继续使用 `GenerationRun` 历史名称；新增通用执行代码应通过
+`ExecutionAttempt` / `ExecutionAttemptRepository` 契约访问同一存储，而不是建立第二张并行 Attempt 表。
+Provider 与媒体专属状态不会继续加入该通用控制面，后续分别归入 ProviderOperation 与 Blob 模型。
+
+`provider_operations` 已作为 expand 表创建，用于保存一次 Attempt 的远端副作用、非敏感
+Provider/路由身份、能力版本、远端 ID、poll 调度字段和错误分类。当前 Worker 仍以
+`GenerationRun.provider_task_id` 作为已受理任务的兼容 checkpoint；在 ProviderOperation 的
+dual-read/dual-write 接入完成前，创建结果不确定的任务不会被解释为可安全重发。
+
+通用控制面已定义 `TaskExecutionDriver`、`DriverExecution`、`DeliveryHandler` 与
+`AttemptTerminalCoordinator`：前者只消费带 Attempt lease 的冻结命令并返回内存 callback/output；
+后者仅通过 `attempt_id + lease_epoch` 取得终态交付权限，并在同一事务收口领域投影、Attempt 与
+Task 终态。图片/视频仍由现有媒体 Coordinator 兼容适配；async-polling `text_chat` 已由
+`TextChatTaskExecutionDriver` 与 `TextChatDeliveryHandler` 接入，SSE 与 inline 不使用该协议。
+图片/视频由 `MediaTaskExecutionDriver` 将通用 lease、快照和 idempotency key 映射回既有
+`GenerationWorkerCommand` 与图片/视频生成基类；Provider 结果继续只留在 Driver 的内存输出，
+再由媒体 Coordinator 归档和领域交付。`task.execute` 的媒体入口已实际经过该 Driver；
+`text_chat` 则由文本 Driver 调用模型一次，文本 Handler 在 fencing 后唯一追加助手消息并更新 task 消息。
+
+durable 图片、视频在提交期会解析当前 model/provider，并要求其已验证具备远端句柄、按句柄轮询和按句柄
+重取结果能力；不满足条件的 Provider 返回 `422`，不会创建本地 Task 或发起远端 create。该门禁与 Worker
+侧恢复检查同时存在，防止历史任务或非 API 写入绕过约束。同步图片接口没有可恢复 receipt，当前不能作为
+durable 媒体 Provider 使用。
+
+对于通过上述门禁的供应商，Worker 已将 Provider 调用分为创建和轮询两步：创建成功后
 使用当前 Run 的 owner/epoch 条件更新立即保存 `provider_task_id`，再开始轮询。过期 Run 恢复后，Worker 读取
-该 ID 并只轮询原远端任务，避免重复创建。同步图片接口没有可恢复 ID；若创建请求已被供应商受理但进程在本地
-持久化 ID 前退出，系统不会猜测统一幂等 header 或盲目重发创建请求，仍需人工诊断或逐供应商补齐幂等契约。
+该 ID 并只轮询原远端任务，避免重复创建。若创建请求已被供应商受理但进程在本地持久化 ID 前退出，系统不会
+猜测统一幂等 header 或盲目重发创建请求，仍需人工诊断或逐供应商补齐幂等契约。
 
 每次 Celery 投递还会留下 `GenerationRunDispatch` 审计记录：以 Celery `work_id` 为主键，保存投递来源
 （`outbox` 或 `reaper`）与时间；Executor 成功领取后将其绑定到 `task_id`、`generation_run_id` 和
@@ -209,9 +214,17 @@ fencing 拒绝。每条新 Run 还保存稳定的本地 `provider_idempotency_ke
 累计 attempts，以同一 work id 重试；Broker 已接收但发布状态尚未来得及确认时，Run 的条件领取与 epoch fencing
 保证该至少一次窗口不产生第二次有效执行。
 
-`GenerationLifecycleCoordinator` 是图片、视频 callback 的唯一终态写入口。它先校验 Run 的 epoch，再在短
-事务中归档 Artifact、调用内部 `TaskFinalizer`、写入领域投影以及 Run/Task 终态。旧 epoch 或重复 callback
-不读取业务目标也不产生副作用；取消意图先于成功 callback 时，Coordinator 收口为 `cancelled`。
+`GenerationLifecycleCoordinator` 是图片、视频 callback 的唯一 fencing 入口。成功 callback 只在短事务中创建
+逻辑 `GenerationArtifact`、`MediaBlob` 和 `StorageOperationOutbox`，并把 Run 置为 `delivering`；它不下载 Provider
+URL、不上传对象存储、也不提前完成 Task。`MediaMaterializeWorker` 只凭 `ProviderOperation` 的白名单 receipt 在
+运行期重取字节，上传固定 key 后执行 HEAD。全部 Blob 已物化时，`MediaDeliveryCoordinator` 才绑定 `FileItem`，
+复用 `TaskFinalizer`、WorkflowHandler 与 CAS Publisher 收口 Run/Task。旧 epoch、重复 callback 和未完成物化均不产生
+提前领域投影；取消意图先于成功 callback 时仍由 Coordinator 收口为 `cancelled`。
+
+文件删除同样不在 API 请求内执行对象存储 I/O。删除服务先拒绝仍被项目 usage、任务媒体快照或
+`GenerationArtifact` 引用的文件；无引用文件在同一数据库事务内登记已存在对象对应的 `MediaBlob`、
+`delete_pending` 墓碑与 `delete` outbox，随后删除 `FileItem`。`MediaDeleteWorker` 以 lease 领取删除意图；
+对象存储删除成功后才把 Blob 标记为 `deleted`，失败则保留墓碑、错误诊断并安全重试。
 
 取消 API 只登记 `cancel_requested` 意图，不撤销 Celery、不直写 Task 或 `ExperimentMessage`。尚未调用
 Provider 的任务会由 Executor 生成 fenced cancelled callback；已在运行的任务等待当前 Worker callback，再由
@@ -229,8 +242,8 @@ Coordinator 统一裁决为 cancelled、failed 或 succeeded。
 - API 层写入 `task_kind`
 - 通过 `spawn_*_task(...)` 投递到 Celery
 - Celery 统一走 `task.execute(task_id)`
-- 图片/视频在 `task.execute(task_id)` 内走 `GenerationExecutor → Worker → Coordinator`；其他任务仍通过
-  `TaskExecutorRegistry` 按 `task_kind` 路由
+- 图片/视频与 async-polling `text_chat` 在 `task.execute(task_id)` 内走
+  `GenerationExecutor → Attempt Driver → Coordinator`；其他任务仍通过 `TaskExecutorRegistry` 按 `task_kind` 路由
 - worker 执行后把状态与结果回写到 MySQL
 - 页面继续通过既有任务状态接口轮询和恢复
 
@@ -353,23 +366,21 @@ Coordinator 统一裁决为 cancelled、failed 或 succeeded。
 
 ## 取消语义
 
-当前取消采用“两级取消”：
+当前取消采用“取消意图 + fenced 终态收口”：
 
 ```text
 前端请求取消
 → GenerationTask.cancel_requested = true
-→ 若任务由 Celery 执行且存在 executor_task_id：
-  → 立即下发 revoke(terminate=True)
-  → API 直接把业务任务状态推进到 cancelled
-→ 若无法立即终止：
-  → worker 在阶段边界继续执行协作式取消
+→ API 不撤销 Celery、不直写业务终态或 ExperimentMessage
+→ Executor 领取后将未启动任务转为 fenced cancelled callback
+→ 已执行任务在当前 callback 到达时由 Coordinator 裁决 cancelled / succeeded / failed
 ```
 
 这意味着：
 
-- 对已进入 Celery worker 的任务，当前支持 best-effort 的“立即取消”
-- 对无法立即终止的单次长调用，仍保留阶段边界协作式取消作为兜底
-- 当前不承诺 provider / LLM SDK 层面的绝对强终止，只保证业务任务状态会立即收敛
+- `executor_task_id` 仅是最近一次 Celery work ID 的诊断信息，不参与执行真相或终态裁决
+- 对已进入 Provider 的单次长调用，当前不承诺 SDK 层面的强终止
+- cancel-vs-success / cancel-vs-failure 由当前 Attempt 的 epoch fencing 唯一裁决
 
 ## 服务层约束
 

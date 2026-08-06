@@ -8,7 +8,6 @@
 
 from __future__ import annotations
 
-from app.services.generation.runtime.text_chat_streaming import run_text_chat_task
 from app.services.script_processing_worker import (
     CharacterPortraitTaskExecutor,
     ConsistencyTaskExecutor,
@@ -22,7 +21,7 @@ from app.services.script_processing_worker import (
     ScriptSimplificationTaskExecutor,
     VariantTaskExecutor,
 )
-from app.services.worker.task_executor import AbstractAsyncDelegatingExecutor, AbstractWorkerTaskExecutor
+from app.services.worker.task_executor import AbstractWorkerTaskExecutor
 
 
 class TaskExecutorRegistry:
@@ -52,12 +51,3 @@ task_executor_registry.register("script_scene_info", SceneInfoTaskExecutor())
 task_executor_registry.register("script_costume_info", CostumeInfoTaskExecutor())
 task_executor_registry.register("script_optimize", ScriptOptimizationTaskExecutor())
 task_executor_registry.register("script_simplify", ScriptSimplificationTaskExecutor())
-task_executor_registry.register(
-    "text_chat",
-    AbstractAsyncDelegatingExecutor(
-        task_kind="text_chat",
-        runner=run_text_chat_task,
-        timeout_seconds=600.0,
-        require_generation_snapshot=True,
-    ),
-)

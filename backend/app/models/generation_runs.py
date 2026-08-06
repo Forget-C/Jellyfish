@@ -12,7 +12,12 @@ from app.models.base import TimestampMixin
 
 
 class GenerationRun(Base, TimestampMixin):
-    """记录一次可 fencing 的执行尝试；不承载用户可见最终任务状态。"""
+    """当前 ExecutionAttempt 的物理存储；保留媒体历史命名与外键兼容。
+
+    新 durable async 代码应优先依赖 ``ExecutionAttempt`` 类型别名与中立仓储，避免
+    再向本表加入媒体、Artifact 或 Provider 专属字段。现有 Provider checkpoint 字段
+    将在 P2 迁移到独立 ProviderOperation 后逐步退出。
+    """
 
     __tablename__ = "generation_runs"
 

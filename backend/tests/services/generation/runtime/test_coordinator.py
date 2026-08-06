@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.contracts.generation import (
@@ -14,11 +15,16 @@ from app.core.contracts.generation import (
 )
 from app.core.contracts.generation_delivery import GenerationDeliveryResult, GenerationOutcome
 from app.core.contracts.generation_run import GenerationWorkerCallback, GenerationWorkerCallbackKind
+from app.core.contracts.image_generation import ImageGenerationResult, ImageItem
 from app.core.db import Base
+from app.models.generation_artifacts import GenerationArtifact
 from app.models.generation_runs import GenerationRun
+from app.models.media_blobs import MediaBlob, StorageOperationOutbox
+from app.models.provider_operations import ProviderOperation
 from app.models.task import GenerationDeliveryMode, GenerationTask, GenerationTaskStatus, GenerationTaskVisibility
 from app.services.generation.runtime.coordinator import GenerationCallbackDisposition, GenerationLifecycleCoordinator
 from app.services.generation.runtime.finalizer import TaskFinalizer
+from app.services.generation.runtime.media_delivery import MediaDeliveryCoordinator
 from app.services.generation.workflows.base import (
     GenerationWorkflowExecutionContext,
     GenerationWorkflowKey,
@@ -71,9 +77,15 @@ def _snapshot() -> ResolvedGenerationSnapshot:
 def _coordinator(handler: _Handler) -> GenerationLifecycleCoordinator:
     """以受控 Handler 构造 Coordinator，隔离真实领域投影。"""
 
+    return GenerationLifecycleCoordinator(finalizer=_finalizer(handler))
+
+
+def _finalizer(handler: _Handler) -> TaskFinalizer:
+    """为媒体终态测试构造只包含记录 Handler 的 Finalizer。"""
+
     registry = GenerationWorkflowRegistry(supported_keys=[handler.key])
     registry.register(handler)  # type: ignore[arg-type]
-    return GenerationLifecycleCoordinator(finalizer=TaskFinalizer(workflow_registry=registry))
+    return TaskFinalizer(workflow_registry=registry)
 
 
 async def _seed(db: AsyncSession, *, epoch: int = 1) -> None:
@@ -100,6 +112,93 @@ async def _seed(db: AsyncSession, *, epoch: int = 1) -> None:
         )
     )
     await db.flush()
+
+
+@pytest.mark.asyncio
+async def test_provider_success_stages_blob_outbox_before_task_terminalization(tmp_path) -> None:
+    """媒体 callback 只能登记交付意图，不能在 Coordinator 中上传或提前完成 Task。"""
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'staged-media.db'}")
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+    async with factory() as db:
+        await _seed(db)
+        db.add(
+            ProviderOperation(
+                id="operation-1",
+                attempt_id="run-1",
+                ordinal=1,
+                operation_kind="image_generation",
+                provider_key="vidu",
+                route_identity={},
+                status="succeeded_remote",
+                remote_id="remote-1",
+                remote_receipt={"remote_id": "remote-1"},
+            )
+        )
+        await db.flush()
+        handler = _Handler()
+        result = ImageGenerationResult(
+            provider="vidu",
+            provider_task_id="remote-1",
+            status="succeeded",
+            images=[ImageItem(url="https://provider.test/one.png"), ImageItem(url="https://provider.test/two.png")],
+        )
+
+        assert await _coordinator(handler).handle_callback(
+            db=db,
+            callback=GenerationWorkerCallback(
+                run_id="run-1", lease_epoch=1, kind=GenerationWorkerCallbackKind.succeeded, provider_task_id="remote-1"
+            ),
+            provider_result=result,
+        ) is GenerationCallbackDisposition.accepted
+
+        task = await db.get(GenerationTask, "task-1")
+        run = await db.get(GenerationRun, "run-1")
+        artifacts = list(await db.scalars(select(GenerationArtifact).order_by(GenerationArtifact.ordinal)))
+        blobs = list(await db.scalars(select(MediaBlob).order_by(MediaBlob.storage_key)))
+        outbox = list(await db.scalars(select(StorageOperationOutbox).order_by(StorageOperationOutbox.id)))
+        assert handler.calls == []
+        assert task is not None and task.status == GenerationTaskStatus.running
+        assert run is not None and run.status == "delivering"
+        assert [artifact.file_id for artifact in artifacts] == [None, None]
+        assert [artifact.blob_id for artifact in artifacts] == [blob.id for blob in blobs]
+        assert [blob.storage_key for blob in blobs] == ["generated/run-1/0/output.png", "generated/run-1/1/output.png"]
+        assert [operation.payload for operation in outbox] == [
+            {"provider_operation_id": "operation-1"},
+            {"provider_operation_id": "operation-1"},
+        ]
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_materialized_blobs_bind_files_before_media_task_succeeds(tmp_path) -> None:
+    """只有全部 Blob HEAD 完成后，才允许绑定 FileItem、投影领域结果并完成 Task。"""
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'media-delivery.db'}")
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+    async with factory() as db:
+        await _seed(db)
+        run = await db.get(GenerationRun, "run-1")
+        assert run is not None
+        run.status = "delivering"
+        blob = MediaBlob(id="blob-1", storage_key="generated/run-1/0/output.png", content_type="image/png", status="materialized")
+        db.add(blob)
+        db.add(GenerationArtifact(id="artifact-1", task_id="task-1", generation_run_id="run-1", modality="image", ordinal=0, blob_id="blob-1", provider_result={}, publish_status="skipped", publish_error="pending_materialization"))
+        await db.flush()
+        handler = _Handler()
+
+        assert await MediaDeliveryCoordinator(finalizer=_finalizer(handler)).finalize_if_ready(db=db, run_id="run-1")
+
+        task = await db.get(GenerationTask, "task-1")
+        await db.refresh(run)
+        artifact = await db.get(GenerationArtifact, "artifact-1")
+        assert handler.calls == ["success"]
+        assert task is not None and task.status == GenerationTaskStatus.succeeded
+        assert run.status == "terminal"
+        assert artifact is not None and artifact.file_id is not None
+    await engine.dispose()
 
 
 @pytest.mark.asyncio

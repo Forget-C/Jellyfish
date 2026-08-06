@@ -7,6 +7,8 @@ from app.core.contracts.generation_run import GenerationWorkerCommand
 from app.models.task import GenerationTask, GenerationTaskStatus
 from app.models.generation_run_dispatches import GenerationRunDispatch
 from app.services.generation.runtime.run_repository import GenerationRunRepository
+from app.core.contracts.execution_attempt import ExecutionAttemptLease
+from app.services.execution_attempt_runtime import TaskExecutionCommand
 from sqlalchemy import update
 from datetime import UTC, datetime
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 _OPERATION_BY_TASK_KIND = {
     "image_generation": GenerationOperation.image_generation,
     "video_generation": GenerationOperation.video_generation,
+    "text_chat": GenerationOperation.text_chat,
 }
 
 
@@ -54,13 +57,12 @@ class GenerationExecutor:
         if not isinstance(snapshot_payload, dict):
             raise ValueError(f"generation task snapshot is unavailable: {task_id}")
         snapshot = ResolvedGenerationSnapshot.model_validate(snapshot_payload)
-        if task.status == GenerationTaskStatus.pending and not task.cancel_requested:
+        if task.status == GenerationTaskStatus.pending:
             marked_running = await self._db.execute(
                 update(GenerationTask)
                 .where(
                     GenerationTask.id == task_id,
                     GenerationTask.status == GenerationTaskStatus.pending,
-                    GenerationTask.cancel_requested.is_(False),
                 )
                 .values(status=GenerationTaskStatus.running, progress=10)
             )
@@ -94,6 +96,51 @@ class GenerationExecutor:
             operation=operation,
             snapshot=snapshot,
             cancel_requested=bool(task.cancel_requested),
+        )
+
+    async def claim_attempt_command(
+        self,
+        *,
+        task_id: str,
+        owner: str,
+        lease_ttl_seconds: int,
+        work_id: str | None = None,
+    ) -> TaskExecutionCommand | None:
+        """领取任意已冻结快照的 durable Task，供非媒体 Driver 复用同一 Attempt 主链。"""
+        task = await self._db.get(GenerationTask, task_id)
+        if task is None:
+            raise ValueError(f"generation task does not exist: {task_id}")
+        snapshot = (task.payload or {}).get("snapshot")
+        if not isinstance(snapshot, dict):
+            raise ValueError(f"generation task snapshot is unavailable: {task_id}")
+        if task.status == GenerationTaskStatus.pending:
+            updated = await self._db.execute(
+                update(GenerationTask)
+                .where(GenerationTask.id == task_id, GenerationTask.status == GenerationTaskStatus.pending)
+                .values(status=GenerationTaskStatus.running, progress=10)
+            )
+            if not updated.rowcount:
+                return None
+        elif task.status not in {GenerationTaskStatus.pending, GenerationTaskStatus.running}:
+            return None
+        run = await self._runs.create_queued(task_id=task_id)
+        if run.status != "queued":
+            if work_id:
+                await self._mark_dispatch_ignored(work_id=work_id, task_id=task_id, reason="run_not_queued")
+            return None
+        epoch = await self._runs.claim(run_id=run.id, owner=owner, ttl_seconds=lease_ttl_seconds)
+        if epoch is None or not await self._runs.begin_execution(run_id=run.id, owner=owner, lease_epoch=epoch):
+            if work_id:
+                await self._mark_dispatch_ignored(work_id=work_id, task_id=task_id, reason="run_claim_rejected")
+            return None
+        if work_id:
+            await self._bind_dispatch(work_id=work_id, task_id=task_id, run_id=run.id, lease_epoch=epoch)
+        return TaskExecutionCommand(
+            lease=ExecutionAttemptLease(attempt_id=run.id, task_id=task_id, lease_epoch=epoch, lease_owner=owner, lease_ttl_seconds=lease_ttl_seconds),
+            task_kind=task.task_kind,
+            snapshot=snapshot,
+            cancel_requested=bool(task.cancel_requested),
+            idempotency_key=run.provider_idempotency_key,
         )
 
     async def _bind_dispatch(self, *, work_id: str, task_id: str, run_id: str, lease_epoch: int) -> None:

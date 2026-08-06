@@ -35,6 +35,14 @@ celery_app.conf.update(
             "task": "task.reap_generation_runs",
             "schedule": 30.0,
         },
+        "materialize-pending-generation-media": {
+            "task": "task.materialize_media",
+            "schedule": 10.0,
+        },
+        "delete-tombstoned-generation-media": {
+            "task": "task.delete_media",
+            "schedule": 10.0,
+        },
     },
 )
 

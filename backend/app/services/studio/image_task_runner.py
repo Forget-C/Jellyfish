@@ -13,6 +13,7 @@ from app.core.contracts.generation import (
 )
 from app.core.contracts.image_generation import ImageGenerationInput, ImageGenerationResult, InputImageRef
 from app.core.contracts.provider import ProviderConfig
+from app.core.contracts.provider_operation import ProviderCreateUncertainError
 from app.core.tasks import ImageGenerationTask
 from app.models.llm import Model, ModelCategoryKey, Provider
 from app.services.generation.files import FileResolver
@@ -133,7 +134,13 @@ async def execute_snapshot_image_generation(
     provider_config = await _resolve_snapshot_provider_config(session, snapshot=snapshot)
     input_ = await _resolve_snapshot_image_input(session, task_id=task_id, snapshot=snapshot)
     provider_task = ImageGenerationTask(provider_config=provider_config, input_=input_)
-    accepted_id = provider_task_id or await provider_task.create_provider_task()
+    if provider_task_id is None:
+        try:
+            accepted_id = await provider_task.create_provider_task()
+        except Exception as error:  # noqa: BLE001 - 无 receipt 的 create 不能被当作普通可重试失败。
+            raise ProviderCreateUncertainError(f"image provider create outcome is uncertain: {error}") from error
+    else:
+        accepted_id = provider_task_id
     if accepted_id and provider_task_id is None and on_provider_accepted and not await on_provider_accepted(accepted_id):
         raise RuntimeError("generation run lost provider acceptance lease")
     result = await provider_task.poll_provider_task(provider_task_id=accepted_id)

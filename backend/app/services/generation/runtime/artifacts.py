@@ -11,9 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.image_generation import ImageGenerationResult
 from app.core.contracts.video_generation import VideoGenerationResult
+from app.core.contracts.storage_operation import StorageOperationKind
 from app.models.generation_artifacts import GenerationArtifact, GenerationArtifactPublishStatus
 from app.models.studio import FileItem
 from app.models.types import FileType
+from app.services.generation.storage.repository import StorageOperationOutboxRepository
 from app.utils.files import create_file_from_url_or_b64
 
 ArtifactModality = Literal["image", "video"]
@@ -126,6 +128,55 @@ class ArtifactStore:
             publish_status=publish_status,
             publish_error=publish_error,
         )
+
+    async def stage_provider_media(
+        self,
+        db: AsyncSession,
+        *,
+        task_id: str,
+        generation_run_id: str,
+        provider_operation_id: str,
+        modality: ArtifactModality,
+        count: int,
+    ) -> list[GenerationArtifact]:
+        """登记待物化媒体 Artifact 与 outbox，不在 Coordinator 事务执行外部 I/O。"""
+        if count <= 0:
+            raise ValueError("provider media result must contain at least one artifact")
+        extension, content_type = ("png", "image/png") if modality == "image" else ("mp4", "video/mp4")
+        repository = StorageOperationOutboxRepository(db)
+        artifacts: list[GenerationArtifact] = []
+        for ordinal in range(count):
+            existing = await self._find_existing(
+                db, task_id=task_id, generation_run_id=generation_run_id, ordinal=ordinal
+            )
+            if existing is not None:
+                artifacts.append(existing)
+                continue
+            blob = await repository.create_pending_blob(
+                storage_key=f"generated/{generation_run_id}/{ordinal}/output.{extension}",
+                content_type=content_type,
+            )
+            artifact = GenerationArtifact(
+                id=uuid4().hex,
+                task_id=task_id,
+                generation_run_id=generation_run_id,
+                modality=modality,
+                ordinal=ordinal,
+                blob_id=blob.id,
+                provider_result={"provider_operation_id": provider_operation_id},
+                publish_status=GenerationArtifactPublishStatus.skipped,
+                publish_error="pending_materialization",
+            )
+            db.add(artifact)
+            await db.flush()
+            await repository.enqueue(
+                blob_id=blob.id,
+                operation_kind=StorageOperationKind.materialize,
+                idempotency_key=f"{generation_run_id}:{ordinal}:materialize",
+                payload={"provider_operation_id": provider_operation_id},
+            )
+            artifacts.append(artifact)
+        return artifacts
 
     async def _find_existing(
         self,

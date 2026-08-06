@@ -127,12 +127,12 @@ class GenerationTask(Base, TimestampMixin):
     executor_type: Mapped[str | None] = mapped_column(
         String(32),
         nullable=True,
-        comment="执行器类型：如 celery",
+        comment="最近一次投递的执行器类型，仅用于诊断，如 celery",
     )
     executor_task_id: Mapped[str | None] = mapped_column(
         String(128),
         nullable=True,
-        comment="执行器侧任务 ID，如 celery task id",
+        comment="最近一次执行器 work ID，仅用于诊断，不作为执行或终态真相",
     )
     lease_owner: Mapped[str | None] = mapped_column(String(128), nullable=True, comment="流式运行 lease 持有者")
     lease_epoch: Mapped[int] = mapped_column(Integer, nullable=False, default=0, comment="lease fencing epoch")

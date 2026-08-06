@@ -11,8 +11,11 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.db import Base
 from app.core.task_manager import DeliveryMode, SqlAlchemyTaskStore, TaskManager
+from app.core.contracts.execution_attempt import ExecutionAttemptCallback, ExecutionAttemptCallbackKind
 from app.models.generation_run_dispatches import GenerationRunDispatch
 from app.models.task import GenerationTask
+from app.services.execution_attempt_runtime import DriverExecution
+from app.services.generation.runtime.media_driver import MediaDriverOutput
 from app.services.script_processing_worker import MergeTaskExecutor, VariantTaskExecutor
 from app.tasks import execute_task as execute_task_module
 from app.services.worker.task_executor import AbstractAsyncDelegatingExecutor, AbstractWorkerTaskExecutor, WorkerTaskContext
@@ -137,6 +140,188 @@ def test_run_task_celery_routes_generation_to_lifecycle_coordinator(monkeypatch,
     execute_task_module.run_task_celery("task-generation")
     assert called == ["task-generation"]
     sync_engine.dispose()
+
+
+def test_run_task_celery_routes_async_text_to_attempt_lifecycle(monkeypatch, tmp_path) -> None:
+    """异步文本与媒体共用 durable Attempt 入口，不得回退旧注册表。"""
+
+    db_path = tmp_path / "text-attempt-route.db"
+    sync_engine = create_engine(f"sqlite:///{db_path}", future=True)
+    sync_session_local = sessionmaker(sync_engine, class_=Session, expire_on_commit=False)
+    Base.metadata.create_all(sync_engine)
+    with sync_session_local() as db:
+        db.add(
+            GenerationTask(
+                id="task-text",
+                mode="async_polling",
+                task_kind="text_chat",
+                status="pending",
+                progress=0,
+                payload={"snapshot": {}},
+                result=None,
+                error="",
+            )
+        )
+        db.commit()
+
+    called: list[str] = []
+
+    async def _run_lifecycle(task_id: str, *, work_id: str | None = None) -> None:
+        assert work_id is None
+        called.append(task_id)
+
+    def _unexpected_registry_lookup(task_kind: str):
+        raise AssertionError(f"text chat must not use registry: {task_kind}")
+
+    monkeypatch.setattr(execute_task_module, "sync_session_maker", sync_session_local)
+    monkeypatch.setattr(execute_task_module, "_run_generation_lifecycle_task", _run_lifecycle)
+    monkeypatch.setattr(execute_task_module.task_executor_registry, "resolve", _unexpected_registry_lookup)
+
+    execute_task_module.run_task_celery("task-text")
+    assert called == ["task-text"]
+    sync_engine.dispose()
+
+
+def test_run_task_celery_routes_script_consistency_to_attempt_lifecycle(monkeypatch, tmp_path) -> None:
+    """一致性检查已迁入 Attempt，不能回退到旧 script executor 注册表。"""
+    db_path = tmp_path / "consistency-attempt-route.db"
+    sync_engine = create_engine(f"sqlite:///{db_path}", future=True)
+    sync_session_local = sessionmaker(sync_engine, class_=Session, expire_on_commit=False)
+    Base.metadata.create_all(sync_engine)
+    with sync_session_local() as db:
+        db.add(GenerationTask(id="task-consistency", mode="async_polling", task_kind="script_consistency", status="pending", progress=0, payload={"snapshot": {"run_args": {"script_text": "第一幕"}}}, result=None, error=""))
+        db.commit()
+    called: list[str] = []
+
+    async def _run_attempt(task_id: str, *, work_id: str | None = None) -> None:
+        assert work_id is None
+        called.append(task_id)
+
+    monkeypatch.setattr(execute_task_module, "sync_session_maker", sync_session_local)
+    monkeypatch.setattr(execute_task_module, "_run_script_consistency_attempt_task", _run_attempt)
+    monkeypatch.setattr(execute_task_module.task_executor_registry, "resolve", lambda kind: (_ for _ in ()).throw(AssertionError(kind)))
+    execute_task_module.run_task_celery("task-consistency")
+    assert called == ["task-consistency"]
+    sync_engine.dispose()
+
+
+def test_run_task_celery_routes_script_variant_to_attempt_lifecycle(monkeypatch, tmp_path) -> None:
+    """变体分析迁入 Attempt 后不得回退到旧 script executor 注册表。"""
+    db_path = tmp_path / "variant-attempt-route.db"
+    sync_engine = create_engine(f"sqlite:///{db_path}", future=True)
+    sync_session_local = sessionmaker(sync_engine, class_=Session, expire_on_commit=False)
+    Base.metadata.create_all(sync_engine)
+    with sync_session_local() as db:
+        db.add(
+            GenerationTask(
+                id="task-variant",
+                mode="async_polling",
+                task_kind="script_variant",
+                status="pending",
+                progress=0,
+                payload={"snapshot": {"run_args": {}}},
+                result=None,
+                error="",
+            )
+        )
+        db.commit()
+    called: list[str] = []
+
+    async def _run_attempt(task_id: str, *, work_id: str | None = None) -> None:
+        assert work_id is None
+        called.append(task_id)
+
+    monkeypatch.setattr(execute_task_module, "sync_session_maker", sync_session_local)
+    monkeypatch.setattr(execute_task_module, "_run_script_variant_attempt_task", _run_attempt)
+    monkeypatch.setattr(execute_task_module.task_executor_registry, "resolve", lambda kind: (_ for _ in ()).throw(AssertionError(kind)))
+    execute_task_module.run_task_celery("task-variant")
+    assert called == ["task-variant"]
+    sync_engine.dispose()
+
+
+def test_run_task_celery_routes_script_merge_to_attempt_lifecycle(monkeypatch, tmp_path) -> None:
+    """实体合并迁入 Attempt 后不得回退到旧 script executor 注册表。"""
+    db_path = tmp_path / "merge-attempt-route.db"
+    sync_engine = create_engine(f"sqlite:///{db_path}", future=True)
+    sync_session_local = sessionmaker(sync_engine, class_=Session, expire_on_commit=False)
+    Base.metadata.create_all(sync_engine)
+    with sync_session_local() as db:
+        db.add(GenerationTask(id="task-merge", mode="async_polling", task_kind="script_merge", status="pending", progress=0, payload={"snapshot": {"run_args": {"all_shot_extractions": []}}}, result=None, error=""))
+        db.commit()
+    called: list[str] = []
+
+    async def _run_attempt(task_id: str, *, work_id: str | None = None) -> None:
+        assert work_id is None
+        called.append(task_id)
+
+    monkeypatch.setattr(execute_task_module, "sync_session_maker", sync_session_local)
+    monkeypatch.setattr(execute_task_module, "_run_script_merge_attempt_task", _run_attempt)
+    monkeypatch.setattr(execute_task_module.task_executor_registry, "resolve", lambda kind: (_ for _ in ()).throw(AssertionError(kind)))
+    execute_task_module.run_task_celery("task-merge")
+    assert called == ["task-merge"]
+    sync_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_materialize_attempt_commits_retry_state_after_worker_error() -> None:
+    """物化异常时必须提交 Worker 已写入的 retry 状态，不能由上下文回滚 lease。"""
+    class _Db:
+        def __init__(self) -> None:
+            self.commits = 0
+
+        async def commit(self) -> None:
+            self.commits += 1
+
+    class _Worker:
+        async def execute_next(self, **_kwargs: object) -> str | None:
+            raise RuntimeError("temporary provider error")
+
+    db = _Db()
+    assert await execute_task_module._execute_materialize_attempt(db=db, worker=_Worker()) is None
+    assert db.commits == 1
+
+
+@pytest.mark.asyncio
+async def test_execute_media_driver_adapts_lifecycle_command(monkeypatch) -> None:
+    """媒体生命周期入口必须经通用 Driver，而非直接调用旧 Worker。"""
+
+    captured = []
+    worker_execution = object()
+
+    class _FakeMediaDriver:
+        async def execute(self, command):  # noqa: ANN001
+            captured.append(command)
+            return DriverExecution(
+                callback=ExecutionAttemptCallback(
+                    attempt_id="run-1",
+                    lease_epoch=2,
+                    kind=ExecutionAttemptCallbackKind.succeeded,
+                ),
+                output=MediaDriverOutput(worker_execution=worker_execution),
+            )
+
+    command = SimpleNamespace(
+        run_id="run-1",
+        task_id="task-1",
+        lease_epoch=2,
+        lease_owner="celery:task-1",
+        lease_ttl_seconds=3600,
+        operation=SimpleNamespace(value="image_generation"),
+        snapshot=SimpleNamespace(model_dump=lambda **_kwargs: {"operation": "image_generation"}),
+        cancel_requested=False,
+        provider_idempotency_key="provider-key",
+    )
+    monkeypatch.setattr(execute_task_module, "MediaTaskExecutionDriver", _FakeMediaDriver)
+
+    actual = await execute_task_module._execute_media_driver(command)
+
+    assert actual is worker_execution
+    assert len(captured) == 1
+    generic_command = captured[0]
+    assert generic_command.lease.attempt_id == "run-1"
+    assert generic_command.task_kind == "image_generation"
+    assert generic_command.snapshot == {"operation": "image_generation"}
+    assert generic_command.idempotency_key == "provider-key"
 
 
 def test_enqueue_task_execution_records_executor(monkeypatch, tmp_path) -> None:

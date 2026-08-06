@@ -114,4 +114,6 @@ async def test_claim_command_returns_cancelled_command_for_cancel_intent(tmp_pat
         command = await GenerationExecutor(db).claim_command(task_id="task-1", owner="executor-a", lease_ttl_seconds=30)
         assert command is not None and command.cancel_requested
         assert await db.scalar(select(GenerationRun.id)) == command.run_id
+        task = await db.get(GenerationTask, "task-1")
+        assert task is not None and task.status == GenerationTaskStatus.running
     await engine.dispose()

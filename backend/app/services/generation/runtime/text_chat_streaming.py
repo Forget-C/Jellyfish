@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from fastapi import HTTPException, status
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from sqlalchemy import func, select
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.generation import (
@@ -33,18 +33,12 @@ from app.core.contracts.streaming import (
 )
 from app.core.contracts.text_generation import TextChatInput, TextChatMessage
 from app.core.db import async_session_maker
-from app.core.task_manager import SqlAlchemyTaskStore
-from app.core.task_manager.types import TaskStatus
 from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
-from app.models.task import GenerationTask
-from app.models.task_links import GenerationTaskLink
 from app.services.generation.gate import GenerationEntityGate
 from app.services.generation.runtime.text_streaming import TextStreamRunNotFoundError, TextStreamingRuntime
 from app.services.generation.submission import GenerationAccepted, GenerationSubmitter
 from app.services.llm.resolver import build_text_chat_model
 from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages
-from app.services.worker.async_task_support import cancel_if_requested_async
-from app.services.worker.task_logging import log_task_event, log_task_failure
 
 _runtime = TextStreamingRuntime()
 _stream_inputs: dict[str, _TextStreamInput] = {}
@@ -196,48 +190,6 @@ async def _invoke_text_snapshot(db: AsyncSession, *, snapshot_payload: dict[str,
     return text
 
 
-async def run_text_chat_task(task_id: str, run_args: dict[str, object]) -> None:
-    """执行异步文本 GenerationTask，并将可见结果投影回关联任务消息。"""
-    del run_args
-    async with async_session_maker() as db:
-        try:
-            store = SqlAlchemyTaskStore(db)
-            await store.set_status(task_id, TaskStatus.running)
-            await store.set_progress(task_id, 10)
-            await db.commit()
-            if await cancel_if_requested_async(store=store, task_id=task_id, session=db):
-                return
-            task = await db.get(GenerationTask, task_id)
-            snapshot_payload = dict((task.payload or {}).get("snapshot") or {}) if task else {}
-            text = await _invoke_text_snapshot(db, snapshot_payload=snapshot_payload)
-            if await cancel_if_requested_async(store=store, task_id=task_id, session=db):
-                return
-            link = await db.scalar(select(GenerationTaskLink).where(GenerationTaskLink.task_id == task_id))
-            if link is None or link.relation_type != GenerationTargetKind.experiment_session.value:
-                raise RuntimeError("text chat task target is unavailable")
-            model_id = str(snapshot_payload.get("model_id") or "")
-            assistant_message = (await append_experiment_messages(db, session_id=link.relation_entity_id, drafts=[ExperimentMessageDraft(role="assistant", content=text, payload={"model_id": model_id})]))[0]
-            await store.set_result(task_id, {"text": text, "assistant_message_id": assistant_message.id, "model_id": model_id})
-            task_message = await db.scalar(select(ExperimentMessage).where(ExperimentMessage.task_id == task_id))
-            if task_message is not None:
-                task_message.status, task_message.payload = "succeeded", {**task_message.payload, "assistant_message_id": assistant_message.id}
-            await store.set_progress(task_id, 100)
-            await store.set_status(task_id, TaskStatus.succeeded)
-            await db.commit()
-            log_task_event("text_chat", task_id, "succeeded")
-        except Exception as exc:  # noqa: BLE001
-            await db.rollback()
-            async with async_session_maker() as failed_db:
-                failed_store = SqlAlchemyTaskStore(failed_db)
-                await failed_store.set_error(task_id, str(exc))
-                await failed_store.set_status(task_id, TaskStatus.failed)
-                task_message = await failed_db.scalar(select(ExperimentMessage).where(ExperimentMessage.task_id == task_id))
-                if task_message is not None:
-                    task_message.status, task_message.payload = "failed", {**task_message.payload, "error": str(exc)}
-                await failed_db.commit()
-            log_task_failure("text_chat", task_id, str(exc))
-
-
 async def stream_text_run(run_id: str) -> None:
     """运行同步 SSE 文本调用，完成后将助手回答写入 ExperimentMessage。"""
     try:
@@ -334,5 +286,5 @@ async def reap_expired_text_stream_runs(*, limit: int = 100) -> list[str]:
 
 __all__ = [
     "create_text_async_task", "create_text_stream_run", "execute_text_inline", "reap_expired_text_stream_runs",
-    "request_text_stream_cancel", "run_text_chat_task", "stream_text_run", "subscribe_text_stream",
+    "request_text_stream_cancel", "stream_text_run", "subscribe_text_stream",
 ]

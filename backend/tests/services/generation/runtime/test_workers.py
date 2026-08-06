@@ -44,6 +44,24 @@ class _WorkerDb:
         """返回当前 Run 的恢复检查点。"""
         return SimpleNamespace(provider_task_id=self._provider_task_id)
 
+    async def commit(self) -> None:
+        """模拟 ProviderOperation checkpoint 在调用远端前的短事务提交。"""
+
+
+class _ProviderOperationRepository:
+    """隔离 Worker 单测中的 ProviderOperation 短事务实现。"""
+
+    def __init__(self, _db: object) -> None:
+        """接收 Worker 传入的会话替身。"""
+
+    async def record_remote_success(self, **_kwargs: object) -> bool:
+        """模拟已记录远端成功，不接管本地 Task 终态。"""
+        return True
+
+    async def begin_polling(self, **_kwargs: object) -> bool:
+        """模拟已知远端 ID 的恢复轮询登记。"""
+        return True
+
 
 def _command() -> GenerationWorkerCommand:
     """构造图片 Worker 的最小 fencing 命令。"""
@@ -80,6 +98,8 @@ async def test_worker_returns_provider_result_only_in_memory(monkeypatch: pytest
         )
 
     monkeypatch.setattr(workers, "async_session_maker", _SessionContext)
+    monkeypatch.setattr(workers, "ProviderOperationRepository", _ProviderOperationRepository)
+    monkeypatch.setattr(workers, "_resolve_provider_operation_remote_id", lambda **_kwargs: _operation_checkpoint())
     monkeypatch.setattr(workers, "execute_snapshot_image_generation", _execute)
 
     execution = await workers.execute_worker_command(_command())
@@ -97,6 +117,8 @@ async def test_worker_converts_provider_exception_to_failed_callback(monkeypatch
         raise RuntimeError("provider unavailable")
 
     monkeypatch.setattr(workers, "async_session_maker", _SessionContext)
+    monkeypatch.setattr(workers, "ProviderOperationRepository", _ProviderOperationRepository)
+    monkeypatch.setattr(workers, "_resolve_provider_operation_remote_id", lambda **_kwargs: _operation_checkpoint())
     monkeypatch.setattr(workers, "execute_snapshot_image_generation", _raise)
 
     execution = await workers.execute_worker_command(_command())
@@ -120,8 +142,24 @@ async def test_worker_reuses_persisted_provider_task_id(monkeypatch: pytest.Monk
         )
 
     monkeypatch.setattr(workers, "async_session_maker", lambda: _SessionContext("provider-existing"))
+    monkeypatch.setattr(workers, "ProviderOperationRepository", _ProviderOperationRepository)
+    monkeypatch.setattr(workers, "_resolve_provider_operation_remote_id", lambda **_kwargs: _operation_checkpoint("provider-existing"))
     monkeypatch.setattr(workers, "execute_snapshot_image_generation", _execute)
 
     execution = await workers.execute_worker_command(_command())
 
     assert execution.callback.provider_task_id == "provider-existing"
+
+
+async def _operation_checkpoint(remote_id: str | None = None) -> tuple[str, str | None]:
+    """提供不访问真实 Provider 配置的 Operation checkpoint 替身。"""
+    return "operation-1", remote_id
+
+
+def test_provider_operation_route_identity_excludes_url_secrets() -> None:
+    """ProviderOperation 不能持久化 URL 中可能存在的凭据和临时 query。"""
+    assert workers._safe_route_identity("https://key:secret@provider.test/v1/images?token=hidden#fragment") == {
+        "scheme": "https",
+        "host": "provider.test",
+        "path": "/v1/images",
+    }

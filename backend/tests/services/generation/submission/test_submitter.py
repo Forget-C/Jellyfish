@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from fastapi import HTTPException
 
 from app.core.contracts.generation import (
     GenerationCommand,
@@ -21,6 +22,7 @@ from app.core.contracts.media import ImageMediaInput, MediaReference
 from app.models.generation_artifacts import GenerationDispatchOutbox, GenerationTaskMediaReference
 from app.models.task import GenerationTask, GenerationTaskVisibility
 from app.models.task_links import GenerationTaskLink
+from app.models.llm import Model, ModelCategoryKey, Provider, ProviderStatus
 from app.models.studio import FileItem, FileType
 from app.services.generation.submission import (
     GenerationSubmitter,
@@ -47,10 +49,28 @@ class RecordingSession:
                 content_hash="sha256:stable",
             )
         }
+        self.models = {
+            "model-1": Model(id="model-1", name="vidu-image", category=ModelCategoryKey.image, provider_id="provider-1")
+        }
+        self.providers = {
+            "provider-1": Provider(
+                id="provider-1",
+                name="vidu",
+                base_url="https://provider.test",
+                api_key="test-key",
+                status=ProviderStatus.active,
+            )
+        }
 
-    async def get(self, _model: object, file_id: str) -> FileItem | None:
+    async def get(self, model: object, identifier: str):  # type: ignore[no-untyped-def]
         """提供媒体快照冻结所需的最小文件读取能力。"""
-        return self.files.get(file_id)
+        if model is FileItem:
+            return self.files.get(identifier)
+        if model is Model:
+            return self.models.get(identifier)
+        if model is Provider:
+            return self.providers.get(identifier)
+        return None
 
     def add(self, instance: object) -> None:
         """记录待写入对象。"""
@@ -158,4 +178,17 @@ async def test_async_submit_rejects_unsupported_delivery_before_writing() -> Non
             db, _image_command(delivery=GenerationDelivery.inline)  # type: ignore[arg-type]
         )
 
+    assert db.added == []
+
+
+@pytest.mark.asyncio
+async def test_async_submit_rejects_media_provider_without_recoverable_receipt_before_writing() -> None:
+    """同步图片 Provider 没有可重取 receipt 时，不得创建不可恢复的 durable Task。"""
+    db = RecordingSession()
+    db.providers["provider-1"].name = "openai"
+
+    with pytest.raises(HTTPException, match="recoverable remote receipt") as error:
+        await GenerationSubmitter(entity_gate=FixedGate()).submit_async(db, _image_command())  # type: ignore[arg-type]
+
+    assert error.value.status_code == 422
     assert db.added == []

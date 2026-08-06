@@ -13,7 +13,7 @@ from app.models.generation_runs import GenerationRun  # noqa: F401
 
 
 class GenerationRunDispatch(Base, TimestampMixin):
-    """以 Celery work_id 为唯一键连接投递、Run 领取与 epoch。"""
+    """当前 ExecutionAttemptDispatch 的物理存储，保留历史表名兼容。"""
 
     __tablename__ = "generation_run_dispatches"
 

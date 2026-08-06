@@ -44,6 +44,8 @@ async def test_create_deduplicates_active_attempt_and_claim_once(tmp_path) -> No
             provider_task_id="provider-job-2",
         )
         assert (await db.get(GenerationRun, first.id)).provider_task_id == "provider-job-1"  # type: ignore[union-attr]
+        first.status = "delivering"
+        assert (await repo.create_queued(task_id="task-1")).id == first.id
     await engine.dispose()
 
 

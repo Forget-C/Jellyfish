@@ -9,6 +9,7 @@ from typing import Any
 from urllib.parse import quote
 
 from fastapi import HTTPException, UploadFile
+from sqlalchemy import exists
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,10 +18,13 @@ from sqlalchemy.orm import selectinload
 from app.api.utils import apply_keyword_filter, apply_order, paginate
 from app.core import storage
 from app.models.studio import FileItem, FileType
+from app.models.generation_artifacts import GenerationArtifact, GenerationTaskMediaReference
 from app.schemas.common import ApiResponse, PaginatedData, paginated_response
 from app.schemas.studio import FileDetailRead, FileRead, FileUpdate, FileUsageRead, FileUsageWrite
 from app.services.common import create_and_refresh, entity_not_found, flush_and_refresh, get_or_404, patch_model
 from app.services.studio.file_usages import upsert_file_usage
+from app.models.studio_file_usages import FileUsage
+from app.services.generation.storage import StorageOperationOutboxRepository
 
 FILE_ORDER_FIELDS = {"name", "created_at", "updated_at"}
 
@@ -222,16 +226,39 @@ async def delete_file(
     *,
     file_id: str,
 ) -> None:
-    """删除文件记录与对象存储中的内容；若记录不存在则静默返回。"""
+    """登记无引用文件的可靠删除；若记录不存在则静默返回。
+
+    API 成功仅表示删除墓碑与 outbox 已随当前事务写入；实际对象删除由
+    Worker 重试完成，避免存储 I/O 成功而数据库回滚造成无审计丢失。
+    """
     file_item = await db.get(FileItem, file_id)
     if file_item is None:
         return
 
-    try:
-        await storage.delete_file(key=file_item.storage_key)
-    except Exception:
-        # 存储删除失败不阻塞记录删除，保持当前接口语义。
-        pass
+    await _ensure_file_is_unreferenced(db, file_id=file_id)
+    repository = StorageOperationOutboxRepository(db)
+    blob = await repository.create_materialized_blob(
+        storage_key=file_item.storage_key,
+        content_type=_content_type_for_file(file_item),
+    )
+    await repository.request_delete(blob_id=blob.id, idempotency_key=f"file:{file_id}:delete")
 
     await db.delete(file_item)
     await db.flush()
+
+
+async def _ensure_file_is_unreferenced(db: AsyncSession, *, file_id: str) -> None:
+    """阻止删除仍被业务、任务快照或生成产物引用的文件。"""
+    reference_checks = (
+        (FileUsage, "素材仍被项目使用"),
+        (GenerationTaskMediaReference, "素材仍被生成任务快照使用"),
+        (GenerationArtifact, "素材仍被生成产物记录使用"),
+    )
+    for model, detail in reference_checks:
+        if await db.scalar(select(exists().where(model.file_id == file_id))):
+            raise HTTPException(status_code=409, detail=detail)
+
+
+def _content_type_for_file(file_item: FileItem) -> str:
+    """为历史 FileItem 补充删除登记所需的保守 MIME 类型。"""
+    return "image/*" if file_item.type == FileType.image else "video/*"

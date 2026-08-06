@@ -7,16 +7,21 @@ from typing import Protocol
 from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import HTTPException, status
 
 from app.core.contracts.generation import (
     GenerationCommand,
     GenerationDelivery,
+    GenerationOperation,
     ResolvedGenerationSnapshot,
 )
 from app.core.contracts.media import ImageMediaInput, MediaReference, VideoMediaInput
 from app.models.generation_artifacts import GenerationDispatchOutbox, GenerationTaskMediaReference
 from app.models.task import GenerationDeliveryMode, GenerationTask, GenerationTaskStatus, GenerationTaskVisibility
 from app.models.task_links import GenerationTaskLink
+from app.models.llm import Model, ModelCategoryKey, Provider
+from app.core.contracts.provider_capabilities import provider_operation_capabilities
+from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.generation.files import FileResolver
 from app.services.generation.submission.capabilities import GenerationCapabilityRegistry, generation_capability_registry
 from app.services.generation.workflows import GenerationWorkflowSubmissionContext
@@ -65,6 +70,7 @@ class GenerationSubmitter:
         )
         await handler.validate_submission(GenerationWorkflowSubmissionContext(data={"db": db, "command": command}))
         snapshot = await self._entity_gate.validate(db, command)
+        await _require_durable_media_recovery(db=db, command=command, snapshot=snapshot)
         return await self.persist_async_task(db=db, command=command, snapshot=snapshot)
 
     async def persist_async_task(
@@ -118,6 +124,47 @@ def _task_payload(*, command: GenerationCommand, snapshot: ResolvedGenerationSna
         "command": command.model_dump(mode="json"),
         "snapshot": snapshot.model_dump(mode="json"),
     }
+
+
+async def _require_durable_media_recovery(
+    *, db: AsyncSession, command: GenerationCommand, snapshot: ResolvedGenerationSnapshot
+) -> None:
+    """拒绝无法用远端 receipt 重取结果的 durable 媒体 Provider。
+
+    P3 的物化 outbox 只保存 ProviderOperation receipt，不能保存临时 URL 或结果正文。
+    因此图片、视频任务必须在提交期确认当前 Provider 同时具备远端句柄、单次 poll
+    和按句柄重取结果能力，避免先创建不可恢复的远端任务。
+    """
+    if command.operation not in {GenerationOperation.image_generation, GenerationOperation.video_generation}:
+        return
+    model = await db.get(Model, snapshot.model_id)
+    expected_category = (
+        ModelCategoryKey.image
+        if command.operation is GenerationOperation.image_generation
+        else ModelCategoryKey.video
+    )
+    if model is None or model.category != expected_category:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="generation model is unavailable")
+    provider = await db.get(Provider, model.provider_id)
+    if provider is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="generation provider is unavailable")
+    resolved = resolve_provider_config_from_provider(provider=provider, category=expected_category)
+    capabilities = provider_operation_capabilities(
+        provider_key=resolved.provider_key,
+        operation_kind=command.operation.value,
+    )
+    if (
+        not capabilities.supports_remote_handle
+        or not capabilities.supports_poll_by_handle
+        or not capabilities.supports_result_retrieval_by_handle
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                "durable media generation requires a provider with a recoverable remote receipt; "
+                f"provider={resolved.provider_key} operation={command.operation.value} is not supported"
+            ),
+        )
 
 
 def _iter_media_references(media: ImageMediaInput | VideoMediaInput | None) -> list[tuple[str, MediaReference]]:

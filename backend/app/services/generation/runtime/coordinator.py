@@ -17,6 +17,7 @@ from app.core.contracts.video_generation import VideoGenerationResult
 from app.core.task_manager import SqlAlchemyTaskStore
 from app.models.generation_artifacts import GenerationArtifact
 from app.models.generation_runs import GenerationRun
+from app.models.provider_operations import ProviderOperation
 from app.models.task import GenerationTask
 from app.services.generation.runtime.finalizer import TaskFinalizer
 from app.services.generation.runtime.artifacts import ArtifactStore
@@ -81,13 +82,17 @@ class GenerationLifecycleCoordinator:
 
         if callback.kind is GenerationWorkerCallbackKind.succeeded:
             if provider_result is not None:
-                artifacts = await self._archive_provider_result(
+                await self._stage_provider_result(
                     db=db,
                     run=run,
-                    snapshot=snapshot,
                     operation=operation,
                     provider_result=provider_result,
                 )
+                run.status = "delivering"
+                run.provider_task_id = callback.provider_task_id
+                run.callback_payload = _callback_audit_payload(callback)
+                await db.flush()
+                return GenerationCallbackDisposition.accepted
             result = await self._finalizer.finalize_success(
                 db=db,
                 store=store,
@@ -127,44 +132,41 @@ class GenerationLifecycleCoordinator:
         return GenerationCallbackDisposition.accepted
 
     @staticmethod
-    async def _archive_provider_result(
+    async def _stage_provider_result(
         *,
         db: AsyncSession,
         run: GenerationRun,
-        snapshot: ResolvedGenerationSnapshot,
         operation: GenerationOperation,
         provider_result: ImageGenerationResult | VideoGenerationResult,
     ) -> list[GenerationArtifact]:
-        """按当前 Run 归档 Worker 内存结果，禁止跨模态或跨 Run 写入。"""
+        """只登记待物化媒体，禁止在 callback 事务中下载、上传或创建 FileItem。"""
         artifact_store = ArtifactStore()
+        provider_operation = await db.scalar(
+            select(ProviderOperation).where(ProviderOperation.attempt_id == run.id, ProviderOperation.ordinal == 1)
+        )
+        if provider_operation is None:
+            raise RuntimeError(f"provider operation is unavailable for run: {run.id}")
         if operation is GenerationOperation.image_generation:
             if not isinstance(provider_result, ImageGenerationResult):
                 raise ValueError("image callback requires ImageGenerationResult")
-            return await artifact_store.store_images(
+            return await artifact_store.stage_provider_media(
                 db,
                 task_id=run.task_id,
                 generation_run_id=run.id,
-                result=provider_result,
-                name_prefix=f"image-{snapshot.canonical_target.entity_id}",
-                storage_prefix=f"generated-images/{snapshot.canonical_target.kind.value}",
+                provider_operation_id=provider_operation.id,
+                modality="image",
+                count=len(provider_result.images),
             )
         if not isinstance(provider_result, VideoGenerationResult):
             raise ValueError("video callback requires VideoGenerationResult")
-        from app.services.film.generated_video import _resolve_snapshot_provider_config
-
-        provider_config = await _resolve_snapshot_provider_config(db, snapshot=snapshot)
-        headers = {"Authorization": f"Bearer {provider_config.api_key}"} if provider_config.provider == "openai" else None
-        artifact = await artifact_store.store_video(
+        return await artifact_store.stage_provider_media(
             db,
             task_id=run.task_id,
             generation_run_id=run.id,
-            result=provider_result,
-            name=f"shot-{snapshot.canonical_target.entity_id}-video",
-            storage_prefix=f"generated-videos/shots/{snapshot.canonical_target.entity_id}",
-            url_request_headers=headers,
-            httpx_timeout=600.0,
+            provider_operation_id=provider_operation.id,
+            modality="video",
+            count=1,
         )
-        return [artifact]
 
     @staticmethod
     async def _claim_terminalization(
@@ -191,7 +193,7 @@ class GenerationLifecycleCoordinator:
     async def _is_duplicate(*, db: AsyncSession, callback: GenerationWorkerCallback) -> bool:
         """区分当前 epoch 已终态的重复 callback 与显然过期的 callback。"""
         run = await db.get(GenerationRun, callback.run_id)
-        return run is not None and run.lease_epoch == callback.lease_epoch and run.status in {"terminalizing", "terminal"}
+        return run is not None and run.lease_epoch == callback.lease_epoch and run.status in {"terminalizing", "delivering", "terminal"}
 
 
 def _callback_audit_payload(callback: GenerationWorkerCallback) -> dict[str, str | int | None]:
