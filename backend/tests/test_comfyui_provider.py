@@ -242,3 +242,132 @@ def test_read_execution_status_treats_absent_status_as_running() -> None:
     """尚无 status 字段视为仍在执行，而不是失败。"""
     assert read_execution_status({})[0] == "running"
     assert read_execution_status({"status": {"status_str": "success"}})[0] == "success"
+
+
+def test_preview_profile_uses_exact_9_16_dimensions() -> None:
+    """预览档 432×768：精确 9:16，且原样注入工作流。"""
+    task = ComfyUIVideoGenerationTask(
+        adapter=_FakeAdapter([_success_history()]),
+        mapping=load_mapping(_MAPPING),
+        provider_config=_cfg(),
+        input_=_input(width=432, height=768),
+        poll_interval_s=0,
+        timeout_s=5,
+    )
+    values = task._build_workflow_values()  # pylint: disable=protected-access
+    assert (values["width"], values["height"]) == (432, 768)
+    assert 432 / 768 == 9 / 16  # 精确比例，不是 544/960 的 17:30
+
+
+def test_final_profile_falls_back_to_ratio_dimensions() -> None:
+    """成片档不传分辨率 → 由 ratio 推导 1080×1920（既有行为不变）。"""
+    task = ComfyUIVideoGenerationTask(
+        adapter=_FakeAdapter([_success_history()]),
+        mapping=load_mapping(_MAPPING),
+        provider_config=_cfg(),
+        input_=_input(),
+        poll_interval_s=0,
+        timeout_s=5,
+    )
+    values = task._build_workflow_values()  # pylint: disable=protected-access
+    assert (values["width"], values["height"]) == (1080, 1920)
+
+
+# --------------------------------------------------------------------------- #
+# fail-fast：缺少尺寸映射时禁止静默略过
+# --------------------------------------------------------------------------- #
+def _mapping_without(keys: set[str], tmp_path: Path):
+    """构造一份去掉指定输入映射的 mapping。"""
+    original = json.loads(_MAPPING.read_text(encoding="utf-8"))
+    original["inputs"] = {k: v for k, v in original["inputs"].items() if k not in keys}
+    original["workflow_path"] = str(_FIXTURES / "example_workflow.api.json")
+    path = tmp_path / "m.json"
+    path.write_text(json.dumps(original), encoding="utf-8")
+    return load_mapping(path)
+
+
+def test_require_render_inputs_passes_with_width_and_height() -> None:
+    """映射同时含 width/height → 校验通过。"""
+    from app.core.integrations.comfyui import require_render_inputs
+
+    require_render_inputs(load_mapping(_MAPPING))  # 不抛异常即通过
+
+
+@pytest.mark.parametrize(
+    "removed,expected",
+    [({"width"}, "width"), ({"height"}, "height")],
+)
+def test_missing_single_dimension_mapping_fails(removed, expected, tmp_path: Path) -> None:
+    """缺少 width 或 height 之一 → 明确失败，错误列出该键。"""
+    from app.core.integrations.comfyui import require_render_inputs
+
+    with pytest.raises(WorkflowConfigError, match="missing required inputs") as exc:
+        require_render_inputs(_mapping_without(removed, tmp_path))
+    assert expected in str(exc.value)
+
+
+def test_missing_both_dimensions_lists_both(tmp_path: Path) -> None:
+    """两者都缺 → 错误同时列出 width 与 height。"""
+    from app.core.integrations.comfyui import require_render_inputs
+
+    with pytest.raises(WorkflowConfigError) as exc:
+        require_render_inputs(_mapping_without({"width", "height"}, tmp_path))
+    message = str(exc.value)
+    assert "width" in message and "height" in message
+    assert message.startswith("ComfyUI workflow mapping is missing required inputs:")
+
+
+@pytest.mark.asyncio
+async def test_missing_mapping_never_submits_prompt(tmp_path: Path) -> None:
+    """校验失败时 submit_prompt 完全不被调用，任务也不会成功。"""
+    adapter = _FakeAdapter([_success_history()])
+    task = ComfyUIVideoGenerationTask(
+        adapter=adapter,
+        mapping=_mapping_without({"width", "height"}, tmp_path),
+        provider_config=_cfg(),
+        input_=_input(width=432, height=768),
+        poll_interval_s=0,
+        timeout_s=5,
+    )
+    await task.run()
+
+    assert adapter.submit_calls == 0, "prompt must not be submitted when mapping is invalid"
+    assert await task.get_result() is None
+    status = await task.status()
+    assert "missing required inputs" in status["error"]
+
+
+@pytest.mark.asyncio
+async def test_preview_profile_actually_reaches_the_workflow() -> None:
+    """预览档：工作流节点真的收到 432×768。"""
+    adapter = _FakeAdapter([_success_history()])
+    task = ComfyUIVideoGenerationTask(
+        adapter=adapter,
+        mapping=load_mapping(_MAPPING),
+        provider_config=_cfg(),
+        input_=_input(width=432, height=768),
+        poll_interval_s=0,
+        timeout_s=5,
+    )
+    await task.run()
+    assert await task.get_result() is not None
+    assert adapter.submitted_prompt["5"]["inputs"]["width"] == 432
+    assert adapter.submitted_prompt["5"]["inputs"]["height"] == 768
+
+
+@pytest.mark.asyncio
+async def test_final_profile_actually_reaches_the_workflow() -> None:
+    """成片档：工作流节点真的收到 1080×1920。"""
+    adapter = _FakeAdapter([_success_history()])
+    task = ComfyUIVideoGenerationTask(
+        adapter=adapter,
+        mapping=load_mapping(_MAPPING),
+        provider_config=_cfg(),
+        input_=_input(),
+        poll_interval_s=0,
+        timeout_s=5,
+    )
+    await task.run()
+    assert await task.get_result() is not None
+    assert adapter.submitted_prompt["5"]["inputs"]["width"] == 1080
+    assert adapter.submitted_prompt["5"]["inputs"]["height"] == 1920

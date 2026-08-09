@@ -464,3 +464,64 @@ def test_worker_boundary_is_the_registered_executor() -> None:
     executor = task_executor_registry.resolve("cas_render_shot")
     assert executor.task_kind == "cas_render_shot"
     assert executor._runner is rt.run_cas_shot_render_task  # pylint: disable=protected-access
+
+
+def test_mock_artifact_does_not_short_circuit_a_real_render() -> None:
+    """回归：Step 6 的 mock 视频产物不得让真实渲染秒回 succeeded。
+
+    这正是「API 返回 pending、Celery 收到任务、36ms 就 succeeded、ComfyUI 没收到
+    workflow」的根因：mock 流水线为每个镜头产出 ArtifactType.video，旧的幂等判定
+    只看 (job, shot, type)，于是把 mock 占位当成「已渲染」。
+    """
+
+    async def _case(factory):
+        # 预置一条 mock 产物，模拟先用 mode=mock 建过任务
+        async with factory() as db:
+            db.add(
+                CasProductionArtifact(
+                    id="mock-art",
+                    job_id=JOB_ID,
+                    production_shot_id=SHOT_ID,
+                    artifact_type="video",
+                    stage="video_generation",
+                    provider=rt.MOCK_VIDEO_PROVIDER,
+                    provider_model="",
+                    file_path="mock/shot.txt",
+                    mime_type="video/mp4",
+                    checksum="",
+                    metadata_json={},
+                )
+            )
+            await db.commit()
+
+        task_id = await _start_attempt(factory)
+        await rt.run_cas_shot_render_task(task_id)
+
+        # 供应商必须真的被调用（不是短路）
+        assert len(_FakeVideoTask.calls) == 1, "real render must call the provider"
+
+        async with factory() as db:
+            arts = (await db.execute(select(CasProductionArtifact))).scalars().all()
+            row = await db.get(GenerationTask, task_id)
+        # mock 产物保留，另外新增一条真实渲染产物
+        providers = sorted(a.provider for a in arts)
+        assert providers == ["comfyui", rt.MOCK_VIDEO_PROVIDER]
+        assert _status_of(row) == "succeeded"
+        assert (row.result or {}).get("reused") is False
+
+    _run_env(_case)
+
+
+def test_missing_run_args_fails_instead_of_silent_success() -> None:
+    """run_args 缺必要字段 → 明确 failed，绝不静默成功。"""
+
+    async def _case(factory):
+        task_id = await _start_attempt(factory)
+        await rt.run_cas_shot_render_task(task_id, {"job_id": JOB_ID})  # 缺 input 等
+
+        async with factory() as db:
+            row = await db.get(GenerationTask, task_id)
+        assert _status_of(row) == "failed"
+        assert _FakeVideoTask.calls == [], "provider must not be called with invalid args"
+
+    _run_env(_case)

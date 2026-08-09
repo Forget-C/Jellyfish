@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -169,7 +171,6 @@ async def list_production_artifacts(job_id: str, db: AsyncSession = Depends(get_
     # Step 7：统一经 build_artifact_view 投影，补上 file_id / size / download_url 等可选字段。
     return success_response(data=[build_artifact_view(a) for a in rows])
 
-
 @router.post(
     "/jobs/{job_id}/shots/{production_shot_id}/render",
     response_model=ApiResponse[RenderTaskView],
@@ -177,18 +178,25 @@ async def list_production_artifacts(job_id: str, db: AsyncSession = Depends(get_
 async def start_shot_render(
     job_id: str,
     production_shot_id: str,
+    profile: Literal["preview", "final"] = "final",
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[RenderTaskView]:
-    """为单个生产镜头发起一次真实渲染尝试（入队后立即返回）。
+    """Start a render task for one production shot.
 
-    既有 Step 6 端点无法表达「渲染某一个镜头」，故新增本路由。
-    实际执行走既有任务中心 + Celery；本路由只登记与入队。
+    ``profile``:
+    - ``final`` (default): dimensions derived from ratio (1080x1920). Behaviour is
+      identical to before this parameter existed.
+    - ``preview``: uses the configured low-resolution profile (default 544x960) for
+      low-power GPUs. The pixel values come from backend settings, never from the
+      caller, so clients cannot dictate render specs.
     """
     job = await db.get(CasProductionJob, job_id)
     if job is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=f"production job not found: {job_id}"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"production job not found: {job_id}",
         )
+
     shot = await db.get(CasProductionShot, production_shot_id)
     if shot is None or shot.job_id != job_id:
         raise HTTPException(
@@ -196,18 +204,26 @@ async def start_shot_render(
             detail=f"production shot not found in job: {production_shot_id}",
         )
 
-    active = await find_active_render_task(db, production_shot_id=production_shot_id)
+    active = await find_active_render_task(
+        db,
+        production_shot_id=production_shot_id,
+    )
     if active is not None:
-        # 已有进行中的尝试：幂等返回，不重复入队。
         return success_response(data=build_render_task_view(active))
 
-    # 提示词只在 application 层组装：这里只把镜头已持久化的字段作为上下文传入。
     render_request = build_render_request(
         shot,
-        context={"scene": shot.image_prompt or "", "action": shot.video_prompt or ""},
+        context={
+            "scene": shot.image_prompt or "",
+            "action": shot.video_prompt or "",
+        },
         ratio="9:16",
         negative_prompt=shot.negative_prompt or None,
+        # preview 档走配置的低分辨率；final 档传 None，由 ratio 推导（既有行为）。
+        width=settings.cas_render_preview_width if profile == "preview" else None,
+        height=settings.cas_render_preview_height if profile == "preview" else None,
     )
+
     task_row, _attempt = await create_shot_render_task(
         db,
         job=job,
@@ -218,10 +234,10 @@ async def start_shot_render(
         poll_interval_s=settings.cas_render_poll_interval_s,
         timeout_s=settings.cas_render_timeout_s,
     )
-    # 任务行必须先可见，worker 才能按 id 取到它。
+
     await db.commit()
 
-    from app.tasks.execute_task import enqueue_task_execution  # 延迟导入，避免导入环
+    from app.tasks.execute_task import enqueue_task_execution
 
     enqueue_task_execution(task_row.id)
     return success_response(data=build_render_task_view(task_row))

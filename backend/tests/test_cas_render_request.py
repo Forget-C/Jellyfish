@@ -120,3 +120,29 @@ def test_seed_change_changes_fingerprint_but_not_prompt() -> None:
     b = build_render_request(_Shot(), context=_context(), seed=2)
     assert a.prompt == b.prompt
     assert snapshot_fingerprint(a.snapshot) != snapshot_fingerprint(b.snapshot)
+
+
+def test_explicit_dimensions_flow_into_video_input() -> None:
+    """预览档：显式分辨率进入供应商契约，并记入快照。"""
+    request = build_render_request(_Shot(), context=_context(), width=432, height=768)
+    assert (request.width, request.height) == (432, 768)
+    video_input = request.to_video_input()
+    assert (video_input.width, video_input.height) == (432, 768)
+    assert request.snapshot["width"] == 432 and request.snapshot["height"] == 768
+
+
+def test_omitting_dimensions_keeps_ratio_only_behaviour() -> None:
+    """成片档：不传分辨率时契约里仍为 None，由 ratio 推导（既有行为不变）。"""
+    request = build_render_request(_Shot(), context=_context())
+    assert request.width is None and request.height is None
+    video_input = request.to_video_input()
+    assert video_input.width is None and video_input.height is None
+    assert video_input.ratio == "9:16"
+
+
+def test_preview_and_final_snapshots_differ() -> None:
+    """同一提示词在两个档位下快照指纹不同，重试可区分。"""
+    preview = build_render_request(_Shot(), context=_context(), width=432, height=768)
+    final = build_render_request(_Shot(), context=_context())
+    assert preview.prompt == final.prompt
+    assert snapshot_fingerprint(preview.snapshot) != snapshot_fingerprint(final.snapshot)

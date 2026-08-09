@@ -8,7 +8,19 @@
  * - 播放只用后端给的 download_url，绝不由 storage_key 拼地址。
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Alert, Button, Card, Descriptions, Empty, Progress, Space, Spin, Tag, Typography } from 'antd'
+import {
+  Alert,
+  Button,
+  Card,
+  Descriptions,
+  Empty,
+  Progress,
+  Radio,
+  Space,
+  Spin,
+  Tag,
+  Typography,
+} from 'antd'
 
 import {
   RENDER_POLL_INTERVAL_MS,
@@ -17,6 +29,7 @@ import {
   fetchProductionJob,
   startShotRender,
   type RenderArtifactView,
+  type RenderProfile,
   type RenderTaskView,
 } from '../../../services/casWorkspaceApi'
 
@@ -46,6 +59,8 @@ export default function ShotRenderPanel({ jobId, productionShotId }: ShotRenderP
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  // 默认预览档：低分辨率试跑，避免误触发高负载的成片渲染。
+  const [profile, setProfile] = useState<RenderProfile>('preview')
 
   const mountedRef = useRef(true)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -132,7 +147,7 @@ export default function ShotRenderPanel({ jobId, productionShotId }: ShotRenderP
     setSubmitting(true)
     setError(null)
     try {
-      const accepted = await startShotRender(jobId, productionShotId)
+      const accepted = await startShotRender(jobId, productionShotId, profile)
       if (!mountedRef.current) return
       setTask(accepted)
       const generation = generationRef.current
@@ -142,7 +157,7 @@ export default function ShotRenderPanel({ jobId, productionShotId }: ShotRenderP
     } finally {
       if (mountedRef.current) setSubmitting(false)
     }
-  }, [jobId, productionShotId, scheduleNext])
+  }, [jobId, productionShotId, profile, scheduleNext])
 
   const active = !!task && !task.is_terminal
   const failed = task?.status === 'failed'
@@ -169,6 +184,27 @@ export default function ShotRenderPanel({ jobId, productionShotId }: ShotRenderP
           data-testid="render-api-error"
         />
       )}
+
+      <Space direction="vertical" className="mb-3" style={{ width: '100%' }}>
+        <Radio.Group
+          value={profile}
+          onChange={(e) => setProfile(e.target.value as RenderProfile)}
+          disabled={active}
+          data-testid="render-profile"
+        >
+          <Radio.Button value="preview" data-testid="profile-preview">
+            预览渲染 · 432×768
+          </Radio.Button>
+          <Radio.Button value="final" data-testid="profile-final">
+            正式渲染 · 1080×1920（高负载）
+          </Radio.Button>
+        </Radio.Group>
+        <Typography.Text type="secondary" data-testid="profile-hint">
+          {profile === 'preview'
+            ? '预览档：精确 9:16，像素量约为成片的 16%，适合核显试跑。'
+            : '正式档：完整成片规格，耗时与显存占用显著更高。'}
+        </Typography.Text>
+      </Space>
 
       <Space className="mb-3">
         <Button

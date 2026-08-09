@@ -325,3 +325,46 @@ def test_unknown_chapter_returns_empty_not_all_jobs(client) -> None:
     )
     assert resp.status_code == 200
     assert resp.json()["data"] == []
+
+
+def test_render_route_accepts_preview_profile(client) -> None:
+    """profile=preview → 快照记录 432×768（精确 9:16）。"""
+    test_client, factory = client
+    import asyncio
+
+    resp = test_client.post(f"{BASE}/jobs/{JOB_ID}/shots/{SHOT_ID}/render", params={"profile": "preview"})
+    assert resp.status_code == 200
+
+    async def _snap():
+        async with factory() as db:
+            task = (await db.execute(select(GenerationTask))).scalars().one()
+            return ((task.payload or {}).get("run_args") or {})
+
+    run_args = asyncio.run(_snap())
+    assert run_args["input"]["width"] == 432
+    assert run_args["input"]["height"] == 768
+    assert run_args["request_snapshot"]["width"] == 432
+
+
+def test_render_route_defaults_to_final_for_api_compatibility(client) -> None:
+    """不传 profile → final：分辨率交给 ratio 推导，既有 API 兼容性不变。"""
+    test_client, factory = client
+    import asyncio
+
+    assert _render(test_client).status_code == 200
+
+    async def _snap():
+        async with factory() as db:
+            task = (await db.execute(select(GenerationTask))).scalars().one()
+            return ((task.payload or {}).get("run_args") or {})
+
+    run_args = asyncio.run(_snap())
+    assert run_args["input"]["width"] is None
+    assert run_args["input"]["height"] is None
+
+
+def test_render_route_rejects_unknown_profile(client) -> None:
+    """未知 profile 值 → 422，不静默退回某个档位。"""
+    test_client, _ = client
+    resp = test_client.post(f"{BASE}/jobs/{JOB_ID}/shots/{SHOT_ID}/render", params={"profile": "ultra"})
+    assert resp.status_code == 422

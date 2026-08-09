@@ -64,6 +64,9 @@ class RenderRequest:
     seconds: int
     seed: int | None
     snapshot: dict[str, Any] = field(default_factory=dict)
+    #: 可选的显式分辨率（预览档）。省略时由 ratio 推导（成片档）。
+    width: int | None = None
+    height: int | None = None
 
     def to_video_input(self) -> VideoGenerationInput:
         """转为共享的供应商中立契约。"""
@@ -72,6 +75,8 @@ class RenderRequest:
             ratio=self.ratio,  # type: ignore[arg-type]
             seconds=self.seconds,
             seed=self.seed,
+            width=self.width,
+            height=self.height,
         )
 
 
@@ -100,6 +105,8 @@ def build_render_request(
     ratio: str = "9:16",
     seed: int | None = None,
     negative_prompt: str | None = None,
+    width: int | None = None,
+    height: int | None = None,
 ) -> RenderRequest:
     """由生产镜头与上下文构造确定性渲染请求。
 
@@ -139,6 +146,10 @@ def build_render_request(
         "seed": seed,
         "sections": dict(ordered),
         "negative_prompt": negative,
+        # 分辨率纳入快照：同一提示词在预览档与成片档下的产出不同，
+        # 重试诊断时必须能区分两者。
+        "width": width,
+        "height": height,
         "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
     }
 
@@ -151,6 +162,8 @@ def build_render_request(
         seconds=seconds,
         seed=seed,
         snapshot=snapshot,
+        width=width,
+        height=height,
     )
 
 

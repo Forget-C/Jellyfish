@@ -140,6 +140,43 @@ def load_mapping(mapping_path: str | Path, *, base_dir: str | Path | None = None
     return WorkflowMapping(workflow=workflow, inputs=normalized, output_node=output_node)
 
 
+#: 渲染必须能够控制的输入。缺少这些映射时工作流会用它自带的内置尺寸出图，
+#: 导致「预览档看似成功、实际仍是成片分辨率」这种静默失败。
+REQUIRED_RENDER_INPUTS: tuple[str, ...] = ("width", "height")
+
+
+def require_render_inputs(
+    mapping: WorkflowMapping, required: tuple[str, ...] = REQUIRED_RENDER_INPUTS
+) -> None:
+    """确认映射确实能把 ``required`` 写入有效的 workflow 节点输入路径。
+
+    不只看键是否存在（dictionary truthiness）：还要确认映射目标解析得出节点与
+    输入名，且该节点确实存在于工作流中。任何一项不满足都抛
+    ``WorkflowConfigError``，调用方据此让任务 failed，绝不提交 prompt。
+
+    异常：
+        WorkflowConfigError：错误信息明确列出缺少/不可用的键。
+    """
+    missing: list[str] = []
+    for key in required:
+        target = mapping.inputs.get(key)
+        if not isinstance(target, str) or not target.strip():
+            missing.append(key)
+            continue
+        try:
+            node_id, field = _split_target(target)
+        except WorkflowConfigError:
+            missing.append(key)
+            continue
+        node = mapping.workflow.get(node_id)
+        if not isinstance(node, dict) or not field:
+            missing.append(key)
+    if missing:
+        raise WorkflowConfigError(
+            "ComfyUI workflow mapping is missing required inputs: " + ", ".join(sorted(missing))
+        )
+
+
 def apply_inputs(mapping: WorkflowMapping, values: dict[str, Any]) -> dict[str, Any]:
     """把 ``values`` 注入工作流副本并返回。
 

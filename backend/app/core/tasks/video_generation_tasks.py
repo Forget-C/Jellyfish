@@ -283,7 +283,12 @@ class ComfyUIVideoGenerationTask(AbstractVideoGenerationTask):
         """把统一的 VideoGenerationInput 映射为工作流输入值。"""
         from app.core.integrations.video_capabilities import ALLOWED_RATIOS
 
-        width, height = _dimensions_for_ratio(self._input.ratio)
+        # 显式尺寸优先（预览档），否则按 ratio 推导（既有行为）。
+        # 契约层已保证 width/height 要么同时存在、要么同时为 None。
+        if self._input.width is not None and self._input.height is not None:
+            width, height = self._input.width, self._input.height
+        else:
+            width, height = _dimensions_for_ratio(self._input.ratio)
         values: dict[str, Any] = {
             "positive_prompt": (self._input.prompt or "").strip(),
             "width": width,
@@ -300,9 +305,30 @@ class ComfyUIVideoGenerationTask(AbstractVideoGenerationTask):
         return values
 
     async def _create_task(self) -> None:
-        from app.core.integrations.comfyui import apply_inputs
+        from app.core.integrations.comfyui import (
+            WorkflowConfigError,
+            apply_inputs,
+            require_render_inputs,
+        )
 
-        prompt = apply_inputs(self._mapping, self._build_workflow_values())
+        # fail-fast：映射必须真的能控制 width/height，否则工作流会用内置尺寸出图，
+        # 造成「预览档显示成功、实际仍是成片分辨率」的静默失败。
+        # 在提交之前校验 —— 校验不过就不会调用 submit_prompt。
+        require_render_inputs(self._mapping)
+
+        values = self._build_workflow_values()
+        prompt = apply_inputs(self._mapping, values)
+
+        # 注入后复核：确认目标节点确实拿到了期望的尺寸，而不只是「映射看起来存在」。
+        for key in ("width", "height"):
+            node_id, field = self._mapping.inputs[key].split(".", 1)
+            actual = (prompt.get(node_id) or {}).get("inputs", {}).get(field)
+            if actual != values[key]:
+                raise WorkflowConfigError(
+                    f"ComfyUI workflow mapping failed to apply {key}: "
+                    f"expected {values[key]}, node {node_id}.{field} holds {actual!r}"
+                )
+
         self._provider_task_id = await self._adapter.submit_prompt(
             cfg=self._cfg,
             prompt=prompt,

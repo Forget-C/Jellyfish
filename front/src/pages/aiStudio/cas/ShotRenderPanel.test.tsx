@@ -107,6 +107,36 @@ describe('ShotRenderPanel', () => {
     expect(screen.getAllByTestId('artifact-item')).toHaveLength(1)
   })
 
+  it('sends profile=preview by default', async () => {
+    vi.mocked(api.startShotRender).mockResolvedValue({
+      task_id: 't9', status: 'pending', is_terminal: false, attempt: 1,
+    } as never)
+    renderPanel()
+    await waitFor(() => expect(screen.getByTestId('generate-video')).toBeInTheDocument())
+    fireEvent.click(screen.getByTestId('generate-video'))
+    // 预览档是默认值：一般 Render 操作必须显式传 preview，不依赖后端默认
+    await waitFor(() => expect(api.startShotRender).toHaveBeenCalledWith(JOB, SHOT, 'preview'))
+  })
+
+  it('sends profile=final after selecting the final option', async () => {
+    vi.mocked(api.startShotRender).mockResolvedValue({
+      task_id: 't10', status: 'pending', is_terminal: false, attempt: 1,
+    } as never)
+    renderPanel()
+    await waitFor(() => expect(screen.getByTestId('render-profile')).toBeInTheDocument())
+    fireEvent.click(screen.getByText(/正式渲染/))
+    fireEvent.click(screen.getByTestId('generate-video'))
+    await waitFor(() => expect(api.startShotRender).toHaveBeenCalledWith(JOB, SHOT, 'final'))
+  })
+
+  it('shows both resolutions so the heavier option is explicit', async () => {
+    renderPanel()
+    await waitFor(() => expect(screen.getByTestId('render-profile')).toBeInTheDocument())
+    expect(screen.getByText(/432×768/)).toBeInTheDocument()
+    expect(screen.getByText(/1080×1920/)).toBeInTheDocument()
+    expect(screen.getByText(/高负载/)).toBeInTheDocument()
+  })
+
   it('starts a render and disables the button while active', async () => {
     vi.mocked(api.startShotRender).mockResolvedValue({
       task_id: 't9',
@@ -119,7 +149,7 @@ describe('ShotRenderPanel', () => {
     renderPanel()
     await waitFor(() => expect(screen.getByTestId('generate-video')).toBeInTheDocument())
     fireEvent.click(screen.getByTestId('generate-video'))
-    await waitFor(() => expect(api.startShotRender).toHaveBeenCalledWith(JOB, SHOT))
+    await waitFor(() => expect(api.startShotRender).toHaveBeenCalledWith(JOB, SHOT, 'preview'))
     await waitFor(() =>
       expect(screen.getByTestId('generate-video').closest('button')).toBeDisabled(),
     )

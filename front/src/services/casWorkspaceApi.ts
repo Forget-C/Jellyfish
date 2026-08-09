@@ -310,12 +310,27 @@ export async function fetchProductionArtifacts(jobId: string): Promise<RenderArt
 }
 
 /** 为单个生产镜头发起渲染；后端入队后立即返回。 */
+/** 渲染档位。preview = 低分辨率试跑；final = 成片规格。 */
+export type RenderProfile = 'preview' | 'final'
+
+/**
+ * 为单个生产镜头发起渲染；后端入队后立即返回。
+ *
+ * ``profile`` 一律显式传出：后端为了保持既有 API 兼容性，未传时默认 final
+ * （1080×1920）。前端不依赖该默认值，避免误触发高负载渲染。
+ * 具体像素由后端配置决定，前端只传档位名称。
+ */
 export async function startShotRender(
   jobId: string,
   productionShotId: string,
+  profile: RenderProfile = 'preview',
 ): Promise<RenderTaskView> {
+  const query = new URLSearchParams({ profile })
   return unwrap<RenderTaskView>(
-    await post(`${CAS_BASE}/production/jobs/${jobId}/shots/${productionShotId}/render`, {}),
+    await post(
+      `${CAS_BASE}/production/jobs/${jobId}/shots/${productionShotId}/render?${query.toString()}`,
+      {},
+    ),
   )
 }
 

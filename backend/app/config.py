@@ -74,6 +74,14 @@ class Settings(BaseSettings):
     #: 单次渲染超时（秒）。视频生成通常远慢于图像，缺省给足余量。
     cas_render_timeout_s: float = 1800.0
 
+    # 分辨率档位：预览档用于低成本试跑（如 Intel Iris Xe 等核显），
+    # 成片档保持 EP001 的 1080×1920 输出规格。两者都必须是 8 的倍数。
+    #: 预览档宽度。
+    cas_render_preview_width: int = 432
+    #: 预览档高度。432×768 = 精确 9:16（0.5625），两者都是 8 的倍数，
+    #: 像素量约为成片档 1080×1920 的 16%，适合 Intel Iris Xe 等核显试跑。
+    cas_render_preview_height: int = 768
+
     def model_post_init(self, __context: object) -> None:
         if not self.celery_broker_url or not str(self.celery_broker_url).strip():
             password_part = f":{self.redis_password}@" if self.redis_password else ""

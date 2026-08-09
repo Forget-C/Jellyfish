@@ -117,13 +117,13 @@ describe('Ep001Workspace → ShotRenderPanel mounting', () => {
       is_terminal: false,
     } as never)
     fireEvent.click(screen.getByTestId('generate-video'))
-    await waitFor(() => expect(api.startShotRender).toHaveBeenCalledWith('job-1', 'pshot-1'))
+    await waitFor(() => expect(api.startShotRender).toHaveBeenCalledWith('job-1', 'pshot-1', 'preview'))
 
     // 切换到第二个镜头（accordion 会关掉第一个）
     fireEvent.click(screen.getAllByTestId('shot-row')[1])
     await waitFor(() => expect(screen.getByTestId('render-panel')).toBeInTheDocument())
     fireEvent.click(screen.getByTestId('generate-video'))
-    await waitFor(() => expect(api.startShotRender).toHaveBeenLastCalledWith('job-1', 'pshot-2'))
+    await waitFor(() => expect(api.startShotRender).toHaveBeenLastCalledWith('job-1', 'pshot-2', 'preview'))
   })
 
   it('shows a clear notice when no production shot maps to the selection', async () => {

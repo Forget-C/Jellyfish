@@ -196,16 +196,28 @@ class _CreateOnlyTask:
         return None
 
 
+#: Step 6 mock 流水线使用的供应商名（``providers/mock.py``）。
+#: mock 也会为每个镜头产出 ``ArtifactType.video`` 产物，因此**必须**把它排除在
+#: 真实渲染的幂等判定之外，否则「先用 mock 建任务、再发起真实渲染」时，
+#: 真实渲染会误判为「已有产物」而秒回 succeeded，根本不会调用 ComfyUI。
+MOCK_VIDEO_PROVIDER = "mock-video"
+
+
 async def _existing_video_artifact(
     db: AsyncSession, *, job_id: str, production_shot_id: str
 ) -> CasProductionArtifact | None:
-    """查询该镜头是否已有视频产物（幂等与「保留既有成功产物」的依据）。"""
+    """查询该镜头是否已有**真实渲染**产生的视频产物。
+
+    仅用于幂等与「保留既有成功产物」。mock 流水线的占位产物不算数：
+    它由 Step 6 的模拟管线生成，并不代表任何供应商真的渲染过。
+    """
     stmt = (
         select(CasProductionArtifact)
         .where(
             CasProductionArtifact.job_id == job_id,
             CasProductionArtifact.production_shot_id == production_shot_id,
             CasProductionArtifact.artifact_type == ArtifactType.video.value,
+            CasProductionArtifact.provider != MOCK_VIDEO_PROVIDER,
         )
         .limit(1)
     )
@@ -277,8 +289,9 @@ async def run_cas_shot_render_task(task_id: str, run_args: dict | None = None) -
         store = SqlAlchemyTaskStore(db)
         task = await store.get(task_id)
         if task is None:
-            logger.warning("cas render task not found: %s", task_id)
-            return
+            # 不静默返回：任务行缺失属于真实故障，必须让 executor 记为 failed，
+            # 否则会出现「秒回 succeeded 但什么都没做」的假成功。
+            raise RenderTaskError(f"render task record not found: {task_id}")
         if not run_args:
             run_args = task.payload.get("run_args") or {}
         await store.set_status(task_id, TaskStatus.running)
@@ -291,7 +304,20 @@ async def run_cas_shot_render_task(task_id: str, run_args: dict | None = None) -
     attempt = int(run_args.get("attempt") or 1)
     snapshot = dict(run_args.get("request_snapshot") or {})
 
+    # run_args 缺字段同样不得静默通过：缺 input 会让供应商拿到空提示词，
+    # 缺 base_url 会让 ComfyUI 适配器无从连接。这里提前失败并给出可读原因。
+    missing = [
+        key
+        for key in ("job_id", "production_shot_id", "provider", "input")
+        if not run_args.get(key)
+    ]
     try:
+        # 放在 try 内：这样缺字段失败也会走同一套「任务 + 生产镜头都标记 failed」的收尾。
+        if missing:
+            raise RenderTaskError(
+                f"render run_args missing required fields: {sorted(missing)}"
+            )
+
         async with async_session_maker() as db:
             store = SqlAlchemyTaskStore(db)
 

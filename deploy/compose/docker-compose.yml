@@ -96,6 +96,11 @@ services:
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-}
       DEBUG: "false"
       API_V1_PREFIX: /api/v1
+      CAS_RENDER_PROVIDER: "comfyui"
+      CAS_COMFYUI_BASE_URL: "http://host.docker.internal:8188"
+      CAS_COMFYUI_WORKFLOW_MAPPING: "/app/workflows/comfyui/cas_sd15_image_test_mapping.json"
+      CAS_RENDER_PREVIEW_WIDTH: ${CAS_RENDER_PREVIEW_WIDTH:-432}
+      CAS_RENDER_PREVIEW_HEIGHT: ${CAS_RENDER_PREVIEW_HEIGHT:-768}
       # S3 / RustFS
       S3_ENDPOINT_URL: http://rustfs:9000
       S3_REGION_NAME: us-east-1
@@ -131,6 +136,11 @@ services:
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-}
       DEBUG: "false"
       API_V1_PREFIX: /api/v1
+      CAS_RENDER_PROVIDER: "comfyui"
+      CAS_COMFYUI_BASE_URL: "http://host.docker.internal:8188"
+      CAS_COMFYUI_WORKFLOW_MAPPING: "/app/workflows/comfyui/cas_sd15_image_test_mapping.json"
+      CAS_RENDER_PREVIEW_WIDTH: ${CAS_RENDER_PREVIEW_WIDTH:-432}
+      CAS_RENDER_PREVIEW_HEIGHT: ${CAS_RENDER_PREVIEW_HEIGHT:-768}
       S3_ENDPOINT_URL: http://rustfs:9000
       S3_REGION_NAME: us-east-1
       S3_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY}

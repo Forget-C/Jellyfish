@@ -1,0 +1,11 @@
+{
+  "workflow_path": "cas_sd15_image_test.api.json",
+  "inputs": {
+    "positive_prompt": "6.text",
+    "negative_prompt": "7.text",
+    "width": "5.width",
+    "height": "5.height",
+    "seed": "3.seed"
+  },
+  "output_node": "9"
+}
