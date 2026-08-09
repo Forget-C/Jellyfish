@@ -36,12 +36,22 @@ async def list_files_api(
     project_id: str | None = Query(None, description="按 file_usages 限定项目；提供后仅返回该项目下有关联记录的文件"),
     chapter_title: str | None = Query(None, description="章节标题（精确匹配，与 project_id 联用）"),
     shot_title: str | None = Query(None, description="镜头标题（精确匹配，与 project_id 联用）"),
+    chapter_id: str | None = Query(
+        None, description="按 file_usages.chapter_id 精确过滤（与 project_id 联用；比标题稳定）"
+    ),
+    usage_kind: str | None = Query(
+        None, description="按 file_usages.usage_kind 精确过滤，如 subtitle（与 project_id 联用）"
+    ),
 ) -> ApiResponse[PaginatedData[FileRead]]:
-    if chapter_title is not None or shot_title is not None:
+    scoped = (chapter_title, shot_title, chapter_id, usage_kind)
+    if any(value is not None for value in scoped):
         if not project_id:
             raise HTTPException(
                 status_code=400,
-                detail="project_id is required when chapter_title or shot_title is set",
+                detail=(
+                    "project_id is required when chapter_title, shot_title, "
+                    "chapter_id or usage_kind is set"
+                ),
             )
 
     if project_id is not None:
@@ -50,6 +60,8 @@ async def list_files_api(
             project_id=project_id,
             chapter_title=chapter_title,
             shot_title=shot_title,
+            chapter_id=chapter_id,
+            usage_kind=usage_kind,
             q=q,
             order=order,
             is_desc=is_desc,

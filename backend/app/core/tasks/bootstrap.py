@@ -12,6 +12,7 @@ TASK_ADAPTER_SPECS = (
     ("image_generation", "volcengine", ImageGenerationTask._build_volcengine_impl),
     ("video_generation", "openai", VideoGenerationTask._build_openai_impl),
     ("video_generation", "volcengine", VideoGenerationTask._build_volcengine_impl),
+    ("video_generation", "comfyui", VideoGenerationTask._build_comfyui_impl),
 )
 
 

@@ -1,0 +1,8 @@
+{
+  "3": {"class_type": "KSampler", "inputs": {"seed": 0, "steps": 20, "cfg": 7.0}},
+  "5": {"class_type": "EmptyLatentVideo", "inputs": {"width": 512, "height": 512, "length": 24}},
+  "6": {"class_type": "CLIPTextEncode", "inputs": {"text": "placeholder positive"}},
+  "7": {"class_type": "CLIPTextEncode", "inputs": {"text": "placeholder negative"}},
+  "8": {"class_type": "VideoCombine", "inputs": {"fps": 24}},
+  "9": {"class_type": "SaveVideo", "inputs": {"filename_prefix": "cas"}}
+}

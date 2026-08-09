@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class FileTypeEnum(str, Enum):
     image = "image"
     video = "video"
+    subtitle = "subtitle"  # 与 models.types.FileType 对齐；WebVTT 等字幕文本产物
 
 
 class FileBase(BaseModel):

@@ -41,6 +41,26 @@ class VideoGenerationInput(BaseModel):
     )
     watermark: Optional[bool] = Field(None, description="是否包含水印，供应商/模型可能有差异")
 
+    #: 可选的显式渲染分辨率。省略时由 ratio 推导（既有行为完全不变）。
+    #: 用途：预览档（低分辨率试跑）与成片档（全分辨率）共用同一条渲染路径。
+    width: Optional[int] = Field(None, gt=0, description="渲染宽度（像素）；须与 height 同时提供")
+    height: Optional[int] = Field(None, gt=0, description="渲染高度（像素）；须与 width 同时提供")
+
+    @model_validator(mode="after")
+    def check_explicit_dimensions(self) -> "VideoGenerationInput":
+        """width/height 必须成对出现，且为 8 的倍数。
+
+        成对要求：只给一个无法推导另一个，静默补齐会产生非预期的画面比例。
+        8 的倍数：扩散模型的潜空间按 8 下采样，非 8 倍数会在供应商侧报错或被
+        悄悄取整；在此处提前拒绝，错误信息比 ComfyUI 的节点报错清晰得多。
+        """
+        if (self.width is None) != (self.height is None):
+            raise ValueError("width and height must be provided together or both omitted")
+        for name, value in (("width", self.width), ("height", self.height)):
+            if value is not None and value % 8 != 0:
+                raise ValueError(f"{name} must be a multiple of 8, got {value}")
+        return self
+
     @model_validator(mode="after")
     def require_prompt_or_any_reference(self) -> "VideoGenerationInput":
         has_prompt = bool((self.prompt or "").strip())

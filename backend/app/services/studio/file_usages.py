@@ -124,9 +124,21 @@ def _scope_filters(
     project_id: str,
     chapter_title: str | None,
     shot_title: str | None,
+    chapter_id: str | None = None,
+    usage_kind: str | None = None,
 ) -> list:
-    """返回与 FileUsage 行组合的 WHERE 条件（不含 project_id 基条件）。"""
+    """返回与 FileUsage 行组合的 WHERE 条件（不含 project_id 基条件）。
+
+    ``chapter_id`` / ``usage_kind`` 为附加的精确过滤：按 ID 定位章节比按标题稳妥
+    （标题不唯一），``usage_kind`` 用于直接取出某一类产物（如 subtitle）。
+    两者都可选，省略时行为与既有实现完全一致。
+    """
     conds: list = []
+
+    if chapter_id:
+        conds.append(FileUsage.chapter_id == chapter_id)
+    if usage_kind:
+        conds.append(FileUsage.usage_kind == usage_kind)
 
     ch_title = normalize_q(chapter_title)
     sh_title = normalize_q(shot_title)
@@ -171,6 +183,8 @@ async def list_files_by_scope_paginated(
     project_id: str,
     chapter_title: str | None = None,
     shot_title: str | None = None,
+    chapter_id: str | None = None,
+    usage_kind: str | None = None,
     q: str | None = None,
     order: str | None = None,
     is_desc: bool = False,
@@ -190,6 +204,8 @@ async def list_files_by_scope_paginated(
             project_id=project_id,
             chapter_title=chapter_title,
             shot_title=shot_title,
+            chapter_id=chapter_id,
+            usage_kind=usage_kind,
         ):
             stmt = stmt.where(c)
         return stmt

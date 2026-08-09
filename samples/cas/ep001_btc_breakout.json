@@ -1,0 +1,555 @@
+{
+  "schema_version": "1.1",
+  "episode_id": "CAS-EP001",
+  "title": "BTC Breaks Out — Bruno Celebrates Too Early",
+  "logline": "Bitcoin pushes above resistance and Bruno throws a party on the signal alone.",
+  "language": "en",
+  "source": {
+    "source_type": "news",
+    "headline": "BTC moves above a prior resistance area",
+    "summary": "Price moved above a prior resistance area; confirmation still outstanding.",
+    "source_url": "https://example-exchange.test/markets/btc-usd",
+    "published_at": "2026-01-02T09:00:00Z",
+    "factual_notes": "Initial breakout signal only; not a confirmed breakout."
+  },
+  "creative_direction": {
+    "format": "short_form_vertical",
+    "tone": "deadpan",
+    "target_duration_seconds": 24,
+    "visual_style": "premium stylized 3D",
+    "comedy_style": "personality collision",
+    "continuity_notes": "Bible v1 locked identities (Bruno Bull, Boris Bear, Milo Cat); world Block Street; The Burrow layout fixed per EP001 §8."
+  },
+  "characters": [
+    {
+      "character_key": "bruno_bull",
+      "display_name": "Bruno Bull",
+      "role": "momentum trader",
+      "description": "Anthropomorphic bull; chestnut-brown fur; forest-green rolled-sleeve shirt; mustard tie; black smartwatch on left wrist.",
+      "actor_key": "actor_bruno",
+      "costume_key": "costume_bruno_office",
+      "voice_profile": "warm baritone, energetic",
+      "continuity_notes": "Tallest of the trio. No jacket, hat, or glasses."
+    },
+    {
+      "character_key": "boris_bear",
+      "display_name": "Boris Bear",
+      "role": "risk manager",
+      "description": "Anthropomorphic bear; charcoal-brown fur; burgundy knit vest over pale blue shirt; rectangular black reading glasses.",
+      "actor_key": "actor_boris",
+      "costume_key": "costume_boris_office",
+      "voice_profile": "low, controlled",
+      "continuity_notes": "Wider than Milo; red notebook and red pen."
+    },
+    {
+      "character_key": "milo_cat",
+      "display_name": "Milo Cat",
+      "role": "strategist",
+      "description": "Anthropomorphic burnt-orange tabby; three forehead stripes; dark teal turtleneck; silver Bitcoin pin on left chest.",
+      "actor_key": "actor_milo",
+      "costume_key": "costume_milo_office",
+      "voice_profile": "smooth, understated",
+      "continuity_notes": "Shortest of the trio. Matte black mug."
+    }
+  ],
+  "assets": {
+    "actors": [
+      {
+        "actor_key": "actor_bruno",
+        "display_name": "Bruno",
+        "description": "Bull identity plate."
+      },
+      {
+        "actor_key": "actor_boris",
+        "display_name": "Boris",
+        "description": "Bear identity plate."
+      },
+      {
+        "actor_key": "actor_milo",
+        "display_name": "Milo",
+        "description": "Cat identity plate."
+      }
+    ],
+    "scenes": [
+      {
+        "scene_key": "the_burrow",
+        "display_name": "The Burrow",
+        "description": "Trading studio: curved desk, wall BTC chart, coffee station, glass wall."
+      }
+    ],
+    "props": [
+      {
+        "prop_key": "wall_btc_chart",
+        "display_name": "Wall BTC chart",
+        "description": "Abstract, textless chart plate."
+      },
+      {
+        "prop_key": "milo_phone",
+        "display_name": "Phone",
+        "description": "Supporting screen prop; glow only, no legible text."
+      }
+    ],
+    "costumes": [
+      {
+        "costume_key": "costume_bruno_office",
+        "display_name": "Bruno office",
+        "description": "Forest-green shirt, mustard tie."
+      },
+      {
+        "costume_key": "costume_boris_office",
+        "display_name": "Boris office",
+        "description": "Burgundy vest, pale blue shirt."
+      },
+      {
+        "costume_key": "costume_milo_office",
+        "display_name": "Milo office",
+        "description": "Dark teal turtleneck."
+      }
+    ]
+  },
+  "shots": [
+    {
+      "shot_id": "SC01",
+      "sequence": 1,
+      "title": "The premature toast",
+      "duration_seconds": 3.0,
+      "script_excerpt": "Bruno bursts in as the alert flares.",
+      "camera": {
+        "shot_type": "MS",
+        "angle": "EYE_LEVEL",
+        "movement": "DOLLY_IN"
+      },
+      "action": "Bruno shoulders through the doorway, arms rising.",
+      "dialogue": [
+        {
+          "order": 1,
+          "character_key": "bruno_bull",
+          "text": "Breakout! We are so back!",
+          "line_mode": "DIALOGUE"
+        }
+      ],
+      "character_keys": [
+        "bruno_bull",
+        "boris_bear"
+      ],
+      "scene_key": "the_burrow",
+      "prop_keys": [
+        "wall_btc_chart"
+      ],
+      "costume_keys": [
+        "costume_bruno_office"
+      ],
+      "image_prompt": "",
+      "video_prompt": "",
+      "negative_prompt": "",
+      "continuity_notes": "Forest-green shirt; watch on left wrist; symmetrical horns.",
+      "metadata": {
+        "beat": "hook"
+      },
+      "beginning_state": "Door half-open; chart line crossing the level.",
+      "ending_state": "Bruno fully in frame, arms up; green accent lit.",
+      "generation_risks": [
+        "extra or asymmetric horns",
+        "jacket appearing",
+        "legible chart text"
+      ],
+      "regeneration_fallback": null,
+      "overlay_ids": [
+        "ov_chart_label_01"
+      ]
+    },
+    {
+      "shot_id": "SC02",
+      "sequence": 2,
+      "title": "Confirmation, please",
+      "duration_seconds": 7.0,
+      "script_excerpt": "Boris blocks the celebration.",
+      "camera": {
+        "shot_type": "MCU",
+        "angle": "EYE_LEVEL",
+        "movement": "STATIC"
+      },
+      "action": "Boris raises a flat paw, clutching the red notebook.",
+      "dialogue": [
+        {
+          "order": 1,
+          "character_key": "boris_bear",
+          "text": "The candle hasn't closed yet.",
+          "line_mode": "DIALOGUE"
+        }
+      ],
+      "character_keys": [
+        "boris_bear",
+        "bruno_bull"
+      ],
+      "scene_key": "the_burrow",
+      "prop_keys": [],
+      "costume_keys": [
+        "costume_boris_office"
+      ],
+      "image_prompt": "",
+      "video_prompt": "",
+      "negative_prompt": "",
+      "continuity_notes": "Glasses present; vest burgundy; small rounded ears.",
+      "metadata": {
+        "beat": "conflict"
+      },
+      "beginning_state": "Boris mid-turn from his monitor.",
+      "ending_state": "Paw up, notebook chest-high.",
+      "generation_risks": [
+        "glasses disappearing",
+        "vest colour drift"
+      ],
+      "regeneration_fallback": null,
+      "overlay_ids": []
+    },
+    {
+      "shot_id": "SC03",
+      "sequence": 3,
+      "title": "The dip",
+      "duration_seconds": 6.5,
+      "script_excerpt": "The chart dips; Bruno freezes.",
+      "camera": {
+        "shot_type": "MLS",
+        "angle": "EYE_LEVEL",
+        "movement": "HANDHELD"
+      },
+      "action": "Bruno freezes mid-celebration; papers hang in the air.",
+      "dialogue": [
+        {
+          "order": 1,
+          "character_key": "bruno_bull",
+          "text": "It's still green… right?",
+          "line_mode": "DIALOGUE"
+        }
+      ],
+      "character_keys": [
+        "bruno_bull",
+        "boris_bear"
+      ],
+      "scene_key": "the_burrow",
+      "prop_keys": [
+        "wall_btc_chart"
+      ],
+      "costume_keys": [],
+      "image_prompt": "",
+      "video_prompt": "",
+      "negative_prompt": "",
+      "continuity_notes": "Resistance line at the same screen height as SC01.",
+      "metadata": {
+        "beat": "escalation"
+      },
+      "beginning_state": "Celebration at maximum; chart at local high.",
+      "ending_state": "Bruno statue-still; chart visibly lower.",
+      "generation_risks": [
+        "duplicate characters",
+        "full-frame red wash",
+        "wardrobe change"
+      ],
+      "regeneration_fallback": null,
+      "overlay_ids": [
+        "ov_chart_label_02"
+      ]
+    },
+    {
+      "shot_id": "SC04",
+      "sequence": 4,
+      "title": "Before the close",
+      "duration_seconds": 4.5,
+      "script_excerpt": "Milo lowers his mug and reveals the delivery.",
+      "camera": {
+        "shot_type": "CU",
+        "angle": "EYE_LEVEL",
+        "movement": "PAN"
+      },
+      "action": "Milo lowers the mug, glances at his phone, slow blink.",
+      "dialogue": [
+        {
+          "order": 1,
+          "character_key": "milo_cat",
+          "text": "Your confetti arrives before candle close.",
+          "line_mode": "DIALOGUE"
+        }
+      ],
+      "character_keys": [
+        "milo_cat",
+        "bruno_bull",
+        "boris_bear"
+      ],
+      "scene_key": "the_burrow",
+      "prop_keys": [
+        "milo_phone"
+      ],
+      "costume_keys": [
+        "costume_milo_office"
+      ],
+      "image_prompt": "",
+      "video_prompt": "",
+      "negative_prompt": "",
+      "continuity_notes": "Teal turtleneck; pin on left chest; phone glow only, no legible text.",
+      "metadata": {
+        "beat": "punchline"
+      },
+      "beginning_state": "Mug at lips; phone face-up, screen glow only.",
+      "ending_state": "Mug at chest height; gaze level; tail settled.",
+      "generation_risks": [
+        "legible phone text",
+        "stripe or eye-colour drift",
+        "glasses on Milo"
+      ],
+      "regeneration_fallback": {
+        "camera_movement": "STATIC",
+        "note": "Recovery only if identity drifts during the pan."
+      },
+      "overlay_ids": [
+        "ov_phone_notification"
+      ]
+    }
+  ],
+  "metadata": {
+    "created_at": "2026-01-02T09:05:00Z",
+    "generator": "cas-episode-design",
+    "model": "",
+    "prompt_version": "ep001-v1.1",
+    "tags": [
+      "ep001",
+      "production",
+      "bible-v1",
+      "block-street"
+    ]
+  },
+  "output": {
+    "aspect_ratio": "9:16",
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "orientation": "vertical",
+    "generated_footage_ms": 21000,
+    "total_runtime_ms": 24000,
+    "safe_area": {
+      "subtitle_bottom_pct": 18,
+      "margin_pct": 6
+    }
+  },
+  "localization": {
+    "spoken_language": "en",
+    "required_publish_language_tags": [
+      "zh-Hant"
+    ],
+    "subtitle_tracks": [
+      {
+        "language_tag": "zh-Hant",
+        "is_primary": true,
+        "rendering": "post_production",
+        "cues": [
+          {
+            "cue_id": "c1",
+            "start_ms": 400,
+            "end_ms": 2000,
+            "text": "突破了！我們回來了！",
+            "speaker_character_key": "bruno_bull",
+            "shot_id": "SC01"
+          },
+          {
+            "cue_id": "c2",
+            "start_ms": 3400,
+            "end_ms": 5400,
+            "text": "這根K棒還沒收。",
+            "speaker_character_key": "boris_bear",
+            "shot_id": "SC02"
+          },
+          {
+            "cue_id": "c3",
+            "start_ms": 11000,
+            "end_ms": 12800,
+            "text": "還是綠的……對吧？",
+            "speaker_character_key": "bruno_bull",
+            "shot_id": "SC03"
+          },
+          {
+            "cue_id": "c4",
+            "start_ms": 17200,
+            "end_ms": 19600,
+            "text": "你的彩帶會比收盤先到。",
+            "speaker_character_key": "milo_cat",
+            "shot_id": "SC04"
+          }
+        ]
+      }
+    ]
+  },
+  "fact_card": {
+    "duration_ms": 3000,
+    "placement": "append_after_shots",
+    "readable_text_in_post": true,
+    "localized": [
+      {
+        "language_tag": "en",
+        "body": [
+          "Moving above 71,500 is the initial breakout signal — not a confirmed breakout.",
+          "Some traders wait for the 4h candle to close above it and follow through.",
+          "Confirmation criteria don't guarantee future performance."
+        ],
+        "disclaimer": "For education and entertainment, not financial advice.",
+        "cta": null
+      },
+      {
+        "language_tag": "zh-Hant",
+        "body": [
+          "價格站上 71,500 只是初步突破訊號，不等於已確認突破。",
+          "部分交易者會等 4h K棒收在其上並延續。",
+          "確認條件並不保證未來表現。"
+        ],
+        "disclaimer": "僅供教育與娛樂，非投資建議。",
+        "cta": null
+      }
+    ]
+  },
+  "market_data": {
+    "instrument": "BTC-USD",
+    "timeframe": "4h",
+    "resistance_level": "71,500.00",
+    "price": "$71,842.10",
+    "price_move_pct": "2.4%",
+    "pullback_pct": "-0.8%",
+    "event_timestamp_utc": "2026-01-02T08:40:00Z",
+    "candle_close_timestamp_utc": "2026-01-02T12:00:00Z",
+    "as_of_utc": "2026-01-02T08:45:00Z",
+    "source_name": "Example Exchange (test)",
+    "source_url": "https://example-exchange.test/markets/btc-usd",
+    "factual_note": "Price moved above the level; confirmation outstanding at capture time.",
+    "ath_context": null,
+    "data_lock": {
+      "status": "locked",
+      "locked_at_utc": "2026-01-02T08:50:00Z"
+    }
+  },
+  "references": {
+    "bible_version": "1.0",
+    "canon_decision": "ADR-015",
+    "characters": [
+      {
+        "character_key": "bruno_bull",
+        "scene_key": null,
+        "prop_key": null,
+        "asset_id": "cas/bruno/identity/front",
+        "kind": "identity",
+        "view": "front",
+        "path": "assets/cas/bruno/front.png"
+      },
+      {
+        "character_key": "boris_bear",
+        "scene_key": null,
+        "prop_key": null,
+        "asset_id": "cas/boris/identity/front",
+        "kind": "identity",
+        "view": "front",
+        "path": "assets/cas/boris/front.png"
+      },
+      {
+        "character_key": "milo_cat",
+        "scene_key": null,
+        "prop_key": null,
+        "asset_id": "cas/milo/identity/front",
+        "kind": "identity",
+        "view": "front",
+        "path": "assets/cas/milo/front.png"
+      }
+    ],
+    "environments": [
+      {
+        "character_key": null,
+        "scene_key": "the_burrow",
+        "prop_key": null,
+        "asset_id": "cas/env/the_burrow/master_wide",
+        "kind": "identity",
+        "view": null,
+        "path": null
+      }
+    ],
+    "props": [
+      {
+        "character_key": null,
+        "scene_key": null,
+        "prop_key": "wall_btc_chart",
+        "asset_id": "cas/prop/wall_chart/textless",
+        "kind": "identity",
+        "view": null,
+        "path": null
+      }
+    ]
+  },
+  "post_production": {
+    "overlays": [
+      {
+        "overlay_id": "ov_chart_label_01",
+        "type": "chart_label",
+        "shot_id": "SC01",
+        "start_ms": 600,
+        "end_ms": 3000,
+        "required": false,
+        "anchor": "upper_safe",
+        "localized": [
+          {
+            "language_tag": "en",
+            "text": "71,500"
+          }
+        ]
+      },
+      {
+        "overlay_id": "ov_chart_label_02",
+        "type": "chart_label",
+        "shot_id": "SC03",
+        "start_ms": 10200,
+        "end_ms": 13000,
+        "required": false,
+        "anchor": "upper_safe",
+        "localized": [
+          {
+            "language_tag": "en",
+            "text": "-0.8%"
+          }
+        ]
+      },
+      {
+        "overlay_id": "ov_phone_notification",
+        "type": "notification",
+        "shot_id": "SC04",
+        "start_ms": 17000,
+        "end_ms": 19000,
+        "required": false,
+        "anchor": "prop_local",
+        "localized": [
+          {
+            "language_tag": "en",
+            "text": "Delivery arriving"
+          },
+          {
+            "language_tag": "zh-Hant",
+            "text": "外送即將送達"
+          }
+        ]
+      },
+      {
+        "overlay_id": "ov_fact_card",
+        "type": "fact_card",
+        "shot_id": null,
+        "start_ms": 21000,
+        "end_ms": 24000,
+        "required": true,
+        "anchor": "centre",
+        "localized": []
+      },
+      {
+        "overlay_id": "ov_disclaimer",
+        "type": "disclaimer",
+        "shot_id": null,
+        "start_ms": 21000,
+        "end_ms": 24000,
+        "required": true,
+        "anchor": "lower_safe",
+        "localized": []
+      }
+    ]
+  }
+}

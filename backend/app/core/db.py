@@ -66,6 +66,10 @@ async def init_db() -> None:
     import app.models.studio  # noqa: F401
     import app.models.task  # noqa: F401
     import app.models.task_links  # noqa: F401
+    # CAS 边界模块的导入台账表（幂等记账）；导入以注册到 Base.metadata。
+    import app.crypto_animal_studio.domain.import_ledger  # noqa: F401
+    # CAS 生产流水线表（任务/镜头/产物）。
+    import app.crypto_animal_studio.production.models  # noqa: F401
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

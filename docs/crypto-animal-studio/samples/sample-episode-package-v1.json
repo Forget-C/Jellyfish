@@ -1,0 +1,169 @@
+{
+  "schema_version": "1.0",
+  "episode_id": "CAS-E001",
+  "title": "Champagne Before Confirmation",
+  "logline": "Bull celebrates a rumored inflow record before anyone has actually confirmed it.",
+  "language": "en",
+  "source": {
+    "source_type": "fictional",
+    "headline": "Fictional Exchange Reports Record Inflows Into Animal Token Fund",
+    "summary": "A made-up trading desk claims an unusually strong day of inflows into a fictional fund. Nothing is confirmed and no real market data is referenced.",
+    "source_url": null,
+    "published_at": "2026-01-02T09:00:00Z",
+    "factual_notes": "Entirely fictional scenario for demonstration. Not investment advice; no price prediction; no reliance on live facts."
+  },
+  "creative_direction": {
+    "format": "short_form_vertical",
+    "tone": "deadpan",
+    "target_duration_seconds": 45,
+    "visual_style": "anime",
+    "comedy_style": "false_confidence + callback",
+    "continuity_notes": "Keep Walter dry and sparse. The champagne is a running visual gag across the episode."
+  },
+  "characters": [
+    {
+      "character_key": "bull",
+      "display_name": "Bull",
+      "role": "main",
+      "description": "Relentlessly optimistic trader who celebrates first and checks later.",
+      "actor_key": "actor_bull",
+      "costume_key": "costume_trader_vest",
+      "voice_profile": "loud, upbeat",
+      "continuity_notes": "Always holding something celebratory."
+    },
+    {
+      "character_key": "bear",
+      "display_name": "Bear",
+      "role": "straight_man",
+      "description": "Skeptical and tired; expects the worst on principle.",
+      "actor_key": "actor_bear",
+      "costume_key": "costume_hoodie",
+      "voice_profile": "low, weary",
+      "continuity_notes": "Rarely makes eye contact with the celebration."
+    },
+    {
+      "character_key": "walter",
+      "display_name": "Walter",
+      "role": "deadpan_anchor",
+      "description": "Quiet, dry closer who delivers the final understated line.",
+      "actor_key": "actor_walter",
+      "costume_key": null,
+      "voice_profile": "flat, minimal",
+      "continuity_notes": "Speaks at most once; the punchline lands on his silence."
+    }
+  ],
+  "assets": {
+    "actors": [
+      { "actor_key": "actor_bull", "display_name": "Bull", "description": "Anthropomorphic bull, broad-shouldered, expressive." },
+      { "actor_key": "actor_bear", "display_name": "Bear", "description": "Anthropomorphic bear, slouched posture." },
+      { "actor_key": "actor_walter", "display_name": "Walter", "description": "Small, neat, unreadable expression." }
+    ],
+    "scenes": [
+      { "scene_key": "scene_trading_floor", "display_name": "Trading Floor", "description": "Open office with monitors, a doom board, and a snack table." }
+    ],
+    "props": [
+      { "prop_key": "prop_champagne", "display_name": "Champagne Bottle", "description": "Oversized celebratory bottle that keeps reappearing." },
+      { "prop_key": "prop_phone", "display_name": "Phone", "description": "Screen shows an unconfirmed notification." }
+    ],
+    "costumes": [
+      { "costume_key": "costume_trader_vest", "display_name": "Trader Vest", "description": "Bright vest with too many pockets." },
+      { "costume_key": "costume_hoodie", "display_name": "Grey Hoodie", "description": "Worn, oversized, hood usually up." }
+    ]
+  },
+  "shots": [
+    {
+      "shot_id": "SC01",
+      "sequence": 1,
+      "title": "The premature toast",
+      "duration_seconds": 8,
+      "script_excerpt": "Bull bursts in with the champagne before anyone can react.",
+      "camera": { "shot_type": "MS", "angle": "EYE_LEVEL", "movement": "STATIC" },
+      "action": "Bull kicks the door open, champagne raised over his head.",
+      "dialogue": [
+        { "order": 1, "character_key": "bull", "text": "Record day! We are so back!", "line_mode": "DIALOGUE" },
+        { "order": 2, "character_key": "bear", "text": "Back from what.", "line_mode": "DIALOGUE" }
+      ],
+      "character_keys": ["bull", "bear"],
+      "scene_key": "scene_trading_floor",
+      "prop_keys": ["prop_champagne"],
+      "costume_keys": ["costume_trader_vest", "costume_hoodie"],
+      "image_prompt": "trading floor, bull raising a champagne bottle, bear slouched in background, anime, cel-shaded",
+      "video_prompt": "bull kicks door open and raises champagne, bear does not look up, 8 seconds",
+      "negative_prompt": "no real logos, no real ticker symbols, no text overlays",
+      "continuity_notes": "Establish the champagne gag here.",
+      "metadata": { "beat": "hook" }
+    },
+    {
+      "shot_id": "SC02",
+      "sequence": 2,
+      "title": "The unread notification",
+      "duration_seconds": 10,
+      "script_excerpt": "Bear points at the phone; the number is unconfirmed.",
+      "camera": { "shot_type": "CU", "angle": "EYE_LEVEL", "movement": "STATIC" },
+      "action": "Bear slides the phone across the desk; the screen says 'PENDING'.",
+      "dialogue": [
+        { "order": 1, "character_key": "bear", "text": "It literally says pending.", "line_mode": "DIALOGUE" },
+        { "order": 2, "character_key": "bull", "text": "Pending is basically confirmed.", "line_mode": "DIALOGUE" }
+      ],
+      "character_keys": ["bull", "bear"],
+      "scene_key": "scene_trading_floor",
+      "prop_keys": ["prop_phone"],
+      "costume_keys": ["costume_trader_vest", "costume_hoodie"],
+      "image_prompt": "close up of a phone reading PENDING, bull leaning in confidently, anime",
+      "video_prompt": "bear slides phone forward, bull waves it off, 10 seconds",
+      "negative_prompt": "no real app UI, no real brand names",
+      "continuity_notes": "Callback target for the ending.",
+      "metadata": { "beat": "trigger" }
+    },
+    {
+      "shot_id": "SC03",
+      "sequence": 3,
+      "title": "The escalation",
+      "duration_seconds": 12,
+      "script_excerpt": "Bull pours anyway; Bear braces for the correction.",
+      "camera": { "shot_type": "MLS", "angle": "LOW_ANGLE", "movement": "HANDHELD" },
+      "action": "Bull pops the champagne; foam goes everywhere; Bear covers his monitor.",
+      "dialogue": [
+        { "order": 1, "character_key": "bull", "text": "To confirmation that definitely will happen!", "line_mode": "DIALOGUE" },
+        { "order": 2, "character_key": "bear", "text": "You are cleaning that up.", "line_mode": "DIALOGUE" }
+      ],
+      "character_keys": ["bull", "bear"],
+      "scene_key": "scene_trading_floor",
+      "prop_keys": ["prop_champagne"],
+      "costume_keys": ["costume_trader_vest"],
+      "image_prompt": "champagne foam exploding across a trading desk, bear shielding a monitor, anime, dynamic",
+      "video_prompt": "champagne pops, foam sprays, bear ducks, 12 seconds",
+      "negative_prompt": "no real market charts, no numbers on screens",
+      "continuity_notes": "Payoff of the champagne gag from SC01.",
+      "metadata": { "beat": "escalation" }
+    },
+    {
+      "shot_id": "SC04",
+      "sequence": 4,
+      "title": "The quiet correction",
+      "duration_seconds": 9,
+      "script_excerpt": "Walter reads the phone and says one thing.",
+      "camera": { "shot_type": "CU", "angle": "EYE_LEVEL", "movement": "STATIC" },
+      "action": "Walter picks up the phone, glances at it, sets it face down. Beat. He walks off.",
+      "dialogue": [
+        { "order": 1, "character_key": "walter", "text": "It was rounding.", "line_mode": "DIALOGUE" }
+      ],
+      "character_keys": ["walter", "bull", "bear"],
+      "scene_key": "scene_trading_floor",
+      "prop_keys": ["prop_phone"],
+      "costume_keys": [],
+      "image_prompt": "walter setting a phone face down on a foam-covered desk, deadpan, anime",
+      "video_prompt": "walter reads phone, sets it down, walks off, freeze on bull's face, 9 seconds",
+      "negative_prompt": "no explanatory text, no captions after the line",
+      "continuity_notes": "Punchline lands on Walter's exit; do not add an explaining beat after this.",
+      "metadata": { "beat": "punchline" }
+    }
+  ],
+  "metadata": {
+    "created_at": "2026-01-02T09:05:00Z",
+    "generator": "creative-os",
+    "model": "sample-fixture",
+    "prompt_version": "cas-episode-v1",
+    "tags": ["sample", "fictional", "crypto-animal-studio"]
+  }
+}
