@@ -205,6 +205,7 @@ def test_list_supported_providers_returns_capability_matrix(client: TestClient) 
     assert "openai" in keys
     assert "volcengine" in keys
     assert "aliyun_bailian" in keys
+    assert "novita" in keys
 
 
 def test_list_supported_providers_text_contains_aliyun_bailian(client: TestClient) -> None:
