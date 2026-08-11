@@ -32,5 +32,16 @@ def bootstrap_builtin_providers() -> None:
                 supported_categories=(ModelCategoryKey.text,),
                 default_base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
             ),
+            ProviderSpec(
+                key="xai",
+                display_name="xAI (Grok)",
+                aliases=("xai", "x.ai", "grok"),
+                supported_categories=(
+                    ModelCategoryKey.text,
+                    ModelCategoryKey.image,
+                    ModelCategoryKey.video,
+                ),
+                default_base_url="https://api.x.ai/v1",
+            ),
         ]
     )
