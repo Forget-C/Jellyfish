@@ -22,7 +22,13 @@ from app.core.integrations.openai.image_capabilities import validate_openai_imag
 
 
 class OpenAIImageApiAdapter:
-    """OpenAI 图片生成 HTTP；无状态，可单测替换。"""
+    """OpenAI 图片生成 HTTP；无状态，可单测替换。
+
+    `PROVIDER_LABEL` 仅用于日志与结果里的 provider 标识；子类（如 xAI，请求/响应形状与
+    OpenAI 完全一致）可以只覆盖这个类属性来复用全部 HTTP 逻辑，而不需要重写 `generate()`。
+    """
+
+    PROVIDER_LABEL: str = "openai"
 
     async def generate(
         self,
@@ -76,7 +82,7 @@ class OpenAIImageApiAdapter:
                 url = f"{base_url}/images/edits"
                 t0 = time.perf_counter()
                 log_image_http_request(
-                    provider="openai",
+                    provider=self.PROVIDER_LABEL,
                     method="POST",
                     url=url,
                     headers=headers,
@@ -99,7 +105,7 @@ class OpenAIImageApiAdapter:
                 url = f"{base_url}/images/generations"
                 t0 = time.perf_counter()
                 log_image_http_request(
-                    provider="openai",
+                    provider=self.PROVIDER_LABEL,
                     method="POST",
                     url=url,
                     headers=headers,
@@ -114,7 +120,7 @@ class OpenAIImageApiAdapter:
             except Exception:  # noqa: BLE001
                 resp_text = ""
             log_image_http_response(
-                provider="openai",
+                provider=self.PROVIDER_LABEL,
                 status_code=r.status_code,
                 elapsed_ms=dt_ms,
                 resp_headers=dict(r.headers),
@@ -124,10 +130,10 @@ class OpenAIImageApiAdapter:
             r.raise_for_status()
             data = r.json()
 
-        return _parse_openai_images_payload(data)
+        return _parse_openai_images_payload(data, provider=self.PROVIDER_LABEL)
 
 
-def _parse_openai_images_payload(data: dict[str, Any]) -> ImageGenerationResult:
+def _parse_openai_images_payload(data: dict[str, Any], *, provider: str = "openai") -> ImageGenerationResult:
     raw_items = data.get("data") or []
     images: list[ImageItem] = []
     for item in raw_items:
@@ -144,7 +150,7 @@ def _parse_openai_images_payload(data: dict[str, Any]) -> ImageGenerationResult:
 
     return ImageGenerationResult(
         images=images,
-        provider="openai",
+        provider=provider,  # type: ignore[arg-type]
         provider_task_id=None,
         status=str(data.get("status") or "succeeded"),
     )

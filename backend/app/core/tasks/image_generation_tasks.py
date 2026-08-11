@@ -10,6 +10,7 @@ from typing import Any, AsyncIterator
 
 from app.core.integrations.openai.images import OpenAIImageApiAdapter
 from app.core.integrations.volcengine.images import VolcengineImageApiAdapter
+from app.core.integrations.xai.images import XAIImageApiAdapter
 from app.core.contracts.image_generation import (
     ImageGenerationInput,
     ImageGenerationResult,
@@ -31,6 +32,7 @@ __all__ = [
     "AbstractImageGenerationTask",
     "OpenAIImageGenerationTask",
     "VolcengineImageGenerationTask",
+    "XAIImageGenerationTask",
     "ImageGenerationTask",
 ]
 
@@ -143,6 +145,33 @@ class VolcengineImageGenerationTask(AbstractImageGenerationTask):
         return self._deferred
 
 
+class XAIImageGenerationTask(AbstractImageGenerationTask):
+    """xAI Images：委托 `XAIImageApiAdapter`（HTTP 形状与 OpenAI 一致，仅 provider 标识不同）。"""
+
+    def __init__(
+        self,
+        *,
+        adapter: XAIImageApiAdapter | None = None,
+        provider_config: ProviderConfig,
+        input_: ImageGenerationInput,
+        timeout_s: float = 60.0,
+    ) -> None:
+        super().__init__(provider_config=provider_config, input_=input_, timeout_s=timeout_s)
+        self._adapter = adapter or XAIImageApiAdapter()
+        self._deferred: ImageGenerationResult | None = None
+
+    async def _create_task(self) -> None:
+        self._deferred = await self._adapter.generate(
+            cfg=self._cfg,
+            inp=self._input,
+            timeout_s=self._timeout_s,
+        )
+
+    async def _poll_and_get_result(self) -> ImageGenerationResult:
+        assert self._deferred is not None
+        return self._deferred
+
+
 class ImageGenerationTask(BaseTask):
     """按 provider 分派到 OpenAI / 火山实现；对外构造函数与原先一致。"""
 
@@ -184,6 +213,19 @@ class ImageGenerationTask(BaseTask):
         timeout_s: float = 60.0,
     ) -> AbstractImageGenerationTask:
         return VolcengineImageGenerationTask(
+            provider_config=provider_config,
+            input_=input_,
+            timeout_s=timeout_s,
+        )
+
+    @staticmethod
+    def _build_xai_impl(
+        *,
+        provider_config: ProviderConfig,
+        input_: ImageGenerationInput,
+        timeout_s: float = 60.0,
+    ) -> AbstractImageGenerationTask:
+        return XAIImageGenerationTask(
             provider_config=provider_config,
             input_=input_,
             timeout_s=timeout_s,
