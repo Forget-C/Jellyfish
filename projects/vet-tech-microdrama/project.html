@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vet Tech Micro-Drama — Jellyfish</title>
+<style>
+  :root {
+    --morning-sky: #CAE4DB;
+    --honey: #DCAE1D;
+    --cerulean: #00303F;
+    --mist: #7A9D96;
+    --bg: var(--morning-sky);
+    --card: #FFFFFF;
+    --border: #B9DBCF;
+    --text: var(--cerulean);
+    --muted: #4E6E75;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    line-height: 1.6;
+  }
+  .hero {
+    padding: 56px 32px 40px;
+    background: var(--cerulean);
+    background-image: radial-gradient(ellipse 900px 420px at 15% -20%, rgba(220,174,29,0.16), transparent),
+                       radial-gradient(ellipse 700px 350px at 95% 10%, rgba(202,228,219,0.16), transparent);
+  }
+  .hero-inner { max-width: 840px; margin: 0 auto; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--honey);
+    margin-bottom: 14px;
+  }
+  h1 { font-size: 34px; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 10px; color: #FFFFFF; }
+  .sub { color: var(--morning-sky); font-size: 15px; max-width: 620px; opacity: 0.9; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+    padding: 4px 12px; border-radius: 999px; margin-left: 12px; vertical-align: middle;
+    background: rgba(220,174,29,0.18); color: var(--honey); border: 1px solid rgba(220,174,29,0.45);
+  }
+  main { max-width: 840px; margin: 0 auto; padding: 40px 32px 72px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    box-shadow: 0 2px 10px rgba(0,48,63,0.06);
+    padding: 26px 28px; margin-bottom: 20px;
+  }
+  .card h2 { font-size: 15px; font-weight: 700; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; color: var(--cerulean); }
+  .card h2::before { content: ''; width: 4px; height: 16px; border-radius: 2px;
+    background: var(--honey); display: inline-block; }
+  .card p { color: var(--muted); font-size: 14px; margin: 0 0 10px; }
+  .card p:last-child { margin-bottom: 0; }
+  .card ul, .card ol { color: var(--muted); font-size: 14px; padding-left: 20px; margin: 10px 0; }
+  .card li { margin-bottom: 6px; }
+  .card strong { color: var(--text); }
+  .phase-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px; }
+  @media (max-width: 640px) { .phase-grid { grid-template-columns: 1fr; } }
+  .phase {
+    border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; background: #FFFFFF;
+  }
+  .phase.done { border-color: var(--mist); background: rgba(122,157,150,0.08); }
+  .phase.pending { border-color: var(--honey); background: rgba(220,174,29,0.08); }
+  .phase-label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+    margin-bottom: 8px; display: block;
+  }
+  .phase.done .phase-label { color: var(--mist); }
+  .phase.pending .phase-label { color: var(--honey); }
+  .phase p { font-size: 13.5px; margin: 0; color: var(--muted); }
+  .episode-box {
+    border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px;
+    background: linear-gradient(135deg, rgba(220,174,29,0.06), rgba(122,157,150,0.08));
+    margin-top: 8px;
+  }
+  .episode-title { font-weight: 700; font-size: 15px; margin-bottom: 6px; color: var(--cerulean); }
+  .open-item {
+    display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border);
+    font-size: 13.5px;
+  }
+  .open-item:last-child { border-bottom: none; }
+  .open-num {
+    flex-shrink: 0; width: 22px; height: 22px; border-radius: 6px;
+    background: rgba(220,174,29,0.18); color: var(--honey); font-weight: 700; font-size: 12px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .open-item p { margin: 0; color: var(--muted); }
+  .open-item strong { color: var(--text); }
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 24px 32px 40px; }
+  @media (max-width: 480px) {
+    .hero { padding: 40px 20px 32px; }
+    h1 { font-size: 26px; }
+    .pill { display: block; width: fit-content; margin-left: 0; margin-top: 10px; }
+    main { padding: 28px 20px 56px; }
+    .card { padding: 20px 18px; }
+    .open-item { gap: 10px; }
+  }
+  @media print {
+    .hero { background: white !important; }
+    h1, .sub { color: var(--cerulean) !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-inner">
+    <div class="eyebrow">Jellyfish · Content Pilot</div>
+    <h1>Vet Tech Micro-Drama <span class="pill">Phase 0 Complete</span></h1>
+    <p class="sub">Short, comedic AI-generated video content for vet techs, paired with a
+    user-generated-content contest — send us your craziest clinic stories, we turn the best into
+    episodes. Originated by Benny Pugh.</p>
+  </div>
+</div>
+
+<main>
+
+  <div class="card">
+    <h2>Two phases</h2>
+    <div class="phase-grid">
+      <div class="phase done">
+        <span class="phase-label">Phase 0 — Done</span>
+        <p>Prove a coherent episode can be made <em>on purpose</em>, reliably — not by accident.
+        A real 6-shot test episode is the evidence.</p>
+      </div>
+      <div class="phase pending">
+        <span class="phase-label">Phase 2 — Not started</span>
+        <p>The actual pilot: the UGC contest, 3–5 real episodes, tech-facing-only distribution.
+        Gated on a go/no-go call.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>The test episode</h2>
+    <div class="episode-box">
+      <div class="episode-title">"The Case of the Missing Simparica"</div>
+      <p>A vet tech (Mara) confronts a colleague (Theo) over "eyeballed" inventory counts and a
+      missing medication bin. 6 shots, ~48 seconds — script → shot breakdown → two reusable
+      character keyframes → six image-conditioned video clips with real spoken dialogue → stitched
+      into one file. Same character and setting held consistent across every shot.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Why vet techs</h2>
+    <p>The Inventory Technician persona is TikTok/Instagram-native, wants recognition beyond
+    clinical work, and has real word-of-mouth leverage between techs at different practices — even
+    with zero purchasing authority. The UGC contest plays directly into that: low-cost content
+    supply <em>and</em> a distribution mechanic through exactly the right audience.</p>
+    <p><strong>Not the audience:</strong> economic buyers (Practice Owners, Enterprise Network
+    Managers) respond to ROI and trust signals, not entertainment — and enterprise buyers in
+    particular are known to scrutinize company legitimacy, so this content should stay off
+    channels they'd see.</p>
+  </div>
+
+  <div class="card">
+    <h2>What's open before Phase 2</h2>
+    <div class="open-item">
+      <div class="open-num">1</div>
+      <p><strong>Go/no-go call with Benny.</strong> The technical and cost questions are answered —
+      what's left is the creative and business call.</p>
+    </div>
+    <div class="open-item">
+      <div class="open-num">2</div>
+      <p><strong>VMX timing</strong> — target is VMX (~Jan 17, 2027), ~23 weeks out. Real runway,
+      not a rush.</p>
+    </div>
+    <div class="open-item">
+      <div class="open-num">3</div>
+      <p><strong>Who owns production time</strong> — Benny is an AE, not marketing staff.</p>
+    </div>
+    <div class="open-item">
+      <div class="open-num">4</div>
+      <p><strong>Debra Noble (VP Sales &amp; Marketing) sign-off</strong> — needed before anything
+      ships externally.</p>
+    </div>
+    <div class="open-item">
+      <div class="open-num">5</div>
+      <p><strong>Script discipline</strong> — the video model's safety filter can be finicky on
+      ambiguous action/emotion phrasing; scripts for real episodes should account for that.</p>
+    </div>
+  </div>
+
+</main>
+
+<footer>Jellyfish — AI Short-Form Studio · projects/vet-tech-microdrama</footer>
+
+</body>
+</html>
