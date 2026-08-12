@@ -211,6 +211,10 @@ async def persist_generated_video_to_shot(
     url_headers: dict[str, str] | None = None
     if provider == "openai":
         url_headers = {"Authorization": f"Bearer {api_key}"}
+    elif provider == "gemini":
+        # Gemini's file download also requires the same key on the redirect target,
+        # not just the initial request (see create_file_from_url_or_b64's follow_redirects).
+        url_headers = {"x-goog-api-key": api_key}
 
     file_obj = await create_file_from_url_or_b64(
         session,

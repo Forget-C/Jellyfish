@@ -73,7 +73,10 @@ async def create_file_from_url_or_b64(
     filename: str = ""
 
     if url:
-        client_kwargs: dict = {}
+        # follow_redirects=True: Gemini's file download endpoint 302s to a second URL
+        # that requires the same auth header — without this, the redirect target is
+        # never fetched and this silently returns a tiny JSON error body instead.
+        client_kwargs: dict = {"follow_redirects": True}
         if httpx_timeout is not None:
             client_kwargs["timeout"] = httpx_timeout
         async with httpx.AsyncClient(**client_kwargs) as client:

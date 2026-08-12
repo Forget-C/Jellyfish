@@ -10,7 +10,7 @@ from typing import Any, AsyncIterator
 
 from app.core.integrations.openai.images import OpenAIImageApiAdapter
 from app.core.integrations.volcengine.images import VolcengineImageApiAdapter
-from app.core.integrations.xai.images import XAIImageApiAdapter
+from app.core.integrations.gemini.images import GeminiImageApiAdapter
 from app.core.contracts.image_generation import (
     ImageGenerationInput,
     ImageGenerationResult,
@@ -32,7 +32,7 @@ __all__ = [
     "AbstractImageGenerationTask",
     "OpenAIImageGenerationTask",
     "VolcengineImageGenerationTask",
-    "XAIImageGenerationTask",
+    "GeminiImageGenerationTask",
     "ImageGenerationTask",
 ]
 
@@ -145,19 +145,19 @@ class VolcengineImageGenerationTask(AbstractImageGenerationTask):
         return self._deferred
 
 
-class XAIImageGenerationTask(AbstractImageGenerationTask):
-    """xAI Images：委托 `XAIImageApiAdapter`（HTTP 形状与 OpenAI 一致，仅 provider 标识不同）。"""
+class GeminiImageGenerationTask(AbstractImageGenerationTask):
+    """Gemini Images：委托 `GeminiImageApiAdapter`（原生多模态 generateContent，非 Imagen :predict）。"""
 
     def __init__(
         self,
         *,
-        adapter: XAIImageApiAdapter | None = None,
+        adapter: GeminiImageApiAdapter | None = None,
         provider_config: ProviderConfig,
         input_: ImageGenerationInput,
         timeout_s: float = 60.0,
     ) -> None:
         super().__init__(provider_config=provider_config, input_=input_, timeout_s=timeout_s)
-        self._adapter = adapter or XAIImageApiAdapter()
+        self._adapter = adapter or GeminiImageApiAdapter()
         self._deferred: ImageGenerationResult | None = None
 
     async def _create_task(self) -> None:
@@ -219,13 +219,13 @@ class ImageGenerationTask(BaseTask):
         )
 
     @staticmethod
-    def _build_xai_impl(
+    def _build_gemini_impl(
         *,
         provider_config: ProviderConfig,
         input_: ImageGenerationInput,
         timeout_s: float = 60.0,
     ) -> AbstractImageGenerationTask:
-        return XAIImageGenerationTask(
+        return GeminiImageGenerationTask(
             provider_config=provider_config,
             input_=input_,
             timeout_s=timeout_s,

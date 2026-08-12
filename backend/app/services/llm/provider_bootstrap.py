@@ -33,15 +33,19 @@ def bootstrap_builtin_providers() -> None:
                 default_base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
             ),
             ProviderSpec(
-                key="xai",
-                display_name="xAI (Grok)",
-                aliases=("xai", "x.ai", "grok"),
+                key="gemini",
+                display_name="Gemini (Google)",
+                aliases=("gemini", "google", "veo"),
                 supported_categories=(
                     ModelCategoryKey.text,
                     ModelCategoryKey.image,
                     ModelCategoryKey.video,
                 ),
-                default_base_url="https://api.x.ai/v1",
+                # 图片（generateContent）与视频（Veo predictLongRunning）走原生 v1beta 路径；
+                # 文本走 LangChain 的 OpenAI 兼容客户端，需要 Provider.base_url 显式指向
+                # Google 的 OpenAI 兼容端点（.../v1beta/openai）——这个默认值只覆盖
+                # 图片/视频场景，文本必须在创建 Provider 时单独配置。
+                default_base_url="https://generativelanguage.googleapis.com/v1beta",
             ),
         ]
     )

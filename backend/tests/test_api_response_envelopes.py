@@ -113,7 +113,7 @@ def test_delete_prompt_template_returns_empty_envelope(client: TestClient) -> No
 
     assert response.status_code == 200
     body = response.json()
-    assert body == {"code": 200, "message": "success", "data": None}
+    assert body == {"code": 200, "message": "success", "data": None, "meta": None}
     assert "tpl-delete" not in db.items
 
 
@@ -127,7 +127,7 @@ def test_get_prompt_template_not_found_returns_api_response(client: TestClient) 
 
     assert response.status_code == 404
     body = response.json()
-    assert body == {"code": 404, "message": "PromptTemplate not found", "data": None}
+    assert body == {"code": 404, "message": "PromptTemplate not found", "data": None, "meta": None}
 
 
 def test_create_prompt_template_validation_error_returns_api_response(client: TestClient) -> None:

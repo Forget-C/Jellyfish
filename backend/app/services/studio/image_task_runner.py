@@ -68,12 +68,15 @@ async def _persist_images_to_assets(
         return
 
     item = images[0]
-    if not item.url:
+    if not item.url and not item.b64_json:
         return
 
+    # Gemini's generateContent-based image results come back as inline base64, not a hosted
+    # URL (unlike OpenAI/Volcengine's response shape) — url takes priority when both are set.
     file_obj = await create_file_from_url_or_b64(
         session,
         url=item.url,
+        b64_data=None if item.url else item.b64_json,
         name=f"{relation_type}-{relation_entity_id}",
         prefix=f"generated-images/{relation_type}/{relation_entity_id}",
     )

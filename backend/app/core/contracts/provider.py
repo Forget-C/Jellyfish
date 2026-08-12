@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-ProviderKey = Literal["openai", "volcengine", "xai"]
+ProviderKey = Literal["openai", "volcengine", "gemini"]
 
 
 @dataclass(frozen=True, slots=True)
