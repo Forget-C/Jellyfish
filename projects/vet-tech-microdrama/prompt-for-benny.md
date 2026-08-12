@@ -39,3 +39,10 @@ and practice managers — native to TikTok/Instagram/Facebook, not a LinkedIn/en
    brief literal visual description.
 3. Any format variants worth flagging for later (e.g. a branching/choose-your-own-adventure cut,
    or a product-launch angle tying in a specific feature) — don't build these out, just note them.
+
+**Last step — give me back an updated file, not just chat text:** take the `project.html` I
+attached and hand me back a complete, updated copy of that same file with the script (premise +
+shot list) added to it as a new section, matching the page's existing design (same fonts, colors,
+card style — don't introduce a different look). I need a single self-contained `.html` file I can
+download and send back to Jen over Slack, so make sure the whole thing — including your added
+section — is valid, complete HTML on its own, not a diff or a snippet I'd need to merge in myself.
