@@ -1,8 +1,11 @@
 # Vet Tech Micro-Drama / UGC Content Pilot
 
-**Status:** Phase 0 complete — awaiting go/no-go on Phase 2
+**Status:** Phase 0 complete — Benny is self-driving Phase 2 on his own timeline (script the week of
+2026-08-12, hoping for output the following week)
 **Originated by:** Benny Pugh (AE, Inventory Ally)
 **Depends on:** [`../00-setup-and-test/`](../00-setup-and-test/)
+**For Benny:** [`prompt-for-benny.md`](prompt-for-benny.md) — paste into your own Claude alongside
+`project.html` to draft a script with full pipeline context baked in.
 
 ## What this is
 
