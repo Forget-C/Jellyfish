@@ -6,14 +6,15 @@
 <title>Vet Tech Micro-Drama — Jellyfish</title>
 <style>
   :root {
-    --cyan: #00E0FF;
-    --purple: #A78BFA;
-    --pink: #FF71CE;
-    --bg: #0a0a0f;
-    --card: #14141c;
-    --border: #24242f;
-    --text: #f2f2f7;
-    --muted: #9a9aab;
+    --morning-sky: #CAE4DB;
+    --honey: #DCAE1D;
+    --cerulean: #00303F;
+    --mist: #7A9D96;
+    --bg: #FFFFFF;
+    --card: #F7FBF9;
+    --border: #D9E9E3;
+    --text: var(--cerulean);
+    --muted: #4E6E75;
   }
   * { box-sizing: border-box; }
   body {
@@ -25,34 +26,33 @@
   }
   .hero {
     padding: 56px 32px 40px;
-    background: radial-gradient(ellipse 900px 400px at 20% -10%, rgba(255,113,206,0.22), transparent),
-                radial-gradient(ellipse 700px 350px at 90% 0%, rgba(0,224,255,0.18), transparent);
-    border-bottom: 1px solid var(--border);
+    background: var(--cerulean);
+    background-image: radial-gradient(ellipse 900px 420px at 15% -20%, rgba(220,174,29,0.16), transparent),
+                       radial-gradient(ellipse 700px 350px at 95% 10%, rgba(202,228,219,0.16), transparent);
   }
   .hero-inner { max-width: 840px; margin: 0 auto; }
   .eyebrow {
     display: inline-flex; align-items: center; gap: 8px;
     font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
-    background: linear-gradient(90deg, var(--pink), var(--purple), var(--cyan));
-    -webkit-background-clip: text; background-clip: text; color: transparent;
+    color: var(--honey);
     margin-bottom: 14px;
   }
-  h1 { font-size: 34px; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 10px; }
-  .sub { color: var(--muted); font-size: 15px; max-width: 620px; }
+  h1 { font-size: 34px; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 10px; color: #FFFFFF; }
+  .sub { color: var(--morning-sky); font-size: 15px; max-width: 620px; opacity: 0.9; }
   .pill {
     display: inline-flex; align-items: center; gap: 6px;
     font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
     padding: 4px 12px; border-radius: 999px; margin-left: 12px; vertical-align: middle;
-    background: rgba(255,113,206,0.12); color: var(--pink); border: 1px solid rgba(255,113,206,0.35);
+    background: rgba(220,174,29,0.18); color: var(--honey); border: 1px solid rgba(220,174,29,0.45);
   }
   main { max-width: 840px; margin: 0 auto; padding: 40px 32px 72px; }
   .card {
     background: var(--card); border: 1px solid var(--border); border-radius: 14px;
     padding: 26px 28px; margin-bottom: 20px;
   }
-  .card h2 { font-size: 15px; font-weight: 700; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+  .card h2 { font-size: 15px; font-weight: 700; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; color: var(--cerulean); }
   .card h2::before { content: ''; width: 4px; height: 16px; border-radius: 2px;
-    background: linear-gradient(180deg, var(--pink), var(--cyan)); display: inline-block; }
+    background: var(--honey); display: inline-block; }
   .card p { color: var(--muted); font-size: 14px; margin: 0 0 10px; }
   .card p:last-child { margin-bottom: 0; }
   .card ul, .card ol { color: var(--muted); font-size: 14px; padding-left: 20px; margin: 10px 0; }
@@ -61,23 +61,23 @@
   .phase-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px; }
   @media (max-width: 640px) { .phase-grid { grid-template-columns: 1fr; } }
   .phase {
-    border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px;
+    border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; background: #FFFFFF;
   }
-  .phase.done { border-color: rgba(0,224,255,0.35); background: rgba(0,224,255,0.05); }
-  .phase.pending { border-color: rgba(167,139,250,0.35); background: rgba(167,139,250,0.05); }
+  .phase.done { border-color: var(--mist); background: rgba(122,157,150,0.08); }
+  .phase.pending { border-color: var(--honey); background: rgba(220,174,29,0.08); }
   .phase-label {
     font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
     margin-bottom: 8px; display: block;
   }
-  .phase.done .phase-label { color: var(--cyan); }
-  .phase.pending .phase-label { color: var(--purple); }
-  .phase p { font-size: 13.5px; margin: 0; }
+  .phase.done .phase-label { color: var(--mist); }
+  .phase.pending .phase-label { color: var(--honey); }
+  .phase p { font-size: 13.5px; margin: 0; color: var(--muted); }
   .episode-box {
     border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px;
-    background: linear-gradient(135deg, rgba(255,113,206,0.06), rgba(0,224,255,0.04));
+    background: linear-gradient(135deg, rgba(220,174,29,0.06), rgba(122,157,150,0.08));
     margin-top: 8px;
   }
-  .episode-title { font-weight: 700; font-size: 15px; margin-bottom: 6px; }
+  .episode-title { font-weight: 700; font-size: 15px; margin-bottom: 6px; color: var(--cerulean); }
   .open-item {
     display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border);
     font-size: 13.5px;
@@ -85,16 +85,15 @@
   .open-item:last-child { border-bottom: none; }
   .open-num {
     flex-shrink: 0; width: 22px; height: 22px; border-radius: 6px;
-    background: rgba(255,113,206,0.15); color: var(--pink); font-weight: 700; font-size: 12px;
+    background: rgba(220,174,29,0.18); color: var(--honey); font-weight: 700; font-size: 12px;
     display: flex; align-items: center; justify-content: center;
   }
   .open-item p { margin: 0; color: var(--muted); }
   .open-item strong { color: var(--text); }
-  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 24px 32px 40px; }
+  footer { text-align: center; color: var(--mist); font-size: 12px; padding: 24px 32px 40px; }
   @media print {
-    body { background: white; color: black; }
-    .card { background: white; border: 1px solid #ddd; }
-    .hero { background: white; }
+    .hero { background: white !important; }
+    h1, .sub { color: var(--cerulean) !important; }
   }
 </style>
 </head>

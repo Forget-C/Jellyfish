@@ -6,14 +6,15 @@
 <title>Setup &amp; Test — Jellyfish</title>
 <style>
   :root {
-    --cyan: #00E0FF;
-    --purple: #A78BFA;
-    --pink: #FF71CE;
-    --bg: #0a0a0f;
-    --card: #14141c;
-    --border: #24242f;
-    --text: #f2f2f7;
-    --muted: #9a9aab;
+    --morning-sky: #CAE4DB;
+    --honey: #DCAE1D;
+    --cerulean: #00303F;
+    --mist: #7A9D96;
+    --bg: #FFFFFF;
+    --card: #F7FBF9;
+    --border: #D9E9E3;
+    --text: var(--cerulean);
+    --muted: #4E6E75;
   }
   * { box-sizing: border-box; }
   body {
@@ -25,58 +26,56 @@
   }
   .hero {
     padding: 56px 32px 40px;
-    background: radial-gradient(ellipse 900px 400px at 20% -10%, rgba(167,139,250,0.25), transparent),
-                radial-gradient(ellipse 700px 350px at 90% 0%, rgba(255,113,206,0.18), transparent);
-    border-bottom: 1px solid var(--border);
+    background: var(--cerulean);
+    background-image: radial-gradient(ellipse 900px 420px at 15% -20%, rgba(202,228,219,0.18), transparent),
+                       radial-gradient(ellipse 700px 350px at 95% 10%, rgba(220,174,29,0.14), transparent);
   }
   .hero-inner { max-width: 840px; margin: 0 auto; }
   .eyebrow {
     display: inline-flex; align-items: center; gap: 8px;
     font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
-    background: linear-gradient(90deg, var(--cyan), var(--purple), var(--pink));
-    -webkit-background-clip: text; background-clip: text; color: transparent;
+    color: var(--honey);
     margin-bottom: 14px;
   }
-  h1 { font-size: 34px; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 10px; }
-  .sub { color: var(--muted); font-size: 15px; max-width: 620px; }
+  h1 { font-size: 34px; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 10px; color: #FFFFFF; }
+  .sub { color: var(--morning-sky); font-size: 15px; max-width: 620px; opacity: 0.9; }
   .pill {
     display: inline-flex; align-items: center; gap: 6px;
     font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
     padding: 4px 12px; border-radius: 999px; margin-left: 12px; vertical-align: middle;
-    background: rgba(0,224,255,0.12); color: var(--cyan); border: 1px solid rgba(0,224,255,0.35);
+    background: rgba(220,174,29,0.18); color: var(--honey); border: 1px solid rgba(220,174,29,0.45);
   }
   main { max-width: 840px; margin: 0 auto; padding: 40px 32px 72px; }
   .card {
     background: var(--card); border: 1px solid var(--border); border-radius: 14px;
     padding: 26px 28px; margin-bottom: 20px;
   }
-  .card h2 { font-size: 15px; font-weight: 700; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+  .card h2 { font-size: 15px; font-weight: 700; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; color: var(--cerulean); }
   .card h2::before { content: ''; width: 4px; height: 16px; border-radius: 2px;
-    background: linear-gradient(180deg, var(--cyan), var(--pink)); display: inline-block; }
+    background: var(--honey); display: inline-block; }
   .card p { color: var(--muted); font-size: 14px; margin: 0 0 10px; }
   .card p:last-child { margin-bottom: 0; }
   .card ul { color: var(--muted); font-size: 14px; padding-left: 20px; margin: 10px 0; }
   .card li { margin-bottom: 6px; }
   .card strong { color: var(--text); }
   table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 8px; }
-  th { text-align: left; color: var(--muted); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
+  th { text-align: left; color: var(--mist); font-weight: 700; padding: 8px 10px; border-bottom: 1.5px solid var(--border); font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
   td { padding: 10px; border-bottom: 1px solid var(--border); color: var(--text); }
-  code { background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 4px; font-size: 12.5px; color: var(--cyan); }
+  code { background: rgba(0,48,63,0.06); padding: 2px 6px; border-radius: 4px; font-size: 12.5px; color: var(--cerulean); font-weight: 600; }
   .links a {
-    color: var(--pink); text-decoration: none; font-size: 14px; font-weight: 600;
-    display: inline-block; margin-right: 20px;
+    color: var(--cerulean); text-decoration: none; font-size: 14px; font-weight: 700;
+    display: inline-block; margin-right: 20px; border-bottom: 2px solid var(--honey);
   }
-  .links a:hover { text-decoration: underline; }
+  .links a:hover { color: var(--honey); }
   .issue-box {
-    border-left: 3px solid var(--purple); padding: 12px 16px; background: rgba(167,139,250,0.06);
+    border-left: 3px solid var(--mist); padding: 12px 16px; background: rgba(122,157,150,0.08);
     border-radius: 0 8px 8px 0; margin-bottom: 12px; font-size: 13.5px; color: var(--muted);
   }
   .issue-box strong { color: var(--text); }
-  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 24px 32px 40px; }
+  footer { text-align: center; color: var(--mist); font-size: 12px; padding: 24px 32px 40px; }
   @media print {
-    body { background: white; color: black; }
-    .card { background: white; border: 1px solid #ddd; }
-    .hero { background: white; }
+    .hero { background: white !important; }
+    h1, .sub { color: var(--cerulean) !important; }
   }
 </style>
 </head>
