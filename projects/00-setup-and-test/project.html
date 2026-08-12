@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Setup &amp; Test — Jellyfish</title>
+<style>
+  :root {
+    --cyan: #00E0FF;
+    --purple: #A78BFA;
+    --pink: #FF71CE;
+    --bg: #0a0a0f;
+    --card: #14141c;
+    --border: #24242f;
+    --text: #f2f2f7;
+    --muted: #9a9aab;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    line-height: 1.6;
+  }
+  .hero {
+    padding: 56px 32px 40px;
+    background: radial-gradient(ellipse 900px 400px at 20% -10%, rgba(167,139,250,0.25), transparent),
+                radial-gradient(ellipse 700px 350px at 90% 0%, rgba(255,113,206,0.18), transparent);
+    border-bottom: 1px solid var(--border);
+  }
+  .hero-inner { max-width: 840px; margin: 0 auto; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    background: linear-gradient(90deg, var(--cyan), var(--purple), var(--pink));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    margin-bottom: 14px;
+  }
+  h1 { font-size: 34px; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 10px; }
+  .sub { color: var(--muted); font-size: 15px; max-width: 620px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+    padding: 4px 12px; border-radius: 999px; margin-left: 12px; vertical-align: middle;
+    background: rgba(0,224,255,0.12); color: var(--cyan); border: 1px solid rgba(0,224,255,0.35);
+  }
+  main { max-width: 840px; margin: 0 auto; padding: 40px 32px 72px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 26px 28px; margin-bottom: 20px;
+  }
+  .card h2 { font-size: 15px; font-weight: 700; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+  .card h2::before { content: ''; width: 4px; height: 16px; border-radius: 2px;
+    background: linear-gradient(180deg, var(--cyan), var(--pink)); display: inline-block; }
+  .card p { color: var(--muted); font-size: 14px; margin: 0 0 10px; }
+  .card p:last-child { margin-bottom: 0; }
+  .card ul { color: var(--muted); font-size: 14px; padding-left: 20px; margin: 10px 0; }
+  .card li { margin-bottom: 6px; }
+  .card strong { color: var(--text); }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 8px; }
+  th { text-align: left; color: var(--muted); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
+  td { padding: 10px; border-bottom: 1px solid var(--border); color: var(--text); }
+  code { background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 4px; font-size: 12.5px; color: var(--cyan); }
+  .links a {
+    color: var(--pink); text-decoration: none; font-size: 14px; font-weight: 600;
+    display: inline-block; margin-right: 20px;
+  }
+  .links a:hover { text-decoration: underline; }
+  .issue-box {
+    border-left: 3px solid var(--purple); padding: 12px 16px; background: rgba(167,139,250,0.06);
+    border-radius: 0 8px 8px 0; margin-bottom: 12px; font-size: 13.5px; color: var(--muted);
+  }
+  .issue-box strong { color: var(--text); }
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 24px 32px 40px; }
+  @media print {
+    body { background: white; color: black; }
+    .card { background: white; border: 1px solid #ddd; }
+    .hero { background: white; }
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-inner">
+    <div class="eyebrow">Jellyfish · Internal Project</div>
+    <h1>Setup &amp; Test <span class="pill">Complete</span></h1>
+    <p class="sub">Standing up this Jellyfish instance and validating whether its script → shot →
+    keyframe → video pipeline could reliably produce a coherent short episode, before committing
+    time or budget to a real content pilot.</p>
+  </div>
+</div>
+
+<main>
+
+  <div class="card">
+    <h2>What happened</h2>
+    <p><strong>1. Feasibility test.</strong> Stood up a local instance and ran a deliberately-written
+    test script through the real pipeline, producing a real 6-shot, ~48-second test episode — script
+    broken into shots by an LLM, two reusable character keyframes, six image-conditioned video clips,
+    stitched together. This proved episodes can be made <em>on purpose</em>, not by accident (the
+    alternative — ad hoc use of consumer tools like Google Flow — took ~20 minutes of trial and error
+    for one clip in initial exploration).</p>
+    <p><strong>2. xAI (Grok) provider adapter.</strong> Wrote and merged a native provider adapter
+    (text, image, video) following the repo's existing OpenAI/Volcengine pattern.</p>
+    <p><strong>3. Switched to Gemini (Veo).</strong> After live comparison, replaced the xAI adapter
+    entirely — better fit for a dialogue-driven drama format, comparable cost, no code left behind
+    for a provider no longer in use.</p>
+  </div>
+
+  <div class="card">
+    <h2>Why Gemini over xAI</h2>
+    <table>
+      <tr><th></th><th>xAI (Grok)</th><th>Gemini (Veo 3.1)</th></tr>
+      <tr><td>Video cost (8s clip)</td><td>~$0.40–0.65</td><td>Lite: ~$0.40 · Fast: ~$0.80 · Standard: ~$3.20</td></tr>
+      <tr><td>Character consistency</td><td>Works well</td><td>Works well</td></tr>
+      <tr><td>Native spoken dialogue</td><td>No</td><td><strong>Yes</strong> — matched to script</td></tr>
+      <tr><td>Reliability</td><td>Consistent</td><td>~2 of 5 attempts hit a safety filter</td></tr>
+    </table>
+    <p style="margin-top:14px">Native dialogue is the deciding factor for a <em>drama</em> format —
+    it removes an entire production step (voiceover/lip-sync) the xAI pipeline didn't cover at all.
+    Cost is a wash. The tradeoff is the safety filter's unpredictability, covered below.</p>
+  </div>
+
+  <div class="card">
+    <h2>Current provider setup</h2>
+    <table>
+      <tr><th>Category</th><th>Model</th><th>Notes</th></tr>
+      <tr><td>Text</td><td><code>gemini-3-flash-preview</code></td><td>Script/shot breakdown</td></tr>
+      <tr><td>Image</td><td><code>gemini-2.5-flash-image</code></td><td>Native multimodal generation, not the deprecated Imagen <code>:predict</code> API</td></tr>
+      <tr><td>Video</td><td><code>veo-3.1-lite-generate-preview</code></td><td>Cheapest tier that still hits good quality</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Known issues</h2>
+    <div class="issue-box"><strong>Unpredictable safety filter.</strong> Roughly 2 of 5 video
+    generation attempts were rejected by a generic "audio" content filter on ordinary, non-explicit
+    phrasing (a character "laughing," "raising hands defensively"). Calmer wording, and even
+    explicit quoted dialogue, passed clean. Not charged when it fires, but budget time for retries
+    when scripting real episodes.</div>
+    <div class="issue-box"><strong>Storage not exercised end-to-end.</strong> Local dev has no
+    S3/RustFS configured — file persistence for generated media hasn't been verified past the
+    download step in this environment. Should work with object storage configured in a real
+    deployment.</div>
+  </div>
+
+  <div class="card">
+    <h2>Links</h2>
+    <div class="links">
+      <a href="https://github.com/jenrum3ry/Jellyfish/pull/1">PR #1 — xAI adapter</a>
+      <a href="https://github.com/jenrum3ry/Jellyfish/pull/2">PR #2 — Gemini adapter, xAI removed</a>
+    </div>
+  </div>
+
+</main>
+
+<footer>Jellyfish — AI Short-Form Studio · projects/00-setup-and-test</footer>
+
+</body>
+</html>
