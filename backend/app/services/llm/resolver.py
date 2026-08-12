@@ -9,7 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.llm import Model, ModelCategoryKey, ModelSettings, Provider
 from app.services.common import entity_not_found
+from app.services.llm.provider_registry import resolve_provider_key_from_name
 from app.services.llm.provider_resolver import resolve_effective_base_url
+
+# Providers whose OpenAI-compatible endpoint rejects unknown extra_body fields outright
+# (Gemini's shim returns a hard 400 on "enable_thinking" rather than ignoring it, unlike
+# genuinely OpenAI-compatible gateways that silently drop fields they don't recognize).
+_PROVIDERS_WITHOUT_ENABLE_THINKING = {"gemini"}
 
 
 def _settings_model_id(settings_row: ModelSettings | None, category: ModelCategoryKey) -> str | None:
@@ -177,7 +183,8 @@ def _build_chat_openai_model(
     if base_url:
         kwargs.setdefault("base_url", base_url)
 
-    if not thinking:
+    provider_key = resolve_provider_key_from_name(provider.name)
+    if not thinking and provider_key not in _PROVIDERS_WITHOUT_ENABLE_THINKING:
         extra_body = dict(kwargs.get("extra_body") or {})
         extra_body["enable_thinking"] = False
         kwargs["extra_body"] = extra_body

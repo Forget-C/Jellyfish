@@ -11,7 +11,7 @@ from typing import Any, AsyncIterator
 
 from app.core.integrations.openai.video import OpenAIVideoApiAdapter
 from app.core.integrations.volcengine.video import VolcengineVideoApiAdapter
-from app.core.integrations.xai.video import XAIVideoApiAdapter
+from app.core.integrations.gemini.video import GeminiVideoApiAdapter
 from app.core.contracts.provider import ProviderConfig
 from app.core.tasks.registry import resolve_task_adapter
 from app.core.contracts.video_generation import VideoGenerationInput, VideoGenerationResult
@@ -23,7 +23,7 @@ __all__ = [
     "AbstractVideoGenerationTask",
     "OpenAIVideoGenerationTask",
     "VolcengineVideoGenerationTask",
-    "XAIVideoGenerationTask",
+    "GeminiVideoGenerationTask",
     "VideoGenerationTask",
 ]
 
@@ -208,17 +208,20 @@ class VolcengineVideoGenerationTask(AbstractVideoGenerationTask):
         )
 
 
-class XAIVideoGenerationTask(AbstractVideoGenerationTask):
-    """xAI (Grok) 视频：adapter 负责 HTTP，Task 负责轮询节奏与状态值归一化。
+class GeminiVideoGenerationTask(AbstractVideoGenerationTask):
+    """Gemini (Veo) 视频：adapter 负责 HTTP，Task 负责轮询节奏与结果/过滤判定。
 
-    与 OpenAI/火山实现的关键差异都在这里体现：status 取值是 pending/done/failed，
-    结果地址来自轮询响应内联的 video.url，而不是二次请求或拼接固定路径。
+    与 OpenAI/火山/其他实现的关键差异都在这里体现：Google 标准长时任务模型
+    （`name` 是完整操作路径，轮询同一路径直到 `done: true`），成功结果在
+    `response.generateVideoResponse.generatedSamples[0].video.uri`；被安全过滤
+    拦截时 `done` 也是 `true`，但没有 samples，原因在 `raiMediaFilteredReasons`
+    （未计费，需要当作失败处理而不是当成功解析）。
     """
 
     def __init__(
         self,
         *,
-        adapter: XAIVideoApiAdapter | None = None,
+        adapter: GeminiVideoApiAdapter | None = None,
         provider_config: ProviderConfig,
         input_: VideoGenerationInput,
         poll_interval_s: float = 2.0,
@@ -230,7 +233,7 @@ class XAIVideoGenerationTask(AbstractVideoGenerationTask):
             poll_interval_s=poll_interval_s,
             timeout_s=timeout_s,
         )
-        self._adapter = adapter or XAIVideoApiAdapter()
+        self._adapter = adapter or GeminiVideoApiAdapter()
 
     async def _create_task(self) -> None:
         self._provider_task_id = await self._adapter.create_video(
@@ -240,39 +243,41 @@ class XAIVideoGenerationTask(AbstractVideoGenerationTask):
         )
 
     async def _poll_and_get_result(self) -> VideoGenerationResult:
-        video_id = self._provider_task_id or ""
-        if not video_id:
-            raise RuntimeError("xAI poll missing provider task id")
+        operation_name = self._provider_task_id or ""
+        if not operation_name:
+            raise RuntimeError("Gemini poll missing operation name")
 
-        status_val = ""
-        video_url: str | None = None
+        meta: dict[str, Any] = {}
         while True:
-            meta = await self._adapter.get_video(
+            meta = await self._adapter.get_operation(
                 cfg=self._cfg,
-                video_id=video_id,
+                operation_name=operation_name,
                 timeout_s=self._timeout_s,
             )
-            status_val = str(meta.get("status") or "")
-            video_obj = meta.get("video") or {}
-            if isinstance(video_obj, dict):
-                u = video_obj.get("url")
-                if isinstance(u, str) and u:
-                    video_url = u
-            if status_val in ("done", "failed"):
-                if status_val == "failed":
-                    raise RuntimeError(f"xAI video failed: {meta!r}")
+            if meta.get("done"):
                 break
             await self._sleep_poll()
 
-        if not video_url:
-            raise RuntimeError(f"xAI video reported done but response had no video.url: {video_id!r}")
+        if "error" in meta:
+            raise RuntimeError(f"Gemini video operation failed: {meta['error']!r}")
+
+        response = meta.get("response") or {}
+        generate_video_response = response.get("generateVideoResponse") or {}
+        samples = generate_video_response.get("generatedSamples") or []
+        if not samples:
+            reasons = generate_video_response.get("raiMediaFilteredReasons") or []
+            raise RuntimeError(f"Gemini video generation produced no samples (filtered): {reasons!r}")
+
+        video_uri = (samples[0].get("video") or {}).get("uri")
+        if not video_uri:
+            raise RuntimeError(f"Gemini video operation done but no video.uri in response: {meta!r}")
 
         return VideoGenerationResult(
-            url=video_url,
+            url=video_uri,
             file_id=None,
-            provider_task_id=video_id,
-            provider="xai",
-            status=status_val or "done",
+            provider_task_id=operation_name,
+            provider="gemini",
+            status="done",
         )
 
 
@@ -329,14 +334,14 @@ class VideoGenerationTask(BaseTask):
         )
 
     @staticmethod
-    def _build_xai_impl(
+    def _build_gemini_impl(
         *,
         provider_config: ProviderConfig,
         input_: VideoGenerationInput,
         poll_interval_s: float = 2.0,
         timeout_s: float = 120.0,
     ) -> AbstractVideoGenerationTask:
-        return XAIVideoGenerationTask(
+        return GeminiVideoGenerationTask(
             provider_config=provider_config,
             input_=input_,
             poll_interval_s=poll_interval_s,
