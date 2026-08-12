@@ -10,9 +10,9 @@
     --honey: #DCAE1D;
     --cerulean: #00303F;
     --mist: #7A9D96;
-    --bg: #FFFFFF;
-    --card: #F7FBF9;
-    --border: #D9E9E3;
+    --bg: var(--morning-sky);
+    --card: #FFFFFF;
+    --border: #B9DBCF;
     --text: var(--cerulean);
     --muted: #4E6E75;
   }
@@ -48,6 +48,7 @@
   main { max-width: 840px; margin: 0 auto; padding: 40px 32px 72px; }
   .card {
     background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    box-shadow: 0 2px 10px rgba(0,48,63,0.06);
     padding: 26px 28px; margin-bottom: 20px;
   }
   .card h2 { font-size: 15px; font-weight: 700; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; color: var(--cerulean); }
@@ -58,13 +59,16 @@
   .card ul { color: var(--muted); font-size: 14px; padding-left: 20px; margin: 10px 0; }
   .card li { margin-bottom: 6px; }
   .card strong { color: var(--text); }
-  table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 8px; }
-  th { text-align: left; color: var(--mist); font-weight: 700; padding: 8px 10px; border-bottom: 1.5px solid var(--border); font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 8px; }
+  table { width: 100%; min-width: 480px; border-collapse: collapse; font-size: 13.5px; }
+  th { text-align: left; color: var(--mist); font-weight: 700; padding: 8px 10px; border-bottom: 1.5px solid var(--border); font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; white-space: nowrap; }
   td { padding: 10px; border-bottom: 1px solid var(--border); color: var(--text); }
-  code { background: rgba(0,48,63,0.06); padding: 2px 6px; border-radius: 4px; font-size: 12.5px; color: var(--cerulean); font-weight: 600; }
+  code { background: rgba(0,48,63,0.06); padding: 2px 6px; border-radius: 4px; font-size: 12.5px; color: var(--cerulean); font-weight: 600; white-space: nowrap; }
+  .links { display: flex; flex-wrap: wrap; gap: 8px 24px; }
   .links a {
-    color: var(--cerulean); text-decoration: none; font-size: 14px; font-weight: 700;
-    display: inline-block; margin-right: 20px; border-bottom: 2px solid var(--honey);
+    color: var(--cerulean); text-decoration: underline; text-decoration-color: var(--honey);
+    text-decoration-thickness: 2px; text-underline-offset: 4px;
+    font-size: 14px; font-weight: 700;
   }
   .links a:hover { color: var(--honey); }
   .issue-box {
@@ -72,7 +76,15 @@
     border-radius: 0 8px 8px 0; margin-bottom: 12px; font-size: 13.5px; color: var(--muted);
   }
   .issue-box strong { color: var(--text); }
-  footer { text-align: center; color: var(--mist); font-size: 12px; padding: 24px 32px 40px; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 24px 32px 40px; }
+  @media (max-width: 480px) {
+    .hero { padding: 40px 20px 32px; }
+    h1 { font-size: 26px; }
+    .pill { display: block; width: fit-content; margin-left: 0; margin-top: 10px; }
+    main { padding: 28px 20px 56px; }
+    .card { padding: 20px 18px; }
+    th, td { padding: 8px 6px; }
+  }
   @media print {
     .hero { background: white !important; }
     h1, .sub { color: var(--cerulean) !important; }
@@ -110,13 +122,13 @@
 
   <div class="card">
     <h2>Why Gemini over xAI</h2>
-    <table>
+    <div class="table-wrap"><table>
       <tr><th></th><th>xAI (Grok)</th><th>Gemini (Veo 3.1)</th></tr>
       <tr><td>Video cost (8s clip)</td><td>~$0.40–0.65</td><td>Lite: ~$0.40 · Fast: ~$0.80 · Standard: ~$3.20</td></tr>
       <tr><td>Character consistency</td><td>Works well</td><td>Works well</td></tr>
       <tr><td>Native spoken dialogue</td><td>No</td><td><strong>Yes</strong> — matched to script</td></tr>
       <tr><td>Reliability</td><td>Consistent</td><td>~2 of 5 attempts hit a safety filter</td></tr>
-    </table>
+    </table></div>
     <p style="margin-top:14px">Native dialogue is the deciding factor for a <em>drama</em> format —
     it removes an entire production step (voiceover/lip-sync) the xAI pipeline didn't cover at all.
     Cost is a wash. The tradeoff is the safety filter's unpredictability, covered below.</p>
@@ -124,12 +136,12 @@
 
   <div class="card">
     <h2>Current provider setup</h2>
-    <table>
+    <div class="table-wrap"><table>
       <tr><th>Category</th><th>Model</th><th>Notes</th></tr>
       <tr><td>Text</td><td><code>gemini-3-flash-preview</code></td><td>Script/shot breakdown</td></tr>
       <tr><td>Image</td><td><code>gemini-2.5-flash-image</code></td><td>Native multimodal generation, not the deprecated Imagen <code>:predict</code> API</td></tr>
       <tr><td>Video</td><td><code>veo-3.1-lite-generate-preview</code></td><td>Cheapest tier that still hits good quality</td></tr>
-    </table>
+    </table></div>
   </div>
 
   <div class="card">

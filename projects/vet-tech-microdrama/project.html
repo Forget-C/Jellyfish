@@ -10,9 +10,9 @@
     --honey: #DCAE1D;
     --cerulean: #00303F;
     --mist: #7A9D96;
-    --bg: #FFFFFF;
-    --card: #F7FBF9;
-    --border: #D9E9E3;
+    --bg: var(--morning-sky);
+    --card: #FFFFFF;
+    --border: #B9DBCF;
     --text: var(--cerulean);
     --muted: #4E6E75;
   }
@@ -48,6 +48,7 @@
   main { max-width: 840px; margin: 0 auto; padding: 40px 32px 72px; }
   .card {
     background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    box-shadow: 0 2px 10px rgba(0,48,63,0.06);
     padding: 26px 28px; margin-bottom: 20px;
   }
   .card h2 { font-size: 15px; font-weight: 700; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; color: var(--cerulean); }
@@ -90,7 +91,15 @@
   }
   .open-item p { margin: 0; color: var(--muted); }
   .open-item strong { color: var(--text); }
-  footer { text-align: center; color: var(--mist); font-size: 12px; padding: 24px 32px 40px; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 24px 32px 40px; }
+  @media (max-width: 480px) {
+    .hero { padding: 40px 20px 32px; }
+    h1 { font-size: 26px; }
+    .pill { display: block; width: fit-content; margin-left: 0; margin-top: 10px; }
+    main { padding: 28px 20px 56px; }
+    .card { padding: 20px 18px; }
+    .open-item { gap: 10px; }
+  }
   @media print {
     .hero { background: white !important; }
     h1, .sub { color: var(--cerulean) !important; }
