@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import ast
 import json
+import logging
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable as FallbackCallable
 from typing import Any, Generic, TypeVar, cast
 
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -26,6 +27,8 @@ from app.services.llm.text_fallback import (
 STRUCTURED_OUTPUT_METHOD = "function_calling"
 
 T = TypeVar("T", bound=BaseModel)
+
+logger = logging.getLogger(__name__)
 
 
 def _extract_json_from_text(raw: str) -> str:
@@ -381,7 +384,7 @@ class AgentBase(ABC, Generic[T]):
                 raise
         return self.format_output(await self.run_once_async(**kwargs))
 
-    def _invoke_with_fallback_sync(self, callable: Callable[[], T]) -> T:
+    def _invoke_with_fallback_sync(self, callable: FallbackCallable[[], T]) -> T:
         """同步执行；JSON/校验等可恢复失败时切换回退模型一次。"""
         try:
             return callable()
@@ -390,8 +393,13 @@ class AgentBase(ABC, Generic[T]):
                 raise
             return self._run_fallback_sync(callable)
 
-    def _run_fallback_sync(self, callable: Callable[[], T]) -> T:
+    def _run_fallback_sync(self, callable: FallbackCallable[[], T]) -> T:
         mark_fallback_used()
+        logger.info(
+            "llm_fallback primary_model=%s fallback_model=%s reason=parse_or_validation_error",
+            getattr(self._model, "model_name", "unknown"),
+            getattr(self._fallback_model, "model_name", "unknown"),
+        )
         original_model = self._model
         original_chain = self._structured_chain
         self._model = self._fallback_model
@@ -402,7 +410,7 @@ class AgentBase(ABC, Generic[T]):
             self._model = original_model
             self._structured_chain = original_chain
 
-    async def _invoke_with_fallback_async(self, callable: Callable[[], Any]) -> Any:
+    async def _invoke_with_fallback_async(self, callable: FallbackCallable[[], Any]) -> Any:
         """异步执行；JSON/校验等可恢复失败时切换回退模型一次。"""
         try:
             return await callable()
@@ -410,6 +418,11 @@ class AgentBase(ABC, Generic[T]):
             if not is_fallback_eligible_error(exc) or fallback_used_in_call() or self._fallback_model is None:
                 raise
             mark_fallback_used()
+            logger.info(
+                "llm_fallback primary_model=%s fallback_model=%s reason=parse_or_validation_error",
+                getattr(self._model, "model_name", "unknown"),
+                getattr(self._fallback_model, "model_name", "unknown"),
+            )
             original_model = self._model
             original_chain = self._structured_chain
             self._model = self._fallback_model

@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import AsyncIterator, Iterator
 from contextvars import ContextVar
 from typing import Any
@@ -17,6 +18,8 @@ from typing import Any
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.outputs import ChatGenerationChunk, ChatResult
 from langchain_core.runnables import RunnableLambda
+
+logger = logging.getLogger(__name__)
 
 _FALLBACK_USED = ContextVar("text_fallback_used", default=False)
 _CALL_DEPTH = ContextVar("text_fallback_call_depth", default=0)
@@ -144,6 +147,11 @@ class FallbackChatModel(BaseChatModel):
         if self.fallback is None or fallback_used_in_call():
             return None
         mark_fallback_used()
+        logger.info(
+            "llm_fallback primary_model=%s fallback_model=%s reason=provider_error",
+            getattr(self.primary, "model_name", "unknown"),
+            getattr(self.fallback, "model_name", "unknown"),
+        )
         return self.fallback
 
     def _generate(
@@ -198,8 +206,7 @@ class FallbackChatModel(BaseChatModel):
             fallback = self._try_fallback()
             if fallback is None:
                 raise
-            for chunk in fallback._stream(messages, stop=stop, run_manager=run_manager, **kwargs):
-                yield chunk
+            yield from fallback._stream(messages, stop=stop, run_manager=run_manager, **kwargs)
 
     async def _astream(
         self,

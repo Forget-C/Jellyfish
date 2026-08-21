@@ -27,6 +27,12 @@ description: "Jellyfish 下一阶段的开发重点、优先级与实施方向�
 
 换句话说，项目后续会更加重视“**稳定、清晰、可持续演进**”，而不仅仅是“功能可用”。
 
+## 当前推进中的计划
+
+- **文本回退可观测性**：`llm_fallback` 事件日志已落地，后续按 provider/model 聚合统计本地成功率与云端升级率，并据此调整重试预算。
+- **数据库迁移上线**：`backend/sql/009-add-text-fallback-model.sql` 已在本地 SQLite 验证；上线前需在目标 MySQL 执行。
+- **DeepSeek Key 生命周期**：现有 Key 文件权限已收敛为 600，计划由账号持有人轮换后更新 Provider 配置。
+
 ## 开发优先级总览
 
 ### 1. 项目结构优化

@@ -6,6 +6,13 @@ description: "如何在代码中注册内置供应商能力，并与异步任务
 
 系统里与「供应商」相关的概念分两层，扩展时通常要同时考虑。
 
+当前内置 text 供应商还包括：
+
+- `ollama`：本地 OpenAI-compatible 网关，默认 `http://localhost:11434/v1`，不要求 API Key。
+- `deepseek`：DeepSeek OpenAI-compatible 网关，默认 `https://api.deepseek.com/v1`。
+
+两者均已注册在 `app/services/llm/provider_bootstrap.py` 的能力表中，可直接在模型管理页创建 Provider / Model。
+
 ## 两层注册分别解决什么
 
 1. **能力注册表（内置、进程内）**  
