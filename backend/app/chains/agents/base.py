@@ -355,8 +355,7 @@ class AgentBase(ABC, Generic[T]):
                     data = self._normalize(result)
                     return self.output_model.model_validate(data)
             except Exception as exc:  # noqa: BLE001
-                if is_fallback_eligible_error(exc):
-                    raise
+                raise
         return self.format_output(self.run_once(**kwargs))
 
     async def aextract(self, **kwargs: Any) -> T:
@@ -379,8 +378,7 @@ class AgentBase(ABC, Generic[T]):
                     data = self._normalize(result)
                     return self.output_model.model_validate(data)
             except Exception as exc:  # noqa: BLE001
-                if is_fallback_eligible_error(exc):
-                    raise
+                raise
         return self.format_output(await self.run_once_async(**kwargs))
 
     def _invoke_with_fallback_sync(self, callable: Callable[[], T]) -> T:
