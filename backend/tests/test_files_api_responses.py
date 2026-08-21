@@ -52,6 +52,7 @@ def test_list_files_requires_project_id_when_scope_filters_set(client: TestClien
         "code": 400,
         "message": "project_id is required when chapter_title or shot_title is set",
         "data": None,
+        "meta": None,
     }
 
 
@@ -69,7 +70,7 @@ def test_get_file_detail_not_found_returns_api_response(client: TestClient, monk
         app.dependency_overrides.clear()
 
     assert response.status_code == 404
-    assert response.json() == {"code": 404, "message": "File not found", "data": None}
+    assert response.json() == {"code": 404, "message": "File not found", "data": None, "meta": None}
 
 
 def test_delete_file_returns_empty_envelope(client: TestClient, monkeypatch) -> None:
@@ -86,7 +87,7 @@ def test_delete_file_returns_empty_envelope(client: TestClient, monkeypatch) -> 
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    assert response.json() == {"code": 200, "message": "success", "data": None}
+    assert response.json() == {"code": 200, "message": "success", "data": None, "meta": None}
 
 
 def test_update_file_meta_returns_success_envelope(client: TestClient, monkeypatch) -> None:

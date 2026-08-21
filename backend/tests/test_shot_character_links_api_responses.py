@@ -113,4 +113,5 @@ def test_upsert_shot_character_link_value_error_returns_api_response(client: Tes
         "code": 400,
         "message": "Character does not belong to the same project",
         "data": None,
+        "meta": None,
     }

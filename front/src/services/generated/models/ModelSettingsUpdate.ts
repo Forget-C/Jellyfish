@@ -12,6 +12,10 @@ export type ModelSettingsUpdate = {
      */
     default_text_model_id?: (string | null);
     /**
+     * 文本模型失败回退模型 ID（全局统一；空表示关闭回退）
+     */
+    fallback_text_model_id?: (string | null);
+    /**
      * 默认图片模型 ID
      */
     default_image_model_id?: (string | null);

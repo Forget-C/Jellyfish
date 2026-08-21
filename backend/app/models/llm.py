@@ -141,6 +141,12 @@ class ModelSettings(Base):
         nullable=True,
         comment="默认文本模型 ID",
     )
+    fallback_text_model_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("models.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="文本模型失败回退模型 ID（全局统一；空表示关闭回退）",
+    )
     default_image_model_id: Mapped[str | None] = mapped_column(
         String(64),
         ForeignKey("models.id", ondelete="SET NULL"),
@@ -157,6 +163,6 @@ class ModelSettings(Base):
     log_level: Mapped[LogLevel] = mapped_column(String(16), nullable=False, default=LogLevel.info, comment="日志级别")
 
     default_text_model: Mapped["Model | None"] = relationship(foreign_keys=[default_text_model_id])
+    fallback_text_model: Mapped["Model | None"] = relationship(foreign_keys=[fallback_text_model_id])
     default_image_model: Mapped["Model | None"] = relationship(foreign_keys=[default_image_model_id])
     default_video_model: Mapped["Model | None"] = relationship(foreign_keys=[default_video_model_id])
-

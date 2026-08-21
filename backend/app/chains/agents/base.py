@@ -6,12 +6,22 @@ import ast
 import json
 import re
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from typing import Any, Generic, TypeVar, cast
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import Runnable, RunnableLambda
 from pydantic import BaseModel
+
+from app.services.llm.text_fallback import (
+    FallbackChatModel,
+    begin_text_call,
+    end_text_call,
+    fallback_used_in_call,
+    is_fallback_eligible_error,
+    mark_fallback_used,
+)
 
 STRUCTURED_OUTPUT_METHOD = "function_calling"
 
@@ -143,6 +153,7 @@ class AgentBase(ABC, Generic[T]):
         agent_kwargs: dict[str, Any] | None = None,
     ) -> None:
         self._model = model
+        self._fallback_model = model.fallback if isinstance(model, FallbackChatModel) else None
         self._model.bind(extra_body={"enable_thinking": self.enable_thinking})
         self._structured_output_method = structured_output_method
         self._agent_kwargs = dict(agent_kwargs or {})
@@ -291,15 +302,29 @@ class AgentBase(ABC, Generic[T]):
 
     def run(self, **kwargs: Any) -> str:
         """调用 agent，返回原始字符串（通常为 JSON）。"""
-        chain: Runnable = self.create_agent()
-        result = chain.invoke(kwargs)
-        return self._last_message_content(result)
+        begin_text_call()
+        try:
+            return self._invoke_with_fallback_sync(lambda: self.run_once(**kwargs))
+        finally:
+            end_text_call()
 
     async def arun(self, **kwargs: Any) -> str:
         """异步调用 agent。"""
+        begin_text_call()
+        try:
+            return await self._invoke_with_fallback_async(lambda: self.run_once_async(**kwargs))
+        finally:
+            end_text_call()
+
+    def run_once(self, **kwargs: Any) -> str:
+        """单轮原始调用，供 run/extract 复用且不重复套回退预算。"""
         chain: Runnable = self.create_agent()
-        result = await chain.ainvoke(kwargs)
-        return self._last_message_content(result)
+        return self._last_message_content(chain.invoke(kwargs))
+
+    async def run_once_async(self, **kwargs: Any) -> str:
+        """异步单轮原始调用，供 arun/aextract 复用且不重复套回退预算。"""
+        chain: Runnable = self.create_agent()
+        return self._last_message_content(await chain.ainvoke(kwargs))
 
     def format_output(self, raw: str) -> T:
         """将 agent 原始输出解析为结构化结果（JSON → 规范化 → Pydantic）。"""
@@ -312,6 +337,13 @@ class AgentBase(ABC, Generic[T]):
 
     def extract(self, **kwargs: Any) -> T:
         """执行：优先 with_structured_output，否则 run + format_output。"""
+        begin_text_call()
+        try:
+            return self._invoke_with_fallback_sync(lambda: self._extract_once(**kwargs))
+        finally:
+            end_text_call()
+
+    def _extract_once(self, **kwargs: Any) -> T:
         chain = self._get_structured_chain()
         if chain is not None:
             try:
@@ -322,12 +354,20 @@ class AgentBase(ABC, Generic[T]):
                 if isinstance(result, dict):
                     data = self._normalize(result)
                     return self.output_model.model_validate(data)
-            except Exception:
-                pass
-        return self.format_output(self.run(**kwargs))
+            except Exception as exc:  # noqa: BLE001
+                if is_fallback_eligible_error(exc):
+                    raise
+        return self.format_output(self.run_once(**kwargs))
 
     async def aextract(self, **kwargs: Any) -> T:
         """异步执行。"""
+        begin_text_call()
+        try:
+            return await self._invoke_with_fallback_async(lambda: self._aextract_once(**kwargs))
+        finally:
+            end_text_call()
+
+    async def _aextract_once(self, **kwargs: Any) -> T:
         chain = self._get_structured_chain()
         if chain is not None:
             try:
@@ -338,6 +378,46 @@ class AgentBase(ABC, Generic[T]):
                 if isinstance(result, dict):
                     data = self._normalize(result)
                     return self.output_model.model_validate(data)
-            except Exception:
-                pass
-        return self.format_output(await self.arun(**kwargs))
+            except Exception as exc:  # noqa: BLE001
+                if is_fallback_eligible_error(exc):
+                    raise
+        return self.format_output(await self.run_once_async(**kwargs))
+
+    def _invoke_with_fallback_sync(self, callable: Callable[[], T]) -> T:
+        """同步执行；JSON/校验等可恢复失败时切换回退模型一次。"""
+        try:
+            return callable()
+        except Exception as exc:  # noqa: BLE001
+            if not is_fallback_eligible_error(exc) or fallback_used_in_call() or self._fallback_model is None:
+                raise
+            return self._run_fallback_sync(callable)
+
+    def _run_fallback_sync(self, callable: Callable[[], T]) -> T:
+        mark_fallback_used()
+        original_model = self._model
+        original_chain = self._structured_chain
+        self._model = self._fallback_model
+        self._structured_chain = None
+        try:
+            return callable()
+        finally:
+            self._model = original_model
+            self._structured_chain = original_chain
+
+    async def _invoke_with_fallback_async(self, callable: Callable[[], Any]) -> Any:
+        """异步执行；JSON/校验等可恢复失败时切换回退模型一次。"""
+        try:
+            return await callable()
+        except Exception as exc:  # noqa: BLE001
+            if not is_fallback_eligible_error(exc) or fallback_used_in_call() or self._fallback_model is None:
+                raise
+            mark_fallback_used()
+            original_model = self._model
+            original_chain = self._structured_chain
+            self._model = self._fallback_model
+            self._structured_chain = None
+            try:
+                return await callable()
+            finally:
+                self._model = original_model
+                self._structured_chain = original_chain

@@ -34,6 +34,7 @@ export default function SettingsTab() {
     if (settings) {
       form.setFieldsValue({
         default_text_model_id: settings.default_text_model_id,
+        fallback_text_model_id: settings.fallback_text_model_id,
         default_image_model_id: settings.default_image_model_id,
         default_video_model_id: settings.default_video_model_id,
         api_timeout: settings.api_timeout,
@@ -49,6 +50,7 @@ export default function SettingsTab() {
       await LlmService.updateModelSettingsApiV1LlmModelSettingsPut({
         requestBody: {
           default_text_model_id: values.default_text_model_id,
+          fallback_text_model_id: values.fallback_text_model_id,
           default_image_model_id: values.default_image_model_id,
           default_video_model_id: values.default_video_model_id,
           api_timeout: values.api_timeout,
@@ -82,6 +84,17 @@ export default function SettingsTab() {
             <Select
               allowClear
               placeholder="选择模型"
+              options={textModels.map((m) => ({ label: m.name, value: m.id }))}
+            />
+          </Form.Item>
+          <Form.Item
+            name="fallback_text_model_id"
+            label="文本失败回退模型"
+            extra="本地主模型失败后最多自动升级到该模型一次；留空表示关闭回退。"
+          >
+            <Select
+              allowClear
+              placeholder="选择回退模型（可选）"
               options={textModels.map((m) => ({ label: m.name, value: m.id }))}
             />
           </Form.Item>

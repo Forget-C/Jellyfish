@@ -42,6 +42,19 @@ class _FakeShotSubresourceDB:
         self._line_id = 1
         self._frame_id = 1
 
+    class _FakeResult:
+        def __init__(self, rows: list[object] | None = None) -> None:
+            self._rows = rows or []
+
+        def scalars(self):
+            return self
+
+        def all(self):
+            return self._rows
+
+        def first(self):
+            return self._rows[0] if self._rows else None
+
     async def get(self, model: type, entity_id):  # noqa: ANN001
         if model is Project:
             return self.projects.get(entity_id)
@@ -104,6 +117,9 @@ class _FakeShotSubresourceDB:
             self.frame_images.pop(obj.id, None)
             return
         raise TypeError(f"Unsupported object type: {type(obj)!r}")
+
+    async def execute(self, *_args, **_kwargs):
+        return self._FakeResult()
 
 
 def _override_db(db: _FakeShotSubresourceDB):

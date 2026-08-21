@@ -135,6 +135,10 @@ class ModelSettingsBase(BaseModel):
     """模型全局设置通用字段。"""
 
     default_text_model_id: str | None = Field(None, description="默认文本模型 ID")
+    fallback_text_model_id: str | None = Field(
+        None,
+        description="文本模型失败回退模型 ID（全局统一；空表示关闭回退）",
+    )
     default_image_model_id: str | None = Field(None, description="默认图片模型 ID")
     default_video_model_id: str | None = Field(None, description="默认视频模型 ID")
     api_timeout: int = Field(30, description="API 超时（秒）")

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import sys
 import types
+from typing import Any
 
 import pytest
 from fastapi import HTTPException
+from langchain_core.language_models.chat_models import BaseChatModel
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.db import Base
@@ -18,6 +20,9 @@ from app.services.llm import (
     get_provider_by_model_or_id,
 )
 from app.services.llm.provider_resolver import resolve_effective_base_url
+from app.services.llm.text_fallback import FallbackChatModel
+from langchain_core.messages import AIMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
 
 
 @pytest.mark.asyncio
@@ -208,6 +213,78 @@ async def test_build_default_text_llm_supports_thinking_toggle(monkeypatch: pyte
     await engine.dispose()
 
 
+@pytest.mark.asyncio
+async def test_build_default_text_llm_wraps_fallback_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeChatOpenAI(BaseChatModel):
+        kwargs: dict[str, Any] = {}
+
+        def __init__(self, **kwargs):  # noqa: ANN003, ANN204
+            super().__init__()
+            self.kwargs = kwargs
+
+        @property
+        def _llm_type(self) -> str:  # pragma: no cover
+            return "fake-chat-openai"
+
+        def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:  # type: ignore[override]
+            msg = AIMessage(content="ok")
+            return ChatResult(generations=[ChatGeneration(message=msg)])
+
+    fake_module = types.ModuleType("langchain_openai")
+    fake_module.ChatOpenAI = FakeChatOpenAI
+    monkeypatch.setitem(sys.modules, "langchain_openai", fake_module)
+
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
+    session_local = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    async with session_local() as db:
+        local_provider = Provider(
+            id="p_local",
+            name="Ollama",
+            base_url="http://localhost:11434/v1",
+            api_key="",
+        )
+        cloud_provider = Provider(
+            id="p_cloud",
+            name="DeepSeek",
+            base_url="https://api.deepseek.com/v1",
+            api_key="dk",
+        )
+        local_model = Model(
+            id="m_local",
+            name="qwen3.5:9b",
+            category=ModelCategoryKey.text,
+            provider_id="p_local",
+        )
+        cloud_model = Model(
+            id="m_cloud",
+            name="deepseek-chat",
+            category=ModelCategoryKey.text,
+            provider_id="p_cloud",
+        )
+        settings = ModelSettings(
+            id=1,
+            default_text_model_id="m_local",
+            fallback_text_model_id="m_cloud",
+        )
+        db.add_all([local_provider, cloud_provider, local_model, cloud_model, settings])
+        await db.commit()
+
+        llm = await build_default_text_llm(db, thinking=True)
+
+        assert isinstance(llm, FallbackChatModel)
+        assert llm.primary.kwargs["model"] == "qwen3.5:9b"
+        assert llm.primary.kwargs["api_key"] == "ollama"
+        assert llm.primary.kwargs["base_url"] == "http://localhost:11434/v1"
+        assert llm.fallback is not None
+        assert llm.fallback.kwargs["model"] == "deepseek-chat"
+        assert llm.fallback.kwargs["api_key"] == "dk"
+
+    await engine.dispose()
+
+
 def test_resolve_effective_base_url_prefers_category_specific_url() -> None:
     provider = Provider(
         id="p1",
@@ -229,4 +306,3 @@ def test_resolve_effective_base_url_prefers_category_specific_url() -> None:
         resolve_effective_base_url(provider=provider, category=ModelCategoryKey.video)
         == "https://video-gateway.example/v1"
     )
-

@@ -18,13 +18,26 @@ class _FakePromptDB:
     def __init__(self) -> None:
         self.items: dict[str, PromptTemplate] = {}
 
+    class _FakeResult:
+        def __init__(self, rows: list[PromptTemplate] | None = None) -> None:
+            self._rows = rows or []
+
+        def scalars(self):
+            return self
+
+        def all(self):
+            return self._rows
+
+        def first(self):
+            return self._rows[0] if self._rows else None
+
     async def get(self, model: type, entity_id: str) -> PromptTemplate | None:  # noqa: ANN401
         if model is not PromptTemplate:
             return None
         return self.items.get(entity_id)
 
-    async def execute(self, *_args, **_kwargs) -> None:
-        return None
+    async def execute(self, *_args, **_kwargs):
+        return self._FakeResult()
 
     def add(self, obj: PromptTemplate) -> None:
         self.items[obj.id] = obj
@@ -113,7 +126,7 @@ def test_delete_prompt_template_returns_empty_envelope(client: TestClient) -> No
 
     assert response.status_code == 200
     body = response.json()
-    assert body == {"code": 200, "message": "success", "data": None}
+    assert body == {"code": 200, "message": "success", "data": None, "meta": None}
     assert "tpl-delete" not in db.items
 
 
@@ -127,7 +140,7 @@ def test_get_prompt_template_not_found_returns_api_response(client: TestClient) 
 
     assert response.status_code == 404
     body = response.json()
-    assert body == {"code": 404, "message": "PromptTemplate not found", "data": None}
+    assert body == {"code": 404, "message": "PromptTemplate not found", "data": None, "meta": None}
 
 
 def test_create_prompt_template_validation_error_returns_api_response(client: TestClient) -> None:

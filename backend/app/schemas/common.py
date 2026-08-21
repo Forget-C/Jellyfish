@@ -17,6 +17,18 @@ class ApiResponse(BaseModel, Generic[T]):
     data: T | None = Field(None, description="实际数据")
     meta: dict[str, Any] | None = Field(None, description="附加元信息")
 
+    def model_dump(
+        self,
+        *args: Any,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """始终序列化 meta 字段，保证响应壳结构稳定。"""
+        kwargs["exclude_none"] = False
+        dumped = super().model_dump(*args, **kwargs)
+        if "meta" not in dumped:
+            dumped["meta"] = None
+        return dumped
+
 
 class Pagination(BaseModel):
     """分页信息。"""

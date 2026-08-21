@@ -19,6 +19,21 @@ def bootstrap_builtin_providers() -> None:
                 default_base_url="https://api.openai.com/v1",
             ),
             ProviderSpec(
+                key="ollama",
+                display_name="Ollama",
+                aliases=("ollama", "本地 Ollama"),
+                supported_categories=(ModelCategoryKey.text,),
+                default_base_url="http://localhost:11434/v1",
+                requires_api_key=False,
+            ),
+            ProviderSpec(
+                key="deepseek",
+                display_name="DeepSeek",
+                aliases=("deepseek", "深度求索"),
+                supported_categories=(ModelCategoryKey.text,),
+                default_base_url="https://api.deepseek.com/v1",
+            ),
+            ProviderSpec(
                 key="volcengine",
                 display_name="火山引擎",
                 aliases=("火山引擎", "volcengine", "volc", "doubao", "bytedance", "ark"),

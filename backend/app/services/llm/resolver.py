@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, cast
 
 from fastapi import HTTPException, status
@@ -10,6 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.llm import Model, ModelCategoryKey, ModelSettings, Provider
 from app.services.common import entity_not_found
 from app.services.llm.provider_resolver import resolve_effective_base_url
+from app.services.llm.text_fallback import FallbackChatModel
+
+
+logger = logging.getLogger(__name__)
 
 
 def _settings_model_id(settings_row: ModelSettings | None, category: ModelCategoryKey) -> str | None:
@@ -135,14 +140,51 @@ async def build_default_text_llm(
     *,
     thinking: bool,
 ) -> BaseChatModel:
-    """基于默认文本模型构造 ChatOpenAI。"""
+    """基于默认文本模型构造 ChatOpenAI；配置回退模型时返回 FallbackChatModel。"""
     model = await get_default_model_by_category(db, ModelCategoryKey.text)
     provider = await get_provider_by_model_or_id(db, model)
-    return _build_chat_openai_model(
+    primary = _build_chat_openai_model(
         provider=provider,
         model=model,
         thinking=thinking,
         import_error_detail="Install langchain-openai (e.g. uv sync --group dev) to use film extraction endpoints",
+    )
+    fallback = await _build_fallback_text_model(
+        db=db,
+        thinking=thinking,
+        import_error_detail="Install langchain-openai (e.g. uv sync --group dev) to use film extraction endpoints",
+    )
+    if fallback is None:
+        return primary
+    return FallbackChatModel(primary=primary, fallback=fallback)
+
+
+async def _build_fallback_text_model(
+    *,
+    db: AsyncSession,
+    thinking: bool,
+    import_error_detail: str,
+) -> BaseChatModel | None:
+    """按 ModelSettings.fallback_text_model_id 构造回退模型；未配置或缺失时返回 None。"""
+    settings = await db.get(ModelSettings, 1)
+    fallback_id = settings.fallback_text_model_id if settings is not None else None
+    if not fallback_id:
+        return None
+    try:
+        fallback_model = await get_model_by_category(
+            db,
+            ModelCategoryKey.text,
+            model_or_id=fallback_id,
+        )
+    except HTTPException:
+        logger.warning("fallback text model not found or invalid: %s; fallback disabled", fallback_id)
+        return None
+    fallback_provider = await get_provider_by_model_or_id(db, fallback_model)
+    return _build_chat_openai_model(
+        provider=fallback_provider,
+        model=fallback_model,
+        thinking=thinking,
+        import_error_detail=import_error_detail,
     )
 
 
@@ -153,12 +195,7 @@ def _build_chat_openai_model(
     thinking: bool,
     import_error_detail: str,
 ) -> BaseChatModel:
-    api_key = (provider.api_key or "").strip()
-    if not api_key:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Provider api_key is empty for provider_id={provider.id}",
-        )
+    api_key = _resolve_llm_api_key(provider)
 
     try:
         from langchain_openai import ChatOpenAI
@@ -183,3 +220,17 @@ def _build_chat_openai_model(
         kwargs["extra_body"] = extra_body
 
     return ChatOpenAI(**kwargs)
+
+
+def _resolve_llm_api_key(provider: Provider) -> str:
+    """返回文本模型调用所需的 API Key；本地 Ollama 允许空 key 并使用占位值。"""
+    api_key = (provider.api_key or "").strip()
+    if api_key:
+        return api_key
+    provider_name = (provider.name or "").strip().lower()
+    if provider_name == "ollama" or "ollama" in provider_name:
+        return "ollama"
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=f"Provider api_key is empty for provider_id={provider.id}",
+    )
