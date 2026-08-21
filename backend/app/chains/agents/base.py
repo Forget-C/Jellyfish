@@ -349,16 +349,13 @@ class AgentBase(ABC, Generic[T]):
     def _extract_once(self, **kwargs: Any) -> T:
         chain = self._get_structured_chain()
         if chain is not None:
-            try:
-                state = chain.invoke(kwargs)
-                result = self._extract_structured_response(state)
-                if isinstance(result, self.output_model):
-                    return cast(T, result)
-                if isinstance(result, dict):
-                    data = self._normalize(result)
-                    return self.output_model.model_validate(data)
-            except Exception as exc:  # noqa: BLE001
-                raise
+            state = chain.invoke(kwargs)
+            result = self._extract_structured_response(state)
+            if isinstance(result, self.output_model):
+                return cast(T, result)
+            if isinstance(result, dict):
+                data = self._normalize(result)
+                return self.output_model.model_validate(data)
         return self.format_output(self.run_once(**kwargs))
 
     async def aextract(self, **kwargs: Any) -> T:
@@ -372,28 +369,25 @@ class AgentBase(ABC, Generic[T]):
     async def _aextract_once(self, **kwargs: Any) -> T:
         chain = self._get_structured_chain()
         if chain is not None:
-            try:
-                state = await chain.ainvoke(kwargs)
-                result = self._extract_structured_response(state)
-                if isinstance(result, self.output_model):
-                    return cast(T, result)
-                if isinstance(result, dict):
-                    data = self._normalize(result)
-                    return self.output_model.model_validate(data)
-            except Exception as exc:  # noqa: BLE001
-                raise
+            state = await chain.ainvoke(kwargs)
+            result = self._extract_structured_response(state)
+            if isinstance(result, self.output_model):
+                return cast(T, result)
+            if isinstance(result, dict):
+                data = self._normalize(result)
+                return self.output_model.model_validate(data)
         return self.format_output(await self.run_once_async(**kwargs))
 
-    def _invoke_with_fallback_sync(self, callable: FallbackCallable[[], T]) -> T:
+    def _invoke_with_fallback_sync(self, callback: FallbackCallable[[], T]) -> T:
         """同步执行；JSON/校验等可恢复失败时切换回退模型一次。"""
         try:
-            return callable()
+            return callback()
         except Exception as exc:  # noqa: BLE001
             if not is_fallback_eligible_error(exc) or fallback_used_in_call() or self._fallback_model is None:
                 raise
-            return self._run_fallback_sync(callable)
+            return self._run_fallback_sync(callback)
 
-    def _run_fallback_sync(self, callable: FallbackCallable[[], T]) -> T:
+    def _run_fallback_sync(self, callback: FallbackCallable[[], T]) -> T:
         mark_fallback_used()
         logger.info(
             "llm_fallback primary_model=%s fallback_model=%s reason=parse_or_validation_error",
@@ -405,15 +399,15 @@ class AgentBase(ABC, Generic[T]):
         self._model = self._fallback_model
         self._structured_chain = None
         try:
-            return callable()
+            return callback()
         finally:
             self._model = original_model
             self._structured_chain = original_chain
 
-    async def _invoke_with_fallback_async(self, callable: FallbackCallable[[], Any]) -> Any:
+    async def _invoke_with_fallback_async(self, callback: FallbackCallable[[], Any]) -> Any:
         """异步执行；JSON/校验等可恢复失败时切换回退模型一次。"""
         try:
-            return await callable()
+            return await callback()
         except Exception as exc:  # noqa: BLE001
             if not is_fallback_eligible_error(exc) or fallback_used_in_call() or self._fallback_model is None:
                 raise

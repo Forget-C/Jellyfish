@@ -125,9 +125,7 @@ def is_fallback_eligible_error(exc: BaseException) -> bool:
     text = str(exc).lower()
     if any(token in text for token in _NON_FALLBACK_ERROR_TOKENS):
         return False
-    if any(token in text for token in _FALLBACK_ERROR_TOKENS):
-        return True
-    return False
+    return any(token in text for token in _FALLBACK_ERROR_TOKENS)
 
 
 class FallbackChatModel(BaseChatModel):
@@ -244,26 +242,26 @@ class FallbackChatModel(BaseChatModel):
             else None
         )
 
-        def _invoke(input: Any, config: Any = None, **call_kwargs: Any) -> Any:
+        def _invoke(payload: Any, config: Any = None, **call_kwargs: Any) -> Any:
             try:
-                return primary_bound.invoke(input, config=config, **call_kwargs)
+                return primary_bound.invoke(payload, config=config, **call_kwargs)
             except Exception as exc:  # noqa: BLE001
                 if not is_fallback_eligible_error(exc):
                     raise
                 fallback = self._try_fallback()
                 if fallback is None or fallback_bound is None:
                     raise
-                return fallback_bound.invoke(input, config=config, **call_kwargs)
+                return fallback_bound.invoke(payload, config=config, **call_kwargs)
 
-        async def _ainvoke(input: Any, config: Any = None, **call_kwargs: Any) -> Any:
+        async def _ainvoke(payload: Any, config: Any = None, **call_kwargs: Any) -> Any:
             try:
-                return await primary_bound.ainvoke(input, config=config, **call_kwargs)
+                return await primary_bound.ainvoke(payload, config=config, **call_kwargs)
             except Exception as exc:  # noqa: BLE001
                 if not is_fallback_eligible_error(exc):
                     raise
                 fallback = self._try_fallback()
                 if fallback is None or fallback_bound is None:
                     raise
-                return await fallback_bound.ainvoke(input, config=config, **call_kwargs)
+                return await fallback_bound.ainvoke(payload, config=config, **call_kwargs)
 
         return RunnableLambda(_invoke, afunc=_ainvoke)
