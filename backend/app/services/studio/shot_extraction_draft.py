@@ -34,7 +34,7 @@ from app.services.common import entity_not_found
 from app.services.studio.entity_thumbnails import resolve_thumbnail_infos
 from app.schemas.skills.script_processing import (
     ShotSemanticSuggestion,
-    StudioAssetDraft,
+    StudioActorDraft, StudioSceneDraft, StudioPropDraft, StudioCostumeDraft,
     StudioCharacterDraft,
     StudioScriptExtractionDraft,
     StudioShotDraft,
@@ -123,6 +123,7 @@ async def build_script_extraction_draft_for_shot(db: AsyncSession, shot_id: str)
                 index=index_by_character_id.get(ch.id),
                 name=ch.name,
                 description=ch.description or "",
+                actor=StudioActorDraft.model_validate(ch.actor, from_attributes=True) if ch.actor else None,
                 tags=[],  # Character 表无 tags，占位与导入草稿对齐
                 costume_name=costume_name,
                 prop_names=prop_names,
@@ -159,6 +160,7 @@ async def build_script_extraction_draft_for_shot(db: AsyncSession, shot_id: str)
                     index=None,
                     name=act.name,
                     description=act.description or "",
+                    actor=StudioActorDraft.model_validate(act, from_attributes=True),
                     tags=list(act.tags or []),
                     costume_name=None,
                     prop_names=[],
@@ -229,7 +231,7 @@ async def build_script_extraction_draft_for_shot(db: AsyncSession, shot_id: str)
         parent_ids=costume_ids,
     )
 
-    scene_drafts: list[StudioAssetDraft] = []
+    scene_drafts: list[StudioSceneDraft] = []
     if scene_ids:
         scenes = (await db.execute(select(Scene).where(Scene.id.in_(scene_ids)))).scalars().all()
         scene_by_id = {s.id: s for s in scenes}
@@ -238,12 +240,14 @@ async def build_script_extraction_draft_for_shot(db: AsyncSession, shot_id: str)
             if s is None:
                 continue
             scene_drafts.append(
-                StudioAssetDraft(
+                StudioSceneDraft(
                     id=s.id,
                     file_id=scene_media.get(s.id, {}).get("file_id"),
                     thumbnail=scene_media.get(s.id, {}).get("thumbnail"),
                     name=s.name,
                     description=s.description or "",
+                    supplementary_info=s.supplementary_info,
+                    **{key: getattr(s, key) for key, _ in s.description_fields},
                     tags=list(s.tags or []),
                     prompt_template_id=s.prompt_template_id,
                     view_count=int(s.view_count or 1),
@@ -251,7 +255,7 @@ async def build_script_extraction_draft_for_shot(db: AsyncSession, shot_id: str)
             )
         scene_drafts.sort(key=lambda x: x.name)
 
-    prop_drafts: list[StudioAssetDraft] = []
+    prop_drafts: list[StudioPropDraft] = []
     if prop_ids:
         props = (await db.execute(select(Prop).where(Prop.id.in_(prop_ids)))).scalars().all()
         prop_by_id = {p.id: p for p in props}
@@ -260,12 +264,14 @@ async def build_script_extraction_draft_for_shot(db: AsyncSession, shot_id: str)
             if p is None:
                 continue
             prop_drafts.append(
-                StudioAssetDraft(
+                StudioPropDraft(
                     id=p.id,
                     file_id=prop_media.get(p.id, {}).get("file_id"),
                     thumbnail=prop_media.get(p.id, {}).get("thumbnail"),
                     name=p.name,
                     description=p.description or "",
+                    supplementary_info=p.supplementary_info,
+                    **{key: getattr(p, key) for key, _ in p.description_fields},
                     tags=list(p.tags or []),
                     prompt_template_id=p.prompt_template_id,
                     view_count=int(p.view_count or 1),
@@ -273,7 +279,7 @@ async def build_script_extraction_draft_for_shot(db: AsyncSession, shot_id: str)
             )
         prop_drafts.sort(key=lambda x: x.name)
 
-    costume_drafts: list[StudioAssetDraft] = []
+    costume_drafts: list[StudioCostumeDraft] = []
     if costume_ids:
         costumes = (await db.execute(select(Costume).where(Costume.id.in_(costume_ids)))).scalars().all()
         costume_by_id = {c.id: c for c in costumes}
@@ -282,12 +288,14 @@ async def build_script_extraction_draft_for_shot(db: AsyncSession, shot_id: str)
             if c is None:
                 continue
             costume_drafts.append(
-                StudioAssetDraft(
+                StudioCostumeDraft(
                     id=c.id,
                     file_id=costume_media.get(c.id, {}).get("file_id"),
                     thumbnail=costume_media.get(c.id, {}).get("thumbnail"),
                     name=c.name,
                     description=c.description or "",
+                    supplementary_info=c.supplementary_info,
+                    **{key: getattr(c, key) for key, _ in c.description_fields},
                     tags=list(c.tags or []),
                     prompt_template_id=c.prompt_template_id,
                     view_count=int(c.view_count or 1),

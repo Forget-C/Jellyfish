@@ -5,8 +5,8 @@ from __future__ import annotations
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.contracts.generation import GenerationTargetKind, ResolvedGenerationSnapshot
-from app.models.studio_asset_images import ActorImage, CharacterImage, CostumeImage, PropImage, SceneImage
+from app.core.contracts.generation import GenerationTargetKind, ImageGenerationOperationInput, ResolvedGenerationSnapshot
+from app.services.studio.entity_specs import entity_spec
 from app.services.generation.publishers.base import GenerationResultPublisher
 
 
@@ -14,7 +14,15 @@ class AssetImagePublisher(GenerationResultPublisher):
     """以 CAS 将图片 Artifact 自动采用到五类资产图片槽位。"""
 
     target_kind = GenerationTargetKind.asset_image_slot
-    _slot_models = (ActorImage, CharacterImage, SceneImage, PropImage, CostumeImage)
+
+    async def publish_terminal(self, db, *, snapshot, artifacts) -> None:
+        """候选模式只归档结果，用户在图片历史中明确采用后才修改槽位。"""
+        if isinstance(snapshot.operation_input, ImageGenerationOperationInput) and snapshot.operation_input.save_as_candidate:
+            self._require_target(snapshot)
+            for artifact in artifacts:
+                self._mark_skipped(artifact, "awaiting_user_adoption")
+            return
+        await super().publish_terminal(db, snapshot=snapshot, artifacts=artifacts)
 
     async def _publish_file(
         self,
@@ -24,7 +32,7 @@ class AssetImagePublisher(GenerationResultPublisher):
         file_id: str,
         expected_version_id: int,
     ) -> bool:
-        """更新匹配的跨资产槽位；所有候选都不匹配即表示版本或目标已变化。"""
+        """按目标类别更新指定槽位；不匹配表示版本或所属资产已变化。"""
         slot_id = snapshot.canonical_target.slot_id
         if slot_id is None:
             raise ValueError("asset image target requires slot_id")
@@ -33,13 +41,12 @@ class AssetImagePublisher(GenerationResultPublisher):
         except ValueError as error:
             raise ValueError("asset image slot_id must be numeric") from error
 
-        for model in self._slot_models:
-            result = await db.execute(
-                update(model)
-                .where(model.id == numeric_slot_id, model.version_id == expected_version_id)
-                .values(file_id=file_id, version_id=model.version_id + 1)
-            )
-            if result.rowcount:
-                return True
-        return False
-
+        spec = entity_spec(snapshot.canonical_target.asset_type)
+        model = spec.image_model
+        parent_field = getattr(model, spec.id_field)
+        result = await db.execute(
+            update(model)
+            .where(model.id == numeric_slot_id, parent_field == snapshot.canonical_target.entity_id, model.version_id == expected_version_id)
+            .values(file_id=file_id, version_id=model.version_id + 1)
+        )
+        return bool(result.rowcount)

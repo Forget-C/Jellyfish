@@ -1,9 +1,10 @@
+import { AssetFactsFields, pickAssetFacts, type AssetFacts } from './AssetFactsFields'
 import { useEffect, useRef, useState } from 'react'
 import { Input, InputNumber, Modal, message } from 'antd'
 import { ProjectVisualStyleAndStyleFields } from '../../project/ProjectVisualStyleAndStyleFields'
 import { useProjectStyleOptions } from '../../project/useProjectStyleOptions'
 
-export type StudioAssetLike = {
+export type StudioAssetLike = AssetFacts & {
   id: string
   name: string
   description?: string | null
@@ -28,7 +29,7 @@ export function normalizeStudioAsset(asset: StudioAssetLike): StudioAssetLike {
 
 function clampViewCount(value: number | null): number | null {
   if (value === null) return null
-  return Math.max(0, Math.min(4, Math.trunc(value)))
+  return Math.max(1, Math.min(4, Math.trunc(value)))
 }
 
 function notifyShotAssetCreatedAndLinked(payload: {
@@ -76,7 +77,7 @@ export type StudioAssetSavedContext =
 export function StudioAssetTypeFormModal({
   open,
   label,
-  entityType: _entityType,
+  entityType,
   editing,
   linkProjectId,
   linkChapterId,
@@ -108,9 +109,9 @@ export function StudioAssetTypeFormModal({
   onSeedConsumed?: () => void
 }) {
   const { options: projectStyleOptions, defaultVisualStyle, getDefaultStyle } = useProjectStyleOptions()
-  void _entityType
   const [formName, setFormName] = useState('')
   const [formDesc, setFormDesc] = useState('')
+  const [formFacts, setFormFacts] = useState<AssetFacts>({})
   const [formTags, setFormTags] = useState('')
   const [formViewCount, setFormViewCount] = useState<number | null>(null)
   const [formVisualStyle, setFormVisualStyle] = useState<'现实' | '动漫'>(defaultVisualStyle as '现实' | '动漫')
@@ -124,7 +125,8 @@ export function StudioAssetTypeFormModal({
     }
     if (editing) {
       setFormName(editing.name)
-      setFormDesc(editing.description ?? '')
+      setFormDesc(editing.supplementary_info ?? '')
+      setFormFacts(pickAssetFacts(entityType, editing))
       setFormTags((editing.tags ?? []).join(', '))
       setFormViewCount(editing.view_count ?? null)
       const nextVisual = (((editing as { visual_style?: '现实' | '动漫' }).visual_style ?? defaultVisualStyle) as '现实' | '动漫')
@@ -139,6 +141,7 @@ export function StudioAssetTypeFormModal({
     if (!createFormInitializedRef.current) {
       createFormInitializedRef.current = true
       if (seedCreateForm) {
+        setFormFacts({})
         setFormName(seedCreateForm.name ?? '')
         setFormDesc(seedCreateForm.description ?? '')
         const nextVisual = seedCreateForm.visual_style ?? (defaultVisualStyle as '现实' | '动漫')
@@ -146,7 +149,8 @@ export function StudioAssetTypeFormModal({
         setFormStyle(seedCreateForm.style ?? getDefaultStyle(nextVisual))
         onSeedConsumed?.()
       } else {
-        setFormName('')
+        setFormFacts({})
+      setFormName('')
         setFormDesc('')
         setFormVisualStyle(defaultVisualStyle as '现实' | '动漫')
         setFormStyle(getDefaultStyle(defaultVisualStyle))
@@ -168,9 +172,10 @@ export function StudioAssetTypeFormModal({
       if (editing) {
         const next = await updateAsset(editing.id, {
           name: formName.trim(),
-          description: formDesc.trim(),
+          supplementary_info: formDesc.trim(),
+          ...formFacts,
           tags: normalizeTags(formTags),
-          view_count: nextViewCount,
+          ...(nextViewCount === null ? {} : { view_count: nextViewCount }),
           visual_style: formVisualStyle,
           style: formStyle,
         })
@@ -182,9 +187,9 @@ export function StudioAssetTypeFormModal({
         const created = await createAsset({
           id: `asset_${Date.now()}`,
           name: formName.trim(),
-          description: formDesc.trim(),
+          supplementary_info: formDesc.trim(),
+          ...formFacts,
           tags: normalizeTags(formTags),
-          thumbnail: '',
           visual_style: formVisualStyle,
           style: formStyle,
           ...(linkProjectId ? { project_id: linkProjectId } : {}),
@@ -223,18 +228,19 @@ export function StudioAssetTypeFormModal({
           <span className="text-gray-600 text-sm">名称</span>
           <Input value={formName} onChange={(e) => setFormName(e.target.value)} className="mt-1" />
         </div>
+        <AssetFactsFields type={entityType} value={formFacts} onChange={setFormFacts} supplementaryInfo={formDesc} />
         <div>
-          <span className="text-gray-600 text-sm">描述</span>
-          <Input.TextArea value={formDesc} onChange={(e) => setFormDesc(e.target.value)} rows={4} className="mt-1" />
+          <span className="text-gray-600 text-sm">补充信息</span>
+          <Input.TextArea maxLength={8000} value={formDesc} onChange={(e) => setFormDesc(e.target.value)} rows={4} className="mt-1" />
         </div>
         <div>
           <span className="text-gray-600 text-sm">标签（逗号分隔）</span>
           <Input value={formTags} onChange={(e) => setFormTags(e.target.value)} className="mt-1" />
         </div>
         <div>
-          <span className="text-gray-600 text-sm">镜头数</span>
+          <span className="text-gray-600 text-sm">视角数</span>
           <InputNumber
-            min={0}
+            min={1}
             max={4}
             precision={0}
             value={formViewCount}

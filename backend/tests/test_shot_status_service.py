@@ -577,7 +577,7 @@ async def test_create_project_asset_link_marks_matching_prop_candidate_as_linked
             Prop(
                 id="prop-1",
                 name="银斧头",
-                description="",
+                supplementary_info="",
                 style=ProjectStyle.real_people_city,
                 view_count=1,
                 tags=[],
@@ -617,7 +617,7 @@ async def test_delete_project_asset_link_marks_matching_prop_candidate_back_to_p
             Prop(
                 id="prop-1",
                 name="银斧头",
-                description="",
+                supplementary_info="",
                 style=ProjectStyle.real_people_city,
                 view_count=1,
                 tags=[],
@@ -678,7 +678,7 @@ async def test_update_shot_detail_scene_marks_matching_scene_candidate_as_linked
             Scene(
                 id="scene-1",
                 name="河边",
-                description="",
+                supplementary_info="",
                 style=ProjectStyle.real_people_city,
                 view_count=1,
                 tags=[],
@@ -733,7 +733,7 @@ async def test_update_shot_detail_scene_change_marks_old_candidate_back_to_pendi
                 Scene(
                     id="scene-1",
                     name="河边",
-                    description="",
+                    supplementary_info="",
                     style=ProjectStyle.real_people_city,
                     view_count=1,
                     tags=[],
@@ -742,7 +742,7 @@ async def test_update_shot_detail_scene_change_marks_old_candidate_back_to_pendi
                 Scene(
                     id="scene-2",
                     name="山洞",
-                    description="",
+                    supplementary_info="",
                     style=ProjectStyle.real_people_city,
                     view_count=1,
                     tags=[],
@@ -799,7 +799,7 @@ async def test_update_shot_detail_scene_clear_marks_old_candidate_back_to_pendin
             Scene(
                 id="scene-1",
                 name="河边",
-                description="",
+                supplementary_info="",
                 style=ProjectStyle.real_people_city,
                 view_count=1,
                 tags=[],

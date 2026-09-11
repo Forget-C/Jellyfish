@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from sqlalchemy import JSON, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import case, func, literal, JSON, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -8,14 +9,47 @@ from app.models.base import TimestampMixin
 from app.models.types import ProjectStyle, ProjectVisualStyle
 
 
-class Scene(Base, TimestampMixin):
+class StructuredAssetMixin:
+    """从分类设定派生描述，保证摘要、搜索和生成读取相同的资产事实。"""
+
+    supplementary_info: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="补充信息")
+
+    @hybrid_property
+    def description(self) -> str:
+        """按固定顺序整理已确认字段，不补全未知信息或截断用户要求。"""
+        parts = []
+        for field, label in self.description_fields:
+            value = (getattr(self, field, None) or "").strip()
+            if value and value != "不适用":
+                parts.append(f"{label}：{value}")
+        supplement = (self.supplementary_info or "").strip()
+        if supplement:
+            parts.append(supplement)
+        return "\n".join(parts)
+
+    @description.expression
+    def description(cls):
+        """提供可用于数据库搜索的同源描述表达式，避免维护另一份文本列。"""
+        result = literal("")
+        for field, label in cls.description_fields:
+            value = func.trim(func.coalesce(getattr(cls, field), ""))
+            result = result + case((value.not_in(["", "不适用"]), literal(label + "：") + value + "\n"), else_="")
+        return func.trim(result + func.coalesce(cls.supplementary_info, ""))
+
+
+class Scene(StructuredAssetMixin, Base, TimestampMixin):
     """场景表。"""
 
     __tablename__ = "scenes"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True, comment="ID")
     name: Mapped[str] = mapped_column(String(255), nullable=False, comment="名称")
-    description: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="描述")
+    description_fields = (('scene_type', '场所类型'), ('spatial_layout', '空间布局'), ('environment_features', '环境特征'), ('materials', '主要材质'), ('color_palette', '色彩'))
+    scene_type: Mapped[str | None] = mapped_column(Text, nullable=True, comment="场所类型")
+    spatial_layout: Mapped[str | None] = mapped_column(Text, nullable=True, comment="空间布局")
+    environment_features: Mapped[str | None] = mapped_column(Text, nullable=True, comment="环境特征")
+    materials: Mapped[str | None] = mapped_column(Text, nullable=True, comment="主要材质")
+    color_palette: Mapped[str | None] = mapped_column(Text, nullable=True, comment="色彩")
     style: Mapped[ProjectStyle] = mapped_column(String(32), nullable=False, comment="题材/风格")
     view_count: Mapped[int] = mapped_column(
         Integer,
@@ -52,14 +86,19 @@ class Scene(Base, TimestampMixin):
     )
 
 
-class Prop(Base, TimestampMixin):
+class Prop(StructuredAssetMixin, Base, TimestampMixin):
     """道具表。角色道具绑定见 CharacterPropLink。"""
 
     __tablename__ = "props"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True, comment="ID")
     name: Mapped[str] = mapped_column(String(255), nullable=False, comment="名称")
-    description: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="描述")
+    description_fields = (('prop_type', '道具类型'), ('shape', '外形结构'), ('size_description', '尺寸或相对尺度'), ('materials', '材质'), ('colors', '颜色'))
+    prop_type: Mapped[str | None] = mapped_column(Text, nullable=True, comment="道具类型")
+    shape: Mapped[str | None] = mapped_column(Text, nullable=True, comment="外形结构")
+    size_description: Mapped[str | None] = mapped_column(Text, nullable=True, comment="尺寸或相对尺度")
+    materials: Mapped[str | None] = mapped_column(Text, nullable=True, comment="材质")
+    colors: Mapped[str | None] = mapped_column(Text, nullable=True, comment="颜色")
     style: Mapped[ProjectStyle] = mapped_column(String(32), nullable=False, comment="题材/风格")
     view_count: Mapped[int] = mapped_column(
         Integer,
@@ -101,14 +140,19 @@ class Prop(Base, TimestampMixin):
     )
 
 
-class Costume(Base, TimestampMixin):
+class Costume(StructuredAssetMixin, Base, TimestampMixin):
     """服装表。角色服装见 Character.costume_id。"""
 
     __tablename__ = "costumes"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True, comment="ID")
     name: Mapped[str] = mapped_column(String(255), nullable=False, comment="名称")
-    description: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="描述")
+    description_fields = (('costume_type', '服装类型'), ('structure', '款式层次'), ('materials', '材质'), ('colors', '颜色'), ('patterns_accessories', '纹样与附属配饰'))
+    costume_type: Mapped[str | None] = mapped_column(Text, nullable=True, comment="服装类型")
+    structure: Mapped[str | None] = mapped_column(Text, nullable=True, comment="款式层次")
+    materials: Mapped[str | None] = mapped_column(Text, nullable=True, comment="材质")
+    colors: Mapped[str | None] = mapped_column(Text, nullable=True, comment="颜色")
+    patterns_accessories: Mapped[str | None] = mapped_column(Text, nullable=True, comment="纹样与附属配饰")
     style: Mapped[ProjectStyle] = mapped_column(String(32), nullable=False, comment="题材/风格")
     view_count: Mapped[int] = mapped_column(
         Integer,
@@ -146,7 +190,7 @@ class Costume(Base, TimestampMixin):
     )
 
 
-class Actor(Base, TimestampMixin):
+class Actor(StructuredAssetMixin, Base, TimestampMixin):
     """演员表（与角色区分）。
 
     说明：
@@ -158,7 +202,13 @@ class Actor(Base, TimestampMixin):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True, comment="ID")
     name: Mapped[str] = mapped_column(String(255), nullable=False, comment="名称")
-    description: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="描述")
+    description_fields = (('age_appearance', '外观年龄'), ('gender', '性别设定'), ('build', '体型'), ('facial_features', '五官特征'), ('skin_tone', '肤色'), ('hair', '发型发色'))
+    age_appearance: Mapped[str | None] = mapped_column(Text, nullable=True, comment="外观年龄")
+    gender: Mapped[str | None] = mapped_column(Text, nullable=True, comment="性别设定")
+    build: Mapped[str | None] = mapped_column(Text, nullable=True, comment="体型")
+    facial_features: Mapped[str | None] = mapped_column(Text, nullable=True, comment="五官特征")
+    skin_tone: Mapped[str | None] = mapped_column(Text, nullable=True, comment="肤色")
+    hair: Mapped[str | None] = mapped_column(Text, nullable=True, comment="发型发色")
     style: Mapped[ProjectStyle] = mapped_column(String(32), nullable=False, comment="题材/风格")
     view_count: Mapped[int] = mapped_column(
         Integer,

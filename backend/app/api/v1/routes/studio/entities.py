@@ -13,6 +13,8 @@ from app.schemas.studio.entity_existence import (
     EntityNameExistenceCheckRequest,
     EntityNameExistenceCheckResponse,
 )
+from app.schemas.studio.cast import ActorCreate, ActorUpdate, CharacterCreate, CharacterUpdate
+from app.schemas.studio.assets import SceneCreate, SceneUpdate, PropCreate, PropUpdate, CostumeCreate, CostumeUpdate
 from app.services.studio import StudioEntitiesService
 
 router = APIRouter()
@@ -68,11 +70,12 @@ async def list_entities(
 @router.post("/{entity_type}", response_model=ApiResponse[dict[str, Any]], status_code=status.HTTP_201_CREATED, summary="统一创建实体")
 async def create_entity(
     entity_type: str,
-    body: dict[str, Any],
+    body: ActorCreate | CharacterCreate | SceneCreate | PropCreate | CostumeCreate,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[dict[str, Any]]:
+    """解析分类请求，交由业务服务验证路径类别并处理实体。"""
     service = StudioEntitiesService(db)
-    payload = await service.create_entity(entity_type=entity_type, body=body)
+    payload = await service.create_entity(entity_type=entity_type, body=body.model_dump(exclude_unset=True))
     return created_response(payload)
 
 
@@ -87,11 +90,12 @@ async def get_entity(entity_type: str, entity_id: str, db: AsyncSession = Depend
 async def update_entity(
     entity_type: str,
     entity_id: str,
-    body: dict[str, Any],
+    body: ActorUpdate | CharacterUpdate | SceneUpdate | PropUpdate | CostumeUpdate,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[dict[str, Any]]:
+    """解析分类请求，交由业务服务验证路径类别并处理实体。"""
     service = StudioEntitiesService(db)
-    payload = await service.update_entity(entity_type=entity_type, entity_id=entity_id, body=body)
+    payload = await service.update_entity(entity_type=entity_type, entity_id=entity_id, body=body.model_dump(exclude_unset=True))
     return success_response(payload)
 
 

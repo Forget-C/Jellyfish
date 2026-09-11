@@ -2,8 +2,10 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { StudioAssetDraft } from './StudioAssetDraft';
 import type { StudioCharacterDraft } from './StudioCharacterDraft';
+import type { StudioCostumeDraft } from './StudioCostumeDraft';
+import type { StudioPropDraft } from './StudioPropDraft';
+import type { StudioSceneDraft } from './StudioSceneDraft';
 import type { StudioShotDraft } from './StudioShotDraft';
 /**
  * 用于导入 Studio 的提取结果草稿（name-based）。
@@ -22,9 +24,9 @@ export type StudioScriptExtractionDraft = {
      */
     script_text: string;
     characters?: Array<StudioCharacterDraft>;
-    scenes?: Array<StudioAssetDraft>;
-    props?: Array<StudioAssetDraft>;
-    costumes?: Array<StudioAssetDraft>;
+    scenes?: Array<StudioSceneDraft>;
+    props?: Array<StudioPropDraft>;
+    costumes?: Array<StudioCostumeDraft>;
     /**
      * 镜头草稿列表
      */

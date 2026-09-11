@@ -171,7 +171,7 @@ async def submit_actor_image_generation_task(
         db,
         modality=GenerationModality.image,
         operation=GenerationOperation.image_generation,
-        target=GenerationTarget(kind=GenerationTargetKind.asset_image_slot, entity_id=actor_id, slot_id=str(slot_id)),
+        target=GenerationTarget(kind=GenerationTargetKind.asset_image_slot, entity_id=actor_id, slot_id=str(slot_id), asset_type="actor"),
         body=body,
     )
 
@@ -194,7 +194,7 @@ async def submit_character_image_generation_task(
         db,
         modality=GenerationModality.image,
         operation=GenerationOperation.image_generation,
-        target=GenerationTarget(kind=GenerationTargetKind.asset_image_slot, entity_id=character_id, slot_id=str(slot_id)),
+        target=GenerationTarget(kind=GenerationTargetKind.asset_image_slot, entity_id=character_id, slot_id=str(slot_id), asset_type="character"),
         body=body,
     )
 
@@ -218,6 +218,6 @@ async def submit_asset_image_generation_task(
         db,
         modality=GenerationModality.image,
         operation=GenerationOperation.image_generation,
-        target=GenerationTarget(kind=GenerationTargetKind.asset_image_slot, entity_id=asset_id, slot_id=str(slot_id)),
+        target=GenerationTarget(kind=GenerationTargetKind.asset_image_slot, entity_id=asset_id, slot_id=str(slot_id), asset_type=asset_type),
         body=body,
     )

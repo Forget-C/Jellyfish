@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { AssetPromptAudit } from './AssetPromptAudit';
 import type { ImageGenerationOperationInput } from './ImageGenerationOperationInput';
 import type { ImageMediaInput } from './ImageMediaInput';
 import type { ScriptOperationInput } from './ScriptOperationInput';
@@ -16,6 +17,7 @@ export type GenerationSubmitRequest = {
     execution_prompt?: (string | null);
     media?: (ImageMediaInput | VideoMediaInput_Input | null);
     render_id?: (string | null);
+    asset_prompt_audit?: (AssetPromptAudit | null);
     operation_input: (TextChatInput | ScriptOperationInput | ImageGenerationOperationInput | VideoGenerationOperationInput);
 };
 

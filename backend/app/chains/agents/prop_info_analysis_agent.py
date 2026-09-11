@@ -2,30 +2,23 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from langchain_core.prompts import PromptTemplate
 
 from app.chains.agents.base import AgentBase
-from app.schemas.skills.prop_info_analysis import PropInfoAnalysisResult
+from app.core.contracts.asset_analysis import PropInfoAnalysisResult
 
-_PROP_INFO_SYSTEM_PROMPT = """\
-你是"道具信息分析师"。你的任务是：当给定一份“原文道具描述”时，判断其中缺少哪些关键信息，导致无法生成合理的道具资产图（外观结构/材质工艺/尺寸比例/使用方式/状态细节/年代与风格/标识与磨损等）。
-
-要求：
-- 输出必须严格服务于“可直接用于AI图像生成”的目的，optimized_description 需是一段连贯、正面、画面感强的描述。
-- 原文仅作参照：只能在原文已明确给出的内容基础上进行顺滑连接或不改变原意的重排，不能修改、替换或弱化原文中的任何关键信息（名称、用途、归属、时代与风格、材质、状态等）。
-- 当原文信息不足时，进行合理的保守补全式扩展，使 optimized_description 至少覆盖以下维度：道具名称与类型、整体形态与结构、材质与表面质感、颜色与关键细节、尺寸与比例（相对尺度亦可）、使用方式与功能特征、状态（新旧/磨损/污渍/破损/可动部件等）、标识或独特特征，并可适度加入与剧情一致的环境痕迹（需与整体道具目标一致）。
-- issues：列出原文真正缺失的关键维度或存在的歧义点，并具体说明这些缺失如何影响道具资产生成的一致性、结构可读性或细节完整性。
-- optimized_description：在尽量保留原文原词原意的基础上，完整保留所有明确信息，并通过正面肯定句式补全缺失部分，形成一段可直接复制用于AI图像生成模型的完整道具描述。
-
-禁止项（严格执行）：
-- optimized_description 中绝对不允许出现“未被详细说明”“信息不详”“未知”“不明确”“假设”“比如”“可以设想”“类似”“通常”“可能”“大概”等任何模糊、不稳定、占位或推测性词语。
-- 所有描述必须使用肯定、具体的正面语言，直接给出可视觉化的细节。
-- issues 中只分析缺失或歧义，不在 optimized_description 中重复提及缺少的内容。
-- 若原文已足够完整，issues 可为空或极简，optimized_description 仍需做结构化顺滑表达，但不得添加原文未暗示的关键事实。
-
-只输出 JSON，符合 PropInfoAnalysisResult 结构。
+_PROP_INFO_SYSTEM_PROMPT = """你是资产设定整理助手。根据当前Prop的原文描述和上下文，提出可核对的分类字段建议。
+允许的字段：prop_type（道具类型）、shape（外形结构）、size_description（尺寸或相对尺度）、materials（材质）、colors（颜色）、supplementary_info（补充信息）。
+只输出 JSON：issues 为缺失或冲突说明；suggestions 为字段候选数组，每项包含 field、value、source、evidence。
+规则：
+- 只整理与当前资产相关的长期视觉设定，不把镜头动作、灯光、临时天气或构图写入主体。
+- 原文明示内容使用 source="explicit"，evidence 必须逐字引用输入中的对应片段。
+- 不确定内容可以只列 issues 并不提供候选。若提出推断选项，必须使用 source="inferred"，不能冒充明确事实。
+- 完整保留年龄范围、否定要求和显著特征，不用肯定语气掩盖未知值。
+- 同一字段最多一个候选；补充信息仅保留固定字段无法表达的原有要求，不重复拼装全部字段。
+- 演员只包含身份外观；正式服装、道具属于独立资产与角色组合，不为演员凭空补全衣着、性格或背景故事。
+- 已给定的设定不得改写；互相矛盾的输入在 issues 中指出并等待用户确认。
+结果仅供用户比较和采用，不直接覆盖资产。
 """
 
 PROP_INFO_PROMPT = PromptTemplate(
@@ -39,71 +32,39 @@ PROP_INFO_PROMPT = PromptTemplate(
 
 
 class PropInfoAnalysisAgent(AgentBase[PropInfoAnalysisResult]):
-    """根据原文道具描述分析缺失信息，并输出优化后的可生成道具描述。"""
+    """根据原文道具描述分析缺失信息，并输出待确认的分类字段建议。"""
 
     @property
     def system_prompt(self) -> str:
+        """返回分类事实与推断分离的整理规则。"""
         return _PROP_INFO_SYSTEM_PROMPT
 
     @property
     def prompt_template(self) -> PromptTemplate:
+        """只传入当前资产文本与上下文。"""
         return PROP_INFO_PROMPT
 
     @property
     def output_model(self) -> type[PropInfoAnalysisResult]:
+        """约束候选字段、证据与长度。"""
         return PropInfoAnalysisResult
 
     def analyze_prop_description(
         self, *, prop_description: str, prop_context: str | None = None
     ) -> PropInfoAnalysisResult:
-        return self.extract(
+        """生成结构化建议并核对明确事实的原文依据。"""
+        result = self.extract(
             prop_context=prop_context or "",
             prop_description=prop_description,
         )
+        return result.verify_evidence(prop_description + "\n" + (prop_context or ""))
 
     async def a_analyze_prop_description(
         self, *, prop_description: str, prop_context: str | None = None
     ) -> PropInfoAnalysisResult:
-        return await self.aextract(
+        """异步生成结构化建议，核对证据后返回待确认结果。"""
+        result = await self.aextract(
             prop_context=prop_context or "",
             prop_description=prop_description,
         )
-
-    def _normalize(self, data: dict[str, Any]) -> dict[str, Any]:
-        # 宽松兼容：issues/optimized_description 字段类型兜底，避免 strict schema 校验失败
-        data = dict(data)
-        issues = data.get("issues", [])
-        if not isinstance(issues, list):
-            data["issues"] = [str(issues)] if issues is not None else []
-        if "optimized_description" not in data:
-            data["optimized_description"] = ""
-
-        # 兜底清理：若模型把“信息不详/未知”等占位句写进 optimized_description，则移除这些句子
-        optimized = data.get("optimized_description") or ""
-        if isinstance(optimized, str) and optimized:
-            fuzzy_markers = (
-                "信息不详",
-                "不详",
-                "未知",
-                "不明确",
-                "未提及",
-                "看不出来",
-                "无法判断",
-                "不确定",
-                "暂时无法判断",
-            )
-            if any(m in optimized for m in fuzzy_markers):
-                parts = optimized.replace("\n", " ").split("。")
-                kept: list[str] = []
-                for p in parts:
-                    seg = p.strip()
-                    if not seg:
-                        continue
-                    if any(m in seg for m in fuzzy_markers):
-                        continue
-                    kept.append(seg)
-                cleaned = "。".join(kept).strip()
-                data["optimized_description"] = cleaned or optimized
-
-        return data
-
+        return result.verify_evidence(prop_description + "\n" + (prop_context or ""))

@@ -10,5 +10,9 @@ export type ImageGenerationOperationInput = {
     target_ratio?: (string | null);
     resolution_profile?: (string | null);
     count?: number;
+    /**
+     * 资产图仅保存候选结果，不自动替换槽位
+     */
+    save_as_candidate?: boolean;
 };
 

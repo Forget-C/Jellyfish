@@ -67,10 +67,10 @@ from app.schemas.skills.script_processing import (
     VariantAnalysisResult,
     VariantSuggestion,
 )
-from app.schemas.skills.character_portrait import CharacterPortraitAnalysisResult
-from app.schemas.skills.prop_info_analysis import PropInfoAnalysisResult
-from app.schemas.skills.scene_info_analysis import SceneInfoAnalysisResult
-from app.schemas.skills.costume_info_analysis import CostumeInfoAnalysisResult
+from app.core.contracts.asset_analysis import CharacterPortraitAnalysisResult
+from app.core.contracts.asset_analysis import PropInfoAnalysisResult
+from app.core.contracts.asset_analysis import SceneInfoAnalysisResult
+from app.core.contracts.asset_analysis import CostumeInfoAnalysisResult
 from app.schemas.skills.shot_frame_prompt import ShotFramePromptInput, ShotFramePromptResult
 
 __all__ = [

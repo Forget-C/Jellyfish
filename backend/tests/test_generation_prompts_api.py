@@ -51,7 +51,7 @@ def test_asset_render_binds_path_target_and_rejects_target_body(client: TestClie
     try:
         response = client.post(
             "/api/v1/studio/generation-prompts/assets/actor/actor-1/slots/2/render",
-            json={"reference_file_ids": ["file-1"]},
+            json={"references": [{"file_id": "file-1", "role": "identity"}]},
         )
         invalid_response = client.post(
             "/api/v1/studio/generation-prompts/assets/actor/actor-1/slots/2/render",

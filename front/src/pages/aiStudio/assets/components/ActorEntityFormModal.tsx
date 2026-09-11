@@ -1,10 +1,11 @@
+import { AssetFactsFields, pickAssetFacts, type AssetFacts } from './AssetFactsFields'
 import { useEffect, useState } from 'react'
 import { Input, InputNumber, Modal, message } from 'antd'
 import { StudioEntitiesApi } from '../../../../services/studioEntities'
 import { ProjectVisualStyleAndStyleFields } from '../../project/ProjectVisualStyleAndStyleFields'
 import { useProjectStyleOptions } from '../../project/useProjectStyleOptions'
 
-export type ActorEntityLike = {
+export type ActorEntityLike = AssetFacts & {
   id: string
   name: string
   description?: string | null
@@ -41,6 +42,7 @@ export function ActorEntityFormModal({
   const { options: projectStyleOptions, defaultVisualStyle, getDefaultStyle } = useProjectStyleOptions()
   const [formName, setFormName] = useState('')
   const [formDesc, setFormDesc] = useState('')
+  const [formFacts, setFormFacts] = useState<AssetFacts>({})
   const [formTags, setFormTags] = useState('')
   const [formViewCount, setFormViewCount] = useState<number | null>(null)
   const [formVisualStyle, setFormVisualStyle] = useState<'现实' | '动漫'>(defaultVisualStyle as '现实' | '动漫')
@@ -50,7 +52,8 @@ export function ActorEntityFormModal({
     if (!open) return
     if (editing) {
       setFormName(editing.name)
-      setFormDesc(editing.description ?? '')
+      setFormDesc(editing.supplementary_info ?? '')
+      setFormFacts(pickAssetFacts('actor', editing))
       setFormTags((editing.tags ?? []).join(', '))
       setFormViewCount(editing.view_count ?? null)
       const nextVisual = ((editing.visual_style as '现实' | '动漫' | undefined) ?? defaultVisualStyle) as '现实' | '动漫'
@@ -59,6 +62,7 @@ export function ActorEntityFormModal({
         (editing.style as string | undefined) ?? getDefaultStyle(nextVisual),
       )
     } else {
+      setFormFacts({})
       setFormName('')
       setFormDesc('')
       setFormTags('')
@@ -79,7 +83,8 @@ export function ActorEntityFormModal({
         const created = await StudioEntitiesApi.create('actor', {
           id: crypto?.randomUUID?.() ?? `actor_${Date.now()}`,
           name,
-          description: formDesc.trim() || undefined,
+          supplementary_info: formDesc.trim(),
+          ...formFacts,
           tags: normalizeTags(formTags),
           view_count: formViewCount ?? undefined,
           visual_style: formVisualStyle,
@@ -95,9 +100,10 @@ export function ActorEntityFormModal({
       } else {
         await StudioEntitiesApi.update('actor', editing.id, {
           name,
-          description: formDesc.trim() || null,
+          supplementary_info: formDesc.trim(),
+          ...formFacts,
           tags: normalizeTags(formTags),
-          view_count: formViewCount ?? null,
+          ...(formViewCount === null ? {} : { view_count: formViewCount }),
           visual_style: formVisualStyle,
           style: formStyle,
         })
@@ -124,9 +130,10 @@ export function ActorEntityFormModal({
           <div className="text-sm text-gray-600 mb-1">名称</div>
           <Input value={formName} onChange={(e) => setFormName(e.target.value)} />
         </div>
+        <AssetFactsFields type={'actor'} value={formFacts} onChange={setFormFacts} supplementaryInfo={formDesc} />
         <div>
-          <div className="text-sm text-gray-600 mb-1">描述</div>
-          <Input.TextArea rows={3} value={formDesc} onChange={(e) => setFormDesc(e.target.value)} />
+          <div className="text-sm text-gray-600 mb-1">补充信息</div>
+          <Input.TextArea maxLength={8000} rows={3} value={formDesc} onChange={(e) => setFormDesc(e.target.value)} />
         </div>
         <div>
           <div className="text-sm text-gray-600 mb-1">标签（逗号分隔）</div>

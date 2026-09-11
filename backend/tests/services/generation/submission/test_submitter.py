@@ -101,7 +101,7 @@ def _image_command(*, delivery: GenerationDelivery = GenerationDelivery.async_po
         modality=GenerationModality.image,
         operation=GenerationOperation.image_generation,
         delivery=delivery,
-        target=GenerationTarget(kind=GenerationTargetKind.asset_image_slot, entity_id="asset-1", slot_id="slot-1"),
+        target=GenerationTarget(kind=GenerationTargetKind.asset_image_slot, asset_type="actor", entity_id="asset-1", slot_id="slot-1"),
         request=GenerationSubmitRequest(
             model_id="model-1",
             execution_prompt="一只水母",

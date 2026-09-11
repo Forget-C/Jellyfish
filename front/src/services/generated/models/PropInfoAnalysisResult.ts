@@ -2,11 +2,12 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { AssetFieldSuggestion } from './AssetFieldSuggestion';
 /**
- * 根据原文道具描述，分析缺少的信息，并给出优化后的可生成道具描述。
+ * Prop 分类设定整理结果。
  */
 export type PropInfoAnalysisResult = {
-    issues: Array<string>;
-    optimized_description: string;
+    issues?: Array<string>;
+    suggestions?: Array<AssetFieldSuggestion>;
 };
 

@@ -34,7 +34,7 @@ def _snapshot(kind: GenerationTargetKind, *, entity_id: str = "shot-1", slot_id:
     """创建包含目标版本的最小图片任务快照。"""
     return ResolvedGenerationSnapshot(
         model_id="model-1",
-        canonical_target=GenerationTarget(kind=kind, entity_id=entity_id, slot_id=slot_id),
+        canonical_target=GenerationTarget(kind=kind, entity_id=entity_id, slot_id=slot_id, asset_type="actor" if kind == GenerationTargetKind.asset_image_slot else None),
         expected_version_id=3,
         operation_input=ImageGenerationOperationInput(),
     )

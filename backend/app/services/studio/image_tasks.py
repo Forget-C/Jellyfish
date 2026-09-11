@@ -78,14 +78,19 @@ def is_front_view(view_angle: AssetViewAngle | str | None) -> bool:
 
 
 def map_view_angle_for_prompt(view_angle: AssetViewAngle | str | None) -> str:
+    """将槽位视角转换为通用展示方向，不向物体或场景添加人体特征。"""
     if view_angle is None:
         return ""
     raw = view_angle.value if isinstance(view_angle, AssetViewAngle) else str(view_angle)
     view_angle_map = {
-        "RIGH": "纯右側面,严格右侧面，90度纯侧面轮廓，耳朵清晰可见",
-        "RIGHT": "纯右側面,严格右侧面，90度纯侧面轮廓，耳朵清晰可见",
-        "LEFT": "纯左侧面,严格左侧面，90度纯侧面轮廓，耳朵清晰可见",
-        "BACK": "正后方,正后方视角，完全背对镜头，只能看到后脑勺和后背",
+        "FRONT": "正面",
+        "RIGH": "严格90度右侧面",
+        "RIGHT": "严格90度右侧面",
+        "LEFT": "严格90度左侧面",
+        "BACK": "正后方，展示主体背面",
+        "THREE_QUARTER": "四分之三视角",
+        "TOP": "正上方俯视",
+        "DETAIL": "细节特写",
     }
     return view_angle_map.get(raw, raw)
 

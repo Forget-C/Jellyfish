@@ -3,11 +3,9 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * Studio 资产草稿（Scene/Prop/Costume）。
- *
- * 导入 API 未传 id 时由服务端生成；分镜详情回填时可带 scene_id/prop_id/costume_id。
+ * 服装草稿保留分类设定。
  */
-export type StudioAssetDraft = {
+export type StudioCostumeDraft = {
     /**
      * 资产 ID（已落库时回填，如 scene_id / prop_id / costume_id）
      */
@@ -40,5 +38,29 @@ export type StudioAssetDraft = {
      * 计划生成视角图数量
      */
     view_count?: number;
+    /**
+     * 补充信息
+     */
+    supplementary_info?: string;
+    /**
+     * 服装类型
+     */
+    costume_type?: (string | null);
+    /**
+     * 款式层次
+     */
+    structure?: (string | null);
+    /**
+     * 材质
+     */
+    materials?: (string | null);
+    /**
+     * 颜色
+     */
+    colors?: (string | null);
+    /**
+     * 纹样与附属配饰
+     */
+    patterns_accessories?: (string | null);
 };
 

@@ -222,14 +222,9 @@ async def test_build_actor_image_base_draft_front_view_returns_no_refs(monkeypat
     )
 
     async def _fake_build_prompt(*_args, **_kwargs):
-        return SimpleNamespace(
-            prompt="演员渲染提示词",
-            template_id="template-1",
-            template_version=2,
-            merged_variables={"view_angle": "front"},
-        )
+        return "演员渲染提示词", "template-1", 2, {"view_angle": "front"}
 
-    monkeypatch.setattr(asset_base, "build_prompt_with_template_snapshot", _fake_build_prompt)
+    monkeypatch.setattr(asset_base, "_build_asset_prompt", _fake_build_prompt)
     monkeypatch.setattr(asset_base, "asset_prompt_category", lambda **_kwargs: "actor_front")
 
     draft = await asset_base.build_actor_image_base_draft(
@@ -246,6 +241,10 @@ async def test_build_actor_image_base_draft_front_view_returns_no_refs(monkeypat
 
 @pytest.mark.asyncio
 async def test_build_character_image_base_draft_combines_actor_and_costume_refs(monkeypatch):
+    async def available_file(**kwargs):
+        """隔离参考图元数据查询。"""
+        return None
+    monkeypatch.setattr("app.services.studio.generation.asset_image.prompt_rules.storage.get_file_info", available_file)
     character = SimpleNamespace(
         id="char-1",
         name="角色A",
@@ -267,25 +266,21 @@ async def test_build_character_image_base_draft_combines_actor_and_costume_refs(
         mapping={
             (Character, "char-1"): character,
             (CharacterImage, 1): image,
-            (Actor, "actor-1"): SimpleNamespace(id="actor-1"),
-            (Costume, "costume-1"): SimpleNamespace(id="costume-1"),
+            (Actor, "actor-1"): SimpleNamespace(id="actor-1", name="演员", description="黑发"),
+            (Costume, "costume-1"): SimpleNamespace(id="costume-1", name="服装", description="白衣"),
+            **{(FileItem, key): SimpleNamespace(type="image", storage_key=key) for key in ("actor-front", "actor-left", "costume-front")},
         }
     )
 
     async def _fake_build_prompt(*_args, **_kwargs):
-        return SimpleNamespace(
-            prompt="角色合成提示词",
-            template_id="template-character",
-            template_version=1,
-            merged_variables={"view_angle": "front"},
-        )
+        return "角色合成提示词", "template-character", 1, {"view_angle": "front"}
 
     async def _fake_pick_ordered(*_args, parent_id: str, **_kwargs):
         if parent_id == "actor-1":
             return ["actor-front", "actor-left"]
         return ["costume-front"]
 
-    monkeypatch.setattr(asset_base, "build_prompt_with_template_snapshot", _fake_build_prompt)
+    monkeypatch.setattr(asset_base, "_build_asset_prompt", _fake_build_prompt)
     monkeypatch.setattr(asset_base, "pick_ordered_ref_file_ids", _fake_pick_ordered)
 
     draft = await asset_base.build_character_image_base_draft(

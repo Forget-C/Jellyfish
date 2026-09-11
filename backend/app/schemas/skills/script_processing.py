@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.studio import CameraAngle, CameraMovement, CameraShotType
+from app.schemas.studio.asset_fields import ActorFields, SceneFields, PropFields, CostumeFields
 from app.schemas.skills.common import DialogueLine, DialogueLineMode, EvidenceSpan
 from app.schemas.skills.film import Character, Location, Prop, Scene, ProjectCinematicBreakdown
 
@@ -290,6 +291,22 @@ class StudioAssetDraft(BaseModel):
     view_count: int = Field(1, ge=1, description="计划生成视角图数量")
 
 
+class StudioActorDraft(ActorFields, StudioAssetDraft):
+    """导出演员身份设定，保留分类事实与补充信息。"""
+
+
+class StudioSceneDraft(SceneFields, StudioAssetDraft):
+    """场景草稿保留分类设定，避免回填只剩拼装后的描述。"""
+
+
+class StudioPropDraft(PropFields, StudioAssetDraft):
+    """道具草稿保留分类设定。"""
+
+
+class StudioCostumeDraft(CostumeFields, StudioAssetDraft):
+    """服装草稿保留分类设定。"""
+
+
 class StudioCharacterDraft(BaseModel):
     """Studio 角色草稿。
 
@@ -305,6 +322,7 @@ class StudioCharacterDraft(BaseModel):
     name: str = Field(..., description="角色名称（同项目内建议唯一）")
     description: str = Field("", description="角色描述")
     tags: List[str] = Field(default_factory=list, description="标签（可选）")
+    actor: StudioActorDraft | None = Field(None, description="关联演员的身份设定，不复制到角色自身")
     costume_name: Optional[str] = Field(None, description="服装名称（可选，导入时映射到 costume_id）")
     prop_names: List[str] = Field(default_factory=list, description="角色常用道具名称列表（可选）")
 
@@ -366,9 +384,9 @@ class StudioScriptExtractionDraft(BaseModel):
     script_text: str = Field(..., description="剧本文本（可为优化后版本）")
 
     characters: List[StudioCharacterDraft] = Field(default_factory=list)
-    scenes: List[StudioAssetDraft] = Field(default_factory=list)
-    props: List[StudioAssetDraft] = Field(default_factory=list)
-    costumes: List[StudioAssetDraft] = Field(default_factory=list)
+    scenes: List[StudioSceneDraft] = Field(default_factory=list)
+    props: List[StudioPropDraft] = Field(default_factory=list)
+    costumes: List[StudioCostumeDraft] = Field(default_factory=list)
 
     shots: List[StudioShotDraft] = Field(default_factory=list, description="镜头草稿列表")
 

@@ -15,7 +15,7 @@ def test_actor_create_default_visual_style() -> None:
     payload = ActorCreate(
         id="actor_1",
         name="Actor 1",
-        description="",
+        supplementary_info="",
         tags=[],
         prompt_template_id=None,
         view_count=1,
@@ -28,7 +28,7 @@ def test_actor_create_with_visual_style_anime() -> None:
     payload = ActorCreate(
         id="actor_2",
         name="Actor 2",
-        description="",
+        supplementary_info="",
         tags=[],
         prompt_template_id=None,
         view_count=1,
@@ -40,7 +40,7 @@ def test_actor_create_with_visual_style_anime() -> None:
 def test_actor_update_accepts_visual_style() -> None:
     payload = ActorUpdate(
         name=None,
-        description=None,
+        supplementary_info="",
         tags=None,
         prompt_template_id=None,
         view_count=None,

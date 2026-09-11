@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.contracts.asset_prompts import AssetPromptOptions
 from app.core.contracts.media import ImageMediaInput, MediaReference
 from app.services.generation.prompts.types import (
     AssetImagePromptRenderInput,
@@ -56,23 +57,25 @@ class AssetImagePromptRenderer:
         if not isinstance(render_input, AssetImagePromptRenderInput):
             raise ValueError("asset_image renderer requires asset_image input")
 
+        options = AssetPromptOptions.model_validate(render_input.model_dump(exclude={"kind", "entity_type", "entity_id", "image_id"}))
         if render_input.entity_type == "actor":
             base = await build_actor_image_base_draft(
-                db, actor_id=render_input.entity_id, image_id=render_input.image_id
+                db, actor_id=render_input.entity_id, image_id=render_input.image_id, options=options
             )
         elif render_input.entity_type == "character":
             base = await build_character_image_base_draft(
-                db, character_id=render_input.entity_id, image_id=render_input.image_id
+                db, character_id=render_input.entity_id, image_id=render_input.image_id, options=options
             )
         else:
             base = await build_asset_image_base_draft(
                 db,
+                options=options,
                 asset_type=render_input.entity_type,
                 asset_id=render_input.entity_id,
                 image_id=render_input.image_id,
             )
 
-        context = build_asset_image_context(base=base, images=render_input.reference_file_ids)
+        context = build_asset_image_context(base=base)
         preview = derive_asset_image_preview(base=base, context=context)
         return RenderedPromptSnapshot(
             render_id=_render_id(),

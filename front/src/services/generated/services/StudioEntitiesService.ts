@@ -2,11 +2,21 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ActorCreate } from '../models/ActorCreate';
+import type { ActorUpdate } from '../models/ActorUpdate';
 import type { ApiResponse_dict_str__Any__ } from '../models/ApiResponse_dict_str__Any__';
 import type { ApiResponse_EntityNameExistenceCheckResponse_ } from '../models/ApiResponse_EntityNameExistenceCheckResponse_';
 import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
 import type { ApiResponse_PaginatedData_dict_str__Any___ } from '../models/ApiResponse_PaginatedData_dict_str__Any___';
+import type { CharacterCreate } from '../models/CharacterCreate';
+import type { CharacterUpdate } from '../models/CharacterUpdate';
+import type { CostumeCreate } from '../models/CostumeCreate';
+import type { CostumeUpdate } from '../models/CostumeUpdate';
 import type { EntityNameExistenceCheckRequest } from '../models/EntityNameExistenceCheckRequest';
+import type { PropCreate } from '../models/PropCreate';
+import type { PropUpdate } from '../models/PropUpdate';
+import type { SceneCreate } from '../models/SceneCreate';
+import type { SceneUpdate } from '../models/SceneUpdate';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -86,6 +96,7 @@ export class StudioEntitiesService {
     }
     /**
      * 统一创建实体
+     * 解析分类请求，交由业务服务验证路径类别并处理实体。
      * @returns ApiResponse_dict_str__Any__ Successful Response
      * @throws ApiError
      */
@@ -94,7 +105,7 @@ export class StudioEntitiesService {
         requestBody,
     }: {
         entityType: string,
-        requestBody: Record<string, any>,
+        requestBody: (ActorCreate | CharacterCreate | SceneCreate | PropCreate | CostumeCreate),
     }): CancelablePromise<ApiResponse_dict_str__Any__> {
         return __request(OpenAPI, {
             method: 'POST',
@@ -135,6 +146,7 @@ export class StudioEntitiesService {
     }
     /**
      * 统一更新实体
+     * 解析分类请求，交由业务服务验证路径类别并处理实体。
      * @returns ApiResponse_dict_str__Any__ Successful Response
      * @throws ApiError
      */
@@ -145,7 +157,7 @@ export class StudioEntitiesService {
     }: {
         entityType: string,
         entityId: string,
-        requestBody: Record<string, any>,
+        requestBody: (ActorUpdate | CharacterUpdate | SceneUpdate | PropUpdate | CostumeUpdate),
     }): CancelablePromise<ApiResponse_dict_str__Any__> {
         return __request(OpenAPI, {
             method: 'PATCH',

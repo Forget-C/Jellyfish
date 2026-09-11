@@ -7,6 +7,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.core.contracts.asset_prompts import AssetPromptAudit
 from app.core.contracts.media import ImageMediaInput, VideoMediaInput
 from app.core.contracts.text_generation import ScriptOperationInput, TextChatInput
 
@@ -55,6 +56,14 @@ class GenerationTarget(BaseModel):
     kind: GenerationTargetKind
     entity_id: str = Field(min_length=1)
     slot_id: str | None = None
+    asset_type: Literal["actor", "character", "scene", "prop", "costume"] | None = None
+
+    @model_validator(mode="after")
+    def require_asset_type(self) -> "GenerationTarget":
+        """资产槽位必须保留路径类别，不能用不同表中可能重复的数字 ID 猜测。"""
+        if self.kind == GenerationTargetKind.asset_image_slot and self.asset_type is None:
+            raise ValueError("asset image target requires asset_type")
+        return self
 
 
 class ImageGenerationOperationInput(BaseModel):
@@ -66,6 +75,7 @@ class ImageGenerationOperationInput(BaseModel):
     target_ratio: str | None = None
     resolution_profile: str | None = None
     count: int = Field(default=1, ge=1, le=10)
+    save_as_candidate: bool = Field(False, description="资产图仅保存候选结果，不自动替换槽位")
 
 
 class VideoGenerationOperationInput(BaseModel):
@@ -94,6 +104,7 @@ class GenerationSubmitRequest(BaseModel):
     execution_prompt: str | None = None
     media: ImageMediaInput | VideoMediaInput | None = None
     render_id: str | None = None
+    asset_prompt_audit: AssetPromptAudit | None = None
     operation_input: TypedOperationInput
 
     @model_validator(mode="after")
@@ -102,6 +113,11 @@ class GenerationSubmitRequest(BaseModel):
         if isinstance(self.operation_input, (ImageGenerationOperationInput, VideoGenerationOperationInput)):
             if not self.execution_prompt or not self.execution_prompt.strip():
                 raise ValueError("execution_prompt is required for image and video generation")
+        if self.asset_prompt_audit is not None:
+            audit = self.asset_prompt_audit
+            references = self.media.references if isinstance(self.media, ImageMediaInput) else []
+            if self.execution_prompt != audit.execution_prompt or [ref.file_id for ref in references] != audit.reference_file_ids:
+                raise ValueError("资产预览与提交的提示词或参考图不一致，请更新预览")
         return self
 
 
@@ -132,3 +148,4 @@ class ResolvedGenerationSnapshot(BaseModel):
     media: ImageMediaInput | VideoMediaInput | None = None
     operation_input: TypedOperationInput
     execution_prompt: str | None = None
+    asset_prompt_audit: AssetPromptAudit | None = None

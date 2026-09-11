@@ -1,5 +1,5 @@
 import { StudioGenerationPromptsService, StudioGenerationTasksService } from '../../../services/generated'
-import type { GenerationSubmitRequest, RenderedPromptSnapshot } from '../../../services/generated'
+import type { AssetPromptAudit, AssetImagePromptRenderBody, GenerationSubmitRequest, RenderedPromptSnapshot } from '../../../services/generated'
 import { StudioEntitiesApi } from '../../../services/studioEntities'
 import type { AssetEditPageBaseProps, BaseAsset, BaseAssetImage } from './components/AssetEditPageBase'
 
@@ -28,10 +28,12 @@ function normalizeUpdateImagePayload(payload: UpdateImagePayload): UpdateImagePa
  * 预览接口仍负责读取资产事实和渲染提示词；提交阶段只冻结最终提示词与
  * FileItem 标识，避免把可变 URL 或资产目标再次放入请求体。
  */
-function createImageGenerationRequest(payload: { prompt: string; images: string[] }): GenerationSubmitRequest {
+function createImageGenerationRequest(payload: { prompt: string; images: string[]; saveAsCandidate?: boolean; audit?: AssetPromptAudit }): GenerationSubmitRequest {
   return {
     model_id: null,
     execution_prompt: payload.prompt,
+    render_id: payload.audit?.render_id,
+    asset_prompt_audit: payload.audit,
     media: {
       references: payload.images
         .filter((fileId) => Boolean(fileId?.trim()))
@@ -40,6 +42,7 @@ function createImageGenerationRequest(payload: { prompt: string; images: string[
     operation_input: {
       kind: 'image_generation',
       count: 1,
+      save_as_candidate: payload.saveAsCandidate ?? false,
     },
   }
 }
@@ -47,18 +50,25 @@ function createImageGenerationRequest(payload: { prompt: string; images: string[
 /**
  * 将统一 Renderer 的快照投影为资产编辑页既有的提示词草稿结构。
  *
- * 资产编辑页只需要最终执行提示词与有序图片文件标识；渲染审计字段保留在
- * 服务端快照内，避免页面重新解释不同媒体类型的推荐结果。
+ * 资产编辑页保留最终提示词、有序图片标识及审计元数据；提交时携带同一快照，
+ * 避免重新解释或遗漏预览中的参考集合。
  */
 function projectRenderedAssetPrompt(snapshot: RenderedPromptSnapshot | null | undefined): {
   prompt: string
   images: string[]
+  audit?: AssetPromptAudit
 } {
   const recommendedMedia = snapshot?.recommended_media
   const references = recommendedMedia && 'references' in recommendedMedia
     ? (recommendedMedia.references ?? [])
     : []
+  const fileIds = references.filter((reference) => reference.media_kind === 'image').map((reference) => reference.file_id)
   return {
+    audit: snapshot ? {
+      render_id: snapshot.render_id, template_id: snapshot.template_id, template_version: snapshot.template_version,
+      variables: Object.fromEntries(Object.entries(snapshot.variables_snapshot).filter((entry): entry is [string, string] => typeof entry[1] === 'string')),
+      execution_prompt: snapshot.execution_prompt, reference_file_ids: fileIds,
+    } : undefined,
     prompt: snapshot?.execution_prompt ?? '',
     images: references
       .filter((reference) => reference.media_kind === 'image')
@@ -69,19 +79,20 @@ function projectRenderedAssetPrompt(snapshot: RenderedPromptSnapshot | null | un
 /**
  * 按已绑定的资产图片槽位渲染提示词。
  *
- * 路径参数固定业务目标，空参考图列表会由 Renderer 使用槽位的默认参考图，
+ * 路径参数固定业务目标，省略参考图集合时由 Renderer 使用槽位的推荐参考图，
  * 从而避免旧图片任务接口重复承担提示词渲染职责。
  */
 async function renderAssetImagePrompt(
   assetType: 'actor' | 'character' | 'prop' | 'scene' | 'costume',
   assetId: string,
   slotId: number,
-): Promise<{ prompt: string; images: string[] }> {
+  options: AssetImagePromptRenderBody = {},
+): Promise<{ prompt: string; images: string[]; audit?: AssetPromptAudit }> {
   const response = await StudioGenerationPromptsService.renderAssetImagePromptApiV1StudioGenerationPromptsAssetsAssetTypeAssetIdSlotsSlotIdRenderPost({
     assetType,
     assetId,
     slotId,
-    requestBody: { reference_file_ids: [] },
+    requestBody: options,
   })
   return projectRenderedAssetPrompt(response.data)
 }
@@ -110,10 +121,10 @@ export const assetAdapters = {
     updateImage: async (id: string, imageId: number, payload) => {
       await StudioEntitiesApi.updateImage('character', id, imageId, normalizeUpdateImagePayload(payload))
     },
-    renderPrompt: async (id: string, imageId: number) => {
-      return renderAssetImagePrompt('character', id, imageId)
+    renderPrompt: async (id: string, imageId: number, options?: AssetImagePromptRenderBody) => {
+      return renderAssetImagePrompt('character', id, imageId, options)
     },
-    createGenerationTask: async (id: string, imageId: number, payload: { prompt: string; images: string[] }) => {
+    createGenerationTask: async (id: string, imageId: number, payload: { prompt: string; images: string[]; saveAsCandidate?: boolean; audit?: AssetPromptAudit }) => {
       const res = await StudioGenerationTasksService.submitCharacterImageGenerationTaskApiV1StudioGenerationTasksCharactersCharacterIdSlotsSlotIdTasksPost({
         characterId: id,
         slotId: imageId,
@@ -145,10 +156,10 @@ export const assetAdapters = {
     updateImage: async (id: string, imageId: number, payload) => {
       await StudioEntitiesApi.updateImage('actor', id, imageId, normalizeUpdateImagePayload(payload))
     },
-    renderPrompt: async (id: string, imageId: number) => {
-      return renderAssetImagePrompt('actor', id, imageId)
+    renderPrompt: async (id: string, imageId: number, options?: AssetImagePromptRenderBody) => {
+      return renderAssetImagePrompt('actor', id, imageId, options)
     },
-    createGenerationTask: async (id: string, imageId: number, payload: { prompt: string; images: string[] }) => {
+    createGenerationTask: async (id: string, imageId: number, payload: { prompt: string; images: string[]; saveAsCandidate?: boolean; audit?: AssetPromptAudit }) => {
       const res = await StudioGenerationTasksService.submitActorImageGenerationTaskApiV1StudioGenerationTasksActorsActorIdSlotsSlotIdTasksPost({
         actorId: id,
         slotId: imageId,
@@ -180,10 +191,10 @@ export const assetAdapters = {
     updateImage: async (id: string, imageId: number, payload) => {
       await StudioEntitiesApi.updateImage('scene', id, imageId, normalizeUpdateImagePayload(payload))
     },
-    renderPrompt: async (id: string, imageId: number) => {
-      return renderAssetImagePrompt('scene', id, imageId)
+    renderPrompt: async (id: string, imageId: number, options?: AssetImagePromptRenderBody) => {
+      return renderAssetImagePrompt('scene', id, imageId, options)
     },
-    createGenerationTask: async (id: string, imageId: number, payload: { prompt: string; images: string[] }) => {
+    createGenerationTask: async (id: string, imageId: number, payload: { prompt: string; images: string[]; saveAsCandidate?: boolean; audit?: AssetPromptAudit }) => {
       const res = await StudioGenerationTasksService.submitAssetImageGenerationTaskApiV1StudioGenerationTasksAssetsAssetTypeAssetIdSlotsSlotIdTasksPost({
         assetType: 'scene',
         assetId: id,
@@ -216,10 +227,10 @@ export const assetAdapters = {
     updateImage: async (id: string, imageId: number, payload) => {
       await StudioEntitiesApi.updateImage('prop', id, imageId, normalizeUpdateImagePayload(payload))
     },
-    renderPrompt: async (id: string, imageId: number) => {
-      return renderAssetImagePrompt('prop', id, imageId)
+    renderPrompt: async (id: string, imageId: number, options?: AssetImagePromptRenderBody) => {
+      return renderAssetImagePrompt('prop', id, imageId, options)
     },
-    createGenerationTask: async (id: string, imageId: number, payload: { prompt: string; images: string[] }) => {
+    createGenerationTask: async (id: string, imageId: number, payload: { prompt: string; images: string[]; saveAsCandidate?: boolean; audit?: AssetPromptAudit }) => {
       const res = await StudioGenerationTasksService.submitAssetImageGenerationTaskApiV1StudioGenerationTasksAssetsAssetTypeAssetIdSlotsSlotIdTasksPost({
         assetType: 'prop',
         assetId: id,
@@ -252,10 +263,10 @@ export const assetAdapters = {
     updateImage: async (id: string, imageId: number, payload) => {
       await StudioEntitiesApi.updateImage('costume', id, imageId, normalizeUpdateImagePayload(payload))
     },
-    renderPrompt: async (id: string, imageId: number) => {
-      return renderAssetImagePrompt('costume', id, imageId)
+    renderPrompt: async (id: string, imageId: number, options?: AssetImagePromptRenderBody) => {
+      return renderAssetImagePrompt('costume', id, imageId, options)
     },
-    createGenerationTask: async (id: string, imageId: number, payload: { prompt: string; images: string[] }) => {
+    createGenerationTask: async (id: string, imageId: number, payload: { prompt: string; images: string[]; saveAsCandidate?: boolean; audit?: AssetPromptAudit }) => {
       const res = await StudioGenerationTasksService.submitAssetImageGenerationTaskApiV1StudioGenerationTasksAssetsAssetTypeAssetIdSlotsSlotIdTasksPost({
         assetType: 'costume',
         assetId: id,

@@ -6,6 +6,10 @@ from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.schemas.studio.asset_fields import SceneFields, PropFields, CostumeFields
+
+from app.core.contracts.asset_prompts import validate_display_overrides
+
 from app.models.studio import AssetQualityLevel, AssetViewAngle, ProjectStyle, ProjectVisualStyle
 
 
@@ -23,7 +27,6 @@ class AssetBase(BaseModel):
 class AssetCreate(BaseModel):
     id: str
     name: str
-    description: str = ""
     tags: list[str] = Field(default_factory=list)
     prompt_template_id: str | None = None
     view_count: int = Field(1, ge=1)
@@ -53,7 +56,6 @@ class AssetCreate(BaseModel):
 
 class AssetUpdate(BaseModel):
     name: str | None = None
-    description: str | None = None
     tags: list[str] | None = None
     prompt_template_id: str | None = None
     view_count: int | None = Field(None, ge=1)
@@ -88,6 +90,13 @@ class AssetImageCreate(BaseModel):
     prompt_overrides: dict[str, str] = Field(default_factory=dict)
 
 
+    @field_validator("prompt_overrides")
+    @classmethod
+    def _validate_overrides(cls, value):
+        """图片级设置仅允许调整展示方式。"""
+        return validate_display_overrides(value)
+
+
 class AssetImageUpdate(BaseModel):
     quality_level: AssetQualityLevel | None = None
     view_angle: AssetViewAngle | None = None
@@ -98,16 +107,47 @@ class AssetImageUpdate(BaseModel):
     prompt_overrides: dict[str, str] | None = None
 
 
-class SceneRead(AssetRead):
-    pass
+    @field_validator("prompt_overrides")
+    @classmethod
+    def _validate_overrides(cls, value):
+        """图片级设置仅允许调整展示方式。"""
+        return validate_display_overrides(value)
 
 
-class PropRead(AssetRead):
-    pass
+class SceneCreate(SceneFields, AssetCreate):
+    """创建Scene，只接收该类别的可编辑设定。"""
 
 
-class CostumeRead(AssetRead):
-    pass
+class SceneUpdate(SceneFields, AssetUpdate):
+    """局部更新Scene，未传字段保持原值。"""
+
+
+class SceneRead(SceneFields, AssetRead):
+    """返回分类设定及只读完整描述。"""
+
+
+class PropCreate(PropFields, AssetCreate):
+    """创建Prop，只接收该类别的可编辑设定。"""
+
+
+class PropUpdate(PropFields, AssetUpdate):
+    """局部更新Prop，未传字段保持原值。"""
+
+
+class PropRead(PropFields, AssetRead):
+    """返回分类设定及只读完整描述。"""
+
+
+class CostumeCreate(CostumeFields, AssetCreate):
+    """创建Costume，只接收该类别的可编辑设定。"""
+
+
+class CostumeUpdate(CostumeFields, AssetUpdate):
+    """局部更新Costume，未传字段保持原值。"""
+
+
+class CostumeRead(CostumeFields, AssetRead):
+    """返回分类设定及只读完整描述。"""
 
 
 class SceneImageRead(AssetImageBase):

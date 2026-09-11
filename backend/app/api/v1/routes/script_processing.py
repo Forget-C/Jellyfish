@@ -31,10 +31,10 @@ from app.chains.agents.script_processing_agents import (
 )
 from app.dependencies import get_db, get_llm, get_nothinking_llm
 from app.schemas.common import ApiResponse, success_response
-from app.schemas.skills.character_portrait import CharacterPortraitAnalysisResult
-from app.schemas.skills.costume_info_analysis import CostumeInfoAnalysisResult
-from app.schemas.skills.prop_info_analysis import PropInfoAnalysisResult
-from app.schemas.skills.scene_info_analysis import SceneInfoAnalysisResult
+from app.core.contracts.asset_analysis import CharacterPortraitAnalysisResult
+from app.core.contracts.asset_analysis import CostumeInfoAnalysisResult
+from app.core.contracts.asset_analysis import PropInfoAnalysisResult
+from app.core.contracts.asset_analysis import SceneInfoAnalysisResult
 from app.services.common import required_field
 from app.services.script_processing_tasks import (
     create_consistency_task,

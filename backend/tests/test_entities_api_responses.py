@@ -75,7 +75,7 @@ def test_create_actor_entity_returns_created_envelope(client: TestClient) -> Non
             json={
                 "id": "actor-1",
                 "name": "演员一",
-                "description": "测试演员",
+                "supplementary_info": "测试演员",
                 "tags": [],
                 "prompt_template_id": None,
                 "view_count": 2,
@@ -116,7 +116,7 @@ def test_delete_actor_entity_returns_empty_envelope(client: TestClient) -> None:
     actor = Actor(
         id="actor-1",
         name="演员一",
-        description="",
+        supplementary_info="",
         tags=[],
         prompt_template_id=None,
         view_count=1,
@@ -142,7 +142,7 @@ def test_create_entity_invalid_entity_type_returns_api_response(client: TestClie
     db = _FakeEntityDB()
     app.dependency_overrides[get_db] = _override_db(db)
     try:
-        response = client.post("/api/v1/studio/entities/unknown", json={"id": "x"})
+        response = client.post("/api/v1/studio/entities/unknown", json={"id": "x", "name": "测试"})
     finally:
         app.dependency_overrides.clear()
 

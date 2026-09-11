@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.core.contracts.asset_prompts import validate_display_overrides
 
 from app.models.studio import AssetQualityLevel, AssetViewAngle
 
@@ -33,6 +35,13 @@ class ActorImageCreate(BaseModel):
     prompt_overrides: dict[str, str] = Field(default_factory=dict)
 
 
+    @field_validator("prompt_overrides")
+    @classmethod
+    def _validate_overrides(cls, value):
+        """图片级设置仅允许调整展示方式。"""
+        return validate_display_overrides(value)
+
+
 class ActorImageUpdate(BaseModel):
     """局部更新演员图片槽位；覆盖仅作用于当前图片。"""
 
@@ -43,3 +52,10 @@ class ActorImageUpdate(BaseModel):
     height: int | None = None
     format: str | None = None
     prompt_overrides: dict[str, str] | None = None
+
+
+    @field_validator("prompt_overrides")
+    @classmethod
+    def _validate_overrides(cls, value):
+        """图片级设置仅允许调整展示方式。"""
+        return validate_display_overrides(value)

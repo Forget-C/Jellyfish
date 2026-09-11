@@ -21,10 +21,13 @@ ENTITY_ORDER_FIELDS = {"name", "style", "visual_style", "created_at", "updated_a
 
 
 def _asset_read_payload(obj: Any, thumbnail: str) -> dict[str, Any]:
+    """返回分类字段和派生摘要，供通用资产列表及编辑页复用。"""
     return {
         "id": obj.id,
         "name": obj.name,
         "description": obj.description,
+        "supplementary_info": obj.supplementary_info,
+        **{field: getattr(obj, field) for field, _ in obj.description_fields},
         "tags": obj.tags or [],
         "prompt_template_id": obj.prompt_template_id,
         "view_count": obj.view_count,

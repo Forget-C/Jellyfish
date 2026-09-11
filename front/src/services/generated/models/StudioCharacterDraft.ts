@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { StudioActorDraft } from './StudioActorDraft';
 /**
  * Studio 角色草稿。
  *
@@ -36,6 +37,10 @@ export type StudioCharacterDraft = {
      * 标签（可选）
      */
     tags?: Array<string>;
+    /**
+     * 关联演员的身份设定，不复制到角色自身
+     */
+    actor?: (StudioActorDraft | null);
     /**
      * 服装名称（可选，导入时映射到 costume_id）
      */

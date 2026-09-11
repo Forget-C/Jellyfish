@@ -1,4 +1,5 @@
 import { StudioEntitiesService } from './generated'
+import type { ActorCreate, CharacterCreate, SceneCreate, PropCreate, CostumeCreate } from './generated'
 
 type EntityType = 'actor' | 'character' | 'scene' | 'prop' | 'costume'
 
@@ -22,7 +23,7 @@ export const StudioEntitiesApi = {
   create(entityType: EntityType, payload: Record<string, unknown>) {
     return StudioEntitiesService.createEntityApiV1StudioEntitiesEntityTypePost({
       entityType,
-      requestBody: payload,
+      requestBody: payload as ActorCreate | CharacterCreate | SceneCreate | PropCreate | CostumeCreate,
     })
   },
   update(entityType: EntityType, entityId: string, payload: Record<string, unknown>) {

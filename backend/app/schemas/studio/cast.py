@@ -6,13 +6,14 @@ from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.schemas.studio.asset_fields import ActorFields
+
 from app.models.studio import ProjectStyle, ProjectVisualStyle
 
 
 class ActorBase(BaseModel):
     id: str = Field(..., description="演员 ID")
     name: str = Field(..., description="名称")
-    description: str = Field("", description="描述")
     tags: list[str] = Field(default_factory=list, description="标签")
     prompt_template_id: str | None = Field(None, description="提示词模板 ID（可空）")
     view_count: int = Field(1, ge=1, description="计划为该演员生成的视角图片数量（不含分镜帧）")
@@ -20,7 +21,9 @@ class ActorBase(BaseModel):
     visual_style: ProjectVisualStyle = Field(ProjectVisualStyle.live_action, description="画面表现形式（真人/动漫等）")
 
 
-class ActorCreate(ActorBase):
+class ActorCreate(ActorFields, ActorBase):
+    """创建演员的身份设定，不接收派生描述写入。"""
+
     project_id: str | None = Field(None, description="可选：创建成功后写入 project_actor_links（与演员创建同一事务）")
     chapter_id: str | None = Field(None, description="可选：章节 ID")
     shot_id: str | None = Field(None, description="可选：分镜 ID")
@@ -43,9 +46,10 @@ class ActorCreate(ActorBase):
         return self
 
 
-class ActorUpdate(BaseModel):
+class ActorUpdate(ActorFields):
+    """局部更新演员设定，区分未传与显式清空。"""
+
     name: str | None = None
-    description: str | None = None
     tags: list[str] | None = None
     prompt_template_id: str | None = None
     view_count: int | None = Field(None, ge=1)
@@ -53,7 +57,10 @@ class ActorUpdate(BaseModel):
     visual_style: ProjectVisualStyle | None = None
 
 
-class ActorRead(ActorBase):
+class ActorRead(ActorFields, ActorBase):
+    """返回演员设定及后端派生的完整描述。"""
+
+    description: str = Field("", description="只读完整描述")
     model_config = ConfigDict(from_attributes=True)
 
     thumbnail: str = Field("", description="缩略图下载地址")
@@ -71,6 +78,10 @@ class CharacterBase(BaseModel):
 
 
 class CharacterCreate(CharacterBase):
+    """创建角色组合，拒绝未声明的字段。"""
+
+    model_config = ConfigDict(extra="forbid")
+
     chapter_id: str | None = Field(None, description="可选：章节 ID")
     shot_id: str | None = Field(None, description="可选：创建成功后自动绑定的分镜 ID")
 
@@ -93,6 +104,10 @@ class CharacterCreate(CharacterBase):
 
 
 class CharacterUpdate(BaseModel):
+    """更新角色组合，避免分类设定被错误吞掉。"""
+
+    model_config = ConfigDict(extra="forbid")
+
     project_id: str | None = None
     name: str | None = None
     description: str | None = None

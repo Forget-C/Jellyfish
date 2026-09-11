@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.contracts.asset_prompts import AssetPromptOptions
 from app.dependencies import get_db
 from app.models.studio import ShotFrameType
 from app.schemas.common import ApiResponse, success_response
@@ -26,12 +27,11 @@ from app.services.generation.prompts.frame_guidance import load_frame_render_gui
 router = APIRouter()
 
 
-class AssetImagePromptRenderBody(BaseModel):
+class AssetImagePromptRenderBody(AssetPromptOptions):
     """资产图片渲染允许编辑的槽位资源；目标仅由路径唯一确定。"""
 
     model_config = ConfigDict(extra="forbid")
 
-    reference_file_ids: list[str] = Field(default_factory=list)
 
 
 class ShotFramePromptRenderBody(BaseModel):
@@ -74,7 +74,7 @@ async def render_asset_image_prompt(
                 entity_type=asset_type,
                 entity_id=asset_id,
                 image_id=slot_id,
-                reference_file_ids=body.reference_file_ids,
+                **body.model_dump(),
             )
         ),
     )

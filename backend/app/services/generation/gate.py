@@ -17,9 +17,9 @@ from app.core.contracts.media import ImageMediaInput, MediaReference, VideoMedia
 from app.models.experiment_sessions import ExperimentSession
 from app.models.llm import Model, ModelCategoryKey, ModelSettings, Provider, ProviderStatus
 from app.models.studio import Shot, ShotDetail, ShotFrameImage
-from app.models.studio_asset_images import ActorImage, CharacterImage, CostumeImage, PropImage, SceneImage
 from app.models.studio_prompts_files_timeline import FileItem
 from app.models.types import FileType
+from app.services.studio.entity_specs import entity_spec
 
 
 @dataclass(frozen=True)
@@ -44,6 +44,7 @@ def _iter_media(media: ImageMediaInput | VideoMediaInput | None) -> list[MediaRe
     return items
 
 
+
 class GenerationEntityGate:
     """统一校验目标、模型和媒体引用，不解释用户编辑后的提示词。"""
 
@@ -59,6 +60,7 @@ class GenerationEntityGate:
             media=command.request.media,
             operation_input=command.request.operation_input,
             execution_prompt=command.request.execution_prompt,
+            asset_prompt_audit=command.request.asset_prompt_audit,
         )
 
     async def _resolve_model(self, db: AsyncSession, command: GenerationCommand) -> Model:
@@ -115,30 +117,22 @@ class GenerationEntityGate:
                 db,
                 slot_id=target.slot_id,
                 entity_id=target.entity_id,
+                asset_type=target.asset_type,
             )
         elif target.kind == GenerationTargetKind.script_processing:
             exists = bool(target.entity_id)
         if not exists:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="target_not_found")
 
-    async def _asset_slot_belongs_to(self, db: AsyncSession, *, slot_id: str, entity_id: str) -> bool:
+    async def _asset_slot_belongs_to(self, db: AsyncSession, *, slot_id: str, entity_id: str, asset_type: str) -> bool:
         """确认资产图片槽位存在且属于路径绑定的资产，拒绝跨资产写回。"""
         try:
             numeric_id = int(slot_id)
         except ValueError:
             return False
-        parent_field_by_model = (
-            (ActorImage, "actor_id"),
-            (CharacterImage, "character_id"),
-            (SceneImage, "scene_id"),
-            (PropImage, "prop_id"),
-            (CostumeImage, "costume_id"),
-        )
-        for model, parent_field in parent_field_by_model:
-            row = await db.get(model, numeric_id)
-            if row is not None:
-                return getattr(row, parent_field) == entity_id
-        return False
+        spec = entity_spec(asset_type)
+        row = await db.get(spec.image_model, numeric_id)
+        return row is not None and getattr(row, spec.id_field) == entity_id
 
     async def _target_version(self, db: AsyncSession, command: GenerationCommand) -> int | None:
         """提交时冻结可发布槽位的当前 CAS 版本，实验与脚本目标不需要版本。"""
@@ -154,8 +148,7 @@ class GenerationEntityGate:
             return row.version_id if row else None
         if target.kind == GenerationTargetKind.asset_image_slot and target.slot_id:
             numeric_id = int(target.slot_id)
-            for model in (ActorImage, CharacterImage, SceneImage, PropImage, CostumeImage):
-                row = await db.get(model, numeric_id)
-                if row is not None:
-                    return row.version_id
+            spec = entity_spec(target.asset_type)
+            row = await db.get(spec.image_model, numeric_id)
+            return row.version_id if row is not None else None
         return None

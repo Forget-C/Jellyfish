@@ -8,6 +8,7 @@ from typing import Annotated, Literal, Protocol
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.contracts.asset_prompts import AssetPromptOptions
 from app.core.contracts.media import ImageMediaInput, VideoMediaInput
 from app.models.studio import ShotFrameType
 from app.schemas.studio.shots import ShotLinkedAssetItem
@@ -21,7 +22,7 @@ class PromptRendererName(str, Enum):
     shot_video = "shot_video"
 
 
-class AssetImagePromptRenderInput(BaseModel):
+class AssetImagePromptRenderInput(AssetPromptOptions):
     """资产图片渲染允许使用的业务输入，不承载生成目标或 operation。"""
 
     model_config = ConfigDict(extra="forbid")
@@ -30,7 +31,6 @@ class AssetImagePromptRenderInput(BaseModel):
     entity_type: Literal["actor", "character", "prop", "scene", "costume"]
     entity_id: str = Field(min_length=1)
     image_id: int | None = Field(default=None, ge=1)
-    reference_file_ids: list[str] = Field(default_factory=list)
 
 
 class ShotFramePromptRenderInput(BaseModel):

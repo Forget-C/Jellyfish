@@ -1,3 +1,5 @@
+import { AssetReferencePicker } from './AssetReferencePicker'
+import { AssetFactsFields, ASSET_FIELDS, pickAssetFacts, previewAssetDescription, type AssetFacts, type AssetFieldName, type StructuredAssetType } from './AssetFactsFields'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Button,
@@ -11,6 +13,7 @@ import {
   Modal,
   Row,
   Space,
+  Select,
   Spin,
   Tag,
   Typography,
@@ -18,7 +21,7 @@ import {
 } from 'antd'
 import { ArrowLeftOutlined, CloseCircleOutlined, EditOutlined, ReloadOutlined } from '@ant-design/icons'
 import { FilmService, ScriptProcessingService } from '../../../../services/generated'
-import type { TaskStatus } from '../../../../services/generated'
+import type { AssetPromptAudit, AssetFieldSuggestion, AssetImagePromptRenderBody, TaskStatus } from '../../../../services/generated'
 import { listTaskLinksNormalized } from '../../../../services/filmTaskLinks'
 import { buildFileDownloadUrl } from '../utils'
 import { DisplayImageCard } from './DisplayImageCard'
@@ -30,7 +33,6 @@ import { useRelationTaskNotification } from '../../components/taskNotificationHe
 import { useTaskPageContext } from '../../components/taskPageContext'
 import { TASK_COPY } from '../../components/taskCopy'
 import { useLocation } from 'react-router-dom'
-import { useGenerationDraft } from '../../hooks/useGenerationDraft'
 import {
   CHARACTER_PORTRAIT_ANALYSIS_RELATION_TYPE,
   COSTUME_INFO_ANALYSIS_RELATION_TYPE,
@@ -52,11 +54,11 @@ export type AssetViewAngle =
   | 'TOP'
   | 'DETAIL'
 
-export type AssetUpdate = {
+export type AssetUpdate = AssetFacts & {
   name: string
-  description: string
-  tags: string[]
-  view_count: number
+  description?: string
+  tags?: string[]
+  view_count?: number
   visual_style: '现实' | '动漫'
   style?: string
 }
@@ -73,7 +75,7 @@ const ANGLE_LABEL_MAP: Record<AssetViewAngle, string> = {
   DETAIL: '细节',
 }
 
-export type BaseAsset = {
+export type BaseAsset = AssetFacts & {
   id: string
   name: string
   description?: string
@@ -103,8 +105,8 @@ export type AssetEditPageBaseProps<TAsset extends BaseAsset, TImage extends Base
   listImages: (assetId: string) => Promise<TImage[]>
   createImageSlot: (assetId: string, angle: AssetViewAngle) => Promise<void>
   updateImage: (assetId: string, imageId: number, payload: { file_id: string; width?: number | null; height?: number | null; format?: string | null }) => Promise<void>
-  renderPrompt: (assetId: string, imageId: number) => Promise<{ prompt: string; images: string[] }>
-  createGenerationTask: (assetId: string, imageId: number, payload: { prompt: string; images: string[] }) => Promise<string | null>
+  renderPrompt: (assetId: string, imageId: number, options?: AssetImagePromptRenderBody) => Promise<{ prompt: string; images: string[]; audit?: AssetPromptAudit }>
+  createGenerationTask: (assetId: string, imageId: number, payload: { prompt: string; images: string[]; saveAsCandidate?: boolean; audit?: AssetPromptAudit }) => Promise<string | null>
   onNavigate: (to: string, replace?: boolean) => void
 }
 
@@ -180,6 +182,8 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
 
   const [formName, setFormName] = useState('')
   const [formDesc, setFormDesc] = useState('')
+  const [formFacts, setFormFacts] = useState<AssetFacts>({})
+  const structuredType = relationType === 'character_image' ? null : relationType.replace('_image', '') as StructuredAssetType
   const [formTags, setFormTags] = useState('')
   const [formViewCount, setFormViewCount] = useState(1)
   const [formVisualStyle, setFormVisualStyle] = useState<'现实' | '动漫'>(defaultVisualStyle as '现实' | '动漫')
@@ -189,7 +193,9 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
   const [smartDetectLoading, setSmartDetectLoading] = useState(false)
   const [smartDetectOpen, setSmartDetectOpen] = useState(false)
   const [smartDetectIssues, setSmartDetectIssues] = useState<string[]>([])
-  const [smartDetectOptimizedDesc, setSmartDetectOptimizedDesc] = useState('')
+  const [smartDetectSuggestions, setSmartDetectSuggestions] = useState<AssetFieldSuggestion[]>([])
+  const [smartDetectBaseline, setSmartDetectBaseline] = useState<string | null>(null)
+  const currentFactsSnapshot = JSON.stringify({ name: formName, facts: formFacts, supplement: formDesc })
 
   const [generatingByImageId, setGeneratingByImageId] = useState<Record<number, boolean>>({})
   const [generationTask, setGenerationTask] = useState<RelationTaskState | null>(null)
@@ -198,37 +204,12 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
   const [promptPreviewOpen, setPromptPreviewOpen] = useState(false)
   const [promptPreviewLoading, setPromptPreviewLoading] = useState(false)
   const [promptPreviewImage, setPromptPreviewImage] = useState<TImage | null>(null)
-  const promptDraft = useGenerationDraft<
-    { prompt: string },
-    { imageId: number | null; images: string[] },
-    { prompt: string; images: string[] },
-    { taskId: string | null }
-  >({
-    initialBase: { prompt: '' },
-    initialContext: { imageId: null, images: [] },
-    derive: async ({ base, context }) => {
-      if (!assetId || !context.imageId) {
-        throw new Error('asset image slot is required')
-      }
-      const result = await renderPrompt(assetId, context.imageId)
-      return {
-        prompt: (base.prompt || '').trim() || (result.prompt ?? ''),
-        images: Array.isArray(result.images) ? result.images.filter(Boolean) : [],
-      }
-    },
-    submit: async ({ context, derived }) => {
-      if (!assetId || !context.imageId) {
-        throw new Error('asset image slot is required')
-      }
-      const taskId = await createGenerationTask(assetId, context.imageId, {
-        prompt: (derived.prompt || '').trim(),
-        images: derived.images,
-      })
-      return { taskId }
-    },
-  })
-  const promptPreviewDraft = promptDraft.base.prompt
-  const promptPreviewRefFileIds = promptDraft.context.images
+  const [promptPreviewDraft, setPromptPreviewDraft] = useState('')
+  const [promptAudit, setPromptAudit] = useState<AssetPromptAudit | undefined>()
+  const [promptPreviewRefFileIds, setPromptPreviewRefFileIds] = useState<string[]>([])
+  const [promptOptions, setPromptOptions] = useState<AssetImagePromptRenderBody>({})
+  const [promptNeedsRefresh, setPromptNeedsRefresh] = useState(false)
+
 
   const [historyOpen, setHistoryOpen] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(false)
@@ -253,9 +234,9 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
         const issues = Array.isArray(result.issues)
           ? result.issues.filter((it: unknown): it is string => typeof it === 'string' && it.trim().length > 0)
           : []
-        const optimizedDesc = String(result.optimized_description ?? '').trim()
+        const suggestions = Array.isArray(result.suggestions) ? result.suggestions as AssetFieldSuggestion[] : []
         setSmartDetectIssues(issues)
-        setSmartDetectOptimizedDesc(optimizedDesc)
+        setSmartDetectSuggestions(suggestions)
         setSmartDetectOpen(true)
         if (issues.length > 0) message.warning(`发现 ${issues.length} 项可能缺失信息`)
         else message.success('未发现缺失信息')
@@ -335,7 +316,8 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
 
       setAsset(nextAsset)
       setFormName(nextAsset.name)
-      setFormDesc(nextAsset.description ?? '')
+      setFormDesc(structuredType ? nextAsset.supplementary_info ?? '' : nextAsset.description ?? '')
+      setFormFacts(structuredType ? pickAssetFacts(structuredType, nextAsset) : {})
       setFormTags((nextAsset.tags ?? []).join(', '))
       {
         const nextVisual = (nextAsset.visual_style ?? defaultVisualStyle) as '现实' | '动漫'
@@ -390,9 +372,8 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
       const nextViewCount = Math.max(minViewCount, clampViewCount(formViewCount))
       const payload: AssetUpdate = {
         name: formName.trim(),
-        description: formDesc.trim(),
-        tags: normalizeTags(formTags),
-        view_count: nextViewCount,
+        ...(structuredType ? { ...formFacts, supplementary_info: formDesc.trim() } : { description: formDesc.trim() }),
+        ...(structuredType ? { tags: normalizeTags(formTags), view_count: nextViewCount } : {}),
         visual_style: formVisualStyle,
         style: formStyle,
       }
@@ -411,7 +392,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
     if (!assetId) return
     if (!smartDetectRelationEntityId) return
 
-    const description = (formDesc || '').trim()
+    const description = structuredType ? previewAssetDescription(structuredType, formFacts, formDesc) : formDesc.trim()
     if (!description) {
       if (relationType === 'actor_image') message.warning('请先输入演员描述再进行智能检测')
       else if (relationType === 'scene_image') message.warning('请先输入场景描述再进行智能检测')
@@ -427,6 +408,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
       return
     }
 
+    setSmartDetectBaseline(currentFactsSnapshot)
     setSmartDetectLoading(true)
     try {
       const request = () => {
@@ -558,38 +540,44 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
     onNavigate: () => onNavigate(location.pathname),
   })
 
-  const openPromptPreview = async (image: TImage) => {
+  /** 渲染当前设置并冻结预览输入；提交不再重新选择参考图。 */
+  const refreshPromptPreview = async (image: TImage, options: AssetImagePromptRenderBody) => {
     if (!assetId) return
-
+    setPromptPreviewLoading(true)
+    setPromptNeedsRefresh(true)
     try {
-      setPromptPreviewOpen(true)
-      setPromptPreviewLoading(true)
-      setPromptPreviewImage(image)
-      const nextContext = { imageId: image.id, images: [] }
-      promptDraft.hydrate({
-        base: { prompt: '' },
-        context: nextContext,
-      })
-      const derived = await promptDraft.deriveNow({
-        base: { prompt: '' },
-        context: nextContext,
-      })
-      if (derived) {
-        promptDraft.hydrate({
-          base: { prompt: derived.prompt },
-          context: { imageId: image.id, images: derived.images },
-          derived,
-        })
-      }
+      const rendered = await renderPrompt(assetId, image.id, options)
+      setPromptPreviewDraft(rendered.prompt)
+      setPromptAudit(rendered.audit)
+      setPromptPreviewRefFileIds(rendered.images)
+      setPromptNeedsRefresh(false)
     } catch {
-      message.error('获取提示词失败')
+      message.error('获取提示词失败，请检查资产设定和模板')
     } finally {
       setPromptPreviewLoading(false)
     }
   }
 
+  /** 打开槽位预览，每次从已保存的资产和推荐参考图开始。 */
+  const openPromptPreview = async (image: TImage) => {
+    if (!assetId) return
+    const savedFacts = structuredType && asset ? pickAssetFacts(structuredType, asset) : {}
+    const savedDescription = structuredType ? asset?.supplementary_info ?? '' : asset?.description ?? ''
+    if (formName !== asset?.name || formDesc !== savedDescription || JSON.stringify(formFacts) !== JSON.stringify(savedFacts)
+      || formStyle !== asset?.style || formVisualStyle !== asset?.visual_style) {
+      message.warning('请先保存资产设定，再预览生成提示词')
+      return
+    }
+    setPromptPreviewOpen(true)
+    setPromptPreviewImage(image)
+    setPromptOptions({})
+    setPromptPreviewDraft('')
+    setPromptPreviewRefFileIds([])
+    await refreshPromptPreview(image, {})
+  }
+
   const confirmGenerateWithPrompt = async () => {
-    if (!assetId || !promptPreviewImage) return
+    if (!assetId || !promptPreviewImage || promptNeedsRefresh || promptPreviewLoading) return
     const prompt = (promptPreviewDraft || '').trim()
     if (!prompt) {
       message.warning('请输入提示词')
@@ -598,8 +586,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
 
     setGeneratingByImageId((prev) => ({ ...prev, [promptPreviewImage.id]: true }))
     try {
-      const submitted = await promptDraft.submitNow()
-      const taskId = submitted?.taskId
+      const taskId = await createGenerationTask(assetId, promptPreviewImage.id, { prompt, images: promptPreviewRefFileIds, saveAsCandidate: promptOptions.mode === 'edit', audit: promptAudit })
       if (!taskId) {
         message.error('生成任务创建失败：缺少任务 ID')
         return
@@ -773,9 +760,10 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
                   <div className="text-gray-600 text-sm mb-1">名称</div>
                   <Input value={formName} onChange={(e) => setFormName(e.target.value)} disabled={smartDetectBusy || savingBase} />
                 </div>
+                {structuredType ? <AssetFactsFields type={structuredType} value={formFacts} onChange={setFormFacts} supplementaryInfo={formDesc} disabled={smartDetectBusy || savingBase} /> : null}
                 <div>
                     <div className="flex items-center justify-between gap-2 mb-1">
-                      <div className="text-gray-600 text-sm">描述</div>
+                      <div className="text-gray-600 text-sm">{structuredType ? '补充信息' : '角色描述'}</div>
                       {relationType === 'actor_image' ||
                       relationType === 'scene_image' ||
                       relationType === 'prop_image' ||
@@ -807,6 +795,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
                   <Input.TextArea
                     rows={4}
                     value={formDesc}
+                    maxLength={structuredType ? 8000 : undefined}
                     onChange={(e) => setFormDesc(e.target.value)}
                     disabled={smartDetectBusy || savingBase}
                   />
@@ -816,7 +805,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
                   <Input value={formTags} onChange={(e) => setFormTags(e.target.value)} disabled={smartDetectBusy || savingBase} />
                 </div>
                 <div>
-                  <div className="text-gray-600 text-sm mb-1">镜头数（仅可增加，最大 4）</div>
+                  <div className="text-gray-600 text-sm mb-1">视角数（仅可增加，最大 4）</div>
                   <InputNumber
                     min={minViewCount}
                     max={4}
@@ -847,7 +836,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
           },
           {
             key: 'views',
-            label: '多镜头图片',
+            label: '多视角图片',
             children: (
               <Row gutter={[16, 16]}>
                 {slotItems.map((slot) => (
@@ -945,6 +934,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
           setPromptPreviewImage(null)
         }}
         okText="生成"
+        okButtonProps={{ disabled: promptNeedsRefresh || promptPreviewLoading || !promptPreviewDraft.trim() }}
         cancelText="取消"
         confirmLoading={Boolean(promptPreviewImage && generatingByImageId[promptPreviewImage.id])}
         onOk={() => void confirmGenerateWithPrompt()}
@@ -957,6 +947,33 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
           </div>
         ) : (
           <div className="space-y-3">
+            <div className="space-y-3">
+              <div className="text-sm text-gray-600">调整本次展示方式</div>
+              <Select value={promptOptions.mode ?? 'generate'} options={[{ value: 'generate', label: '生成资产图' }, { value: 'edit', label: '局部修改（结果保留为候选）' }]}
+                onChange={(mode) => { setPromptOptions((current) => ({ ...current, mode, references: undefined })); setPromptNeedsRefresh(true) }} />
+              {promptOptions.mode === 'edit' ? <div className="text-sm text-gray-500">使用当前槽位图片修改。生成后请到图片历史中查看并明确采用。</div> : null}
+              {([
+                ['framing_instruction', '构图'], ['background_instruction', '背景'],
+                ['lighting_instruction', '灯光'], ['visible_detail_instruction', '细节强调'],
+                ['negative_prompt', '排除内容'], ['additional_instruction', '本次附加要求'],
+                ['edit_instruction', '修改对象与目标效果'], ['preserve_instruction', '保持不变的内容'],
+              ] as const).filter(([key]) => promptOptions.mode === 'edit' || !['edit_instruction', 'preserve_instruction'].includes(key)).map(([key, label]) => (
+                <label key={key} className="block text-sm text-gray-600">
+                  {label}
+                  <Input.TextArea autoSize={{ minRows: 1, maxRows: 3 }} value={promptOptions[key] ?? ''}
+                    placeholder="留空使用已保存的展示设置" maxLength={key === 'additional_instruction' ? 4000 : 2000}
+                    onChange={(event) => {
+                      setPromptOptions((current) => ({ ...current, [key]: event.target.value || undefined }))
+                      setPromptNeedsRefresh(true)
+                    }} />
+                </label>
+              ))}
+              <AssetReferencePicker value={promptOptions.references} onChange={(references) => { setPromptOptions((current) => ({ ...current, references })); setPromptNeedsRefresh(true) }} />
+              <Space>
+                <Button type="primary" onClick={() => promptPreviewImage && void refreshPromptPreview(promptPreviewImage, promptOptions)}>更新预览</Button>
+              </Space>
+              {promptNeedsRefresh ? <div className="text-sm text-amber-600">展示要求已修改，请更新预览后生成。</div> : null}
+            </div>
             <div>
               <div className="text-xs text-gray-500 mb-2">关联图片（参考图）</div>
               {promptPreviewRefFileIds.length === 0 ? (
@@ -978,11 +995,11 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
               )}
             </div>
             <div>
-              <div className="text-xs text-gray-500 mb-2">提示词（可编辑）</div>
+              <div className="text-xs text-gray-500 mb-2">最终提示词（只读；通过展示要求调整）</div>
               <Input.TextArea
                 rows={10}
                 value={promptPreviewDraft}
-                onChange={(e) => promptDraft.setBase({ prompt: e.target.value })}
+                readOnly
                 placeholder="请输入提示词…"
               />
             </div>
@@ -1008,7 +1025,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
               {smartDetectIssues.length === 0 ? (
                 <div className="text-sm text-gray-600">未发现缺失信息。</div>
               ) : (
-                <div className="text-sm text-gray-600">发现 {smartDetectIssues.length} 项可能缺失信息（建议参考下面优化后的描述）：</div>
+                <div className="text-sm text-gray-600">发现 {smartDetectIssues.length} 项可能缺失信息（请比较下方字段建议）：</div>
               )}
               {smartDetectIssues.length > 0 ? (
                 <div className="space-y-2">
@@ -1021,27 +1038,36 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
               ) : null}
             </div>
 
-            <div>
-              <div className="text-xs text-gray-500 mb-2">优化后的描述（可直接填入）</div>
-              <Input.TextArea rows={6} value={smartDetectOptimizedDesc} readOnly />
-            </div>
-
+            {smartDetectBaseline !== currentFactsSnapshot ? (
+              <div className="text-sm text-amber-600">
+                资产设定已变化或本次分析来自恢复的任务，请先核对当前值与建议。
+                <Button size="small" onClick={() => setSmartDetectBaseline(currentFactsSnapshot)}>已重新比较当前设定</Button>
+              </div>
+            ) : null}
+            {smartDetectSuggestions.map((suggestion) => {
+              const field = structuredType ? ASSET_FIELDS[structuredType].find((item) => item.key === suggestion.field) : undefined
+              const supplementary = suggestion.field === 'supplementary_info'
+              if (!field && !supplementary) return null
+              const current = supplementary ? formDesc : formFacts[suggestion.field as AssetFieldName] ?? ''
+              return (
+                <Card key={suggestion.field} size="small" title={field?.label ?? '补充信息'}>
+                  <Tag color={suggestion.source === 'explicit' ? 'blue' : 'orange'}>{suggestion.source === 'explicit' ? '原文提取' : 'AI 推断，需确认'}</Tag>
+                  <div className="text-sm whitespace-pre-wrap mt-2">当前：{current || '未填写'}</div>
+                  <div className="text-sm whitespace-pre-wrap mt-2">建议：{suggestion.value}</div>
+                  {suggestion.evidence ? <div className="text-xs text-gray-500 mt-2">原文依据：{suggestion.evidence}</div> : null}
+                  <Button className="mt-2" size="small" disabled={smartDetectBaseline !== currentFactsSnapshot || current === suggestion.value}
+                    onClick={() => {
+                      const facts = supplementary ? formFacts : { ...formFacts, [suggestion.field]: suggestion.value }
+                      const supplement = supplementary ? suggestion.value : formDesc
+                      setFormFacts(facts)
+                      setFormDesc(supplement)
+                      setSmartDetectBaseline(JSON.stringify({ name: formName, facts, supplement }))
+                      message.success('已采用到表单，保存后生效')
+                    }}>明确采用此项</Button>
+                </Card>
+              )
+            })}
             <div className="flex justify-end gap-2">
-              <Button
-                onClick={() => {
-                  const next = smartDetectOptimizedDesc.trim()
-                  if (!next) {
-                    message.warning('未返回有效的优化描述')
-                    return
-                  }
-                  setFormDesc(next)
-                  setSmartDetectOpen(false)
-                  message.success('已填入描述')
-                }}
-                disabled={!smartDetectOptimizedDesc.trim()}
-              >
-                填入描述
-              </Button>
               <Button onClick={() => setSmartDetectOpen(false)}>关闭</Button>
             </div>
           </div>

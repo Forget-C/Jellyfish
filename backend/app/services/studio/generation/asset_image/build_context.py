@@ -21,9 +21,10 @@ def build_asset_image_context(
     base: AssetImageBaseDraft,
     images: list[str] | None = None,
 ) -> AssetImageContext:
+    """保留显式空参考集合，防止用户移除的图片再次成为默认输入。"""
     normalized = [str(item).strip() for item in (images or []) if str(item).strip()]
-    final_images = normalized if normalized else list(base.default_images)
-    source = "request" if normalized else "default"
+    final_images = normalized if images is not None else list(base.default_images)
+    source = "request" if images is not None else "default"
     return AssetImageContext(
         entity_type=base.entity_type,
         entity_id=base.entity_id,
