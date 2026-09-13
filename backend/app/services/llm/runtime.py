@@ -69,8 +69,16 @@ def build_default_text_llm_sync(
         kwargs.setdefault("base_url", base_url)
 
     if not thinking:
-        extra_body = dict(kwargs.get("extra_body") or {})
-        extra_body["enable_thinking"] = False
-        kwargs["extra_body"] = extra_body
+        # DashScope-style OpenAI-compatible endpoints take the Qwen
+        # `enable_thinking` extension, but the official OpenAI API rejects it
+        # with 400 Unknown parameter; disable reasoning through the official
+        # `reasoning_effort` parameter there instead.
+        base = (base_url or "").rstrip("/")
+        if not base or "api.openai.com" in base:
+            kwargs.setdefault("reasoning_effort", "none")
+        else:
+            extra_body = dict(kwargs.get("extra_body") or {})
+            extra_body["enable_thinking"] = False
+            kwargs["extra_body"] = extra_body
 
     return ChatOpenAI(**kwargs)
