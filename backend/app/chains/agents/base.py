@@ -130,6 +130,18 @@ def _load_json_like(text: str) -> Any:
     raise ValueError("Empty output from LLM")
 
 
+def _thinking_extra_body(model: BaseChatModel, enable_thinking: bool) -> dict[str, Any] | None:
+    """Extra body toggling Qwen-style thinking for OpenAI-compatible endpoints.
+
+    `enable_thinking` is a DashScope extension; the official OpenAI API rejects
+    it as an unknown parameter, so nothing is bound for api.openai.com targets.
+    """
+    base = str(getattr(model, "openai_api_base", "") or "").rstrip("/")
+    if not base or "api.openai.com" in base:
+        return None
+    return {"enable_thinking": enable_thinking}
+
+
 class AgentBase(ABC, Generic[T]):
     """通用 Agent 基类：子类固化 prompt_template 与 output_model。"""
 
@@ -143,7 +155,9 @@ class AgentBase(ABC, Generic[T]):
         agent_kwargs: dict[str, Any] | None = None,
     ) -> None:
         self._model = model
-        self._model.bind(extra_body={"enable_thinking": self.enable_thinking})
+        thinking_body = _thinking_extra_body(model, self.enable_thinking)
+        if thinking_body is not None:
+            self._model.bind(extra_body=thinking_body)
         self._structured_output_method = structured_output_method
         self._agent_kwargs = dict(agent_kwargs or {})
         self._structured_chain: Runnable | None = None
