@@ -57,7 +57,7 @@ export function PlanEditor({ projectId, design, value, onChange, disabled = fals
           <Select aria-label="视频模型" disabled={disabled} placeholder="选择视频模型" style={{ minWidth: 220 }} value={unit.model_id || undefined} options={models.map(model => ({ value: model.id, label: model.name }))} onChange={model_id => patch(unit.id, { model_id })} />
           <span>时长（秒）</span><InputNumber disabled={disabled} min={1} precision={0} value={unit.duration_ms / 1000} onChange={seconds => patch(unit.id, { duration_ms: (seconds || 1) * 1000 })} />
           <Select aria-label="画幅" disabled={disabled} value={unit.ratio} options={['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'].map(ratio => ({ value: ratio, label: ratio }))} onChange={ratio => patch(unit.id, { ratio })} />
-          <span>种子（可留空）</span><InputNumber disabled={disabled} min={-1} precision={0} value={typeof unit.parameters?.seed === 'number' ? unit.parameters.seed : null} onChange={seed => patch(unit.id, { parameters: seed == null ? {} : { seed } })} />
+          <span>种子（可留空）</span><InputNumber disabled={disabled} min={-1} precision={0} value={typeof unit.parameters?.seed === 'number' ? unit.parameters.seed : null} onChange={seed => patch(unit.id, { parameters: seed === null ? {} : { seed } })} />
         </Space>
         <Typography.Text strong>本次参考素材</Typography.Text>
         {!unit.references.length && <Typography.Text type="secondary">尚未选入参考。是否可以纯文本试拍由目标模型决定。</Typography.Text>}

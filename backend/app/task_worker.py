@@ -15,6 +15,7 @@ import httpx
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
+from openai import APIStatusError, APITimeoutError
 from sqlalchemy import func, or_, select
 
 from app.core.db import async_session_maker, close_db
@@ -23,6 +24,7 @@ from app.core.contracts.task import TaskStatus
 from app.models.llm import Model, ModelCategoryKey, Provider
 from app.models.task import Task
 from app.services.file_cleanup import FileCleaner
+from app.services.directing.ai import DirectingOutputError
 from app.services.generation.media_execution import build_media_input, deliver_media, load_media_context, store_media_output
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.script_processing_worker import apply_script_result, generate_script_result
@@ -347,9 +349,15 @@ class TaskWorker:
         """保存稳定且不含上游正文、URL 或凭据的错误摘要。"""
         if isinstance(error, ProviderDataError):
             return str(error)
+        if isinstance(error, DirectingOutputError):
+            return str(error)
+        if isinstance(error, APIStatusError):
+            if error.code == "AllocationQuota.FreeTierOnly":
+                return "模型免费额度已耗尽，且供应商开启了仅使用免费额度；请恢复额度或选择其他模型"
+            return f"模型请求失败，HTTP {error.status_code}"
         if isinstance(error, httpx.HTTPStatusError):
             return f"供应商请求失败，HTTP {error.response.status_code}"
-        if isinstance(error, TimeoutError):
+        if isinstance(error, (TimeoutError, APITimeoutError)):
             return "请求或执行超时"
         return f"任务处理失败：{type(error).__name__}"
 

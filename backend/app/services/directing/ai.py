@@ -3,7 +3,9 @@
 import json
 from uuid import uuid4
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from pydantic import ValidationError
+from sqlalchemy import select
 
 from app.core.contracts.directing.common import Source
 from app.core.contracts.directing.design import SceneDesign
@@ -12,6 +14,7 @@ from app.core.contracts.directing.workspace import AIRequest, DivisionResult, Di
 from app.models.directing import DirectingRevision
 from app.models.llm import ModelCategoryKey, Provider
 from app.models.task import Task
+from app.models.studio import Character, Scene, Prop, ProjectSceneLink, ProjectPropLink
 from app.services.directing.workspace import WorkspaceService
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.llm.resolver import get_model_by_category
@@ -20,25 +23,41 @@ from app.services.task_service import TaskService
 RESULT_CONTRACTS = {"directing_divide": DivisionResult, "directing_design": SceneDesign, "directing_review": ReviewPacket}
 
 
+class DirectingOutputError(ValueError):
+    """可显示的结构错误摘要，不携带模型正文或上游连接信息。"""
+
+
 def generate_directing_result(kind: str, llm, args: dict):
     """在 Worker 有界线程执行，返回严格结构，绝不由模型直接批准或覆盖工作单。"""
     contract = RESULT_CONTRACTS[kind]
     instruction = {
         "directing_divide": "将章节分成连续叙事场次。excerpt 必须逐字复制原文中连续的一段，不得改写，按原文顺序排列。不同地点或时间转换可分场，不按镜头分场。",
-        "directing_design": "根据场次原文与人工意见，设计可拍摄的六部门工作单。镜头与节拍使用稳定 ID。保留剧情事实。所有角色、对白、背景行为和摄影必须有因果。未知技术值标 unknown，不适用给理由。不得自称用户确认。每镜必须有摄影行。所有有内容的 Note 必须带 model 来源，reference 使用所提供的 task_identity，version 使用 1。",
+        "directing_design": "根据场次原文、已有资产与人工意见，设计可拍摄的六部门工作单。已有资产只有适用于本场时才引用其 ID，不得凭空编造资产 ID，不得让资产设定改变原文事实。镜头与节拍使用稳定 ID。保留剧情事实。所有角色、对白、背景行为和摄影必须有因果。未知技术值标 unknown，不适用给理由。不得自称用户确认。每镜必须有摄影行。所有有内容的 Note 必须带 model 来源，reference 使用所提供的 task_identity，version 使用 1。",
         "directing_review": "以六部门分别审查本轮每个镜头出现项。严格保留提供的 roles 和 occurrences，不得减少、更换、合并。同一镜头不同单元分别检查。每行给出 pass 或 revise、具体理由及可执行修改建议。检查共同空间、先后反应、参考绑定、摄影、声音和相邻衔接。模型不能授权用户执行。",
     }[kind]
-    response = llm.invoke([
-        SystemMessage(content=instruction + "\n仅返回符合以下 JSON Schema 的 JSON 对象，不添加 Markdown：\n" + json.dumps(contract.model_json_schema(), ensure_ascii=False)),
+    messages = [
+        SystemMessage(content=instruction + '\nNote 的 fact/proposal 必须有 text 和 sources；其余状态不得带 text，none/not_applicable 必须有 reason。Source.version 必须是字符串，例如 "1"。所有关联 ID 必须存在于本工作单对应列表。\n仅返回符合以下 JSON Schema 的 JSON 对象，不添加 Markdown：\n' + json.dumps(contract.model_json_schema(), ensure_ascii=False)),
         HumanMessage(content=json.dumps(args, ensure_ascii=False)),
-    ])
-    content = response.content
-    if not isinstance(content, str):
-        raise ValueError("导演模型未返回文本 JSON")
-    text = content.strip()
-    if text.startswith("```"):
-        text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-    result = contract.model_validate_json(text)
+    ]
+    for attempt in range(2):
+        response = llm.invoke(messages)
+        content = response.content
+        if not isinstance(content, str):
+            raise DirectingOutputError("导演模型未返回文本 JSON")
+        text = content.strip()
+        if text.startswith("```") and "\n" in text:
+            text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        try:
+            result = contract.model_validate_json(text)
+            break
+        except ValidationError as error:
+            errors = error.errors(include_url=False, include_input=False, include_context=False)
+            if attempt == 1:
+                paths = [(".".join(map(str, item["loc"])) or "工作单关联") + "：" + item["msg"] for item in errors[:8]]
+                raise DirectingOutputError("导演输出结构校验失败，请重新生成或手动修正：" + "、".join(paths)) from None
+            # 只允许一次结构纠错，继续沿用 Worker 的取消回调和总时限。
+            messages.extend([AIMessage(content=content), HumanMessage(content=
+                "只修正以下结构或关联错误，保留原文事实和既有设计意图，返回完整 JSON：\n" + json.dumps(errors, ensure_ascii=False))])
     if kind == "directing_divide":
         cursor = 0
         for scene in result.scenes:
@@ -78,6 +97,15 @@ class DirectingAIService(WorkspaceService):
             args.update(script_text=chapter.raw_text, chapter_id=chapter.chapter_id, source_version=chapter.source_version)
         if not args["script_text"].strip():
             raise ValueError("请先填写章节原文")
+        if kind == "directing_design":
+            characters = list(await self.db.scalars(select(Character).where(Character.project_id == self.project_id)))
+            locations = list(await self.db.scalars(select(Scene).join(ProjectSceneLink, ProjectSceneLink.scene_id == Scene.id).where(ProjectSceneLink.project_id == self.project_id)))
+            props = list(await self.db.scalars(select(Prop).join(ProjectPropLink, ProjectPropLink.prop_id == Prop.id).where(ProjectPropLink.project_id == self.project_id)))
+            args["existing_assets"] = {
+                "characters": [{"id": row.id, "name": row.name, "description": row.description} for row in characters],
+                "locations": [{"id": row.id, "name": row.name, **{key: getattr(row, key) for key, _ in row.description_fields}} for row in locations],
+                "props": [{"id": row.id, "name": row.name, **{key: getattr(row, key) for key, _ in row.description_fields}} for row in props],
+            }
         if body.revision_id:
             revision = await self.revision(body.revision_id, kind="design", sequence_id=sequence_id)
             if revision.version != body.expected_version:

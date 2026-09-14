@@ -35,17 +35,13 @@ import {
   type ProjectVisualStyleChoice,
 } from './ProjectVisualStyleAndStyleFields'
 import { useProjectStyleOptions } from './useProjectStyleOptions'
-import { getChapterPreparationState } from './ProjectWorkbench/chapterPreparation'
-import { ensureHasShotsBeforeShooting } from './ProjectWorkbench/ensureHasShotsBeforeShooting'
-import { getChapterShotsPath, getChapterStudioPath } from './ProjectWorkbench/routes'
-import { loadProjectFlowStatsForChapters, type ProjectFlowStats } from './ProjectWorkbench/projectFlowStats'
 
 type ViewMode = 'grid' | 'compact' | 'large'
-type FilterTab = 'all' | 'editRaw' | 'extractShots' | 'prepareShots' | 'generating' | 'ready'
+type FilterTab = 'all' | 'editRaw'
 type SortKey = 'updatedAt' | 'name' | 'createdAt' | 'chapters'
-type ChapterPreparationInput = Parameters<typeof getChapterPreparationState>[0]
+type ChapterPreparationInput = { id: string; index: number; rawText?: string; storyboardCount?: number }
 type ProjectStageSummary = {
-  key: ReturnType<typeof getChapterPreparationState>['key'] | 'create_first_chapter'
+  key: 'edit_raw' | 'sequences' | 'create_first_chapter'
   stageText: string
   stageColor: string
   nextActionLabel: string
@@ -53,7 +49,6 @@ type ProjectStageSummary = {
   chapterId?: string
   storyboardCount?: number
 }
-type ProjectFlowStatsMap = Record<string, ProjectFlowStats>
 type ProjectView = Project & {
   visualStyle?: ProjectVisualStyleChoice
   defaultVideoRatio?: string | null
@@ -75,7 +70,6 @@ const ProjectLobby: React.FC = () => {
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [editingProject, setEditingProject] = useState<ProjectView | null>(null)
   const [projectStageMap, setProjectStageMap] = useState<Record<string, ProjectStageSummary>>({})
-  const [projectFlowStatsMap, setProjectFlowStatsMap] = useState<ProjectFlowStatsMap>({})
   const {
     options: projectStyleOptions,
     videoRatioOptions,
@@ -159,7 +153,6 @@ const ProjectLobby: React.FC = () => {
     const list = Array.isArray(projects) ? projects : []
     if (!list.length) {
       setProjectStageMap({})
-      setProjectFlowStatsMap({})
       return
     }
 
@@ -174,21 +167,14 @@ const ProjectLobby: React.FC = () => {
           nextActionHint: '项目还没有章节，建议先创建第一章',
         }
       }
-      const findByState = (key: ReturnType<typeof getChapterPreparationState>['key']) =>
-        chaptersByIndex.find((chapter) => getChapterPreparationState(chapter).key === key)
-      const chapter =
-        findByState('edit_raw') ??
-        findByState('extract_shots') ??
-        findByState('prepare_shots') ??
-        findByState('shoot') ??
-        chaptersByIndex[0]
-      const state = getChapterPreparationState(chapter)
+      const chapter = chaptersByIndex.find(chapter => !chapter.rawText?.trim()) || chaptersByIndex[0]
+      const missingRaw = !chapter.rawText?.trim()
       return {
-        key: state.key,
-        stageText: state.text,
-        stageColor: state.color,
-        nextActionLabel: state.primaryAction,
-        nextActionHint: `第${chapter.index}章 · ${state.hint}`,
+        key: missingRaw ? 'edit_raw' : 'sequences',
+        stageText: missingRaw ? '待补原文' : '场次创作',
+        stageColor: missingRaw ? 'default' : 'blue',
+        nextActionLabel: missingRaw ? '编辑原文' : '进入场次',
+        nextActionHint: `第${chapter.index}章 · 原文划场、设计、试拍与剪辑`,
         chapterId: chapter.id,
         storyboardCount: chapter.storyboardCount,
       }
@@ -223,13 +209,7 @@ const ProjectLobby: React.FC = () => {
               ]),
             ),
           )
-          const flowStatsEntries = await Promise.all(
-            Object.entries(chapterGroups).map(async ([projectId, chapters]) => [
-              projectId,
-              await loadProjectFlowStatsForChapters(chapters),
-            ] as const),
-          )
-          setProjectFlowStatsMap(Object.fromEntries(flowStatsEntries))
+
           return
         }
 
@@ -273,17 +253,10 @@ const ProjectLobby: React.FC = () => {
         setProjectStageMap(
           Object.fromEntries(chapterResponses.map(([projectId, summary]) => [projectId, summary])),
         )
-        const flowStatsEntries = await Promise.all(
-          chapterResponses.map(async ([projectId, _summary, chapters]) => [
-            projectId,
-            await loadProjectFlowStatsForChapters(chapters),
-          ] as const),
-        )
-        setProjectFlowStatsMap(Object.fromEntries(flowStatsEntries))
+
       } catch {
         setProjectStageMap({})
-        setProjectFlowStatsMap({})
-      }
+        }
     }
 
     void loadSummaries()
@@ -303,12 +276,7 @@ const ProjectLobby: React.FC = () => {
 
       if (filterTab === 'all') return true
       const stage = projectStageMap[p.id]
-      const flowStats = projectFlowStatsMap[p.id]
       if (filterTab === 'editRaw') return stage?.key === 'edit_raw' || stage?.key === 'create_first_chapter'
-      if (filterTab === 'extractShots') return stage?.key === 'extract_shots'
-      if (filterTab === 'prepareShots') return stage?.key === 'prepare_shots'
-      if (filterTab === 'generating') return (flowStats?.generatingShots ?? 0) > 0
-      if (filterTab === 'ready') return (flowStats?.readyShots ?? 0) > 0
       return true
     })
 
@@ -337,7 +305,7 @@ const ProjectLobby: React.FC = () => {
     })
 
     return next
-  }, [projects, search, filterTab, sortKey, sortOrder, projectStageMap, projectFlowStatsMap])
+  }, [projects, search, filterTab, sortKey, sortOrder, projectStageMap])
 
   const handleSelectProject = (id: string) => {
     setSelectedProjectId(id)
@@ -505,20 +473,7 @@ const ProjectLobby: React.FC = () => {
       navigate(`/projects/${project.id}?tab=chapters&edit=${stageSummary.chapterId}`)
       return
     }
-    if (stageSummary.key === 'extract_shots') {
-      navigate(getChapterShotsPath(project.id, stageSummary.chapterId))
-      return
-    }
-    if (stageSummary.key === 'prepare_shots') {
-      navigate(getChapterStudioPath(project.id, stageSummary.chapterId))
-      return
-    }
-    void ensureHasShotsBeforeShooting({
-      projectId: project.id,
-      chapterId: stageSummary.chapterId,
-      storyboardCount: stageSummary.storyboardCount,
-      navigate,
-    })
+    navigate(`/projects/${project.id}/chapters/${stageSummary.chapterId}/sequences`)
   }
 
   /**
@@ -549,7 +504,6 @@ const ProjectLobby: React.FC = () => {
   const renderCard = (p: ProjectView) => {
     const status = getProjectStatus(p)
     const stageSummary = projectStageMap[p.id]
-    const flowStats = projectFlowStatsMap[p.id]
     const isCompact = viewMode === 'compact'
     const isLarge = viewMode === 'large'
     const mainActionLabel = stageSummary?.nextActionLabel ?? (status === 'completed' ? '继续剪辑' : p.progress > 0 ? '继续拍摄' : '进入项目')
@@ -624,23 +578,9 @@ const ProjectLobby: React.FC = () => {
           <div className={`mt-1 text-[11px] text-gray-600 ${isLarge ? 'line-clamp-2 min-h-[2rem]' : 'line-clamp-1 min-h-0'}`}>
             {stageSummary?.nextActionHint ?? '进入项目工作台后继续推进主流程'}
           </div>
-          {isCompact ? (
-            <div className="mt-1 text-[11px] text-gray-500 truncate">
-              下一步：{stageSummary?.nextActionLabel ?? '进入项目'}
-            </div>
-          ) : (
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              <Tag bordered={false} color="gold" className="mr-0 text-[11px]">
-                待确认 {flowStats?.pendingConfirmShots ?? 0}
-              </Tag>
-              <Tag bordered={false} color="green" className="mr-0 text-[11px]">
-                已就绪 {flowStats?.readyShots ?? 0}
-              </Tag>
-              <Tag bordered={false} color="processing" className="mr-0 text-[11px]">
-                生成中 {flowStats?.generatingShots ?? 0}
-              </Tag>
-            </div>
-          )}
+          <div className="mt-1 text-[11px] text-gray-500 truncate">
+            下一步：{stageSummary?.nextActionLabel ?? '进入项目'}
+          </div>
         </div>
 
         {!isCompact && (
@@ -748,38 +688,6 @@ const ProjectLobby: React.FC = () => {
                 onClick={() => setFilterTab('editRaw')}
               >
                 待补原文
-              </Button>
-              <Button
-                type={filterTab === 'extractShots' ? 'primary' : 'text'}
-                size="small"
-                className="text-[11px]"
-                onClick={() => setFilterTab('extractShots')}
-              >
-                待提取分镜
-              </Button>
-              <Button
-                type={filterTab === 'prepareShots' ? 'primary' : 'text'}
-                size="small"
-                className="text-[11px]"
-                onClick={() => setFilterTab('prepareShots')}
-              >
-                待准备镜头
-              </Button>
-              <Button
-                type={filterTab === 'generating' ? 'primary' : 'text'}
-                size="small"
-                className="text-[11px]"
-                onClick={() => setFilterTab('generating')}
-              >
-                生成中
-              </Button>
-              <Button
-                type={filterTab === 'ready' ? 'primary' : 'text'}
-                size="small"
-                className="text-[11px]"
-                onClick={() => setFilterTab('ready')}
-              >
-                可继续推进
               </Button>
             </Space>
           </Space>

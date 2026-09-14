@@ -94,19 +94,25 @@ export class StudioFilesService {
     }
     /**
      * 下载文件二进制内容
+     * 返回整文件或浏览器请求的单段字节。
      * @returns any Successful Response
      * @throws ApiError
      */
     public static downloadFileApiApiV1StudioFilesFileIdDownloadGet({
         fileId,
+        range,
     }: {
         fileId: string,
+        range?: (string | null),
     }): CancelablePromise<any> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/studio/files/{file_id}/download',
             path: {
                 'file_id': fileId,
+            },
+            headers: {
+                'Range': range,
             },
             errors: {
                 422: `Validation Error`,

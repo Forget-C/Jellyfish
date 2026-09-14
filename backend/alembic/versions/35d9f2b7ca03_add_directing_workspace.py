@@ -14,9 +14,10 @@ def upgrade() -> None:
     """Add source ranges and user action identities without rewriting old design content."""
     if op.get_bind().dialect.name == "mysql":
         op.alter_column("directing_revisions", "created_at", existing_type=sa.DateTime(), type_=DATETIME(fsp=6), existing_nullable=False)
+    op.add_column("directing_revisions", sa.Column("source_key", sa.String(64), nullable=True))
     op.add_column("directing_sequences", sa.Column("source_start", sa.Integer(), nullable=True))
     op.add_column("directing_sequences", sa.Column("source_end", sa.Integer(), nullable=True))
-    op.add_column("directing_sequences", sa.Column("source_text", sa.Text(), nullable=False, server_default=""))
+    op.add_column("directing_sequences", sa.Column("source_text", sa.Text(), nullable=False, server_default=sa.text("('')")))
     op.create_table("directing_actions",
         sa.Column("id", sa.String(64), primary_key=True),
         sa.Column("sequence_id", sa.String(64), sa.ForeignKey("directing_sequences.id", ondelete="RESTRICT"), nullable=False),
@@ -38,6 +39,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Remove only workspace additions after their data has been backed up."""
     op.drop_table("directing_actions")
+    op.drop_column("directing_revisions", "source_key")
     with op.batch_alter_table("directing_sequences") as batch:
         batch.drop_column("source_text")
         batch.drop_column("source_end")

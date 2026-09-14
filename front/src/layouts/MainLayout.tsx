@@ -82,6 +82,7 @@ const MainLayout: React.FC = () => {
       settings: t('menu.settings'),
       chapters: '章节管理',
       studio: '分镜工作室',
+      sequences: '场次',
       prep: '章节编辑',
       shots: '分镜',
       editor: '视频剪辑',
@@ -112,7 +113,7 @@ const MainLayout: React.FC = () => {
       }
 
       const isLast = i === path.length - 1
-      let label = pathLabels[segment]
+      let label = path[4] === 'sequences' && i === 5 ? '场次工作台' : pathLabels[segment]
       if (label === undefined) {
         if (path[0] === 'projects' && i === 1) label = '项目工作台'
         else if (path[2] === 'chapters' && i === 3) label = '章节'

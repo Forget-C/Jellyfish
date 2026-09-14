@@ -1,5 +1,6 @@
 """场次契约的事务存储；调用方提交事务，任何失败回滚本次写入。"""
 
+import json
 from datetime import UTC, datetime
 from hashlib import sha256
 from uuid import uuid4
@@ -90,6 +91,12 @@ class DirectingStore:
         CONTRACTS[row.kind].model_validate(row.payload)
         return row
 
+    @staticmethod
+    def source_key(sequence: Sequence) -> str:
+        """只摘要实质来源，不因场次改名或排序使设计失效。"""
+        return sha256(json.dumps([sequence.source, sequence.source_start, sequence.source_end,
+                                 sequence.source_text], ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+
     async def read_revision(self, revision_id: str) -> RevisionSnapshot:
         """返回有明确项目、章节和类型的快照，供未来 API/编译消费。"""
         row = await self.revision(revision_id)
@@ -98,6 +105,7 @@ class DirectingStore:
             id=row.id, project_id=self.project_id, chapter_id=sequence.chapter_id,
             sequence_id=row.sequence_id, parent_id=row.parent_id, version=row.version,
             confirmed_by=row.confirmed_by, confirmed_at=row.confirmed_at,
+            source_current=row.kind != "design" or row.source_key == self.source_key(sequence),
             content=CONTRACTS[row.kind].model_validate(row.payload),
         )
 
@@ -129,7 +137,8 @@ class DirectingStore:
                 if parent_id is not None:
                     await self.revision(parent_id, kind=kind, sequence_id=sequence_id, confirmed=True)
                 row = DirectingRevision(id=uuid4().hex, sequence_id=sequence_id, kind=kind,
-                                        parent_id=parent_id, version=1, payload=content.model_dump(mode="json"))
+                                        parent_id=parent_id, version=1, payload=content.model_dump(mode="json"),
+                                        source_key=self.source_key(sequence) if kind == "design" else None)
                 self.db.add(row)
                 await self.db.flush()
             else:
@@ -139,7 +148,8 @@ class DirectingStore:
                 result = await self.db.execute(update(DirectingRevision).where(
                     DirectingRevision.id == row.id, DirectingRevision.version == expected_version,
                     DirectingRevision.confirmed_at.is_(None),
-                ).values(payload=content.model_dump(mode="json"), version=expected_version + 1))
+                ).values(payload=content.model_dump(mode="json"), version=expected_version + 1,
+                         source_key=self.source_key(sequence) if kind == "design" else None))
                 if result.rowcount != 1:
                     raise RevisionConflict("revision changed or confirmed")
             await self._replace_links(row.id, sequence, dependencies, files, takes)
@@ -149,6 +159,8 @@ class DirectingStore:
         """由应用的人工作用域登记确认；模型工作单不能自行填写批准人。"""
         ID_ADAPTER.validate_python(actor_id)
         row = await self.revision(revision_id)
+        if row.kind == "design" and row.source_key != self.source_key(await self.sequence(row.sequence_id)):
+            raise RevisionConflict("场次原文范围已变化，请核对并重新保存设计")
         async with self.db.begin_nested():
             await self._validate(await self.sequence(row.sequence_id), CONTRACTS[row.kind].model_validate(row.payload))
             result = await self.db.execute(update(DirectingRevision).where(
@@ -196,6 +208,9 @@ class DirectingStore:
                 for binding in unit.references:
                     references(binding.participant_ids, [r.id for r in design.participants], "reference participant")
                     await require_available_file(self.db, file_id=binding.file_id, expected_type=binding.media_kind)
+                    projects = set(await self.db.scalars(select(FileUsage.project_id).where(FileUsage.file_id == binding.file_id)))
+                    if projects and self.project_id not in projects:
+                        raise ValueError("参考文件仅属于其他项目，请先关联到当前项目或上传本次素材")
                     files.add(binding.file_id)
         elif isinstance(content, Prompt):
             plan = await dependency(content.plan_revision_id, "plan")

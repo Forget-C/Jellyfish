@@ -16,6 +16,7 @@ function sequential(cut: SequenceCut_Input): SequenceCut_Input {
 
 /** 候选审片与主视频粗剪，保留完整 Take，采用和审查是独立操作。 */
 export function CutEditor({ projectId, workspace, onChange }: { projectId: string; workspace: WorkspaceRead; onChange: (workspace: WorkspaceRead) => void }) {
+  const [comparison, setComparison] = useState<string>()
   const [selected, setSelected] = useState(workspace.takes.slice(-1)[0]?.id || '')
   const [media, setMedia] = useState<Record<string, MediaRead>>({})
   const [error, setError] = useState('')
@@ -26,30 +27,47 @@ export function CutEditor({ projectId, workspace, onChange }: { projectId: strin
   const [observation, setObservation] = useState('')
   const [coverageId, setCoverageId] = useState<string>()
   const [replaceId, setReplaceId] = useState<string>()
-  const saved = workspace.cuts.slice(-1)[0]
+  const [saved, setSaved] = useState<WorkspaceRead['cuts'][number] | undefined>(workspace.cuts.slice(-1)[0])
+  const pendingRange = useRef<{ takeId: string; start: number; end: number }>()
   const [cut, setCut] = useState<SequenceCut_Input>(saved?.content || { items: [] })
   const [playIndex, setPlayIndex] = useState<number>()
+  const advancingClip = useRef<string>()
   const video = useRef<HTMLVideoElement>(null)
   const take = workspace.takes.find(item => item.id === selected)
+  const takeIds = workspace.takes.map(item => item.id).join(',')
+  const duration = media[selected]?.duration_ms || 0
   const sequenceId = workspace.sequence.id
   const unit = workspace.plans.find(plan => plan.id === take?.plan_revision_id)?.content.units.find(item => item.id === take?.unit_id)
   useEffect(() => {
     let active = true
-    void Promise.all(workspace.takes.map(item => StudioDirectingService.directingTakeMedia({ projectId, sequenceId, takeId: item.id }))).then(rows => {
+    void Promise.all((takeIds ? takeIds.split(',') : []).map(takeId => StudioDirectingService.directingTakeMedia({ projectId, sequenceId, takeId }))).then(rows => {
       if (active) setMedia(Object.fromEntries(rows.flatMap(row => row.data ? [[row.data.take_id, row.data]] : [])))
     }).catch(cause => { if (active) setError(directingError(cause)) })
     return () => { active = false }
-  }, [projectId, sequenceId, workspace.takes.map(item => item.id).join(',')])
+  }, [projectId, sequenceId, takeIds])
   useEffect(() => { if (!selected && workspace.takes.length) setSelected(workspace.takes.slice(-1)[0]!.id) }, [workspace.takes, selected])
+  const annotation = useRef(take?.annotation)
+  annotation.current = take?.annotation
   useEffect(() => {
-    setStart(0); setEnd((media[selected]?.duration_ms || 0) / 1000)
-    setCoverageId(undefined); setObservation(take?.annotation.rationale.text || '')
-    setVerdict(take?.annotation.verdict || 'retain')
-  }, [selected, media[selected]?.duration_ms])
+    const pending = pendingRange.current
+    if (pending?.takeId === selected) {
+      setStart(pending.start); setEnd(pending.end)
+      pendingRange.current = undefined
+    } else { setStart(0); setEnd(duration / 1000) }
+    setCoverageId(undefined); setObservation(annotation.current?.rationale.text || '')
+    setVerdict(annotation.current?.verdict || 'retain')
+  }, [selected, duration])
   const source = media[selected]
   const clips = cut.items.filter((item): item is MediaCutItem => 'media_range' in item)
-  const playing = playIndex == null ? undefined : clips[playIndex]
+  const playing = playIndex === undefined ? undefined : clips[playIndex]
   const playback = playing ? media[playing.take_id] : undefined
+  /** 同一片段只推进一次，避免出点和结束事件重复推进或暂停事件重入。 */
+  const advancePlayback = (element: HTMLVideoElement) => {
+    if (!playing || advancingClip.current === playing.id) return
+    advancingClip.current = playing.id
+    element.pause()
+    setPlayIndex(playIndex !== undefined && playIndex + 1 < clips.length ? playIndex + 1 : undefined)
+  }
   /** 保存真实观察区间及来源，未拍到计划内容时允许不声明覆盖。 */
   const review = async () => {
     if (!take) return
@@ -81,7 +99,11 @@ export function CutEditor({ projectId, workspace, onChange }: { projectId: strin
         document: { kind: 'cut', content: cut },
         ...(saved?.confirmed_at ? { parent_id: saved.id } : saved ? { revision_id: saved.id, expected_version: saved.version } : {}),
       } })
-      if (response.data) { onChange(response.data); setCut(response.data.cuts.slice(-1)[0]?.content || cut) }
+      if (response.data) {
+        onChange(response.data)
+        const next = saved && !saved.confirmed_at ? response.data.cuts.find(row => row.id === saved.id) : response.data.cuts.slice(-1)[0]
+        setSaved(next); setCut(next?.content || cut)
+      }
     } catch (cause) { setError(directingError(cause)) } finally { setBusy(false) }
   }
   return <Space direction="vertical" style={{ width: '100%' }} size="large">
@@ -89,6 +111,8 @@ export function CutEditor({ projectId, workspace, onChange }: { projectId: strin
     <Card title="候选素材与审片">
       {!workspace.takes.length ? <Typography.Text>试拍成功后，候选素材会出现在这里。</Typography.Text> : <Space direction="vertical" style={{ width: '100%' }}>
         <Select aria-label="选择候选 Take" style={{ width: '100%' }} value={selected} options={workspace.takes.map((item, index) => ({ value: item.id, label: `Take ${index + 1} · ${item.unit_id}${item.annotation.verdict ? ' · ' + ({ pass: '过', retain: '保', repair: '修', discard: '废' }[item.annotation.verdict]) : ' · 未审'}` }))} onChange={setSelected} />
+        <Select allowClear aria-label="对比候选素材" placeholder="选择另一条候选进行对比" className="w-full" value={comparison} options={workspace.takes.filter(item => item.id !== selected).map((item) => ({ value: item.id, label: `Take ${workspace.takes.findIndex(take => take.id === item.id) + 1} · ${item.unit_id}` }))} onChange={setComparison} />
+        {comparison && comparison !== selected && media[comparison] && <Card size="small" title="对比素材（不会改变当前采用区间）"><video controls key={comparison} src={OpenAPI.BASE + media[comparison].url} className="w-full" style={{ maxHeight: 300, background: '#111' }} /></Card>}
         {source && <video ref={video} key={source.take_id} controls src={OpenAPI.BASE + source.url} style={{ width: '100%', maxHeight: 420, background: '#111' }} />}
         {!source?.duration_ms && <Alert type="warning" message="素材真实时长尚不可用，暂不能采用区间。" />}
         <Space wrap><span>入点（秒）</span><InputNumber min={0} precision={3} value={start} onChange={value => setStart(value || 0)} /><Button onClick={() => setStart(Math.round((video.current?.currentTime || 0) * 1000) / 1000)}>取当前入点</Button>
@@ -99,11 +123,11 @@ export function CutEditor({ projectId, workspace, onChange }: { projectId: strin
         <Space wrap><Select allowClear placeholder="追加到粗剪，或选择要替换的片段" style={{ minWidth: 280 }} value={replaceId} options={cut.items.map((item, index) => ({ value: item.id, label: `替换片段 ${index + 1}` }))} onChange={setReplaceId} /><Button type="primary" disabled={!source?.duration_ms} onClick={adopt}>{replaceId ? '替换此片段' : '采用当前区间'}</Button></Space>
       </Space>}
     </Card>
-    <Card title="场次粗剪" extra={<Space><Button disabled={!clips.length} onClick={() => setPlayIndex(0)}>顺序播放</Button><Button type="primary" loading={busy} onClick={save}>保存粗剪</Button></Space>}>
+    <Card title="场次粗剪" extra={<Space><Button onClick={() => { const next = workspace.cuts.slice(-1)[0]; setSaved(next); setCut(next?.content || { items: [] }) }}>放弃本地修改，载入最新</Button><Button disabled={!clips.length} onClick={() => setPlayIndex(0)}>顺序播放</Button><Button type="primary" loading={busy} onClick={save}>保存粗剪</Button></Space>}>
       <Space direction="vertical" style={{ width: '100%' }}>
-        {playing && playback && <video key={playing.id} controls autoPlay src={OpenAPI.BASE + playback.url} style={{ width: '100%', maxHeight: 420 }} onLoadedMetadata={event => { event.currentTarget.currentTime = playing.media_range.source_in_ms / 1000 }} onTimeUpdate={event => {
+        {playing && playback && <video key={`playback-${playing.id}`} controls autoPlay onEnded={event => advancePlayback(event.currentTarget)} src={OpenAPI.BASE + playback.url} style={{ width: '100%', maxHeight: 420 }} onLoadedMetadata={event => { advancingClip.current = undefined; event.currentTarget.currentTime = playing.media_range.source_in_ms / 1000 }} onTimeUpdate={event => {
           if (event.currentTarget.currentTime * 1000 >= playing.media_range.source_out_ms) {
-            event.currentTarget.pause(); setPlayIndex(index => index != null && index + 1 < clips.length ? index + 1 : undefined)
+            advancePlayback(event.currentTarget)
           }
         }} />}
         {!cut.items.length && <Typography.Text type="secondary">尚未采用素材；试拍成功不会自动进入粗剪。</Typography.Text>}
@@ -111,7 +135,7 @@ export function CutEditor({ projectId, workspace, onChange }: { projectId: strin
           <Space wrap><strong>片段 {index + 1}</strong><span>{'media_range' in item ? `${(item.media_range.source_in_ms / 1000).toFixed(2)}–${(item.media_range.source_out_ms / 1000).toFixed(2)} 秒` : `预演 ${item.estimated_duration_ms / 1000} 秒`}</span>
             <Button disabled={index === 0} onClick={() => { const items = [...cut.items]; [items[index - 1], items[index]] = [items[index], items[index - 1]]; setCut(sequential({ items })) }}>上移</Button>
             <Button disabled={index === cut.items.length - 1} onClick={() => { const items = [...cut.items]; [items[index + 1], items[index]] = [items[index], items[index + 1]]; setCut(sequential({ items })) }}>下移</Button>
-            <Button onClick={() => { if ('media_range' in item) { setSelected(item.take_id); setStart(item.media_range.source_in_ms / 1000); setEnd(item.media_range.source_out_ms / 1000); setReplaceId(item.id) } }}>调整区间</Button>
+            <Button onClick={() => { if ('media_range' in item) { if (selected !== item.take_id) pendingRange.current = { takeId: item.take_id, start: item.media_range.source_in_ms / 1000, end: item.media_range.source_out_ms / 1000 }; setSelected(item.take_id); setStart(item.media_range.source_in_ms / 1000); setEnd(item.media_range.source_out_ms / 1000); setReplaceId(item.id) } }}>调整区间</Button>
             <Button danger onClick={() => setCut(sequential({ items: cut.items.filter(row => row.id !== item.id) }))}>移除</Button>
           </Space>
         </Card>)}

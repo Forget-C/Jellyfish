@@ -2,11 +2,11 @@
 
 from hashlib import sha256
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import func, or_, select, update
 
 from app.core.contracts.directing.common import Source
 from app.core.contracts.directing.workspace import (
-    ChapterSequences, SequenceCreate, SequenceRead, SequenceUpdate, SourceSpan, WorkspaceRead,
+    RevisionWrite, ChapterSequences, SequenceCreate, SequenceRead, SequenceUpdate, SourceSpan, WorkspaceRead,
 )
 from app.models.directing import DirectingRevision, Sequence, Take
 from app.models.studio import Chapter
@@ -48,7 +48,8 @@ class WorkspaceService(DirectingStore):
     async def write_sequence(self, chapter_id: str, body: SequenceCreate | SequenceUpdate,
                              sequence_id: str | None = None) -> SequenceRead:
         """范围变化和原文版本比较在同一事务，保存真实选定摘录。"""
-        chapter = await self.chapter(chapter_id)
+        await self.chapter(chapter_id)
+        chapter = await self.db.scalar(select(Chapter).where(Chapter.id == chapter_id).with_for_update().execution_options(populate_existing=True))
         version = sha256(chapter.raw_text.encode()).hexdigest()
         if body.source_version != version:
             raise RevisionConflict("章节原文已变化，请刷新并重新确认范围")
@@ -56,11 +57,22 @@ class WorkspaceService(DirectingStore):
             raise ValueError("场次范围超出章节原文")
         async with self.db.begin_nested():
             if sequence_id is None:
+                if await self.db.scalar(select(Sequence.id).where(Sequence.chapter_id == chapter_id, Sequence.position == body.position)):
+                    raise RevisionConflict("此场次顺序已被使用，请刷新后重试")
                 row = await self.create_sequence(chapter_id=chapter_id, title=body.title, position=body.position)
             else:
                 row = await self.sequence(sequence_id)
                 if row.chapter_id != chapter_id or not isinstance(body, SequenceUpdate):
                     raise ValueError("场次章节或版本不匹配")
+                if row.version != body.expected_version:
+                    raise RevisionConflict("场次已被修改，请刷新后重试")
+                other = await self.db.scalar(select(Sequence).where(Sequence.chapter_id == chapter_id,
+                    Sequence.position == body.position, Sequence.id != sequence_id))
+                if other is not None:
+                    old_position = row.position
+                    temporary = (await self.db.scalar(select(func.max(Sequence.position)).where(Sequence.chapter_id == chapter_id))) + 1
+                    await self.db.execute(update(Sequence).where(Sequence.id == sequence_id).values(position=temporary))
+                    await self.db.execute(update(Sequence).where(Sequence.id == other.id).values(position=old_position, version=other.version + 1))
                 row = await self.update_sequence(sequence_id, expected_version=body.expected_version,
                                                  title=body.title, position=body.position)
             await self.db.execute(update(Sequence).where(Sequence.id == row.id).values(
@@ -69,6 +81,17 @@ class WorkspaceService(DirectingStore):
                 source=Source(kind="chapter", reference=chapter.id, version=version).model_dump(mode="json"),
             ))
         return await self.read_sequence(row.id)
+
+    async def save_workspace_revision(self, sequence_id: str, body: RevisionWrite):
+        """比较用户编辑时看到的场次，避免旧页面内容被标成新来源。"""
+        await self.db.scalar(select(Sequence).where(Sequence.id == sequence_id).with_for_update())
+        sequence = await self.read_sequence(sequence_id)
+        if body.document.kind == "design":
+            if body.sequence_version != sequence.version or sequence.source_changed:
+                raise RevisionConflict("场次或原文已变化，请刷新、核对设计后再保存")
+        return await self.save_revision(sequence_id, kind=body.document.kind,
+            payload=body.document.content.model_dump(mode="json"), revision_id=body.revision_id,
+            expected_version=body.expected_version, parent_id=body.parent_id)
 
     async def workspace(self, sequence_id: str) -> WorkspaceRead:
         """一次读取各类版本、候选和任务身份，不在任务中心复制业务上下文。"""

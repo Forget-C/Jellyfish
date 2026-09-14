@@ -249,6 +249,15 @@ class SceneDesign(Contract):
     @model_validator(mode="after")
     def linked_work_sheets(self):
         """逐岗解析共享身份，防止拆镜后表演丢失或跨版本错配。"""
+        errors = []
+
+        def check(validator, *args):
+            """一次汇总全部身份缺口，避免模型每次只修到首个悬空引用。"""
+            try:
+                validator(*args)
+            except ValueError as error:
+                errors.append(str(error))
+
         groups = {"participant": self.participants, "event": self.events,
                   "criterion": self.criteria, "beat": self.direction.beats,
                   "anchor": self.direction.anchors, "blocking": self.direction.blocking_states,
@@ -256,35 +265,37 @@ class SceneDesign(Contract):
                   "continuity": self.continuity}
         ids = {name: [row.id for row in rows] for name, rows in groups.items()}
         for name, values in ids.items():
-            unique(values, name)
+            check(unique, values, name)
         for beat in self.direction.beats:
-            references(beat.event_ids, ids["event"], "event")
+            check(references, beat.event_ids, ids["event"], "event")
         for row in self.direction.blocking_states:
-            references([row.participant_id], ids["participant"], "participant")
-            references(row.anchor_ids, ids["anchor"], "anchor")
-            references([row.event_id] if row.event_id else [], ids["event"], "event")
+            check(references, [row.participant_id], ids["participant"], "participant")
+            check(references, row.anchor_ids, ids["anchor"], "anchor")
+            check(references, [row.event_id] if row.event_id else [], ids["event"], "event")
         for shot in self.direction.shots:
             for key, values in (("beat", shot.beat_ids), ("event", shot.event_ids),
                                 ("blocking", shot.blocking_state_ids), ("criterion", shot.criterion_ids)):
-                unique(values, key)
-                references(values, ids[key], key)
-        unique([(r.beat_id, r.participant_id) for r in self.performance.beats], "performance row")
+                check(unique, values, key)
+                check(references, values, ids[key], key)
+        check(unique, [(r.beat_id, r.participant_id) for r in self.performance.beats], "performance row")
         for row in self.performance.beats:
             for key, values in (("beat", [row.beat_id]), ("participant", [row.participant_id]),
                                 ("event", row.received_event_ids), ("dialogue", row.dialogue_ids),
                                 ("criterion", row.criterion_ids)):
-                references(values, ids[key], key)
+                check(references, values, ids[key], key)
         for row in self.performance.situations + self.sound.dialogues:
-            references([row.participant_id], ids["participant"], "participant")
+            check(references, [row.participant_id], ids["participant"], "participant")
         for row in self.staging.activities:
-            references([row.participant_id], ids["participant"], "participant")
-            references([row.anchor_id] if row.anchor_id else [], ids["anchor"], "anchor")
-            references([row.trigger_event_id] if row.trigger_event_id else [], ids["event"], "event")
-        unique([r.shot_id for r in self.cinematography], "camera shot")
+            check(references, [row.participant_id], ids["participant"], "participant")
+            check(references, [row.anchor_id] if row.anchor_id else [], ids["anchor"], "anchor")
+            check(references, [row.trigger_event_id] if row.trigger_event_id else [], ids["event"], "event")
+        check(unique, [r.shot_id for r in self.cinematography], "camera shot")
         for row in self.cinematography:
-            references([row.shot_id], ids["shot"], "shot")
-            references(row.criterion_ids, ids["criterion"], "criterion")
+            check(references, [row.shot_id], ids["shot"], "shot")
+            check(references, row.criterion_ids, ids["criterion"], "criterion")
         for row in self.continuity:
-            references([row.participant_id] if row.participant_id else [], ids["participant"], "participant")
-            references([row.event_id] if row.event_id else [], ids["event"], "event")
+            check(references, [row.participant_id] if row.participant_id else [], ids["participant"], "participant")
+            check(references, [row.event_id] if row.event_id else [], ids["event"], "event")
+        if errors:
+            raise ValueError("; ".join(errors))
         return self

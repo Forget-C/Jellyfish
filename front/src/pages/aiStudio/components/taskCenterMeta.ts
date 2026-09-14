@@ -16,7 +16,8 @@ function sourceMeta(source: TaskSourceRead | null | undefined): ResolvedTaskMeta
   const { kind, id, project_id: projectId, chapter_id: chapterId } = source
   let navigateTo: string | null = null
   if (kind === 'shot' && projectId && chapterId) navigateTo = getChapterStudioPath(projectId, chapterId)
-  else if (kind === 'chapter' && projectId) navigateTo = getChapterShotsPath(projectId, id)
+  else if (kind === 'chapter' && projectId) navigateTo = `/projects/${projectId}/chapters/${id}/sequences`
+  else if (kind === 'sequence' && projectId && chapterId) navigateTo = `/projects/${projectId}/chapters/${chapterId}/sequences/${id}`
   else if (kind === 'project') navigateTo = `/projects/${id}`
   else if (kind === 'character' && projectId) navigateTo = `/projects/${projectId}/roles/${id}/edit`
   else if (kind === 'experiment_session') navigateTo = `/lab?session=${encodeURIComponent(id)}`

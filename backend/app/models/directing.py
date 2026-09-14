@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint, Integer, JSON, String, Text, UniqueConstraint, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint, Integer, JSON, String, Text, UniqueConstraint, func, text
 from sqlalchemy.dialects.mysql import DATETIME
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -23,7 +23,7 @@ class Sequence(Base, TimestampMixin):
     source: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     source_start: Mapped[int | None] = mapped_column(Integer)
     source_end: Mapped[int | None] = mapped_column(Integer)
-    source_text: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    source_text: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default=text("('')"))
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     __table_args__ = (
@@ -51,6 +51,7 @@ class DirectingRevision(Base, TimestampMixin):
     parent_id: Mapped[str | None] = mapped_column(ForeignKey("directing_revisions.id", ondelete="RESTRICT"))
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    source_key: Mapped[str | None] = mapped_column(String(64))
     confirmed_by: Mapped[str | None] = mapped_column(String(64))
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime)
 

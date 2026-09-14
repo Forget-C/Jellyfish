@@ -30,7 +30,7 @@
 
 ## 场次工作台数据基础
 
-1. 阶段一当前实现见 `site/content/docs/architecture/directing-foundation.md`；场次 API、页面与生成接入尚未实施。
+1. 当前场次实现见 `site/content/docs/architecture/directing-foundation.md`；场次 API、设计/试拍/剪辑页面与单元任务已接入，阶段二真实试拍、局部采用与补拍替换闭环已验收；样片动作偏差不等于计划已覆盖。
 2. 新场次数据统一通过 `app.services.directing.store.DirectingStore` 读写；不得绕过类型、项目归属、版本与文件引用校验直接更新 JSON。
 3. `Sequence` 表示故事场次，`Scene` 仍是场所资产。GenerationUnit 身份为生产计划版本与 unit_id，Take 不绑定唯一镜头。
 4. 已确认版本不可原地改写；预演预计时长和真实媒体区间、素材审查与剪辑采用必须分开。

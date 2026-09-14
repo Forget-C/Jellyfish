@@ -12,6 +12,7 @@ export type RevisionSnapshot_SequenceCut_ = {
     version: number;
     confirmed_by: (string | null);
     confirmed_at: (string | null);
+    source_current?: boolean;
     content: SequenceCut_Output;
 };
 

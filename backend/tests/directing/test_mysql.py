@@ -39,10 +39,10 @@ async def test_mysql_schema_roundtrip_and_concurrent_writes():
                     "include_object": lambda obj, name, type_, reflected, compare_to: (name if type_ == "table" else obj.table.name).startswith("directing_"),
                 })
                 assert not compare_metadata(context, Base.metadata)
-                assert sync.scalar(text("SELECT version_num FROM alembic_version")) == "24c8e1a6b902"
+                assert sync.scalar(text("SELECT version_num FROM alembic_version")) == "35d9f2b7ca03"
             await connection.run_sync(verify)
         async with sessions.begin() as db:
-            db.add(Project(id="p1", name="测试", style="drama"))
+            db.add(Project(id="p1", name="测试", style="真人都市"))
             await db.flush()
             db.add(Chapter(id="ch1", project_id="p1", index=1, title="借钱", raw_text="兄弟在店中交谈"))
             db.add_all([FileItem(id="image1", type="image", name="空间", storage_key="files/space.png"),

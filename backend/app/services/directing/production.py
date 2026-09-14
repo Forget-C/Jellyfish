@@ -37,6 +37,9 @@ class ProductionService(DirectingAIService):
         plan_row = await self.revision(plan_id, kind="plan", sequence_id=sequence_id, confirmed=True)
         plan = ProductionPlan.model_validate(plan_row.payload)
         await self._validate(await self.sequence(sequence_id), plan)
+        design = await self.revision(plan.design_revision_id, kind="design", sequence_id=sequence_id)
+        if design.source_key != self.source_key(await self.sequence(sequence_id)) or (await self.read_sequence(sequence_id)).source_changed:
+            raise ValueError("设计依据的原文或场次范围已变化，请核对设计并确认新计划")
         unit = self._unit(plan, unit_id)
         if len(unit.coverage) > 1:
             raise ValueError("当前模型尚未验证精确多镜生成，请在计划中明确拆成单镜试拍单元后再编译")
@@ -82,6 +85,7 @@ class ProductionService(DirectingAIService):
         design = SceneDesign.model_validate(design_row.payload)
         shots = {item.shot_id for item in unit.coverage}
         beats = {beat for item in unit.coverage for beat in item.beat_ids}
+        blocking = {state for shot in design.direction.shots if shot.id in shots for state in shot.blocking_state_ids}
         if not shots <= {row.shot_id for row in design.cinematography}:
             raise ValueError("镜头缺少摄影工作单")
         required = [design.direction.viewpoint, design.direction.information_change]
@@ -89,15 +93,14 @@ class ProductionService(DirectingAIService):
         required += [b.must_show for b in design.direction.beats if b.id in beats]
         if any(note.state not in ("fact", "proposal") for note in required):
             raise ValueError("视点、信息变化或镜头可见结果仍未确定，请先完善导演方案")
-        lines = ["【场次试拍 v1】", f"时长 {unit.duration_ms // 1000} 秒，画幅 {unit.ratio}。"]
+        lines = ["【场次试拍 v3】", f"时长 {unit.duration_ms // 1000} 秒，画幅 {unit.ratio}。"]
         for binding in unit.references:
             names = [p.name for p in design.participants if p.id in binding.participant_ids]
             lines.append(f"参考 @{binding.id}：用途 {binding.purpose}，主体 {'、'.join(names) or '空间/构图'}，输入位置 {binding.input_role}。")
-        for index, coverage in enumerate(unit.coverage, 1):
-            lines.append(f"镜头 {index} [{coverage.shot_id}]：{coverage.action_scope}")
         lines.append("人物：" + "；".join(f"{p.id}={p.name}" for p in design.participants))
         lines.append("声音安排：" + {"postproduction": "对白和声音待后期处理", "generated": "同期生成", "unknown": "待确定，不视为已完成"}[design.sound.execution])
         decisions = []
+        background = True
 
         def emit(value, path, label):
             """逐项保留文本来源路径，忽略溯源元数据但不丢失已知创作内容。"""
@@ -110,13 +113,13 @@ class ProductionService(DirectingAIService):
                 else:
                     return
                 lines.append(line)
-                decisions.append(CompilationDecision(section_path=path, disposition="text", explanation="按当前单元覆盖编入执行文本", text_excerpt=line))
+                decisions.append(CompilationDecision(section_path=path, disposition="text", explanation="保留场次背景，不能据此追加本次动作" if background else "按当前单元覆盖编入执行文本", text_excerpt=line))
             elif isinstance(value, dict):
-                identity = ", ".join(f"{key}={value[key]}" for key in ("id", "participant_id", "beat_id", "shot_id") if key in value)
+                identity = ", ".join(f"{key}={value[key]}" for key in ("id", "participant_id", "beat_id", "shot_id") if value.get(key) is not None)
                 if identity:
                     lines.append(f"【{label}: {identity}】")
                 for key, child in value.items():
-                    if key not in ("sources", "style_revision_id"):
+                    if key not in ("style_revision_id", "id", "participant_id", "beat_id", "shot_id") and (key != "sources" or path == "/sound"):
                         emit(child, path + "/" + key, key)
             elif isinstance(value, list):
                 for index, child in enumerate(value):
@@ -125,16 +128,42 @@ class ProductionService(DirectingAIService):
                             continue
                         if path == "/direction/beats" and child["id"] not in beats:
                             continue
+                        if path == "/direction/blocking_states" and child["id"] not in blocking:
+                            continue
                         if path == "/performance/beats" and child["beat_id"] not in beats:
                             continue
                         if path == "/cinematography" and child["shot_id"] not in shots:
                             continue
                     emit(child, path + "/" + str(index), label + f"[{index + 1}]")
-        emit(design.model_dump(mode="json"), "", "工作单")
+            elif value is not None:
+                # Keep causal ID references and explicit timings; these are not Note objects.
+                unit_label = "毫秒" if label in ("delay_ms", "estimated_duration_ms") else ""
+                field_label = "原设计预计时长（非本次单元时长）" if label == "estimated_duration_ms" else label
+                line = f"{field_label}：{value}{unit_label}"
+                lines.append(line)
+                decisions.append(CompilationDecision(section_path=path, disposition="text",
+                    explanation="保留关联身份或明确数值，避免丢失因果与时序", text_excerpt=line))
+        document = design.model_dump(mode="json")
+        lines.append("【场次背景】以下含前后镜头信息，仅供理解人物、空间及连续性；不得把背景中的动作追加到本次拍摄。")
+        for key in ("participants", "events", "criteria"):
+            emit(document[key], "/" + key, key)
+        emit({key: value for key, value in document["direction"].items() if key not in ("beats", "blocking_states", "shots")}, "/direction", "总导演背景")
+        emit({key: value for key, value in document["performance"].items() if key != "beats"}, "/performance", "表演背景")
+        for key in ("staging", "continuity", "sound", "prompt"):
+            emit(document[key], "/" + key, key)
+        background = False
+        lines.append("【本次执行动作】")
+        lines.append("只执行以下单元范围；背景中未被本单元覆盖的动作不拍摄。")
+        for index, coverage in enumerate(unit.coverage, 1):
+            lines.append(f"镜头 {index} [{coverage.shot_id}]：{coverage.action_scope}")
+        for key in ("beats", "blocking_states", "shots"):
+            emit(document["direction"][key], "/direction/" + key, key)
+        emit(document["performance"]["beats"], "/performance/beats", "beats")
+        emit(document["cinematography"], "/cinematography", "cinematography")
         text = "\n".join(lines)
         if len("".join(text.split())) > 5000:
             raise ValueError("执行文本超过 5000 非空白字符，请简化重复工作单内容或缩小单元范围；系统不会截断")
-        prompt = Prompt(plan_revision_id=plan_id, unit_id=unit_id, format_version="jellyfish-scene-v1", text=text,
+        prompt = Prompt(plan_revision_id=plan_id, unit_id=unit_id, format_version="jellyfish-scene-v3", text=text,
                         decisions=decisions, sources=[Source(kind="revision", reference=design_row.id, version=str(design_row.version))])
         async with self.db.begin_nested():
             row = await self.save_revision(sequence_id, kind="prompt", payload=prompt.model_dump(mode="json"))

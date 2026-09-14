@@ -33,7 +33,7 @@ async def database(tmp_path):
         async with engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
         async with sessions.begin() as db:
-            db.add_all([Project(id="p1", name="film", style="drama"), Project(id="p2", name="other", style="drama")])
+            db.add_all([Project(id="p1", name="film", style="真人都市"), Project(id="p2", name="other", style="真人都市")])
             await db.flush()
             db.add_all([Chapter(id="ch1", project_id="p1", index=1, title="借钱", raw_text="兄弟在店中交谈"),
                         Chapter(id="ch2", project_id="p2", index=1, title="另一项目")])

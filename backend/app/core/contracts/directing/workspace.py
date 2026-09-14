@@ -125,6 +125,7 @@ class RevisionWrite(Contract):
     """创建、派生或 CAS 修改业务草稿，提示词与审稿由专用流程产生。"""
 
     document: RevisionContent
+    sequence_version: int | None = Field(default=None, gt=0)
     revision_id: Identity | None = None
     expected_version: int | None = Field(default=None, gt=0)
     parent_id: Identity | None = None

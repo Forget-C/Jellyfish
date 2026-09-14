@@ -12,6 +12,7 @@ export type RevisionSnapshot_ReviewPacket_ = {
     version: number;
     confirmed_by: (string | null);
     confirmed_at: (string | null);
+    source_current?: boolean;
     content: ReviewPacket;
 };
 

@@ -18,15 +18,11 @@ import { CostumesTab, PropsTab } from './tabs/PropsTab'
 import { FilesTab } from './tabs/FilesTab'
 import { EditTab } from './tabs/EditTab'
 import { SettingsTab } from './tabs/SettingsTab'
-import { getChapterShotsPath, getChapterStudioPath, getProjectEditorPath } from './routes'
+import { getProjectEditorPath } from './routes'
 import { useProject, useChapters } from './hooks/useProjectData'
-import { ensureHasShotsBeforeShooting } from './ensureHasShotsBeforeShooting'
-import { getChapterPreparationState } from './chapterPreparation'
 import { WorkspaceLayout, WorkspaceScrollPanel } from '../../../../components'
 
 const TAB_PARAM = 'tab'
-const CREATE_PARAM = 'create'
-const EDIT_PARAM = 'edit'
 
 const ProjectWorkbench: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>()
@@ -40,98 +36,16 @@ const ProjectWorkbench: React.FC = () => {
   const { chapters } = useChapters(projectId)
   const [activeTab, setActiveTab] = useState<TabKey>(() => resolvedTab)
 
-  const chaptersByIndex = [...chapters].sort((a, b) => a.index - b.index)
-
-  const recommendedChapter = (() => {
-    const findByState = (key: ReturnType<typeof getChapterPreparationState>['key']) =>
-      chaptersByIndex.find((chapter) => getChapterPreparationState(chapter).key === key)
-    return (
-      findByState('edit_raw') ??
-      findByState('extract_shots') ??
-      findByState('prepare_shots') ??
-      findByState('shoot') ??
-      chaptersByIndex[0] ??
-      null
-    )
-  })()
-
-  const primaryCta = (() => {
-    if (!projectId) {
-      return {
-        label: '创建第一章',
-        hint: '先创建章节，再进入分镜准备流程',
-        icon: <PlusOutlined />,
-        onClick: () => {},
-      }
-    }
-    if (!recommendedChapter) {
-      return {
-        label: '创建第一章',
-        hint: '先创建章节，再进入分镜准备流程',
-        icon: <PlusOutlined />,
-        onClick: () => {
-          setTabInUrl('chapters')
-          setSearchParams(
-            (prev) => {
-              const next = new URLSearchParams(prev)
-              next.set(CREATE_PARAM, '1')
-              return next
-            },
-            { replace: true }
-          )
-        },
-      }
-    }
-    const state = getChapterPreparationState(recommendedChapter)
-    const chapterLabel = `第${recommendedChapter.index}章`
-    if (state.key === 'edit_raw') {
-      return {
-        label: `编辑${chapterLabel}原文`,
-        hint: `${chapterLabel}还没有原文内容，建议先补章节原文`,
-        icon: state.primaryIcon,
-        onClick: () => {
-          setTabInUrl('chapters')
-          setSearchParams(
-            (prev) => {
-              const next = new URLSearchParams(prev)
-              next.set(TAB_PARAM, 'chapters')
-              next.set(EDIT_PARAM, recommendedChapter.id)
-              return next
-            },
-            { replace: true }
-          )
-        },
-      }
-    }
-    if (state.key === 'extract_shots') {
-      return {
-        label: `提取${chapterLabel}分镜`,
-        hint: `${chapterLabel}已有原文，下一步更适合先提取分镜`,
-        icon: state.primaryIcon,
-        onClick: () => navigate(getChapterShotsPath(projectId, recommendedChapter.id)),
-      }
-    }
-    if (state.key === 'prepare_shots') {
-      return {
-        label: `进入${chapterLabel}分镜工作室`,
-        hint: `${chapterLabel}已有分镜，建议继续补齐镜头准备`,
-        icon: state.primaryIcon,
-        onClick: () => navigate(getChapterStudioPath(projectId, recommendedChapter.id)),
-      }
-    }
-    return {
-      label: `进入${chapterLabel}拍摄`,
-      hint: `${chapterLabel}已具备分镜，可继续进入拍摄流程`,
-      icon: state.primaryIcon,
-      onClick: () =>
-        ensureHasShotsBeforeShooting({
-          projectId,
-          chapterId: recommendedChapter.id,
-          storyboardCount: recommendedChapter.storyboardCount,
-          navigate,
-        }),
-    }
-  })()
+  const recommendedChapter = [...chapters].sort((a, b) => a.index - b.index)[0]
+  const primaryCta = {
+    label: recommendedChapter ? '进入章节场次' : '创建第一章',
+    hint: '章节原文 → 场次设计 → 单元试拍 → 审片剪辑',
+    icon: <PlusOutlined />,
+    onClick: () => {
+      if (recommendedChapter) navigate(`/projects/${projectId}/chapters/${recommendedChapter.id}/sequences`)
+      else setSearchParams({ tab: 'chapters', create: '1' })
+    },
+  }
 
   // 与 URL 中的 tab 同步：URL 变化时更新 activeTab；初次或无效 tab 时写回 URL
   useEffect(() => {

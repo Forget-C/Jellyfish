@@ -23,6 +23,7 @@ class RevisionSnapshot(Contract, Generic[Content]):
     version: int = Field(gt=0)
     confirmed_by: Identity | None
     confirmed_at: datetime | None
+    source_current: bool = True
     content: Content
 
     @model_validator(mode="after")

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Space, Tag } from 'antd'
 import { FilmService, StudioDirectingService } from '../../../services/generated'
 import type { DirectingTaskRead } from '../../../services/generated'
@@ -14,24 +14,28 @@ export function DirectingTasks({ projectId, taskIds, onResult, onSettled }: {
   const [tasks, setTasks] = useState<DirectingTaskRead[]>([])
   const [error, setError] = useState('')
   const key = taskIds.join(',')
+  const settledCallback = useRef(onSettled)
+  settledCallback.current = onSettled
   useEffect(() => {
     let active = true
     let previous = ''
+    let timer: ReturnType<typeof window.setTimeout> | undefined
     /** 按固定任务身份轮询状态，避免保存业务正文到任务中心。 */
     const load = async () => {
       try {
-        const rows = await Promise.all(taskIds.map(taskId => StudioDirectingService.directingTask({ projectId, taskId })))
+        const rows = await Promise.all((key ? key.split(',') : []).map(taskId => StudioDirectingService.directingTask({ projectId, taskId })))
         if (!active) return
         const next = rows.flatMap(row => row.data ? [row.data] : [])
-        setTasks(next)
+        setTasks(next); setError('')
         const signature = next.map(row => row.status).join(',')
-        if (previous && signature !== previous) onSettled?.()
+        const running = next.some(row => ['queued', 'running'].includes(row.status))
+        if ((previous && signature !== previous) || (!previous && next.length && !running)) settledCallback.current?.()
         previous = signature
-      } catch (cause) { if (active) setError(directingError(cause)) }
+        if (running) timer = window.setTimeout(() => { void load() }, 2500)
+      } catch (cause) { if (active) { setError(directingError(cause)); timer = window.setTimeout(() => { void load() }, 5000) } }
     }
     void load()
-    const timer = window.setInterval(() => { void load() }, 2500)
-    return () => { active = false; window.clearInterval(timer) }
+    return () => { active = false; window.clearTimeout(timer) }
   }, [projectId, key])
   if (!taskIds.length) return null
   return <Space direction="vertical" style={{ width: '100%' }}>

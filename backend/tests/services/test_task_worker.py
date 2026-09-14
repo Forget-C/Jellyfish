@@ -325,3 +325,25 @@ async def test_poll_and_output_collection_have_total_time_limit(monkeypatch):
                 worker.text_pool.shutdown(wait=True)
     finally:
         await engine.dispose()
+
+
+@pytest.mark.parametrize("code, expected", [
+    ("AllocationQuota.FreeTierOnly", "模型免费额度已耗尽，且供应商开启了仅使用免费额度；请恢复额度或选择其他模型"),
+    ("UnknownVendorError", "模型请求失败，HTTP 403"),
+])
+def test_model_permission_error_is_actionable_without_exposing_response(code, expected):
+    """真实验收中的额度拒绝可识别，未知供应商正文和凭据不进入任务错误。"""
+    from openai import PermissionDeniedError
+
+    response = httpx.Response(403, request=httpx.Request("POST", "https://provider.invalid/v1"))
+    error = PermissionDeniedError("private upstream message", response=response,
+                                  body={"code": code, "message": "private upstream message"})
+    assert TaskWorker._error_message(error) == expected
+
+
+def test_model_timeout_has_readable_error():
+    """模型 SDK 超时与普通执行超时使用相同可读摘要。"""
+    from openai import APITimeoutError
+
+    error = APITimeoutError(request=httpx.Request("POST", "https://provider.invalid/v1"))
+    assert TaskWorker._error_message(error) == "请求或执行超时"

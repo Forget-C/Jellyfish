@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db
@@ -107,9 +107,11 @@ async def upload_file_api(
 )
 async def download_file_api(
     file_id: str,
+    range_header: str | None = Header(default=None, alias="Range"),
     db: AsyncSession = Depends(get_db),
 ):
-    return await build_download_response(db, file_id=file_id)
+    """返回整文件或浏览器请求的单段字节。"""
+    return await build_download_response(db, file_id=file_id, range_header=range_header)
 
 
 @router.get(

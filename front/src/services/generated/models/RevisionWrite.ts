@@ -10,6 +10,7 @@ import type { PlanWrite } from './PlanWrite';
  */
 export type RevisionWrite = {
     document: (DesignWrite | PlanWrite | CutWrite);
+    sequence_version?: (number | null);
     revision_id?: (string | null);
     expected_version?: (number | null);
     parent_id?: (string | null);

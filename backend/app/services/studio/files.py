@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -190,19 +191,30 @@ async def build_download_response(
     db: AsyncSession,
     *,
     file_id: str,
+    range_header: str | None = None,
 ) -> StreamingResponse:
-    """根据 file_id 构建下载响应。"""
+    """下载文件并支持浏览器单区间读取，保证视频可跳转到真实入出点。"""
     file_item = await require_available_file(db, file_id=file_id, lock=False)
     content = await storage.download_file(key=file_item.storage_key)
-
     filename = Path(file_item.storage_key).name or "download"
     media_type = file_item.content_type if file_item.content_type != "application/octet-stream" else _resolve_download_media_type(filename)
-    content_disposition = f"attachment; filename*=UTF-8''{quote(filename)}"
-    return StreamingResponse(
-        iter([content]),
-        media_type=media_type,
-        headers={"Content-Disposition": content_disposition},
-    )
+    headers = {"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}", "Accept-Ranges": "bytes"}
+    status_code = 200
+    total = len(content)
+    if range_header:
+        match = re.fullmatch(r"bytes=(\d*)-(\d*)", range_header.strip())
+        if match is None or not any(match.groups()) or not total:
+            raise HTTPException(status_code=416, detail="Invalid byte range", headers={"Content-Range": f"bytes */{total}"})
+        left, right = match.groups()
+        start = int(left) if left else max(0, total - int(right))
+        end = min(total - 1, int(right)) if left and right else total - 1
+        if start >= total or end < start:
+            raise HTTPException(status_code=416, detail="Byte range outside file", headers={"Content-Range": f"bytes */{total}"})
+        headers["Content-Range"] = f"bytes {start}-{end}/{total}"
+        content = content[start:end + 1]
+        status_code = 206
+    headers["Content-Length"] = str(len(content))
+    return StreamingResponse(iter([content]), status_code=status_code, media_type=media_type, headers=headers)
 
 
 async def get_storage_info(

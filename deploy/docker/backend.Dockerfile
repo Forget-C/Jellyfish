@@ -6,9 +6,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# System deps for common wheels / TLS
+# TLS and ffprobe for validating actual generated video duration
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates curl \
+  && apt-get install -y --no-install-recommends ca-certificates curl ffmpeg \
   && rm -rf /var/lib/apt/lists/*
 
 # Install uv (Python package manager)

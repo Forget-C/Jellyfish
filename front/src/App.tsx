@@ -21,6 +21,8 @@ import ModelManagement from './pages/aiStudio/models/ModelManagement'
 import ExperimentLabPage from './pages/aiStudio/experiment/ExperimentLabPage'
 import { ChapterShotsPage } from './pages/aiStudio/shots/ChapterShotsPage'
 import { ChapterShotEditPage } from './pages/aiStudio/shots/ChapterShotEditPage'
+import ChapterSequencesPage from './pages/aiStudio/directing/ChapterSequencesPage'
+import SequenceWorkspacePage from './pages/aiStudio/directing/SequenceWorkspacePage'
 import './App.css'
 
 /** 兼容旧实验室地址，并保留原 URL 的会话定位参数。 */
@@ -41,6 +43,8 @@ const App: React.FC = () => {
           <Route path="projects/:projectId" element={<ProjectWorkbench />} />
           <Route path="projects/:projectId/roles/:characterId/edit" element={<RoleDetailPage />} />
           <Route path="projects/:projectId/chapters/:chapterId/prep/*" element={<Navigate to="../shots" replace />} />
+          <Route path="projects/:projectId/chapters/:chapterId/sequences" element={<ChapterSequencesPage />} />
+          <Route path="projects/:projectId/chapters/:chapterId/sequences/:sequenceId" element={<SequenceWorkspacePage />} />
           <Route path="projects/:projectId/chapters/:chapterId/studio" element={<ChapterStudio />} />
           <Route path="projects/:projectId/chapters/:chapterId/shots/:shotId/edit" element={<ChapterShotEditPage />} />
           <Route path="projects/:projectId/chapters/:chapterId/shots" element={<ChapterShotsPage />} />
