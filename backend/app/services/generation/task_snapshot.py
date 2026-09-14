@@ -13,6 +13,8 @@ from app.models.studio_prompts_files_timeline import FileItem
 def split_snapshot(snapshot: ResolvedGenerationSnapshot) -> tuple[dict, str, str, list[tuple[str, int, str]]]:
     """把文件引用移至 task_inputs，并以具体资产类型区分各表的数字槽位 ID。"""
     data = snapshot.model_dump(mode="json", exclude={"canonical_target", "expected_version_id", "media"})
+    if data.get("prompt_revision_id") is None:
+        data.pop("prompt_revision_id", None)
     target = snapshot.canonical_target
     target_type = target.kind.value
     target_id = target.entity_id

@@ -114,6 +114,9 @@ def _simplify(llm, run_args: dict[str, Any]) -> ScriptSimplificationResult:
 
 def generate_script_result(kind: str, llm, run_args: dict[str, Any]) -> Any:
     """在有界线程池中调用同步 Agent；调用方负责先退出数据库会话。"""
+    if kind.startswith("directing_"):
+        from app.services.directing.ai import generate_directing_result
+        return generate_directing_result(kind, llm, run_args)
     required = {
         "script_consistency": {"script_text": str},
         "script_merge": {"all_shot_extractions": list},

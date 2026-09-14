@@ -35,6 +35,7 @@ class GenerationTargetKind(str, Enum):
     asset_image_slot = "asset_image_slot"
     shot_frame_slot = "shot_frame_slot"
     shot_video = "shot_video"
+    directing_unit = "directing_unit"
     shot_detail = "shot_detail"
     script_processing = "script_processing"
 
@@ -145,6 +146,7 @@ class ResolvedGenerationSnapshot(BaseModel):
     model_id: str
     canonical_target: GenerationTarget
     expected_version_id: int | None = Field(default=None, ge=1)
+    prompt_revision_id: str | None = None
     media: ImageMediaInput | VideoMediaInput | None = None
     operation_input: TypedOperationInput
     execution_prompt: str | None = None

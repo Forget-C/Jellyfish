@@ -1,9 +1,10 @@
 """场次工作台基础存储。大工作单使用类型化 JSON，关系和版本由列约束。"""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint, Integer, JSON, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint, Integer, JSON, String, Text, UniqueConstraint, func
+from sqlalchemy.dialects.mysql import DATETIME
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -20,6 +21,9 @@ class Sequence(Base, TimestampMixin):
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     source: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    source_start: Mapped[int | None] = mapped_column(Integer)
+    source_end: Mapped[int | None] = mapped_column(Integer)
+    source_text: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     __table_args__ = (
@@ -28,10 +32,18 @@ class Sequence(Base, TimestampMixin):
     )
 
 
+def revision_created_at() -> datetime:
+    """应用侧保存微秒创建时间，保证连续创建版本的展示顺序。"""
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
 class DirectingRevision(Base, TimestampMixin):
     """设计、计划、提示词、审稿、剪辑共用版本机制，payload 按 kind 强类型验证。"""
 
     __tablename__ = "directing_revisions"
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True).with_variant(DATETIME(fsp=6), "mysql"),
+                                                default=revision_created_at, server_default=func.now(), nullable=False)
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     sequence_id: Mapped[str] = mapped_column(ForeignKey("directing_sequences.id", ondelete="RESTRICT"), nullable=False, index=True)
@@ -88,3 +100,24 @@ class CutTakeReference(Base):
 
     revision_id: Mapped[str] = mapped_column(ForeignKey("directing_revisions.id", ondelete="CASCADE"), primary_key=True)
     take_id: Mapped[str] = mapped_column(ForeignKey("directing_takes.id", ondelete="RESTRICT"), primary_key=True)
+
+
+class DirectingAction(Base, TimestampMixin):
+    """记录用户实际点击的编译/执行授权，绑定版本，不采信模型自称批准。"""
+
+    __tablename__ = "directing_actions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    sequence_id: Mapped[str] = mapped_column(ForeignKey("directing_sequences.id", ondelete="RESTRICT"), nullable=False, index=True)
+    revision_id: Mapped[str] = mapped_column(ForeignKey("directing_revisions.id", ondelete="RESTRICT"), nullable=False)
+    action: Mapped[str] = mapped_column(String(16), nullable=False)
+    actor_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    displayed_label: Mapped[str] = mapped_column(String(128), nullable=False)
+    unit_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    review_revision_id: Mapped[str | None] = mapped_column(ForeignKey("directing_revisions.id", ondelete="RESTRICT"))
+    request_id: Mapped[str | None] = mapped_column(String(64), unique=True)
+    task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id", ondelete="RESTRICT"), unique=True)
+
+    __table_args__ = (
+        CheckConstraint("action IN ('compile','execute')", name="ck_directing_action_kind"),
+    )

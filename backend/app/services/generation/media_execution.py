@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import mimetypes
@@ -105,6 +106,8 @@ async def store_media_output(sessions, client: httpx.AsyncClient, *, task_id: st
     async with sessions() as db:
         if await db.get(TaskOutput, (task_id, ordinal)) is not None:
             return
+        task = await db.get(Task, task_id)
+        measure_duration = task is not None and task.target_type == "directing_unit"
     try:
         info = await storage.get_file_info(key=key)
     except ClientError as error:
@@ -113,6 +116,7 @@ async def store_media_output(sessions, client: httpx.AsyncClient, *, task_id: st
         info = None
     content_type = "image/png" if kind == "image_generation" else "video/mp4"
     content_hash = None
+    duration_ms = None
     if info is not None:
         if not info.size or not info.content_type:
             raise ProviderDataError("stored_output_incomplete")
@@ -121,6 +125,11 @@ async def store_media_output(sessions, client: httpx.AsyncClient, *, task_id: st
         if not content_type.startswith(f"{expected_type}/"):
             raise ProviderDataError("stored_output_type_mismatch")
         content_hash = (info.extra or {}).get("Metadata", {}).get("sha256")
+        if measure_duration:
+            from app.services.directing.media import probe_duration
+            with SpooledTemporaryFile(max_size=8 * 1024 * 1024) as measured:
+                measured.write(await storage.download_file(key=key))
+                duration_ms = await asyncio.to_thread(probe_duration, measured)
     else:
         with SpooledTemporaryFile(max_size=8 * 1024 * 1024) as target:
             digest = hashlib.sha256()
@@ -147,6 +156,9 @@ async def store_media_output(sessions, client: httpx.AsyncClient, *, task_id: st
                 raise ProviderDataError("provider_output_type_mismatch")
             content_hash = digest.hexdigest()
             target.seek(0)
+            if measure_duration:
+                from app.services.directing.media import probe_duration
+                duration_ms = await asyncio.to_thread(probe_duration, target)
             await storage.upload_file(key=key, data=target, content_type=content_type,
                                       extra_args={"Metadata": {"sha256": content_hash}})
     async with sessions() as db:
@@ -154,7 +166,7 @@ async def store_media_output(sessions, client: httpx.AsyncClient, *, task_id: st
         if file is None:
             file = FileItem(id=file_id, type="image" if kind == "image_generation" else "video",
                             name=f"{task_id}-{ordinal}", storage_key=key, content_type=content_type,
-                            size_bytes=size, content_hash=content_hash)
+                            size_bytes=size, content_hash=content_hash, duration_ms=duration_ms)
             db.add(file)
             await db.flush()
         relation = await TaskService(db).add_output(task_id, ordinal=ordinal, file_id=file.id)
@@ -169,6 +181,16 @@ async def deliver_media(db: AsyncSession, task: Task) -> None:
                                  .where(TaskInput.task_id == task.id))).all()
     snapshot = restore_snapshot(task, relations)
     outputs = list(await db.scalars(select(TaskOutput).where(TaskOutput.task_id == task.id)))
+    if snapshot.canonical_target.kind == GenerationTargetKind.directing_unit:
+        from app.services.directing.store import DirectingStore
+
+        store = DirectingStore(db, task.project_id)
+        for output in outputs:
+            await store.register_take(prompt_revision_id=snapshot.prompt_revision_id, task_id=task.id,
+                                      output_ordinal=output.ordinal, delivery_task=task)
+            output.delivery_status = "published"
+            output.delivery_reason = "candidate_take"
+        return
     publishers = {
         GenerationTargetKind.asset_image_slot: AssetImagePublisher,
         GenerationTargetKind.shot_frame_slot: ShotFramePublisher,

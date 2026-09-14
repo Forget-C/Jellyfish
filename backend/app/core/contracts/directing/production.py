@@ -29,10 +29,13 @@ class ReferenceBinding(Contract):
     participant_ids: list[Identity]
     ordinal: int = Field(ge=0)
     source: Source
+    input_role: Literal["subject", "first_frame", "last_frame", "key_frame"] = "subject"
 
     @model_validator(mode="after")
     def media_purpose(self):
         """声音引用只接受音频，其余视觉用途不能使用音频。"""
+        if self.input_role != "subject" and self.media_kind != "image":
+            raise ValueError("帧参考必须是图片")
         if (self.purpose == "sound") != (self.media_kind == "audio"):
             raise ValueError("media kind does not match purpose")
         return self

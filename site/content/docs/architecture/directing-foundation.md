@@ -84,3 +84,10 @@ cd backend
 ```
 
 MySQL 并发测试需新建且已迁移至 head 的独立空业务库，名称必须以 `jellyfish_check_directing` 开头；使用 `JELLYFISH_DIRECTING_MYSQL_URL` 显式指定后运行 `tests/directing/test_mysql.py`。测试不调用模型或对象存储；它只证明数据基础成立。
+
+
+## 阶段二代码增量边界
+
+当前代码新增场次来源范围、场次工作区 API 和六岗文本任务分派。设计与审稿的模型结果通过显式应用动作保存；编译结果冻结为提示词版本，试拍记录编译/执行动作及任务身份。单元视频任务成功后发布为候选 Take，不自动进入粗剪；真实视频时长通过 ffprobe 读取。
+
+前端已存在设计、试拍和剪辑组件，但尚未接入主路由。数据库新增迁移为 `35d9f2b7ca03`，当前未验证其 MySQL 升级，不应将这些代码增量理解为完整可用的场次主流程。后续验收与未完成项见[实施计划](/docs/plans/directing-workbench-implementation-tasks/)。

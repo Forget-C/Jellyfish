@@ -13,6 +13,7 @@ from app.core.contracts.generation import (
 )
 from app.core.contracts.media import ImageMediaInput, MediaReference, VideoMediaInput
 from app.models.experiment_sessions import ExperimentSession
+from app.models.directing import DirectingRevision
 from app.models.llm import Model, ModelCategoryKey, ModelSettings, Provider, ProviderStatus
 from app.models.studio import Shot, ShotDetail, ShotFrameImage
 from app.models.studio_prompts_files_timeline import FileItem
@@ -44,6 +45,7 @@ class GenerationEntityGate:
         await self._validate_media(db, command.request.media)
         return ResolvedGenerationSnapshot(
             model_id=model.id,
+            prompt_revision_id=command.target.entity_id if command.target.kind == GenerationTargetKind.directing_unit else None,
             canonical_target=command.target,
             expected_version_id=await self._target_version(db, command),
             media=command.request.media,
@@ -94,6 +96,9 @@ class GenerationEntityGate:
             exists = session is not None
             if session is not None and session.lab_type != command.modality.value:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="experiment_session_type_invalid")
+        elif target.kind == GenerationTargetKind.directing_unit:
+            revision = await db.get(DirectingRevision, target.entity_id)
+            exists = revision is not None and revision.kind == "prompt" and revision.confirmed_at is not None
         elif target.kind == GenerationTargetKind.shot_video:
             exists = await db.get(Shot, target.entity_id) is not None
         elif target.kind == GenerationTargetKind.shot_detail:
@@ -129,6 +134,9 @@ class GenerationEntityGate:
     async def _target_version(self, db: AsyncSession, command: GenerationCommand) -> int | None:
         """提交时冻结可发布槽位的当前 CAS 版本，实验与脚本目标不需要版本。"""
         target = command.target
+        if target.kind == GenerationTargetKind.directing_unit:
+            revision = await db.get(DirectingRevision, target.entity_id)
+            return revision.version if revision else None
         if target.kind == GenerationTargetKind.shot_video:
             shot = await db.get(Shot, target.entity_id)
             return shot.generated_video_version_id if shot else None

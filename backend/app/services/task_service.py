@@ -21,6 +21,7 @@ TASK_KINDS = frozenset({
     "script_divide", "script_extract", "script_merge", "script_consistency", "script_variant",
     "script_character_portrait", "script_prop_info", "script_scene_info", "script_costume_info",
     "script_optimize", "script_simplify",
+    "directing_divide", "directing_design", "directing_review",
 })
 MEDIA_KINDS = frozenset({"image_generation", "video_generation"})
 Delivery = Callable[[AsyncSession, Task], Awaitable[None]]

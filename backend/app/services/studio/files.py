@@ -196,7 +196,7 @@ async def build_download_response(
     content = await storage.download_file(key=file_item.storage_key)
 
     filename = Path(file_item.storage_key).name or "download"
-    media_type = _resolve_download_media_type(filename)
+    media_type = file_item.content_type if file_item.content_type != "application/octet-stream" else _resolve_download_media_type(filename)
     content_disposition = f"attachment; filename*=UTF-8''{quote(filename)}"
     return StreamingResponse(
         iter([content]),

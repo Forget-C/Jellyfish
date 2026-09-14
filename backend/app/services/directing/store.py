@@ -55,7 +55,8 @@ class DirectingStore:
         source = Source(kind="chapter", reference=chapter.id, version=sha256(chapter.raw_text.encode()).hexdigest())
         async with self.db.begin_nested():
             row = Sequence(id=uuid4().hex, chapter_id=chapter.id, title=title, position=position,
-                           source=source.model_dump(mode="json"), version=1)
+                           source=source.model_dump(mode="json"), version=1, source_start=0,
+                           source_end=len(chapter.raw_text), source_text=chapter.raw_text)
             self.db.add(row)
             await self.db.flush()
         return row
@@ -311,7 +312,7 @@ class DirectingStore:
         TakeAnnotation.model_validate(row.annotation)
         return row
 
-    async def register_take(self, *, prompt_revision_id: str, task_id: str, output_ordinal: int) -> Take:
+    async def register_take(self, *, prompt_revision_id: str, task_id: str, output_ordinal: int, delivery_task: Task | None = None) -> Take:
         """按 TaskOutput 幂等登记候选；不更改任何剪辑或镜头采用槽位。"""
         prompt_row = await self.revision(prompt_revision_id, kind="prompt", confirmed=True)
         sequence = await self.sequence(prompt_row.sequence_id)
@@ -320,7 +321,9 @@ class DirectingStore:
             # Serializes duplicate publisher calls on MySQL before querying the unique output key.
             output = await self.db.get(TaskOutput, (task_id, output_ordinal), with_for_update=True, populate_existing=True)
             task = await self.db.get(Task, task_id, populate_existing=True)
-            if output is None or task is None or task.project_id != self.project_id or task.status != "succeeded":
+            completing = (delivery_task is task and task is not None and task.status == "running"
+                          and task.target_type == "directing_unit" and task.target_id == prompt_revision_id)
+            if output is None or task is None or task.project_id != self.project_id or (task.status != "succeeded" and not completing):
                 raise ValueError("successful project task output required")
             if task.input_snapshot.get("prompt_revision_id") != prompt_revision_id:
                 raise ValueError("task prompt revision mismatch")

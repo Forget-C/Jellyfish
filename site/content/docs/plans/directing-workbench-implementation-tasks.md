@@ -5,7 +5,7 @@ weight: 33
 status: in_progress
 ---
 
-> 2026-09-14。用户已确认[目标流程](/docs/plans/directing-workbench-refactor-plan/)，本文规划实施顺序；T01–T02 已完成，M0 已达成；T03–T18 未开始。六岗信息结构以[专业输出契约](/docs/plans/six-department-output-contracts-plan/)为准。阶段一当前实现及验证见[核心数据与版本](/docs/architecture/directing-foundation/)。
+> 2026-09-14。用户已确认[目标流程](/docs/plans/directing-workbench-refactor-plan/)，本文规划实施顺序；T01–T02 已完成，M0 已达成；P2（T03–T09）已进入实现，尚未验收；T10–T18 未开始。六岗信息结构以[专业输出契约](/docs/plans/six-department-output-contracts-plan/)为准。阶段一当前实现及验证见[核心数据与版本](/docs/architecture/directing-foundation/)。
 
 ## 1. 顺序与交付节点
 
@@ -69,6 +69,10 @@ T01 交付：`backend/app/core/contracts/directing/` 的六岗内容、生产/�
 T02 交付：五张场次基础表、`DirectingStore`、迁移 `24c8e1a6b902`，以及 SQLite 外键约束和 MySQL 完整升级/并发验证。模型能力仍为待核验，未接生成或页面。
 
 ## 3. P2：跑通第一场戏
+
+阶段二当前为阶段性实现：已新增场次范围/API、六岗 AI 任务、生产计划编译与审稿、单元视频任务和 Take 发布，以及设计/试拍/粗剪页面组件。页面尚未接入主路由，真实模型试拍、局部剪辑与补拍替换尚未完成验收，不代表 M1 达成。
+
+提交前检查覆盖契约、存储、场次来源与生产服务的 32 项测试；前端类型检查单独执行。新增迁移尚未完成隔离 MySQL 升级验证。后续优先完成页面入口、来源失效检查及剪辑编辑并发保护，再进行真实端到端验收。
 
 ### T03 — 新建项目到场次工作区
 

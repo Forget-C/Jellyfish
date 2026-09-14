@@ -3,6 +3,7 @@
 from sqlalchemy import select
 
 from app.models.experiment_sessions import ExperimentSession
+from app.models.directing import Sequence, DirectingRevision
 from app.models.studio import Actor, Character, Scene, Prop, Costume, Shot, Chapter, Project
 from app.schemas.task import TaskSourceRead
 
@@ -45,6 +46,17 @@ async def resolve_task_sources(db, rows) -> dict[str, TaskSourceRead]:
             for row in (await db.execute(select(*columns).where(model.id.in_(ids)))).all():
                 found[row.id] = TaskSourceRead(kind=kind, id=row.id, title=row.name,
                                                project_id=row.project_id if kind == "character" else None)
+        elif kind in {"directing_sequence", "directing_unit"}:
+            query = select(Sequence.id, Sequence.title, Sequence.chapter_id, Chapter.project_id).join(Chapter, Chapter.id == Sequence.chapter_id)
+            if kind == "directing_unit":
+                query = query.add_columns(DirectingRevision.id.label("lookup_id")).join(DirectingRevision, DirectingRevision.sequence_id == Sequence.id).where(DirectingRevision.id.in_(ids))
+            else:
+                query = query.add_columns(Sequence.id.label("lookup_id")).where(Sequence.id.in_(ids))
+            for row in (await db.execute(query)).all():
+                found[row.lookup_id] = TaskSourceRead(kind="sequence", id=row.id, title=row.title, chapter_id=row.chapter_id, project_id=row.project_id)
+        elif kind == "directing_chapter":
+            for row in (await db.execute(select(Chapter.id, Chapter.title, Chapter.project_id).where(Chapter.id.in_(ids)))).all():
+                found[row.id] = TaskSourceRead(kind="chapter", id=row.id, title=row.title, chapter_id=row.id, project_id=row.project_id)
         elif kind == "shot":
             query = select(Shot.id, Shot.title, Shot.chapter_id, Chapter.project_id).join(Chapter, Chapter.id == Shot.chapter_id).where(Shot.id.in_(ids))
             for row in (await db.execute(query)).all():

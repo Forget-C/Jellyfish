@@ -3,7 +3,7 @@
 from app.core.db import Base
 from app.models.base import TimestampMixin
 from app.models.task import Task, TaskInput, TaskOutput
-from app.models.directing import Sequence, DirectingRevision, RevisionDependency, Take, CutTakeReference
+from app.models.directing import Sequence, DirectingRevision, RevisionDependency, Take, CutTakeReference, DirectingAction
 
 from app.models.llm import Model, ModelSettings, Provider
 from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
@@ -40,7 +40,7 @@ from app.models.studio import (
 )
 
 __all__ = [
-    "Sequence", "DirectingRevision", "RevisionDependency", "Take", "CutTakeReference",
+    "Sequence", "DirectingRevision", "RevisionDependency", "Take", "CutTakeReference", "DirectingAction",
     "Task",
     "TaskInput",
     "TaskOutput",

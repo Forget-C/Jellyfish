@@ -313,7 +313,8 @@ class TaskWorker:
 
             async def deliver(db, current):
                 """脚本业务写回与任务成功共用一个短事务。"""
-                await apply_script_result(db, kind=current.kind, run_args=args, result=generated)
+                if not current.kind.startswith("directing_"):
+                    await apply_script_result(db, kind=current.kind, run_args=args, result=generated)
         async with self.sessions() as db:
             await TaskService(db).finish(task.id, result=result, deliver=deliver)
             await db.commit()
