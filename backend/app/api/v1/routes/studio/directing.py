@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.directing.workspace import (
-    ExtractFrameRequest, ExtractedFrame, AssetSummary, AssetCreateRequest, VisualRequest, AIRequest, ApplyDesignRequest, ChapterSequences, RevisionWrite, SequenceCreate, SequenceRead,
+    RegroupRequest, ExtractFrameRequest, ExtractedFrame, AssetSummary, AssetCreateRequest, VisualRequest, AIRequest, ApplyDesignRequest, ChapterSequences, RevisionWrite, SequenceCreate, SequenceRead,
     CompileRequest, ShootRequest, TakeReviewWrite, MediaRead, ReviewDecisionRequest, DirectingTaskRead,
     SequenceUpdate, TaskAccepted, VersionRequest, WorkspaceRead,
 )
@@ -12,6 +12,8 @@ from app.core.contracts.directing.style import ProjectStyleRevision, StyleWrite
 from app.dependencies import get_db
 from app.schemas.common import ApiResponse, success_response
 from app.services.directing.production import ProductionService
+from app.services.directing.batch import BatchService
+from app.core.contracts.directing.batch import BatchPrepare, BatchRead
 from app.services.studio.files import require_available_file
 from app.services.directing.store import RevisionConflict
 
@@ -200,3 +202,29 @@ async def create_asset(project_id: str, sequence_id: str, body: AssetCreateReque
 async def extract_frame(project_id: str, sequence_id: str, take_id: str, body: ExtractFrameRequest, db: AsyncSession = Depends(get_db, scope="function")):
     """从已归档 Take 的真实位置提取连续性参考图。"""
     return success_response(await _call(ProductionService(db, project_id).extract_take_frame(sequence_id, take_id, body.at_ms)))
+
+
+@router.post("/sequences/{sequence_id}/batches/prepare", response_model=ApiResponse[BatchRead], operation_id="directing_prepare_batch")
+async def prepare_batch(project_id: str, sequence_id: str, body: BatchPrepare, db: AsyncSession = Depends(get_db, scope="function")):
+    """固定本轮选择并返回逐项预检，不执行模型请求。"""
+    return success_response(await _call(BatchService(db, project_id).prepare_batch(sequence_id, body)))
+
+
+@router.get("/sequences/{sequence_id}/batches", response_model=ApiResponse[list[BatchRead]], operation_id="directing_batches")
+async def batches(project_id: str, sequence_id: str, db: AsyncSession = Depends(get_db, scope="function")):
+    """恢复本场固定批次及各项通用任务状态。"""
+    return success_response(await _call(BatchService(db, project_id).list_batches(sequence_id)))
+
+
+@router.post("/sequences/{sequence_id}/batches/{batch_id}/submit", response_model=ApiResponse[BatchRead], operation_id="directing_submit_batch")
+async def submit_batch(project_id: str, sequence_id: str, batch_id: str, body: VersionRequest, db: AsyncSession = Depends(get_db, scope="function")):
+    """显式受理已预检批次，重复请求不会新增任务。"""
+    return success_response(await _call(BatchService(db, project_id).submit_batch(sequence_id, batch_id, expected_version=body.expected_version)))
+
+
+@router.post("/sequences/{sequence_id}/regroup", response_model=ApiResponse[WorkspaceRead], operation_id="directing_regroup_units")
+async def regroup_units(project_id: str, sequence_id: str, body: RegroupRequest, db: AsyncSession = Depends(get_db, scope="function")):
+    """显式拆分/组合产生新计划草稿，原计划和已有素材保持不变。"""
+    service = ProductionService(db, project_id)
+    await _call(service.regroup_units(sequence_id, body))
+    return success_response(await _call(service.workspace(sequence_id)))

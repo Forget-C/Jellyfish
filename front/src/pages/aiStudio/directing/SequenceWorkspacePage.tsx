@@ -8,6 +8,8 @@ import { StyleEditor } from './StyleEditor'
 import { SceneAssets } from './SceneAssets'
 import { VisualPanel } from './VisualPanel'
 import { PlanEditor } from './PlanEditor'
+import { BatchPanel } from './BatchPanel'
+import { RegroupPanel } from './RegroupPanel'
 import { CutEditor } from './CutEditor'
 import { DirectingTasks } from './DirectingTasks'
 import { emptyDesign } from './designTemplate'
@@ -119,6 +121,7 @@ export default function SequenceWorkspacePage() {
             }}>为此设计准备试拍</Button>}</Space></>}
       </Space> },
       { key: 'shoot', label: '单元试拍', children: <Space direction="vertical" style={{ width: '100%' }} size="large">
+        {basePlan && <RegroupPanel key={basePlan.id} projectId={projectId} sequenceId={sequenceId} plan={basePlan} disabled={!basePlan.confirmed_at || planDirty || planStale} onChange={next => { setWorkspace(next); selectPlan(next.plans.slice(-1)[0]); setPromptId(undefined); setReviewId(undefined) }} />}
         <Space wrap><Select placeholder="选择生产计划" value={basePlan?.id} style={{ minWidth: 240 }} options={workspace.plans.map((row, index) => ({ value: row.id, label: `计划 ${index + 1} · ${row.confirmed_at ? '已确认' : '草稿'}` }))} onChange={id => selectPlan(workspace.plans.find(row => row.id === id))} />
           <Select placeholder="从已确认设计创建新计划" style={{ minWidth: 240 }} value={undefined} options={workspace.designs.filter(row => row.confirmed_at).map((row, index) => ({ value: row.id, label: `设计 ${index + 1}` }))} onChange={id => { setBasePlan(undefined); setPlan({ design_revision_id: id!, units: [] }) }} /></Space>
         {planStale && <Alert type="warning" message={`当前编辑计划修订 ${basePlan!.version}，服务器版本已更新。`} action={<Button onClick={() => selectPlan(latestPlan)}>放弃本地编辑并载入最新计划</Button>} />}
@@ -162,6 +165,7 @@ export default function SequenceWorkspacePage() {
           })}>确认并开始试拍</Button>
         </Space></Card>}
       </Space> },
+      { key: 'batch', label: '批量拍摄', children: <BatchPanel key={sequenceId} projectId={projectId} workspace={workspace} onSubmitted={reload} /> },
       { key: 'visual', label: '视觉验证', children: <VisualPanel projectId={projectId} workspace={workspace} onSubmitted={reload} /> },
       { key: 'cut', label: '审片与粗剪', children: <CutEditor key={workspace.sequence.id} projectId={projectId} workspace={workspace} onChange={setWorkspace} /> },
     ]} />

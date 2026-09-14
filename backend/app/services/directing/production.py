@@ -7,7 +7,7 @@ from sqlalchemy import select
 from app.core.contracts.directing.common import Note, ROLES, Source
 from app.core.contracts.directing.design import SceneDesign
 from app.core.contracts.directing.production import CompilationDecision, ProductionPlan, Prompt, ReviewPacket, ReviewOccurrence, ReviewRow
-from app.core.contracts.directing.workspace import AIRequest, VisualRequest
+from app.core.contracts.directing.workspace import AIRequest, VisualRequest, RegroupRequest
 from app.core.contracts.generation import (
     ImageGenerationOperationInput, GenerationCommand, GenerationDelivery, GenerationModality, GenerationOperation, GenerationSubmitRequest,
     GenerationTarget, GenerationTargetKind, VideoGenerationOperationInput,
@@ -33,6 +33,57 @@ from app.services.llm.resolver import get_model_by_category
 
 class ProductionService(DirectingAIService):
     """冻结输入后执行；不复用旧镜头槽位，不静默拆镜或丢失参考。"""
+
+    async def regroup_units(self, sequence_id: str, body: RegroupRequest):
+        """用户明确重组固定计划；保留其他单元并重接依赖，不改提示词、任务或剪辑。"""
+        row = await self.revision(body.plan_revision_id, kind="plan", sequence_id=sequence_id, confirmed=True)
+        plan = ProductionPlan.model_validate(row.payload)
+        selected_ids = set(body.unit_ids)
+        if len(selected_ids) != len(body.unit_ids):
+            raise ValueError("重组单元不能重复")
+        selected = [unit for unit in plan.units if unit.id in selected_ids]
+        if len(selected) != len(selected_ids):
+            raise ValueError("所选单元不属于该计划")
+        replacements = {}
+        if body.operation == "merge":
+            if len(selected) < 2:
+                raise ValueError("至少选择两个单元才能组合")
+            first = selected[0]
+            # 不替用户选择冲突的模型、参考或控制参数，避免无声丢失拍摄意图。
+            for unit in selected[1:]:
+                if any(getattr(unit, key) != getattr(first, key) for key in ("model_id", "ratio", "parameters", "references", "capability")):
+                    raise ValueError("组合前请统一所选单元的模型、画幅、参数、参考与能力依据")
+            merged = first.model_copy(deep=True)
+            merged.id = uuid4().hex
+            merged.duration_ms = sum(unit.duration_ms for unit in selected)
+            merged.coverage = [coverage.model_copy(update={"id": uuid4().hex}) for unit in selected for coverage in unit.coverage]
+            merged.depends_on_unit_ids = sorted({identity for unit in selected for identity in unit.depends_on_unit_ids} - selected_ids)
+            replacements = {unit.id: [merged] for unit in selected}
+        else:
+            if all(len(unit.coverage) == 1 for unit in selected):
+                raise ValueError("所选单元已是单镜范围，无需拆分")
+            design = SceneDesign.model_validate((await self.revision(plan.design_revision_id)).payload)
+            shots = {shot.id: shot for shot in design.direction.shots}
+            for unit in selected:
+                replacements[unit.id] = []
+                for coverage in unit.coverage:
+                    part = unit.model_copy(deep=True)
+                    part.id = uuid4().hex
+                    part.coverage = [coverage.model_copy(deep=True)]
+                    part.duration_ms = shots[coverage.shot_id].estimated_duration_ms or unit.duration_ms
+                    replacements[unit.id].append(part)
+        units, seen = [], set()
+        for unit in plan.units:
+            for replacement in replacements.get(unit.id, [unit]):
+                if replacement.id not in seen:
+                    seen.add(replacement.id)
+                    units.append(replacement)
+        for unit in units:
+            unit.depends_on_unit_ids = sorted({part.id for identity in unit.depends_on_unit_ids
+                for part in replacements.get(identity, [self._unit(plan, identity)]) if part.id != unit.id})
+        content = ProductionPlan.model_validate({"design_revision_id": plan.design_revision_id,
+            "units": [unit.model_dump(mode="json") for unit in units]})
+        return await self.save_revision(sequence_id, kind="plan", payload=content.model_dump(mode="json"), parent_id=row.id)
 
     async def generate_visual(self, sequence_id: str, body: VisualRequest):
         """复用统一图片生成管线，只交付候选文件，不修改设计、资产默认图或参考。"""
@@ -238,6 +289,32 @@ class ProductionService(DirectingAIService):
         row = await self.save_revision(sequence_id, kind="review", payload=packet.model_dump(mode="json"))
         return await self.confirm_revision(row.id, expected_version=row.version, actor_id="local-user")
 
+    async def prepare_shoot(self, sequence_id: str, *, prompt_id: str, review_id: str) -> GenerationCommand:
+        """只读预检固定提示词、审稿、计划和模型输入，单次与批量共用且不创建任务。"""
+        sequence = await self.read_sequence(sequence_id)
+        if sequence.source_changed:
+            raise ValueError("章节原文已变化，请重新核对当前场次")
+        prompt_row = await self.revision(prompt_id, kind="prompt", sequence_id=sequence_id, confirmed=True)
+        review_row = await self.revision(review_id, kind="review", sequence_id=sequence_id, confirmed=True)
+        prompt, review = Prompt.model_validate(prompt_row.payload), ReviewPacket.model_validate(review_row.payload)
+        if review.mode != "formal" or any(row.verdict != "pass" for row in review.rows):
+            raise ValueError("六部门审稿仍有未处理项，请修改方案并重新编译审稿")
+        if {o.prompt_revision_id for o in review.occurrences} != {prompt_id}:
+            raise ValueError("审稿不是本次提示词版本")
+        if any(d.disposition == "unexpressed" for d in prompt.decisions):
+            raise ValueError("重要要求尚未表达，不能试拍")
+        if len("".join(prompt.text.split())) > 5000:
+            raise ValueError("提示词超过格式长度限制")
+        await self._validate(await self.sequence(sequence_id), review)
+        plan, unit, media = await self.validate_unit(sequence_id, prompt.plan_revision_id, prompt.unit_id, prompt.text)
+        command = GenerationCommand(modality=GenerationModality.video, operation=GenerationOperation.video_generation,
+            delivery=GenerationDelivery.async_polling,
+            target=GenerationTarget(kind=GenerationTargetKind.directing_unit, entity_id=prompt_id),
+            request=GenerationSubmitRequest(model_id=unit.model_id, execution_prompt=prompt.text, media=media,
+                operation_input=VideoGenerationOperationInput(ratio=unit.ratio, seconds=unit.duration_ms // 1000, seed=unit.parameters.get("seed"))))
+        await GenerationEntityGate().validate(self.db, command)
+        return command
+
     async def shoot(self, sequence_id: str, *, prompt_id: str, review_id: str, request_id: str):
         """版本检查、明确执行授权与幂等任务创建在同一短事务完成。"""
         async with self.db.begin_nested():
@@ -248,30 +325,10 @@ class ProductionService(DirectingAIService):
                 if existing.sequence_id != sequence_id or existing.revision_id != prompt_id or existing.review_revision_id != review_id:
                     raise ValueError("请求身份已用于其他版本，不能复用")
                 return await self.db.get(Task, existing.task_id)
-            sequence = await self.read_sequence(sequence_id)
-            if sequence.source_changed:
-                raise ValueError("章节原文已变化，请重新核对当前场次")
-            prompt_row = await self.revision(prompt_id, kind="prompt", sequence_id=sequence_id, confirmed=True)
-            review_row = await self.revision(review_id, kind="review", sequence_id=sequence_id, confirmed=True)
-            prompt, review = Prompt.model_validate(prompt_row.payload), ReviewPacket.model_validate(review_row.payload)
-            if review.mode != "formal" or any(row.verdict != "pass" for row in review.rows):
-                raise ValueError("六部门审稿仍有未处理项，请修改方案并重新编译审稿")
-            if {o.prompt_revision_id for o in review.occurrences} != {prompt_id}:
-                raise ValueError("审稿不是本次提示词版本")
-            if any(d.disposition == "unexpressed" for d in prompt.decisions):
-                raise ValueError("重要要求尚未表达，不能试拍")
-            if len("".join(prompt.text.split())) > 5000:
-                raise ValueError("提示词超过格式长度限制")
-            await self._validate(await self.sequence(sequence_id), review)
-            plan, unit, media = await self.validate_unit(sequence_id, prompt.plan_revision_id, prompt.unit_id, prompt.text)
-            command = GenerationCommand(modality=GenerationModality.video, operation=GenerationOperation.video_generation,
-                delivery=GenerationDelivery.async_polling,
-                target=GenerationTarget(kind=GenerationTargetKind.directing_unit, entity_id=prompt_id),
-                request=GenerationSubmitRequest(model_id=unit.model_id, execution_prompt=prompt.text, media=media,
-                    operation_input=VideoGenerationOperationInput(ratio=unit.ratio, seconds=unit.duration_ms // 1000, seed=unit.parameters.get("seed"))))
+            command = await self.prepare_shoot(sequence_id, prompt_id=prompt_id, review_id=review_id)
             accepted = await GenerationSubmitter(entity_gate=GenerationEntityGate()).submit_async(self.db, command)
             self.db.add(DirectingAction(id=uuid4().hex, sequence_id=sequence_id, revision_id=prompt_id,
-                review_revision_id=review_id, unit_id=unit.id, action="execute", actor_id="local-user",
+                review_revision_id=review_id, unit_id=Prompt.model_validate((await self.revision(prompt_id)).payload).unit_id, action="execute", actor_id="local-user",
                 displayed_label="确认并开始试拍", request_id=request_id, task_id=accepted.task_id))
             await self.db.flush()
         return await self.db.get(Task, accepted.task_id)

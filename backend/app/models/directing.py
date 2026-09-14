@@ -141,3 +141,36 @@ class ProjectStyleRecord(Base, TimestampMixin):
         CheckConstraint('version > 0', name='ck_directing_style_version'),
         CheckConstraint('(confirmed_by IS NULL AND confirmed_at IS NULL) OR (confirmed_by IS NOT NULL AND confirmed_at IS NOT NULL)', name='ck_directing_style_confirmation'),
     )
+
+
+class DirectingBatch(Base, TimestampMixin):
+    """固定一次预检选择与显式受理动作，不承担各任务运行状态。"""
+
+    __tablename__ = 'directing_batches'
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    sequence_id: Mapped[str] = mapped_column(ForeignKey('directing_sequences.id', ondelete='RESTRICT'), nullable=False, index=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default='prepared')
+    created_at: Mapped[datetime] = mapped_column(DateTime().with_variant(DATETIME(fsp=6), 'mysql'), default=revision_created_at, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint('version > 0', name='ck_directing_batch_version'),
+        CheckConstraint("status IN ('prepared','submitted')", name='ck_directing_batch_status'),
+    )
+
+
+class DirectingBatchItem(Base):
+    """一项固定输入与唯一受理任务，失败只记录本项错误。"""
+
+    __tablename__ = 'directing_batch_items'
+    batch_id: Mapped[str] = mapped_column(ForeignKey('directing_batches.id', ondelete='CASCADE'), primary_key=True)
+    ordinal: Mapped[int] = mapped_column(Integer, primary_key=True)
+    prompt_revision_id: Mapped[str] = mapped_column(ForeignKey('directing_revisions.id', ondelete='RESTRICT'), nullable=False)
+    review_revision_id: Mapped[str] = mapped_column(ForeignKey('directing_revisions.id', ondelete='RESTRICT'), nullable=False)
+    task_id: Mapped[str | None] = mapped_column(ForeignKey('tasks.id', ondelete='RESTRICT'), unique=True)
+    error: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        CheckConstraint('ordinal >= 0', name='ck_directing_batch_item_ordinal'),
+        UniqueConstraint('batch_id', 'prompt_revision_id', name='uq_directing_batch_prompt'),
+    )

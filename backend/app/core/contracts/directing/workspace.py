@@ -249,3 +249,11 @@ class ExtractedFrame(Contract):
 
     file_id: Identity
     source: Source
+
+
+class RegroupRequest(Contract):
+    """在已确认计划上明确拆分或组合单元，结果只能是新计划草稿。"""
+
+    plan_revision_id: Identity
+    unit_ids: list[Identity] = Field(min_length=1)
+    operation: Literal['split', 'merge']

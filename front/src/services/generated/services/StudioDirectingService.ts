@@ -3,10 +3,12 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { AIRequest } from '../models/AIRequest';
+import type { ApiResponse_BatchRead_ } from '../models/ApiResponse_BatchRead_';
 import type { ApiResponse_ChapterSequences_ } from '../models/ApiResponse_ChapterSequences_';
 import type { ApiResponse_DirectingTaskRead_ } from '../models/ApiResponse_DirectingTaskRead_';
 import type { ApiResponse_ExtractedFrame_ } from '../models/ApiResponse_ExtractedFrame_';
 import type { ApiResponse_list_AssetSummary__ } from '../models/ApiResponse_list_AssetSummary__';
+import type { ApiResponse_list_BatchRead__ } from '../models/ApiResponse_list_BatchRead__';
 import type { ApiResponse_list_ProjectStyleRevision__ } from '../models/ApiResponse_list_ProjectStyleRevision__';
 import type { ApiResponse_MediaRead_ } from '../models/ApiResponse_MediaRead_';
 import type { ApiResponse_SequenceRead_ } from '../models/ApiResponse_SequenceRead_';
@@ -14,8 +16,10 @@ import type { ApiResponse_TaskAccepted_ } from '../models/ApiResponse_TaskAccept
 import type { ApiResponse_WorkspaceRead_ } from '../models/ApiResponse_WorkspaceRead_';
 import type { ApplyDesignRequest } from '../models/ApplyDesignRequest';
 import type { AssetCreateRequest } from '../models/AssetCreateRequest';
+import type { BatchPrepare } from '../models/BatchPrepare';
 import type { CompileRequest } from '../models/CompileRequest';
 import type { ExtractFrameRequest } from '../models/ExtractFrameRequest';
+import type { RegroupRequest } from '../models/RegroupRequest';
 import type { ReviewDecisionRequest } from '../models/ReviewDecisionRequest';
 import type { RevisionWrite } from '../models/RevisionWrite';
 import type { SequenceCreate } from '../models/SequenceCreate';
@@ -705,6 +709,121 @@ export class StudioDirectingService {
                 'project_id': projectId,
                 'sequence_id': sequenceId,
                 'take_id': takeId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Prepare Batch
+     * 固定本轮选择并返回逐项预检，不执行模型请求。
+     * @returns ApiResponse_BatchRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingPrepareBatch({
+        projectId,
+        sequenceId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        requestBody: BatchPrepare,
+    }): CancelablePromise<ApiResponse_BatchRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/batches/prepare',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Batches
+     * 恢复本场固定批次及各项通用任务状态。
+     * @returns ApiResponse_list_BatchRead__ Successful Response
+     * @throws ApiError
+     */
+    public static directingBatches({
+        projectId,
+        sequenceId,
+    }: {
+        projectId: string,
+        sequenceId: string,
+    }): CancelablePromise<ApiResponse_list_BatchRead__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/batches',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Submit Batch
+     * 显式受理已预检批次，重复请求不会新增任务。
+     * @returns ApiResponse_BatchRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingSubmitBatch({
+        projectId,
+        sequenceId,
+        batchId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        batchId: string,
+        requestBody: VersionRequest,
+    }): CancelablePromise<ApiResponse_BatchRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/batches/{batch_id}/submit',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'batch_id': batchId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Regroup Units
+     * 显式拆分/组合产生新计划草稿，原计划和已有素材保持不变。
+     * @returns ApiResponse_WorkspaceRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingRegroupUnits({
+        projectId,
+        sequenceId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        requestBody: RegroupRequest,
+    }): CancelablePromise<ApiResponse_WorkspaceRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/regroup',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
             },
             body: requestBody,
             mediaType: 'application/json',
