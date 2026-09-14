@@ -256,3 +256,32 @@ async def test_draft_reference_replacement_and_annotation_conflict(tmp_path):
                 await store.annotate_take(take_id, expected_version=1, annotation=data)
             assert (await store.read_take(take_id)).annotation.verdict == "repair"
             assert await db.scalar(select(func.count()).select_from(CutTakeReference)) == 0
+
+
+@pytest.mark.asyncio
+async def test_planned_card_image_and_dialogue_keep_frozen_dependencies(tmp_path):
+    """预演图必须属于项目，落点引用镜头对白，派生修改不改变旧版。"""
+    from app.services.studio.file_usages import upsert_file_usage
+
+    async with database(tmp_path) as sessions:
+        async with sessions.begin() as db:
+            store, sequence_id, design_id, _, _ = await setup_story(db)
+            item = {'kind': 'planned', 'id': 'card1', 'design_revision_id': design_id, 'shot_id': 's2',
+                    'estimated_duration_ms': 4000, 'timeline_start_ms': 0, 'preview_file_id': 'image1',
+                    'dialogue_cues': [{'dialogue_id': 'd1', 'offset_ms': 1000}]}
+            row = await frozen(store, sequence_id, 'cut', {'items': [item]})
+            changed = deepcopy(item)
+            changed['estimated_duration_ms'] = 5000
+            derived = await store.save_revision(sequence_id, kind='cut', payload={'items': [changed]}, parent_id=row.id)
+            assert (await store.revision(row.id)).payload['items'][0]['estimated_duration_ms'] == 4000
+            assert derived.parent_id == row.id
+            for updates, error in [({'shot_id': 's1'}, 'planned dialogue'),
+                                   ({'dialogue_cues': [{'dialogue_id': 'd1', 'offset_ms': 4000}]}, 'inside planned'),
+                                   ({'preview_file_id': 'video1'}, 'image')]:
+                with pytest.raises((ValueError, HTTPException), match=error):
+                    await store.save_revision(sequence_id, kind='cut', payload={'items': [{**item, **updates}]})
+            db.add(FileItem(id='foreign-image', type='image', name='other', storage_key='other.png'))
+            await db.flush()
+            await upsert_file_usage(db, file_id='foreign-image', project_id='p2', chapter_id='ch2', shot_id=None, usage_kind='upload')
+            with pytest.raises(ValueError, match='not linked'):
+                await store.save_revision(sequence_id, kind='cut', payload={'items': [{**item, 'preview_file_id': 'foreign-image'}]})

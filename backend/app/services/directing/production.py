@@ -7,12 +7,12 @@ from sqlalchemy import select
 from app.core.contracts.directing.common import Note, ROLES, Source
 from app.core.contracts.directing.design import SceneDesign
 from app.core.contracts.directing.production import CompilationDecision, ProductionPlan, Prompt, ReviewPacket, ReviewOccurrence, ReviewRow
-from app.core.contracts.directing.workspace import AIRequest
+from app.core.contracts.directing.workspace import AIRequest, VisualRequest
 from app.core.contracts.generation import (
-    GenerationCommand, GenerationDelivery, GenerationModality, GenerationOperation, GenerationSubmitRequest,
+    ImageGenerationOperationInput, GenerationCommand, GenerationDelivery, GenerationModality, GenerationOperation, GenerationSubmitRequest,
     GenerationTarget, GenerationTargetKind, VideoGenerationOperationInput,
 )
-from app.core.contracts.media import MediaReference, VideoFrameMediaReferences, VideoMediaInput, VideoSubjectMediaReference
+from app.core.contracts.media import ImageMediaInput, MediaReference, VideoFrameMediaReferences, VideoMediaInput, VideoSubjectMediaReference
 from app.core.contracts.video_generation import VideoGenerationInput, VideoFrameReferences, VideoSubjectReference
 from app.core.integrations.video_capabilities import validate_video_options
 from app.core.integrations.openai.video_capabilities import validate_openai_video_options
@@ -22,6 +22,8 @@ from app.core.integrations.volcengine.video_capabilities import validate_volceng
 from app.models.directing import DirectingAction, Sequence
 from app.models.llm import ModelCategoryKey, Provider
 from app.models.task import Task
+from app.models.studio import FileUsage
+from app.services.studio.files import require_available_file
 from app.services.directing.ai import DirectingAIService
 from app.services.generation.gate import GenerationEntityGate
 from app.services.generation.submission.submitter import GenerationSubmitter
@@ -31,6 +33,32 @@ from app.services.llm.resolver import get_model_by_category
 
 class ProductionService(DirectingAIService):
     """冻结输入后执行；不复用旧镜头槽位，不静默拆镜或丢失参考。"""
+
+    async def generate_visual(self, sequence_id: str, body: VisualRequest):
+        """复用统一图片生成管线，只交付候选文件，不修改设计、资产默认图或参考。"""
+        row = await self.revision(body.design_revision_id, kind="design", sequence_id=sequence_id, confirmed=True)
+        sequence = await self.sequence(sequence_id)
+        if row.source_key != self.source_key(sequence):
+            raise ValueError("场次来源已变化，请确认新设计后生成验证图")
+        for file_id in body.reference_file_ids:
+            await require_available_file(self.db, file_id=file_id, expected_type="image")
+            if not await self.db.scalar(select(FileUsage.file_id).where(FileUsage.file_id == file_id, FileUsage.project_id == self.project_id)):
+                raise ValueError("参考图不属于当前项目")
+        model = await get_model_by_category(self.db, ModelCategoryKey.image, model_or_id=body.model_id)
+        text = f"验证目的：{body.purpose}\n{body.prompt}"
+        design = SceneDesign.model_validate(row.payload)
+        for rule in await self.applicable_style(design.style_revision_id, sequence_id, model.name):
+            text += f"\n项目风格 [{rule.role}]：{rule.requirement}；例外：{rule.exceptions.text or rule.exceptions.reason or '未注明'}"
+        accepted = await GenerationSubmitter(entity_gate=GenerationEntityGate()).submit_async(self.db, GenerationCommand(
+            modality=GenerationModality.image, operation=GenerationOperation.image_generation,
+            delivery=GenerationDelivery.async_polling,
+            target=GenerationTarget(kind=GenerationTargetKind.directing_image, entity_id=row.id),
+            request=GenerationSubmitRequest(model_id=model.id, execution_prompt=text,
+                operation_input=ImageGenerationOperationInput(target_ratio=body.ratio, count=1, save_as_candidate=True),
+                media=ImageMediaInput(references=[MediaReference(file_id=file_id, media_kind="image", ordinal=index)
+                    for index, file_id in enumerate(body.reference_file_ids)])),
+        ))
+        return await self.db.get(Task, accepted.task_id)
 
     async def validate_unit(self, sequence_id: str, plan_id: str, unit_id: str, text: str = "准备检查"):
         """用已接入供应商规则核对媒体、时长和参数；艺术多镜能力保持未验证。"""
@@ -93,7 +121,7 @@ class ProductionService(DirectingAIService):
         required += [b.must_show for b in design.direction.beats if b.id in beats]
         if any(note.state not in ("fact", "proposal") for note in required):
             raise ValueError("视点、信息变化或镜头可见结果仍未确定，请先完善导演方案")
-        lines = ["【场次试拍 v3】", f"时长 {unit.duration_ms // 1000} 秒，画幅 {unit.ratio}。"]
+        lines = ["【场次试拍 v4】", f"时长 {unit.duration_ms // 1000} 秒，画幅 {unit.ratio}。"]
         for binding in unit.references:
             names = [p.name for p in design.participants if p.id in binding.participant_ids]
             lines.append(f"参考 @{binding.id}：用途 {binding.purpose}，主体 {'、'.join(names) or '空间/构图'}，输入位置 {binding.input_role}。")
@@ -160,10 +188,18 @@ class ProductionService(DirectingAIService):
             emit(document["direction"][key], "/direction/" + key, key)
         emit(document["performance"]["beats"], "/performance/beats", "beats")
         emit(document["cinematography"], "/cinematography", "cinematography")
+        model = await get_model_by_category(self.db, ModelCategoryKey.video, model_or_id=unit.model_id)
+        for rule in await self.applicable_style(design.style_revision_id, sequence_id, model.name):
+            line = f"项目风格 [{rule.role}/{rule.id}]：{rule.requirement}"
+            if rule.exceptions.text or rule.exceptions.reason:
+                line += f"；例外：{rule.exceptions.text or rule.exceptions.reason}"
+            lines.append(line)
+            decisions.append(CompilationDecision(section_path="/style_revision_id", disposition="text",
+                explanation=f"固定项目风格 {design.style_revision_id} 的适用规则 {rule.id}", text_excerpt=line))
         text = "\n".join(lines)
         if len("".join(text.split())) > 5000:
             raise ValueError("执行文本超过 5000 非空白字符，请简化重复工作单内容或缩小单元范围；系统不会截断")
-        prompt = Prompt(plan_revision_id=plan_id, unit_id=unit_id, format_version="jellyfish-scene-v3", text=text,
+        prompt = Prompt(plan_revision_id=plan_id, unit_id=unit_id, format_version="jellyfish-scene-v4", text=text,
                         decisions=decisions, sources=[Source(kind="revision", reference=design_row.id, version=str(design_row.version))])
         async with self.db.begin_nested():
             row = await self.save_revision(sequence_id, kind="prompt", payload=prompt.model_dump(mode="json"))
@@ -185,7 +221,10 @@ class ProductionService(DirectingAIService):
                     rows=[ReviewRow(role=role, occurrence_id=o.id, verdict="pending", rationale="待审查", findings=[]) for role in ROLES for o in occurrences], context=Note())
         design = await self.revision(plan.design_revision_id)
         return await self.submit_ai(kind="directing_review", body=body, sequence_id=sequence_id,
-                                   extra={"packet": packet.model_dump(mode="json"), "prompt": prompt.model_dump(mode="json"), "design": design.payload})
+                                   extra={"packet": packet.model_dump(mode="json"), "prompt": prompt.model_dump(mode="json"), "design": design.payload,
+                                          "style_rules": [rule.model_dump(mode="json") for rule in await self.applicable_style(
+                                              design.payload.get("style_revision_id"), sequence_id,
+                                              (await get_model_by_category(self.db, ModelCategoryKey.video, model_or_id=unit.model_id)).name)]})
 
     async def apply_review(self, sequence_id: str, task_id: str):
         """记录模型实际审稿结果，保留 revise 结论，不能用保存动作伪装通过。"""

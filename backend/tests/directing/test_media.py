@@ -47,3 +47,66 @@ async def test_invalid_playback_ranges(monkeypatch, header):
     with pytest.raises(HTTPException) as error:
         await files.build_download_response(None, file_id="test", range_header=header)
     assert error.value.status_code == 416
+
+
+def test_extract_frame_uses_real_video_position(tmp_path):
+    """从实际视频不同时间提取不同画面，越过末尾不能伪造图片。"""
+    from app.services.directing.media import extract_frame
+    if not shutil.which('ffmpeg'):
+        pytest.skip('ffmpeg required')
+    path = tmp_path / 'frames.mp4'
+    subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc=size=64x64:rate=10:duration=2',
+        '-pix_fmt', 'yuv420p', '-movflags', '+faststart', str(path)], check=True, timeout=30)
+    content = path.read_bytes()
+    first, second = extract_frame(content, 0), extract_frame(content, 1000)
+    assert first.startswith(b'\x89PNG') and first != second
+    with pytest.raises(ValueError, match='没有可提取'):
+        extract_frame(content, 3000)
+
+
+@pytest.mark.asyncio
+async def test_take_frame_source_and_project_boundary(tmp_path, monkeypatch):
+    """提帧持久保存 Take/时间来源，越界和其他项目请求在下载前被拒绝。"""
+    from sqlalchemy import select
+    from app.models.studio import FileUsage
+    from app.services.directing.production import ProductionService
+    from tests.directing.test_store import database, setup_story, output
+
+    download = AsyncMock(return_value=b'test-video')
+    monkeypatch.setattr(files.storage, 'download_file', download)
+    monkeypatch.setattr(files.storage, 'upload_file', AsyncMock())
+    monkeypatch.setattr('app.services.directing.media.extract_frame', lambda content, at_ms: b'\x89PNG\r\n\x1a\nimage')
+    async with database(tmp_path) as sessions:
+        async with sessions.begin() as db:
+            store, sequence_id, _, _, prompts = await setup_story(db)
+            await output(db, prompts[0])
+            take = await store.register_take(prompt_revision_id=prompts[0], task_id='task1', output_ordinal=0)
+            service = ProductionService(db, 'p1')
+            with pytest.raises(ValueError):
+                await service.extract_take_frame(sequence_id, take.id, 9000)
+            with pytest.raises(ValueError):
+                await ProductionService(db, 'p2').extract_take_frame(sequence_id, take.id, 1000)
+            download.assert_not_called()
+            result = await service.extract_take_frame(sequence_id, take.id, 1000)
+            assert result.source.file_id == 'video1'
+            assert result.source.media_range.source_in_ms == 1000
+            assert result.source.reference == take.id
+            usage = await db.scalar(select(FileUsage).where(FileUsage.file_id == result.file_id))
+            assert usage.project_id == 'p1' and usage.source_ref == f'frame:{take.id}:1000'
+
+
+@pytest.mark.parametrize('failure,message', [
+    (subprocess.TimeoutExpired('ffmpeg', 30), '提取画面超时'),
+    (subprocess.CalledProcessError(1, 'ffmpeg'), '无法解码'),
+])
+def test_frame_failure_is_actionable(monkeypatch, failure, message):
+    """提帧失败转成可显示的业务错误，不向页面返回无说明的 500。"""
+    from app.services.directing.media import extract_frame
+
+    def fail(*args, **kwargs):
+        """模拟本地媒体处理失败，不依赖损坏文件的特定解码器行为。"""
+        raise failure
+
+    monkeypatch.setattr(subprocess, 'run', fail)
+    with pytest.raises(ValueError, match=message):
+        extract_frame(b'broken-video', 0)

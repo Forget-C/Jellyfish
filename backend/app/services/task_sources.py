@@ -46,9 +46,9 @@ async def resolve_task_sources(db, rows) -> dict[str, TaskSourceRead]:
             for row in (await db.execute(select(*columns).where(model.id.in_(ids)))).all():
                 found[row.id] = TaskSourceRead(kind=kind, id=row.id, title=row.name,
                                                project_id=row.project_id if kind == "character" else None)
-        elif kind in {"directing_sequence", "directing_unit"}:
+        elif kind in {"directing_sequence", "directing_unit", "directing_image"}:
             query = select(Sequence.id, Sequence.title, Sequence.chapter_id, Chapter.project_id).join(Chapter, Chapter.id == Sequence.chapter_id)
-            if kind == "directing_unit":
+            if kind in {"directing_unit", "directing_image"}:
                 query = query.add_columns(DirectingRevision.id.label("lookup_id")).join(DirectingRevision, DirectingRevision.sequence_id == Sequence.id).where(DirectingRevision.id.in_(ids))
             else:
                 query = query.add_columns(Sequence.id.label("lookup_id")).where(Sequence.id.in_(ids))

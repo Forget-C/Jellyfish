@@ -122,3 +122,22 @@ class DirectingAction(Base, TimestampMixin):
     __table_args__ = (
         CheckConstraint("action IN ('compile','execute')", name="ck_directing_action_kind"),
     )
+
+
+class ProjectStyleRecord(Base, TimestampMixin):
+    """项目级风格快照，独立于任一场次且保留确认人与派生关系。"""
+
+    __tablename__ = 'directing_project_styles'
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey('projects.id', ondelete='RESTRICT'), nullable=False, index=True)
+    parent_id: Mapped[str | None] = mapped_column(ForeignKey('directing_project_styles.id', ondelete='RESTRICT'))
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    confirmed_by: Mapped[str | None] = mapped_column(String(64))
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True).with_variant(DATETIME(fsp=6), 'mysql'), default=revision_created_at, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint('version > 0', name='ck_directing_style_version'),
+        CheckConstraint('(confirmed_by IS NULL AND confirmed_at IS NULL) OR (confirmed_by IS NOT NULL AND confirmed_at IS NOT NULL)', name='ck_directing_style_confirmation'),
+    )

@@ -151,7 +151,7 @@ async def test_compiler_preserves_causal_ids_and_explicit_delay(tmp_path):
             assert mapping["/continuity/0/domain"] == "domain：hands_props"
             assert all(text in prompt.text for text in mapping.values())
             assert not any("/sources/" in path for path in mapping)
-            assert prompt.format_version == "jellyfish-scene-v3"
+            assert prompt.format_version == "jellyfish-scene-v4"
 
 
 @pytest.mark.asyncio

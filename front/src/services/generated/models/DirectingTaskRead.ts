@@ -17,5 +17,6 @@ export type DirectingTaskRead = {
     division?: (DivisionResult | null);
     design?: (SceneDesign_Output | null);
     review?: (ReviewPacket | null);
+    image_file_ids?: Array<string>;
 };
 

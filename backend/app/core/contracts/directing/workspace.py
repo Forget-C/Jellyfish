@@ -86,6 +86,7 @@ class AIRequest(Contract):
     """冻结本轮人工意见和起始版本供异步 AI 操作使用。"""
 
     model_id: Identity | None = None
+    style_revision_id: Identity | None = None
     instruction: str = ""
     revision_id: Identity | None = None
     expected_version: int | None = Field(default=None, gt=0)
@@ -206,3 +207,45 @@ class DirectingTaskRead(Contract):
     division: DivisionResult | None = None
     design: SceneDesign | None = None
     review: ReviewPacket | None = None
+    image_file_ids: list[Identity] = Field(default_factory=list)
+
+
+class VisualRequest(Contract):
+    """本次验证图的固定设计、目的和显式参考，不隐式读取全项目素材。"""
+
+    design_revision_id: Identity
+    prompt: str = Field(min_length=1, max_length=12000)
+    purpose: Literal["identity", "space", "composition", "continuity"]
+    model_id: Identity | None = None
+    reference_file_ids: list[Identity] = Field(default_factory=list, max_length=10)
+    ratio: Literal["16:9", "9:16", "1:1"] = "16:9"
+
+
+class AssetSummary(Contract):
+    """场次可复用的项目资产身份，不复制本场调度状态到资产。"""
+
+    id: Identity
+    kind: Literal['character', 'scene', 'prop']
+    name: str
+    description: str
+
+
+class AssetCreateRequest(Contract):
+    """仅显式录入跨场稳定设定；本场动作仍保存在设计工作单。"""
+
+    kind: Literal['character', 'scene', 'prop']
+    name: str = Field(min_length=1, max_length=255)
+    description: str = Field(default='', max_length=8000)
+
+
+class ExtractFrameRequest(Contract):
+    """以真实素材毫秒位置提帧，不使用计划预计时长。"""
+
+    at_ms: int = Field(ge=0)
+
+
+class ExtractedFrame(Contract):
+    """提帧文件及真实视频来源，供后续参考绑定和接缝检查。"""
+
+    file_id: Identity
+    source: Source

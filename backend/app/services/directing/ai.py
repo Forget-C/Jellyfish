@@ -13,7 +13,7 @@ from app.core.contracts.directing.production import ReviewPacket
 from app.core.contracts.directing.workspace import AIRequest, DivisionResult, DirectingTaskRead
 from app.models.directing import DirectingRevision
 from app.models.llm import ModelCategoryKey, Provider
-from app.models.task import Task
+from app.models.task import Task, TaskOutput
 from app.models.studio import Character, Scene, Prop, ProjectSceneLink, ProjectPropLink
 from app.services.directing.workspace import WorkspaceService
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
@@ -70,6 +70,9 @@ def generate_directing_result(kind: str, llm, args: dict):
             raise ValueError("模型改变了送审清单")
         if any(row.verdict == "pending" for row in result.rows):
             raise ValueError("审稿未完成")
+    if kind == "directing_design":
+        # 风格身份来自用户冻结输入，不采信模型生成的其他版本 ID。
+        result.style_revision_id = args.get("style_revision_id")
     return result
 
 
@@ -98,6 +101,8 @@ class DirectingAIService(WorkspaceService):
         if not args["script_text"].strip():
             raise ValueError("请先填写章节原文")
         if kind == "directing_design":
+            args["style_revision_id"] = body.style_revision_id
+            args["style_rules"] = [rule.model_dump(mode="json") for rule in await self.applicable_style(body.style_revision_id, sequence_id, model.name)]
             characters = list(await self.db.scalars(select(Character).where(Character.project_id == self.project_id)))
             locations = list(await self.db.scalars(select(Scene).join(ProjectSceneLink, ProjectSceneLink.scene_id == Scene.id).where(ProjectSceneLink.project_id == self.project_id)))
             props = list(await self.db.scalars(select(Prop).join(ProjectPropLink, ProjectPropLink.prop_id == Prop.id).where(ProjectPropLink.project_id == self.project_id)))
@@ -145,12 +150,14 @@ class DirectingAIService(WorkspaceService):
     async def read_task(self, task_id: str) -> DirectingTaskRead:
         """仅返回本项目导演任务的类型化结果，不暴露凭据或供应商原始响应。"""
         task = await self.db.get(Task, task_id)
-        if task is None or task.project_id != self.project_id or task.target_type not in {"directing_chapter", "directing_sequence", "directing_unit"}:
+        if task is None or task.project_id != self.project_id or task.target_type not in {"directing_chapter", "directing_sequence", "directing_unit", "directing_image"}:
             raise ValueError("任务不属于当前工作区")
         result = {}
         result_key = {"directing_divide": "division", "directing_design": "design", "directing_review": "review"}.get(task.kind)
         if task.status == "succeeded" and result_key:
             result[result_key] = RESULT_CONTRACTS[task.kind].model_validate(task.result)
+        if task.status == "succeeded" and task.target_type == "directing_image":
+            result["image_file_ids"] = list(await self.db.scalars(select(TaskOutput.file_id).where(TaskOutput.task_id == task.id).order_by(TaskOutput.ordinal)))
         return DirectingTaskRead(task_id=task.id, kind=task.kind, status=task.status,
                                  error=task.error_message,
                                  source_version=task.input_snapshot.get("run_args", {}).get("source_version"), **result)

@@ -96,6 +96,9 @@ class GenerationEntityGate:
             exists = session is not None
             if session is not None and session.lab_type != command.modality.value:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="experiment_session_type_invalid")
+        elif target.kind == GenerationTargetKind.directing_image:
+            revision = await db.get(DirectingRevision, target.entity_id)
+            exists = revision is not None and revision.kind == "design" and revision.confirmed_at is not None
         elif target.kind == GenerationTargetKind.directing_unit:
             revision = await db.get(DirectingRevision, target.entity_id)
             exists = revision is not None and revision.kind == "prompt" and revision.confirmed_at is not None

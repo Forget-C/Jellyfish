@@ -4,7 +4,7 @@ import { FilmService, StudioDirectingService } from '../../../services/generated
 import type { DirectingTaskRead } from '../../../services/generated'
 import { directingError } from './common'
 
-const titles: Record<string, string> = { directing_divide: '场次分析', directing_design: '导演设计', directing_review: '六部门审稿', video_generation: '单元试拍' }
+const titles: Record<string, string> = { directing_divide: '场次分析', directing_design: '导演设计', directing_review: '六部门审稿', image_generation: '验证图', video_generation: '单元试拍' }
 const statuses: Record<string, string> = { queued: '等待执行', running: '执行中', succeeded: '已完成', failed: '失败', cancelled: '已取消' }
 
 /** 业务内任务结果面板；刷新可以恢复，成功结果由用户显式采用。 */
@@ -47,7 +47,7 @@ export function DirectingTasks({ projectId, taskIds, onResult, onSettled }: {
           try { await FilmService.cancelTaskApiV1FilmTasksTaskIdCancelPost({ taskId: task.task_id, requestBody: { reason: '用户取消' } }) }
           catch (cause) { setError(directingError(cause)) }
         }}>取消</Button>}
-        {task.status === 'succeeded' && (task.division || task.design || task.review) && <Button size="small" onClick={() => onResult?.(task)}>查看结果</Button>}
+        {task.status === 'succeeded' && (task.division || task.design || task.review || !!task.image_file_ids?.length) && <Button size="small" onClick={() => onResult?.(task)}>查看结果</Button>}
       </Space>
       {task.error && <Alert type="error" message={task.error} style={{ marginTop: 8 }} />}
     </Card>)}

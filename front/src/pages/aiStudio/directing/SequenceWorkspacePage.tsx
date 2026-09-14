@@ -4,6 +4,9 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { StudioDirectingService } from '../../../services/generated'
 import type { DirectingTaskRead, ProductionPlan_Input, SceneDesign_Input, WorkspaceRead } from '../../../services/generated'
 import { DesignEditor } from './DesignEditor'
+import { StyleEditor } from './StyleEditor'
+import { SceneAssets } from './SceneAssets'
+import { VisualPanel } from './VisualPanel'
 import { PlanEditor } from './PlanEditor'
 import { CutEditor } from './CutEditor'
 import { DirectingTasks } from './DirectingTasks'
@@ -100,12 +103,12 @@ export default function SequenceWorkspacePage() {
           <Button onClick={() => { setBaseDesign(undefined); setEditingSequenceVersion(workspace.sequence.version); setDesign(emptyDesign()) }}>手动起稿</Button></Space>
         <Input.TextArea placeholder="本场希望观众看到什么？也可填写对现有设计的修改意见。" value={instruction} onChange={event => setInstruction(event.target.value)} />
         <Button loading={busy} disabled={designDirty || designStale || workspace.sequence.source_changed} onClick={() => run(async () => {
-          await StudioDirectingService.directingGenerateDesign({ projectId, sequenceId, requestBody: { instruction, revision_id: baseDesign?.id, expected_version: baseDesign?.version } }); await reload()
+          await StudioDirectingService.directingGenerateDesign({ projectId, sequenceId, requestBody: { instruction, style_revision_id: design?.style_revision_id, revision_id: baseDesign?.id, expected_version: baseDesign?.version } }); await reload()
         })}>生成导演建议</Button>
         {designDirty && <Typography.Text type="warning">请先保存本地修改，再生成建议或确认设计。</Typography.Text>}
         {designStale && <Alert type="warning" message={`当前编辑修订 ${baseDesign!.version}，服务器版本已更新。`} action={<Button onClick={() => selectDesign(latestDesign, workspace.sequence.version)}>放弃本地编辑并载入最新设计</Button>} />}
         {baseDesign && !baseDesign.source_current && <Alert type="warning" message="此设计依据的场次范围已变化，请核对内容后保存为当前来源的设计。" />}
-        {design && <><DesignEditor value={design} onChange={setDesign} />
+        {design && <><SceneAssets projectId={projectId} sequenceId={sequenceId} design={design} onChange={setDesign} /><StyleEditor projectId={projectId} sequenceId={sequenceId} value={design.style_revision_id} onChange={id => setDesign({ ...design, style_revision_id: id })} /><DesignEditor value={design} onChange={setDesign} />
           <Space><Button type="primary" loading={busy} onClick={saveDesign}>{baseDesign?.confirmed_at ? '保存为新设计版本' : '保存设计草稿'}</Button>
             <Button disabled={!baseDesign || !!baseDesign.confirmed_at || designDirty || designStale} loading={busy} onClick={() => run(async () => {
               const response = await StudioDirectingService.directingConfirmRevision({ projectId, sequenceId, revisionId: baseDesign!.id, requestBody: { expected_version: baseDesign!.version } })
@@ -159,10 +162,11 @@ export default function SequenceWorkspacePage() {
           })}>确认并开始试拍</Button>
         </Space></Card>}
       </Space> },
+      { key: 'visual', label: '视觉验证', children: <VisualPanel projectId={projectId} workspace={workspace} onSubmitted={reload} /> },
       { key: 'cut', label: '审片与粗剪', children: <CutEditor key={workspace.sequence.id} projectId={projectId} workspace={workspace} onChange={setWorkspace} /> },
     ]} />
     <DirectingTasks projectId={projectId} taskIds={workspace.task_ids} onSettled={reload} onResult={setResult} />
-    <Modal title={result?.design ? '导演建议' : '审稿结果'} open={!!result} width={900} onCancel={() => setResult(undefined)} footer={<Button type="primary" loading={busy} onClick={() => run(async () => {
+    <Modal title={result?.image_file_ids?.length ? '验证图候选' : result?.design ? '导演建议' : '审稿结果'} open={!!result} width={900} onCancel={() => setResult(undefined)} footer={result?.image_file_ids?.length ? null : <Button type="primary" loading={busy} onClick={() => run(async () => {
       if (!result) return
       const response = result.design
         ? await StudioDirectingService.directingApplyDesign({ projectId, sequenceId, requestBody: { task_id: result.task_id } })
@@ -177,6 +181,7 @@ export default function SequenceWorkspacePage() {
       }
       setResult(undefined)
     })}>{result?.design ? '采用为可编辑草稿' : '保存审稿结论'}</Button>}>
+      {!!result?.image_file_ids?.length && <><Typography.Paragraph>候选图已保存到本项目素材。请在生产计划中明确选择，才会加入本次参考；不会自动替换已确认素材。</Typography.Paragraph>{result.image_file_ids.map(id => <Image key={id} src={buildFileDownloadUrl(id)} alt="验证图候选" />)}</>}
       {result?.design && <DesignEditor value={result.design} onChange={() => {}} disabled />}
       {result?.review?.rows.map(row => <p key={row.role + row.occurrence_id}><strong>{roles[row.role]}</strong> · {row.verdict} · {row.rationale}</p>)}
     </Modal>

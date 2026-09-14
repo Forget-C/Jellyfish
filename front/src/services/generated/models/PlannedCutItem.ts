@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { DialogueCue } from './DialogueCue';
 /**
  * 预演项只引用设计和预计时长，没有伪造媒体区间。
  */
@@ -12,5 +13,7 @@ export type PlannedCutItem = {
     shot_id: string;
     estimated_duration_ms: number;
     timeline_start_ms: number;
+    preview_file_id?: (string | null);
+    dialogue_cues?: Array<DialogueCue>;
 };
 

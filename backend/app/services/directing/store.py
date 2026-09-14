@@ -12,8 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.contracts.directing import SceneDesign, ProductionPlan, Prompt, ReviewPacket, SequenceCut, TakeAnnotation
 from app.core.contracts.directing.common import Identity, Source, references
 from app.core.contracts.directing.revisions import RevisionSnapshot, TakeSnapshot
-from app.models.directing import Sequence, DirectingRevision, RevisionDependency, Take, CutTakeReference
-from app.models.studio import Chapter, Character, FileUsage, ProjectSceneLink, ProjectPropLink
+from app.core.contracts.directing.style import ProjectStyleProfile, ProjectStyleRevision, StyleWrite
+from app.models.directing import ProjectStyleRecord, Sequence, DirectingRevision, RevisionDependency, Take, CutTakeReference
+from app.models.studio import Project, Chapter, Character, FileUsage, ProjectSceneLink, ProjectPropLink
 from app.models.task import Task, TaskOutput
 from app.models.types import FileUsageKind
 from app.services.studio.files import require_available_file
@@ -35,6 +36,103 @@ class DirectingStore:
         """绑定事务会话和上层已鉴权的项目，所有查询都重新核对归属。"""
         self.db = db
         self.project_id = ID_ADAPTER.validate_python(project_id)
+
+    async def style_revision(self, revision_id: str, *, confirmed: bool = False) -> ProjectStyleRecord:
+        """只读取本项目风格，设计只能引用已确认快照。"""
+        row = await self.db.scalar(select(ProjectStyleRecord).where(ProjectStyleRecord.id == revision_id,
+            ProjectStyleRecord.project_id == self.project_id).execution_options(populate_existing=True))
+        if row is None:
+            raise ValueError("style revision not found in project")
+        if confirmed and row.confirmed_at is None:
+            raise ValueError("style revision must be confirmed")
+        ProjectStyleProfile.model_validate(row.payload)
+        return row
+
+    async def list_styles(self) -> list[ProjectStyleRevision]:
+        """按创建顺序返回风格候选和已确认版本，不自动选择最新版。"""
+        rows = await self.db.scalars(select(ProjectStyleRecord).where(ProjectStyleRecord.project_id == self.project_id)
+            .order_by(ProjectStyleRecord.created_at, ProjectStyleRecord.id))
+        return [ProjectStyleRevision(id=row.id, project_id=row.project_id, parent_id=row.parent_id,
+            version=row.version, confirmed_by=row.confirmed_by, confirmed_at=row.confirmed_at,
+            content=ProjectStyleProfile.model_validate(row.payload)) for row in rows]
+
+    async def save_style(self, body: StyleWrite) -> ProjectStyleRecord:
+        """校验范围与证据后 CAS 保存；已确认版本只能派生，不修改全局资产。"""
+        if not await self.db.get(Project, self.project_id):
+            raise ValueError("project not found")
+        if body.revision_id and body.parent_id:
+            raise ValueError("cannot update and derive a style at once")
+        if body.parent_id:
+            await self.style_revision(body.parent_id, confirmed=True)
+        files = await self._validate_style(body.content)
+        async with self.db.begin_nested():
+            if body.revision_id:
+                row = await self.style_revision(body.revision_id)
+                result = await self.db.execute(update(ProjectStyleRecord).where(ProjectStyleRecord.id == row.id,
+                    ProjectStyleRecord.version == body.expected_version, ProjectStyleRecord.confirmed_at.is_(None))
+                    .values(payload=body.content.model_dump(mode="json"), version=ProjectStyleRecord.version + 1))
+                if result.rowcount != 1:
+                    raise RevisionConflict("style changed or confirmed")
+            else:
+                if body.expected_version is not None:
+                    raise ValueError("new style cannot have expected_version")
+                row = ProjectStyleRecord(id=uuid4().hex, project_id=self.project_id, parent_id=body.parent_id,
+                    payload=body.content.model_dump(mode="json"), version=1)
+                self.db.add(row)
+                await self.db.flush()
+            await self.db.execute(delete(FileUsage).where(FileUsage.project_id == self.project_id,
+                FileUsage.source_ref == "style:" + row.id))
+            for file_id in files:
+                await upsert_file_usage(self.db, file_id=file_id, project_id=self.project_id, chapter_id=None,
+                    shot_id=None, usage_kind="directing_reference", source_ref="style:" + row.id)
+        return await self.style_revision(row.id)
+
+    async def _validate_style(self, content: ProjectStyleProfile) -> set[str]:
+        """保存与确认时复核适用范围和来源，避免草稿期间证据失效后仍被确认。"""
+        files = set()
+        for rule in content.rules:
+            for sequence_id in rule.sequence_ids:
+                await self.sequence(sequence_id)
+        sources = content.sources + [source for rule in content.rules for source in [*rule.sources, *rule.exceptions.sources]]
+        for source in sources:
+            if source.kind == "chapter":
+                chapter = await self.db.scalar(select(Chapter).where(Chapter.id == source.reference, Chapter.project_id == self.project_id))
+                if not chapter or sha256(chapter.raw_text.encode()).hexdigest() != source.version:
+                    raise ValueError("style chapter source does not match project or version")
+            if source.kind == "revision":
+                revision = await self.revision(source.reference, confirmed=True)
+                if str(revision.version) != source.version:
+                    raise ValueError("style source revision version mismatch")
+            if source.file_id:
+                await require_available_file(self.db, file_id=source.file_id)
+                if not await self.db.scalar(select(FileUsage.file_id).where(FileUsage.file_id == source.file_id, FileUsage.project_id == self.project_id)):
+                    raise ValueError("style evidence file not linked to project")
+                if source.media_range:
+                    await self._range(source.file_id, source.media_range)
+                files.add(source.file_id)
+        return files
+
+    async def confirm_style(self, revision_id: str, *, expected_version: int, actor_id: str) -> ProjectStyleRecord:
+        """记录用户对风格版本的确认；候选规则即使在确认版本内也不启用。"""
+        ID_ADAPTER.validate_python(actor_id)
+        row = await self.style_revision(revision_id)
+        await self._validate_style(ProjectStyleProfile.model_validate(row.payload))
+        result = await self.db.execute(update(ProjectStyleRecord).where(ProjectStyleRecord.id == row.id,
+            ProjectStyleRecord.version == expected_version, ProjectStyleRecord.confirmed_at.is_(None))
+            .values(version=ProjectStyleRecord.version + 1, confirmed_by=actor_id,
+                confirmed_at=datetime.now(UTC).replace(tzinfo=None)))
+        if result.rowcount != 1:
+            raise RevisionConflict("style changed or confirmed")
+        return await self.style_revision(row.id)
+
+    async def applicable_style(self, revision_id: str | None, sequence_id: str, model_name: str):
+        """只返回固定风格版本内已确认且满足场次和模型范围的规则。"""
+        if not revision_id:
+            return []
+        row = await self.style_revision(revision_id, confirmed=True)
+        return [rule for rule in ProjectStyleProfile.model_validate(row.payload).rules if rule.status == "confirmed"
+            and (not rule.sequence_ids or sequence_id in rule.sequence_ids)
+            and (not rule.model_names or model_name in rule.model_names)]
 
     async def sequence(self, sequence_id: str) -> Sequence:
         """按章节项目查询场次，隐藏其他项目对象。"""
@@ -183,7 +281,7 @@ class DirectingStore:
 
         if isinstance(content, SceneDesign):
             if content.style_revision_id is not None:
-                raise ValueError("project style revisions are not implemented yet")
+                await self.style_revision(content.style_revision_id, confirmed=True)
             for participant in content.participants:
                 if participant.character_id and not await self.db.scalar(select(Character.id).where(
                     Character.id == participant.character_id, Character.project_id == self.project_id,
@@ -243,6 +341,16 @@ class DirectingStore:
                 if item.kind == "planned":
                     design = await dependency(item.design_revision_id, "design")
                     references([item.shot_id], [r.id for r in design.direction.shots], "planned shot")
+                    shot = next(row for row in design.direction.shots if row.id == item.shot_id)
+                    dialogue_ids = {dialogue_id for row in design.performance.beats if row.beat_id in shot.beat_ids for dialogue_id in row.dialogue_ids}
+                    references([cue.dialogue_id for cue in item.dialogue_cues], dialogue_ids, "planned dialogue")
+                    if item.preview_file_id:
+                        await require_available_file(self.db, file_id=item.preview_file_id, expected_type="image")
+                        if not await self.db.scalar(select(FileUsage.file_id).where(
+                            FileUsage.file_id == item.preview_file_id, FileUsage.project_id == self.project_id,
+                        )):
+                            raise ValueError("preview image not linked to project")
+                        files.add(item.preview_file_id)
                 else:
                     take = await self.take(item.take_id, sequence_id=sequence.id)
                     await self._range(take.file_id, item.media_range)

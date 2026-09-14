@@ -1,0 +1,19 @@
+/* generated using openapi-typescript-codegen -- do not edit */
+/* istanbul ignore file */
+/* tslint:disable */
+/* eslint-disable */
+import type { Note_Input } from './Note_Input';
+import type { Source } from './Source';
+/**
+ * 有来源、例外和范围的可观察规则；空范围表示项目通用。
+ */
+export type StyleRule_Input = {
+    id: string;
+    role: 'direction' | 'performance' | 'staging' | 'cinematography' | 'continuity' | 'prompt';
+    requirement: string;
+    exceptions?: Note_Input;
+    sequence_ids?: Array<string>;
+    model_names?: Array<string>;
+    status?: 'candidate' | 'confirmed' | 'deprecated';
+    sources: Array<Source>;
+};

@@ -4,10 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.directing.workspace import (
-    AIRequest, ApplyDesignRequest, ChapterSequences, RevisionWrite, SequenceCreate, SequenceRead,
+    ExtractFrameRequest, ExtractedFrame, AssetSummary, AssetCreateRequest, VisualRequest, AIRequest, ApplyDesignRequest, ChapterSequences, RevisionWrite, SequenceCreate, SequenceRead,
     CompileRequest, ShootRequest, TakeReviewWrite, MediaRead, ReviewDecisionRequest, DirectingTaskRead,
     SequenceUpdate, TaskAccepted, VersionRequest, WorkspaceRead,
 )
+from app.core.contracts.directing.style import ProjectStyleRevision, StyleWrite
 from app.dependencies import get_db
 from app.schemas.common import ApiResponse, success_response
 from app.services.directing.production import ProductionService
@@ -152,3 +153,50 @@ async def resolve_review(project_id: str, sequence_id: str, review_id: str, body
 async def task_detail(project_id: str, task_id: str, db: AsyncSession = Depends(get_db, scope="function")):
     """读取当前项目的导演建议和错误，保持业务结果在场次面板。"""
     return success_response(await _call(ProductionService(db, project_id).read_task(task_id)))
+
+
+@router.get("/styles", response_model=ApiResponse[list[ProjectStyleRevision]], operation_id="directing_styles")
+async def styles(project_id: str, db: AsyncSession = Depends(get_db, scope="function")):
+    """读取项目的候选与确认风格版本。"""
+    return success_response(await _call(ProductionService(db, project_id).list_styles()))
+
+
+@router.post("/styles", response_model=ApiResponse[list[ProjectStyleRevision]], operation_id="directing_save_style")
+async def save_style(project_id: str, body: StyleWrite, db: AsyncSession = Depends(get_db, scope="function")):
+    """保存或派生风格草稿，不自动启用。"""
+    service = ProductionService(db, project_id)
+    await _call(service.save_style(body))
+    return success_response(await _call(service.list_styles()))
+
+
+@router.post("/styles/{revision_id}/confirm", response_model=ApiResponse[list[ProjectStyleRevision]], operation_id="directing_confirm_style")
+async def confirm_style(project_id: str, revision_id: str, body: VersionRequest, db: AsyncSession = Depends(get_db, scope="function")):
+    """记录人工确认的项目风格版本。"""
+    service = ProductionService(db, project_id)
+    await _call(service.confirm_style(revision_id, expected_version=body.expected_version, actor_id="local-user"))
+    return success_response(await _call(service.list_styles()))
+
+
+@router.post("/sequences/{sequence_id}/images", response_model=ApiResponse[TaskAccepted], operation_id="directing_generate_visual")
+async def generate_visual(project_id: str, sequence_id: str, body: VisualRequest, db: AsyncSession = Depends(get_db, scope="function")):
+    """提交基于已确认设计的验证图，产物保留为候选。"""
+    task = await _call(ProductionService(db, project_id).generate_visual(sequence_id, body))
+    return success_response(TaskAccepted(task_id=task.id))
+
+
+@router.get("/assets", response_model=ApiResponse[list[AssetSummary]], operation_id="directing_assets")
+async def assets(project_id: str, db: AsyncSession = Depends(get_db, scope="function")):
+    """返回当前项目内可关联的角色、场所与道具。"""
+    return success_response(await _call(ProductionService(db, project_id).assets()))
+
+
+@router.post("/sequences/{sequence_id}/assets", response_model=ApiResponse[list[AssetSummary]], operation_id="directing_create_asset")
+async def create_asset(project_id: str, sequence_id: str, body: AssetCreateRequest, db: AsyncSession = Depends(get_db, scope="function")):
+    """在场次内按需创建项目资产，身份绑定仍由用户明确选择。"""
+    return success_response(await _call(ProductionService(db, project_id).create_asset(sequence_id, body)))
+
+
+@router.post("/sequences/{sequence_id}/takes/{take_id}/frame", response_model=ApiResponse[ExtractedFrame], operation_id="directing_extract_frame")
+async def extract_frame(project_id: str, sequence_id: str, take_id: str, body: ExtractFrameRequest, db: AsyncSession = Depends(get_db, scope="function")):
+    """从已归档 Take 的真实位置提取连续性参考图。"""
+    return success_response(await _call(ProductionService(db, project_id).extract_take_frame(sequence_id, take_id, body.at_ms)))

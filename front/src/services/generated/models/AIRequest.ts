@@ -7,6 +7,7 @@
  */
 export type AIRequest = {
     model_id?: (string | null);
+    style_revision_id?: (string | null);
     instruction?: string;
     revision_id?: (string | null);
     expected_version?: (number | null);

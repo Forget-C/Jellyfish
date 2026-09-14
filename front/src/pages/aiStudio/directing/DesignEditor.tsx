@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Button, Card, Collapse, Input, InputNumber, Select, Space, Typography } from 'antd'
 import type { SceneDesign_Input, Note_Input } from '../../../services/generated'
 import { humanNote } from './common'
@@ -12,12 +13,19 @@ const labels: Record<string, string> = {
   shot_id: '所属镜头', composition: '构图重心', depth_layers: '空间层次', height_angle: '高度与角度', lens_effect: '焦段或透视效果', depth_focus: '景深与焦点', support: '支撑方式', movement_start: '运动起点', movement_trigger: '运动触发', movement_path: '运动路径', movement_speed: '运动速度', end_frame: '结束画面', light_sources: '光源', light_regions: '明暗区域', exposure_color: '曝光与色温', optical_effects: '光学效果', motion_texture: '运动质感', technical_parameters: '技术意图', adjacent_requirements: '相邻镜头衔接', prohibitions: '禁止项',
   domain: '连续性领域', before: '前态', change: '变化', after: '后态', following_constraint: '后续约束', dialogues: '对白', version: '对白版本', content: '内容', sources: '声源', ambience_actions: '环境与动作声', music_constraints: '音乐约束', execution: '声音执行方式', priorities: '编译优先级', binding_requirements: '参考绑定要求', sound_strategy: '声音策略',
 }
-const states = [{ value: 'proposal', label: '设计建议' }, { value: 'fact', label: '已知事实' }, { value: 'unknown', label: '待确定' }, { value: 'not_applicable', label: '不适用' }, { value: 'none', label: '明确没有' }]
+const states = [{ value: 'unset', label: '未填写' }, { value: 'proposal', label: '设计建议' }, { value: 'fact', label: '已知事实' }, { value: 'unknown', label: '待确定' }, { value: 'not_applicable', label: '不适用' }, { value: 'none', label: '明确没有' }]
 type Value = unknown
 
 /** 递归展示有语义的工作单字段，编辑同一份契约，避免额外 Markdown 真值。 */
 export function DesignEditor({ value, onChange, disabled = false }: { value: SceneDesign_Input; onChange: (value: SceneDesign_Input) => void; disabled?: boolean }) {
+  const [query, setQuery] = useState('')
   const blank = emptyDesign()
+  /** 按中文字段名、稳定身份或内容定位所属工作单，避免在长表单中逐项翻找。 */
+  const matches = (key: string, child: unknown): boolean => {
+    const search = query.trim().toLowerCase()
+    if (!search || `${labels[key] || key} ${typeof child === 'string' ? child : ''}`.toLowerCase().includes(search)) return true
+    return !!child && typeof child === 'object' && Object.entries(child).some(([name, value]) => matches(name, value))
+  }
   /** 将局部字段变化写回不可变副本，服务端最终验证共享身份。 */
   const change = (path: Array<string | number>, next: Value) => {
     const copy = structuredClone(value)
@@ -40,7 +48,7 @@ export function DesignEditor({ value, onChange, disabled = false }: { value: Sce
     if (current && typeof current === 'object' && !Array.isArray(current) && ('state' in current)) {
       const note = current as Note_Input
       return <Space direction="vertical" size={4} style={{ width: '100%' }}>
-        <Space><Typography.Text>{label}</Typography.Text><Select size="small" value={note.state === 'unset' ? 'unknown' : note.state} options={states} disabled={disabled} style={{ width: 125 }} onChange={state => change(path, ['none', 'not_applicable'].includes(state) ? { state, reason: note.reason || '' } : state === 'unknown' ? { state } : { ...humanNote(note.text || ''), state })} /></Space>
+        <Space><Typography.Text>{label}</Typography.Text><Select size="small" value={note.state || 'unset'} options={states} disabled={disabled} style={{ width: 125 }} onChange={state => change(path, ['none', 'not_applicable'].includes(state) ? { state, reason: note.reason || '' } : ['unset', 'unknown'].includes(state) ? { state } : { ...humanNote(note.text || ''), state })} /></Space>
         <Input.TextArea disabled={disabled} value={note.text || note.reason || ''} autoSize={{ minRows: 1, maxRows: 5 }} placeholder="填写可观察、可拍摄的内容" onChange={event => change(path, ['none', 'not_applicable'].includes(note.state || '') ? { ...note, reason: event.target.value } : { ...humanNote(event.target.value), state: note.state === 'fact' ? 'fact' : 'proposal' })} />
         {!!note.sources?.length && <Typography.Text type="secondary">来源：{note.sources.map(source => `${source.kind} · ${source.reference} · ${source.version}`).join('；')}</Typography.Text>}
       </Space>
@@ -50,7 +58,7 @@ export function DesignEditor({ value, onChange, disabled = false }: { value: Sce
       return <Space direction="vertical" style={{ width: '100%' }}>
         {current.map((row, index) => <Card key={index} size="small" title={`${label} ${index + 1}`} extra={!disabled && <Button size="small" danger onClick={() => change(path, current.filter((_, i) => i !== index))}>移除</Button>}>{render(row, [...path, index], (Array.isArray(template) ? template[0] : undefined))}</Card>)}
         {!disabled && <Button onClick={() => {
-          const sample = (Array.isArray(template) ? template[0] : undefined) || current[0] || { state: 'unknown' }
+          const sample = (Array.isArray(template) ? template[0] : undefined) || current[0] || { state: 'unset' }
           const next = structuredClone(sample)
           if (next && typeof next === 'object' && 'id' in next) next.id = 'item-' + crypto.randomUUID().slice(0, 8)
           change(path, [...current, next])
@@ -58,7 +66,7 @@ export function DesignEditor({ value, onChange, disabled = false }: { value: Sce
       </Space>
     }
     if (current && typeof current === 'object') return <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-      {Object.entries(current).filter(([name]) => !['sources', 'style_revision_id'].includes(name) || (path[0] === 'sound' && name === 'sources')).map(([name, child]) => <div key={name}>
+      {Object.entries({ ...templateFields, ...current }).filter(([name]) => !['sources', 'style_revision_id'].includes(name) || (path[0] === 'sound' && name === 'sources')).map(([name, child]) => <div key={name}>
         {!(child && typeof child === 'object' && 'state' in child) && <Typography.Text type="secondary">{labels[name] || name}</Typography.Text>}
         {render(child, [...path, name], templateFields[name])}
       </div>)}
@@ -66,8 +74,8 @@ export function DesignEditor({ value, onChange, disabled = false }: { value: Sce
     if (['character_id', 'prop_id', 'location_asset_id'].includes(key)) return <Typography.Text>{typeof current === 'string' && current ? current : '未关联资产'}</Typography.Text>
     if (key.endsWith('_id') && options(key).length) return <Select allowClear disabled={disabled} value={current} options={options(key)} onChange={next => change(path, next ?? null)} style={{ width: '100%' }} />
     if (key === 'domain' || key === 'execution') return <Select disabled={disabled} value={current} style={{ width: '100%' }} options={(key === 'domain' ? ['space', 'appearance', 'hands_props', 'environment', 'camera', 'dialogue_sound'] : ['postproduction', 'generated', 'unknown']).map(item => ({ value: item, label: ({ space: '空间', appearance: '造型', hands_props: '手部与道具', environment: '环境', camera: '摄影', dialogue_sound: '对白与声音', postproduction: '待后期', generated: '同期生成', unknown: '待确定' } as Record<string, string>)[item] }))} onChange={next => change(path, next)} />
-    if (typeof current === 'number') return <InputNumber disabled={disabled} min={0} value={current} onChange={next => change(path, next)} />
+    if (typeof current === 'number' || ['delay_ms', 'estimated_duration_ms'].includes(key)) return <InputNumber aria-label={label} disabled={disabled} min={key === 'estimated_duration_ms' ? 1 : 0} precision={0} value={typeof current === 'number' ? current : null} onChange={next => change(path, next)} />
     return <Input disabled={disabled || key === 'id'} value={typeof current === 'string' ? current : ''} onChange={event => change(path, event.target.value || null)} />
   }
-  return <><Typography.Paragraph type="secondary">设计来源：{value.sources.map(source => `${source.kind} · ${source.reference} · ${source.version}`).join('；')}</Typography.Paragraph><Collapse items={Object.entries(value).filter(([key]) => !['sources', 'style_revision_id'].includes(key)).map(([key, child]) => ({ key, label: labels[key] || key, children: render(child, [key], (blank as unknown as Record<string, unknown>)[key]) }))} defaultActiveKey={['direction']} /></>
+  return <><Input.Search aria-label="定位工作单问题" placeholder="搜索部门、字段、镜头或内容" value={query} onChange={event => setQuery(event.target.value)} allowClear /><Typography.Paragraph type="secondary">设计来源：{value.sources.map(source => `${source.kind} · ${source.reference} · ${source.version}`).join('；')}</Typography.Paragraph><Collapse items={Object.entries(value).filter(([key, child]) => !['sources', 'style_revision_id'].includes(key) && matches(key, child)).map(([key, child]) => ({ key, label: labels[key] || key, children: render(child, [key], (blank as unknown as Record<string, unknown>)[key]) }))} defaultActiveKey={['direction']} /></>
 }

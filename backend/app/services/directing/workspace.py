@@ -93,6 +93,58 @@ class WorkspaceService(DirectingStore):
             payload=body.document.content.model_dump(mode="json"), revision_id=body.revision_id,
             expected_version=body.expected_version, parent_id=body.parent_id)
 
+    async def extract_take_frame(self, sequence_id: str, take_id: str, at_ms: int):
+        """提帧归档到当前项目，持久保留 Take 和毫秒位置，不改原视频。"""
+        import asyncio
+        from io import BytesIO
+        from fastapi import UploadFile
+        from starlette.datastructures import Headers
+        from app.core import storage
+        from app.core.contracts.directing.workspace import ExtractedFrame
+        from app.services.directing.media import extract_frame
+        from app.services.studio.files import require_available_file, upload_file
+
+        take = await self.take(take_id, sequence_id=sequence_id)
+        file = await require_available_file(self.db, file_id=take.file_id)
+        if at_ms < 0 or file.duration_ms is None or at_ms >= file.duration_ms:
+            raise ValueError("提帧位置必须在真实视频时长内")
+        content = await storage.download_file(key=file.storage_key)
+        frame = await asyncio.to_thread(extract_frame, content, at_ms)
+        sequence = await self.sequence(sequence_id)
+        result = await upload_file(self.db, file=UploadFile(file=BytesIO(frame), filename=f"frame-{at_ms}.png", size=len(frame),
+            headers=Headers({"content-type": "image/png"})), project_id=self.project_id, chapter_id=sequence.chapter_id,
+            usage_kind="directing_reference", source_ref=f"frame:{take.id}:{at_ms}")
+        return ExtractedFrame(file_id=result.id, source=Source(kind="file", reference=take.id, version="1",
+            file_id=file.id, media_range={"source_in_ms": at_ms, "source_out_ms": at_ms + 1}))
+
+    async def assets(self):
+        """列出当前项目已关联资产，供场次工作单显式选择。"""
+        from app.core.contracts.directing.workspace import AssetSummary
+        from app.models.studio import Character, Scene, Prop, ProjectSceneLink, ProjectPropLink
+
+        result = []
+        queries = [("character", select(Character).where(Character.project_id == self.project_id)),
+            ("scene", select(Scene).join(ProjectSceneLink, ProjectSceneLink.scene_id == Scene.id).where(ProjectSceneLink.project_id == self.project_id).distinct()),
+            ("prop", select(Prop).join(ProjectPropLink, ProjectPropLink.prop_id == Prop.id).where(ProjectPropLink.project_id == self.project_id).distinct())]
+        for kind, query in queries:
+            for row in await self.db.scalars(query):
+                result.append(AssetSummary(id=row.id, kind=kind, name=row.name, description=row.description or ""))
+        return result
+
+    async def create_asset(self, sequence_id, body):
+        """复用资产创建服务并关联项目，不自动替换场次内已有身份。"""
+        from uuid import uuid4
+        from app.models.studio import Project
+        from app.services.studio.entities import StudioEntitiesService
+
+        sequence = await self.sequence(sequence_id)
+        project = await self.db.get(Project, self.project_id)
+        payload = {"id": uuid4().hex, "project_id": self.project_id, "chapter_id": sequence.chapter_id,
+            "name": body.name, "style": project.style, "visual_style": project.visual_style,
+            "description" if body.kind == "character" else "supplementary_info": body.description}
+        await StudioEntitiesService(self.db).create_entity(entity_type=body.kind, body=payload)
+        return await self.assets()
+
     async def workspace(self, sequence_id: str) -> WorkspaceRead:
         """一次读取各类版本、候选和任务身份，不在任务中心复制业务上下文。"""
         sequence = await self.read_sequence(sequence_id)
@@ -104,6 +156,6 @@ class WorkspaceService(DirectingStore):
         takes = await self.db.scalars(select(Take).where(Take.sequence_id == sequence_id).order_by(Take.created_at, Take.id))
         task_ids = list(await self.db.scalars(select(Task.id).where(Task.project_id == self.project_id,
             or_((Task.target_type == "directing_sequence") & (Task.target_id == sequence_id),
-                (Task.target_type == "directing_unit") & Task.target_id.in_(select(DirectingRevision.id).where(DirectingRevision.sequence_id == sequence_id)))).order_by(Task.created_at)))
+                Task.target_type.in_(["directing_unit", "directing_image"]) & Task.target_id.in_(select(DirectingRevision.id).where(DirectingRevision.sequence_id == sequence_id)))).order_by(Task.created_at)))
         return WorkspaceRead(sequence=sequence, **groups,
                              takes=[await self.read_take(row.id) for row in takes], task_ids=task_ids)

@@ -5,19 +5,26 @@
 import type { AIRequest } from '../models/AIRequest';
 import type { ApiResponse_ChapterSequences_ } from '../models/ApiResponse_ChapterSequences_';
 import type { ApiResponse_DirectingTaskRead_ } from '../models/ApiResponse_DirectingTaskRead_';
+import type { ApiResponse_ExtractedFrame_ } from '../models/ApiResponse_ExtractedFrame_';
+import type { ApiResponse_list_AssetSummary__ } from '../models/ApiResponse_list_AssetSummary__';
+import type { ApiResponse_list_ProjectStyleRevision__ } from '../models/ApiResponse_list_ProjectStyleRevision__';
 import type { ApiResponse_MediaRead_ } from '../models/ApiResponse_MediaRead_';
 import type { ApiResponse_SequenceRead_ } from '../models/ApiResponse_SequenceRead_';
 import type { ApiResponse_TaskAccepted_ } from '../models/ApiResponse_TaskAccepted_';
 import type { ApiResponse_WorkspaceRead_ } from '../models/ApiResponse_WorkspaceRead_';
 import type { ApplyDesignRequest } from '../models/ApplyDesignRequest';
+import type { AssetCreateRequest } from '../models/AssetCreateRequest';
 import type { CompileRequest } from '../models/CompileRequest';
+import type { ExtractFrameRequest } from '../models/ExtractFrameRequest';
 import type { ReviewDecisionRequest } from '../models/ReviewDecisionRequest';
 import type { RevisionWrite } from '../models/RevisionWrite';
 import type { SequenceCreate } from '../models/SequenceCreate';
 import type { SequenceUpdate } from '../models/SequenceUpdate';
 import type { ShootRequest } from '../models/ShootRequest';
+import type { StyleWrite } from '../models/StyleWrite';
 import type { TakeReviewWrite } from '../models/TakeReviewWrite';
 import type { VersionRequest } from '../models/VersionRequest';
+import type { VisualRequest } from '../models/VisualRequest';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -512,6 +519,195 @@ export class StudioDirectingService {
                 'project_id': projectId,
                 'task_id': taskId,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Styles
+     * 读取项目的候选与确认风格版本。
+     * @returns ApiResponse_list_ProjectStyleRevision__ Successful Response
+     * @throws ApiError
+     */
+    public static directingStyles({
+        projectId,
+    }: {
+        projectId: string,
+    }): CancelablePromise<ApiResponse_list_ProjectStyleRevision__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/styles',
+            path: {
+                'project_id': projectId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Save Style
+     * 保存或派生风格草稿，不自动启用。
+     * @returns ApiResponse_list_ProjectStyleRevision__ Successful Response
+     * @throws ApiError
+     */
+    public static directingSaveStyle({
+        projectId,
+        requestBody,
+    }: {
+        projectId: string,
+        requestBody: StyleWrite,
+    }): CancelablePromise<ApiResponse_list_ProjectStyleRevision__> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/styles',
+            path: {
+                'project_id': projectId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Confirm Style
+     * 记录人工确认的项目风格版本。
+     * @returns ApiResponse_list_ProjectStyleRevision__ Successful Response
+     * @throws ApiError
+     */
+    public static directingConfirmStyle({
+        projectId,
+        revisionId,
+        requestBody,
+    }: {
+        projectId: string,
+        revisionId: string,
+        requestBody: VersionRequest,
+    }): CancelablePromise<ApiResponse_list_ProjectStyleRevision__> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/styles/{revision_id}/confirm',
+            path: {
+                'project_id': projectId,
+                'revision_id': revisionId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Generate Visual
+     * 提交基于已确认设计的验证图，产物保留为候选。
+     * @returns ApiResponse_TaskAccepted_ Successful Response
+     * @throws ApiError
+     */
+    public static directingGenerateVisual({
+        projectId,
+        sequenceId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        requestBody: VisualRequest,
+    }): CancelablePromise<ApiResponse_TaskAccepted_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/images',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Assets
+     * 返回当前项目内可关联的角色、场所与道具。
+     * @returns ApiResponse_list_AssetSummary__ Successful Response
+     * @throws ApiError
+     */
+    public static directingAssets({
+        projectId,
+    }: {
+        projectId: string,
+    }): CancelablePromise<ApiResponse_list_AssetSummary__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/assets',
+            path: {
+                'project_id': projectId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Asset
+     * 在场次内按需创建项目资产，身份绑定仍由用户明确选择。
+     * @returns ApiResponse_list_AssetSummary__ Successful Response
+     * @throws ApiError
+     */
+    public static directingCreateAsset({
+        projectId,
+        sequenceId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        requestBody: AssetCreateRequest,
+    }): CancelablePromise<ApiResponse_list_AssetSummary__> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/assets',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Extract Frame
+     * 从已归档 Take 的真实位置提取连续性参考图。
+     * @returns ApiResponse_ExtractedFrame_ Successful Response
+     * @throws ApiError
+     */
+    public static directingExtractFrame({
+        projectId,
+        sequenceId,
+        takeId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        takeId: string,
+        requestBody: ExtractFrameRequest,
+    }): CancelablePromise<ApiResponse_ExtractedFrame_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/takes/{take_id}/frame',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'take_id': takeId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

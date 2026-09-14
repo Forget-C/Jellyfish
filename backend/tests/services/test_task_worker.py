@@ -347,3 +347,50 @@ def test_model_timeout_has_readable_error():
 
     error = APITimeoutError(request=httpx.Request("POST", "https://provider.invalid/v1"))
     assert TaskWorker._error_message(error) == "请求或执行超时"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind', ['directing_divide', 'directing_design', 'directing_review'])
+async def test_directing_worker_streams_without_thinking(monkeypatch, kind):
+    """六岗长输出采用流式接收，旧模型配置不能重新启用思考或关闭流式。"""
+    from types import SimpleNamespace
+
+    engine = create_async_engine('sqlite+aiosqlite:///:memory:')
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    captured = {}
+
+    def capture_model(**kwargs):
+        """捕获真实 Worker 组装的客户端参数，不访问供应商。"""
+        captured.update(kwargs)
+        return object()
+
+    async def generate(*args):
+        """隔离工作单生成，只检查任务客户端策略和正常交付。"""
+        return SimpleNamespace(model_dump=lambda: {'checked': True})
+
+    monkeypatch.setattr('app.task_worker.ChatOpenAI', capture_model)
+    try:
+        task_id = await _seed_text_task(sessions)
+        async with sessions.begin() as db:
+            task = await db.get(Task, task_id)
+            task.kind = kind
+            task.input_snapshot = {**task.input_snapshot, 'run_args': {}}
+            model = await db.get(Model, 'text-model')
+            model.params = {'streaming': False, 'extra_body': {'enable_thinking': True, 'seed': 7}}
+        async with httpx.AsyncClient() as client:
+            worker = TaskWorker(sessions, client=client)
+            monkeypatch.setattr(worker, '_run_script', generate)
+            try:
+                await worker._execute(task_id)
+            finally:
+                worker.text_pool.shutdown(wait=True)
+        assert captured['streaming'] is True
+        assert captured['extra_body'] == {'enable_thinking': False, 'seed': 7}
+        assert captured['timeout'] == 120
+        assert captured['max_retries'] == 0
+        async with sessions() as db:
+            assert (await db.get(Task, task_id)).status == 'succeeded'
+    finally:
+        await engine.dispose()

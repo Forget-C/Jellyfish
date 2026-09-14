@@ -291,7 +291,11 @@ class TaskWorker:
                           max_retries=0, timeout=self.limits.request_seconds, http_async_client=self.client)
             if task.kind != "text_chat":
                 params["callbacks"] = [ScriptStopHandler(stopped, monotonic() + self.limits.execution_seconds)]
-            if task.kind in {"text_chat", "script_divide", "script_extract"}:
+            directing = task.kind in {"directing_divide", "directing_design", "directing_review"}
+            if directing:
+                # 长工作单持续接收分片，避免非流式等待完整响应触发读取超时。
+                params["streaming"] = True
+            if directing or task.kind in {"text_chat", "script_divide", "script_extract"}:
                 params["extra_body"] = {**params.get("extra_body", {}), "enable_thinking": False}
             llm = ChatOpenAI(**params)
         if task.kind == "text_chat":

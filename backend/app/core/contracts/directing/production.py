@@ -222,6 +222,13 @@ class TakeAnnotation(Contract):
         return self
 
 
+class DialogueCue(Contract):
+    """预演中的对白落点，时间相对卡片且不代表真实声轨。"""
+
+    dialogue_id: Identity
+    offset_ms: int = Field(ge=0)
+
+
 class PlannedCutItem(Contract):
     """预演项只引用设计和预计时长，没有伪造媒体区间。"""
 
@@ -231,6 +238,15 @@ class PlannedCutItem(Contract):
     shot_id: Identity
     estimated_duration_ms: int = Field(gt=0)
     timeline_start_ms: int = Field(ge=0)
+    preview_file_id: Identity | None = None
+    dialogue_cues: list[DialogueCue] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def cue_range(self):
+        """对白落点必须在预计卡片区间内，允许同一对白安排多个落点。"""
+        if any(cue.offset_ms >= self.estimated_duration_ms for cue in self.dialogue_cues):
+            raise ValueError("dialogue cue must be inside planned duration")
+        return self
 
 
 class MediaCutItem(Contract):

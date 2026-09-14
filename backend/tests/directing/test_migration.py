@@ -34,6 +34,9 @@ def test_foundation_migration_and_next_upgrade():
         workspace = revision_module("35d9f2b7ca03_add_directing_workspace.py")
         workspace.op = migration.op
         workspace.upgrade()
+        styles = revision_module("46e0a3c8db14_add_project_styles.py")
+        styles.op = migration.op
+        styles.upgrade()
         context = MigrationContext.configure(connection, opts={"compare_type": True})
         assert not compare_metadata(context, Base.metadata)
         connection.execute(sa.text("INSERT INTO projects (id,name,description,style,visual_style,seed,unify_style,progress,stats) VALUES ('p','p','','drama','live_action',0,1,0,'{}')"))
@@ -51,6 +54,7 @@ def test_foundation_migration_and_next_upgrade():
         assert connection.scalar(sa.text("SELECT title FROM directing_sequences WHERE id='seq'")) == "scene"
         migration.op.drop_column("directing_sequences", "migration_probe")
         assert not compare_metadata(context, Base.metadata)
+        styles.downgrade()
         workspace.downgrade()
         migration.downgrade()
         assert "directing_sequences" not in sa.inspect(connection).get_table_names()

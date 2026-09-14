@@ -191,6 +191,19 @@ async def deliver_media(db: AsyncSession, task: Task) -> None:
             output.delivery_status = "published"
             output.delivery_reason = "candidate_take"
         return
+    if snapshot.canonical_target.kind == GenerationTargetKind.directing_image:
+        from app.services.directing.store import DirectingStore
+        from app.services.studio.file_usages import upsert_file_usage
+
+        store = DirectingStore(db, task.project_id)
+        design = await store.revision(task.target_id, kind="design", confirmed=True)
+        sequence = await store.sequence(design.sequence_id)
+        for output in outputs:
+            await upsert_file_usage(db, file_id=output.file_id, project_id=task.project_id, chapter_id=sequence.chapter_id,
+                shot_id=None, usage_kind="directing_reference", source_ref="image-task:" + task.id)
+            output.delivery_status = "published"
+            output.delivery_reason = "candidate_reference"
+        return
     publishers = {
         GenerationTargetKind.asset_image_slot: AssetImagePublisher,
         GenerationTargetKind.shot_frame_slot: ShotFramePublisher,
