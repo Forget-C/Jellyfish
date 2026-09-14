@@ -52,6 +52,21 @@ const MainLayout: React.FC = () => {
   const breadcrumbItems = useMemo(() => {
     const path = location.pathname.replace(/^\/+/, '').split('/').filter(Boolean)
     if (path.length === 0) return [{ title: t('title') }]
+    // 资产编辑使用有效的列表回跳地址，编号留在档案内，避免路径中的英文和 UUID 干扰阅读。
+    const assetCategories: Record<string, { label: string; tab: string }> = {
+      actors: { label: '演员', tab: 'actor' },
+      scenes: { label: '场景', tab: 'scene' },
+      props: { label: '道具', tab: 'prop' },
+      costumes: { label: '服装', tab: 'costume' },
+    }
+    const assetCategory = path[0] === 'assets' ? assetCategories[path[1]] : undefined
+    if (assetCategory && path.length === 4 && path[3] === 'edit') {
+      return [
+        { key: 'assets', title: <Link to="/assets">资产管理</Link> },
+        { key: 'category', title: <Link to={`/assets?tab=${assetCategory.tab}`}>{assetCategory.label}</Link> },
+        { key: 'edit', title: '编辑' },
+      ]
+    }
     const items: { title: React.ReactNode; key: string }[] = []
     const pathLabels: Record<string, string> = {
       projects: '项目列表',

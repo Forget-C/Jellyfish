@@ -46,6 +46,7 @@ type ControlledModeProps = {
   visualStyleLabel?: string
   styleLabel?: string
   options?: ProjectStyleFieldOptions
+  layout?: 'vertical' | 'horizontal'
 }
 
 function resolveOptions(options?: ProjectStyleFieldOptions): ProjectStyleFieldOptions {
@@ -70,6 +71,7 @@ function getDefaultStyle(visual: string, options: ProjectStyleFieldOptions): str
   )
 }
 
+/** 复用视觉与视频风格的联动选择；受控模式可在资产档案中横向排列。 */
 export function ProjectVisualStyleAndStyleFields(props: FormModeProps | ControlledModeProps) {
   const disabled = props.disabled
   const resolvedOptions = resolveOptions(props.options)
@@ -107,11 +109,12 @@ export function ProjectVisualStyleAndStyleFields(props: FormModeProps | Controll
   const { visual_style, style, onChange, visualStyleLabel, styleLabel } = props
 
   return (
-    <div className="space-y-3">
+    <div className={props.layout === 'horizontal' ? 'grid grid-cols-1 sm:grid-cols-2 gap-4' : 'space-y-3'}>
       <div>
         <span className="text-gray-600 text-sm">{visualStyleLabel ?? '视觉风格'}</span>
         <Select
           className="mt-1 w-full"
+          aria-label={visualStyleLabel ?? '视觉风格'}
           disabled={disabled}
           value={visual_style}
           onChange={(v) => {
@@ -125,6 +128,7 @@ export function ProjectVisualStyleAndStyleFields(props: FormModeProps | Controll
         <span className="text-gray-600 text-sm">{styleLabel ?? '视频风格'}</span>
         <Select
           className="mt-1 w-full"
+          aria-label={styleLabel ?? '视频风格'}
           disabled={disabled}
           value={style}
           onChange={(v) => onChange({ visual_style, style: String(v) })}
@@ -134,4 +138,3 @@ export function ProjectVisualStyleAndStyleFields(props: FormModeProps | Controll
     </div>
   )
 }
-

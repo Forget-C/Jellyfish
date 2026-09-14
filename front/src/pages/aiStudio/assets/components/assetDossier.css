@@ -1,0 +1,164 @@
+/* 以可用内容宽度适配档案，侧栏展开时也不依赖整个视口的宽度。 */
+.asset-dossier {
+  container: asset-dossier / inline-size;
+  height: 100%;
+  overflow: auto;
+  background: #fff;
+}
+
+.asset-dossier-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 24px;
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.asset-dossier-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 正文铺满站点内容区，只保留一层与操作栏对齐的内部间距。 */
+.asset-dossier-sheet {
+  padding: 24px;
+}
+
+.asset-dossier-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 192px;
+  align-items: start;
+  gap: 32px;
+}
+
+.asset-dossier-overview[data-asset-type='prop'] {
+  grid-template-columns: minmax(0, 1fr) 224px;
+}
+
+.asset-dossier-overview[data-asset-type='scene'] {
+  grid-template-columns: minmax(0, 1fr) 300px;
+}
+
+.asset-dossier-name {
+  margin: 4px 0 20px;
+  color: #1f2937;
+  font-size: 24px;
+  line-height: 1.4;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.asset-dossier-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.asset-dossier-cover {
+  aspect-ratio: 3 / 4;
+}
+
+.asset-dossier-overview[data-asset-type='prop'] .asset-dossier-cover {
+  aspect-ratio: 1;
+}
+
+.asset-dossier-overview[data-asset-type='scene'] .asset-dossier-cover {
+  aspect-ratio: 8 / 5;
+}
+
+.asset-dossier-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #f5f6f8;
+}
+
+.asset-dossier-image-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.asset-dossier-section {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 24px;
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.asset-dossier-section-title {
+  margin: 0;
+  color: #374151;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.asset-dossier-view-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 112px));
+  gap: 12px;
+}
+
+.asset-dossier-view {
+  padding: 5px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  color: #4b5563;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.asset-dossier-view[aria-pressed='true'] {
+  border-color: #1677ff;
+  color: #1677ff;
+  box-shadow: 0 0 0 1px #1677ff;
+}
+
+.asset-dossier-view-image {
+  display: block;
+  height: 72px;
+  margin-bottom: 5px;
+}
+
+.asset-dossier-preview {
+  height: min(65vh, 640px);
+}
+
+@container asset-dossier (max-width: 760px) {
+  .asset-dossier-toolbar { padding: 12px 16px; }
+  .asset-dossier-sheet { padding: 16px; }
+  .asset-dossier-overview,
+  .asset-dossier-overview[data-asset-type='prop'],
+  .asset-dossier-overview[data-asset-type='scene'] { grid-template-columns: minmax(0, 1fr) 160px; gap: 20px; }
+  .asset-dossier-section { grid-template-columns: 1fr; gap: 12px; }
+}
+
+@container asset-dossier (max-width: 520px) {
+  .asset-dossier-overview,
+  .asset-dossier-overview[data-asset-type='prop'],
+  .asset-dossier-overview[data-asset-type='scene'] { grid-template-columns: 1fr; }
+  .asset-dossier-fields { grid-template-columns: 1fr; }
+  .asset-dossier-overview > figure { width: min(100%, 192px); margin: 0 auto; }
+  .asset-dossier-overview[data-asset-type='prop'] > figure { width: min(100%, 224px); }
+  .asset-dossier-overview[data-asset-type='scene'] > figure { width: min(100%, 300px); }
+}

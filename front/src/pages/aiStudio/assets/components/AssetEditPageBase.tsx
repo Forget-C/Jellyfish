@@ -1,11 +1,12 @@
 import { AssetReferencePicker } from './AssetReferencePicker'
+import { AssetDossierImage, AssetDossierSection } from './AssetDossier'
+import './assetDossier.css'
 import { AssetFactsFields, ASSET_FIELDS, pickAssetFacts, previewAssetDescription, type AssetFacts, type AssetFieldName, type StructuredAssetType } from './AssetFactsFields'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Button,
   Card,
   Col,
-  Collapse,
   Empty,
   Image,
   Input,
@@ -157,6 +158,7 @@ function getAssetNavigateRelationType(relationType: string): string | null {
   return null
 }
 
+/** 共用资产档案编辑与图片管理，按资产类别填充属性，保留生成、检测和历史采用流程。 */
 export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseAssetImage>({
   assetId,
   missingAssetIdText,
@@ -178,6 +180,8 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
   const [loading, setLoading] = useState(true)
   const [asset, setAsset] = useState<TAsset | null>(null)
   const [images, setImages] = useState<TImage[]>([])
+  const [selectedAngle, setSelectedAngle] = useState<AssetViewAngle | null>(null)
+  const [imagePreviewOpen, setImagePreviewOpen] = useState(false)
 
   const [formName, setFormName] = useState('')
   const [formDesc, setFormDesc] = useState('')
@@ -188,6 +192,25 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
   const [formVisualStyle, setFormVisualStyle] = useState<'现实' | '动漫'>(defaultVisualStyle as '现实' | '动漫')
   const [formStyle, setFormStyle] = useState<string>(getDefaultStyle(defaultVisualStyle))
   const [savingBase, setSavingBase] = useState(false)
+
+  // 保存状态和生成入口使用同一份差异判断，包含标签、视角数量及默认风格。
+  const savedVisualStyle = asset?.visual_style ?? defaultVisualStyle
+  const hasUnsavedChanges = Boolean(asset && (
+    formName !== asset.name
+    || formDesc !== (structuredType ? asset.supplementary_info ?? '' : asset.description ?? '')
+    || (structuredType && (
+      JSON.stringify(formFacts) !== JSON.stringify(pickAssetFacts(structuredType, asset))
+      || JSON.stringify(normalizeTags(formTags)) !== JSON.stringify(asset.tags ?? [])
+      || formViewCount !== clampViewCount(asset.view_count)
+    ))
+    || formVisualStyle !== savedVisualStyle
+    || formStyle !== (asset.style ?? getDefaultStyle(savedVisualStyle))
+  ))
+
+  useEffect(() => {
+    setSelectedAngle(null)
+    setImagePreviewOpen(false)
+  }, [assetId])
 
   const [smartDetectLoading, setSmartDetectLoading] = useState(false)
   const [smartDetectOpen, setSmartDetectOpen] = useState(false)
@@ -301,6 +324,23 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
     return current
   }, [assetId, createImageSlot, listImages])
 
+  /** 使用接口确认的资产同步表单，保存后不立即重读，避免旧读结果覆盖已保存内容。 */
+  const applyAsset = useCallback((nextAsset: TAsset) => {
+    setAsset(nextAsset)
+    setFormName(nextAsset.name)
+    setFormDesc(structuredType ? nextAsset.supplementary_info ?? '' : nextAsset.description ?? '')
+    setFormFacts(structuredType ? pickAssetFacts(structuredType, nextAsset) : {})
+    setFormTags((nextAsset.tags ?? []).join(', '))
+    {
+      const nextVisual = (nextAsset.visual_style ?? defaultVisualStyle) as '现实' | '动漫'
+      setFormVisualStyle(nextVisual)
+      setFormStyle((nextAsset.style as string | undefined) ?? getDefaultStyle(nextVisual))
+    }
+
+    setFormViewCount(clampViewCount(nextAsset.view_count))
+  }, [structuredType, defaultVisualStyle, getDefaultStyle])
+
+  /** 加载资产和已有视角，初始化档案表单及图片区域。 */
   const loadData = useCallback(async () => {
     if (!assetId) return
 
@@ -313,19 +353,8 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
         return
       }
 
-      setAsset(nextAsset)
-      setFormName(nextAsset.name)
-      setFormDesc(structuredType ? nextAsset.supplementary_info ?? '' : nextAsset.description ?? '')
-      setFormFacts(structuredType ? pickAssetFacts(structuredType, nextAsset) : {})
-      setFormTags((nextAsset.tags ?? []).join(', '))
-      {
-        const nextVisual = (nextAsset.visual_style ?? defaultVisualStyle) as '现实' | '动漫'
-        setFormVisualStyle(nextVisual)
-        setFormStyle((nextAsset.style as string | undefined) ?? getDefaultStyle(nextVisual))
-      }
-
+      applyAsset(nextAsset)
       const targetCount = clampViewCount(nextAsset.view_count)
-      setFormViewCount(targetCount)
 
       const imageRows = await ensureImageSlots(targetCount)
       setImages(imageRows)
@@ -334,7 +363,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
     } finally {
       setLoading(false)
     }
-  }, [assetId, assetDisplayName, backTo, defaultVisualStyle, ensureImageSlots, getAsset, getDefaultStyle, onNavigate])
+  }, [assetId, assetDisplayName, backTo, applyAsset, ensureImageSlots, getAsset, onNavigate])
 
   useEffect(() => {
     void loadData()
@@ -358,7 +387,11 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
   }, [formViewCount, images])
 
   const minViewCount = useMemo(() => clampViewCount(asset?.view_count), [asset?.view_count])
+  const selectedSlot = slotItems.find((slot) => slot.angle === selectedAngle)
+    ?? slotItems.find((slot) => slot.imageUrl)
+    ?? slotItems[0]
 
+  /** 保存整份资产档案并补齐新增视角，用服务端返回值确认字段和保存状态。 */
   const handleSaveBaseInfo = async () => {
     if (!assetId || !asset) return
     if (!formName.trim()) {
@@ -377,9 +410,10 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
         style: formStyle,
       }
       const nextAsset = await updateAsset(assetId, payload)
-      if (nextAsset) setAsset(nextAsset)
-      message.success('基础信息已保存')
-      await loadData()
+      if (!nextAsset) throw new Error('保存响应缺少资产数据')
+      applyAsset(nextAsset)
+      setImages(await ensureImageSlots(nextViewCount))
+      message.success('资产已保存')
     } catch {
       message.error('保存失败')
     } finally {
@@ -560,10 +594,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
   /** 打开槽位预览，每次从已保存的资产和推荐参考图开始。 */
   const openPromptPreview = async (image: TImage) => {
     if (!assetId) return
-    const savedFacts = structuredType && asset ? pickAssetFacts(structuredType, asset) : {}
-    const savedDescription = structuredType ? asset?.supplementary_info ?? '' : asset?.description ?? ''
-    if (formName !== asset?.name || formDesc !== savedDescription || JSON.stringify(formFacts) !== JSON.stringify(savedFacts)
-      || formStyle !== asset?.style || formVisualStyle !== asset?.visual_style) {
+    if (hasUnsavedChanges) {
       message.warning('请先保存资产设定，再预览生成提示词')
       return
     }
@@ -730,158 +761,170 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
   }
 
   return (
-    <div className="space-y-4 h-full overflow-auto">
-      <Card>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <Space>
-            <Button icon={<ArrowLeftOutlined />} onClick={() => onNavigate(backTo)}>
-              返回{assetDisplayName}资产
-            </Button>
-            <Typography.Title level={5} style={{ margin: 0 }}>
-              {assetDisplayName}资产编辑
-            </Typography.Title>
-            {asset?.id ? <Tag>{asset.id}</Tag> : null}
-          </Space>
-          <Button icon={<ReloadOutlined />} onClick={() => void loadData()} loading={loading}>
+    <div className="asset-dossier">
+      <div className="asset-dossier-toolbar">
+        <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => onNavigate(backTo)}>
+          返回{assetDisplayName}资产
+        </Button>
+        <div className="asset-dossier-toolbar-actions">
+          <span className={hasUnsavedChanges ? 'text-sm text-amber-600' : 'text-sm text-gray-500'} role="status">
+            {loading ? '加载中' : hasUnsavedChanges ? '有未保存的修改' : '已保存'}
+          </span>
+          <Button icon={<ReloadOutlined />} onClick={() => void loadData()} loading={loading}
+            disabled={savingBase || smartDetectBusy || hasUnsavedChanges}>
             刷新
           </Button>
+          <Button type="primary" onClick={() => void handleSaveBaseInfo()} loading={savingBase}
+            disabled={loading || smartDetectBusy || !hasUnsavedChanges}>
+            保存资产
+          </Button>
         </div>
-      </Card>
+      </div>
 
-      <Collapse
-        defaultActiveKey={['base', 'views']}
-        items={[
-          {
-            key: 'base',
-            label: '基础信息展示',
-            children: loading ? (
-              <div className="py-8 text-center">
-                <Spin />
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div>
-                  <div className="text-gray-600 text-sm mb-1">名称</div>
-                  <Input value={formName} onChange={(e) => setFormName(e.target.value)} disabled={smartDetectBusy || savingBase} />
+      <div className="asset-dossier-body">
+        <div className="asset-dossier-sheet">
+          {loading ? (
+            <div className="py-8 text-center"><Spin /></div>
+          ) : (
+            <>
+              <div className="asset-dossier-overview" data-asset-type={structuredType ?? 'character'}>
+                <div className="min-w-0">
+                  <div className="text-sm text-gray-500">{assetDisplayName}档案</div>
+                  <h1 className="asset-dossier-name">{asset?.name || `${assetDisplayName}资产`}</h1>
+                  <div className="space-y-4">
+                    <div className="asset-dossier-fields">
+                      <label className="block min-w-0 text-sm text-gray-600">
+                        名称
+                        <Input className="mt-1" value={formName} onChange={(e) => setFormName(e.target.value)}
+                          disabled={smartDetectBusy || savingBase} />
+                      </label>
+                      {structuredType ? (
+                        <label className="block min-w-0 text-sm text-gray-600">
+                          标签
+                          <Input className="mt-1" placeholder="多个标签用逗号分隔" value={formTags}
+                            onChange={(e) => setFormTags(e.target.value)} disabled={smartDetectBusy || savingBase} />
+                        </label>
+                      ) : null}
+                    </div>
+                    {structuredType ? <AssetFactsFields type={structuredType} section="overview" value={formFacts}
+                      onChange={setFormFacts} supplementaryInfo={formDesc} disabled={smartDetectBusy || savingBase} /> : null}
+                  </div>
+                  {asset?.id ? (
+                    <details className="mt-4 text-xs text-gray-500">
+                      <summary className="cursor-pointer">资产编号</summary>
+                      <Typography.Text className="break-all" type="secondary" copyable>{asset.id}</Typography.Text>
+                    </details>
+                  ) : null}
                 </div>
-                {structuredType ? <AssetFactsFields type={structuredType} value={formFacts} onChange={setFormFacts} supplementaryInfo={formDesc} disabled={smartDetectBusy || savingBase} /> : null}
-                <div>
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <div className="text-gray-600 text-sm">{structuredType ? '补充信息' : '角色描述'}</div>
-                      {relationType === 'actor_image' ||
-                      relationType === 'scene_image' ||
-                      relationType === 'prop_image' ||
-                      relationType === 'costume_image' ? (
-                        <>
-                          <Button
-                            type="primary"
-                            size="small"
-                            onClick={() => void handleSmartDetectMissing()}
-                            loading={smartDetectLoading}
-                            disabled={Boolean(loading) || !!smartDetectTask}
-                          >
+                <figure className="m-0 min-w-0">
+                  <div className="asset-dossier-cover">
+                    <AssetDossierImage src={selectedSlot?.imageUrl}
+                      alt={`${asset?.name ?? assetDisplayName} · ${ANGLE_LABEL_MAP[selectedSlot?.angle ?? 'FRONT']}`} preview />
+                  </div>
+                  <figcaption className="mt-2 text-center text-sm text-gray-500">
+                    {ANGLE_LABEL_MAP[selectedSlot?.angle ?? 'FRONT']} · {selectedSlot?.imageUrl ? '点击图片放大' : '等待生成'}
+                  </figcaption>
+                </figure>
+              </div>
+
+              <AssetDossierSection title={structuredType === 'actor' ? '外貌设定' : `${assetDisplayName}设定`}>
+                <div className="space-y-4">
+                  {structuredType ? <AssetFactsFields type={structuredType} section="details" value={formFacts}
+                    onChange={setFormFacts} supplementaryInfo={formDesc} disabled={smartDetectBusy || savingBase} /> : null}
+                  <div>
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                      <label htmlFor="asset-dossier-description" className="text-gray-600 text-sm">
+                        {structuredType ? '补充描述' : '角色描述'}
+                      </label>
+                      {structuredType ? (
+                        <div className="flex flex-wrap gap-2">
+                          <Button size="small" onClick={() => void handleSmartDetectMissing()}
+                            loading={smartDetectLoading} disabled={loading || savingBase || !!smartDetectTask}>
                             {smartDetectTask ? '检测中' : '智能检测'}
                           </Button>
                           {smartDetectTask ? (
-                            <Button
-                              size="small"
-                              danger
-                              icon={<CloseCircleOutlined />}
-                              disabled={smartDetectTask.cancelRequested}
-                              onClick={() => void handleCancelSmartDetectTask()}
-                            >
+                            <Button size="small" danger icon={<CloseCircleOutlined />} disabled={smartDetectTask.cancelRequested}
+                              onClick={() => void handleCancelSmartDetectTask()}>
                               {smartDetectTask.cancelRequested ? '正在取消' : '取消检测'}
                             </Button>
                           ) : null}
-                        </>
+                        </div>
                       ) : null}
                     </div>
-                  <Input.TextArea
-                    rows={4}
-                    value={formDesc}
-                    maxLength={structuredType ? 8000 : undefined}
-                    onChange={(e) => setFormDesc(e.target.value)}
-                    disabled={smartDetectBusy || savingBase}
-                  />
+                    <Input.TextArea id="asset-dossier-description" autoSize={{ minRows: 2, maxRows: 8 }} value={formDesc}
+                      maxLength={structuredType ? 8000 : undefined} onChange={(e) => setFormDesc(e.target.value)}
+                      disabled={smartDetectBusy || savingBase} />
+                  </div>
+                  {structuredType ? (
+                    <details className="text-sm text-gray-500">
+                      <summary className="cursor-pointer">完整描述预览</summary>
+                      <div className="whitespace-pre-wrap break-words mt-2">
+                        {previewAssetDescription(structuredType, formFacts, formDesc) || '尚未填写设定'}
+                      </div>
+                    </details>
+                  ) : null}
                 </div>
-                <div>
-                  <div className="text-gray-600 text-sm mb-1">标签（逗号分隔）</div>
-                  <Input value={formTags} onChange={(e) => setFormTags(e.target.value)} disabled={smartDetectBusy || savingBase} />
+              </AssetDossierSection>
+
+              <AssetDossierSection title="生成风格">
+                <ProjectVisualStyleAndStyleFields layout="horizontal" disabled={smartDetectBusy || savingBase}
+                  visual_style={formVisualStyle} style={formStyle} options={projectStyleOptions}
+                  onChange={(next) => {
+                    setFormVisualStyle(next.visual_style)
+                    setFormStyle(next.style)
+                  }} />
+              </AssetDossierSection>
+
+              <AssetDossierSection title="多视角图片">
+                <div className="space-y-4">
+                  {structuredType ? (
+                    <div className="flex flex-wrap items-center gap-3">
+                      <label htmlFor="asset-dossier-view-count" className="text-sm text-gray-600">视角数</label>
+                      <InputNumber id="asset-dossier-view-count" min={minViewCount} max={MAX_VIEW_COUNT} precision={0}
+                        value={formViewCount} onChange={(v) => setFormViewCount(v ?? minViewCount)}
+                        disabled={smartDetectBusy || savingBase} />
+                      <span className="text-xs text-gray-500">仅可增加，最多 {MAX_VIEW_COUNT} 个；保存后生效</span>
+                    </div>
+                  ) : null}
+                  <div className="asset-dossier-view-list" aria-label="图片视角">
+                    {slotItems.map((slot) => (
+                      <button type="button" key={slot.angle} className="asset-dossier-view"
+                        aria-label={`切换到${ANGLE_LABEL_MAP[slot.angle]}视角`}
+                        aria-pressed={slot.angle === selectedSlot?.angle} onClick={() => setSelectedAngle(slot.angle)}>
+                        <span className="asset-dossier-view-image">
+                          <AssetDossierImage src={slot.imageUrl} alt={ANGLE_LABEL_MAP[slot.angle]} />
+                        </span>
+                        {ANGLE_LABEL_MAP[slot.angle]}{!slot.image ? ' · 待保存' : ''}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm text-gray-600 mr-1">当前：{ANGLE_LABEL_MAP[selectedSlot?.angle ?? 'FRONT']}</span>
+                    <Button disabled={!selectedSlot?.imageUrl} onClick={() => setImagePreviewOpen(true)}>查看大图</Button>
+                    <Button disabled={!selectedSlot?.image || savingBase || smartDetectBusy}
+                      loading={Boolean(selectedSlot?.image && generatingByImageId[selectedSlot.image.id])}
+                      onClick={() => selectedSlot?.image && void openPromptPreview(selectedSlot.image)}>
+                      {selectedSlot?.imageUrl ? '重新生成' : '生成图片'}
+                    </Button>
+                    <Button icon={<EditOutlined />} disabled={!selectedSlot?.image || savingBase || hasUnsavedChanges}
+                      onClick={() => selectedSlot?.image && void openHistoryModal(selectedSlot.image)}>
+                      编辑图片
+                    </Button>
+                  </div>
+                  {hasUnsavedChanges ? <div className="text-sm text-amber-600">请先保存资产，再生成或采用图片。</div> : null}
                 </div>
-                <div>
-                  <div className="text-gray-600 text-sm mb-1">视角数（仅可增加，最大 4）</div>
-                  <InputNumber
-                    min={minViewCount}
-                    max={4}
-                    precision={0}
-                    value={formViewCount}
-                    onChange={(v) => setFormViewCount(v ?? minViewCount)}
-                    disabled={smartDetectBusy || savingBase}
-                  />
-                </div>
-                <div>
-                  <div className="text-gray-600 text-sm mb-1">视觉风格</div>
-                  <ProjectVisualStyleAndStyleFields
-                    disabled={smartDetectBusy || savingBase}
-                    visual_style={formVisualStyle}
-                    style={formStyle}
-                    options={projectStyleOptions}
-                    onChange={(next) => {
-                      setFormVisualStyle(next.visual_style)
-                      setFormStyle(next.style)
-                    }}
-                  />
-                </div>
-                <Button type="primary" onClick={() => void handleSaveBaseInfo()} loading={savingBase || smartDetectLoading}>
-                  保存基础信息
-                </Button>
-              </div>
-            ),
-          },
-          {
-            key: 'views',
-            label: '多视角图片',
-            children: (
-              <Row gutter={[16, 16]}>
-                {slotItems.map((slot) => (
-                  <Col xs={24} sm={12} lg={8} xl={6} key={slot.angle}>
-                    <DisplayImageCard
-                      title={`照片角度：${ANGLE_LABEL_MAP[slot.angle]}`}
-                      imageUrl={slot.imageUrl}
-                      imageAlt={slot.angle}
-                      placeholder="暂无图片"
-                      hoverable={false}
-                      imageHeightClassName="h-44"
-                      extra={slot.image ? <Tag color="blue">ID {slot.image.id}</Tag> : null}
-                      footer={
-                        <div className="flex items-center gap-2">
-                          <Button
-                            type="primary"
-                            size="small"
-                            disabled={!slot.image}
-                            loading={Boolean(slot.image && generatingByImageId[slot.image.id])}
-                            onClick={() => slot.image && void openPromptPreview(slot.image)}
-                          >
-                            生成
-                          </Button>
-                          <Button
-                            size="small"
-                            icon={<EditOutlined />}
-                            disabled={!slot.image}
-                            onClick={() => slot.image && void openHistoryModal(slot.image)}
-                          >
-                            编辑
-                          </Button>
-                        </div>
-                      }
-                    />
-                  </Col>
-                ))}
-              </Row>
-            ),
-          },
-        ]}
-      />
+              </AssetDossierSection>
+            </>
+          )}
+        </div>
+      </div>
+
+      <Modal title={`${asset?.name ?? assetDisplayName} · ${ANGLE_LABEL_MAP[selectedSlot?.angle ?? 'FRONT']}`}
+        open={imagePreviewOpen} onCancel={() => setImagePreviewOpen(false)} footer={null} width={960}>
+        <div className="asset-dossier-preview">
+          <AssetDossierImage src={selectedSlot?.imageUrl} alt={ANGLE_LABEL_MAP[selectedSlot?.angle ?? 'FRONT']} />
+        </div>
+      </Modal>
 
       <Modal
         title="历史生成图片"
