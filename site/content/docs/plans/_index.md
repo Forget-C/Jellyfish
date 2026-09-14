@@ -11,6 +11,9 @@ description: "记录当前正在推进的开发计划、改造方案与阶段性
 
 当前计划入口：
 
+- [场次工作台实施任务与依赖顺序](/docs/plans/directing-workbench-implementation-tasks/)
+- [场次创作与试拍剪辑工作台方案](/docs/plans/directing-workbench-refactor-plan/)
+- [六部门专业输出契约](/docs/plans/six-department-output-contracts-plan/)
 - [异步任务体系简化评估（提案）](/docs/plans/async-task-simplification-assessment/)
 - [任务与文件表结构简化方案（提案）](/docs/plans/async-task-schema-simplification/)
 - [开发规划](/docs/plans/development-plan/)
@@ -21,3 +24,7 @@ description: "记录当前正在推进的开发计划、改造方案与阶段性
 - [统一生成编排与独立提示词渲染实施计划](/docs/plans/unified-generation-orchestration-plan/)
 - [实验室历史输入回填与重试方案](/docs/plans/experiment-history-retry/)
 - [实验室消息与异步生成任务收口计划](/docs/plans/experiment-message-async-generation-plan/)
+
+前期评估依据：
+
+- [六部门与旧工作台的融合评估（已被新方案替代）](/docs/plans/directing-workbench-integration-assessment/)
