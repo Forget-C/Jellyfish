@@ -11,6 +11,8 @@ description: "记录当前真实生效的系统结构、状态流转、页面边
 
 推荐阅读：
 
+- [场次工作台核心数据与版本](/docs/architecture/directing-foundation/)
+
 - [项目结构](/docs/architecture/project-structure/)
 - [前端基础布局](/docs/architecture/frontend-layout/)
 - [任务执行架构](/docs/architecture/task-execution/)

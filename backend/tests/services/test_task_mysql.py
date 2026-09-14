@@ -53,7 +53,7 @@ async def test_migrated_mysql_schema_matches_task_models():
                 assert not substantive, substantive
                 assert not {"generation_tasks", "generation_runs", "generation_artifacts", "media_blobs"} & set(inspect(connection).get_table_names())
             await db.run_sync(compare)
-            assert (await db.execute(text("SELECT version_num FROM alembic_version"))).scalar_one() == "13b6a9d2e401"
+            assert (await db.execute(text("SELECT version_num FROM alembic_version"))).scalar_one() == "24c8e1a6b902"
     finally:
         await engine.dispose()
 

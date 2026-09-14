@@ -142,6 +142,8 @@ class FileType(str, Enum):
 class FileUsageKind(str, Enum):
     """文件在项目业务链上的用途（file_usages.usage_kind）。"""
 
+    directing_reference = "directing_reference"
+    directing_take = "directing_take"
     shot_frame = "shot_frame"
     generated_video = "generated_video"
     character_image = "character_image"
