@@ -1,15 +1,17 @@
 import { message } from 'antd'
 import { create } from 'zustand'
 import { FilmService } from '../../../services/generated'
-import type { TaskListItemRead, TaskStatus } from '../../../services/generated'
+import type { TaskListItemRead, TaskSourceRead, TaskStatus } from '../../../services/generated'
 import { resolveTaskSourceLabel, resolveTaskTitle } from './taskCopy'
 
 export type TaskUiItem = {
   taskId: string
   title?: string | null
   sourceLabel?: string | null
+  source?: TaskSourceRead | null
+  sourceResolved?: boolean
   status: TaskStatus
-  progress: number
+  progress: number | null
   cancelRequested: boolean
   startedAtTs?: number | null
   finishedAtTs?: number | null
@@ -53,22 +55,25 @@ export function mergeTaskUiItems(
     const optimistic = optimisticItems[taskId]
     return {
       taskId,
-      title: optimistic?.title ?? resolveTaskTitle(server?.task_kind),
+      title: server?.title && server.title !== server.task_kind
+        ? server.title : optimistic?.title || resolveTaskTitle(server?.task_kind),
+      source: server?.source,
+      sourceResolved: !!server,
       sourceLabel:
         optimistic?.sourceLabel ??
-        resolveTaskSourceLabel(server?.relation_type, server?.relation_entity_id),
-      status: server?.status ?? optimistic?.status ?? 'pending',
-      progress: server?.progress ?? optimistic?.progress ?? 0,
+        resolveTaskSourceLabel(server?.target_type, server?.target_id),
+      status: server?.status ?? optimistic?.status ?? 'queued',
+      progress: server ? server.progress ?? null : optimistic?.progress ?? null,
       cancelRequested: !!(server?.cancel_requested ?? optimistic?.cancelRequested),
       startedAtTs: server?.started_at_ts ?? optimistic?.startedAtTs,
       finishedAtTs: server?.finished_at_ts ?? optimistic?.finishedAtTs,
       elapsedMs: server?.elapsed_ms ?? optimistic?.elapsedMs,
-      relationType: server?.relation_type ?? optimistic?.relationType,
-      relationEntityId: server?.relation_entity_id ?? optimistic?.relationEntityId,
-      resourceType: server?.resource_type ?? optimistic?.resourceType,
-      navigateRelationType: server?.navigate_relation_type ?? optimistic?.navigateRelationType,
+      relationType: server?.target_type ?? optimistic?.relationType,
+      relationEntityId: server?.target_id ?? optimistic?.relationEntityId,
+      resourceType: (server?.task_kind === 'video_generation' ? 'video' : server?.task_kind === 'image_generation' ? 'image' : 'text') ?? optimistic?.resourceType,
+      navigateRelationType: server?.target_type ?? optimistic?.navigateRelationType,
       navigateRelationEntityId:
-        server?.navigate_relation_entity_id ?? optimistic?.navigateRelationEntityId,
+        server?.target_id ?? optimistic?.navigateRelationEntityId,
       onCancel: optimistic?.onCancel ?? null,
       onNavigate: optimistic?.onNavigate ?? null,
     }

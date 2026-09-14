@@ -39,7 +39,7 @@ export class StudioTextLabService {
     }
     /**
      * 提交文本实验室统一异步任务
-     * 创建文本 canonical 消息和统一 polling 任务，由 Outbox 可靠投递。
+     * 创建文本消息与数据库排队任务，提交后由 Worker 领取。
      * @returns ApiResponse_ExperimentTaskCreated_ Successful Response
      * @throws ApiError
      */

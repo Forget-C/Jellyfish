@@ -3,20 +3,16 @@
 from __future__ import annotations
 
 import json
-from types import SimpleNamespace
 
 import httpx
 import pytest
 
-from app.core.contracts.image_generation import ImageGenerationInput, InputImageRef
+from app.core.contracts.provider_media import ProviderImageInput as ImageGenerationInput, ProviderImageReference as InputImageRef
+from app.core.integrations.media_provider import MediaProvider
 from app.core.contracts.provider import ProviderConfig
-from app.core.contracts.video_generation import VideoGenerationInput
+from app.core.contracts.provider_media import ProviderVideoInput as VideoGenerationInput, ProviderVideoFrames, ProviderVideoSubject
 from app.core.integrations.image_capabilities import validate_image_options
 from app.core.integrations.video_capabilities import validate_video_options
-from app.core.integrations.kling.images import KlingImageApiAdapter
-from app.core.integrations.kling.video import KlingVideoApiAdapter
-from app.core.tasks.image_generation_tasks import KlingImageGenerationTask
-from app.core.tasks.video_generation_tasks import KlingVideoGenerationTask
 
 
 def _projected_video_input(
@@ -27,14 +23,14 @@ def _projected_video_input(
     first_frame: str | None = None,
 ) -> VideoGenerationInput:
     """构造仅在 Provider 调用期间存在的帧 Data URL 投影。"""
-    return VideoGenerationInput.model_construct(
+    return VideoGenerationInput(
         prompt=prompt,
         model=model,
         ratio=ratio,
         seconds=None,
         seed=None,
         watermark=None,
-        frame_references=SimpleNamespace(
+        frame_references=ProviderVideoFrames(
             first_frame=first_frame,
             last_frame=None,
             key_frames=[],
@@ -44,10 +40,9 @@ def _projected_video_input(
 
 
 def _projected_image_reference(image_url: str) -> InputImageRef:
-    """构造仅在 Provider 调用期间存在的参考图 Data URL 投影。"""
-    reference = InputImageRef.model_construct(file_id=None)
-    object.__setattr__(reference, "image_url", image_url)
-    return reference
+    """使用经过校验的执行期图片引用。"""
+    return InputImageRef(image_url=image_url)
+
 
 
 def _with_projected_images(
@@ -82,18 +77,17 @@ async def test_kling_turbo_video_create_and_query(monkeypatch: pytest.MonkeyPatc
             return httpx.Response(200, json={"code": 0, "data": {"id": "video-1"}})
         assert request.url.path == "/tasks"
         assert request.url.params["task_ids"] == "video-1"
-        return httpx.Response(200, json={"code": 0, "data": [{"id": "video-1", "status": "succeeded"}]})
+        return httpx.Response(200, json={"code": 0, "data": [{"id": "video-1", "status": "succeeded", "outputs": [{"type": "video", "url": "https://example/video.mp4"}]}]})
 
     _patch_httpx_client(monkeypatch, httpx.MockTransport(handler))
     cfg = ProviderConfig(provider="kling", api_key="kling-key")
     inp = VideoGenerationInput(
         prompt="城市夜景", model="kling-3.0-turbo", ratio="16:9", seconds=5, watermark=False
     )
-    adapter = KlingVideoApiAdapter()
-    task_id = await adapter.create_video(cfg=cfg, input_=inp, timeout_s=30)
+    task_id = await _submit(cfg=cfg, input_=inp)
     assert task_id == "video-1"
-    creation = await adapter.get_creation(cfg=cfg, task_id=task_id, timeout_s=30)
-    assert creation["data"][0]["status"] == "succeeded"
+    creation = await _poll(cfg=cfg, task_id=task_id)
+    assert creation.status == "succeeded"
 
 
 @pytest.mark.asyncio
@@ -110,12 +104,11 @@ async def test_kling_omni_image_to_video_uses_contents(monkeypatch: pytest.Monke
         return httpx.Response(200, json={"code": 0, "data": {"id": "video-2"}})
 
     _patch_httpx_client(monkeypatch, httpx.MockTransport(handler))
-    task_id = await KlingVideoApiAdapter().create_video(
+    task_id = await _submit(
         cfg=ProviderConfig(provider="kling", api_key="kling-key"),
         input_=_projected_video_input(
             prompt="人物回头", model="kling-3.0", ratio="9:16", first_frame="frame"
         ),
-        timeout_s=30,
     )
     assert task_id == "video-2"
 
@@ -133,7 +126,7 @@ async def test_kling_image_create_and_query(monkeypatch: pytest.MonkeyPatch) -> 
             assert body["resolution"] == "2k"
             return httpx.Response(200, json={"code": 0, "data": {"task_id": "image-1"}})
         assert request.url.path == "/v1/images/generations/image-1"
-        return httpx.Response(200, json={"code": 0, "data": {"task_status": "succeed"}})
+        return httpx.Response(200, json={"code": 0, "data": {"task_status": "succeed", "task_result": {"images": [{"url": "https://example/image.png"}]}}})
 
     _patch_httpx_client(monkeypatch, httpx.MockTransport(handler))
     cfg = ProviderConfig(provider="kling", api_key="kling-key")
@@ -143,72 +136,38 @@ async def test_kling_image_create_and_query(monkeypatch: pytest.MonkeyPatch) -> 
         resolution_profile="high",
     )
     inp = _with_projected_images(inp, [_projected_image_reference("data:image/png;base64,raw-image")])
-    adapter = KlingImageApiAdapter()
-    task_id = await adapter.create_image(cfg=cfg, inp=inp, timeout_s=30)
+    task_id = await _submit(cfg=cfg, input_=inp)
     assert task_id == "image-1"
-    creation = await adapter.get_creation(cfg=cfg, task_id=task_id, timeout_s=30)
-    assert creation["data"]["task_status"] == "succeed"
+    creation = await _poll(cfg=cfg, task_id=task_id, kind="image_generation")
+    assert creation.status == "succeeded"
 
 
 @pytest.mark.asyncio
-async def test_kling_video_task_normalizes_successful_output() -> None:
-    """视频任务层应将可灵 outputs 视频 URL 转成项目通用结果。"""
+async def test_kling_video_poll_normalizes_successful_output(monkeypatch) -> None:
+    """新供应商入口直接归一化可灵查询结果。"""
+    def handler(request):
+        """返回可灵的嵌套结果结构。"""
+        assert request.method == "GET"
+        return httpx.Response(200, json={"data": [{"status": "succeeded", "outputs": [{"type": "video", "url": "https://example/video.mp4"}]}]})
+    _patch_httpx_client(monkeypatch, httpx.MockTransport(handler))
+    result = await _poll(cfg=ProviderConfig(provider="kling", api_key="key"), task_id="result-1", kind="video_generation")
+    assert result.status == "succeeded"
+    assert result.outputs[0].url == "https://example/video.mp4"
 
-    class Adapter:
-        """模拟可灵视频创建与查询结果。"""
-
-        async def create_video(self, **_: object) -> str:
-            return "video-3"
-
-        async def get_creation(self, **_: object) -> dict[str, object]:
-            return {
-                "data": [
-                    {"status": "succeeded", "outputs": [{"type": "video", "url": "https://example/video.mp4"}]}
-                ]
-            }
-
-    task = KlingVideoGenerationTask(
-        adapter=Adapter(),  # type: ignore[arg-type]
-        provider_config=ProviderConfig(provider="kling", api_key="key"),
-        input_=VideoGenerationInput(prompt="城市", model="kling-3.0-turbo", ratio="16:9"),
-        poll_interval_s=0,
-    )
-    await task.run()
-    result = await task.get_result()
-    assert result is not None
-    assert result.provider == "kling"
-    assert result.url == "https://example/video.mp4"
 
 
 @pytest.mark.asyncio
-async def test_kling_image_task_normalizes_successful_output() -> None:
-    """图片任务层应将可灵 task_result.images 转成项目通用结果。"""
+async def test_kling_image_poll_normalizes_successful_output(monkeypatch) -> None:
+    """新供应商入口直接归一化可灵查询结果。"""
+    def handler(request):
+        """返回可灵的嵌套结果结构。"""
+        assert request.method == "GET"
+        return httpx.Response(200, json={"data": {"task_status": "succeed", "task_result": {"images": [{"url": "https://example/image.png"}]}}})
+    _patch_httpx_client(monkeypatch, httpx.MockTransport(handler))
+    result = await _poll(cfg=ProviderConfig(provider="kling", api_key="key"), task_id="result-1", kind="image_generation")
+    assert result.status == "succeeded"
+    assert result.outputs[0].url == "https://example/image.png"
 
-    class Adapter:
-        """模拟可灵图片创建与查询结果。"""
-
-        async def create_image(self, **_: object) -> str:
-            return "image-2"
-
-        async def get_creation(self, **_: object) -> dict[str, object]:
-            return {
-                "data": {
-                    "task_status": "succeed",
-                    "task_result": {"images": [{"url": "https://example/image.png"}]},
-                }
-            }
-
-    task = KlingImageGenerationTask(
-        adapter=Adapter(),  # type: ignore[arg-type]
-        provider_config=ProviderConfig(provider="kling", api_key="key"),
-        input_=ImageGenerationInput(prompt="猫", model="kling-v3"),
-        poll_interval_s=0,
-    )
-    await task.run()
-    result = await task.get_result()
-    assert result is not None
-    assert result.provider == "kling"
-    assert result.images[0].url == "https://example/image.png"
 
 
 def test_kling_capabilities_reject_unmapped_common_options() -> None:
@@ -230,3 +189,14 @@ def test_kling_capabilities_reject_unmapped_common_options() -> None:
         model="kling-v3",
         input_=ImageGenerationInput(prompt="猫", n=9, size="2k"),
     )
+
+async def _submit(*, cfg, input_):
+    """通过新供应商入口验证单次提交协议。"""
+    async with httpx.AsyncClient() as client:
+        return await MediaProvider(client).submit(cfg, input_)
+
+
+async def _poll(*, cfg, task_id, kind="video_generation"):
+    """通过新供应商入口验证一次状态观察及结果归一化。"""
+    async with httpx.AsyncClient() as client:
+        return await MediaProvider(client).poll(cfg, task_id=task_id, kind=kind)

@@ -3,20 +3,15 @@
 from __future__ import annotations
 
 import json
-from types import SimpleNamespace
 
 import httpx
 import pytest
 from pydantic import ValidationError
 
-from app.core.integrations.openai.video import OpenAIVideoApiAdapter
-from app.core.integrations.vidu.video import ViduVideoApiAdapter
 from app.core.integrations.vidu.video_payload import build_create_video_request
-from app.core.tasks.video_generation_tasks import ViduVideoGenerationTask
-from app.core.integrations.volcengine.video import VolcengineVideoApiAdapter
+from app.core.integrations.media_provider import MediaProvider
 from app.core.contracts.provider import ProviderConfig
-from app.core.contracts.media import MediaReference
-from app.core.contracts.video_generation import VideoGenerationInput
+from app.core.contracts.provider_media import ProviderVideoInput as VideoGenerationInput, ProviderVideoFrames, ProviderVideoSubject
 
 
 def _projected_video_input(
@@ -27,17 +22,17 @@ def _projected_video_input(
     first_frame: str | None = None,
     last_frame: str | None = None,
     key_frames: list[str] | None = None,
-    subject_references: list[SimpleNamespace] | None = None,
+    subject_references: list[ProviderVideoSubject] | None = None,
 ) -> VideoGenerationInput:
     """构造仅在 Provider 调用期间存在的媒体 URL/Data URL 投影。"""
-    return VideoGenerationInput.model_construct(
+    return VideoGenerationInput(
         prompt=prompt,
         model=model,
         ratio=ratio,
         seconds=None,
         seed=None,
         watermark=None,
-        frame_references=SimpleNamespace(
+        frame_references=ProviderVideoFrames(
             first_frame=first_frame,
             last_frame=last_frame,
             key_frames=key_frames or [],
@@ -46,21 +41,10 @@ def _projected_video_input(
     )
 
 
-def _projected_subject(
-    *, name: str, images: list[str] | None = None, videos: list[str] | None = None
-) -> SimpleNamespace:
-    """构造 Vidu adapter 使用的短生命周期主体媒体投影。"""
-    image_values = images or []
-    video_values = videos or []
-    return SimpleNamespace(
-        name=name,
-        images=image_values,
-        videos=video_values,
-        media=[
-            *[MediaReference(file_id=f"image-{index}", media_kind="image") for index, _ in enumerate(image_values)],
-            *[MediaReference(file_id=f"video-{index}", media_kind="video") for index, _ in enumerate(video_values)],
-        ],
-    )
+def _projected_subject(*, name: str, images=None, videos=None) -> ProviderVideoSubject:
+    """以执行期 DTO 保留命名主体和媒体类型。"""
+    return ProviderVideoSubject(name=name, images=images or [], videos=videos or [])
+
 
 
 def _patch_httpx_client(monkeypatch: pytest.MonkeyPatch, transport: httpx.MockTransport) -> None:
@@ -90,7 +74,7 @@ async def test_openai_video_create_returns_id(monkeypatch: pytest.MonkeyPatch) -
     inp = VideoGenerationInput.model_validate(
         {"prompt": "a cat", "ratio": "16:9", "seed": 42, "watermark": False, "seconds": 6}
     )
-    vid = await OpenAIVideoApiAdapter().create_video(cfg=cfg, input_=inp, timeout_s=30.0)
+    vid = await _submit(cfg=cfg, input_=inp)
     assert vid == "video-1"
 
 
@@ -103,8 +87,8 @@ async def test_openai_video_get_returns_meta(monkeypatch: pytest.MonkeyPatch) ->
 
     _patch_httpx_client(monkeypatch, httpx.MockTransport(handler))
     cfg = ProviderConfig(provider="openai", api_key="sk-test")
-    meta = await OpenAIVideoApiAdapter().get_video(cfg=cfg, video_id="v-99", timeout_s=30.0)
-    assert meta["status"] == "completed"
+    meta = await _poll(cfg=cfg, task_id="v-99")
+    assert meta.status == "succeeded"
 
 
 @pytest.mark.asyncio
@@ -131,11 +115,11 @@ async def test_volcengine_video_create_and_get(monkeypatch: pytest.MonkeyPatch) 
     inp = VideoGenerationInput.model_validate(
         {"prompt": "舞", "ratio": "9:16", "seconds": 8, "seed": 7, "watermark": True}
     )
-    tid = await VolcengineVideoApiAdapter().create_contents_task(cfg=cfg, input_=inp, timeout_s=30.0)
+    tid = await _submit(cfg=cfg, input_=inp)
     assert tid == "t-1"
-    meta = await VolcengineVideoApiAdapter().get_contents_task(cfg=cfg, task_id=tid, timeout_s=30.0)
-    assert meta["status"] == "succeeded"
-    assert meta["content"]["video_url"] == "https://v.example/out.mp4"
+    meta = await _poll(cfg=cfg, task_id=tid)
+    assert meta.status == "succeeded"
+    assert meta.outputs[0].url == "https://v.example/out.mp4"
 
 
 @pytest.mark.asyncio
@@ -164,11 +148,10 @@ async def test_vidu_video_create_and_get(monkeypatch: pytest.MonkeyPatch) -> Non
         first_frame="first",
         last_frame="last",
     )
-    adapter = ViduVideoApiAdapter()
-    task_id = await adapter.create_video(cfg=cfg, input_=inp, timeout_s=30.0)
+    task_id = await _submit(cfg=cfg, input_=inp)
     assert task_id == "vidu-video-1"
-    creation = await adapter.get_creation(cfg=cfg, task_id=task_id, timeout_s=30.0)
-    assert creation["state"] == "success"
+    creation = await _poll(cfg=cfg, task_id=task_id)
+    assert creation.status == "succeeded"
 
 
 def test_vidu_video_payload_selects_text_and_reference_endpoints() -> None:
@@ -213,27 +196,17 @@ def test_vidu_video_payload_keeps_subject_references_separate_from_frames() -> N
 
 
 @pytest.mark.asyncio
-async def test_vidu_video_task_polls_creation_to_result() -> None:
-    """Task 层应在 Vidu 成功状态时返回待持久化的视频 URL。"""
+async def test_vidu_video_poll_normalizes_creation(monkeypatch) -> None:
+    """Vidu 视频查询输出归一化为待收取的视频地址。"""
+    def handler(request):
+        """模拟单次查询。"""
+        assert request.method == "GET"
+        return httpx.Response(200, json={"state": "success", "creations": [{"url": "https://vidu.example/video.mp4"}]})
+    _patch_httpx_client(monkeypatch, httpx.MockTransport(handler))
+    result = await _poll(cfg=ProviderConfig(provider="vidu", api_key="key"), task_id="video-2")
+    assert result.status == "succeeded"
+    assert result.outputs[0].url == "https://vidu.example/video.mp4"
 
-    class _Adapter:
-        async def create_video(self, **_: object) -> str:
-            return "vidu-video-2"
-
-        async def get_creation(self, **_: object) -> dict[str, object]:
-            return {"state": "success", "creations": [{"url": "https://vidu.example/video.mp4"}]}
-
-    task = ViduVideoGenerationTask(
-        adapter=_Adapter(),  # type: ignore[arg-type]
-        provider_config=ProviderConfig(provider="vidu", api_key="key"),
-        input_=VideoGenerationInput(prompt="a city", model="viduq2", ratio="16:9"),
-        poll_interval_s=0,
-    )
-    await task.run()
-    result = await task.get_result()
-    assert result is not None
-    assert result.provider == "vidu"
-    assert result.url == "https://vidu.example/video.mp4"
 
 
 def test_video_input_seed_bounds_validation() -> None:
@@ -246,3 +219,14 @@ def test_video_input_seed_bounds_validation() -> None:
         VideoGenerationInput.model_validate({"prompt": "bad", "ratio": "16:9", "seed": -2})
     with pytest.raises(ValidationError):
         VideoGenerationInput.model_validate({"prompt": "bad", "ratio": "16:9", "seed": 4294967296})
+
+async def _submit(*, cfg, input_):
+    """通过新供应商入口验证单次提交协议。"""
+    async with httpx.AsyncClient() as client:
+        return await MediaProvider(client).submit(cfg, input_)
+
+
+async def _poll(*, cfg, task_id, kind="video_generation"):
+    """通过新供应商入口验证一次状态观察及结果归一化。"""
+    async with httpx.AsyncClient() as client:
+        return await MediaProvider(client).poll(cfg, task_id=task_id, kind=kind)

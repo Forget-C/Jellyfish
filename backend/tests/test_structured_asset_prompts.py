@@ -139,17 +139,17 @@ def test_submission_rejects_preview_media_mismatch():
 async def test_candidate_publisher_does_not_replace_asset_image(asset_db):
     """局部修改结果只归档为候选，不自动改写当前图。"""
     from app.core.contracts.generation import ResolvedGenerationSnapshot, GenerationTarget, GenerationTargetKind, ImageGenerationOperationInput
-    from app.models.generation_artifacts import GenerationArtifact, GenerationArtifactPublishStatus
+    from app.models.task import TaskOutput
     from app.services.generation.publishers.asset_image import AssetImagePublisher
-    artifact = GenerationArtifact(ordinal=0, file_id="replacement")
+    artifact = TaskOutput(task_id="candidate-task", ordinal=0, file_id="replacement")
     snapshot = ResolvedGenerationSnapshot(
         model_id="model", canonical_target=GenerationTarget(kind=GenerationTargetKind.asset_image_slot, asset_type="actor", entity_id="actor", slot_id="1"),
         expected_version_id=1, operation_input=ImageGenerationOperationInput(save_as_candidate=True), execution_prompt="修改背景",
     )
     await AssetImagePublisher().publish_terminal(asset_db, snapshot=snapshot, artifacts=[artifact])
     assert (await asset_db.get(ActorImage, 1)).file_id == "front"
-    assert artifact.publish_status == GenerationArtifactPublishStatus.skipped
-    assert artifact.publish_error == "awaiting_user_adoption"
+    assert artifact.delivery_status == "skipped"
+    assert artifact.delivery_reason == "awaiting_user_adoption"
 
 
 @pytest.mark.asyncio

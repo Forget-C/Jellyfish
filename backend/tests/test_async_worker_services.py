@@ -1,7 +1,4 @@
-"""遗留通用 async TaskStore 领取语义测试。
-
-图片和视频已迁移到 GenerationRun；这里仅覆盖仍被文本/脚本任务使用的通用领取门禁。
-"""
+"""唯一任务服务的领取与取消门禁。"""
 
 from __future__ import annotations
 
@@ -9,8 +6,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.db import Base
-from app.core.task_manager import SqlAlchemyTaskStore
-from app.core.task_manager.types import DeliveryMode
+from app.services.task_service import TaskService
 
 
 @pytest.mark.asyncio
@@ -22,10 +18,10 @@ async def test_claim_pending_allows_only_one_worker(tmp_path) -> None:
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
     async with factory() as db:
-        store = SqlAlchemyTaskStore(db)
-        task = await store.create(payload={}, mode=DeliveryMode.async_polling, task_kind="script_divide")
-        assert await store.claim_pending(task.id)
-        assert not await store.claim_pending(task.id)
+        store = TaskService(db)
+        task = await store.submit(snapshot={}, kind="script_divide")
+        assert await store.claim(task.id, worker_id="worker")
+        assert not await store.claim(task.id, worker_id="worker")
     await engine.dispose()
 
 
@@ -38,8 +34,8 @@ async def test_claim_pending_rejects_cancel_intent(tmp_path) -> None:
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
     async with factory() as db:
-        store = SqlAlchemyTaskStore(db)
-        task = await store.create(payload={}, mode=DeliveryMode.async_polling, task_kind="script_divide")
-        await store.request_cancel_intent(task.id, "用户取消")
-        assert not await store.claim_pending(task.id)
+        store = TaskService(db)
+        task = await store.submit(snapshot={}, kind="script_divide")
+        await store.request_cancel(task.id, reason="用户取消")
+        assert not await store.claim(task.id, worker_id="worker")
     await engine.dispose()

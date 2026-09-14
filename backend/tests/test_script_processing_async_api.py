@@ -19,7 +19,7 @@ from app.services.script_processing_tasks import (
     SCRIPT_EXTRACTION_RELATION_TYPE,
     VARIANT_ANALYSIS_RELATION_TYPE,
 )
-from app.core.task_manager.types import TaskStatus
+from app.core.contracts.task import TaskStatus
 
 
 def _override_db():
@@ -40,7 +40,7 @@ def test_divide_async_returns_created_task_payload(client, monkeypatch) -> None:
         assert write_to_db is True
         return AsyncTaskCreateResult(
             task_id="task-1",
-            status=TaskStatus.pending,
+            status=TaskStatus.queued,
             reused=False,
             relation_type=CHAPTER_DIVISION_RELATION_TYPE,
             relation_entity_id="chapter-1",
@@ -63,7 +63,7 @@ def test_divide_async_returns_created_task_payload(client, monkeypatch) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["data"]["task_id"] == "task-1"
-    assert body["data"]["status"] == "pending"
+    assert body["data"]["status"] == "queued"
     assert body["data"]["reused"] is False
 
 
@@ -75,16 +75,14 @@ def test_extract_async_returns_created_task_payload(client, monkeypatch) -> None
         chapter_id: str,
         script_division: dict,
         consistency: dict | None,
-        refresh_cache: bool,
     ):
         assert project_id == "project-1"
         assert chapter_id == "chapter-1"
         assert script_division == {"shots": []}
         assert consistency is None
-        assert refresh_cache is False
         return AsyncTaskCreateResult(
             task_id="task-extract-1",
-            status=TaskStatus.pending,
+            status=TaskStatus.queued,
             reused=False,
             relation_type=SCRIPT_EXTRACTION_RELATION_TYPE,
             relation_entity_id="chapter-1",
@@ -100,7 +98,6 @@ def test_extract_async_returns_created_task_payload(client, monkeypatch) -> None
                 "chapter_id": "chapter-1",
                 "script_division": {"shots": []},
                 "consistency": None,
-                "refresh_cache": False,
             },
         )
     finally:
@@ -109,7 +106,7 @@ def test_extract_async_returns_created_task_payload(client, monkeypatch) -> None
     assert response.status_code == 200
     body = response.json()
     assert body["data"]["task_id"] == "task-extract-1"
-    assert body["data"]["status"] == "pending"
+    assert body["data"]["status"] == "queued"
     assert body["data"]["reused"] is False
 
 
@@ -132,7 +129,7 @@ def test_merge_entities_async_returns_created_task_payload(client, monkeypatch) 
         assert conflict_resolutions is None
         return AsyncTaskCreateResult(
             task_id="task-merge-1",
-            status=TaskStatus.pending,
+            status=TaskStatus.queued,
             reused=False,
             relation_type=ENTITY_MERGE_RELATION_TYPE,
             relation_entity_id="chapter-1",
@@ -165,7 +162,7 @@ def test_merge_entities_async_returns_created_task_payload(client, monkeypatch) 
     assert response.status_code == 200
     body = response.json()
     assert body["data"]["task_id"] == "task-merge-1"
-    assert body["data"]["status"] == "pending"
+    assert body["data"]["status"] == "queued"
     assert body["data"]["reused"] is False
 
 
@@ -175,7 +172,7 @@ def test_check_consistency_async_returns_created_task_payload(client, monkeypatc
         assert script_text == "完整剧本"
         return AsyncTaskCreateResult(
             task_id="task-consistency-1",
-            status=TaskStatus.pending,
+            status=TaskStatus.queued,
             reused=False,
             relation_type=CONSISTENCY_CHECK_RELATION_TYPE,
             relation_entity_id="chapter-1",
@@ -204,7 +201,7 @@ def test_check_consistency_async_returns_created_task_payload(client, monkeypatc
     assert response.status_code == 200
     body = response.json()
     assert body["data"]["task_id"] == "task-consistency-1"
-    assert body["data"]["status"] == "pending"
+    assert body["data"]["status"] == "queued"
     assert body["data"]["reused"] is False
 
 
@@ -223,7 +220,7 @@ def test_analyze_variants_async_returns_created_task_payload(client, monkeypatch
         assert script_division is None
         return AsyncTaskCreateResult(
             task_id="task-variant-1",
-            status=TaskStatus.pending,
+            status=TaskStatus.queued,
             reused=False,
             relation_type=VARIANT_ANALYSIS_RELATION_TYPE,
             relation_entity_id="chapter-1",
@@ -254,7 +251,7 @@ def test_analyze_variants_async_returns_created_task_payload(client, monkeypatch
     assert response.status_code == 200
     body = response.json()
     assert body["data"]["task_id"] == "task-variant-1"
-    assert body["data"]["status"] == "pending"
+    assert body["data"]["status"] == "queued"
     assert body["data"]["reused"] is False
 
 
@@ -263,7 +260,7 @@ def test_analyze_character_portrait_async_returns_created_task_payload(client, m
         assert relation_entity_id == "chapter-1"
         assert character_context is None
         assert character_description == "人物描述"
-        return AsyncTaskCreateResult("task-char-1", TaskStatus.pending, False, CHARACTER_PORTRAIT_ANALYSIS_RELATION_TYPE, "chapter-1")
+        return AsyncTaskCreateResult("task-char-1", TaskStatus.queued, False, CHARACTER_PORTRAIT_ANALYSIS_RELATION_TYPE, "chapter-1")
 
     def _fake_pick(*, relation_entity_id: str | None = None, chapter_id: str | None, project_id: str | None, endpoint: str) -> str:
         assert relation_entity_id is None
@@ -288,7 +285,7 @@ def test_analyze_prop_info_async_returns_created_task_payload(client, monkeypatc
         assert relation_entity_id == "chapter-1"
         assert prop_context is None
         assert prop_description == "道具描述"
-        return AsyncTaskCreateResult("task-prop-1", TaskStatus.pending, False, PROP_INFO_ANALYSIS_RELATION_TYPE, "chapter-1")
+        return AsyncTaskCreateResult("task-prop-1", TaskStatus.queued, False, PROP_INFO_ANALYSIS_RELATION_TYPE, "chapter-1")
 
     def _fake_pick(*, relation_entity_id: str | None = None, chapter_id: str | None, project_id: str | None, endpoint: str) -> str:
         assert relation_entity_id is None
@@ -311,7 +308,7 @@ def test_analyze_scene_info_async_returns_created_task_payload(client, monkeypat
         assert relation_entity_id == "chapter-1"
         assert scene_context is None
         assert scene_description == "场景描述"
-        return AsyncTaskCreateResult("task-scene-1", TaskStatus.pending, False, SCENE_INFO_ANALYSIS_RELATION_TYPE, "chapter-1")
+        return AsyncTaskCreateResult("task-scene-1", TaskStatus.queued, False, SCENE_INFO_ANALYSIS_RELATION_TYPE, "chapter-1")
 
     def _fake_pick(*, relation_entity_id: str | None = None, chapter_id: str | None, project_id: str | None, endpoint: str) -> str:
         assert relation_entity_id is None
@@ -334,7 +331,7 @@ def test_analyze_costume_info_async_returns_created_task_payload(client, monkeyp
         assert relation_entity_id == "chapter-1"
         assert costume_context is None
         assert costume_description == "服装描述"
-        return AsyncTaskCreateResult("task-costume-1", TaskStatus.pending, False, COSTUME_INFO_ANALYSIS_RELATION_TYPE, "chapter-1")
+        return AsyncTaskCreateResult("task-costume-1", TaskStatus.queued, False, COSTUME_INFO_ANALYSIS_RELATION_TYPE, "chapter-1")
 
     def _fake_pick(*, relation_entity_id: str | None = None, chapter_id: str | None, project_id: str | None, endpoint: str) -> str:
         assert relation_entity_id is None
@@ -357,7 +354,7 @@ def test_optimize_script_async_returns_created_task_payload(client, monkeypatch)
         assert relation_entity_id == "chapter-opt"
         assert script_text == "原始剧本"
         assert consistency == {"has_issues": True}
-        return AsyncTaskCreateResult("task-opt-1", TaskStatus.pending, False, SCRIPT_OPTIMIZATION_RELATION_TYPE, "chapter-opt")
+        return AsyncTaskCreateResult("task-opt-1", TaskStatus.queued, False, SCRIPT_OPTIMIZATION_RELATION_TYPE, "chapter-opt")
 
     def _fake_pick(*, chapter_id: str | None, project_id: str | None, endpoint: str) -> str:
         assert endpoint == "optimize-script-async"
@@ -386,7 +383,7 @@ def test_simplify_script_async_returns_created_task_payload(client, monkeypatch)
     async def _fake_create(_db, *, relation_entity_id: str, script_text: str):
         assert relation_entity_id == "chapter-simplify"
         assert script_text == "原始剧本"
-        return AsyncTaskCreateResult("task-simplify-1", TaskStatus.pending, False, SCRIPT_SIMPLIFICATION_RELATION_TYPE, "chapter-simplify")
+        return AsyncTaskCreateResult("task-simplify-1", TaskStatus.queued, False, SCRIPT_SIMPLIFICATION_RELATION_TYPE, "chapter-simplify")
 
     def _fake_pick(*, chapter_id: str | None, project_id: str | None, endpoint: str) -> str:
         assert endpoint == "simplify-script-async"

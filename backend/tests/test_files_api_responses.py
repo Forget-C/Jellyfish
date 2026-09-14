@@ -102,7 +102,7 @@ def test_update_file_meta_returns_success_envelope(client: TestClient, monkeypat
         id="file-1",
         type=FileType.image,
         name="封面图",
-        thumbnail="https://example.com/image.png",
+        thumbnail_key="image-thumbnail.png",
         tags=["cover"],
         storage_key="files/image.png",
     )

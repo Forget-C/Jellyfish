@@ -55,7 +55,7 @@ async def validation_exception_handler(request: Request, exc: Exception) -> JSON
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期：启动时初始化，关闭时清理。"""
-    # 启动时：供应商注册 + 任务执行器注册（幂等）
+    # 启动时幂等注册供应商能力；任务由独立 Worker 执行。
     bootstrap_all_registries()
     yield
     # 关闭时：清理资源

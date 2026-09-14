@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.services.studio.experiment_messages import read_experiment_messages
+
 import asyncio
 
 from fastapi import APIRouter, Depends, Request
@@ -71,7 +73,7 @@ async def submit_text_lab_task(
     body: TextLabRunRequest,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[ExperimentTaskCreated]:
-    """创建文本 canonical 消息和统一 polling 任务，由 Outbox 可靠投递。"""
+    """创建文本消息与数据库排队任务，提交后由 Worker 领取。"""
     accepted, user_message, task_message = await create_text_async_task(
         db,
         session_id=session_id,
@@ -84,10 +86,7 @@ async def submit_text_lab_task(
     return created_response(
         ExperimentTaskCreated(
             task_id=accepted.task_id,
-            messages=[
-                ExperimentMessageRead.model_validate(user_message),
-                ExperimentMessageRead.model_validate(task_message),
-            ],
+            messages=await read_experiment_messages(db, [user_message, task_message]),
         )
     )
 

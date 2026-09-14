@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.generation import GenerationTargetKind, ResolvedGenerationSnapshot
-from app.models.generation_artifacts import GenerationArtifact, GenerationArtifactPublishStatus
+from app.models.task import TaskOutput
 
 
 class GenerationResultPublisher(ABC):
@@ -20,7 +20,7 @@ class GenerationResultPublisher(ABC):
         db: AsyncSession,
         *,
         snapshot: ResolvedGenerationSnapshot,
-        artifacts: list[GenerationArtifact],
+        artifacts: list[TaskOutput],
     ) -> None:
         """发布第一个产物，其他产物保留为可追溯历史记录。
 
@@ -40,6 +40,9 @@ class GenerationResultPublisher(ABC):
         expected_version_id = snapshot.expected_version_id
         if expected_version_id is None:
             raise ValueError("publisher requires expected_version_id")
+        from app.services.studio.files import require_available_file
+
+        await require_available_file(db, file_id=primary.file_id)
         published = await self._publish_file(
             db,
             snapshot=snapshot,
@@ -47,11 +50,11 @@ class GenerationResultPublisher(ABC):
             expected_version_id=expected_version_id,
         )
         if published:
-            primary.publish_status = GenerationArtifactPublishStatus.published
-            primary.publish_error = None
+            primary.delivery_status = "published"
+            primary.delivery_reason = None
         else:
-            primary.publish_status = GenerationArtifactPublishStatus.conflicted
-            primary.publish_error = "target_version_conflict"
+            primary.delivery_status = "conflicted"
+            primary.delivery_reason = "target_version_conflict"
 
     def _require_target(self, snapshot: ResolvedGenerationSnapshot) -> None:
         """阻止 Publisher 被错误的可信 target 调用。"""
@@ -60,30 +63,30 @@ class GenerationResultPublisher(ABC):
 
     @staticmethod
     def _partition_artifacts(
-        artifacts: list[GenerationArtifact],
-    ) -> tuple[GenerationArtifact | None, list[GenerationArtifact]]:
+        artifacts: list[TaskOutput],
+    ) -> tuple[TaskOutput | None, list[TaskOutput]]:
         """按 ordinal 选择唯一主产物，并稳定处理所有历史产物。"""
         ordered = sorted(artifacts, key=lambda artifact: artifact.ordinal)
         primary = next((artifact for artifact in ordered if artifact.ordinal == 0), None)
         return primary, [artifact for artifact in ordered if artifact is not primary]
 
     @staticmethod
-    def _is_final_primary(artifact: GenerationArtifact) -> bool:
+    def _is_final_primary(artifact: TaskOutput) -> bool:
         """识别已处理的主产物，确保重复发布不会重新执行过期 CAS。"""
-        return artifact.publish_status in {
-            GenerationArtifactPublishStatus.published,
-            GenerationArtifactPublishStatus.conflicted,
+        return artifact.delivery_status in {
+            "published",
+            "conflicted",
         }
 
     @staticmethod
-    def _mark_skipped(artifact: GenerationArtifact, reason: str) -> None:
+    def _mark_skipped(artifact: TaskOutput, reason: str) -> None:
         """为非主产物记录明确的未自动采用原因。"""
-        if artifact.publish_status not in {
-            GenerationArtifactPublishStatus.published,
-            GenerationArtifactPublishStatus.conflicted,
+        if artifact.delivery_status not in {
+            "published",
+            "conflicted",
         }:
-            artifact.publish_status = GenerationArtifactPublishStatus.skipped
-            artifact.publish_error = reason
+            artifact.delivery_status = "skipped"
+            artifact.delivery_reason = reason
 
     @abstractmethod
     async def _publish_file(

@@ -123,7 +123,7 @@ async def create_text_async_task(
         session_id=session_id,
         drafts=[
             ExperimentMessageDraft(role="user", content=content, payload={"model_id": model_id}),
-            ExperimentMessageDraft(role="task", content="文本生成任务已提交，正在等待生成结果。", status="pending", payload={"modality": "text"}),
+            ExperimentMessageDraft(role="task", content="文本生成任务已提交，正在等待生成结果。", payload={"modality": "text"}),
         ],
     )
     accepted = await GenerationSubmitter(entity_gate=GenerationEntityGate()).submit_async(db, command)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -18,13 +19,13 @@ from sqlalchemy.orm import selectinload
 from app.api.utils import apply_keyword_filter, apply_order, paginate
 from app.core import storage
 from app.models.studio import FileItem, FileType
-from app.models.generation_artifacts import GenerationArtifact, GenerationTaskMediaReference
+from app.models.task import Task, TaskInput, TaskOutput
+from app.models.studio import ActorImage, CharacterImage, SceneImage, PropImage, CostumeImage, ShotFrameImage, Shot
 from app.schemas.common import ApiResponse, PaginatedData, paginated_response
 from app.schemas.studio import FileDetailRead, FileRead, FileUpdate, FileUsageRead, FileUsageWrite
 from app.services.common import create_and_refresh, entity_not_found, flush_and_refresh, get_or_404, patch_model
 from app.services.studio.file_usages import upsert_file_usage
 from app.models.studio_file_usages import FileUsage
-from app.services.generation.storage import StorageOperationOutboxRepository
 
 FILE_ORDER_FIELDS = {"name", "created_at", "updated_at"}
 
@@ -73,7 +74,7 @@ async def list_files_paginated(
     page_size: int,
 ) -> ApiResponse[PaginatedData[FileRead]]:
     """分页查询文件。"""
-    stmt = select(FileItem)
+    stmt = select(FileItem).where(FileItem.delete_requested_at.is_(None), FileItem.deleted_at.is_(None))
     stmt = apply_keyword_filter(stmt, q=q, fields=[FileItem.name])
     stmt = apply_order(
         stmt,
@@ -115,7 +116,7 @@ async def update_file_meta(
     body: FileUpdate,
 ) -> FileItem:
     """更新文件元信息，并按需写入 usage。"""
-    obj = await get_or_404(db, FileItem, file_id, detail=entity_not_found("File"))
+    obj = await require_available_file(db, file_id=file_id)
     data = body.model_dump(exclude_unset=True)
     usage_payload = data.pop("usage", None)
     patch_model(obj, data)
@@ -150,22 +151,22 @@ async def upload_file(
 
     file_type = _detect_file_type(file.filename)
     display_name = _build_display_name(file.filename, name)
-    content = await file.read()
-
-    key = f"files/{file.filename}"
-    info = await storage.upload_file(
+    file_id = uuid.uuid4().hex
+    key = f"files/{file_id}{Path(file.filename).suffix.lower()}"
+    await storage.upload_file(
         key=key,
-        data=content,
+        data=file.file,
         content_type=file.content_type,
     )
 
     file_item = await create_and_refresh(
         db,
         FileItem(
-            id=str(uuid.uuid4()),
+            id=file_id,
             type=file_type,
             name=display_name,
-            thumbnail=info.url,
+            content_type=file.content_type or _resolve_download_media_type(file.filename),
+            size_bytes=file.size,
             tags=[],
             storage_key=key,
         ),
@@ -191,7 +192,7 @@ async def build_download_response(
     file_id: str,
 ) -> StreamingResponse:
     """根据 file_id 构建下载响应。"""
-    file_item = await get_or_404(db, FileItem, file_id, detail=entity_not_found("File"))
+    file_item = await require_available_file(db, file_id=file_id, lock=False)
     content = await storage.download_file(key=file_item.storage_key)
 
     filename = Path(file_item.storage_key).name or "download"
@@ -210,7 +211,7 @@ async def get_storage_info(
     file_id: str,
 ) -> dict[str, Any]:
     """读取对象存储信息。"""
-    file_item = await get_or_404(db, FileItem, file_id, detail=entity_not_found("File"))
+    file_item = await require_available_file(db, file_id=file_id, lock=False)
     info = await storage.get_file_info(key=file_item.storage_key)
     return {
         "key": info.key,
@@ -226,39 +227,39 @@ async def delete_file(
     *,
     file_id: str,
 ) -> None:
-    """登记无引用文件的可靠删除；若记录不存在则静默返回。
-
-    API 成功仅表示删除墓碑与 outbox 已随当前事务写入；实际对象删除由
-    Worker 重试完成，避免存储 I/O 成功而数据库回滚造成无审计丢失。
-    """
-    file_item = await db.get(FileItem, file_id)
-    if file_item is None:
+    """登记文件删除请求，保留文件行和任务历史，由 Worker 删除对象字节。"""
+    file_item = await db.get(FileItem, file_id, with_for_update=True, populate_existing=True)
+    if file_item is None or file_item.delete_requested_at is not None:
         return
-
     await _ensure_file_is_unreferenced(db, file_id=file_id)
-    repository = StorageOperationOutboxRepository(db)
-    blob = await repository.create_materialized_blob(
-        storage_key=file_item.storage_key,
-        content_type=_content_type_for_file(file_item),
-    )
-    await repository.request_delete(blob_id=blob.id, idempotency_key=f"file:{file_id}:delete")
-
-    await db.delete(file_item)
+    file_item.delete_requested_at = datetime.now(UTC).replace(tzinfo=None)
     await db.flush()
 
 
+async def require_available_file(
+    db: AsyncSession, *, file_id: str, lock: bool = True, expected_type: str | None = None,
+) -> FileItem:
+    """新增使用关系前锁定文件，与删除登记串行化，拒绝再次使用已删除内容。"""
+    file = await db.get(FileItem, file_id, with_for_update=lock, populate_existing=True)
+    if file is None:
+        raise HTTPException(status_code=404, detail=entity_not_found("File"))
+    if file.delete_requested_at is not None or file.deleted_at is not None:
+        raise HTTPException(status_code=410, detail="File deleted")
+    if expected_type is not None and file.type != expected_type:
+        raise HTTPException(status_code=422, detail=f"Expected {expected_type} file")
+    return file
+
+
 async def _ensure_file_is_unreferenced(db: AsyncSession, *, file_id: str) -> None:
-    """阻止删除仍被业务、任务快照或生成产物引用的文件。"""
-    reference_checks = (
-        (FileUsage, "素材仍被项目使用"),
-        (GenerationTaskMediaReference, "素材仍被生成任务快照使用"),
-        (GenerationArtifact, "素材仍被生成产物记录使用"),
-    )
-    for model, detail in reference_checks:
+    """历史任务引用不阻止删除字节；活动任务与实际业务采用关系必须保护。"""
+    for model in (FileUsage, ActorImage, CharacterImage, SceneImage, PropImage, CostumeImage, ShotFrameImage):
         if await db.scalar(select(exists().where(model.file_id == file_id))):
-            raise HTTPException(status_code=409, detail=detail)
-
-
-def _content_type_for_file(file_item: FileItem) -> str:
-    """为历史 FileItem 补充删除登记所需的保守 MIME 类型。"""
-    return "image/*" if file_item.type == FileType.image else "video/*"
+            raise HTTPException(status_code=409, detail="素材仍被业务使用")
+    if await db.scalar(select(exists().where(Shot.generated_video_file_id == file_id))):
+        raise HTTPException(status_code=409, detail="素材仍被镜头使用")
+    for relation in (TaskInput, TaskOutput):
+        active = select(relation.task_id).join(Task, Task.id == relation.task_id).where(
+            relation.file_id == file_id, Task.status.in_(["queued", "running"]),
+        ).limit(1)
+        if await db.scalar(active) is not None:
+            raise HTTPException(status_code=409, detail="素材仍被活动任务使用")

@@ -29,7 +29,10 @@ async def upsert_file_usage(
     usage_kind: FileUsageKind | str,
     source_ref: str | None = None,
 ) -> FileUsage:
-    """按 (file_id, usage_kind, source_ref) 幂等写入或更新行列。"""
+    """按 (file_id, project_id, usage_kind, source_ref) 幂等写入或更新行列。"""
+    from app.services.studio.files import require_available_file
+
+    await require_available_file(session, file_id=file_id)
     ref = (source_ref or "")[:128]
     kind_str = usage_kind.value if isinstance(usage_kind, FileUsageKind) else str(usage_kind)
 
@@ -37,6 +40,7 @@ async def upsert_file_usage(
         select(FileUsage)
         .where(
             FileUsage.file_id == file_id,
+            FileUsage.project_id == project_id,
             FileUsage.usage_kind == kind_str,
             FileUsage.source_ref == ref,
         )
@@ -44,7 +48,6 @@ async def upsert_file_usage(
     )
     row = (await session.execute(stmt)).scalars().first()
     if row is not None:
-        row.project_id = project_id
         row.chapter_id = chapter_id
         row.shot_id = shot_id
         await session.flush()
@@ -199,6 +202,7 @@ async def list_files_by_scope_paginated(
     grouped = (
         select(FileItem.id, func.max(ord_attr).label("_ord_key"))
         .join(FileUsage, FileUsage.file_id == FileItem.id)
+        .where(FileItem.delete_requested_at.is_(None), FileItem.deleted_at.is_(None))
     )
     grouped = _apply_scope_filters(grouped)
     if qn:

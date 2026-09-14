@@ -11,6 +11,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
+from app.models.task import Task
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,43 +28,52 @@ class ExperimentMessageDraft:
 def task_message_display_payload(*, modality: str) -> dict[str, Any]:
     """构造异步任务消息的初始展示投影，不复制任务请求快照。
 
-    ``GenerationTask.payload`` 是模型、提示词、媒体和 operation input 的唯一
-    权威来源。实验室消息仅保留让用户识别该消息用途所需的模态信息；终态时再
-    追加产物引用或错误摘要。
+    消息只保存模态标签；任务输入、状态、结果都在读取时从任务记录获取。
     """
 
     return {"modality": modality}
 
 
-def project_task_message_terminal(
-    message: ExperimentMessage,
-    *,
-    status: str,
-    result: dict[str, Any] | None = None,
-    error: str | None = None,
-    progress: int | None = None,
-) -> None:
-    """将异步任务的用户可见终态投影回实验室消息。
+async def read_experiment_messages(
+    db: AsyncSession, messages: Sequence[ExperimentMessage],
+) -> list["ExperimentMessageRead"]:
+    """读时批量合成任务状态与结果，消息行不保存异步生命周期副本。"""
+    from app.schemas.studio.experiment_sessions import ExperimentMessageRead
+    from app.services.task_queries import TaskQueries
 
-    只投影稳定的文件引用或 URL，完整结果仍以 ``GenerationTask.result`` 为准。
-    该收口避免消息 payload 演变为第二份执行参数或供应商原始响应。
-    """
+    task_ids = [message.task_id for message in messages if message.task_id]
+    owners = dict((await db.execute(select(Task.id, Task.target_id).where(
+        Task.id.in_(task_ids), Task.target_type == "experiment_session",
+    ))).all()) if task_ids else {}
+    task_ids = {message.task_id for message in messages if owners.get(message.task_id) == message.session_id}
+    tasks = await TaskQueries(db).results(list(task_ids))
+    result = []
+    for message in messages:
+        view = ExperimentMessageRead.model_validate(message)
+        if message.task_id:
+            task = tasks.get(message.task_id) if owners.get(message.task_id) == message.session_id else None
+            payload = task_message_display_payload(modality=str((message.payload or {}).get("modality") or "generation"))
+            if task is not None:
+                payload.update(progress=task.progress, outputs=[item.model_dump() for item in task.outputs])
+                if task.generation_delivery is not None:
+                    payload["result"] = task.generation_delivery.model_dump(mode="json")
+                elif task.result is not None:
+                    payload["result"] = task.result
+                if task.error:
+                    payload["error"] = task.error
+                view = view.model_copy(update={"status": task.status.value, "payload": payload})
+            else:
+                view = view.model_copy(update={"status": None, "payload": {**payload, "error": "关联任务不存在"}})
+        result.append(view)
+    return result
 
-    payload = task_message_display_payload(modality=str((message.payload or {}).get("modality") or "generation"))
-    if result:
-        display_result = {
-            key: value
-            for key, value in result.items()
-            if key in {"primary_file_id", "file_id", "url", "publish_status"} and value is not None
-        }
-        if display_result:
-            payload["result"] = display_result
-    if error:
-        payload["error"] = error
-    if progress is not None:
-        payload["progress"] = progress
-    message.status = status
-    message.payload = payload
+
+async def has_active_experiment_tasks(db: AsyncSession, session_id: str) -> bool:
+    """直接按任务唯一来源查询活动状态，不依赖展示消息是否存在。"""
+    return await db.scalar(select(Task.id).where(
+        Task.target_type == "experiment_session", Task.target_id == session_id,
+        Task.status.in_(["queued", "running"]),
+    ).limit(1)) is not None
 
 
 async def reserve_message_sequences(
@@ -118,7 +128,7 @@ async def append_experiment_messages(
             sequence=sequence,
             role=draft.role,
             content=draft.content,
-            status=draft.status,
+            status=None if draft.task_id or draft.role == "task" else draft.status,
             payload=dict(draft.payload),
             task_id=draft.task_id,
         )
@@ -131,7 +141,7 @@ async def append_experiment_messages(
 __all__ = [
     "ExperimentMessageDraft",
     "append_experiment_messages",
-    "project_task_message_terminal",
+    "read_experiment_messages",
     "reserve_message_sequences",
     "task_message_display_payload",
 ]

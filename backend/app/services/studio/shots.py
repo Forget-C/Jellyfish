@@ -18,6 +18,7 @@ from app.models.studio import (
 )
 from app.schemas.common import ApiResponse, PaginatedData, paginated_response
 from app.schemas.studio.shots import ShotCreate, ShotExtractionSummaryRead, ShotRead, ShotUpdate
+from app.services.studio.files import require_available_file
 from app.services.common import (
     create_and_refresh,
     delete_if_exists,
@@ -207,6 +208,8 @@ async def create(
     """创建镜头。"""
     await ensure_not_exists(db, Shot, body.id, detail=entity_already_exists("Shot"))
     await require_entity(db, Chapter, body.chapter_id, detail=entity_not_found("Chapter"), status_code=400)
+    if body.generated_video_file_id is not None:
+        await require_available_file(db, file_id=body.generated_video_file_id, expected_type="video")
     return await create_and_refresh(db, Shot(**body.model_dump()))
 
 
@@ -236,6 +239,11 @@ async def update(
             detail=entity_not_found("Chapter"),
             status_code=400,
         )
+    if update_data.get("generated_video_file_id") is not None:
+        await require_available_file(db, file_id=update_data["generated_video_file_id"], expected_type="video")
+    if "generated_video_file_id" in update_data:
+        # 手动选择或清空视频后，迟到的生成结果只能保留为历史。
+        obj.generated_video_version_id = Shot.generated_video_version_id + 1
     patch_model(obj, update_data)
     return await flush_and_refresh(db, obj)
 

@@ -29,13 +29,6 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "sqlite+aiosqlite:///./jellyfish.db"
 
-    # Redis / Celery Broker
-    redis_host: str = "localhost"
-    redis_port: int = 6379
-    redis_db: int = 0
-    redis_password: str | None = None
-    celery_broker_url: str | None = None
-
     # CORS：环境变量中建议使用逗号分隔（更贴近 docker-compose 用法）
     # 也兼容 JSON 数组：'["http://a","http://b"]'
     cors_origins: str = "http://localhost:7788,http://127.0.0.1:7788"
@@ -65,10 +58,6 @@ class Settings(BaseSettings):
     # 可选：对外访问基址（CDN 或自定义域名），为空则使用 S3 自带 URL 或预签名 URL
     s3_public_base_url: str | None = None
 
-    def model_post_init(self, __context: object) -> None:
-        if not self.celery_broker_url or not str(self.celery_broker_url).strip():
-            password_part = f":{self.redis_password}@" if self.redis_password else ""
-            self.celery_broker_url = f"redis://{password_part}{self.redis_host}:{self.redis_port}/{self.redis_db}"
 
 
 settings = Settings()

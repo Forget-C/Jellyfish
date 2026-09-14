@@ -76,6 +76,7 @@ import {
 } from '../../../services/generated'
 import { StudioEntitiesApi } from '../../../services/studioEntities'
 import type {
+  TaskOutputHistoryRead,
   CameraAngle,
   CameraMovement,
   CameraShotType,
@@ -100,7 +101,6 @@ import type {
   ShotStatus,
   ShotVideoPromptPackRead,
 } from '../../../services/generated'
-import { listTaskLinksNormalized } from '../../../services/filmTaskLinks'
 import { buildFileDownloadUrl, resolveAssetUrl } from '../assets/utils'
 import type { Chapter } from '../../../mocks/data'
 import { executeTaskCancel } from '../components/taskActionHelpers'
@@ -275,7 +275,6 @@ type StudioShot = ShotRead & {
 type ShotRuntimeState = {
   has_active_tasks: boolean
   has_active_video_tasks: boolean
-  has_active_prompt_tasks: boolean
   has_active_frame_tasks: boolean
   active_task_count: number
 }
@@ -293,7 +292,7 @@ type KeyframeCardState = {
   loading: boolean
   taskStatus: string | null
   taskId: string | null
-  thumbs: Array<{ linkId: number; fileId: string; thumbUrl: string }>
+  thumbs: Array<{ outputId: string; fileId: string; thumbUrl: string }>
   modalOpen: boolean
   applyingFileId: string | null
 }
@@ -666,7 +665,6 @@ const ChapterStudio: React.FC = () => {
             {
               has_active_tasks: item.has_active_tasks,
               has_active_video_tasks: item.has_active_video_tasks,
-              has_active_prompt_tasks: item.has_active_prompt_tasks,
               has_active_frame_tasks: item.has_active_frame_tasks,
               active_task_count: item.active_task_count,
             },
@@ -3202,7 +3200,7 @@ function Inspector(props: {
   const [videoSettledTask, setVideoSettledTask] = useState<RelationTaskState | null>(null)
   const [frameImageTask, setFrameImageTask] = useState<RelationTaskState | null>(null)
   const [frameImageSettledTask, setFrameImageSettledTask] = useState<RelationTaskState | null>(null)
-  const [generatedVideos, setGeneratedVideos] = useState<Array<{ linkId: number; fileId: string; url: string }>>([])
+  const [generatedVideos, setGeneratedVideos] = useState<Array<{ outputId: string; fileId: string; url: string }>>([])
   const [videoReadiness, setVideoReadiness] = useState<ShotVideoReadinessRead | null>(null)
   const [videoReadinessLoading, setVideoReadinessLoading] = useState(false)
   const [keyframeCards, setKeyframeCards] = useState<Record<PromptFrameType, KeyframeCardState>>({
@@ -3337,21 +3335,23 @@ function Inspector(props: {
     let canceled = false
     void (async () => {
       try {
-        const links = await listTaskLinksNormalized({
-          resourceType: 'video',
-          relationType: 'video',
-          relationEntityId: selectedShot.id,
-          order: 'updated_at',
-          isDesc: true,
-          page: 1,
-          pageSize: 100,
-        })
+        const outputs: TaskOutputHistoryRead[] = []
+        let cursor: string | null = null
+        do {
+          const response = await FilmService.listTaskOutputsApiV1FilmTasksOutputsGet({
+            targetType: 'shot_video', targetId: selectedShot.id, cursor,
+          })
+          if (canceled) return
+          if (!response.data) throw new Error('视频历史响应缺少数据')
+          outputs.push(...response.data.items)
+          cursor = response.data.next_cursor ?? null
+        } while (cursor)
         if (canceled) return
         const seen = new Set<string>()
-        const list = links
+        const list = outputs
           .filter((l) => Boolean(l.file_id))
           .map((l) => ({
-            linkId: l.id,
+            outputId: `${l.task_id}:${l.ordinal}`,
             fileId: String(l.file_id),
             url: buildFileDownloadUrl(String(l.file_id)) ?? '',
           }))
@@ -3364,7 +3364,7 @@ function Inspector(props: {
         const currentId = selectedShot.generated_video_file_id?.trim() || ''
         if (currentId && !list.some((x) => x.fileId === currentId)) {
           const currentUrl = buildFileDownloadUrl(currentId) ?? ''
-          if (currentUrl) list.unshift({ linkId: -1, fileId: currentId, url: currentUrl })
+          if (currentUrl) list.unshift({ outputId: 'current', fileId: currentId, url: currentUrl })
         }
         setGeneratedVideos(list)
       } catch {
@@ -4355,7 +4355,7 @@ function Inspector(props: {
       setVideoTaskPolling(true)
       setVideoTask({
         taskId,
-        status: 'pending',
+        status: 'queued',
         progress: 0,
         cancelRequested: false,
       })
@@ -4434,19 +4434,20 @@ function Inspector(props: {
       updateCardState(frameType, { thumbs: [] })
       return
     }
-    let thumbs: Array<{ linkId: number; fileId: string; thumbUrl: string }> = []
+    let thumbs: Array<{ outputId: string; fileId: string; thumbUrl: string }> = []
     for (let i = 0; i < retryCount; i += 1) {
-      const links = await listTaskLinksNormalized({
-        resourceType: 'image',
-        relationType: 'shot_frame_image',
-        relationEntityId: String(slotId),
-        order: 'updated_at',
-        isDesc: true,
-        page: 1,
-        pageSize: 100,
-      })
+      const outputs: TaskOutputHistoryRead[] = []
+      let cursor: string | null = null
+      do {
+        const response = await FilmService.listTaskOutputsApiV1FilmTasksOutputsGet({
+          targetType: 'shot_frame_slot', targetId: String(slotId), cursor,
+        })
+        if (!response.data) throw new Error('关键帧历史响应缺少数据')
+        outputs.push(...response.data.items)
+        cursor = response.data.next_cursor ?? null
+      } while (cursor)
       const seen = new Set<string>()
-      thumbs = links
+      thumbs = outputs
         .filter((l) => Boolean(l.file_id))
         .filter((l) => {
           const fid = String(l.file_id)
@@ -4455,7 +4456,7 @@ function Inspector(props: {
           return true
         })
         .map((l) => ({
-          linkId: l.id,
+          outputId: `${l.task_id}:${l.ordinal}`,
           fileId: String(l.file_id),
           thumbUrl: buildFileDownloadUrl(String(l.file_id)) ?? '',
         }))
@@ -4592,7 +4593,7 @@ function Inspector(props: {
       updateCardState(frameType, { taskId })
       setFrameImageTask({
         taskId,
-        status: 'pending',
+        status: 'queued',
         progress: 0,
         cancelRequested: false,
       })
@@ -5036,7 +5037,7 @@ function Inspector(props: {
                         ) : (
                           <div className="mt-2 flex items-center gap-2 overflow-x-auto whitespace-nowrap pb-1">
                             {st.thumbs.slice(0, 4).map((it) => (
-                              <img key={it.linkId} src={it.thumbUrl} alt="" className="w-16 h-16 rounded object-cover border border-gray-200 shrink-0" />
+                              <img key={it.outputId} src={it.thumbUrl} alt="" className="w-16 h-16 rounded object-cover border border-gray-200 shrink-0" />
                             ))}
                           </div>
                         )}
@@ -5198,7 +5199,7 @@ function Inspector(props: {
                             {st.thumbs.map((it) => {
                               const inUse = inUseFileId && inUseFileId === it.fileId
                               return (
-                                <div key={it.linkId} className="border rounded p-2">
+                                <div key={it.outputId} className="border rounded p-2">
                                   <img src={it.thumbUrl} alt="" className="w-full h-36 object-cover rounded" />
                                   <div className="mt-2 flex items-center justify-between">
                                     {inUse ? (
@@ -5496,7 +5497,7 @@ function Inspector(props: {
                     ) : (
                       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
                         {generatedVideos.map((item, idx) => (
-                          <div key={`${item.linkId}-${item.fileId}`} className="border rounded p-2">
+                          <div key={`${item.outputId}-${item.fileId}`} className="border rounded p-2">
                             <video
                               src={item.url}
                               className="w-full h-20 rounded object-cover bg-black"

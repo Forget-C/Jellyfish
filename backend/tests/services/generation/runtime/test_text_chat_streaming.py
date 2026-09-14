@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.db import Base
 from app.models.experiment_sessions import ExperimentSession
-from app.models.task import GenerationTask
+from app.models.task import Task
 from app.services.generation.runtime import text_chat_streaming
 
 
@@ -34,7 +34,7 @@ async def test_text_stream_creates_message_without_generation_task(tmp_path, mon
 
         assert accepted.data.task_id == run_id
         async with session_local() as db:
-            assert list((await db.scalars(select(GenerationTask))).all()) == []
+            assert list((await db.scalars(select(Task))).all()) == []
         assert await text_chat_streaming.request_text_stream_cancel(
             session_id="text-session", task_id=run_id, reason="user_cancelled"
         )

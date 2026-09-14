@@ -11,6 +11,8 @@ description: "记录当前正在推进的开发计划、改造方案与阶段性
 
 当前计划入口：
 
+- [异步任务体系简化评估（提案）](/docs/plans/async-task-simplification-assessment/)
+- [任务与文件表结构简化方案（提案）](/docs/plans/async-task-schema-simplification/)
 - [开发规划](/docs/plans/development-plan/)
 - [任务异步化与取消方案](/docs/plans/task-async-cancellation-plan/)
 - [Alembic 统一数据库迁移方案](/docs/plans/alembic-unified-migration-plan/)

@@ -6,15 +6,13 @@ import json
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
-from app.core.integrations.openai.images import OpenAIImageApiAdapter
-from app.core.integrations.vidu.images import ViduImageApiAdapter, build_create_image_body
-from app.core.tasks.image_generation_tasks import ViduImageGenerationTask
 from app.core.integrations.volcengine.images import (
-    VolcengineImageApiAdapter,
     build_volcengine_image_generations_url,
 )
-from app.core.contracts.image_generation import ImageGenerationInput, InputImageRef
+from app.core.contracts.provider_media import ProviderImageInput as ImageGenerationInput, ProviderImageReference as InputImageRef
+from app.core.integrations.media_provider import MediaProvider
 from app.core.contracts.provider import ProviderConfig
 from app.core.integrations.image_capabilities import (
     ImageModelCapability,
@@ -23,11 +21,10 @@ from app.core.integrations.image_capabilities import (
 )
 
 
-def _projected_image_reference(image_url: str | None) -> InputImageRef:
-    """构造仅在 Provider 调用期间存在的参考图 URL 投影。"""
-    reference = InputImageRef.model_construct(file_id=None)
-    object.__setattr__(reference, "image_url", image_url)
-    return reference
+def _projected_image_reference(image_url: str) -> InputImageRef:
+    """使用经过校验的执行期图片引用。"""
+    return InputImageRef(image_url=image_url)
+
 
 
 def _with_projected_images(
@@ -65,13 +62,12 @@ async def test_openai_image_adapter_generations(monkeypatch: pytest.MonkeyPatch)
     _patch_httpx_client(monkeypatch, httpx.MockTransport(handler))
     cfg = ProviderConfig(provider="openai", api_key="sk-test", base_url="https://api.openai.com/v1")
     inp = ImageGenerationInput(prompt="hello", n=1, watermark=False)
-    result = await OpenAIImageApiAdapter().generate(cfg=cfg, inp=inp, timeout_s=30.0)
+    result = await _submit(cfg=cfg, input_=inp)
     assert captured["path"].endswith("/images/generations")
     body = json.loads(captured["body"])
     assert body["prompt"] == "hello"
     assert body["watermark"] is False
-    assert result.provider == "openai"
-    assert result.images[0].url == "https://cdn.example.com/1.png"
+    assert result[0].url == "https://cdn.example.com/1.png"
 
 
 @pytest.mark.asyncio
@@ -91,10 +87,10 @@ async def test_openai_image_adapter_edits_when_references(monkeypatch: pytest.Mo
         watermark=True,
     )
     inp = _with_projected_images(inp, [_projected_image_reference("https://example.com/ref.png")])
-    result = await OpenAIImageApiAdapter().generate(cfg=cfg, inp=inp, timeout_s=30.0)
+    result = await _submit(cfg=cfg, input_=inp)
     body = json.loads(captured["body"])
     assert body["watermark"] is True
-    assert result.images[0].b64_json == "abc"
+    assert result[0].b64_json == "abc"
 
 
 @pytest.mark.asyncio
@@ -124,7 +120,7 @@ async def test_openai_image_adapter_resolves_video_reference_size(monkeypatch: p
         purpose="video_reference",
     )
     try:
-        await OpenAIImageApiAdapter().generate(cfg=cfg, inp=inp, timeout_s=30.0)
+        await _submit(cfg=cfg, input_=inp)
         body = json.loads(captured["body"])
         assert body["size"] == "1792x1024"
     finally:
@@ -166,10 +162,8 @@ async def test_volcengine_image_adapter_generations(monkeypatch: pytest.MonkeyPa
         resolution_profile="standard",
         purpose="video_reference",
     )
-    result = await VolcengineImageApiAdapter().generate(cfg=cfg, inp=inp, timeout_s=30.0)
-    assert result.provider == "volcengine"
-    assert result.provider_task_id == "task-xyz"
-    assert result.images[0].url == "https://volc.example/v.mp4"
+    result = await _submit(cfg=cfg, input_=inp)
+    assert result[0].url == "https://volc.example/v.mp4"
 
 
 def test_volcengine_image_url_discards_misconfigured_video_operation_path() -> None:
@@ -211,11 +205,10 @@ async def test_vidu_image_adapter_create_and_get(monkeypatch: pytest.MonkeyPatch
         resolution_profile="high",
         purpose="video_reference",
     )
-    adapter = ViduImageApiAdapter()
-    task_id = await adapter.create_image(cfg=cfg, inp=inp, timeout_s=30.0)
+    task_id = await _submit(cfg=cfg, input_=inp)
     assert task_id == "vidu-image-1"
-    creation = await adapter.get_creation(cfg=cfg, task_id=task_id, timeout_s=30.0)
-    assert creation["creations"][0]["url"] == "https://cdn.vidu.example/image.png"
+    creation = await _poll(cfg=cfg, task_id=task_id, kind="image_generation")
+    assert creation.outputs[0].url == "https://cdn.vidu.example/image.png"
 
 
 @pytest.mark.asyncio
@@ -226,47 +219,32 @@ async def test_vidu_image_adapter_exposes_provider_error_summary(monkeypatch: py
         return httpx.Response(401, json={"code": "invalid_token", "message": "token expired"})
 
     _patch_httpx_client(monkeypatch, httpx.MockTransport(handler))
-    with pytest.raises(RuntimeError, match="HTTP 401.*invalid_token"):
-        await ViduImageApiAdapter().create_image(
+    with pytest.raises(httpx.HTTPStatusError, match="401"):
+        await _submit(
             cfg=ProviderConfig(provider="vidu", api_key="bad-key"),
-            inp=ImageGenerationInput(prompt="a scene", model="viduq2"),
-            timeout_s=30.0,
+            input_=ImageGenerationInput(prompt="a scene", model="viduq2"),
         )
 
 
-def test_vidu_image_body_rejects_reference_without_worker_projection() -> None:
-    """Vidu 只能接收 Worker 已投影的 URL 或 data URL。"""
-    inp = ImageGenerationInput(
-        prompt="a scene",
-        model="viduq2",
-    )
-    inp = _with_projected_images(inp, [_projected_image_reference(None)])
-    with pytest.raises(ValueError, match="require image_url"):
-        build_create_image_body(inp)
+def test_provider_image_reference_requires_url() -> None:
+    """缺少地址在执行期 DTO 校验时被拒绝，不通过旁路注入非法引用。"""
+    with pytest.raises(ValidationError):
+        InputImageRef(image_url=None)
+
 
 
 @pytest.mark.asyncio
-async def test_vidu_image_task_polls_creation_to_result() -> None:
-    """Task 层应把 Vidu 的异步 creation 结果转换为统一图片结果。"""
+async def test_vidu_image_poll_normalizes_creation(monkeypatch) -> None:
+    """一次查询将 Vidu 图片输出归一化，不在适配器内循环等待。"""
+    def handler(request):
+        """模拟成功的 creation 响应。"""
+        assert request.method == "GET"
+        return httpx.Response(200, json={"state": "success", "creations": [{"url": "https://vidu.example/image.png"}]})
+    _patch_httpx_client(monkeypatch, httpx.MockTransport(handler))
+    result = await _poll(cfg=ProviderConfig(provider="vidu", api_key="key"), task_id="image-2", kind="image_generation")
+    assert result.status == "succeeded"
+    assert result.outputs[0].url == "https://vidu.example/image.png"
 
-    class _Adapter:
-        async def create_image(self, **_: object) -> str:
-            return "vidu-image-2"
-
-        async def get_creation(self, **_: object) -> dict[str, object]:
-            return {"state": "success", "creations": [{"url": "https://vidu.example/image.png"}]}
-
-    task = ViduImageGenerationTask(
-        adapter=_Adapter(),  # type: ignore[arg-type]
-        provider_config=ProviderConfig(provider="vidu", api_key="key"),
-        input_=ImageGenerationInput(prompt="a scene", model="viduq2"),
-        poll_interval_s=0,
-    )
-    await task.run()
-    result = await task.get_result()
-    assert result is not None
-    assert result.provider == "vidu"
-    assert result.images[0].url == "https://vidu.example/image.png"
 
 
 @pytest.mark.asyncio
@@ -287,7 +265,18 @@ async def test_openai_image_adapter_rejects_unsupported_watermark(monkeypatch: p
     inp = ImageGenerationInput(prompt="hello", model="gpt-image-no-wm-1", n=1, watermark=True)
     try:
         with pytest.raises(ValueError) as exc_info:
-            await OpenAIImageApiAdapter().generate(cfg=cfg, inp=inp, timeout_s=30.0)
+            await _submit(cfg=cfg, input_=inp)
         assert "watermark is not supported" in str(exc_info.value)
     finally:
         clear_image_model_capability_overrides(provider="openai")
+
+async def _submit(*, cfg, input_):
+    """通过新供应商入口验证单次提交协议。"""
+    async with httpx.AsyncClient() as client:
+        return await MediaProvider(client).submit(cfg, input_)
+
+
+async def _poll(*, cfg, task_id, kind="video_generation"):
+    """通过新供应商入口验证一次状态观察及结果归一化。"""
+    async with httpx.AsyncClient() as client:
+        return await MediaProvider(client).poll(cfg, task_id=task_id, kind=kind)

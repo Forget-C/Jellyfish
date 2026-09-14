@@ -59,10 +59,8 @@ from app.services.script_extraction_cache import (
     set_cached_script_extract,
 )
 from app.services.studio.script_division import write_division_result_to_chapter
-from app.services.studio import (
-    sync_shot_extracted_candidates_from_draft,
-    sync_shot_extracted_dialogue_candidates_from_draft,
-)
+from app.services.studio.shot_extracted_candidates import sync_from_extraction_draft as sync_shot_extracted_candidates_from_draft
+from app.services.studio.shot_extracted_dialogue_candidates import sync_from_extraction_draft as sync_shot_extracted_dialogue_candidates_from_draft
 from app.services.studio.shot_semantic_defaults import apply_shot_semantic_defaults_from_draft
 from app.api.v1.routes.film.common import AsyncTaskCreateRead
 
@@ -842,12 +840,17 @@ async def simplify_script_async(
 # 7. ElementExtractorAgent - 项目级提取（最终输出）
 # ============================================================================
 
-class ScriptExtractRequest(BaseModel):
-    """项目级信息提取请求（最终输出）。"""
+class ScriptExtractAsyncRequest(BaseModel):
+    """异步提取每次新建任务都执行生成，不提供进程内缓存选项。"""
     project_id: str = Field(..., description="项目 ID", min_length=1)
     chapter_id: str = Field(..., description="章节 ID", min_length=1)
     script_division: dict[str, Any] = Field(..., description="分镜结果（ScriptDivisionResult 序列化）")
     consistency: dict[str, Any] | None = Field(None, description="一致性检查结果（可选；ScriptConsistencyCheckResult 序列化）")
+
+
+class ScriptExtractRequest(ScriptExtractAsyncRequest):
+    """同步提取保留进程内缓存及显式刷新选项。"""
+
     refresh_cache: bool = Field(False, description="是否跳过后端缓存并强制重新提取")
 
 
@@ -858,7 +861,7 @@ class ScriptExtractRequest(BaseModel):
     description="创建项目级信息提取任务并立即返回 task_id；前端可通过任务状态接口轮询。",
 )
 async def extract_script_async(
-    request: ScriptExtractRequest,
+    request: ScriptExtractAsyncRequest,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[AsyncTaskCreateRead]:
     task_info = await create_extract_task(
@@ -867,7 +870,6 @@ async def extract_script_async(
         chapter_id=request.chapter_id,
         script_division=request.script_division,
         consistency=request.consistency,
-        refresh_cache=request.refresh_cache,
     )
     await db.commit()
     return success_response(

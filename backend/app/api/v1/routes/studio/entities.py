@@ -15,7 +15,7 @@ from app.schemas.studio.entity_existence import (
 )
 from app.schemas.studio.cast import ActorCreate, ActorUpdate, CharacterCreate, CharacterUpdate
 from app.schemas.studio.assets import SceneCreate, SceneUpdate, PropCreate, PropUpdate, CostumeCreate, CostumeUpdate
-from app.services.studio import StudioEntitiesService
+from app.services.studio.entities import StudioEntitiesService
 
 router = APIRouter()
 

@@ -9,6 +9,7 @@ from app.api.utils import apply_order, paginate
 from app.models.studio import ShotDetail, ShotFrameImage
 from app.schemas.common import ApiResponse, PaginatedData, paginated_response
 from app.schemas.studio.shots import ShotFrameImageCreate, ShotFrameImageRead, ShotFrameImageUpdate
+from app.services.studio.files import require_available_file
 from app.services.common import (
     create_and_refresh,
     delete_if_exists,
@@ -58,6 +59,8 @@ async def create(
 ) -> ShotFrameImage:
     """创建镜头分镜帧图片。"""
     await require_entity(db, ShotDetail, body.shot_detail_id, detail=entity_not_found("ShotDetail"), status_code=400)
+    if body.file_id is not None:
+        await require_available_file(db, file_id=body.file_id, expected_type="image")
     return await create_and_refresh(db, ShotFrameImage(**body.model_dump()))
 
 
@@ -69,7 +72,13 @@ async def update(
 ) -> ShotFrameImage:
     """更新镜头分镜帧图片。"""
     obj = await get_or_404(db, ShotFrameImage, image_id, detail=entity_not_found("ShotFrameImage"))
-    patch_model(obj, body.model_dump(exclude_unset=True))
+    if body.file_id is not None:
+        await require_available_file(db, file_id=body.file_id, expected_type="image")
+    update_data = body.model_dump(exclude_unset=True)
+    if "file_id" in update_data:
+        # SQL 原子递增，避免并发手动采用丢失版本变化。
+        obj.version_id = ShotFrameImage.version_id + 1
+    patch_model(obj, update_data)
     return await flush_and_refresh(db, obj)
 
 

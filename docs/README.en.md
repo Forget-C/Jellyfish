@@ -74,7 +74,7 @@ Notes:
 - `openapi:update` fetches `http://127.0.0.1:8000/openapi.json` into `front/openapi.json`, then generates code under `front/src/services/generated/`.
 - To change the API base URL, use `VITE_BACKEND_URL` (build-time) or inject `BACKEND_URL` at runtime (served as `/env.js` and loaded by `front/index.html`); see `front/src/services/openapi.ts`.
 
-## 🐳 Run with Docker Compose (MySQL + Redis + RustFS + Backend + Celery Worker + Front)
+## 🐳 Run with Docker Compose (MySQL + RustFS + Backend + Task Worker + Front)
 
 The repository ships a ready-to-run compose setup under `deploy/compose/`.
 
@@ -83,7 +83,6 @@ The repository ships a ready-to-run compose setup under `deploy/compose/`.
 - Frontend: `http://localhost:7788`
 - Backend: `http://localhost:8000` (Swagger at `/docs`)
 - MySQL: `localhost:${MYSQL_PORT:-3306}`
-- Redis: `localhost:${REDIS_PORT:-6379}`
 - RustFS (S3 API): `http://localhost:${RUSTFS_PORT:-9000}` (Console: `http://localhost:${RUSTFS_CONSOLE_PORT:-9001}`)
 
 ### Start
@@ -96,56 +95,18 @@ docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.y
 On startup, `backend-migrate` runs the Alembic revision chain and records the
 applied revision in `alembic_version`. After it succeeds,
 `backend-seed-system-data` applies idempotent system prompt-template seed data.
-The backend and Celery worker only start after both one-off services complete.
+The backend and task worker only start after both one-off services complete.
 
-Compose also starts:
+Compose starts one `task-worker` process (`python -m app.task_worker`). It reads
+queued tasks from MySQL and polls provider IDs for remote media jobs. Redis and
+Celery are no longer required. Task status and history come from `tasks`, through
+the `/api/v1/film/tasks` APIs.
 
-- `redis`
-  - used as the Celery broker
-- `celery-worker`
-  - executes long-running tasks such as `divide / extract`
-
-### Redis / Celery broker configuration
-
-You can configure Redis separately in compose via:
-
-- `REDIS_PORT`
-- `REDIS_DB`
-- `REDIS_PASSWORD`
-
-If `CELERY_BROKER_URL` is **not explicitly set**, the backend builds it from the Redis settings using:
-
-```text
-redis://[:password@]REDIS_HOST:REDIS_PORT/REDIS_DB
-```
-
-In the compose setup the defaults are:
-
-```text
-REDIS_HOST=redis
-REDIS_PORT=6379
-REDIS_DB=${REDIS_DB:-0}
-```
-
-### First-round Celery verification
-
-After startup, verify the following first:
-
-1. `redis` is `healthy`
-2. `celery-worker` logs contain `ready`
-3. Trigger:
-   - `Extract storyboard` from the shot management page
-   - `Extract and refresh candidates` from the shot edit page
-4. Refresh the page and keep checking:
-   - chapter detail APIs
-   - shot list APIs
-   - `/api/v1/film/tasks/{task_id}/status`
-
-The main success criteria are:
-
-- long-running `divide / extract` work is executed by `celery-worker`
-- `backend` keeps responding to other APIs
-- task status can still be recovered after page refresh
+Do not run old and new workers together. Back up the database and stop API/worker
+processes before upgrading an existing environment. The task schema migration
+removes old execution history while retaining business records and stored files;
+new task history is kept in the new tables. Non-empty unversioned databases are
+not automatically stamped. See the database migration documentation for details.
 
 ## 🧑‍💻 Development setup (frontend & backend separately)
 
@@ -165,6 +126,15 @@ uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 Before opening a PR, you can run `uv sync --group dev` and `uv run pylint app` under `backend` for static analysis (see [backend/README.md](../backend/README.md)).
 
+### Start the task worker
+
+After migrations and system seeds complete, run one worker in another terminal:
+
+```bash
+cd backend
+uv run python -m app.task_worker
+```
+
 ### Start frontend
 
 ```bash
@@ -173,13 +143,13 @@ pnpm install
 pnpm dev
 ```
 
-### (Optional) Run only dependencies: MySQL + Redis + RustFS
+### (Optional) Run only dependencies: MySQL + RustFS
 
-If you want to use MySQL + Redis + RustFS in development (instead of the default SQLite), start only the infrastructure services:
+For local development with the supported MySQL migration chain, start the infrastructure services:
 
 ```bash
 cp deploy/compose/.env.example deploy/compose/.env
-docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.yml up -d mysql redis rustfs
+docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.yml up -d mysql rustfs
 ```
 
 ### Git commit message format

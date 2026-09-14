@@ -19,6 +19,7 @@ import type { PropInfoAnalysisRequest } from '../models/PropInfoAnalysisRequest'
 import type { SceneInfoAnalysisRequest } from '../models/SceneInfoAnalysisRequest';
 import type { ScriptConsistencyCheckRequest } from '../models/ScriptConsistencyCheckRequest';
 import type { ScriptDividerRequest } from '../models/ScriptDividerRequest';
+import type { ScriptExtractAsyncRequest } from '../models/ScriptExtractAsyncRequest';
 import type { ScriptExtractRequest } from '../models/ScriptExtractRequest';
 import type { ScriptOptimizeRequest } from '../models/ScriptOptimizeRequest';
 import type { ScriptSimplifyRequest } from '../models/ScriptSimplifyRequest';
@@ -414,7 +415,7 @@ export class ScriptProcessingService {
     public static extractScriptAsyncApiV1ScriptProcessingExtractAsyncPost({
         requestBody,
     }: {
-        requestBody: ScriptExtractRequest,
+        requestBody: ScriptExtractAsyncRequest,
     }): CancelablePromise<ApiResponse_AsyncTaskCreateRead_> {
         return __request(OpenAPI, {
             method: 'POST',

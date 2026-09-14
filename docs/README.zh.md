@@ -178,7 +178,7 @@ cd front
 pnpm run openapi:update
 ```
 
-## 🐳 Docker 一键启动（MySQL + Redis + RustFS + Backend + Celery Worker + Front）
+## 🐳 Docker 一键启动（MySQL + RustFS + Backend + Task Worker + Front）
 
 项目已提供开箱即用的 compose 编排，文件位于 `deploy/compose/`。
 
@@ -187,7 +187,6 @@ pnpm run openapi:update
 - 前端：`http://localhost:7788`
 - 后端：`http://localhost:8000`（`/docs` 为 Swagger）
 - MySQL：`localhost:${MYSQL_PORT:-3306}`
-- Redis：`localhost:${REDIS_PORT:-6379}`
 - RustFS（S3 API）：`http://localhost:${RUSTFS_PORT:-9000}`（Console：`http://localhost:${RUSTFS_CONSOLE_PORT:-9001}`）
 
 ### 启动
@@ -197,16 +196,18 @@ cp deploy/compose/.env.example deploy/compose/.env
 docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.yml up --build
 ```
 
+任务由单个 `task-worker` 进程执行，不再依赖 Redis/Celery。升级已有环境前备份数据库并停止 API 与新旧 Worker；任务收缩迁移不转换旧执行历史，保留业务记录和文件，新任务历史存入新表。非空未纳管数据库不会自动登记迁移版本。
+
 ## 🧑‍💻 开发环境启动（前后端分离）
 
-如需本地启动前后端、复用 Docker Compose 拉起的中间件，先复制配套环境变量，并启动 MySQL、Redis、RustFS、数据库迁移和系统种子任务：
+如需本地启动前后端、复用 Docker Compose 拉起的中间件，先复制配套环境变量，并启动 MySQL、RustFS、数据库迁移和系统种子任务：
 
 ```bash
 cp deploy/compose/.env.example deploy/compose/.env
 cp backend/.env.example backend/.env
 cp front/.env.example front/.env
 docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.yml \
-  up -d mysql redis rustfs backend-migrate backend-seed-system-data
+  up -d mysql rustfs backend-migrate backend-seed-system-data
 ```
 
 `backend/.env.example` 中的默认 MySQL 与 RustFS 凭据已和 `deploy/compose/.env.example` 对齐。如修改 Compose 的对应凭据，也请同步修改本地的 `backend/.env`。
@@ -217,6 +218,15 @@ docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.y
 cd backend
 uv sync
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### 启动任务 Worker
+
+迁移及系统种子执行成功后，另开终端启动一个 Worker：
+
+```bash
+cd backend
+uv run python -m app.task_worker
 ```
 
 ### 启动前端

@@ -15,6 +15,17 @@ from app.core.contracts.generation import (
 )
 from app.models.experiment_sessions import ExperimentMessage
 from app.services.generation.submission import GenerationAccepted
+from app.schemas.studio.experiment_sessions import ExperimentMessageRead
+
+
+@pytest.fixture(autouse=True)
+def isolate_message_projection(monkeypatch):
+    """这里验证路由编排；消息状态投影另由真实数据库测试覆盖。"""
+    async def read(db, messages):
+        """投影只能在提交完成后执行。"""
+        assert db.commits == 1
+        return [ExperimentMessageRead.model_validate(message) for message in messages]
+    monkeypatch.setattr(route, "read_experiment_messages", read)
 
 
 class _DummyDB:
@@ -68,7 +79,7 @@ def _message(message_id: str, role: str) -> ExperimentMessage:
         sequence=1 if role == "user" else 2,
         role=role,
         content="最终提示词",
-        status="pending" if role == "task" else None,
+        status=None,
         payload={},
         created_at=timestamp,
         updated_at=timestamp,
@@ -76,8 +87,8 @@ def _message(message_id: str, role: str) -> ExperimentMessage:
 
 
 @pytest.mark.anyio
-async def test_image_lab_task_creates_messages_before_snapshot_and_waits_for_outbox(monkeypatch) -> None:
-    """图片实验室提交必须先原子持久化消息与快照，再由 Outbox 投递。"""
+async def test_image_lab_task_commits_messages_and_snapshot_before_read_projection(monkeypatch) -> None:
+    """图片实验室提交先原子保存消息和任务，再查询响应投影。"""
 
     db = _DummyDB()
     user_message, task_message = _message("user-1", "user"), _message("task-message-1", "task")

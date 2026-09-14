@@ -211,35 +211,39 @@ async def get_file_info(*, key: str) -> StoredFileInfo:
     )
 
 
-async def list_files(*, prefix: str = "") -> list[StoredFileInfo]:
-    """根据前缀列出文件（最多一页，若需翻页可扩展）。"""
+async def list_files_page(
+    *, prefix: str, cursor: str | None = None, limit: int = 100,
+) -> tuple[list[StoredFileInfo], str | None]:
+    """分页列出逻辑 key；限制单批工作量，返回值可直接交给下载或删除方法。"""
+    if not 1 <= limit <= 1000:
+        raise ValueError("object page limit must be between 1 and 1000")
     client = _build_s3_client()
     bucket = settings.s3_bucket_name
-    if bucket is None:
-        raise RuntimeError("S3 未配置：缺少 s3_bucket_name")
+    base = settings.s3_base_path.strip().strip("/")
+    normalized_prefix = _normalize_key(prefix)
 
-    normalized_prefix = _normalize_key(prefix) if prefix else settings.s3_base_path.strip().strip("/")
+    def _list() -> dict[str, Any]:
+        """在线程池中查询一页对象，透传供应商的不透明游标。"""
+        params = dict(Bucket=bucket, Prefix=normalized_prefix, MaxKeys=limit)
+        if cursor:
+            params["ContinuationToken"] = cursor
+        return client.list_objects_v2(**params)
 
-    def _list() -> list[dict[str, Any]]:
-        resp = client.list_objects_v2(Bucket=bucket, Prefix=normalized_prefix or None)
-        return resp.get("Contents", [])  # type: ignore[no-any-return]
-
-    contents = await to_thread.run_sync(_list)
-
-    results: list[StoredFileInfo] = []
-    for item in contents:
+    response = await to_thread.run_sync(_list)
+    results = []
+    for item in response.get("Contents", []):
         key = item["Key"]
-        size = int(item.get("Size") or 0)
-        url = _build_public_url(key)
-        results.append(
-            StoredFileInfo(
-                key=key,
-                url=url,
-                size=size,
-                extra={"LastModified": item.get("LastModified"), "StorageClass": item.get("StorageClass")},
-            )
-        )
-    return results
+        if not key.startswith(normalized_prefix):
+            raise ValueError("storage returned an object outside requested prefix")
+        logical_key = key[len(base) + 1:] if base else key
+        results.append(StoredFileInfo(
+            key=logical_key, url=_build_public_url(logical_key), size=int(item.get("Size") or 0),
+            extra={"LastModified": item.get("LastModified")},
+        ))
+    next_cursor = response.get("NextContinuationToken") if response.get("IsTruncated") else None
+    if response.get("IsTruncated") and not next_cursor:
+        raise ValueError("storage pagination cursor missing")
+    return results, next_cursor
 
 
 async def delete_file(*, key: str) -> None:

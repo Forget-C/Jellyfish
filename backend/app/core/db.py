@@ -1,7 +1,5 @@
 """SQLAlchemy 异步引擎与会话。"""
 
-from typing import Any
-
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     AsyncEngine,
@@ -9,19 +7,24 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.engine import make_url
 
 from app.config import settings
 
 
 def _build_engine() -> AsyncEngine:
+    """短事务使用最新已提交读；文件行锁后的引用检查不能沿用更早的快照。"""
+    options = {"isolation_level": "READ COMMITTED"} if make_url(settings.database_url).get_backend_name() == "mysql" else {}
     return create_async_engine(
         settings.database_url,
         echo=settings.debug,
         future=True,
+        **options,
     )
 
 
 def _build_session_maker(bind_engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
+    """创建可在短事务间复用的异步会话工厂。"""
     return async_sessionmaker(
         bind_engine,
         class_=AsyncSession,
@@ -31,26 +34,8 @@ def _build_session_maker(bind_engine: AsyncEngine) -> async_sessionmaker[AsyncSe
     )
 
 
-class _AsyncSessionMakerProxy:
-    """可重绑定的 sessionmaker 代理。
-
-    Celery prefork 模式下，worker 子进程不能继续复用父进程里初始化的
-    async engine / sessionmaker。这里保持导入对象稳定，同时允许在子进程
-    启动后重新绑定底层 sessionmaker。
-    """
-
-    def __init__(self, maker: async_sessionmaker[AsyncSession]) -> None:
-        self._maker = maker
-
-    def configure(self, maker: async_sessionmaker[AsyncSession]) -> None:
-        self._maker = maker
-
-    def __call__(self, *args: Any, **kwargs: Any) -> AsyncSession:
-        return self._maker(*args, **kwargs)
-
-
 engine = _build_engine()
-async_session_maker = _AsyncSessionMakerProxy(_build_session_maker(engine))
+async_session_maker = _build_session_maker(engine)
 
 
 class Base(DeclarativeBase):
@@ -59,31 +44,6 @@ class Base(DeclarativeBase):
     pass
 
 
-async def init_db() -> None:
-    """创建所有表（开发/迁移用）。"""
-    # 确保 ORM 模型已导入，从而注册到 Base.metadata
-    import app.models.llm  # noqa: F401  # pylint: disable=unused-import
-    import app.models.studio  # noqa: F401
-    import app.models.task  # noqa: F401
-    import app.models.task_links  # noqa: F401
-
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-
 async def close_db() -> None:
     """关闭数据库连接。"""
     await engine.dispose()
-
-
-def reset_db_runtime() -> None:
-    """在 Celery worker 子进程中重建 engine 与 sessionmaker。
-
-    这样可以避免 prefork 继承父进程中的 async engine，导致连接对象和事件循环
-    绑定错乱，触发 Future attached to a different loop。
-    """
-
-    global engine
-
-    engine = _build_engine()
-    async_session_maker.configure(_build_session_maker(engine))

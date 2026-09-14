@@ -1,13 +1,9 @@
-"""给 Celery worker 使用的同步任务执行服务。"""
+"""剧本生成的纯计算函数；不管理任务状态或持有网络请求期间的数据库会话。"""
 
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any
-
-from fastapi import HTTPException
-from sqlalchemy.orm import Session
 
 from app.chains.agents import ElementExtractorAgent, ScriptDividerAgent
 from app.chains.agents import (
@@ -29,421 +25,135 @@ from app.chains.agents.script_processing_agents import (
     ScriptSimplificationResult,
     VariantAnalysisResult,
 )
-from app.core.db_sync import sync_session_maker
-from app.services.script_extraction_cache import (
-    build_script_extract_cache_key,
-    get_cached_script_extract,
-    set_cached_script_extract,
-)
-from app.services.llm.runtime import build_default_text_llm_sync
-from app.services.studio.script_division import write_division_result_to_chapter_sync
-from app.services.studio.shot_extracted_candidates import (
-    sync_from_extraction_draft_sync as sync_shot_extracted_candidates_from_draft_sync,
-)
-from app.services.studio.shot_extracted_dialogue_candidates import (
-    sync_from_extraction_draft_sync as sync_shot_extracted_dialogue_candidates_from_draft_sync,
-)
-from app.services.studio.shot_semantic_defaults import apply_shot_semantic_defaults_from_draft_sync
-from app.services.worker.task_executor import (
-    AbstractLLMResultGenerator,
-    AbstractWorkerTaskExecutor,
-    WorkerTaskContext,
-)
 
 
-logger = logging.getLogger(__name__)
-
-
-class DivideResultGenerator(AbstractLLMResultGenerator):
-    thinking = False
-
-    def generate_with_llm(self, llm, run_args: dict[str, Any]) -> ScriptDivisionResult:
-        agent = ScriptDividerAgent(llm)
-        return agent.divide_script(script_text=str(run_args.get("script_text") or ""))
-
-
-class _ScriptProcessingTaskExecutor(AbstractWorkerTaskExecutor):
-    """剧本任务执行基类：只消费统一提交时冻结的 command/snapshot。"""
-
-    def load_run_args(self, ctx: WorkerTaskContext) -> dict[str, Any]:
-        """拒绝非文本 Agent 命令，避免新任务重新依赖可变的路由入参。"""
-
-        payload = dict(ctx.task.payload or {})
-        command = payload.get("command")
-        snapshot = payload.get("snapshot")
-        if not isinstance(command, dict) or not isinstance(snapshot, dict):
-            raise RuntimeError("script task command and snapshot are required")
-        if command.get("operation") != "text_agent":
-            raise RuntimeError("script task command must use text_agent")
-        run_args = snapshot.get("run_args")
-        if not isinstance(run_args, dict):
-            raise RuntimeError("script task snapshot.run_args is required")
-        return dict(run_args)
-
-
-class ExtractResultGenerator(AbstractLLMResultGenerator):
-    thinking = False
-
-    def generate(self, db: Session, run_args: dict[str, Any]) -> tuple[Any, bool]:
-        return generate_extraction_result(
-            db=db,
-            project_id=str(run_args.get("project_id") or ""),
-            chapter_id=str(run_args.get("chapter_id") or ""),
-            script_division=dict(run_args.get("script_division") or {}),
-            consistency=dict(run_args.get("consistency") or {}) if run_args.get("consistency") else None,
-            refresh_cache=bool(run_args.get("refresh_cache")),
-        )
-
-    def generate_with_llm(self, llm, run_args: dict[str, Any]) -> Any:  # pragma: no cover - 不直接走这里
-        raise NotImplementedError
-
-
-class ConsistencyResultGenerator(AbstractLLMResultGenerator):
-    thinking = True
-
-    def generate_with_llm(self, llm, run_args: dict[str, Any]) -> ScriptConsistencyCheckResult:
-        agent = ConsistencyCheckerAgent(llm)
-        return agent.extract(script_text=str(run_args.get("script_text") or ""))
-
-
-class MergeResultGenerator(AbstractLLMResultGenerator):
-    """执行冻结的跨镜实体合并输入，产出可持久化的实体库结果。"""
-
-    thinking = True
-
-    def generate_with_llm(self, llm, run_args: dict[str, Any]) -> EntityMergeResult:
-        agent = EntityMergerAgent(llm)
-        return agent.extract(
-            all_extractions_json=json.dumps(run_args.get("all_shot_extractions") or [], ensure_ascii=False),
-            historical_library_json=json.dumps(run_args.get("historical_library") or {}, ensure_ascii=False),
-            script_division_json=json.dumps(run_args.get("script_division") or {}, ensure_ascii=False),
-            previous_merge_json=json.dumps(run_args.get("previous_merge") or {}, ensure_ascii=False),
-            conflict_resolutions_json=json.dumps(run_args.get("conflict_resolutions") or [], ensure_ascii=False),
-        )
-
-
-class VariantResultGenerator(AbstractLLMResultGenerator):
-    """执行冻结的实体变体分析输入，避免 Worker 重新读取路由状态。"""
-
-    thinking = True
-
-    def generate_with_llm(self, llm, run_args: dict[str, Any]) -> VariantAnalysisResult:
-        agent = VariantAnalyzerAgent(llm)
-        return agent.extract(
-            merged_library_json=json.dumps(run_args.get("merged_library") or {}, ensure_ascii=False),
-            all_extractions_json=json.dumps(run_args.get("all_shot_extractions") or [], ensure_ascii=False),
-            script_division_json=json.dumps(run_args.get("script_division") or {}, ensure_ascii=False),
-        )
-
-
-class CharacterPortraitResultGenerator(AbstractLLMResultGenerator):
-    thinking = True
-
-    def generate_with_llm(self, llm, run_args: dict[str, Any]) -> Any:
-        agent = CharacterPortraitAnalysisAgent(llm)
-        return agent.analyze_character_description(
-            character_context=run_args.get("character_context"),
-            character_description=str(run_args.get("character_description") or ""),
-        )
-
-
-class PropInfoResultGenerator(AbstractLLMResultGenerator):
-    thinking = True
-
-    def generate_with_llm(self, llm, run_args: dict[str, Any]) -> Any:
-        agent = PropInfoAnalysisAgent(llm)
-        return agent.analyze_prop_description(
-            prop_context=run_args.get("prop_context"),
-            prop_description=str(run_args.get("prop_description") or ""),
-        )
-
-
-class SceneInfoResultGenerator(AbstractLLMResultGenerator):
-    thinking = True
-
-    def generate_with_llm(self, llm, run_args: dict[str, Any]) -> Any:
-        agent = SceneInfoAnalysisAgent(llm)
-        return agent.analyze_scene_description(
-            scene_context=run_args.get("scene_context"),
-            scene_description=str(run_args.get("scene_description") or ""),
-        )
-
-
-class CostumeInfoResultGenerator(AbstractLLMResultGenerator):
-    thinking = True
-
-    def generate_with_llm(self, llm, run_args: dict[str, Any]) -> Any:
-        agent = CostumeInfoAnalysisAgent(llm)
-        return agent.analyze_costume_description(
-            costume_context=run_args.get("costume_context"),
-            costume_description=str(run_args.get("costume_description") or ""),
-        )
-
-
-class ScriptOptimizationResultGenerator(AbstractLLMResultGenerator):
-    thinking = True
-
-    def generate_with_llm(self, llm, run_args: dict[str, Any]) -> ScriptOptimizationResult:
-        agent = ScriptOptimizerAgent(llm)
-        return agent.extract(
-            script_text=str(run_args.get("script_text") or ""),
-            consistency_json=json.dumps(dict(run_args.get("consistency") or {}), ensure_ascii=False),
-        )
-
-
-class ScriptSimplificationResultGenerator(AbstractLLMResultGenerator):
-    thinking = True
-
-    def generate_with_llm(self, llm, run_args: dict[str, Any]) -> ScriptSimplificationResult:
-        agent = ScriptSimplifierAgent(llm)
-        return agent.extract(script_text=str(run_args.get("script_text") or ""))
-
-
-class DivideTaskExecutor(_ScriptProcessingTaskExecutor):
-    task_kind = "script_divide"
-    timeout_seconds = 1800.0
-
-    def __init__(self) -> None:
-        super().__init__(session_maker=sync_session_maker)
-        self._generator = DivideResultGenerator()
-
-    def execute(self, ctx: WorkerTaskContext, run_args: dict[str, Any]) -> ScriptDivisionResult:
-        return self._generator.generate(ctx.db, run_args)
-
-    def should_apply(self, ctx: WorkerTaskContext, run_args: dict[str, Any], result: ScriptDivisionResult) -> bool:  # noqa: ARG002
-        return bool(run_args.get("write_to_db"))
-
-    def apply_result(self, ctx: WorkerTaskContext, run_args: dict[str, Any], result: ScriptDivisionResult) -> None:
-        chapter_id = str(run_args.get("chapter_id") or "")
-        if not chapter_id:
-            raise HTTPException(status_code=400, detail="chapter_id is required for write_to_db=true")
-        apply_division_result(ctx.db, chapter_id=chapter_id, result=result)
-
-
-class ExtractTaskExecutor(_ScriptProcessingTaskExecutor):
-    task_kind = "script_extract"
-    timeout_seconds = 1800.0
-
-    def __init__(self) -> None:
-        super().__init__(session_maker=sync_session_maker)
-        self._generator = ExtractResultGenerator()
-
-    def execute(self, ctx: WorkerTaskContext, run_args: dict[str, Any]) -> tuple[Any, bool]:
-        return self._generator.generate(ctx.db, run_args)
-
-    def serialize_result(self, result: tuple[Any, bool]) -> dict[str, Any]:
-        draft, from_cache = result
-        return {
-            "draft": draft.model_dump(),
-            "from_cache": from_cache,
-        }
-
-    def should_apply(self, ctx: WorkerTaskContext, run_args: dict[str, Any], result: tuple[Any, bool]) -> bool:  # noqa: ARG002
-        return True
-
-    def apply_result(self, ctx: WorkerTaskContext, run_args: dict[str, Any], result: tuple[Any, bool]) -> None:
-        draft, _from_cache = result
-        chapter_id = str(run_args.get("chapter_id") or "")
-        apply_extraction_result(ctx.db, chapter_id=chapter_id, draft=draft)
-
-
-class ConsistencyTaskExecutor(_ScriptProcessingTaskExecutor):
-    task_kind = "script_consistency"
-    succeeded_progress = 100
-    timeout_seconds = 900.0
-
-    def __init__(self) -> None:
-        super().__init__(session_maker=sync_session_maker)
-        self._generator = ConsistencyResultGenerator()
-
-    def execute(self, ctx: WorkerTaskContext, run_args: dict[str, Any]) -> ScriptConsistencyCheckResult:
-        return self._generator.generate(ctx.db, run_args)
-
-
-class MergeTaskExecutor(_ScriptProcessingTaskExecutor):
-    """统一 Celery Worker 中执行实体合并任务。"""
-
-    task_kind = "script_merge"
-    succeeded_progress = 100
-    timeout_seconds = 1800.0
-
-    def __init__(self) -> None:
-        super().__init__(session_maker=sync_session_maker)
-        self._generator = MergeResultGenerator()
-
-    def execute(self, ctx: WorkerTaskContext, run_args: dict[str, Any]) -> EntityMergeResult:
-        return self._generator.generate(ctx.db, run_args)
-
-
-class VariantTaskExecutor(_ScriptProcessingTaskExecutor):
-    """统一 Celery Worker 中执行实体变体分析任务。"""
-
-    task_kind = "script_variant"
-    succeeded_progress = 100
-    timeout_seconds = 900.0
-
-    def __init__(self) -> None:
-        super().__init__(session_maker=sync_session_maker)
-        self._generator = VariantResultGenerator()
-
-    def execute(self, ctx: WorkerTaskContext, run_args: dict[str, Any]) -> VariantAnalysisResult:
-        return self._generator.generate(ctx.db, run_args)
-
-
-class _SimpleLLMTaskExecutor(_ScriptProcessingTaskExecutor):
-    succeeded_progress = 100
-    timeout_seconds = 900.0
-    generator_class: type[AbstractLLMResultGenerator]
-
-    def __init__(self) -> None:
-        super().__init__(session_maker=sync_session_maker)
-        self._generator = self.generator_class()
-
-    def execute(self, ctx: WorkerTaskContext, run_args: dict[str, Any]) -> Any:
-        return self._generator.generate(ctx.db, run_args)
-
-
-class CharacterPortraitTaskExecutor(_SimpleLLMTaskExecutor):
-    task_kind = "script_character_portrait"
-    generator_class = CharacterPortraitResultGenerator
-
-
-class PropInfoTaskExecutor(_SimpleLLMTaskExecutor):
-    task_kind = "script_prop_info"
-    generator_class = PropInfoResultGenerator
-
-
-class SceneInfoTaskExecutor(_SimpleLLMTaskExecutor):
-    task_kind = "script_scene_info"
-    generator_class = SceneInfoResultGenerator
-
-
-class CostumeInfoTaskExecutor(_SimpleLLMTaskExecutor):
-    task_kind = "script_costume_info"
-    generator_class = CostumeInfoResultGenerator
-
-
-class ScriptOptimizationTaskExecutor(_SimpleLLMTaskExecutor):
-    task_kind = "script_optimize"
-    generator_class = ScriptOptimizationResultGenerator
-
-
-class ScriptSimplificationTaskExecutor(_SimpleLLMTaskExecutor):
-    task_kind = "script_simplify"
-    generator_class = ScriptSimplificationResultGenerator
-
-
-def generate_division_result(
-    *,
-    db: Session,
-    script_text: str,
-) -> ScriptDivisionResult:
-    llm = build_default_text_llm_sync(db, thinking=False)
+def _divide(llm, run_args: dict[str, Any]) -> ScriptDivisionResult:
+    """执行 divide 的冻结输入，只返回生成结果。"""
     agent = ScriptDividerAgent(llm)
-    return agent.divide_script(script_text=script_text)
+    return agent.divide_script(script_text=str(run_args.get("script_text") or ""))
 
 
-def apply_division_result(
-    db: Session,
-    *,
-    chapter_id: str,
-    result: ScriptDivisionResult,
-) -> None:
-    write_division_result_to_chapter_sync(db, chapter_id=chapter_id, result=result)
+def _consistency(llm, run_args: dict[str, Any]) -> ScriptConsistencyCheckResult:
+    """执行 consistency 的冻结输入，只返回生成结果。"""
+    agent = ConsistencyCheckerAgent(llm)
+    return agent.extract(script_text=str(run_args.get("script_text") or ""))
 
 
-def generate_extraction_result(
-    *,
-    db: Session,
-    project_id: str,
-    chapter_id: str,
-    script_division: dict[str, Any],
-    consistency: dict[str, Any] | None,
-    refresh_cache: bool,
-) -> tuple[Any, bool]:
-    cache_key = build_script_extract_cache_key(
-        project_id=project_id,
-        chapter_id=chapter_id,
-        script_division=script_division,
-        consistency=consistency,
+def _merge(llm, run_args: dict[str, Any]) -> EntityMergeResult:
+    """执行 merge 的冻结输入，只返回生成结果。"""
+    agent = EntityMergerAgent(llm)
+    return agent.extract(
+        all_extractions_json=json.dumps(run_args.get("all_shot_extractions") or [], ensure_ascii=False),
+        historical_library_json=json.dumps(run_args.get("historical_library") or {}, ensure_ascii=False),
+        script_division_json=json.dumps(run_args.get("script_division") or {}, ensure_ascii=False),
+        previous_merge_json=json.dumps(run_args.get("previous_merge") or {}, ensure_ascii=False),
+        conflict_resolutions_json=json.dumps(run_args.get("conflict_resolutions") or [], ensure_ascii=False),
     )
 
-    result = None
-    from_cache = False
-    if not refresh_cache:
-        result = get_cached_script_extract(cache_key)
-        from_cache = result is not None
 
-    if result is None:
-        llm = build_default_text_llm_sync(db, thinking=False)
-        agent = ElementExtractorAgent(llm)
-        result = agent.extract(
-            project_id=project_id,
-            chapter_id=chapter_id,
-            script_division_json=json.dumps(script_division, ensure_ascii=False),
-            consistency_json=json.dumps(consistency or {}, ensure_ascii=False),
+def _variant(llm, run_args: dict[str, Any]) -> VariantAnalysisResult:
+    """执行 variant 的冻结输入，只返回生成结果。"""
+    agent = VariantAnalyzerAgent(llm)
+    return agent.extract(
+        merged_library_json=json.dumps(run_args.get("merged_library") or {}, ensure_ascii=False),
+        all_extractions_json=json.dumps(run_args.get("all_shot_extractions") or [], ensure_ascii=False),
+        script_division_json=json.dumps(run_args.get("script_division") or {}, ensure_ascii=False),
+    )
+
+
+def _character_portrait(llm, run_args: dict[str, Any]) -> Any:
+    """执行 character_portrait 的冻结输入，只返回生成结果。"""
+    agent = CharacterPortraitAnalysisAgent(llm)
+    return agent.analyze_character_description(
+        character_context=run_args.get("character_context"),
+        character_description=str(run_args.get("character_description") or ""),
+    )
+
+
+def _prop_info(llm, run_args: dict[str, Any]) -> Any:
+    """执行 prop_info 的冻结输入，只返回生成结果。"""
+    agent = PropInfoAnalysisAgent(llm)
+    return agent.analyze_prop_description(
+        prop_context=run_args.get("prop_context"),
+        prop_description=str(run_args.get("prop_description") or ""),
+    )
+
+
+def _scene_info(llm, run_args: dict[str, Any]) -> Any:
+    """执行 scene_info 的冻结输入，只返回生成结果。"""
+    agent = SceneInfoAnalysisAgent(llm)
+    return agent.analyze_scene_description(
+        scene_context=run_args.get("scene_context"),
+        scene_description=str(run_args.get("scene_description") or ""),
+    )
+
+
+def _costume_info(llm, run_args: dict[str, Any]) -> Any:
+    """执行 costume_info 的冻结输入，只返回生成结果。"""
+    agent = CostumeInfoAnalysisAgent(llm)
+    return agent.analyze_costume_description(
+        costume_context=run_args.get("costume_context"),
+        costume_description=str(run_args.get("costume_description") or ""),
+    )
+
+
+def _optimize(llm, run_args: dict[str, Any]) -> ScriptOptimizationResult:
+    """执行 optimize 的冻结输入，只返回生成结果。"""
+    agent = ScriptOptimizerAgent(llm)
+    return agent.extract(
+        script_text=str(run_args.get("script_text") or ""),
+        consistency_json=json.dumps(dict(run_args.get("consistency") or {}), ensure_ascii=False),
+    )
+
+
+def _simplify(llm, run_args: dict[str, Any]) -> ScriptSimplificationResult:
+    """执行 simplify 的冻结输入，只返回生成结果。"""
+    agent = ScriptSimplifierAgent(llm)
+    return agent.extract(script_text=str(run_args.get("script_text") or ""))
+
+
+def generate_script_result(kind: str, llm, run_args: dict[str, Any]) -> Any:
+    """在有界线程池中调用同步 Agent；调用方负责先退出数据库会话。"""
+    required = {
+        "script_consistency": {"script_text": str},
+        "script_merge": {"all_shot_extractions": list},
+        "script_variant": {"merged_library": dict, "all_shot_extractions": list},
+    }
+    for field, value_type in required.get(kind, {}).items():
+        value = run_args.get(field)
+        if not isinstance(value, value_type) or (value_type is str and not value.strip()):
+            raise ValueError(f"missing or invalid script input: {field}")
+    if kind == "script_extract":
+        return ElementExtractorAgent(llm).extract(
+            project_id=str(run_args.get("project_id") or ""), chapter_id=str(run_args.get("chapter_id") or ""),
+            script_division_json=json.dumps(run_args.get("script_division") or {}, ensure_ascii=False),
+            consistency_json=json.dumps(run_args.get("consistency") or {}, ensure_ascii=False),
         )
-        set_cached_script_extract(cache_key, result)
-
-    return result, from_cache
-
-
-def apply_extraction_result(
-    db: Session,
-    *,
-    chapter_id: str,
-    draft: Any,
-) -> None:
-    """将提取草稿同步为候选与镜头语言默认值。"""
-
-    sync_shot_extracted_candidates_from_draft_sync(db, chapter_id=chapter_id, draft=draft)
-    sync_shot_extracted_dialogue_candidates_from_draft_sync(db, chapter_id=chapter_id, draft=draft)
-    apply_shot_semantic_defaults_from_draft_sync(db, chapter_id=chapter_id, draft=draft)
+    generators = {
+        "script_divide": _divide,
+        "script_consistency": _consistency,
+        "script_merge": _merge,
+        "script_variant": _variant,
+        "script_character_portrait": _character_portrait,
+        "script_prop_info": _prop_info,
+        "script_scene_info": _scene_info,
+        "script_costume_info": _costume_info,
+        "script_optimize": _optimize,
+        "script_simplify": _simplify,
+    }
+    return generators[kind](llm, run_args)
 
 
-def run_divide_task_sync(task_id: str) -> None:
-    DivideTaskExecutor().run(task_id)
-
-
-def run_extract_task_sync(task_id: str) -> None:
-    ExtractTaskExecutor().run(task_id)
-
-
-def run_consistency_task_sync(task_id: str) -> None:
-    ConsistencyTaskExecutor().run(task_id)
-
-
-def run_merge_task_sync(task_id: str) -> None:
-    """由统一 registry 调用实体合并 Worker。"""
-
-    MergeTaskExecutor().run(task_id)
-
-
-def run_variant_task_sync(task_id: str) -> None:
-    """由统一 registry 调用实体变体分析 Worker。"""
-
-    VariantTaskExecutor().run(task_id)
-
-
-def run_character_portrait_task_sync(task_id: str) -> None:
-    CharacterPortraitTaskExecutor().run(task_id)
-
-
-def run_prop_info_task_sync(task_id: str) -> None:
-    PropInfoTaskExecutor().run(task_id)
-
-
-def run_scene_info_task_sync(task_id: str) -> None:
-    SceneInfoTaskExecutor().run(task_id)
-
-
-def run_costume_info_task_sync(task_id: str) -> None:
-    CostumeInfoTaskExecutor().run(task_id)
-
-
-def run_script_optimization_task_sync(task_id: str) -> None:
-    ScriptOptimizationTaskExecutor().run(task_id)
-
-
-def run_script_simplification_task_sync(task_id: str) -> None:
-    ScriptSimplificationTaskExecutor().run(task_id)
+async def apply_script_result(db, *, kind: str, run_args: dict, result: Any) -> None:
+    """在 TaskService 成功交付事务中应用剧本结果，不产生网络 I/O。"""
+    chapter_id = str(run_args.get("chapter_id") or "")
+    if kind == "script_divide" and run_args.get("write_to_db"):
+        from app.services.studio.script_division import write_division_result_to_chapter_sync
+        await db.run_sync(lambda session: write_division_result_to_chapter_sync(session, chapter_id=chapter_id, result=result))
+    elif kind == "script_extract":
+        from app.services.studio.shot_extracted_candidates import sync_from_extraction_draft_sync as sync_assets
+        from app.services.studio.shot_extracted_dialogue_candidates import sync_from_extraction_draft_sync as sync_dialogue
+        from app.services.studio.shot_semantic_defaults import apply_shot_semantic_defaults_from_draft_sync
+        await db.run_sync(lambda session: sync_assets(session, chapter_id=chapter_id, draft=result))
+        await db.run_sync(lambda session: sync_dialogue(session, chapter_id=chapter_id, draft=result))
+        await db.run_sync(lambda session: apply_shot_semantic_defaults_from_draft_sync(session, chapter_id=chapter_id, draft=result))

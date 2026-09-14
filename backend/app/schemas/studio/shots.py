@@ -518,6 +518,5 @@ class ShotRuntimeSummaryRead(BaseModel):
     shot_id: str = Field(..., description="镜头 ID")
     has_active_tasks: bool = Field(..., description="是否存在进行中的关联任务")
     has_active_video_tasks: bool = Field(..., description="是否存在进行中的视频任务")
-    has_active_prompt_tasks: bool = Field(..., description="是否存在进行中的提示词任务")
     has_active_frame_tasks: bool = Field(..., description="是否存在进行中的分镜帧图片任务")
     active_task_count: int = Field(..., description="进行中的唯一任务数")

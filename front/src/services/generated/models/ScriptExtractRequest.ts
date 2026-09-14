@@ -3,7 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * 项目级信息提取请求（最终输出）。
+ * 同步提取保留进程内缓存及显式刷新选项。
  */
 export type ScriptExtractRequest = {
     /**

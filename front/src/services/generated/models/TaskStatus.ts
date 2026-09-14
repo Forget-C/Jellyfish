@@ -3,6 +3,6 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * 任务状态枚举。
+ * 本地任务唯一主状态；终态不允许重新进入执行。
  */
-export type TaskStatus = 'pending' | 'running' | 'streaming' | 'succeeded' | 'failed' | 'cancelled';
+export type TaskStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';

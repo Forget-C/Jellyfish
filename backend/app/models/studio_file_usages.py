@@ -63,7 +63,7 @@ class FileUsage(Base, TimestampMixin):
     file: Mapped["FileItem"] = relationship(back_populates="usages")
 
     __table_args__ = (
-        UniqueConstraint("file_id", "usage_kind", "source_ref", name="uq_file_usages_file_kind_ref"),
+        UniqueConstraint("file_id", "project_id", "usage_kind", "source_ref", name="uq_file_usages_file_project_kind_ref"),
         Index("ix_file_usages_project_shot", "project_id", "shot_id"),
     )
 

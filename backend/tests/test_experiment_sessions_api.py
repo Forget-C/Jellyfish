@@ -14,7 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.api.v1.routes.studio import experiment_sessions as route
 from app.core.db import Base
 from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
-from app.models.task import GenerationDeliveryMode, GenerationTask, GenerationTaskStatus
+from app.models.task import Task
+from app.services.task_service import TaskService
 from app.schemas.studio.experiment_sessions import ExperimentMessageCreate, ExperimentSessionCreate
 from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages
 
@@ -61,15 +62,10 @@ async def test_experiment_message_pagination_returns_chronological_page_and_sess
                 )
                 for index in range(4)
             ])
-            db.add(GenerationTask(
-                id="task-running", mode=GenerationDeliveryMode.async_polling,
-                task_kind="image_generation", status=GenerationTaskStatus.running, payload={}, error="",
-            ))
-            db.add(ExperimentMessage(
-                id="task-message", session_id=session_id, role="task", content="图片生成中",
-                task_id="task-running", status="running", payload={},
-                sequence=5, created_at=base_time + timedelta(seconds=5),
-            ))
+            task = await TaskService(db).submit(kind="image_generation", snapshot={},
+                target_type="experiment_session", target_id=session_id)
+            db.add(ExperimentMessage(id="task-message", session_id=session_id, role="task", content="图片生成中",
+                task_id=task.id, status=None, payload={"modality": "image"}, sequence=5))
             await db.commit()
 
             page = await route.list_experiment_messages(session_id, db, page=1, page_size=2)
@@ -194,14 +190,9 @@ async def test_experiment_session_clear_and_delete_block_only_active_tasks() -> 
             await route.create_experiment_message(
                 session_id, ExperimentMessageCreate(role="user", content="生成视频"), db
             )
-            db.add(GenerationTask(
-                id="task-active", mode=GenerationDeliveryMode.async_polling,
-                task_kind="video_generation", status=GenerationTaskStatus.pending, payload={}, error="",
-            ))
-            db.add(ExperimentMessage(
-                id="task-active-message", session_id=session_id, role="task", content="生成中",
-                task_id="task-active", status="pending", payload={}, sequence=2,
-            ))
+            task = await TaskService(db).submit(kind="video_generation", snapshot={},
+                target_type="experiment_session", target_id=session_id)
+            # 故意不创建任务消息，活动保护必须仍来自任务主表。
             await db.commit()
 
             with pytest.raises(HTTPException, match="cannot be cleared"):
@@ -209,9 +200,7 @@ async def test_experiment_session_clear_and_delete_block_only_active_tasks() -> 
             with pytest.raises(HTTPException, match="cannot be deleted"):
                 await route.delete_experiment_session(session_id, db)
 
-            task = await db.get(GenerationTask, "task-active")
-            assert task is not None
-            task.status = GenerationTaskStatus.succeeded
+            await TaskService(db).request_cancel(task.id)
             await db.commit()
 
             await route.clear_experiment_messages(session_id, db)
@@ -219,5 +208,60 @@ async def test_experiment_session_clear_and_delete_block_only_active_tasks() -> 
             await route.delete_experiment_session(session_id, db)
             with pytest.raises(HTTPException, match="not found"):
                 await route.list_experiment_messages(session_id, db)
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("terminal", ["succeeded", "failed", "cancelled"])
+async def test_task_message_status_is_read_projection_and_rejects_cross_session(terminal):
+    """任务状态只在 TaskService 维护；消息不存副本，也不展示其他会话的结果。"""
+    from app.services.studio.experiment_messages import read_experiment_messages
+    from app.schemas.studio.experiment_sessions import ExperimentMessageUpdate
+
+    db, engine = await _build_session()
+    try:
+        async with db:
+            db.add_all([ExperimentSession(id="owner", lab_type="text"), ExperimentSession(id="other", lab_type="text")])
+            await db.flush()
+            service = TaskService(db)
+            task = await service.submit(kind="text_chat", snapshot={}, target_type="experiment_session", target_id="owner")
+            message = (await append_experiment_messages(db, session_id="owner", drafts=[
+                ExperimentMessageDraft(role="task", content="生成中", task_id=task.id, payload={"modality": "text"}),
+            ]))[0]
+            foreign_task = await service.submit(kind="text_chat", snapshot={}, target_type="experiment_session", target_id="owner")
+            await service.claim(foreign_task.id, worker_id="worker")
+            await service.finish(foreign_task.id, result={"text": "其他会话内容"})
+            foreign = (await append_experiment_messages(db, session_id="other", drafts=[
+                ExperimentMessageDraft(role="task", content="错误关联", task_id=foreign_task.id, payload={"modality": "text"}),
+            ]))[0]
+            await db.commit()
+            assert (await read_experiment_messages(db, [message]))[0].status == "queued"
+            await service.claim(task.id, worker_id="worker")
+            await service.report_progress(task.id, progress=30, stage="generating")
+            assert (await read_experiment_messages(db, [message]))[0].status == "running"
+            if terminal == "succeeded":
+                await service.finish(task.id, result={"text": "结果"})
+            elif terminal == "failed":
+                await service.finish(task.id, error_code="provider_failed", error="供应商失败")
+            else:
+                await service.request_cancel(task.id)
+                await service.finish(task.id, result={"text": "迟到结果"})
+            await db.commit()
+            views = await read_experiment_messages(db, [message, foreign])
+            assert views[0].status == terminal
+            assert views[1].status is None and "result" not in views[1].payload
+            if terminal == "succeeded":
+                assert views[0].payload["result"] == {"text": "结果"}
+            else:
+                assert views[0].payload["error"]
+            await db.refresh(message)
+            assert message.status is None and message.payload == {"modality": "text"}
+            with pytest.raises(HTTPException) as error:
+                await route.update_experiment_message(message.id, ExperimentMessageUpdate(status="failed"), db)
+            assert error.value.status_code == 409
+            with pytest.raises(HTTPException) as error:
+                await route.create_experiment_message("other", ExperimentMessageCreate(role="task", content="伪造", task_id=task.id), db)
+            assert error.value.status_code == 422
     finally:
         await engine.dispose()

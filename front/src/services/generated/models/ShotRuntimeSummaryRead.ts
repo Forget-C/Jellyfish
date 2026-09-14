@@ -16,10 +16,6 @@ export type ShotRuntimeSummaryRead = {
      */
     has_active_video_tasks: boolean;
     /**
-     * 是否存在进行中的提示词任务
-     */
-    has_active_prompt_tasks: boolean;
-    /**
      * 是否存在进行中的分镜帧图片任务
      */
     has_active_frame_tasks: boolean;

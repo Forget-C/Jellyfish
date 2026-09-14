@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.utils import apply_order, paginate
 from app.models.studio import CharacterImage
 from app.services.common import entity_not_found
+from app.services.studio.files import require_available_file
 from app.services.studio.entity_specs import entity_spec, normalize_entity_type
 
 IMAGE_ORDER_FIELDS = {"id", "quality_level", "view_angle", "created_at", "updated_at"}
@@ -53,6 +54,7 @@ async def create_entity_image(
     entity_id: str,
     body: dict[str, Any],
 ) -> dict[str, Any]:
+    """保存实体图片，锁定新增文件引用以避免采用正在删除的内容。"""
     entity_type_norm = normalize_entity_type(entity_type)
     spec = entity_spec(entity_type_norm)
     parent = await db.get(spec.model, entity_id)
@@ -60,6 +62,8 @@ async def create_entity_image(
         raise HTTPException(status_code=404, detail=entity_not_found(spec.model.__name__))
 
     parsed = spec.image_create_model.model_validate(body).model_dump()
+    if parsed.get("file_id") is not None:
+        await require_available_file(db, file_id=parsed["file_id"], expected_type="image")
     obj = spec.image_model(**{spec.id_field: entity_id, **parsed})
     db.add(obj)
     await db.flush()
@@ -85,6 +89,7 @@ async def update_entity_image(
     image_id: int,
     body: dict[str, Any],
 ) -> dict[str, Any]:
+    """保存实体图片，锁定新增文件引用以避免采用正在删除的内容。"""
     entity_type_norm = normalize_entity_type(entity_type)
     spec = entity_spec(entity_type_norm)
     obj = await db.get(spec.image_model, image_id)
@@ -92,6 +97,11 @@ async def update_entity_image(
         raise HTTPException(status_code=404, detail=entity_not_found(spec.image_model.__name__))
 
     update_data = spec.image_update_model.model_validate(body).model_dump(exclude_unset=True)
+    if update_data.get("file_id") is not None:
+        await require_available_file(db, file_id=update_data["file_id"], expected_type="image")
+    if "file_id" in update_data:
+        # 手动采用或清空使旧生成任务的自动采用失效。
+        obj.version_id = spec.image_model.version_id + 1
     for key, value in update_data.items():
         setattr(obj, key, value)
     await db.flush()

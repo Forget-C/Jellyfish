@@ -26,7 +26,7 @@ from app.services.studio.generation.video.derive_preview import derive_video_pre
 from app.services.studio.generation.video.build_base import VideoBaseDraft
 from app.services.studio.generation.video.build_context import VideoGenerationContext
 from app.services.studio.generation.video import validate_images_count
-from app.services.studio import get_shot_video_readiness
+from app.services.studio.shot_video_readiness import get_shot_video_readiness
 
 
 async def _build_session() -> tuple[AsyncSession, object]:

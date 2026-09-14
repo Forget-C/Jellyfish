@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { NavigateFunction } from 'react-router-dom'
-import { StudioChaptersService, StudioShotsService } from '../../../services/generated'
+import { StudioChaptersService, StudioShotsService, type TaskSourceRead } from '../../../services/generated'
 import { StudioEntitiesApi } from '../../../services/studioEntities'
 import { getChapterShotsPath, getChapterStudioPath } from '../project/ProjectWorkbench/routes'
 import type { TaskUiItem } from './taskUiStore'
@@ -8,6 +8,20 @@ import type { TaskUiItem } from './taskUiStore'
 type ResolvedTaskMeta = {
   sourceLabel?: string | null
   navigateTo?: string | null
+}
+
+/** 将服务端已验证的轻量来源映射为页面入口，不再逐条请求业务详情。 */
+function sourceMeta(source: TaskSourceRead | null | undefined): ResolvedTaskMeta {
+  if (!source) return {}
+  const { kind, id, project_id: projectId, chapter_id: chapterId } = source
+  let navigateTo: string | null = null
+  if (kind === 'shot' && projectId && chapterId) navigateTo = getChapterStudioPath(projectId, chapterId)
+  else if (kind === 'chapter' && projectId) navigateTo = getChapterShotsPath(projectId, id)
+  else if (kind === 'project') navigateTo = `/projects/${id}`
+  else if (kind === 'character' && projectId) navigateTo = `/projects/${projectId}/roles/${id}/edit`
+  else if (kind === 'experiment_session') navigateTo = `/lab?session=${encodeURIComponent(id)}`
+  else navigateTo = ASSET_EDIT_PATH_BUILDERS[`${kind}_image`]?.(id) ?? null
+  return { sourceLabel: source.title, navigateTo }
 }
 
 const CHAPTER_RELATION_TYPES = new Set([
@@ -173,6 +187,7 @@ async function resolveTaskMeta(task: TaskUiItem): Promise<ResolvedTaskMeta | nul
   return null
 }
 
+/** 按来源复用导航信息，单项解析完成不会丢弃同批其他请求的结果。 */
 export function useResolvedTaskCenterTasks(
   tasks: TaskUiItem[],
   navigate: NavigateFunction,
@@ -180,10 +195,16 @@ export function useResolvedTaskCenterTasks(
   const [metaMap, setMetaMap] = useState<Record<string, ResolvedTaskMeta>>({})
   const loadingKeysRef = useRef<Set<string>>(new Set())
 
+  const mountedRef = useRef(false)
   useEffect(() => {
-    let cancelled = false
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
+
+  useEffect(() => {
 
     tasks.forEach((task) => {
+      if (task.sourceResolved) return
       const effectiveRelationType = task.navigateRelationType ?? task.relationType
       const effectiveRelationEntityId = task.navigateRelationEntityId ?? task.relationEntityId
       if ((task.sourceLabel && task.onNavigate) || !effectiveRelationType || !effectiveRelationEntityId) {
@@ -194,25 +215,34 @@ export function useResolvedTaskCenterTasks(
       loadingKeysRef.current.add(key)
       void resolveTaskMeta(task)
         .then((meta) => {
-          if (cancelled || !meta) return
+          if (!mountedRef.current) return
           setMetaMap((current) => ({
             ...current,
-            [key]: meta,
+            [key]: meta ?? {},
           }))
+        })
+        .catch(() => {
+          // 来源已删除或暂时不可用时保留任务历史，不产生未处理异常或重复请求循环。
+          if (mountedRef.current) setMetaMap((current) => ({ ...current, [key]: {} }))
         })
         .finally(() => {
           loadingKeysRef.current.delete(key)
         })
     })
 
-    return () => {
-      cancelled = true
-    }
   }, [metaMap, tasks])
 
   return useMemo(
     () =>
       tasks.map((task) => {
+        if (task.sourceResolved) {
+          const meta = sourceMeta(task.source)
+          return {
+            ...task,
+            sourceLabel: meta.sourceLabel ?? null,
+            onNavigate: meta.navigateTo ? () => navigate(meta.navigateTo!) : null,
+          }
+        }
         const key = metaKeyForTask(task)
         const meta = key ? metaMap[key] : undefined
         return {

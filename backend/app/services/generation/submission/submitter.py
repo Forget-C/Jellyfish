@@ -1,185 +1,91 @@
-"""统一生成提交骨架与异步任务的可靠持久化。"""
+"""校验生成请求，并通过唯一任务维护入口提交执行。"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Protocol
-from uuid import uuid4
+from types import SimpleNamespace
 
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import HTTPException, status
 
-from app.core.contracts.generation import (
-    GenerationCommand,
-    GenerationDelivery,
-    GenerationOperation,
-    ResolvedGenerationSnapshot,
-)
-from app.core.contracts.media import ImageMediaInput, MediaReference, VideoMediaInput
-from app.models.generation_artifacts import GenerationDispatchOutbox, GenerationTaskMediaReference
-from app.models.task import GenerationDeliveryMode, GenerationTask, GenerationTaskStatus, GenerationTaskVisibility
-from app.models.task_links import GenerationTaskLink
+from app.core.contracts.generation import GenerationCommand, GenerationDelivery, ResolvedGenerationSnapshot
+from app.core.contracts.task import TaskExecutionMode
 from app.models.llm import Model, ModelCategoryKey, Provider
-from app.core.contracts.provider_capabilities import provider_operation_capabilities
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
-from app.services.generation.files import FileResolver
 from app.services.generation.submission.capabilities import GenerationCapabilityRegistry, generation_capability_registry
-from app.services.generation.workflows import GenerationWorkflowSubmissionContext
-from app.services.generation.workflows.defaults import generation_workflow_registry
+from app.services.generation.task_snapshot import split_snapshot
+from app.services.task_service import TaskService
+from app.services.task_sources import resolve_task_sources
 
 
 class GenerationEntityGate(Protocol):
-    """将命令中的 ID 校验并冻结为不携带 ORM 实体的执行快照。"""
+    """校验命令中的实体与媒体，并生成不携带 ORM 实体的输入快照。"""
 
     async def validate(self, db: AsyncSession, command: GenerationCommand) -> ResolvedGenerationSnapshot:
-        """校验可信目标、模型和媒体关系并返回可序列化快照。"""
+        """返回已验证的生成输入。"""
 
 
 @dataclass(frozen=True)
 class GenerationAccepted:
-    """异步提交成功后的最小响应，调用方据此开始轮询。"""
+    """调用方以任务 ID 查询进度和历史结果。"""
 
     task_id: str
 
 
 class GenerationSubmitter:
-    """统一入口：先校验能力和实体，再按固定 delivery 分派。"""
+    """只负责生成请求校验与输入编排，任务生命周期由 TaskService 管理。"""
 
     def __init__(
-        self,
-        *,
-        entity_gate: GenerationEntityGate,
+        self, *, entity_gate: GenerationEntityGate,
         capability_registry: GenerationCapabilityRegistry = generation_capability_registry,
     ) -> None:
-        """注入门禁，保证路由不需要了解任务快照和落库细节。"""
+        """注入实体门禁和允许的生成组合。"""
         self._entity_gate = entity_gate
         self._capability_registry = capability_registry
 
     async def submit_async(self, db: AsyncSession, command: GenerationCommand) -> GenerationAccepted:
-        """创建轮询任务、目标关联、媒体快照与 Outbox，并交由 dispatcher 投递。"""
+        """在调用方事务中创建任务与输入关系，不额外维护投递表或执行状态。"""
         self._capability_registry.require_supported(
-            operation=command.operation,
-            delivery=command.delivery,
-            target_kind=command.target.kind,
+            operation=command.operation, delivery=command.delivery, target_kind=command.target.kind,
         )
         if command.delivery is not GenerationDelivery.async_polling:
             raise ValueError("submit_async requires async_polling delivery")
-        handler = generation_workflow_registry.resolve(
-            operation=command.operation,
-            target_kind=command.target.kind,
-        )
-        await handler.validate_submission(GenerationWorkflowSubmissionContext(data={"db": db, "command": command}))
         snapshot = await self._entity_gate.validate(db, command)
-        await _require_durable_media_recovery(db=db, command=command, snapshot=snapshot)
         return await self.persist_async_task(db=db, command=command, snapshot=snapshot)
 
     async def persist_async_task(
-        self,
-        *,
-        db: AsyncSession,
-        command: GenerationCommand,
-        snapshot: ResolvedGenerationSnapshot,
+        self, *, db: AsyncSession, command: GenerationCommand, snapshot: ResolvedGenerationSnapshot,
     ) -> GenerationAccepted:
-        """在调用方的同一数据库事务中写入任务、关联、媒体快照和 Outbox。"""
-        task_id = uuid4().hex
-        task = GenerationTask(
-            id=task_id,
-            mode=GenerationDeliveryMode.async_polling,
-            visibility=GenerationTaskVisibility.task_center,
-            task_kind=command.operation.value,
-            status=GenerationTaskStatus.pending,
-            payload=_task_payload(command=command, snapshot=snapshot),
+        """冻结模型路由身份；凭据仍在执行期解析，媒体引用只存在于 task_inputs。"""
+        model = await db.get(Model, snapshot.model_id)
+        provider = await db.get(Provider, model.provider_id) if model is not None else None
+        if model is None or provider is None:
+            raise HTTPException(status_code=422, detail="generation_model_unavailable")
+        config = resolve_provider_config_from_provider(provider=provider, category=ModelCategoryKey(command.modality.value))
+        mode = TaskExecutionMode.direct
+        if command.operation.value == "video_generation" or (
+            command.operation.value == "image_generation" and config.provider_key in {"vidu", "kling"}
+        ):
+            mode = TaskExecutionMode.remote
+        data, target_type, target_id, inputs = split_snapshot(snapshot)
+        data.update(model_name=model.name, provider_key=config.provider_key)
+        kind = command.operation.value
+        if kind == "text_agent":
+            kind = {
+                "divide": "script_divide", "extract": "script_extract", "merge-entities": "script_merge",
+                "check-consistency": "script_consistency", "analyze-variants": "script_variant",
+                "analyze-character-portrait": "script_character_portrait", "analyze-prop-info": "script_prop_info",
+                "analyze-scene-info": "script_scene_info", "analyze-costume-info": "script_costume_info",
+                "optimize-script": "script_optimize", "simplify-script": "script_simplify",
+            }[snapshot.operation_input.operation]
+        source = (await resolve_task_sources(db, [SimpleNamespace(
+            id="submission", target_type=target_type, target_id=target_id,
+            target_parent_id=data.get("target_parent_id"),
+        )])).get("submission")
+        task = await TaskService(db).submit(
+            kind=kind, snapshot=data, title=kind, target_type=target_type, target_id=target_id,
+            expected_target_version=snapshot.expected_version_id, provider_id=provider.id,
+            execution_mode=mode, inputs=inputs, project_id=source.project_id if source else None,
         )
-        db.add(task)
-        db.add(
-            GenerationTaskLink(
-                task_id=task_id,
-                resource_type=command.modality.value,
-                relation_type=snapshot.canonical_target.kind.value,
-                relation_entity_id=snapshot.canonical_target.slot_id or snapshot.canonical_target.entity_id,
-            )
-        )
-        file_resolver = FileResolver(db)
-        for group_path, reference in _iter_media_references(snapshot.media):
-            media_snapshot = await file_resolver.snapshot(reference)
-            db.add(
-                GenerationTaskMediaReference(
-                    task_id=task_id,
-                    file_id=reference.file_id,
-                    group_path=group_path,
-                    ordinal=reference.ordinal,
-                    media_kind=reference.media_kind,
-                    file_content_version=media_snapshot.file_content_version,
-                    file_content_hash=media_snapshot.file_content_hash,
-                )
-            )
-        db.add(GenerationDispatchOutbox(task_id=task_id, payload={"task_id": task_id}))
-        await db.flush()
-        return GenerationAccepted(task_id=task_id)
-
-
-def _task_payload(*, command: GenerationCommand, snapshot: ResolvedGenerationSnapshot) -> dict[str, object]:
-    """保存任务输入快照；模型与供应商配置由 Worker 在执行期动态解析。"""
-    return {
-        "command": command.model_dump(mode="json"),
-        "snapshot": snapshot.model_dump(mode="json"),
-    }
-
-
-async def _require_durable_media_recovery(
-    *, db: AsyncSession, command: GenerationCommand, snapshot: ResolvedGenerationSnapshot
-) -> None:
-    """拒绝无法用远端 receipt 重取结果的 durable 媒体 Provider。
-
-    P3 的物化 outbox 只保存 ProviderOperation receipt，不能保存临时 URL 或结果正文。
-    因此图片、视频任务必须在提交期确认当前 Provider 同时具备远端句柄、单次 poll
-    和按句柄重取结果能力，避免先创建不可恢复的远端任务。
-    """
-    if command.operation not in {GenerationOperation.image_generation, GenerationOperation.video_generation}:
-        return
-    model = await db.get(Model, snapshot.model_id)
-    expected_category = (
-        ModelCategoryKey.image
-        if command.operation is GenerationOperation.image_generation
-        else ModelCategoryKey.video
-    )
-    if model is None or model.category != expected_category:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="generation model is unavailable")
-    provider = await db.get(Provider, model.provider_id)
-    if provider is None:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="generation provider is unavailable")
-    resolved = resolve_provider_config_from_provider(provider=provider, category=expected_category)
-    capabilities = provider_operation_capabilities(
-        provider_key=resolved.provider_key,
-        operation_kind=command.operation.value,
-    )
-    if (
-        not capabilities.supports_remote_handle
-        or not capabilities.supports_poll_by_handle
-        or not capabilities.supports_result_retrieval_by_handle
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=(
-                "durable media generation requires a provider with a recoverable remote receipt; "
-                f"provider={resolved.provider_key} operation={command.operation.value} is not supported"
-            ),
-        )
-
-
-def _iter_media_references(media: ImageMediaInput | VideoMediaInput | None) -> list[tuple[str, MediaReference]]:
-    """将强类型媒体树投影为持久化媒体快照所需的稳定 group_path。"""
-    if media is None:
-        return []
-    if isinstance(media, ImageMediaInput):
-        return [("references", reference) for reference in media.references]
-
-    references: list[tuple[str, MediaReference]] = []
-    if media.frames.first:
-        references.append(("frames.first", media.frames.first))
-    if media.frames.last:
-        references.append(("frames.last", media.frames.last))
-    references.extend(("frames.keys", reference) for reference in media.frames.keys)
-    for subject in media.subjects:
-        references.extend((f"subjects.{subject.name}", reference) for reference in subject.media)
-    return references
+        return GenerationAccepted(task_id=task.id)

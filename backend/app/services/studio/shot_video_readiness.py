@@ -16,8 +16,8 @@ from app.models.studio import (
     ShotFrameType,
     ShotFrameImage,
 )
-from app.models.task import GenerationTask, GenerationTaskStatus
-from app.models.task_links import GenerationTaskLink
+from app.models.task import Task
+from app.core.contracts.task import TaskStatus
 from app.schemas.studio.shots import ShotVideoReadinessCheck, ShotVideoReadinessRead
 from app.services.common import entity_not_found
 from app.services.studio.generation.video import (
@@ -36,12 +36,7 @@ REQUIRED_FRAMES_BY_MODE: dict[str, tuple[ShotFrameType, ...]] = {
     "text_only": (),
 }
 
-_ACTIVE_TASK_STATUSES = (
-    GenerationTaskStatus.pending,
-    GenerationTaskStatus.running,
-    GenerationTaskStatus.streaming,
-)
-
+_ACTIVE_TASK_STATUSES = (TaskStatus.queued, TaskStatus.running)
 
 def _check(key: str, ok: bool, message: str) -> ShotVideoReadinessCheck:
     return ShotVideoReadinessCheck(key=key, ok=ok, message=message)
@@ -62,16 +57,11 @@ async def _count_pending_candidates(db: AsyncSession, *, shot_id: str) -> tuple[
 
 
 async def _has_active_video_task(db: AsyncSession, *, shot_id: str) -> bool:
-    stmt = (
-        select(func.count(GenerationTask.id))
-        .select_from(GenerationTaskLink)
-        .join(GenerationTask, GenerationTask.id == GenerationTaskLink.task_id)
-        .where(GenerationTaskLink.resource_type == "video")
-        .where(GenerationTaskLink.relation_type == "video")
-        .where(GenerationTaskLink.relation_entity_id == shot_id)
-        .where(GenerationTask.status.in_(_ACTIVE_TASK_STATUSES))
-    )
-    return bool(await db.scalar(stmt))
+    """只查询当前镜头的视频任务，不依赖采用关系或镜头信息确认状态。"""
+    return await db.scalar(select(Task.id).where(
+        Task.kind == "video_generation", Task.target_type == "shot_video", Task.target_id == shot_id,
+        Task.status.in_(_ACTIVE_TASK_STATUSES),
+    ).limit(1)) is not None
 
 
 async def _reference_frames_ready(

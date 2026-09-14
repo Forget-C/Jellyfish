@@ -16,6 +16,7 @@ import {
   useTaskUiStore,
 } from './taskUiStore'
 import { useResolvedTaskCenterTasks } from './taskCenterMeta'
+import { TaskHistory } from './TaskHistory'
 
 const TASK_CENTER_OPEN_STORAGE_KEY = 'jellyfish_task_center_open_v1'
 const TASK_CENTER_POSITION_STORAGE_KEY = 'jellyfish_task_center_position_v1'
@@ -105,16 +106,17 @@ function formatStartedAt(startedAtTs?: number | null): string | null {
 }
 
 function taskTone(task: TaskUiItem): { color: string; label: string } {
-  if (task.cancelRequested) return { color: 'orange', label: '取消中' }
   if (task.status === 'cancelled') return { color: 'orange', label: '已取消' }
   if (task.status === 'failed') return { color: 'red', label: '失败' }
   if (task.status === 'succeeded') return { color: 'green', label: '已完成' }
-  if (task.status === 'streaming') return { color: 'cyan', label: '处理中' }
+  if (task.cancelRequested) return { color: 'orange', label: '取消中' }
   if (task.status === 'running') return { color: 'blue', label: '运行中' }
   return { color: 'default', label: '排队中' }
 }
 
+/** 展示近期活动任务，并提供独立的完整历史查询入口。 */
 export function TaskCenter() {
+  const [historyOpen, setHistoryOpen] = useState(false)
   const navigate = useNavigate()
   const [scopeFilter, setScopeFilter] = useState<'auto' | 'all' | 'current' | 'active' | 'settled'>('auto')
   const [taskKindFilter, setTaskKindFilter] = useState<string | undefined>(undefined)
@@ -183,9 +185,9 @@ export function TaskCenter() {
         const activeContexts = flattenPageContexts(contextScopes)
         const priority = (task: TaskUiItem): number => {
           if (isTaskHighlighted(task, activeContexts)) return 4
-          if (task.cancelRequested) return 3
-          if (task.status === 'running' || task.status === 'streaming') return 2
-          if (task.status === 'pending') return 1
+          if (task.cancelRequested && ['queued', 'running'].includes(task.status)) return 3
+          if (task.status === 'running') return 2
+          if (task.status === 'queued') return 1
           return 0
         }
         const priorityDelta = priority(b) - priority(a)
@@ -211,7 +213,7 @@ export function TaskCenter() {
   const summaryCounts = useMemo(
     () => ({
       current: resolvedTasks.filter((task) => isTaskHighlighted(task, activeContexts)).length,
-      active: resolvedTasks.filter((task) => ['pending', 'running', 'streaming'].includes(task.status)).length,
+      active: resolvedTasks.filter((task) => ['queued', 'running'].includes(task.status)).length,
       settled: resolvedTasks.filter((task) => ['succeeded', 'failed', 'cancelled'].includes(task.status)).length,
     }),
     [activeContexts, resolvedTasks],
@@ -227,7 +229,7 @@ export function TaskCenter() {
     () =>
       resolvedTasks.filter((task) => {
         if (effectiveScopeFilter === 'current' && !isTaskHighlighted(task, activeContexts)) return false
-        if (effectiveScopeFilter === 'active' && !['pending', 'running', 'streaming'].includes(task.status)) return false
+        if (effectiveScopeFilter === 'active' && !['queued', 'running'].includes(task.status)) return false
         if (effectiveScopeFilter === 'settled' && !['succeeded', 'failed', 'cancelled'].includes(task.status)) return false
         if (taskKindFilter && task.title !== taskKindFilter) return false
         return true
@@ -246,7 +248,7 @@ export function TaskCenter() {
     }
     const currentTasks = pagedTasks.filter((task) => isTaskHighlighted(task, activeContexts))
     const activeTasks = pagedTasks.filter(
-      (task) => !isTaskHighlighted(task, activeContexts) && ['pending', 'running', 'streaming'].includes(task.status),
+      (task) => !isTaskHighlighted(task, activeContexts) && ['queued', 'running'].includes(task.status),
     )
     const settledTasks = pagedTasks.filter(
       (task) => !isTaskHighlighted(task, activeContexts) && ['succeeded', 'failed', 'cancelled'].includes(task.status),
@@ -254,7 +256,7 @@ export function TaskCenter() {
     const otherTasks = pagedTasks.filter(
       (task) =>
         !isTaskHighlighted(task, activeContexts) &&
-        !['pending', 'running', 'streaming', 'succeeded', 'failed', 'cancelled'].includes(task.status),
+        !['queued', 'running', 'succeeded', 'failed', 'cancelled'].includes(task.status),
     )
     return [
       { key: 'current', title: currentTasks.length > 0 ? `当前页 ${currentTasks.length}` : null, tasks: currentTasks },
@@ -353,9 +355,10 @@ export function TaskCenter() {
             size="small"
             className="shadow-lg"
             extra={
-              <Button size="small" type="text" onClick={() => setOpen(false)}>
-                收起
-              </Button>
+              <div className="flex gap-1">
+                <Button size="small" type="text" onClick={() => setHistoryOpen(true)}>历史</Button>
+                <Button size="small" type="text" onClick={() => setOpen(false)}>收起</Button>
+              </div>
             }
             bodyStyle={{ maxHeight: 304, overflow: 'auto' }}
           >
@@ -416,7 +419,7 @@ export function TaskCenter() {
                               <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-500">
                                 {highlighted ? <Tag color="blue">当前页面</Tag> : null}
                                 <Tag color={tone.color}>{tone.label}</Tag>
-                                <span>进度 {Math.max(0, Math.min(100, Math.round(task.progress)))}%</span>
+                                {task.progress == null ? null : <span>进度 {Math.max(0, Math.min(100, Math.round(task.progress)))}%</span>}
                                 {elapsed ? <span>耗时 {elapsed}</span> : null}
                               </div>
                               {startedAt ? <div className="mt-1 text-xs text-gray-400">开始于 {startedAt}</div> : null}
@@ -444,7 +447,7 @@ export function TaskCenter() {
                                 >
                                   {task.cancelRequested ? '正在取消' : '取消'}
                                 </Button>
-                              ) : task.status === 'pending' || task.status === 'running' || task.status === 'streaming' ? (
+                              ) : task.status === 'queued' || task.status === 'running' ? (
                                 <Button
                                   size="small"
                                   danger
@@ -459,7 +462,7 @@ export function TaskCenter() {
                               ) : null}
                             </div>
                           </div>
-                          <Progress
+                          {task.progress == null ? null : <Progress
                             percent={Math.max(0, Math.min(100, Math.round(task.progress)))}
                             size="small"
                             status={
@@ -471,7 +474,7 @@ export function TaskCenter() {
                             }
                             showInfo={false}
                             className="mt-2"
-                          />
+                          />}
                         </div>
                       )
                     })}
@@ -502,6 +505,7 @@ export function TaskCenter() {
         </div>
       ) : null}
 
+      <TaskHistory open={historyOpen} onClose={() => setHistoryOpen(false)} />
       <Badge count={tasks.length} size="small" offset={[-4, 4]} showZero={false}>
         <Button
           type="primary"

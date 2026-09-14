@@ -28,6 +28,7 @@ export type FileDetailRead = {
      * 标签
      */
     tags?: Array<string>;
+    deleted?: boolean;
     usages?: Array<FileUsageRead>;
 };
 

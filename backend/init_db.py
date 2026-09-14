@@ -1,14 +1,6 @@
-import asyncio
+"""开发初始化也使用正式迁移链，避免 create_all 绕过版本和数据变更。"""
 
-from app.core.db import init_db, close_db
-
-
-async def _main() -> None:
-    """初始化数据库，创建所有表。"""
-    await init_db()
-    await close_db()
-
+from app.scripts.migrate_database import migrate_database
 
 if __name__ == "__main__":
-    asyncio.run(_main())
-
+    migrate_database()

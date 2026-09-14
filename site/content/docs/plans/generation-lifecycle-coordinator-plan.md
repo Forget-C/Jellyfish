@@ -1,8 +1,10 @@
 ---
 title: 生成执行生命周期完整修复计划
 description: 以交付语义划分同步流与可恢复异步执行，补齐执行尝试、供应商操作、媒体 Blob 与领域交付边界。
-status: in_progress
+status: superseded
 ---
+
+> 本文的可恢复执行、Attempt、Run、Blob 与协调器方案已被 [异步任务简化方案](/docs/plans/async-task-schema-simplification/) 替代。以下为旧决策依据，不再作为当前实施要求；当前实现见 [任务执行架构](/docs/architecture/task-execution/)。
 
 ## 1. 背景与目标
 

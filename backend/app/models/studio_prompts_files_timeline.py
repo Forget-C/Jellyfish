@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from sqlalchemy import Boolean, JSON, Index, Integer, String, Text
+from datetime import datetime
+
+from sqlalchemy import BigInteger, Boolean, DateTime, JSON, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -47,14 +49,20 @@ class FileItem(Base, TimestampMixin):
     id: Mapped[str] = mapped_column(String(64), primary_key=True, comment="文件 ID（UUID）")
     type: Mapped[FileType] = mapped_column(String(16), nullable=False, index=True, comment="文件类型")
     name: Mapped[str] = mapped_column(String(255), nullable=False, comment="文件名/标题")
-    thumbnail: Mapped[str] = mapped_column(String(1024), nullable=False, default="", comment="缩略图 URL/路径")
+    thumbnail_key: Mapped[str | None] = mapped_column(String(700), nullable=True, comment="缩略图存储 key")
     tags: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list, comment="标签（JSON 数组）")
     storage_key: Mapped[str] = mapped_column(
-        String(1024),
-        nullable=False,
-        comment="对象存储中的 key（如 files/xxx.png）",
+        String(700, collation="utf8mb4_bin").with_variant(String(700), "sqlite"),
+        nullable=False, unique=True,
+        comment="不可变对象的唯一存储 key",
     )
-    content_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, comment="文件内容版本")
+    content_type: Mapped[str] = mapped_column(String(255), nullable=False, default="application/octet-stream")
+    size_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    width: Mapped[int | None] = mapped_column(Integer)
+    height: Mapped[int | None] = mapped_column(Integer)
+    duration_ms: Mapped[int | None] = mapped_column(BigInteger)
+    delete_requested_at: Mapped[datetime | None] = mapped_column(DateTime)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime)
     content_hash: Mapped[str | None] = mapped_column(String(128), nullable=True, comment="文件内容哈希")
 
     usages: Mapped[list["FileUsage"]] = relationship(
@@ -66,6 +74,7 @@ class FileItem(Base, TimestampMixin):
 
     __table_args__ = (
         Index("ix_files_updated_at", "updated_at"),
+        Index("ix_files_delete", "deleted_at", "delete_requested_at"),
     )
 
 

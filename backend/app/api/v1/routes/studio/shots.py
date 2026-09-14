@@ -41,20 +41,18 @@ from app.services.studio.shots import (
     list_paginated as list_shots_paginated,
     update as update_shot_service,
 )
-from app.services.studio import (
-    accept_shot_extracted_dialogue_candidate,
-    build_shot_preparation_state,
-    get_shot_assets_overview,
-    ignore_shot_extracted_candidate,
-    ignore_shot_extracted_dialogue_candidate,
-    link_existing_asset_for_preparation,
-    link_shot_extracted_candidate,
-    list_shot_extracted_candidates,
-    list_shot_extracted_dialogue_candidates,
-    get_shot_video_readiness,
-    list_shot_runtime_summary_by_chapter,
-    set_skip_extraction,
-)
+from app.services.studio.shot_extracted_dialogue_candidates import mark_accepted as accept_shot_extracted_dialogue_candidate
+from app.services.studio.shot_preparation_state import build_shot_preparation_state
+from app.services.studio.shot_assets_overview import get_shot_assets_overview
+from app.services.studio.shot_extracted_candidates import mark_ignored as ignore_shot_extracted_candidate
+from app.services.studio.shot_extracted_dialogue_candidates import mark_ignored as ignore_shot_extracted_dialogue_candidate
+from app.services.studio.shot_preparation_state import link_existing_asset_for_preparation
+from app.services.studio.shot_extracted_candidates import mark_linked as link_shot_extracted_candidate
+from app.services.studio.shot_extracted_candidates import list_by_shot as list_shot_extracted_candidates
+from app.services.studio.shot_extracted_dialogue_candidates import list_by_shot as list_shot_extracted_dialogue_candidates
+from app.services.studio.shot_video_readiness import get_shot_video_readiness
+from app.services.studio.shot_runtime_summary import list_shot_runtime_summary_by_chapter
+from app.services.studio.shot_extracted_candidates import set_skip_extraction
 from app.services.studio.generation.video import (
     build_video_base_draft,
     build_video_context,

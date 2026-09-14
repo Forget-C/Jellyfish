@@ -2,15 +2,9 @@
 
 from app.core.db import Base
 from app.models.base import TimestampMixin
+from app.models.task import Task, TaskInput, TaskOutput
 
 from app.models.llm import Model, ModelSettings, Provider
-from app.models.provider_operations import ProviderOperation
-from app.models.task import GenerationTask
-from app.models.task_links import GenerationTaskLink
-from app.models.generation_artifacts import GenerationArtifact, GenerationDispatchOutbox, GenerationTaskMediaReference
-from app.models.media_blobs import MediaBlob, StorageOperationOutbox
-from app.models.generation_runs import GenerationRun
-from app.models.generation_run_dispatches import GenerationRunDispatch
 from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
 from app.models.types import FileUsageKind
 
@@ -45,6 +39,9 @@ from app.models.studio import (
 )
 
 __all__ = [
+    "Task",
+    "TaskInput",
+    "TaskOutput",
     "Base",
     "TimestampMixin",
     "Project",
@@ -76,18 +73,8 @@ __all__ = [
     "FileUsageKind",
     "TimelineClip",
     "Provider",
-    "ProviderOperation",
     "Model",
     "ModelSettings",
-    "GenerationTask",
-    "GenerationTaskLink",
-    "GenerationArtifact",
-    "GenerationRun",
-    "GenerationRunDispatch",
-    "GenerationTaskMediaReference",
-    "GenerationDispatchOutbox",
-    "MediaBlob",
-    "StorageOperationOutbox",
     "ExperimentSession",
     "ExperimentMessage",
 ]

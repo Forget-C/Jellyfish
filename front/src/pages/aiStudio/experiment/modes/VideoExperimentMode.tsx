@@ -248,7 +248,7 @@ export function VideoExperimentMode({ sessionId, ensureSession, clearSessionMess
         const response = await FilmService.getTaskResultApiV1FilmTasksTaskIdResultGet({ taskId })
         if (cancelled) return
         const task = response.data; const status = task?.status ?? 'pending'
-        setUpdates((current) => ({ ...current, [taskId]: { status, error: task?.error ?? undefined, progress: task?.progress, videoUrl: status === 'succeeded' ? extractVideoUrl(task?.generation_delivery ?? task?.result) : current[taskId]?.videoUrl } }))
+        setUpdates((current) => ({ ...current, [taskId]: { status, error: task?.error ?? undefined, progress: task?.progress ?? undefined, videoUrl: status === 'succeeded' ? extractVideoUrl(task?.generation_delivery ?? task?.result) : current[taskId]?.videoUrl } }))
         if (status === 'failed') message.error(task?.error || '视频生成失败，请检查模型与供应商配置')
         if (['succeeded', 'failed', 'cancelled'].includes(status)) await refreshHistory()
       } catch { if (!cancelled) message.error('获取视频生成任务状态失败') }

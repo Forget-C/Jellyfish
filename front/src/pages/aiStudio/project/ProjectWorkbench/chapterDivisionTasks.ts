@@ -52,7 +52,7 @@ type UseChapterDivisionTaskMapPollingOptions = {
 
 export const RELATION_TASK_POLL_INTERVAL_MS = 2000
 
-const ACTIVE_TASK_STATUSES: TaskStatus[] = ['pending', 'running', 'streaming']
+const ACTIVE_TASK_STATUSES: TaskStatus[] = ['queued', 'running']
 
 export function isActiveTaskStatus(status?: TaskStatus | null): boolean {
   return !!status && ACTIVE_TASK_STATUSES.includes(status)
@@ -85,7 +85,7 @@ export function toRelationTaskStateFromStatusRead(
   return {
     taskId: data.task_id,
     status: data.status,
-    progress: data.progress,
+    progress: data.progress ?? 0,
     cancelRequested: !!data.cancel_requested,
     startedAtTs: data.started_at_ts,
     finishedAtTs: data.finished_at_ts,
@@ -123,23 +123,14 @@ export async function loadActiveRelationTask(
   relationType: string,
   relationEntityId: string,
 ): Promise<RelationTaskState | null> {
-  const linksRes = await FilmService.listTaskLinksApiV1FilmTaskLinksGet({
-    relationType,
-    relationEntityId,
-    page: 1,
-    pageSize: 20,
-    order: 'updated_at',
-    isDesc: true,
+  const response = await FilmService.listTasksApiV1FilmTasksGet({
+    targetType: relationType,
+    targetId: relationEntityId,
+    statuses: ['queued', 'running'],
+    limit: 1,
   })
-  const links = linksRes.data?.items ?? []
-  for (const link of links) {
-    const statusRes = await FilmService.getTaskStatusApiV1FilmTasksTaskIdStatusGet({ taskId: link.task_id })
-    const data = statusRes.data
-    if (!data) continue
-    if (!isActiveTaskStatus(data.status)) continue
-    return toRelationTaskStateFromStatusRead(data)
-  }
-  return null
+  const task = response.data?.items[0]
+  return task ? toRelationTaskStateFromStatusRead(task) : null
 }
 
 async function loadTaskState(taskId: string): Promise<RelationTaskState | null> {

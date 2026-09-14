@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db
 from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
-from app.models.task import GenerationTask, GenerationTaskStatus
 from app.schemas.common import ApiResponse, created_response, empty_response, success_response
 from app.schemas.studio.experiment_sessions import (
     ExperimentMessageCreate,
@@ -21,7 +20,7 @@ from app.schemas.studio.experiment_sessions import (
     ExperimentSessionUpdate,
     LabType,
 )
-from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages
+from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages, read_experiment_messages, has_active_experiment_tasks
 
 router = APIRouter()
 
@@ -38,24 +37,12 @@ async def _serialize_experiment_session(session: ExperimentSession, db: AsyncSes
         .order_by(ExperimentMessage.sequence.desc())
         .limit(1)
     )
-    running_task = await db.scalar(
-        select(ExperimentMessage.id)
-        .join(GenerationTask, GenerationTask.id == ExperimentMessage.task_id)
-        .where(
-            ExperimentMessage.session_id == session.id,
-            GenerationTask.status.in_([
-                GenerationTaskStatus.pending,
-                GenerationTaskStatus.running,
-                GenerationTaskStatus.streaming,
-            ]),
-        )
-        .limit(1)
-    )
+    has_running_task = await has_active_experiment_tasks(db, session.id)
     preview = latest_message.content.strip()[:80] if latest_message and latest_message.content else None
     return ExperimentSessionRead.model_validate(session).model_copy(
         update={
             "last_message_preview": preview,
-            "has_running_task": running_task is not None,
+            "has_running_task": has_running_task,
         }
     )
 
@@ -96,7 +83,7 @@ async def list_experiment_messages(session_id: str, db: AsyncSession = Depends(g
         raise HTTPException(status_code=404, detail="Experiment session not found")
     rows = (await db.execute(select(ExperimentMessage).where(ExperimentMessage.session_id == session_id).order_by(ExperimentMessage.sequence.desc()).offset((page - 1) * page_size).limit(page_size))).scalars().all()
     rows.reverse()
-    return success_response([ExperimentMessageRead.model_validate(row) for row in rows])
+    return success_response(await read_experiment_messages(db, rows))
 
 
 @router.post("/{session_id}/messages", response_model=ApiResponse[ExperimentMessageRead], status_code=status.HTTP_201_CREATED)
@@ -104,6 +91,8 @@ async def create_experiment_message(session_id: str, body: ExperimentMessageCrea
     """追加一条用户可见消息；该数据不会传入模型上下文。"""
     if await db.get(ExperimentSession, session_id) is None:
         raise HTTPException(status_code=404, detail="Experiment session not found")
+    if body.task_id is not None or body.role == "task":
+        raise HTTPException(status_code=422, detail="task_messages_are_created_by_generation_submission")
     items = await append_experiment_messages(
         db,
         session_id=session_id,
@@ -115,15 +104,17 @@ async def create_experiment_message(session_id: str, body: ExperimentMessageCrea
         session.updated_at = func.now()
     await db.commit()
     await db.refresh(item)
-    return created_response(ExperimentMessageRead.model_validate(item))
+    return created_response((await read_experiment_messages(db, [item]))[0])
 
 
 @router.patch("/messages/{message_id}", response_model=ApiResponse[ExperimentMessageRead])
 async def update_experiment_message(message_id: str, body: ExperimentMessageUpdate, db: AsyncSession = Depends(get_db)) -> ApiResponse[ExperimentMessageRead]:
-    """更新异步任务消息的状态、展示文本或结果快照。"""
+    """更新普通或流式消息；异步任务消息只能从任务事实派生。"""
     item = await db.get(ExperimentMessage, message_id)
     if item is None:
         raise HTTPException(status_code=404, detail="Experiment message not found")
+    if item.task_id is not None or item.role == "task":
+        raise HTTPException(status_code=409, detail="task_message_is_read_only")
     if body.content is not None:
         item.content = body.content
     if body.status is not None:
@@ -132,19 +123,19 @@ async def update_experiment_message(message_id: str, body: ExperimentMessageUpda
         item.payload = body.payload
     await db.commit()
     await db.refresh(item)
-    return success_response(ExperimentMessageRead.model_validate(item))
+    return success_response((await read_experiment_messages(db, [item]))[0])
 
 
 @router.delete("/{session_id}", response_model=ApiResponse[None])
 async def delete_experiment_session(session_id: str, db: AsyncSession = Depends(get_db)) -> ApiResponse[None]:
-    """删除尚未关联任务消息的会话，避免运行任务失去历史归属。
+    """锁定会话并检查活动任务，避免与新任务提交交错。
 
     P2 接入审计后，应在提交成功的同一事务中记录删除事件。
     """
-    session = await db.get(ExperimentSession, session_id)
+    session = await db.get(ExperimentSession, session_id, with_for_update=True)
     if session is None:
         raise HTTPException(status_code=404, detail="Experiment session not found")
-    has_task = (await db.execute(select(ExperimentMessage.id).join(GenerationTask, GenerationTask.id == ExperimentMessage.task_id).where(ExperimentMessage.session_id == session_id, GenerationTask.status.in_([GenerationTaskStatus.pending, GenerationTaskStatus.running, GenerationTaskStatus.streaming])).limit(1))).scalar_one_or_none()
+    has_task = await has_active_experiment_tasks(db, session_id)
     if has_task:
         raise HTTPException(status_code=409, detail="Session with generation tasks cannot be deleted")
     await db.delete(session)
@@ -158,9 +149,9 @@ async def clear_experiment_messages(session_id: str, db: AsyncSession = Depends(
 
     P2 的保留策略落地前维持物理删除；后续归档策略不能影响运行中任务保护。
     """
-    if await db.get(ExperimentSession, session_id) is None:
+    if await db.get(ExperimentSession, session_id, with_for_update=True) is None:
         raise HTTPException(status_code=404, detail="Experiment session not found")
-    has_task = (await db.execute(select(ExperimentMessage.id).join(GenerationTask, GenerationTask.id == ExperimentMessage.task_id).where(ExperimentMessage.session_id == session_id, GenerationTask.status.in_([GenerationTaskStatus.pending, GenerationTaskStatus.running, GenerationTaskStatus.streaming])).limit(1))).scalar_one_or_none()
+    has_task = await has_active_experiment_tasks(db, session_id)
     if has_task:
         raise HTTPException(status_code=409, detail="Session with generation tasks cannot be cleared")
     rows = (await db.execute(select(ExperimentMessage).where(ExperimentMessage.session_id == session_id))).scalars().all()

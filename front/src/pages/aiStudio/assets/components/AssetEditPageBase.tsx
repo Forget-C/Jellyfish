@@ -21,8 +21,7 @@ import {
 } from 'antd'
 import { ArrowLeftOutlined, CloseCircleOutlined, EditOutlined, ReloadOutlined } from '@ant-design/icons'
 import { FilmService, ScriptProcessingService } from '../../../../services/generated'
-import type { AssetPromptAudit, AssetFieldSuggestion, AssetImagePromptRenderBody, TaskStatus } from '../../../../services/generated'
-import { listTaskLinksNormalized } from '../../../../services/filmTaskLinks'
+import type { TaskOutputHistoryRead, AssetPromptAudit, AssetFieldSuggestion, AssetImagePromptRenderBody, TaskStatus } from '../../../../services/generated'
 import { buildFileDownloadUrl } from '../utils'
 import { DisplayImageCard } from './DisplayImageCard'
 import { ProjectVisualStyleAndStyleFields } from '../../project/ProjectVisualStyleAndStyleFields'
@@ -117,7 +116,7 @@ type HistoryCandidate<TImage extends BaseAssetImage> = {
   width?: number | null
   height?: number | null
   format?: string | null
-  source: 'task-link' | 'image'
+  source: 'task-output' | 'image'
   originalImage?: TImage
 }
 
@@ -593,13 +592,13 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
       }
       setGenerationTask({
         taskId,
-        status: 'pending',
+        status: 'queued',
         progress: 0,
         cancelRequested: false,
       })
       setGenerationSettledTask(null)
 
-      let finalStatus: TaskStatus = 'pending'
+      let finalStatus: TaskStatus = 'queued'
       let finalTaskState: RelationTaskState | null = null
       for (let i = 0; i < 30; i += 1) {
         await sleep(2000)
@@ -638,11 +637,16 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
     setHistoryLoading(true)
 
     try {
-      const links = await listTaskLinksNormalized({
-        resourceType: 'image',
-        relationType,
-        relationEntityId: String(targetImage.id),
-      })
+      const outputs: TaskOutputHistoryRead[] = []
+      let cursor: string | null = null
+      do {
+        const response = await FilmService.listTaskOutputsApiV1FilmTasksOutputsGet({
+          targetType: `${relationType}_slot`, targetId: String(targetImage.id), cursor,
+        })
+        if (!response.data) throw new Error('图片历史响应缺少数据')
+        outputs.push(...response.data.items)
+        cursor = response.data.next_cursor ?? null
+      } while (cursor)
       const imagesByFileId = new Map<string, TImage>()
       images.forEach((img) => {
         if (img.file_id) {
@@ -651,19 +655,19 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
       })
 
       const seenFileIds = new Set<string>()
-      const taskLinkCandidates: HistoryCandidate<TImage>[] = links
+      const taskOutputCandidates: HistoryCandidate<TImage>[] = outputs
         .filter((link) => Boolean(link.file_id))
         .map((link) => {
           const fileId = String(link.file_id)
           const matchedImage = imagesByFileId.get(fileId)
           return {
-            id: `task-link-${link.id}`,
+            id: `${link.task_id}:${link.ordinal}`,
             file_id: fileId,
             view_angle: matchedImage?.view_angle ?? targetImage.view_angle,
             width: matchedImage?.width ?? null,
             height: matchedImage?.height ?? null,
             format: matchedImage?.format ?? null,
-            source: 'task-link' as const,
+            source: 'task-output' as const,
             originalImage: matchedImage,
           }
         })
@@ -686,7 +690,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
           originalImage: img,
         }))
 
-      setHistoryCandidates(taskLinkCandidates.length > 0 ? taskLinkCandidates : fallbackCandidates)
+      setHistoryCandidates(taskOutputCandidates.length > 0 ? taskOutputCandidates : fallbackCandidates)
     } catch {
       message.error('加载历史生成图片失败')
       setHistoryCandidates([])
@@ -900,7 +904,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
             {historyCandidates.map((candidate) => (
               <Col xs={24} sm={12} md={8} key={candidate.id}>
                 <DisplayImageCard
-                  title={candidate.view_angle ? `角度：${ANGLE_LABEL_MAP[candidate.view_angle] ?? candidate.view_angle}` : candidate.source === 'task-link' ? '任务产物' : `图片 ${candidate.id}`}
+                  title={candidate.view_angle ? `角度：${ANGLE_LABEL_MAP[candidate.view_angle] ?? candidate.view_angle}` : candidate.source === 'task-output' ? '任务产物' : `图片 ${candidate.id}`}
                   imageUrl={buildFileDownloadUrl(candidate.file_id)}
                   imageAlt={candidate.id}
                   placeholder="无缩略图"

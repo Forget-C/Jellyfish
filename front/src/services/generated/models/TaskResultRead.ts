@@ -3,36 +3,25 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { GenerationDeliveryResult } from './GenerationDeliveryResult';
+import type { TaskOutputRead } from './TaskOutputRead';
 import type { TaskStatus } from './TaskStatus';
+/**
+ * 业务面板按需查询结果，媒体结果由输出关系生成，不复制到任务 JSON。
+ */
 export type TaskResultRead = {
     task_id: string;
     status: TaskStatus;
-    progress: number;
+    stage: string;
+    progress?: (number | null);
+    cancel_requested?: boolean;
+    cancel_requested_at_ts?: (number | null);
+    started_at_ts?: (number | null);
+    finished_at_ts?: (number | null);
+    elapsed_ms?: (number | null);
     result?: (Record<string, any> | null);
-    /**
-     * 图片/视频生成任务的强类型终态交付；非生成任务或历史结果为 null
-     */
+    outputs?: Array<TaskOutputRead>;
     generation_delivery?: (GenerationDeliveryResult | null);
     error?: string;
-    /**
-     * 是否已请求取消
-     */
-    cancel_requested?: boolean;
-    /**
-     * 请求取消时间戳
-     */
-    cancel_requested_at_ts?: (number | null);
-    /**
-     * 任务开始执行时间戳
-     */
-    started_at_ts?: (number | null);
-    /**
-     * 任务结束时间戳
-     */
-    finished_at_ts?: (number | null);
-    /**
-     * 任务累计执行耗时（毫秒）
-     */
-    elapsed_ms?: (number | null);
+    error_code?: (string | null);
 };
 

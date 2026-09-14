@@ -1,148 +1,90 @@
-"""生成任务（图片/视频/等）通用任务表。
+"""任务与输入输出关系：本地生命周期只存 tasks，由 TaskService 维护。"""
 
-设计目标：
-- 统一支撑“流式输出”“任务 + 轮询”等多种交付方式
-- 进度使用 0-100 的整数，前端轮询时可直接展示
-- payload/result 采用 JSON，便于不同模型/供应商扩展
-"""
-
-from __future__ import annotations
-
-from datetime import datetime
-from enum import Enum
+from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, DateTime, Index, Integer, String, Text
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.contracts.task import TaskExecutionMode, TaskStatus
 from app.core.db import Base
 from app.models.base import TimestampMixin
 
 
-class GenerationTaskStatus(str, Enum):
-    pending = "pending"
-    running = "running"
-    streaming = "streaming"
-    succeeded = "succeeded"
-    failed = "failed"
-    cancelled = "cancelled"
+class Task(Base, TimestampMixin):
+    """一次提交的一条执行与历史记录；远端状态是观察值，不是本地终态。"""
 
+    __tablename__ = "tasks"
 
-class GenerationDeliveryMode(str, Enum):
-    streaming = "streaming"  # 长连接分段输出（SSE/WebSocket/HTTP chunked）
-    async_polling = "async_polling"  # 任务 + 轮询查询状态
-
-
-class GenerationTaskVisibility(str, Enum):
-    """任务是否属于任务中心；SSE 运行仅对实验室可见。"""
-
-    hidden = "hidden"
-    task_center = "task_center"
-
-
-class GenerationTask(Base, TimestampMixin):
-    __tablename__ = "generation_tasks"
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True, comment="任务 ID")
-
-    mode: Mapped[GenerationDeliveryMode] = mapped_column(
-        String(32),
-        nullable=False,
-        index=True,
-        comment="交付方式：streaming / async_polling / ...",
-    )
-    visibility: Mapped[GenerationTaskVisibility] = mapped_column(
-        String(32), nullable=False, default=GenerationTaskVisibility.task_center, index=True,
-        comment="任务可见范围：hidden / task_center",
-    )
-    task_kind: Mapped[str] = mapped_column(
-        String(64),
-        nullable=False,
-        default="generic",
-        index=True,
-        comment="业务任务类型：用于执行器路由，如 script_divide / video_generation / image_generation",
-    )
-    status: Mapped[GenerationTaskStatus] = mapped_column(
-        String(32),
-        nullable=False,
-        default=GenerationTaskStatus.pending,
-        index=True,
-        comment="任务状态",
-    )
-    progress: Mapped[int] = mapped_column(
-        Integer,
-        nullable=False,
-        default=0,
-        comment="进度 0-100",
-    )
-
-    payload: Mapped[dict[str, Any]] = mapped_column(
-        JSON,
-        nullable=False,
-        default=dict,
-        comment="请求参数（JSON）",
-    )
-    result: Mapped[dict[str, Any] | None] = mapped_column(
-        JSON,
-        nullable=True,
-        comment="结果（JSON，例如 url、metadata）",
-    )
-    error: Mapped[str] = mapped_column(
-        Text,
-        nullable=False,
-        default="",
-        comment="失败原因（为空表示无错误）",
-    )
-    cancel_requested: Mapped[bool] = mapped_column(
-        Boolean,
-        nullable=False,
-        default=False,
-        comment="是否已请求取消",
-    )
-    cancel_requested_at: Mapped[datetime | None] = mapped_column(
-        DateTime,
-        nullable=True,
-        comment="请求取消时间",
-    )
-    started_at: Mapped[datetime | None] = mapped_column(
-        DateTime,
-        nullable=True,
-        comment="任务开始执行时间",
-    )
-    finished_at: Mapped[datetime | None] = mapped_column(
-        DateTime,
-        nullable=True,
-        comment="任务结束时间（成功 / 失败 / 取消）",
-    )
-    cancel_reason: Mapped[str | None] = mapped_column(
-        String(255),
-        nullable=True,
-        comment="取消原因",
-    )
-    cancelled_at: Mapped[datetime | None] = mapped_column(
-        DateTime,
-        nullable=True,
-        comment="实际取消完成时间",
-    )
-    executor_type: Mapped[str | None] = mapped_column(
-        String(32),
-        nullable=True,
-        comment="最近一次投递的执行器类型，仅用于诊断，如 celery",
-    )
-    executor_task_id: Mapped[str | None] = mapped_column(
-        String(128),
-        nullable=True,
-        comment="最近一次执行器 work ID，仅用于诊断，不作为执行或终态真相",
-    )
-    lease_owner: Mapped[str | None] = mapped_column(String(128), nullable=True, comment="流式运行 lease 持有者")
-    lease_epoch: Mapped[int] = mapped_column(Integer, nullable=False, default=0, comment="lease fencing epoch")
-    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, comment="lease 过期时间")
-    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, comment="最近续租时间")
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    # 应用写入完整精度时间，避免 SQLite 默认秒级文本与游标绑定精度不同。
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None), nullable=False)
+    kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    target_type: Mapped[str | None] = mapped_column(String(64))
+    target_id: Mapped[str | None] = mapped_column(String(64))
+    expected_target_version: Mapped[int | None] = mapped_column(Integer)
+    project_id: Mapped[str | None] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default=TaskStatus.queued)
+    stage: Mapped[str] = mapped_column(String(32), nullable=False, default="queued")
+    progress: Mapped[int | None] = mapped_column(Integer)
+    execution_mode: Mapped[str] = mapped_column(String(16), nullable=False, default=TaskExecutionMode.direct)
+    worker_instance_id: Mapped[str | None] = mapped_column(String(64))
+    input_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    result: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    provider_id: Mapped[str | None] = mapped_column(ForeignKey("providers.id", ondelete="RESTRICT"))
+    provider_task_id: Mapped[str | None] = mapped_column(String(255))
+    remote_status: Mapped[str | None] = mapped_column(String(64))
+    next_poll_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_polled_at: Mapped[datetime | None] = mapped_column(DateTime)
+    deadline_at: Mapped[datetime | None] = mapped_column(DateTime)
+    cancel_requested_at: Mapped[datetime | None] = mapped_column(DateTime)
+    cancel_reason: Mapped[str | None] = mapped_column(String(255))
+    error_code: Mapped[str | None] = mapped_column(String(128))
+    error_message: Mapped[str | None] = mapped_column(Text)
+    last_poll_error: Mapped[str | None] = mapped_column(Text)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+    retry_of_task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id", ondelete="SET NULL"))
 
     __table_args__ = (
-        # 轮询高频：按 id 主键读最常见；列表/后台清理可按状态与更新时间过滤
-        Index("ix_generation_tasks_status_updated_at", "status", "updated_at"),
-        Index("ix_generation_tasks_mode_updated_at", "mode", "updated_at"),
-        Index("ix_generation_tasks_visibility_updated_at", "visibility", "updated_at"),
-        Index("ix_generation_tasks_status_cancel_requested", "status", "cancel_requested"),
+        CheckConstraint("status IN ('queued','running','succeeded','failed','cancelled')", name="ck_tasks_status"),
+        CheckConstraint("execution_mode IN ('direct','remote')", name="ck_tasks_execution_mode"),
+        CheckConstraint("progress IS NULL OR (progress >= 0 AND progress <= 100)", name="ck_tasks_progress"),
+        Index("ix_tasks_queue", "status", "created_at", "id"),
+        Index("ix_tasks_poll", "status", "next_poll_at", "id"),
+        Index("ix_tasks_deadline", "status", "deadline_at"),
+        Index("ix_tasks_history", "created_at", "id"),
+        Index("ix_tasks_project_history", "project_id", "created_at", "id"),
+        Index("ix_tasks_target", "target_type", "target_id", "created_at"),
+    )
+
+
+class TaskInput(Base):
+    """不可变参考文件及其输入位置，避免将文件版本复制到任务表。"""
+
+    __tablename__ = "task_inputs"
+
+    task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), primary_key=True)
+    role_path: Mapped[str] = mapped_column(String(255), primary_key=True)
+    ordinal: Mapped[int] = mapped_column(Integer, primary_key=True)
+    file_id: Mapped[str] = mapped_column(ForeignKey("files.id", ondelete="RESTRICT"), nullable=False)
+
+    __table_args__ = (Index("ix_task_inputs_file", "file_id", "task_id"),)
+
+
+class TaskOutput(Base):
+    """一个完整生成文件一行；输出身份是 task_id 与 ordinal。"""
+
+    __tablename__ = "task_outputs"
+
+    task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), primary_key=True)
+    ordinal: Mapped[int] = mapped_column(Integer, primary_key=True)
+    file_id: Mapped[str] = mapped_column(ForeignKey("files.id", ondelete="RESTRICT"), nullable=False, index=True)
+    delivery_status: Mapped[str | None] = mapped_column(String(16))
+    delivery_reason: Mapped[str | None] = mapped_column(String(128))
+
+    __table_args__ = (
+        CheckConstraint("delivery_status IS NULL OR delivery_status IN ('published','conflicted','skipped')", name="ck_task_outputs_delivery"),
+        CheckConstraint("ordinal >= 0", name="ck_task_outputs_ordinal"),
     )

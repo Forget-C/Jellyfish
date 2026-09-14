@@ -1,8 +1,10 @@
 ---
 title: 生成执行策略 ADR
 description: 固化 inline、SSE streaming 与 durable async 的边界，以及当前 Provider 恢复能力矩阵。
-status: accepted
+status: superseded
 ---
+
+> 本文的可恢复执行、Attempt、Run、Blob 与协调器方案已被 [异步任务简化方案](/docs/plans/async-task-schema-simplification/) 替代。以下为旧决策依据，不再作为当前实施要求；当前实现见 [任务执行架构](/docs/architecture/task-execution/)。
 
 ## 决策
 

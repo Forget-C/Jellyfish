@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from app.services.studio.experiment_messages import read_experiment_messages
+
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -88,12 +90,11 @@ async def _submit_lab_task(
         session_id=session_id,
         drafts=[
             # 用户消息只保存可见文本。完整模型、媒体和 operation 参数只存在于
-            # GenerationTask.payload，不能由消息记录反向作为 Worker 输入。
+            # Task.input_snapshot，不能由消息记录反向作为 Worker 输入。
             ExperimentMessageDraft(role="user", content=body.execution_prompt or ""),
             ExperimentMessageDraft(
                 role="task",
                 content=f"{task_label}生成任务已提交，正在等待生成结果。",
-                status="pending",
                 payload=task_message_display_payload(modality=modality.value),
             ),
         ],
@@ -116,10 +117,7 @@ async def _submit_lab_task(
     return created_response(
         ExperimentTaskCreated(
             task_id=accepted.task_id,
-            messages=[
-                ExperimentMessageRead.model_validate(user_message),
-                ExperimentMessageRead.model_validate(task_message),
-            ],
+            messages=await read_experiment_messages(db, [user_message, task_message]),
         )
     )
 

@@ -2,10 +2,10 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+/**
+ * 用户发起取消时可附带简短原因。
+ */
 export type TaskCancelRequest = {
-    /**
-     * 取消原因（可选）
-     */
     reason?: (string | null);
 };
 

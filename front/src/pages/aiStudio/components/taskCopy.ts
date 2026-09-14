@@ -157,6 +157,9 @@ export const TASK_COPY = {
 } satisfies Record<string, TaskCopyPreset>
 
 export const TASK_KIND_TITLE_MAP: Record<string, string> = {
+  text_chat: '文本生成',
+  script_merge: '实体合并',
+  script_variant: '变体分析',
   script_divide: TASK_COPY.chapterDivision.title,
   script_extract: TASK_COPY.scriptExtract.title,
   script_consistency: TASK_COPY.consistencyCheck.title,
@@ -168,7 +171,6 @@ export const TASK_KIND_TITLE_MAP: Record<string, string> = {
   script_costume_info: '服装信息分析',
   image_generation: '图片生成',
   video_generation: '视频生成',
-  shot_frame_prompt: '分镜提示词生成',
 }
 
 export const RELATION_TYPE_LABEL_MAP: Record<string, string> = {

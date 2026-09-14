@@ -414,7 +414,6 @@ def test_list_shot_runtime_summary_returns_success_envelope(client: TestClient, 
                 shot_id="shot-1",
                 has_active_tasks=True,
                 has_active_video_tasks=True,
-                has_active_prompt_tasks=False,
                 has_active_frame_tasks=False,
                 active_task_count=1,
             )

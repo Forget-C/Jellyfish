@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,15 +18,6 @@ from app.models.studio import Shot, ShotDetail, ShotFrameImage
 from app.models.studio_prompts_files_timeline import FileItem
 from app.models.types import FileType
 from app.services.studio.entity_specs import entity_spec
-
-
-@dataclass(frozen=True)
-class ResolvedMediaSnapshot:
-    """门禁验证后的单个媒体叶子及其不可变内容版本信息。"""
-
-    reference: MediaReference
-    content_version: int
-    content_hash: str | None
 
 
 def _iter_media(media: ImageMediaInput | VideoMediaInput | None) -> list[MediaReference]:
@@ -91,7 +80,7 @@ class GenerationEntityGate:
         for reference in _iter_media(media):
             file_item = await db.get(FileItem, reference.file_id)
             expected_type = FileType.image if reference.media_kind == "image" else FileType.video
-            if file_item is None:
+            if file_item is None or file_item.delete_requested_at is not None or file_item.deleted_at is not None:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="file_not_found")
             if file_item.type != expected_type:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="media_role_invalid")
@@ -101,7 +90,10 @@ class GenerationEntityGate:
         target = command.target
         exists = False
         if target.kind == GenerationTargetKind.experiment_session:
-            exists = await db.get(ExperimentSession, target.entity_id) is not None
+            session = await db.get(ExperimentSession, target.entity_id, with_for_update=True)
+            exists = session is not None
+            if session is not None and session.lab_type != command.modality.value:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="experiment_session_type_invalid")
         elif target.kind == GenerationTargetKind.shot_video:
             exists = await db.get(Shot, target.entity_id) is not None
         elif target.kind == GenerationTargetKind.shot_detail:

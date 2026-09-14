@@ -12,7 +12,7 @@ from app.core.contracts.generation import (
     ImageGenerationOperationInput,
     ResolvedGenerationSnapshot,
 )
-from app.models.generation_artifacts import GenerationArtifact, GenerationArtifactPublishStatus
+from app.models.task import TaskOutput
 from app.services.generation.publishers import AssetImagePublisher, ShotFramePublisher, ShotVideoPublisher
 
 
@@ -23,6 +23,10 @@ class RecordingSession:
         """按执行顺序提供 SQL 更新影响行数。"""
         self._rowcounts = list(rowcounts)
         self.statements: list[object] = []
+
+    async def get(self, model, file_id, **kwargs):
+        """模拟可用文件；真实文件删除与采用冲突另由数据库集成测试验证。"""
+        return SimpleNamespace(id=file_id, delete_requested_at=None, deleted_at=None)
 
     async def execute(self, statement: object) -> SimpleNamespace:
         """模拟 AsyncSession.execute 的 rowcount 返回值。"""
@@ -40,18 +44,9 @@ def _snapshot(kind: GenerationTargetKind, *, entity_id: str = "shot-1", slot_id:
     )
 
 
-def _artifact(ordinal: int, *, status: GenerationArtifactPublishStatus = GenerationArtifactPublishStatus.skipped) -> GenerationArtifact:
-    """创建尚待 Publisher 确定最终状态的最小图片 Artifact。"""
-    return GenerationArtifact(
-        id=f"artifact-{ordinal}",
-        task_id="task-1",
-        modality="image",
-        ordinal=ordinal,
-        file_id=f"file-{ordinal}",
-        provider_result={},
-        publish_status=status,
-        publish_error="staging",
-    )
+def _artifact(ordinal: int) -> TaskOutput:
+    """创建待发布的任务输出，不再维护独立 Artifact 状态模型。"""
+    return TaskOutput(task_id="task-1", ordinal=ordinal, file_id=f"file-{ordinal}")
 
 
 @pytest.mark.asyncio
@@ -65,10 +60,10 @@ async def test_asset_publisher_publishes_primary_and_keeps_secondary_as_history(
     )
 
     assert len(db.statements) == 1
-    assert primary.publish_status is GenerationArtifactPublishStatus.published
-    assert primary.publish_error is None
-    assert secondary.publish_status is GenerationArtifactPublishStatus.skipped
-    assert secondary.publish_error == "non_primary_artifact"
+    assert primary.delivery_status == "published"
+    assert primary.delivery_reason is None
+    assert secondary.delivery_status == "skipped"
+    assert secondary.delivery_reason == "non_primary_artifact"
     assert "version_id" in str(db.statements[0])
     assert "file_id" in str(db.statements[0])
 
@@ -84,8 +79,8 @@ async def test_shot_frame_publisher_marks_conflict_without_overwriting_slot() ->
     )
 
     assert len(db.statements) == 1
-    assert primary.publish_status is GenerationArtifactPublishStatus.conflicted
-    assert primary.publish_error == "target_version_conflict"
+    assert primary.delivery_status == "conflicted"
+    assert primary.delivery_reason == "target_version_conflict"
     assert "shot_frame_images" in str(db.statements[0])
 
 
@@ -101,7 +96,19 @@ async def test_shot_video_publisher_uses_dedicated_video_version_and_is_idempote
     await publisher.publish_terminal(db, snapshot=snapshot, artifacts=[primary])  # type: ignore[arg-type]
 
     assert len(db.statements) == 1
-    assert primary.publish_status is GenerationArtifactPublishStatus.published
+    assert primary.delivery_status == "published"
     statement = str(db.statements[0])
     assert "generated_video_file_id" in statement
     assert "generated_video_version_id" in statement
+    assert "status" not in statement
+
+
+@pytest.mark.asyncio
+async def test_frame_publisher_rejects_wrong_target_before_database_write():
+    """目标类型不匹配时不能把实验或视频结果写入帧槽位。"""
+    db = RecordingSession(1)
+    with pytest.raises(ValueError, match="target_kind mismatch"):
+        await ShotFramePublisher().publish_terminal(
+            db, snapshot=_snapshot(GenerationTargetKind.shot_video), artifacts=[_artifact(0)],
+        )
+    assert db.statements == []

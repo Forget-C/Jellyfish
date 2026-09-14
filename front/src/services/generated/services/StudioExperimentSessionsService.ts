@@ -86,7 +86,7 @@ export class StudioExperimentSessionsService {
     }
     /**
      * Delete Experiment Session
-     * 删除尚未关联任务消息的会话，避免运行任务失去历史归属。
+     * 锁定会话并检查活动任务，避免与新任务提交交错。
      *
      * P2 接入审计后，应在提交成功的同一事务中记录删除事件。
      * @returns ApiResponse_NoneType_ Successful Response
@@ -190,7 +190,7 @@ export class StudioExperimentSessionsService {
     }
     /**
      * Update Experiment Message
-     * 更新异步任务消息的状态、展示文本或结果快照。
+     * 更新普通或流式消息；异步任务消息只能从任务事实派生。
      * @returns ApiResponse_ExperimentMessageRead_ Successful Response
      * @throws ApiError
      */

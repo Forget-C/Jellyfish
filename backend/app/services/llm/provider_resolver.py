@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.llm import Model, ModelCategoryKey, Provider, ProviderStatus
 from app.services.common import entity_not_found
-from app.bootstrap import bootstrap_all_registries
+from app.services.llm.provider_bootstrap import bootstrap_builtin_providers
 from app.services.llm.provider_registry import (
     get_provider_spec,
     is_provider_category_supported,
@@ -56,7 +56,7 @@ def resolve_provider_config_from_provider(
     provider: Provider,
     category: ModelCategoryKey,
 ) -> ResolvedProviderConfig:
-    bootstrap_all_registries()
+    bootstrap_builtin_providers()
     _validate_provider_status(provider)
     provider_key = resolve_provider_key_from_name(provider.name)
     if not is_provider_category_supported(provider_key, category):
@@ -92,7 +92,7 @@ def resolve_effective_base_url(
     provider_key: str | None = None,
 ) -> str | None:
     """按类别解析 Provider 实际 base_url：类别覆盖 > 通用 > 内置默认。"""
-    bootstrap_all_registries()
+    bootstrap_builtin_providers()
     key = provider_key or resolve_provider_key_from_name(provider.name)
     spec = get_provider_spec(key)
     common_base = (provider.base_url or "").strip()

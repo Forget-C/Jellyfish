@@ -3,20 +3,14 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { TaskStatus } from './TaskStatus';
+/**
+ * 取消结果直接反映服务裁决后的任务状态。
+ */
 export type TaskCancelRead = {
     task_id: string;
     status: TaskStatus;
-    /**
-     * 是否已登记取消请求
-     */
     cancel_requested: boolean;
-    /**
-     * 请求取消时间戳
-     */
     cancel_requested_at_ts?: (number | null);
-    /**
-     * 是否已立即取消完成
-     */
     effective_immediately?: boolean;
 };
 

@@ -5,6 +5,8 @@ weight: 31
 status: in_progress
 ---
 
+> 本文涉及任务执行层的 Run、恢复执行与产物状态模型已由 [异步任务简化方案](/docs/plans/async-task-schema-simplification/) 替代；提示词渲染等独立范围不因此视为完成。当前任务实现见 [任务执行架构](/docs/architecture/task-execution/)。
+
 > 本文属于“任务计划”文档，描述目标架构与一次性切换的实施步骤。项目仍处于开发期，本文**不保留旧路由、旧 payload、双写或兼容适配层**。
 
 ## 1. 背景与问题

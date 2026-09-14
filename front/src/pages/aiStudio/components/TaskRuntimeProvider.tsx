@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import type { ReactNode } from 'react'
-import { FilmService } from '../../../services/generated'
+import { FilmService, type TaskListItemRead } from '../../../services/generated'
 import { useTaskUiStore } from './taskUiStore'
 
 const TASK_POLL_INTERVAL_MS = 4000
@@ -20,17 +20,24 @@ export function TaskRuntimeProvider({ children }: TaskRuntimeProviderProps) {
 
     const load = async () => {
       try {
-        const res = await FilmService.listTasksApiV1FilmTasksGet({
-          recentSeconds: TASK_RECENT_SECONDS,
-          page: 1,
-          pageSize: TASK_PAGE_SIZE,
-        })
-        if (cancelled) return
-        setServerTasks(res.data?.items ?? [])
+        const tasks: TaskListItemRead[] = []
+        let cursor: string | null = null
+        // 完整读取活动集合后一次替换，避免只展示第一页或分页中间状态。
+        do {
+          const res = await FilmService.listTasksApiV1FilmTasksGet({
+            recentSeconds: TASK_RECENT_SECONDS,
+            limit: TASK_PAGE_SIZE,
+            cursor,
+          })
+          if (cancelled) return
+          if (!res.data) throw new Error('任务列表响应缺少数据')
+          tasks.push(...res.data.items)
+          cursor = res.data.next_cursor ?? null
+        } while (cursor)
+        if (!cancelled) setServerTasks(tasks)
       } catch {
-        if (!cancelled) {
-          setServerTasks([])
-        }
+        // 查询失败保留上一次完整快照，下一轮继续刷新。
+
       } finally {
         if (!cancelled) {
           timer = window.setTimeout(() => {

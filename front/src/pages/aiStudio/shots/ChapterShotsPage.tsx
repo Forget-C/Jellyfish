@@ -71,7 +71,6 @@ type ShotPreparationState = {
 type ShotRuntimeState = {
   has_active_tasks: boolean
   has_active_video_tasks: boolean
-  has_active_prompt_tasks: boolean
   has_active_frame_tasks: boolean
   active_task_count: number
 }
@@ -150,7 +149,6 @@ export function ChapterShotsPage() {
             {
               has_active_tasks: item.has_active_tasks,
               has_active_video_tasks: item.has_active_video_tasks,
-              has_active_prompt_tasks: item.has_active_prompt_tasks,
               has_active_frame_tasks: item.has_active_frame_tasks,
               active_task_count: item.active_task_count,
             },

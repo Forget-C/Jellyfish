@@ -33,7 +33,7 @@ class ShotFramePublisher(GenerationResultPublisher):
             raise ValueError("shot frame slot_id must be numeric") from error
         result = await db.execute(
             update(ShotFrameImage)
-            .where(ShotFrameImage.id == numeric_slot_id, ShotFrameImage.version_id == expected_version_id)
+            .where(ShotFrameImage.id == numeric_slot_id, ShotFrameImage.shot_detail_id == snapshot.canonical_target.entity_id, ShotFrameImage.version_id == expected_version_id)
             .values(file_id=file_id, version_id=ShotFrameImage.version_id + 1)
         )
         return bool(result.rowcount)

@@ -25,22 +25,20 @@ from app.models.studio import (
     ShotStatus,
 )
 from app.schemas.skills.script_processing import StudioScriptExtractionDraft, StudioShotDraft
-from app.services.studio import (
-    create_project_asset_link,
-    delete_project_asset_link,
-    get_shot_assets_overview,
-    ignore_shot_extracted_candidate,
-    link_shot_extracted_candidate,
-    accept_shot_extracted_dialogue_candidate,
-    ignore_shot_extracted_dialogue_candidate,
-    list_shot_extracted_candidates,
-    list_shot_extracted_dialogue_candidates,
-    replace_shot_extracted_candidates,
-    replace_shot_extracted_dialogue_candidates,
-    set_skip_extraction,
-    sync_shot_extracted_candidates_from_draft,
-    sync_shot_extracted_dialogue_candidates_from_draft,
-)
+from app.services.studio.shot_assets import create_project_asset_link
+from app.services.studio.shot_assets import delete_project_asset_link
+from app.services.studio.shot_assets_overview import get_shot_assets_overview
+from app.services.studio.shot_extracted_candidates import mark_ignored as ignore_shot_extracted_candidate
+from app.services.studio.shot_extracted_candidates import mark_linked as link_shot_extracted_candidate
+from app.services.studio.shot_extracted_dialogue_candidates import mark_accepted as accept_shot_extracted_dialogue_candidate
+from app.services.studio.shot_extracted_dialogue_candidates import mark_ignored as ignore_shot_extracted_dialogue_candidate
+from app.services.studio.shot_extracted_candidates import list_by_shot as list_shot_extracted_candidates
+from app.services.studio.shot_extracted_dialogue_candidates import list_by_shot as list_shot_extracted_dialogue_candidates
+from app.services.studio.shot_extracted_candidates import replace_for_shot as replace_shot_extracted_candidates
+from app.services.studio.shot_extracted_dialogue_candidates import replace_for_shot as replace_shot_extracted_dialogue_candidates
+from app.services.studio.shot_extracted_candidates import set_skip_extraction
+from app.services.studio.shot_extracted_candidates import sync_from_extraction_draft as sync_shot_extracted_candidates_from_draft
+from app.services.studio.shot_extracted_dialogue_candidates import sync_from_extraction_draft as sync_shot_extracted_dialogue_candidates_from_draft
 from app.services.studio.generation.video import (
     build_video_base_draft,
     build_video_context,
@@ -54,7 +52,8 @@ from app.schemas.studio.shots import (
     ShotDetailUpdate,
     ShotExtractedDialogueCandidateAcceptRequest,
 )
-from app.services.studio import mark_shot_generating, recompute_shot_status
+from app.services.studio.shot_status import mark_shot_generating
+from app.services.studio.shot_status import recompute_shot_status
 
 
 async def _build_session() -> tuple[AsyncSession, object]:

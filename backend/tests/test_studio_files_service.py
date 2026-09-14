@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import pytest
+from fastapi import UploadFile
+from io import BytesIO
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.db import Base
@@ -48,8 +50,8 @@ async def test_list_files_paginated_filters_by_keyword() -> None:
     async with db:
         db.add_all(
             [
-                FileItem(id="f1", type=FileType.image, name="角色主图", thumbnail="", tags=[], storage_key="files/a.png"),
-                FileItem(id="f2", type=FileType.video, name="片段视频", thumbnail="", tags=[], storage_key="files/b.mp4"),
+                FileItem(id="f1", type=FileType.image, name="角色主图", tags=[], storage_key="files/a.png"),
+                FileItem(id="f2", type=FileType.video, name="片段视频", tags=[], storage_key="files/b.mp4"),
             ]
         )
         await db.commit()
@@ -79,7 +81,7 @@ async def test_get_file_detail_includes_usages() -> None:
                 id="f1",
                 type=FileType.image,
                 name="角色主图",
-                thumbnail="thumb",
+                thumbnail_key="thumb",
                 tags=["hero"],
                 storage_key="files/a.png",
             )
@@ -121,7 +123,7 @@ async def test_update_file_meta_updates_fields_and_upserts_usage() -> None:
                 id="f1",
                 type=FileType.image,
                 name="旧名称",
-                thumbnail="old",
+                thumbnail_key="old",
                 tags=["old"],
                 storage_key="files/a.png",
             )
@@ -133,7 +135,6 @@ async def test_update_file_meta_updates_fields_and_upserts_usage() -> None:
             file_id="f1",
             body=FileUpdate(
                 name="新名称",
-                thumbnail="new-thumb",
                 tags=["hero", "poster"],
                 usage={
                     "project_id": "p1",
@@ -160,7 +161,7 @@ async def test_update_file_meta_updates_fields_and_upserts_usage() -> None:
         detail = await get_file_detail(db, file_id="f1")
 
         assert updated.name == "新名称"
-        assert updated.thumbnail == "new-thumb"
+        assert updated.thumbnail_key == "old"
         assert updated.tags == ["hero", "poster"]
         assert updated_again.id == "f1"
         assert len(detail.usages) == 1
@@ -172,13 +173,6 @@ async def test_update_file_meta_updates_fields_and_upserts_usage() -> None:
 @pytest.mark.asyncio
 async def test_upload_file_does_not_force_public_acl(monkeypatch) -> None:
     """上传应兼容禁用对象 ACL 的 S3 bucket，访问控制由 bucket 策略或下载接口处理。"""
-    class _Upload:
-        filename = "reference.png"
-        content_type = "image/png"
-
-        async def read(self) -> bytes:
-            return b"png-content"
-
     captured: dict[str, object] = {}
 
     async def _fake_upload_file(**kwargs):
@@ -188,10 +182,10 @@ async def test_upload_file_does_not_force_public_acl(monkeypatch) -> None:
     monkeypatch.setattr(files_service.storage, "upload_file", _fake_upload_file)
     db, engine = await _build_session()
     async with db:
-        uploaded = await files_service.upload_file(db, file=_Upload())
+        uploaded = await files_service.upload_file(db, file=UploadFile(filename="reference.png", file=BytesIO(b"png-content"), size=11, headers={"content-type": "image/png"}))
 
         assert uploaded.type == FileType.image
-        assert captured["key"] == "files/reference.png"
+        assert captured["key"] == f"files/{uploaded.id}.png"
         assert captured["content_type"] == "image/png"
         assert "extra_args" not in captured
     await engine.dispose()
