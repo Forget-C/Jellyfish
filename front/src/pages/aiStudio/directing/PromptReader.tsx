@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button, Drawer, Empty, Tag } from 'antd'
 import type { Note_Input, Prompt, SceneDesign_Input, WorkspaceRead } from '../../../services/generated'
-import { DesignNote } from './DesignSummary'
+import { DesignNote } from './DesignNote'
 import { ReferencePreview } from './ReferencePreview'
 
 /** 只解析冻结设计中的 JSON pointer，不把字段路径回跳到较新的编辑版本。 */
@@ -11,8 +11,9 @@ export function FrozenDesignValue({ design, pointer }: { design?: SceneDesign_In
 }
 
 /** 正文片段与原编译映射一起阅读；文字重叠时展示所有关联决定，不推断来源。 */
-export function PromptReader({ prompt, workspace }: { prompt: Prompt; workspace: WorkspaceRead }) {
+export function PromptReader({ prompt, workspace, active = true }: { active?: boolean; prompt: Prompt; workspace: WorkspaceRead }) {
   const [selection, setSelection] = useState<number[]>()
+  useEffect(() => { if (!active) setSelection(undefined) }, [active])
   const plan = workspace.plans.find(row => row.id === prompt.plan_revision_id)
   const unit = plan?.content.units.find(row => row.id === prompt.unit_id)
   const design = workspace.designs.find(row => row.id === plan?.content.design_revision_id)

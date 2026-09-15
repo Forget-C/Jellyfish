@@ -1,6 +1,6 @@
 # 场次工作台体验回归
 
-从项目根目录运行 31 项纯行为回归，使用现有 TypeScript 编译器与 Node.js 内置测试工具：
+从项目根目录运行既有纯行为回归，使用现有 TypeScript 编译器与 Node.js 内置测试工具：
 
 ```bash
 node --test front/tests/workspaceUsage.test.mjs front/tests/workspaceNavigation.test.mjs front/tests/workspaceContext.test.mjs front/tests/workspaceGuidance.test.mjs front/tests/workspaceTaskContext.test.mjs front/tests/workspacePreparation.test.mjs front/tests/workspaceProduction.test.mjs front/tests/workspaceCut.test.mjs
@@ -43,3 +43,18 @@ node front/tests/shellFocus.browser.mjs
 覆盖全部路由族、项目与资产页签、五种规定尺寸、全局导航、真实标题回跳、任务抽屉、资产与 Agent 保存、实验室历史与固定输入区，以及旧入口参数恢复。原场次回归继续负责业务草稿、采用、离开保护与复杂写入失败场景。
 
 `shellFocus.browser.mjs` 临时监听 `127.0.0.1:4185`，验证桌面与手机导航的 Tab 往返、2px 可见焦点及 Escape 关闭；手机导航位于应用壳外的抽屉门户中，因此单独覆盖其焦点样式。
+
+## 新场次工作台回归（B 阶段）
+
+```bash
+node --test front/tests/designWorkspace.test.mjs front/tests/workspaceTaskContext.test.mjs
+node front/tests/sequenceWorkbench.browser.mjs
+node front/tests/workspaceDesignViews.browser.mjs
+node front/tests/workspaceJourney.browser.mjs
+```
+
+纯行为测试覆盖真实关联图、对象编辑时其他字段与来源保留、稳定身份版本比较。浏览器脚本使用 `127.0.0.1:4186`，检查参考 A 的布局边界、共享对象选择、1/60/200 镜头虚拟定位和1279/1024/768/375px 导航与详情抽屉。默认输出 `/tmp/jellyfish-sequence-workbench`，可通过 `SEQUENCE_EVIDENCE_DIR` 指定目录。此脚本的试拍与剪辑截图仅验证布局；完整媒体、采用及编辑保护仍由上述专门回归验证。B5 的最终证据与未完成项维护在全站布局和场次工作台计划中。
+
+`workspaceDesignViews.browser.mjs` 使用4187端口，覆盖200镜头的节拍聚合、搜索和问题过滤、错版与多来源预演选择、稳定身份历史比较、版本切换后的选择恢复；只读浏览不产生业务写入。`workspaceJourney.browser.mjs` 使用4188端口和ffmpeg合成媒体，从新建项目、章节、场次连续执行到设计/计划确认、编译审稿、生成候选、人工审片、精确区间粗剪及局部返工。其接口替身按实际请求推进数据，不预先填充后续产出。
+
+试拍回归还检查跨计划同名单元的运行/失败摘要及冻结来源抽屉；剪辑回归检查所选接缝两端实际区间和抽屉关闭、切换后的输入保留。综合响应式回归直接检查首屏按钮的尺寸和命中位置，不先滚动按钮以掩盖裁切。

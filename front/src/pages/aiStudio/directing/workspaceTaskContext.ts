@@ -29,3 +29,13 @@ export function taskWorkspaceContext(workspace: WorkspaceRead, taskId: string, s
   if (first && occurrences?.every(row => row.plan_revision_id === first.plan_revision_id && row.unit_id === first.unit_id && row.prompt_revision_id === first.prompt_revision_id)) return { taskId, planId: first.plan_revision_id, unitId: first.unit_id, promptId: first.prompt_revision_id }
   return undefined
 }
+
+/** 摘要只归入有真实产出、提交范围或审稿出现项依据的计划与单元。 */
+export function tasksForUnit(workspace: WorkspaceRead, tasks: DirectingTaskRead[], submitted: SubmittedWorkspaceTask[], planId?: string, unitId?: string): DirectingTaskRead[] {
+  if (!planId || !unitId) return []
+  return tasks.filter(task => {
+    const context = taskWorkspaceContext(workspace, task.task_id, submitted, task)
+    if (context) return context.planId === planId && context.unitId === unitId
+    return task.review?.occurrences.some(row => row.plan_revision_id === planId && row.unit_id === unitId) || false
+  })
+}

@@ -169,16 +169,35 @@ try {
   workspace.plans[1].confirmed_at = '2026-09-15T01:00:00'
   workspace.plans[1].content.units[0].parameters = { seed: 123, guidance_scale: 7 }
   workspace.plans[1].content.units[0].references = ['video', 'audio'].map((kind, index) => ({ id: 'ref-' + kind, file_id: kind + '-file', media_kind: kind, purpose: kind === 'audio' ? 'sound' : 'performance', ordinal: index, participant_ids: [], source: { kind: 'human', reference: 'fixed-media', version: '1' } }))
-  workspace.prompts = ['old-input', 'new-input-a', 'new-input-b'].map((id, index) => revision(id, { plan_revision_id: index ? 'p-new' : 'p-old', unit_id: 'u1', text: id + ' 固定正文', decisions: [], sources: [], format_version: 'v4' }))
+  workspace.prompts = ['old-input', 'new-input-a', 'new-input-b'].map((id, index) => revision(id, { plan_revision_id: index ? 'p-new' : 'p-old', unit_id: 'u1', text: id + ' 固定正文', decisions: index === 1 ? [{ section_path: '/direction/information_change', disposition: 'reference', text_excerpt: '固定正文', explanation: '使用已冻结设计与声音参考', reference_id: 'ref-audio' }] : [], sources: [], format_version: 'v4' }))
   const roles = ['direction', 'performance', 'staging', 'cinematography', 'continuity', 'prompt']
   workspace.reviews = workspace.prompts.map((prompt, index) => revision('review-' + index, { mode: 'formal', roles, occurrences: [{ id: 'o1', prompt_revision_id: prompt.id, plan_revision_id: prompt.content.plan_revision_id, unit_id: 'u1', coverage_item_id: 'cover1', shot_id: 'shot1', local_number: 1 }], rows: roles.map(role => ({ role, occurrence_id: 'o1', verdict: 'pass', rationale: '检查通过', findings: [] })), context: { state: 'unset' } }))
   workspace.takes = makeWorkspace().takes.slice(0, 2)
   workspace.takes[1].plan_revision_id = 'p-new'
   async function choose(label, option) {
     await page.getByRole('combobox', { name: label, exact: true }).locator('../..').click()
-    await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: option }).first().click()
+    const popup = page.locator('.ant-select-dropdown:visible').last()
+    await popup.locator('.ant-select-item-option').filter({ hasText: option }).first().click()
+    if (label !== '重组单元') await popup.waitFor({ state: 'hidden' })
   }
+  tasks.set('new-running', { task_id: 'new-running', kind: 'video_generation', status: 'running', error: null })
+  workspace.task_ids.push('new-running')
+  await page.evaluate(() => sessionStorage.setItem('directing-submitted-tasks:p1:s1', JSON.stringify([{ taskId: 'failed', planId: 'p-old', unitId: 'u1' }, { taskId: 'new-running', planId: 'p-new', unitId: 'u1' }])))
   await page.goto(base + '?view=shoot&plan=p-new&unit=u1&prompt=old-input&review=review-0')
+  const unitSummary = page.locator('[data-unit-task-summary]')
+  await unitSummary.getByText('本单元 · 执行中 1', { exact: true }).waitFor()
+  assert.ok(!(await unitSummary.innerText()).includes('供应商未生成'))
+  const beforeTaskBrowse = writes.length
+  await choose('查看或编辑生产计划', '计划 1')
+  await unitSummary.getByText('本单元 · 失败 1', { exact: true }).waitFor()
+  await unitSummary.getByText('供应商未生成视频，请核对后重试', { exact: true }).waitFor()
+  await unitSummary.getByRole('button', { name: '查看任务记录', exact: true }).click()
+  await page.locator('[data-task-id="failed"]').waitFor()
+  await page.locator('.ant-drawer-open').getByRole('button', { name: 'Close', exact: true }).click()
+  await choose('查看或编辑生产计划', '计划 2')
+  await unitSummary.getByText('本单元 · 执行中 1', { exact: true }).waitFor()
+  assert.equal(writes.length, beforeTaskBrowse)
+
   await page.getByRole('tab', { name: '生成指令', exact: true }).click()
   await page.getByRole('combobox', { name: '选择生成指令版本' }).waitFor()
   assert.equal(await page.getByRole('button', { name: '检查生成指令', exact: true }).isDisabled(), true)
@@ -192,6 +211,18 @@ try {
   await page.getByText('提示词引导强度：7', { exact: true }).waitFor()
   assert.equal(await page.locator('video[aria-label="视频参考 1"]').count(), 2)
   assert.equal(await page.locator('audio[aria-label="声音参考 2"]').count(), 2)
+  await page.locator('.prompt-reader').getByRole('button', { name: '固定正文', exact: true }).click()
+  const mapping = page.locator('.ant-drawer-open').filter({ hasText: '生成指令的冻结依据' })
+  await mapping.getByText('固定计划：计划 2 · 单元 u1 · 设计 1', { exact: true }).waitFor()
+  await mapping.locator('.frozen-design-value').getByText('递出旧信，认出对方', { exact: true }).waitFor()
+  assert.equal(await mapping.locator('audio[aria-label="声音参考 2"]').count(), 1)
+  await mapping.getByRole('button', { name: 'Close', exact: true }).click()
+  await mapping.waitFor({ state: 'hidden' })
+  await choose('选择生成指令版本', '提示词 3')
+  assert.equal(await page.locator('.prompt-reader').innerText(), 'new-input-b 固定正文')
+  assert.equal(await page.locator('.prompt-decision').count(), 0)
+  await choose('选择生成指令版本', '提示词 2')
+
   await page.getByRole('tab', { name: '审稿与执行', exact: true }).click()
   assert.equal(await page.getByRole('button', { name: '确认并开始生成视频', exact: true }).isDisabled(), true)
   await page.getByRole('tab', { name: '候选素材', exact: true }).click()

@@ -1,6 +1,7 @@
+import { useWorkbenchDesktop } from './useWorkbenchDesktop'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Alert, Button, Drawer, Empty, Grid, Input, Modal, Select, Tabs } from 'antd'
+import { Alert, Button, Drawer, Empty, Input, Modal, Select, Tabs } from 'antd'
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons'
 import type { SceneDesign_Input, WorkspaceRead } from '../../../services/generated'
 import { DesignRelations } from './DesignRelations'
@@ -24,11 +25,16 @@ export function DesignEditor({ value, onChange, disabled = false, active = true,
   const [assetsOpen, setAssetsOpen] = useState(false)
   useEffect(() => { if (!active) { setAssetsOpen(false); setDetailsOpen(false) } }, [active])
   const [scrollTop, setScrollTop] = useState(0)
+  const [revealId, setRevealId] = useState<string>()
   const [height, setHeight] = useState(640)
   const [inspectorWidth, setInspectorWidth] = useState(344)
   const list = useRef<HTMLDivElement>(null)
-  const screens = Grid.useBreakpoint()
+  const desktop = useWorkbenchDesktop()
   const objects = useMemo(() => designObjects(value), [value])
+  useEffect(() => {
+    if (!objects.some(object => object.key === selected)) setSelected(value.direction.shots[0] ? `shot:${value.direction.shots[0].id}` : 'overview')
+    if (!value.direction.shots.some(shot => shot.id === focusedShot)) setFocusedShot(value.direction.shots[0]?.id)
+  }, [objects, selected, focusedShot, value.direction.shots])
   const selectedObject = objects.find(row => row.key === selected) || objects[0]
   const shotId = selectedObject.key.startsWith('shot:') ? selectedObject.key.slice(5) : undefined
   const shot = value.direction.shots.find(row => row.id === shotId)
@@ -49,12 +55,16 @@ export function DesignEditor({ value, onChange, disabled = false, active = true,
     return () => observer.disconnect()
   }, [view])
   useEffect(() => { const reset = () => setInspectorWidth(344); window.addEventListener('sequence-reset-layout', reset); return () => window.removeEventListener('sequence-reset-layout', reset) }, [])
-  const select = (key: string, open = true) => { setSelected(key); if (key.startsWith('shot:')) setFocusedShot(key.slice(5)); if (open && !screens.xl) setDetailsOpen(true) }
+  const select = (key: string, open = true) => { setSelected(key); if (key.startsWith('shot:')) setFocusedShot(key.slice(5)); if (open && !desktop) setDetailsOpen(true) }
   const reveal = (id: string) => {
-    setSelected(`shot:${id}`); setFocusedShot(id)
-    const row = rows.findIndex(row => row.kind === 'shot' && row.id === id)
-    if (row >= 0 && list.current) list.current.scrollTop = Math.max(0, row * 40 - list.current.clientHeight / 2)
+    setSelected(`shot:${id}`); setFocusedShot(id); setRevealId(id)
   }
+  useEffect(() => {
+    if (!revealId || view !== 'list' || !list.current) return
+    const row = rows.findIndex(row => row.kind === 'shot' && row.id === revealId)
+    if (row >= 0) list.current.scrollTop = Math.max(0, row * 40 - list.current.clientHeight / 2)
+    setRevealId(undefined)
+  }, [revealId, rows, view])
   const update = (next: SceneDesign_Input) => onChange(next)
   const addShot = () => {
     const id = 'shot-' + crypto.randomUUID().slice(0, 8)
@@ -84,7 +94,7 @@ export function DesignEditor({ value, onChange, disabled = false, active = true,
   const visible = rows.slice(start, start + Math.ceil(height / 40) + 8)
   return <div className="design-workspace" style={{ '--sequence-inspector-width': `${inspectorWidth}px` } as React.CSSProperties} data-workspace-target="design-editor" tabIndex={-1}>
     {active && <SequenceNavigation><div className="design-navigation"><h2>场次结构</h2><Button type="text" block aria-pressed={selected === 'overview'} onClick={() => select('overview')}>▦ 全场概览</Button><h3>故事节拍</h3><Button type="text" block onClick={() => { setBeat(undefined); setView('list') }}>全部镜头 · {value.direction.shots.length}</Button>
-      <div className="design-tree">{value.direction.beats.map((b, i) => <div key={b.id}><Button type="text" block aria-pressed={beat === b.id} onClick={() => { setBeat(b.id); setView('list'); select(`beat:${b.id}`, false) }}>{String(i + 1).padStart(2, '0')}　{noteText(b.objective) || '未命名节拍'}</Button>{value.direction.shots.filter(s => s.beat_ids[0] === b.id).slice(0, 12).map(s => <Button type="text" block className="design-tree-shot" aria-pressed={shotId === s.id} key={s.id} onClick={() => { setBeat(undefined); reveal(s.id) }}>镜头 {String(value.direction.shots.indexOf(s) + 1).padStart(2, '0')}</Button>)}{value.direction.shots.filter(s => s.beat_ids[0] === b.id).length > 12 && <Button type="link" onClick={() => { setBeat(b.id); setView('list') }}>查看本节拍全部镜头</Button>}</div>)}</div>
+      <div className="design-tree">{value.direction.beats.map((b, i) => <div key={b.id}><Button type="text" block aria-pressed={beat === b.id} onClick={() => { setBeat(b.id); setView('list'); select(`beat:${b.id}`, false) }}>{String(i + 1).padStart(2, '0')}　{noteText(b.objective) || '未命名节拍'}</Button>{value.direction.shots.filter(s => s.beat_ids[0] === b.id).slice(0, 12).map(s => <Button type="text" block className="design-tree-shot" aria-pressed={shotId === s.id} key={s.id} onClick={() => { setBeat(undefined); setQuery(''); setProblems(false); setView('list'); reveal(s.id) }}>镜头 {String(value.direction.shots.indexOf(s) + 1).padStart(2, '0')}</Button>)}{value.direction.shots.filter(s => s.beat_ids[0] === b.id).length > 12 && <Button type="link" onClick={() => { setBeat(b.id); setView('list') }}>查看本节拍全部镜头</Button>}</div>)}</div>
       <div className="design-navigation-bottom"><Button type="text" block onClick={() => setAssetsOpen(true)}>人物与场所</Button><Button type="text" block onClick={() => { setProblems(!problems); setView('list') }}>⚠ 设计问题 · {value.direction.shots.filter(s => shotIssues(value, s.id).length).length}</Button><Button type="text" block onClick={() => setView('roles')}>六岗与声音审阅</Button></div>
     </div></SequenceNavigation>}
     <section className="design-center">
@@ -103,7 +113,7 @@ export function DesignEditor({ value, onChange, disabled = false, active = true,
           <div style={{ height: rows.length * 40, position: 'relative' }}>{visible.map((row, index) => row.kind === 'group' ? <div className="design-group-row" style={{ top: (start + index) * 40 }} key={`group:${row.id}`}><strong>{row.id ? `${String(value.direction.beats.findIndex(b => b.id === row.id) + 1).padStart(2, '0')}　${noteText(value.direction.beats.find(b => b.id === row.id)?.objective) || '待明确节拍'}` : '未分组'}</strong><span>（{row.shots.length} 个镜头）</span></div> : <div className={`design-shot-row${shotId === row.id ? ' is-selected' : ''}`} role="row" aria-selected={shotId === row.id} data-shot-id={row.id} style={{ top: (start + index) * 40 }} key={row.id} onClick={() => select(`shot:${row.id}`)}>
             <span>{String(value.direction.shots.indexOf(row.shot) + 1).padStart(2, '0')}</span><span title={noteText(row.shot.visible_result)}>{noteText(row.shot.visible_result) || '动作待填写'}{row.shot.beat_ids.length > 1 && <small> · 跨 {row.shot.beat_ids.length} 节拍</small>}</span><span title={noteText(row.shot.narrative_function)}>{noteText(row.shot.narrative_function) || '待填写'}</span><span>{row.shot.estimated_duration_ms ? `${row.shot.estimated_duration_ms / 1000}s` : '未填写'}</span><span className={shotIssues(value, row.id).length ? 'design-issue' : 'design-secondary'} title={shotIssues(value, row.id).join('；')}>{shotIssues(value, row.id)[0] || '未记录问题'}</span>
           </div>)}</div>
-        </div><div className="design-list-footer"><span>{filtered.length} / {value.direction.shots.length} 个镜头 · 预计 {value.direction.shots.reduce((n, s) => n + (s.estimated_duration_ms || 0), 0) / 1000} 秒</span>{!disabled && <Button size="small" icon={<PlusOutlined />} onClick={addShot}>新增镜头</Button>}</div></> : view === 'storyboard' ? <DesignStoryboard value={value} shots={filtered} selected={shotId} onSelect={id => select(`shot:${id}`)} revisionId={revisionId} cuts={cuts} /> : view === 'relations' ? <DesignRelations value={value} shotId={focusedShot} onSelect={select} /> : <div className="design-role-browser"><Select aria-label="岗位" value={role} onChange={setRole} options={Object.entries({ ...departmentNames, participants: '人物与物件' }).map(([value, label]) => ({ value, label }))} /><h2>{departmentNames[role] || '人物与物件'}</h2><p className="design-secondary">选择对象查看全部字段；共享内容仅在原对象上编辑。</p>{objects.filter(o => o.kind === role).map(o => <button className={`design-role-row${selected === o.key ? ' is-selected' : ''}`} key={o.key} onClick={() => select(o.key)}>{o.label}<span>查看与编辑 ›</span></button>)}{!disabled && <Select<string> aria-label="新增岗位对象" value={undefined} placeholder="新增对象" options={Object.entries(role === 'direction' ? { beats: '节拍', anchors: '空间锚点', blocking_states: '调度', events: '事件', criteria: '验收要求' } : role === 'performance' ? { situations: '角色情境', beats: '节拍表演' } : role === 'staging' ? { activities: '镜内活动' } : role === 'sound' ? { dialogues: '对白' } : { [role]: departmentNames[role] || '人物与物件' }).filter(([key]) => key !== 'prompt').map(([value, label]) => ({ value, label }))} onChange={key => {
+        </div><div className="design-list-footer"><span>{filtered.length} / {value.direction.shots.length} 个镜头 · 预计 {value.direction.shots.reduce((n, s) => n + (s.estimated_duration_ms || 0), 0) / 1000} 秒</span>{!disabled && <Button size="small" icon={<PlusOutlined />} onClick={addShot}>新增镜头</Button>}</div></> : view === 'storyboard' ? <DesignStoryboard key={revisionId} value={value} shots={filtered} selected={shotId} onSelect={id => select(`shot:${id}`)} revisionId={revisionId} cuts={cuts} /> : view === 'relations' ? <DesignRelations value={value} shotId={focusedShot} onSelect={select} onBeatSelect={id => { setBeat(id); setQuery(''); setProblems(false); setScrollTop(0); setView('list') }} /> : <div className="design-role-browser"><Select aria-label="岗位" value={role} onChange={setRole} options={Object.entries({ ...departmentNames, participants: '人物与物件' }).map(([value, label]) => ({ value, label }))} /><h2>{departmentNames[role] || '人物与物件'}</h2><p className="design-secondary">选择对象查看全部字段；共享内容仅在原对象上编辑。</p>{objects.filter(o => o.kind === role).map(o => <button className={`design-role-row${selected === o.key ? ' is-selected' : ''}`} key={o.key} onClick={() => select(o.key)}>{o.label}<span>查看与编辑 ›</span></button>)}{!disabled && <Select<string> aria-label="新增岗位对象" value={undefined} placeholder="新增对象" options={Object.entries(role === 'direction' ? { beats: '节拍', anchors: '空间锚点', blocking_states: '调度', events: '事件', criteria: '验收要求' } : role === 'performance' ? { situations: '角色情境', beats: '节拍表演' } : role === 'staging' ? { activities: '镜内活动' } : role === 'sound' ? { dialogues: '对白' } : { [role]: departmentNames[role] || '人物与物件' }).filter(([key]) => key !== 'prompt').map(([value, label]) => ({ value, label }))} onChange={key => {
           const path = ['events', 'criteria', 'cinematography', 'continuity', 'participants'].includes(key) ? [key] : [role, key]
           const rows = designAt(value, path)
           const sample = designAt(emptyDesign(), [...path, 0])
@@ -111,9 +121,9 @@ export function DesignEditor({ value, onChange, disabled = false, active = true,
           const next = structuredClone(sample); if ('id' in next) next.id = 'item-' + crypto.randomUUID().slice(0, 8)
           update(patchDesign(value, path, [...rows, next]))
         }} />}</div>}
-      {!screens.xl && <Button className="design-detail-trigger" onClick={() => setDetailsOpen(true)}>所选对象详情</Button>}
+      {!desktop && <Button className="design-detail-trigger" onClick={() => setDetailsOpen(true)}>所选对象详情</Button>}
     </section>
-    {screens.xl ? <aside className="design-inspector"><div className="design-inspector-resizer" role="separator" aria-label="调整详情宽度" tabIndex={0} aria-valuemin={300} aria-valuemax={480} aria-valuenow={inspectorWidth} onDoubleClick={() => setInspectorWidth(344)} onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); setInspectorWidth(v => Math.max(300, Math.min(480, v + (event.key === 'ArrowLeft' ? 8 : -8)))) } }} onPointerDown={event => event.currentTarget.setPointerCapture(event.pointerId)} onPointerMove={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) setInspectorWidth(Math.max(300, Math.min(480, window.innerWidth - event.clientX))) }} />{inspector}</aside> : <Drawer title="对象详情" width={344} open={detailsOpen} onClose={() => setDetailsOpen(false)}>{inspector}</Drawer>}
+    {desktop ? <aside className="design-inspector"><div className="design-inspector-resizer" role="separator" aria-label="调整详情宽度" tabIndex={0} aria-valuemin={300} aria-valuemax={480} aria-valuenow={inspectorWidth} onDoubleClick={() => setInspectorWidth(344)} onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); setInspectorWidth(v => Math.max(300, Math.min(480, v + (event.key === 'ArrowLeft' ? 8 : -8)))) } }} onPointerDown={event => event.currentTarget.setPointerCapture(event.pointerId)} onPointerMove={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) setInspectorWidth(Math.max(300, Math.min(480, window.innerWidth - event.clientX))) }} />{inspector}</aside> : <Drawer title="对象详情" width={344} open={detailsOpen} onClose={() => setDetailsOpen(false)}>{inspector}</Drawer>}
     <Drawer title="人物、场所与风格" width={640} open={assetsOpen} onClose={() => setAssetsOpen(false)}>{assets || <DesignFields value={value} path={['participants']} onChange={update} disabled={disabled} />}</Drawer>
   </div>
 }

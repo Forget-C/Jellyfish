@@ -14,6 +14,7 @@ export function DesignStoryboard({ value, shots, selected, onSelect, revisionId,
   const [scroll, setScroll] = useState(0)
   const viewport = useRef<HTMLDivElement>(null)
   useEffect(() => { const element = viewport.current; if (!element) return; const observer = new ResizeObserver(() => setSize({ width: element.clientWidth, height: element.clientHeight })); observer.observe(element); return () => observer.disconnect() }, [])
+  useEffect(() => { setScroll(0); if (viewport.current) viewport.current.scrollTop = 0 }, [shots.length, density])
   const columns = Math.max(1, Math.floor((size.width - 16) / density))
   const rowHeight = density === 180 ? 188 : 224
   const start = Math.max(0, Math.floor(scroll / rowHeight) - 1) * columns

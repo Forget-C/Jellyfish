@@ -93,6 +93,8 @@
   .sequence-mobile-navigation { font-size: 12px; padding: 0 6px; }
   .sequence-version-bar { padding: 8px; min-height: 104px; flex-basis: auto; flex-wrap: wrap; gap: 8px; }
   .sequence-version-actions { width: 100%; gap: 4px; }
+  .sequence-version-actions .sequence-secondary-action { display: none; }
+  .sequence-version-actions > .ant-btn { flex-shrink: 0; }
   .sequence-version-actions .ant-btn { padding-inline: 6px; font-size: 12px; }
   .sequence-version-actions .ant-btn-primary { min-width: 0; }
   .design-view-toolbar { flex-wrap: wrap; flex-basis: 96px; padding: 4px 8px; }
@@ -236,3 +238,14 @@
 .cut-seam-marker { right: -8px; z-index: 1; }
 .cut-boundary-compare { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; margin: 16px 0; }
 .cut-boundary-compare video { width: 100%; background: #111827; margin-top: 8px; }
+
+.production-task-summary { margin: 8px 16px; padding: 8px 12px; border: 1px solid #dce8f8; border-radius: 6px; background: #f5f9ff; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12px; }
+.production-task-summary p { flex-basis: 100%; margin: 0; color: #b45309; }
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .cut-version-bar, .production-version-bar { flex-wrap: wrap; flex-basis: auto; min-height: 104px; padding: 8px 16px; gap: 8px; }
+  .cut-version-bar .sequence-version-context { flex: 1 0 280px; }
+  .cut-version-bar .sequence-version-actions { flex-shrink: 0; margin-left: auto; }
+  .production-version-bar > .ant-space:first-child { flex-basis: 100%; }
+  .production-version-bar > .ant-space:last-child { margin-left: auto; }
+}

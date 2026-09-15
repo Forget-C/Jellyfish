@@ -64,7 +64,7 @@ export function WorkspaceDrafts({ children }: { children: ReactNode }) {
   const processing = busyDrafts().length > 0
   const hasChanges = dirtyDrafts().length > 0
   return <Context.Provider value={value}>{children}
-    <Modal title={processing ? '当前操作尚未完成' : hasChanges ? '有未保存的修改' : '当前操作已结束'} open={!!pending} onCancel={cancel} closable={!saving} maskClosable={false} footer={<Space wrap>
+    <Modal zIndex={2000} title={processing ? '当前操作尚未完成' : hasChanges ? '有未保存的修改' : '当前操作已结束'} open={!!pending} onCancel={cancel} closable={!saving} maskClosable={false} footer={<Space wrap>
       <Button disabled={saving} onClick={cancel}>{processing ? '留在当前页' : '取消，继续编辑'}</Button>
       {(hasChanges || processing) && <Button danger disabled={saving || processing} onClick={() => { void finish(false) }}>放弃修改并继续</Button>}
       <Button type="primary" loading={saving} disabled={processing} onClick={() => { void finish(true) }}>{hasChanges || processing ? '保存后继续' : '继续'}</Button>

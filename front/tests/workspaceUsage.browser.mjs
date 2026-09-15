@@ -94,11 +94,11 @@ try {
       return
     }
     if (/^当前采用：剪辑|^正在核对当前采用|^采用状态暂不可用|^尚未确认采用剪辑/.test(value)) {
-      await contextAction('当前进展'); await page.getByText(value, { exact: true }).first().waitFor(); await closeDrawer(); return
+      await contextAction('当前进展'); await page.getByText(value, { exact: true }).filter({ visible: true }).first().waitFor(); await closeDrawer(); return
     }
-    if (/^当前采用：片段|^编辑草稿已选入/.test(value)) {
+    if (/^当前采用：片段|^编辑草稿已选入|^采用状态加载中$/.test(value)) {
       await page.locator('.cut-inspector').getByRole('tab', { name: '来源', exact: true }).click()
-      await page.getByText(value, { exact: true }).first().waitFor()
+      await page.getByText(value, { exact: true }).filter({ visible: true }).first().waitFor()
       await page.locator('.cut-inspector').getByRole('tab', { name: '审片', exact: true }).click(); return
     }
     await page.getByText(value, { exact: true }).first().waitFor({ state: 'visible' })
@@ -133,7 +133,8 @@ try {
   await choose('查看或编辑设计版本', '设计 1 · 已确认')
   await contextAction('版本与历史')
   await page.locator('.ant-drawer-open').getByRole('tab', { name: '设计版本', exact: true }).click()
-  await page.locator('.ant-drawer-open').getByText('当前采用与版本引用', { exact: true }).click()
+  const references = page.locator('.ant-drawer-open details').filter({ has: page.getByText('当前采用与版本引用', { exact: true }) })
+  if (!await references.evaluate(element => element.open)) await references.locator('summary').click()
   await page.locator('.ant-drawer-open').getByText('计划 1 · 已确认（当前采用仍在引用）', { exact: false }).waitFor()
   await closeDrawer()
   await page.getByRole('tab', { name: '单元试拍' , exact: true }).click()
@@ -322,6 +323,7 @@ try {
   await modal.waitFor()
   await modal.getByText('拍摄方案', { exact: true }).waitFor()
   await modal.getByRole('button', { name: '取消，继续编辑' }).click()
+  await closeDrawer()
   await choose('查看或编辑设计版本', '设计 1 · 已确认')
   await modal.waitFor()
   await modal.getByRole('button', { name: '放弃修改并继续' }).click()

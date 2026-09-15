@@ -1,7 +1,8 @@
+import { useWorkbenchDesktop } from './useWorkbenchDesktop'
 import { createContext, useContext, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Button, Drawer, Grid } from 'antd'
+import { Button, Drawer } from 'antd'
 import { MenuOutlined } from '@ant-design/icons'
 
 const NavigationContext = createContext<HTMLElement | null>(null)
@@ -12,8 +13,8 @@ export function SequenceLayout({ children, footer }: { children: ReactNode; foot
   const [open, setOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   const [width, setWidth] = useState(208)
-  const screens = Grid.useBreakpoint()
-  const compact = !screens.xl
+  const desktop = useWorkbenchDesktop()
+  const compact = !desktop
   const navigation = <div className="sequence-navigation-content" ref={setTarget} onClick={event => { if (compact && (event.target as Element).closest('button')) setOpen(false) }} />
   return <NavigationContext.Provider value={target}>
     <div className="sequence-layout" style={{ '--sequence-nav-width': `${collapsed ? 48 : width}px` } as React.CSSProperties}>
@@ -24,7 +25,7 @@ export function SequenceLayout({ children, footer }: { children: ReactNode; foot
           event.currentTarget.setPointerCapture(event.pointerId)
         }} onPointerMove={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) setWidth(Math.max(176, Math.min(280, event.clientX - 64))) }} />}
       </aside>}
-      <main className="sequence-main">{compact && <Button className="sequence-mobile-navigation" icon={<MenuOutlined />} onClick={() => setOpen(true)}>场次导航</Button>}{children}</main>
+      <main className="sequence-main">{compact && <Button aria-label="场次导航" className="sequence-mobile-navigation" icon={<MenuOutlined />} onClick={() => setOpen(true)}>场次导航</Button>}{children}</main>
       <footer className="sequence-status">{footer}<Button type="text" size="small" onClick={() => { setWidth(208); setCollapsed(false); window.dispatchEvent(new Event('sequence-reset-layout')) }}>恢复默认布局</Button></footer>
       {compact && <Drawer title="场次导航" placement="left" width={272} open={open} onClose={() => setOpen(false)} forceRender>{navigation}</Drawer>}
     </div>

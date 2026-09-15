@@ -292,7 +292,7 @@ A2 调整各页与外壳相关的标题、页签、工具栏、间距、分隔�
 | 主题与页面容器 | `front/src/main.tsx`、`front/src/index.css`、`front/src/App.css`、`front/src/components/layout/PageLayout.tsx` |
 | 任务入口与状态 | `front/src/pages/aiStudio/components/TaskCenter.tsx`、`TaskRuntimeProvider.tsx`、现有任务 store |
 | 全站适配 | 第 4.2 节各路由页面与其共用布局组件 |
-| 场次设计 | `SequenceWorkspacePage.tsx`、`DesignSummary.tsx`、`DesignEditor.tsx`、`WorkspaceHistory.tsx`、`workspace.css` |
+| 场次设计 | `SequenceWorkspacePage.tsx`、`DesignNote.tsx`、`DesignEditor.tsx`、`WorkspaceHistory.tsx`、`workspace.css` |
 | 单元与参考 | `PlanEditor.tsx`、`DependencyEditor.tsx`、`ReferencePreview.tsx`、审稿/批量/重组/验证图相关组件 |
 | 审片与剪辑 | `CutEditor.tsx`、`PlannedCard.tsx`、`ContinuityPanel.tsx`、`FeedbackPanel.tsx`、`LedgerPanel.tsx` |
 
@@ -361,3 +361,18 @@ node front/tests/shellFocus.browser.mjs
 2026-09-15：已开始 B1–B4 的工作区改造，尚未达到 MB。首轮隔离浏览器检查已验证 1586×992 的导航／阶段／控制栏／详情边界，1／60／200 镜头的虚拟滚动与键盘定位，以及分镜／关系选择共享。试拍、剪辑初步布局已形成，正在更新并执行原有区间、采用、返工与延迟写入回归；截图与结果暂存 `/tmp/jellyfish-sequence-workbench`，最终证据将在 B5 归档。
 
 分镜图优先复用现有 `PlannedCutItem.preview_file_id` 的持久化绑定。用户选择已保存剪辑来源后，只显示设计版本与镜头身份精确匹配的预演图片；同镜头多个来源片段需继续明确选择。不创建独立镜头图片字段或临时绑定，也不自动选最新候选。
+
+#### B 阶段回归收口（2026-09-15）
+
+当前仍未达到 MB。已统一工作台组件与样式的 1280px 断点，补充窄屏导航的可访问名称；问题回跳与普通单元切换分别处理，切换指令版本清空旧来源选择。离开保护对话框置于业务抽屉之上，接缝抽屉关闭和筛选保留审查输入。
+
+本轮直接验证：
+
+- `pnpm --dir front run typecheck` 通过。
+- `sequenceWorkbench.browser.mjs` 的 11 项检查通过：参考 A 区域边界、关系选择、1/60/200 镜头定位，以及 1279/1024/768/375px 导航与详情抽屉。临时结果：`/tmp/jellyfish-sequence-workbench/results.json`。试拍与剪辑此组仅证明布局，完整媒体行为使用专门回归。
+- `workspaceCut.browser.mjs` 通过 A13–A16，包含更新后的实际时长时间线、混合播放、采用与定向返工；临时证据：`/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-ux4-n0UApr`。
+- `workspaceWrite.browser.mjs` 十项延迟保存检查通过；临时证据：`/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-write-5gIZa8`。
+- 已修复375px设计确认按钮挤窄，次要操作移入“更多”。综合响应式回归56组通过，临时证据：`/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-ux5-0b49dm`。该检查包含滚动后按钮命中，默认首屏是否完整仍需B5截图逐项检查。
+- 引导回归通过：`/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-ux2-MIsaWF`；使用、版本及离开保护回归通过：`/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-ux1-6xuMcz`。这些结果不能替代B5全部要求。
+
+上述临时结果不是最终归档。仍须完成全部回归、完整业务流程、分镜来源匹配与版本比较的浏览器证据，以及 B5 逐项视觉对照和架构说明。

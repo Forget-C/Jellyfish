@@ -50,7 +50,7 @@ export function LedgerPanel({ projectId, sequenceId }: { projectId: string; sequ
         {unit.coverage.map(item => <p key={item.id}>{item.shot_id}：{item.action_scope}</p>)}
         <Space wrap>{unit.references.map(ref => <Space key={ref.id} direction="vertical">{ref.media_kind === 'image' ? <Image width={100} src={buildFileDownloadUrl(ref.file_id)} /> : <a href={buildFileDownloadUrl(ref.file_id)}>查看参考文件</a>}<span>{ref.purpose} · {ref.input_role} · {ref.source.reference}</span></Space>)}</Space></>}
       <Collapse items={[{ key: 'prompt', label: '查看固定提示词和编译去向', children: <><Typography.Paragraph copyable className="whitespace-pre-wrap">{prompt?.content.text}</Typography.Paragraph>{prompt?.content.decisions.map((item, i) => <p key={i}>{item.section_path}：{item.disposition} · {item.explanation}</p>)}</> },
-        { key: 'design', label: '查看原设计与六岗依据', children: design ? <><p>风格版本：{design.content.style_revision_id || '未指定'}</p><DesignEditor value={design.content} onChange={() => {}} disabled /></> : null }]} />
+        { key: 'design', label: '查看原设计与六岗依据', children: design ? <><p>风格版本：{design.content.style_revision_id || '未指定'}</p><div style={{ height: 680 }}><DesignEditor active={false} value={design.content} onChange={() => {}} disabled /></div></> : null }]} />
     </Space>
   }
   return <Space data-workspace-target="ledger" tabIndex={-1} direction="vertical" className="w-full" size="middle">

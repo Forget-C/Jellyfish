@@ -5,7 +5,7 @@ import { shotGraph } from './designWorkspace'
 import { noteText } from './DesignFields'
 
 /** 关系图是设计引用的只读投影；缩放和平移不进入业务版本。 */
-export function DesignRelations({ value, shotId, onSelect }: { value: SceneDesign_Input; shotId?: string; onSelect: (key: string) => void }) {
+export function DesignRelations({ value, shotId, onSelect, onBeatSelect }: { value: SceneDesign_Input; shotId?: string; onSelect: (key: string) => void; onBeatSelect: (id?: string) => void }) {
   const [filter, setFilter] = useState('镜头关联')
   const [all, setAll] = useState(false)
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 })
@@ -26,7 +26,10 @@ export function DesignRelations({ value, shotId, onSelect }: { value: SceneDesig
   useEffect(() => { const observer = new ResizeObserver(fit); if (surface.current) observer.observe(surface.current); return () => observer.disconnect() }, [canvasHeight])
   return <div className="design-graph-workspace">
     <div className="design-graph-tools"><Segmented value={filter} onChange={value => setFilter(String(value))} options={['镜头关联', '人物调度', '完整关联']} /><Button onClick={() => setAll(!all)}>{all ? '聚焦当前镜头' : '全场节拍'}</Button></div>
-    {all ? <div className="design-beat-map">{value.direction.beats.map((beat, index) => <section key={beat.id}><h3>节拍 {index + 1} · {noteText(beat.objective) || '待明确'}</h3><p>{value.direction.shots.filter(s => s.beat_ids.includes(beat.id)).length} 个关联镜头</p>{value.direction.shots.filter(s => s.beat_ids.includes(beat.id)).map(shot => <Button key={shot.id} onClick={() => { onSelect(`shot:${shot.id}`); setAll(false) }}>镜头 {value.direction.shots.indexOf(shot) + 1} · {noteText(shot.visible_result)}</Button>)}</section>)}</div> : <div ref={surface} className="design-graph-surface" tabIndex={0} aria-label="镜头关系画布" onKeyDown={event => {
+    {all ? <div className="design-beat-map">{value.direction.beats.map((beat, index) => {
+      const shots = value.direction.shots.filter(shot => shot.beat_ids.includes(beat.id))
+      return <section key={beat.id} data-beat-group={beat.id}><h3>节拍 {index + 1} · {noteText(beat.objective) || '待明确'}</h3><p>{shots.length} 个关联镜头 · 预计 {shots.reduce((sum, shot) => sum + (shot.estimated_duration_ms || 0), 0) / 1000} 秒</p><Button onClick={() => onSelect(`beat:${beat.id}`)}>查看节拍详情</Button><Button onClick={() => onBeatSelect(beat.id)}>查看节拍 {index + 1} 的镜头清单</Button></section>
+    })}<section><h3>全场镜头</h3><p>{value.direction.shots.length} 个镜头；跨节拍镜头保持同一身份。未归入现有节拍的镜头也可在清单中查看。</p><Button onClick={() => onBeatSelect()}>查看全部镜头</Button></section></div> : <div ref={surface} className="design-graph-surface" tabIndex={0} aria-label="镜头关系画布" onKeyDown={event => {
       if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)) { event.preventDefault(); setTransform(t => ({ ...t, x: t.x + (event.key === 'ArrowLeft' ? 30 : event.key === 'ArrowRight' ? -30 : 0), y: t.y + (event.key === 'ArrowUp' ? 30 : event.key === 'ArrowDown' ? -30 : 0) })) }
     }} onPointerDown={event => { if ((event.target as Element).closest('button')) return; event.currentTarget.setPointerCapture(event.pointerId); drag.current = { x: event.clientX, y: event.clientY, left: transform.x, top: transform.y } }} onPointerMove={event => { if (drag.current && event.currentTarget.hasPointerCapture(event.pointerId)) { const d = drag.current; setTransform(t => ({ ...t, x: d.left + event.clientX - d.x, y: d.top + event.clientY - d.y })) } }} onPointerUp={() => { drag.current = undefined }}>
       <div className="design-graph-canvas" style={{ width: 1140, height: canvasHeight, transform: `translate(${transform.x}px,${transform.y}px) scale(${transform.scale})` }}>

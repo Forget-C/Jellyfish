@@ -9,8 +9,8 @@ import { DependencyEditor } from './DependencyEditor'
 import { directingError } from './common'
 
 /** 拍摄单元和本轮参考的显式编辑，关联资产不会自动全量提交。 */
-export function PlanEditor({ workbench = false, projectId, workspace, design, value, onChange, disabled = false, issue, selectedUnitId, onSelectUnit, planId }: {
-  workbench?: boolean; planId?: string; selectedUnitId?: string; onSelectUnit?: (id: string) => void; projectId: string; workspace: WorkspaceRead; design: SceneDesign_Input; value: ProductionPlan_Input; onChange: (plan: ProductionPlan_Input) => void; disabled?: boolean; issue?: { unitId?: string; message: string }
+export function PlanEditor({ projectId, workspace, design, value, onChange, disabled = false, issue, selectedUnitId, planId }: {
+  planId?: string; selectedUnitId?: string; projectId: string; workspace: WorkspaceRead; design: SceneDesign_Input; value: ProductionPlan_Input; onChange: (plan: ProductionPlan_Input) => void; disabled?: boolean; issue?: { unitId?: string; message: string }
 }) {
   const latest = useRef({ value, planId })
   latest.current = { value, planId }
@@ -55,13 +55,7 @@ export function PlanEditor({ workbench = false, projectId, workspace, design, va
   const selected = value.units.find(unit => unit.id === selectedUnitId) || value.units[0]
   return <Space direction="vertical" size="middle" style={{ width: '100%' }}>
     {error && <Alert type="error" message={error} closable onClose={() => setError('')} />}
-    <div className={workbench ? "production-preparation" : "grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_280px]"}>
-    {!workbench && <Card size="small" title="本场拍摄内容" className="xl:col-start-2 xl:row-start-1 self-start">
-      <Space direction="vertical" style={{ width: '100%' }}>{value.units.map((unit, index) => <Button block style={{ height: 'auto', whiteSpace: 'normal', textAlign: 'left', padding: 12 }} key={unit.id} aria-pressed={selected?.id === unit.id} onClick={() => onSelectUnit?.(unit.id)}>
-        {unit.coverage.map(item => item.action_scope).join('；') || `单元 ${index + 1} · 待填写动作`} · {workspace.takes.filter(take => take.plan_revision_id === planId && take.unit_id === unit.id).length ? '已有视频' : '准备输入'}
-      </Button>)}</Space>
-      <Typography.Paragraph type="secondary">选择一项，准备本次动作范围、模型和参考；同名动作按计划版本分开。</Typography.Paragraph>
-    </Card>}
+    <div className="production-preparation">
     {value.units.filter(unit => unit.id === selected?.id).map(unit => <Card className="xl:col-start-1 xl:row-start-1 min-w-0" key={unit.id} title={`本次要拍：${unit.coverage.map(item => item.action_scope).join('；') || '待填写动作范围'}`} data-workspace-target={`unit:${unit.id}`} tabIndex={-1} extra={!disabled && <Button danger onClick={() => onChange({ ...value, units: value.units.filter(item => item.id !== unit.id) })}>移除单元</Button>}>
       {issue?.unitId === unit.id && <Alert type="error" message={issue.message} />}
       <Space direction="vertical" style={{ width: '100%' }}>
@@ -69,19 +63,13 @@ export function PlanEditor({ workbench = false, projectId, workspace, design, va
         <Select mode="multiple" disabled={disabled} style={{ width: '100%' }} value={unit.coverage.map(item => item.shot_id)} options={design.direction.shots.map((shot, i) => ({ value: shot.id, label: `镜头 ${i + 1} · ${shot.visible_result.text || '待确定内容'}` }))} onChange={ids => patch(unit.id, { coverage: coverage(ids).map(row => unit.coverage.find(old => old.shot_id === row.shot_id) || row) })} />
         {unit.coverage.map(item => <div key={item.id} style={{ width: '100%' }}><Typography.Text type="secondary">动作范围 · {item.shot_id}</Typography.Text><Input.TextArea disabled={disabled} value={item.action_scope} onChange={event => patch(unit.id, { coverage: unit.coverage.map(row => row.id === item.id ? { ...row, action_scope: event.target.value } : row) })} /></div>)}
         {unit.coverage.length > 1 && <Alert type="warning" message="计划包含多个镜头，当前多镜执行能力未验证。保存并确认后，可在重组面板明确拆分。" />}
-        {workbench ? <ProductionParameters>        <Space wrap>
+        <ProductionParameters>        <Space wrap>
           <Select aria-label="视频模型" disabled={disabled} placeholder="选择视频模型" style={{ minWidth: 220 }} value={unit.model_id || undefined} options={models.map(model => ({ value: model.id, label: model.name }))} onChange={model_id => patch(unit.id, { model_id })} />
           <span>时长（秒）</span><InputNumber disabled={disabled} min={1} precision={0} value={unit.duration_ms / 1000} onChange={seconds => patch(unit.id, { duration_ms: (seconds || 1) * 1000 })} />
           <Select aria-label="画幅" disabled={disabled} value={unit.ratio} options={['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'].map(ratio => ({ value: ratio, label: ratio }))} onChange={ratio => patch(unit.id, { ratio })} />
           <span>种子（可留空）</span><InputNumber disabled={disabled} min={-1} precision={0} value={typeof unit.parameters?.seed === 'number' ? unit.parameters.seed : null} onChange={seed => patch(unit.id, { parameters: seed === null ? Object.fromEntries(Object.entries(unit.parameters || {}).filter(([key]) => key !== 'seed')) : { ...unit.parameters, seed } })} />
         </Space>
-</ProductionParameters> : <>        <Space wrap>
-          <Select aria-label="视频模型" disabled={disabled} placeholder="选择视频模型" style={{ minWidth: 220 }} value={unit.model_id || undefined} options={models.map(model => ({ value: model.id, label: model.name }))} onChange={model_id => patch(unit.id, { model_id })} />
-          <span>时长（秒）</span><InputNumber disabled={disabled} min={1} precision={0} value={unit.duration_ms / 1000} onChange={seconds => patch(unit.id, { duration_ms: (seconds || 1) * 1000 })} />
-          <Select aria-label="画幅" disabled={disabled} value={unit.ratio} options={['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'].map(ratio => ({ value: ratio, label: ratio }))} onChange={ratio => patch(unit.id, { ratio })} />
-          <span>种子（可留空）</span><InputNumber disabled={disabled} min={-1} precision={0} value={typeof unit.parameters?.seed === 'number' ? unit.parameters.seed : null} onChange={seed => patch(unit.id, { parameters: seed === null ? Object.fromEntries(Object.entries(unit.parameters || {}).filter(([key]) => key !== 'seed')) : { ...unit.parameters, seed } })} />
-        </Space>
-</>}
+</ProductionParameters>
         <DependencyEditor projectId={projectId} workspace={workspace} unit={unit} onChange={update => patch(unit.id, update)} disabled={disabled} />
         <Typography.Text strong>本次参考素材</Typography.Text>
         {!unit.references.length && <Typography.Text type="secondary">尚未选入参考。是否可以纯文本试拍由目标模型决定。</Typography.Text>}

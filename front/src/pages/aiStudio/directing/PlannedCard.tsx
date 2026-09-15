@@ -1,6 +1,6 @@
 import { Button, Image, InputNumber, Select, Space, Typography } from 'antd'
 import type { PlannedCutItem, SceneDesign_Input } from '../../../services/generated'
-import { DesignNote } from './DesignSummary'
+import { DesignNote } from './DesignNote'
 import { buildFileDownloadUrl } from '../assets/utils'
 
 /** 同一预演项的文字、静态图与对白落点，所有时间均为计划而非媒体证据。 */

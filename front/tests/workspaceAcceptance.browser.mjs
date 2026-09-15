@@ -113,17 +113,17 @@ try {
       results.push({ width, state, ...dimensions })
       await page.screenshot({ path: join(output, `${width}-${state}.png`), fullPage: true, animations: 'disabled' })
       while (await page.locator('.ant-drawer-open').count()) { await page.locator('.ant-drawer-open').last().getByRole('button', { name: 'Close', exact: true }).click(); await page.waitForTimeout(400) }
+      await page.waitForFunction(() => [...document.querySelectorAll('.ant-drawer-mask')].every(element => !element.getClientRects().length || getComputedStyle(element).visibility === 'hidden'))
       const actions = [page.getByRole('tab', { name: '导演设计', exact: true }), page.getByRole('tab', { name: '单元试拍', exact: true }), page.getByRole('tab', { name: '剪辑验收', exact: true })]
       if (view === 'cut') actions.push(page.getByRole('button', { name: '保存剪辑草稿', exact: true }).or(page.getByRole('button', { name: '保存为新剪辑草稿', exact: true })), page.getByRole('button', { name: '确认并设为当前采用', exact: true }))
       if (state === 'shoot') actions.push(page.getByRole('button', { name: '准备生成指令', exact: true }))
       if (view === 'design' && state !== 'first') actions.push(page.getByRole('button', { name: '保存为新设计草稿', exact: true }), page.getByRole('button', { name: '确认本轮设计', exact: true }))
       for (const action of actions) {
-        await action.evaluate(element => element.scrollIntoView({ block: 'center', behavior: 'instant' }))
         assert.equal(await action.evaluate(element => {
           const box = element.getBoundingClientRect(), viewport = document.querySelector('.app-route-viewport').getBoundingClientRect()
           const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)
-          return box.left >= viewport.left && box.right <= viewport.right + 1 && element.scrollWidth <= element.clientWidth + 1 && !!hit && element.contains(hit)
-        }), true, `${width} ${state}: clipped or obscured action`)
+          return box.top >= viewport.top && box.bottom <= viewport.bottom && box.left >= viewport.left && box.right <= viewport.right + 1 && element.scrollWidth <= element.clientWidth + 1 && !!hit && element.contains(hit)
+        }), true, `${width} ${state}: clipped or obscured action ${await action.innerText()} ${JSON.stringify(await action.evaluate(element => { const box = element.getBoundingClientRect(); return { box: box.toJSON(), hit: document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)?.outerHTML, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth } }))}`)
       }
       if (state === 'first') {
         await keyboard(page.getByRole('button', { name: '更多场次操作', exact: true }))
@@ -161,6 +161,13 @@ try {
   await writeFile(join(output, 'results.json'), JSON.stringify(results, null, 2))
   console.log(JSON.stringify({ output, results }, null, 2))
   assert.ok(results.every(row => row.content <= row.route + 2 && row.document <= row.viewport + 2), 'Page overflow: inspect results.json and screenshots')
+} catch (error) {
+  for (const context of browser?.contexts() || []) for (const page of context.pages()) {
+    await page.screenshot({ path: join(output, 'failure.png') });
+    console.log(await page.locator('body').innerText());
+    console.log(await page.evaluate(() => ({ width: innerWidth, navigation: document.querySelector('.sequence-mobile-navigation')?.outerHTML })));
+  }
+  console.log('Browser evidence:', output); throw error
 } finally {
   await browser?.close()
   await server.close()
