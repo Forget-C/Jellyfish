@@ -4,12 +4,13 @@ import { Alert, Button, Modal, Space } from 'antd'
 import { useBeforeUnload, useBlocker } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 
-type Draft = { name: string; dirty: boolean; save: () => Promise<boolean>; discard: () => void }
+type Draft = { name: string; dirty: boolean; busy?: boolean; save: () => Promise<boolean>; discard: () => void }
 type Transition = { action: () => void; cancel?: () => void }
 type DraftContext = {
   register: (id: string, draft: MutableRefObject<Draft>) => () => void
   changed: () => void
   request: (transition: Transition) => void
+  busy: boolean
   dirtyNames: string[]
 }
 const Context = createContext<DraftContext | null>(null)
@@ -28,23 +29,24 @@ export function WorkspaceDrafts({ children }: { children: ReactNode }) {
     return () => { drafts.current.delete(id); changed() }
   }, [changed])
   const dirtyDrafts = useCallback(() => [...drafts.current.values()].filter(draft => draft.current.dirty), [])
+  const busyDrafts = useCallback(() => [...drafts.current.values()].filter(draft => draft.current.busy), [])
   const request = useCallback((transition: Transition) => {
-    if (!dirtyDrafts().length) transition.action()
+    if (!dirtyDrafts().length && !busyDrafts().length) transition.action()
     else { setError(''); setPending(transition) }
-  }, [dirtyDrafts])
+  }, [dirtyDrafts, busyDrafts])
   const blocker = useBlocker(({ currentLocation, nextLocation, historyAction }) => {
     if (historyAction === 'REPLACE' && currentLocation.pathname === nextLocation.pathname && nextLocation.state?.directingContextSync) return false
-    return (currentLocation.pathname !== nextLocation.pathname || currentLocation.search !== nextLocation.search) && dirtyDrafts().length > 0
+    return (currentLocation.pathname !== nextLocation.pathname || currentLocation.search !== nextLocation.search) && (dirtyDrafts().length > 0 || busyDrafts().length > 0)
   })
   useEffect(() => {
     if (blocker.state === 'blocked') request({ action: blocker.proceed, cancel: blocker.reset })
   }, [blocker, request])
   useBeforeUnload(useCallback((event: BeforeUnloadEvent) => {
-    if (dirtyDrafts().length) { event.preventDefault(); event.returnValue = '' }
-  }, [dirtyDrafts]))
+    if (dirtyDrafts().length || busyDrafts().length) { event.preventDefault(); event.returnValue = '' }
+  }, [dirtyDrafts, busyDrafts]))
   const cancel = () => { if (!saving) { pending?.cancel?.(); setPending(undefined); setError('') } }
   const finish = async (save: boolean) => {
-    if (!pending || saving) return
+    if (!pending || saving || busyDrafts().length) return
     setSaving(true); setError('')
     try {
       for (const draft of dirtyDrafts()) {
@@ -58,14 +60,16 @@ export function WorkspaceDrafts({ children }: { children: ReactNode }) {
     } catch { setError('保存未完成，修改已保留。请检查页面中的错误后重试。') }
     finally { setSaving(false) }
   }
-  const value = { register, changed, request, dirtyNames: dirtyDrafts().map(draft => draft.current.name) }
+  const value = { register, changed, request, busy: busyDrafts().length > 0, dirtyNames: dirtyDrafts().map(draft => draft.current.name) }
+  const processing = busyDrafts().length > 0
+  const hasChanges = dirtyDrafts().length > 0
   return <Context.Provider value={value}>{children}
-    <Modal title="有未保存的修改" open={!!pending} onCancel={cancel} closable={!saving} maskClosable={false} footer={<Space wrap>
-      <Button disabled={saving} onClick={cancel}>取消，继续编辑</Button>
-      <Button danger disabled={saving} onClick={() => { void finish(false) }}>放弃修改并继续</Button>
-      <Button type="primary" loading={saving} onClick={() => { void finish(true) }}>保存后继续</Button>
+    <Modal title={processing ? '当前操作尚未完成' : hasChanges ? '有未保存的修改' : '当前操作已结束'} open={!!pending} onCancel={cancel} closable={!saving} maskClosable={false} footer={<Space wrap>
+      <Button disabled={saving} onClick={cancel}>{processing ? '留在当前页' : '取消，继续编辑'}</Button>
+      {(hasChanges || processing) && <Button danger disabled={saving || processing} onClick={() => { void finish(false) }}>放弃修改并继续</Button>}
+      <Button type="primary" loading={saving} disabled={processing} onClick={() => { void finish(true) }}>{hasChanges || processing ? '保存后继续' : '继续'}</Button>
     </Space>}>
-      <p>继续前，请处理以下修改。保存不会确认版本、开始生成或改变当前采用。</p>
+      <p>{processing ? '请等待当前操作完成后再切换。' : hasChanges ? '继续前，请处理以下修改。保存不会确认版本、开始生成或改变当前采用。' : '当前没有未保存的修改，可以继续切换。'}</p>
       <ul>{dirtyDrafts().map(draft => <li key={draft.current.name}>{draft.current.name}</li>)}</ul>
       {error && <Alert type="error" message={error} />}
     </Modal>
@@ -81,8 +85,18 @@ export function useWorkspaceDraft(draft: Draft) {
   const register = context?.register
   const changed = context?.changed
   useEffect(() => register?.(id, latest), [register, id])
-  useEffect(() => { changed?.() }, [changed, draft.dirty, draft.name])
+  useEffect(() => { changed?.() }, [changed, draft.dirty, draft.name, draft.busy])
   return (action: () => void) => context ? context.request({ action }) : action()
+}
+
+/** 写入期间锁定当前编辑区；inert 同时阻止自定义选择、拖动和原生输入。 */
+export function WorkspaceWriteBoundary({ busy, children }: { busy: boolean; children: ReactNode }) {
+  const context = useContext(Context)
+  const locked = busy || !!context?.busy
+  return <>
+    {busy && <p role="status">操作处理中，完成后可继续编辑。</p>}
+    <fieldset disabled={locked} aria-busy={locked} {...(locked ? { inert: '' } : {})} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, width: '100%' }}>{children}</fieldset>
+  </>
 }
 
 export function useWorkspaceDraftStatus() {

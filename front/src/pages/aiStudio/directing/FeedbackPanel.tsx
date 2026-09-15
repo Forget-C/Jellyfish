@@ -1,5 +1,5 @@
 import { useWorkspacePreparation } from './useWorkspacePreparation'
-import { useWorkspaceDraft } from './WorkspaceDrafts'
+import { useWorkspaceDraft, WorkspaceWriteBoundary } from './WorkspaceDrafts'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Select, Space, Spin, Typography } from 'antd'
 import { useSearchParams } from 'react-router-dom'
@@ -81,9 +81,9 @@ export function FeedbackPanel({ projectId, workspace, onRefresh }: { projectId: 
     if (!row) throw new Error('未找到已保存的反馈版本')
     if (row) { rememberFeedback(row.id); const saved = { kind: document.kind, content: row.content } as Document; setDocument(saved); setBase({ id: row.id, version: row.version, confirmed: !!row.confirmed_at, document: saved }) }
   })
-  const guard = useWorkspaceDraft({ name: '验收与返工反馈', dirty, save, discard: () => setDocument(base?.document ? structuredClone(base.document) : undefined) })
+  const guard = useWorkspaceDraft({ busy, name: '验收与返工反馈', dirty, save, discard: () => setDocument(base?.document ? structuredClone(base.document) : undefined) })
   if (!data) return <Space><Spin />{error && <Alert type="error" message={error} />}</Space>
-  return <Space data-workspace-target="feedback" tabIndex={-1} direction="vertical" className="w-full" size="large">
+  return <WorkspaceWriteBoundary busy={busy}><Space data-workspace-target="feedback" tabIndex={-1} direction="vertical" className="w-full" size="large">
     {error && <Alert type="error" message={error} />}{notice && <Alert type="success" message={notice} />}
     <Alert type="info" message={current ? `当前采用验收：${current.content.verdict === 'pass' ? '画面通过' : '需调整'}；${current.content.sound_status === 'pending_postproduction' ? '声音待后期' : '声音有单独审查记录'}` : '当前采用尚无已确认场次验收；旧版结论保留在历史中。'} />
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -142,5 +142,5 @@ export function FeedbackPanel({ projectId, workspace, onRefresh }: { projectId: 
           if (response.data) { setData(response.data); setBase({ ...base!, confirmed: true, version: base!.version + 1 }); setNotice('已确认，后续修改将派生新版本。') }
         })}>确认此反馈版本</Button></Space>
     </Card>}
-  </Space>
+  </Space></WorkspaceWriteBoundary>
 }

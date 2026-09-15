@@ -1,0 +1,579 @@
+{
+  "baseline": "aed4f55 + delivery review and save-protection fixes (working tree)",
+  "date": "2026-09-15",
+  "browser": "Playwright Chromium",
+  "fixture": "isolated API responses; no real backend or model generation; media recovery test verifies metadata refetch, existing Cut/Acceptance suites use synthetic video for playback",
+  "source_sha256": {
+    "front/src/pages/aiStudio/directing/WorkspaceDrafts.tsx": "905b41f7399d05e75d20a66c2ae548d017737c4282f5fd69e91df5b059095c16",
+    "front/src/pages/aiStudio/directing/SequenceWorkspacePage.tsx": "e5e22a3fdbb34060f35bd5bd3133c2cbec2c9963bd7bbc4d68b1d3e47f4e1a66",
+    "front/src/pages/aiStudio/directing/CutEditor.tsx": "87f018e7ca137eeafbefc262fc1476716b98a2b04c7ccec5269ad3b5774fea98",
+    "front/src/pages/aiStudio/directing/FeedbackPanel.tsx": "3478147a58fed1e86415936d8df8858f95cd56b7f157fe348d277da72be5636c",
+    "front/src/pages/aiStudio/directing/StyleEditor.tsx": "b9670586fe7c9c85256114ae8e7b50d4494a5e0b842e4c8a6b9604b6eb437a3b",
+    "front/src/pages/aiStudio/directing/ContinuityPanel.tsx": "c7e410fa79bf8edf134847bdeef8a5de717a21af378ffc146149d8a17b55bc56",
+    "front/tests/workspaceWrite.browser.mjs": "68e9b89af16d7967808b7fb2e5c11abb96b841f48198f0dcf8709f51bb0ca58b",
+    "front/tests/workspaceAcceptance.browser.mjs": "6973e888f9fe6434079364b0f59d0dab170844cf95d953b550d5c04f0433bf8f",
+    "front/tests/directing-fixtures.mjs": "4346b600c418dc8fbaef0c83e5595d98dcbd1306a0f0f8078a0830ffe826f758"
+  },
+  "resolved": [
+    "R1: in-flight write protection across seven editors",
+    "R2: save then reload page media recovery hint"
+  ],
+  "write_checks": {
+    "checks": [
+      "设计：延迟成功/失败期间禁止新输入，失败保留并可重试，成功恢复编辑",
+      "浏览器后退被保护，等待中不能放弃或重复保存，取消切换保留当前页",
+      "等待中的导航在保存完成后可继续，不重复提交已保存内容",
+      "生产计划：延迟成功/失败期间禁止新输入，失败保留并可重试，成功恢复编辑",
+      "项目风格：延迟成功/失败期间禁止新输入，失败保留并可重试，成功恢复编辑",
+      "反馈：延迟成功/失败期间禁止新输入，失败保留并可重试，成功恢复编辑",
+      "剪辑：延迟响应期间不能增删片段，失败保留草稿，继续编辑并重试后两张预演卡完整保存",
+      "媒体：提示明确要求保存后重新加载页面，重新加载后恢复素材读取",
+      "素材审片：延迟成功/失败期间禁止新输入，失败保留并可重试，成功恢复编辑",
+      "接缝审查：延迟成功/失败期间禁止新输入，失败保留并可重试，成功恢复编辑"
+    ],
+    "errors": []
+  },
+  "layout_checks": [
+    {
+      "width": 1440,
+      "state": "first",
+      "document": 1440,
+      "viewport": 1440,
+      "route": 1210,
+      "content": 1210,
+      "wide": []
+    },
+    {
+      "width": 1440,
+      "state": "design",
+      "document": 1440,
+      "viewport": 1440,
+      "route": 1210,
+      "content": 1210,
+      "wide": []
+    },
+    {
+      "width": 1440,
+      "state": "design-expanded",
+      "document": 1440,
+      "viewport": 1440,
+      "route": 1210,
+      "content": 1210,
+      "wide": []
+    },
+    {
+      "width": 1440,
+      "state": "shoot",
+      "document": 1440,
+      "viewport": 1440,
+      "route": 1210,
+      "content": 1210,
+      "wide": []
+    },
+    {
+      "width": 1440,
+      "state": "tasks",
+      "document": 1440,
+      "viewport": 1440,
+      "route": 1210,
+      "content": 1210,
+      "wide": []
+    },
+    {
+      "width": 1440,
+      "state": "cut",
+      "document": 1440,
+      "viewport": 1440,
+      "route": 1210,
+      "content": 1210,
+      "wide": []
+    },
+    {
+      "width": 1440,
+      "state": "cut-expanded",
+      "document": 1440,
+      "viewport": 1440,
+      "route": 1210,
+      "content": 1210,
+      "wide": []
+    },
+    {
+      "width": 1440,
+      "state": "confirmed-cut",
+      "document": 1440,
+      "viewport": 1440,
+      "route": 1210,
+      "content": 1210,
+      "wide": []
+    },
+    {
+      "width": 1440,
+      "state": "source-changed",
+      "document": 1440,
+      "viewport": 1440,
+      "route": 1210,
+      "content": 1210,
+      "wide": []
+    },
+    {
+      "width": 1440,
+      "state": "adoption-error",
+      "document": 1440,
+      "viewport": 1440,
+      "route": 1210,
+      "content": 1210,
+      "wide": []
+    },
+    {
+      "width": 1440,
+      "state": "media-error",
+      "document": 1440,
+      "viewport": 1440,
+      "route": 1210,
+      "content": 1210,
+      "wide": []
+    },
+    {
+      "width": 1440,
+      "state": "continuity",
+      "document": 1440,
+      "viewport": 1440,
+      "route": 1210,
+      "content": 1210,
+      "wide": []
+    },
+    {
+      "width": 1440,
+      "state": "feedback",
+      "document": 1440,
+      "viewport": 1440,
+      "route": 1210,
+      "content": 1210,
+      "wide": []
+    },
+    {
+      "width": 1440,
+      "state": "ledger",
+      "document": 1440,
+      "viewport": 1440,
+      "route": 1210,
+      "content": 1210,
+      "wide": []
+    },
+    {
+      "width": 1024,
+      "state": "first",
+      "document": 1024,
+      "viewport": 1024,
+      "route": 794,
+      "content": 794,
+      "wide": []
+    },
+    {
+      "width": 1024,
+      "state": "design",
+      "document": 1024,
+      "viewport": 1024,
+      "route": 794,
+      "content": 794,
+      "wide": []
+    },
+    {
+      "width": 1024,
+      "state": "design-expanded",
+      "document": 1024,
+      "viewport": 1024,
+      "route": 794,
+      "content": 794,
+      "wide": []
+    },
+    {
+      "width": 1024,
+      "state": "shoot",
+      "document": 1024,
+      "viewport": 1024,
+      "route": 794,
+      "content": 794,
+      "wide": []
+    },
+    {
+      "width": 1024,
+      "state": "tasks",
+      "document": 1024,
+      "viewport": 1024,
+      "route": 794,
+      "content": 794,
+      "wide": []
+    },
+    {
+      "width": 1024,
+      "state": "cut",
+      "document": 1024,
+      "viewport": 1024,
+      "route": 794,
+      "content": 794,
+      "wide": []
+    },
+    {
+      "width": 1024,
+      "state": "cut-expanded",
+      "document": 1024,
+      "viewport": 1024,
+      "route": 794,
+      "content": 794,
+      "wide": []
+    },
+    {
+      "width": 1024,
+      "state": "confirmed-cut",
+      "document": 1024,
+      "viewport": 1024,
+      "route": 794,
+      "content": 794,
+      "wide": []
+    },
+    {
+      "width": 1024,
+      "state": "source-changed",
+      "document": 1024,
+      "viewport": 1024,
+      "route": 794,
+      "content": 794,
+      "wide": []
+    },
+    {
+      "width": 1024,
+      "state": "adoption-error",
+      "document": 1024,
+      "viewport": 1024,
+      "route": 794,
+      "content": 794,
+      "wide": []
+    },
+    {
+      "width": 1024,
+      "state": "media-error",
+      "document": 1024,
+      "viewport": 1024,
+      "route": 794,
+      "content": 794,
+      "wide": []
+    },
+    {
+      "width": 1024,
+      "state": "continuity",
+      "document": 1024,
+      "viewport": 1024,
+      "route": 794,
+      "content": 794,
+      "wide": []
+    },
+    {
+      "width": 1024,
+      "state": "feedback",
+      "document": 1024,
+      "viewport": 1024,
+      "route": 794,
+      "content": 794,
+      "wide": []
+    },
+    {
+      "width": 1024,
+      "state": "ledger",
+      "document": 1024,
+      "viewport": 1024,
+      "route": 794,
+      "content": 794,
+      "wide": []
+    },
+    {
+      "width": 768,
+      "state": "first",
+      "document": 768,
+      "viewport": 768,
+      "route": 538,
+      "content": 538,
+      "wide": []
+    },
+    {
+      "width": 768,
+      "state": "design",
+      "document": 768,
+      "viewport": 768,
+      "route": 538,
+      "content": 538,
+      "wide": []
+    },
+    {
+      "width": 768,
+      "state": "design-expanded",
+      "document": 768,
+      "viewport": 768,
+      "route": 538,
+      "content": 538,
+      "wide": []
+    },
+    {
+      "width": 768,
+      "state": "shoot",
+      "document": 768,
+      "viewport": 768,
+      "route": 538,
+      "content": 538,
+      "wide": []
+    },
+    {
+      "width": 768,
+      "state": "tasks",
+      "document": 768,
+      "viewport": 768,
+      "route": 538,
+      "content": 538,
+      "wide": []
+    },
+    {
+      "width": 768,
+      "state": "cut",
+      "document": 768,
+      "viewport": 768,
+      "route": 538,
+      "content": 538,
+      "wide": []
+    },
+    {
+      "width": 768,
+      "state": "cut-expanded",
+      "document": 768,
+      "viewport": 768,
+      "route": 538,
+      "content": 538,
+      "wide": []
+    },
+    {
+      "width": 768,
+      "state": "confirmed-cut",
+      "document": 768,
+      "viewport": 768,
+      "route": 538,
+      "content": 538,
+      "wide": []
+    },
+    {
+      "width": 768,
+      "state": "source-changed",
+      "document": 768,
+      "viewport": 768,
+      "route": 538,
+      "content": 538,
+      "wide": []
+    },
+    {
+      "width": 768,
+      "state": "adoption-error",
+      "document": 768,
+      "viewport": 768,
+      "route": 538,
+      "content": 538,
+      "wide": []
+    },
+    {
+      "width": 768,
+      "state": "media-error",
+      "document": 768,
+      "viewport": 768,
+      "route": 538,
+      "content": 538,
+      "wide": []
+    },
+    {
+      "width": 768,
+      "state": "continuity",
+      "document": 768,
+      "viewport": 768,
+      "route": 538,
+      "content": 538,
+      "wide": []
+    },
+    {
+      "width": 768,
+      "state": "feedback",
+      "document": 768,
+      "viewport": 768,
+      "route": 538,
+      "content": 538,
+      "wide": []
+    },
+    {
+      "width": 768,
+      "state": "ledger",
+      "document": 768,
+      "viewport": 768,
+      "route": 538,
+      "content": 538,
+      "wide": []
+    },
+    {
+      "width": 375,
+      "state": "first",
+      "document": 375,
+      "viewport": 375,
+      "route": 365,
+      "content": 365,
+      "wide": []
+    },
+    {
+      "width": 375,
+      "state": "design",
+      "document": 375,
+      "viewport": 375,
+      "route": 365,
+      "content": 365,
+      "wide": []
+    },
+    {
+      "width": 375,
+      "state": "design-expanded",
+      "document": 375,
+      "viewport": 375,
+      "route": 365,
+      "content": 365,
+      "wide": []
+    },
+    {
+      "width": 375,
+      "state": "shoot",
+      "document": 375,
+      "viewport": 375,
+      "route": 365,
+      "content": 365,
+      "wide": []
+    },
+    {
+      "width": 375,
+      "state": "tasks",
+      "document": 375,
+      "viewport": 375,
+      "route": 365,
+      "content": 365,
+      "wide": []
+    },
+    {
+      "width": 375,
+      "state": "cut",
+      "document": 375,
+      "viewport": 375,
+      "route": 365,
+      "content": 365,
+      "wide": []
+    },
+    {
+      "width": 375,
+      "state": "cut-expanded",
+      "document": 375,
+      "viewport": 375,
+      "route": 365,
+      "content": 365,
+      "wide": []
+    },
+    {
+      "width": 375,
+      "state": "confirmed-cut",
+      "document": 375,
+      "viewport": 375,
+      "route": 365,
+      "content": 365,
+      "wide": [
+        {
+          "tag": "BUTTON",
+          "class": "ant-btn css-dev-only-do-not-override-2nkxv5 ant-btn-default",
+          "text": "片段 3 · 预计预演时间线 2 秒起"
+        },
+        {
+          "tag": "SPAN",
+          "class": "",
+          "text": "片段 3 · 预计预演"
+        },
+        {
+          "tag": "SPAN",
+          "class": "",
+          "text": "时间线 2 秒起"
+        }
+      ]
+    },
+    {
+      "width": 375,
+      "state": "source-changed",
+      "document": 375,
+      "viewport": 375,
+      "route": 365,
+      "content": 365,
+      "wide": []
+    },
+    {
+      "width": 375,
+      "state": "adoption-error",
+      "document": 375,
+      "viewport": 375,
+      "route": 365,
+      "content": 365,
+      "wide": []
+    },
+    {
+      "width": 375,
+      "state": "media-error",
+      "document": 375,
+      "viewport": 375,
+      "route": 365,
+      "content": 365,
+      "wide": []
+    },
+    {
+      "width": 375,
+      "state": "continuity",
+      "document": 375,
+      "viewport": 375,
+      "route": 365,
+      "content": 365,
+      "wide": []
+    },
+    {
+      "width": 375,
+      "state": "feedback",
+      "document": 375,
+      "viewport": 375,
+      "route": 365,
+      "content": 365,
+      "wide": []
+    },
+    {
+      "width": 375,
+      "state": "ledger",
+      "document": 375,
+      "viewport": 375,
+      "route": 365,
+      "content": 365,
+      "wide": []
+    }
+  ],
+  "validation": {
+    "behavior_tests": {
+      "passed": 31,
+      "failed": 0
+    },
+    "browser_suites": [
+      "workspaceUsage.browser.mjs",
+      "workspaceGuidance.browser.mjs",
+      "workspaceProduction.browser.mjs",
+      "workspaceCut.browser.mjs",
+      "workspaceAcceptance.browser.mjs",
+      "workspaceWrite.browser.mjs"
+    ],
+    "typecheck": "passed",
+    "affected_eslint": "passed",
+    "front_build": "passed; existing large-chunk warning",
+    "site_build": "passed; existing Hugo .Site.Data deprecation warning",
+    "diff_check": "passed"
+  },
+  "evidence_scope": "Acceptance checked the write boundary across 56 viewport/state combinations. A subsequent change only adjusted the pending-navigation dialog after save; Usage and Write were rerun for that change. Other passed checks were reused where behavior was unchanged. Existing screenshots/evidence.json remain historical stage evidence.",
+  "excluded": "A19 cancelled by user, not executed; no real-device or model-artistic-quality claims"
+}

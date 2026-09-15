@@ -1,4 +1,4 @@
-import { useWorkspaceDraft } from './WorkspaceDrafts'
+import { useWorkspaceDraft, WorkspaceWriteBoundary } from './WorkspaceDrafts'
 import { useEffect, useState } from 'react'
 import { Alert, Button, Card, Input, Select, Space, Typography } from 'antd'
 import { StudioDirectingService } from '../../../services/generated'
@@ -37,8 +37,8 @@ export function StyleEditor({ projectId, sequenceId, value, onChange }: {
       setRows(nextRows); setBase(next); setDraft(next.content); return true
     } catch (cause) { setError(directingError(cause)); return false } finally { setBusy(false) }
   }
-  const guard = useWorkspaceDraft({ name: '项目风格', dirty: !!draft && JSON.stringify(draft) !== JSON.stringify(base?.content), save, discard: () => setDraft(base?.content ? structuredClone(base.content) : undefined) })
-  return <Card title="项目风格与适用规则">
+  const guard = useWorkspaceDraft({ busy, name: '项目风格', dirty: !!draft && JSON.stringify(draft) !== JSON.stringify(base?.content), save, discard: () => setDraft(base?.content ? structuredClone(base.content) : undefined) })
+  return <WorkspaceWriteBoundary busy={busy}><Card title="项目风格与适用规则">
     <Space direction="vertical" className="w-full">
       {error && <Alert type="error" message={error} />}
       <Select aria-label="本设计风格依据" allowClear placeholder="本设计不绑定项目风格" className="w-full" value={value} options={rows.filter(row => row.confirmed_at).map(row => ({ value: row.id, label: `${row.content.title} · v${row.version}` }))} onChange={id => onChange(id || null)} />
@@ -68,5 +68,5 @@ export function StyleEditor({ projectId, sequenceId, value, onChange }: {
           }}>确认此风格版本</Button></Space>
       </>}
     </Space>
-  </Card>
+  </Card></WorkspaceWriteBoundary>
 }

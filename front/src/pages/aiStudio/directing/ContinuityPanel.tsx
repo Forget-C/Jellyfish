@@ -1,4 +1,4 @@
-import { useWorkspaceDraft, useWorkspaceDraftStatus } from './WorkspaceDrafts'
+import { useWorkspaceDraft, useWorkspaceDraftStatus, WorkspaceWriteBoundary } from './WorkspaceDrafts'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Image, Input, Select, Space, Tag, Typography } from 'antd'
 import { StudioDirectingService } from '../../../services/generated'
@@ -31,8 +31,8 @@ function SeamEditor({ seam, frames, onReview, busy, blocked }: {
     if (ok) setBaseline({ left, right, rationale, verdict })
     return ok
   }
-  useWorkspaceDraft({ name: `接缝审查 ${seam.left_item_id} → ${seam.right_item_id}`, dirty: JSON.stringify({ left, right, rationale, verdict }) !== JSON.stringify(baseline), save, discard: () => { setLeft(baseline.left); setRight(baseline.right); setRationale(baseline.rationale); setVerdict(baseline.verdict) } })
-  return <Card size="small" title={`${seam.left_item_id} → ${seam.right_item_id}`} extra={<Tag color={seam.status === 'pass' ? 'green' : 'orange'}>{seam.status === 'pass' ? '已通过' : seam.status === 'revise' ? '需调整' : '待复核'}</Tag>}>
+  useWorkspaceDraft({ busy, name: `接缝审查 ${seam.left_item_id} → ${seam.right_item_id}`, dirty: JSON.stringify({ left, right, rationale, verdict }) !== JSON.stringify(baseline), save, discard: () => { setLeft(baseline.left); setRight(baseline.right); setRationale(baseline.rationale); setVerdict(baseline.verdict) } })
+  return <WorkspaceWriteBoundary busy={busy}><Card size="small" title={`${seam.left_item_id} → ${seam.right_item_id}`} extra={<Tag color={seam.status === 'pass' ? 'green' : 'orange'}>{seam.status === 'pass' ? '已通过' : seam.status === 'revise' ? '需调整' : '待复核'}</Tag>}>
     <Space direction="vertical" className="w-full">
       {seam.rationale && <Typography.Text>上次结论：{seam.rationale}</Typography.Text>}
       <Space wrap>
@@ -43,7 +43,7 @@ function SeamEditor({ seam, frames, onReview, busy, blocked }: {
       <Input.TextArea aria-label="接缝审查说明" placeholder="查看实际视频和边界帧后，记录朝向、位置、动作或光线的衔接结论" value={rationale} onChange={event => setRationale(event.target.value)} />
       <Space><Select value={verdict} onChange={setVerdict} options={[{ value: 'pass', label: '衔接通过' }, { value: 'revise', label: '需要调整' }]} /><Button loading={busy} disabled={blocked || !selectedLeft || !selectedRight || !rationale.trim()} onClick={() => { void save() }}>保存人工接缝审查</Button></Space>
     </Space>
-  </Card>
+  </Card></WorkspaceWriteBoundary>
 }
 
 /** 以当前确认剪辑为依据查看真实连续性，替换仅提示有关单元与接缝，不自动重拍。 */

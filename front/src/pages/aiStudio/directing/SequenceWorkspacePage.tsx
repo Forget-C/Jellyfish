@@ -1,3 +1,4 @@
+import { flushSync } from 'react-dom'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Image, Input, Modal, Select, Space, Spin, Tag, Typography } from 'antd'
 import { useLocation, useNavigate, useNavigationType, useParams, useSearchParams } from 'react-router-dom'
@@ -25,7 +26,7 @@ import { buildFileDownloadUrl } from '../assets/utils'
 import { useActiveCut } from './useActiveCut'
 import { ActiveCutSummary, WorkspaceHistory } from './WorkspaceHistory'
 import { revisionName, revisionReferences } from './workspaceUsage'
-import { WorkspaceDrafts, useWorkspaceDraft } from './WorkspaceDrafts'
+import { WorkspaceDrafts, useWorkspaceDraft, WorkspaceWriteBoundary } from './WorkspaceDrafts'
 import { WorkspaceStages } from './WorkspaceStages'
 import { useWorkspacePreparation } from './useWorkspacePreparation'
 import { WorkspaceNextStep } from './WorkspaceNextStep'
@@ -140,7 +141,10 @@ function SequenceWorkspace() {
       const message = directingError(cause)
       setError(message); setIssue({ message, stage, target: stage === 'shoot' ? plan?.units.some(unit => unit.id === unitId) ? `unit:${unitId}` : 'plan-version' : stage === 'design' ? design ? 'design-editor' : 'design-version' : 'cut-editor', planId: basePlan?.id, unitId })
       return false
-    } finally { setBusy(false) }
+    } finally {
+      // 先提交编辑基线和请求结束状态，再允许结果写入后的路由跳转。
+      flushSync(() => setBusy(false))
+    }
   }
   /** 保存或派生设计，保留用户开始编辑时的版本。 */
   const saveDesign = () => run(async () => {
@@ -167,8 +171,8 @@ function SequenceWorkspace() {
       setWorkspace(response.data); selectPlan(saved)
     }
   })
-  const guardDesign = useWorkspaceDraft({ name: '拍摄方案', dirty: !!design && JSON.stringify(design) !== JSON.stringify(baseDesign?.content), save: saveDesign, discard: () => selectDesign(baseDesign, editingSequenceVersion) })
-  const guardPlan = useWorkspaceDraft({ name: '生产计划与参考', dirty: !!plan && JSON.stringify(plan) !== JSON.stringify(basePlan?.content), save: savePlan, discard: () => selectPlan(basePlan) })
+  const guardDesign = useWorkspaceDraft({ busy, name: '拍摄方案', dirty: !!design && JSON.stringify(design) !== JSON.stringify(baseDesign?.content), save: saveDesign, discard: () => selectDesign(baseDesign, editingSequenceVersion) })
+  const guardPlan = useWorkspaceDraft({ busy, name: '生产计划与参考', dirty: !!plan && JSON.stringify(plan) !== JSON.stringify(basePlan?.content), save: savePlan, discard: () => selectPlan(basePlan) })
   const workspaceReady = !!workspace
   useEffect(() => {
     if (!focusTarget || !workspaceReady || view !== focusView.current) return
@@ -223,7 +227,7 @@ function SequenceWorkspace() {
     description: recoverable ? '将恢复该任务真实关联的计划、单元与提示词，不替换为较新版本。' : '暂未取得这个任务的固定输入；不会自动选用其他计划。任务记录仍可查看。',
     label: recoverable ? '载入本任务的固定输入' : '查看定位任务', view: 'shoot', target: recoverable ? 'task-input' : 'tasks', taskId: requestedTask,
   } : workspaceGuidance({ workspace, stage, view, design: baseDesign, plan: basePlan, editingPlan: plan, unitId, promptId, reviewId, designStale, planStale, tasks, tasksState, pending: pendingTask, issue })
-  return <Space className="sequence-workspace" role="region" aria-label="场次工作区" direction="vertical" size="large" style={{ width: '100%' }}>
+  return <WorkspaceWriteBoundary busy={busy}><Space className="sequence-workspace" role="region" aria-label="场次工作区" direction="vertical" size="large" style={{ width: '100%' }}>
     <Space wrap><Button onClick={() => navigate(`/projects/${projectId}/chapters/${chapterId}/sequences`)}>返回场次列表</Button><Typography.Title level={3} style={{ margin: 0 }}>{workspace.sequence.title}</Typography.Title><Button onClick={reload}>刷新状态</Button><Button onClick={() => setHistoryOpen(true)}>版本与历史</Button></Space>
     {['design', 'shoot'].includes(view) && ['feedback', 'continuity', 'ledger'].includes(search.get('returnView') || '') && <Button onClick={() => { const next = cutDestination(search, { view: search.get('returnView')! }); next.delete('returnView'); setSearch(next) }}>返回问题与记录</Button>}
     <div><Typography.Title level={4} style={{ margin: 0 }}>把这场戏做成可预览的粗剪</Typography.Title><Typography.Paragraph type="secondary">先确定怎么拍，再生成视频素材，最后选出片段、组成这场戏。</Typography.Paragraph></div>
@@ -336,7 +340,7 @@ function SequenceWorkspace() {
         if (result.design) {
           const changed = response.data.designs.filter(row => !workspace.designs.some(previous => previous.id === row.id && previous.version === row.version))
           if (changed.length !== 1) throw new Error('结果已返回多个变化版本，请在设计版本中明确核对；未自动替换编辑。')
-          selectDesign(changed[0], response.data.sequence.version); changeView('design')
+          selectDesign(changed[0], response.data.sequence.version)
         }
         else {
           const applied = uniqueNewRecord(workspace.reviews, response.data.reviews)
@@ -346,14 +350,13 @@ function SequenceWorkspace() {
             selectPlan(response.data.plans.find(row => row.id === occurrence.plan_revision_id)); setUnitId(occurrence.unit_id)
             setReviewId(applied.id); setPromptId(occurrence.prompt_revision_id)
           }
-          changeView('shoot')
         }
       }
       setResult(undefined)
-    }) })}>{result?.design ? '写入可编辑草稿' : '保存审稿结论'}</Button>}>
+    }).then(ok => { if (ok) changeView(result?.design ? 'design' : 'shoot') }) })}>{result?.design ? '写入可编辑草稿' : '保存审稿结论'}</Button>}>
       {!!result?.image_file_ids?.length && <><Typography.Paragraph>候选图已保存到本项目素材。请在生产计划中明确选择，才会加入本次参考；不会自动替换已确认素材。</Typography.Paragraph>{result.image_file_ids.map(id => <Image key={id} src={buildFileDownloadUrl(id)} alt="验证图候选" />)}</>}
       {result?.design && <DesignEditor value={result.design} onChange={() => {}} disabled />}
       {result?.review?.rows.map(row => <Card key={row.role + row.occurrence_id} size="small" title={`${roles[row.role]} · ${row.verdict === 'pass' ? '通过' : row.verdict === 'pending' ? '待审' : '需修改'}`}><ReviewDetails row={row} /></Card>)}
     </Modal>
-  </Space>
+  </Space></WorkspaceWriteBoundary>
 }

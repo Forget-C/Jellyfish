@@ -13,4 +13,4 @@ status: cancelled
 
 ## 阶段收口
 
-[体验优化计划](/docs/plans/directing-workbench-experience-plan/)已同步范围调整；A17 综合回归、A18 布局与键盘检查、A20 工程与文档收口已完成，UX5 已完成。
+[体验优化计划](/docs/plans/directing-workbench-experience-plan/)已同步范围调整；A19 的取消决定保持有效。交付复核发现的保存期间编辑保护缺口已修复并复验，UX1–UX5 按校准后的必要要求完成；最新证据见体验优化计划第 9 节，不重新要求用户测试。

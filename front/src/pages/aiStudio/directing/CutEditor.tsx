@@ -1,4 +1,4 @@
-import { useWorkspaceDraft } from './WorkspaceDrafts'
+import { useWorkspaceDraft, WorkspaceWriteBoundary } from './WorkspaceDrafts'
 import { useSearchParams } from 'react-router-dom'
 import { readWorkspaceContext, restoreSelection, saveWorkspaceContext } from './workspaceContext'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -65,7 +65,7 @@ export function CutEditor({ projectId, workspace, activeCut, onChange, onSelecti
     void Promise.allSettled((takeIds ? takeIds.split(',') : []).map(takeId => StudioDirectingService.directingTakeMedia({ projectId, sequenceId, takeId }))).then(rows => {
       if (active) {
         setMedia(Object.fromEntries(rows.flatMap(row => row.status === 'fulfilled' && row.value.data ? [[row.value.data.take_id, row.value.data]] : [])))
-        if (rows.some(row => row.status === 'rejected' || !row.value.data)) setError('部分素材暂时无法读取；其余素材仍可审片，缺失素材请刷新重试。')
+        if (rows.some(row => row.status === 'rejected' || !row.value.data)) setError('部分素材暂时无法读取；其余素材仍可审片，缺失素材请在保存修改后重新加载页面重试。')
       }
     }).catch(cause => { if (active) setError(directingError(cause)) })
     return () => { active = false }
@@ -185,9 +185,9 @@ export function CutEditor({ projectId, workspace, activeCut, onChange, onSelecti
       return true
     } catch (cause) { setError(directingError(cause)); return false } finally { setBusy(false) }
   }
-  const guardCut = useWorkspaceDraft({ name: '剪辑草稿', dirty, save, discard: () => { setPlayIndex(undefined); setCut(structuredClone(saved?.content || { items: [] })) } })
-  const guardReview = useWorkspaceDraft({ name: '素材审片', dirty: reviewDirty, save: review, discard: () => { setObservation(take?.annotation.rationale.text || ''); setVerdict(take?.annotation.verdict || 'retain'); setCoverageId(undefined); setReviewVersion(take?.version); setReviewDirty(false) } })
-  return <Space direction="vertical" style={{ width: '100%' }} size="large">
+  const guardCut = useWorkspaceDraft({ busy, name: '剪辑草稿', dirty, save, discard: () => { setPlayIndex(undefined); setCut(structuredClone(saved?.content || { items: [] })) } })
+  const guardReview = useWorkspaceDraft({ busy, name: '素材审片', dirty: reviewDirty, save: review, discard: () => { setObservation(take?.annotation.rationale.text || ''); setVerdict(take?.annotation.verdict || 'retain'); setCoverageId(undefined); setReviewVersion(take?.version); setReviewDirty(false) } })
+  return <WorkspaceWriteBoundary busy={busy}><Space direction="vertical" style={{ width: '100%' }} size="large">
     {['feedback', 'continuity', 'ledger'].includes(search.get('returnView') || '') && <Button onClick={() => { const next = cutDestination(search, { view: search.get('returnView')! }); next.delete('returnView'); setSearch(next) }}>返回问题与记录</Button>}
     {rangePreparation.error && <Alert type="warning" message={rangePreparation.error} />}
     {error && <Alert type="error" message={error} closable onClose={() => setError('')} />}
@@ -291,5 +291,5 @@ export function CutEditor({ projectId, workspace, activeCut, onChange, onSelecti
         </Card>)}
       </Space>
     </Card>
-  </Space>
+  </Space></WorkspaceWriteBoundary>
 }

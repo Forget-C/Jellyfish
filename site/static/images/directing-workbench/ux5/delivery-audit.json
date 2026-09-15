@@ -1,0 +1,27 @@
+{
+  "baseline": "aed4f55",
+  "findings": [
+    {
+      "case": "design_edit_during_save",
+      "expected": "B：保存等待期间继续输入的内容",
+      "actual": "A：提交保存的内容",
+      "server": "A：提交保存的内容",
+      "defect": true
+    },
+    {
+      "case": "cut_edit_during_save",
+      "expected": 2,
+      "actual": 1,
+      "server": 1,
+      "defect": true
+    },
+    {
+      "case": "media_retry_by_refresh_status",
+      "mediaReadsBefore": 6,
+      "mediaReadsAfter": 6,
+      "playerCount": 0,
+      "hardReloadRecovers": true
+    }
+  ],
+  "errors": []
+}
