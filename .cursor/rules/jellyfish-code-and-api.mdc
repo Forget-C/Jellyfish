@@ -1,30 +1,7 @@
 ---
-description: Jellyfish 代码与接口协作规则
-alwaysApply: true
+description: 修改 Jellyfish 前后端代码或对外接口契约时使用。
+globs: "backend/app/**/*.py,front/src/**/*"
+alwaysApply: false
 ---
 
-# Jellyfish Code And API Rules
-
-## 代码规范
-
-- API 变更后必须运行：`pnpm run openapi:update`。
-- 前端调用后端接口时，统一使用 OpenAPI generated client，不新增手写 service 封装。
-- 当前端样式重复度大于 1 次时，优先抽离为可复用组件或公共样式结构。
-- 函数、类等代码块必须添加注释：
-  - 至少包含功能介绍（说明“做什么”与“为什么存在”）。
-  - 复杂函数需补充参数说明、返回值说明（如适用）与关键内部逻辑注释。
-  - 注释必须与代码实现保持同步，避免过时、误导或空泛描述。
-- 后端严格区分层职责：
-  - `api` 层负责收参、鉴权、响应组织。
-  - `service` 层负责业务逻辑、状态流转、数据编排。
-- 生成能力相关的通用契约（输入/输出 DTO、供应商配置等）统一放在 `app/core/contracts`：
-  - `tasks` 仅保留任务封装、分派与执行编排，不定义跨层 DTO。
-  - `integrations` 仅依赖 `contracts`，不依赖 `tasks` 类型模块。
-
-## 变更同步要求
-
-- 修改 API、类型、状态模型后，优先同步：
-  - 后端实现
-  - OpenAPI
-  - 前端 generated types
-  - 对应开发文档
+项目规则统一维护在 [AGENTS.md](../../AGENTS.md)。本规则适用时，仅定位其中的“代码规范、接口与文档同步”；当前上下文已包含相关内容时直接复用，不重复读取或执行检查。

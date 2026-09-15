@@ -233,12 +233,24 @@ cp deploy/compose/.env.example deploy/compose/.env
 cp backend/.env.example backend/.env
 cp front/.env.example front/.env
 docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.yml \
-  up -d mysql redis rustfs backend-migrate backend-seed-system-data
+  up --build -d mysql redis rustfs backend-migrate backend-seed-system-data
 ```
+
+Keep `--build` when rerunning this command after updating the code so the
+migration and system-seed images include the current scripts. If migration
+fails with `Can't locate revision identified by ...`, check that the revision
+exists in `backend/alembic/versions/` and rebuild the images with this command.
+Do not reset the database volume or change `alembic_version` to work around a
+stale image. If the revision is absent from the checkout, use the code version
+that contains it before retrying.
 
 The default credentials in `backend/.env.example` match
 `deploy/compose/.env.example`. When changing MySQL or RustFS credentials in the
 Compose file, update the corresponding values in `backend/.env` too.
+If `MYSQL_PORT` is changed in `deploy/compose/.env`, also update the port in
+`backend/.env`'s `DATABASE_URL` (for example, `127.0.0.1:13306`). Local processes
+use the published host port; Compose services continue to use `mysql:3306`.
+Restart the local backend and Celery worker after changing their environment.
 
 ### Backend
 

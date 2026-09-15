@@ -1,39 +1,6 @@
 ---
-description: Jellyfish 标准完成状态（DoD）规则
-alwaysApply: true
+description: 检查本次 Jellyfish 变更是否完成时使用。
+alwaysApply: false
 ---
 
-# Jellyfish Definition Of Done
-
-以下场景在默认情况下，满足全部条件才算“完成”：
-
-1. 代码实现完成：
-   - 功能代码已落地
-   - 无明显遗留占位实现
-   - 无无效兼容代码残留
-   - 新增或改动的函数、类等代码块已补充必要注释，并与实现一致
-
-2. 接口/类型完成：
-   - 若后端 API 有变化，已运行 `pnpm run openapi:update`
-   - 前端 generated types 已同步
-   - 前端调用已切到 OpenAPI generated client
-
-3. 文档完成：
-   - 若影响当前系统行为，已更新 `architecture`
-   - 若影响后续执行计划，已更新 `plans`
-   - 若为发布说明，按需更新 `blog`
-
-4. 页面职责完成：
-   - 分镜编辑页继续保持“准备”定位
-   - 分镜工作室继续保持“生成”定位
-   - 未引入新的职责混淆
-
-5. 验证完成：
-   - 前端改动后，至少通过 `pnpm exec tsc --noEmit`
-   - 后端改动后，至少通过相关测试或最低限度的语法/导入校验
-   - Python 相关改动后，需运行 `pylint` 完成静态校验
-
-6. 结果汇报完成：
-   - 明确说明改了什么
-   - 明确说明验证结果
-   - 若有未完成项或后续建议，需单独说明
+项目规则统一维护在 [AGENTS.md](../../AGENTS.md)。本规则适用时，仅定位其中的“标准完成状态”；当前上下文已包含相关内容时直接复用，不重复读取或执行检查。
