@@ -123,6 +123,7 @@ try {
   await choose('选择候选 Take', 'Take 3 · u1')
   await page.locator('video').first().evaluate(video => new Promise(resolve => { if (video.readyState >= 1) resolve(); else video.addEventListener('loadedmetadata', resolve, { once: true }) }))
   assert.equal(await page.locator('video').first().evaluate(video => video.duration), 6)
+  await page.getByText('实际观察、覆盖与审片结论', { exact: true }).click()
   await page.getByRole('button', { name: '保存审片', exact: true }).click()
   await settled()
   assert.equal(workspace.takes[2].annotation.review_status, 'reviewed')
@@ -326,6 +327,7 @@ try {
   assert.equal(writes.length, beforeOtherDrafts)
 
   // Concurrent annotation refresh keeps local prose and the original save baseline.
+  await page.getByText('实际观察、覆盖与审片结论', { exact: true }).click()
   await page.getByRole('textbox', { name: '实际观察' }).fill('尚未保存的本地审片')
   const reviewedTake = workspace.takes.find(row => row.id === 't3')
   reviewedTake.version += 1

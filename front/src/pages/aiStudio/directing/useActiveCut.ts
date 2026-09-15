@@ -11,7 +11,7 @@ export function useActiveCut(projectId: string, sequenceId: string, workspace?: 
     if (!workspace || workspace.sequence.id !== sequenceId) return
     let cancelled = false
     void StudioDirectingService.directingFeedback({ projectId, sequenceId }).then(response => {
-      if (!cancelled) setResult({ workspace, projectId, state: resolveActiveCut(workspace, response.data?.active_cut_revision_id) })
+      if (!cancelled) setResult({ workspace, projectId, state: { ...resolveActiveCut(workspace, response.data?.active_cut_revision_id), ...(response.data ? { feedback: response.data } : {}) } })
     }).catch(() => { if (!cancelled) setResult({ workspace, projectId, state: { status: 'error' } }) })
     return () => { cancelled = true }
   }, [projectId, sequenceId, workspace])

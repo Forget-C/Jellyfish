@@ -1,7 +1,7 @@
-import type { SequenceCut_Input, WorkspaceRead } from '../../../services/generated'
+import type { FeedbackRead, SequenceCut_Input, WorkspaceRead } from '../../../services/generated'
 
 export type CutRevision = WorkspaceRead['cuts'][number]
-export type ActiveCutState = { status: 'loading' | 'error' } | { status: 'ready'; cut?: CutRevision }
+export type ActiveCutState = { status: 'loading' | 'error' } | { status: 'ready'; cut?: CutRevision; feedback?: FeedbackRead }
 
 /** 当前采用只认服务端指针；上下文缺失或版本未确认时保持未知，不能猜测为未采用。 */
 export function resolveActiveCut(workspace: WorkspaceRead, id: string | null | undefined): ActiveCutState {

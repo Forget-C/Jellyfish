@@ -4,6 +4,9 @@ import { Alert, Button, Card, Image, Input, Select, Space, Tag, Typography } fro
 import { StudioDirectingService } from '../../../services/generated'
 import type { ContinuityRead, CutFrameRead, SeamRead, WorkspaceRead } from '../../../services/generated'
 import { buildFileDownloadUrl } from '../assets/utils'
+import { useSearchParams } from 'react-router-dom'
+import { cutDestination, takeAction } from './workspaceCut'
+import { revisionName } from './workspaceUsage'
 import { directingError } from './common'
 
 /** 展示实际区间的首尾帧与原视频，明确区分历史证据和当前采用。 */
@@ -46,6 +49,7 @@ function SeamEditor({ seam, frames, onReview, busy, blocked }: {
 /** 以当前确认剪辑为依据查看真实连续性，替换仅提示有关单元与接缝，不自动重拍。 */
 export function ContinuityPanel({ projectId, workspace }: { projectId: string; workspace: WorkspaceRead }) {
   const sequenceId = workspace.sequence.id
+  const [search, setSearch] = useSearchParams()
   const [state, setState] = useState<ContinuityRead>()
   const [pending, setPending] = useState<ContinuityRead>()
   const drafts = useWorkspaceDraftStatus()
@@ -85,7 +89,8 @@ export function ContinuityPanel({ projectId, workspace }: { projectId: string; w
     {error && <Alert type="error" message={error} />}
     {pending && <Alert type="warning" message="连续性依据已有更新；正在编辑的旧版输入已保留。" action={<Button onClick={() => drafts.transition(() => { setState(pending); setPending(undefined) })}>处理修改并载入最新连续性</Button>} />}
     <Alert type="info" message="先在粗剪中确认实际采用，再提取边界帧并检查接缝。落幅可在拍摄计划中显式绑定为前段依赖；不会自动采用或重拍。" />
-    <Button onClick={() => { void reload() }}>刷新连续性状态</Button>
+    <Space wrap><Button onClick={() => { void reload() }}>刷新连续性状态</Button><Button onClick={() => setSearch(cutDestination(search, { view: 'cut' }))}>返回剪辑工作区</Button></Space>
+    {state && <Typography.Text>接缝需处理 {state.seams.filter(row => row.status !== 'pass').length} 项 · 依赖待复核 {state.units.filter(row => row.status !== 'ready').length} 项；只处理受影响项，不要求全场重拍。</Typography.Text>}
     {!state && <Typography.Text>正在读取实际采用依据…</Typography.Text>}
     {state && !state.active_cut_revision_id && <Typography.Text>尚无已确认采用版本。预演卡不能作为实际连续性证据。</Typography.Text>}
     {state?.active_cut_revision_id && !cut && <Alert type="warning" message="采用版本已变化，请使用顶部“刷新状态”载入当前剪辑。" />}
@@ -95,6 +100,7 @@ export function ContinuityPanel({ projectId, workspace }: { projectId: string; w
       const take = workspace.takes.find(row => row.id === item.take_id)
       return <Card key={item.id} size="small" title={`实际片段 ${index + 1} · ${item.id}`}>
         <Space direction="vertical" className="w-full">
+          <Typography.Text>{take ? takeAction(workspace, take.id) : '素材缺失'}</Typography.Text><Button onClick={() => setSearch(cutDestination(search, { view: 'cut', cut: cut.id, item: item.id, take: take?.id, returnView: 'continuity' }))}>定位并调整片段 {index + 1}</Button>
           <Typography.Text>采用区间：{item.media_range.source_in_ms / 1000}–{item.media_range.source_out_ms / 1000} 秒</Typography.Text>
           {take && <video controls preload="metadata" style={{ maxWidth: '100%', width: 360 }} src={`${buildFileDownloadUrl(take.file_id)}#t=${item.media_range.source_in_ms / 1000},${item.media_range.source_out_ms / 1000}`} />}
           <Space><Button disabled={busy || !!pending} onClick={() => { void extract(item.id, 'start') }}>提取实际入幅</Button><Button disabled={busy || !!pending} onClick={() => { void extract(item.id, 'end') }}>提取实际落幅</Button></Space>
@@ -107,7 +113,7 @@ export function ContinuityPanel({ projectId, workspace }: { projectId: string; w
     {state?.seams.map(seam => <SeamEditor key={`${state.active_cut_revision_id}:${seam.left_item_id}:${seam.right_item_id}`} seam={seam} frames={state.frames} onReview={review} busy={busy} blocked={!!pending} />)}
     <Typography.Title level={5}>依赖与替换影响</Typography.Title>
     {!state?.units.length && <Typography.Text type="secondary">尚未声明前段落幅依赖。</Typography.Text>}
-    {state?.units.map(unit => <Alert key={`${unit.plan_revision_id}:${unit.unit_id}`} type={unit.status === 'ready' ? 'success' : 'warning'} message={`计划 ${unit.plan_revision_id} · 单元 ${unit.unit_id} · ${unit.status === 'ready' ? '实际依据有效' : '待复核，不能提交'}`} description={unit.errors.join('；')} />)}
+    {state?.units.map(unit => <Alert key={`${unit.plan_revision_id}:${unit.unit_id}`} type={unit.status === 'ready' ? 'success' : 'warning'} message={`计划 ${unit.plan_revision_id} · 单元 ${unit.unit_id} · ${unit.status === 'ready' ? '实际依据有效' : '待复核，不能提交'}`} description={<Space direction="vertical"><span>{unit.errors.join('；')}</span><Button onClick={() => setSearch(cutDestination(search, { view: 'shoot', plan: unit.plan_revision_id, unit: unit.unit_id, returnView: 'continuity' }))}>核对{revisionName(workspace.plans, unit.plan_revision_id, '计划')}中的此单元</Button></Space>} />)}
     {!!state?.frames.some(frame => !frame.current) && <Typography.Text type="secondary">历史提帧仍保留；采用片段或区间已变化的证据不能继续用于提交。</Typography.Text>}
   </Space>
 }

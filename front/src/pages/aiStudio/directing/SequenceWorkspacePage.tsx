@@ -5,6 +5,7 @@ import { StudioDirectingService } from '../../../services/generated'
 import type { DirectingTaskRead, ProductionPlan_Input, SceneDesign_Input, WorkspaceRead } from '../../../services/generated'
 import { DesignEditor } from './DesignEditor'
 import { productionRecords, uniqueNewRecord } from './workspaceProduction'
+import { cutDestination } from './workspaceCut'
 import { ReferencePreview } from './ReferencePreview'
 import { ReviewDetails } from './ReviewDetails'
 import { StyleEditor } from './StyleEditor'
@@ -44,7 +45,7 @@ export default function SequenceWorkspacePage() {
   const location = useLocation()
   const navigationType = useNavigationType()
   const query = new URLSearchParams(location.search)
-  const identity = JSON.stringify(['design', 'plan', 'unit', 'prompt', 'review', 'cut', 'take', 'task'].map(key => query.get(key)))
+  const identity = JSON.stringify(['design', 'plan', 'unit', 'prompt', 'review', 'cut', 'take', 'task', 'item', 'feedback'].map(key => query.get(key)))
   const context = useRef({ identity, generation: 0 })
   if (identity !== context.current.identity) {
     if (!(navigationType === 'REPLACE' && location.state?.directingContextSync)) context.current.generation += 1
@@ -82,6 +83,8 @@ function SequenceWorkspace() {
   const [issue, setIssue] = useState<GuidanceInput['issue']>()
   const [focusTarget, setFocusTarget] = useState<string | null>(() => search.get('focus'))
   const focusView = useRef(view)
+  const requestedFocus = search.get('focus')
+  useEffect(() => { if (requestedFocus) { focusView.current = view; setFocusTarget(requestedFocus) } }, [requestedFocus, view])
   const [result, setResult] = useState<DirectingTaskRead>()
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -221,6 +224,7 @@ function SequenceWorkspace() {
   } : workspaceGuidance({ workspace, stage, view, design: baseDesign, plan: basePlan, editingPlan: plan, unitId, promptId, reviewId, designStale, planStale, tasks, tasksState, pending: pendingTask, issue })
   return <Space role="region" aria-label="场次工作区" direction="vertical" size="large" style={{ width: '100%', padding: 24 }}>
     <Space wrap><Button onClick={() => navigate(`/projects/${projectId}/chapters/${chapterId}/sequences`)}>返回场次列表</Button><Typography.Title level={3} style={{ margin: 0 }}>{workspace.sequence.title}</Typography.Title><Button onClick={reload}>刷新状态</Button><Button onClick={() => setHistoryOpen(true)}>版本与历史</Button></Space>
+    {['design', 'shoot'].includes(view) && ['feedback', 'continuity', 'ledger'].includes(search.get('returnView') || '') && <Button onClick={() => { const next = cutDestination(search, { view: search.get('returnView')! }); next.delete('returnView'); setSearch(next) }}>返回问题与记录</Button>}
     <div><Typography.Title level={4} style={{ margin: 0 }}>把这场戏做成可预览的粗剪</Typography.Title><Typography.Paragraph type="secondary">先确定怎么拍，再生成视频素材，最后选出片段、组成这场戏。</Typography.Paragraph></div>
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: 16 }}>
     <WorkspaceNextStep guidance={guidance} busy={busy} running={tasks.filter(task => ['queued', 'running'].includes(task.status)).length} onAction={followGuidance} />

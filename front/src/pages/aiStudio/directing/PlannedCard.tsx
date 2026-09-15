@@ -1,5 +1,6 @@
 import { Button, Image, InputNumber, Select, Space, Typography } from 'antd'
 import type { PlannedCutItem, SceneDesign_Input } from '../../../services/generated'
+import { DesignNote } from './DesignSummary'
 import { buildFileDownloadUrl } from '../assets/utils'
 
 /** 同一预演项的文字、静态图与对白落点，所有时间均为计划而非媒体证据。 */
@@ -13,8 +14,8 @@ export function PlannedCard({ item, design, images, onImageSearch, onChange }: {
   const dialogues = design?.sound.dialogues.filter(row => dialogueIds.has(row.id)) || []
   return <Space direction="vertical" className="w-full">
     <Typography.Text strong>预演 · {item.shot_id}</Typography.Text>
-    <Typography.Paragraph>{shot?.narrative_function.text || '镜头叙事作用尚未填写'}</Typography.Paragraph>
-    <Typography.Paragraph>{shot?.visible_result.text || '可见动作尚未填写'}</Typography.Paragraph>
+    <Typography.Paragraph>叙事作用：<DesignNote note={shot?.narrative_function} /></Typography.Paragraph>
+    <Typography.Paragraph>计划画面：<DesignNote note={shot?.visible_result} /></Typography.Paragraph><Typography.Text type="secondary">文字或静态图预演 · 预计 {item.estimated_duration_ms / 1000} 秒 · 不作为实际覆盖证据</Typography.Text>
     {item.preview_file_id && <Image src={buildFileDownloadUrl(item.preview_file_id)} alt="预演参考图" style={{ maxHeight: 300, objectFit: 'contain' }} />}
     {onChange && <Space wrap>
       <span>预计秒数</span><InputNumber aria-label="预演预计秒数" min={0.001} precision={3} value={item.estimated_duration_ms / 1000} onChange={seconds => {

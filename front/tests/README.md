@@ -1,20 +1,21 @@
 # 场次工作台体验回归
 
-从项目根目录运行 27 项纯行为回归，使用现有 TypeScript 编译器与 Node.js 内置测试工具：
+从项目根目录运行 31 项纯行为回归，使用现有 TypeScript 编译器与 Node.js 内置测试工具：
 
 ```bash
-node --test front/tests/workspaceUsage.test.mjs front/tests/workspaceNavigation.test.mjs front/tests/workspaceContext.test.mjs front/tests/workspaceGuidance.test.mjs front/tests/workspaceTaskContext.test.mjs front/tests/workspacePreparation.test.mjs front/tests/workspaceProduction.test.mjs
+node --test front/tests/workspaceUsage.test.mjs front/tests/workspaceNavigation.test.mjs front/tests/workspaceContext.test.mjs front/tests/workspaceGuidance.test.mjs front/tests/workspaceTaskContext.test.mjs front/tests/workspacePreparation.test.mjs front/tests/workspaceProduction.test.mjs front/tests/workspaceCut.test.mjs
 ```
 
-浏览器回归需要 Node.js 20+、Playwright 及 Chromium；`workspaceUsage.browser.mjs` 还需 ffmpeg。可复用 Codex workspace runtime；如果 Playwright 不在项目模块路径，通过 `NODE_PATH` 指向提供该包的 `node_modules`，并使用该 runtime 的 Node.js。
+浏览器回归需要 Node.js 20+、Playwright 及 Chromium；`workspaceUsage.browser.mjs` 与 `workspaceCut.browser.mjs` 还需 ffmpeg。可复用 Codex workspace runtime；如果 Playwright 不在项目模块路径，通过 `NODE_PATH` 指向提供该包的 `node_modules`，并使用该 runtime 的 Node.js。
 
 ```bash
 node front/tests/workspaceUsage.browser.mjs
 node front/tests/workspaceGuidance.browser.mjs
 node front/tests/workspaceProduction.browser.mjs
+node front/tests/workspaceCut.browser.mjs
 ```
 
-三个脚本分别启动仅监听 `127.0.0.1:4178`、`127.0.0.1:4179` 和 `127.0.0.1:4180` 的临时 Vite，在真实页面中拦截业务接口，不连接生产后端，不调用真实生成模型。运行结束关闭浏览器和临时服务，并输出截图证据目录。
+四个脚本分别启动仅监听 `127.0.0.1:4178`、`127.0.0.1:4179` 、`127.0.0.1:4180` 和 `127.0.0.1:4181` 的临时 Vite，在真实页面中拦截业务接口，不连接生产后端，不调用真实生成模型。运行结束关闭浏览器和临时服务，并输出截图证据目录。
 
 | 脚本 | 覆盖 |
 | --- | --- |
@@ -23,4 +24,6 @@ node front/tests/workspaceProduction.browser.mjs
 
 | `workspaceProduction.browser.mjs` | A09–A12：同源设计摘要、六岗与声音各字段编辑/保存/刷新、其他字段及 Note 状态/来源完整保留、保存和写入失败、迟到建议、成功/失败/取消任务与完整历史、跨计划同名单元隔离、多个指令显式选择、固定参数与媒体类型，以及验证图/批量/重组的实际请求。 |
 
-测试替身证明前端交互与请求边界。采用指针、不可变版本和事务规则由 `backend/tests/directing/test_store.py`、`test_continuity.py`、`test_feedback.py` 的现有业务测试验证；没有后端变化时复用已有结果。迟到建议的服务端独立派生由 `backend/tests/directing/test_workspace.py` 验证。UX4–UX5 的剪辑布局、完整设备覆盖、真实模型艺术质量和目标用户理解测试不由这些脚本代替。
+| `workspaceCut.browser.mjs` | A13–A16：候选与采用并排、同一 Take 多区间、真实片段/预演混合播放、准确跳转提帧、重排/替换/保存刷新、采用替换后的局部依赖、画面/声音分开、问题及历史返工的精确往返、当前返工的局部计划和三类台账。六秒合成媒体支持 HTTP Range，以验证真实跳转位置。 |
+
+测试替身证明前端交互与请求边界。采用指针、不可变版本和事务规则由 `backend/tests/directing/test_store.py`、`test_continuity.py`、`test_feedback.py` 的现有业务测试验证；没有后端变化时复用已有结果。迟到建议的服务端独立派生由 `backend/tests/directing/test_workspace.py` 验证。UX5 的完整设备覆盖、真实模型艺术质量和目标用户理解测试不由这些脚本代替。
