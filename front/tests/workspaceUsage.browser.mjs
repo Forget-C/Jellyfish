@@ -78,41 +78,71 @@ try {
     return respond({ items: [], total: 0 })
   })
   const url = 'http://127.0.0.1:4178/projects/p1/chapters/ch1/sequences/s1?view=cut'
-  async function text(value) { await page.getByText(value, { exact: true }).first().waitFor({ state: 'visible' }) }
+  async function contextAction(label) {
+    await page.locator('.workspace-stage-tabs').waitFor()
+    if (await page.getByRole('button', { name: '更多场次操作', exact: true }).isVisible()) await page.getByRole('button', { name: '更多场次操作', exact: true }).click()
+    else await page.getByRole('button', { name: /阶段工具/ }).click()
+    await page.getByRole('menuitem', { name: label, exact: true }).click()
+  }
+  async function closeDrawer() { await page.locator('.ant-drawer-open').last().getByRole('button', { name: 'Close', exact: true }).click(); await page.waitForTimeout(350) }
+  async function text(value) {
+    if (/^当前查看： · (设计|剪辑)/.test(value)) {
+      const [, kind, number] = value.match(/(设计|剪辑) (\d+)/)
+      const selector = page.getByRole('combobox', { name: kind === '设计' ? '查看或编辑设计版本' : '查看或编辑剪辑版本', exact: true }).locator('../..')
+      await selector.waitFor()
+      assert.match(await selector.innerText(), new RegExp(kind + ' 0?' + number))
+      return
+    }
+    if (/^当前采用：剪辑|^正在核对当前采用|^采用状态暂不可用|^尚未确认采用剪辑/.test(value)) {
+      await contextAction('当前进展'); await page.getByText(value, { exact: true }).first().waitFor(); await closeDrawer(); return
+    }
+    if (/^当前采用：片段|^编辑草稿已选入/.test(value)) {
+      await page.locator('.cut-inspector').getByRole('tab', { name: '来源', exact: true }).click()
+      await page.getByText(value, { exact: true }).first().waitFor()
+      await page.locator('.cut-inspector').getByRole('tab', { name: '审片', exact: true }).click(); return
+    }
+    await page.getByText(value, { exact: true }).first().waitFor({ state: 'visible' })
+  }
   async function choose(label, title) {
     await page.getByRole('combobox', { name: label, exact: true }).locator('../..').click()
-    await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: title }).first().click()
+    await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: label === '查看或编辑设计版本' ? new RegExp('设计 0?' + title.match(/设计 (\d+)/)[1]) : title }).first().click()
   }
   async function settled() { await text(`当前采用：剪辑 ${workspace.cuts.findIndex(row => row.id === activeId) + 1} · 已确认`) }
   await page.goto(url)
   await settled()
   await text('当前查看： · 剪辑 3 · 草稿')
   assert.equal(writes.length, 0)
+  await contextAction('当前进展')
   await page.getByText('查看采用区间与预演', { exact: true }).click()
   assert.ok((await page.locator('body').innerText()).includes('片段 2 · Take 1 · 源区间 4.000–5.000 秒'))
-  await page.getByText('查看采用区间与预演', { exact: true }).click()
+  await closeDrawer()
 
   // A04: opening and expanding every history group performs no business writes.
-  await page.getByRole('button', { name: '版本与历史', exact: true }).click()
-  const drawer = page.locator('.ant-drawer-content')
+  await contextAction('版本与历史')
+  const drawer = page.locator('.ant-drawer-open')
   for (const summary of await drawer.locator('summary').all()) await summary.click()
   assert.ok((await drawer.innerText()).includes('当前采用仍在引用'))
+  await drawer.getByRole('tab', { name: '剪辑版本', exact: true }).click()
   assert.ok((await drawer.innerText()).includes('剪辑 1 · 已确认 · 历史版本'))
   assert.equal(writes.length, 0)
   await drawer.getByRole('button', { name: 'Close' }).click()
 
   // A01: latest draft remains explicitly a viewing choice, while older dependencies stay in use.
-  await page.getByRole('tab', { name: /1\. 设计这场戏/ , exact: true }).click()
+  await page.getByRole('tab', { name: '导演设计' , exact: true }).click()
   await text('当前查看： · 设计 2 · 草稿')
   await choose('查看或编辑设计版本', '设计 1 · 已确认')
-  await page.getByText('此设计的引用：计划 1 · 已确认（当前采用仍在引用）', { exact: false }).waitFor()
-  await page.getByRole('tab', { name: /2\. 生成视频素材/ , exact: true }).click()
+  await contextAction('版本与历史')
+  await page.locator('.ant-drawer-open').getByRole('tab', { name: '设计版本', exact: true }).click()
+  await page.locator('.ant-drawer-open').getByText('当前采用与版本引用', { exact: true }).click()
+  await page.locator('.ant-drawer-open').getByText('计划 1 · 已确认（当前采用仍在引用）', { exact: false }).waitFor()
+  await closeDrawer()
+  await page.getByRole('tab', { name: '单元试拍' , exact: true }).click()
   await text('当前查看： · 计划 2 · 草稿 · 固定设计依据：设计 1')
   await choose('查看或编辑生产计划', '计划 1 · 已确认')
   await page.getByText('此计划的引用：Take 1（当前采用仍在引用）', { exact: false }).waitFor()
   assert.equal(writes.length, 0)
   await settled()
-  await page.getByRole('tab', { name: /3\. 选片与剪辑/ , exact: true }).click()
+  await page.getByRole('tab', { name: '剪辑验收' , exact: true }).click()
 
   // A03: review-passed but currently unused take remains a candidate; adopted take shows both ranges.
   await choose('选择候选 Take', 'Take 2 · u1')
@@ -123,7 +153,8 @@ try {
   await choose('选择候选 Take', 'Take 3 · u1')
   await page.locator('video').first().evaluate(video => new Promise(resolve => { if (video.readyState >= 1) resolve(); else video.addEventListener('loadedmetadata', resolve, { once: true }) }))
   assert.equal(await page.locator('video').first().evaluate(video => video.duration), 6)
-  await page.getByText('实际观察、覆盖与审片结论', { exact: true }).click()
+  await page.locator('.cut-inspector').getByRole('tab', { name: '审片', exact: true }).click()
+  await page.getByRole('textbox', { name: '实际观察', exact: true }).waitFor()
   await page.getByRole('button', { name: '保存审片', exact: true }).click()
   await settled()
   assert.equal(workspace.takes[2].annotation.review_status, 'reviewed')
@@ -150,7 +181,7 @@ try {
 
   // A02: late successful output is a new candidate, not automatic adoption.
   workspace.takes.push({ ...structuredClone(workspace.takes[2]), id: 't4', file_id: 'file4', task_id: 'new-success', annotation: { review_status: 'unreviewed', rationale: { state: 'unset' }, coverage: [], retained_ranges: [] } })
-  await page.getByRole('button', { name: '刷新状态', exact: true }).click()
+  await contextAction('刷新状态')
   await settled()
   await choose('选择候选 Take', 'Take 4 · u1')
   assert.ok((await page.getByRole('combobox', { name: '选择候选 Take' }).locator('../..').innerText()).includes('当前未采用'))
@@ -158,16 +189,16 @@ try {
 
   // A04: loading/error states cannot temporarily label everything as unadopted.
   feedbackMode = 'hold'
-  await page.getByRole('button', { name: '刷新状态', exact: true }).click()
+  await contextAction('刷新状态')
   await text('正在核对当前采用…')
   await text('采用状态加载中')
   assert.equal(pendingFeedback.length, 1)
   const writesBeforeHistory = writes.length
-  await page.getByRole('button', { name: '版本与历史', exact: true }).click()
-  assert.ok(!(await page.locator('.ant-drawer-content').innerText()).includes('当前未采用'))
-  await page.locator('.ant-drawer-content').getByRole('button', { name: 'Close' }).click()
+  await contextAction('版本与历史')
+  assert.ok(!(await page.locator('.ant-drawer-open').innerText()).includes('当前未采用'))
+  await page.locator('.ant-drawer-open').getByRole('button', { name: 'Close' }).click()
   feedbackMode = 'fail'
-  await page.getByRole('button', { name: '刷新状态', exact: true }).click()
+  await contextAction('刷新状态')
   await text('采用状态暂不可用，请刷新状态重试。')
   // Complete the previous stale request with null: it must not overwrite the newer error.
   const oldResponse = page.waitForResponse(response => response.url().endsWith('/s1/feedback') && response.status() === 200)
@@ -177,29 +208,29 @@ try {
   await text('采用状态暂不可用，请刷新状态重试。')
   assert.equal(writes.length, writesBeforeHistory)
   feedbackMode = 'ok'
-  await page.getByRole('button', { name: '刷新状态', exact: true }).click()
+  await contextAction('刷新状态')
   await settled()
   assert.equal(activeId, 'c-draft')
   // Only an explicit null pointer means no adopted cut. A missing referenced cut stays unknown.
   activeId = null
-  await page.getByRole('button', { name: '刷新状态', exact: true }).click()
+  await contextAction('刷新状态')
   await text('尚未确认采用剪辑；候选素材和草稿不代表当前采用。')
   activeId = 'not-in-workspace'
-  await page.getByRole('button', { name: '刷新状态', exact: true }).click()
+  await contextAction('刷新状态')
   await text('采用状态暂不可用，请刷新状态重试。')
   activeId = 'c-draft'
-  await page.getByRole('button', { name: '刷新状态', exact: true }).click()
+  await contextAction('刷新状态')
   await settled()
 
   // A01/A02: a remotely updated draft does not silently replace the local editing baseline.
   const concurrent = revision('concurrent', { items: [] }, false)
   workspace.cuts.push(concurrent)
-  await page.getByRole('button', { name: '刷新状态', exact: true }).click()
+  await contextAction('刷新状态')
   await settled()
   await choose('查看或编辑剪辑版本', '剪辑 4 · 草稿')
   concurrent.content.items.push(structuredClone(workspace.cuts[2].content.items[0]))
   concurrent.version += 1
-  await page.getByRole('button', { name: '刷新状态', exact: true }).click()
+  await contextAction('刷新状态')
   await text('剪辑编辑基线已过期，请核对服务端版本后继续。')
   assert.equal(await page.getByRole('button', { name: '保存剪辑草稿', exact: true }).isDisabled(), true)
   assert.equal(await page.getByRole('button', { name: '确认并设为当前采用', exact: true }).isDisabled(), true)
@@ -213,7 +244,7 @@ try {
     '/api/v1/studio/projects/p1/directing/sequences/s1/revisions/c-draft/confirm',
   ])
   // UX2 navigation: all old entry points still open their panel and stage.
-  const entries = { design: '1.', shoot: '2.', visual: '2.', batch: '2.', cut: '3.', continuity: '3.', feedback: '3.', ledger: '3.' }
+  const entries = { design: '导演设计', shoot: '单元试拍', visual: '单元试拍', batch: '单元试拍', cut: '剪辑验收', continuity: '剪辑验收', feedback: '剪辑验收', ledger: '剪辑验收' }
   for (const [view, stage] of Object.entries(entries)) {
     await page.goto(url.replace('view=cut', `view=${view}`))
     await settled()
@@ -222,10 +253,11 @@ try {
     assert.equal(await primary.count(), 3)
     assert.ok((await flow.locator('.ant-tabs').first().locator('[role="tab"][aria-selected="true"]').innerText()).startsWith(stage))
     if (['visual', 'batch', 'continuity', 'feedback', 'ledger'].includes(view)) {
+      await contextAction('当前进展')
       await page.getByRole('region', { name: '下一步引导' }).getByRole('button').click()
       await page.waitForFunction(target => document.activeElement?.getAttribute('data-workspace-target') === target, view)
     }
-    await page.getByRole('button', { name: '刷新状态', exact: true }).click()
+    await contextAction('刷新状态')
     await settled()
   }
   // Explicit old versions win on entry; user choices then survive refresh.
@@ -235,9 +267,9 @@ try {
   await page.reload()
   await text('当前查看： · 设计 2 · 草稿')
   assert.equal(new URL(page.url()).searchParams.get('returnTo'), '/projects/p1')
-  await page.getByRole('tab', { name: /2\. 生成视频素材/ }).click()
+  await page.getByRole('tab', { name: '单元试拍' }).click()
   await text('当前查看： · 计划 1 · 基线已确认，修改将派生新版本 · 固定设计依据：设计 1')
-  await page.getByRole('tab', { name: /3\. 选片与剪辑/ }).click()
+  await page.getByRole('tab', { name: '剪辑验收' }).click()
   await text('当前查看： · 剪辑 1 · 已确认 · 历史版本')
   await choose('查看或编辑剪辑版本', '剪辑 3 · 已确认')
   await choose('选择候选 Take', 'Take 3 · u1')
@@ -250,14 +282,15 @@ try {
   // UX2 edit protection: cancel, failure, retry, discard and browser back.
   const modal = page.getByRole('dialog', { name: '有未保存的修改' })
   await page.getByRole('button', { name: '把这一段加入剪辑草稿', exact: true }).click()
-  const dirtyCut = await page.getByText('当前编辑：未保存剪辑草稿', { exact: false }).innerText()
-  await page.getByRole('tab', { name: /1\. 设计这场戏/ }).click()
+  const dirtyCut = '草稿 · 未保存'
+  await page.locator('.cut-version-bar').getByText(dirtyCut, { exact: true }).waitFor()
+  await page.getByRole('tab', { name: '导演设计' }).click()
   await modal.waitFor()
   await modal.getByRole('button', { name: '取消，继续编辑' }).click()
   assert.equal(new URL(page.url()).searchParams.get('view'), 'cut')
   await text(dirtyCut)
   failRevisionSave = true
-  await page.getByRole('tab', { name: /1\. 设计这场戏/ }).click()
+  await page.getByRole('tab', { name: '导演设计' }).click()
   await modal.getByRole('button', { name: '保存后继续' }).click()
   await modal.getByText('剪辑草稿未保存成功，请处理页面中的提示后重试。').waitFor()
   assert.equal(new URL(page.url()).searchParams.get('view'), 'cut')
@@ -269,21 +302,23 @@ try {
   await text('当前查看： · 设计 2 · 草稿')
   assert.equal(activeId, 'c-draft')
   assert.equal(workspace.cuts.at(-1).confirmed_at, null)
-  await page.getByRole('tab', { name: /3\. 选片与剪辑/ }).click()
+  await page.getByRole('tab', { name: '剪辑验收' }).click()
   await page.getByRole('button', { name: '把这一段加入剪辑草稿', exact: true }).click()
   const writesBeforeDiscard = writes.length
   await page.evaluate(() => history.back())
   await modal.waitFor()
   await modal.getByRole('button', { name: '取消，继续编辑' }).click()
   assert.equal(new URL(page.url()).searchParams.get('view'), 'cut')
-  await page.getByRole('tab', { name: /1\. 设计这场戏/ }).click()
+  await page.getByRole('tab', { name: '导演设计' }).click()
   await modal.getByRole('button', { name: '放弃修改并继续' }).click()
   await modal.waitFor({ state: 'hidden' })
   await text('当前查看： · 设计 2 · 草稿')
   assert.equal(writes.length, writesBeforeDiscard)
   // A page-wide navigation must also protect an edited design, without saving on cancel.
-  await page.getByRole('button', { name: '手动起稿', exact: true }).click()
-  await page.getByRole('button', { name: '返回场次列表', exact: true }).click()
+  await page.getByRole('button', { name: '＋ 新建设计⌄', exact: true }).click()
+  await page.getByRole('menuitem', { name: '手动起稿', exact: true }).click()
+  await contextAction('本场原文')
+  await page.getByRole('button', { name: '返回场次列表核对原文', exact: true }).click()
   await modal.waitFor()
   await modal.getByText('拍摄方案', { exact: true }).waitFor()
   await modal.getByRole('button', { name: '取消，继续编辑' }).click()
@@ -292,47 +327,51 @@ try {
   await modal.getByRole('button', { name: '放弃修改并继续' }).click()
   await text('当前查看： · 设计 1 · 基线已确认，修改将派生新版本')
   assert.equal(writes.length, writesBeforeDiscard)
-  await page.getByRole('tab', { name: /3\. 选片与剪辑/ }).click()
+  await page.getByRole('tab', { name: '剪辑验收' }).click()
   assert.deepEqual(errors, [])
   // Other document editors register their drafts with the same leave guard.
   const beforeOtherDrafts = writes.length
-  await page.getByRole('tab', { name: /1\. 设计这场戏/ }).click()
-  await page.getByText('人物、场所与风格', { exact: true }).click()
+  await page.getByRole('tab', { name: '导演设计' }).click()
+  await page.getByRole('button', { name: '人物与场所', exact: true }).click()
   await page.getByRole('button', { name: '新建风格候选', exact: true }).click()
   await page.getByRole('textbox', { name: '风格标题' }).fill('保留克制表演')
-  await page.getByRole('tab', { name: /3\. 选片与剪辑/ }).click()
+  await closeDrawer()
+  await page.getByRole('tab', { name: '剪辑验收' }).click()
   await modal.getByText('项目风格', { exact: true }).waitFor()
   await modal.getByRole('button', { name: '取消，继续编辑' }).click()
+  await page.getByRole('button', { name: '人物与场所', exact: true }).click()
   assert.equal(await page.getByRole('textbox', { name: '风格标题' }).inputValue(), '保留克制表演')
-  await page.getByRole('tab', { name: /3\. 选片与剪辑/ }).click()
+  await closeDrawer()
+  await page.getByRole('tab', { name: '剪辑验收' }).click()
   await modal.getByRole('button', { name: '放弃修改并继续' }).click()
-  await page.getByRole('tab', { name: /2\. 生成视频素材/ }).click()
+  await page.getByRole('tab', { name: '单元试拍' }).click()
   const actionScope = page.locator('[data-workspace-target="unit:u1"] textarea').first()
   await actionScope.fill('保留递信的局部动作')
-  await page.getByRole('tab', { name: /3\. 选片与剪辑/ }).click()
+  await page.getByRole('tab', { name: '剪辑验收' }).click()
   await modal.getByText('生产计划与参考', { exact: true }).waitFor()
   await modal.getByRole('button', { name: '取消，继续编辑' }).click()
   assert.equal(await actionScope.inputValue(), '保留递信的局部动作')
-  await page.getByRole('tab', { name: /3\. 选片与剪辑/ }).click()
+  await page.getByRole('tab', { name: '剪辑验收' }).click()
   await modal.getByRole('button', { name: '放弃修改并继续' }).click()
-  await page.getByRole('button', { name: '验收与局部返工', exact: true }).click()
+  await contextAction('验收与局部返工')
   await page.getByRole('button', { name: '新建经验候选', exact: true }).click()
   await page.getByRole('textbox', { name: '适用条件' }).fill('只适用于本场固定机位')
-  await page.getByRole('tab', { name: /1\. 设计这场戏/ }).click()
+  await page.getByRole('tab', { name: '导演设计' }).click()
   await modal.getByText('验收与返工反馈', { exact: true }).waitFor()
   await modal.getByRole('button', { name: '取消，继续编辑' }).click()
   assert.equal(await page.getByRole('textbox', { name: '适用条件' }).inputValue(), '只适用于本场固定机位')
-  await page.getByRole('tab', { name: /3\. 选片与剪辑/ }).click()
+  await page.getByRole('tab', { name: '剪辑验收' }).click()
   await modal.getByRole('button', { name: '放弃修改并继续' }).click()
   assert.equal(writes.length, beforeOtherDrafts)
 
   // Concurrent annotation refresh keeps local prose and the original save baseline.
-  await page.getByText('实际观察、覆盖与审片结论', { exact: true }).click()
+  await page.locator('.cut-inspector').getByRole('tab', { name: '审片', exact: true }).click()
+  await page.getByRole('textbox', { name: '实际观察', exact: true }).waitFor()
   await page.getByRole('textbox', { name: '实际观察' }).fill('尚未保存的本地审片')
   const reviewedTake = workspace.takes.find(row => row.id === 't3')
   reviewedTake.version += 1
   reviewedTake.annotation.rationale = { state: 'fact', text: '另一位成员的新观察', sources: [] }
-  await page.getByRole('button', { name: '刷新状态', exact: true }).click()
+  await contextAction('刷新状态')
   await text('素材审片版本已有更新，本地输入仍保留。')
   assert.equal(await page.getByRole('textbox', { name: '实际观察' }).inputValue(), '尚未保存的本地审片')
   assert.equal(await page.getByRole('button', { name: '保存审片', exact: true }).isDisabled(), true)
@@ -346,12 +385,12 @@ try {
   workspace.cuts.push(revision('seam-new', { items: seamItems.map(item => ({ ...item, id: item.id + '-new' })) }))
   continuityExtra.seams = [{ left_item_id: 'left', right_item_id: 'right', status: 'pending' }]
   activeId = 'seam-old'
-  await page.getByRole('button', { name: '刷新状态', exact: true }).click()
-  await page.getByRole('button', { name: '检查实际连续性', exact: true }).click()
+  await contextAction('刷新状态')
+  await contextAction('检查实际连续性')
   await page.getByRole('textbox', { name: '接缝审查说明' }).fill('保留旧版接缝观察')
   activeId = 'seam-new'
   continuityExtra.seams = [{ left_item_id: 'left-new', right_item_id: 'right-new', status: 'pending' }]
-  await page.getByRole('button', { name: '刷新状态', exact: true }).click()
+  await contextAction('刷新状态')
   await text('连续性依据已有更新；正在编辑的旧版输入已保留。')
   assert.equal(await page.getByRole('textbox', { name: '接缝审查说明' }).inputValue(), '保留旧版接缝观察')
   await page.getByRole('button', { name: '处理修改并载入最新连续性', exact: true }).click()

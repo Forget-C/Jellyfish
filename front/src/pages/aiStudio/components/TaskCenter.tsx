@@ -6,7 +6,7 @@ import {
   DownOutlined,
 } from '@ant-design/icons'
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import type { TaskUiItem } from './taskUiStore'
 import {
   flattenPageContexts,
@@ -57,6 +57,7 @@ function taskTone(task: TaskUiItem): { color: string; label: string } {
 export function TaskCenter() {
   const [historyOpen, setHistoryOpen] = useState(false)
   const navigate = useNavigate()
+  const location = useLocation()
   const [scopeFilter, setScopeFilter] = useState<'auto' | 'all' | 'current' | 'active' | 'settled'>('auto')
   const [taskKindFilter, setTaskKindFilter] = useState<string | undefined>(undefined)
   const [page, setPage] = useState(1)
@@ -169,6 +170,7 @@ export function TaskCenter() {
         任务 <span className="app-task-count" aria-label={`运行中任务 ${summaryCounts.active}`}>{summaryCounts.active}</span><DownOutlined />
       </Button>
       <Drawer title="任务中心" className="app-task-drawer" width={416} open={open} onClose={() => setOpen(false)} extra={<Button onClick={() => { setHistoryOpen(true); setOpen(false) }}>历史</Button>}>
+        {/\/chapters\/[^/]+\/sequences\/[^/]+$/.test(location.pathname) && <Button block style={{ marginBottom: 12 }} onClick={() => { setOpen(false); window.dispatchEvent(new Event('sequence-open-task-results')) }}>查看本场任务与业务结果</Button>}
             <div className="mb-3 flex flex-col gap-2">
               <Segmented
                 size="small"

@@ -71,34 +71,33 @@ try {
       mediaFailure = state === 'media-error'
       const view = ['cut', 'cut-expanded', 'confirmed-cut', 'adoption-error', 'media-error'].includes(state) ? 'cut' : state === 'tasks' ? 'shoot' : ['shoot', 'continuity', 'feedback', 'ledger'].includes(state) ? state : 'design'
       await page.goto(`http://127.0.0.1:4182/projects/p1/chapters/ch1/sequences/s1?view=${view}&design=d1&plan=p-old&unit=u1&cut=${state === 'confirmed-cut' ? 'c-active' : 'c-draft'}&take=${state === 'cut' ? 't3' : 't1'}`)
-      await page.getByRole('region', { name: '下一步引导' }).waitFor()
-      await page.getByRole('button', { name: '刷新状态', exact: true }).waitFor()
-      if (view === 'cut') await page.getByRole('region', { name: '已确认采用侧区' }).waitFor()
+      await page.locator('.workspace-stage-tabs').waitFor()
       if (view === 'cut' && !mediaFailure) await page.getByLabel('当前候选播放器', { exact: true }).evaluate(video => new Promise(resolve => { if (video.readyState >= 2) resolve(); else video.addEventListener('loadeddata', resolve, { once: true }) }))
-      if (failure) await page.getByText('采用状态暂不可用，请刷新状态重试。', { exact: true }).waitFor()
+      if (failure) await page.getByRole('button', { name: '当前采用待核对', exact: true }).waitFor()
       if (state === 'design-expanded') {
-        await keyboard(page.locator('summary').filter({ hasText: '编辑完整设计' }))
-        await keyboard(page.locator('.ant-collapse-header').filter({ hasText: /^总导演$/ }))
+        if (width < 1280) await page.getByRole('button', { name: '场次导航', exact: true }).click()
+        await keyboard(page.locator('.design-navigation').getByRole('button', { name: /全场概览/ }))
         await page.getByRole('textbox', { name: '本场信息变化', exact: true }).waitFor()
       }
       if (state === 'cut-expanded') {
-        for (const label of ['完整素材、实际观察与来源', '对比另一条素材', '实际观察、覆盖与审片结论', '添加节奏预演']) await keyboard(page.locator('summary').filter({ hasText: label }))
+        await keyboard(page.locator('summary').filter({ hasText: '对比另一条素材' }))
+        if (width < 1280) await page.getByRole('button', { name: '审片与片段详情', exact: true }).click()
+        const inspector = page.locator(width < 1280 ? '.ant-drawer-open' : '.cut-inspector')
+        await inspector.getByRole('tab', { name: '来源', exact: true }).click()
+        await keyboard(inspector.locator('summary').filter({ hasText: '完整素材、实际观察与来源' }))
       }
       if (state === 'shoot') {
+        await page.getByRole('tab', { name: '生成指令', exact: true }).click()
         const select = page.getByRole('combobox', { name: '选择编译单元', exact: true })
-        await select.focus()
-        await page.keyboard.press('ArrowDown')
-        await page.keyboard.press('ArrowDown')
-        await page.keyboard.press('Enter')
+        await select.focus(); await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter')
         await page.waitForURL(url => url.searchParams.get('unit') === 'u2')
-        await select.focus()
-        await page.keyboard.press('ArrowDown')
-        await page.keyboard.press('ArrowUp')
-        await page.keyboard.press('Enter')
+        await select.focus(); await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowUp'); await page.keyboard.press('Enter')
         await page.waitForURL(url => url.searchParams.get('unit') === 'u1')
         await page.keyboard.press('Escape')
       }
       if (state === 'tasks') {
+        await page.getByRole('button', { name: '任务中心', exact: true }).click()
+        await page.getByRole('button', { name: '查看本场任务与业务结果', exact: true }).click()
         await keyboard(page.locator('summary').filter({ hasText: '完整任务记录 · 5 项' }))
         for (const [status, label] of Object.entries({ queued: '等待执行', running: '执行中', failed: '失败', cancelled: '已取消', succeeded: '已完成' })) await page.locator(`[data-task-id="task-${status}"]`).getByText(label, { exact: true }).waitFor()
       }
@@ -113,13 +112,11 @@ try {
       })
       results.push({ width, state, ...dimensions })
       await page.screenshot({ path: join(output, `${width}-${state}.png`), fullPage: true, animations: 'disabled' })
-      const panel = state === 'design-expanded' ? page.getByRole('textbox', { name: '本场信息变化', exact: true }) : page.locator(state === 'tasks' ? '[data-workspace-target="tasks"]' : view === 'cut' ? '[data-workspace-target="take-review"]' : view === 'shoot' ? '[data-workspace-target="unit:u1"]' : '.workspace-stage-tabs').first()
-      await panel.scrollIntoViewIfNeeded()
-      await page.screenshot({ path: join(output, `${width}-${state}-panel.png`), animations: 'disabled' })
-      // Major actions must fit the route and remain reachable by ordinary vertical scrolling.
-      const actions = [page.getByRole('region', { name: '下一步引导' }).getByRole('button')]
+      while (await page.locator('.ant-drawer-open').count()) { await page.locator('.ant-drawer-open').last().getByRole('button', { name: 'Close', exact: true }).click(); await page.waitForTimeout(400) }
+      const actions = [page.getByRole('tab', { name: '导演设计', exact: true }), page.getByRole('tab', { name: '单元试拍', exact: true }), page.getByRole('tab', { name: '剪辑验收', exact: true })]
       if (view === 'cut') actions.push(page.getByRole('button', { name: '保存剪辑草稿', exact: true }).or(page.getByRole('button', { name: '保存为新剪辑草稿', exact: true })), page.getByRole('button', { name: '确认并设为当前采用', exact: true }))
-      if (view === 'shoot') actions.push(page.getByRole('button', { name: '准备生成指令', exact: true }))
+      if (state === 'shoot') actions.push(page.getByRole('button', { name: '准备生成指令', exact: true }))
+      if (view === 'design' && state !== 'first') actions.push(page.getByRole('button', { name: '保存为新设计草稿', exact: true }), page.getByRole('button', { name: '确认本轮设计', exact: true }))
       for (const action of actions) {
         await action.evaluate(element => element.scrollIntoView({ block: 'center', behavior: 'instant' }))
         assert.equal(await action.evaluate(element => {
@@ -129,7 +126,8 @@ try {
         }), true, `${width} ${state}: clipped or obscured action`)
       }
       if (state === 'first') {
-        await keyboard(page.getByRole('button', { name: '版本与历史', exact: true }))
+        await keyboard(page.getByRole('button', { name: '更多场次操作', exact: true }))
+        await page.getByRole('menuitem', { name: '版本与历史', exact: true }).click()
         await page.locator('.ant-drawer-content').filter({ hasText: '版本与历史（只读）' }).waitFor()
         await page.keyboard.press('Escape')
         await page.locator('.ant-drawer-content').filter({ hasText: '版本与历史（只读）' }).waitFor({ state: 'hidden' })
@@ -140,7 +138,7 @@ try {
           await page.keyboard.press('Escape')
           await page.getByRole('dialog').waitFor({ state: 'hidden' })
         }
-        await page.getByRole('tab', { name: /1\. 设计这场戏/ }).focus()
+        await page.getByRole('tab', { name: '导演设计', exact: true }).focus()
         await page.keyboard.press('Tab')
         await page.keyboard.press('Enter')
         await page.waitForURL(url => url.searchParams.get('view') === 'shoot')

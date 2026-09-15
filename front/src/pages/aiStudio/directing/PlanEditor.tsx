@@ -1,16 +1,19 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Image, Input, InputNumber, Modal, Pagination, Select, Space, Typography, Upload } from 'antd'
 import { LlmService, StudioFilesService } from '../../../services/generated'
 import type { WorkspaceRead, FileRead, GenerationUnit_Input, ModelRead, ProductionPlan_Input, SceneDesign_Input, ReferenceBinding_Input } from '../../../services/generated'
 import { buildFileDownloadUrl } from '../assets/utils'
+import { ProductionParameters } from './ProductionWorkbench'
 import { ReferencePreview } from './ReferencePreview'
 import { DependencyEditor } from './DependencyEditor'
 import { directingError } from './common'
 
 /** 拍摄单元和本轮参考的显式编辑，关联资产不会自动全量提交。 */
-export function PlanEditor({ projectId, workspace, design, value, onChange, disabled = false, issue, selectedUnitId, onSelectUnit, planId }: {
-  planId?: string; selectedUnitId?: string; onSelectUnit?: (id: string) => void; projectId: string; workspace: WorkspaceRead; design: SceneDesign_Input; value: ProductionPlan_Input; onChange: (plan: ProductionPlan_Input) => void; disabled?: boolean; issue?: { unitId?: string; message: string }
+export function PlanEditor({ workbench = false, projectId, workspace, design, value, onChange, disabled = false, issue, selectedUnitId, onSelectUnit, planId }: {
+  workbench?: boolean; planId?: string; selectedUnitId?: string; onSelectUnit?: (id: string) => void; projectId: string; workspace: WorkspaceRead; design: SceneDesign_Input; value: ProductionPlan_Input; onChange: (plan: ProductionPlan_Input) => void; disabled?: boolean; issue?: { unitId?: string; message: string }
 }) {
+  const latest = useRef({ value, planId })
+  latest.current = { value, planId }
   const [models, setModels] = useState<ModelRead[]>([])
   const [defaultModel, setDefaultModel] = useState('')
   const [error, setError] = useState('')
@@ -37,47 +40,56 @@ export function PlanEditor({ projectId, workspace, design, value, onChange, disa
   const loadFiles = async (next = 1, global = allFiles) => {
     try {
       const response = await StudioFilesService.listFilesApiApiV1StudioFilesGet({ projectId: global ? undefined : projectId, q: query, page: next, pageSize: 20 })
-      setFiles((response.data?.items || []).filter(file => file.type === 'image'))
+      setFiles((response.data?.items || []).filter(file => ['image', 'video', 'audio'].includes(file.type)))
       setTotal(response.data?.pagination.total || 0); setPage(next)
     } catch (cause) { setError(directingError(cause)) }
   }
   /** 明确添加一份文件；输入位置和用途仍可在单元内调整。 */
-  const addReference = (fileId: string, unitId = picker) => {
-    const unit = value.units.find(item => item.id === unitId)
+  const addReference = (fileId: string, unitId = picker, mediaKind: ReferenceBinding_Input['media_kind'] = 'image') => {
+    if (latest.current.planId !== planId) return
+    const current = latest.current.value
+    const unit = current.units.find(item => item.id === unitId)
     if (!unit || unit.references.some(ref => ref.file_id === fileId)) return
-    patch(unit.id, { references: [...unit.references, { id: 'ref-' + crypto.randomUUID().slice(0, 8), file_id: fileId, media_kind: 'image', purpose: 'composition', participant_ids: [], ordinal: unit.references.length, input_role: 'first_frame', source: { kind: 'human', reference: 'local-user', version: 'reference-1' } }] })
+    onChange({ ...current, units: current.units.map(row => row.id === unit.id ? { ...row, references: [...unit.references, { id: 'ref-' + crypto.randomUUID().slice(0, 8), file_id: fileId, media_kind: mediaKind, purpose: mediaKind === 'audio' ? 'sound' : 'composition', participant_ids: [], ordinal: unit.references.length, input_role: mediaKind === 'image' ? 'first_frame' : undefined, source: { kind: 'human', reference: 'local-user', version: 'reference-1' } }] } : row) })
   }
   const selected = value.units.find(unit => unit.id === selectedUnitId) || value.units[0]
   return <Space direction="vertical" size="middle" style={{ width: '100%' }}>
     {error && <Alert type="error" message={error} closable onClose={() => setError('')} />}
-    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
-    <Card size="small" title="本场拍摄内容" className="xl:col-start-2 xl:row-start-1 self-start">
+    <div className={workbench ? "production-preparation" : "grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_280px]"}>
+    {!workbench && <Card size="small" title="本场拍摄内容" className="xl:col-start-2 xl:row-start-1 self-start">
       <Space direction="vertical" style={{ width: '100%' }}>{value.units.map((unit, index) => <Button block style={{ height: 'auto', whiteSpace: 'normal', textAlign: 'left', padding: 12 }} key={unit.id} aria-pressed={selected?.id === unit.id} onClick={() => onSelectUnit?.(unit.id)}>
         {unit.coverage.map(item => item.action_scope).join('；') || `单元 ${index + 1} · 待填写动作`} · {workspace.takes.filter(take => take.plan_revision_id === planId && take.unit_id === unit.id).length ? '已有视频' : '准备输入'}
       </Button>)}</Space>
       <Typography.Paragraph type="secondary">选择一项，准备本次动作范围、模型和参考；同名动作按计划版本分开。</Typography.Paragraph>
-    </Card>
+    </Card>}
     {value.units.filter(unit => unit.id === selected?.id).map(unit => <Card className="xl:col-start-1 xl:row-start-1 min-w-0" key={unit.id} title={`本次要拍：${unit.coverage.map(item => item.action_scope).join('；') || '待填写动作范围'}`} data-workspace-target={`unit:${unit.id}`} tabIndex={-1} extra={!disabled && <Button danger onClick={() => onChange({ ...value, units: value.units.filter(item => item.id !== unit.id) })}>移除单元</Button>}>
       {issue?.unitId === unit.id && <Alert type="error" message={issue.message} />}
       <Space direction="vertical" style={{ width: '100%' }}>
         <details><summary>单元身份</summary>{unit.id} · 计划：{planId || '未保存'}</details><Typography.Text>本次覆盖镜头</Typography.Text>
-        <Select mode="multiple" disabled={disabled} style={{ width: '100%' }} value={unit.coverage.map(item => item.shot_id)} options={design.direction.shots.map((shot, i) => ({ value: shot.id, label: `镜头 ${i + 1} · ${shot.visible_result.text || '待确定内容'}` }))} onChange={ids => patch(unit.id, { coverage: coverage(ids) })} />
+        <Select mode="multiple" disabled={disabled} style={{ width: '100%' }} value={unit.coverage.map(item => item.shot_id)} options={design.direction.shots.map((shot, i) => ({ value: shot.id, label: `镜头 ${i + 1} · ${shot.visible_result.text || '待确定内容'}` }))} onChange={ids => patch(unit.id, { coverage: coverage(ids).map(row => unit.coverage.find(old => old.shot_id === row.shot_id) || row) })} />
         {unit.coverage.map(item => <div key={item.id} style={{ width: '100%' }}><Typography.Text type="secondary">动作范围 · {item.shot_id}</Typography.Text><Input.TextArea disabled={disabled} value={item.action_scope} onChange={event => patch(unit.id, { coverage: unit.coverage.map(row => row.id === item.id ? { ...row, action_scope: event.target.value } : row) })} /></div>)}
         {unit.coverage.length > 1 && <Alert type="warning" message="计划包含多个镜头，当前多镜执行能力未验证。保存并确认后，可在重组面板明确拆分。" />}
-        <Space wrap>
+        {workbench ? <ProductionParameters>        <Space wrap>
           <Select aria-label="视频模型" disabled={disabled} placeholder="选择视频模型" style={{ minWidth: 220 }} value={unit.model_id || undefined} options={models.map(model => ({ value: model.id, label: model.name }))} onChange={model_id => patch(unit.id, { model_id })} />
           <span>时长（秒）</span><InputNumber disabled={disabled} min={1} precision={0} value={unit.duration_ms / 1000} onChange={seconds => patch(unit.id, { duration_ms: (seconds || 1) * 1000 })} />
           <Select aria-label="画幅" disabled={disabled} value={unit.ratio} options={['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'].map(ratio => ({ value: ratio, label: ratio }))} onChange={ratio => patch(unit.id, { ratio })} />
-          <span>种子（可留空）</span><InputNumber disabled={disabled} min={-1} precision={0} value={typeof unit.parameters?.seed === 'number' ? unit.parameters.seed : null} onChange={seed => patch(unit.id, { parameters: seed === null ? {} : { seed } })} />
+          <span>种子（可留空）</span><InputNumber disabled={disabled} min={-1} precision={0} value={typeof unit.parameters?.seed === 'number' ? unit.parameters.seed : null} onChange={seed => patch(unit.id, { parameters: seed === null ? Object.fromEntries(Object.entries(unit.parameters || {}).filter(([key]) => key !== 'seed')) : { ...unit.parameters, seed } })} />
         </Space>
+</ProductionParameters> : <>        <Space wrap>
+          <Select aria-label="视频模型" disabled={disabled} placeholder="选择视频模型" style={{ minWidth: 220 }} value={unit.model_id || undefined} options={models.map(model => ({ value: model.id, label: model.name }))} onChange={model_id => patch(unit.id, { model_id })} />
+          <span>时长（秒）</span><InputNumber disabled={disabled} min={1} precision={0} value={unit.duration_ms / 1000} onChange={seconds => patch(unit.id, { duration_ms: (seconds || 1) * 1000 })} />
+          <Select aria-label="画幅" disabled={disabled} value={unit.ratio} options={['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'].map(ratio => ({ value: ratio, label: ratio }))} onChange={ratio => patch(unit.id, { ratio })} />
+          <span>种子（可留空）</span><InputNumber disabled={disabled} min={-1} precision={0} value={typeof unit.parameters?.seed === 'number' ? unit.parameters.seed : null} onChange={seed => patch(unit.id, { parameters: seed === null ? Object.fromEntries(Object.entries(unit.parameters || {}).filter(([key]) => key !== 'seed')) : { ...unit.parameters, seed } })} />
+        </Space>
+</>}
         <DependencyEditor projectId={projectId} workspace={workspace} unit={unit} onChange={update => patch(unit.id, update)} disabled={disabled} />
         <Typography.Text strong>本次参考素材</Typography.Text>
         {!unit.references.length && <Typography.Text type="secondary">尚未选入参考。是否可以纯文本试拍由目标模型决定。</Typography.Text>}
         {unit.references.map((ref, refIndex) => <Card key={ref.id} size="small" style={{ width: '100%' }}>
           <Space wrap><ReferencePreview reference={ref} />
-            <span>参考 {refIndex + 1}</span>
-            <Select disabled={disabled} value={ref.purpose} style={{ width: 125 }} options={[{ value: 'identity', label: '人物身份' }, { value: 'space', label: '场所空间' }, { value: 'composition', label: '构图' }, { value: 'continuity', label: '连续性' }, { value: 'performance', label: '表演' }]} onChange={purpose => patch(unit.id, { references: unit.references.map(r => r.id === ref.id ? { ...r, purpose } : r) })} />
-            <Select disabled={disabled} value={ref.input_role} style={{ width: 145 }} options={[{ value: 'first_frame', label: '首帧构图' }, { value: 'last_frame', label: '尾帧构图' }, { value: 'key_frame', label: '关键帧' }, { value: 'subject', label: '命名主体参考' }]} onChange={input_role => patch(unit.id, { references: unit.references.map(r => r.id === ref.id ? { ...r, input_role } : r) })} />
+            <span>参考 {ref.ordinal + 1} · {ref.media_kind === 'image' ? '图片' : ref.media_kind === 'video' ? '视频' : '声音'}</span><details><summary>参考来源</summary>{ref.source.kind} · {ref.source.reference} · {ref.source.version}</details>
+            <Select disabled={disabled} value={ref.purpose} style={{ width: 125 }} options={[{ value: 'identity', label: '人物身份' }, { value: 'space', label: '场所空间' }, { value: 'composition', label: '构图' }, { value: 'continuity', label: '连续性' }, { value: 'performance', label: '表演' }, { value: 'sound', label: '声音' }]} onChange={purpose => patch(unit.id, { references: unit.references.map(r => r.id === ref.id ? { ...r, purpose } : r) })} />
+            <Select allowClear disabled={disabled} value={ref.input_role} style={{ width: 145 }} options={[{ value: 'first_frame', label: '首帧构图' }, { value: 'last_frame', label: '尾帧构图' }, { value: 'key_frame', label: '关键帧' }, { value: 'subject', label: '命名主体参考' }]} onChange={input_role => patch(unit.id, { references: unit.references.map(r => r.id === ref.id ? { ...r, input_role: input_role ?? undefined } : r) })} />
             <Select mode="multiple" disabled={disabled} placeholder="绑定人物/物件" style={{ minWidth: 180 }} value={ref.participant_ids} options={design.participants.map(p => ({ value: p.id, label: p.name }))} onChange={participant_ids => patch(unit.id, { references: unit.references.map(r => r.id === ref.id ? { ...r, participant_ids } : r) })} />
             {!disabled && <><Button disabled={refIndex === 0} onClick={() => {
               const next: ReferenceBinding_Input[] = [...unit.references]; [next[refIndex - 1], next[refIndex]] = [next[refIndex], next[refIndex - 1]]
@@ -85,18 +97,18 @@ export function PlanEditor({ projectId, workspace, design, value, onChange, disa
             }}>上移</Button><Button danger onClick={() => patch(unit.id, { references: unit.references.filter(r => r.id !== ref.id).map((r, ordinal) => ({ ...r, ordinal })) })}>移除</Button></>}
           </Space>
         </Card>)}
-        {!disabled && <Space><Button onClick={() => { setPicker(unit.id); void loadFiles() }}>从素材中选择</Button><Upload accept="image/*" showUploadList={false} beforeUpload={file => {
-          void StudioFilesService.uploadFileApiApiV1StudioFilesUploadPost({ formData: { file: file as unknown as string, project_id: projectId, usage_kind: 'upload' } }).then(response => { if (response.data) addReference(response.data.id, unit.id) }).catch(cause => setError(directingError(cause)))
+        {!disabled && <Space><Button onClick={() => { setPicker(unit.id); void loadFiles() }}>从素材中选择</Button><Upload accept="image/*,video/*,audio/*" showUploadList={false} beforeUpload={file => {
+          void StudioFilesService.uploadFileApiApiV1StudioFilesUploadPost({ formData: { file: file as unknown as string, project_id: projectId, usage_kind: 'upload' } }).then(response => { if (response.data) addReference(response.data.id, unit.id, response.data.type as ReferenceBinding_Input['media_kind']) }).catch(cause => setError(directingError(cause)))
           return false
-        }}><Button>上传参考图</Button></Upload></Space>}
+        }}><Button>上传参考素材</Button></Upload></Space>}
       </Space>
     </Card>)}
     </div>
     {!disabled && <Button disabled={!design.direction.shots.length} onClick={() => onChange({ ...value, units: [...value.units, { id: 'unit-' + crypto.randomUUID().slice(0, 8), coverage: coverage([design.direction.shots[0].id]), references: [], model_id: defaultModel, duration_ms: 5000, ratio: '16:9', capability: { multi_shot: 'unknown' } }] })}>新增试拍 / 补拍单元</Button>}
-    <Modal title="选择本次参考图" open={!!picker} onCancel={() => setPicker(undefined)} footer={<Button onClick={() => setPicker(undefined)}>完成选择</Button>}>
+    <Modal title="选择本次参考素材" open={!!picker} onCancel={() => setPicker(undefined)} footer={<Button onClick={() => setPicker(undefined)}>完成选择</Button>}>
       <Space direction="vertical" style={{ width: '100%' }}><Input.Search placeholder="搜索素材" value={query} onChange={event => setQuery(event.target.value)} onSearch={() => void loadFiles()} />
         <Select value={allFiles ? 'all' : 'project'} options={[{ value: 'project', label: '当前项目素材' }, { value: 'all', label: '全部已有素材' }]} onChange={scope => { setAllFiles(scope === 'all'); void loadFiles(1, scope === 'all') }} />
-        {files.map(file => <Space key={file.id}><Image width={60} src={file.thumbnail || buildFileDownloadUrl(file.id)} /><span>{file.name}</span><Button onClick={() => addReference(file.id)}>选入</Button></Space>)}
+        {files.map(file => <Space key={file.id}>{file.type === 'image' ? <Image width={60} src={file.thumbnail || buildFileDownloadUrl(file.id)} /> : <span>{file.type === 'video' ? '视频' : '声音'}</span>}<span>{file.name}</span><Button onClick={() => addReference(file.id, picker, file.type as ReferenceBinding_Input['media_kind'])}>选入</Button></Space>)}
         <Pagination current={page} total={total} pageSize={20} onChange={next => void loadFiles(next)} /></Space>
     </Modal>
   </Space>

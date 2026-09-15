@@ -1,7 +1,7 @@
 export const workspaceStages = [
-  { key: 'design', title: '1. 设计这场戏', output: '得到拍摄方案' },
-  { key: 'shoot', title: '2. 生成视频素材', output: '得到待挑选的视频' },
-  { key: 'cut', title: '3. 选片与剪辑', output: '得到本场粗剪' },
+  { key: 'design', title: '导演设计', output: '得到拍摄方案' },
+  { key: 'shoot', title: '单元试拍', output: '得到待挑选的视频' },
+  { key: 'cut', title: '剪辑验收', output: '得到本场粗剪' },
 ] as const
 
 export type WorkspaceStage = typeof workspaceStages[number]['key']

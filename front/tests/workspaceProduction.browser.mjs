@@ -79,21 +79,24 @@ try {
   })
   const base = 'http://127.0.0.1:4180/projects/p1/chapters/ch1/sequences/s1'
   await page.goto(base + '?view=design&design=d2')
-  const summary = page.getByRole('region', { name: '拍摄方案概览' })
-  await summary.getByText('递出旧信，认出对方', { exact: true }).waitFor()
+  const summary = page.locator('.sequence-stages .design-intent')
+  await summary.getByText('本场意图：递出旧信，认出对方', { exact: true }).waitFor()
   assert.equal(await page.getByRole('textbox', { name: '本场信息变化', exact: true }).isVisible(), false)
-  assert.ok((await summary.innerText()).includes('待确定'))
-  assert.ok((await summary.innerText()).includes('不适用'))
-  assert.ok(!(await summary.innerText()).includes('已完成检查'))
   await page.screenshot({ path: join(output, 'design-overview.png'), fullPage: true })
-  await page.getByText('编辑完整设计 · 六岗、声音与来源', { exact: true }).click()
-  const designEditor = page.locator('[data-workspace-target="design-editor"]')
-  for (const title of ['人物与物件', '触发事件', '验收要求', '总导演', '表演指导', '镜内执行', '摄影指导', '场记与连续性', '对白与声音', '提示词指导']) {
-    await designEditor.locator('.ant-collapse-header').filter({ hasText: new RegExp('^' + title + '$') }).click()
+  async function object(role, label) {
+    await page.locator('.design-navigation').getByRole('button', { name: '六岗与声音审阅', exact: true }).click()
+    await choose('岗位', role)
+    await page.locator('.design-role-row').filter({ hasText: label }).first().click()
   }
+  async function tasksPanel() {
+    await page.getByRole('button', { name: '任务中心', exact: true }).click()
+    await page.getByRole('button', { name: '查看本场任务与业务结果', exact: true }).click()
+  }
+  await page.locator('.design-navigation').getByRole('button', { name: /全场概览/ }).click()
   const information = page.getByRole('textbox', { name: '本场信息变化', exact: true })
   await information.fill('人工修改：递信但尚未相认')
-  await summary.getByText('人工修改：递信但尚未相认', { exact: true }).waitFor()
+  await summary.getByText('本场意图：人工修改：递信但尚未相认', { exact: true }).waitFor()
+  await object('对白与声音', '声音安排')
   const sound = page.getByRole('textbox', { name: '音乐约束', exact: true })
   await sound.fill('不配乐，只保留脚步声')
   const fieldEdits = [
@@ -103,9 +106,11 @@ try {
     ['前态', '信件仍在右手', ['continuity', 0, 'before']],
     ['编译优先级', '优先保留递信动作', ['prompt', 'priorities']],
   ]
-  for (const [label, text] of fieldEdits) await page.getByRole('textbox', { name: label, exact: true }).fill(text)
+  const objectNames = [['表演指导','表演适用规则'], ['镜内执行','环境活动与留白'], ['摄影指导','摄影 01'], ['场记与连续性','连续性 01'], ['提示词指导','提示词指导']]
+  for (const [index, [label, text]] of fieldEdits.entries()) { await object(...objectNames[index]); await page.getByRole('textbox', { name: label, exact: true }).fill(text) }
   await page.getByRole('button', { name: '保存设计草稿', exact: true }).click()
   await page.getByText('模拟保存失败，修改仍保留', { exact: true }).first().waitFor()
+  await page.locator('.design-navigation').getByRole('button', { name: /全场概览/ }).click()
   assert.equal(await information.inputValue(), '人工修改：递信但尚未相认')
   assert.equal(await page.getByRole('button', { name: '确认本轮设计', exact: true }).isDisabled(), true)
   saveFailure = false
@@ -124,13 +129,12 @@ try {
   assert.equal(saved.sound.music_constraints.state, 'none')
   assert.equal(saved.direction.turning_point.state, 'unknown')
   await page.reload()
-  await summary.getByText('人工修改：递信但尚未相认', { exact: true }).waitFor()
-  await page.getByText('编辑完整设计 · 六岗、声音与来源', { exact: true }).click()
-  await designEditor.locator('.ant-collapse-header').filter({ hasText: /^对白与声音$/ }).click()
+  await summary.getByText('本场意图：人工修改：递信但尚未相认', { exact: true }).waitFor()
+  await object('对白与声音', '声音安排')
   assert.equal(await sound.inputValue(), '不配乐，只保留脚步声')
-  for (const title of ['表演指导', '镜内执行', '摄影指导', '场记与连续性', '提示词指导']) await designEditor.locator('.ant-collapse-header').filter({ hasText: new RegExp('^' + title + '$') }).click()
-  for (const [label, text] of fieldEdits) assert.equal(await page.getByRole('textbox', { name: label, exact: true }).inputValue(), text)
+  for (const [index, [label, text]] of fieldEdits.entries()) { await object(...objectNames[index]); assert.equal(await page.getByRole('textbox', { name: label, exact: true }).inputValue(), text) }
   // Read-only suggestion view and failed apply do not overwrite the current saved human version.
+  await tasksPanel()
   await page.locator('[data-task-id="late"]').getByRole('button', { name: '查看结果' }).click()
   const dialog = page.getByRole('dialog', { name: '导演建议' })
   await dialog.getByRole('button', { name: '写入可编辑草稿' }).click()
@@ -142,7 +146,9 @@ try {
   await dialog.waitFor({ state: 'hidden' })
   assert.deepEqual(workspace.designs[1].content, saved)
   assert.equal(workspace.designs.at(-1).confirmed_at, null)
-  await summary.getByText('模型较早的建议', { exact: true }).waitFor()
+  await page.getByRole('tab', { name: '镜头清单', exact: true }).click()
+  await summary.getByText('本场意图：模型较早的建议', { exact: true }).waitFor()
+  await tasksPanel()
   // Stored result and cancelled tasks move to full history; failures/running stay visible.
   await page.locator('[data-task-id="running"]').getByText('等待执行', { exact: true }).waitFor()
   const beforeQueueTransition = writes.length
@@ -173,6 +179,7 @@ try {
     await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: option }).first().click()
   }
   await page.goto(base + '?view=shoot&plan=p-new&unit=u1&prompt=old-input&review=review-0')
+  await page.getByRole('tab', { name: '生成指令', exact: true }).click()
   await page.getByRole('combobox', { name: '选择生成指令版本' }).waitFor()
   assert.equal(await page.getByRole('button', { name: '检查生成指令', exact: true }).isDisabled(), true)
   await page.getByRole('combobox', { name: '选择生成指令版本' }).locator('../..').click()
@@ -180,22 +187,25 @@ try {
   assert.equal(await options.count(), 2)
   assert.equal(await options.filter({ hasText: '提示词 1' }).count(), 0)
   await options.filter({ hasText: '提示词 2' }).click()
-  await page.getByText('完整生成指令', { exact: true }).click()
-  assert.equal(await page.locator('textarea[readonly]').inputValue(), 'new-input-a 固定正文')
+  assert.equal(await page.locator('.prompt-reader').innerText(), 'new-input-a 固定正文')
   await page.getByText('全部固定参数与版本', { exact: true }).click()
   await page.getByText('提示词引导强度：7', { exact: true }).waitFor()
   assert.equal(await page.locator('video[aria-label="视频参考 1"]').count(), 2)
   assert.equal(await page.locator('audio[aria-label="声音参考 2"]').count(), 2)
+  await page.getByRole('tab', { name: '审稿与执行', exact: true }).click()
   assert.equal(await page.getByRole('button', { name: '确认并开始生成视频', exact: true }).isDisabled(), true)
+  await page.getByRole('tab', { name: '候选素材', exact: true }).click()
   const candidateCard = page.locator('.ant-card').filter({ has: page.getByText('本单元生成的视频 · 待挑选素材', { exact: true }) })
   assert.equal(await candidateCard.getByRole('button').count(), 1)
   await page.keyboard.press('Escape')
   await page.screenshot({ path: join(output, 'production-inputs.png'), fullPage: true })
   await choose('查看或编辑生产计划', '计划 1')
+  await page.getByRole('tab', { name: '生成指令', exact: true }).click()
   assert.equal(await page.getByRole('button', { name: '检查生成指令', exact: true }).isDisabled(), true)
-  assert.equal(await page.locator('textarea[readonly]').inputValue(), '')
+  assert.equal(await page.locator('.prompt-reader').count(), 0)
   // A12: existing visual, batch and regroup operations remain reachable and explicit.
-  await page.getByRole('button', { name: '验证参考画面', exact: true }).click()
+  await page.getByRole('button', { name: /阶段工具/ }).click()
+  await page.getByRole('menuitem', { name: '验证参考画面', exact: true }).click()
   await choose('验证图设计版本', '设计 1')
   await page.getByRole('textbox', { name: '验证图描述' }).fill('检查递信构图')
   await Promise.all([page.waitForResponse(response => response.url().endsWith('/images')), page.getByRole('button', { name: '生成候选验证图', exact: true }).click()])
@@ -209,7 +219,7 @@ try {
   assert.deepEqual(writes.find(row => row.path.endsWith('/batches/prepare')).body.items, [{ prompt_revision_id: 'new-input-a', review_revision_id: 'review-1' }])
   await page.getByRole('button', { name: '单元与生成指令', exact: true }).click()
   await choose('查看或编辑生产计划', '计划 2')
-  await page.getByText('拆分或重组生产计划', { exact: true }).click()
+  await page.getByRole('button', { name: '拆分与重组', exact: true }).click()
   await choose('重组单元', '单元 1')
   await page.keyboard.press('Escape')
   await page.getByRole('button', { name: '按镜头拆为新计划', exact: true }).click()

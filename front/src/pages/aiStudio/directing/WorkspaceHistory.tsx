@@ -1,4 +1,8 @@
-import { Alert, Card, Drawer, Space, Tag, Typography } from 'antd'
+import { useState } from 'react'
+import { Alert, Card, Drawer, Empty, Select, Space, Tabs, Tag, Typography } from 'antd'
+import { revisionDifferences } from './revisionDiff'
+import { designLabels } from './designLabels'
+import { DesignEditor } from './DesignEditor'
 import type { SequenceCut_Input, WorkspaceRead } from '../../../services/generated'
 import { cutStatus, revisionName, revisionReferences } from './workspaceUsage'
 import type { ActiveCutState } from './workspaceUsage'
@@ -26,29 +30,26 @@ export function ActiveCutSummary({ active, workspace }: { active: ActiveCutState
 
 /** 历史浏览仅呈现快照和真实引用，不切换编辑基线、不调用任何写入接口。 */
 export function WorkspaceHistory({ open, onClose, workspace, active }: { open: boolean; onClose: () => void; workspace: WorkspaceRead; active: ActiveCutState }) {
-  return <Drawer title="版本与历史（只读）" open={open} onClose={onClose} width={640}>
-    <Space direction="vertical" className="w-full" size="large">
-      <ActiveCutSummary active={active} workspace={workspace} />
-      <Card size="small" title="设计版本">
-        {workspace.designs.map(row => <details key={row.id}><summary>{revisionName(workspace.designs, row.id, '设计')} · {row.confirmed_at ? '已确认' : '草稿'} · 修订 {row.version}</summary>
-          <p>{row.content.direction.information_change.text || '本场信息变化未填写'}</p>
-          <p>引用关系：{revisionReferences(workspace, active, 'design', row.id).join('；') || '暂无计划或预演引用'}</p>
-          {row.parent_id && <p>派生自：{revisionName(workspace.designs, row.parent_id, '设计')}</p>}
-        </details>)}
-        {!workspace.designs.length && <Typography.Text type="secondary">暂无设计版本</Typography.Text>}
-      </Card>
-      <Card size="small" title="生产计划版本">
-        {workspace.plans.map(row => <details key={row.id}><summary>{revisionName(workspace.plans, row.id, '计划')} · {row.confirmed_at ? '已确认' : '草稿'}</summary>
-          <p>固定依据：{revisionName(workspace.designs, row.content.design_revision_id, '设计')}</p>
-          <p>引用关系：{revisionReferences(workspace, active, 'plan', row.id).join('；') || '暂无提示词或素材引用'}</p>
-          {row.content.units.map(unit => <p key={unit.id}>{unit.id} · {unit.coverage.map(item => item.action_scope).join('；')}</p>)}
-        </details>)}
-        {!workspace.plans.length && <Typography.Text type="secondary">暂无生产计划</Typography.Text>}
-      </Card>
-      <Card size="small" title="剪辑版本与曾采用区间">
-        {workspace.cuts.map(row => <details key={row.id}><summary>{revisionName(workspace.cuts, row.id, '剪辑')} · {cutStatus(row, active)}</summary><CutItems cut={row.content} workspace={workspace} /></details>)}
-        {!workspace.cuts.length && <Typography.Text type="secondary">暂无剪辑版本</Typography.Text>}
-      </Card>
-    </Space>
+  const [kind, setKind] = useState('design')
+  const [beforeId, setBeforeId] = useState<string>()
+  const [afterId, setAfterId] = useState<string>()
+  const [mode, setMode] = useState('compare')
+  const records = kind === 'design' ? workspace.designs : kind === 'plan' ? workspace.plans : workspace.cuts
+  const before = records.find(row => row.id === beforeId)
+  const after = records.find(row => row.id === afterId)
+  const changes = before && after ? revisionDifferences(before.content, after.content) : []
+  const display = (value: unknown): string => value === undefined ? '—' : value === null ? '空值' : typeof value === 'string' ? ({ unset: '未填写', unknown: '待确定', proposal: '设计建议', fact: '已知事实', none: '明确没有', not_applicable: '不适用' } as Record<string, string>)[value] || value : typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)
+  const names = kind === 'design' ? '设计' : kind === 'plan' ? '计划' : '剪辑'
+  return <Drawer title="版本与历史（只读）" open={open} onClose={onClose} width={960}>
+    <Tabs activeKey={kind} onChange={key => { setKind(key); setBeforeId(undefined); setAfterId(undefined) }} items={[{ key: 'design', label: '设计版本' }, { key: 'plan', label: '生产计划版本' }, { key: 'cut', label: '剪辑版本' }]} />
+    <p>浏览快照与比较不会切换编辑基线或当前采用。草稿保存只保留最新修订，不虚构逐次保存历史。</p>
+    <Space wrap><Select aria-label="比较基准版本" placeholder="选择基准版本" style={{ width: 220 }} value={beforeId} options={records.map((row, index) => ({ value: row.id, label: `${names} ${index + 1} · ${row.confirmed_at ? '已确认' : '草稿'} · 修订 ${row.version}` }))} onChange={setBeforeId} />
+      <span>→</span><Select aria-label="查看或比较的历史版本" placeholder="选择查看版本" style={{ width: 220 }} value={afterId} options={records.map((row, index) => ({ value: row.id, label: `${names} ${index + 1} · ${row.confirmed_at ? '已确认' : '草稿'} · 修订 ${row.version}` }))} onChange={setAfterId} /></Space>
+    <Tabs activeKey={mode} onChange={setMode} items={[{ key: 'compare', label: '比较变更' }, { key: 'snapshot', label: '完整快照' }]} />
+    {mode === 'compare' ? !before || !after ? <Empty description="选择两个版本，按稳定身份比较增删与字段变化" /> : <><p>{changes.length} 项变化 · 含来源、Note 状态与顺序</p>{!changes.length && <Empty description="两个版本内容相同" />}<div className="revision-differences">{changes.map((change, index) => <section key={index}><h3><Tag color={change.kind === 'added' ? 'green' : change.kind === 'removed' ? 'red' : 'blue'}>{change.kind === 'added' ? '新增' : change.kind === 'removed' ? '移除' : '修改'}</Tag>{change.path.split('.').map(part => designLabels[part] || part).join(' / ')}</h3><div><pre>{display(change.before)}</pre><pre>{display(change.after)}</pre></div></section>)}</div></> : !after ? <Empty description="选择要查看的历史版本" /> : <>
+      <p>版本身份：{after.id} · 修订 {after.version}{after.parent_id ? ` · 派生自 ${after.parent_id}` : ''}</p>
+      {kind === 'design' ? <div style={{ height: 680 }}><DesignEditor active={false} key={after.id} value={workspace.designs.find(row => row.id === after.id)!.content} onChange={() => {}} disabled /></div> : kind === 'cut' ? <CutItems workspace={workspace} cut={workspace.cuts.find(row => row.id === after.id)!.content} /> : <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(after.content, null, 2)}</pre>}
+    </>}
+    <details style={{ marginTop: 24 }}><summary>当前采用与版本引用</summary><ActiveCutSummary active={active} workspace={workspace} />{records.map(row => <p key={row.id}>{revisionName(records, row.id, names)} · {kind === 'cut' ? cutStatus(workspace.cuts.find(cut => cut.id === row.id)!, active) : revisionReferences(workspace, active, kind as 'design' | 'plan', row.id).join('；') || '暂无引用'}</p>)}</details>
   </Drawer>
 }

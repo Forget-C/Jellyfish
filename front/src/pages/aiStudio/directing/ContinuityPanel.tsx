@@ -47,7 +47,7 @@ function SeamEditor({ seam, frames, onReview, busy, blocked }: {
 }
 
 /** 以当前确认剪辑为依据查看真实连续性，替换仅提示有关单元与接缝，不自动重拍。 */
-export function ContinuityPanel({ projectId, workspace }: { projectId: string; workspace: WorkspaceRead }) {
+export function ContinuityPanel({ projectId, workspace, itemIds }: { projectId: string; workspace: WorkspaceRead; itemIds?: string[] }) {
   const sequenceId = workspace.sequence.id
   const [search, setSearch] = useSearchParams()
   const [state, setState] = useState<ContinuityRead>()
@@ -96,6 +96,7 @@ export function ContinuityPanel({ projectId, workspace }: { projectId: string; w
     {state?.active_cut_revision_id && !cut && <Alert type="warning" message="采用版本已变化，请使用顶部“刷新状态”载入当前剪辑。" />}
     {cut && <Typography.Text>{pending ? '当前编辑依据（已有更新）' : '当前采用版本'}：{cut.id} · 草稿编辑不改变此依据</Typography.Text>}
     {cut?.content.items.map((item, index) => {
+      if (itemIds && !itemIds.includes(item.id)) return null
       if (!('take_id' in item)) return <Typography.Text key={item.id} type="secondary">片段 {index + 1} 为预演，不提供实际证据</Typography.Text>
       const take = workspace.takes.find(row => row.id === item.take_id)
       return <Card key={item.id} size="small" title={`实际片段 ${index + 1} · ${item.id}`}>
@@ -110,7 +111,7 @@ export function ContinuityPanel({ projectId, workspace }: { projectId: string; w
     })}
     <Typography.Title level={5}>实际相邻接缝</Typography.Title>
     {!state?.seams.length && <Typography.Text type="secondary">没有直接相接的两个真实片段；预演和时间线空白不作为接缝。</Typography.Text>}
-    {state?.seams.map(seam => <SeamEditor key={`${state.active_cut_revision_id}:${seam.left_item_id}:${seam.right_item_id}`} seam={seam} frames={state.frames} onReview={review} busy={busy} blocked={!!pending} />)}
+    {state?.seams.filter(seam => !itemIds || itemIds[0] === seam.left_item_id && itemIds[1] === seam.right_item_id).map(seam => <SeamEditor key={`${state.active_cut_revision_id}:${seam.left_item_id}:${seam.right_item_id}`} seam={seam} frames={state.frames} onReview={review} busy={busy} blocked={!!pending} />)}
     <Typography.Title level={5}>依赖与替换影响</Typography.Title>
     {!state?.units.length && <Typography.Text type="secondary">尚未声明前段落幅依赖。</Typography.Text>}
     {state?.units.map(unit => <Alert key={`${unit.plan_revision_id}:${unit.unit_id}`} type={unit.status === 'ready' ? 'success' : 'warning'} message={`计划 ${unit.plan_revision_id} · 单元 ${unit.unit_id} · ${unit.status === 'ready' ? '实际依据有效' : '待复核，不能提交'}`} description={<Space direction="vertical"><span>{unit.errors.join('；')}</span><Button onClick={() => setSearch(cutDestination(search, { view: 'shoot', plan: unit.plan_revision_id, unit: unit.unit_id, returnView: 'continuity' }))}>核对{revisionName(workspace.plans, unit.plan_revision_id, '计划')}中的此单元</Button></Space>} />)}

@@ -86,6 +86,9 @@ try {
   })
   const base = 'http://127.0.0.1:4181/projects/p1/chapters/ch1/sequences/s1'
   const side = () => page.getByRole('region', { name: '已确认采用侧区' })
+  const openAdopted = async () => { await page.getByRole('button', { name: /^当前采用：/ }).click(); await side().waitFor() }
+  const closeAdopted = async () => { await page.locator('.ant-drawer-open').getByRole('button', { name: 'Close', exact: true }).click() }
+  const selectClip = async id => { await page.locator(`[data-timeline-item="${id}"]`).click(); await page.locator(`[data-workspace-target="cut-item:${id}"]`).waitFor() }
   const candidate = () => page.getByLabel('当前候选播放器', { exact: true })
   const text = value => page.getByText(value, { exact: true }).first().waitFor()
   async function choose(label, option) {
@@ -93,6 +96,7 @@ try {
     await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: option }).first().click()
   }
   await page.goto(base + '?view=cut&cut=c-draft&take=t1')
+  await openAdopted()
   await side().getByText('画面：已验收通过', { exact: true }).waitFor()
   await side().getByText('声音：待后期', { exact: true }).waitFor()
   await text('正在观看：递出旧信 · Take 1')
@@ -114,16 +118,20 @@ try {
   await page.getByRole('spinbutton', { name: '候选出点秒数' }).fill('1.5')
   await choose('替换草稿片段', '替换片段 1')
   await page.getByRole('button', { name: '替换剪辑草稿中的此片段', exact: true }).click()
-  await text('当前编辑：未保存剪辑草稿 · 剪辑 2为编辑基线')
+  await page.locator('.cut-version-bar').getByText('草稿 · 未保存', { exact: true }).waitFor()
   assert.equal(writes.length, 0)
+  await openAdopted()
   assert.ok((await side().innerText()).includes('源区间 1.000–2.000 秒'))
+  await closeAdopted()
   assert.equal(activeId, 'c-active')
+  await selectClip('a')
   await page.locator('[data-workspace-target="cut-item:a"]').getByRole('button', { name: /^下\s*移$/ }).click()
   await page.getByRole('button', { name: '保存剪辑草稿', exact: true }).click()
   assert.deepEqual(workspace.cuts[1].content.items.map(item => item.id), ['b', 'a', 'c', 'pre'])
   assert.equal(activeId, 'c-active')
   await page.reload()
   await page.getByRole('navigation', { name: '剪辑时间线' }).waitFor()
+  await selectClip('a')
   assert.ok((await page.locator('[data-workspace-target="cut-item:a"]').innerText()).includes('0.50–1.50 秒'))
   assert.equal(workspace.takes.length, 3)
   await page.locator('[data-workspace-target="cut-editor"]').evaluate(element => element.scrollIntoView({ block: 'start' }))
@@ -149,11 +157,13 @@ try {
   await page.getByText('已保存参考图，来源 Take t1', { exact: false }).waitFor()
   assert.equal(writes.at(-1).body.at_ms, 1250)
   // Restore the original order before confirming, so only the changed a range affects a/b.
+  await selectClip('b')
   await page.locator('[data-workspace-target="cut-item:b"]').getByRole('button', { name: /^下\s*移$/ }).click()
   await page.getByRole('button', { name: '保存剪辑草稿', exact: true }).click()
   assert.deepEqual(workspace.cuts[1].content.items.map(item => item.id), ['a', 'b', 'c', 'pre'])
   // Confirming changes the adopted sidebar, while only relevant dependencies become blocked.
   await page.getByRole('button', { name: '确认并设为当前采用', exact: true }).click()
+  await openAdopted()
   await side().getByText('剪辑 2 · 已确认采用', { exact: true }).waitFor()
   await side().getByText('接缝待处理 1 项 · 依赖待复核 1 项', { exact: true }).waitFor()
   assert.equal(activeId, 'c-draft')
@@ -179,7 +189,7 @@ try {
   await page.getByRole('spinbutton', { name: '候选出点秒数' }).fill('1.8')
   await page.getByRole('button', { name: '替换剪辑草稿中的此片段', exact: true }).click()
   await page.getByRole('button', { name: '保存为新剪辑草稿', exact: true }).click()
-  await text('当前查看： · 剪辑 3 · 草稿')
+  await page.locator('.cut-version-bar').getByText('草稿 · 已保存', { exact: true }).waitFor()
   assert.equal(activeId, 'c-draft')
   await page.getByRole('button', { name: '返回问题与记录', exact: true }).click()
   await page.getByRole('textbox', { name: '症状', exact: true }).waitFor()

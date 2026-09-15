@@ -1,82 +1,119 @@
-import { useState } from 'react'
-import { Button, Card, Collapse, Input, InputNumber, Select, Space, Typography } from 'antd'
-import type { SceneDesign_Input, Note_Input } from '../../../services/generated'
-import { humanNote } from './common'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
+import { Alert, Button, Drawer, Empty, Grid, Input, Modal, Select, Tabs } from 'antd'
+import { PlusOutlined, SearchOutlined } from '@ant-design/icons'
+import type { SceneDesign_Input, WorkspaceRead } from '../../../services/generated'
+import { DesignRelations } from './DesignRelations'
+import { DesignStoryboard } from './DesignStoryboard'
 import { emptyDesign } from './designTemplate'
-import { DesignSummary } from './DesignSummary'
+import { DesignFields, designAt, noteText, patchDesign } from './DesignFields'
+import { departmentNames, designObjects, shotIssues } from './designWorkspace'
+import { SequenceNavigation } from './SequenceLayout'
 
-const labels: Record<string, string> = {
-  participants: '人物与物件', events: '触发事件', criteria: '验收要求', direction: '总导演', performance: '表演指导', staging: '镜内执行', cinematography: '摄影指导', continuity: '场记与连续性', sound: '对白与声音', prompt: '提示词指导',
-  id: '标识', name: '名称', character_id: '关联角色', prop_id: '关联道具', description: '说明', requirement: '验收要求', viewpoint: '观察视点', information_change: '本场信息变化', relationship_change: '人物关系变化', turning_point: '关键转折', immutable_facts: '不可改事实', location_asset_id: '场所资产', spatial_basis: '空间依据', shootable_area: '可拍区域', axis: '轴线', scale: '空间尺度', open_questions: '待确定问题', control_level: '创作控制',
-  beats: '节拍', anchors: '空间锚点', blocking_states: '调度状态', shots: '镜头覆盖', event_ids: '关联事件', objective: '行动目标', obstacle: '阻碍', expected_change: '预期变化', must_show: '必须让观众看到', participant_id: '人物/物件', anchor_ids: '位置锚点', event_id: '变化事件', position: '位置', orientation: '朝向', initiative: '主动权', path: '行动路径', transition_reason: '切换原因',
-  beat_ids: '覆盖节拍', blocking_state_ids: '调度依据', criterion_ids: '验收依据', narrative_function: '叙事作用', visible_result: '可见结果', estimated_duration_ms: '预计时长（毫秒）', situations: '角色情境', situation: '当前处境', relationship: '人物关系', beat_id: '所属节拍', received_event_ids: '接收到的事件', subtext: '潜台词', attention: '注意对象', internal_adjustment: '内部调整', physical_action: '可见身体动作', dialogue_ids: '对白依据', delivery: '表达方式', reaction_order: '反应先后', exit_state: '离开节拍时的状态', avoid: '避免的表现', gaze: '目光', breath: '呼吸', weight: '身体重心', hands: '手部', voice: '声音', applicability: '适用说明',
-  activities: '镜内活动', anchor_id: '区域锚点', trigger_event_id: '触发事件', depth: '景深层次', ongoing_task: '持续任务', reaction_delay: '反应延迟依据', delay_ms: '明确延迟（毫秒）', intensity: '活动强度', entrances_exits: '入出画', narrative_support: '对主戏的作用', end_state: '结束状态', environment: '环境活动', intentional_absence: '留白理由',
-  shot_id: '所属镜头', composition: '构图重心', depth_layers: '空间层次', height_angle: '高度与角度', lens_effect: '焦段或透视效果', depth_focus: '景深与焦点', support: '支撑方式', movement_start: '运动起点', movement_trigger: '运动触发', movement_path: '运动路径', movement_speed: '运动速度', end_frame: '结束画面', light_sources: '光源', light_regions: '明暗区域', exposure_color: '曝光与色温', optical_effects: '光学效果', motion_texture: '运动质感', technical_parameters: '技术意图', adjacent_requirements: '相邻镜头衔接', prohibitions: '禁止项',
-  domain: '连续性领域', before: '前态', change: '变化', after: '后态', following_constraint: '后续约束', dialogues: '对白', version: '对白版本', content: '内容', sources: '声源', ambience_actions: '环境与动作声', music_constraints: '音乐约束', execution: '声音执行方式', priorities: '编译优先级', binding_requirements: '参考绑定要求', sound_strategy: '声音策略',
-}
-const states = [{ value: 'unset', label: '未填写' }, { value: 'proposal', label: '设计建议' }, { value: 'fact', label: '已知事实' }, { value: 'unknown', label: '待确定' }, { value: 'not_applicable', label: '不适用' }, { value: 'none', label: '明确没有' }]
-type Value = unknown
-
-/** 递归展示有语义的工作单字段，编辑同一份契约，避免额外 Markdown 真值。 */
-export function DesignEditor({ value, onChange, disabled = false }: { value: SceneDesign_Input; onChange: (value: SceneDesign_Input) => void; disabled?: boolean }) {
+/** 共享选择驱动左树、虚拟清单与对象详情，所有编辑直接更新唯一设计内容。 */
+export function DesignEditor({ value, onChange, disabled = false, active = true, assets, revisionId, cuts }: { value: SceneDesign_Input; onChange: (value: SceneDesign_Input) => void; disabled?: boolean; active?: boolean; revisionId?: string; cuts?: WorkspaceRead['cuts']; assets?: ReactNode }) {
+  const [selected, setSelected] = useState(() => value.direction.shots[0] ? `shot:${value.direction.shots[0].id}` : 'overview')
+  const [tab, setTab] = useState('narrative')
+  const [focusedShot, setFocusedShot] = useState(value.direction.shots[0]?.id)
+  const [view, setView] = useState('list')
   const [query, setQuery] = useState('')
-  const blank = emptyDesign()
-  /** 按中文字段名、稳定身份或内容定位所属工作单，避免在长表单中逐项翻找。 */
-  const matches = (key: string, child: unknown): boolean => {
-    const search = query.trim().toLowerCase()
-    if (!search || `${labels[key] || key} ${typeof child === 'string' ? child : ''}`.toLowerCase().includes(search)) return true
-    return !!child && typeof child === 'object' && Object.entries(child).some(([name, value]) => matches(name, value))
+  const [beat, setBeat] = useState<string>()
+  const [problems, setProblems] = useState(false)
+  const [role, setRole] = useState('direction')
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const [assetsOpen, setAssetsOpen] = useState(false)
+  useEffect(() => { if (!active) { setAssetsOpen(false); setDetailsOpen(false) } }, [active])
+  const [scrollTop, setScrollTop] = useState(0)
+  const [height, setHeight] = useState(640)
+  const [inspectorWidth, setInspectorWidth] = useState(344)
+  const list = useRef<HTMLDivElement>(null)
+  const screens = Grid.useBreakpoint()
+  const objects = useMemo(() => designObjects(value), [value])
+  const selectedObject = objects.find(row => row.key === selected) || objects[0]
+  const shotId = selectedObject.key.startsWith('shot:') ? selectedObject.key.slice(5) : undefined
+  const shot = value.direction.shots.find(row => row.id === shotId)
+  const filtered = useMemo(() => value.direction.shots.filter((row, index) => {
+    const names = value.direction.blocking_states.filter(b => row.blocking_state_ids.includes(b.id)).map(b => value.participants.find(p => p.id === b.participant_id)?.name).join(' ')
+    return (!beat || row.beat_ids.includes(beat)) && (!problems || shotIssues(value, row.id).length) && `${index + 1} ${row.id} ${noteText(row.visible_result)} ${noteText(row.narrative_function)} ${names}`.toLowerCase().includes(query.toLowerCase())
+  }), [value, beat, query, problems])
+  const rows = useMemo(() => {
+    const groups = new Map<string, typeof filtered>()
+    filtered.forEach(row => { const group = beat || row.beat_ids[0] || ''; groups.set(group, [...(groups.get(group) || []), row]) })
+    return [...groups].flatMap(([id, shots]) => [{ kind: 'group' as const, id, shots }, ...shots.map(shot => ({ kind: 'shot' as const, id: shot.id, shot }))])
+  }, [filtered, beat])
+  useEffect(() => {
+    const target = list.current
+    if (!target) return
+    const observer = new ResizeObserver(() => setHeight(target.clientHeight))
+    observer.observe(target)
+    return () => observer.disconnect()
+  }, [view])
+  useEffect(() => { const reset = () => setInspectorWidth(344); window.addEventListener('sequence-reset-layout', reset); return () => window.removeEventListener('sequence-reset-layout', reset) }, [])
+  const select = (key: string, open = true) => { setSelected(key); if (key.startsWith('shot:')) setFocusedShot(key.slice(5)); if (open && !screens.xl) setDetailsOpen(true) }
+  const reveal = (id: string) => {
+    setSelected(`shot:${id}`); setFocusedShot(id)
+    const row = rows.findIndex(row => row.kind === 'shot' && row.id === id)
+    if (row >= 0 && list.current) list.current.scrollTop = Math.max(0, row * 40 - list.current.clientHeight / 2)
   }
-  /** 将局部字段变化写回不可变副本，服务端最终验证共享身份。 */
-  const change = (path: Array<string | number>, next: Value) => {
-    const copy = structuredClone(value)
-    let node = copy as unknown as Record<string, unknown>
-    path.slice(0, -1).forEach(key => { node = node[key] as Record<string, unknown> })
-    node[path[path.length - 1]] = next
-    onChange(copy)
+  const update = (next: SceneDesign_Input) => onChange(next)
+  const addShot = () => {
+    const id = 'shot-' + crypto.randomUUID().slice(0, 8)
+    const template = emptyDesign().direction.shots[0]
+    onChange({ ...value, direction: { ...value.direction, shots: [...value.direction.shots, { ...template, id, beat_ids: beat ? [beat] : value.direction.beats.slice(0, 1).map(b => b.id), event_ids: [], criterion_ids: [], blocking_state_ids: [] }] } })
+    setSelected(`shot:${id}`)
   }
-  /** 根据关联字段列出当前设计中的合法候选身份。 */
-  const options = (key: string) => {
-    if (key.includes('participant')) return value.participants.map(row => ({ value: row.id, label: row.name }))
-    const rows = key.includes('beat') ? value.direction.beats : key.includes('event') ? value.events : key.includes('anchor') ? value.direction.anchors : key.includes('blocking') ? value.direction.blocking_states : key.includes('criterion') ? value.criteria : key.includes('dialogue') ? value.sound.dialogues : key === 'shot_id' ? value.direction.shots : []
-    return rows.map(row => ({ value: row.id, label: row.id }))
-  }
-  /** 渲染未知/事实/不适用等状态，空内容不能通过输入控件变成假事实。 */
-  const render = (current: unknown, path: Array<string | number>, template: unknown): React.ReactNode => {
-    const key = String(path[path.length - 1])
-    const label = labels[key] || key
-    const templateFields = template && typeof template === 'object' ? template as Record<string, unknown> : {}
-    if (current && typeof current === 'object' && !Array.isArray(current) && ('state' in current)) {
-      const note = current as Note_Input
-      return <Space direction="vertical" size={4} style={{ width: '100%' }}>
-        <Space><Typography.Text>{label}</Typography.Text><Select aria-label={`${label}状态`} size="small" value={note.state || 'unset'} options={states} disabled={disabled} style={{ width: 125 }} onChange={state => change(path, ['none', 'not_applicable'].includes(state) ? { state, reason: note.reason || '' } : ['unset', 'unknown'].includes(state) ? { state } : { ...humanNote(note.text || ''), state })} /></Space>
-        <Input.TextArea aria-label={label} disabled={disabled} value={note.text || note.reason || ''} autoSize={{ minRows: 1, maxRows: 5 }} placeholder="填写可观察、可拍摄的内容" onChange={event => change(path, ['none', 'not_applicable'].includes(note.state || '') ? { ...note, reason: event.target.value } : { ...humanNote(event.target.value), state: note.state === 'fact' ? 'fact' : 'proposal' })} />
-        {!!note.sources?.length && <Typography.Text type="secondary">来源：{note.sources.map(source => `${source.kind} · ${source.reference} · ${source.version}`).join('；')}</Typography.Text>}
-      </Space>
-    }
-    if (Array.isArray(current)) {
-      if (key.endsWith('_ids')) return <Select mode="multiple" aria-label={label} disabled={disabled} value={current} options={options(key)} onChange={next => change(path, next)} style={{ width: '100%' }} />
-      return <Space direction="vertical" style={{ width: '100%' }}>
-        {current.map((row, index) => <Card key={index} size="small" title={`${label} ${index + 1}`} extra={!disabled && <Button size="small" danger onClick={() => change(path, current.filter((_, i) => i !== index))}>移除</Button>}>{render(row, [...path, index], (Array.isArray(template) ? template[0] : undefined))}</Card>)}
-        {!disabled && <Button onClick={() => {
-          const sample = (Array.isArray(template) ? template[0] : undefined) || current[0] || { state: 'unset' }
-          const next = structuredClone(sample)
-          if (next && typeof next === 'object' && 'id' in next) next.id = 'item-' + crypto.randomUUID().slice(0, 8)
-          change(path, [...current, next])
-        }}>添加{label}</Button>}
-      </Space>
-    }
-    if (current && typeof current === 'object') return <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-      {Object.entries({ ...templateFields, ...current }).filter(([name]) => !['sources', 'style_revision_id'].includes(name) || (path[0] === 'sound' && name === 'sources')).map(([name, child]) => <div key={name}>
-        {!(child && typeof child === 'object' && 'state' in child) && <Typography.Text type="secondary">{labels[name] || name}</Typography.Text>}
-        {render(child, [...path, name], templateFields[name])}
-      </div>)}
-    </Space>
-    if (['character_id', 'prop_id', 'location_asset_id'].includes(key)) return <Typography.Text>{typeof current === 'string' && current ? current : '未关联资产'}</Typography.Text>
-    if (key.endsWith('_id') && options(key).length) return <Select allowClear disabled={disabled} value={current} options={options(key)} onChange={next => change(path, next ?? null)} style={{ width: '100%' }} />
-    if (key === 'domain' || key === 'execution') return <Select disabled={disabled} value={current} style={{ width: '100%' }} options={(key === 'domain' ? ['space', 'appearance', 'hands_props', 'environment', 'camera', 'dialogue_sound'] : ['postproduction', 'generated', 'unknown']).map(item => ({ value: item, label: ({ space: '空间', appearance: '造型', hands_props: '手部与道具', environment: '环境', camera: '摄影', dialogue_sound: '对白与声音', postproduction: '待后期', generated: '同期生成', unknown: '待确定' } as Record<string, string>)[item] }))} onChange={next => change(path, next)} />
-    if (typeof current === 'number' || ['delay_ms', 'estimated_duration_ms'].includes(key)) return <InputNumber aria-label={label} disabled={disabled} min={key === 'estimated_duration_ms' ? 1 : 0} precision={0} value={typeof current === 'number' ? current : null} onChange={next => change(path, next)} />
-    return <Input disabled={disabled || key === 'id'} value={typeof current === 'string' ? current : ''} onChange={event => change(path, event.target.value || null)} />
-  }
-  return <><DesignSummary value={value} /><details style={{ marginTop: 16 }}><summary>编辑完整设计 · 六岗、声音与来源</summary><Input.Search aria-label="定位工作单问题" placeholder="搜索部门、字段、镜头或内容" value={query} onChange={event => setQuery(event.target.value)} allowClear /><Typography.Paragraph type="secondary">设计来源：{value.sources.map(source => `${source.kind} · ${source.reference} · ${source.version}`).join('；')}</Typography.Paragraph><Collapse items={Object.entries(value).filter(([key, child]) => !['sources', 'style_revision_id'].includes(key) && matches(key, child)).map(([key, child]) => ({ key, label: labels[key] || key, children: render(child, [key], (blank as unknown as Record<string, unknown>)[key]) }))} defaultActiveKey={[]} /></details></>
+  const impact = selectedObject.path[0] === 'performance' || selectedObject.key.startsWith('beat:')
+    ? value.direction.shots.filter(s => selectedObject.key.startsWith('beat:') ? s.beat_ids.includes(selectedObject.key.slice(5)) : selectedObject.path[1] === 'beats' ? s.beat_ids.includes(designAt(value, selectedObject.path)?.beat_id) : true)
+    : []
+  const cameraIndex = value.cinematography.findIndex(row => row.shot_id === shotId)
+  const shotIndex = value.direction.shots.findIndex(row => row.id === shotId)
+  const inspector = <div className="design-inspector-content">
+    <h2>{selectedObject.label}</h2>
+    {shot && <p className="design-secondary">覆盖节拍：{shot.beat_ids.map(id => `${value.direction.beats.findIndex(b => b.id === id) + 1} ${noteText(value.direction.beats.find(b => b.id === id)?.objective)}`).join('、') || '未关联'}</p>}
+    {impact.length > 0 && <Alert type="info" message={`共享规则 · 修改将影响 ${impact.length} 个镜头`} description={impact.map(s => `镜头 ${value.direction.shots.indexOf(s) + 1}`).join('、')} />}
+    {shot ? <Tabs activeKey={tab} onChange={setTab} items={[
+      { key: 'narrative', label: '叙事', children: <DesignFields value={value} path={['direction', 'shots', shotIndex]} fields={['visible_result', 'narrative_function', 'estimated_duration_ms']} onChange={update} disabled={disabled} /> },
+      { key: 'performance', label: '表演', children: <>{value.performance.beats.map((row, index) => shot.beat_ids.includes(row.beat_id) && <section className="design-related" key={index}><p>{value.participants.find(p => p.id === row.participant_id)?.name || '缺失人物引用'} · 共享节拍表演</p><p>{noteText(row.physical_action) || '身体动作待填写'}</p><Button onClick={() => select(`performance:${index}`)}>编辑表演与影响范围</Button></section>)}<Button onClick={() => { setRole('performance'); setView('roles') }}>完整表演审阅</Button></> },
+      { key: 'camera', label: '摄影', children: cameraIndex >= 0 ? <><DesignFields value={value} path={['cinematography', cameraIndex]} fields={['composition', 'lens_effect', 'movement_path', 'end_frame']} onChange={update} disabled={disabled} /><details><summary>完整摄影参数与验收依据</summary><DesignFields value={value} path={['cinematography', cameraIndex]} fields={Object.keys(value.cinematography[cameraIndex]).filter(key => !['composition', 'lens_effect', 'movement_path', 'end_frame'].includes(key))} onChange={update} disabled={disabled} /></details></> : <Empty description="此镜头尚无摄影设计">{!disabled && <Button onClick={() => onChange({ ...value, cinematography: [...value.cinematography, { ...emptyDesign().cinematography[0], shot_id: shot.id, criterion_ids: [] }] })}>添加摄影设计</Button>}</Empty> },
+      { key: 'relations', label: '关联', children: <><DesignFields value={value} path={['direction', 'shots', shotIndex]} fields={['beat_ids', 'event_ids', 'blocking_state_ids', 'criterion_ids']} onChange={update} disabled={disabled} /><h3>相关对象</h3>{objects.filter(o => o.key.startsWith('blocking:') && shot.blocking_state_ids.includes(o.key.slice(9)) || o.key.startsWith('event:') && shot.event_ids.includes(o.key.slice(6)) || o.key.startsWith('criterion:') && shot.criterion_ids.includes(o.key.slice(10))).map(o => <Button block type="text" className="design-object-link" key={o.key} onClick={() => select(o.key)}>{o.label}</Button>)}<Button onClick={() => { setView('roles'); setRole('sound') }}>声音与连续性审阅</Button></> },
+    ]} /> : <DesignFields value={value} path={selectedObject.path} fields={selectedObject.fields} onChange={update} disabled={disabled} />}
+    {!disabled && typeof selectedObject.path[selectedObject.path.length - 1] === 'number' && <Button danger onClick={() => Modal.confirm({ title: `移除${selectedObject.label}`, content: '会从当前设计草稿移除此对象。其他对象保留原引用，缺失关联会明确标记，保存前需要修复。', onOk: () => { const path = selectedObject.path.slice(0, -1); const index = selectedObject.path[selectedObject.path.length - 1]; update(patchDesign(value, path, designAt(value, path).filter((_: unknown, i: number) => i !== index))); setSelected('overview') } })}>移除当前对象</Button>}
+    <details className="design-source"><summary>对象身份与设计来源</summary><p>{selectedObject.key}</p>{value.sources.map((source, index) => <p key={index}>{source.kind} · {source.reference} · {source.version}</p>)}</details>
+  </div>
+  const start = Math.max(0, Math.floor(scrollTop / 40) - 4)
+  const visible = rows.slice(start, start + Math.ceil(height / 40) + 8)
+  return <div className="design-workspace" style={{ '--sequence-inspector-width': `${inspectorWidth}px` } as React.CSSProperties} data-workspace-target="design-editor" tabIndex={-1}>
+    {active && <SequenceNavigation><div className="design-navigation"><h2>场次结构</h2><Button type="text" block aria-pressed={selected === 'overview'} onClick={() => select('overview')}>▦ 全场概览</Button><h3>故事节拍</h3><Button type="text" block onClick={() => { setBeat(undefined); setView('list') }}>全部镜头 · {value.direction.shots.length}</Button>
+      <div className="design-tree">{value.direction.beats.map((b, i) => <div key={b.id}><Button type="text" block aria-pressed={beat === b.id} onClick={() => { setBeat(b.id); setView('list'); select(`beat:${b.id}`, false) }}>{String(i + 1).padStart(2, '0')}　{noteText(b.objective) || '未命名节拍'}</Button>{value.direction.shots.filter(s => s.beat_ids[0] === b.id).slice(0, 12).map(s => <Button type="text" block className="design-tree-shot" aria-pressed={shotId === s.id} key={s.id} onClick={() => { setBeat(undefined); reveal(s.id) }}>镜头 {String(value.direction.shots.indexOf(s) + 1).padStart(2, '0')}</Button>)}{value.direction.shots.filter(s => s.beat_ids[0] === b.id).length > 12 && <Button type="link" onClick={() => { setBeat(b.id); setView('list') }}>查看本节拍全部镜头</Button>}</div>)}</div>
+      <div className="design-navigation-bottom"><Button type="text" block onClick={() => setAssetsOpen(true)}>人物与场所</Button><Button type="text" block onClick={() => { setProblems(!problems); setView('list') }}>⚠ 设计问题 · {value.direction.shots.filter(s => shotIssues(value, s.id).length).length}</Button><Button type="text" block onClick={() => setView('roles')}>六岗与声音审阅</Button></div>
+    </div></SequenceNavigation>}
+    <section className="design-center">
+      <div className="design-view-toolbar"><div className="design-view-tabs" role="tablist" aria-label="设计视图">{[['list', '镜头清单'], ['storyboard', '分镜板'], ['relations', '关系视图'], ...(!active ? [['roles', '岗位审阅']] : [])].map(([key, label]) => <button role="tab" aria-selected={view === key} key={key} onClick={() => setView(key)}>{label}</button>)}</div><Input prefix={<SearchOutlined />} aria-label="搜索镜头、动作、人物" placeholder="搜索镜头、动作、人物" value={query} onChange={event => { setQuery(event.target.value); setScrollTop(0); if (list.current) list.current.scrollTop = 0 }} allowClear /><Button aria-pressed={problems} onClick={() => setProblems(!problems)}>仅看问题</Button></div>
+      {view === 'list' ? <><div className="design-intent"><strong>本场意图：{noteText(value.direction.information_change) || '待明确'}</strong><Button type="link" onClick={() => select('overview')}>全场概览 ›</Button></div>
+        <div className="design-list-head" role="row"><span>镜头</span><span>可见动作</span><span>叙事作用</span><span>预计时长</span><span>待处理</span></div>
+        <div className="design-shot-list" role="grid" aria-label="镜头清单" aria-rowcount={filtered.length} tabIndex={0} ref={list} onScroll={event => setScrollTop(event.currentTarget.scrollTop)} onKeyDown={event => {
+          if (!['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter'].includes(event.key)) return
+          event.preventDefault()
+          if (event.key === 'Enter') { setDetailsOpen(true); return }
+          const current = filtered.findIndex(s => s.id === shotId)
+          const index = event.key === 'Home' ? 0 : event.key === 'End' ? filtered.length - 1 : Math.max(0, Math.min(filtered.length - 1, current + (event.key === 'ArrowDown' ? 1 : -1)))
+          if (filtered[index]) reveal(filtered[index].id)
+        }}>
+          {!filtered.length && <Empty description="没有匹配的镜头" />}
+          <div style={{ height: rows.length * 40, position: 'relative' }}>{visible.map((row, index) => row.kind === 'group' ? <div className="design-group-row" style={{ top: (start + index) * 40 }} key={`group:${row.id}`}><strong>{row.id ? `${String(value.direction.beats.findIndex(b => b.id === row.id) + 1).padStart(2, '0')}　${noteText(value.direction.beats.find(b => b.id === row.id)?.objective) || '待明确节拍'}` : '未分组'}</strong><span>（{row.shots.length} 个镜头）</span></div> : <div className={`design-shot-row${shotId === row.id ? ' is-selected' : ''}`} role="row" aria-selected={shotId === row.id} data-shot-id={row.id} style={{ top: (start + index) * 40 }} key={row.id} onClick={() => select(`shot:${row.id}`)}>
+            <span>{String(value.direction.shots.indexOf(row.shot) + 1).padStart(2, '0')}</span><span title={noteText(row.shot.visible_result)}>{noteText(row.shot.visible_result) || '动作待填写'}{row.shot.beat_ids.length > 1 && <small> · 跨 {row.shot.beat_ids.length} 节拍</small>}</span><span title={noteText(row.shot.narrative_function)}>{noteText(row.shot.narrative_function) || '待填写'}</span><span>{row.shot.estimated_duration_ms ? `${row.shot.estimated_duration_ms / 1000}s` : '未填写'}</span><span className={shotIssues(value, row.id).length ? 'design-issue' : 'design-secondary'} title={shotIssues(value, row.id).join('；')}>{shotIssues(value, row.id)[0] || '未记录问题'}</span>
+          </div>)}</div>
+        </div><div className="design-list-footer"><span>{filtered.length} / {value.direction.shots.length} 个镜头 · 预计 {value.direction.shots.reduce((n, s) => n + (s.estimated_duration_ms || 0), 0) / 1000} 秒</span>{!disabled && <Button size="small" icon={<PlusOutlined />} onClick={addShot}>新增镜头</Button>}</div></> : view === 'storyboard' ? <DesignStoryboard value={value} shots={filtered} selected={shotId} onSelect={id => select(`shot:${id}`)} revisionId={revisionId} cuts={cuts} /> : view === 'relations' ? <DesignRelations value={value} shotId={focusedShot} onSelect={select} /> : <div className="design-role-browser"><Select aria-label="岗位" value={role} onChange={setRole} options={Object.entries({ ...departmentNames, participants: '人物与物件' }).map(([value, label]) => ({ value, label }))} /><h2>{departmentNames[role] || '人物与物件'}</h2><p className="design-secondary">选择对象查看全部字段；共享内容仅在原对象上编辑。</p>{objects.filter(o => o.kind === role).map(o => <button className={`design-role-row${selected === o.key ? ' is-selected' : ''}`} key={o.key} onClick={() => select(o.key)}>{o.label}<span>查看与编辑 ›</span></button>)}{!disabled && <Select<string> aria-label="新增岗位对象" value={undefined} placeholder="新增对象" options={Object.entries(role === 'direction' ? { beats: '节拍', anchors: '空间锚点', blocking_states: '调度', events: '事件', criteria: '验收要求' } : role === 'performance' ? { situations: '角色情境', beats: '节拍表演' } : role === 'staging' ? { activities: '镜内活动' } : role === 'sound' ? { dialogues: '对白' } : { [role]: departmentNames[role] || '人物与物件' }).filter(([key]) => key !== 'prompt').map(([value, label]) => ({ value, label }))} onChange={key => {
+          const path = ['events', 'criteria', 'cinematography', 'continuity', 'participants'].includes(key) ? [key] : [role, key]
+          const rows = designAt(value, path)
+          const sample = designAt(emptyDesign(), [...path, 0])
+          if (!Array.isArray(rows) || !sample) return
+          const next = structuredClone(sample); if ('id' in next) next.id = 'item-' + crypto.randomUUID().slice(0, 8)
+          update(patchDesign(value, path, [...rows, next]))
+        }} />}</div>}
+      {!screens.xl && <Button className="design-detail-trigger" onClick={() => setDetailsOpen(true)}>所选对象详情</Button>}
+    </section>
+    {screens.xl ? <aside className="design-inspector"><div className="design-inspector-resizer" role="separator" aria-label="调整详情宽度" tabIndex={0} aria-valuemin={300} aria-valuemax={480} aria-valuenow={inspectorWidth} onDoubleClick={() => setInspectorWidth(344)} onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); setInspectorWidth(v => Math.max(300, Math.min(480, v + (event.key === 'ArrowLeft' ? 8 : -8)))) } }} onPointerDown={event => event.currentTarget.setPointerCapture(event.pointerId)} onPointerMove={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) setInspectorWidth(Math.max(300, Math.min(480, window.innerWidth - event.clientX))) }} />{inspector}</aside> : <Drawer title="对象详情" width={344} open={detailsOpen} onClose={() => setDetailsOpen(false)}>{inspector}</Drawer>}
+    <Drawer title="人物、场所与风格" width={640} open={assetsOpen} onClose={() => setAssetsOpen(false)}>{assets || <DesignFields value={value} path={['participants']} onChange={update} disabled={disabled} />}</Drawer>
+  </div>
 }
