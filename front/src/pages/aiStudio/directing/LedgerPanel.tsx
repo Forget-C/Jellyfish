@@ -6,6 +6,7 @@ import type { LedgerRead } from '../../../services/generated'
 import { buildFileDownloadUrl } from '../assets/utils'
 import { directingError } from './common'
 import { DesignEditor } from './DesignEditor'
+import { ReviewDetails } from './ReviewDetails'
 
 /** 三本账展示版本、来源和实验关联，编辑必须回到原始业务记录。 */
 export function LedgerPanel({ projectId, sequenceId }: { projectId: string; sequenceId: string }) {
@@ -56,7 +57,7 @@ export function LedgerPanel({ projectId, sequenceId }: { projectId: string; sequ
           <p>计划 {prompt.content.plan_revision_id} / 单元 {prompt.content.unit_id} · 非空白字符 {prompt.content.text.replace(/\s/g, '').length} · 格式 {prompt.content.format_version}</p>
           <Typography.Paragraph copyable className="whitespace-pre-wrap">{prompt.content.text}</Typography.Paragraph>
           {prompt.content.sources.map((source, i) => <p key={i}>来源：{source.reference} / {source.version}</p>)}
-          {workspace.reviews.filter(review => review.content.occurrences.some(item => item.prompt_revision_id === prompt.id)).map(review => <details key={review.id}><summary>审稿 {review.id} · {review.confirmed_by || '草稿'}</summary>{review.content.rows.map((row, i) => <p key={i}>{row.role} / {row.verdict}：{row.rationale}</p>)}</details>)}
+          {workspace.reviews.filter(review => review.content.occurrences.some(item => item.prompt_revision_id === prompt.id)).map(review => <details key={review.id}><summary>审稿 {review.id} · {review.confirmed_by || '草稿'}</summary>{review.content.rows.map((row, i) => <div key={i}><strong>{row.role} / {row.verdict}</strong><ReviewDetails row={row} /></div>)}</details>)}
           {data.actions.filter(action => action.revision_id === prompt.id || action.task_id && workspace.takes.some(take => take.prompt_revision_id === prompt.id && take.task_id === action.task_id)).map((action, i) => <p key={i}>{action.actor_id} · {action.displayed_label} · {action.created_at} · 任务 {action.task_id || '无'}</p>)}
           <p>产出：{workspace.takes.filter(take => take.prompt_revision_id === prompt.id).map(take => take.id).join('、') || '尚无 Take'}</p>
         </Card>)}

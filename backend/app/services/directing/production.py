@@ -143,10 +143,11 @@ class ProductionService(DirectingAIService):
                 if key in frames:
                     raise ValueError("首帧或尾帧只能选择一份图片")
                 frames[key] = ref
-        media = VideoMediaInput(frames=VideoFrameMediaReferences(**frames), subjects=subjects)
+        frame_media = VideoFrameMediaReferences(**frames)
+        media = VideoMediaInput(frames=frame_media, subjects=subjects)
         options = VideoGenerationInput(prompt=text, model=model.name, ratio=unit.ratio,
             seconds=unit.duration_ms // 1000, seed=unit.parameters.get("seed"),
-            frame_references=VideoFrameReferences(first_frame=media.frames.first, last_frame=media.frames.last, key_frames=media.frames.keys),
+            frame_references=VideoFrameReferences(first_frame=frame_media.first, last_frame=frame_media.last, key_frames=frame_media.keys),
             subject_references=[VideoSubjectReference(name=s.name, media=s.media) for s in subjects])
         validate_video_options(provider=config.provider_key, model=model.name, input_=options)
         validators = {"openai": validate_openai_video_options, "vidu": validate_vidu_video_options,
@@ -156,7 +157,7 @@ class ProductionService(DirectingAIService):
 
     async def compile_unit(self, sequence_id: str, plan_id: str, unit_id: str):
         """将适用工作单字段编译为有版本的文本及逐项去向，不截断关键语义。"""
-        plan, unit, media = await self.validate_unit(sequence_id, plan_id, unit_id)
+        plan, unit, _ = await self.validate_unit(sequence_id, plan_id, unit_id)
         design_row = await self.revision(plan.design_revision_id, kind="design", sequence_id=sequence_id, confirmed=True)
         design = SceneDesign.model_validate(design_row.payload)
         shots = {item.shot_id for item in unit.coverage}
@@ -303,7 +304,7 @@ class ProductionService(DirectingAIService):
         if len("".join(prompt.text.split())) > 5000:
             raise ValueError("提示词超过格式长度限制")
         await self._validate(await self.sequence(sequence_id), review)
-        plan, unit, media = await self.validate_unit(sequence_id, prompt.plan_revision_id, prompt.unit_id, prompt.text)
+        _, unit, media = await self.validate_unit(sequence_id, prompt.plan_revision_id, prompt.unit_id, prompt.text)
         command = GenerationCommand(modality=GenerationModality.video, operation=GenerationOperation.video_generation,
             delivery=GenerationDelivery.async_polling,
             target=GenerationTarget(kind=GenerationTargetKind.directing_unit, entity_id=prompt_id),

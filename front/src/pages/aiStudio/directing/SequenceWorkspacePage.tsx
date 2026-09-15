@@ -4,6 +4,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { StudioDirectingService } from '../../../services/generated'
 import type { DirectingTaskRead, ProductionPlan_Input, SceneDesign_Input, WorkspaceRead } from '../../../services/generated'
 import { DesignEditor } from './DesignEditor'
+import { ReviewDetails } from './ReviewDetails'
 import { StyleEditor } from './StyleEditor'
 import { SceneAssets } from './SceneAssets'
 import { VisualPanel } from './VisualPanel'
@@ -153,9 +154,9 @@ export default function SequenceWorkspacePage() {
         </Card>}
         {workspace.reviews.length > 0 && <Card title="审稿与执行确认"><Space direction="vertical" style={{ width: '100%' }}>
           <Select style={{ width: '100%' }} value={selectedReview?.id} placeholder="选择本次审稿" options={workspace.reviews.filter(row => row.content.occurrences.every(o => o.prompt_revision_id === promptId)).map((row, index) => ({ value: row.id, label: `审稿 ${index + 1}${row.parent_id ? ' · 含人工裁决' : ''}` }))} onChange={setReviewId} />
-          {selectedReview?.content.rows.map(row => <Card key={row.role + row.occurrence_id} size="small" title={<Space>{roles[row.role]}<Tag color={row.verdict === 'pass' ? 'green' : 'orange'}>{row.verdict === 'pass' ? '通过' : '需修改'}</Tag></Space>}>
-            <p>{row.rationale}</p>{row.findings.map((finding, index) => <p key={index}>{finding.observation} {finding.suggestion.text}</p>)}
-            {row.verdict === 'revise' && <Button onClick={() => { let reason = ''; Modal.confirm({ title: '接受此艺术偏离并记录理由', content: <Input.TextArea placeholder="说明为什么保留当前方案；结构和模型能力校验仍不可绕过" onChange={event => { reason = event.target.value }} />, onOk: async () => {
+          {selectedReview?.content.rows.map(row => <Card key={row.role + row.occurrence_id} size="small" title={<Space>{roles[row.role]}<Tag color={row.verdict === 'pass' ? 'green' : 'orange'}>{row.verdict === 'pass' ? '通过' : row.verdict === 'pending' ? '待审' : '需修改'}</Tag></Space>}>
+            <ReviewDetails row={row} />
+            {row.verdict === 'revise' && <Button onClick={() => { let reason = ''; Modal.confirm({ title: '接受此艺术偏离并记录理由', content: <Space direction="vertical" className="w-full"><ReviewDetails row={row} /><Input.TextArea placeholder="说明为什么保留当前方案；结构和模型能力校验仍不可绕过" onChange={event => { reason = event.target.value }} /></Space>, onOk: async () => {
               const response = await StudioDirectingService.directingResolveReview({ projectId, sequenceId, reviewId: selectedReview.id, requestBody: { role: row.role, occurrence_id: row.occurrence_id, reason } })
               if (response.data) { setWorkspace(response.data); setReviewId(response.data.reviews.slice(-1)[0]?.id) }
             } }) }}>记录人工取舍</Button>}
@@ -193,7 +194,7 @@ export default function SequenceWorkspacePage() {
     })}>{result?.design ? '采用为可编辑草稿' : '保存审稿结论'}</Button>}>
       {!!result?.image_file_ids?.length && <><Typography.Paragraph>候选图已保存到本项目素材。请在生产计划中明确选择，才会加入本次参考；不会自动替换已确认素材。</Typography.Paragraph>{result.image_file_ids.map(id => <Image key={id} src={buildFileDownloadUrl(id)} alt="验证图候选" />)}</>}
       {result?.design && <DesignEditor value={result.design} onChange={() => {}} disabled />}
-      {result?.review?.rows.map(row => <p key={row.role + row.occurrence_id}><strong>{roles[row.role]}</strong> · {row.verdict} · {row.rationale}</p>)}
+      {result?.review?.rows.map(row => <Card key={row.role + row.occurrence_id} size="small" title={`${roles[row.role]} · ${row.verdict === 'pass' ? '通过' : row.verdict === 'pending' ? '待审' : '需修改'}`}><ReviewDetails row={row} /></Card>)}
     </Modal>
   </Space>
 }

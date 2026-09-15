@@ -6,7 +6,7 @@ from pydantic import Field, model_validator
 
 from app.core.contracts.directing.common import Contract, Identity, Source, Text, Role
 from app.core.contracts.directing.design import SceneDesign
-from app.core.contracts.directing.production import ProductionPlan, Prompt, ReviewPacket, SequenceCut, TakeAnnotation
+from app.core.contracts.directing.production import ProductionPlan, ReviewPacket, SequenceCut, TakeAnnotation
 from app.core.contracts.directing.revisions import (
     SceneDesignRevision, ProductionPlanRevision, PromptRevision, ReviewPacketRevision,
     SequenceCutRevision, TakeSnapshot,

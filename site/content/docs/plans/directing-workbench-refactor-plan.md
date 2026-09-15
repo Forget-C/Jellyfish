@@ -2,10 +2,10 @@
 title: "场次创作与试拍剪辑工作台方案"
 description: "从创作目标重新评估流程，以场次设计、生成单元、早期粗剪和定点补拍组织工作台。"
 weight: 35
-status: in_progress
+status: completed
 ---
 
-> 2026-09-15 验收校准。场次主流程、真实试拍、粗剪和局部返工已接通；本方案保留产品目标，具体实现与阶段证据见[实施任务](/docs/plans/directing-workbench-implementation-tasks/)及[当前架构](/docs/architecture/directing-foundation/)。当前仍需收口审稿决策信息展示与本次范围内的静态检查问题，不按早期页面形态或报告形式机械补功能。
+> 2026-09-15 验收校准。场次主流程、真实试拍、粗剪和局部返工已接通；本方案保留产品目标，具体实现与阶段证据见[实施任务](/docs/plans/directing-workbench-implementation-tasks/)及[当前架构](/docs/architecture/directing-foundation/)。审稿决策信息展示与范围内静态检查已按最小范围收口，不按早期页面形态或报告形式机械补功能。
 
 > 六部门工作单的语义见[输出契约规范](/docs/plans/six-department-output-contracts-plan/)。专业信息完整不意味着用户必须逐格填写、审批或下载六份报告。验收校准的决策及依据统一维护在实施任务的“验收基线校准”一节。
 

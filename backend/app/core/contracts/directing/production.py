@@ -5,7 +5,7 @@ from typing import Annotated, Literal
 from pydantic import Field, model_validator
 
 from app.core.contracts.directing.common import (
-    Contract, Identity, MediaRange, Note, ROLES, Role, Source, Text, references, unique,
+    Contract, Identity, MediaRange, Note, ROLES, Role, Source, Text, unique,
 )
 
 
