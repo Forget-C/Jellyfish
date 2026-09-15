@@ -154,7 +154,8 @@ class WorkspaceService(DirectingStore):
         """一次读取各类版本、候选和任务身份，不在任务中心复制业务上下文。"""
         sequence = await self.read_sequence(sequence_id)
         groups = {name: [] for name in ("designs", "plans", "prompts", "reviews", "cuts")}
-        rows = await self.db.scalars(select(DirectingRevision).where(DirectingRevision.sequence_id == sequence_id)
+        rows = await self.db.scalars(select(DirectingRevision).where(DirectingRevision.sequence_id == sequence_id,
+                                     DirectingRevision.kind.in_(["design", "plan", "prompt", "review", "cut"]))
                                      .order_by(DirectingRevision.created_at, DirectingRevision.id))
         for row in rows:
             groups[row.kind + "s"].append(await self.read_revision(row.id))

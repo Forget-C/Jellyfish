@@ -11,6 +11,8 @@ import { ContinuityPanel } from './ContinuityPanel'
 import { PlanEditor } from './PlanEditor'
 import { BatchPanel } from './BatchPanel'
 import { RegroupPanel } from './RegroupPanel'
+import { LedgerPanel } from './LedgerPanel'
+import { FeedbackPanel } from './FeedbackPanel'
 import { CutEditor } from './CutEditor'
 import { DirectingTasks } from './DirectingTasks'
 import { emptyDesign } from './designTemplate'
@@ -169,6 +171,8 @@ export default function SequenceWorkspacePage() {
       { key: 'continuity', label: '实际连续性', children: <ContinuityPanel key={sequenceId} projectId={projectId} workspace={workspace} /> },
       { key: 'batch', label: '批量拍摄', children: <BatchPanel key={sequenceId} projectId={projectId} workspace={workspace} onSubmitted={reload} /> },
       { key: 'visual', label: '视觉验证', children: <VisualPanel projectId={projectId} workspace={workspace} onSubmitted={reload} /> },
+      { key: 'ledger', label: '三本账', children: <LedgerPanel key={sequenceId} projectId={projectId} sequenceId={sequenceId} /> },
+      { key: 'feedback', label: '场次验收与返工', children: <FeedbackPanel key={sequenceId} projectId={projectId} workspace={workspace} onRefresh={reload} /> },
       { key: 'cut', label: '审片与粗剪', children: <CutEditor key={workspace.sequence.id} projectId={projectId} workspace={workspace} onChange={setWorkspace} /> },
     ]} />
     <DirectingTasks projectId={projectId} taskIds={workspace.task_ids} onSettled={reload} onResult={setResult} />

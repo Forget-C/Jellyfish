@@ -53,10 +53,10 @@ class DirectingRevision(Base, TimestampMixin):
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     source_key: Mapped[str | None] = mapped_column(String(64))
     confirmed_by: Mapped[str | None] = mapped_column(String(64))
-    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime().with_variant(DATETIME(fsp=6), "mysql"))
 
     __table_args__ = (
-        CheckConstraint("kind IN ('design','plan','prompt','review','cut')", name="ck_directing_revision_kind"),
+        CheckConstraint("kind IN ('design','plan','prompt','review','cut','cut_review','repair','knowledge')", name="ck_directing_revision_kind"),
         CheckConstraint("version > 0", name="ck_directing_revision_version"),
         CheckConstraint("(confirmed_by IS NULL AND confirmed_at IS NULL) OR (confirmed_by IS NOT NULL AND confirmed_at IS NOT NULL)", name="ck_directing_revision_confirmation"),
     )
@@ -218,3 +218,30 @@ class SeamReview(Base):
     actor_id: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime().with_variant(DATETIME(fsp=6), 'mysql'), default=revision_created_at, nullable=False)
     __table_args__ = (CheckConstraint("verdict IN ('pass','revise')", name='ck_directing_seam_verdict'),)
+
+
+class ChapterTransition(Base):
+    """不可变跨场审查固定两端采用和实际帧，顺序改变后仅保留历史。"""
+
+    __tablename__ = 'directing_chapter_transitions'
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    chapter_id: Mapped[str] = mapped_column(ForeignKey('chapters.id', ondelete='RESTRICT'), index=True)
+    left_sequence_id: Mapped[str] = mapped_column(ForeignKey('directing_sequences.id', ondelete='RESTRICT'))
+    right_sequence_id: Mapped[str] = mapped_column(ForeignKey('directing_sequences.id', ondelete='RESTRICT'))
+    left_cut_revision_id: Mapped[str] = mapped_column(ForeignKey('directing_revisions.id', ondelete='RESTRICT'))
+    right_cut_revision_id: Mapped[str] = mapped_column(ForeignKey('directing_revisions.id', ondelete='RESTRICT'))
+    left_frame_id: Mapped[str] = mapped_column(ForeignKey('directing_cut_frames.id', ondelete='RESTRICT'))
+    right_frame_id: Mapped[str] = mapped_column(ForeignKey('directing_cut_frames.id', ondelete='RESTRICT'))
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    actor_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime().with_variant(DATETIME(fsp=6), 'mysql'), default=revision_created_at)
+
+
+class RepairPlanLink(Base):
+    """连接明确返工诊断与派生计划，后续任务和 Take 沿计划身份追溯。"""
+
+    __tablename__ = 'directing_repair_plans'
+
+    repair_revision_id: Mapped[str] = mapped_column(ForeignKey('directing_revisions.id', ondelete='RESTRICT'), primary_key=True)
+    plan_revision_id: Mapped[str] = mapped_column(ForeignKey('directing_revisions.id', ondelete='RESTRICT'), primary_key=True, unique=True)

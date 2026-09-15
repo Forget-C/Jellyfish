@@ -4,11 +4,14 @@
 /* eslint-disable */
 import type { AIRequest } from '../models/AIRequest';
 import type { ApiResponse_BatchRead_ } from '../models/ApiResponse_BatchRead_';
+import type { ApiResponse_ChapterAssemblyRead_ } from '../models/ApiResponse_ChapterAssemblyRead_';
 import type { ApiResponse_ChapterSequences_ } from '../models/ApiResponse_ChapterSequences_';
 import type { ApiResponse_ContinuityRead_ } from '../models/ApiResponse_ContinuityRead_';
 import type { ApiResponse_CutFrameRead_ } from '../models/ApiResponse_CutFrameRead_';
 import type { ApiResponse_DirectingTaskRead_ } from '../models/ApiResponse_DirectingTaskRead_';
 import type { ApiResponse_ExtractedFrame_ } from '../models/ApiResponse_ExtractedFrame_';
+import type { ApiResponse_FeedbackRead_ } from '../models/ApiResponse_FeedbackRead_';
+import type { ApiResponse_LedgerRead_ } from '../models/ApiResponse_LedgerRead_';
 import type { ApiResponse_list_AssetSummary__ } from '../models/ApiResponse_list_AssetSummary__';
 import type { ApiResponse_list_BatchRead__ } from '../models/ApiResponse_list_BatchRead__';
 import type { ApiResponse_list_ProjectStyleRevision__ } from '../models/ApiResponse_list_ProjectStyleRevision__';
@@ -22,7 +25,9 @@ import type { BatchPrepare } from '../models/BatchPrepare';
 import type { CompileRequest } from '../models/CompileRequest';
 import type { CutFrameRequest } from '../models/CutFrameRequest';
 import type { ExtractFrameRequest } from '../models/ExtractFrameRequest';
+import type { FeedbackWrite } from '../models/FeedbackWrite';
 import type { RegroupRequest } from '../models/RegroupRequest';
+import type { RepairPlanRequest } from '../models/RepairPlanRequest';
 import type { ReviewDecisionRequest } from '../models/ReviewDecisionRequest';
 import type { RevisionWrite } from '../models/RevisionWrite';
 import type { SeamReviewRequest } from '../models/SeamReviewRequest';
@@ -31,6 +36,7 @@ import type { SequenceUpdate } from '../models/SequenceUpdate';
 import type { ShootRequest } from '../models/ShootRequest';
 import type { StyleWrite } from '../models/StyleWrite';
 import type { TakeReviewWrite } from '../models/TakeReviewWrite';
+import type { TransitionWrite_Input } from '../models/TransitionWrite_Input';
 import type { VersionRequest } from '../models/VersionRequest';
 import type { VisualRequest } from '../models/VisualRequest';
 import type { CancelablePromise } from '../core/CancelablePromise';
@@ -911,6 +917,231 @@ export class StudioDirectingService {
             path: {
                 'project_id': projectId,
                 'sequence_id': sequenceId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Feedback
+     * 返回当前验收、返工与经验候选的持久版本。
+     * @returns ApiResponse_FeedbackRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingFeedback({
+        projectId,
+        sequenceId,
+    }: {
+        projectId: string,
+        sequenceId: string,
+    }): CancelablePromise<ApiResponse_FeedbackRead_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/feedback',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Save Feedback
+     * 保存强类型反馈草稿，艺术判断由其来源承担。
+     * @returns ApiResponse_FeedbackRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingSaveFeedback({
+        projectId,
+        sequenceId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        requestBody: FeedbackWrite,
+    }): CancelablePromise<ApiResponse_FeedbackRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/feedback',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Confirm Feedback
+     * 显式确认当前反馈草稿，旧采用上的审片不能成为当前验收。
+     * @returns ApiResponse_FeedbackRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingConfirmFeedback({
+        projectId,
+        sequenceId,
+        revisionId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        revisionId: string,
+        requestBody: VersionRequest,
+    }): CancelablePromise<ApiResponse_FeedbackRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/feedback/{revision_id}/confirm',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'revision_id': revisionId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Ledger
+     * 只读汇总三本账，不提供第二份台账编辑入口。
+     * @returns ApiResponse_LedgerRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingLedger({
+        projectId,
+        sequenceId,
+    }: {
+        projectId: string,
+        sequenceId: string,
+    }): CancelablePromise<ApiResponse_LedgerRead_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/ledger',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Chapter Assembly
+     * 查询章节顺序播放依据、验收缺口与跨场审查。
+     * @returns ApiResponse_ChapterAssemblyRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingChapterAssembly({
+        projectId,
+        chapterId,
+    }: {
+        projectId: string,
+        chapterId: string,
+    }): CancelablePromise<ApiResponse_ChapterAssemblyRead_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/assembly',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Review Transition
+     * 保存人工跨场审查，校验相邻顺序及实际边界。
+     * @returns ApiResponse_ChapterAssemblyRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingReviewTransition({
+        projectId,
+        chapterId,
+        requestBody,
+    }: {
+        projectId: string,
+        chapterId: string,
+        requestBody: TransitionWrite_Input,
+    }): CancelablePromise<ApiResponse_ChapterAssemblyRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/transitions',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Knowledge Style
+     * 从已确认经验显式准备项目风格草稿，未自动确认或应用。
+     * @returns ApiResponse_list_ProjectStyleRevision__ Successful Response
+     * @throws ApiError
+     */
+    public static directingKnowledgeStyle({
+        projectId,
+        sequenceId,
+        revisionId,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        revisionId: string,
+    }): CancelablePromise<ApiResponse_list_ProjectStyleRevision__> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/knowledge/{revision_id}/style',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'revision_id': revisionId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Prepare Repair Plan
+     * 从确认的返工单创建显式局部生产草稿，继续走正常确认、编译和执行。
+     * @returns ApiResponse_WorkspaceRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingPrepareRepairPlan({
+        projectId,
+        sequenceId,
+        revisionId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        revisionId: string,
+        requestBody: RepairPlanRequest,
+    }): CancelablePromise<ApiResponse_WorkspaceRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/repairs/{revision_id}/plan',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'revision_id': revisionId,
             },
             body: requestBody,
             mediaType: 'application/json',

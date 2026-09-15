@@ -43,6 +43,9 @@ def test_foundation_migration_and_next_upgrade():
         continuity = revision_module("68a2c5e0fd36_add_actual_continuity.py")
         continuity.op = migration.op
         continuity.upgrade()
+        feedback = revision_module("79b3d6f1ae47_add_directing_feedback.py")
+        feedback.op = migration.op
+        feedback.upgrade()
         context = MigrationContext.configure(connection, opts={"compare_type": True})
         assert not compare_metadata(context, Base.metadata)
         connection.execute(sa.text("INSERT INTO projects (id,name,description,style,visual_style,seed,unify_style,progress,stats) VALUES ('p','p','','drama','live_action',0,1,0,'{}')"))
@@ -60,6 +63,7 @@ def test_foundation_migration_and_next_upgrade():
         assert connection.scalar(sa.text("SELECT title FROM directing_sequences WHERE id='seq'")) == "scene"
         migration.op.drop_column("directing_sequences", "migration_probe")
         assert not compare_metadata(context, Base.metadata)
+        feedback.downgrade()
         continuity.downgrade()
         batches.downgrade()
         styles.downgrade()

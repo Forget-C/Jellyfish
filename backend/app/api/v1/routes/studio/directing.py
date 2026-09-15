@@ -19,6 +19,10 @@ from app.core.contracts.directing.batch import BatchPrepare, BatchRead
 from app.services.studio.files import require_available_file
 from app.services.directing.store import RevisionConflict
 
+from app.services.directing.feedback import FeedbackService
+from app.core.contracts.directing.feedback import FeedbackRead, FeedbackWrite, ChapterAssemblyRead, TransitionWrite, RepairPlanRequest
+from app.core.contracts.directing.ledger import LedgerRead
+
 router = APIRouter(prefix="/projects/{project_id}/directing", tags=["studio/directing"])
 
 
@@ -248,3 +252,62 @@ async def cut_frame(project_id: str, sequence_id: str, body: CutFrameRequest, db
 async def review_seam(project_id: str, sequence_id: str, body: SeamReviewRequest, db: AsyncSession = Depends(get_db, scope="function")):
     """保存针对真实相邻片段的人工接缝结论。"""
     return success_response(await _call(ContinuityService(db, project_id).review_seam(sequence_id, body)))
+
+
+@router.get('/sequences/{sequence_id}/feedback', response_model=ApiResponse[FeedbackRead], operation_id='directing_feedback')
+async def feedback(project_id: str, sequence_id: str, db: AsyncSession = Depends(get_db, scope='function')):
+    """返回当前验收、返工与经验候选的持久版本。"""
+    return success_response(await _call(FeedbackService(db, project_id).feedback(sequence_id)))
+
+
+@router.post('/sequences/{sequence_id}/feedback', response_model=ApiResponse[FeedbackRead], operation_id='directing_save_feedback')
+async def save_feedback(project_id: str, sequence_id: str, body: FeedbackWrite, db: AsyncSession = Depends(get_db, scope='function')):
+    """保存强类型反馈草稿，艺术判断由其来源承担。"""
+    service = FeedbackService(db, project_id)
+    await _call(service.write_feedback(sequence_id, body))
+    return success_response(await _call(service.feedback(sequence_id)))
+
+
+@router.post('/sequences/{sequence_id}/feedback/{revision_id}/confirm', response_model=ApiResponse[FeedbackRead], operation_id='directing_confirm_feedback')
+async def confirm_feedback(project_id: str, sequence_id: str, revision_id: str, body: VersionRequest, db: AsyncSession = Depends(get_db, scope='function')):
+    """显式确认当前反馈草稿，旧采用上的审片不能成为当前验收。"""
+    service = FeedbackService(db, project_id)
+    row = await _call(service.revision(revision_id, sequence_id=sequence_id))
+    if row.kind not in ('cut_review', 'repair', 'knowledge'):
+        raise HTTPException(status_code=422, detail='不是反馈记录')
+    await _call(service.confirm_revision(revision_id, expected_version=body.expected_version, actor_id='local-user'))
+    return success_response(await _call(service.feedback(sequence_id)))
+
+
+@router.get('/sequences/{sequence_id}/ledger', response_model=ApiResponse[LedgerRead], operation_id='directing_ledger')
+async def ledger(project_id: str, sequence_id: str, db: AsyncSession = Depends(get_db, scope='function')):
+    """只读汇总三本账，不提供第二份台账编辑入口。"""
+    return success_response(await _call(FeedbackService(db, project_id).ledger(sequence_id)))
+
+
+@router.get('/chapters/{chapter_id}/assembly', response_model=ApiResponse[ChapterAssemblyRead], operation_id='directing_chapter_assembly')
+async def chapter_assembly(project_id: str, chapter_id: str, db: AsyncSession = Depends(get_db, scope='function')):
+    """查询章节顺序播放依据、验收缺口与跨场审查。"""
+    return success_response(await _call(FeedbackService(db, project_id).chapter_assembly(chapter_id)))
+
+
+@router.post('/chapters/{chapter_id}/transitions', response_model=ApiResponse[ChapterAssemblyRead], operation_id='directing_review_transition')
+async def review_transition(project_id: str, chapter_id: str, body: TransitionWrite, db: AsyncSession = Depends(get_db, scope='function')):
+    """保存人工跨场审查，校验相邻顺序及实际边界。"""
+    return success_response(await _call(FeedbackService(db, project_id).review_transition(chapter_id, body)))
+
+
+@router.post('/sequences/{sequence_id}/knowledge/{revision_id}/style', response_model=ApiResponse[list[ProjectStyleRevision]], operation_id='directing_knowledge_style')
+async def knowledge_style(project_id: str, sequence_id: str, revision_id: str, db: AsyncSession = Depends(get_db, scope='function')):
+    """从已确认经验显式准备项目风格草稿，未自动确认或应用。"""
+    service = FeedbackService(db, project_id)
+    await _call(service.propose_style(sequence_id, revision_id))
+    return success_response(await _call(service.list_styles()))
+
+
+@router.post('/sequences/{sequence_id}/repairs/{revision_id}/plan', response_model=ApiResponse[WorkspaceRead], operation_id='directing_prepare_repair_plan')
+async def prepare_repair_plan(project_id: str, sequence_id: str, revision_id: str, body: RepairPlanRequest, db: AsyncSession = Depends(get_db, scope='function')):
+    """从确认的返工单创建显式局部生产草稿，继续走正常确认、编译和执行。"""
+    service = FeedbackService(db, project_id)
+    await _call(service.prepare_repair_plan(sequence_id, revision_id, body))
+    return success_response(await _call(service.workspace(sequence_id)))

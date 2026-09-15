@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { StudioDirectingService } from '../../../services/generated'
 import type { ChapterSequences, DirectingTaskRead, SequenceRead } from '../../../services/generated'
 import { directingError, excerptMatches, excerptSpan } from './common'
+import { ChapterAssemblyPanel } from './ChapterAssemblyPanel'
 import { DirectingTasks } from './DirectingTasks'
 
 /** 章节先确认叙事场次，允许 AI 分析失败后继续人工划场。 */
@@ -69,6 +70,7 @@ export default function ChapterSequencesPage() {
       <Typography.Paragraph ellipsis={{ rows: 3 }}>{scene.source_text}</Typography.Paragraph>
       <Button onClick={() => { setEditing(scene); setSelectedStart(scene.span?.start); setTitle(scene.title); setPosition(scene.position); setExcerpt(scene.source_text); setOpen(true) }}>核对原文、名称与顺序</Button>
     </Card>) : <Empty description="先确认一场戏，再进入设计与试拍" />}
+    <ChapterAssemblyPanel projectId={projectId} chapterId={chapterId} />
     <Modal title="确认场次原文" open={open} onCancel={() => setOpen(false)} onOk={create} confirmLoading={busy} okText={editing ? "保存并进入场次" : "创建并进入场次"}>
       <Space direction="vertical" style={{ width: '100%' }}><Input aria-label="场次标题" placeholder="场次标题" value={title} onChange={event => setTitle(event.target.value)} />
         {editing && <Space>场次顺序<InputNumber min={1} value={position + 1} onChange={value => setPosition((value || 1) - 1)} /></Space>}

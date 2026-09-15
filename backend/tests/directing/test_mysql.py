@@ -39,7 +39,7 @@ async def test_mysql_schema_roundtrip_and_concurrent_writes():
                     "include_object": lambda obj, name, type_, reflected, compare_to: (name if type_ == "table" else obj.table.name).startswith("directing_"),
                 })
                 assert not compare_metadata(context, Base.metadata)
-                assert sync.scalar(text("SELECT version_num FROM alembic_version")) == "68a2c5e0fd36"
+                assert sync.scalar(text("SELECT version_num FROM alembic_version")) == "79b3d6f1ae47"
             await connection.run_sync(verify)
         async with sessions.begin() as db:
             db.add(Project(id="p1", name="测试", style="真人都市"))
@@ -131,5 +131,49 @@ async def test_mysql_schema_roundtrip_and_concurrent_writes():
 
         accepted = await asyncio.gather(accept_batch(), accept_batch())
         assert accepted[0] == accepted[1] and len(set(accepted[0])) == 2 and all(accepted[0])
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_mysql_feedback_confirmation_race():
+    """真实多连接下采用替换与验收竞争，不允许旧采用结论冒充当前结论。"""
+    from app.models.directing import Sequence
+    from app.services.directing.feedback import FeedbackService
+    from tests.directing.test_feedback import review
+    value = os.environ.get('JELLYFISH_DIRECTING_MYSQL_URL')
+    if not value:
+        pytest.skip('JELLYFISH_DIRECTING_MYSQL_URL required')
+    url = make_url(value)
+    if url.get_backend_name() != 'mysql' or not (url.database or '').startswith('jellyfish_check_directing'):
+        raise ValueError('Only an isolated directing validation database is allowed')
+    engine = create_async_engine(value, isolation_level='READ COMMITTED')
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with sessions.begin() as db:
+            sid = await db.scalar(select(Sequence.id).where(Sequence.chapter_id == 'ch1').order_by(Sequence.position))
+            service = FeedbackService(db, 'p1')
+            cut = await service.active_cut(sid)
+            older = await service.save_revision(sid, kind='cut_review', payload=review(cut.id))
+            newer = await service.save_revision(sid, kind='cut_review', payload=review(cut.id))
+            await service.confirm_revision(newer.id, expected_version=1, actor_id='author')
+            await service.confirm_revision(older.id, expected_version=1, actor_id='author')
+            assert (await service.feedback(sid)).current_review_id == older.id
+            replacement = await service.save_revision(sid, kind='cut', payload=cut.payload, parent_id=cut.id)
+            racing = await service.save_revision(sid, kind='cut_review', payload=review(cut.id))
+        async def confirm(identity):
+            """两项均从同一版本开始，各自独立事务并争用相同场次锁。"""
+            async with sessions.begin() as db:
+                try:
+                    await FeedbackService(db, 'p1').confirm_revision(identity, expected_version=1, actor_id='author')
+                    return 'confirmed'
+                except RevisionConflict:
+                    return 'conflict'
+        results = await asyncio.gather(confirm(racing.id), confirm(replacement.id))
+        assert results[1] == 'confirmed'
+        async with sessions() as db:
+            state = await FeedbackService(db, 'p1').feedback(sid)
+            assert state.active_cut_revision_id == replacement.id and state.current_review_id is None
     finally:
         await engine.dispose()

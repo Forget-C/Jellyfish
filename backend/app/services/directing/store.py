@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.directing import SceneDesign, ProductionPlan, Prompt, ReviewPacket, SequenceCut, TakeAnnotation
 from app.core.contracts.directing.common import Identity, Source, references
+from app.core.contracts.directing.feedback import CutReview, RepairItem, KnowledgeCandidate
 from app.core.contracts.directing.revisions import RevisionSnapshot, TakeSnapshot
 from app.core.contracts.directing.style import ProjectStyleProfile, ProjectStyleRevision, StyleWrite
 from app.models.directing import ActiveCut, CutFrame, ProjectStyleRecord, Sequence, DirectingRevision, RevisionDependency, Take, CutTakeReference
@@ -21,7 +22,8 @@ from app.services.studio.files import require_available_file
 from app.services.studio.file_usages import upsert_file_usage
 
 CONTRACTS = {"design": SceneDesign, "plan": ProductionPlan, "prompt": Prompt,
-             "review": ReviewPacket, "cut": SequenceCut}
+             "review": ReviewPacket, "cut": SequenceCut, "cut_review": CutReview,
+             "repair": RepairItem, "knowledge": KnowledgeCandidate}
 ID_ADAPTER = TypeAdapter(Identity)
 
 
@@ -261,6 +263,11 @@ class DirectingStore:
         """由应用的人工作用域登记确认；模型工作单不能自行填写批准人。"""
         ID_ADAPTER.validate_python(actor_id)
         row = await self.revision(revision_id)
+        if row.kind in ('cut_review', 'repair'):
+            await self.db.scalar(select(Sequence).where(Sequence.id == row.sequence_id).with_for_update())
+            active = await self.active_cut(row.sequence_id)
+            if row.kind == 'cut_review' and (active is None or active.id != row.payload['cut_revision_id']):
+                raise RevisionConflict('当前采用版本已变化，请重新审片')
         if row.kind == "design" and row.source_key != self.source_key(await self.sequence(row.sequence_id)):
             raise RevisionConflict("场次原文范围已变化，请核对并重新保存设计")
         async with self.db.begin_nested():
@@ -375,6 +382,9 @@ class DirectingStore:
                     await self._range(take.file_id, item.media_range)
                     files.add(take.file_id)
                     takes.add(take.id)
+        elif isinstance(content, (CutReview, RepairItem, KnowledgeCandidate)):
+            from app.services.directing.feedback_rules import validate_feedback
+            dependencies, files, takes = await validate_feedback(self, sequence, content)
         # Every file source, including nested work-sheet evidence, protects the file.
         await self._sources(content.model_dump(mode="json"), sequence, files, dependencies)
         for file_id in sorted(files):
