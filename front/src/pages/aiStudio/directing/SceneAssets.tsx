@@ -1,3 +1,4 @@
+import { useWorkspacePreparation } from './useWorkspacePreparation'
 import { useEffect, useState } from 'react'
 import { Alert, Button, Card, Input, Modal, Select, Space, Typography } from 'antd'
 import { StudioDirectingService } from '../../../services/generated'
@@ -12,7 +13,8 @@ export function SceneAssets({ projectId, sequenceId, design, onChange }: {
 }) {
   const [assets, setAssets] = useState<AssetSummary[]>([])
   const [creating, setCreating] = useState(false)
-  const [input, setInput] = useState<AssetCreateRequest>({ kind: 'character', name: '', description: '' })
+  const preparation = useWorkspacePreparation('新资产准备', `${projectId}:${sequenceId}:asset`, { kind: 'character' as AssetCreateRequest['kind'], name: '', description: '' })
+  const input = preparation.value
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   useEffect(() => {
@@ -32,12 +34,14 @@ export function SceneAssets({ projectId, sequenceId, design, onChange }: {
     </Space>
     <Modal title="创建跨场复用资产" open={creating} confirmLoading={busy} onCancel={() => setCreating(false)} onOk={async () => {
       setBusy(true); setError('')
-      try { const response = await StudioDirectingService.directingCreateAsset({ projectId, sequenceId, requestBody: input }); setAssets(response.data || []); setCreating(false); setInput({ kind: 'character', name: '', description: '' }) }
+      try { const response = await StudioDirectingService.directingCreateAsset({ projectId, sequenceId, requestBody: input }); setAssets(response.data || []); setCreating(false); preparation.update({ kind: 'character', name: '', description: '' }) }
       catch (cause) { setError(directingError(cause)) } finally { setBusy(false) }
     }}>
-      <Space direction="vertical" className="w-full"><Select aria-label="新资产类型" value={input.kind} options={kinds} onChange={kind => setInput({ ...input, kind })} />
-        <Input aria-label="新资产名称" placeholder="资产名称" value={input.name} onChange={event => setInput({ ...input, name: event.target.value })} />
-        <Input.TextArea aria-label="资产稳定设定" placeholder="只填写跨场稳定设定，不填写本场动作或临时状态" value={input.description} onChange={event => setInput({ ...input, description: event.target.value })} /></Space>
+      {preparation.error && <Alert type="warning" message={preparation.error} />}
+      <Typography.Paragraph type="secondary">输入自动暂存在本浏览器会话，确认创建后才写入项目资产。</Typography.Paragraph>
+      <Space direction="vertical" className="w-full"><Select aria-label="新资产类型" value={input.kind} options={kinds} onChange={kind => preparation.update({ kind })} />
+        <Input aria-label="新资产名称" placeholder="资产名称" value={input.name} onChange={event => preparation.update({ name: event.target.value })} />
+        <Input.TextArea aria-label="资产稳定设定" placeholder="只填写跨场稳定设定，不填写本场动作或临时状态" value={input.description} onChange={event => preparation.update({ description: event.target.value })} /></Space>
     </Modal>
   </Card>
 }

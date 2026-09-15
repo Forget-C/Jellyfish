@@ -1,5 +1,5 @@
 import type React from 'react'
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { createBrowserRouter, createRoutesFromElements, RouterProvider, Navigate, Route, useLocation } from 'react-router-dom'
 import MainLayout from './layouts/MainLayout'
 import Settings from './pages/Settings'
 import NotFound from './pages/NotFound'
@@ -29,10 +29,7 @@ function LegacyLabRedirect({ mode }: { mode: 'text' | 'image' | 'video' }) {
   return <Navigate to={`/lab?${params.toString()}`} replace />
 }
 
-const App: React.FC = () => {
-  return (
-    <BrowserRouter>
-      <Routes>
+const router = createBrowserRouter(createRoutesFromElements(
         <Route path="/" element={<MainLayout />}>
           <Route index element={<Navigate to="/projects" replace />} />
           <Route path="projects" element={<ProjectLobby />} />
@@ -57,9 +54,8 @@ const App: React.FC = () => {
           <Route path="settings" element={<Settings />} />
           <Route path="*" element={<NotFound />} />
         </Route>
-      </Routes>
-    </BrowserRouter>
-  )
-}
+))
+
+const App: React.FC = () => <RouterProvider router={router} />
 
 export default App

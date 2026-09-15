@@ -38,7 +38,7 @@ export function LedgerPanel({ projectId, sequenceId }: { projectId: string; sequ
         { key: 'design', label: '查看原设计与六岗依据', children: design ? <><p>风格版本：{design.content.style_revision_id || '未指定'}</p><DesignEditor value={design.content} onChange={() => {}} disabled /></> : null }]} />
     </Space>
   }
-  return <Space direction="vertical" className="w-full" size="middle">
+  return <Space data-workspace-target="ledger" tabIndex={-1} direction="vertical" className="w-full" size="middle">
     {error && <Alert type="error" message={error} />}<Typography.Paragraph>本页直接组合原始业务数据。修改观察、采用或返工，请回对应页面；台账本身没有第二份可编辑真值。</Typography.Paragraph>
     <Space><Button onClick={reload}>刷新三本账</Button><Link to="?view=feedback">编辑验收与返工</Link><Link to="?view=cut">审片与粗剪</Link></Space>
     <Tabs items={[

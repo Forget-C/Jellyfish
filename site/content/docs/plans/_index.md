@@ -11,6 +11,7 @@ description: "记录当前正在推进的开发计划、改造方案与阶段性
 
 当前计划入口：
 
+- [场次工作台体验优化实施计划](/docs/plans/directing-workbench-experience-plan/)
 - [场次工作台实施任务与依赖顺序](/docs/plans/directing-workbench-implementation-tasks/)
 - [场次创作与试拍剪辑工作台方案](/docs/plans/directing-workbench-refactor-plan/)
 - [六部门专业输出契约](/docs/plans/six-department-output-contracts-plan/)

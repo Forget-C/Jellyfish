@@ -9,6 +9,8 @@ status: completed
 
 ## 1. 顺序与交付节点
 
+后续体验优化见[场次工作台体验优化实施计划](/docs/plans/directing-workbench-experience-plan/)：以产出为中心调整布局、状态与历史区分、下一步引导，使用独立的 UX1–UX5 阶段和验收标准；本计划已完成的 M0–M4 结论保持不变。
+
 按 P1–P6 执行，共 18 项任务。优先完成从新建项目到实际选片补拍的一场戏闭环；每项功能同时包含后端、API/generated client 和必要前端，避免先完成整套后端再统一补页面。
 
 ```text

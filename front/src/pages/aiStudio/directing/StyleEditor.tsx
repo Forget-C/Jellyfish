@@ -1,3 +1,4 @@
+import { useWorkspaceDraft } from './WorkspaceDrafts'
 import { useEffect, useState } from 'react'
 import { Alert, Button, Card, Input, Select, Space, Typography } from 'antd'
 import { StudioDirectingService } from '../../../services/generated'
@@ -24,7 +25,7 @@ export function StyleEditor({ projectId, sequenceId, value, onChange }: {
   }
   /** 保存完整快照，已确认版本自动派生而不是覆盖。 */
   const save = async () => {
-    if (!draft) return
+    if (!draft) return false
     setBusy(true); setError('')
     try {
       const response = await StudioDirectingService.directingSaveStyle({ projectId, requestBody: {
@@ -32,16 +33,18 @@ export function StyleEditor({ projectId, sequenceId, value, onChange }: {
       } })
       const nextRows = response.data || []
       const next = base && !base.confirmed_at ? nextRows.find(row => row.id === base.id) : nextRows[nextRows.length - 1]
-      setRows(nextRows); setBase(next); setDraft(next?.content)
-    } catch (cause) { setError(directingError(cause)) } finally { setBusy(false) }
+      if (!next) throw new Error('保存风格未返回有效版本')
+      setRows(nextRows); setBase(next); setDraft(next.content); return true
+    } catch (cause) { setError(directingError(cause)); return false } finally { setBusy(false) }
   }
+  const guard = useWorkspaceDraft({ name: '项目风格', dirty: !!draft && JSON.stringify(draft) !== JSON.stringify(base?.content), save, discard: () => setDraft(base?.content ? structuredClone(base.content) : undefined) })
   return <Card title="项目风格与适用规则">
     <Space direction="vertical" className="w-full">
       {error && <Alert type="error" message={error} />}
       <Select aria-label="本设计风格依据" allowClear placeholder="本设计不绑定项目风格" className="w-full" value={value} options={rows.filter(row => row.confirmed_at).map(row => ({ value: row.id, label: `${row.content.title} · v${row.version}` }))} onChange={id => onChange(id || null)} />
       <Typography.Text type="secondary">只启用已确认版本中状态为“启用”且范围匹配的规则。候选、弃用规则不会影响生成；修改依据后须保存新设计。</Typography.Text>
-      <Space wrap><Select aria-label="编辑风格版本" placeholder="选择版本查看或派生" className="min-w-64" value={base?.id} options={rows.map(row => ({ value: row.id, label: `${row.content.title} · ${row.confirmed_at ? '已确认' : '草稿'} v${row.version}` }))} onChange={id => { const row = rows.find(item => item.id === id); setBase(row); setDraft(row?.content) }} />
-        <Button onClick={() => { setBase(undefined); setDraft({ title: '项目风格', rules: [], sources: humanNote('人工整理').sources || [] }) }}>新建风格候选</Button></Space>
+      <Space wrap><Select aria-label="编辑风格版本" placeholder="选择版本查看或派生" className="min-w-64" value={base?.id} options={rows.map(row => ({ value: row.id, label: `${row.content.title} · ${row.confirmed_at ? '已确认' : '草稿'} v${row.version}` }))} onChange={id => guard(() => { const row = rows.find(item => item.id === id); setBase(row); setDraft(row?.content) })} />
+        <Button onClick={() => guard(() => { setBase(undefined); setDraft({ title: '项目风格', rules: [], sources: humanNote('人工整理').sources || [] }) })}>新建风格候选</Button></Space>
       {draft && <><Input aria-label="风格标题" value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })} />
         {draft.rules.map(rule => <Card key={rule.id} size="small" title={roles.find(role => role.value === rule.role)?.label} extra={<Button danger onClick={() => setDraft({ ...draft, rules: draft.rules.filter(row => row.id !== rule.id) })}>移除规则</Button>}>
           <Space direction="vertical" className="w-full">

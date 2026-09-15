@@ -35,7 +35,7 @@ export function BatchPanel({ projectId, workspace, onSubmitted }: { projectId: s
     setBusy(true); setError('')
     try { await operation() } catch (cause) { setError(directingError(cause)) } finally { setBusy(false) }
   }
-  return <Card title="批量预检与拍摄">
+  return <Card title="批量预检与拍摄" data-workspace-target="batch" tabIndex={-1}>
     <Space direction="vertical" className="w-full">
       {error && <Alert type="error" message={error} />}
       <Typography.Text type="secondary">选择固定提示词及对应审稿。预检不调用模型；确认受理后每项各产生一个请求，失败和取消互不替代，不会自动重试或改动粗剪。</Typography.Text>

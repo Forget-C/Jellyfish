@@ -10,12 +10,16 @@ type ResolvedTaskMeta = {
 }
 
 /** 将服务端已验证的轻量来源映射为页面入口，不再逐条请求业务详情。 */
-function sourceMeta(source: TaskSourceRead | null | undefined): ResolvedTaskMeta {
+function sourceMeta(source: TaskSourceRead | null | undefined, task: TaskUiItem): ResolvedTaskMeta {
   if (!source) return {}
   const { kind, id, project_id: projectId, chapter_id: chapterId } = source
   let navigateTo: string | null = null
   if (kind === 'chapter' && projectId) navigateTo = `/projects/${projectId}/chapters/${id}/sequences`
-  else if (kind === 'sequence' && projectId && chapterId) navigateTo = `/projects/${projectId}/chapters/${chapterId}/sequences/${id}`
+  else if (kind === 'sequence' && projectId && chapterId) {
+    const view = task.taskKind === 'directing_design' ? 'design' : task.taskKind === 'image_generation' ? 'visual' : 'shoot'
+    const query = new URLSearchParams({ view, task: task.taskId, focus: 'tasks' })
+    navigateTo = `/projects/${projectId}/chapters/${chapterId}/sequences/${id}?${query}`
+  }
   else if (kind === 'project') navigateTo = `/projects/${id}`
   else if (kind === 'character' && projectId) navigateTo = `/projects/${projectId}/roles/${id}/edit`
   else if (kind === 'experiment_session') navigateTo = `/lab?session=${encodeURIComponent(id)}`
@@ -202,7 +206,7 @@ export function useResolvedTaskCenterTasks(
     () =>
       tasks.map((task) => {
         if (task.sourceResolved) {
-          const meta = sourceMeta(task.source)
+          const meta = sourceMeta(task.source, task)
           return {
             ...task,
             sourceLabel: meta.sourceLabel ?? null,

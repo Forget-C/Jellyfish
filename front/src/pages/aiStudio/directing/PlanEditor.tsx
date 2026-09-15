@@ -3,12 +3,13 @@ import { Alert, Button, Card, Image, Input, InputNumber, Modal, Pagination, Sele
 import { LlmService, StudioFilesService } from '../../../services/generated'
 import type { WorkspaceRead, FileRead, GenerationUnit_Input, ModelRead, ProductionPlan_Input, SceneDesign_Input, ReferenceBinding_Input } from '../../../services/generated'
 import { buildFileDownloadUrl } from '../assets/utils'
+import { ReferencePreview } from './ReferencePreview'
 import { DependencyEditor } from './DependencyEditor'
 import { directingError } from './common'
 
 /** 拍摄单元和本轮参考的显式编辑，关联资产不会自动全量提交。 */
-export function PlanEditor({ projectId, workspace, design, value, onChange, disabled = false }: {
-  projectId: string; workspace: WorkspaceRead; design: SceneDesign_Input; value: ProductionPlan_Input; onChange: (plan: ProductionPlan_Input) => void; disabled?: boolean
+export function PlanEditor({ projectId, workspace, design, value, onChange, disabled = false, issue, selectedUnitId, onSelectUnit, planId }: {
+  planId?: string; selectedUnitId?: string; onSelectUnit?: (id: string) => void; projectId: string; workspace: WorkspaceRead; design: SceneDesign_Input; value: ProductionPlan_Input; onChange: (plan: ProductionPlan_Input) => void; disabled?: boolean; issue?: { unitId?: string; message: string }
 }) {
   const [models, setModels] = useState<ModelRead[]>([])
   const [defaultModel, setDefaultModel] = useState('')
@@ -46,11 +47,20 @@ export function PlanEditor({ projectId, workspace, design, value, onChange, disa
     if (!unit || unit.references.some(ref => ref.file_id === fileId)) return
     patch(unit.id, { references: [...unit.references, { id: 'ref-' + crypto.randomUUID().slice(0, 8), file_id: fileId, media_kind: 'image', purpose: 'composition', participant_ids: [], ordinal: unit.references.length, input_role: 'first_frame', source: { kind: 'human', reference: 'local-user', version: 'reference-1' } }] })
   }
+  const selected = value.units.find(unit => unit.id === selectedUnitId) || value.units[0]
   return <Space direction="vertical" size="middle" style={{ width: '100%' }}>
     {error && <Alert type="error" message={error} closable onClose={() => setError('')} />}
-    {value.units.map((unit, index) => <Card key={unit.id} title={`试拍单元 ${index + 1}`} extra={!disabled && <Button danger onClick={() => onChange({ ...value, units: value.units.filter(item => item.id !== unit.id) })}>移除单元</Button>}>
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+    <Card size="small" title="本场拍摄内容" className="xl:col-start-2 xl:row-start-1 self-start">
+      <Space direction="vertical" style={{ width: '100%' }}>{value.units.map((unit, index) => <Button block style={{ height: 'auto', whiteSpace: 'normal', textAlign: 'left', padding: 12 }} key={unit.id} aria-pressed={selected?.id === unit.id} onClick={() => onSelectUnit?.(unit.id)}>
+        {unit.coverage.map(item => item.action_scope).join('；') || `单元 ${index + 1} · 待填写动作`} · {workspace.takes.filter(take => take.plan_revision_id === planId && take.unit_id === unit.id).length ? '已有视频' : '准备输入'}
+      </Button>)}</Space>
+      <Typography.Paragraph type="secondary">选择一项，准备本次动作范围、模型和参考；同名动作按计划版本分开。</Typography.Paragraph>
+    </Card>
+    {value.units.filter(unit => unit.id === selected?.id).map(unit => <Card className="xl:col-start-1 xl:row-start-1 min-w-0" key={unit.id} title={`本次要拍：${unit.coverage.map(item => item.action_scope).join('；') || '待填写动作范围'}`} data-workspace-target={`unit:${unit.id}`} tabIndex={-1} extra={!disabled && <Button danger onClick={() => onChange({ ...value, units: value.units.filter(item => item.id !== unit.id) })}>移除单元</Button>}>
+      {issue?.unitId === unit.id && <Alert type="error" message={issue.message} />}
       <Space direction="vertical" style={{ width: '100%' }}>
-        <Typography.Text>本次覆盖镜头</Typography.Text>
+        <details><summary>单元身份</summary>{unit.id} · 计划：{planId || '未保存'}</details><Typography.Text>本次覆盖镜头</Typography.Text>
         <Select mode="multiple" disabled={disabled} style={{ width: '100%' }} value={unit.coverage.map(item => item.shot_id)} options={design.direction.shots.map((shot, i) => ({ value: shot.id, label: `镜头 ${i + 1} · ${shot.visible_result.text || '待确定内容'}` }))} onChange={ids => patch(unit.id, { coverage: coverage(ids) })} />
         {unit.coverage.map(item => <div key={item.id} style={{ width: '100%' }}><Typography.Text type="secondary">动作范围 · {item.shot_id}</Typography.Text><Input.TextArea disabled={disabled} value={item.action_scope} onChange={event => patch(unit.id, { coverage: unit.coverage.map(row => row.id === item.id ? { ...row, action_scope: event.target.value } : row) })} /></div>)}
         {unit.coverage.length > 1 && <Alert type="warning" message="计划包含多个镜头，当前多镜执行能力未验证。保存并确认后，可在重组面板明确拆分。" />}
@@ -64,7 +74,7 @@ export function PlanEditor({ projectId, workspace, design, value, onChange, disa
         <Typography.Text strong>本次参考素材</Typography.Text>
         {!unit.references.length && <Typography.Text type="secondary">尚未选入参考。是否可以纯文本试拍由目标模型决定。</Typography.Text>}
         {unit.references.map((ref, refIndex) => <Card key={ref.id} size="small" style={{ width: '100%' }}>
-          <Space wrap><Image width={72} height={72} style={{ objectFit: 'cover' }} src={buildFileDownloadUrl(ref.file_id)} />
+          <Space wrap><ReferencePreview reference={ref} />
             <span>参考 {refIndex + 1}</span>
             <Select disabled={disabled} value={ref.purpose} style={{ width: 125 }} options={[{ value: 'identity', label: '人物身份' }, { value: 'space', label: '场所空间' }, { value: 'composition', label: '构图' }, { value: 'continuity', label: '连续性' }, { value: 'performance', label: '表演' }]} onChange={purpose => patch(unit.id, { references: unit.references.map(r => r.id === ref.id ? { ...r, purpose } : r) })} />
             <Select disabled={disabled} value={ref.input_role} style={{ width: 145 }} options={[{ value: 'first_frame', label: '首帧构图' }, { value: 'last_frame', label: '尾帧构图' }, { value: 'key_frame', label: '关键帧' }, { value: 'subject', label: '命名主体参考' }]} onChange={input_role => patch(unit.id, { references: unit.references.map(r => r.id === ref.id ? { ...r, input_role } : r) })} />
@@ -81,6 +91,7 @@ export function PlanEditor({ projectId, workspace, design, value, onChange, disa
         }}><Button>上传参考图</Button></Upload></Space>}
       </Space>
     </Card>)}
+    </div>
     {!disabled && <Button disabled={!design.direction.shots.length} onClick={() => onChange({ ...value, units: [...value.units, { id: 'unit-' + crypto.randomUUID().slice(0, 8), coverage: coverage([design.direction.shots[0].id]), references: [], model_id: defaultModel, duration_ms: 5000, ratio: '16:9', capability: { multi_shot: 'unknown' } }] })}>新增试拍 / 补拍单元</Button>}
     <Modal title="选择本次参考图" open={!!picker} onCancel={() => setPicker(undefined)} footer={<Button onClick={() => setPicker(undefined)}>完成选择</Button>}>
       <Space direction="vertical" style={{ width: '100%' }}><Input.Search placeholder="搜索素材" value={query} onChange={event => setQuery(event.target.value)} onSearch={() => void loadFiles()} />

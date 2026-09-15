@@ -3,6 +3,7 @@ import { Button, Card, Collapse, Input, InputNumber, Select, Space, Typography }
 import type { SceneDesign_Input, Note_Input } from '../../../services/generated'
 import { humanNote } from './common'
 import { emptyDesign } from './designTemplate'
+import { DesignSummary } from './DesignSummary'
 
 const labels: Record<string, string> = {
   participants: '人物与物件', events: '触发事件', criteria: '验收要求', direction: '总导演', performance: '表演指导', staging: '镜内执行', cinematography: '摄影指导', continuity: '场记与连续性', sound: '对白与声音', prompt: '提示词指导',
@@ -48,8 +49,8 @@ export function DesignEditor({ value, onChange, disabled = false }: { value: Sce
     if (current && typeof current === 'object' && !Array.isArray(current) && ('state' in current)) {
       const note = current as Note_Input
       return <Space direction="vertical" size={4} style={{ width: '100%' }}>
-        <Space><Typography.Text>{label}</Typography.Text><Select size="small" value={note.state || 'unset'} options={states} disabled={disabled} style={{ width: 125 }} onChange={state => change(path, ['none', 'not_applicable'].includes(state) ? { state, reason: note.reason || '' } : ['unset', 'unknown'].includes(state) ? { state } : { ...humanNote(note.text || ''), state })} /></Space>
-        <Input.TextArea disabled={disabled} value={note.text || note.reason || ''} autoSize={{ minRows: 1, maxRows: 5 }} placeholder="填写可观察、可拍摄的内容" onChange={event => change(path, ['none', 'not_applicable'].includes(note.state || '') ? { ...note, reason: event.target.value } : { ...humanNote(event.target.value), state: note.state === 'fact' ? 'fact' : 'proposal' })} />
+        <Space><Typography.Text>{label}</Typography.Text><Select aria-label={`${label}状态`} size="small" value={note.state || 'unset'} options={states} disabled={disabled} style={{ width: 125 }} onChange={state => change(path, ['none', 'not_applicable'].includes(state) ? { state, reason: note.reason || '' } : ['unset', 'unknown'].includes(state) ? { state } : { ...humanNote(note.text || ''), state })} /></Space>
+        <Input.TextArea aria-label={label} disabled={disabled} value={note.text || note.reason || ''} autoSize={{ minRows: 1, maxRows: 5 }} placeholder="填写可观察、可拍摄的内容" onChange={event => change(path, ['none', 'not_applicable'].includes(note.state || '') ? { ...note, reason: event.target.value } : { ...humanNote(event.target.value), state: note.state === 'fact' ? 'fact' : 'proposal' })} />
         {!!note.sources?.length && <Typography.Text type="secondary">来源：{note.sources.map(source => `${source.kind} · ${source.reference} · ${source.version}`).join('；')}</Typography.Text>}
       </Space>
     }
@@ -77,5 +78,5 @@ export function DesignEditor({ value, onChange, disabled = false }: { value: Sce
     if (typeof current === 'number' || ['delay_ms', 'estimated_duration_ms'].includes(key)) return <InputNumber aria-label={label} disabled={disabled} min={key === 'estimated_duration_ms' ? 1 : 0} precision={0} value={typeof current === 'number' ? current : null} onChange={next => change(path, next)} />
     return <Input disabled={disabled || key === 'id'} value={typeof current === 'string' ? current : ''} onChange={event => change(path, event.target.value || null)} />
   }
-  return <><Input.Search aria-label="定位工作单问题" placeholder="搜索部门、字段、镜头或内容" value={query} onChange={event => setQuery(event.target.value)} allowClear /><Typography.Paragraph type="secondary">设计来源：{value.sources.map(source => `${source.kind} · ${source.reference} · ${source.version}`).join('；')}</Typography.Paragraph><Collapse items={Object.entries(value).filter(([key, child]) => !['sources', 'style_revision_id'].includes(key) && matches(key, child)).map(([key, child]) => ({ key, label: labels[key] || key, children: render(child, [key], (blank as unknown as Record<string, unknown>)[key]) }))} defaultActiveKey={['direction']} /></>
+  return <><DesignSummary value={value} /><details style={{ marginTop: 16 }}><summary>编辑完整设计 · 六岗、声音与来源</summary><Input.Search aria-label="定位工作单问题" placeholder="搜索部门、字段、镜头或内容" value={query} onChange={event => setQuery(event.target.value)} allowClear /><Typography.Paragraph type="secondary">设计来源：{value.sources.map(source => `${source.kind} · ${source.reference} · ${source.version}`).join('；')}</Typography.Paragraph><Collapse items={Object.entries(value).filter(([key, child]) => !['sources', 'style_revision_id'].includes(key) && matches(key, child)).map(([key, child]) => ({ key, label: labels[key] || key, children: render(child, [key], (blank as unknown as Record<string, unknown>)[key]) }))} defaultActiveKey={[]} /></details></>
 }
