@@ -93,7 +93,7 @@ class WorkspaceService(DirectingStore):
             payload=body.document.content.model_dump(mode="json"), revision_id=body.revision_id,
             expected_version=body.expected_version, parent_id=body.parent_id)
 
-    async def extract_take_frame(self, sequence_id: str, take_id: str, at_ms: int):
+    async def extract_take_frame(self, sequence_id: str, take_id: str, at_ms: int, *, adopted_range=None, edge="start"):
         """提帧归档到当前项目，持久保留 Take 和毫秒位置，不改原视频。"""
         import asyncio
         from io import BytesIO
@@ -101,7 +101,7 @@ class WorkspaceService(DirectingStore):
         from starlette.datastructures import Headers
         from app.core import storage
         from app.core.contracts.directing.workspace import ExtractedFrame
-        from app.services.directing.media import extract_frame
+        from app.services.directing.media import extract_frame, extract_boundary_frame
         from app.services.studio.files import require_available_file, upload_file
 
         take = await self.take(take_id, sequence_id=sequence_id)
@@ -109,7 +109,12 @@ class WorkspaceService(DirectingStore):
         if at_ms < 0 or file.duration_ms is None or at_ms >= file.duration_ms:
             raise ValueError("提帧位置必须在真实视频时长内")
         content = await storage.download_file(key=file.storage_key)
-        frame = await asyncio.to_thread(extract_frame, content, at_ms)
+        if adopted_range is not None:
+            await self._range(file.id, adopted_range)
+            frame, at_ms = await asyncio.to_thread(extract_boundary_frame, content,
+                adopted_range.source_in_ms, adopted_range.source_out_ms, edge)
+        else:
+            frame = await asyncio.to_thread(extract_frame, content, at_ms)
         sequence = await self.sequence(sequence_id)
         result = await upload_file(self.db, file=UploadFile(file=BytesIO(frame), filename=f"frame-{at_ms}.png", size=len(frame),
             headers=Headers({"content-type": "image/png"})), project_id=self.project_id, chapter_id=sequence.chapter_id,

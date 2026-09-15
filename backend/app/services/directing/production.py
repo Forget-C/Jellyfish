@@ -35,7 +35,7 @@ class ProductionService(DirectingAIService):
     """冻结输入后执行；不复用旧镜头槽位，不静默拆镜或丢失参考。"""
 
     async def regroup_units(self, sequence_id: str, body: RegroupRequest):
-        """用户明确重组固定计划；保留其他单元并重接依赖，不改提示词、任务或剪辑。"""
+        """用户明确重组固定计划；保留其他单元和历史证据依赖，不改提示词、任务或剪辑。"""
         row = await self.revision(body.plan_revision_id, kind="plan", sequence_id=sequence_id, confirmed=True)
         plan = ProductionPlan.model_validate(row.payload)
         selected_ids = set(body.unit_ids)
@@ -51,13 +51,12 @@ class ProductionService(DirectingAIService):
             first = selected[0]
             # 不替用户选择冲突的模型、参考或控制参数，避免无声丢失拍摄意图。
             for unit in selected[1:]:
-                if any(getattr(unit, key) != getattr(first, key) for key in ("model_id", "ratio", "parameters", "references", "capability")):
-                    raise ValueError("组合前请统一所选单元的模型、画幅、参数、参考与能力依据")
+                if any(getattr(unit, key) != getattr(first, key) for key in ("model_id", "ratio", "parameters", "references", "capability", "dependencies")):
+                    raise ValueError("组合前请统一所选单元的模型、画幅、参数、参考、依赖与能力依据")
             merged = first.model_copy(deep=True)
             merged.id = uuid4().hex
             merged.duration_ms = sum(unit.duration_ms for unit in selected)
             merged.coverage = [coverage.model_copy(update={"id": uuid4().hex}) for unit in selected for coverage in unit.coverage]
-            merged.depends_on_unit_ids = sorted({identity for unit in selected for identity in unit.depends_on_unit_ids} - selected_ids)
             replacements = {unit.id: [merged] for unit in selected}
         else:
             if all(len(unit.coverage) == 1 for unit in selected):
@@ -78,9 +77,6 @@ class ProductionService(DirectingAIService):
                 if replacement.id not in seen:
                     seen.add(replacement.id)
                     units.append(replacement)
-        for unit in units:
-            unit.depends_on_unit_ids = sorted({part.id for identity in unit.depends_on_unit_ids
-                for part in replacements.get(identity, [self._unit(plan, identity)]) if part.id != unit.id})
         content = ProductionPlan.model_validate({"design_revision_id": plan.design_revision_id,
             "units": [unit.model_dump(mode="json") for unit in units]})
         return await self.save_revision(sequence_id, kind="plan", payload=content.model_dump(mode="json"), parent_id=row.id)
@@ -122,8 +118,9 @@ class ProductionService(DirectingAIService):
         unit = self._unit(plan, unit_id)
         if len(unit.coverage) > 1:
             raise ValueError("当前模型尚未验证精确多镜生成，请在计划中明确拆成单镜试拍单元后再编译")
-        if unit.depends_on_unit_ids:
-            raise ValueError("请先完成依赖单元并显式选入其素材；自动依赖执行将在后续阶段提供")
+        dependency_errors = await self.continuity_errors(sequence_id, unit)
+        if dependency_errors:
+            raise ValueError("；".join(dependency_errors))
         if unit.duration_ms % 1000:
             raise ValueError("当前模型时长按整秒提交，请调整单元预计时长")
         unsupported = set(unit.parameters) - {"seed"}

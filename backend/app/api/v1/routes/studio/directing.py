@@ -13,6 +13,8 @@ from app.dependencies import get_db
 from app.schemas.common import ApiResponse, success_response
 from app.services.directing.production import ProductionService
 from app.services.directing.batch import BatchService
+from app.services.directing.continuity import ContinuityService
+from app.core.contracts.directing.continuity import ContinuityRead, CutFrameRequest, CutFrameRead, SeamReviewRequest
 from app.core.contracts.directing.batch import BatchPrepare, BatchRead
 from app.services.studio.files import require_available_file
 from app.services.directing.store import RevisionConflict
@@ -228,3 +230,21 @@ async def regroup_units(project_id: str, sequence_id: str, body: RegroupRequest,
     service = ProductionService(db, project_id)
     await _call(service.regroup_units(sequence_id, body))
     return success_response(await _call(service.workspace(sequence_id)))
+
+
+@router.get("/sequences/{sequence_id}/continuity", response_model=ApiResponse[ContinuityRead], operation_id="directing_continuity")
+async def continuity(project_id: str, sequence_id: str, db: AsyncSession = Depends(get_db, scope="function")):
+    """返回当前真实连续性与局部失效状态。"""
+    return success_response(await _call(ContinuityService(db, project_id).continuity(sequence_id)))
+
+
+@router.post("/sequences/{sequence_id}/cut-frames", response_model=ApiResponse[CutFrameRead], operation_id="directing_cut_frame")
+async def cut_frame(project_id: str, sequence_id: str, body: CutFrameRequest, db: AsyncSession = Depends(get_db, scope="function")):
+    """从已确认采用区间提帧并固定来源。"""
+    return success_response(await _call(ContinuityService(db, project_id).extract_cut_frame(sequence_id, body)))
+
+
+@router.post("/sequences/{sequence_id}/seam-reviews", response_model=ApiResponse[ContinuityRead], operation_id="directing_review_seam")
+async def review_seam(project_id: str, sequence_id: str, body: SeamReviewRequest, db: AsyncSession = Depends(get_db, scope="function")):
+    """保存针对真实相邻片段的人工接缝结论。"""
+    return success_response(await _call(ContinuityService(db, project_id).review_seam(sequence_id, body)))

@@ -36,6 +36,7 @@ class BatchItemRead(BatchItemInput):
     duration_ms: int
     ratio: str
     task_id: Identity | None = None
+    progress: int | None = Field(default=None, ge=0, le=100)
     status: Literal['ready', 'blocked', 'queued', 'running', 'succeeded', 'failed', 'cancelled']
     error: str | None = None
 

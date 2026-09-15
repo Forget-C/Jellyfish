@@ -13,7 +13,7 @@ from app.core.contracts.directing import SceneDesign, ProductionPlan, Prompt, Re
 from app.core.contracts.directing.common import Identity, Source, references
 from app.core.contracts.directing.revisions import RevisionSnapshot, TakeSnapshot
 from app.core.contracts.directing.style import ProjectStyleProfile, ProjectStyleRevision, StyleWrite
-from app.models.directing import ProjectStyleRecord, Sequence, DirectingRevision, RevisionDependency, Take, CutTakeReference
+from app.models.directing import ActiveCut, CutFrame, ProjectStyleRecord, Sequence, DirectingRevision, RevisionDependency, Take, CutTakeReference
 from app.models.studio import Project, Chapter, Character, FileUsage, ProjectSceneLink, ProjectPropLink
 from app.models.task import Task, TaskOutput
 from app.models.types import FileUsageKind
@@ -27,6 +27,10 @@ ID_ADAPTER = TypeAdapter(Identity)
 
 class RevisionConflict(ValueError):
     """当前版本已变化或被冻结，调用方应重新读取并展示冲突。"""
+
+
+class ContinuityNotReady(ValueError):
+    """实际采用证据失效；可安全向用户显示恢复操作。"""
 
 
 class DirectingStore:
@@ -260,6 +264,9 @@ class DirectingStore:
         if row.kind == "design" and row.source_key != self.source_key(await self.sequence(row.sequence_id)):
             raise RevisionConflict("场次原文范围已变化，请核对并重新保存设计")
         async with self.db.begin_nested():
+            # 确认采用与执行受理共用场次锁，草稿不会改变实际连续性依据。
+            if row.kind == "cut":
+                await self.db.scalar(select(Sequence).where(Sequence.id == row.sequence_id).with_for_update())
             await self._validate(await self.sequence(row.sequence_id), CONTRACTS[row.kind].model_validate(row.payload))
             result = await self.db.execute(update(DirectingRevision).where(
                 DirectingRevision.id == row.id, DirectingRevision.version == expected_version,
@@ -267,6 +274,13 @@ class DirectingStore:
             ).values(confirmed_by=actor_id, confirmed_at=datetime.now(UTC).replace(tzinfo=None), version=expected_version + 1))
             if result.rowcount != 1:
                 raise RevisionConflict("revision changed or already confirmed")
+            if row.kind == "cut":
+                active = await self.db.get(ActiveCut, row.sequence_id, populate_existing=True)
+                if active is None:
+                    self.db.add(ActiveCut(sequence_id=row.sequence_id, revision_id=row.id))
+                else:
+                    active.revision_id = row.id
+                await self.db.flush()
         return await self.revision(row.id)
 
     async def _validate(self, sequence, content):
@@ -299,6 +313,11 @@ class DirectingStore:
             design = await dependency(content.design_revision_id, "design")
             shots = {r.id: r for r in design.direction.shots}
             for unit in content.units:
+                for link in unit.dependencies:
+                    source = await dependency(link.plan_revision_id, "plan")
+                    self._unit(source, link.unit_id)
+                    if link.frame_id:
+                        await self.validate_frame_binding(sequence.id, unit, link)
                 for item in unit.coverage:
                     references([item.shot_id], shots, "shot")
                     references(item.beat_ids, shots[item.shot_id].beat_ids, "shot beat")
@@ -361,6 +380,77 @@ class DirectingStore:
         for file_id in sorted(files):
             await require_available_file(self.db, file_id=file_id)
         return dependencies, files, takes
+
+    async def active_cut(self, sequence_id: str):
+        """解析当前已确认采用；不以最新草稿或创建时间代替用户确认动作。"""
+        await self.sequence(sequence_id)
+        active = await self.db.get(ActiveCut, sequence_id, populate_existing=True)
+        return await self.revision(active.revision_id, kind="cut", sequence_id=sequence_id, confirmed=True) if active else None
+
+    @staticmethod
+    def frame_matches(frame, item):
+        """只有同一采用项、Take 和实际源区间才可复用旧边界证据。"""
+        return (item.kind == "media" and item.id == frame.item_id and item.take_id == frame.take_id
+                and item.media_range.source_in_ms == frame.source_in_ms
+                and item.media_range.source_out_ms == frame.source_out_ms)
+
+    async def cut_frame(self, sequence_id: str, frame_id: str):
+        """验证真实提帧归属与原采用依据，拒绝伪造或跨场证据。"""
+        await self.sequence(sequence_id)
+        frame = await self.db.get(CutFrame, frame_id)
+        if frame is None or frame.sequence_id != sequence_id:
+            raise ValueError("落幅证据不属于当前场次")
+        original = await self.revision(frame.cut_revision_id, kind="cut", sequence_id=sequence_id, confirmed=True)
+        cut = SequenceCut.model_validate(original.payload)
+        item = next((item for item in cut.items if self.frame_matches(frame, item)), None)
+        if item is None or not frame.source_in_ms <= frame.at_ms < frame.source_out_ms:
+            raise ValueError("提帧与实际采用区间不一致")
+        take = await self.take(frame.take_id, sequence_id=sequence_id)
+        await self._range(take.file_id, item.media_range)
+        await require_available_file(self.db, file_id=frame.file_id, expected_type="image")
+        return frame
+
+    async def validate_frame_binding(self, sequence_id, unit, link):
+        """实际前段落幅必须来自指定计划单元，并作为本次图片参考真实发送。"""
+        frame = await self.cut_frame(sequence_id, link.frame_id)
+        take = await self.take(frame.take_id, sequence_id=sequence_id)
+        if frame.edge != "end" or (take.plan_revision_id, take.unit_id) != (link.plan_revision_id, link.unit_id):
+            raise ValueError("前段落幅与依赖的计划单元不一致")
+        binding = next((binding for binding in unit.references if binding.id == link.reference_id), None)
+        if binding is None or binding.file_id != frame.file_id or binding.media_kind != "image" or binding.purpose != "continuity":
+            raise ValueError("落幅证据必须明确绑定为连续性图片参考")
+        return frame
+
+    async def continuity_errors(self, sequence_id: str, unit) -> list[str]:
+        """逐单元检查当前采用依据；失效只阻止相关单元，不修改任何冻结版本。"""
+        if not unit.dependencies:
+            return []
+        active = await self.active_cut(sequence_id)
+        items = SequenceCut.model_validate(active.payload).items if active else []
+        errors = []
+        for link in unit.dependencies:
+            label = f"{link.plan_revision_id}/{link.unit_id}"
+            if not link.frame_id:
+                errors.append(f"依赖 {label} 尚未选择实际落幅")
+                continue
+            try:
+                frame = await self.validate_frame_binding(sequence_id, unit, link)
+                if not any(self.frame_matches(frame, item) for item in items):
+                    errors.append(f"依赖 {label} 的采用片段或区间已变化，请重新提帧并派生计划")
+            except ValueError as cause:
+                errors.append(f"依赖 {label}：{cause}")
+        return errors
+
+    async def validate_task_continuity(self, task: Task):
+        """Worker 发出请求前重查固定计划的实际依赖；已发出的请求保留原输入。"""
+        if task.target_type != "directing_unit":
+            return
+        prompt = await self.revision(task.input_snapshot.get("prompt_revision_id"), kind="prompt", confirmed=True)
+        content = Prompt.model_validate(prompt.payload)
+        plan = ProductionPlan.model_validate((await self.revision(content.plan_revision_id, kind="plan", confirmed=True)).payload)
+        errors = await self.continuity_errors(prompt.sequence_id, self._unit(plan, content.unit_id))
+        if errors:
+            raise ContinuityNotReady("；".join(errors))
 
     @staticmethod
     def _unit(plan, unit_id):

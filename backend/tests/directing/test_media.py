@@ -110,3 +110,21 @@ def test_frame_failure_is_actionable(monkeypatch, failure, message):
     monkeypatch.setattr(subprocess, 'run', fail)
     with pytest.raises(ValueError, match=message):
         extract_frame(b'broken-video', 0)
+
+
+def test_adopted_end_frame_stays_inside_actual_interval(tmp_path):
+    """区间末端不在帧时间上时取最后一帧，视频结尾也不向区间外取帧。"""
+    import subprocess
+    from app.services.directing.media import extract_boundary_frame
+
+    path = tmp_path / 'boundary.mp4'
+    subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=320x180:rate=10',
+        '-t', '6', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-y', str(path)], check=True)
+    content = path.read_bytes()
+    first, first_ms = extract_boundary_frame(content, 101, 1099, 'start')
+    last, last_ms = extract_boundary_frame(content, 101, 1099, 'end')
+    ending, ending_ms = extract_boundary_frame(content, 101, 6000, 'end')
+    assert first.startswith(b'\x89PNG') and last.startswith(b'\x89PNG') and ending.startswith(b'\x89PNG')
+    assert (first_ms, last_ms, ending_ms) == (200, 1000, 5900)
+    with pytest.raises(ValueError, match='没有可提取'):
+        extract_boundary_frame(content, 101, 199, 'end')

@@ -39,7 +39,7 @@ async def test_mysql_schema_roundtrip_and_concurrent_writes():
                     "include_object": lambda obj, name, type_, reflected, compare_to: (name if type_ == "table" else obj.table.name).startswith("directing_"),
                 })
                 assert not compare_metadata(context, Base.metadata)
-                assert sync.scalar(text("SELECT version_num FROM alembic_version")) == "57f1b4d9ec25"
+                assert sync.scalar(text("SELECT version_num FROM alembic_version")) == "68a2c5e0fd36"
             await connection.run_sync(verify)
         async with sessions.begin() as db:
             db.add(Project(id="p1", name="测试", style="真人都市"))
@@ -81,5 +81,55 @@ async def test_mysql_schema_roundtrip_and_concurrent_writes():
             cut = await store.save_revision(sequence_id, kind="cut", payload={"items": [{"kind": "media", "id": "clip", "take_id": take_ids[0],
                 "media_range": {"source_in_ms": 2000, "source_out_ms": 5000}, "timeline_start_ms": 0}]})
             assert cut.payload["items"][0]["media_range"]["source_out_ms"] == 5000
+        async def confirm_cut():
+            """同一个采用草稿并发确认只有一个胜者，当前采用指针与确认原子写入。"""
+            async with sessions.begin() as db:
+                try:
+                    await DirectingStore(db, "p1").confirm_revision(cut.id, expected_version=1, actor_id="author")
+                    return "confirmed"
+                except RevisionConflict:
+                    return "conflict"
+
+        assert sorted(await asyncio.gather(confirm_cut(), confirm_cut())) == ["confirmed", "conflict"]
+        from copy import deepcopy
+        from app.core.contracts.directing.batch import BatchPrepare
+        from app.core.contracts.directing.common import ROLES
+        from app.models.llm import Model, Provider
+        from app.services.directing.batch import BatchService
+        from tests.directing.test_store import frozen
+        async with sessions.begin() as db:
+            service = BatchService(db, "p1")
+            assert (await service.active_cut(sequence_id)).id == cut.id
+            db.add(Provider(id="provider1", name="OpenAI", base_url="https://example.invalid/v1", api_key="test-only", status="active"))
+            await db.flush()
+            db.add(Model(id="model1", name="sora-test", category="video", provider_id="provider1", params={}))
+            await db.flush()
+            data = deepcopy((await service.revision(plan_id)).payload)
+            for unit in data["units"]:
+                unit["coverage"] = unit["coverage"][:1]
+                unit["model_id"] = "model1"
+                for reference in unit["references"]:
+                    reference["input_role"] = "first_frame"
+            production = await frozen(service, sequence_id, "plan", data)
+            items = []
+            for unit in data["units"]:
+                prompt = await service.compile_unit(sequence_id, production.id, unit["id"])
+                coverage = unit["coverage"][0]
+                review = await frozen(service, sequence_id, "review", {"mode": "formal", "roles": list(ROLES), "context": {},
+                    "occurrences": [{"id": "o1", "prompt_revision_id": prompt.id, "plan_revision_id": production.id,
+                        "unit_id": unit["id"], "coverage_item_id": coverage["id"], "shot_id": coverage["shot_id"], "local_number": 1}],
+                    "rows": [{"role": role, "occurrence_id": "o1", "verdict": "pass", "rationale": "离线审查", "findings": []} for role in ROLES]})
+                items.append({"prompt_revision_id": prompt.id, "review_revision_id": review.id})
+            batch = await service.prepare_batch(sequence_id, BatchPrepare(items=items))
+            assert [item.status for item in batch.items] == ["ready", "ready"]
+
+        async def accept_batch():
+            """重复并发确认同批，等待原事务并返回完全相同的任务身份。"""
+            async with sessions.begin() as db:
+                result = await BatchService(db, "p1").submit_batch(sequence_id, batch.id, expected_version=1)
+                return [item.task_id for item in result.items]
+
+        accepted = await asyncio.gather(accept_batch(), accept_batch())
+        assert accepted[0] == accepted[1] and len(set(accepted[0])) == 2 and all(accepted[0])
     finally:
         await engine.dispose()

@@ -93,8 +93,8 @@ async def test_batch_scope_versions_and_blocked_preflight(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_regroup_derives_plan_preserves_references_and_rewires_dependencies(tmp_path):
-    """拆分后的依赖指向新单元；组合保留范围，不覆盖旧计划或自动生成任务。"""
+async def test_regroup_derives_plan_preserves_references_and_versioned_dependencies(tmp_path):
+    """重组保留历史计划的实际依赖身份；组合保留范围，不覆盖旧计划或自动生成任务。"""
     from app.core.contracts.directing.workspace import RegroupRequest
     from tests.directing.samples import plan_sample
 
@@ -104,17 +104,47 @@ async def test_regroup_derives_plan_preserves_references_and_rewires_dependencie
             prompt = await service.revision(selection.items[0].prompt_revision_id)
             old = await service.revision(prompt.payload['plan_revision_id'])
             payload = plan_sample(old.payload['design_revision_id'])
-            payload['units'][1]['depends_on_unit_ids'] = ['u1']
+            payload['units'][1]['dependencies'] = [{'plan_revision_id': old.id, 'unit_id': 'u1'}]
             original = await frozen(service, sequence_id, 'plan', payload)
             original_payload = deepcopy(original.payload)
             split = await service.regroup_units(sequence_id, RegroupRequest(plan_revision_id=original.id, unit_ids=['u1'], operation='split'))
             units = split.payload['units']
             assert split.parent_id == original.id and split.confirmed_at is None
-            assert len(units) == 3 and units[2]['depends_on_unit_ids'] == sorted([units[0]['id'], units[1]['id']])
+            assert len(units) == 3 and units[2]['dependencies'] == original_payload['units'][1]['dependencies']
             assert (await service.revision(original.id)).payload == original_payload
             split = await service.confirm_revision(split.id, expected_version=split.version, actor_id='author')
             merged = await service.regroup_units(sequence_id, RegroupRequest(plan_revision_id=split.id, unit_ids=[units[0]['id'], units[1]['id']], operation='merge'))
             assert len(merged.payload['units']) == 2
             assert len(merged.payload['units'][0]['coverage']) == 2
-            assert merged.payload['units'][1]['depends_on_unit_ids'] == [merged.payload['units'][0]['id']]
+            assert merged.payload['units'][1]['dependencies'] == original_payload['units'][1]['dependencies']
             assert await db.scalar(select(func.count()).select_from(Task)) == 0
+
+
+@pytest.mark.asyncio
+async def test_batch_rolls_back_only_failed_item_after_task_creation(tmp_path, monkeypatch):
+    """某项已插入任务后发生异常，保存点只回滚该项，不留下幽灵任务或撤回其他项。"""
+    from app.models.directing import DirectingAction
+    from app.services.generation.submission.submitter import GenerationSubmitter
+
+    async with database(tmp_path) as sessions:
+        async with sessions.begin() as db:
+            service, sequence_id, selection = await pair(db)
+            batch = await service.prepare_batch(sequence_id, selection)
+            original = GenerationSubmitter.submit_async
+            calls = 0
+
+            async def fail_after_insert(submitter, session, command):
+                """第二次真实事务提交封装插入后失败，不调用任何供应商。"""
+                nonlocal calls
+                accepted = await original(submitter, session, command)
+                calls += 1
+                if calls == 2:
+                    raise RuntimeError('failed after inserting task')
+                return accepted
+
+            monkeypatch.setattr(GenerationSubmitter, 'submit_async', fail_after_insert)
+            accepted = await service.submit_batch(sequence_id, batch.id, expected_version=1)
+            assert accepted.items[0].task_id and accepted.items[1].task_id is None
+            assert accepted.items[1].status == 'blocked'
+            assert await db.scalar(select(func.count()).select_from(Task)) == 1
+            assert await db.scalar(select(func.count()).select_from(DirectingAction).where(DirectingAction.action == 'execute')) == 1

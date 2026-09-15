@@ -40,6 +40,9 @@ def test_foundation_migration_and_next_upgrade():
         batches = revision_module("57f1b4d9ec25_add_directing_batches.py")
         batches.op = migration.op
         batches.upgrade()
+        continuity = revision_module("68a2c5e0fd36_add_actual_continuity.py")
+        continuity.op = migration.op
+        continuity.upgrade()
         context = MigrationContext.configure(connection, opts={"compare_type": True})
         assert not compare_metadata(context, Base.metadata)
         connection.execute(sa.text("INSERT INTO projects (id,name,description,style,visual_style,seed,unify_style,progress,stats) VALUES ('p','p','','drama','live_action',0,1,0,'{}')"))
@@ -57,10 +60,50 @@ def test_foundation_migration_and_next_upgrade():
         assert connection.scalar(sa.text("SELECT title FROM directing_sequences WHERE id='seq'")) == "scene"
         migration.op.drop_column("directing_sequences", "migration_probe")
         assert not compare_metadata(context, Base.metadata)
+        continuity.downgrade()
         batches.downgrade()
         styles.downgrade()
         workspace.downgrade()
         migration.downgrade()
         assert "directing_sequences" not in sa.inspect(connection).get_table_names()
         assert connection.scalar(sa.text("SELECT title FROM chapters WHERE id='ch'")) == "ch"
+    engine.dispose()
+
+
+def test_continuity_migration_preserves_unresolved_dependencies_and_confirmed_cut():
+    """有数据升级保留旧依赖身份和确认时间，绝不把计划状态提升为真实证据。"""
+    from datetime import datetime
+    from copy import deepcopy
+    from app.models.directing import DirectingRevision
+    from tests.directing.samples import plan_sample
+
+    engine = sa.create_engine('sqlite://')
+    with engine.begin() as connection:
+        Base.metadata.create_all(connection)
+        migration = revision_module('68a2c5e0fd36_add_actual_continuity.py')
+        migration.op = Operations(MigrationContext.configure(connection))
+        migration.downgrade()
+        connection.execute(sa.text("INSERT INTO projects (id,name,description,style,visual_style,seed,unify_style,progress,stats) VALUES ('p','p','','drama','live_action',0,1,0,'{}')"))
+        connection.execute(sa.text("INSERT INTO chapters (id,project_id,`index`,title,summary,raw_text,condensed_text,storyboard_count,status) VALUES ('ch','p',1,'ch','','','',0,'draft')"))
+        connection.execute(sa.text("INSERT INTO directing_sequences (id,chapter_id,position,title,source,version) VALUES ('seq','ch',0,'scene','{}',1)"))
+        payload = plan_sample('design')
+        payload['units'][1]['depends_on_unit_ids'] = ['u1']
+        before = deepcopy(payload)
+        table = DirectingRevision.__table__
+        moment = datetime(2026, 1, 1)
+        connection.execute(table.insert().values(id='plan', sequence_id='seq', kind='plan', payload=payload,
+            version=2, confirmed_at=moment, confirmed_by='author'))
+        connection.execute(table.insert().values(id='cut', sequence_id='seq', kind='cut', payload={'items': []},
+            version=2, confirmed_at=moment, confirmed_by='author'))
+        migration.upgrade()
+        row = connection.execute(sa.select(table).where(table.c.id == 'plan')).mappings().one()
+        assert row['confirmed_at'] == moment and row['version'] == 2
+        assert row['payload']['units'][1]['dependencies'] == [{'plan_revision_id': 'plan', 'unit_id': 'u1', 'frame_id': None, 'reference_id': None}]
+        assert connection.scalar(sa.text('SELECT revision_id FROM directing_active_cuts')) == 'cut'
+        assert connection.scalar(sa.text('SELECT count(*) FROM directing_cut_frames')) == 0
+        migration.downgrade()
+        restored = connection.scalar(sa.select(table.c.payload).where(table.c.id == 'plan'))
+        # 缺省空列表可显式化，但原依赖和覆盖内容不得丢失。
+        assert restored['units'][1]['depends_on_unit_ids'] == before['units'][1]['depends_on_unit_ids']
+        assert restored['units'][0]['coverage'] == before['units'][0]['coverage']
     engine.dispose()

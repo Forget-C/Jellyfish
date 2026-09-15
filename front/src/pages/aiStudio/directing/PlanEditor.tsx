@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Alert, Button, Card, Image, Input, InputNumber, Modal, Pagination, Select, Space, Typography, Upload } from 'antd'
 import { LlmService, StudioFilesService } from '../../../services/generated'
-import type { FileRead, GenerationUnit_Input, ModelRead, ProductionPlan_Input, SceneDesign_Input, ReferenceBinding_Input } from '../../../services/generated'
+import type { WorkspaceRead, FileRead, GenerationUnit_Input, ModelRead, ProductionPlan_Input, SceneDesign_Input, ReferenceBinding_Input } from '../../../services/generated'
 import { buildFileDownloadUrl } from '../assets/utils'
+import { DependencyEditor } from './DependencyEditor'
 import { directingError } from './common'
 
 /** 拍摄单元和本轮参考的显式编辑，关联资产不会自动全量提交。 */
-export function PlanEditor({ projectId, design, value, onChange, disabled = false }: {
-  projectId: string; design: SceneDesign_Input; value: ProductionPlan_Input; onChange: (plan: ProductionPlan_Input) => void; disabled?: boolean
+export function PlanEditor({ projectId, workspace, design, value, onChange, disabled = false }: {
+  projectId: string; workspace: WorkspaceRead; design: SceneDesign_Input; value: ProductionPlan_Input; onChange: (plan: ProductionPlan_Input) => void; disabled?: boolean
 }) {
   const [models, setModels] = useState<ModelRead[]>([])
   const [defaultModel, setDefaultModel] = useState('')
@@ -59,6 +60,7 @@ export function PlanEditor({ projectId, design, value, onChange, disabled = fals
           <Select aria-label="画幅" disabled={disabled} value={unit.ratio} options={['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'].map(ratio => ({ value: ratio, label: ratio }))} onChange={ratio => patch(unit.id, { ratio })} />
           <span>种子（可留空）</span><InputNumber disabled={disabled} min={-1} precision={0} value={typeof unit.parameters?.seed === 'number' ? unit.parameters.seed : null} onChange={seed => patch(unit.id, { parameters: seed === null ? {} : { seed } })} />
         </Space>
+        <DependencyEditor projectId={projectId} workspace={workspace} unit={unit} onChange={update => patch(unit.id, update)} disabled={disabled} />
         <Typography.Text strong>本次参考素材</Typography.Text>
         {!unit.references.length && <Typography.Text type="secondary">尚未选入参考。是否可以纯文本试拍由目标模型决定。</Typography.Text>}
         {unit.references.map((ref, refIndex) => <Card key={ref.id} size="small" style={{ width: '100%' }}>

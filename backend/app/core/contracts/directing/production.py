@@ -56,6 +56,22 @@ class ModelCapability(Contract):
         return self
 
 
+class UnitDependency(Contract):
+    """前段落幅绑定历史计划身份及实际证据；未选证据只能保存待准备计划。"""
+
+    plan_revision_id: Identity
+    unit_id: Identity
+    frame_id: Identity | None = None
+    reference_id: Identity | None = None
+
+    @model_validator(mode="after")
+    def paired_evidence(self):
+        """证据与实际输入绑定必须同时选择，避免只登记依赖却未发送参考。"""
+        if (self.frame_id is None) != (self.reference_id is None):
+            raise ValueError("落幅证据和参考绑定必须同时选择")
+        return self
+
+
 class GenerationUnit(Contract):
     """一次明确模型请求的范围，可含多镜或部分动作。"""
 
@@ -67,7 +83,7 @@ class GenerationUnit(Contract):
     ratio: Text
     parameters: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
     capability: ModelCapability
-    depends_on_unit_ids: list[Identity] = Field(default_factory=list)
+    dependencies: list[UnitDependency] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def identities(self):
@@ -75,7 +91,7 @@ class GenerationUnit(Contract):
         unique([r.id for r in self.coverage], "coverage item")
         unique([r.id for r in self.references], "reference")
         unique([r.ordinal for r in self.references], "reference ordinal")
-        unique(self.depends_on_unit_ids, "unit dependency")
+        unique([(r.plan_revision_id, r.unit_id) for r in self.dependencies], "unit dependency")
         return self
 
 
@@ -87,18 +103,8 @@ class ProductionPlan(Contract):
 
     @model_validator(mode="after")
     def dependencies(self):
-        """依赖仅能指向本计划中其他单元，且必须无环。"""
-        ids = [r.id for r in self.units]
-        unique(ids, "unit")
-        graph = {r.id: r.depends_on_unit_ids for r in self.units}
-        remaining = set(ids)
-        for unit in self.units:
-            references(unit.depends_on_unit_ids, ids, "unit dependency")
-        while remaining:
-            ready = {key for key in remaining if not set(graph[key]) & remaining}
-            if not ready:
-                raise ValueError("cyclic unit dependencies")
-            remaining -= ready
+        """单元身份唯一；跨版本依赖由存储层核对已确认来源和真实证据。"""
+        unique([r.id for r in self.units], "unit")
         return self
 
 

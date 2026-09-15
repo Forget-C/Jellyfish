@@ -15,6 +15,7 @@ export type BatchItemRead = {
     duration_ms: number;
     ratio: string;
     task_id?: (string | null);
+    progress?: (number | null);
     status: 'ready' | 'blocked' | 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
     error?: (string | null);
 };

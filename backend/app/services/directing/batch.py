@@ -73,7 +73,7 @@ class BatchService(ProductionService):
             items.append(BatchItemRead(ordinal=item.ordinal, prompt_revision_id=item.prompt_revision_id,
                 review_revision_id=item.review_revision_id, plan_revision_id=prompt.plan_revision_id,
                 unit_id=unit.id, model_id=unit.model_id, duration_ms=unit.duration_ms, ratio=unit.ratio,
-                task_id=item.task_id, status=task.status if task else 'blocked' if item.error else 'ready',
+                task_id=item.task_id, progress=task.progress if task else None, status=task.status if task else 'blocked' if item.error else 'ready',
                 error=task.error_message if task else item.error))
         return BatchRead(id=batch.id, sequence_id=sequence_id, version=batch.version, status=batch.status,
             created_at=batch.created_at, items=items)

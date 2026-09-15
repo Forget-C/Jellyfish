@@ -25,6 +25,7 @@ from app.models.llm import Model, ModelCategoryKey, Provider
 from app.models.task import Task
 from app.services.file_cleanup import FileCleaner
 from app.services.directing.ai import DirectingOutputError
+from app.services.directing.store import DirectingStore, ContinuityNotReady
 from app.services.generation.media_execution import build_media_input, deliver_media, load_media_context, store_media_output
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.script_processing_worker import apply_script_result, generate_script_result
@@ -209,6 +210,9 @@ class TaskWorker:
                 inp = await build_media_input(task, snapshot, files)
                 if await self._load(task_id) is None:
                     return
+                if task.target_type == "directing_unit":
+                    async with self.sessions() as db:
+                        await DirectingStore(db, task.project_id).validate_task_continuity(task)
                 result = await MediaProvider(self.client).submit(cfg, inp)
                 if isinstance(result, str):
                     async with self.sessions() as db:
@@ -225,6 +229,8 @@ class TaskWorker:
             raise
         except TimeoutError:
             await self._fail(task_id, "execution_timeout", "任务执行超时")
+        except ContinuityNotReady as error:
+            await self._fail(task_id, "continuity_changed", str(error))
         except Exception as error:
             await self._fail(task_id, "submission_failed", self._error_message(error))
 

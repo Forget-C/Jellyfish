@@ -57,7 +57,7 @@ export function BatchPanel({ projectId, workspace, onSubmitted }: { projectId: s
         <Space direction="vertical" className="w-full">
           {batch.items.map(item => <Space key={item.ordinal} wrap>
             <Typography.Text>单元 {item.unit_id} · {models[item.model_id] || item.model_id} · {item.duration_ms / 1000} 秒 · {item.ratio}</Typography.Text>
-            <Tag>{states[item.status]}</Tag>{item.error && <Typography.Text type="danger">{item.error}</Typography.Text>}
+            <Tag>{states[item.status]}</Tag>{item.progress !== null && item.progress !== undefined && <Typography.Text>{item.progress}%</Typography.Text>}{item.error && <Typography.Text type="danger">{item.error}</Typography.Text>}
             {item.task_id && ['queued', 'running'].includes(item.status) && <Button onClick={() => run(async () => {
               await FilmService.cancelTaskApiV1FilmTasksTaskIdCancelPost({ taskId: item.task_id!, requestBody: { reason: '用户取消批次中的单项' } }); await load(); onSubmitted()
             })}>取消此项</Button>}

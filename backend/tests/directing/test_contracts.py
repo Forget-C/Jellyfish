@@ -73,9 +73,11 @@ def test_unit_relations_and_capability():
     with pytest.raises(ValidationError, match="duplicate coverage"):
         ProductionPlan.model_validate(bad)
     bad = plan_sample()
-    bad["units"][0]["depends_on_unit_ids"] = ["u2"]
-    bad["units"][1]["depends_on_unit_ids"] = ["u1"]
-    with pytest.raises(ValidationError, match="cyclic"):
+    bad["units"][0]["dependencies"] = [{"plan_revision_id": "old-plan", "unit_id": "u2", "frame_id": "frame"}]
+    with pytest.raises(ValidationError, match="同时选择"):
+        ProductionPlan.model_validate(bad)
+    bad["units"][0]["dependencies"] = [{"plan_revision_id": "old-plan", "unit_id": "u2"}] * 2
+    with pytest.raises(ValidationError, match="duplicate unit dependency"):
         ProductionPlan.model_validate(bad)
     bad = plan_sample()
     bad["units"][0]["capability"] = {"multi_shot": "supported"}

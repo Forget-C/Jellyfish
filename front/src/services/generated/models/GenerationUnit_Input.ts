@@ -5,6 +5,7 @@
 import type { CoverageItem } from './CoverageItem';
 import type { ModelCapability_Input } from './ModelCapability_Input';
 import type { ReferenceBinding_Input } from './ReferenceBinding_Input';
+import type { UnitDependency } from './UnitDependency';
 /**
  * 一次明确模型请求的范围，可含多镜或部分动作。
  */
@@ -17,6 +18,5 @@ export type GenerationUnit_Input = {
     ratio: string;
     parameters?: Record<string, (string | number | boolean | null)>;
     capability: ModelCapability_Input;
-    depends_on_unit_ids?: Array<string>;
+    dependencies?: Array<UnitDependency>;
 };
-

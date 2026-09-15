@@ -174,3 +174,47 @@ class DirectingBatchItem(Base):
         CheckConstraint('ordinal >= 0', name='ck_directing_batch_item_ordinal'),
         UniqueConstraint('batch_id', 'prompt_revision_id', name='uq_directing_batch_prompt'),
     )
+
+
+class ActiveCut(Base):
+    """最后明确确认的采用版本；新草稿不改变实际连续性依据。"""
+
+    __tablename__ = 'directing_active_cuts'
+    sequence_id: Mapped[str] = mapped_column(ForeignKey('directing_sequences.id', ondelete='RESTRICT'), primary_key=True)
+    revision_id: Mapped[str] = mapped_column(ForeignKey('directing_revisions.id', ondelete='RESTRICT'), nullable=False)
+
+
+class CutFrame(Base):
+    """从真实采用区间提取的不可变帧，保留原剪辑、Take 与文件引用。"""
+
+    __tablename__ = 'directing_cut_frames'
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    sequence_id: Mapped[str] = mapped_column(ForeignKey('directing_sequences.id', ondelete='RESTRICT'), nullable=False, index=True)
+    cut_revision_id: Mapped[str] = mapped_column(ForeignKey('directing_revisions.id', ondelete='RESTRICT'), nullable=False)
+    item_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    take_id: Mapped[str] = mapped_column(ForeignKey('directing_takes.id', ondelete='RESTRICT'), nullable=False)
+    file_id: Mapped[str] = mapped_column(ForeignKey('files.id', ondelete='RESTRICT'), nullable=False, unique=True)
+    source_in_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_out_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+    at_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+    edge: Mapped[str] = mapped_column(String(8), nullable=False)
+    __table_args__ = (
+        CheckConstraint("edge IN ('start','end')", name='ck_directing_frame_edge'),
+        CheckConstraint('source_in_ms >= 0 AND source_out_ms > source_in_ms AND at_ms >= source_in_ms AND at_ms < source_out_ms', name='ck_directing_frame_range'),
+    )
+
+
+class SeamReview(Base):
+    """人工真实接缝审查的不可变记录；只在相邻片段与区间未变时复用。"""
+
+    __tablename__ = 'directing_seam_reviews'
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    sequence_id: Mapped[str] = mapped_column(ForeignKey('directing_sequences.id', ondelete='RESTRICT'), nullable=False, index=True)
+    cut_revision_id: Mapped[str] = mapped_column(ForeignKey('directing_revisions.id', ondelete='RESTRICT'), nullable=False)
+    left_frame_id: Mapped[str] = mapped_column(ForeignKey('directing_cut_frames.id', ondelete='RESTRICT'), nullable=False)
+    right_frame_id: Mapped[str] = mapped_column(ForeignKey('directing_cut_frames.id', ondelete='RESTRICT'), nullable=False)
+    verdict: Mapped[str] = mapped_column(String(8), nullable=False)
+    rationale: Mapped[str] = mapped_column(Text, nullable=False)
+    actor_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime().with_variant(DATETIME(fsp=6), 'mysql'), default=revision_created_at, nullable=False)
+    __table_args__ = (CheckConstraint("verdict IN ('pass','revise')", name='ck_directing_seam_verdict'),)

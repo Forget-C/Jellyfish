@@ -5,6 +5,8 @@
 import type { AIRequest } from '../models/AIRequest';
 import type { ApiResponse_BatchRead_ } from '../models/ApiResponse_BatchRead_';
 import type { ApiResponse_ChapterSequences_ } from '../models/ApiResponse_ChapterSequences_';
+import type { ApiResponse_ContinuityRead_ } from '../models/ApiResponse_ContinuityRead_';
+import type { ApiResponse_CutFrameRead_ } from '../models/ApiResponse_CutFrameRead_';
 import type { ApiResponse_DirectingTaskRead_ } from '../models/ApiResponse_DirectingTaskRead_';
 import type { ApiResponse_ExtractedFrame_ } from '../models/ApiResponse_ExtractedFrame_';
 import type { ApiResponse_list_AssetSummary__ } from '../models/ApiResponse_list_AssetSummary__';
@@ -18,10 +20,12 @@ import type { ApplyDesignRequest } from '../models/ApplyDesignRequest';
 import type { AssetCreateRequest } from '../models/AssetCreateRequest';
 import type { BatchPrepare } from '../models/BatchPrepare';
 import type { CompileRequest } from '../models/CompileRequest';
+import type { CutFrameRequest } from '../models/CutFrameRequest';
 import type { ExtractFrameRequest } from '../models/ExtractFrameRequest';
 import type { RegroupRequest } from '../models/RegroupRequest';
 import type { ReviewDecisionRequest } from '../models/ReviewDecisionRequest';
 import type { RevisionWrite } from '../models/RevisionWrite';
+import type { SeamReviewRequest } from '../models/SeamReviewRequest';
 import type { SequenceCreate } from '../models/SequenceCreate';
 import type { SequenceUpdate } from '../models/SequenceUpdate';
 import type { ShootRequest } from '../models/ShootRequest';
@@ -821,6 +825,89 @@ export class StudioDirectingService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/regroup',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Continuity
+     * 返回当前真实连续性与局部失效状态。
+     * @returns ApiResponse_ContinuityRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingContinuity({
+        projectId,
+        sequenceId,
+    }: {
+        projectId: string,
+        sequenceId: string,
+    }): CancelablePromise<ApiResponse_ContinuityRead_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/continuity',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Cut Frame
+     * 从已确认采用区间提帧并固定来源。
+     * @returns ApiResponse_CutFrameRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingCutFrame({
+        projectId,
+        sequenceId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        requestBody: CutFrameRequest,
+    }): CancelablePromise<ApiResponse_CutFrameRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/cut-frames',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Review Seam
+     * 保存针对真实相邻片段的人工接缝结论。
+     * @returns ApiResponse_ContinuityRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingReviewSeam({
+        projectId,
+        sequenceId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        requestBody: SeamReviewRequest,
+    }): CancelablePromise<ApiResponse_ContinuityRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/seam-reviews',
             path: {
                 'project_id': projectId,
                 'sequence_id': sequenceId,
