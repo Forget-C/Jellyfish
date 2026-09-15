@@ -1,6 +1,6 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type React from 'react'
-import { Layout, Menu, theme, Dropdown, Space, Avatar, Select, Breadcrumb } from 'antd'
+import { Layout, Menu, theme, Dropdown, Space, Avatar, Select, Breadcrumb, Button, Drawer, Grid } from 'antd'
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -30,6 +30,9 @@ const MainLayout: React.FC = () => {
   const location = useLocation()
   const navigate = useNavigate()
   const { token } = theme.useToken()
+  const screens = Grid.useBreakpoint()
+  const compactWorkspace = /^\/projects\/[^/]+\/chapters\/[^/]+\/sequences\/[^/]+$/.test(location.pathname) && screens.md === false
+  const [navigationOpen, setNavigationOpen] = useState(false)
 
   const collapsed = useAppStore((state) => state.siderCollapsed)
   const toggleCollapsed = useAppStore((state) => state.toggleSider)
@@ -193,6 +196,7 @@ const MainLayout: React.FC = () => {
         collapsed={collapsed}
         width={220}
         style={{
+          display: compactWorkspace ? 'none' : undefined,
           flexShrink: 0,
           background: token.colorBgContainer,
           borderRight: `1px solid ${token.colorBorderSecondary}`,
@@ -222,6 +226,9 @@ const MainLayout: React.FC = () => {
           style={{ borderRight: 'none', paddingTop: 8 }}
         />
       </Sider>
+      <Drawer title={t('title')} placement="left" width={280} open={compactWorkspace && navigationOpen} onClose={() => setNavigationOpen(false)}>
+        <Menu mode="inline" selectedKeys={selectedKeys} items={menuItems} onClick={() => setNavigationOpen(false)} />
+      </Drawer>
 
       <Layout
         style={{
@@ -241,12 +248,14 @@ const MainLayout: React.FC = () => {
           }}
         >
           <Space size="middle" className="flex-1 min-w-0">
-            <span
-              className="cursor-pointer text-xl shrink-0"
-              onClick={toggleCollapsed}
+            <Button
+              type="text"
+              aria-label={compactWorkspace ? '打开主导航' : collapsed ? '展开主导航' : '收起主导航'}
+              className="text-xl shrink-0"
+              onClick={() => compactWorkspace ? setNavigationOpen(true) : toggleCollapsed()}
             >
               {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-            </span>
+            </Button>
             <Breadcrumb
               items={breadcrumbItems}
               className="hidden sm:block"

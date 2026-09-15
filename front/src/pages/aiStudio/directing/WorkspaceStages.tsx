@@ -7,7 +7,7 @@ export function WorkspaceStages({ view, onChange, items }: { view: string | null
   const current = workspaceView(view)
   const stage = workspaceViews[current].stage
   return <section aria-label="场次制作流程">
-    <Tabs activeKey={stage} onChange={onChange} onTabClick={key => { if (key === stage && current !== stage) onChange(key) }} items={workspaceStages.map(item => ({
+    <Tabs className="workspace-stage-tabs" activeKey={stage} onChange={onChange} onTabClick={key => { if (key === stage && current !== stage) onChange(key) }} items={workspaceStages.map(item => ({
       key: item.key,
       label: <Space direction="vertical" size={0}><span>{item.title}</span><Typography.Text type="secondary">{item.output}</Typography.Text></Space>,
     }))} />

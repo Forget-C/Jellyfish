@@ -1,0 +1,69 @@
+.sequence-workspace {
+  padding: 24px 24px 80px;
+  overflow-wrap: anywhere;
+}
+
+.sequence-workspace :is(button, summary, [tabindex], input, textarea):focus-visible {
+  outline: 2px solid #1677ff !important;
+  outline-offset: 3px;
+}
+
+/* Keep labels and actions readable inside narrow workspaces, including expanded editors. */
+@media (max-width: 767px) {
+  .sequence-workspace {
+    padding: 12px 12px 80px;
+  }
+
+  .sequence-workspace .ant-space-item {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .sequence-workspace .ant-space-horizontal {
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+
+  .sequence-workspace .ant-select {
+    min-width: 0 !important;
+    max-width: 100%;
+  }
+
+  .sequence-workspace .ant-btn {
+    max-width: 100%;
+    height: auto;
+    min-height: 32px;
+    white-space: normal;
+  }
+
+  .sequence-workspace .ant-card-head-wrapper {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .sequence-workspace .ant-card-head-title {
+    white-space: normal;
+    overflow: visible;
+  }
+
+  .sequence-workspace .ant-card-body {
+    padding: 12px;
+  }
+
+  .workspace-stage-tabs > .ant-tabs-nav .ant-tabs-nav-list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+    transform: none !important;
+  }
+
+  .workspace-stage-tabs > .ant-tabs-nav .ant-tabs-tab {
+    margin: 0;
+    padding: 12px 4px;
+    white-space: normal;
+  }
+
+  .workspace-stage-tabs > .ant-tabs-nav .ant-tabs-nav-operations {
+    display: none;
+  }
+}

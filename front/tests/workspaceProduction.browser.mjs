@@ -32,7 +32,7 @@ try {
     ['late', { task_id: 'late', kind: 'directing_design', status: 'succeeded', design: structuredClone(workspace.designs[0].content), error: null }],
     ['failed', { task_id: 'failed', kind: 'video_generation', status: 'failed', error: '供应商未生成视频，请核对后重试' }],
     ['cancelled', { task_id: 'cancelled', kind: 'video_generation', status: 'cancelled', error: null }],
-    ['running', { task_id: 'running', kind: 'image_generation', status: 'running', error: null }],
+    ['running', { task_id: 'running', kind: 'image_generation', status: 'queued', error: null }],
   ])
   // Distinct suggestion; the persisted baseline is not evidence that it has been applied.
   tasks.get('late').design.direction.information_change.text = '模型较早的建议'
@@ -144,6 +144,11 @@ try {
   assert.equal(workspace.designs.at(-1).confirmed_at, null)
   await summary.getByText('模型较早的建议', { exact: true }).waitFor()
   // Stored result and cancelled tasks move to full history; failures/running stay visible.
+  await page.locator('[data-task-id="running"]').getByText('等待执行', { exact: true }).waitFor()
+  const beforeQueueTransition = writes.length
+  tasks.get('running').status = 'running'
+  await page.locator('[data-task-id="running"]').getByText('执行中', { exact: true }).waitFor()
+  assert.equal(writes.length, beforeQueueTransition) // Polling a queued task must not resubmit it.
   assert.equal(await page.locator('[data-task-id="late"]').isVisible(), false)
   assert.equal(await page.locator('[data-task-id="cancelled"]').isVisible(), false)
   assert.equal(await page.locator('[data-task-id="failed"]').isVisible(), true)

@@ -1,0 +1,542 @@
+{
+  "baseline": "891a5fe + UX5 working changes",
+  "browser": "Playwright Chromium",
+  "viewport_height": 900,
+  "fixture": "isolated workspace and synthetic six-second video; no real generation",
+  "source_sha256": {
+    "front/src/layouts/MainLayout.tsx": "8a946c69a7bc407da8b72c4b1fa332874b0e957d17f7b7c13ba37d9dce42de32",
+    "front/src/pages/aiStudio/directing/SequenceWorkspacePage.tsx": "57d53f7a7635dddf766678925083a31cb04be34f4b3dab41bd78ee27578011a9",
+    "front/src/pages/aiStudio/directing/WorkspaceStages.tsx": "7e5f056579993d44025ca2019b47149184e25b0dd6629c8d5fba4adbdf914f9b",
+    "front/src/pages/aiStudio/directing/workspace.css": "f8bcae3822c0e2f1dd4b3902fd265ab4d83c17a8f9b9576a1d9abcd099da8327",
+    "front/tests/workspaceAcceptance.browser.mjs": "6973e888f9fe6434079364b0f59d0dab170844cf95d953b550d5c04f0433bf8f",
+    "front/tests/workspaceProduction.browser.mjs": "2ea48794db7bf53f5fecae0d658e18dd111d335b96c421d74775233e492c60fc"
+  },
+  "layout_checks": [
+    {
+      "width": 1440,
+      "state": "first",
+      "document": 1440,
+      "viewport": 1440,
+      "route": 1210,
+      "content": 1210,
+      "wide": []
+    },
+    {
+      "width": 1440,
+      "state": "design",
+      "document": 1440,
+      "viewport": 1440,
+      "route": 1210,
+      "content": 1210,
+      "wide": []
+    },
+    {
+      "width": 1440,
+      "state": "design-expanded",
+      "document": 1440,
+      "viewport": 1440,
+      "route": 1210,
+      "content": 1210,
+      "wide": []
+    },
+    {
+      "width": 1440,
+      "state": "shoot",
+      "document": 1440,
+      "viewport": 1440,
+      "route": 1210,
+      "content": 1210,
+      "wide": []
+    },
+    {
+      "width": 1440,
+      "state": "tasks",
+      "document": 1440,
+      "viewport": 1440,
+      "route": 1210,
+      "content": 1210,
+      "wide": []
+    },
+    {
+      "width": 1440,
+      "state": "cut",
+      "document": 1440,
+      "viewport": 1440,
+      "route": 1210,
+      "content": 1210,
+      "wide": []
+    },
+    {
+      "width": 1440,
+      "state": "cut-expanded",
+      "document": 1440,
+      "viewport": 1440,
+      "route": 1210,
+      "content": 1210,
+      "wide": []
+    },
+    {
+      "width": 1440,
+      "state": "confirmed-cut",
+      "document": 1440,
+      "viewport": 1440,
+      "route": 1210,
+      "content": 1210,
+      "wide": []
+    },
+    {
+      "width": 1440,
+      "state": "source-changed",
+      "document": 1440,
+      "viewport": 1440,
+      "route": 1210,
+      "content": 1210,
+      "wide": []
+    },
+    {
+      "width": 1440,
+      "state": "adoption-error",
+      "document": 1440,
+      "viewport": 1440,
+      "route": 1210,
+      "content": 1210,
+      "wide": []
+    },
+    {
+      "width": 1440,
+      "state": "media-error",
+      "document": 1440,
+      "viewport": 1440,
+      "route": 1210,
+      "content": 1210,
+      "wide": []
+    },
+    {
+      "width": 1440,
+      "state": "continuity",
+      "document": 1440,
+      "viewport": 1440,
+      "route": 1210,
+      "content": 1210,
+      "wide": []
+    },
+    {
+      "width": 1440,
+      "state": "feedback",
+      "document": 1440,
+      "viewport": 1440,
+      "route": 1210,
+      "content": 1210,
+      "wide": []
+    },
+    {
+      "width": 1440,
+      "state": "ledger",
+      "document": 1440,
+      "viewport": 1440,
+      "route": 1210,
+      "content": 1210,
+      "wide": []
+    },
+    {
+      "width": 1024,
+      "state": "first",
+      "document": 1024,
+      "viewport": 1024,
+      "route": 794,
+      "content": 794,
+      "wide": []
+    },
+    {
+      "width": 1024,
+      "state": "design",
+      "document": 1024,
+      "viewport": 1024,
+      "route": 794,
+      "content": 794,
+      "wide": []
+    },
+    {
+      "width": 1024,
+      "state": "design-expanded",
+      "document": 1024,
+      "viewport": 1024,
+      "route": 794,
+      "content": 794,
+      "wide": []
+    },
+    {
+      "width": 1024,
+      "state": "shoot",
+      "document": 1024,
+      "viewport": 1024,
+      "route": 794,
+      "content": 794,
+      "wide": []
+    },
+    {
+      "width": 1024,
+      "state": "tasks",
+      "document": 1024,
+      "viewport": 1024,
+      "route": 794,
+      "content": 794,
+      "wide": []
+    },
+    {
+      "width": 1024,
+      "state": "cut",
+      "document": 1024,
+      "viewport": 1024,
+      "route": 794,
+      "content": 794,
+      "wide": []
+    },
+    {
+      "width": 1024,
+      "state": "cut-expanded",
+      "document": 1024,
+      "viewport": 1024,
+      "route": 794,
+      "content": 794,
+      "wide": []
+    },
+    {
+      "width": 1024,
+      "state": "confirmed-cut",
+      "document": 1024,
+      "viewport": 1024,
+      "route": 794,
+      "content": 794,
+      "wide": []
+    },
+    {
+      "width": 1024,
+      "state": "source-changed",
+      "document": 1024,
+      "viewport": 1024,
+      "route": 794,
+      "content": 794,
+      "wide": []
+    },
+    {
+      "width": 1024,
+      "state": "adoption-error",
+      "document": 1024,
+      "viewport": 1024,
+      "route": 794,
+      "content": 794,
+      "wide": []
+    },
+    {
+      "width": 1024,
+      "state": "media-error",
+      "document": 1024,
+      "viewport": 1024,
+      "route": 794,
+      "content": 794,
+      "wide": []
+    },
+    {
+      "width": 1024,
+      "state": "continuity",
+      "document": 1024,
+      "viewport": 1024,
+      "route": 794,
+      "content": 794,
+      "wide": []
+    },
+    {
+      "width": 1024,
+      "state": "feedback",
+      "document": 1024,
+      "viewport": 1024,
+      "route": 794,
+      "content": 794,
+      "wide": []
+    },
+    {
+      "width": 1024,
+      "state": "ledger",
+      "document": 1024,
+      "viewport": 1024,
+      "route": 794,
+      "content": 794,
+      "wide": []
+    },
+    {
+      "width": 768,
+      "state": "first",
+      "document": 768,
+      "viewport": 768,
+      "route": 538,
+      "content": 538,
+      "wide": []
+    },
+    {
+      "width": 768,
+      "state": "design",
+      "document": 768,
+      "viewport": 768,
+      "route": 538,
+      "content": 538,
+      "wide": []
+    },
+    {
+      "width": 768,
+      "state": "design-expanded",
+      "document": 768,
+      "viewport": 768,
+      "route": 538,
+      "content": 538,
+      "wide": []
+    },
+    {
+      "width": 768,
+      "state": "shoot",
+      "document": 768,
+      "viewport": 768,
+      "route": 538,
+      "content": 538,
+      "wide": []
+    },
+    {
+      "width": 768,
+      "state": "tasks",
+      "document": 768,
+      "viewport": 768,
+      "route": 538,
+      "content": 538,
+      "wide": []
+    },
+    {
+      "width": 768,
+      "state": "cut",
+      "document": 768,
+      "viewport": 768,
+      "route": 538,
+      "content": 538,
+      "wide": []
+    },
+    {
+      "width": 768,
+      "state": "cut-expanded",
+      "document": 768,
+      "viewport": 768,
+      "route": 538,
+      "content": 538,
+      "wide": []
+    },
+    {
+      "width": 768,
+      "state": "confirmed-cut",
+      "document": 768,
+      "viewport": 768,
+      "route": 538,
+      "content": 538,
+      "wide": []
+    },
+    {
+      "width": 768,
+      "state": "source-changed",
+      "document": 768,
+      "viewport": 768,
+      "route": 538,
+      "content": 538,
+      "wide": []
+    },
+    {
+      "width": 768,
+      "state": "adoption-error",
+      "document": 768,
+      "viewport": 768,
+      "route": 538,
+      "content": 538,
+      "wide": []
+    },
+    {
+      "width": 768,
+      "state": "media-error",
+      "document": 768,
+      "viewport": 768,
+      "route": 538,
+      "content": 538,
+      "wide": []
+    },
+    {
+      "width": 768,
+      "state": "continuity",
+      "document": 768,
+      "viewport": 768,
+      "route": 538,
+      "content": 538,
+      "wide": []
+    },
+    {
+      "width": 768,
+      "state": "feedback",
+      "document": 768,
+      "viewport": 768,
+      "route": 538,
+      "content": 538,
+      "wide": []
+    },
+    {
+      "width": 768,
+      "state": "ledger",
+      "document": 768,
+      "viewport": 768,
+      "route": 538,
+      "content": 538,
+      "wide": []
+    },
+    {
+      "width": 375,
+      "state": "first",
+      "document": 375,
+      "viewport": 375,
+      "route": 365,
+      "content": 365,
+      "wide": []
+    },
+    {
+      "width": 375,
+      "state": "design",
+      "document": 375,
+      "viewport": 375,
+      "route": 365,
+      "content": 365,
+      "wide": []
+    },
+    {
+      "width": 375,
+      "state": "design-expanded",
+      "document": 375,
+      "viewport": 375,
+      "route": 365,
+      "content": 365,
+      "wide": []
+    },
+    {
+      "width": 375,
+      "state": "shoot",
+      "document": 375,
+      "viewport": 375,
+      "route": 365,
+      "content": 365,
+      "wide": []
+    },
+    {
+      "width": 375,
+      "state": "tasks",
+      "document": 375,
+      "viewport": 375,
+      "route": 365,
+      "content": 365,
+      "wide": []
+    },
+    {
+      "width": 375,
+      "state": "cut",
+      "document": 375,
+      "viewport": 375,
+      "route": 365,
+      "content": 365,
+      "wide": []
+    },
+    {
+      "width": 375,
+      "state": "cut-expanded",
+      "document": 375,
+      "viewport": 375,
+      "route": 365,
+      "content": 365,
+      "wide": []
+    },
+    {
+      "width": 375,
+      "state": "confirmed-cut",
+      "document": 375,
+      "viewport": 375,
+      "route": 365,
+      "content": 365,
+      "wide": [
+        {
+          "tag": "BUTTON",
+          "class": "ant-btn css-dev-only-do-not-override-2nkxv5 ant-btn-default",
+          "text": "片段 3 · 预计预演时间线 2 秒起"
+        },
+        {
+          "tag": "SPAN",
+          "class": "",
+          "text": "片段 3 · 预计预演"
+        },
+        {
+          "tag": "SPAN",
+          "class": "",
+          "text": "时间线 2 秒起"
+        }
+      ]
+    },
+    {
+      "width": 375,
+      "state": "source-changed",
+      "document": 375,
+      "viewport": 375,
+      "route": 365,
+      "content": 365,
+      "wide": []
+    },
+    {
+      "width": 375,
+      "state": "adoption-error",
+      "document": 375,
+      "viewport": 375,
+      "route": 365,
+      "content": 365,
+      "wide": []
+    },
+    {
+      "width": 375,
+      "state": "media-error",
+      "document": 375,
+      "viewport": 375,
+      "route": 365,
+      "content": 365,
+      "wide": []
+    },
+    {
+      "width": 375,
+      "state": "continuity",
+      "document": 375,
+      "viewport": 375,
+      "route": 365,
+      "content": 365,
+      "wide": []
+    },
+    {
+      "width": 375,
+      "state": "feedback",
+      "document": 375,
+      "viewport": 375,
+      "route": 365,
+      "content": 365,
+      "wide": []
+    },
+    {
+      "width": 375,
+      "state": "ledger",
+      "document": 375,
+      "viewport": 375,
+      "route": 365,
+      "content": 365,
+      "wide": []
+    }
+  ],
+  "regression_logs": {
+    "workspaceUsage": "{\n  \"result\": \"A01–A04 and UX2 navigation/context/edit guard checks passed\",\n  \"writes\": [\n    \"/api/v1/studio/projects/p1/directing/sequences/s1/takes/t3\",\n    \"/api/v1/studio/projects/p1/directing/sequences/s1/revisions\",\n    \"/api/v1/studio/projects/p1/directing/sequences/s1/revisions/c-draft/confirm\",\n    \"/api/v1/studio/projects/p1/directing/sequences/s1/revisions\",\n    \"/api/v1/studio/projects/p1/directing/sequences/s1/revisions\"\n  ],\n  \"screenshot\": \"/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-ux1-ivikZS/ux1-cut.png\"\n}\n",
+    "workspaceGuidance": "{\n  \"result\": \"UX2 first-entry, guidance, scoped blockers, task refresh, focus and business return checks passed\",\n  \"writes\": [\n    \"/api/v1/studio/projects/p1/directing/sequences/s1/design\",\n    \"/api/v1/studio/projects/p1/directing/sequences/s1/compile\",\n    \"/api/v1/studio/projects/p1/directing/sequences/s1/compile\",\n    \"/api/v1/studio/projects/p1/directing/sequences/s1/compile\",\n    \"/api/v1/studio/projects/p1/directing/sequences/s1/prompts/prompt1/review\",\n    \"/api/v1/studio/projects/p1/directing/sequences/s1/review/apply\"\n  ],\n  \"evidence\": \"/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-ux2-tb1TGd\"\n}\n",
+    "workspaceProduction": "{\n  \"result\": \"A09–A12 design roundtrip, scoped production, fixed media, task history and auxiliary operations passed\",\n  \"evidence\": \"/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-ux3-Pn4t5k\"\n}\n",
+    "workspaceCut": "{\n  \"result\": \"A13–A16 mixed timeline, playback, adoption and targeted repair checks passed\",\n  \"evidence\": \"/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-ux4-4Qr36m\"\n}\n"
+  }
+}

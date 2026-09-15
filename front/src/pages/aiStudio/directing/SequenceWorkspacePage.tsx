@@ -34,6 +34,7 @@ import { workspaceGuidance, reviewCanExecute } from './workspaceGuidance'
 import type { GuidanceInput, WorkspaceGuidance } from './workspaceGuidance'
 import { withWorkspaceView, workspaceView, workspaceViews } from './workspaceNavigation'
 import { readWorkspaceContext, restoreSelection, saveWorkspaceContext } from './workspaceContext'
+import './workspace.css'
 
 type DesignRevision = WorkspaceRead['designs'][number]
 type PlanRevision = WorkspaceRead['plans'][number]
@@ -222,7 +223,7 @@ function SequenceWorkspace() {
     description: recoverable ? '将恢复该任务真实关联的计划、单元与提示词，不替换为较新版本。' : '暂未取得这个任务的固定输入；不会自动选用其他计划。任务记录仍可查看。',
     label: recoverable ? '载入本任务的固定输入' : '查看定位任务', view: 'shoot', target: recoverable ? 'task-input' : 'tasks', taskId: requestedTask,
   } : workspaceGuidance({ workspace, stage, view, design: baseDesign, plan: basePlan, editingPlan: plan, unitId, promptId, reviewId, designStale, planStale, tasks, tasksState, pending: pendingTask, issue })
-  return <Space role="region" aria-label="场次工作区" direction="vertical" size="large" style={{ width: '100%', padding: 24 }}>
+  return <Space className="sequence-workspace" role="region" aria-label="场次工作区" direction="vertical" size="large" style={{ width: '100%' }}>
     <Space wrap><Button onClick={() => navigate(`/projects/${projectId}/chapters/${chapterId}/sequences`)}>返回场次列表</Button><Typography.Title level={3} style={{ margin: 0 }}>{workspace.sequence.title}</Typography.Title><Button onClick={reload}>刷新状态</Button><Button onClick={() => setHistoryOpen(true)}>版本与历史</Button></Space>
     {['design', 'shoot'].includes(view) && ['feedback', 'continuity', 'ledger'].includes(search.get('returnView') || '') && <Button onClick={() => { const next = cutDestination(search, { view: search.get('returnView')! }); next.delete('returnView'); setSearch(next) }}>返回问题与记录</Button>}
     <div><Typography.Title level={4} style={{ margin: 0 }}>把这场戏做成可预览的粗剪</Typography.Title><Typography.Paragraph type="secondary">先确定怎么拍，再生成视频素材，最后选出片段、组成这场戏。</Typography.Paragraph></div>
@@ -277,7 +278,7 @@ function SequenceWorkspace() {
               const response = await StudioDirectingService.directingConfirmRevision({ projectId, sequenceId, revisionId: basePlan!.id, requestBody: { expected_version: basePlan!.version } })
               if (response.data) { setWorkspace(response.data); selectPlan(response.data.plans.find(row => row.id === basePlan!.id)) }
             })}>确认本次单元与参考</Button></Space>
-          {basePlan?.confirmed_at && <Space data-workspace-target="unit-select" tabIndex={-1}><Select aria-label="选择编译单元" style={{ minWidth: 260 }} value={unitId} options={basePlan.content.units.map((unit, index) => ({ value: unit.id, label: `单元 ${index + 1} · ${unit.coverage.map(c => c.action_scope).join('；')}` }))} onChange={id => { setUnitId(id); setPromptId(undefined); setReviewId(undefined) }} />
+          {basePlan?.confirmed_at && <Space wrap data-workspace-target="unit-select" tabIndex={-1}><Select aria-label="选择编译单元" style={{ width: 260, maxWidth: '100%' }} value={unitId} options={basePlan.content.units.map((unit, index) => ({ value: unit.id, label: `单元 ${index + 1} · ${unit.coverage.map(c => c.action_scope).join('；')}` }))} onChange={id => { setUnitId(id); setPromptId(undefined); setReviewId(undefined) }} />
             <Button data-workspace-target="compile" disabled={!unitId || planDirty || planStale} loading={busy} onClick={() => run(async () => {
               const response = await StudioDirectingService.directingCompile({ projectId, sequenceId, requestBody: { plan_revision_id: basePlan.id, unit_id: unitId! } })
               if (response.data) { setWorkspace(response.data); setPromptId(uniqueNewRecord(workspace.prompts, productionRecords(response.data, basePlan.id, unitId).prompts)?.id); setReviewId(undefined) }

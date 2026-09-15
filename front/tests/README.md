@@ -13,17 +13,17 @@ node front/tests/workspaceUsage.browser.mjs
 node front/tests/workspaceGuidance.browser.mjs
 node front/tests/workspaceProduction.browser.mjs
 node front/tests/workspaceCut.browser.mjs
+node front/tests/workspaceAcceptance.browser.mjs
 ```
 
-四个脚本分别启动仅监听 `127.0.0.1:4178`、`127.0.0.1:4179` 、`127.0.0.1:4180` 和 `127.0.0.1:4181` 的临时 Vite，在真实页面中拦截业务接口，不连接生产后端，不调用真实生成模型。运行结束关闭浏览器和临时服务，并输出截图证据目录。
+五个脚本分别启动仅监听 `127.0.0.1:4178` 至 `127.0.0.1:4182` 的临时 Vite，在真实页面中拦截业务接口，不连接生产后端，不调用真实生成模型。运行结束关闭浏览器和临时服务，并输出截图证据目录。`workspaceAcceptance.browser.mjs` 同样需要 ffmpeg。
 
 | 脚本 | 覆盖 |
 | --- | --- |
 | `workspaceUsage.browser.mjs` | A01–A04 采用与区间；八种旧入口、辅助定位、版本刷新、保存/放弃/取消、保存失败重试、不同草稿编辑器、并发审片及采用替换时的接缝保留。媒体为 ffmpeg 生成的六秒色卡。 |
 | `workspaceGuidance.browser.mjs` | A05–A08 首次进入、下一步、来源变化、参考/能力拒绝定位、单元隔离、任务轮询与结果查看、焦点、章节/资产/任务往返、固定输入恢复和准备输入暂存及失败兜底。 |
-
-| `workspaceProduction.browser.mjs` | A09–A12：同源设计摘要、六岗与声音各字段编辑/保存/刷新、其他字段及 Note 状态/来源完整保留、保存和写入失败、迟到建议、成功/失败/取消任务与完整历史、跨计划同名单元隔离、多个指令显式选择、固定参数与媒体类型，以及验证图/批量/重组的实际请求。 |
-
+| `workspaceProduction.browser.mjs` | A09–A12 及 A17 排队转执行：同源设计摘要、六岗与声音各字段编辑/保存/刷新、其他字段及 Note 状态/来源完整保留、保存和写入失败、迟到建议、成功/失败/取消任务与完整历史、跨计划同名单元隔离、多个指令显式选择、固定参数与媒体类型，以及验证图/批量/重组的实际请求。 |
 | `workspaceCut.browser.mjs` | A13–A16：候选与采用并排、同一 Take 多区间、真实片段/预演混合播放、准确跳转提帧、重排/替换/保存刷新、采用替换后的局部依赖、画面/声音分开、问题及历史返工的精确往返、当前返工的局部计划和三类台账。六秒合成媒体支持 HTTP Range，以验证真实跳转位置。 |
+| `workspaceAcceptance.browser.mjs` | A18：1440/1024/768/375 宽度 × 14 个页面状态，检查文档和路由实际滚动宽度、主要动作无遮挡、键盘焦点/折叠/选择/导航、窄屏主导航打开关闭及桌面侧栏。每个组合保留首屏和内容截图及 `results.json`，使用合成视频，不发业务写入。 |
 
-测试替身证明前端交互与请求边界。采用指针、不可变版本和事务规则由 `backend/tests/directing/test_store.py`、`test_continuity.py`、`test_feedback.py` 的现有业务测试验证；没有后端变化时复用已有结果。迟到建议的服务端独立派生由 `backend/tests/directing/test_workspace.py` 验证。UX5 的完整设备覆盖、真实模型艺术质量和目标用户理解测试不由这些脚本代替。
+测试替身证明前端交互与请求边界。采用指针、不可变版本和事务规则由 `backend/tests/directing/test_store.py`、`test_continuity.py`、`test_feedback.py` 的现有业务测试验证；没有后端变化时复用已有结果。迟到建议的服务端独立派生由 `backend/tests/directing/test_workspace.py` 验证。A17 的场景矩阵由前四组综合覆盖；A18 为 Chromium CSS 视口检查，不宣称真实手机硬件或全部浏览器通过。这些脚本不证明真实模型艺术质量或目标用户理解。A19 五秒用户测试已由用户明确取消，不再作为本次 UX5 门槛；取消说明见 `site/content/docs/plans/directing-workbench-usability-check.md`。
