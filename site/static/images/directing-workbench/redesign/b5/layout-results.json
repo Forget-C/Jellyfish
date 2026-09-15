@@ -54,6 +54,10 @@
       }
     },
     {
+      "name": "navigation and inspector resize, collapse and restore",
+      "passed": true
+    },
+    {
       "name": "graph branches and shared storyboard selection",
       "passed": true
     },

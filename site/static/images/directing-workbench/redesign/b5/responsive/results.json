@@ -1,6 +1,7 @@
 [
   {
     "width": 1440,
+    "height": 900,
     "state": "first",
     "document": 1440,
     "viewport": 1440,
@@ -10,6 +11,7 @@
   },
   {
     "width": 1440,
+    "height": 900,
     "state": "design",
     "document": 1440,
     "viewport": 1440,
@@ -19,6 +21,7 @@
   },
   {
     "width": 1440,
+    "height": 900,
     "state": "design-expanded",
     "document": 1440,
     "viewport": 1440,
@@ -28,6 +31,7 @@
   },
   {
     "width": 1440,
+    "height": 900,
     "state": "shoot",
     "document": 1440,
     "viewport": 1440,
@@ -37,6 +41,7 @@
   },
   {
     "width": 1440,
+    "height": 900,
     "state": "tasks",
     "document": 1440,
     "viewport": 1440,
@@ -46,6 +51,7 @@
   },
   {
     "width": 1440,
+    "height": 900,
     "state": "cut",
     "document": 1440,
     "viewport": 1440,
@@ -55,6 +61,7 @@
   },
   {
     "width": 1440,
+    "height": 900,
     "state": "cut-expanded",
     "document": 1440,
     "viewport": 1440,
@@ -64,6 +71,7 @@
   },
   {
     "width": 1440,
+    "height": 900,
     "state": "confirmed-cut",
     "document": 1440,
     "viewport": 1440,
@@ -73,6 +81,7 @@
   },
   {
     "width": 1440,
+    "height": 900,
     "state": "source-changed",
     "document": 1440,
     "viewport": 1440,
@@ -82,6 +91,7 @@
   },
   {
     "width": 1440,
+    "height": 900,
     "state": "adoption-error",
     "document": 1440,
     "viewport": 1440,
@@ -91,6 +101,7 @@
   },
   {
     "width": 1440,
+    "height": 900,
     "state": "media-error",
     "document": 1440,
     "viewport": 1440,
@@ -100,6 +111,7 @@
   },
   {
     "width": 1440,
+    "height": 900,
     "state": "continuity",
     "document": 1440,
     "viewport": 1440,
@@ -109,6 +121,7 @@
   },
   {
     "width": 1440,
+    "height": 900,
     "state": "feedback",
     "document": 1440,
     "viewport": 1440,
@@ -118,6 +131,7 @@
   },
   {
     "width": 1440,
+    "height": 900,
     "state": "ledger",
     "document": 1440,
     "viewport": 1440,
@@ -127,6 +141,7 @@
   },
   {
     "width": 1024,
+    "height": 768,
     "state": "first",
     "document": 1024,
     "viewport": 1024,
@@ -136,6 +151,7 @@
   },
   {
     "width": 1024,
+    "height": 768,
     "state": "design",
     "document": 1024,
     "viewport": 1024,
@@ -145,6 +161,7 @@
   },
   {
     "width": 1024,
+    "height": 768,
     "state": "design-expanded",
     "document": 1024,
     "viewport": 1024,
@@ -154,6 +171,7 @@
   },
   {
     "width": 1024,
+    "height": 768,
     "state": "shoot",
     "document": 1024,
     "viewport": 1024,
@@ -163,6 +181,7 @@
   },
   {
     "width": 1024,
+    "height": 768,
     "state": "tasks",
     "document": 1024,
     "viewport": 1024,
@@ -172,6 +191,7 @@
   },
   {
     "width": 1024,
+    "height": 768,
     "state": "cut",
     "document": 1024,
     "viewport": 1024,
@@ -181,6 +201,7 @@
   },
   {
     "width": 1024,
+    "height": 768,
     "state": "cut-expanded",
     "document": 1024,
     "viewport": 1024,
@@ -190,6 +211,7 @@
   },
   {
     "width": 1024,
+    "height": 768,
     "state": "confirmed-cut",
     "document": 1024,
     "viewport": 1024,
@@ -199,6 +221,7 @@
   },
   {
     "width": 1024,
+    "height": 768,
     "state": "source-changed",
     "document": 1024,
     "viewport": 1024,
@@ -208,6 +231,7 @@
   },
   {
     "width": 1024,
+    "height": 768,
     "state": "adoption-error",
     "document": 1024,
     "viewport": 1024,
@@ -217,6 +241,7 @@
   },
   {
     "width": 1024,
+    "height": 768,
     "state": "media-error",
     "document": 1024,
     "viewport": 1024,
@@ -226,6 +251,7 @@
   },
   {
     "width": 1024,
+    "height": 768,
     "state": "continuity",
     "document": 1024,
     "viewport": 1024,
@@ -235,6 +261,7 @@
   },
   {
     "width": 1024,
+    "height": 768,
     "state": "feedback",
     "document": 1024,
     "viewport": 1024,
@@ -244,6 +271,7 @@
   },
   {
     "width": 1024,
+    "height": 768,
     "state": "ledger",
     "document": 1024,
     "viewport": 1024,
@@ -253,6 +281,7 @@
   },
   {
     "width": 768,
+    "height": 1024,
     "state": "first",
     "document": 768,
     "viewport": 768,
@@ -262,6 +291,7 @@
   },
   {
     "width": 768,
+    "height": 1024,
     "state": "design",
     "document": 768,
     "viewport": 768,
@@ -282,6 +312,7 @@
   },
   {
     "width": 768,
+    "height": 1024,
     "state": "design-expanded",
     "document": 768,
     "viewport": 768,
@@ -302,6 +333,7 @@
   },
   {
     "width": 768,
+    "height": 1024,
     "state": "shoot",
     "document": 768,
     "viewport": 768,
@@ -311,6 +343,7 @@
   },
   {
     "width": 768,
+    "height": 1024,
     "state": "tasks",
     "document": 768,
     "viewport": 768,
@@ -320,6 +353,7 @@
   },
   {
     "width": 768,
+    "height": 1024,
     "state": "cut",
     "document": 768,
     "viewport": 768,
@@ -329,6 +363,7 @@
   },
   {
     "width": 768,
+    "height": 1024,
     "state": "cut-expanded",
     "document": 768,
     "viewport": 768,
@@ -338,6 +373,7 @@
   },
   {
     "width": 768,
+    "height": 1024,
     "state": "confirmed-cut",
     "document": 768,
     "viewport": 768,
@@ -347,6 +383,7 @@
   },
   {
     "width": 768,
+    "height": 1024,
     "state": "source-changed",
     "document": 768,
     "viewport": 768,
@@ -367,6 +404,7 @@
   },
   {
     "width": 768,
+    "height": 1024,
     "state": "adoption-error",
     "document": 768,
     "viewport": 768,
@@ -376,6 +414,7 @@
   },
   {
     "width": 768,
+    "height": 1024,
     "state": "media-error",
     "document": 768,
     "viewport": 768,
@@ -385,6 +424,7 @@
   },
   {
     "width": 768,
+    "height": 1024,
     "state": "continuity",
     "document": 768,
     "viewport": 768,
@@ -394,6 +434,7 @@
   },
   {
     "width": 768,
+    "height": 1024,
     "state": "feedback",
     "document": 768,
     "viewport": 768,
@@ -403,6 +444,7 @@
   },
   {
     "width": 768,
+    "height": 1024,
     "state": "ledger",
     "document": 768,
     "viewport": 768,
@@ -412,6 +454,7 @@
   },
   {
     "width": 375,
+    "height": 812,
     "state": "first",
     "document": 375,
     "viewport": 375,
@@ -421,6 +464,7 @@
   },
   {
     "width": 375,
+    "height": 812,
     "state": "design",
     "document": 375,
     "viewport": 375,
@@ -430,6 +474,7 @@
   },
   {
     "width": 375,
+    "height": 812,
     "state": "design-expanded",
     "document": 375,
     "viewport": 375,
@@ -439,6 +484,7 @@
   },
   {
     "width": 375,
+    "height": 812,
     "state": "shoot",
     "document": 375,
     "viewport": 375,
@@ -448,6 +494,7 @@
   },
   {
     "width": 375,
+    "height": 812,
     "state": "tasks",
     "document": 375,
     "viewport": 375,
@@ -457,6 +504,7 @@
   },
   {
     "width": 375,
+    "height": 812,
     "state": "cut",
     "document": 375,
     "viewport": 375,
@@ -472,6 +520,7 @@
   },
   {
     "width": 375,
+    "height": 812,
     "state": "cut-expanded",
     "document": 375,
     "viewport": 375,
@@ -487,6 +536,7 @@
   },
   {
     "width": 375,
+    "height": 812,
     "state": "confirmed-cut",
     "document": 375,
     "viewport": 375,
@@ -522,6 +572,7 @@
   },
   {
     "width": 375,
+    "height": 812,
     "state": "source-changed",
     "document": 375,
     "viewport": 375,
@@ -531,6 +582,7 @@
   },
   {
     "width": 375,
+    "height": 812,
     "state": "adoption-error",
     "document": 375,
     "viewport": 375,
@@ -546,6 +598,7 @@
   },
   {
     "width": 375,
+    "height": 812,
     "state": "media-error",
     "document": 375,
     "viewport": 375,
@@ -561,6 +614,7 @@
   },
   {
     "width": 375,
+    "height": 812,
     "state": "continuity",
     "document": 375,
     "viewport": 375,
@@ -570,6 +624,7 @@
   },
   {
     "width": 375,
+    "height": 812,
     "state": "feedback",
     "document": 375,
     "viewport": 375,
@@ -579,6 +634,7 @@
   },
   {
     "width": 375,
+    "height": 812,
     "state": "ledger",
     "document": 375,
     "viewport": 375,

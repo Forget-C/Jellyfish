@@ -131,7 +131,13 @@ try {
   for (const view of ['shoot','cut']) {
     await page.goto(base.replace('view=design', `view=${view}`) + '&plan=p-old&unit=u1&prompt=preview-prompt&cut=c-active&take=t1')
     await page.locator(`.${view === 'shoot' ? 'production' : 'cut'}-workbench`).waitFor()
-    if (view === 'cut') await page.getByLabel('当前候选播放器', { exact: true }).evaluate(video => new Promise(resolve => { if (video.readyState >= 4) resolve(); else video.addEventListener('canplaythrough', resolve, { once: true }) }))
+    if (view === 'cut') {
+      await page.getByLabel('当前候选播放器', { exact: true }).evaluate(async video => {
+        await video.play()
+        await new Promise(resolve => video.addEventListener('timeupdate', resolve, { once: true }))
+        video.pause()
+      })
+    }
     await page.waitForTimeout(500)
     await page.screenshot({ path: `${output}/${view}-desktop.png` })
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))

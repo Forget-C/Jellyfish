@@ -21,7 +21,8 @@ try {
   browser = await chromium.launch({ headless: true })
   const results = []
   for (const width of [1440, 1024, 768, 375]) {
-    const page = await browser.newPage({ viewport: { width, height: 900 } })
+    const height = width === 1024 ? 768 : width === 768 ? 1024 : width === 375 ? 812 : 900
+    const page = await browser.newPage({ viewport: { width, height } })
     page.setDefaultTimeout(15000)
     await page.addInitScript(() => { window.__ENV = { BACKEND_URL: location.origin } })
     let workspace, failure = false, mediaFailure = false, taskRows = []
@@ -110,19 +111,20 @@ try {
         }).slice(0, 12).map(element => ({ tag: element.tagName, class: element.className, text: element.textContent.slice(0, 80) }))
         return { document: document.documentElement.scrollWidth, viewport: innerWidth, route: route.clientWidth, content: route.scrollWidth, wide }
       })
-      results.push({ width, state, ...dimensions })
+      results.push({ width, height, state, ...dimensions })
       await page.screenshot({ path: join(output, `${width}-${state}.png`), fullPage: true, animations: 'disabled' })
       while (await page.locator('.ant-drawer-open').count()) { await page.locator('.ant-drawer-open').last().getByRole('button', { name: 'Close', exact: true }).click(); await page.waitForTimeout(400) }
       await page.waitForFunction(() => [...document.querySelectorAll('.ant-drawer-mask')].every(element => !element.getClientRects().length || getComputedStyle(element).visibility === 'hidden'))
       const actions = [page.getByRole('tab', { name: '导演设计', exact: true }), page.getByRole('tab', { name: '单元试拍', exact: true }), page.getByRole('tab', { name: '剪辑验收', exact: true })]
       if (view === 'cut') actions.push(page.getByRole('button', { name: '保存剪辑草稿', exact: true }).or(page.getByRole('button', { name: '保存为新剪辑草稿', exact: true })), page.getByRole('button', { name: '确认并设为当前采用', exact: true }))
+      if (view === 'cut') actions.push(...await page.locator('.cut-save-actions button').all())
       if (state === 'shoot') actions.push(page.getByRole('button', { name: '准备生成指令', exact: true }))
       if (view === 'design' && state !== 'first') actions.push(page.getByRole('button', { name: '保存为新设计草稿', exact: true }), page.getByRole('button', { name: '确认本轮设计', exact: true }))
       for (const action of actions) {
         assert.equal(await action.evaluate(element => {
           const box = element.getBoundingClientRect(), viewport = document.querySelector('.app-route-viewport').getBoundingClientRect()
           const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)
-          return box.top >= viewport.top && box.bottom <= viewport.bottom && box.left >= viewport.left && box.right <= viewport.right + 1 && element.scrollWidth <= element.clientWidth + 1 && !!hit && element.contains(hit)
+          return box.top >= viewport.top && box.bottom <= Math.min(viewport.bottom, document.querySelector('.sequence-status').getBoundingClientRect().top) && box.left >= viewport.left && box.right <= viewport.right + 1 && element.scrollWidth <= element.clientWidth + 1 && !!hit && element.contains(hit)
         }), true, `${width} ${state}: clipped or obscured action ${await action.innerText()} ${JSON.stringify(await action.evaluate(element => { const box = element.getBoundingClientRect(); return { box: box.toJSON(), hit: document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)?.outerHTML, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth } }))}`)
       }
       if (state === 'first') {

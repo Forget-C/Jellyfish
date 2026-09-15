@@ -1,0 +1,118 @@
+{
+  "recordedAt": "2026-09-15T10:10:51.680366+00:00",
+  "baselineCommit": "9d0dec1",
+  "environment": {
+    "node": "v24.19.0",
+    "chromium": "151.0.7922.34",
+    "viewport": "1586x992 default; responsive dimensions in result files",
+    "data": "Isolated API fixtures and generated media. No production backend writes or paid model execution."
+  },
+  "runs": [
+    {
+      "command": "pnpm --dir front run typecheck",
+      "result": "passed",
+      "evidence": "typecheck-output.txt",
+      "reuse": false
+    },
+    {
+      "command": "node --test front/tests/designWorkspace.test.mjs front/tests/workspaceUsage.test.mjs front/tests/workspaceNavigation.test.mjs front/tests/workspaceContext.test.mjs front/tests/workspaceGuidance.test.mjs front/tests/workspaceTaskContext.test.mjs front/tests/workspacePreparation.test.mjs front/tests/workspaceProduction.test.mjs front/tests/workspaceCut.test.mjs front/tests/shellNavigation.test.mjs",
+      "result": "39 passed, 0 failed",
+      "evidence": "pure-output.txt",
+      "reuse": false
+    },
+    {
+      "command": "node front/tests/sequenceWorkbench.browser.mjs",
+      "result": "12 passed; errors=[]; writes=[]",
+      "evidence": "layout-results.json",
+      "reuse": false,
+      "output": "layout-output.txt"
+    },
+    {
+      "command": "node front/tests/workspaceProduction.browser.mjs",
+      "result": "A09–A12 design roundtrip, scoped production, fixed media, task history and auxiliary operations passed",
+      "evidence": "production-output.txt",
+      "reuse": false
+    },
+    {
+      "command": "node front/tests/workspaceDesignViews.browser.mjs",
+      "result": "explicit storyboard sources, 200-shot graph aggregation and read-only version comparison passed",
+      "evidence": "design-views/results.json",
+      "reuse": true,
+      "basis": "Prior successful tool completion in this task; tested behavior unchanged since that run. Current source fingerprints are archived. Original result artifact copied without editing."
+    },
+    {
+      "command": "node front/tests/workspaceJourney.browser.mjs",
+      "result": "five continuous UI stages passed",
+      "evidence": "journey/results.json",
+      "reuse": true,
+      "basis": "Prior successful tool completion in this task; tested behavior unchanged since that run. Current source fingerprints are archived. Original result artifact copied without editing."
+    },
+    {
+      "command": "node front/tests/workspaceWrite.browser.mjs",
+      "result": "10 delayed-write checks passed",
+      "evidence": "write/results.json",
+      "reuse": true,
+      "basis": "Prior successful tool completion in this task; tested behavior unchanged since that run. Current source fingerprints are archived. Original result artifact copied without editing."
+    },
+    {
+      "command": "node front/tests/workspaceAcceptance.browser.mjs",
+      "result": "56 first-screen cases passed at 1440x900, 1024x768, 768x1024, 375x812, including all bottom playback actions above status bar",
+      "evidence": "responsive/results.json",
+      "reuse": false,
+      "output": "responsive-output.txt"
+    },
+    {
+      "command": "node front/tests/shellAcceptance.browser.mjs",
+      "result": "57 page/viewport cases and 44 interactions; errors=[]; overflow=[]",
+      "evidence": "shell/results.json",
+      "reuse": true,
+      "basis": "Prior successful tool completion in this task; tested behavior unchanged since that run. Current source fingerprints are archived. Original result artifact copied without editing."
+    },
+    {
+      "command": "node front/tests/shellFocus.browser.mjs",
+      "result": "1586/375 keyboard focus with 2px outline passed",
+      "evidence": "focus/focus.json",
+      "reuse": true,
+      "basis": "Prior successful tool completion in this task; tested behavior unchanged since that run. Current source fingerprints are archived. Original result artifact copied without editing."
+    },
+    {
+      "command": "node front/tests/workspaceCut.browser.mjs",
+      "result": "A13–A16 mixed timeline, playback, adoption and targeted repair checks passed",
+      "evidence": "cut/",
+      "reuse": true,
+      "basis": "Prior successful tool completion in this task; tested behavior unchanged since that run. Current source fingerprints are archived. Script emits pass to terminal only; directory contains screenshots, not a fabricated raw result log."
+    },
+    {
+      "command": "node front/tests/workspaceGuidance.browser.mjs",
+      "result": "UX2 first-entry, guidance, scoped blockers, task refresh, focus and business return checks passed",
+      "evidence": "guidance/",
+      "reuse": true,
+      "basis": "Prior successful tool completion in this task; tested behavior unchanged since that run. Current source fingerprints are archived. Script emits pass to terminal only; directory contains screenshots, not a fabricated raw result log."
+    },
+    {
+      "command": "node front/tests/workspaceUsage.browser.mjs",
+      "result": "A01–A04 and UX2 navigation/context/edit guard checks passed",
+      "evidence": "usage/",
+      "reuse": true,
+      "basis": "Prior successful tool completion in this task; tested behavior unchanged since that run. Current source fingerprints are archived. Script emits pass to terminal only; directory contains screenshots, not a fabricated raw result log."
+    }
+  ],
+  "limitations": [
+    "Frontend behavior and request boundaries; does not measure model artistic quality.",
+    "Five-second user study cancelled by user; not an outstanding gate.",
+    "No backend or external contract change; backend lint/OpenAPI regeneration not applicable."
+  ],
+  "finalChecks": {
+    "hugo": {
+      "result": "passed",
+      "evidence": "hugo-output.txt",
+      "note": "Existing theme .Site.Data deprecation warning only."
+    },
+    "documents": {
+      "result": "passed",
+      "evidence": "document-results.json"
+    },
+    "gitDiffCheck": "passed"
+  },
+  "finalLayoutChange": "After the earlier business regressions, only timeline row space and obsolete bottom margin changed. Final sequence screenshots, responsive boundary/hit checks and typecheck were rerun; playback/adoption/state behavior was unchanged, so dedicated business results were reused."
+}

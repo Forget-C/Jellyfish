@@ -1,0 +1,47 @@
+✔ graph branches represent actual direct and indirect references, including missing IDs (0.9465ms)
+✔ object editing retains untouched roles, shared identities, sources and Note states (0.693375ms)
+✔ revision compare uses stable identities and separately reports reordering and Note/source changes (0.188459ms)
+✔ revision compare distinguishes adding/removing objects and never mutates either snapshot (0.095041ms)
+✔ scene breadcrumbs preserve valid parent routes and readable names (0.734458ms)
+✔ asset and role parents return to their exact category (0.093ms)
+✔ unknown nested routes never pretend to identify a valid object (0.108834ms)
+✔ explicit business context wins; stale or deliberately empty selection never becomes latest (0.358375ms)
+✔ saved browsing position is isolated by project and scene and merges independent panels (0.597666ms)
+✔ mixed cuts retain repeated Take ranges and keep estimated duration separate from real media (0.797875ms)
+✔ timeline endpoint includes existing gaps without counting them as real coverage (0.084875ms)
+✔ repair links pin the exact cut and item and retain the feedback return identity (0.14725ms)
+✔ readable action names are derived from the Take’s fixed plan and unit (7.684583ms)
+✔ first entry describes an output and proposes generation without performing it (0.872625ms)
+✔ source and concurrent versions precede generation; existing media remains accessible (0.160125ms)
+✔ design drafts lead to confirmation and confirmed designs lead to preparation (0.13125ms)
+✔ provider rejection is scoped to its plan and unit; empty references alone are not a blocker (0.149584ms)
+✔ task progress is only primary for the submitted unit; matching candidates lead to review (0.217166ms)
+✔ unread task state cannot recommend a duplicate submission and remains scoped to its unit (0.15425ms)
+✔ fixed prompt and review identities govern the proposed action (0.206584ms)
+✔ all existing business links resolve to their stage without losing their target (0.346958ms)
+✔ stage changes preserve frozen input and return context and do not mutate the original URL (0.090583ms)
+✔ local preparations retain recognized fields, isolate scope, and never mutate defaults (0.82875ms)
+✔ same unit name in different plans never mixes prompts, reviews or videos (0.746792ms)
+✔ concurrent response never chooses the last new version as this operation result (0.08525ms)
+✔ editing a recorded suggestion does not make its task pending again when model provenance remains (0.193292ms)
+✔ multiple submitted unit identities survive refresh and stay scoped to project and scene (0.759791ms)
+✔ task recovery uses actual identities and refuses to invent a plan for an unknown task (0.118916ms)
+✔ unit task summary separates plan versions and includes explicit multi-unit review occurrences (0.133959ms)
+✔ uses the active pointer, not the newest draft or another confirmed revision (1.089584ms)
+✔ missing pointer, unknown cut, unconfirmed cut and another sequence remain unknown (0.173792ms)
+✔ loading and errors never claim a take is not adopted (0.152875ms)
+✔ all adopted source ranges are shown, with no fabricated range from the planned item (0.145542ms)
+✔ review pass, previous adoption, and new generation do not imply current adoption (0.119334ms)
+✔ editing and saving a new cut does not replace the adopted cut (0.116334ms)
+✔ confirmation and current/historical adoption are separate labels (0.144708ms)
+✔ old designs and plans retain their actual current-media and preview references (0.229917ms)
+✔ history and unknown adoption reads preserve source data and never infer current references (0.529958ms)
+✔ version labels use the full collection, without renumbering filtered versions (0.185708ms)
+ℹ tests 39
+ℹ suites 0
+ℹ pass 39
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 300.505958

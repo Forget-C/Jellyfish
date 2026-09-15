@@ -1,0 +1,16 @@
+Start building sites … 
+hugo v0.159.2+extended+withdeploy darwin/arm64 BuildDate=2026-04-01T12:59:20Z VendorInfo=Homebrew
+
+WARN  deprecated: .Site.Data was deprecated in Hugo v0.156.0 and will be removed in a future release. Use hugo.Data instead.
+
+                  │ ZH  
+──────────────────┼─────
+ Pages            │ 123 
+ Paginator pages  │   0 
+ Non-page files   │   2 
+ Static files     │ 255 
+ Processed images │   0 
+ Aliases          │   1 
+ Cleaned          │   0 
+
+Total in 283 ms
