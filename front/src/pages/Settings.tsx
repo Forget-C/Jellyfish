@@ -1,4 +1,5 @@
-import { Card, Form, Input, Select, Switch, Button, message } from 'antd'
+import { PageToolbar, WorkspaceLayout, WorkspaceScrollPanel } from '../components'
+import { Form, Input, Select, Switch, Button, message } from 'antd'
 import { useAppStore } from '../store/useAppStore'
 import { useTranslation } from 'react-i18next'
 
@@ -11,11 +12,14 @@ const Settings: React.FC = () => {
 
   const handleFinish = (values: { name: string; role: string; darkMode: boolean }) => {
     setUser({ name: values.name, role: values.role })
-    message.success(t('settings.updated'))
+    message.success(t('settings:updated'))
   }
 
   return (
-    <Card title={t('settings.title')}>
+    <WorkspaceLayout>
+      <PageToolbar title={t('settings:title')} />
+      <WorkspaceScrollPanel className="app-page-content">
+      <div className="app-settings-form">
       <Form
         form={form}
         layout="vertical"
@@ -27,35 +31,35 @@ const Settings: React.FC = () => {
         onFinish={handleFinish}
       >
         <Form.Item
-          label={t('settings.nickname')}
+          label={t('settings:nickname')}
           name="name"
-          rules={[{ required: true, message: t('settings.validation.nicknameRequired') }]}
+          rules={[{ required: true, message: t('settings:validation.nicknameRequired') }]}
         >
-          <Input placeholder={t('settings.nickname')} />
+          <Input placeholder={t('settings:nickname')} />
         </Form.Item>
 
         <Form.Item
-          label={t('settings.role')}
+          label={t('settings:role')}
           name="role"
-          rules={[{ required: true, message: t('settings.validation.roleRequired') }]}
+          rules={[{ required: true, message: t('settings:validation.roleRequired') }]}
         >
           <Select
             options={[
-              { label: t('settings.roleOptions.admin'), value: t('settings.roleOptions.admin') },
+              { label: t('settings:roleOptions.admin'), value: t('settings:roleOptions.admin') },
               {
-                label: t('settings.roleOptions.operator'),
-                value: t('settings.roleOptions.operator'),
+                label: t('settings:roleOptions.operator'),
+                value: t('settings:roleOptions.operator'),
               },
-              { label: t('settings.roleOptions.guest'), value: t('settings.roleOptions.guest') },
+              { label: t('settings:roleOptions.guest'), value: t('settings:roleOptions.guest') },
             ]}
           />
         </Form.Item>
 
         <Form.Item
-          label={t('settings.darkMode')}
+          label={t('settings:darkMode')}
           name="darkMode"
           valuePropName="checked"
-          tooltip={t('settings.darkModeTooltip')}
+          tooltip={t('settings:darkModeTooltip')}
         >
           <Switch />
         </Form.Item>
@@ -66,7 +70,9 @@ const Settings: React.FC = () => {
           </Button>
         </Form.Item>
       </Form>
-    </Card>
+      </div>
+      </WorkspaceScrollPanel>
+    </WorkspaceLayout>
   )
 }
 

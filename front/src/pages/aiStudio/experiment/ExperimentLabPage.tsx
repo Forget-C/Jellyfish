@@ -17,6 +17,7 @@ export default function ExperimentLabPage() {
   const initialSessionId = useRef(searchParams.get('session') ?? undefined).current
   const lastRouteKeyRef = useRef(searchParams.toString())
   const initialModeAppliedRef = useRef(false)
+  const skipSessionWriteRef = useRef(false)
   const requestedMode = searchParams.get('mode') as ExperimentLabType | null
   const sessionState = useExperimentSessions({ initialSessionId })
   const { sessions, selectedSessionId, selectedLabType, loading, selectDraft, selectSession, ensureSession, renameSession, deleteSession, clearSessionMessages } = sessionState
@@ -36,17 +37,25 @@ export default function ExperimentLabPage() {
 
   /** 初次以 mode 参数进入时，mode 明确优先于默认的最近会话恢复。 */
   useEffect(() => {
-    if (!loading && !initialSessionId && requestedMode && ['text', 'image', 'video'].includes(requestedMode)) {
+    if (!loading && !initialSessionId && !initialModeAppliedRef.current && requestedMode && ['text', 'image', 'video'].includes(requestedMode)) {
       initialModeAppliedRef.current = true
+      // 同一次 effect 提交中仍能读到刚恢复的历史会话，等草稿选择生效后再允许回写。
+      skipSessionWriteRef.current = true
       selectDraft(requestedMode)
     }
   }, [initialSessionId, loading, requestedMode, selectDraft])
 
   /** 草稿首提创建会话后补写 URL；已有会话切换均由显式操作写入。 */
   useEffect(() => {
+    if (skipSessionWriteRef.current) {
+      skipSessionWriteRef.current = false
+      return
+    }
     if (!initialSessionId && requestedMode && !initialModeAppliedRef.current) return
     if (loading || searchParams.get('session') || !selectedSessionId) return
-    const next = new URLSearchParams({ session: selectedSessionId })
+    const next = new URLSearchParams(searchParams)
+    next.delete('mode')
+    next.set('session', selectedSessionId)
     lastRouteKeyRef.current = next.toString()
     setSearchParams(next, { replace: true })
   }, [initialSessionId, loading, requestedMode, searchParams, selectedSessionId, setSearchParams])
@@ -54,7 +63,9 @@ export default function ExperimentLabPage() {
   /** 切换历史会话；模态由服务端会话的 lab_type 决定。 */
   const handleSelectSession = (session: typeof sessions[number]) => {
     selectSession(session)
-    const next = new URLSearchParams({ session: session.id })
+    const next = new URLSearchParams(searchParams)
+    next.delete('mode')
+    next.set('session', session.id)
     lastRouteKeyRef.current = next.toString()
     setSearchParams(next)
   }
@@ -62,7 +73,9 @@ export default function ExperimentLabPage() {
   /** 进入草稿态时同步 URL，确保刷新后仍保留所选模态。 */
   const handleStartDraft = (labType: ExperimentLabType) => {
     selectDraft(labType)
-    const next = new URLSearchParams({ mode: labType })
+    const next = new URLSearchParams(searchParams)
+    next.delete('session')
+    next.set('mode', labType)
     lastRouteKeyRef.current = next.toString()
     setSearchParams(next)
   }

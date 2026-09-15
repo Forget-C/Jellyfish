@@ -1,3 +1,4 @@
+import { usePageTitle } from '../../../../layouts/pageTitle'
 import React, { useEffect, useState } from 'react'
 import { Card, Button, Tabs, Space, Dropdown, Empty } from 'antd'
 import type { MenuProps } from 'antd'
@@ -30,6 +31,7 @@ const ProjectWorkbench: React.FC = () => {
     tabFromUrl !== null && isTabKey(tabFromUrl) ? tabFromUrl : DEFAULT_TAB
 
   const { project, loading: projectLoading } = useProject(projectId)
+  usePageTitle(project?.id === projectId ? project?.name : undefined)
   const { chapters } = useChapters(projectId)
   const [activeTab, setActiveTab] = useState<TabKey>(() => resolvedTab)
 
@@ -96,15 +98,14 @@ const ProjectWorkbench: React.FC = () => {
   return (
     <WorkspaceLayout>
       <div
-        className="sticky top-0 z-20 bg-white border-b border-gray-200 shadow-sm"
-        style={{ marginTop: -5, padding: '16px 24px' }}
+        className="app-page-toolbar project-workbench-header"
       >
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-gray-100">
+        <div className="flex w-full flex-wrap items-center justify-between gap-3">
           <Tabs
             activeKey={activeTab}
             onChange={(k) => setTabInUrl(k as TabKey)}
             size="middle"
-            className="project-workbench-tabs flex-1 min-w-0"
+            className="project-workbench-tabs app-page-tabs flex-1 min-w-0"
             items={TAB_CONFIG.map(({ key, label, icon }) => ({
               key,
               label: (
@@ -128,13 +129,13 @@ const ProjectWorkbench: React.FC = () => {
             </Dropdown>
           </Space>
         </div>
-        <div className="mt-2 text-xs text-gray-500">
+        <div className="text-xs text-gray-500">
           {primaryCta.hint}
         </div>
       </div>
 
       <WorkspaceScrollPanel
-        className="pt-4 animate-fadeIn"
+        className="app-page-content animate-fadeIn"
         style={{ animation: 'fadeIn 0.25s ease-out' }}
       >
         {activeTab === 'dashboard' && <DashboardTab onSelectTab={setTabInUrl} />}

@@ -7,16 +7,13 @@ interface UserInfo {
 }
 
 interface AppState {
-  siderCollapsed: boolean
   user: UserInfo
   language: SupportedLanguage
   setUser: (user: Partial<UserInfo>) => void
   setLanguage: (lang: SupportedLanguage) => void
-  toggleSider: () => void
 }
 
 export const useAppStore = create<AppState>((set) => ({
-  siderCollapsed: false,
   user: {
     name: 'Admin',
     role: '系统管理员',
@@ -30,10 +27,5 @@ export const useAppStore = create<AppState>((set) => ({
       },
     })),
   setLanguage: (lang) => set(() => ({ language: lang })),
-  toggleSider: () =>
-    set((state) => ({
-      siderCollapsed: !state.siderCollapsed,
-    })),
 }))
-
 

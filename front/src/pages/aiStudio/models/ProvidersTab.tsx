@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useEffect, useState, useMemo } from 'react'
 import {
   Layout,
@@ -28,7 +29,6 @@ import {
   AppstoreOutlined,
   UnorderedListOutlined,
   DownOutlined,
-  RightOutlined,
   ThunderboltOutlined,
   WarningOutlined,
 } from '@ant-design/icons'
@@ -43,7 +43,7 @@ import {
   maskUrl,
 } from './constants'
 
-export default function ProvidersTab() {
+export default function ProvidersTab({ header }: { header: ReactNode }) {
   const [providers, setProviders] = useState<ProviderRead[]>([])
   const [supportedSpecs, setSupportedSpecs] = useState<ProviderSupportedRead[]>([])
   const [supportedLoading, setSupportedLoading] = useState(true)
@@ -53,13 +53,12 @@ export default function ProvidersTab() {
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table')
   const [selectedProvider, setSelectedProvider] = useState<ProviderRead | null>(null)
   const [detailPanelOpen, setDetailPanelOpen] = useState(false)
-  const [treeCollapsed, setTreeCollapsed] = useState(false)
   const [providerModalOpen, setProviderModalOpen] = useState(false)
   const [providerEditing, setProviderEditing] = useState<ProviderRead | null>(null)
   const [credentialsLoading, setCredentialsLoading] = useState(false)
   const [testConnecting, setTestConnecting] = useState(false)
   const [form] = Form.useForm()
-  const { lg } = Grid.useBreakpoint()
+  const { xl: lg } = Grid.useBreakpoint()
   const isLargeScreen = lg ?? false
 
   const load = async () => {
@@ -375,6 +374,7 @@ export default function ProvidersTab() {
 
   return (
     <>
+      {header}
       <div className="flex-shrink-0 px-4 py-2 border-b border-gray-100 bg-white flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="text-gray-600 text-sm">共 {providers.length} 个供应商</span>
@@ -407,32 +407,7 @@ export default function ProvidersTab() {
       </div>
 
       <Layout className="flex-1 min-h-0 flex-row overflow-hidden">
-        <div
-          className="flex-shrink-0 border-r border-gray-200 bg-white overflow-auto"
-          style={{ width: treeCollapsed ? 48 : 200 }}
-        >
-          {treeCollapsed ? (
-            <Button
-              type="text"
-              icon={<RightOutlined />}
-              onClick={() => setTreeCollapsed(false)}
-              className="w-full rounded-none"
-            />
-          ) : (
-            <>
-              <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100">
-                <span className="text-sm font-medium text-gray-700">筛选</span>
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<RightOutlined rotate={180} />}
-                  onClick={() => setTreeCollapsed(true)}
-                />
-              </div>
-              <div className="p-3 text-sm text-gray-500">点击列表项查看详情</div>
-            </>
-          )}
-        </div>
+
 
         <div className="flex-1 min-w-0 overflow-auto p-4 bg-gray-50">
           <div className="flex justify-end gap-1 mb-2">
@@ -561,7 +536,7 @@ export default function ProvidersTab() {
         {selectedProvider && isLargeScreen && (
           <div
             className="flex-shrink-0 overflow-auto border-l border-gray-200 bg-white"
-            style={{ width: '36%', minWidth: 320 }}
+            style={{ width: 344 }}
           >
             <div className="p-4 border-b border-gray-100 flex items-center justify-between">
               <span className="font-medium">详情</span>

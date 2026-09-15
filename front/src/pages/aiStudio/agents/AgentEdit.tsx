@@ -1,3 +1,4 @@
+import { usePageTitle } from '../../../layouts/pageTitle'
 import React, { useEffect, useState } from 'react'
 import {
   Layout,
@@ -35,6 +36,7 @@ export default function AgentEdit() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [agent, setAgent] = useState<Agent | null>(null)
+  usePageTitle(agent?.id === id ? agent?.name : undefined)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
@@ -135,7 +137,7 @@ export default function AgentEdit() {
   return (
     <Layout className="h-full flex flex-col" style={{ minHeight: 0 }}>
       {/* 顶部工具栏 */}
-      <div className="flex-shrink-0 flex flex-wrap items-center gap-2 px-4 py-2 border-b border-gray-200 bg-white">
+      <div className="app-page-toolbar">
         <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate('/agents')}>
           返回列表
         </Button>
@@ -163,7 +165,7 @@ export default function AgentEdit() {
       </div>
 
       {/* 双栏：工作流 + 属性 */}
-      <Layout className="flex-1 min-h-0 flex-row overflow-hidden">
+      <Layout className="app-editor-split flex-1 min-h-0 flex-row overflow-hidden">
         {/* 左侧：工作流编辑器占位 */}
         <div className="flex-1 min-w-0 overflow-auto p-4 bg-gray-50 border-r border-gray-200">
           <div className="text-sm text-gray-500 mb-2">工作流编排（可接入 React Flow）</div>
@@ -197,7 +199,7 @@ export default function AgentEdit() {
         </div>
 
         {/* 右侧：节点属性配置 */}
-        <div className="w-96 flex-shrink-0 overflow-auto border-l border-gray-200 bg-white">
+        <div className="app-editor-properties flex-shrink-0 overflow-auto border-l border-gray-200 bg-white">
           <div className="p-4 border-b border-gray-100 font-medium flex items-center gap-2">
             <SettingOutlined />
             节点属性

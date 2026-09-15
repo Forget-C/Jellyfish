@@ -1,3 +1,4 @@
+import { usePageTitle } from '../../../layouts/pageTitle'
 import { flushSync } from 'react-dom'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Image, Input, Modal, Select, Space, Spin, Tag, Typography } from 'antd'
@@ -66,6 +67,7 @@ function SequenceWorkspace() {
   const initialSearch = useRef(search)
   initialSearch.current = search
   const [workspace, setWorkspace] = useState<WorkspaceRead>()
+  usePageTitle(workspace?.sequence.id === sequenceId ? workspace?.sequence.title : undefined)
   const activeCut = useActiveCut(projectId, sequenceId, workspace)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [baseDesign, setBaseDesign] = useState<DesignRevision>()

@@ -1,4 +1,4 @@
-/* 以可用内容宽度适配档案，侧栏展开时也不依赖整个视口的宽度。 */
+/* 以工作区可用宽度适配档案，使用全站工具栏与间距。 */
 .asset-dossier {
   container: asset-dossier / inline-size;
   height: 100%;
@@ -15,9 +15,10 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 24px;
+  min-height: 64px;
+  padding: 12px 16px;
   background: #fff;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--app-border);
 }
 
 .asset-dossier-toolbar-actions {
@@ -29,7 +30,7 @@
 
 /* 正文铺满站点内容区，只保留一层与操作栏对齐的内部间距。 */
 .asset-dossier-sheet {
-  padding: 24px;
+  padding: 16px;
 }
 
 .asset-dossier-overview {

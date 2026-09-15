@@ -1,3 +1,4 @@
+import { usePageTitle } from '../../../../layouts/pageTitle'
 import { AssetReferencePicker } from './AssetReferencePicker'
 import { AssetDossierImage, AssetDossierSection } from './AssetDossier'
 import './assetDossier.css'
@@ -179,6 +180,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
   const location = useLocation()
   const [loading, setLoading] = useState(true)
   const [asset, setAsset] = useState<TAsset | null>(null)
+  usePageTitle(asset?.id === assetId ? asset?.name : undefined)
   const [images, setImages] = useState<TImage[]>([])
   const [selectedAngle, setSelectedAngle] = useState<AssetViewAngle | null>(null)
   const [imagePreviewOpen, setImagePreviewOpen] = useState(false)

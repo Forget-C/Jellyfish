@@ -28,7 +28,7 @@ export function ExperimentComposer({
   submitLabel = '发送',
 }: ExperimentComposerProps) {
   return (
-    <div className="mt-5 overflow-hidden rounded-2xl border-2 border-slate-300 bg-slate-50/80 text-slate-900 shadow-md transition-colors focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-100">
+    <div className="mt-3 overflow-hidden rounded-md border border-slate-300 bg-white text-slate-900 transition-colors focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100">
       <div className="p-4">
         {children}
       </div>

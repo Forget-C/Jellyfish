@@ -451,9 +451,9 @@ const ProjectLobby: React.FC = () => {
 
   const renderStatusTag = (p: ProjectView) => {
     const status = getProjectStatus(p)
-    if (status === 'completed') return <Tag color="green" className="mr-0 text-[11px] leading-4">已完成</Tag>
-    if (status === 'draft') return <Tag color="default" className="mr-0 text-[11px] leading-4">草稿</Tag>
-    return <Tag color="orange" className="mr-0 text-[11px] leading-4">进行中</Tag>
+    if (status === 'completed') return <Tag color="green" className="mr-0 text-xs leading-4">已完成</Tag>
+    if (status === 'draft') return <Tag color="default" className="mr-0 text-xs leading-4">草稿</Tag>
+    return <Tag color="orange" className="mr-0 text-xs leading-4">进行中</Tag>
   }
 
   const handlePrimaryAction = (project: ProjectView, stageSummary?: ProjectStageSummary) => {
@@ -476,29 +476,6 @@ const ProjectLobby: React.FC = () => {
     navigate(`/projects/${project.id}/chapters/${stageSummary.chapterId}/sequences`)
   }
 
-  /**
-   * 根据项目 ID 生成稳定的浅色渐变背景，避免深色背景。
-   */
-  const getLightGradientByProjectId = (id: string): string => {
-    const gradients = [
-      'from-sky-100 via-sky-50 to-white',
-      'from-emerald-100 via-emerald-50 to-white',
-      'from-indigo-100 via-indigo-50 to-white',
-      'from-amber-100 via-amber-50 to-white',
-      'from-rose-100 via-rose-50 to-white',
-      'from-violet-100 via-violet-50 to-white',
-      'from-teal-100 via-teal-50 to-white',
-    ]
-
-    let hash = 0
-    for (let i = 0; i < id.length; i += 1) {
-      hash = (hash * 31 + id.charCodeAt(i)) >>> 0
-    }
-
-    const index = hash % gradients.length
-    return gradients[index]
-  }
-
   const selectedProject = filteredSorted.find((p) => p.id === selectedProjectId) ?? filteredSorted[0]
 
   const renderCard = (p: ProjectView) => {
@@ -518,9 +495,9 @@ const ProjectLobby: React.FC = () => {
         loading={loading}
         size="small"
         className={`h-full cursor-pointer transition-all duration-200 ${
-          isSelected ? 'ring-2 ring-indigo-500 ring-offset-1' : 'hover:shadow-lg'
+          isSelected ? 'ring-1 ring-blue-500' : 'hover:border-blue-300'
         }`}
-        bodyStyle={{ padding: '10px' }}
+        bodyStyle={{ padding: 16 }}
         onClick={() => {
           handleSelectProject(p.id)
           if (!multiSelectMode) {
@@ -528,11 +505,10 @@ const ProjectLobby: React.FC = () => {
           }
         }}
         onMouseEnter={() => handleSelectProject(p.id)}
+        onFocusCapture={() => handleSelectProject(p.id)}
       >
         <div
-          className={`relative mb-1.5 rounded bg-gradient-to-r ${getLightGradientByProjectId(
-            p.id,
-          )} text-gray-900 p-2 overflow-hidden`}
+          className="relative mb-1.5 rounded bg-blue-50 text-gray-900 p-2 overflow-hidden"
         >
           <div className="flex justify-between items-start gap-2">
             <div className="min-w-0">
@@ -540,7 +516,7 @@ const ProjectLobby: React.FC = () => {
               <div className={`${isCompact ? 'text-sm' : 'text-base'} font-semibold truncate text-gray-900`}>
                 {p.name}
               </div>
-              <div className="text-[10px] text-gray-500 truncate">
+              <div className="text-xs text-gray-500 truncate">
                 {p.updatedAt}
               </div>
             </div>
@@ -570,22 +546,22 @@ const ProjectLobby: React.FC = () => {
 
         <div className={`mb-1.5 rounded border border-gray-100 bg-gray-50 ${isCompact ? 'px-2 py-1' : 'px-2 py-1.5'}`}>
           <div className="flex items-center justify-between gap-2">
-            <span className="text-[11px] text-gray-500">当前阶段</span>
-            <Tag color={stageSummary?.stageColor ?? 'default'} className="mr-0 text-[11px] leading-4">
+            <span className="text-xs text-gray-500">当前阶段</span>
+            <Tag color={stageSummary?.stageColor ?? 'default'} className="mr-0 text-xs leading-4">
               {stageSummary?.stageText ?? '待推进'}
             </Tag>
           </div>
-          <div className={`mt-1 text-[11px] text-gray-600 ${isLarge ? 'line-clamp-2 min-h-[2rem]' : 'line-clamp-1 min-h-0'}`}>
+          <div className={`mt-1 text-xs text-gray-600 ${isLarge ? 'line-clamp-2 min-h-[2rem]' : 'line-clamp-1 min-h-0'}`}>
             {stageSummary?.nextActionHint ?? '进入项目工作台后继续推进主流程'}
           </div>
-          <div className="mt-1 text-[11px] text-gray-500 truncate">
+          <div className="mt-1 text-xs text-gray-500 truncate">
             下一步：{stageSummary?.nextActionLabel ?? '进入项目'}
           </div>
         </div>
 
         {!isCompact && (
           <div className="mb-1.5">
-            <div className="flex justify-between text-[11px] mb-0.5 text-gray-500">
+            <div className="flex justify-between text-xs mb-0.5 text-gray-500">
               <span>进度</span>
               <span>{p.progress}%</span>
             </div>
@@ -593,7 +569,7 @@ const ProjectLobby: React.FC = () => {
               percent={p.progress}
               size="small"
               showInfo={false}
-              strokeColor={{ from: '#6366f1', to: '#a855f7' }}
+              strokeColor="#1677ff"
             />
           </div>
         )}
@@ -601,33 +577,33 @@ const ProjectLobby: React.FC = () => {
         {isLarge ? (
           <Row gutter={6} className="mb-1.5">
             <Col span={6}>
-              <Statistic title={<span className="text-[11px]">章节</span>} value={p.stats.chapters} valueStyle={{ fontSize: '13px' }} />
+              <Statistic title={<span className="text-xs">章节</span>} value={p.stats.chapters} valueStyle={{ fontSize: '13px' }} />
             </Col>
             <Col span={6}>
-              <Statistic title={<span className="text-[11px]">角色</span>} value={p.stats.roles} valueStyle={{ fontSize: '13px' }} />
+              <Statistic title={<span className="text-xs">角色</span>} value={p.stats.roles} valueStyle={{ fontSize: '13px' }} />
             </Col>
             <Col span={6}>
-              <Statistic title={<span className="text-[11px]">场景</span>} value={p.stats.scenes} valueStyle={{ fontSize: '13px' }} />
+              <Statistic title={<span className="text-xs">场景</span>} value={p.stats.scenes} valueStyle={{ fontSize: '13px' }} />
             </Col>
             <Col span={6}>
-              <Statistic title={<span className="text-[11px]">道具</span>} value={p.stats.props} valueStyle={{ fontSize: '13px' }} />
+              <Statistic title={<span className="text-xs">道具</span>} value={p.stats.props} valueStyle={{ fontSize: '13px' }} />
             </Col>
           </Row>
         ) : (
-          <div className="mb-1.5 text-[11px] text-gray-500 truncate">
+          <div className="mb-1.5 text-xs text-gray-500 truncate">
             章 {p.stats.chapters} · 角 {p.stats.roles} · 场 {p.stats.scenes} · 道 {p.stats.props}
           </div>
         )}
 
         <div className={`mt-1 border-t border-gray-100 flex items-center justify-between gap-1 ${isCompact ? 'pt-1' : 'pt-1.5'}`}>
-          <span className="text-[11px] text-gray-500 truncate">{p.updatedAt}</span>
+          <span className="text-xs text-gray-500 truncate">{p.updatedAt}</span>
           <Space size="small" onClick={(e) => e.stopPropagation()}>
             <Button
               type="primary"
               size="small"
               icon={<EnterOutlined />}
               onClick={() => handlePrimaryAction(p, stageSummary)}
-              className="text-[11px]"
+              className="text-xs"
             >
               {isCompact ? '进入' : mainActionLabel}
             </Button>
@@ -638,7 +614,7 @@ const ProjectLobby: React.FC = () => {
                   size="small"
                   icon={<EditOutlined />}
                   onClick={(e) => handleOpenEdit(e, p)}
-                  className="text-[11px]"
+                  className="text-xs"
                 />
                 <Popconfirm
                   title="确定删除该项目？"
@@ -648,7 +624,7 @@ const ProjectLobby: React.FC = () => {
                   cancelText="取消"
                   okButtonProps={{ danger: true }}
                 >
-                  <Button type="text" size="small" danger icon={<DeleteOutlined />} className="text-[11px]" />
+                  <Button type="text" size="small" danger icon={<DeleteOutlined />} className="text-xs" />
                 </Popconfirm>
               </>
             )}
@@ -660,31 +636,31 @@ const ProjectLobby: React.FC = () => {
 
   return (
     <div className="min-h-0 flex-1 flex flex-col overflow-hidden">
-      <div className="flex-shrink-0 space-y-2 pb-2">
-      <div className="sticky top-0 z-10 pb-1.5 bg-gradient-to-b from-[rgba(249,250,251,0.96)] to-[rgba(249,250,251,0.9)] backdrop-blur">
+      <div className="flex-shrink-0">
+      <div className="app-page-toolbar project-lobby-toolbar">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <Space wrap size="small" className="flex-1 min-w-[240px]">
+          <Space wrap size="middle" className="flex-1 min-w-[240px]">
             <Input.Search
               placeholder="搜索项目名称或描述"
               allowClear
-              size="small"
+              size="middle"
               className="w-64 max-w-full"
               onSearch={setSearch}
               onChange={(e) => setSearch(e.target.value)}
             />
-            <Space size="small" wrap>
+            <Space size="middle" wrap>
               <Button
                 type={filterTab === 'all' ? 'primary' : 'text'}
-                size="small"
-                className="text-[11px]"
+                size="middle"
+                className="text-xs"
                 onClick={() => setFilterTab('all')}
               >
                 全部
               </Button>
               <Button
                 type={filterTab === 'editRaw' ? 'primary' : 'text'}
-                size="small"
-                className="text-[11px]"
+                size="middle"
+                className="text-xs"
                 onClick={() => setFilterTab('editRaw')}
               >
                 待补原文
@@ -692,11 +668,11 @@ const ProjectLobby: React.FC = () => {
             </Space>
           </Space>
 
-            <Space size="small" wrap>
-            <Space size="small">
+            <Space size="middle" wrap>
+            <Space size="middle">
               <span className="text-xs text-gray-500">排序</span>
               <Select
-                size="small"
+                size="middle"
                 value={sortKey}
                 style={{ width: 128 }}
                 onChange={(value: SortKey) => setSortKey(value)}
@@ -707,42 +683,42 @@ const ProjectLobby: React.FC = () => {
                 ]}
               />
               <Button
-                size="small"
+                size="middle"
                 type="text"
-                className="text-[11px]"
+                className="text-xs"
                 onClick={() => setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
               >
                 {sortOrder === 'asc' ? '↑' : '↓'}
               </Button>
             </Space>
 
-            <Space size="small">
+            <Space size="middle">
               <span className="text-xs text-gray-500">视图</span>
               <Button
-                size="small"
+                size="middle"
                 type={viewMode === 'grid' ? 'primary' : 'text'}
                 icon={<AppstoreOutlined />}
                 onClick={() => setViewMode('grid')}
               />
               <Button
-                size="small"
+                size="middle"
                 type={viewMode === 'compact' ? 'primary' : 'text'}
                 icon={<BarsOutlined />}
                 onClick={() => setViewMode('compact')}
               />
               <Button
-                size="small"
+                size="middle"
                 type={viewMode === 'large' ? 'primary' : 'text'}
                 icon={<UnorderedListOutlined />}
                 onClick={() => setViewMode('large')}
               />
             </Space>
 
-            <Space size="small">
+            <Space size="middle">
               <Button
-                size="small"
+                size="middle"
                 type={multiSelectMode ? 'primary' : 'text'}
-                className="text-[11px]"
+                className="text-xs"
                 onClick={() => {
                   setMultiSelectMode((prev) => !prev)
                   setSelectedIds([])
@@ -760,14 +736,14 @@ const ProjectLobby: React.FC = () => {
                   okButtonProps={{ danger: true }}
                   disabled={!selectedIds.length}
                 >
-                  <Button size="small" danger disabled={!selectedIds.length} className="text-[11px]">
+                  <Button size="middle" danger disabled={!selectedIds.length} className="text-xs">
                     删除选中
                   </Button>
                 </Popconfirm>
               )}
             </Space>
 
-            <Button type="primary" size="small" className="text-[11px]" icon={<PlusOutlined />} onClick={handleOpenCreate}>
+            <Button type="primary" size="middle" className="text-xs" icon={<PlusOutlined />} onClick={handleOpenCreate}>
               新建项目
             </Button>
           </Space>
@@ -775,9 +751,9 @@ const ProjectLobby: React.FC = () => {
       </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto">
-      <Row gutter={12}>
-        <Col xs={24} lg={18}>
+      <div className="app-page-content min-h-0 flex-1 overflow-auto">
+      <div className="project-lobby-panels">
+        <div className="min-w-0">
           <Row gutter={viewMode === 'compact' ? [8, 8] : viewMode === 'large' ? [14, 14] : [12, 12]}>
             {!loading && filteredSorted.length === 0 && (
               <Col span={24}>
@@ -801,42 +777,42 @@ const ProjectLobby: React.FC = () => {
               </Col>
             ))}
           </Row>
-        </Col>
+        </div>
 
-        <Col xs={24} lg={6} className="flex-shrink-0">
+        <aside className="project-lobby-inspector">
           <div className="h-full">
             <Card
               size="small"
               title="项目速览"
               className="mb-1.5"
-              bodyStyle={{ padding: '10px' }}
-              headStyle={{ minHeight: 36, paddingInline: 10 }}
+              bodyStyle={{ padding: 16 }}
+              headStyle={{ minHeight: 48, paddingInline: 16 }}
             >
               {selectedProject ? (
                 <div className="space-y-2">
                   <div>
-                    <div className="text-[11px] text-gray-500 mb-0.5">项目名称</div>
+                    <div className="text-xs text-gray-500 mb-0.5">项目名称</div>
                     <div className="font-medium">{selectedProject.name}</div>
                   </div>
                   <div>
-                    <div className="text-[11px] text-gray-500 mb-0.5">简介</div>
+                    <div className="text-xs text-gray-500 mb-0.5">简介</div>
                     <div className="text-xs text-gray-600 line-clamp-2">
                       {selectedProject.description || '暂无描述'}
                     </div>
                   </div>
-                  <div className="flex items-center justify-between text-[11px] text-gray-500">
+                  <div className="flex items-center justify-between text-xs text-gray-500">
                     <span>视频风格：{selectedProject.style}</span>
                     <span>种子：{selectedProject.seed}</span>
                   </div>
                   <div>
-                    <div className="text-[11px] text-gray-500 mb-0.5">进度</div>
+                    <div className="text-xs text-gray-500 mb-0.5">进度</div>
                     <Progress
                       percent={selectedProject.progress}
                       size="small"
-                      strokeColor={{ from: '#6366f1', to: '#22c55e' }}
+                      strokeColor="#1677ff"
                     />
                   </div>
-                  <div className="text-[11px] text-gray-500">
+                  <div className="text-xs text-gray-500">
                     章 {selectedProject.stats.chapters} · 角 {selectedProject.stats.roles} · 场 {selectedProject.stats.scenes} · 道 {selectedProject.stats.props}
                   </div>
                   <Button
@@ -845,7 +821,7 @@ const ProjectLobby: React.FC = () => {
                     size="small"
                     icon={<EnterOutlined />}
                     onClick={() => navigate(`/projects/${selectedProject.id}`)}
-                    className="text-[11px]"
+                    className="text-xs"
                   >
                     进入章节工作台
                   </Button>
@@ -857,8 +833,8 @@ const ProjectLobby: React.FC = () => {
               )}
             </Card>
           </div>
-        </Col>
-      </Row>
+        </aside>
+      </div>
       </div>
 
       <Modal

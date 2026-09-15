@@ -1,3 +1,4 @@
+import { usePageTitle } from '../../../layouts/pageTitle'
 import { useCallback, useEffect, useState } from 'react'
 import { Alert, Button, Card, Empty, Input, InputNumber, Modal, Select, Space, Spin, Typography } from 'antd'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -12,6 +13,7 @@ export default function ChapterSequencesPage() {
   const { projectId = '', chapterId = '' } = useParams()
   const navigate = useNavigate()
   const [chapter, setChapter] = useState<ChapterSequences>()
+  usePageTitle(chapter?.chapter_id === chapterId ? chapter?.title : undefined)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [open, setOpen] = useState(false)
@@ -43,8 +45,8 @@ export default function ChapterSequencesPage() {
     } catch (cause) { setError(directingError(cause)) } finally { setBusy(false) }
   }
   if (!chapter) return <Space><Spin />{error && <Alert type="error" message={error} />}</Space>
-  return <Space direction="vertical" size="large" style={{ width: '100%', padding: 24 }}>
-    <Space><Button onClick={() => navigate(`/projects/${projectId}?tab=chapters`)}>返回章节</Button><Typography.Title level={3} style={{ margin: 0 }}>{chapter.title} · 场次</Typography.Title></Space>
+  return <Space className="chapter-sequences-page" direction="vertical" size="middle" style={{ width: '100%' }}>
+    <div className="app-page-toolbar"><Button onClick={() => navigate(`/projects/${projectId}?tab=chapters`)}>返回章节</Button><h1 className="app-page-title">{chapter.title} · 场次</h1></div>
     {error && <Alert type="error" message={error} closable onClose={() => setError('')} />}
     <Card title="章节原文" extra={<Button onClick={() => navigate(`/projects/${projectId}?tab=chapters&edit=${chapterId}`)}>编辑原文</Button>}>
       <Typography.Paragraph style={{ whiteSpace: 'pre-wrap', maxHeight: 280, overflow: 'auto' }}>{chapter.raw_text || '请先添加章节原文。'}</Typography.Paragraph>

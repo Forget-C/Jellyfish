@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Card, Tabs } from 'antd'
+import { Tabs } from 'antd'
+import { PageToolbar, WorkspaceLayout } from '../../../components'
 import { useSearchParams } from 'react-router-dom'
 import { ActorsTab } from './tabs/ActorsTab'
 import { ScenesTab } from './tabs/ScenesTab'
@@ -46,9 +47,10 @@ const AssetManager = () => {
   }
 
   return (
-    <div className="space-y-4">
-      <Card>
+    <WorkspaceLayout>
+      <PageToolbar title="资产管理" />
         <Tabs
+          className="app-page-tabs app-content-tabs"
           activeKey={activeTab}
           onChange={(k) => {
             if (isValidTab(k)) setTabInUrl(k)
@@ -60,8 +62,7 @@ const AssetManager = () => {
             { key: 'costume', label: '服装', children: <CostumesTab /> },
           ]}
         />
-      </Card>
-    </div>
+    </WorkspaceLayout>
   )
 }
 

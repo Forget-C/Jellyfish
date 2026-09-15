@@ -71,32 +71,32 @@ export function ExperimentSessionSidebar({ value, sessions, disabled = false, ex
     } : null,
   ].filter(Boolean)
 
-  return <aside className="hidden w-64 shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white px-3 py-4 lg:flex">
+  return <aside className="app-context-sidebar">
     <Button
       block
       icon={<span className="relative flex h-5 w-5 items-center justify-center" aria-hidden="true"><MessageOutlined className="text-lg" /><PlusOutlined className="absolute -right-0.5 -top-0.5 rounded-full bg-slate-100 text-[9px]" /></span>}
       onClick={() => setCreateOpen(true)}
       disabled={disabled}
-      className="!h-11 !justify-start !gap-3 !rounded-xl !border-slate-200 !bg-slate-100 !px-4 !text-[15px] !font-medium !text-slate-900 !shadow-sm hover:!border-slate-300 hover:!bg-slate-200"
+      className="!h-10 !justify-start !gap-2 !rounded-md !border-slate-200 !px-3 !text-sm !font-medium"
     >
       新建对话
     </Button>
     {extensionSlot ? <div className="mt-5" data-testid="experiment-sidebar-extension">{extensionSlot}</div> : null}
-    <div className="mt-8 px-3 text-sm font-normal text-slate-400">最近对话</div>
+    <div className="mt-6 px-2 text-xs font-normal text-slate-500">最近对话</div>
     <div className="mt-3 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-1">
       {sessions.map((session) => {
         const selected = session.id === value
         const menuItems = getMenuItems(session)
-        return <div key={session.id} className={`group flex min-w-0 items-center rounded-xl transition-colors ${selected ? 'bg-slate-100 text-slate-950' : 'text-slate-800 hover:bg-slate-100'}`}>
+        return <div key={session.id} className={`group flex min-w-0 items-center rounded-md transition-colors ${selected ? 'bg-blue-50 text-blue-700' : 'text-slate-800 hover:bg-slate-100'}`}>
           <button
             type="button"
-            className="min-w-0 flex-1 border-0 bg-transparent px-3 py-2.5 text-left"
+            className="min-w-0 flex-1 border-0 bg-transparent px-2 py-1.5 text-left"
             onClick={() => onChange(session)}
             disabled={disabled}
             aria-current={selected ? 'page' : undefined}
           >
             <Tooltip title={session.title} placement="right" mouseEnterDelay={0.6}>
-              <span className={`block truncate text-[15px] leading-6 ${selected ? 'font-semibold' : 'font-normal'}`}>{session.title}</span>
+              <span className={`block truncate text-sm leading-6 ${selected ? 'font-semibold' : 'font-normal'}`}>{session.title}</span>
             </Tooltip>
           </button>
           {menuItems.length ? <Dropdown menu={{ items: menuItems }} trigger={['click']} placement="bottomRight" overlayClassName="experiment-session-dropdown">

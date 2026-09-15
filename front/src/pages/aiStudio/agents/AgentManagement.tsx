@@ -1,3 +1,4 @@
+import { WorkspaceSidebar } from '../../../components/layout/WorkspaceSidebar'
 import React, { useEffect, useState, useMemo } from 'react'
 import {
   Layout,
@@ -31,7 +32,6 @@ import {
   AppstoreOutlined,
   UnorderedListOutlined,
   DownOutlined,
-  RightOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
@@ -64,7 +64,6 @@ export default function AgentManagement() {
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table')
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
   const [detailPanelOpen, setDetailPanelOpen] = useState(false)
-  const [treeCollapsed, setTreeCollapsed] = useState(false)
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
   const [createModalOpen, setCreateModalOpen] = useState(false)
   const [createName, setCreateName] = useState('')
@@ -72,7 +71,7 @@ export default function AgentManagement() {
   const [createDesc, setCreateDesc] = useState('')
   const [createLoading, setCreateLoading] = useState(false)
   const [typeFilter, setTypeFilter] = useState<AgentTypeKey | null>(null)
-  const { lg } = Grid.useBreakpoint()
+  const { xl: lg } = Grid.useBreakpoint()
   const isLargeScreen = lg ?? false
 
   const load = async () => {
@@ -322,262 +321,247 @@ export default function AgentManagement() {
   ]
 
   return (
-    <Layout className="h-full flex flex-col" style={{ minHeight: 0 }}>
-      {/* 顶部区域 */}
-      <div className="flex-shrink-0 px-4 py-3 border-b border-gray-200 bg-white space-y-2">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-gray-800">Agent管理</span>
-            <span className="text-gray-500 text-sm">· 总计 {agents.length} 个 Agent</span>
-          </div>
-          <Space wrap>
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>
-              创建新 Agent
-            </Button>
-            <Input
-              placeholder="按名称/类型/创建者搜索"
-              prefix={<SearchOutlined className="text-gray-400" />}
-              allowClear
-              className="w-52"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <Dropdown
-              menu={{
-                items: SORT_OPTIONS.map((o) => ({
-                  key: o.value,
-                  label: o.label,
-                  onClick: () => setSortBy(o.value as 'updated' | 'name'),
-                })),
-              }}
-            >
-              <Button icon={<DownOutlined />}>排序：{SORT_OPTIONS.find((s) => s.value === sortBy)?.label}</Button>
-            </Dropdown>
-          </Space>
-        </div>
-        <Tabs
-          activeKey={activeTab}
-          onChange={setActiveTab}
-          size="small"
-          items={[
-            { key: 'all', label: `全部 (${typeCounts.all})` },
-            ...AGENT_TYPES.map((t) => ({
-              key: t.key,
-              label: `${t.label} (${typeCounts[t.key]})`,
-            })),
-          ]}
+    <Layout className="app-management-body h-full flex-row" style={{ minHeight: 0 }}>
+      <WorkspaceSidebar title="类型筛选">
+        <Tree
+          selectedKeys={typeFilter ? [typeFilter] : []}
+          treeData={treeData}
+          showLine
+          blockNode
+          expandAction="click"
+          onSelect={([key]) => setTypeFilter(key ? (key as AgentTypeKey) : null)}
+          className="py-2"
         />
-      </div>
-
-      {/* 主体：左侧树 + 列表 + 右侧面板 */}
-      <Layout className="flex-1 min-h-0 flex-row overflow-hidden">
-        {/* 左侧类型树 */}
-        <div
-          className="flex-shrink-0 border-r border-gray-200 bg-white overflow-auto"
-          style={{ width: treeCollapsed ? 48 : 200 }}
-        >
-          {treeCollapsed ? (
-            <Button
-              type="text"
-              icon={<RightOutlined />}
-              onClick={() => setTreeCollapsed(false)}
-              className="w-full rounded-none"
-            />
-          ) : (
-            <>
-              <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100">
-                <span className="text-sm font-medium text-gray-700">类型筛选</span>
-                <Button type="text" size="small" icon={<RightOutlined rotate={180} />} onClick={() => setTreeCollapsed(true)} />
-              </div>
-              <Tree
-                selectedKeys={typeFilter ? [typeFilter] : []}
-                treeData={treeData}
-                showLine
-                blockNode
-                expandAction="click"
-                onSelect={([key]) => setTypeFilter(key ? (key as AgentTypeKey) : null)}
-                className="py-2"
+      </WorkspaceSidebar>
+      <section className="flex flex-1 min-w-0 min-h-0 flex-col">
+        {/* 顶部区域 */}
+        <div className="app-page-toolbar app-management-toolbar">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <h1 className="app-page-title">Agent 管理</h1>
+              <span className="text-gray-500 text-sm">· 总计 {agents.length} 个 Agent</span>
+            </div>
+            <Space wrap>
+              <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>
+                创建新 Agent
+              </Button>
+              <Input
+                placeholder="按名称/类型/创建者搜索"
+                prefix={<SearchOutlined className="text-gray-400" />}
+                allowClear
+                className="w-52"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
               />
-            </>
-          )}
+              <Dropdown
+                menu={{
+                  items: SORT_OPTIONS.map((o) => ({
+                    key: o.value,
+                    label: o.label,
+                    onClick: () => setSortBy(o.value as 'updated' | 'name'),
+                  })),
+                }}
+              >
+                <Button icon={<DownOutlined />}>排序：{SORT_OPTIONS.find((s) => s.value === sortBy)?.label}</Button>
+              </Dropdown>
+            </Space>
+          </div>
+          <Tabs
+            className="app-page-tabs"
+            activeKey={activeTab}
+            onChange={setActiveTab}
+            size="small"
+            items={[
+              { key: 'all', label: `全部 (${typeCounts.all})` },
+              ...AGENT_TYPES.map((t) => ({
+                key: t.key,
+                label: `${t.label} (${typeCounts[t.key]})`,
+              })),
+            ]}
+          />
         </div>
 
-        {/* 列表区 */}
-        <div className="flex-1 min-w-0 overflow-auto p-4 bg-gray-50">
-          <div className="flex justify-end gap-1 mb-2">
-            <Button
-              type={viewMode === 'table' ? 'primary' : 'default'}
-              size="small"
-              icon={<UnorderedListOutlined />}
-              onClick={() => setViewMode('table')}
-            />
-            <Button
-              type={viewMode === 'card' ? 'primary' : 'default'}
-              size="small"
-              icon={<AppstoreOutlined />}
-              onClick={() => setViewMode('card')}
-            />
+        {/* 列表与详情 */}
+        <Layout className="flex-1 min-h-0 flex-row overflow-hidden">
+
+
+          {/* 列表区 */}
+          <div className="flex-1 min-w-0 overflow-auto p-4 bg-gray-50">
+            <div className="flex justify-end gap-1 mb-2">
+              <Button
+                type={viewMode === 'table' ? 'primary' : 'default'}
+                size="small"
+                icon={<UnorderedListOutlined />}
+                onClick={() => setViewMode('table')}
+              />
+              <Button
+                type={viewMode === 'card' ? 'primary' : 'default'}
+                size="small"
+                icon={<AppstoreOutlined />}
+                onClick={() => setViewMode('card')}
+              />
+            </div>
+
+            {filteredList.length === 0 ? (
+              <Card>
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description={agents.length === 0 ? '暂无 Agent，点击「创建新 Agent」开始' : '无匹配结果'}
+                >
+                  {agents.length === 0 && (
+                    <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>
+                      创建第一个 Agent
+                    </Button>
+                  )}
+                </Empty>
+              </Card>
+            ) : viewMode === 'table' ? (
+              <Card className="mb-4">
+                {selectedRowKeys.length > 0 && (
+                  <div className="mb-3 flex items-center gap-2 flex-wrap">
+                    <span className="text-gray-500 text-sm">已选 {selectedRowKeys.length} 项</span>
+                    <Button size="small" danger icon={<DeleteOutlined />} onClick={handleBatchDelete}>
+                      批量删除
+                    </Button>
+                  </div>
+                )}
+                <Table<Agent>
+                  rowKey="id"
+                  loading={loading}
+                  columns={tableColumns}
+                  dataSource={filteredList}
+                  pagination={{ pageSize: 20, showSizeChanger: true }}
+                  rowSelection={{
+                    selectedRowKeys,
+                    onChange: (keys) => setSelectedRowKeys(keys as React.Key[]),
+                  }}
+                  onRow={(record) => ({
+                    onClick: () => handleRowClick(record),
+                    style: { cursor: 'pointer' },
+                  })}
+                  size="small"
+                />
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {filteredList.map((agent) => (
+                  <Card
+                    key={agent.id}
+                    hoverable
+                    className="cursor-pointer transition-shadow"
+                    style={{ minHeight: 220 }}
+                    onClick={() => handleRowClick(agent)}
+                    actions={[
+                      <Button key="edit" type="text" size="small" icon={<EditOutlined />} onClick={(e) => { e.stopPropagation(); navigate(`/agents/${agent.id}/edit`) }}>编辑</Button>,
+                      <Button key="test" type="text" size="small" icon={<ThunderboltOutlined />} onClick={(e) => { e.stopPropagation(); navigate(`/agents/${agent.id}/edit?test=1`) }}>测试</Button>,
+                      <Dropdown
+                        key="more"
+                        menu={{
+                          items: [
+                            { key: 'copy', label: '复制', icon: <CopyOutlined /> },
+                            { key: 'export', label: '导出', icon: <ExportOutlined /> },
+                            {
+                              key: 'delete',
+                              label: '删除',
+                              danger: true,
+                              icon: <DeleteOutlined />,
+                              onClick: () => handleDelete(agent, { stopPropagation: () => {} } as unknown as React.MouseEvent),
+                            },
+                          ],
+                        }}
+                        trigger={['click']}
+                      >
+                        <Button type="text" size="small" icon={<MenuOutlined />} onClick={(e) => e.stopPropagation()}>更多</Button>
+                      </Dropdown>,
+                    ]}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <Tag color={typeColorMap[agent.type]}>{typeLabelMap[agent.type]}</Tag>
+                      {agent.isDefault && <StarFilled style={{ color: '#faad14' }} />}
+                    </div>
+                    <div className="font-medium text-gray-900 mb-1 truncate" title={agent.name}>
+                      {agent.name}
+                    </div>
+                    <div className="text-gray-500 text-sm line-clamp-2 mb-2" title={agent.description}>
+                      {agent.description || '—'}
+                    </div>
+                    <div className="text-xs text-gray-400">
+                      {agent.version} · 更新：{agent.updatedAt}
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
           </div>
 
-          {filteredList.length === 0 ? (
-            <Card>
-              <Empty
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description={agents.length === 0 ? '暂无 Agent，点击「创建新 Agent」开始' : '无匹配结果'}
-              >
-                {agents.length === 0 && (
-                  <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>
-                    创建第一个 Agent
-                  </Button>
-                )}
-              </Empty>
-            </Card>
-          ) : viewMode === 'table' ? (
-            <Card className="mb-4">
-              {selectedRowKeys.length > 0 && (
-                <div className="mb-3 flex items-center gap-2 flex-wrap">
-                  <span className="text-gray-500 text-sm">已选 {selectedRowKeys.length} 项</span>
-                  <Button size="small" danger icon={<DeleteOutlined />} onClick={handleBatchDelete}>
-                    批量删除
-                  </Button>
+          {/* 右侧详情：桌面为侧栏，移动端为 Drawer */}
+          {selectedAgent && isLargeScreen && (
+              <div className="flex-shrink-0 overflow-auto border-l border-gray-200 bg-white" style={{ width: 344 }}>
+                <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+                  <span className="font-medium">Agent 详情</span>
+                  <Button type="link" size="small" onClick={() => { setSelectedAgent(null); setDetailPanelOpen(false) }}>收起</Button>
                 </div>
-              )}
-              <Table<Agent>
-                rowKey="id"
-                loading={loading}
-                columns={tableColumns}
-                dataSource={filteredList}
-                pagination={{ pageSize: 20, showSizeChanger: true }}
-                rowSelection={{
-                  selectedRowKeys,
-                  onChange: (keys) => setSelectedRowKeys(keys as React.Key[]),
-                }}
-                onRow={(record) => ({
-                  onClick: () => handleRowClick(record),
-                  style: { cursor: 'pointer' },
-                })}
-                size="small"
-              />
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filteredList.map((agent) => (
-                <Card
-                  key={agent.id}
-                  hoverable
-                  className="cursor-pointer transition-shadow"
-                  style={{ minHeight: 220 }}
-                  onClick={() => handleRowClick(agent)}
-                  actions={[
-                    <Button key="edit" type="text" size="small" icon={<EditOutlined />} onClick={(e) => { e.stopPropagation(); navigate(`/agents/${agent.id}/edit`) }}>编辑</Button>,
-                    <Button key="test" type="text" size="small" icon={<ThunderboltOutlined />} onClick={(e) => { e.stopPropagation(); navigate(`/agents/${agent.id}/edit?test=1`) }}>测试</Button>,
-                    <Dropdown
-                      key="more"
-                      menu={{
-                        items: [
-                          { key: 'copy', label: '复制', icon: <CopyOutlined /> },
-                          { key: 'export', label: '导出', icon: <ExportOutlined /> },
-                          {
-                            key: 'delete',
-                            label: '删除',
-                            danger: true,
-                            icon: <DeleteOutlined />,
-                            onClick: () => handleDelete(agent, { stopPropagation: () => {} } as unknown as React.MouseEvent),
-                          },
-                        ],
-                      }}
-                      trigger={['click']}
-                    >
-                      <Button type="text" size="small" icon={<MenuOutlined />} onClick={(e) => e.stopPropagation()}>更多</Button>
-                    </Dropdown>,
-                  ]}
-                >
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <Tag color={typeColorMap[agent.type]}>{typeLabelMap[agent.type]}</Tag>
-                    {agent.isDefault && <StarFilled style={{ color: '#faad14' }} />}
+                <div className="p-4 space-y-4">
+                  <div>
+                    <div className="text-sm text-gray-500 mb-1">名称</div>
+                    <div className="font-medium">{selectedAgent.name}</div>
                   </div>
-                  <div className="font-medium text-gray-900 mb-1 truncate" title={agent.name}>
-                    {agent.name}
+                  <div>
+                    <div className="text-sm text-gray-500 mb-1">类型</div>
+                    <Tag color={typeColorMap[selectedAgent.type]}>{typeLabelMap[selectedAgent.type]}</Tag>
                   </div>
-                  <div className="text-gray-500 text-sm line-clamp-2 mb-2" title={agent.description}>
-                    {agent.description || '—'}
+                  <div>
+                    <div className="text-sm text-gray-500 mb-1">描述</div>
+                    <div className="text-gray-700 text-sm">{selectedAgent.description || '—'}</div>
                   </div>
-                  <div className="text-xs text-gray-400">
-                    {agent.version} · 更新：{agent.updatedAt}
+                  <div className="text-sm text-gray-500">
+                    版本 {selectedAgent.version} · 更新于 {selectedAgent.updatedAt} · {selectedAgent.updatedBy}
                   </div>
-                </Card>
-              ))}
-            </div>
+                  <Space>
+                    <Button type="primary" icon={<EditOutlined />} onClick={() => navigate(`/agents/${selectedAgent.id}/edit`)}>
+                      编辑
+                    </Button>
+                    <Button icon={<ThunderboltOutlined />} onClick={() => navigate(`/agents/${selectedAgent.id}/edit?test=1`)}>
+                      快速测试
+                    </Button>
+                  </Space>
+                </div>
+              </div>
           )}
-        </div>
-
-        {/* 右侧详情：桌面为侧栏，移动端为 Drawer */}
-        {selectedAgent && isLargeScreen && (
-            <div className="flex-shrink-0 overflow-auto border-l border-gray-200 bg-white" style={{ width: '36%', minWidth: 320 }}>
-              <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-                <span className="font-medium">Agent 详情</span>
-                <Button type="link" size="small" onClick={() => { setSelectedAgent(null); setDetailPanelOpen(false) }}>收起</Button>
-              </div>
-              <div className="p-4 space-y-4">
-                <div>
-                  <div className="text-sm text-gray-500 mb-1">名称</div>
-                  <div className="font-medium">{selectedAgent.name}</div>
+          {selectedAgent && !isLargeScreen && (
+              <Drawer
+                title="Agent 详情"
+                placement="right"
+                open={detailPanelOpen}
+                onClose={() => setDetailPanelOpen(false)}
+                width="min(100%, 400px)"
+              >
+                <div className="space-y-4">
+                  <div>
+                    <div className="text-sm text-gray-500 mb-1">名称</div>
+                    <div className="font-medium">{selectedAgent.name}</div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-500 mb-1">类型</div>
+                    <Tag color={typeColorMap[selectedAgent.type]}>{typeLabelMap[selectedAgent.type]}</Tag>
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-500 mb-1">描述</div>
+                    <div className="text-gray-700 text-sm">{selectedAgent.description || '—'}</div>
+                  </div>
+                  <Space>
+                    <Button type="primary" icon={<EditOutlined />} onClick={() => navigate(`/agents/${selectedAgent.id}/edit`)}>
+                      编辑
+                    </Button>
+                    <Button icon={<ThunderboltOutlined />} onClick={() => navigate(`/agents/${selectedAgent.id}/edit?test=1`)}>
+                      快速测试
+                    </Button>
+                  </Space>
                 </div>
-                <div>
-                  <div className="text-sm text-gray-500 mb-1">类型</div>
-                  <Tag color={typeColorMap[selectedAgent.type]}>{typeLabelMap[selectedAgent.type]}</Tag>
-                </div>
-                <div>
-                  <div className="text-sm text-gray-500 mb-1">描述</div>
-                  <div className="text-gray-700 text-sm">{selectedAgent.description || '—'}</div>
-                </div>
-                <div className="text-sm text-gray-500">
-                  版本 {selectedAgent.version} · 更新于 {selectedAgent.updatedAt} · {selectedAgent.updatedBy}
-                </div>
-                <Space>
-                  <Button type="primary" icon={<EditOutlined />} onClick={() => navigate(`/agents/${selectedAgent.id}/edit`)}>
-                    编辑
-                  </Button>
-                  <Button icon={<ThunderboltOutlined />} onClick={() => navigate(`/agents/${selectedAgent.id}/edit?test=1`)}>
-                    快速测试
-                  </Button>
-                </Space>
-              </div>
-            </div>
-        )}
-        {selectedAgent && !isLargeScreen && (
-            <Drawer
-              title="Agent 详情"
-              placement="right"
-              open={detailPanelOpen}
-              onClose={() => setDetailPanelOpen(false)}
-              width="min(100%, 400px)"
-            >
-              <div className="space-y-4">
-                <div>
-                  <div className="text-sm text-gray-500 mb-1">名称</div>
-                  <div className="font-medium">{selectedAgent.name}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-gray-500 mb-1">类型</div>
-                  <Tag color={typeColorMap[selectedAgent.type]}>{typeLabelMap[selectedAgent.type]}</Tag>
-                </div>
-                <div>
-                  <div className="text-sm text-gray-500 mb-1">描述</div>
-                  <div className="text-gray-700 text-sm">{selectedAgent.description || '—'}</div>
-                </div>
-                <Space>
-                  <Button type="primary" icon={<EditOutlined />} onClick={() => navigate(`/agents/${selectedAgent.id}/edit`)}>
-                    编辑
-                  </Button>
-                  <Button icon={<ThunderboltOutlined />} onClick={() => navigate(`/agents/${selectedAgent.id}/edit?test=1`)}>
-                    快速测试
-                  </Button>
-                </Space>
-              </div>
-            </Drawer>
-        )}
-      </Layout>
+              </Drawer>
+          )}
+        </Layout>
+      </section>
 
       {/* 创建 Agent 弹窗 */}
       <Modal

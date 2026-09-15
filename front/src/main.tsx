@@ -21,6 +21,15 @@ const RootApp: React.FC = () => {
         token: {
           colorPrimary: '#1677ff',
           borderRadius: 6,
+          colorBgLayout: '#f7f9fc',
+          colorBgContainer: '#ffffff',
+          colorText: '#1f2937',
+          colorTextSecondary: '#667085',
+          colorBorderSecondary: '#e5eaf0',
+          colorPrimaryBg: '#eaf3ff',
+          controlHeight: 32,
+          fontSize: 14,
+          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
         },
       }}
     >
@@ -82,4 +91,3 @@ async function enableMocking() {
 }
 
 void enableMocking()
-

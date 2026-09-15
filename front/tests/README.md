@@ -29,3 +29,17 @@ node front/tests/workspaceWrite.browser.mjs
 | `workspaceWrite.browser.mjs` | A08/A09/A14 延迟写入保护：设计、计划、风格、反馈、剪辑、审片和接缝的成功/失败恢复；保存中后退、取消与完成后继续，媒体提示与整页恢复。不调用真实模型。 |
 
 测试替身证明前端交互与请求边界。采用指针、不可变版本和事务规则由 `backend/tests/directing/test_store.py`、`test_continuity.py`、`test_feedback.py` 的现有业务测试验证；没有后端变化时复用已有结果。迟到建议的服务端独立派生由 `backend/tests/directing/test_workspace.py` 验证。A17 的场景矩阵由前四组综合覆盖；A18 为 Chromium CSS 视口检查，不宣称真实手机硬件或全部浏览器通过。这些脚本不证明真实模型艺术质量或目标用户理解。A19 五秒用户测试已由用户明确取消，不再作为本次 UX5 门槛；取消说明见 `site/content/docs/plans/directing-workbench-usability-check.md`。
+
+## 全站布局框架回归（A1–A3）
+
+```bash
+node --test front/tests/shellNavigation.test.mjs
+node front/tests/shellAcceptance.browser.mjs
+node front/tests/shellFocus.browser.mjs
+```
+
+`shellAcceptance.browser.mjs` 使用同样的 Node.js / Playwright 环境，临时监听 `127.0.0.1:4184`。接口请求由测试替身隔离，不连接真实服务或调用模型。默认截图与测量数据位于 `/tmp/jellyfish-shell-acceptance`，可通过 `SHELL_EVIDENCE_DIR` 指定输出目录。
+
+覆盖全部路由族、项目与资产页签、五种规定尺寸、全局导航、真实标题回跳、任务抽屉、资产与 Agent 保存、实验室历史与固定输入区，以及旧入口参数恢复。原场次回归继续负责业务草稿、采用、离开保护与复杂写入失败场景。
+
+`shellFocus.browser.mjs` 临时监听 `127.0.0.1:4185`，验证桌面与手机导航的 Tab 往返、2px 可见焦点及 Escape 关闭；手机导航位于应用壳外的抽屉门户中，因此单独覆盖其焦点样式。

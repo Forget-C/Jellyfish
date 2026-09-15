@@ -1,7 +1,8 @@
-/** Shared full-height layout for text, image, and future experiment laboratories. */
-import type { ReactNode } from 'react'
-import { Card } from 'antd'
-import { WorkspaceLayout } from '../../../../components'
+import { useEffect, useState, type ReactNode } from 'react'
+import { Button, Drawer, Grid } from 'antd'
+import { MenuOutlined } from '@ant-design/icons'
+import { useLocation } from 'react-router-dom'
+import { PageToolbar, WorkspaceLayout } from '../../../../components'
 
 type ExperimentLabLayoutProps = {
   title: string
@@ -12,21 +13,28 @@ type ExperimentLabLayoutProps = {
   overlays?: ReactNode
 }
 
-/** Aligns laboratory history and input areas while callers provide modality-specific content. */
+/** 会话侧栏与生成区共享全站边界；窄屏打开同一个会话导航，输入区独立于历史滚动。 */
 export function ExperimentLabLayout({ title, extra, sidebar, history, composer, overlays }: ExperimentLabLayoutProps) {
+  const { xl } = Grid.useBreakpoint()
+  const { search } = useLocation()
+  const [sessionsOpen, setSessionsOpen] = useState(false)
+  useEffect(() => { setSessionsOpen(false) }, [search])
   return (
     <WorkspaceLayout>
-      <Card title={title} className="app-fill-card" extra={extra}>
-        <div className="flex min-h-0 flex-1 gap-4">
-          {sidebar}
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <div className="flex-1 min-h-0 space-y-4 overflow-y-auto rounded-xl border border-slate-200 bg-white p-4 pr-3 shadow-inner">
-              {history}
-            </div>
+      <div className="app-lab-layout">
+        {xl && sidebar}
+        <section className="app-lab-main" aria-label={title}>
+          <PageToolbar title={title}>
+            {!xl && <Button icon={<MenuOutlined />} onClick={() => setSessionsOpen(true)}>会话导航</Button>}
+            <div className="app-page-actions">{extra}</div>
+          </PageToolbar>
+          <div className="app-lab-content">
+            <div className="app-lab-history">{history}</div>
             {composer}
           </div>
-        </div>
-      </Card>
+        </section>
+      </div>
+      {!xl && <Drawer title="会话导航" placement="left" width={272} open={sessionsOpen} onClose={() => setSessionsOpen(false)}>{sidebar}</Drawer>}
       {overlays}
     </WorkspaceLayout>
   )

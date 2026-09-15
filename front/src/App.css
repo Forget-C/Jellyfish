@@ -27,32 +27,12 @@
   transform: translateY(-2px);
 }
 
-/* Tailwind and Ant Design compatibility */
-.ant-card {
-  border: 1px solid #f0f0f0;
-}
-
-.ant-btn-primary {
-  background: #1890ff;
-  border-color: #1890ff;
-}
-
-.ant-btn-primary:hover {
-  background: #40a9ff;
-  border-color: #40a9ff;
-}
-
-/* Project workbench: tab 选中态主色下划线 */
+/* 页面页签统一使用全站主题。 */
 .project-workbench-tabs.ant-tabs .ant-tabs-ink-bar {
-  background: #6366f1;
   height: 3px;
 }
 .project-workbench-tabs.ant-tabs .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn {
-  color: #6366f1;
   font-weight: 600;
-}
-.project-workbench-tabs.ant-tabs .ant-tabs-tab:hover .ant-tabs-tab-btn {
-  color: #6366f1;
 }
 @keyframes fadeIn {
   from { opacity: 0; }

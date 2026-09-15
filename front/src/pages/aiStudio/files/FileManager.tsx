@@ -1,3 +1,4 @@
+import { PageToolbar } from '../../../components'
 import React, { useEffect, useState } from 'react'
 import {
   Card,
@@ -58,7 +59,7 @@ const FileManager: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-4">
+      <PageToolbar title="文件管理">
         <Input.Search
           placeholder="搜索文件名或标签"
           allowClear
@@ -88,9 +89,9 @@ const FileManager: React.FC = () => {
         <Button icon={<DownloadOutlined />} disabled={selectedFileIds.length === 0}>
           批量导出{selectedFileIds.length ? ` (${selectedFileIds.length})` : ''}
         </Button>
-      </div>
+      </PageToolbar>
 
-      <Card title="文件列表" loading={loading}>
+      <Card className="app-page-list" title="文件列表" loading={loading}>
         <Row gutter={[16, 16]}>
           {filtered.map((f) => (
             <Col xs={24} sm={12} md={8} lg={6} key={f.id}>

@@ -1,3 +1,4 @@
+import { PageToolbar } from '../../../components'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FC, Key } from 'react'
 import { Card, Tree, Input, Row, Col, Tag, Pagination, Button, Modal, Form, Select, Switch, message } from 'antd'
@@ -373,11 +374,8 @@ const PromptTemplateManager: FC = () => {
 
   return (
     <div className="space-y-4">
-      <Card
-        title="提示词模板管理"
-        loading={loading && templates.length === 0}
-        extra={<Button type="primary" onClick={openCreateModal}>添加提示词</Button>}
-      >
+      <PageToolbar title="提示词模板管理"><div className="app-page-actions"><Button type="primary" onClick={openCreateModal}>添加提示词</Button></div></PageToolbar>
+      <Card className="app-page-list" loading={loading && templates.length === 0}>
         <Input.Search
           placeholder="搜索模板名称或预览"
           allowClear

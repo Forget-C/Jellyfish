@@ -147,13 +147,14 @@ try {
       }
     }
     if (width === 1440) {
-      await page.getByRole('button', { name: '收起主导航', exact: true }).click()
-      await page.getByRole('button', { name: '展开主导航', exact: true }).click()
+      assert.equal(await page.getByRole('navigation', { name: '主导航', exact: true }).evaluate(element => element.getBoundingClientRect().width), 64)
     }
     if (width === 375) {
       await page.goto('http://127.0.0.1:4182/projects')
-      await page.getByRole('button', { name: '收起主导航', exact: true }).waitFor()
-      assert.equal(await page.locator('.ant-layout-sider').isVisible(), true, 'Other routes keep their existing navigation layout')
+      await page.getByRole('button', { name: '打开主导航', exact: true }).click()
+      await page.getByRole('navigation', { name: '移动主导航', exact: true }).waitFor()
+      await page.keyboard.press('Escape')
+      await page.getByRole('dialog').waitFor({ state: 'hidden' })
     }
     assert.deepEqual(errors, [])
     assert.deepEqual(writes, [])

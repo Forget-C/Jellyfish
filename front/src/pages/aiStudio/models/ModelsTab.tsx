@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+import { WorkspaceSidebar } from '../../../components/layout/WorkspaceSidebar'
 import { useEffect, useState, useMemo } from 'react'
 import {
   Alert,
@@ -29,7 +31,6 @@ import {
   AppstoreOutlined,
   UnorderedListOutlined,
   DownOutlined,
-  RightOutlined,
   ThunderboltOutlined,
   SettingOutlined,
 } from '@ant-design/icons'
@@ -64,7 +65,7 @@ interface ModelFormValues {
   params?: string
 }
 
-export default function ModelsTab() {
+export default function ModelsTab({ header }: { header: ReactNode }) {
   const [providers, setProviders] = useState<ProviderRead[]>([])
   const [supportedProviders, setSupportedProviders] = useState<ProviderSupportedRead[]>([])
   const [models, setModels] = useState<ModelRead[]>([])
@@ -78,7 +79,6 @@ export default function ModelsTab() {
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table')
   const [selectedModel, setSelectedModel] = useState<ModelRead | null>(null)
   const [detailPanelOpen, setDetailPanelOpen] = useState(false)
-  const [treeCollapsed, setTreeCollapsed] = useState(false)
   const [categoryFilter, setCategoryFilter] = useState<ModelCategoryKey | null>(null)
   const [modelModalOpen, setModelModalOpen] = useState(false)
   const [modelEditing, setModelEditing] = useState<ModelRead | null>(null)
@@ -89,7 +89,7 @@ export default function ModelsTab() {
   const [form] = Form.useForm<ModelFormValues>()
   const selectedFormCategory = Form.useWatch<ModelCategoryKey | undefined>('category', form)
   const selectedFormProviderId = Form.useWatch<string | undefined>('provider_id', form)
-  const { lg } = Grid.useBreakpoint()
+  const { xl: lg } = Grid.useBreakpoint()
   const isLargeScreen = lg ?? false
 
   const load = async () => {
@@ -478,285 +478,267 @@ export default function ModelsTab() {
 
   return (
     <>
-      <div className="flex-shrink-0 px-4 py-2 border-b border-gray-100 bg-white flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="text-gray-600 text-sm">共 {models.length} 个模型</span>
-        </div>
-        <Space wrap>
-          <Button icon={<SettingOutlined />} onClick={() => setDefaultModelsDrawerOpen(true)}>
-            默认模型 {configuredDefaultCount}/3
-          </Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => openModelModal()}>
-            添加模型
-          </Button>
-          <Input
-            placeholder="搜索名称/类型"
-            allowClear
-            className="w-48"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+      <Layout className="app-management-body flex-1 min-h-0 flex-row overflow-hidden">
+        <WorkspaceSidebar title="筛选">
+          <Tree
+            selectedKeys={categoryFilter ? [categoryFilter] : []}
+            treeData={treeData}
+            showLine
+            blockNode
+            onSelect={([key]) => setCategoryFilter(key ? (key as ModelCategoryKey) : null)}
+            className="py-2"
           />
-          <Dropdown
-            menu={{
-              items: SORT_OPTIONS.map((o) => ({
-                key: o.value,
-                label: o.label,
-                onClick: () => setSortBy(o.value as 'updated' | 'name' | 'category'),
-              })),
-            }}
-          >
-            <Button icon={<DownOutlined />}>
-              排序：{SORT_OPTIONS.find((s) => s.value === sortBy)?.label}
-            </Button>
-          </Dropdown>
-        </Space>
-      </div>
-
-      <Layout className="flex-1 min-h-0 flex-row overflow-hidden">
-        <div
-          className="flex-shrink-0 border-r border-gray-200 bg-white overflow-auto"
-          style={{ width: treeCollapsed ? 48 : 200 }}
-        >
-          {treeCollapsed ? (
-            <Button
-              type="text"
-              icon={<RightOutlined />}
-              onClick={() => setTreeCollapsed(false)}
-              className="w-full rounded-none"
-            />
-          ) : (
-            <>
-              <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100">
-                <span className="text-sm font-medium text-gray-700">筛选</span>
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<RightOutlined rotate={180} />}
-                  onClick={() => setTreeCollapsed(true)}
-                />
-              </div>
-              <Tree
-                selectedKeys={categoryFilter ? [categoryFilter] : []}
-                treeData={treeData}
-                showLine
-                blockNode
-                onSelect={([key]) => setCategoryFilter(key ? (key as ModelCategoryKey) : null)}
-                className="py-2"
-              />
-            </>
-          )}
-        </div>
-
-        <div className="flex-1 min-w-0 overflow-auto p-4 bg-gray-50">
-          <div className="flex justify-end gap-1 mb-2">
-            <Button
-              type={viewMode === 'table' ? 'primary' : 'default'}
-              size="small"
-              icon={<UnorderedListOutlined />}
-              onClick={() => setViewMode('table')}
-            />
-            <Button
-              type={viewMode === 'card' ? 'primary' : 'default'}
-              size="small"
-              icon={<AppstoreOutlined />}
-              onClick={() => setViewMode('card')}
-            />
-          </div>
-
-          {modelList.length === 0 ? (
-            <Card>
-              <Empty
-                description={
-                  models.length === 0 ? '暂无模型，请先添加供应商再添加模型' : '无匹配结果'
-                }
-              >
-                {providers.length > 0 && models.length === 0 && (
-                  <Button type="primary" icon={<PlusOutlined />} onClick={() => openModelModal()}>
-                    添加第一个模型
-                  </Button>
-                )}
-              </Empty>
-            </Card>
-          ) : viewMode === 'table' ? (
-            <Card>
-              <Table<ModelRead>
-                rowKey="id"
-                loading={loading}
-                columns={modelColumns}
-                dataSource={modelList}
-                scroll={{ x: 1024 }}
-                pagination={{ pageSize: 20 }}
-                onRow={(record) => ({
-                  onClick: () => {
-                    setSelectedModel(record)
-                    setDetailPanelOpen(true)
-                  },
-                  style: { cursor: 'pointer' },
-                })}
-                size="small"
-              />
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {modelList.map((m) => (
-                <Card
-                  key={m.id}
-                  hoverable
-                  className="cursor-pointer"
-                  style={{ minHeight: 220 }}
-                  onClick={() => {
-                    setSelectedModel(m)
-                    setDetailPanelOpen(true)
-                  }}
-                  actions={[
-                    <Button
-                      key="edit"
-                      type="text"
-                      size="small"
-                      icon={<EditOutlined />}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        openModelModal(m)
-                      }}
-                    >
-                      编辑
-                    </Button>,
-                    <Button key="test" type="text" size="small" icon={<ThunderboltOutlined />}>
-                      测试生成
-                    </Button>,
-                    <Dropdown
-                      key="more"
-                      menu={{
-                        items: [
-                          {
-                            key: 'copy',
-                            label: '复制',
-                            icon: <CopyOutlined />,
-                            onClick: ({ domEvent }) => {
-                              domEvent.stopPropagation()
-                              openCopyModelModal(m)
-                            },
-                          },
-                          {
-                            key: 'delete',
-                            label: '删除',
-                            danger: true,
-                            icon: <DeleteOutlined />,
-                            onClick: ({ domEvent }) => {
-                              domEvent.stopPropagation()
-                              handleDeleteModel(m)
-                            },
-                          },
-                        ],
-                      }}
-                      trigger={['click']}
-                    >
-                      <Button type="text" size="small" onClick={(e) => e.stopPropagation()}>
-                        更多
-                      </Button>
-                    </Dropdown>,
-                  ]}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <Tag color={categoryColorMap[m.category]}>{categoryLabelMap[m.category]}</Tag>
-                  </div>
-                  <div className="font-medium mb-1">{m.name}</div>
-                  <div className="text-gray-500 text-sm mb-1">
-                    供应商：{getProviderName(m.provider_id)}
-                  </div>
-                  <div className="text-gray-500 text-sm line-clamp-2 mb-2">{m.description || '—'}</div>
-                  {m.created_by && (
-                    <span className="text-xs text-gray-400">创建：{m.created_by}</span>
-                  )}
-                </Card>
-              ))}
+        </WorkspaceSidebar>
+        <section className="flex flex-1 min-w-0 min-h-0 flex-col">
+          {header}
+          <div className="flex-shrink-0 px-4 py-2 border-b border-gray-100 bg-white flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-gray-600 text-sm">共 {models.length} 个模型</span>
             </div>
-          )}
-        </div>
-
-        {selectedModel && isLargeScreen && (
-          <div
-            className="flex-shrink-0 overflow-auto border-l border-gray-200 bg-white"
-            style={{ width: '36%', minWidth: 320 }}
-          >
-            <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-              <span className="font-medium">详情</span>
-              <Button
-                type="link"
-                size="small"
-                onClick={() => {
-                  setDetailPanelOpen(false)
-                  setSelectedModel(null)
+            <Space wrap>
+              <Button icon={<SettingOutlined />} onClick={() => setDefaultModelsDrawerOpen(true)}>
+                默认模型 {configuredDefaultCount}/3
+              </Button>
+              <Button type="primary" icon={<PlusOutlined />} onClick={() => openModelModal()}>
+                添加模型
+              </Button>
+              <Input
+                placeholder="搜索名称/类型"
+                allowClear
+                className="w-48"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              <Dropdown
+                menu={{
+                  items: SORT_OPTIONS.map((o) => ({
+                    key: o.value,
+                    label: o.label,
+                    onClick: () => setSortBy(o.value as 'updated' | 'name' | 'category'),
+                  })),
                 }}
               >
-                收起
-              </Button>
-            </div>
-            <div className="p-4 space-y-4">
-              <div>
-                <div className="text-sm text-gray-500 mb-1">名称</div>
-                <div className="font-medium">{selectedModel.name}</div>
-              </div>
-              <div>
-                <div className="text-sm text-gray-500 mb-1">类别</div>
-                <Tag color={categoryColorMap[selectedModel.category]}>
-                  {categoryLabelMap[selectedModel.category]}
-                </Tag>
-              </div>
-              <div>
-                <div className="text-sm text-gray-500 mb-1">关联供应商</div>
-                <div>{getProviderName(selectedModel.provider_id)}</div>
-              </div>
-              <div>
-                <div className="text-sm text-gray-500 mb-1">描述</div>
-                <div className="text-gray-700 text-sm">{selectedModel.description || '—'}</div>
-              </div>
-              <Space>
-                <Button
-                  type="primary"
-                  icon={<EditOutlined />}
-                  onClick={() => openModelModal(selectedModel)}
-                >
-                  编辑
+                <Button icon={<DownOutlined />}>
+                  排序：{SORT_OPTIONS.find((s) => s.value === sortBy)?.label}
                 </Button>
-                <Button icon={<ThunderboltOutlined />}>快速测试</Button>
-              </Space>
-            </div>
+              </Dropdown>
+            </Space>
           </div>
-        )}
 
-        {selectedModel && !isLargeScreen && (
-          <Drawer
-            title="详情"
-            placement="right"
-            open={detailPanelOpen}
-            onClose={() => setDetailPanelOpen(false)}
-            width="min(100%, 400px)"
-          >
-            <div className="space-y-4">
-              <div>
-                <div className="text-sm text-gray-500 mb-1">名称</div>
-                <div className="font-medium">{selectedModel.name}</div>
-              </div>
-              <div>
-                <div className="text-sm text-gray-500 mb-1">类别</div>
-                <Tag color={categoryColorMap[selectedModel.category]}>
-                  {categoryLabelMap[selectedModel.category]}
-                </Tag>
-              </div>
-              <Space>
+          <Layout className="flex-1 min-h-0 flex-row overflow-hidden">
+
+            <div className="flex-1 min-w-0 overflow-auto p-4 bg-gray-50">
+              <div className="flex justify-end gap-1 mb-2">
                 <Button
-                  type="primary"
-                  icon={<EditOutlined />}
-                  onClick={() => openModelModal(selectedModel)}
-                >
-                  编辑
-                </Button>
-                <Button icon={<ThunderboltOutlined />}>快速测试</Button>
-              </Space>
+                  type={viewMode === 'table' ? 'primary' : 'default'}
+                  size="small"
+                  icon={<UnorderedListOutlined />}
+                  onClick={() => setViewMode('table')}
+                />
+                <Button
+                  type={viewMode === 'card' ? 'primary' : 'default'}
+                  size="small"
+                  icon={<AppstoreOutlined />}
+                  onClick={() => setViewMode('card')}
+                />
+              </div>
+
+              {modelList.length === 0 ? (
+                <Card>
+                  <Empty
+                    description={
+                      models.length === 0 ? '暂无模型，请先添加供应商再添加模型' : '无匹配结果'
+                    }
+                  >
+                    {providers.length > 0 && models.length === 0 && (
+                      <Button type="primary" icon={<PlusOutlined />} onClick={() => openModelModal()}>
+                        添加第一个模型
+                      </Button>
+                    )}
+                  </Empty>
+                </Card>
+              ) : viewMode === 'table' ? (
+                <Card>
+                  <Table<ModelRead>
+                    rowKey="id"
+                    loading={loading}
+                    columns={modelColumns}
+                    dataSource={modelList}
+                    scroll={{ x: 1024 }}
+                    pagination={{ pageSize: 20 }}
+                    onRow={(record) => ({
+                      onClick: () => {
+                        setSelectedModel(record)
+                        setDetailPanelOpen(true)
+                      },
+                      style: { cursor: 'pointer' },
+                    })}
+                    size="small"
+                  />
+                </Card>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {modelList.map((m) => (
+                    <Card
+                      key={m.id}
+                      hoverable
+                      className="cursor-pointer"
+                      style={{ minHeight: 220 }}
+                      onClick={() => {
+                        setSelectedModel(m)
+                        setDetailPanelOpen(true)
+                      }}
+                      actions={[
+                        <Button
+                          key="edit"
+                          type="text"
+                          size="small"
+                          icon={<EditOutlined />}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            openModelModal(m)
+                          }}
+                        >
+                          编辑
+                        </Button>,
+                        <Button key="test" type="text" size="small" icon={<ThunderboltOutlined />}>
+                          测试生成
+                        </Button>,
+                        <Dropdown
+                          key="more"
+                          menu={{
+                            items: [
+                              {
+                                key: 'copy',
+                                label: '复制',
+                                icon: <CopyOutlined />,
+                                onClick: ({ domEvent }) => {
+                                  domEvent.stopPropagation()
+                                  openCopyModelModal(m)
+                                },
+                              },
+                              {
+                                key: 'delete',
+                                label: '删除',
+                                danger: true,
+                                icon: <DeleteOutlined />,
+                                onClick: ({ domEvent }) => {
+                                  domEvent.stopPropagation()
+                                  handleDeleteModel(m)
+                                },
+                              },
+                            ],
+                          }}
+                          trigger={['click']}
+                        >
+                          <Button type="text" size="small" onClick={(e) => e.stopPropagation()}>
+                            更多
+                          </Button>
+                        </Dropdown>,
+                      ]}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <Tag color={categoryColorMap[m.category]}>{categoryLabelMap[m.category]}</Tag>
+                      </div>
+                      <div className="font-medium mb-1">{m.name}</div>
+                      <div className="text-gray-500 text-sm mb-1">
+                        供应商：{getProviderName(m.provider_id)}
+                      </div>
+                      <div className="text-gray-500 text-sm line-clamp-2 mb-2">{m.description || '—'}</div>
+                      {m.created_by && (
+                        <span className="text-xs text-gray-400">创建：{m.created_by}</span>
+                      )}
+                    </Card>
+                  ))}
+                </div>
+              )}
             </div>
-          </Drawer>
-        )}
+
+            {selectedModel && isLargeScreen && (
+              <div
+                className="flex-shrink-0 overflow-auto border-l border-gray-200 bg-white"
+                style={{ width: 344 }}
+              >
+                <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+                  <span className="font-medium">详情</span>
+                  <Button
+                    type="link"
+                    size="small"
+                    onClick={() => {
+                      setDetailPanelOpen(false)
+                      setSelectedModel(null)
+                    }}
+                  >
+                    收起
+                  </Button>
+                </div>
+                <div className="p-4 space-y-4">
+                  <div>
+                    <div className="text-sm text-gray-500 mb-1">名称</div>
+                    <div className="font-medium">{selectedModel.name}</div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-500 mb-1">类别</div>
+                    <Tag color={categoryColorMap[selectedModel.category]}>
+                      {categoryLabelMap[selectedModel.category]}
+                    </Tag>
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-500 mb-1">关联供应商</div>
+                    <div>{getProviderName(selectedModel.provider_id)}</div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-500 mb-1">描述</div>
+                    <div className="text-gray-700 text-sm">{selectedModel.description || '—'}</div>
+                  </div>
+                  <Space>
+                    <Button
+                      type="primary"
+                      icon={<EditOutlined />}
+                      onClick={() => openModelModal(selectedModel)}
+                    >
+                      编辑
+                    </Button>
+                    <Button icon={<ThunderboltOutlined />}>快速测试</Button>
+                  </Space>
+                </div>
+              </div>
+            )}
+
+            {selectedModel && !isLargeScreen && (
+              <Drawer
+                title="详情"
+                placement="right"
+                open={detailPanelOpen}
+                onClose={() => setDetailPanelOpen(false)}
+                width="min(100%, 400px)"
+              >
+                <div className="space-y-4">
+                  <div>
+                    <div className="text-sm text-gray-500 mb-1">名称</div>
+                    <div className="font-medium">{selectedModel.name}</div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-500 mb-1">类别</div>
+                    <Tag color={categoryColorMap[selectedModel.category]}>
+                      {categoryLabelMap[selectedModel.category]}
+                    </Tag>
+                  </div>
+                  <Space>
+                    <Button
+                      type="primary"
+                      icon={<EditOutlined />}
+                      onClick={() => openModelModal(selectedModel)}
+                    >
+                      编辑
+                    </Button>
+                    <Button icon={<ThunderboltOutlined />}>快速测试</Button>
+                  </Space>
+                </div>
+              </Drawer>
+            )}
+          </Layout>
+        </section>
       </Layout>
 
       <Drawer

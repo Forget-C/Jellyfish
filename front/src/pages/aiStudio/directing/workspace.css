@@ -1,5 +1,5 @@
 .sequence-workspace {
-  padding: 24px 24px 80px;
+  padding: 16px 16px 32px;
   overflow-wrap: anywhere;
 }
 
@@ -11,7 +11,7 @@
 /* Keep labels and actions readable inside narrow workspaces, including expanded editors. */
 @media (max-width: 767px) {
   .sequence-workspace {
-    padding: 12px 12px 80px;
+    padding: 12px 12px 32px;
   }
 
   .sequence-workspace .ant-space-item {
