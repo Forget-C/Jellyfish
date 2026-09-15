@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button, Card, Empty, Input, Modal, Space, message, Pagination } from 'antd'
 import { EditOutlined, LinkOutlined, PlusOutlined } from '@ant-design/icons'
 import { useNavigate, useParams } from 'react-router-dom'
-import { StudioShotLinksService } from '../../../../../services/generated'
+import { StudioProjectAssetsService } from '../../../../../services/generated'
 import type { ProjectCostumeLinkRead, ProjectPropLinkRead } from '../../../../../services/generated'
 import { resolveAssetUrl } from '../../../assets/utils'
 import { DisplayImageCard } from '../../../assets/components/DisplayImageCard'
@@ -54,11 +54,11 @@ function LinkedAssetTab({
   const loadLinks = async () => {
     setLoading(true)
     try {
-      const res = await StudioShotLinksService.listProjectEntityLinksApiV1StudioShotLinksEntityTypeGet({
+      const res = await StudioProjectAssetsService.listProjectEntityLinksApiV1StudioProjectAssetsEntityTypeGet({
         entityType: kind,
         projectId,
         chapterId: null,
-        shotId: null,
+
         assetId: null,
         order: null,
         isDesc: false,
@@ -144,12 +144,12 @@ function LinkedAssetTab({
     setLinkingId(assetId)
     try {
       if (kind === 'prop') {
-        await StudioShotLinksService.createProjectPropLinkApiV1StudioShotLinksPropPost({
-          requestBody: { project_id: projectId, chapter_id: null, shot_id: null, asset_id: assetId },
+        await StudioProjectAssetsService.createProjectPropLinkApiV1StudioProjectAssetsPropPost({
+          requestBody: { project_id: projectId, chapter_id: null, asset_id: assetId },
         })
       } else {
-        await StudioShotLinksService.createProjectCostumeLinkApiV1StudioShotLinksCostumePost({
-          requestBody: { project_id: projectId, chapter_id: null, shot_id: null, asset_id: assetId },
+        await StudioProjectAssetsService.createProjectCostumeLinkApiV1StudioProjectAssetsCostumePost({
+          requestBody: { project_id: projectId, chapter_id: null, asset_id: assetId },
         })
       }
       message.success(`已关联${kind === 'prop' ? '道具' : '服装'}「${assetName}」`)
@@ -166,9 +166,9 @@ function LinkedAssetTab({
     setUnlinkingId(link.id)
     try {
       if ('prop_id' in link) {
-        await StudioShotLinksService.deleteProjectPropLinkApiV1StudioShotLinksPropLinkIdDelete({ linkId: link.id })
+        await StudioProjectAssetsService.deleteProjectPropLinkApiV1StudioProjectAssetsPropLinkIdDelete({ linkId: link.id })
       } else {
-        await StudioShotLinksService.deleteProjectCostumeLinkApiV1StudioShotLinksCostumeLinkIdDelete({ linkId: link.id })
+        await StudioProjectAssetsService.deleteProjectCostumeLinkApiV1StudioProjectAssetsCostumeLinkIdDelete({ linkId: link.id })
       }
       message.success('已取消关联')
       await loadLinks()

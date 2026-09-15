@@ -33,7 +33,7 @@ export function ChaptersTab() {
       const id = newId('c')
       await StudioChaptersService.createChapterApiV1StudioChaptersPost({ requestBody: {
         id, project_id: projectId, index: Math.max(0, ...chapters.map(chapter => chapter.index)) + 1,
-        title: title.trim(), summary: '', raw_text: content, storyboard_count: 0, status: 'draft',
+        title: title.trim(), summary: '', raw_text: content, status: 'draft',
       } })
       setCreating(false); setTitle(''); setContent('')
       await refresh()

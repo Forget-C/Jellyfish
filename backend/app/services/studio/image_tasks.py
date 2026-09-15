@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import storage
 from app.core.contracts.provider import ProviderConfig
 from app.models.llm import Model, ModelCategoryKey
-from app.models.studio import AssetViewAngle, FileItem, PromptCategory, PromptTemplate, ShotFrameType
+from app.models.studio import AssetViewAngle, FileItem, PromptCategory, PromptTemplate
 from app.services.llm import get_model_by_category
 from app.services.llm.provider_resolver import resolve_provider_config
 
@@ -325,12 +325,3 @@ def asset_prompt_category(
     }
     front_category, other_category = mapping[relation_type]
     return front_category if is_front_view else other_category
-
-
-def shot_frame_prompt_category(frame_type: ShotFrameType | str) -> PromptCategory:
-    value = frame_type.value if isinstance(frame_type, ShotFrameType) else str(frame_type)
-    if value == ShotFrameType.first.value:
-        return PromptCategory.frame_head_image
-    if value == ShotFrameType.last.value:
-        return PromptCategory.frame_tail_image
-    return PromptCategory.frame_key_image

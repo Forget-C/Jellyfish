@@ -88,7 +88,7 @@ def test_generation_command_serializes_final_input_without_url_media() -> None:
         modality=GenerationModality.video,
         operation=GenerationOperation.video_generation,
         delivery=GenerationDelivery.async_polling,
-        target=GenerationTarget(kind=GenerationTargetKind.shot_video, entity_id="shot-1"),
+        target=GenerationTarget(kind=GenerationTargetKind.directing_unit, entity_id="shot-1"),
         request=GenerationSubmitRequest(
             execution_prompt="A moonlit city",
             media=VideoMediaInput(),

@@ -6,7 +6,6 @@ import NotFound from './pages/NotFound'
 import ProjectLobby from './pages/aiStudio/project/ProjectLobby'
 import ProjectWorkbench from './pages/aiStudio/project/ProjectWorkbench'
 import RoleDetailPage from './pages/aiStudio/project/ProjectWorkbench/RoleDetailPage'
-import ChapterStudio from './pages/aiStudio/chapter/ChapterStudio'
 import AssetManager from './pages/aiStudio/assets/AssetManager'
 import ActorAssetEditPage from './pages/aiStudio/assets/ActorAssetEditPage.tsx'
 import SceneAssetEditPage from './pages/aiStudio/assets/SceneAssetEditPage.tsx'
@@ -14,13 +13,10 @@ import PropAssetEditPage from './pages/aiStudio/assets/PropAssetEditPage.tsx'
 import CostumeAssetEditPage from './pages/aiStudio/assets/CostumeAssetEditPage.tsx'
 import PromptTemplateManager from './pages/aiStudio/prompts/PromptTemplateManager'
 import FileManager from './pages/aiStudio/files/FileManager'
-import VideoEditor from './pages/aiStudio/editor/VideoEditor'
 import AgentManagement from './pages/aiStudio/agents/AgentManagement'
 import AgentEdit from './pages/aiStudio/agents/AgentEdit.tsx'
 import ModelManagement from './pages/aiStudio/models/ModelManagement'
 import ExperimentLabPage from './pages/aiStudio/experiment/ExperimentLabPage'
-import { ChapterShotsPage } from './pages/aiStudio/shots/ChapterShotsPage'
-import { ChapterShotEditPage } from './pages/aiStudio/shots/ChapterShotEditPage'
 import ChapterSequencesPage from './pages/aiStudio/directing/ChapterSequencesPage'
 import SequenceWorkspacePage from './pages/aiStudio/directing/SequenceWorkspacePage'
 import './App.css'
@@ -42,14 +38,8 @@ const App: React.FC = () => {
           <Route path="projects" element={<ProjectLobby />} />
           <Route path="projects/:projectId" element={<ProjectWorkbench />} />
           <Route path="projects/:projectId/roles/:characterId/edit" element={<RoleDetailPage />} />
-          <Route path="projects/:projectId/chapters/:chapterId/prep/*" element={<Navigate to="../shots" replace />} />
           <Route path="projects/:projectId/chapters/:chapterId/sequences" element={<ChapterSequencesPage />} />
           <Route path="projects/:projectId/chapters/:chapterId/sequences/:sequenceId" element={<SequenceWorkspacePage />} />
-          <Route path="projects/:projectId/chapters/:chapterId/studio" element={<ChapterStudio />} />
-          <Route path="projects/:projectId/chapters/:chapterId/shots/:shotId/edit" element={<ChapterShotEditPage />} />
-          <Route path="projects/:projectId/chapters/:chapterId/shots" element={<ChapterShotsPage />} />
-          <Route path="projects/:projectId/chapters/:chapterId/prep-drafts" element={<Navigate to="../shots" replace />} />
-          <Route path="projects/:projectId/editor" element={<VideoEditor />} />
           <Route path="assets" element={<AssetManager />} />
           <Route path="assets/actors/:actorImageId/edit" element={<ActorAssetEditPage />} />
           <Route path="assets/scenes/:sceneId/edit" element={<SceneAssetEditPage />} />

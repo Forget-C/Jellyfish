@@ -31,7 +31,6 @@ def test_entity_existence_check_returns_success_envelope(client: TestClient, mon
                     "name": "角色一",
                     "exists": True,
                     "linked_to_project": True,
-                    "linked_to_shot": False,
                     "asset_id": "character-1",
                     "link_id": None,
                 }
@@ -48,7 +47,6 @@ def test_entity_existence_check_returns_success_envelope(client: TestClient, mon
             "/api/v1/studio/entities/existence-check",
             json={
                 "project_id": "project-1",
-                "shot_id": "shot-1",
                 "character_names": ["角色一"],
                 "prop_names": [],
                 "scene_names": [],
@@ -68,7 +66,6 @@ def test_entity_existence_check_returns_success_envelope(client: TestClient, mon
                     "name": "角色一",
                     "exists": True,
                     "linked_to_project": True,
-                    "linked_to_shot": False,
                     "asset_id": "character-1",
                     "link_id": None,
                 }
@@ -83,7 +80,7 @@ def test_entity_existence_check_returns_success_envelope(client: TestClient, mon
 
 def test_entity_existence_check_relation_error_returns_api_response(client: TestClient, monkeypatch) -> None:
     async def _fake_check(self, **_kwargs):  # noqa: ANN001
-        raise HTTPException(status_code=404, detail="shot_id does not belong to project_id")
+        raise HTTPException(status_code=404, detail="project not found")
 
     monkeypatch.setattr(StudioEntitiesService, "check_names_existence", _fake_check)
     app.dependency_overrides[get_db] = _override_db(_FakeDB())
@@ -92,7 +89,6 @@ def test_entity_existence_check_relation_error_returns_api_response(client: Test
             "/api/v1/studio/entities/existence-check",
             json={
                 "project_id": "project-1",
-                "shot_id": "shot-404",
                 "character_names": [],
                 "prop_names": [],
                 "scene_names": [],
@@ -105,7 +101,7 @@ def test_entity_existence_check_relation_error_returns_api_response(client: Test
     assert response.status_code == 404
     assert response.json() == {
         "code": 404,
-        "message": "shot_id does not belong to project_id",
+        "message": "project not found",
         "data": None,
         "meta": None,
     }

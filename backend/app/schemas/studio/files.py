@@ -32,10 +32,10 @@ class FileUsageWrite(BaseModel):
 
     project_id: str = Field(..., description="项目 ID")
     chapter_id: str | None = Field(None, description="章节 ID")
-    shot_id: str | None = Field(None, description="镜头 ID")
+
     usage_kind: str = Field(
         ...,
-        description="用途：shot_frame / generated_video / character_image / asset_image / upload / api 等",
+        description="用途：directing_reference / directing_take / generated_video / character_image / asset_image / upload / api 等",
     )
     source_ref: str | None = Field(None, description="幂等键（可选）")
 
@@ -47,7 +47,7 @@ class FileUsageRead(BaseModel):
     file_id: str
     project_id: str
     chapter_id: str | None
-    shot_id: str | None
+
     usage_kind: str
     source_ref: str
 

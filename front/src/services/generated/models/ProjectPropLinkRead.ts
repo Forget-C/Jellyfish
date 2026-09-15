@@ -15,14 +15,9 @@ export type ProjectPropLinkRead = {
      * 章节 ID（可空）
      */
     chapter_id?: (string | null);
-    /**
-     * 镜头 ID（可空）
-     */
-    shot_id?: (string | null);
     prop_id: string;
     /**
      * 道具缩略图下载地址
      */
     thumbnail?: string;
 };
-

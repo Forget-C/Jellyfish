@@ -9,7 +9,7 @@ class EntityNameExistenceCheckRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     project_id: str = Field(..., description="项目 ID（必填）", min_length=1)
-    shot_id: str | None = Field(None, description="镜头 ID（可选；不传则 linked_to_shot 恒为 false）")
+
     character_names: list[str] = Field(default_factory=list, description="角色名称列表")
     prop_names: list[str] = Field(default_factory=list, description="道具名称列表")
     scene_names: list[str] = Field(default_factory=list, description="场景名称列表")
@@ -24,7 +24,7 @@ class EntityNameExistenceItem(BaseModel):
     name: str = Field(..., description="输入名称（原样回传）")
     exists: bool = Field(..., description="数据库中是否存在（模糊命中）")
     linked_to_project: bool = Field(..., description="是否已关联到该项目（角色等同于 exists）")
-    linked_to_shot: bool = Field(False, description="是否已关联到请求中的 shot（未传 shot_id 时为 false）")
+
     asset_id: str | None = Field(None, description="命中的资产 ID（如 prop_id/scene_id/costume_id/character_id）")
     link_id: int | None = Field(None, description="若已关联到项目，对应 Project*Link 的 id；否则为空")
 
@@ -38,4 +38,3 @@ class EntityNameExistenceCheckResponse(BaseModel):
     props: list[EntityNameExistenceItem] = Field(default_factory=list)
     scenes: list[EntityNameExistenceItem] = Field(default_factory=list)
     costumes: list[EntityNameExistenceItem] = Field(default_factory=list)
-

@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Button, Card, Checkbox, Col, Empty, Modal, Pagination, Row, Select, Space, Spin, Tag } from 'antd'
 import { DownloadOutlined, FileImageOutlined, VideoCameraOutlined } from '@ant-design/icons'
 import { useNavigate, useParams } from 'react-router-dom'
-import { StudioFilesService, StudioShotsService } from '../../../../../services/generated'
+import { StudioFilesService } from '../../../../../services/generated'
 import type { FileRead } from '../../../../../services/generated'
 import { DisplayImageCard } from '../../../assets/components/DisplayImageCard'
 import { useChapters } from '../hooks/useProjectData'
@@ -28,10 +28,6 @@ export function FilesTab() {
   const { chapters, loading: chaptersLoading } = useChapters(projectId)
 
   const [chapterTitle, setChapterTitle] = useState<string | undefined>(undefined)
-  const [shotTitle, setShotTitle] = useState<string | undefined>(undefined)
-  const [shots, setShots] = useState<{ title: string }[]>([])
-  const [shotsLoading, setShotsLoading] = useState(false)
-
   const [page, setPage] = useState(1)
   const [files, setFiles] = useState<FileRead[]>([])
   const [total, setTotal] = useState(0)
@@ -40,41 +36,6 @@ export function FilesTab() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [previewVideo, setPreviewVideo] = useState<FileRead | null>(null)
 
-  const selectedChapter = useMemo(
-    () => chapters.find((c) => c.title === chapterTitle),
-    [chapters, chapterTitle]
-  )
-
-  useEffect(() => {
-    if (!selectedChapter?.id) {
-      setShots([])
-      return
-    }
-    let cancelled = false
-    setShotsLoading(true)
-    ;(async () => {
-      try {
-        const res = await StudioShotsService.listShotsApiV1StudioShotsGet({
-          chapterId: selectedChapter.id,
-          page: 1,
-          pageSize: 500,
-        })
-        const items = res.data?.items ?? []
-        if (!cancelled) {
-          const uniq = Array.from(new Map(items.map((s) => [s.title, { title: s.title }])).values())
-          setShots(uniq)
-        }
-      } catch {
-        if (!cancelled) setShots([])
-      } finally {
-        if (!cancelled) setShotsLoading(false)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [selectedChapter?.id])
-
   const loadFiles = useCallback(async () => {
     if (!projectId) return
     setFilesLoading(true)
@@ -82,7 +43,6 @@ export function FilesTab() {
       const res = await StudioFilesService.listFilesApiApiV1StudioFilesGet({
         projectId,
         chapterTitle: chapterTitle ?? null,
-        shotTitle: shotTitle ?? null,
         page,
         pageSize: PAGE_SIZE,
         order: 'updated_at',
@@ -96,7 +56,7 @@ export function FilesTab() {
     } finally {
       setFilesLoading(false)
     }
-  }, [projectId, chapterTitle, shotTitle, page])
+  }, [projectId, chapterTitle, page])
 
   useEffect(() => {
     void loadFiles()
@@ -151,24 +111,11 @@ export function FilesTab() {
               options={chapters.map((c) => ({ value: c.title, label: `${c.title}（第${c.index}章）` }))}
               onChange={(v) => {
                 setChapterTitle(v ?? undefined)
-                setShotTitle(undefined)
                 setPage(1)
               }}
               loading={chaptersLoading}
             />
-            <Select
-              allowClear
-              placeholder="镜头标题"
-              style={{ minWidth: 220 }}
-              value={shotTitle}
-              disabled={!chapterTitle}
-              options={shots.map((s) => ({ value: s.title, label: s.title }))}
-              loading={shotsLoading}
-              onChange={(v) => {
-                setShotTitle(v ?? undefined)
-                setPage(1)
-              }}
-            />
+
           </Space>
         </div>
 

@@ -5,7 +5,6 @@ import {
   PlusOutlined,
   EllipsisOutlined,
   ArrowLeftOutlined,
-  VideoCameraFilled,
 } from '@ant-design/icons'
 import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { TAB_CONFIG, type TabKey, isTabKey, DEFAULT_TAB } from './constants'
@@ -16,9 +15,7 @@ import { RolesTab } from './tabs/RolesTab'
 import { ScenesTab } from './tabs/ScenesTab'
 import { CostumesTab, PropsTab } from './tabs/PropsTab'
 import { FilesTab } from './tabs/FilesTab'
-import { EditTab } from './tabs/EditTab'
 import { SettingsTab } from './tabs/SettingsTab'
-import { getProjectEditorPath } from './routes'
 import { useProject, useChapters } from './hooks/useProjectData'
 import { WorkspaceLayout, WorkspaceScrollPanel } from '../../../../components'
 
@@ -126,9 +123,6 @@ const ProjectWorkbench: React.FC = () => {
             >
               {primaryCta.label}
             </Button>
-            <Button icon={<VideoCameraFilled />} onClick={() => projectId && navigate(getProjectEditorPath(projectId))}>
-              进入后期剪辑
-            </Button>
             <Dropdown menu={{ items: moreMenuItems }} placement="bottomRight">
               <Button icon={<EllipsisOutlined />}>更多</Button>
             </Dropdown>
@@ -153,7 +147,6 @@ const ProjectWorkbench: React.FC = () => {
         {activeTab === 'props' && <PropsTab />}
         {activeTab === 'costumes' && <CostumesTab />}
         {activeTab === 'files' && <FilesTab />}
-        {activeTab === 'edit' && <EditTab />}
         {activeTab === 'settings' && <SettingsTab />}
       </WorkspaceScrollPanel>
     </WorkspaceLayout>

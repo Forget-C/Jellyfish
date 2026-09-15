@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
 from app.models.base import TimestampMixin
-from app.models.types import FileType, PromptCategory, TimelineClipType
+from app.models.types import FileType, PromptCategory
 
 
 class PromptTemplate(Base,TimestampMixin):
@@ -78,30 +78,4 @@ class FileItem(Base, TimestampMixin):
     )
 
 
-class TimelineClip(Base):
-    """时间线片段。
-
-    说明：
-    - `source_id` 为逻辑引用（例如文件/音频素材 ID），不强制外键，便于接入不同素材来源。
-    - 表内无 project_id/chapter_id，不直接归属项目/章节。
-
-    应用层保证：
-    - 若业务需按项目/章节维度的时间线，需在应用层通过 source_id 或关联表绑定归属。
-    """
-
-    __tablename__ = "timeline_clips"
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True, comment="片段 ID")
-    type: Mapped[TimelineClipType] = mapped_column(String(16), nullable=False, index=True, comment="片段类型")
-    source_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True, comment="来源素材 ID（逻辑引用）")
-    label: Mapped[str] = mapped_column(String(255), nullable=False, comment="显示标签")
-    start: Mapped[int] = mapped_column(Integer, nullable=False, default=0, comment="起始时间（秒）")
-    end: Mapped[int] = mapped_column(Integer, nullable=False, default=0, comment="结束时间（秒）")
-    track: Mapped[int] = mapped_column(Integer, nullable=False, default=1, comment="轨道号")
-
-    __table_args__ = (
-        Index("ix_timeline_clips_track", "track"),
-    )
-
-
-__all__ = ["PromptTemplate", "FileItem", "TimelineClip"]
+__all__ = ["PromptTemplate", "FileItem"]

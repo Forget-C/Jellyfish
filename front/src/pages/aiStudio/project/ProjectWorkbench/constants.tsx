@@ -6,7 +6,6 @@ import {
   PictureOutlined,
   ScissorOutlined,
   FileImageOutlined,
-  VideoCameraOutlined,
   SettingOutlined,
 } from '@ant-design/icons'
 import type { Chapter } from '../../../../mocks/data'
@@ -20,7 +19,6 @@ export type TabKey =
   | 'props'
   | 'costumes'
   | 'files'
-  | 'edit'
   | 'settings'
 
 const TAB_KEYS: TabKey[] = [
@@ -32,7 +30,6 @@ const TAB_KEYS: TabKey[] = [
   'props',
   'costumes',
   'files',
-  'edit',
   'settings',
 ]
 
@@ -51,7 +48,6 @@ export const TAB_CONFIG: { key: TabKey; label: string; icon: React.ReactNode }[]
   { key: 'props', label: '道具', icon: <ScissorOutlined /> },
   { key: 'costumes', label: '服装', icon: <ScissorOutlined /> },
   { key: 'files', label: '文件', icon: <FileImageOutlined /> },
-  { key: 'edit', label: '剪辑', icon: <VideoCameraOutlined /> },
   { key: 'settings', label: '设置', icon: <SettingOutlined /> },
 ]
 
@@ -60,4 +56,3 @@ export const chapterStatusMap: Record<Chapter['status'], { color: string; text: 
   shooting: { color: 'processing', text: '拍摄中' },
   done: { color: 'success', text: '完成' },
 }
-

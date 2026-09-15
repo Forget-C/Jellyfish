@@ -32,31 +32,6 @@ function clampViewCount(value: number | null): number | null {
   return Math.max(1, Math.min(4, Math.trunc(value)))
 }
 
-function notifyShotAssetCreatedAndLinked(payload: {
-  projectId?: string
-  chapterId?: string
-  shotId?: string
-  assetId?: string
-  assetName: string
-}) {
-  if (!payload.projectId || !payload.chapterId || !payload.shotId) return
-  try {
-    window.opener?.postMessage(
-      {
-        type: 'studio-shot-asset-created-and-linked',
-        projectId: payload.projectId,
-        chapterId: payload.chapterId,
-        shotId: payload.shotId,
-        assetId: payload.assetId ?? null,
-        assetName: payload.assetName,
-      },
-      window.location.origin,
-    )
-  } catch {
-    // 跨窗口通知失败不阻塞创建成功。
-  }
-}
-
 type AssetMutationPayload = Record<string, unknown> & {
   name: string
   description?: string
@@ -81,7 +56,6 @@ export function StudioAssetTypeFormModal({
   editing,
   linkProjectId,
   linkChapterId,
-  linkShotId,
   createAsset,
   updateAsset,
   onCancel,
@@ -95,7 +69,6 @@ export function StudioAssetTypeFormModal({
   editing: StudioAssetLike | null
   linkProjectId?: string
   linkChapterId?: string
-  linkShotId?: string
   createAsset: (payload: AssetCreatePayload) => Promise<StudioAssetLike>
   updateAsset: (id: string, payload: AssetMutationPayload) => Promise<StudioAssetLike>
   onCancel: () => void
@@ -184,7 +157,7 @@ export function StudioAssetTypeFormModal({
         onCancel()
         await onSaved({ type: 'update', id: editing.id, asset: normalizedNext })
       } else {
-        const created = await createAsset({
+        await createAsset({
           id: `asset_${Date.now()}`,
           name: formName.trim(),
           supplementary_info: formDesc.trim(),
@@ -194,15 +167,7 @@ export function StudioAssetTypeFormModal({
           style: formStyle,
           ...(linkProjectId ? { project_id: linkProjectId } : {}),
           ...(linkProjectId && linkChapterId ? { chapter_id: linkChapterId } : {}),
-          ...(linkProjectId && linkShotId ? { shot_id: linkShotId } : {}),
           ...(nextViewCount === null ? {} : { view_count: nextViewCount }),
-        })
-        notifyShotAssetCreatedAndLinked({
-          projectId: linkProjectId,
-          chapterId: linkChapterId,
-          shotId: linkShotId,
-          assetId: created.id,
-          assetName: formName.trim(),
         })
         message.success('已创建')
         onCancel()

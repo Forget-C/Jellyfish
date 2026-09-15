@@ -19,11 +19,7 @@ export function ActorsTab() {
 
   const [editOpen, setEditOpen] = useState(false)
   const [editing, setEditing] = useState<ActorEntityLike | null>(null)
-  const [fromShotCreateContext, setFromShotCreateContext] = useState<{
-    projectId: string
-    chapterId: string
-    shotId: string
-  } | null>(null)
+
 
   const load = async (opts?: { page?: number; pageSize?: number; q?: string }) => {
     setLoading(true)
@@ -56,16 +52,8 @@ export function ActorsTab() {
   useEffect(() => {
     const create = searchParams.get('create')
     const tab = searchParams.get('tab')
-    const projectId = searchParams.get('projectId')?.trim() ?? ''
-    const chapterId = searchParams.get('chapterId')?.trim() ?? ''
-    const shotId = searchParams.get('shotId')?.trim() ?? ''
     if (create === '1' && tab === 'actor') {
       setEditing(null)
-      if (projectId && chapterId && shotId) {
-        setFromShotCreateContext({ projectId, chapterId, shotId })
-      } else {
-        setFromShotCreateContext(null)
-      }
       setEditOpen(true)
       setSearchParams(
         (prev) => {
@@ -75,7 +63,6 @@ export function ActorsTab() {
           next.delete('desc')
           next.delete('projectId')
           next.delete('chapterId')
-          next.delete('shotId')
           return next
         },
         { replace: true },
@@ -87,20 +74,17 @@ export function ActorsTab() {
 
   const openCreate = () => {
     setEditing(null)
-    setFromShotCreateContext(null)
     setEditOpen(true)
   }
 
   const openEdit = (a: ActorEntityLike) => {
     setEditing(a)
-    setFromShotCreateContext(null)
     setEditOpen(true)
   }
 
   const handleModalCancel = () => {
     setEditOpen(false)
     setEditing(null)
-    setFromShotCreateContext(null)
   }
 
   return (
@@ -181,9 +165,6 @@ export function ActorsTab() {
       <ActorEntityFormModal
         open={editOpen}
         editing={editing}
-        linkProjectId={fromShotCreateContext?.projectId}
-        linkChapterId={fromShotCreateContext?.chapterId}
-        linkShotId={fromShotCreateContext?.shotId}
         onCancel={handleModalCancel}
         onSuccess={async (detail) => {
           const createdItem = detail?.created as { id?: string } | undefined

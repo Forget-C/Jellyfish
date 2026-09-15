@@ -15,14 +15,9 @@ export type ProjectCostumeLinkRead = {
      * 章节 ID（可空）
      */
     chapter_id?: (string | null);
-    /**
-     * 镜头 ID（可空）
-     */
-    shot_id?: (string | null);
     costume_id: string;
     /**
      * 服装缩略图下载地址
      */
     thumbnail?: string;
 };
-

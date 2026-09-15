@@ -31,7 +31,7 @@ class FileUsageCreateParams:
 
     project_id: str
     chapter_id: str | None = None
-    shot_id: str | None = None
+
     usage_kind: FileUsageKind | str = FileUsageKind.api
     source_ref: str | None = None
 
@@ -137,7 +137,6 @@ async def create_file_from_url_or_b64(
             file_id=file_obj.id,
             project_id=usage.project_id,
             chapter_id=usage.chapter_id,
-            shot_id=usage.shot_id,
             usage_kind=usage.usage_kind,
             source_ref=usage.source_ref,
         )

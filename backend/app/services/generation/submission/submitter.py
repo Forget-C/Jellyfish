@@ -73,8 +73,7 @@ class GenerationSubmitter:
         kind = command.operation.value
         if kind == "text_agent":
             kind = {
-                "divide": "script_divide", "extract": "script_extract", "merge-entities": "script_merge",
-                "check-consistency": "script_consistency", "analyze-variants": "script_variant",
+                "check-consistency": "script_consistency",
                 "analyze-character-portrait": "script_character_portrait", "analyze-prop-info": "script_prop_info",
                 "analyze-scene-info": "script_scene_info", "analyze-costume-info": "script_costume_info",
                 "optimize-script": "script_optimize", "simplify-script": "script_simplify",

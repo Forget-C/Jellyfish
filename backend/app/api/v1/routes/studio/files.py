@@ -35,9 +35,9 @@ async def list_files_api(
     page_size: int = Query(10, ge=1, le=100),
     project_id: str | None = Query(None, description="按 file_usages 限定项目；提供后仅返回该项目下有关联记录的文件"),
     chapter_title: str | None = Query(None, description="章节标题（精确匹配，与 project_id 联用）"),
-    shot_title: str | None = Query(None, description="镜头标题（精确匹配，与 project_id 联用）"),
+
 ) -> ApiResponse[PaginatedData[FileRead]]:
-    if chapter_title is not None or shot_title is not None:
+    if chapter_title is not None:
         if not project_id:
             raise HTTPException(
                 status_code=400,
@@ -49,7 +49,7 @@ async def list_files_api(
             db,
             project_id=project_id,
             chapter_title=chapter_title,
-            shot_title=shot_title,
+
             q=q,
             order=order,
             is_desc=is_desc,
@@ -84,7 +84,7 @@ async def upload_file_api(
     db: AsyncSession = Depends(get_db),
     project_id: str | None = Form(None, description="可选：写入 file_usages 的项目 ID"),
     chapter_id: str | None = Form(None),
-    shot_id: str | None = Form(None),
+
     usage_kind: str | None = Form(None, description="与 project_id 同时提供时写入 file_usages"),
     source_ref: str | None = Form(None),
 ) -> ApiResponse[FileRead]:
@@ -94,7 +94,7 @@ async def upload_file_api(
         name=name,
         project_id=project_id,
         chapter_id=chapter_id,
-        shot_id=shot_id,
+
         usage_kind=usage_kind,
         source_ref=source_ref,
     )

@@ -67,37 +67,6 @@ def test_asset_render_binds_path_target_and_rejects_target_body(client: TestClie
     assert invalid_response.status_code == 422
 
 
-def test_shot_frame_render_binds_path_frame_and_guidance(client: TestClient, monkeypatch) -> None:
-    """帧类型和镜头 ID 必须由路径绑定，guidance 仅由服务端加载。"""
-    renderer = _Renderer(PromptRendererName.shot_frame)
-
-    async def _guidance(**_kwargs):
-        return dict.fromkeys(
-            (
-                "director_command_summary",
-                "continuity_guidance",
-                "frame_specific_guidance",
-                "composition_anchor",
-                "screen_direction_guidance",
-            ),
-            "服务端 guidance",
-        )
-
-    monkeypatch.setattr(route.prompt_renderer_registry, "resolve", lambda _name: renderer)
-    monkeypatch.setattr(route, "load_frame_render_guidance", _guidance)
-    app.dependency_overrides[get_db] = _override_db(_DummyDB())
-    try:
-        response = client.post(
-            "/api/v1/studio/generation-prompts/shots/shot-1/frames/first/render",
-            json={"prompt": "首帧提示词", "images": []},
-        )
-    finally:
-        app.dependency_overrides.clear()
-
-    assert response.status_code == 200
-    assert renderer.request.input.shot_id == "shot-1"
-    assert renderer.request.input.frame_type.value == "first"
-    assert renderer.request.input.director_command_summary == "服务端 guidance"
 
 
 def test_legacy_studio_image_task_endpoint_is_unmounted(client: TestClient) -> None:
@@ -108,26 +77,3 @@ def test_legacy_studio_image_task_endpoint_is_unmounted(client: TestClient) -> N
     )
 
     assert response.status_code == 404
-
-
-def test_shot_video_render_binds_path_shot_and_rejects_delivery_body(client: TestClient, monkeypatch) -> None:
-    """视频路由只接受视频渲染输入，禁止 body 声明交付协议。"""
-    renderer = _Renderer(PromptRendererName.shot_video)
-    monkeypatch.setattr(route.prompt_renderer_registry, "resolve", lambda _name: renderer)
-    app.dependency_overrides[get_db] = _override_db(_DummyDB())
-    try:
-        response = client.post(
-            "/api/v1/studio/generation-prompts/shots/shot-1/video/render",
-            json={"reference_mode": "first", "image_file_ids": ["file-1"]},
-        )
-        invalid_response = client.post(
-            "/api/v1/studio/generation-prompts/shots/shot-1/video/render",
-            json={"reference_mode": "first", "delivery": "streaming"},
-        )
-    finally:
-        app.dependency_overrides.clear()
-
-    assert response.status_code == 200
-    assert renderer.request.input.shot_id == "shot-1"
-    assert renderer.request.input.image_file_ids == ["file-1"]
-    assert invalid_response.status_code == 422

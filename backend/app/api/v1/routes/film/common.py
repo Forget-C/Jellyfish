@@ -36,7 +36,7 @@ class BindTarget(BaseModel):
 
     project_id: str | None = Field(None, description="绑定项目 ID（可选）")
     chapter_id: str | None = Field(None, description="绑定章节 ID（可选）")
-    shot_id: str | None = Field(None, description="绑定镜头 ID（可选）")
+
 
 
 class EntityExtractTaskRequest(EntityExtractRequest, BindTarget):
@@ -50,7 +50,6 @@ class ShotlistExtractTaskRequest(ShotlistExtractRequest, BindTarget):
 class ShotFramePromptRequest(BaseModel):
     """镜头分镜帧提示词生成任务请求。"""
 
-    shot_id: str = Field(..., description="镜头 ID")
     frame_type: str = Field(..., description="first | last | key")
 
 

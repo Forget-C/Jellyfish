@@ -282,6 +282,6 @@ async def test_planned_card_image_and_dialogue_keep_frozen_dependencies(tmp_path
                     await store.save_revision(sequence_id, kind='cut', payload={'items': [{**item, **updates}]})
             db.add(FileItem(id='foreign-image', type='image', name='other', storage_key='other.png'))
             await db.flush()
-            await upsert_file_usage(db, file_id='foreign-image', project_id='p2', chapter_id='ch2', shot_id=None, usage_kind='upload')
+            await upsert_file_usage(db, file_id='foreign-image', project_id='p2', chapter_id='ch2', usage_kind='upload')
             with pytest.raises(ValueError, match='not linked'):
                 await store.save_revision(sequence_id, kind='cut', payload={'items': [{**item, 'preview_file_id': 'foreign-image'}]})

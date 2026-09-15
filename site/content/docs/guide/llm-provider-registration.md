@@ -71,7 +71,7 @@ description: "如何在代码中注册内置供应商能力，并与异步任务
 
 - 图片：使用 Vidu 文档支持的图片模型名，例如 `viduq2` 或 `viduq1`；`viduq2` 支持纯提示词和 0–7 张参考图。
 - 视频：填写所选 Vidu 视频模型名，例如 `viduq2`、`viduq3` 系列。运行时会按输入选择 `text2video`、`img2video`、`start-end2video` 或 `reference2video`，无需在模型参数中填写端点。
-- 将所需模型设为 `default_image_model_id`、`default_video_model_id` 后，现有分镜工作室即可使用。Vidu 不支持项目通用 `watermark` 参数；带该参数的请求会在调用前被拒绝，避免静默丢参。
+- 将所需模型设为 `default_image_model_id`、`default_video_model_id` 后，场次试拍与资产图片入口即可选择使用。Vidu 不支持项目通用 `watermark` 参数；带该参数的请求会在调用前被拒绝，避免静默丢参。
 
 ### 配置可灵 AI
 

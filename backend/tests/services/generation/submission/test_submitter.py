@@ -28,7 +28,7 @@ def test_capability_registry_restricts_delivery_by_trusted_target() -> None:
     assert not generation_capability_registry.supports(
         operation=GenerationOperation.image_generation,
         delivery=GenerationDelivery.async_polling,
-        target_kind=GenerationTargetKind.shot_video,
+        target_kind=GenerationTargetKind.directing_unit,
     )
     with pytest.raises(UnsupportedGenerationDeliveryError, match="target_unsupported"):
         generation_capability_registry.require_supported(

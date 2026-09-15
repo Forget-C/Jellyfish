@@ -88,9 +88,6 @@ _DEFAULT_TARGET_CAPABILITIES: Mapping[
     (GenerationOperation.text_agent, GenerationTargetKind.script_processing): frozenset({
         GenerationDelivery.async_polling,
     }),
-    (GenerationOperation.text_agent, GenerationTargetKind.shot_detail): frozenset({
-        GenerationDelivery.async_polling,
-    }),
     (GenerationOperation.image_generation, GenerationTargetKind.experiment_session): frozenset({
         GenerationDelivery.async_polling,
     }),
@@ -98,16 +95,10 @@ _DEFAULT_TARGET_CAPABILITIES: Mapping[
     (GenerationOperation.image_generation, GenerationTargetKind.asset_image_slot): frozenset({
         GenerationDelivery.async_polling,
     }),
-    (GenerationOperation.image_generation, GenerationTargetKind.shot_frame_slot): frozenset({
-        GenerationDelivery.async_polling,
-    }),
     (GenerationOperation.video_generation, GenerationTargetKind.experiment_session): frozenset({
         GenerationDelivery.async_polling,
     }),
     (GenerationOperation.video_generation, GenerationTargetKind.directing_unit): frozenset({
-        GenerationDelivery.async_polling,
-    }),
-    (GenerationOperation.video_generation, GenerationTargetKind.shot_video): frozenset({
         GenerationDelivery.async_polling,
     }),
 }

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -40,13 +40,6 @@ class FileUsage(Base, TimestampMixin):
         index=True,
         comment="章节 ID（可空）",
     )
-    shot_id: Mapped[str | None] = mapped_column(
-        String(64),
-        ForeignKey("shots.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-        comment="镜头 ID（可空）",
-    )
     usage_kind: Mapped[FileUsageKind] = mapped_column(
         String(32),
         nullable=False,
@@ -64,7 +57,6 @@ class FileUsage(Base, TimestampMixin):
 
     __table_args__ = (
         UniqueConstraint("file_id", "project_id", "usage_kind", "source_ref", name="uq_file_usages_file_project_kind_ref"),
-        Index("ix_file_usages_project_shot", "project_id", "shot_id"),
     )
 
 

@@ -26,9 +26,8 @@ class ActorCreate(ActorFields, ActorBase):
 
     project_id: str | None = Field(None, description="可选：创建成功后写入 project_actor_links（与演员创建同一事务）")
     chapter_id: str | None = Field(None, description="可选：章节 ID")
-    shot_id: str | None = Field(None, description="可选：分镜 ID")
 
-    @field_validator("project_id", "chapter_id", "shot_id", mode="before")
+    @field_validator("project_id", "chapter_id", mode="before")
     @classmethod
     def _blank_link_ids(cls, v: object) -> object:
         if v is None:
@@ -41,8 +40,6 @@ class ActorCreate(ActorFields, ActorBase):
     def _link_scope(self) -> Self:
         if self.chapter_id and not self.project_id:
             raise ValueError("project_id is required when chapter_id is set")
-        if self.shot_id and not self.project_id:
-            raise ValueError("project_id is required when shot_id is set")
         return self
 
 
@@ -83,9 +80,8 @@ class CharacterCreate(CharacterBase):
     model_config = ConfigDict(extra="forbid")
 
     chapter_id: str | None = Field(None, description="可选：章节 ID")
-    shot_id: str | None = Field(None, description="可选：创建成功后自动绑定的分镜 ID")
 
-    @field_validator("project_id", "chapter_id", "shot_id", mode="before")
+    @field_validator("project_id", "chapter_id", mode="before")
     @classmethod
     def _blank_link_ids(cls, v: object) -> object:
         if v is None:
@@ -98,8 +94,6 @@ class CharacterCreate(CharacterBase):
     def _link_scope(self) -> Self:
         if self.chapter_id and not self.project_id:
             raise ValueError("project_id is required when chapter_id is set")
-        if self.shot_id and not self.project_id:
-            raise ValueError("project_id is required when shot_id is set")
         return self
 
 
@@ -144,28 +138,4 @@ class CharacterPropLinkUpdate(BaseModel):
 
 
 class CharacterPropLinkRead(CharacterPropLinkBase):
-    model_config = ConfigDict(from_attributes=True)
-
-
-class ShotCharacterLinkBase(BaseModel):
-    id: int = Field(..., description="关联行 ID")
-    shot_id: str = Field(..., description="镜头 ID")
-    character_id: str = Field(..., description="角色 ID")
-    index: int = Field(0, description="镜头内角色排序")
-    note: str = Field("", description="备注")
-
-
-class ShotCharacterLinkCreate(BaseModel):
-    shot_id: str
-    character_id: str
-    index: int = 0
-    note: str = ""
-
-
-class ShotCharacterLinkUpdate(BaseModel):
-    index: int | None = None
-    note: str | None = None
-
-
-class ShotCharacterLinkRead(ShotCharacterLinkBase):
     model_config = ConfigDict(from_attributes=True)

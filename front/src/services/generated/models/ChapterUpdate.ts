@@ -10,7 +10,5 @@ export type ChapterUpdate = {
     summary?: (string | null);
     raw_text?: (string | null);
     condensed_text?: (string | null);
-    storyboard_count?: (number | null);
     status?: (ChapterStatus | null);
 };
-

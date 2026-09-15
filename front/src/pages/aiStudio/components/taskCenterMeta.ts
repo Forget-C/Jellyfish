@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { NavigateFunction } from 'react-router-dom'
-import { StudioChaptersService, StudioShotsService, type TaskSourceRead } from '../../../services/generated'
+import { StudioChaptersService, type TaskSourceRead } from '../../../services/generated'
 import { StudioEntitiesApi } from '../../../services/studioEntities'
-import { getChapterShotsPath, getChapterStudioPath } from '../project/ProjectWorkbench/routes'
 import type { TaskUiItem } from './taskUiStore'
 
 type ResolvedTaskMeta = {
@@ -15,8 +14,7 @@ function sourceMeta(source: TaskSourceRead | null | undefined): ResolvedTaskMeta
   if (!source) return {}
   const { kind, id, project_id: projectId, chapter_id: chapterId } = source
   let navigateTo: string | null = null
-  if (kind === 'shot' && projectId && chapterId) navigateTo = getChapterStudioPath(projectId, chapterId)
-  else if (kind === 'chapter' && projectId) navigateTo = `/projects/${projectId}/chapters/${id}/sequences`
+  if (kind === 'chapter' && projectId) navigateTo = `/projects/${projectId}/chapters/${id}/sequences`
   else if (kind === 'sequence' && projectId && chapterId) navigateTo = `/projects/${projectId}/chapters/${chapterId}/sequences/${id}`
   else if (kind === 'project') navigateTo = `/projects/${id}`
   else if (kind === 'character' && projectId) navigateTo = `/projects/${projectId}/roles/${id}/edit`
@@ -26,8 +24,6 @@ function sourceMeta(source: TaskSourceRead | null | undefined): ResolvedTaskMeta
 }
 
 const CHAPTER_RELATION_TYPES = new Set([
-  'chapter_division',
-  'script_extraction',
   'consistency_check',
   'script_optimization',
   'script_simplification',
@@ -46,13 +42,6 @@ const ASSET_ENTITY_TYPES: Record<string, 'actor' | 'scene' | 'prop' | 'costume'>
   prop_image: 'prop',
   costume_image: 'costume',
 }
-
-const SHOT_RELATION_TYPES = new Set([
-  'video',
-  'shot_first_frame_prompt',
-  'shot_last_frame_prompt',
-  'shot_key_frame_prompt',
-])
 
 function metaKeyForTask(task: TaskUiItem): string | null {
   if (task.navigateRelationType && task.navigateRelationEntityId) {
@@ -76,31 +65,7 @@ async function resolveTaskMeta(task: TaskUiItem): Promise<ResolvedTaskMeta | nul
     if (!chapter) return null
     return {
       sourceLabel: chapter.title ? `章节：${chapter.title}` : `章节：${relationEntityId}`,
-      navigateTo: getChapterShotsPath(chapter.project_id, chapter.id),
-    }
-  }
-
-  if (relationType && relationEntityId && (SHOT_RELATION_TYPES.has(relationType) || relationType === 'shot')) {
-    const shotRes = await StudioShotsService.getShotApiV1StudioShotsShotIdGet({
-      shotId: relationEntityId,
-    })
-    const shot = shotRes.data
-    if (!shot) return null
-    const chapterRes = await StudioChaptersService.getChapterApiV1StudioChaptersChapterIdGet({
-      chapterId: shot.chapter_id,
-    })
-    const chapter = chapterRes.data
-    if (!chapter) {
-      return {
-        sourceLabel: shot.title ? `镜头：${shot.title}` : `镜头：${relationEntityId}`,
-        navigateTo: null,
-      }
-    }
-    return {
-      sourceLabel: shot.title
-        ? `镜头：${shot.title}（第 ${shot.index} 镜）`
-        : `镜头：${relationEntityId}`,
-      navigateTo: getChapterStudioPath(chapter.project_id, chapter.id),
+      navigateTo: `/projects/${chapter.project_id}/chapters/${chapter.id}/sequences`,
     }
   }
 

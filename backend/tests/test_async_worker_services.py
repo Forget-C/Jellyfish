@@ -19,7 +19,7 @@ async def test_claim_pending_allows_only_one_worker(tmp_path) -> None:
         await connection.run_sync(Base.metadata.create_all)
     async with factory() as db:
         store = TaskService(db)
-        task = await store.submit(snapshot={}, kind="script_divide")
+        task = await store.submit(snapshot={}, kind="directing_divide")
         assert await store.claim(task.id, worker_id="worker")
         assert not await store.claim(task.id, worker_id="worker")
     await engine.dispose()
@@ -35,7 +35,7 @@ async def test_claim_pending_rejects_cancel_intent(tmp_path) -> None:
         await connection.run_sync(Base.metadata.create_all)
     async with factory() as db:
         store = TaskService(db)
-        task = await store.submit(snapshot={}, kind="script_divide")
+        task = await store.submit(snapshot={}, kind="directing_divide")
         await store.request_cancel(task.id, reason="用户取消")
         assert not await store.claim(task.id, worker_id="worker")
     await engine.dispose()

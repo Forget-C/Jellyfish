@@ -13,11 +13,7 @@ from app.services.task_service import TaskService
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("name,args,relation", [
-    ('create_divide_task', {'chapter_id': 'chapter-1', 'script_text': '一段剧本', 'write_to_db': True}, submission.CHAPTER_DIVISION_RELATION_TYPE),
-    ('create_extract_task', {'project_id': 'project-1', 'chapter_id': 'chapter-1', 'script_division': {'shots': []}, 'consistency': None}, submission.SCRIPT_EXTRACTION_RELATION_TYPE),
-    ('create_merge_task', {'relation_entity_id': 'chapter-1', 'all_shot_extractions': [], 'historical_library': None, 'script_division': None, 'previous_merge': None, 'conflict_resolutions': None}, submission.ENTITY_MERGE_RELATION_TYPE),
     ('create_consistency_task', {'relation_entity_id': 'chapter-1', 'script_text': '完整剧本'}, submission.CONSISTENCY_CHECK_RELATION_TYPE),
-    ('create_variant_task', {'relation_entity_id': 'chapter-1', 'merged_library': {}, 'all_shot_extractions': [], 'script_division': None}, submission.VARIANT_ANALYSIS_RELATION_TYPE),
     ('create_character_portrait_task', {'relation_entity_id': 'chapter-1', 'character_context': None, 'character_description': '人物描述'}, submission.CHARACTER_PORTRAIT_ANALYSIS_RELATION_TYPE),
     ('create_prop_info_task', {'relation_entity_id': 'chapter-1', 'prop_context': None, 'prop_description': '道具描述'}, submission.PROP_INFO_ANALYSIS_RELATION_TYPE),
     ('create_scene_info_task', {'relation_entity_id': 'chapter-1', 'scene_context': None, 'scene_description': '场景描述'}, submission.SCENE_INFO_ANALYSIS_RELATION_TYPE),
@@ -65,9 +61,6 @@ async def test_script_submission_keeps_single_input_and_reuses_only_active_task(
         await engine.dispose()
 
 
-def test_pick_merge_relation_entity_id_prefers_chapter() -> None:
-    assert submission.pick_merge_relation_entity_id(chapter_id="chapter-1", project_id="project-1") == "chapter-1"
-    assert submission.pick_merge_relation_entity_id(chapter_id=None, project_id="project-1") == "project-1"
 
 
 def test_pick_consistency_relation_entity_id_prefers_chapter() -> None:
@@ -75,9 +68,6 @@ def test_pick_consistency_relation_entity_id_prefers_chapter() -> None:
     assert submission.pick_consistency_relation_entity_id(chapter_id=None, project_id="project-1") == "project-1"
 
 
-def test_pick_variant_relation_entity_id_prefers_chapter() -> None:
-    assert submission.pick_variant_relation_entity_id(chapter_id="chapter-1", project_id="project-1") == "chapter-1"
-    assert submission.pick_variant_relation_entity_id(chapter_id=None, project_id="project-1") == "project-1"
 
 
 def test_pick_analysis_relation_entity_id_prefers_chapter() -> None:

@@ -1,14 +1,12 @@
 """剧本纯计算与新 Worker 的结果保存、缺失输入失败边界。"""
 
-import json
-
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.db import Base
 from app.models.llm import Model, Provider
 from app.models.task import Task
-from app.schemas.skills.script_processing import EntityMergeResult, ScriptConsistencyCheckResult, VariantAnalysisResult
+from app.schemas.skills.script_processing import ScriptConsistencyCheckResult
 from app.services import script_processing_worker
 from app.services.task_service import TaskService
 from app.task_worker import TaskWorker
@@ -19,11 +17,6 @@ from app.task_worker import TaskWorker
 @pytest.mark.parametrize("kind,args,agent_name,expected", [
     ("script_consistency", {"script_text": "第一幕"}, "ConsistencyCheckerAgent",
      {"issues": [], "has_issues": True, "summary": "发现一处问题"}),
-    ("script_merge", {"all_shot_extractions": [{"name": "角色"}], "historical_library": {}, "script_division": {}},
-     "EntityMergerAgent", {"merged_library": {"characters": [], "locations": [], "scenes": [], "props": [], "total_entries": 0},
-                           "merge_stats": {}, "conflicts": [], "notes": "ok"}),
-    ("script_variant", {"merged_library": {"characters": []}, "all_shot_extractions": [], "script_division": {}},
-     "VariantAnalyzerAgent", {"costume_timelines": [], "variant_suggestions": [], "chapter_variants": {"chapter-1": ["outfit_v2"]}, "notes": None}),
 ])
 async def test_script_worker_preserves_inputs_and_result_or_fails_missing_data(monkeypatch, kind, args, agent_name, expected, missing):
     """实际 Worker 调用纯生成器：保留冻结输入和结果形状，缺失输入不调用 Agent。"""
@@ -32,8 +25,7 @@ async def test_script_worker_preserves_inputs_and_result_or_fails_missing_data(m
         await connection.run_sync(Base.metadata.create_all)
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     calls = []
-    result_type = {"script_consistency": ScriptConsistencyCheckResult, "script_merge": EntityMergeResult,
-                   "script_variant": VariantAnalysisResult}[kind]
+    result_type = ScriptConsistencyCheckResult
 
     class Agent:
         """仅模拟模型计算，任务状态和事务仍由真实 Worker 维护。"""
@@ -71,16 +63,7 @@ async def test_script_worker_preserves_inputs_and_result_or_fails_missing_data(m
             else:
                 assert saved.status == "succeeded" and saved.result == expected
                 assert len(calls) == 1
-                if kind == "script_consistency":
-                    assert calls[0] == args
-                else:
-                    assert json.loads(calls[0]["all_extractions_json"]) == args["all_shot_extractions"]
-                    assert json.loads(calls[0]["script_division_json"]) == args["script_division"]
-                    library = "historical_library" if kind == "script_merge" else "merged_library"
-                    assert json.loads(calls[0][f"{library}_json"]) == args[library]
-                    if kind == "script_merge":
-                        assert json.loads(calls[0]["previous_merge_json"]) == {}
-                        assert json.loads(calls[0]["conflict_resolutions_json"]) == []
+                assert calls[0] == args
     finally:
         worker.text_pool.shutdown(wait=True)
         await engine.dispose()

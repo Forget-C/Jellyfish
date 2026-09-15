@@ -15,8 +15,6 @@ from app.models.studio import (
     Project,
     ProjectStyle,
     ProjectVisualStyle,
-    Shot,
-    ShotStatus,
 )
 
 
@@ -26,15 +24,12 @@ class _FakeStudioDB:
     def __init__(self) -> None:
         self.projects: dict[str, Project] = {}
         self.chapters: dict[str, Chapter] = {}
-        self.shots: dict[str, Shot] = {}
 
     async def get(self, model: type, entity_id: str):  # noqa: ANN001
         if model is Project:
             return self.projects.get(entity_id)
         if model is Chapter:
             return self.chapters.get(entity_id)
-        if model is Shot:
-            return self.shots.get(entity_id)
         return None
 
     def add(self, obj: object) -> None:
@@ -43,9 +38,6 @@ class _FakeStudioDB:
             return
         if isinstance(obj, Chapter):
             self.chapters[obj.id] = obj
-            return
-        if isinstance(obj, Shot):
-            self.shots[obj.id] = obj
             return
         raise TypeError(f"Unsupported object type: {type(obj)!r}")
 
@@ -64,9 +56,6 @@ class _FakeStudioDB:
             return
         if isinstance(obj, Chapter):
             self.chapters.pop(obj.id, None)
-            return
-        if isinstance(obj, Shot):
-            self.shots.pop(obj.id, None)
             return
         raise TypeError(f"Unsupported object type: {type(obj)!r}")
 
@@ -119,7 +108,6 @@ def _seed_chapter(
         summary="章节摘要",
         raw_text="原文",
         condensed_text="精简原文",
-        storyboard_count=0,
         status=ChapterStatus.draft,
     )
     obj.created_at = now
@@ -258,7 +246,6 @@ def test_create_chapter_returns_created_envelope(client: TestClient) -> None:
                 "summary": "摘要",
                 "raw_text": "原文",
                 "condensed_text": "精简原文",
-                "storyboard_count": 0,
                 "status": "draft",
             },
         )
@@ -286,7 +273,6 @@ def test_create_chapter_missing_project_returns_api_response(client: TestClient)
                 "summary": "",
                 "raw_text": "",
                 "condensed_text": "",
-                "storyboard_count": 0,
                 "status": "draft",
             },
         )
@@ -307,82 +293,3 @@ def test_get_chapter_not_found_returns_api_response(client: TestClient) -> None:
 
     assert response.status_code == 404
     assert response.json() == {"code": 404, "message": "Chapter not found", "data": None, "meta": None}
-
-
-def test_create_shot_returns_created_envelope(client: TestClient) -> None:
-    db = _FakeStudioDB()
-    _seed_project(db, "proj-shot")
-    _seed_chapter(db, chapter_id="ch-shot", project_id="proj-shot")
-    app.dependency_overrides[get_db] = _override_db(db)
-    try:
-        response = client.post(
-            "/api/v1/studio/shots",
-            json={
-                "id": "shot-create",
-                "chapter_id": "ch-shot",
-                "index": 1,
-                "title": "镜头一",
-                "thumbnail": "",
-                "status": "pending",
-                "script_excerpt": "镜头内容",
-                "generated_video_file_id": None,
-            },
-        )
-    finally:
-        app.dependency_overrides.clear()
-
-    assert response.status_code == 201
-    body = response.json()
-    assert body["code"] == 201
-    assert body["data"]["id"] == "shot-create"
-    assert body["data"]["chapter_id"] == "ch-shot"
-
-
-def test_get_shot_not_found_returns_api_response(client: TestClient) -> None:
-    db = _FakeStudioDB()
-    app.dependency_overrides[get_db] = _override_db(db)
-    try:
-        response = client.get("/api/v1/studio/shots/missing")
-    finally:
-        app.dependency_overrides.clear()
-
-    assert response.status_code == 404
-    assert response.json() == {"code": 404, "message": "Shot not found", "data": None, "meta": None}
-
-
-def test_delete_shot_returns_empty_envelope(client: TestClient) -> None:
-    db = _FakeStudioDB()
-    _seed_project(db, "proj-shot-delete")
-    _seed_chapter(db, chapter_id="ch-shot-delete", project_id="proj-shot-delete")
-    _seed_shot(db, shot_id="shot-delete", chapter_id="ch-shot-delete")
-    app.dependency_overrides[get_db] = _override_db(db)
-    try:
-        response = client.delete("/api/v1/studio/shots/shot-delete")
-    finally:
-        app.dependency_overrides.clear()
-
-    assert response.status_code == 200
-    assert response.json() == {"code": 200, "message": "success", "data": None, "meta": None}
-    assert "shot-delete" not in db.shots
-
-
-def test_create_shot_validation_error_returns_api_response(client: TestClient) -> None:
-    db = _FakeStudioDB()
-    app.dependency_overrides[get_db] = _override_db(db)
-    try:
-        response = client.post(
-            "/api/v1/studio/shots",
-            json={
-                "id": "shot-invalid",
-                "title": "缺字段镜头",
-            },
-        )
-    finally:
-        app.dependency_overrides.clear()
-
-    assert response.status_code == 422
-    body = response.json()
-    assert body["code"] == 422
-    assert body["data"] is None
-    assert "chapter_id" in body["message"]
-    assert "index" in body["message"]

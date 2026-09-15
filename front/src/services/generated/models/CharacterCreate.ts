@@ -44,9 +44,4 @@ export type CharacterCreate = {
      * 可选：章节 ID
      */
     chapter_id?: (string | null);
-    /**
-     * 可选：创建成功后自动绑定的分镜 ID
-     */
-    shot_id?: (string | null);
 };
-

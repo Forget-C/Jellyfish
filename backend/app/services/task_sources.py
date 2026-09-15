@@ -4,13 +4,13 @@ from sqlalchemy import select
 
 from app.models.experiment_sessions import ExperimentSession
 from app.models.directing import Sequence, DirectingRevision
-from app.models.studio import Actor, Character, Scene, Prop, Costume, Shot, Chapter, Project
+from app.models.studio import Actor, Character, Scene, Prop, Costume, Chapter, Project
 from app.schemas.task import TaskSourceRead
 
 _ASSETS = {"actor": Actor, "character": Character, "scene": Scene, "prop": Prop, "costume": Costume}
 _SCRIPT_TARGETS = {
-    "chapter_division", "script_extraction", "consistency_check", "script_optimization", "script_simplification",
-    "entity_merge", "variant_analysis", "character_portrait_analysis", "prop_info_analysis", "scene_info_analysis", "costume_info_analysis",
+    "consistency_check", "script_optimization", "script_simplification",
+    "character_portrait_analysis", "prop_info_analysis", "scene_info_analysis", "costume_info_analysis",
     "script_processing",
 }
 
@@ -20,11 +20,7 @@ async def resolve_task_sources(db, rows) -> dict[str, TaskSourceRead]:
     grouped: dict[str, dict[str, str]] = {}
     for row in rows:
         kind, identity = row.target_type, row.target_id
-        if kind == "shot_frame_slot":
-            kind, identity = "shot", row.target_parent_id
-        elif kind == "shot_video":
-            kind = "shot"
-        elif kind and kind.endswith("_image_slot"):
+        if kind and kind.endswith("_image_slot"):
             kind, identity = kind.removesuffix("_image_slot"), row.target_parent_id
         elif kind in _SCRIPT_TARGETS:
             if identity and ":" in identity:
@@ -57,10 +53,6 @@ async def resolve_task_sources(db, rows) -> dict[str, TaskSourceRead]:
         elif kind == "directing_chapter":
             for row in (await db.execute(select(Chapter.id, Chapter.title, Chapter.project_id).where(Chapter.id.in_(ids)))).all():
                 found[row.id] = TaskSourceRead(kind="chapter", id=row.id, title=row.title, chapter_id=row.id, project_id=row.project_id)
-        elif kind == "shot":
-            query = select(Shot.id, Shot.title, Shot.chapter_id, Chapter.project_id).join(Chapter, Chapter.id == Shot.chapter_id).where(Shot.id.in_(ids))
-            for row in (await db.execute(query)).all():
-                found[row.id] = TaskSourceRead(kind="shot", id=row.id, title=row.title, chapter_id=row.chapter_id, project_id=row.project_id)
         elif kind == "experiment_session":
             for row in (await db.execute(select(ExperimentSession.id, ExperimentSession.title).where(ExperimentSession.id.in_(ids)))).all():
                 found[row.id] = TaskSourceRead(kind=kind, id=row.id, title=row.title)

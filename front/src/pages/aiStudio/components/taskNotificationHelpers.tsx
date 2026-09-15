@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { Button, Space, notification } from 'antd'
 import type { ReactNode } from 'react'
-import type { RelationTaskState } from '../project/ProjectWorkbench/chapterDivisionTasks'
+import type { RelationTaskState } from '../project/ProjectWorkbench/relationTasks'
 import { useTaskUiStore } from './taskUiStore'
 
 const SETTLED_TASK_RETAIN_MS = 8000

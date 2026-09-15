@@ -9,25 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import storage
 from app.models.studio import AssetViewAngle, FileItem
-from app.schemas.studio.shots import ShotLinkedAssetItem
-
-
-async def resolve_reference_file_ids_and_names_from_linked_items(
-    db: AsyncSession,  # noqa: ARG001
-    *,
-    items: list[ShotLinkedAssetItem],
-) -> tuple[list[str], list[str]]:
-    """将关联资产条目解析为参考图 file_id 列表（顺序有效）。"""
-    file_ids: list[str] = []
-    names: list[str] = []
-    for item in items or []:
-        name = (item.name or "").strip()
-        file_id = (item.file_id or "").strip()
-        if not file_id:
-            continue
-        file_ids.append(str(file_id))
-        names.append(name or (item.id or ""))
-    return file_ids, names
 
 
 async def resolve_reference_image_refs_by_file_ids(

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from app.services.generation.prompts.renderers import (
     AssetImagePromptRenderer,
-    ShotFramePromptRenderer,
-    ShotVideoPromptRenderer,
 )
 from app.services.generation.prompts.types import PromptRenderer, PromptRendererName
 
@@ -34,5 +32,5 @@ class PromptRendererRegistry:
 
 
 prompt_renderer_registry = PromptRendererRegistry(
-    [AssetImagePromptRenderer(), ShotFramePromptRenderer(), ShotVideoPromptRenderer()]
+    [AssetImagePromptRenderer()]
 )

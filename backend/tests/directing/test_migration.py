@@ -49,7 +49,7 @@ def test_foundation_migration_and_next_upgrade():
         context = MigrationContext.configure(connection, opts={"compare_type": True})
         assert not compare_metadata(context, Base.metadata)
         connection.execute(sa.text("INSERT INTO projects (id,name,description,style,visual_style,seed,unify_style,progress,stats) VALUES ('p','p','','drama','live_action',0,1,0,'{}')"))
-        connection.execute(sa.text("INSERT INTO chapters (id,project_id,`index`,title,summary,raw_text,condensed_text,storyboard_count,status) VALUES ('ch','p',1,'ch','','','',0,'draft')"))
+        connection.execute(sa.text("INSERT INTO chapters (id,project_id,`index`,title,summary,raw_text,condensed_text,status) VALUES ('ch','p',1,'ch','','','','draft')"))
         connection.execute(sa.text("INSERT INTO directing_sequences (id,chapter_id,position,title,source,version) VALUES ('seq','ch',0,'scene','{}',1)"))
         for statement in (
             "INSERT INTO directing_sequences (id,chapter_id,position,title,source,version) VALUES ('bad','missing',1,'scene','{}',1)",
@@ -88,7 +88,7 @@ def test_continuity_migration_preserves_unresolved_dependencies_and_confirmed_cu
         migration.op = Operations(MigrationContext.configure(connection))
         migration.downgrade()
         connection.execute(sa.text("INSERT INTO projects (id,name,description,style,visual_style,seed,unify_style,progress,stats) VALUES ('p','p','','drama','live_action',0,1,0,'{}')"))
-        connection.execute(sa.text("INSERT INTO chapters (id,project_id,`index`,title,summary,raw_text,condensed_text,storyboard_count,status) VALUES ('ch','p',1,'ch','','','',0,'draft')"))
+        connection.execute(sa.text("INSERT INTO chapters (id,project_id,`index`,title,summary,raw_text,condensed_text,status) VALUES ('ch','p',1,'ch','','','','draft')"))
         connection.execute(sa.text("INSERT INTO directing_sequences (id,chapter_id,position,title,source,version) VALUES ('seq','ch',0,'scene','{}',1)"))
         payload = plan_sample('design')
         payload['units'][1]['depends_on_unit_ids'] = ['u1']
@@ -110,4 +110,44 @@ def test_continuity_migration_preserves_unresolved_dependencies_and_confirmed_cu
         # 缺省空列表可显式化，但原依赖和覆盖内容不得丢失。
         assert restored['units'][1]['depends_on_unit_ids'] == before['units'][1]['depends_on_unit_ids']
         assert restored['units'][0]['coverage'] == before['units'][0]['coverage']
+    engine.dispose()
+
+
+@pytest.mark.parametrize('active', [False, True])
+def test_retirement_preserves_assets_and_blocks_active_legacy_tasks(active):
+    """旧引用收缩保留章节来源并去重；运行中的旧任务阻止任何结构删除。"""
+    migration = revision_module('8ac4e702bf58_retire_shot_workflow.py')
+    engine = sa.create_engine('sqlite://')
+    with engine.begin() as connection:
+        connection.execute(sa.text('CREATE TABLE tasks (status TEXT, kind TEXT, target_type TEXT)'))
+        connection.execute(sa.text('CREATE TABLE chapters (id TEXT PRIMARY KEY, storyboard_count INTEGER)'))
+        connection.execute(sa.text("INSERT INTO chapters VALUES ('ch', 2)"))
+        connection.execute(sa.text('CREATE TABLE shots (id TEXT PRIMARY KEY, chapter_id TEXT)'))
+        connection.execute(sa.text("INSERT INTO shots VALUES ('s1','ch'),('s2','ch')"))
+        for table in migration.OLD_TABLES:
+            if table != 'shots':
+                connection.execute(sa.text(f'CREATE TABLE {table} (id TEXT PRIMARY KEY)'))
+        connection.execute(sa.text('CREATE TABLE file_usages (id TEXT PRIMARY KEY, file_id TEXT, chapter_id TEXT, shot_id TEXT REFERENCES shots(id))'))
+        connection.execute(sa.text("INSERT INTO file_usages VALUES ('usage','file',NULL,'s1')"))
+        for table, kind in migration.LINKS.items():
+            connection.execute(sa.text(f'CREATE TABLE {table} (id INTEGER PRIMARY KEY, {kind}_id TEXT, project_id TEXT, chapter_id TEXT, shot_id TEXT REFERENCES shots(id), CONSTRAINT uq_{table}_{kind}_scope UNIQUE ({kind}_id,project_id,chapter_id,shot_id))'))
+            connection.execute(sa.text(f"INSERT INTO {table} VALUES (1,'asset','p','ch','s1'),(2,'asset','p','ch','s2')"))
+        connection.execute(sa.text('CREATE TABLE directing_takes (id TEXT PRIMARY KEY, content TEXT)'))
+        connection.execute(sa.text("INSERT INTO directing_takes VALUES ('take','retained')"))
+        migration.op = Operations(MigrationContext.configure(connection))
+        if active:
+            connection.execute(sa.text("INSERT INTO tasks VALUES ('running','video_generation','shot_video')"))
+            with pytest.raises(RuntimeError, match='active retired shot tasks'):
+                migration.upgrade()
+            assert 'shots' in sa.inspect(connection).get_table_names()
+            assert connection.scalar(sa.text('SELECT count(*) FROM project_actor_links')) == 2
+        else:
+            migration.upgrade()
+            assert not set(migration.OLD_TABLES) & set(sa.inspect(connection).get_table_names())
+            assert connection.execute(sa.text('SELECT file_id,chapter_id FROM file_usages')).one() == ('file','ch')
+            for table in migration.LINKS:
+                assert connection.scalar(sa.text(f'SELECT count(*) FROM {table}')) == 1
+                assert 'shot_id' not in {c['name'] for c in sa.inspect(connection).get_columns(table)}
+            assert 'storyboard_count' not in {c['name'] for c in sa.inspect(connection).get_columns('chapters')}
+        assert connection.scalar(sa.text('SELECT content FROM directing_takes')) == 'retained'
     engine.dispose()

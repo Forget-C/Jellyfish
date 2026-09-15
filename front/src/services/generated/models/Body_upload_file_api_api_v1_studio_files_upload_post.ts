@@ -12,11 +12,9 @@ export type Body_upload_file_api_api_v1_studio_files_upload_post = {
      */
     project_id?: (string | null);
     chapter_id?: (string | null);
-    shot_id?: (string | null);
     /**
      * 与 project_id 同时提供时写入 file_usages
      */
     usage_kind?: (string | null);
     source_ref?: (string | null);
 };
-

@@ -8,16 +8,12 @@ from app.main import app
 from app.services.script_processing_tasks import (
     AsyncTaskCreateResult,
     CHARACTER_PORTRAIT_ANALYSIS_RELATION_TYPE,
-    CHAPTER_DIVISION_RELATION_TYPE,
     CONSISTENCY_CHECK_RELATION_TYPE,
     COSTUME_INFO_ANALYSIS_RELATION_TYPE,
-    ENTITY_MERGE_RELATION_TYPE,
     PROP_INFO_ANALYSIS_RELATION_TYPE,
     SCENE_INFO_ANALYSIS_RELATION_TYPE,
     SCRIPT_OPTIMIZATION_RELATION_TYPE,
     SCRIPT_SIMPLIFICATION_RELATION_TYPE,
-    SCRIPT_EXTRACTION_RELATION_TYPE,
-    VARIANT_ANALYSIS_RELATION_TYPE,
 )
 from app.core.contracts.task import TaskStatus
 
@@ -33,137 +29,10 @@ def _override_db():
     return _get_db
 
 
-def test_divide_async_returns_created_task_payload(client, monkeypatch) -> None:
-    async def _fake_create_divide_task(_db, *, chapter_id: str, script_text: str, write_to_db: bool):
-        assert chapter_id == "chapter-1"
-        assert script_text == "一段剧本"
-        assert write_to_db is True
-        return AsyncTaskCreateResult(
-            task_id="task-1",
-            status=TaskStatus.queued,
-            reused=False,
-            relation_type=CHAPTER_DIVISION_RELATION_TYPE,
-            relation_entity_id="chapter-1",
-        )
-
-    monkeypatch.setattr(script_processing_route, "create_divide_task", _fake_create_divide_task)
-    app.dependency_overrides[get_db] = _override_db()
-    try:
-        response = client.post(
-            "/api/v1/script-processing/divide-async",
-            json={
-                "chapter_id": "chapter-1",
-                "script_text": "一段剧本",
-                "write_to_db": True,
-            },
-        )
-    finally:
-        app.dependency_overrides.clear()
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["data"]["task_id"] == "task-1"
-    assert body["data"]["status"] == "queued"
-    assert body["data"]["reused"] is False
 
 
-def test_extract_async_returns_created_task_payload(client, monkeypatch) -> None:
-    async def _fake_create_extract_task(
-        _db,
-        *,
-        project_id: str,
-        chapter_id: str,
-        script_division: dict,
-        consistency: dict | None,
-    ):
-        assert project_id == "project-1"
-        assert chapter_id == "chapter-1"
-        assert script_division == {"shots": []}
-        assert consistency is None
-        return AsyncTaskCreateResult(
-            task_id="task-extract-1",
-            status=TaskStatus.queued,
-            reused=False,
-            relation_type=SCRIPT_EXTRACTION_RELATION_TYPE,
-            relation_entity_id="chapter-1",
-        )
-
-    monkeypatch.setattr(script_processing_route, "create_extract_task", _fake_create_extract_task)
-    app.dependency_overrides[get_db] = _override_db()
-    try:
-        response = client.post(
-            "/api/v1/script-processing/extract-async",
-            json={
-                "project_id": "project-1",
-                "chapter_id": "chapter-1",
-                "script_division": {"shots": []},
-                "consistency": None,
-            },
-        )
-    finally:
-        app.dependency_overrides.clear()
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["data"]["task_id"] == "task-extract-1"
-    assert body["data"]["status"] == "queued"
-    assert body["data"]["reused"] is False
 
 
-def test_merge_entities_async_returns_created_task_payload(client, monkeypatch) -> None:
-    async def _fake_create_merge_task(
-        _db,
-        *,
-        relation_entity_id: str,
-        all_shot_extractions: list[dict],
-        historical_library: dict | None,
-        script_division: dict | None,
-        previous_merge: dict | None,
-        conflict_resolutions: list[dict] | None,
-    ):
-        assert relation_entity_id == "chapter-1"
-        assert all_shot_extractions == []
-        assert historical_library is None
-        assert script_division is None
-        assert previous_merge is None
-        assert conflict_resolutions is None
-        return AsyncTaskCreateResult(
-            task_id="task-merge-1",
-            status=TaskStatus.queued,
-            reused=False,
-            relation_type=ENTITY_MERGE_RELATION_TYPE,
-            relation_entity_id="chapter-1",
-        )
-
-    def _fake_pick_relation_entity_id(*, chapter_id: str | None, project_id: str | None) -> str:
-        assert chapter_id == "chapter-1"
-        assert project_id == "project-1"
-        return "chapter-1"
-
-    monkeypatch.setattr(script_processing_route, "pick_merge_relation_entity_id", _fake_pick_relation_entity_id)
-    monkeypatch.setattr(script_processing_route, "create_merge_task", _fake_create_merge_task)
-    app.dependency_overrides[get_db] = _override_db()
-    try:
-        response = client.post(
-            "/api/v1/script-processing/merge-entities-async",
-            json={
-                "project_id": "project-1",
-                "chapter_id": "chapter-1",
-                "all_shot_extractions": [],
-                "historical_library": None,
-                "script_division": None,
-                "previous_merge": None,
-                "conflict_resolutions": None,
-            },
-        )
-    finally:
-        app.dependency_overrides.clear()
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["data"]["task_id"] == "task-merge-1"
-    assert body["data"]["status"] == "queued"
-    assert body["data"]["reused"] is False
 
 
 def test_check_consistency_async_returns_created_task_payload(client, monkeypatch) -> None:
@@ -205,54 +74,6 @@ def test_check_consistency_async_returns_created_task_payload(client, monkeypatc
     assert body["data"]["reused"] is False
 
 
-def test_analyze_variants_async_returns_created_task_payload(client, monkeypatch) -> None:
-    async def _fake_create_variant_task(
-        _db,
-        *,
-        relation_entity_id: str,
-        merged_library: dict,
-        all_shot_extractions: list[dict],
-        script_division: dict | None,
-    ):
-        assert relation_entity_id == "chapter-1"
-        assert merged_library == {}
-        assert all_shot_extractions == []
-        assert script_division is None
-        return AsyncTaskCreateResult(
-            task_id="task-variant-1",
-            status=TaskStatus.queued,
-            reused=False,
-            relation_type=VARIANT_ANALYSIS_RELATION_TYPE,
-            relation_entity_id="chapter-1",
-        )
-
-    def _fake_pick_relation_entity_id(*, chapter_id: str | None, project_id: str | None) -> str:
-        assert chapter_id == "chapter-1"
-        assert project_id == "project-1"
-        return "chapter-1"
-
-    monkeypatch.setattr(script_processing_route, "pick_variant_relation_entity_id", _fake_pick_relation_entity_id)
-    monkeypatch.setattr(script_processing_route, "create_variant_task", _fake_create_variant_task)
-    app.dependency_overrides[get_db] = _override_db()
-    try:
-        response = client.post(
-            "/api/v1/script-processing/analyze-variants-async",
-            json={
-                "project_id": "project-1",
-                "chapter_id": "chapter-1",
-                "merged_library": {},
-                "all_shot_extractions": [],
-                "script_division": None,
-            },
-        )
-    finally:
-        app.dependency_overrides.clear()
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["data"]["task_id"] == "task-variant-1"
-    assert body["data"]["status"] == "queued"
-    assert body["data"]["reused"] is False
 
 
 def test_analyze_character_portrait_async_returns_created_task_payload(client, monkeypatch) -> None:

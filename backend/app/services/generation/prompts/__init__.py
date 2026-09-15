@@ -3,8 +3,6 @@
 from app.services.generation.prompts.registry import PromptRendererRegistry, prompt_renderer_registry
 from app.services.generation.prompts.renderers import (
     AssetImagePromptRenderer,
-    ShotFramePromptRenderer,
-    ShotVideoPromptRenderer,
 )
 from app.services.generation.prompts.types import (
     AssetImagePromptRenderInput,
@@ -12,8 +10,6 @@ from app.services.generation.prompts.types import (
     PromptRendererName,
     PromptRenderRequest,
     RenderedPromptSnapshot,
-    ShotFramePromptRenderInput,
-    ShotVideoPromptRenderInput,
 )
 
 __all__ = [
@@ -24,9 +20,5 @@ __all__ = [
     "PromptRendererRegistry",
     "PromptRenderRequest",
     "RenderedPromptSnapshot",
-    "ShotFramePromptRenderer",
-    "ShotFramePromptRenderInput",
-    "ShotVideoPromptRenderer",
-    "ShotVideoPromptRenderInput",
     "prompt_renderer_registry",
 ]

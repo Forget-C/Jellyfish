@@ -32,7 +32,7 @@ async def check_entity_names_existence(
     service = StudioEntitiesService(db)
     data = await service.check_names_existence(
         project_id=body.project_id,
-        shot_id=body.shot_id,
+
         character_names=body.character_names,
         prop_names=body.prop_names,
         scene_names=body.scene_names,

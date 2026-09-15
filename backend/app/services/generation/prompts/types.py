@@ -3,23 +3,19 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Annotated, Literal, Protocol
+from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.asset_prompts import AssetPromptOptions
 from app.core.contracts.media import ImageMediaInput, VideoMediaInput
-from app.models.studio import ShotFrameType
-from app.schemas.studio.shots import ShotLinkedAssetItem
 
 
 class PromptRendererName(str, Enum):
     """由固定路由 Binder 选择的已注册提示词渲染器名称。"""
 
     asset_image = "asset_image"
-    shot_frame = "shot_frame"
-    shot_video = "shot_video"
 
 
 class AssetImagePromptRenderInput(AssetPromptOptions):
@@ -33,41 +29,7 @@ class AssetImagePromptRenderInput(AssetPromptOptions):
     image_id: int | None = Field(default=None, ge=1)
 
 
-class ShotFramePromptRenderInput(BaseModel):
-    """分镜帧渲染所需的已绑定镜头输入与参考资源。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    kind: Literal["shot_frame"] = "shot_frame"
-    shot_id: str = Field(min_length=1)
-    frame_type: ShotFrameType
-    prompt: str = ""
-    images: list[ShotLinkedAssetItem] = Field(default_factory=list)
-    director_command_summary: str = ""
-    continuity_guidance: str = ""
-    frame_specific_guidance: str = ""
-    composition_anchor: str = ""
-    screen_direction_guidance: str = ""
-
-
-class ShotVideoPromptRenderInput(BaseModel):
-    """镜头视频渲染所需的已绑定镜头输入与模板选择。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    kind: Literal["shot_video"] = "shot_video"
-    shot_id: str = Field(min_length=1)
-    reference_mode: Literal["first", "last", "key", "first_last", "first_last_key", "text_only"]
-    prompt: str | None = None
-    image_file_ids: list[str] = Field(default_factory=list)
-    template_id: str | None = None
-
-
-PromptRenderInput = Annotated[
-    AssetImagePromptRenderInput | ShotFramePromptRenderInput | ShotVideoPromptRenderInput,
-    Field(discriminator="kind"),
-]
-
+PromptRenderInput = AssetImagePromptRenderInput
 
 class PromptRenderRequest(BaseModel):
     """Renderer 的统一输入包装；类型和业务目标只能由调用方 Binder 决定。"""
@@ -75,29 +37,6 @@ class PromptRenderRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     input: PromptRenderInput
-
-
-class FrameGuidanceDecisionSnapshot(BaseModel):
-    """帧提示词渲染中单条 guidance 的保留或压缩决策，供工作室展示诊断。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    text: str
-    category: str
-    reason_tag: str = ""
-    reason: str
-
-
-class FrameReferenceMappingSnapshot(BaseModel):
-    """帧提示词引用的资产与 file_id 映射，保持图片顺序可审计。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    token: str
-    type: str
-    id: str
-    name: str
-    file_id: str
 
 
 class RenderedPromptSnapshot(BaseModel):
@@ -113,12 +52,6 @@ class RenderedPromptSnapshot(BaseModel):
     template_version: int | None = None
     recommended_media: ImageMediaInput | VideoMediaInput | None = None
     warnings: list[str] = Field(default_factory=list)
-    base_prompt: str | None = None
-    selected_guidance: list[str] = Field(default_factory=list)
-    dropped_guidance: list[str] = Field(default_factory=list)
-    selected_guidance_details: list[FrameGuidanceDecisionSnapshot] = Field(default_factory=list)
-    dropped_guidance_details: list[FrameGuidanceDecisionSnapshot] = Field(default_factory=list)
-    reference_mappings: list[FrameReferenceMappingSnapshot] = Field(default_factory=list)
 
 
 class PromptRenderer(Protocol):

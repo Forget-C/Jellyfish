@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button, Card, Empty, Image, Input, Modal, Space, message, Pagination } from 'antd'
 import { EditOutlined, LinkOutlined, PlusOutlined, UserOutlined } from '@ant-design/icons'
 import { useParams, useNavigate } from 'react-router-dom'
-import { StudioShotLinksService } from '../../../../../services/generated'
+import { StudioProjectAssetsService } from '../../../../../services/generated'
 import type { ProjectActorLinkRead } from '../../../../../services/generated'
 import { StudioEntitiesApi } from '../../../../../services/studioEntities'
 import { useProjectCharacters } from '../hooks/useProjectData'
@@ -53,11 +53,11 @@ export function ActorsTab() {
     if (!projectId) return
     setLinksLoading(true)
     try {
-      const res = await StudioShotLinksService.listProjectEntityLinksApiV1StudioShotLinksEntityTypeGet({
+      const res = await StudioProjectAssetsService.listProjectEntityLinksApiV1StudioProjectAssetsEntityTypeGet({
         entityType: 'actor',
         projectId,
         chapterId: null,
-        shotId: null,
+
         assetId: null,
         order: null,
         isDesc: false,
@@ -107,11 +107,11 @@ export function ActorsTab() {
     if (!projectId) return
     setLinkingId(actor.id)
     try {
-      await StudioShotLinksService.createProjectActorLinkApiV1StudioShotLinksActorPost({
+      await StudioProjectAssetsService.createProjectActorLinkApiV1StudioProjectAssetsActorPost({
         requestBody: {
           project_id: projectId,
           chapter_id: null,
-          shot_id: null,
+
           asset_id: actor.id,
         },
       })
@@ -132,7 +132,7 @@ export function ActorsTab() {
   const handleUnlinkActor = async (link: ProjectActorLinkRead) => {
     setUnlinkingId(link.id)
     try {
-      await StudioShotLinksService.deleteProjectActorLinkApiV1StudioShotLinksActorLinkIdDelete({ linkId: link.id })
+      await StudioProjectAssetsService.deleteProjectActorLinkApiV1StudioProjectAssetsActorLinkIdDelete({ linkId: link.id })
       message.success('已取消关联')
       await loadLinks()
     } catch {
@@ -369,4 +369,3 @@ export function ActorsTab() {
     </div>
   )
 }
-

@@ -18,7 +18,7 @@ from app.models.task import Task, TaskInput, TaskOutput
 
 TASK_KINDS = frozenset({
     "text_chat", "image_generation", "video_generation",
-    "script_divide", "script_extract", "script_merge", "script_consistency", "script_variant",
+    "script_consistency",
     "script_character_portrait", "script_prop_info", "script_scene_info", "script_costume_info",
     "script_optimize", "script_simplify",
     "directing_divide", "directing_design", "directing_review",

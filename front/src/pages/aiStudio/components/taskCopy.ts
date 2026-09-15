@@ -14,34 +14,6 @@ export type TaskCopyPreset = {
 }
 
 export const TASK_COPY = {
-  chapterDivision: {
-    title: '分镜提取',
-    runningDescription: '系统正在后台提取分镜，完成后会自动刷新当前内容。',
-    cancellingDescription: '已发送取消请求，系统会在当前步骤结束后停止。',
-    successDescription: '分镜提取已完成，页面内容已自动刷新。',
-    cancelledDescription: '分镜提取已取消。',
-    failedDescription: '分镜提取失败，请稍后重试。',
-    startedMessage: '已开始分镜提取',
-    reusedMessage: '已恢复当前章节的分镜提取任务',
-    cancelledImmediatelyMessage: '分镜提取已取消',
-    cancelRequestedMessage: '已请求取消分镜提取',
-    runningMessage: '当前已有分镜提取任务在运行',
-    cancellingMessage: '当前分镜提取任务正在取消，请稍候',
-  },
-  scriptExtract: {
-    title: '资产提取',
-    runningDescription: '任务完成后会自动刷新资产与对白候选，无需手动刷新页面。',
-    cancellingDescription: '已发送取消请求，系统会在当前步骤结束后停止，并在结束后自动刷新页面。',
-    successDescription: '资产提取已完成，候选内容已自动刷新。',
-    cancelledDescription: '资产提取已取消。',
-    failedDescription: '资产提取失败，请稍后重试。',
-    startedMessage: '已开始资产提取',
-    reusedMessage: '已恢复当前章节的资产提取任务',
-    cancelledImmediatelyMessage: '资产提取已取消',
-    cancelRequestedMessage: '已请求取消资产提取',
-    runningMessage: '当前已有资产提取任务在运行',
-    cancellingMessage: '当前资产提取任务正在取消，请稍候',
-  },
   consistencyCheck: {
     title: '一致性检查',
     runningDescription: '检查完成后会自动展示最新的一致性检查结果。',
@@ -158,10 +130,6 @@ export const TASK_COPY = {
 
 export const TASK_KIND_TITLE_MAP: Record<string, string> = {
   text_chat: '文本生成',
-  script_merge: '实体合并',
-  script_variant: '变体分析',
-  script_divide: TASK_COPY.chapterDivision.title,
-  script_extract: TASK_COPY.scriptExtract.title,
   script_consistency: TASK_COPY.consistencyCheck.title,
   script_simplify: TASK_COPY.scriptSimplify.title,
   script_optimize: TASK_COPY.scriptOptimize.title,
@@ -174,8 +142,6 @@ export const TASK_KIND_TITLE_MAP: Record<string, string> = {
 }
 
 export const RELATION_TYPE_LABEL_MAP: Record<string, string> = {
-  chapter_division: '章节',
-  script_extraction: '章节',
   consistency_check: '章节',
   script_optimization: '章节',
   script_simplification: '章节',

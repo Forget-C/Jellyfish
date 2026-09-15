@@ -15,7 +15,6 @@ from app.models.studio import (
     Project,
     ProjectStyle,
     ProjectVisualStyle,
-    Shot,
 )
 from app.services.studio import files as files_service
 from app.services.studio.files import get_file_detail, list_files_paginated, update_file_meta
@@ -39,8 +38,7 @@ async def _seed_scope_graph(db: AsyncSession) -> None:
         visual_style=ProjectVisualStyle.live_action,
     )
     chapter = Chapter(id="c1", project_id="p1", index=1, title="第一章")
-    shot = Shot(id="s1", chapter_id="c1", index=1, title="镜头一")
-    db.add_all([project, chapter, shot])
+    db.add_all([project, chapter])
     await db.commit()
 
 
@@ -95,7 +93,6 @@ async def test_get_file_detail_includes_usages() -> None:
                 usage={
                     "project_id": "p1",
                     "chapter_id": "c1",
-                    "shot_id": "s1",
                     "usage_kind": FileUsageKind.upload,
                     "source_ref": "manual",
                 }
@@ -108,7 +105,6 @@ async def test_get_file_detail_includes_usages() -> None:
         assert len(detail.usages) == 1
         assert detail.usages[0].project_id == "p1"
         assert detail.usages[0].chapter_id == "c1"
-        assert detail.usages[0].shot_id == "s1"
         assert detail.usages[0].usage_kind == FileUsageKind.upload
     await engine.dispose()
 
@@ -139,7 +135,6 @@ async def test_update_file_meta_updates_fields_and_upserts_usage() -> None:
                 usage={
                     "project_id": "p1",
                     "chapter_id": "c1",
-                    "shot_id": "s1",
                     "usage_kind": FileUsageKind.asset_image,
                     "source_ref": "slot-1",
                 },
@@ -152,7 +147,6 @@ async def test_update_file_meta_updates_fields_and_upserts_usage() -> None:
                 usage={
                     "project_id": "p1",
                     "chapter_id": "c1",
-                    "shot_id": "s1",
                     "usage_kind": FileUsageKind.asset_image,
                     "source_ref": "slot-1",
                 }

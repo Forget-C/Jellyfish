@@ -53,7 +53,6 @@ class ChapterBase(BaseModel):
     summary: str = Field("", description="章节摘要")
     raw_text: str = Field("", description="章节原文")
     condensed_text: str = Field("", description="精简原文")
-    storyboard_count: int = Field(0, description="分镜数量")
     status: ChapterStatus = Field(ChapterStatus.draft, description="章节状态")
 
 
@@ -68,7 +67,6 @@ class ChapterUpdate(BaseModel):
     summary: str | None = None
     raw_text: str | None = None
     condensed_text: str | None = None
-    storyboard_count: int | None = None
     status: ChapterStatus | None = None
 
 
@@ -76,7 +74,7 @@ class ChapterRead(ChapterBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    shot_count: int = Field(0, description="分镜数（shots 条数聚合）")
+    sequence_count: int = Field(0, description="已确认场次数")
 
 
 class StyleOption(BaseModel):

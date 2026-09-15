@@ -10,9 +10,6 @@ import {
   projects as initialProjects,
   providers as initialProviders,
   promptTemplates,
-  shotDetails,
-  shots,
-  timelineClips,
 } from './data'
 
 // 可变的项目列表，支持创建/编辑/删除（会话内生效）
@@ -91,7 +88,7 @@ function toChapterRead(c: Chapter) {
     index: c.index,
     title: c.title,
     summary: c.summary,
-    storyboard_count: c.storyboardCount,
+    sequence_count: c.sequenceCount,
     status: c.status,
   }
 }
@@ -231,7 +228,7 @@ export const handlers = [
       index: number
       title: string
       summary?: string
-      storyboard_count?: number
+      sequence_count?: number
       status?: Chapter['status']
     }>
 
@@ -259,7 +256,7 @@ export const handlers = [
       index: nextIndex,
       title: body.title,
       summary: body.summary ?? '',
-      storyboardCount: body.storyboard_count ?? 0,
+      sequenceCount: body.sequence_count ?? 0,
       status: body.status ?? 'draft',
       updatedAt: now,
     }
@@ -285,7 +282,7 @@ export const handlers = [
       index: number | null
       title: string | null
       summary: string | null
-      storyboard_count: number | null
+      sequence_count: number | null
       status: Chapter['status'] | null
     }>
 
@@ -308,10 +305,10 @@ export const handlers = [
         typeof body.summary === 'string'
           ? body.summary
           : current.summary,
-      storyboardCount:
-        typeof body.storyboard_count === 'number'
-          ? body.storyboard_count
-          : current.storyboardCount,
+      sequenceCount:
+        typeof body.sequence_count === 'number'
+          ? body.sequence_count
+          : current.sequenceCount,
       status:
         (body.status as Chapter['status']) ?? current.status,
       updatedAt: new Date().toISOString(),
@@ -395,23 +392,6 @@ export const handlers = [
     return HttpResponse.json(list, { status: 200 })
   }),
 
-  // 某章节的分镜列表
-  http.get('/api/chapters/:chapterId/shots', ({ params }) => {
-    const { chapterId } = params as { chapterId: string }
-    const list = shots.filter((s) => s.chapterId === chapterId)
-    return HttpResponse.json(list, { status: 200 })
-  }),
-
-  // 单个分镜详情（镜头属性）
-  http.get('/api/shots/:shotId', ({ params }) => {
-    const { shotId } = params as { shotId: string }
-    const detail = shotDetails.find((s) => s.id === shotId)
-    if (!detail) {
-      return HttpResponse.json({ message: '分镜不存在' }, { status: 404 })
-    }
-    return HttpResponse.json(detail, { status: 200 })
-  }),
-
   // 资产列表（可通过查询参数过滤）
   http.get('/api/assets', ({ request }) => {
     const url = new URL(request.url)
@@ -428,11 +408,6 @@ export const handlers = [
   // 文件列表
   http.get('/api/files', () => {
     return HttpResponse.json(files, { status: 200 })
-  }),
-
-  // 某项目的时间线数据
-  http.get('/api/projects/:projectId/timeline', () => {
-    return HttpResponse.json(timelineClips, { status: 200 })
   }),
 
   // Agent 列表
@@ -604,5 +579,3 @@ export const handlers = [
     return HttpResponse.json(modelSettingsStore, { status: 200 })
   }),
 ]
-
-

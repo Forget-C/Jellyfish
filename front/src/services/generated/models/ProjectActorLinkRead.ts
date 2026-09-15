@@ -15,14 +15,9 @@ export type ProjectActorLinkRead = {
      * 章节 ID（可空）
      */
     chapter_id?: (string | null);
-    /**
-     * 镜头 ID（可空）
-     */
-    shot_id?: (string | null);
     actor_id: string;
     /**
      * 演员缩略图下载地址
      */
     thumbnail?: string;
 };
-

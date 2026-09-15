@@ -15,7 +15,6 @@ from app.core.contracts.media import ImageMediaInput, MediaReference, VideoMedia
 from app.models.experiment_sessions import ExperimentSession
 from app.models.directing import DirectingRevision
 from app.models.llm import Model, ModelCategoryKey, ModelSettings, Provider, ProviderStatus
-from app.models.studio import Shot, ShotDetail, ShotFrameImage
 from app.models.studio_prompts_files_timeline import FileItem
 from app.models.types import FileType
 from app.services.studio.entity_specs import entity_spec
@@ -102,16 +101,6 @@ class GenerationEntityGate:
         elif target.kind == GenerationTargetKind.directing_unit:
             revision = await db.get(DirectingRevision, target.entity_id)
             exists = revision is not None and revision.kind == "prompt" and revision.confirmed_at is not None
-        elif target.kind == GenerationTargetKind.shot_video:
-            exists = await db.get(Shot, target.entity_id) is not None
-        elif target.kind == GenerationTargetKind.shot_detail:
-            exists = await db.get(ShotDetail, target.entity_id) is not None
-        elif target.kind == GenerationTargetKind.shot_frame_slot:
-            try:
-                frame = await db.get(ShotFrameImage, int(target.slot_id)) if target.slot_id is not None else None
-                exists = frame is not None and frame.shot_detail_id == target.entity_id
-            except ValueError:
-                exists = False
         elif target.kind == GenerationTargetKind.asset_image_slot:
             exists = target.slot_id is not None and await self._asset_slot_belongs_to(
                 db,
@@ -140,15 +129,6 @@ class GenerationEntityGate:
         if target.kind == GenerationTargetKind.directing_unit:
             revision = await db.get(DirectingRevision, target.entity_id)
             return revision.version if revision else None
-        if target.kind == GenerationTargetKind.shot_video:
-            shot = await db.get(Shot, target.entity_id)
-            return shot.generated_video_version_id if shot else None
-        if target.kind == GenerationTargetKind.shot_frame_slot and target.slot_id:
-            try:
-                row = await db.get(ShotFrameImage, int(target.slot_id))
-            except ValueError:
-                return None
-            return row.version_id if row else None
         if target.kind == GenerationTargetKind.asset_image_slot and target.slot_id:
             numeric_id = int(target.slot_id)
             spec = entity_spec(target.asset_type)

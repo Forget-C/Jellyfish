@@ -39,7 +39,7 @@ import { useProjectStyleOptions } from './useProjectStyleOptions'
 type ViewMode = 'grid' | 'compact' | 'large'
 type FilterTab = 'all' | 'editRaw'
 type SortKey = 'updatedAt' | 'name' | 'createdAt' | 'chapters'
-type ChapterPreparationInput = { id: string; index: number; rawText?: string; storyboardCount?: number }
+type ChapterPreparationInput = { id: string; index: number; rawText?: string; sequenceCount?: number }
 type ProjectStageSummary = {
   key: 'edit_raw' | 'sequences' | 'create_first_chapter'
   stageText: string
@@ -47,7 +47,7 @@ type ProjectStageSummary = {
   nextActionLabel: string
   nextActionHint: string
   chapterId?: string
-  storyboardCount?: number
+  sequenceCount?: number
 }
 type ProjectView = Project & {
   visualStyle?: ProjectVisualStyleChoice
@@ -176,7 +176,7 @@ const ProjectLobby: React.FC = () => {
         nextActionLabel: missingRaw ? '编辑原文' : '进入场次',
         nextActionHint: `第${chapter.index}章 · 原文划场、设计、试拍与剪辑`,
         chapterId: chapter.id,
-        storyboardCount: chapter.storyboardCount,
+        sequenceCount: chapter.sequenceCount,
       }
     }
 
@@ -195,7 +195,7 @@ const ProjectLobby: React.FC = () => {
                   title: chapter.title,
                   summary: chapter.summary ?? '',
                   rawText: chapter.summary ?? '',
-                  storyboardCount: chapter.storyboardCount,
+                  sequenceCount: chapter.sequenceCount,
                   status: chapter.status,
                   updatedAt: chapter.updatedAt,
                 })),
@@ -231,7 +231,7 @@ const ProjectLobby: React.FC = () => {
                   title: chapter.title,
                   summary: chapter.summary ?? '',
                   rawText: chapter.raw_text ?? '',
-                  storyboardCount: chapter.shot_count ?? chapter.storyboard_count ?? 0,
+                  sequenceCount: chapter.sequence_count ?? 0,
                   status: chapter.status ?? 'draft',
                   updatedAt: new Date().toISOString(),
                 })),
@@ -243,7 +243,7 @@ const ProjectLobby: React.FC = () => {
                 title: chapter.title,
                 summary: chapter.summary ?? '',
                 rawText: chapter.raw_text ?? '',
-                storyboardCount: chapter.shot_count ?? chapter.storyboard_count ?? 0,
+                sequenceCount: chapter.sequence_count ?? 0,
                 status: chapter.status ?? 'draft',
                 updatedAt: new Date().toISOString(),
               })),

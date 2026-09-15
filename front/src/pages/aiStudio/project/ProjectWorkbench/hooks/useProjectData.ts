@@ -53,7 +53,7 @@ function toUIChapter(c: ChapterRead): Chapter {
     title: c.title,
     summary: c.summary ?? '',
     rawText: c.raw_text ?? '',
-    storyboardCount: c.shot_count ?? c.storyboard_count ?? 0,
+    sequenceCount: c.sequence_count ?? 0,
     status: c.status ?? 'draft',
     updatedAt: new Date().toISOString(),
   }

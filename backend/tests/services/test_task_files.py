@@ -78,12 +78,12 @@ async def test_active_task_blocks_delete_but_history_survives_delete_request():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("target", ["actor", "frame", "shot"])
-async def test_business_adoption_rejects_deleted_and_wrong_media(target):
-    """实际业务采用阻止文件删除；解除采用后删除的文件不能被重新采用。"""
-    from app.models.studio import Actor, Shot, ShotDetail
-    from app.schemas.studio.shots import ShotFrameImageCreate, ShotFrameImageUpdate, ShotUpdate
-    from app.services.studio import entity_images, shot_frames, shots
+async def test_business_adoption_rejects_deleted_and_wrong_media():
+    """资产采用仍校验媒体、删除保护与 CAS；场次采用由 directing 回归验证。"""
+    from types import SimpleNamespace
+    from app.models.studio import Actor
+    from app.services.studio import entity_images
+    from app.services.generation.publishers import AssetImagePublisher
 
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as connection:
@@ -91,45 +91,23 @@ async def test_business_adoption_rejects_deleted_and_wrong_media(target):
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     try:
         async with sessions() as db:
-            media_type = "video" if target == "shot" else "image"
-            file = FileItem(id="usable", type=media_type, name="test", storage_key="usable")
-            wrong = FileItem(id="wrong", type="image" if media_type == "video" else "video",
-                             name="wrong", storage_key="wrong")
-            db.add_all([file, wrong, Actor(id="actor", name="actor", style="realistic"),
-                        Shot(id="shot", chapter_id="chapter", index=1, title="shot"),
-                        ShotDetail(id="shot", camera_shot="MS", angle="EYE_LEVEL", movement="STATIC")])
+            file = FileItem(id="usable", type="image", name="test", storage_key="usable")
+            wrong = FileItem(id="wrong", type="video", name="wrong", storage_key="wrong")
+            db.add_all([file, wrong, Actor(id="actor", name="actor", style="realistic")])
             await db.flush()
-            if target == "actor":
-                slot = await entity_images.create_entity_image(db, entity_type="actor", entity_id="actor", body={})
-            elif target == "frame":
-                slot = await shot_frames.create(db, body=ShotFrameImageCreate(shot_detail_id="shot", frame_type="first"))
+            slot = await entity_images.create_entity_image(db, entity_type="actor", entity_id="actor", body={})
 
             async def adopt(file_id):
-                """经由真实业务服务修改文件引用。"""
-                if target == "actor":
-                    await entity_images.update_entity_image(db, entity_type="actor", entity_id="actor",
-                                                            image_id=slot["id"], body={"file_id": file_id})
-                elif target == "frame":
-                    await shot_frames.update(db, image_id=slot.id, body=ShotFrameImageUpdate(file_id=file_id))
-                else:
-                    await shots.update(db, shot_id="shot", body=ShotUpdate(generated_video_file_id=file_id))
+                """使用真实业务服务维护槽位与文件引用。"""
+                await entity_images.update_entity_image(db, entity_type="actor", entity_id="actor",
+                    image_id=slot["id"], body={"file_id": file_id})
 
             with pytest.raises(HTTPException) as error:
                 await adopt(wrong.id)
             assert error.value.status_code == 422
             await adopt(file.id)
-            # 模拟手动采用前已提交的任务完成，旧版本不能覆盖最新选择。
-            from types import SimpleNamespace
-            from app.services.generation.publishers.asset_image import AssetImagePublisher
-            from app.services.generation.publishers.shot_frame import ShotFramePublisher
-            from app.services.generation.publishers.shot_video import ShotVideoPublisher
-
-            publisher = {"actor": AssetImagePublisher, "frame": ShotFramePublisher, "shot": ShotVideoPublisher}[target]()
-            snapshot = SimpleNamespace(canonical_target=SimpleNamespace(
-                entity_id="actor" if target == "actor" else "shot", asset_type="actor",
-                slot_id=str(slot["id"] if target == "actor" else slot.id) if target != "shot" else None,
-            ))
-            assert not await publisher._publish_file(db, snapshot=snapshot, file_id=file.id, expected_version_id=1)
+            snapshot = SimpleNamespace(canonical_target=SimpleNamespace(entity_id="actor", asset_type="actor", slot_id=str(slot["id"])))
+            assert not await AssetImagePublisher()._publish_file(db, snapshot=snapshot, file_id=file.id, expected_version_id=1)
             with pytest.raises(HTTPException) as error:
                 await delete_file(db, file_id=file.id)
             assert error.value.status_code == 409

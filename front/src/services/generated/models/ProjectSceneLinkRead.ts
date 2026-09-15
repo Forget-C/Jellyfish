@@ -15,14 +15,9 @@ export type ProjectSceneLinkRead = {
      * 章节 ID（可空）
      */
     chapter_id?: (string | null);
-    /**
-     * 镜头 ID（可空）
-     */
-    shot_id?: (string | null);
     scene_id: string;
     /**
      * 场景缩略图下载地址
      */
     thumbnail?: string;
 };
-

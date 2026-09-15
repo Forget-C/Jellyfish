@@ -13,7 +13,7 @@ from app.core.contracts.generation import (
     ResolvedGenerationSnapshot,
 )
 from app.models.task import TaskOutput
-from app.services.generation.publishers import AssetImagePublisher, ShotFramePublisher, ShotVideoPublisher
+from app.services.generation.publishers import AssetImagePublisher
 
 
 class RecordingSession:
@@ -34,7 +34,7 @@ class RecordingSession:
         return SimpleNamespace(rowcount=self._rowcounts.pop(0))
 
 
-def _snapshot(kind: GenerationTargetKind, *, entity_id: str = "shot-1", slot_id: str | None = "12") -> ResolvedGenerationSnapshot:
+def _snapshot(kind: GenerationTargetKind, *, entity_id: str = "actor-1", slot_id: str | None = "12") -> ResolvedGenerationSnapshot:
     """创建包含目标版本的最小图片任务快照。"""
     return ResolvedGenerationSnapshot(
         model_id="model-1",
@@ -69,28 +69,28 @@ async def test_asset_publisher_publishes_primary_and_keeps_secondary_as_history(
 
 
 @pytest.mark.asyncio
-async def test_shot_frame_publisher_marks_conflict_without_overwriting_slot() -> None:
+async def test_asset_publisher_marks_conflict_without_overwriting_slot() -> None:
     """帧槽位 CAS 未命中时保留 Artifact，并暴露固定冲突码。"""
     db = RecordingSession(0)
     primary = _artifact(0)
 
-    await ShotFramePublisher().publish_terminal(
-        db, snapshot=_snapshot(GenerationTargetKind.shot_frame_slot), artifacts=[primary]  # type: ignore[arg-type]
+    await AssetImagePublisher().publish_terminal(
+        db, snapshot=_snapshot(GenerationTargetKind.asset_image_slot), artifacts=[primary]  # type: ignore[arg-type]
     )
 
     assert len(db.statements) == 1
     assert primary.delivery_status == "conflicted"
     assert primary.delivery_reason == "target_version_conflict"
-    assert "shot_frame_images" in str(db.statements[0])
+    assert "actor_images" in str(db.statements[0])
 
 
 @pytest.mark.asyncio
-async def test_shot_video_publisher_uses_dedicated_video_version_and_is_idempotent() -> None:
-    """视频发布不改 shot.status，重复调用不会对已发布 Artifact 再执行 CAS。"""
+async def test_asset_publisher_uses_slot_version_and_is_idempotent() -> None:
+    """资产发布使用槽位版本，重复调用不会对已发布 Artifact 再执行 CAS。"""
     db = RecordingSession(1)
     primary = _artifact(0)
-    publisher = ShotVideoPublisher()
-    snapshot = _snapshot(GenerationTargetKind.shot_video, entity_id="shot-42", slot_id=None)
+    publisher = AssetImagePublisher()
+    snapshot = _snapshot(GenerationTargetKind.asset_image_slot, entity_id="actor-42", slot_id="12")
 
     await publisher.publish_terminal(db, snapshot=snapshot, artifacts=[primary])  # type: ignore[arg-type]
     await publisher.publish_terminal(db, snapshot=snapshot, artifacts=[primary])  # type: ignore[arg-type]
@@ -98,8 +98,8 @@ async def test_shot_video_publisher_uses_dedicated_video_version_and_is_idempote
     assert len(db.statements) == 1
     assert primary.delivery_status == "published"
     statement = str(db.statements[0])
-    assert "generated_video_file_id" in statement
-    assert "generated_video_version_id" in statement
+    assert "file_id" in statement
+    assert "version_id" in statement
     assert "status" not in statement
 
 
@@ -108,7 +108,7 @@ async def test_frame_publisher_rejects_wrong_target_before_database_write():
     """目标类型不匹配时不能把实验或视频结果写入帧槽位。"""
     db = RecordingSession(1)
     with pytest.raises(ValueError, match="target_kind mismatch"):
-        await ShotFramePublisher().publish_terminal(
-            db, snapshot=_snapshot(GenerationTargetKind.shot_video), artifacts=[_artifact(0)],
+        await AssetImagePublisher().publish_terminal(
+            db, snapshot=_snapshot(GenerationTargetKind.experiment_session), artifacts=[_artifact(0)],
         )
     assert db.statements == []

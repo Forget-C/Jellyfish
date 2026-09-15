@@ -29,10 +29,6 @@ export type ChapterCreate = {
      */
     condensed_text?: string;
     /**
-     * 分镜数量
-     */
-    storyboard_count?: number;
-    /**
      * 章节状态
      */
     status?: ChapterStatus;
@@ -41,4 +37,3 @@ export type ChapterCreate = {
      */
     id: string;
 };
-

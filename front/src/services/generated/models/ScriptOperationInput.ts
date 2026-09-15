@@ -7,7 +7,6 @@
  */
 export type ScriptOperationInput = {
     kind?: string;
-    operation: 'divide' | 'extract' | 'check-consistency' | 'analyze-character-portrait' | 'analyze-prop-info' | 'analyze-scene-info' | 'analyze-costume-info' | 'optimize-script' | 'simplify-script' | 'merge-entities' | 'analyze-variants';
+    operation: 'check-consistency' | 'analyze-character-portrait' | 'analyze-prop-info' | 'analyze-scene-info' | 'analyze-costume-info' | 'optimize-script' | 'simplify-script';
     source_text: string;
 };
-

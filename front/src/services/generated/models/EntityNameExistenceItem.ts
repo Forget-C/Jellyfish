@@ -19,10 +19,6 @@ export type EntityNameExistenceItem = {
      */
     linked_to_project: boolean;
     /**
-     * 是否已关联到请求中的 shot（未传 shot_id 时为 false）
-     */
-    linked_to_shot?: boolean;
-    /**
      * 命中的资产 ID（如 prop_id/scene_id/costume_id/character_id）
      */
     asset_id?: (string | null);
@@ -31,4 +27,3 @@ export type EntityNameExistenceItem = {
      */
     link_id?: (number | null);
 };
-

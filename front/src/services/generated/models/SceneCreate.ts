@@ -24,10 +24,6 @@ export type SceneCreate = {
      */
     chapter_id?: (string | null);
     /**
-     * 可选：分镜 ID
-     */
-    shot_id?: (string | null);
-    /**
      * 补充信息
      */
     supplementary_info?: string;
@@ -52,4 +48,3 @@ export type SceneCreate = {
      */
     color_palette?: (string | null);
 };
-

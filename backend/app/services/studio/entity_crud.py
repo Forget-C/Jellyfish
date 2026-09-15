@@ -9,12 +9,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.utils import apply_keyword_filter, apply_order, paginate
-from app.models.studio import Actor, Chapter, Costume, Project, Shot, ShotCharacterLink
-from app.schemas.studio.cast import ShotCharacterLinkCreate
+from app.models.studio import Actor, Chapter, Costume, Project
 from app.services.common import entity_already_exists, entity_not_found
 from app.services.studio.entity_specs import DEFAULT_VIEW_ANGLES, LINK_MODEL_BY_ENTITY, entity_spec, normalize_entity_type
 from app.services.studio.entity_thumbnails import resolve_thumbnails
-from app.services.studio.shot_character_links import upsert as upsert_shot_character_link
 from app.utils.project_links import upsert_project_link
 
 ENTITY_ORDER_FIELDS = {"name", "style", "visual_style", "created_at", "updated_at"}
@@ -97,15 +95,12 @@ async def create_entity(
 
     link_project_id: str | None = None
     link_chapter_id: str | None = None
-    link_shot_id: str | None = None
     if entity_type_norm in LINK_MODEL_BY_ENTITY:
         link_project_id = data.pop("project_id", None)
         link_chapter_id = data.pop("chapter_id", None)
-        link_shot_id = data.pop("shot_id", None)
     elif entity_type_norm == "character":
         link_project_id = data.get("project_id")
         link_chapter_id = data.pop("chapter_id", None)
-        link_shot_id = data.pop("shot_id", None)
 
     exists = await db.get(spec.model, data["id"])
     if exists is not None:
@@ -119,24 +114,12 @@ async def create_entity(
         if data.get("costume_id") and await db.get(Costume, data["costume_id"]) is None:
             raise HTTPException(status_code=400, detail=entity_not_found("Costume"))
         chapter: Chapter | None = None
-        shot: Shot | None = None
         if link_chapter_id is not None:
             chapter = await db.get(Chapter, link_chapter_id)
             if chapter is None:
                 raise HTTPException(status_code=400, detail=entity_not_found("Chapter"))
             if chapter.project_id != data["project_id"]:
                 raise HTTPException(status_code=400, detail="Chapter does not belong to the same project")
-        if link_shot_id is not None:
-            shot = await db.get(Shot, link_shot_id)
-            if shot is None:
-                raise HTTPException(status_code=400, detail=entity_not_found("Shot"))
-            shot_chapter = await db.get(Chapter, shot.chapter_id)
-            if shot_chapter is None:
-                raise HTTPException(status_code=400, detail=f"{entity_not_found('Chapter')} for shot")
-            if shot_chapter.project_id != data["project_id"]:
-                raise HTTPException(status_code=400, detail="Shot does not belong to the same project")
-            if chapter is not None and shot.chapter_id != chapter.id:
-                raise HTTPException(status_code=400, detail="Shot does not belong to the specified chapter")
 
     obj = spec.model(**data)
     db.add(obj)
@@ -160,25 +143,6 @@ async def create_entity(
             asset_id=obj.id,
             project_id=link_project_id,
             chapter_id=link_chapter_id,
-            shot_id=link_shot_id,
-        )
-
-    if entity_type_norm == "character" and link_shot_id is not None:
-        existing_indexes_stmt = (
-            select(ShotCharacterLink.index)
-            .where(ShotCharacterLink.shot_id == link_shot_id)
-            .order_by(ShotCharacterLink.index.desc())
-            .limit(1)
-        )
-        max_index = (await db.execute(existing_indexes_stmt)).scalars().first()
-        await upsert_shot_character_link(
-            db,
-            body=ShotCharacterLinkCreate(
-                shot_id=link_shot_id,
-                character_id=obj.id,
-                index=(max_index if isinstance(max_index, int) else -1) + 1,
-                note="",
-            ),
         )
 
     if entity_type_norm in {"actor", "character"}:

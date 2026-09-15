@@ -72,9 +72,4 @@ export type ActorCreate = {
      * 可选：章节 ID
      */
     chapter_id?: (string | null);
-    /**
-     * 可选：分镜 ID
-     */
-    shot_id?: (string | null);
 };
-

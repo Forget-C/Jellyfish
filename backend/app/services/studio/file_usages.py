@@ -1,8 +1,8 @@
-"""文件在项目中的使用位置：写入与按项目/章节标题/镜头标题分页查询。"""
+"""文件在项目中的使用位置：写入与按项目/章节标题分页查询。"""
 
 from __future__ import annotations
 
-from sqlalchemy import Select, delete, func, or_, select
+from sqlalchemy import Select, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.utils import normalize_q
@@ -14,7 +14,6 @@ from app.models.studio import (
     ProjectCostumeLink,
     ProjectPropLink,
     ProjectSceneLink,
-    Shot,
 )
 from app.models.types import FileUsageKind
 
@@ -25,7 +24,7 @@ async def upsert_file_usage(
     file_id: str,
     project_id: str,
     chapter_id: str | None,
-    shot_id: str | None,
+
     usage_kind: FileUsageKind | str,
     source_ref: str | None = None,
 ) -> FileUsage:
@@ -49,7 +48,6 @@ async def upsert_file_usage(
     row = (await session.execute(stmt)).scalars().first()
     if row is not None:
         row.chapter_id = chapter_id
-        row.shot_id = shot_id
         await session.flush()
         return row
 
@@ -57,7 +55,7 @@ async def upsert_file_usage(
         file_id=file_id,
         project_id=project_id,
         chapter_id=chapter_id,
-        shot_id=shot_id,
+
         usage_kind=kind_str,
         source_ref=ref,
     )
@@ -71,31 +69,6 @@ async def delete_usages_by_file_id(session: AsyncSession, file_id: str) -> None:
     """删除某文件的全部 usage（若未使用 ON DELETE CASCADE 时备用）。"""
     await session.execute(delete(FileUsage).where(FileUsage.file_id == file_id))
     await session.flush()
-
-
-async def sync_usage_from_shot_context(
-    session: AsyncSession,
-    *,
-    file_id: str,
-    shot_id: str,
-    usage_kind: FileUsageKind | str,
-    source_ref: str | None = None,
-) -> FileUsage | None:
-    shot = await session.get(Shot, shot_id)
-    if shot is None:
-        return None
-    chapter = await session.get(Chapter, shot.chapter_id)
-    if chapter is None:
-        return None
-    return await upsert_file_usage(
-        session,
-        file_id=file_id,
-        project_id=chapter.project_id,
-        chapter_id=chapter.id,
-        shot_id=shot_id,
-        usage_kind=usage_kind,
-        source_ref=source_ref,
-    )
 
 
 async def sync_usage_from_character(
@@ -116,7 +89,7 @@ async def sync_usage_from_character(
         file_id=file_id,
         project_id=char.project_id,
         chapter_id=None,
-        shot_id=None,
+
         usage_kind=usage_kind,
         source_ref=source_ref,
     )
@@ -126,44 +99,15 @@ def _scope_filters(
     *,
     project_id: str,
     chapter_title: str | None,
-    shot_title: str | None,
+
 ) -> list:
     """返回与 FileUsage 行组合的 WHERE 条件（不含 project_id 基条件）。"""
     conds: list = []
 
     ch_title = normalize_q(chapter_title)
-    sh_title = normalize_q(shot_title)
-
-    ch_ids_matching_title = select(Chapter.id).where(
-        Chapter.project_id == project_id,
-        Chapter.title == ch_title,
-    )
-
-    if ch_title and sh_title:
-        shot_ids = select(Shot.id).where(
-            Shot.chapter_id.in_(ch_ids_matching_title),
-            Shot.title == sh_title,
-        )
-        conds.append(FileUsage.shot_id.in_(shot_ids))
-    elif ch_title and not sh_title:
-        conds.append(
-            or_(
-                FileUsage.chapter_id.in_(ch_ids_matching_title),
-                FileUsage.shot_id.in_(
-                    select(Shot.id).where(Shot.chapter_id.in_(ch_ids_matching_title))
-                ),
-            )
-        )
-    elif sh_title and not ch_title:
-        shot_ids = (
-            select(Shot.id)
-            .join(Chapter, Shot.chapter_id == Chapter.id)
-            .where(
-                Chapter.project_id == project_id,
-                Shot.title == sh_title,
-            )
-        )
-        conds.append(FileUsage.shot_id.in_(shot_ids))
+    if ch_title:
+        chapter_ids = select(Chapter.id).where(Chapter.project_id == project_id, Chapter.title == ch_title)
+        conds.append(FileUsage.chapter_id.in_(chapter_ids))
 
     return conds
 
@@ -173,7 +117,7 @@ async def list_files_by_scope_paginated(
     *,
     project_id: str,
     chapter_title: str | None = None,
-    shot_title: str | None = None,
+
     q: str | None = None,
     order: str | None = None,
     is_desc: bool = False,
@@ -182,7 +126,7 @@ async def list_files_by_scope_paginated(
     allow_order_fields: set[str] | None = None,
     default_order: str = "created_at",
 ) -> tuple[list[FileItem], int]:
-    """按项目及可选章节标题、镜头标题过滤文件（标题多命中时并集），去重后分页。"""
+    """按项目及可选章节标题过滤文件（标题多命中时并集），去重后分页。"""
     allow_fields = allow_order_fields or {"name", "created_at", "updated_at"}
     order_col = order if order and order in allow_fields else default_order
     ord_attr = getattr(FileItem, order_col)
@@ -192,7 +136,7 @@ async def list_files_by_scope_paginated(
         for c in _scope_filters(
             project_id=project_id,
             chapter_title=chapter_title,
-            shot_title=shot_title,
+
         ):
             stmt = stmt.where(c)
         return stmt
@@ -258,7 +202,6 @@ async def first_project_id_for_actor(session: AsyncSession, actor_id: str) -> st
 __all__ = [
     "upsert_file_usage",
     "delete_usages_by_file_id",
-    "sync_usage_from_shot_context",
     "sync_usage_from_character",
     "list_files_by_scope_paginated",
     "first_project_id_for_scene",

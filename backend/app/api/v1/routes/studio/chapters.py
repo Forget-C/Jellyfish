@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.utils import apply_keyword_filter, apply_order, paginate
 from app.dependencies import get_db
-from app.models.studio import Chapter, Project, Shot
+from app.models.studio import Chapter, Project
+from app.models.directing import Sequence
 from app.schemas.common import ApiResponse, PaginatedData, created_response, empty_response, paginated_response, success_response
 from app.services.common import (
     create_and_refresh,
@@ -25,7 +26,7 @@ from app.schemas.studio.projects import ChapterCreate, ChapterRead, ChapterUpdat
 
 router = APIRouter()
 
-CHAPTER_ORDER_FIELDS = {"index", "title", "created_at", "updated_at", "storyboard_count", "status"}
+CHAPTER_ORDER_FIELDS = {"index", "title", "created_at", "updated_at", "status"}
 
 
 @router.get(
@@ -57,19 +58,19 @@ async def list_chapters(
     items, total = await paginate(db, stmt=stmt, page=page, page_size=page_size)
 
     chapter_ids = [c.id for c in items]
-    shot_count_by_chapter: dict[str, int] = {}
+    sequence_count_by_chapter: dict[str, int] = {}
     if chapter_ids:
         count_stmt = (
-            select(Shot.chapter_id, func.count(Shot.id))
-            .where(Shot.chapter_id.in_(chapter_ids))
-            .group_by(Shot.chapter_id)
+            select(Sequence.chapter_id, func.count(Sequence.id))
+            .where(Sequence.chapter_id.in_(chapter_ids))
+            .group_by(Sequence.chapter_id)
         )
         res = await db.execute(count_stmt)
-        shot_count_by_chapter = {str(ch_id): int(cnt) for ch_id, cnt in res.all()}
+        sequence_count_by_chapter = {str(ch_id): int(cnt) for ch_id, cnt in res.all()}
 
     return paginated_response(
         [
-            ChapterRead.model_validate(x).model_copy(update={"shot_count": shot_count_by_chapter.get(x.id, 0)})
+            ChapterRead.model_validate(x).model_copy(update={"sequence_count": sequence_count_by_chapter.get(x.id, 0)})
             for x in items
         ],
         page=page,
@@ -115,10 +116,10 @@ async def get_chapter(
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[ChapterRead]:
     obj = await get_or_404(db, Chapter, chapter_id, detail=entity_not_found("Chapter"))
-    count_stmt = select(func.count(Shot.id)).where(Shot.chapter_id == chapter_id)
+    count_stmt = select(func.count(Sequence.id)).where(Sequence.chapter_id == chapter_id)
     res = await db.execute(count_stmt)
-    shot_count = int(res.scalar() or 0)
-    return success_response(ChapterRead.model_validate(obj).model_copy(update={"shot_count": shot_count}))
+    sequence_count = int(res.scalar() or 0)
+    return success_response(ChapterRead.model_validate(obj).model_copy(update={"sequence_count": sequence_count}))
 
 
 @router.patch(

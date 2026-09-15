@@ -16,7 +16,7 @@ import {
   SCRIPT_OPTIMIZATION_RELATION_TYPE,
   SCRIPT_SIMPLIFICATION_RELATION_TYPE,
   useCancelableRelationTask,
-} from '../../project/ProjectWorkbench/chapterDivisionTasks'
+} from '../../project/ProjectWorkbench/relationTasks'
 import { executeAsyncTaskCreate, executeTaskCancel, notifyExistingTask } from '../../components/taskActionHelpers'
 import { handleTaskResultSafely } from '../../components/taskResultHelpers'
 import { useRelationTaskNotification } from '../../components/taskNotificationHelpers'

@@ -5,155 +5,20 @@
 import type { ApiResponse_AsyncTaskCreateRead_ } from '../models/ApiResponse_AsyncTaskCreateRead_';
 import type { ApiResponse_CharacterPortraitAnalysisResult_ } from '../models/ApiResponse_CharacterPortraitAnalysisResult_';
 import type { ApiResponse_CostumeInfoAnalysisResult_ } from '../models/ApiResponse_CostumeInfoAnalysisResult_';
-import type { ApiResponse_EntityMergeResult_ } from '../models/ApiResponse_EntityMergeResult_';
 import type { ApiResponse_PropInfoAnalysisResult_ } from '../models/ApiResponse_PropInfoAnalysisResult_';
 import type { ApiResponse_SceneInfoAnalysisResult_ } from '../models/ApiResponse_SceneInfoAnalysisResult_';
 import type { ApiResponse_ScriptConsistencyCheckResult_ } from '../models/ApiResponse_ScriptConsistencyCheckResult_';
-import type { ApiResponse_ScriptDivisionResult_ } from '../models/ApiResponse_ScriptDivisionResult_';
-import type { ApiResponse_StudioScriptExtractionDraft_ } from '../models/ApiResponse_StudioScriptExtractionDraft_';
-import type { ApiResponse_VariantAnalysisResult_ } from '../models/ApiResponse_VariantAnalysisResult_';
 import type { CharacterPortraitAnalysisRequest } from '../models/CharacterPortraitAnalysisRequest';
 import type { CostumeInfoAnalysisRequest } from '../models/CostumeInfoAnalysisRequest';
-import type { EntityMergerRequest } from '../models/EntityMergerRequest';
 import type { PropInfoAnalysisRequest } from '../models/PropInfoAnalysisRequest';
 import type { SceneInfoAnalysisRequest } from '../models/SceneInfoAnalysisRequest';
 import type { ScriptConsistencyCheckRequest } from '../models/ScriptConsistencyCheckRequest';
-import type { ScriptDividerRequest } from '../models/ScriptDividerRequest';
-import type { ScriptExtractAsyncRequest } from '../models/ScriptExtractAsyncRequest';
-import type { ScriptExtractRequest } from '../models/ScriptExtractRequest';
 import type { ScriptOptimizeRequest } from '../models/ScriptOptimizeRequest';
 import type { ScriptSimplifyRequest } from '../models/ScriptSimplifyRequest';
-import type { VariantAnalysisRequest } from '../models/VariantAnalysisRequest';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class ScriptProcessingService {
-    /**
-     * 异步将剧本分割为多个镜头
-     * 创建章节分镜提取任务并立即返回 task_id；前端可通过任务状态接口轮询。
-     * @returns ApiResponse_AsyncTaskCreateRead_ Successful Response
-     * @throws ApiError
-     */
-    public static divideScriptAsyncApiV1ScriptProcessingDivideAsyncPost({
-        requestBody,
-    }: {
-        requestBody: ScriptDividerRequest,
-    }): CancelablePromise<ApiResponse_AsyncTaskCreateRead_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/script-processing/divide-async',
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * 将剧本分割为多个镜头
-     * 输入完整剧本文本，输出分镜列表（index/start_line/end_line/script_excerpt/shot_name/time_of_day）。注意：此阶段不强制稳定ID，角色以“称呼/名字”弱信息输出，稳定ID在合并阶段统一分配。当前同步接口主要用于兼容旧调用与调试场景；页面主流程优先使用 divide-async。
-     * @returns ApiResponse_ScriptDivisionResult_ Successful Response
-     * @throws ApiError
-     */
-    public static divideScriptApiV1ScriptProcessingDividePost({
-        requestBody,
-    }: {
-        requestBody: ScriptDividerRequest,
-    }): CancelablePromise<ApiResponse_ScriptDivisionResult_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/script-processing/divide',
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * 异步合并多镜头的实体信息
-     * 创建实体合并任务并立即返回 task_id；当前保留为预备能力，尚无真实前端入口。
-     * @returns ApiResponse_AsyncTaskCreateRead_ Successful Response
-     * @throws ApiError
-     */
-    public static mergeEntitiesAsyncApiV1ScriptProcessingMergeEntitiesAsyncPost({
-        requestBody,
-    }: {
-        requestBody: EntityMergerRequest,
-    }): CancelablePromise<ApiResponse_AsyncTaskCreateRead_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/script-processing/merge-entities-async',
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * 合并多镜头的实体信息
-     * 输入全部分镜提取结果（可选带上脚本分镜与历史实体库），输出合并后的实体库：角色库/地点库/场景库/道具库（静态画像 + 变体列表）。该步骤会统一分配稳定ID（如 char_001/loc_001/prop_001/scene_001）。当提供 previous_merge 与 conflict_resolutions 时，将进行冲突重试合并，优先消解 conflicts 并尽量保持 ID 稳定。当前接口保留为预备能力，尚无真实前端入口。
-     * @returns ApiResponse_EntityMergeResult_ Successful Response
-     * @throws ApiError
-     */
-    public static mergeEntitiesApiV1ScriptProcessingMergeEntitiesPost({
-        requestBody,
-    }: {
-        requestBody: EntityMergerRequest,
-    }): CancelablePromise<ApiResponse_EntityMergeResult_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/script-processing/merge-entities',
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * 异步分析服装/外形变体
-     * 创建变体分析任务并立即返回 task_id；当前保留为预备能力，尚无真实前端入口。
-     * @returns ApiResponse_AsyncTaskCreateRead_ Successful Response
-     * @throws ApiError
-     */
-    public static analyzeVariantsAsyncApiV1ScriptProcessingAnalyzeVariantsAsyncPost({
-        requestBody,
-    }: {
-        requestBody: VariantAnalysisRequest,
-    }): CancelablePromise<ApiResponse_AsyncTaskCreateRead_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/script-processing/analyze-variants-async',
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * 分析服装/外形变体
-     * 检测角色服装/外形变化，构建演变时间线，生成章节变体建议列表与变体建议。当前接口保留为预备能力，尚无真实前端入口。
-     * @returns ApiResponse_VariantAnalysisResult_ Successful Response
-     * @throws ApiError
-     */
-    public static analyzeVariantsApiV1ScriptProcessingAnalyzeVariantsPost({
-        requestBody,
-    }: {
-        requestBody: VariantAnalysisRequest,
-    }): CancelablePromise<ApiResponse_VariantAnalysisResult_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/script-processing/analyze-variants',
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
     /**
      * 异步检查角色混淆一致性（基于原文）
      * 创建一致性检查任务并立即返回 task_id；前端可通过任务状态接口轮询。
@@ -399,48 +264,6 @@ export class ScriptProcessingService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/script-processing/simplify-script-async',
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * 异步项目级信息提取（最终输出）
-     * 创建项目级信息提取任务并立即返回 task_id；前端可通过任务状态接口轮询。
-     * @returns ApiResponse_AsyncTaskCreateRead_ Successful Response
-     * @throws ApiError
-     */
-    public static extractScriptAsyncApiV1ScriptProcessingExtractAsyncPost({
-        requestBody,
-    }: {
-        requestBody: ScriptExtractAsyncRequest,
-    }): CancelablePromise<ApiResponse_AsyncTaskCreateRead_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/script-processing/extract-async',
-            body: requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * 项目级信息提取（最终输出）
-     * 输入分镜结果（可选带一致性检查结果），输出可导入 Studio 的草稿结构（name-based，ID 由导入接口生成）。当前同步接口主要用于兼容旧调用与调试场景；页面主流程优先使用 extract-async。
-     * @returns ApiResponse_StudioScriptExtractionDraft_ Successful Response
-     * @throws ApiError
-     */
-    public static extractScriptApiV1ScriptProcessingExtractPost({
-        requestBody,
-    }: {
-        requestBody: ScriptExtractRequest,
-    }): CancelablePromise<ApiResponse_StudioScriptExtractionDraft_> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/script-processing/extract',
             body: requestBody,
             mediaType: 'application/json',
             errors: {

@@ -11,7 +11,6 @@ from app.models.types import ChapterStatus, ProjectStyle, ProjectVisualStyle
 
 if TYPE_CHECKING:
     from app.models.studio_assets import Actor, Character, Costume, Prop, Scene
-    from app.models.studio_shots import Shot
 
 
 class Project(Base, TimestampMixin):
@@ -109,7 +108,6 @@ class Chapter(Base, TimestampMixin):
     summary: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="章节摘要")
     raw_text: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="章节原文（未清洗/可较长）")
     condensed_text: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="由模型精简后的原文（用于抽取/提示词）")
-    storyboard_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, comment="分镜数量")
     status: Mapped[ChapterStatus] = mapped_column(
         String(32),
         nullable=False,
@@ -118,11 +116,6 @@ class Chapter(Base, TimestampMixin):
     )
 
     project: Mapped["Project"] = relationship(back_populates="chapters")
-    shots: Mapped[list["Shot"]] = relationship(
-        back_populates="chapter",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
-    )
 
     __table_args__ = (
         UniqueConstraint("project_id", "index", name="uq_chapters_project_index"),
@@ -133,7 +126,7 @@ class Chapter(Base, TimestampMixin):
 
 
 class ProjectActorLink(Base, TimestampMixin):
-    """项目/章节/镜头 -> 演员关联。"""
+    """项目/章节 -> 演员关联。"""
 
     __tablename__ = "project_actor_links"
 
@@ -152,13 +145,6 @@ class ProjectActorLink(Base, TimestampMixin):
         index=True,
         comment="章节 ID",
     )
-    shot_id: Mapped[str | None] = mapped_column(
-        String(64),
-        ForeignKey("shots.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-        comment="镜头 ID",
-    )
     actor_id: Mapped[str] = mapped_column(
         String(64),
         ForeignKey("actors.id", ondelete="CASCADE"),
@@ -168,71 +154,64 @@ class ProjectActorLink(Base, TimestampMixin):
     )
 
     project: Mapped["Project"] = relationship(back_populates="actor_links")
-    shot: Mapped["Shot"] = relationship(back_populates="actor_links")
     actor: Mapped["Actor"] = relationship()
 
     __table_args__ = (
-        UniqueConstraint("actor_id", "project_id", "chapter_id", "shot_id", name="uq_project_actor_links_actor_scope"),
+        UniqueConstraint("actor_id", "project_id", "chapter_id", name="uq_project_actor_links_actor_scope"),
     )
 
 
 class ProjectSceneLink(Base, TimestampMixin):
-    """项目/章节/镜头 -> 场景关联。"""
+    """项目/章节 -> 场景关联。"""
 
     __tablename__ = "project_scene_links"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, comment="关联行 ID")
     project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True, comment="项目 ID")
     chapter_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("chapters.id", ondelete="SET NULL"), nullable=True, index=True, comment="章节 ID")
-    shot_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("shots.id", ondelete="SET NULL"), nullable=True, index=True, comment="镜头 ID")
     scene_id: Mapped[str] = mapped_column(String(64), ForeignKey("scenes.id", ondelete="CASCADE"), nullable=False, index=True, comment="场景 ID")
 
     project: Mapped["Project"] = relationship(back_populates="scene_links")
-    shot: Mapped["Shot"] = relationship(back_populates="scene_links")
     scene: Mapped["Scene"] = relationship()
 
     __table_args__ = (
-        UniqueConstraint("scene_id", "project_id", "chapter_id", "shot_id", name="uq_project_scene_links_scene_scope"),
+        UniqueConstraint("scene_id", "project_id", "chapter_id", name="uq_project_scene_links_scene_scope"),
     )
 
 
 class ProjectPropLink(Base, TimestampMixin):
-    """项目/章节/镜头 -> 道具关联。"""
+    """项目/章节 -> 道具关联。"""
 
     __tablename__ = "project_prop_links"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, comment="关联行 ID")
     project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True, comment="项目 ID")
     chapter_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("chapters.id", ondelete="SET NULL"), nullable=True, index=True, comment="章节 ID")
-    shot_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("shots.id", ondelete="SET NULL"), nullable=True, index=True, comment="镜头 ID")
     prop_id: Mapped[str] = mapped_column(String(64), ForeignKey("props.id", ondelete="CASCADE"), nullable=False, index=True, comment="道具 ID")
 
     project: Mapped["Project"] = relationship(back_populates="prop_links")
-    shot: Mapped["Shot"] = relationship(back_populates="prop_links")
     prop: Mapped["Prop"] = relationship()
 
     __table_args__ = (
-        UniqueConstraint("prop_id", "project_id", "chapter_id", "shot_id", name="uq_project_prop_links_prop_scope"),
+        UniqueConstraint("prop_id", "project_id", "chapter_id", name="uq_project_prop_links_prop_scope"),
     )
 
 
 class ProjectCostumeLink(Base, TimestampMixin):
-    """项目/章节/镜头 -> 服装关联。"""
+    """项目/章节 -> 服装关联。"""
 
     __tablename__ = "project_costume_links"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, comment="关联行 ID")
     project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True, comment="项目 ID")
     chapter_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("chapters.id", ondelete="SET NULL"), nullable=True, index=True, comment="章节 ID")
-    shot_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("shots.id", ondelete="SET NULL"), nullable=True, index=True, comment="镜头 ID")
     costume_id: Mapped[str] = mapped_column(String(64), ForeignKey("costumes.id", ondelete="CASCADE"), nullable=False, index=True, comment="服装 ID")
 
     project: Mapped["Project"] = relationship(back_populates="costume_links")
-    shot: Mapped["Shot"] = relationship(back_populates="costume_links")
     costume: Mapped["Costume"] = relationship()
 
     __table_args__ = (
-        UniqueConstraint("costume_id", "project_id", "chapter_id", "shot_id", name="uq_project_costume_links_costume_scope"),
+        UniqueConstraint("costume_id", "project_id", "chapter_id", name="uq_project_costume_links_costume_scope"),
     )
 
 

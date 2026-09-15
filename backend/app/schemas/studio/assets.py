@@ -34,9 +34,8 @@ class AssetCreate(BaseModel):
     visual_style: ProjectVisualStyle = ProjectVisualStyle.live_action
     project_id: str | None = Field(None, description="可选：创建成功后写入 project_*_link（与资产创建同一事务）")
     chapter_id: str | None = Field(None, description="可选：章节 ID")
-    shot_id: str | None = Field(None, description="可选：分镜 ID")
 
-    @field_validator("project_id", "chapter_id", "shot_id", mode="before")
+    @field_validator("project_id", "chapter_id", mode="before")
     @classmethod
     def _blank_link_ids(cls, v: object) -> object:
         if v is None:
@@ -49,8 +48,6 @@ class AssetCreate(BaseModel):
     def _link_scope(self) -> Self:
         if self.chapter_id and not self.project_id:
             raise ValueError("project_id is required when chapter_id is set")
-        if self.shot_id and not self.project_id:
-            raise ValueError("project_id is required when shot_id is set")
         return self
 
 

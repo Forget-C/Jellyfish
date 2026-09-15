@@ -18,8 +18,9 @@ from app.services.generation.task_snapshot import restore_snapshot, split_snapsh
 
 @pytest.mark.asyncio
 async def test_media_submission_records_project_for_history_filter():
-    """视频提交从镜头解析项目，历史项目筛选无需再次猜测业务关联。"""
-    from app.models.studio import Project, Chapter, Shot
+    """视频提交从固定场次计划解析项目，历史项目筛选无需再次猜测业务关联。"""
+    from app.models.studio import Project, Chapter
+    from tests.directing.test_store import setup_story
     from app.services.task_queries import TaskQueries
 
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
@@ -29,26 +30,28 @@ async def test_media_submission_records_project_for_history_filter():
     try:
         async with sessions() as db:
             db.add(Provider(id="provider", name="Vidu", base_url="https://example.invalid", api_key="test"))
-            db.add(Project(id="p", name="project", style="realistic"))
+            db.add(Project(id="p1", name="project", style="realistic"))
             await db.flush()
             db.add(Model(id="model", name="viduq2", category="video", provider_id="provider"))
-            db.add(Chapter(id="c", project_id="p", index=1, title="chapter"))
+            db.add(Chapter(id="ch1", project_id="p1", index=1, title="chapter"))
             await db.flush()
-            db.add(Shot(id="s", chapter_id="c", index=1, title="shot"))
+            db.add_all([FileItem(id="image1",type="image",name="ref",storage_key="ref.png"),
+                        FileItem(id="video1",type="video",name="take",storage_key="take.mp4",duration_ms=9000)])
             await db.flush()
+            _, sequence_id, _, _, prompts = await setup_story(db)
             command = GenerationCommand.model_validate({
                 "modality": "video", "operation": "video_generation", "delivery": "async_polling",
-                "target": {"kind": "shot_video", "entity_id": "s"},
+                "target": {"kind": "directing_unit", "entity_id": prompts[0]},
                 "request": {"model_id": "model", "execution_prompt": "test",
                             "operation_input": {"kind": "video_generation", "ratio": "16:9"}},
             })
             accepted = await GenerationSubmitter(entity_gate=GenerationEntityGate()).submit_async(db, command)
             await db.commit()
             task = await db.get(Task, accepted.task_id)
-            assert task.project_id == "p"
-            page = await TaskQueries(db).list(project_id="p")
+            assert task.project_id == "p1"
+            page = await TaskQueries(db).list(project_id="p1")
             assert [item.task_id for item in page.items] == [task.id]
-            assert page.items[0].source.id == "s"
+            assert page.items[0].source.id == sequence_id
             assert not (await TaskQueries(db).list(project_id="other")).items
     finally:
         await engine.dispose()

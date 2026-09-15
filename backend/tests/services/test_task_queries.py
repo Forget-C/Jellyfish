@@ -18,7 +18,8 @@ from app.services.task_queries import TaskQueries
 @pytest.mark.asyncio
 async def test_history_sources_are_batched_and_survive_deleted_targets():
     """槽位回跳到业务主体；共享资产不猜项目，来源删除也不丢失任务历史。"""
-    from app.models.studio import Project, Chapter, Shot, Actor, Character
+    from app.models.studio import Project, Chapter, Actor, Character
+    from app.services.directing.store import DirectingStore
 
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as connection:
@@ -33,15 +34,13 @@ async def test_history_sources_are_batched_and_survive_deleted_targets():
             db.add(Chapter(id="c", project_id="p", index=1, title="章节"))
             db.add(Character(id="r", project_id="p", name="角色", style="realistic"))
             await db.flush()
-            shot = Shot(id="s", chapter_id="c", index=1, title="镜头")
-            db.add(shot)
-            await db.flush()
+            sequence = await DirectingStore(db, "p").create_sequence(chapter_id="c", title="场次", position=0)
             service = TaskService(db)
             targets = [
-                ("shot_frame_slot", "slot", "s"), ("shot_video", "s", None),
+                ("directing_sequence", sequence.id, None), ("directing_sequence", sequence.id, None),
                 ("actor_image_slot", "slot", "a"), ("character_image_slot", "slot", "r"),
-                ("experiment_session", "e", None), ("script_extraction", "c", None),
-                ("chapter_division", "p", None), ("prop_info_analysis", "actor_image:a", None),
+                ("experiment_session", "e", None), ("consistency_check", "c", None),
+                ("script_optimization", "p", None), ("prop_info_analysis", "actor_image:a", None),
             ]
             tasks = [await service.submit(kind="image_generation", target_type=kind, target_id=identity,
                                           snapshot={"target_parent_id": parent}) for kind, identity, parent in targets]
@@ -55,7 +54,7 @@ async def test_history_sources_are_batched_and_survive_deleted_targets():
             event.listen(engine.sync_engine, "before_cursor_execute", record_sql)
             page = await TaskQueries(db).list(limit=20)
             event.remove(engine.sync_engine, "before_cursor_execute", record_sql)
-            assert len(statements) == 7  # 主表一次；镜头、演员、角色、会话各一次；章节及项目各一次。
+            assert len(statements) == 7  # 主表一次；场次、演员、角色、会话各一次；章节及项目各一次。
             sources = {item.task_id: item.source for item in page.items}
             assert sources[tasks[0].id] == sources[tasks[1].id]
             assert sources[tasks[0].id].project_id == "p"
@@ -66,7 +65,7 @@ async def test_history_sources_are_batched_and_survive_deleted_targets():
             assert sources[tasks[5].id].kind == "chapter"
             assert sources[tasks[6].id].kind == "project"
             assert sources[tasks[7].id] == sources[tasks[2].id]
-            await db.delete(shot)
+            await db.delete(sequence)
             await db.commit()
             page = await TaskQueries(db).list(limit=20)
             assert len(page.items) == len(tasks)

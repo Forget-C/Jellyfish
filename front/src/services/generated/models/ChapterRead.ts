@@ -29,17 +29,12 @@ export type ChapterRead = {
      */
     condensed_text?: string;
     /**
-     * 分镜数量
-     */
-    storyboard_count?: number;
-    /**
      * 章节状态
      */
     status?: ChapterStatus;
     id: string;
     /**
-     * 分镜数（shots 条数聚合）
+     * 已确认场次数
      */
-    shot_count?: number;
+    sequence_count?: number;
 };
-

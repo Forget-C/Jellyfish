@@ -11,10 +11,6 @@ export type EntityNameExistenceCheckRequest = {
      */
     project_id: string;
     /**
-     * 镜头 ID（可选；不传则 linked_to_shot 恒为 false）
-     */
-    shot_id?: (string | null);
-    /**
      * 角色名称列表
      */
     character_names?: Array<string>;
@@ -31,4 +27,3 @@ export type EntityNameExistenceCheckRequest = {
      */
     costume_names?: Array<string>;
 };
-

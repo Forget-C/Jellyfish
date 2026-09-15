@@ -5,60 +5,26 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.chains.agents import ElementExtractorAgent, ScriptDividerAgent
 from app.chains.agents import (
     CharacterPortraitAnalysisAgent,
     ConsistencyCheckerAgent,
     CostumeInfoAnalysisAgent,
-    EntityMergerAgent,
     PropInfoAnalysisAgent,
     SceneInfoAnalysisAgent,
     ScriptOptimizerAgent,
     ScriptSimplifierAgent,
-    VariantAnalyzerAgent,
 )
-from app.chains.agents.script_processing_agents import (
-    EntityMergeResult,
+from app.schemas.skills.script_processing import (
     ScriptConsistencyCheckResult,
-    ScriptDivisionResult,
     ScriptOptimizationResult,
     ScriptSimplificationResult,
-    VariantAnalysisResult,
 )
-
-
-def _divide(llm, run_args: dict[str, Any]) -> ScriptDivisionResult:
-    """执行 divide 的冻结输入，只返回生成结果。"""
-    agent = ScriptDividerAgent(llm)
-    return agent.divide_script(script_text=str(run_args.get("script_text") or ""))
 
 
 def _consistency(llm, run_args: dict[str, Any]) -> ScriptConsistencyCheckResult:
     """执行 consistency 的冻结输入，只返回生成结果。"""
     agent = ConsistencyCheckerAgent(llm)
     return agent.extract(script_text=str(run_args.get("script_text") or ""))
-
-
-def _merge(llm, run_args: dict[str, Any]) -> EntityMergeResult:
-    """执行 merge 的冻结输入，只返回生成结果。"""
-    agent = EntityMergerAgent(llm)
-    return agent.extract(
-        all_extractions_json=json.dumps(run_args.get("all_shot_extractions") or [], ensure_ascii=False),
-        historical_library_json=json.dumps(run_args.get("historical_library") or {}, ensure_ascii=False),
-        script_division_json=json.dumps(run_args.get("script_division") or {}, ensure_ascii=False),
-        previous_merge_json=json.dumps(run_args.get("previous_merge") or {}, ensure_ascii=False),
-        conflict_resolutions_json=json.dumps(run_args.get("conflict_resolutions") or [], ensure_ascii=False),
-    )
-
-
-def _variant(llm, run_args: dict[str, Any]) -> VariantAnalysisResult:
-    """执行 variant 的冻结输入，只返回生成结果。"""
-    agent = VariantAnalyzerAgent(llm)
-    return agent.extract(
-        merged_library_json=json.dumps(run_args.get("merged_library") or {}, ensure_ascii=False),
-        all_extractions_json=json.dumps(run_args.get("all_shot_extractions") or [], ensure_ascii=False),
-        script_division_json=json.dumps(run_args.get("script_division") or {}, ensure_ascii=False),
-    )
 
 
 def _character_portrait(llm, run_args: dict[str, Any]) -> Any:
@@ -119,24 +85,13 @@ def generate_script_result(kind: str, llm, run_args: dict[str, Any]) -> Any:
         return generate_directing_result(kind, llm, run_args)
     required = {
         "script_consistency": {"script_text": str},
-        "script_merge": {"all_shot_extractions": list},
-        "script_variant": {"merged_library": dict, "all_shot_extractions": list},
     }
     for field, value_type in required.get(kind, {}).items():
         value = run_args.get(field)
         if not isinstance(value, value_type) or (value_type is str and not value.strip()):
             raise ValueError(f"missing or invalid script input: {field}")
-    if kind == "script_extract":
-        return ElementExtractorAgent(llm).extract(
-            project_id=str(run_args.get("project_id") or ""), chapter_id=str(run_args.get("chapter_id") or ""),
-            script_division_json=json.dumps(run_args.get("script_division") or {}, ensure_ascii=False),
-            consistency_json=json.dumps(run_args.get("consistency") or {}, ensure_ascii=False),
-        )
     generators = {
-        "script_divide": _divide,
         "script_consistency": _consistency,
-        "script_merge": _merge,
-        "script_variant": _variant,
         "script_character_portrait": _character_portrait,
         "script_prop_info": _prop_info,
         "script_scene_info": _scene_info,
@@ -145,18 +100,3 @@ def generate_script_result(kind: str, llm, run_args: dict[str, Any]) -> Any:
         "script_simplify": _simplify,
     }
     return generators[kind](llm, run_args)
-
-
-async def apply_script_result(db, *, kind: str, run_args: dict, result: Any) -> None:
-    """在 TaskService 成功交付事务中应用剧本结果，不产生网络 I/O。"""
-    chapter_id = str(run_args.get("chapter_id") or "")
-    if kind == "script_divide" and run_args.get("write_to_db"):
-        from app.services.studio.script_division import write_division_result_to_chapter_sync
-        await db.run_sync(lambda session: write_division_result_to_chapter_sync(session, chapter_id=chapter_id, result=result))
-    elif kind == "script_extract":
-        from app.services.studio.shot_extracted_candidates import sync_from_extraction_draft_sync as sync_assets
-        from app.services.studio.shot_extracted_dialogue_candidates import sync_from_extraction_draft_sync as sync_dialogue
-        from app.services.studio.shot_semantic_defaults import apply_shot_semantic_defaults_from_draft_sync
-        await db.run_sync(lambda session: sync_assets(session, chapter_id=chapter_id, draft=result))
-        await db.run_sync(lambda session: sync_dialogue(session, chapter_id=chapter_id, draft=result))
-        await db.run_sync(lambda session: apply_shot_semantic_defaults_from_draft_sync(session, chapter_id=chapter_id, draft=result))

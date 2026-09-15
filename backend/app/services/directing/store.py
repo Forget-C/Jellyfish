@@ -90,7 +90,7 @@ class DirectingStore:
                 FileUsage.source_ref == "style:" + row.id))
             for file_id in files:
                 await upsert_file_usage(self.db, file_id=file_id, project_id=self.project_id, chapter_id=None,
-                    shot_id=None, usage_kind="directing_reference", source_ref="style:" + row.id)
+                    usage_kind="directing_reference", source_ref="style:" + row.id)
         return await self.style_revision(row.id)
 
     async def _validate_style(self, content: ProjectStyleProfile) -> set[str]:
@@ -521,7 +521,7 @@ class DirectingStore:
         self.db.add_all([CutTakeReference(revision_id=revision_id, take_id=key) for key in sorted(takes)])
         for file_id in sorted(files):
             await upsert_file_usage(self.db, file_id=file_id, project_id=self.project_id, chapter_id=sequence.chapter_id,
-                                    shot_id=None, usage_kind=FileUsageKind.directing_reference, source_ref=revision_id)
+                                    usage_kind=FileUsageKind.directing_reference, source_ref=revision_id)
         await self.db.flush()
 
     async def take(self, take_id: str, *, sequence_id: str | None = None) -> Take:
@@ -562,7 +562,7 @@ class DirectingStore:
                        annotation=TakeAnnotation(coverage=[], review_status="unreviewed", rationale={}, retained_ranges=[]).model_dump(mode="json"))
             self.db.add(row)
             await upsert_file_usage(self.db, file_id=output.file_id, project_id=self.project_id, chapter_id=sequence.chapter_id,
-                                    shot_id=None, usage_kind=FileUsageKind.directing_take, source_ref=row.id)
+                                    usage_kind=FileUsageKind.directing_take, source_ref=row.id)
             await self.db.flush()
         return row
 
@@ -596,6 +596,6 @@ class DirectingStore:
             ))
             for file_id in sorted(files):
                 await upsert_file_usage(self.db, file_id=file_id, project_id=self.project_id,
-                                        chapter_id=sequence.chapter_id, shot_id=None,
+                                        chapter_id=sequence.chapter_id,
                                         usage_kind=FileUsageKind.directing_take, source_ref=row.id)
         return await self.take(row.id)

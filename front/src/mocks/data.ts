@@ -27,43 +27,9 @@ export interface Chapter {
   index: number
   title: string
   summary: string
-  storyboardCount: number
+  sequenceCount: number
   status: ChapterStatus
   updatedAt: string
-}
-
-export type ShotStatus = 'pending' | 'ready'
-
-export interface Shot {
-  id: string
-  chapterId: string
-  index: number
-  title: string
-  duration: number
-  thumbnail: string
-  status: ShotStatus
-  scriptExcerpt: string
-}
-
-export type CameraShotType = '远景' | '中景' | '近景' | '特写'
-export type CameraAngle = '平视' | '俯视' | '仰视' | '侧面'
-export type CameraMovement = '拉镜' | '推镜' | '跟镜' | '固定'
-
-export interface ShotDetail {
-  id: string
-  cameraShot: CameraShotType
-  angle: CameraAngle
-  movement: CameraMovement
-  sceneAssetId: string | null
-  duration: number
-  moodTags: string[]
-  atmosphere: string
-  followAtmosphere: boolean
-  dialog: {
-    role: string
-    text: string
-  }[]
-  hasBgm: boolean
 }
 
 export type AssetType = 'actor' | 'scene' | 'prop' | 'costume'
@@ -109,16 +75,6 @@ export interface FileItem {
   createdAt: string
   projectId: string
   chapterId?: string
-}
-
-export interface TimelineClip {
-  id: string
-  type: 'video' | 'audio'
-  sourceId: string
-  label: string
-  start: number
-  end: number
-  track: number
 }
 
 /** Agent 类型：剧情提取、角色提取、场景提取、道具提取、其他 */
@@ -266,7 +222,7 @@ export const chapters: Chapter[] = [
     index: 1,
     title: '第1集：出租屋里的争吵',
     summary: '凌晨的出租屋里，小雨和阿川因为房租和未来爆发激烈争吵。',
-    storyboardCount: 12,
+    sequenceCount: 12,
     status: 'shooting',
     updatedAt: '2026-03-01 12:20',
   },
@@ -276,7 +232,7 @@ export const chapters: Chapter[] = [
     index: 2,
     title: '第2集：面试前夜',
     summary: '暴雨夜里，小雨接到最后一次面试通知，却发现身份证丢了。',
-    storyboardCount: 10,
+    sequenceCount: 10,
     status: 'draft',
     updatedAt: '2026-02-28 20:05',
   },
@@ -286,7 +242,7 @@ export const chapters: Chapter[] = [
     index: 1,
     title: '第1集：霓虹街口的交易',
     summary: '改造人情报贩子在雨夜街口完成一笔危险交易。',
-    storyboardCount: 15,
+    sequenceCount: 15,
     status: 'done',
     updatedAt: '2026-02-27 10:30',
   },
@@ -296,7 +252,7 @@ export const chapters: Chapter[] = [
     index: 2,
     title: '第2集：追车与巷战',
     summary: '警方与改造人在高架与巷弄间展开追逐与交火。',
-    storyboardCount: 18,
+    sequenceCount: 18,
     status: 'draft',
     updatedAt: '2026-02-26 14:00',
   },
@@ -306,7 +262,7 @@ export const chapters: Chapter[] = [
     index: 1,
     title: '第1集：入京',
     summary: '少年剑客初入长安，在客栈中听闻朝堂风云。',
-    storyboardCount: 14,
+    sequenceCount: 14,
     status: 'shooting',
     updatedAt: '2026-03-02 08:30',
   },
@@ -316,370 +272,9 @@ export const chapters: Chapter[] = [
     index: 1,
     title: '第1集：搬进来的第一天',
     summary: '三人初次见面，因生活习惯冲突闹出不少笑话。',
-    storyboardCount: 8,
+    sequenceCount: 8,
     status: 'done',
     updatedAt: '2026-03-01 17:00',
-  },
-]
-
-export const shots: Shot[] = [
-  {
-    id: 's1',
-    chapterId: 'c1',
-    index: 1,
-    title: '远景：城郊老旧小区夜景',
-    duration: 6,
-    thumbnail: '/mock/thumbnails/p1-c1-s1.jpg',
-    status: 'ready',
-    scriptExcerpt: '夜色下的老旧小区，昏黄路灯下只有零星行人经过。',
-  },
-  {
-    id: 's2',
-    chapterId: 'c1',
-    index: 2,
-    title: '中景：出租屋内静止的风扇',
-    duration: 5,
-    thumbnail: '/mock/thumbnails/p1-c1-s2.jpg',
-    status: 'pending',
-    scriptExcerpt: '电风扇吱呀吱呀地转着，镜头慢慢推向桌上的欠条。',
-  },
-  {
-    id: 's3',
-    chapterId: 'c1',
-    index: 3,
-    title: '近景：两人对峙的沉默',
-    duration: 8,
-    thumbnail: '/mock/thumbnails/p1-c1-s3.jpg',
-    status: 'pending',
-    scriptExcerpt: '小雨和阿川面对面坐着，谁也不肯先开口。',
-  },
-  {
-    id: 's7',
-    chapterId: 'c1',
-    index: 4,
-    title: '特写：桌上的欠条',
-    duration: 4,
-    thumbnail: '/mock/thumbnails/p1-c1-s4.jpg',
-    status: 'ready',
-    scriptExcerpt: '镜头推至皱巴巴的欠条，字迹模糊。',
-  },
-  {
-    id: 's8',
-    chapterId: 'c1',
-    index: 5,
-    title: '中景：小雨起身',
-    duration: 5,
-    thumbnail: '/mock/thumbnails/p1-c1-s5.jpg',
-    status: 'ready',
-    scriptExcerpt: '小雨猛地站起，椅子发出刺耳声响。',
-  },
-  {
-    id: 's9',
-    chapterId: 'c1',
-    index: 6,
-    title: '近景：阿川抬头',
-    duration: 3,
-    thumbnail: '/mock/thumbnails/p1-c1-s6.jpg',
-    status: 'pending',
-    scriptExcerpt: '阿川抬头看她，欲言又止。',
-  },
-  {
-    id: 's10',
-    chapterId: 'c1',
-    index: 7,
-    title: '远景：窗外夜色',
-    duration: 6,
-    thumbnail: '/mock/thumbnails/p1-c1-s7.jpg',
-    status: 'pending',
-    scriptExcerpt: '透过窗户可见远处路灯与零星车灯。',
-  },
-  {
-    id: 's11',
-    chapterId: 'c1',
-    index: 8,
-    title: '中景：小雨背对镜头',
-    duration: 5,
-    thumbnail: '/mock/thumbnails/p1-c1-s8.jpg',
-    status: 'pending',
-    scriptExcerpt: '小雨背对镜头站在门口，肩膀微微颤抖。',
-  },
-  {
-    id: 's12',
-    chapterId: 'c1',
-    index: 9,
-    title: '特写：门把手',
-    duration: 2,
-    thumbnail: '/mock/thumbnails/p1-c1-s9.jpg',
-    status: 'ready',
-    scriptExcerpt: '手握住门把手，停顿片刻。',
-  },
-  {
-    id: 's13',
-    chapterId: 'c1',
-    index: 10,
-    title: '中景：门被推开',
-    duration: 4,
-    thumbnail: '/mock/thumbnails/p1-c1-s10.jpg',
-    status: 'pending',
-    scriptExcerpt: '门开，走廊灯光涌入。',
-  },
-  {
-    id: 's14',
-    chapterId: 'c1',
-    index: 11,
-    title: '近景：阿川独坐',
-    duration: 7,
-    thumbnail: '/mock/thumbnails/p1-c1-s11.jpg',
-    status: 'ready',
-    scriptExcerpt: '阿川仍坐在桌前，低头不语。',
-  },
-  {
-    id: 's15',
-    chapterId: 'c1',
-    index: 12,
-    title: '远景：出租屋全景收尾',
-    duration: 6,
-    thumbnail: '/mock/thumbnails/p1-c1-s12.jpg',
-    status: 'pending',
-    scriptExcerpt: '空荡的出租屋，风扇仍在转，门半掩。',
-  },
-  {
-    id: 's4',
-    chapterId: 'c2',
-    index: 1,
-    title: '雨夜街道',
-    duration: 5,
-    thumbnail: '/mock/thumbnails/p1-c2-s1.jpg',
-    status: 'pending',
-    scriptExcerpt: '暴雨倾盆，小雨撑着破伞在路边翻包。',
-  },
-  {
-    id: 's5',
-    chapterId: 'c3',
-    index: 1,
-    title: '霓虹街口全景',
-    duration: 7,
-    thumbnail: '/mock/thumbnails/p2-c3-s1.jpg',
-    status: 'ready',
-    scriptExcerpt: '雨夜街口，全息广告与霓虹灯交织。',
-  },
-  {
-    id: 's6',
-    chapterId: 'c5',
-    index: 1,
-    title: '长安城门外',
-    duration: 6,
-    thumbnail: '/mock/thumbnails/p3-c5-s1.jpg',
-    status: 'pending',
-    scriptExcerpt: '少年牵马入城，城门守卫盘查。',
-  },
-]
-
-export const shotDetails: ShotDetail[] = [
-  {
-    id: 's1',
-    cameraShot: '远景',
-    angle: '平视',
-    movement: '固定',
-    sceneAssetId: 'scene1',
-    duration: 6,
-    moodTags: ['压抑', '城市夜景'],
-    atmosphere: '阴天、轻微雾气，路灯偏暖色调，整体偏低饱和度。',
-    followAtmosphere: true,
-    dialog: [],
-    hasBgm: true,
-  },
-  {
-    id: 's2',
-    cameraShot: '中景',
-    angle: '俯视',
-    movement: '推镜',
-    sceneAssetId: 'scene2',
-    duration: 5,
-    moodTags: ['焦虑', '窒息感'],
-    atmosphere: '狭窄出租屋，顶灯偏冷白光，阴影明显。',
-    followAtmosphere: true,
-    dialog: [
-      {
-        role: '小雨',
-        text: '要不，我们还是回老家吧……',
-      },
-    ],
-    hasBgm: true,
-  },
-  {
-    id: 's3',
-    cameraShot: '近景',
-    angle: '侧面',
-    movement: '跟镜',
-    sceneAssetId: 'scene2',
-    duration: 8,
-    moodTags: ['对峙', '临界点'],
-    atmosphere: '镜头贴近人物，背景虚化，只剩呼吸声和电风扇声。',
-    followAtmosphere: false,
-    dialog: [
-      {
-        role: '阿川',
-        text: '你说的“我们”，到底还有没有我？',
-      },
-    ],
-    hasBgm: false,
-  },
-  {
-    id: 's4',
-    cameraShot: '中景',
-    angle: '平视',
-    movement: '固定',
-    sceneAssetId: null,
-    duration: 5,
-    moodTags: ['焦虑', '雨夜'],
-    atmosphere: '雨夜街道，路灯昏黄，雨丝可见。',
-    followAtmosphere: true,
-    dialog: [],
-    hasBgm: true,
-  },
-  {
-    id: 's5',
-    cameraShot: '远景',
-    angle: '俯视',
-    movement: '固定',
-    sceneAssetId: null,
-    duration: 7,
-    moodTags: ['赛博朋克', '雨夜'],
-    atmosphere: '霓虹与全息广告，雨滴反射光影。',
-    followAtmosphere: true,
-    dialog: [],
-    hasBgm: true,
-  },
-  {
-    id: 's6',
-    cameraShot: '中景',
-    angle: '平视',
-    movement: '跟镜',
-    sceneAssetId: null,
-    duration: 6,
-    moodTags: ['古风', '入城'],
-    atmosphere: '城门洞内明暗对比，尘土在光中飞扬。',
-    followAtmosphere: true,
-    dialog: [],
-    hasBgm: true,
-  },
-  {
-    id: 's7',
-    cameraShot: '特写',
-    angle: '俯视',
-    movement: '推镜',
-    sceneAssetId: 'scene2',
-    duration: 4,
-    moodTags: ['压抑', '细节'],
-    atmosphere: '顶光，欠条褶皱与阴影。',
-    followAtmosphere: true,
-    dialog: [],
-    hasBgm: false,
-  },
-  {
-    id: 's8',
-    cameraShot: '中景',
-    angle: '平视',
-    movement: '固定',
-    sceneAssetId: 'scene2',
-    duration: 5,
-    moodTags: ['爆发', '紧张'],
-    atmosphere: '室内顶灯，动作带出阴影。',
-    followAtmosphere: true,
-    dialog: [],
-    hasBgm: true,
-  },
-  {
-    id: 's9',
-    cameraShot: '近景',
-    angle: '仰视',
-    movement: '固定',
-    sceneAssetId: 'scene2',
-    duration: 3,
-    moodTags: ['隐忍', '沉默'],
-    atmosphere: '从下往上拍，阿川表情克制。',
-    followAtmosphere: true,
-    dialog: [],
-    hasBgm: false,
-  },
-  {
-    id: 's10',
-    cameraShot: '远景',
-    angle: '平视',
-    movement: '固定',
-    sceneAssetId: 'scene2',
-    duration: 6,
-    moodTags: ['疏离', '夜色'],
-    atmosphere: '窗外夜景，与室内冷暖对比。',
-    followAtmosphere: true,
-    dialog: [],
-    hasBgm: true,
-  },
-  {
-    id: 's11',
-    cameraShot: '中景',
-    angle: '侧面',
-    movement: '固定',
-    sceneAssetId: 'scene2',
-    duration: 5,
-    moodTags: ['决绝', '离开'],
-    atmosphere: '背对镜头，门口逆光轮廓。',
-    followAtmosphere: true,
-    dialog: [],
-    hasBgm: true,
-  },
-  {
-    id: 's12',
-    cameraShot: '特写',
-    angle: '平视',
-    movement: '固定',
-    sceneAssetId: 'scene2',
-    duration: 2,
-    moodTags: ['犹豫', '细节'],
-    atmosphere: '门把手特写，手部微动。',
-    followAtmosphere: true,
-    dialog: [],
-    hasBgm: false,
-  },
-  {
-    id: 's13',
-    cameraShot: '中景',
-    angle: '平视',
-    movement: '固定',
-    sceneAssetId: 'scene2',
-    duration: 4,
-    moodTags: ['分离', '光影'],
-    atmosphere: '门开，走廊暖光与室内冷光交织。',
-    followAtmosphere: true,
-    dialog: [],
-    hasBgm: true,
-  },
-  {
-    id: 's14',
-    cameraShot: '近景',
-    angle: '俯视',
-    movement: '固定',
-    sceneAssetId: 'scene2',
-    duration: 7,
-    moodTags: ['孤独', '沉默'],
-    atmosphere: '阿川独坐，顶灯拉长影子。',
-    followAtmosphere: true,
-    dialog: [],
-    hasBgm: true,
-  },
-  {
-    id: 's15',
-    cameraShot: '远景',
-    angle: '平视',
-    movement: '拉镜',
-    sceneAssetId: 'scene2',
-    duration: 6,
-    moodTags: ['余韵', '空荡'],
-    atmosphere: '全屋收尾，风扇、半掩的门，留白。',
-    followAtmosphere: true,
-    dialog: [],
-    hasBgm: true,
   },
 ]
 
@@ -817,27 +412,6 @@ export const files: FileItem[] = [
     createdAt: '2026-03-01 16:00',
     projectId: 'p4',
     chapterId: 'c6',
-  },
-]
-
-export const timelineClips: TimelineClip[] = [
-  {
-    id: 'tc1',
-    type: 'video',
-    sourceId: 'f2',
-    label: '城市夜景开场',
-    start: 0,
-    end: 6,
-    track: 1,
-  },
-  {
-    id: 'tc2',
-    type: 'audio',
-    sourceId: 'bgm1',
-    label: '克制型城市情绪配乐',
-    start: 0,
-    end: 20,
-    track: 2,
   },
 ]
 

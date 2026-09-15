@@ -251,7 +251,7 @@ class Character(Base, TimestampMixin):
 
     组成约定：
     - 角色由：Actor（演员） + Costume（服装） + Props（道具）组成。
-    - 最终在分镜中引用角色：`ShotCharacterLink`（shot_character_links）。
+    - 场次设计通过版本化资产需求引用角色。
 
     应用层保证：
     - `costume_id` 所指服装应为该角色所属项目或全局资产，避免跨项目误用。
@@ -299,11 +299,6 @@ class Character(Base, TimestampMixin):
         cascade="all, delete-orphan",
         passive_deletes=True,
         order_by="CharacterPropLink.index",
-    )
-    shot_links: Mapped[list["ShotCharacterLink"]] = relationship(
-        back_populates="character",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
     )
     images: Mapped[list["CharacterImage"]] = relationship(
         back_populates="character",
@@ -362,4 +357,3 @@ __all__ = [
     "Character",
     "CharacterPropLink",
 ]
-

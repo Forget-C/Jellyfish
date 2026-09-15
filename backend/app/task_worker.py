@@ -28,7 +28,7 @@ from app.services.directing.ai import DirectingOutputError
 from app.services.directing.store import DirectingStore, ContinuityNotReady
 from app.services.generation.media_execution import build_media_input, deliver_media, load_media_context, store_media_output
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
-from app.services.script_processing_worker import apply_script_result, generate_script_result
+from app.services.script_processing_worker import generate_script_result
 from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages
 from app.services.task_service import MEDIA_KINDS, TASK_KINDS, TaskService, utcnow
 
@@ -301,7 +301,7 @@ class TaskWorker:
             if directing:
                 # 长工作单持续接收分片，避免非流式等待完整响应触发读取超时。
                 params["streaming"] = True
-            if directing or task.kind in {"text_chat", "script_divide", "script_extract"}:
+            if directing or task.kind == "text_chat":
                 params["extra_body"] = {**params.get("extra_body", {}), "enable_thinking": False}
             llm = ChatOpenAI(**params)
         if task.kind == "text_chat":
@@ -321,12 +321,9 @@ class TaskWorker:
         else:
             args = task.input_snapshot["run_args"]
             generated = await self._run_script(task, llm, args, stopped)
-            result = {"draft": generated.model_dump(), "from_cache": False} if task.kind == "script_extract" else generated.model_dump()
+            result = generated.model_dump()
 
-            async def deliver(db, current):
-                """脚本业务写回与任务成功共用一个短事务。"""
-                if not current.kind.startswith("directing_"):
-                    await apply_script_result(db, kind=current.kind, run_args=args, result=generated)
+            deliver = None
         async with self.sessions() as db:
             await TaskService(db).finish(task.id, result=result, deliver=deliver)
             await db.commit()

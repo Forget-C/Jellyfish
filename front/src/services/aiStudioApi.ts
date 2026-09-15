@@ -2,12 +2,9 @@ import { get, post, put, del } from './http'
 import type {
   Project,
   Chapter,
-  Shot,
-  ShotDetail,
   Asset,
   PromptTemplate,
   FileItem,
-  TimelineClip,
   Agent,
 } from '../mocks/data'
 
@@ -22,10 +19,6 @@ const api = {
   chapters: {
     list: (projectId: string) => get<Chapter[]>(`/projects/${projectId}/chapters`),
   },
-  shots: {
-    list: (chapterId: string) => get<Shot[]>(`/chapters/${chapterId}/shots`),
-    get: (shotId: string) => get<ShotDetail>(`/shots/${shotId}`),
-  },
   assets: {
     list: (type?: string) =>
       get<Asset[]>(type ? `/assets?type=${type}` : '/assets'),
@@ -35,10 +28,6 @@ const api = {
   },
   files: {
     list: () => get<FileItem[]>('/files'),
-  },
-  timeline: {
-    get: (projectId: string) =>
-      get<TimelineClip[]>(`/projects/${projectId}/timeline`),
   },
   agents: {
     list: () => get<Agent[]>('/agents'),

@@ -21,10 +21,10 @@ from app.api.utils import apply_keyword_filter, apply_order, paginate
 from app.core import storage
 from app.models.studio import FileItem, FileType
 from app.models.task import Task, TaskInput, TaskOutput
-from app.models.studio import ActorImage, CharacterImage, SceneImage, PropImage, CostumeImage, ShotFrameImage, Shot
+from app.models.studio import ActorImage, CharacterImage, SceneImage, PropImage, CostumeImage
 from app.schemas.common import ApiResponse, PaginatedData, paginated_response
 from app.schemas.studio import FileDetailRead, FileRead, FileUpdate, FileUsageRead, FileUsageWrite
-from app.services.common import create_and_refresh, entity_not_found, flush_and_refresh, get_or_404, patch_model
+from app.services.common import create_and_refresh, entity_not_found, flush_and_refresh, patch_model
 from app.services.studio.file_usages import upsert_file_usage
 from app.models.studio_file_usages import FileUsage
 
@@ -128,7 +128,7 @@ async def update_file_meta(
             file_id=file_id,
             project_id=u.project_id,
             chapter_id=u.chapter_id,
-            shot_id=u.shot_id,
+
             usage_kind=u.usage_kind,
             source_ref=u.source_ref,
         )
@@ -142,7 +142,7 @@ async def upload_file(
     name: str | None = None,
     project_id: str | None = None,
     chapter_id: str | None = None,
-    shot_id: str | None = None,
+
     usage_kind: str | None = None,
     source_ref: str | None = None,
 ) -> FileItem:
@@ -179,7 +179,7 @@ async def upload_file(
             file_id=file_item.id,
             project_id=project_id,
             chapter_id=chapter_id,
-            shot_id=shot_id,
+
             usage_kind=usage_kind,
             source_ref=source_ref,
         )
@@ -264,11 +264,9 @@ async def require_available_file(
 
 async def _ensure_file_is_unreferenced(db: AsyncSession, *, file_id: str) -> None:
     """历史任务引用不阻止删除字节；活动任务与实际业务采用关系必须保护。"""
-    for model in (FileUsage, ActorImage, CharacterImage, SceneImage, PropImage, CostumeImage, ShotFrameImage):
+    for model in (FileUsage, ActorImage, CharacterImage, SceneImage, PropImage, CostumeImage):
         if await db.scalar(select(exists().where(model.file_id == file_id))):
             raise HTTPException(status_code=409, detail="素材仍被业务使用")
-    if await db.scalar(select(exists().where(Shot.generated_video_file_id == file_id))):
-        raise HTTPException(status_code=409, detail="素材仍被镜头使用")
     for relation in (TaskInput, TaskOutput):
         active = select(relation.task_id).join(Task, Task.id == relation.task_id).where(
             relation.file_id == file_id, Task.status.in_(["queued", "running"]),

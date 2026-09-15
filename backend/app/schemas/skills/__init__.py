@@ -36,42 +36,14 @@ from app.schemas.skills.film import (
     TextChunk,
 )
 from app.schemas.skills.script_processing import (
-    ConflictResolutionSuggestion,
-    ConsistencyCheckResult,
-    ConsistencyWarning,
-    CostumeTimeline,
-    CostumeTimelineEntry,
-    EntityEntry,
-    EntityLibrary,
-    EntityMergeResult,
-    EntityVariant,
-    OutputCompileResult,
     ScriptConsistencyCheckResult,
     ScriptConsistencyIssue,
-    ScriptDivisionResult,
-    ScriptExtractionResult,
     ScriptOptimizationResult,
-    ScriptShotExtraction,
-    ShotCharacterInfo,
-    ShotDivision,
-    ShotElementExtractionResult,
-    ShotElements,
-    ShotPropInfo,
-    ShotSceneInfo,
-    StudioAssetDraft,
-    StudioCharacterDraft,
-    StudioScriptExtractionDraft,
-    StudioShotDraft,
-    StudioShotDraftDialogueLine,
-    TableData,
-    VariantAnalysisResult,
-    VariantSuggestion,
 )
 from app.core.contracts.asset_analysis import CharacterPortraitAnalysisResult
 from app.core.contracts.asset_analysis import PropInfoAnalysisResult
 from app.core.contracts.asset_analysis import SceneInfoAnalysisResult
 from app.core.contracts.asset_analysis import CostumeInfoAnalysisResult
-from app.schemas.skills.shot_frame_prompt import ShotFramePromptInput, ShotFramePromptResult
 
 __all__ = [
     # common
@@ -110,42 +82,12 @@ __all__ = [
     "FilmEntityExtractionResult",
     "FilmShotlistResult",
     # shot frame prompt
-    "ShotFramePromptInput",
-    "ShotFramePromptResult",
     # script processing
-    "ShotDivision",
-    "ScriptDivisionResult",
-    "ShotCharacterInfo",
-    "ShotPropInfo",
-    "ShotSceneInfo",
-    "ShotElements",
-    "ShotElementExtractionResult",
-    "EntityVariant",
-    "EntityEntry",
-    "EntityLibrary",
-    "EntityMergeResult",
-    "ConflictResolutionSuggestion",
     "ScriptConsistencyIssue",
     "ScriptConsistencyCheckResult",
     "ScriptOptimizationResult",
-    "ScriptShotExtraction",
-    "ScriptExtractionResult",
-    "StudioAssetDraft",
-    "StudioCharacterDraft",
-    "StudioShotDraftDialogueLine",
-    "StudioShotDraft",
-    "StudioScriptExtractionDraft",
-    "CostumeTimelineEntry",
-    "CostumeTimeline",
-    "VariantSuggestion",
-    "VariantAnalysisResult",
-    "ConsistencyWarning",
-    "ConsistencyCheckResult",
-    "TableData",
-    "OutputCompileResult",
     "CharacterPortraitAnalysisResult",
     "PropInfoAnalysisResult",
     "SceneInfoAnalysisResult",
     "CostumeInfoAnalysisResult",
 ]
-

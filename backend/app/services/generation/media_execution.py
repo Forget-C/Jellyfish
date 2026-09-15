@@ -24,7 +24,7 @@ from app.models.llm import ModelCategoryKey, Provider
 from app.models.task import Task, TaskInput, TaskOutput
 from app.models.studio_prompts_files_timeline import FileItem
 from app.services.generation.task_snapshot import restore_snapshot
-from app.services.generation.publishers import AssetImagePublisher, ShotFramePublisher, ShotVideoPublisher
+from app.services.generation.publishers import AssetImagePublisher
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.task_service import TaskService, utcnow
 
@@ -200,14 +200,12 @@ async def deliver_media(db: AsyncSession, task: Task) -> None:
         sequence = await store.sequence(design.sequence_id)
         for output in outputs:
             await upsert_file_usage(db, file_id=output.file_id, project_id=task.project_id, chapter_id=sequence.chapter_id,
-                shot_id=None, usage_kind="directing_reference", source_ref="image-task:" + task.id)
+                usage_kind="directing_reference", source_ref="image-task:" + task.id)
             output.delivery_status = "published"
             output.delivery_reason = "candidate_reference"
         return
     publishers = {
         GenerationTargetKind.asset_image_slot: AssetImagePublisher,
-        GenerationTargetKind.shot_frame_slot: ShotFramePublisher,
-        GenerationTargetKind.shot_video: ShotVideoPublisher,
     }
     publisher = publishers.get(snapshot.canonical_target.kind)
     if publisher is None:

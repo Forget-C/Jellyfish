@@ -15,7 +15,7 @@ from app.models.studio_asset_images import (
     PropImage,
     SceneImage,
 )
-from app.models.studio_prompts_files_timeline import FileItem, PromptTemplate, TimelineClip
+from app.models.studio_prompts_files_timeline import FileItem, PromptTemplate
 from app.models.studio_file_usages import FileUsage
 from app.models.experiment_sessions import ExperimentMessage, ExperimentSession
 from app.models.studio_projects import (
@@ -26,35 +26,15 @@ from app.models.studio_projects import (
     ProjectPropLink,
     ProjectSceneLink,
 )
-from app.models.studio_shots import (
-    Shot,
-    ShotExtractedCandidate,
-    ShotExtractedDialogueCandidate,
-    ShotCharacterLink,
-    ShotDetail,
-    ShotDialogLine,
-    ShotFrameImage,
-)
 from app.models.types import (
     AssetQualityLevel,
     AssetViewAngle,
-    CameraAngle,
-    CameraMovement,
-    CameraShotType,
     ChapterStatus,
-    DialogueLineMode,
     FileType,
     FileUsageKind,
     ProjectStyle,
     ProjectVisualStyle,
     PromptCategory,
-    ShotCandidateStatus,
-    ShotCandidateType,
-    ShotDialogueCandidateStatus,
-    ShotFrameType,
-    ShotStatus,
-    TimelineClipType,
-    VFXType,
 )
 
 __all__ = [
@@ -62,21 +42,10 @@ __all__ = [
     "ProjectStyle",
     "ProjectVisualStyle",
     "ChapterStatus",
-    "ShotStatus",
-    "ShotCandidateType",
-    "ShotCandidateStatus",
-    "ShotDialogueCandidateStatus",
-    "CameraShotType",
-    "CameraAngle",
-    "CameraMovement",
     "AssetQualityLevel",
     "AssetViewAngle",
-    "ShotFrameType",
     "FileType",
     "FileUsageKind",
-    "TimelineClipType",
-    "DialogueLineMode",
-    "VFXType",
     "PromptCategory",
     # Models
     "Project",
@@ -84,17 +53,10 @@ __all__ = [
     "Scene",
     "Prop",
     "Costume",
-    "Shot",
-    "ShotDetail",
-    "ShotFrameImage",
-    "ShotDialogLine",
-    "ShotExtractedCandidate",
-    "ShotExtractedDialogueCandidate",
     "Actor",
     "Character",
     "CharacterImage",
     "CharacterPropLink",
-    "ShotCharacterLink",
     "ActorImage",
     "SceneImage",
     "PropImage",
@@ -106,7 +68,6 @@ __all__ = [
     "PromptTemplate",
     "FileItem",
     "FileUsage",
-    "TimelineClip",
     "ExperimentSession",
     "ExperimentMessage",
 ]

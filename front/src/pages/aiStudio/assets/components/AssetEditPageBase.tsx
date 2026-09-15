@@ -41,7 +41,7 @@ import {
   type RelationTaskState,
   toRelationTaskStateFromStatusRead,
   useCancelableRelationTask,
-} from '../../project/ProjectWorkbench/chapterDivisionTasks'
+} from '../../project/ProjectWorkbench/relationTasks'
 
 const MAX_VIEW_COUNT = 4
 // 与后端 `AssetViewAngle`（backend/app/models/studio.py）一致的枚举值

@@ -30,7 +30,7 @@ class StudioEntitiesService:
         self,
         *,
         project_id: str,
-        shot_id: str | None = None,
+
         character_names: list[str],
         prop_names: list[str],
         scene_names: list[str],
@@ -39,7 +39,7 @@ class StudioEntitiesService:
         return await check_names_existence_service(
             self._db,
             project_id=project_id,
-            shot_id=shot_id,
+
             character_names=character_names,
             prop_names=prop_names,
             scene_names=scene_names,

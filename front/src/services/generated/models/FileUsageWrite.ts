@@ -15,11 +15,7 @@ export type FileUsageWrite = {
      */
     chapter_id?: (string | null);
     /**
-     * 镜头 ID
-     */
-    shot_id?: (string | null);
-    /**
-     * 用途：shot_frame / generated_video / character_image / asset_image / upload / api 等
+     * 用途：directing_reference / directing_take / generated_video / character_image / asset_image / upload / api 等
      */
     usage_kind: string;
     /**
@@ -27,4 +23,3 @@ export type FileUsageWrite = {
      */
     source_ref?: (string | null);
 };
-

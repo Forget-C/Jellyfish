@@ -33,9 +33,9 @@ class ScriptOperationInput(BaseModel):
 
     kind: Literal["script_operation"] = "script_operation"
     operation: Literal[
-        "divide", "extract", "check-consistency", "analyze-character-portrait",
+        "check-consistency", "analyze-character-portrait",
         "analyze-prop-info", "analyze-scene-info", "analyze-costume-info",
-        "optimize-script", "simplify-script", "merge-entities", "analyze-variants",
+        "optimize-script", "simplify-script",
     ]
     source_text: str = Field(min_length=1)
 

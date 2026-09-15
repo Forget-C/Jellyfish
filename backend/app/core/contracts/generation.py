@@ -33,11 +33,8 @@ class GenerationTargetKind(str, Enum):
 
     experiment_session = "experiment_session"
     asset_image_slot = "asset_image_slot"
-    shot_frame_slot = "shot_frame_slot"
-    shot_video = "shot_video"
     directing_unit = "directing_unit"
     directing_image = "directing_image"
-    shot_detail = "shot_detail"
     script_processing = "script_processing"
 
 
