@@ -1,0 +1,48 @@
+{
+  "date": "2026-09-16",
+  "status": "completed with documented check limitations",
+  "scope": "Isolated browser API fixtures; no real generation or adoption",
+  "pureTests": {
+    "command": "node --test front/tests/*.test.mjs",
+    "passed": 54
+  },
+  "backend": {
+    "command": "uv run pytest tests/directing -q",
+    "passed": 120,
+    "skipped": 2,
+    "skipReason": "JELLYFISH_DIRECTING_MYSQL_URL not configured"
+  },
+  "pylint": {
+    "command": "uv run pylint app",
+    "status": "5 existing findings in unmodified files",
+    "files": [
+      "app/task_worker.py",
+      "app/models/studio_assets.py",
+      "app/api/v1/routes/studio/lab_generation_tasks.py",
+      "app/services/task_queries.py"
+    ]
+  },
+  "browserPassed": {
+    "workspaceShootStart": "jellyfish-shoot-start-zvJmzP",
+    "workspaceAssetFlow": "jellyfish-asset-flow-zDEnGy",
+    "workspaceShootSteps": "jellyfish-shoot-steps-kFmz3g",
+    "workspaceJourney": "jellyfish-journey-TaHYmv",
+    "workspaceUsage": "jellyfish-ux1-akxxic",
+    "workspaceWrite": "jellyfish-write-oMBbYQ",
+    "workspaceAcceptance": "jellyfish-ux5-CYVMEk",
+    "workspaceAssets": "PASS, no writes",
+    "workspaceProduction": "jellyfish-ux3-CIzfck",
+    "workspaceGuidance": "jellyfish-ux2-Y4rInP"
+  },
+  "remaining": [],
+  "limitations": [
+    "Chromium CSS viewport checks, not real mobile hardware",
+    "Asset availability reflects file metadata; storage reachability is verified when loading media",
+    "No real model execution; generated test media only"
+  ],
+  "typecheck": "passed",
+  "documentation": {
+    "hugo": "passed, existing .Site.Data deprecation warning",
+    "diffCheck": "passed"
+  }
+}

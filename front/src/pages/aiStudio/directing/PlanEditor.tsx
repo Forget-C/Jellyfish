@@ -2,7 +2,7 @@ import { SourceLinks } from './Sources'
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Image, Input, InputNumber, Modal, Pagination, Select, Space, Typography, Upload } from 'antd'
 import { LlmService, StudioFilesService } from '../../../services/generated'
-import type { WorkspaceRead, FileRead, GenerationUnit_Input, ModelRead, ProductionPlan_Input, SceneDesign_Input, ReferenceBinding_Input } from '../../../services/generated'
+import type { AssetSummary, WorkspaceRead, FileRead, GenerationUnit_Input, ModelRead, ProductionPlan_Input, SceneDesign_Input, ReferenceBinding_Input } from '../../../services/generated'
 import { buildFileDownloadUrl } from '../assets/utils'
 import { ProductionParameters } from './ProductionWorkbench'
 import { ReferencePreview } from './ReferencePreview'
@@ -10,7 +10,8 @@ import { DependencyEditor } from './DependencyEditor'
 import { directingError } from './common'
 
 /** 拍摄单元和本轮参考的显式编辑，关联资产不会自动全量提交。 */
-export function PlanEditor({ projectId, workspace, design, value, onChange, disabled = false, issue, selectedUnitId, planId }: {
+export function PlanEditor({ assets, assetError, onReloadAssets, projectId, workspace, design, value, onChange, disabled = false, issue, selectedUnitId, planId }: {
+  assets?: AssetSummary[]; assetError?: string; onReloadAssets?: () => void;
   planId?: string; selectedUnitId?: string; projectId: string; workspace: WorkspaceRead; design: SceneDesign_Input; value: ProductionPlan_Input; onChange: (plan: ProductionPlan_Input) => void; disabled?: boolean; issue?: { unitId?: string; message: string }
 }) {
   const latest = useRef({ value, planId })
@@ -19,6 +20,11 @@ export function PlanEditor({ projectId, workspace, design, value, onChange, disa
   const [defaultModel, setDefaultModel] = useState('')
   const [error, setError] = useState('')
   const [picker, setPicker] = useState<string>()
+  const [assetPicker, setAssetPicker] = useState<string>()
+  const [assetPurpose, setAssetPurpose] = useState<ReferenceBinding_Input['purpose']>('identity')
+  const [assetRole, setAssetRole] = useState<ReferenceBinding_Input['input_role']>('subject')
+  useEffect(() => { setPicker(undefined); setAssetPicker(undefined) }, [planId, value.design_revision_id])
+  const linkedAssets = (assets || []).filter(asset => asset.kind === 'scene' ? design.direction.location_asset_id === asset.id : design.participants.some(person => (asset.kind === 'character' ? person.character_id : person.prop_id) === asset.id))
   const [files, setFiles] = useState<FileRead[]>([])
   const [query, setQuery] = useState('')
   const [page, setPage] = useState(1)
@@ -46,12 +52,12 @@ export function PlanEditor({ projectId, workspace, design, value, onChange, disa
     } catch (cause) { setError(directingError(cause)) }
   }
   /** 明确添加一份文件；输入位置和用途仍可在单元内调整。 */
-  const addReference = (fileId: string, unitId = picker, mediaKind: ReferenceBinding_Input['media_kind'] = 'image') => {
+  const addReference = (fileId: string, unitId = picker, mediaKind: ReferenceBinding_Input['media_kind'] = 'image', binding?: Pick<ReferenceBinding_Input, 'purpose' | 'input_role' | 'participant_ids'>) => {
     if (latest.current.planId !== planId) return
     const current = latest.current.value
     const unit = current.units.find(item => item.id === unitId)
     if (!unit || unit.references.some(ref => ref.file_id === fileId)) return
-    onChange({ ...current, units: current.units.map(row => row.id === unit.id ? { ...row, references: [...unit.references, { id: 'ref-' + crypto.randomUUID().slice(0, 8), file_id: fileId, media_kind: mediaKind, purpose: mediaKind === 'audio' ? 'sound' : 'composition', participant_ids: [], ordinal: unit.references.length, input_role: mediaKind === 'image' ? 'first_frame' : undefined, source: { kind: 'human', reference: 'local-user', version: 'reference-1' } }] } : row) })
+    onChange({ ...current, units: current.units.map(row => row.id === unit.id ? { ...row, references: [...unit.references, { id: 'ref-' + crypto.randomUUID().slice(0, 8), file_id: fileId, media_kind: mediaKind, purpose: mediaKind === 'audio' ? 'sound' : 'composition', participant_ids: [], ordinal: unit.references.length, input_role: mediaKind === 'image' ? 'first_frame' : undefined, source: { kind: 'human', reference: 'local-user', version: 'reference-1', file_id: fileId }, ...binding }] } : row) })
   }
   const selected = value.units.find(unit => unit.id === selectedUnitId) || value.units[0]
   return <Space direction="vertical" size="middle" style={{ width: '100%' }}>
@@ -65,7 +71,7 @@ export function PlanEditor({ projectId, workspace, design, value, onChange, disa
         {unit.coverage.map(item => <div key={item.id} style={{ width: '100%' }}><Typography.Text type="secondary">动作范围 · {item.shot_id}</Typography.Text><Input.TextArea disabled={disabled} value={item.action_scope} onChange={event => patch(unit.id, { coverage: unit.coverage.map(row => row.id === item.id ? { ...row, action_scope: event.target.value } : row) })} /></div>)}
         {unit.coverage.length > 1 && <Alert type="warning" message="计划包含多个镜头，当前多镜执行能力未验证。保存并确认后，可在重组面板明确拆分。" />}
         <ProductionParameters>        <Space wrap>
-          <Select aria-label="视频模型" disabled={disabled} placeholder="选择视频模型" style={{ minWidth: 220 }} value={unit.model_id || undefined} options={models.map(model => ({ value: model.id, label: model.name }))} onChange={model_id => patch(unit.id, { model_id })} />
+          <span data-workspace-target={`unit-model:${unit.id}`} tabIndex={-1}><Select aria-label="视频模型" disabled={disabled} placeholder="选择视频模型" style={{ minWidth: 220 }} value={unit.model_id || undefined} options={models.map(model => ({ value: model.id, label: model.name }))} onChange={model_id => patch(unit.id, { model_id })} /></span>
           <span>时长（秒）</span><InputNumber disabled={disabled} min={1} precision={0} value={unit.duration_ms / 1000} onChange={seconds => patch(unit.id, { duration_ms: (seconds || 1) * 1000 })} />
           <Select aria-label="画幅" disabled={disabled} value={unit.ratio} options={['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'].map(ratio => ({ value: ratio, label: ratio }))} onChange={ratio => patch(unit.id, { ratio })} />
           <span>种子（可留空）</span><InputNumber disabled={disabled} min={-1} precision={0} value={typeof unit.parameters?.seed === 'number' ? unit.parameters.seed : null} onChange={seed => patch(unit.id, { parameters: seed === null ? Object.fromEntries(Object.entries(unit.parameters || {}).filter(([key]) => key !== 'seed')) : { ...unit.parameters, seed } })} />
@@ -86,7 +92,7 @@ export function PlanEditor({ projectId, workspace, design, value, onChange, disa
             }}>上移</Button><Button danger onClick={() => patch(unit.id, { references: unit.references.filter(r => r.id !== ref.id).map((r, ordinal) => ({ ...r, ordinal })) })}>移除</Button></>}
           </Space>
         </Card>)}
-        {!disabled && <Space><Button onClick={() => { setPicker(unit.id); void loadFiles() }}>从素材中选择</Button><Upload accept="image/*,video/*,audio/*" showUploadList={false} beforeUpload={file => {
+        {!disabled && <Space wrap><Button onClick={() => setAssetPicker(unit.id)}>从本场资产选参考</Button><Button onClick={() => { setPicker(unit.id); void loadFiles() }}>从素材中选择</Button><Upload accept="image/*,video/*,audio/*" showUploadList={false} beforeUpload={file => {
           void StudioFilesService.uploadFileApiApiV1StudioFilesUploadPost({ formData: { file: file as unknown as string, project_id: projectId, usage_kind: 'upload' } }).then(response => { if (response.data) addReference(response.data.id, unit.id, response.data.type as ReferenceBinding_Input['media_kind']) }).catch(cause => setError(directingError(cause)))
           return false
         }}><Button>上传参考素材</Button></Upload></Space>}
@@ -94,6 +100,17 @@ export function PlanEditor({ projectId, workspace, design, value, onChange, disa
     </Card>)}
     </div>
     {!disabled && <Button disabled={!design.direction.shots.length} onClick={() => onChange({ ...value, units: [...value.units, { id: 'unit-' + crypto.randomUUID().slice(0, 8), coverage: coverage([design.direction.shots[0].id]), references: [], model_id: defaultModel, duration_ms: 5000, ratio: '16:9', capability: { multi_shot: 'unknown' } }] })}>新增试拍 / 补拍单元</Button>}
+    <Modal title="从本场资产选择参考" open={!!assetPicker} onCancel={() => setAssetPicker(undefined)} footer={<Button onClick={() => setAssetPicker(undefined)}>完成选择</Button>}>
+      <p>只选入这次试拍需要的图片；本场关联不会自动提交图片。</p>
+      {!assets ? <Alert type={assetError ? 'error' : 'info'} message={assetError || '正在读取本场资产'} action={assetError && <Button onClick={onReloadAssets}>重试读取资产</Button>} /> : <>
+        <Space wrap><Select aria-label="资产参考用途" value={assetPurpose} onChange={setAssetPurpose} options={[{ value: 'identity', label: '人物／物件身份' }, { value: 'space', label: '场所空间' }, { value: 'composition', label: '构图' }, { value: 'continuity', label: '连续性' }]} />
+          <Select aria-label="资产参考输入位置" value={assetRole} onChange={setAssetRole} options={[{ value: 'subject', label: '命名主体参考' }, { value: 'first_frame', label: '首帧构图' }, { value: 'last_frame', label: '尾帧构图' }, { value: 'key_frame', label: '关键帧' }]} /></Space>
+        {!linkedAssets.length && <p>此计划依据的设计尚未关联资产。也可从素材中选择，或按模型能力进行纯文本试拍。</p>}
+        {linkedAssets.map(asset => <section key={`${asset.kind}:${asset.id}`} className="scene-asset-row"><strong>{asset.name}</strong>{!asset.image_file_ids?.length && <span>尚无可用图片；可在导演设计的本场资产中准备。</span>}
+          {asset.image_file_ids?.map((fileId, index) => <Space key={fileId}><Image width={64} src={buildFileDownloadUrl(fileId)} /><Button disabled={disabled || value.units.find(unit => unit.id === assetPicker)?.references.some(ref => ref.file_id === fileId)} onClick={() => addReference(fileId, assetPicker, 'image', { purpose: assetPurpose, input_role: assetRole, participant_ids: design.participants.filter(person => (asset.kind === 'character' ? person.character_id : asset.kind === 'prop' ? person.prop_id : null) === asset.id).map(person => person.id) })}>选入 {asset.name} 图片 {index + 1}</Button></Space>)}
+        </section>)}
+      </>}
+    </Modal>
     <Modal title="选择本次参考素材" open={!!picker} onCancel={() => setPicker(undefined)} footer={<Button onClick={() => setPicker(undefined)}>完成选择</Button>}>
       <Space direction="vertical" style={{ width: '100%' }}><Input.Search placeholder="搜索素材" value={query} onChange={event => setQuery(event.target.value)} onSearch={() => void loadFiles()} />
         <Select value={allFiles ? 'all' : 'project'} options={[{ value: 'project', label: '当前项目素材' }, { value: 'all', label: '全部已有素材' }]} onChange={scope => { setAllFiles(scope === 'all'); void loadFiles(1, scope === 'all') }} />

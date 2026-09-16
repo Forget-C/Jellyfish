@@ -12,6 +12,7 @@ export type { ActorUpdate } from './models/ActorUpdate';
 export type { ActualCoverage_Input } from './models/ActualCoverage_Input';
 export type { ActualCoverage_Output } from './models/ActualCoverage_Output';
 export type { AIRequest } from './models/AIRequest';
+export type { ApiResponse_AssetSummary_ } from './models/ApiResponse_AssetSummary_';
 export type { ApiResponse_AsyncTaskCreateRead_ } from './models/ApiResponse_AsyncTaskCreateRead_';
 export type { ApiResponse_BatchRead_ } from './models/ApiResponse_BatchRead_';
 export type { ApiResponse_ChapterAssemblyRead_ } from './models/ApiResponse_ChapterAssemblyRead_';

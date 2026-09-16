@@ -11,6 +11,7 @@ description: "记录当前正在推进的开发计划、改造方案与阶段性
 
 当前计划入口：
 
+- [场次资产准备与设计到试拍衔接优化计划](/docs/plans/sequence-workbench-asset-to-shoot/)：明确资产建档、关联和图片准备的去向，统一确认设计后的试拍入口与单元步骤；E1–E4完成，独立截图、检查结果与验证局限已归档。
 - [场次工作台镜头视图与全场关系总览优化计划](/docs/plans/sequence-workbench-scene-overview/)：统一镜头/关系层级及分镜/清单切换，优化分镜密度与顺序，以紧凑节拍行展示全场关系；D1–D4完成，MD验收及独立证据已归档。
 - [场次工作台导航、视图与来源优化方案](/docs/plans/sequence-workbench-interaction-refinement/)：在已完成的 A/B 阶段基础上，明确范围与视图职责，优化节拍内操作、可读来源及三个工作空间；C1–C5已完成，MC验收及证据已归档。
 - [全站布局统一与场次工作台重设计计划](/docs/plans/frontend-shell-and-sequence-workbench-plan/)：A1–A3、B1–B5 已完成，保留框架规格、参考图及 MA/MB 验收记录。

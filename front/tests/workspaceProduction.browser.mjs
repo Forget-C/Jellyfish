@@ -227,7 +227,7 @@ try {
   assert.equal(await page.locator('.prompt-decision').count(), 0)
   await choose('选择生成指令版本', '提示词 2')
 
-  await page.getByRole('tab', { name: '审稿与执行', exact: true }).click()
+  await page.getByRole('tab', { name: '检查与试拍', exact: true }).click()
   assert.equal(await page.getByRole('button', { name: '确认并开始生成视频', exact: true }).isDisabled(), true)
   await page.getByRole('tab', { name: '候选素材', exact: true }).click()
   const candidateCard = page.locator('.ant-card').filter({ has: page.getByText('本单元生成的视频 · 待挑选素材', { exact: true }) })

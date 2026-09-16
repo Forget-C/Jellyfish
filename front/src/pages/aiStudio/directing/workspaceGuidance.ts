@@ -60,6 +60,9 @@ export function workspaceGuidance(input: GuidanceInput): WorkspaceGuidance {
   if (stage === 'shoot') {
     if (!editingPlan) return step('先选定拍摄方案', '从已确认设计创建生产计划，明确本次要生成什么。', '选择已确认设计', 'shoot', 'plan-version')
     if (!editingPlan.units.length) return step('添加本次要拍的内容', '为一个明确的动作准备生成单元，再选择模型与参考。', '添加生成单元', 'shoot', 'plan-editor')
+    const editingUnit = editingPlan.units.find(row => row.id === unitId) || editingPlan.units[0]
+    if (!editingUnit.model_id) return step('下一步：选择视频模型', '模型决定实际生成时长和参考输入要求；镜头预计时长不代表模型支持的时长。', '选择视频模型', 'shoot', `unit-model:${editingUnit.id}`)
+    if (plan?.confirmed_at && JSON.stringify(editingPlan) !== JSON.stringify(plan.content)) return step('拍摄准备已修改', '保存并确认新的计划版本后再准备指令，旧版本引用保持不变。', '保存并确认修改', 'shoot', 'plan-confirm')
     if (!plan?.confirmed_at) return step('核对本次范围与参考', '保存并确认生产计划后，才能生成固定的执行指令。', '去确认单元与参考', 'shoot', 'plan-confirm')
     const unit = plan.content.units.find(row => row.id === unitId)
     if (!unit) return step('选择本次生成单元', '选择一个单元后继续；不会替你切换到另一个版本。', '选择生成单元', 'shoot', 'unit-select')

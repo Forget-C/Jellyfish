@@ -4,7 +4,7 @@ import { Alert, Button, Modal, Space } from 'antd'
 import { useBeforeUnload, useBlocker } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 
-type Draft = { name: string; dirty: boolean; busy?: boolean; save: () => Promise<boolean>; discard: () => void }
+type Draft = { name: string; dirty: boolean; busy?: boolean; preserveOnStageChange?: boolean; save: () => Promise<boolean>; discard: () => void }
 type Transition = { action: () => void; cancel?: () => void }
 type DraftContext = {
   register: (id: string, draft: MutableRefObject<Draft>) => () => void
@@ -36,6 +36,14 @@ export function WorkspaceDrafts({ children }: { children: ReactNode }) {
   }, [dirtyDrafts, busyDrafts])
   const blocker = useBlocker(({ currentLocation, nextLocation, historyAction }) => {
     if (historyAction === 'REPLACE' && currentLocation.pathname === nextLocation.pathname && nextLocation.state?.directingContextSync) return false
+    // 阶段和字段定位不卸载工作单，可以保留编辑往返；身份变化与写入中仍受保护。
+    const contentQuery = (search: string) => {
+      const query = new URLSearchParams(search)
+      for (const key of ['view', 'focus', 'returnView']) query.delete(key)
+      query.sort()
+      return query.toString()
+    }
+    if (currentLocation.pathname === nextLocation.pathname && contentQuery(currentLocation.search) === contentQuery(nextLocation.search) && !busyDrafts().length && dirtyDrafts().every(draft => draft.current.preserveOnStageChange)) return false
     return (currentLocation.pathname !== nextLocation.pathname || currentLocation.search !== nextLocation.search) && (dirtyDrafts().length > 0 || busyDrafts().length > 0)
   })
   useEffect(() => {

@@ -141,7 +141,7 @@ try {
       if (view === 'cut') actions.push(page.getByRole('button', { name: '保存剪辑草稿', exact: true }).or(page.getByRole('button', { name: '保存为新剪辑草稿', exact: true })), page.getByRole('button', { name: '确认并设为当前采用', exact: true }))
       if (view === 'cut') actions.push(...await page.locator('.cut-save-actions button').all())
       if (state === 'shoot') actions.push(page.getByRole('button', { name: '准备生成指令', exact: true }))
-      if (view === 'design' && state !== 'first') actions.push(page.getByRole('button', { name: '保存为新设计草稿', exact: true }), page.getByRole('button', { name: '确认本轮设计', exact: true }))
+      if (view === 'design' && state !== 'first') actions.push(page.getByRole('button', { name: '保存为新设计草稿', exact: true }), page.getByRole('button', { name: /^(准备|继续)试拍 →$/ }))
       for (const action of actions) {
         assert.equal(await action.evaluate(element => {
           const box = element.getBoundingClientRect(), viewport = document.querySelector('.app-route-viewport').getBoundingClientRect()

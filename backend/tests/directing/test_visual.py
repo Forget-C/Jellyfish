@@ -47,12 +47,50 @@ async def test_visual_candidate_has_design_source_without_auto_adoption(tmp_path
 async def test_scene_asset_creation_is_project_scoped(tmp_path, kind):
     """按需创建只产生资产身份，不自动修改场次设计，其他项目不能读取。"""
     from app.core.contracts.directing.workspace import AssetCreateRequest
+    from uuid import uuid4
 
     async with database(tmp_path) as sessions:
         async with sessions.begin() as db:
             service = ProductionService(db, 'p1')
             sequence = await service.create_sequence(chapter_id='ch1', title='shop', position=0)
-            assets = await service.create_asset(sequence.id, AssetCreateRequest(kind=kind, name='稳定设定', description='灰色'))
-            assert len(assets) == 1 and assets[0].kind == kind
+            body = AssetCreateRequest(request_id=str(uuid4()), kind=kind, name='稳定设定', description='灰色')
+            asset = await service.create_asset(sequence.id, body)
+            assert asset.kind == kind and asset.image_file_ids == []
+            assert (await service.create_asset(sequence.id, body)).id == asset.id
+            assert len(await service.assets()) == 1
             assert not await ProductionService(db, 'p2').assets()
             assert not (await service.workspace(sequence.id)).designs
+
+
+@pytest.mark.asyncio
+async def test_asset_retry_conflict_and_available_images(tmp_path):
+    """创建重试固定身份；空槽位与删除中的文件不当成可用参考图。"""
+    from datetime import datetime
+    from uuid import uuid4
+    from app.core.contracts.directing.workspace import AssetCreateRequest
+    from app.models.studio import SceneImage, FileItem
+    from app.services.directing.store import RevisionConflict
+
+    async with database(tmp_path) as sessions:
+        async with sessions.begin() as db:
+            service = ProductionService(db, 'p1')
+            sequence = await service.create_sequence(chapter_id='ch1', title='shop', position=0)
+            body = AssetCreateRequest(request_id=str(uuid4()), kind='scene', name='街道', description='灰墙')
+            asset = await service.create_asset(sequence.id, body)
+            assert asset.image_file_ids == []
+            with pytest.raises(RevisionConflict):
+                await service.create_asset(sequence.id, body.model_copy(update={'name': '另一个地点'}))
+            with pytest.raises(ValueError):
+                await ProductionService(db, 'p2').create_asset(sequence.id, body)
+            slot = await db.scalar(select(SceneImage).where(SceneImage.scene_id == asset.id))
+            slot.file_id = 'image1'
+            await db.flush()
+            summary = (await service.assets())[0]
+            assert summary.image_file_ids == ['image1'] and summary.unavailable_image_count == 0
+            file = await db.get(FileItem, 'image1')
+            file.delete_requested_at = datetime.now()
+            await db.flush()
+            summary = (await service.assets())[0]
+            assert summary.image_file_ids == [] and summary.unavailable_image_count == 1
+            assert (await service.create_asset(sequence.id, body)).id == asset.id
+            assert len(await service.assets()) == 1

@@ -206,9 +206,9 @@ async def assets(project_id: str, db: AsyncSession = Depends(get_db, scope="func
     return success_response(await _call(ProductionService(db, project_id).assets()))
 
 
-@router.post("/sequences/{sequence_id}/assets", response_model=ApiResponse[list[AssetSummary]], operation_id="directing_create_asset")
+@router.post("/sequences/{sequence_id}/assets", response_model=ApiResponse[AssetSummary], operation_id="directing_create_asset")
 async def create_asset(project_id: str, sequence_id: str, body: AssetCreateRequest, db: AsyncSession = Depends(get_db, scope="function")):
-    """在场次内按需创建项目资产，身份绑定仍由用户明确选择。"""
+    """返回本次创建的精确资产身份；请求可重试，设计关联仍须另行保存。"""
     return success_response(await _call(ProductionService(db, project_id).create_asset(sequence_id, body)))
 
 

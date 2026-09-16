@@ -125,30 +125,54 @@ class WorkspaceService(DirectingStore):
     async def assets(self):
         """列出当前项目已关联资产，供场次工作单显式选择。"""
         from app.core.contracts.directing.workspace import AssetSummary
-        from app.models.studio import Character, Scene, Prop, ProjectSceneLink, ProjectPropLink
+        from app.models.studio import Character, Scene, Prop, ProjectSceneLink, ProjectPropLink, CharacterImage, SceneImage, PropImage, FileItem
 
         result = []
         queries = [("character", select(Character).where(Character.project_id == self.project_id)),
             ("scene", select(Scene).join(ProjectSceneLink, ProjectSceneLink.scene_id == Scene.id).where(ProjectSceneLink.project_id == self.project_id).distinct()),
             ("prop", select(Prop).join(ProjectPropLink, ProjectPropLink.prop_id == Prop.id).where(ProjectPropLink.project_id == self.project_id).distinct())]
+        image_models = {'character': (CharacterImage, CharacterImage.character_id),
+                        'scene': (SceneImage, SceneImage.scene_id), 'prop': (PropImage, PropImage.prop_id)}
         for kind, query in queries:
-            for row in await self.db.scalars(query):
-                result.append(AssetSummary(id=row.id, kind=kind, name=row.name, description=row.description or ""))
+            rows = list(await self.db.scalars(query))
+            if not rows:
+                continue
+            image_model, owner = image_models[kind]
+            images = list(await self.db.execute(select(owner, image_model.file_id, FileItem).outerjoin(
+                FileItem, FileItem.id == image_model.file_id).where(owner.in_([row.id for row in rows]))))
+            for row in rows:
+                files = set()
+                unavailable = 0
+                for asset_id, file_id, file in images:
+                    if asset_id != row.id or not file_id:
+                        continue
+                    if file is not None and file.type == 'image' and file.delete_requested_at is None and file.deleted_at is None:
+                        files.add(file_id)
+                    else:
+                        unavailable += 1
+                result.append(AssetSummary(id=row.id, kind=kind, name=row.name, description=row.description or "",
+                                          image_file_ids=sorted(files), unavailable_image_count=unavailable))
         return result
 
     async def create_asset(self, sequence_id, body):
-        """复用资产创建服务并关联项目，不自动替换场次内已有身份。"""
-        from uuid import uuid4
+        """项目锁串行化同次请求；返回精确实体，不能凭列表顺序或同名资产猜测。"""
+        from uuid import uuid5, NAMESPACE_URL
         from app.models.studio import Project
         from app.services.studio.entities import StudioEntitiesService
 
         sequence = await self.sequence(sequence_id)
-        project = await self.db.get(Project, self.project_id)
-        payload = {"id": uuid4().hex, "project_id": self.project_id, "chapter_id": sequence.chapter_id,
+        project = await self.db.scalar(select(Project).where(Project.id == self.project_id).with_for_update())
+        asset_id = uuid5(NAMESPACE_URL, f'directing-asset:{self.project_id}:{sequence_id}:{body.request_id}').hex
+        previous = next((asset for asset in await self.assets() if asset.id == asset_id), None)
+        if previous is not None:
+            if previous.kind != body.kind or previous.name != body.name or previous.description.strip() != body.description.strip():
+                raise RevisionConflict('此创建请求已产生资产，内容已不同，请查看原资产后再决定是否新建')
+            return previous
+        payload = {"id": asset_id, "project_id": self.project_id, "chapter_id": sequence.chapter_id,
             "name": body.name, "style": project.style, "visual_style": project.visual_style,
             "description" if body.kind == "character" else "supplementary_info": body.description}
         await StudioEntitiesService(self.db).create_entity(entity_type=body.kind, body=payload)
-        return await self.assets()
+        return next(asset for asset in await self.assets() if asset.id == asset_id and asset.kind == body.kind)
 
     async def workspace(self, sequence_id: str) -> WorkspaceRead:
         """一次读取各类版本、候选和任务身份，不在任务中心复制业务上下文。"""

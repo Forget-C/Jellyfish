@@ -84,3 +84,13 @@ test('fixed prompt and review identities govern the proposed action', () => {
   review.content.occurrences = []
   assert.equal(workspaceGuidance(data).target, 'prompt-review')
 })
+
+test('shoot preparation directs missing models and edited confirmed plans to the exact next input', () => {
+  const data = input('shoot')
+  data.editingPlan = structuredClone(data.plan.content)
+  data.editingPlan.units[0].model_id = ''
+  assert.equal(workspaceGuidance(data).target, 'unit-model:u1')
+  data.editingPlan.units[0].model_id = 'another-model'
+  assert.equal(workspaceGuidance(data).target, 'plan-confirm')
+  assert.equal(data.plan.content.units[0].model_id === 'another-model', false)
+})

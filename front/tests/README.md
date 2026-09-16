@@ -86,3 +86,15 @@ node front/tests/workspaceRefinement.browser.mjs
 既有浏览器回归已适配“镜头 / 关系”和“分镜 / 清单”入口；全场不能再直接使用详细图缩放，测试需明确进入节拍。最终结果归档于`site/static/images/directing-workbench/scene-overview/`，与C阶段历史证据分开。
 
 `node front/tests/workspaceAssets.browser.mjs`使用同一运行环境，在4195端口隔离验证本场资产有效计数、未保存内容保留、问题面板、刷新后筛选恢复、三种展示的空结果恢复、无效引用、加载失败重试、问题定位和375px资产入口。业务请求均由接口替身处理。
+
+### E阶段资产与试拍衔接
+
+沿用上述Node.js 20+和Playwright环境，运行：
+
+```bash
+node front/tests/workspaceShootStart.browser.mjs
+node front/tests/workspaceAssetFlow.browser.mjs
+node front/tests/workspaceShootSteps.browser.mjs
+```
+
+三个脚本分别监听4196–4198端口，所有业务接口由隔离替身处理，不修改真实项目或调用模型。起步回归检查设计状态、精确计划匹配、显式镜头选择、刷新和草稿往返；资产回归检查类型选择、创建结果不明的同身份重试、详情只读、编辑返回保护及确认版本派生；步骤回归检查逐图参考选择、用途与位置、保存成功但确认失败后的重试，以及四步骤切换。均覆盖1440/1024/768/375宽度并输出独立截图目录。真实后端资产身份及媒体判定由`backend/tests/directing/test_visual.py`补充验证。

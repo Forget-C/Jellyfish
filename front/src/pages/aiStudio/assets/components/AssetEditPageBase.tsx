@@ -1,3 +1,4 @@
+import { useWorkspaceDraft } from '../../directing/WorkspaceDrafts'
 import { usePageTitle } from '../../../../layouts/pageTitle'
 import { AssetReferencePicker } from './AssetReferencePicker'
 import { AssetDossierImage, AssetDossierSection } from './AssetDossier'
@@ -100,6 +101,7 @@ export type AssetEditPageBaseProps<TAsset extends BaseAsset, TImage extends Base
   missingAssetIdText: string
   assetDisplayName: string
   backTo: string
+  embedded?: boolean
   relationType: string
   getAsset: (assetId: string) => Promise<TAsset | null>
   updateAsset: (assetId: string, payload: AssetUpdate) => Promise<TAsset | null>
@@ -165,6 +167,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
   missingAssetIdText,
   assetDisplayName,
   backTo,
+  embedded = false,
   relationType,
   getAsset,
   updateAsset,
@@ -180,7 +183,7 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
   const location = useLocation()
   const [loading, setLoading] = useState(true)
   const [asset, setAsset] = useState<TAsset | null>(null)
-  usePageTitle(asset?.id === assetId ? asset?.name : undefined)
+  usePageTitle(asset?.id === assetId ? asset?.name : undefined, !embedded)
   const [images, setImages] = useState<TImage[]>([])
   const [selectedAngle, setSelectedAngle] = useState<AssetViewAngle | null>(null)
   const [imagePreviewOpen, setImagePreviewOpen] = useState(false)
@@ -358,14 +361,14 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
       applyAsset(nextAsset)
       const targetCount = clampViewCount(nextAsset.view_count)
 
-      const imageRows = await ensureImageSlots(targetCount)
+      const imageRows = embedded ? await listImages(assetId) : await ensureImageSlots(targetCount)
       setImages(imageRows)
     } catch {
       message.error(`加载${assetDisplayName}资产失败`)
     } finally {
       setLoading(false)
     }
-  }, [assetId, assetDisplayName, backTo, applyAsset, ensureImageSlots, getAsset, onNavigate])
+  }, [assetId, assetDisplayName, backTo, applyAsset, ensureImageSlots, getAsset, onNavigate, embedded, listImages])
 
   useEffect(() => {
     void loadData()
@@ -395,10 +398,10 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
 
   /** 保存整份资产档案并补齐新增视角，用服务端返回值确认字段和保存状态。 */
   const handleSaveBaseInfo = async () => {
-    if (!assetId || !asset) return
+    if (!assetId || !asset) return false
     if (!formName.trim()) {
       message.warning('请输入名称')
-      return
+      return false
     }
 
     setSavingBase(true)
@@ -416,11 +419,21 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
       applyAsset(nextAsset)
       setImages(await ensureImageSlots(nextViewCount))
       message.success('资产已保存')
+      return true
     } catch {
       message.error('保存失败')
+      return false
     } finally {
       setSavingBase(false)
     }
+  }
+
+  useWorkspaceDraft({ name: `${assetDisplayName}资产档案`, dirty: embedded && hasUnsavedChanges, busy: embedded && (savingBase || smartDetectBusy), save: handleSaveBaseInfo, discard: () => { if (asset) applyAsset(asset) } })
+  const returnFromAsset = () => {
+    if (savingBase || smartDetectBusy) return
+    if (embedded && hasUnsavedChanges) {
+      Modal.confirm({ title: '资产档案有未保存的修改', content: '本场设计仍保留。请保存资产后返回，或取消并继续编辑。', okText: '保存并返回本场资产', cancelText: '继续编辑', onOk: async () => { if (!await handleSaveBaseInfo()) throw new Error('资产未保存'); onNavigate(backTo) } })
+    } else onNavigate(backTo)
   }
 
   const handleSmartDetectMissing = async () => {
@@ -765,10 +778,11 @@ export function AssetEditPageBase<TAsset extends BaseAsset, TImage extends BaseA
   return (
     <div className="asset-dossier">
       <div className="asset-dossier-toolbar">
-        <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => onNavigate(backTo)}>
-          返回{assetDisplayName}资产
+        <Button type="text" aria-label={embedded ? '返回本场资产' : undefined} icon={<ArrowLeftOutlined />} disabled={savingBase || smartDetectBusy} onClick={returnFromAsset}>
+          {embedded ? '返回本场资产' : `返回${assetDisplayName}资产`}
         </Button>
         <div className="asset-dossier-toolbar-actions">
+          {embedded && !images.length && <Button disabled={loading || hasUnsavedChanges || savingBase} onClick={async () => { setSavingBase(true); try { setImages(await ensureImageSlots(clampViewCount(formViewCount))) } catch { message.error('图片视角准备失败，可重试') } finally { setSavingBase(false) } }}>准备图片视角</Button>}
           <span className={hasUnsavedChanges ? 'text-sm text-amber-600' : 'text-sm text-gray-500'} role="status">
             {loading ? '加载中' : hasUnsavedChanges ? '有未保存的修改' : '已保存'}
           </span>

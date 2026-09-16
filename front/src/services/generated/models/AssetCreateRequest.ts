@@ -3,9 +3,10 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * 仅显式录入跨场稳定设定；本场动作仍保存在设计工作单。
+ * 同次创建固定请求身份，结果不明时重试不会重复建档；不修改本场设计。
  */
 export type AssetCreateRequest = {
+    request_id: string;
     kind: 'character' | 'scene' | 'prop';
     name: string;
     description?: string;

@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { AIRequest } from '../models/AIRequest';
+import type { ApiResponse_AssetSummary_ } from '../models/ApiResponse_AssetSummary_';
 import type { ApiResponse_BatchRead_ } from '../models/ApiResponse_BatchRead_';
 import type { ApiResponse_ChapterAssemblyRead_ } from '../models/ApiResponse_ChapterAssemblyRead_';
 import type { ApiResponse_ChapterSequences_ } from '../models/ApiResponse_ChapterSequences_';
@@ -699,8 +700,8 @@ export class StudioDirectingService {
     }
     /**
      * Create Asset
-     * 在场次内按需创建项目资产，身份绑定仍由用户明确选择。
-     * @returns ApiResponse_list_AssetSummary__ Successful Response
+     * 返回本次创建的精确资产身份；请求可重试，设计关联仍须另行保存。
+     * @returns ApiResponse_AssetSummary_ Successful Response
      * @throws ApiError
      */
     public static directingCreateAsset({
@@ -711,7 +712,7 @@ export class StudioDirectingService {
         projectId: string,
         sequenceId: string,
         requestBody: AssetCreateRequest,
-    }): CancelablePromise<ApiResponse_list_AssetSummary__> {
+    }): CancelablePromise<ApiResponse_AssetSummary_> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/assets',

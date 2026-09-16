@@ -10,4 +10,6 @@ export type AssetSummary = {
     kind: 'character' | 'scene' | 'prop';
     name: string;
     description: string;
+    image_file_ids?: Array<string>;
+    unavailable_image_count?: number;
 };

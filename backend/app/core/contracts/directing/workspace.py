@@ -228,11 +228,14 @@ class AssetSummary(Contract):
     kind: Literal['character', 'scene', 'prop']
     name: str
     description: str
+    image_file_ids: list[Identity] = Field(default_factory=list)
+    unavailable_image_count: int = Field(default=0, ge=0)
 
 
 class AssetCreateRequest(Contract):
-    """仅显式录入跨场稳定设定；本场动作仍保存在设计工作单。"""
+    """同次创建固定请求身份，结果不明时重试不会重复建档；不修改本场设计。"""
 
+    request_id: str = Field(pattern=r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
     kind: Literal['character', 'scene', 'prop']
     name: str = Field(min_length=1, max_length=255)
     description: str = Field(default='', max_length=8000)

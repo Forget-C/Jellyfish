@@ -10,6 +10,7 @@ description: "聚焦怎么开发、怎么协作、怎么接入前后端能力的
 - [后端说明](/docs/guide/backend/)
 - [OpenAPI](/docs/guide/openapi/)
 - [AI 工作流](/docs/guide/ai-workflow/)
+- [从本场资产到单元试拍](/docs/guide/sequence-asset-to-shoot/)
 - [LLM 供应商注册与扩展](/docs/guide/llm-provider-registration/)
 
 相关文档已拆分到独立栏目：

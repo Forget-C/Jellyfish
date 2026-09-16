@@ -6,14 +6,15 @@ import { StudioChaptersService, StudioProjectsService } from '../services/genera
 const useTitleStore = create<{ pathname: string; title?: string }>(() => ({ pathname: '' }))
 
 /** 发布页面已加载的名称；调用方须核对对象身份，不能将旧对象状态用于新路由。 */
-export function usePageTitle(title?: string) {
+export function usePageTitle(title?: string, enabled = true) {
   const { pathname } = useLocation()
   useLayoutEffect(() => {
+    if (!enabled) return
     useTitleStore.setState({ pathname, title })
     return () => {
       if (useTitleStore.getState().pathname === pathname) useTitleStore.setState({ pathname: '', title: undefined })
     }
-  }, [pathname, title])
+  }, [pathname, title, enabled])
 }
 
 /** 只补取当前页面没有读取的上级名称，不读取当前实体或改变业务编辑基线。 */

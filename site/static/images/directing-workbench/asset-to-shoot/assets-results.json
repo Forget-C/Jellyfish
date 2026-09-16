@@ -1,0 +1,456 @@
+{
+  "results": [
+    {
+      "width": 1440,
+      "state": "detail"
+    },
+    {
+      "width": 1024,
+      "state": "detail"
+    },
+    {
+      "width": 768,
+      "state": "detail"
+    },
+    {
+      "width": 375,
+      "state": "detail"
+    },
+    {
+      "width": 1440,
+      "state": "assets"
+    },
+    {
+      "width": 1024,
+      "state": "assets"
+    },
+    {
+      "width": 768,
+      "state": "assets"
+    },
+    {
+      "width": 375,
+      "state": "assets"
+    }
+  ],
+  "requests": [
+    {
+      "path": "/api/v1/studio/projects/p1/directing/sequences/s1/assets",
+      "body": {
+        "request_id": "16543f07-9d26-45cd-9730-cc5d5c776cd3",
+        "kind": "character",
+        "name": "张三",
+        "description": ""
+      }
+    },
+    {
+      "path": "/api/v1/studio/projects/p1/directing/sequences/s1/assets",
+      "body": {
+        "request_id": "16543f07-9d26-45cd-9730-cc5d5c776cd3",
+        "kind": "character",
+        "name": "张三",
+        "description": ""
+      }
+    },
+    {
+      "path": "/api/v1/studio/projects/p1/directing/sequences/s1/revisions",
+      "body": {
+        "document": {
+          "kind": "design",
+          "content": {
+            "style_revision_id": null,
+            "sources": [
+              {
+                "kind": "human",
+                "reference": "local-user",
+                "version": "manual-1"
+              }
+            ],
+            "participants": [
+              {
+                "id": "person1",
+                "name": "张三",
+                "character_id": "created-role",
+                "prop_id": null
+              }
+            ],
+            "events": [
+              {
+                "id": "event1",
+                "description": {
+                  "state": "unset"
+                }
+              }
+            ],
+            "criteria": [
+              {
+                "id": "criterion1",
+                "requirement": {
+                  "state": "unset"
+                }
+              }
+            ],
+            "direction": {
+              "viewpoint": {
+                "state": "unset"
+              },
+              "information_change": {
+                "state": "fact",
+                "text": "递出旧信，认出对方",
+                "sources": []
+              },
+              "relationship_change": {
+                "state": "unset"
+              },
+              "turning_point": {
+                "state": "unset"
+              },
+              "spatial_basis": {
+                "state": "unset"
+              },
+              "shootable_area": {
+                "state": "unset"
+              },
+              "axis": {
+                "state": "unset"
+              },
+              "scale": {
+                "state": "unset"
+              },
+              "control_level": {
+                "state": "unset"
+              },
+              "location_asset_id": null,
+              "immutable_facts": [],
+              "open_questions": [],
+              "anchors": [
+                {
+                  "id": "anchor1",
+                  "description": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "blocking_states": [
+                {
+                  "id": "state1",
+                  "participant_id": "person1",
+                  "anchor_ids": [
+                    "anchor1"
+                  ],
+                  "event_id": "event1",
+                  "position": {
+                    "state": "unset"
+                  },
+                  "orientation": {
+                    "state": "unset"
+                  },
+                  "initiative": {
+                    "state": "unset"
+                  },
+                  "path": {
+                    "state": "unset"
+                  },
+                  "transition_reason": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "beats": [
+                {
+                  "id": "beat1",
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "objective": {
+                    "state": "unset"
+                  },
+                  "obstacle": {
+                    "state": "unset"
+                  },
+                  "expected_change": {
+                    "state": "unset"
+                  },
+                  "must_show": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "shots": [
+                {
+                  "id": "shot1",
+                  "beat_ids": [
+                    "beat1"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "unset"
+                  },
+                  "estimated_duration_ms": 5000
+                }
+              ]
+            },
+            "performance": {
+              "applicability": {
+                "state": "unset"
+              },
+              "situations": [
+                {
+                  "participant_id": "person1",
+                  "situation": {
+                    "state": "unset"
+                  },
+                  "relationship": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "beats": [
+                {
+                  "beat_id": "beat1",
+                  "participant_id": "person1",
+                  "received_event_ids": [
+                    "event1"
+                  ],
+                  "dialogue_ids": [],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "objective": {
+                    "state": "unset"
+                  },
+                  "obstacle": {
+                    "state": "unset"
+                  },
+                  "subtext": {
+                    "state": "unset"
+                  },
+                  "attention": {
+                    "state": "unset"
+                  },
+                  "internal_adjustment": {
+                    "state": "unset"
+                  },
+                  "physical_action": {
+                    "state": "unset"
+                  },
+                  "delivery": {
+                    "state": "unset"
+                  },
+                  "reaction_order": {
+                    "state": "unset"
+                  },
+                  "exit_state": {
+                    "state": "unset"
+                  },
+                  "avoid": {
+                    "state": "unset"
+                  },
+                  "gaze": {
+                    "state": "unset"
+                  },
+                  "breath": {
+                    "state": "unset"
+                  },
+                  "weight": {
+                    "state": "unset"
+                  },
+                  "hands": {
+                    "state": "unset"
+                  },
+                  "voice": {
+                    "state": "unset"
+                  }
+                }
+              ]
+            },
+            "staging": {
+              "activities": [
+                {
+                  "participant_id": "person1",
+                  "anchor_id": "anchor1",
+                  "trigger_event_id": "event1",
+                  "delay_ms": null,
+                  "depth": {
+                    "state": "unset"
+                  },
+                  "ongoing_task": {
+                    "state": "unset"
+                  },
+                  "path": {
+                    "state": "unset"
+                  },
+                  "attention": {
+                    "state": "unset"
+                  },
+                  "reaction_delay": {
+                    "state": "unset"
+                  },
+                  "intensity": {
+                    "state": "unset"
+                  },
+                  "entrances_exits": {
+                    "state": "unset"
+                  },
+                  "narrative_support": {
+                    "state": "unset"
+                  },
+                  "end_state": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "environment": {
+                "state": "unset"
+              },
+              "intentional_absence": {
+                "state": "unset"
+              }
+            },
+            "cinematography": [
+              {
+                "shot_id": "shot1",
+                "criterion_ids": [
+                  "criterion1"
+                ],
+                "composition": {
+                  "state": "unset"
+                },
+                "depth_layers": {
+                  "state": "unset"
+                },
+                "viewpoint": {
+                  "state": "unset"
+                },
+                "position": {
+                  "state": "unset"
+                },
+                "height_angle": {
+                  "state": "unset"
+                },
+                "lens_effect": {
+                  "state": "unset"
+                },
+                "depth_focus": {
+                  "state": "unset"
+                },
+                "support": {
+                  "state": "unset"
+                },
+                "movement_start": {
+                  "state": "unset"
+                },
+                "movement_trigger": {
+                  "state": "unset"
+                },
+                "movement_path": {
+                  "state": "unset"
+                },
+                "movement_speed": {
+                  "state": "unset"
+                },
+                "end_frame": {
+                  "state": "unset"
+                },
+                "light_sources": {
+                  "state": "unset"
+                },
+                "light_regions": {
+                  "state": "unset"
+                },
+                "exposure_color": {
+                  "state": "unset"
+                },
+                "optical_effects": {
+                  "state": "unset"
+                },
+                "motion_texture": {
+                  "state": "unset"
+                },
+                "technical_parameters": {
+                  "state": "unset"
+                },
+                "adjacent_requirements": {
+                  "state": "unset"
+                },
+                "prohibitions": {
+                  "state": "unset"
+                }
+              }
+            ],
+            "continuity": [
+              {
+                "id": "continuity1",
+                "domain": "hands_props",
+                "participant_id": "person1",
+                "event_id": "event1",
+                "before": {
+                  "state": "unset"
+                },
+                "change": {
+                  "state": "unset"
+                },
+                "after": {
+                  "state": "unset"
+                },
+                "following_constraint": {
+                  "state": "unset"
+                }
+              }
+            ],
+            "sound": {
+              "dialogues": [
+                {
+                  "id": "dialogue1",
+                  "participant_id": "person1",
+                  "version": "1",
+                  "content": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "sources": {
+                "state": "unset"
+              },
+              "ambience_actions": {
+                "state": "unset"
+              },
+              "music_constraints": {
+                "state": "unset"
+              },
+              "execution": "postproduction"
+            },
+            "prompt": {
+              "priorities": {
+                "state": "unset"
+              },
+              "binding_requirements": {
+                "state": "unset"
+              },
+              "sound_strategy": {
+                "state": "unset"
+              },
+              "prohibitions": {
+                "state": "unset"
+              }
+            }
+          }
+        },
+        "sequence_version": 1,
+        "parent_id": "d1"
+      }
+    }
+  ],
+  "errors": []
+}
