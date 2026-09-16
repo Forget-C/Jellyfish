@@ -35,9 +35,14 @@ export function reviewCanExecute(review: WorkspaceRead['reviews'][number] | unde
 
 /** 未保存报告也用完整六岗矩阵判断按钮文案；通过仍不代表已经确认或提交。 */
 export function reviewPacketPassed(packet: ReviewPacket | null | undefined, promptId: string | undefined): boolean {
-  if (!packet || packet.mode !== 'formal' || !packet.occurrences.length || packet.occurrences.some(row => row.prompt_revision_id !== promptId)) return false
+  return !!packet && reviewPacketComplete(packet) && packet.occurrences.every(row => row.prompt_revision_id === promptId) && packet.rows.every(row => row.verdict === 'pass')
+}
+
+/** 展示汇总与执行判断共用矩阵完整性；待检查和缺失行均不冒充通过。 */
+export function reviewPacketComplete(packet: ReviewPacket): boolean {
+  if (packet.mode !== 'formal' || !packet.occurrences.length || new Set(packet.occurrences.map(row => row.id)).size !== packet.occurrences.length) return false
   const roles = ['direction', 'performance', 'staging', 'cinematography', 'continuity', 'prompt']
-  return packet.rows.length === packet.occurrences.length * roles.length && packet.occurrences.every(occurrence => roles.every(role => packet.rows.some(row => row.occurrence_id === occurrence.id && row.role === role && row.verdict === 'pass')))
+  return packet.rows.length === packet.occurrences.length * roles.length && packet.occurrences.every(occurrence => roles.every(role => packet.rows.some(row => row.occurrence_id === occurrence.id && row.role === role)))
 }
 
 /** 导航摘要复用主操作判断，不能把“有指令”当作当前进度。 */
@@ -47,6 +52,11 @@ export function shootProgressLabel(guidance: WorkspaceGuidance, input: Pick<Guid
     const task = input.tasks.find(row => row.task_id === guidance.taskId)
     if (!task || !['queued', 'running'].includes(task.status)) return '状态待核实'
     return `${task.kind === 'directing_review' ? '检查' : '视频生成'}${task.status === 'queued' ? '排队中' : '中'}`
+  }
+  if (guidance.target === 'result') {
+    const packet = input.tasks.find(row => row.task_id === guidance.taskId)?.review
+    if (packet?.rows.some(row => row.verdict !== 'pass')) return '检查需处理'
+    if (packet && !reviewPacketComplete(packet)) return '检查待核对'
   }
   if (guidance.target === 'prompt-review') return input.promptId ? '待检查或选择结论' : '待选择指令'
   if (guidance.target === 'review') return input.reviewId ? '检查需处理' : '待选择检查'

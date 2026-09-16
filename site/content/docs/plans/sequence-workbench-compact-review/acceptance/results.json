@@ -1,0 +1,90 @@
+{
+  "sizes": [
+    {
+      "width": 1440,
+      "header": {
+        "x": 272,
+        "y": 140,
+        "width": 1168,
+        "height": 64
+      },
+      "bars": [
+        {
+          "className": "sequence-version-bar workbench-toolbar production-version-bar",
+          "height": 44
+        },
+        {
+          "className": "production-local-tabs",
+          "height": 40
+        }
+      ]
+    },
+    {
+      "width": 1024,
+      "header": {
+        "x": 64,
+        "y": 140,
+        "width": 960,
+        "height": 64
+      },
+      "bars": [
+        {
+          "className": "sequence-version-bar workbench-toolbar production-version-bar",
+          "height": 44
+        },
+        {
+          "className": "production-local-tabs",
+          "height": 40
+        }
+      ]
+    },
+    {
+      "width": 768,
+      "header": {
+        "x": 64,
+        "y": 185,
+        "width": 704,
+        "height": 64
+      },
+      "bars": [
+        {
+          "className": "sequence-version-bar workbench-toolbar production-version-bar",
+          "height": 89
+        },
+        {
+          "className": "production-local-tabs",
+          "height": 40
+        }
+      ]
+    },
+    {
+      "width": 375,
+      "header": {
+        "x": 0,
+        "y": 185,
+        "width": 375,
+        "height": 105.84375
+      },
+      "bars": [
+        {
+          "className": "sequence-version-bar workbench-toolbar production-version-bar",
+          "height": 89
+        },
+        {
+          "className": "production-local-tabs",
+          "height": 40
+        }
+      ]
+    }
+  ],
+  "writes": [
+    "/api/v1/studio/projects/p1/directing/sequences/s1/sources/resolve",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/sources/resolve",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/sources/resolve",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/sources/resolve",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/sources/resolve",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/sources/resolve",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/sources/resolve"
+  ],
+  "errors": []
+}

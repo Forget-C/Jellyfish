@@ -78,7 +78,7 @@ try {
     await page.setViewportSize({ width, height: 1000 })
     await page.reload()
     await page.getByRole('tab', { name: '拍摄准备', exact: true }).waitFor()
-    for (const name of ['拍摄准备', '指令与检查', '执行试拍', '候选素材']) {
+    for (const name of ['拍摄准备', '指令检查', '执行试拍', '候选素材']) {
       await page.getByRole('tab', { name, exact: true }).click()
       await page.waitForFunction(label => [...document.querySelectorAll('[role=tab]')].some(tab => tab.textContent.startsWith(label) && tab.getAttribute('aria-selected') === 'true'), name)
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1))

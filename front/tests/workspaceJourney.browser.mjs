@@ -137,8 +137,10 @@ try {
     assert.equal(compileRequests[0], compileRequests[1])
     assert.equal(workspace.prompts.length, 2, '恢复原结果，不重复编译，也不选择并发生成的其他版本')
   }
-  await page.locator('.shoot-prompt-excerpt').waitFor()
-  assert.equal(await page.getByRole('tab', { name: '指令与检查', exact: true }).getAttribute('aria-selected'), 'true')
+  await page.getByRole('button', { name: '查看指令', exact: true }).click()
+  await page.locator('.production-inspector .prompt-reader').waitFor()
+  await page.getByRole('button', { name: '关闭指令详情' }).click()
+  assert.equal(await page.getByRole('tab', { name: '指令检查', exact: true }).getAttribute('aria-selected'), 'true')
   const compiledPrompt = new URL(page.url()).searchParams.get('prompt')
   assert.ok(compiledPrompt)
   await page.locator('.production-unit-list button[aria-pressed="true"]').click()

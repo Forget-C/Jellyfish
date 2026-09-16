@@ -1,21 +1,23 @@
 import { useWorkbenchDesktop } from './useWorkbenchDesktop'
-import { createContext, useContext, useState } from 'react'
+import { createContext, useCallback, useContext, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Button, Drawer } from 'antd'
 import { MenuOutlined } from '@ant-design/icons'
+import { nameWorkbenchDialog } from './WorkbenchChrome'
 
 const NavigationContext = createContext<HTMLElement | null>(null)
 
 /** 业务导航与阶段栏各占一列；门户只移动展示位置，不重挂载业务编辑状态。 */
 export function SequenceLayout({ children, footer }: { children: ReactNode; footer: ReactNode }) {
   const [target, setTarget] = useState<HTMLDivElement | null>(null)
+  const mountNavigation = useCallback((node: HTMLDivElement | null) => { setTarget(node); nameWorkbenchDialog(node, '场次导航') }, [])
   const [open, setOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   const [width, setWidth] = useState(208)
   const desktop = useWorkbenchDesktop()
   const compact = !desktop
-  const navigation = <div className="sequence-navigation-content" ref={setTarget} onClick={event => { if (compact && (event.target as Element).closest('button')) setOpen(false) }} />
+  const navigation = <div className="sequence-navigation-content" ref={mountNavigation} onClick={event => { if (compact && (event.target as Element).closest('button') && !(event.target as Element).closest('[data-navigation-tool]')) setOpen(false) }} />
   return <NavigationContext.Provider value={target}>
     <div className="sequence-layout" style={{ '--sequence-nav-width': `${collapsed ? 48 : width}px` } as React.CSSProperties}>
       {!compact && <aside className={`sequence-navigation${collapsed ? ' is-collapsed' : ''}`}>

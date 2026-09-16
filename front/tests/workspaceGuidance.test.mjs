@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { loadSource, makeWorkspace, revision } from './directing-fixtures.mjs'
 
-const { workspaceGuidance, reviewPacketPassed, pendingReviewResults } = await loadSource('workspaceGuidance')
+const { workspaceGuidance, reviewPacketPassed, reviewPacketComplete, pendingReviewResults } = await loadSource('workspaceGuidance')
 
 test('saved checks match their task identity even when another task produced identical text', () => {
   const workspace = makeWorkspace()
@@ -165,4 +165,22 @@ test('shoot preparation directs missing models and edited confirmed plans to the
   data.editingPlan.units[0].model_id = 'another-model'
   assert.equal(workspaceGuidance(data).target, 'plan-confirm')
   assert.equal(data.plan.content.units[0].model_id === 'another-model', false)
+})
+
+
+test('multi-occurrence completeness distinguishes pending, missing rows and duplicate identities', () => {
+  const roles = ['direction', 'performance', 'staging', 'cinematography', 'continuity', 'prompt']
+  const packet = { mode: 'formal', occurrences: ['o1', 'o2'].map(id => ({ id, prompt_revision_id: 'p1' })), rows: ['o1', 'o2'].flatMap(id => roles.map(role => ({ role, occurrence_id: id, verdict: 'pass' }))) }
+  assert.equal(reviewPacketComplete(packet), true)
+  packet.rows[7].verdict = 'pending'
+  assert.equal(reviewPacketComplete(packet), true)
+  assert.equal(reviewPacketPassed(packet, 'p1'), false)
+  packet.rows[7].verdict = 'pass'
+  assert.equal(reviewPacketPassed(packet, 'p1'), true)
+  packet.rows.pop()
+  assert.equal(reviewPacketComplete(packet), false)
+  packet.rows.push({ ...packet.rows[0] })
+  assert.equal(reviewPacketComplete(packet), false)
+  packet.occurrences[1].id = 'o1'
+  assert.equal(reviewPacketComplete(packet), false)
 })

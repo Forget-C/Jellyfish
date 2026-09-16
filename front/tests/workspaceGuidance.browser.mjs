@@ -83,8 +83,15 @@ try {
   const text = value => page.getByText(value, { exact: true }).first().waitFor()
   async function choose(label, value) {
     await closeGuide()
-    if (['选择编译单元', '选择生成指令版本'].includes(label)) await page.getByRole('tab', { name: '指令与检查', exact: true }).click()
+    if (['选择编译单元', '选择生成指令版本'].includes(label)) await page.getByRole('tab', { name: '指令检查', exact: true }).click()
     if (label === '选择编译单元') { await page.locator('.production-unit-list button').filter({ hasText: `单元 ${value.match(/单元 (\d+)/)[1].padStart(2, '0')}` }).click(); return }
+    if (label === '选择生成指令版本') {
+      if (await page.getByText(`检查对象：试拍${value}`, { exact: true }).isVisible()) return
+      await page.getByRole('button', { name: /^(切换版本|选择指令版本)$/ }).click()
+      const row = page.locator('.shoot-record-list > div').filter({ has: page.getByText(`试拍${value}`, { exact: true }) })
+      await row.getByRole('button', { name: '切换到此版本' }).click()
+      await page.getByRole('button', { name: '关闭指令详情' }).click(); return
+    }
     await page.getByRole('combobox', { name: label, exact: true }).locator('../..').click()
     await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: value }).first().click()
   }
@@ -141,7 +148,7 @@ try {
   await guide().getByRole('button', { name: '去准备生成指令' }).click()
   await focused('compile')
   await closeGuide()
-  await page.getByRole('tab', { name: '指令与检查', exact: true }).click()
+  await page.getByRole('tab', { name: '指令检查', exact: true }).click()
   await page.getByRole('button', { name: /^(生成试拍指令|重试生成指令)$/, exact: true }).click()
   await openGuide()
   await guide().getByText('当前模型要求首帧参考', { exact: true }).waitFor()
@@ -155,7 +162,7 @@ try {
   await choose('选择编译单元', '单元 1')
   compileError = '当前执行器不支持声音参考，请保留声音设计并安排后期'
   await closeGuide()
-  await page.getByRole('tab', { name: '指令与检查', exact: true }).click()
+  await page.getByRole('tab', { name: '指令检查', exact: true }).click()
   await page.getByRole('button', { name: /^(生成试拍指令|重试生成指令)$/, exact: true }).click()
   await openGuide()
   await guide().getByText(compileError, { exact: true }).waitFor()
@@ -166,7 +173,7 @@ try {
   // A06/A08: a submitted review belongs to one unit and survives refresh.
   compileError = ''
   await closeGuide()
-  await page.getByRole('tab', { name: '指令与检查', exact: true }).click()
+  await page.getByRole('tab', { name: '指令检查', exact: true }).click()
   await page.getByRole('button', { name: /^(生成试拍指令|重试生成指令)$/, exact: true }).click()
   await openGuide()
   await guide().getByRole('button', { name: '去检查生成指令' }).click()
@@ -213,14 +220,14 @@ try {
   await page.waitForURL(url => url.pathname === '/assets')
   await page.goBack()
   await closeGuide()
-  await page.getByRole('tab', { name: '指令与检查', exact: true }).click()
+  await page.getByRole('tab', { name: '指令检查', exact: true }).click()
   await page.locator('.production-next-step h2').waitFor()
   assert.ok((await page.locator('.production-next-step h2').innerText()).includes('单元 02'))
   await contextAction('本场原文')
   await page.getByRole('button', { name: '返回场次列表核对原文', exact: true }).click()
   await page.getByRole('button', { name: '进入场次', exact: true }).click()
   await closeGuide()
-  await page.getByRole('tab', { name: '指令与检查', exact: true }).click()
+  await page.getByRole('tab', { name: '指令检查', exact: true }).click()
   await page.locator('.production-next-step h2').waitFor()
   assert.ok((await page.locator('.production-next-step h2').innerText()).includes('单元 02'))
   await page.getByRole('button', { name: /任务中心/ }).click()
@@ -229,9 +236,11 @@ try {
   await page.waitForURL(url => url.searchParams.get('task') === 'review-task')
   assert.equal(new URL(page.url()).searchParams.get('task'), 'review-task')
   assert.equal(new URL(page.url()).searchParams.get('view'), 'shoot')
-  await page.getByRole('tab', { name: '指令与检查', exact: true }).click()
+  await page.getByRole('tab', { name: '指令检查', exact: true }).click()
   assert.ok((await page.locator('.production-next-step h2').innerText()).includes('单元 01'))
-  assert.equal(await page.locator('.shoot-prompt-excerpt').innerText(), '固定动作与参考')
+  await page.getByRole('button', { name: '查看指令', exact: true }).click()
+  assert.equal(await page.locator('.production-inspector .prompt-reader').innerText(), '固定动作与参考')
+  await page.getByRole('button', { name: '关闭指令详情' }).click()
   // Preparation inputs survive leaving; storage denial falls back to the same explicit guard.
   const beforePreparation = writes.length
   await closeGuide()
@@ -281,12 +290,14 @@ try {
   await page.waitForURL(url => url.searchParams.get('plan') === 'p-old')
   await focused('plan-version')
   await text('当前查看： · 计划 1 · 基线已确认，修改将派生新版本 · 固定设计依据：设计 1')
-  await page.getByRole('tab', { name: '指令与检查', exact: true }).click()
-  assert.equal(await page.locator('.shoot-prompt-excerpt').innerText(), '固定动作与参考')
+  await page.getByRole('tab', { name: '指令检查', exact: true }).click()
+  await page.getByRole('button', { name: '查看指令', exact: true }).click()
+  assert.equal(await page.locator('.production-inspector .prompt-reader').innerText(), '固定动作与参考')
+  await page.getByRole('button', { name: '关闭指令详情' }).click()
   await choose('选择编译单元', '单元 2')
   await page.waitForURL(url => url.searchParams.get('unit') === 'u2')
   await page.reload()
-  await page.getByRole('tab', { name: '指令与检查', exact: true }).click()
+  await page.getByRole('tab', { name: '指令检查', exact: true }).click()
   assert.ok((await page.locator('.production-next-step h2').innerText()).includes('单元 02'))
   // A remote running task with no recoverable snapshot must never select a newer plan.
   tasks.set('remote-running', { task_id: 'remote-running', kind: 'video_generation', status: 'running', error: null, source_version: null })

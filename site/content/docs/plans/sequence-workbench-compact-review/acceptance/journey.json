@@ -1,0 +1,644 @@
+{
+  "steps": [
+    "新建项目",
+    "章节原文、场次与设计确认",
+    "单元确认、编译审稿与生成候选",
+    "审片、精确区间与确认粗剪",
+    "局部返工保留片段与采用身份"
+  ],
+  "writes": [
+    {
+      "path": "/api/v1/studio/projects",
+      "body": {
+        "id": "172ca90d-b350-4d08-ae01-f119114954df",
+        "name": "主流程验收项目",
+        "description": "",
+        "style": "真人都市",
+        "visual_style": "现实",
+        "seed": 46563,
+        "unify_style": true,
+        "default_video_ratio": "16:9",
+        "progress": 0
+      }
+    },
+    {
+      "path": "/api/v1/studio/chapters",
+      "body": {
+        "id": "49a87f2b-4af0-4e65-be26-2424f028197d",
+        "project_id": "172ca90d-b350-4d08-ae01-f119114954df",
+        "index": 1,
+        "title": "旧信重逢",
+        "summary": "",
+        "raw_text": "他递出旧信，她认出了他。",
+        "status": "draft"
+      }
+    },
+    {
+      "path": "/api/v1/studio/projects/172ca90d-b350-4d08-ae01-f119114954df/directing/chapters/49a87f2b-4af0-4e65-be26-2424f028197d/sequences",
+      "body": {
+        "title": "旧信重逢",
+        "position": 0,
+        "source_version": 1,
+        "span": {
+          "start": 0,
+          "end": 12
+        }
+      }
+    },
+    {
+      "path": "/api/v1/studio/projects/172ca90d-b350-4d08-ae01-f119114954df/directing/sequences/s1/revisions",
+      "body": {
+        "document": {
+          "kind": "design",
+          "content": {
+            "style_revision_id": null,
+            "sources": [
+              {
+                "kind": "human",
+                "reference": "local-user",
+                "version": "manual-1"
+              }
+            ],
+            "participants": [
+              {
+                "id": "person1",
+                "name": "待命名人物",
+                "character_id": null,
+                "prop_id": null
+              }
+            ],
+            "events": [
+              {
+                "id": "event1",
+                "description": {
+                  "state": "unset"
+                }
+              }
+            ],
+            "criteria": [
+              {
+                "id": "criterion1",
+                "requirement": {
+                  "state": "unset"
+                }
+              }
+            ],
+            "direction": {
+              "viewpoint": {
+                "state": "unset"
+              },
+              "information_change": {
+                "state": "unset"
+              },
+              "relationship_change": {
+                "state": "unset"
+              },
+              "turning_point": {
+                "state": "unset"
+              },
+              "spatial_basis": {
+                "state": "unset"
+              },
+              "shootable_area": {
+                "state": "unset"
+              },
+              "axis": {
+                "state": "unset"
+              },
+              "scale": {
+                "state": "unset"
+              },
+              "control_level": {
+                "state": "unset"
+              },
+              "location_asset_id": null,
+              "immutable_facts": [],
+              "open_questions": [],
+              "anchors": [
+                {
+                  "id": "anchor1",
+                  "description": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "blocking_states": [
+                {
+                  "id": "state1",
+                  "participant_id": "person1",
+                  "anchor_ids": [
+                    "anchor1"
+                  ],
+                  "event_id": "event1",
+                  "position": {
+                    "state": "unset"
+                  },
+                  "orientation": {
+                    "state": "unset"
+                  },
+                  "initiative": {
+                    "state": "unset"
+                  },
+                  "path": {
+                    "state": "unset"
+                  },
+                  "transition_reason": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "beats": [
+                {
+                  "id": "beat1",
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "objective": {
+                    "state": "unset"
+                  },
+                  "obstacle": {
+                    "state": "unset"
+                  },
+                  "expected_change": {
+                    "state": "unset"
+                  },
+                  "must_show": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "shots": [
+                {
+                  "id": "shot1",
+                  "beat_ids": [
+                    "beat1"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "proposal",
+                    "text": "让她认出笔迹",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "local-user",
+                        "version": "manual-1"
+                      }
+                    ]
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "他把旧信递到她手边",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "local-user",
+                        "version": "manual-1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                }
+              ]
+            },
+            "performance": {
+              "applicability": {
+                "state": "unset"
+              },
+              "situations": [
+                {
+                  "participant_id": "person1",
+                  "situation": {
+                    "state": "unset"
+                  },
+                  "relationship": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "beats": [
+                {
+                  "beat_id": "beat1",
+                  "participant_id": "person1",
+                  "received_event_ids": [
+                    "event1"
+                  ],
+                  "dialogue_ids": [],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "objective": {
+                    "state": "unset"
+                  },
+                  "obstacle": {
+                    "state": "unset"
+                  },
+                  "subtext": {
+                    "state": "unset"
+                  },
+                  "attention": {
+                    "state": "unset"
+                  },
+                  "internal_adjustment": {
+                    "state": "unset"
+                  },
+                  "physical_action": {
+                    "state": "unset"
+                  },
+                  "delivery": {
+                    "state": "unset"
+                  },
+                  "reaction_order": {
+                    "state": "unset"
+                  },
+                  "exit_state": {
+                    "state": "unset"
+                  },
+                  "avoid": {
+                    "state": "unset"
+                  },
+                  "gaze": {
+                    "state": "unset"
+                  },
+                  "breath": {
+                    "state": "unset"
+                  },
+                  "weight": {
+                    "state": "unset"
+                  },
+                  "hands": {
+                    "state": "unset"
+                  },
+                  "voice": {
+                    "state": "unset"
+                  }
+                }
+              ]
+            },
+            "staging": {
+              "activities": [
+                {
+                  "participant_id": "person1",
+                  "anchor_id": "anchor1",
+                  "trigger_event_id": "event1",
+                  "delay_ms": null,
+                  "depth": {
+                    "state": "unset"
+                  },
+                  "ongoing_task": {
+                    "state": "unset"
+                  },
+                  "path": {
+                    "state": "unset"
+                  },
+                  "attention": {
+                    "state": "unset"
+                  },
+                  "reaction_delay": {
+                    "state": "unset"
+                  },
+                  "intensity": {
+                    "state": "unset"
+                  },
+                  "entrances_exits": {
+                    "state": "unset"
+                  },
+                  "narrative_support": {
+                    "state": "unset"
+                  },
+                  "end_state": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "environment": {
+                "state": "unset"
+              },
+              "intentional_absence": {
+                "state": "unset"
+              }
+            },
+            "cinematography": [
+              {
+                "shot_id": "shot1",
+                "criterion_ids": [
+                  "criterion1"
+                ],
+                "composition": {
+                  "state": "unset"
+                },
+                "depth_layers": {
+                  "state": "unset"
+                },
+                "viewpoint": {
+                  "state": "unset"
+                },
+                "position": {
+                  "state": "unset"
+                },
+                "height_angle": {
+                  "state": "unset"
+                },
+                "lens_effect": {
+                  "state": "unset"
+                },
+                "depth_focus": {
+                  "state": "unset"
+                },
+                "support": {
+                  "state": "unset"
+                },
+                "movement_start": {
+                  "state": "unset"
+                },
+                "movement_trigger": {
+                  "state": "unset"
+                },
+                "movement_path": {
+                  "state": "unset"
+                },
+                "movement_speed": {
+                  "state": "unset"
+                },
+                "end_frame": {
+                  "state": "unset"
+                },
+                "light_sources": {
+                  "state": "unset"
+                },
+                "light_regions": {
+                  "state": "unset"
+                },
+                "exposure_color": {
+                  "state": "unset"
+                },
+                "optical_effects": {
+                  "state": "unset"
+                },
+                "motion_texture": {
+                  "state": "unset"
+                },
+                "technical_parameters": {
+                  "state": "unset"
+                },
+                "adjacent_requirements": {
+                  "state": "unset"
+                },
+                "prohibitions": {
+                  "state": "unset"
+                }
+              }
+            ],
+            "continuity": [
+              {
+                "id": "continuity1",
+                "domain": "hands_props",
+                "participant_id": "person1",
+                "event_id": "event1",
+                "before": {
+                  "state": "unset"
+                },
+                "change": {
+                  "state": "unset"
+                },
+                "after": {
+                  "state": "unset"
+                },
+                "following_constraint": {
+                  "state": "unset"
+                }
+              }
+            ],
+            "sound": {
+              "dialogues": [
+                {
+                  "id": "dialogue1",
+                  "participant_id": "person1",
+                  "version": "1",
+                  "content": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "sources": {
+                "state": "unset"
+              },
+              "ambience_actions": {
+                "state": "unset"
+              },
+              "music_constraints": {
+                "state": "unset"
+              },
+              "execution": "postproduction"
+            },
+            "prompt": {
+              "priorities": {
+                "state": "unset"
+              },
+              "binding_requirements": {
+                "state": "unset"
+              },
+              "sound_strategy": {
+                "state": "unset"
+              },
+              "prohibitions": {
+                "state": "unset"
+              }
+            }
+          }
+        },
+        "sequence_version": 1
+      }
+    },
+    {
+      "path": "/api/v1/studio/projects/172ca90d-b350-4d08-ae01-f119114954df/directing/sequences/s1/revisions/design-1/confirm",
+      "body": {
+        "expected_version": 1
+      }
+    },
+    {
+      "path": "/api/v1/studio/projects/172ca90d-b350-4d08-ae01-f119114954df/directing/sequences/s1/revisions",
+      "body": {
+        "document": {
+          "kind": "plan",
+          "content": {
+            "design_revision_id": "design-1",
+            "units": [
+              {
+                "id": "unit-c3bcb5e7-5f07-44ec-8892-fbbd7b878b47",
+                "coverage": [
+                  {
+                    "id": "coverage-3bee911d-2732-4752-8511-d71ec1063585",
+                    "shot_id": "shot1",
+                    "beat_ids": [
+                      "beat1"
+                    ],
+                    "event_ids": [
+                      "event1"
+                    ],
+                    "action_scope": "他把旧信递到她手边"
+                  }
+                ],
+                "model_id": "model1",
+                "duration_ms": 5000,
+                "ratio": "16:9",
+                "references": [],
+                "capability": {
+                  "multi_shot": "unknown"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "path": "/api/v1/studio/projects/172ca90d-b350-4d08-ae01-f119114954df/directing/sequences/s1/revisions/plan-1/confirm",
+      "body": {
+        "expected_version": 1
+      }
+    },
+    {
+      "path": "/api/v1/studio/projects/172ca90d-b350-4d08-ae01-f119114954df/directing/sequences/s1/compile",
+      "body": {
+        "plan_revision_id": "plan-1",
+        "unit_id": "unit-c3bcb5e7-5f07-44ec-8892-fbbd7b878b47",
+        "request_id": "30a193ee-85d4-43d3-b805-2547b98ec7e5"
+      }
+    },
+    {
+      "path": "/api/v1/studio/projects/172ca90d-b350-4d08-ae01-f119114954df/directing/sequences/s1/compile",
+      "body": {
+        "plan_revision_id": "plan-1",
+        "unit_id": "unit-c3bcb5e7-5f07-44ec-8892-fbbd7b878b47",
+        "request_id": "30a193ee-85d4-43d3-b805-2547b98ec7e5"
+      }
+    },
+    {
+      "path": "/api/v1/studio/projects/172ca90d-b350-4d08-ae01-f119114954df/directing/sequences/s1/prompts/prompt1/review",
+      "body": {
+        "request_id": "cbb46cf7-34fa-4607-bb22-c7e0e751bfd3"
+      }
+    },
+    {
+      "path": "/api/v1/studio/projects/172ca90d-b350-4d08-ae01-f119114954df/directing/sequences/s1/prompts/prompt1/review",
+      "body": {
+        "request_id": "cbb46cf7-34fa-4607-bb22-c7e0e751bfd3"
+      }
+    },
+    {
+      "path": "/api/v1/studio/projects/172ca90d-b350-4d08-ae01-f119114954df/directing/sequences/s1/review/apply",
+      "body": {
+        "task_id": "review-task"
+      }
+    },
+    {
+      "path": "/api/v1/studio/projects/172ca90d-b350-4d08-ae01-f119114954df/directing/sequences/s1/shoot",
+      "body": {
+        "prompt_revision_id": "prompt1",
+        "review_revision_id": "review1",
+        "request_id": "4105d501-a85b-4d7a-abb5-f7d7c29dc602"
+      }
+    },
+    {
+      "path": "/api/v1/studio/projects/172ca90d-b350-4d08-ae01-f119114954df/directing/sequences/s1/takes/take1",
+      "body": {
+        "expected_version": 1,
+        "annotation": {
+          "review_status": "reviewed",
+          "verdict": "retain",
+          "rationale": {
+            "state": "proposal",
+            "text": "递信动作清楚，保留中间区间",
+            "sources": [
+              {
+                "kind": "human",
+                "reference": "local-user",
+                "version": "manual-1"
+              }
+            ]
+          },
+          "retained_ranges": [
+            {
+              "source_in_ms": 0,
+              "source_out_ms": 6000
+            }
+          ],
+          "coverage": []
+        }
+      }
+    },
+    {
+      "path": "/api/v1/studio/projects/172ca90d-b350-4d08-ae01-f119114954df/directing/sequences/s1/revisions",
+      "body": {
+        "document": {
+          "kind": "cut",
+          "content": {
+            "items": [
+              {
+                "kind": "media",
+                "id": "clip-622c2637",
+                "take_id": "take1",
+                "media_range": {
+                  "source_in_ms": 1000,
+                  "source_out_ms": 4000
+                },
+                "timeline_start_ms": 0
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "path": "/api/v1/studio/projects/172ca90d-b350-4d08-ae01-f119114954df/directing/sequences/s1/revisions/cut-1/confirm",
+      "body": {
+        "expected_version": 1
+      }
+    },
+    {
+      "path": "/api/v1/studio/projects/172ca90d-b350-4d08-ae01-f119114954df/directing/sequences/s1/feedback",
+      "body": {
+        "document": {
+          "kind": "repair",
+          "content": {
+            "cut_revision_id": "cut-1",
+            "item_id": "clip-622c2637",
+            "problem_range": {
+              "source_in_ms": 1000,
+              "source_out_ms": 4000
+            },
+            "symptom": {
+              "state": "proposal",
+              "text": "入点稍早，只调整此片段",
+              "sources": [
+                {
+                  "kind": "human",
+                  "reference": "local-user",
+                  "version": "manual-1"
+                }
+              ]
+            },
+            "root_cause_hypothesis": {},
+            "retained_ranges": [],
+            "preferred_fix": "trim",
+            "alternative_fix": {},
+            "needs_new_media": false,
+            "primary_change": {},
+            "acceptance": {},
+            "comparison": {},
+            "attribution": "unproven"
+          }
+        }
+      }
+    }
+  ],
+  "errors": []
+}
