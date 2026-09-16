@@ -80,7 +80,7 @@ class DirectingAIService(WorkspaceService):
     """提交真实文本任务；任务成功只保留建议，人工采用走已有版本保护。"""
 
     async def submit_ai(self, *, kind: str, body: AIRequest, chapter_id: str | None = None,
-                        sequence_id: str | None = None, extra: dict | None = None) -> Task:
+                        sequence_id: str | None = None, extra: dict | None = None, request_context: dict | None = None) -> Task:
         """冻结原文、人工意见和起始版本，避免 AI 在后台读取变化中的工作区。"""
         if kind not in RESULT_CONTRACTS:
             raise ValueError("未知导演操作")
@@ -120,7 +120,7 @@ class DirectingAIService(WorkspaceService):
             args.update(extra)
         return await TaskService(self.db).submit(
             kind=kind, title={"directing_divide": "分析章节场次", "directing_design": "生成导演方案", "directing_review": "六部门审稿"}[kind],
-            snapshot={"model_id": model.id, "model_name": model.name, "provider_key": config.provider_key, "run_args": args},
+            snapshot={**(request_context or {}), "model_id": model.id, "model_name": model.name, "provider_key": config.provider_key, "run_args": args},
             provider_id=provider.id, project_id=self.project_id,
             target_type="directing_sequence" if sequence_id else "directing_chapter", target_id=sequence_id or chapter_id,
         )

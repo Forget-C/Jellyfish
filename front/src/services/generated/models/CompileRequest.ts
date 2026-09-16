@@ -8,5 +8,6 @@
 export type CompileRequest = {
     plan_revision_id: string;
     unit_id: string;
+    request_id?: (string | null);
 };
 

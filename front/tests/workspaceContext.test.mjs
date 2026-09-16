@@ -2,7 +2,24 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { loadSource } from './directing-fixtures.mjs'
 
-const { restoreSelection, readWorkspaceContext, saveWorkspaceContext, readDesignPosition } = await loadSource('workspaceContext')
+const { restoreSelection, readWorkspaceContext, saveWorkspaceContext, readDesignPosition, readUnitSelection, saveUnitSelection } = await loadSource('workspaceContext')
+
+test('each unit remembers explicit versions independently across plans and handles broken storage', () => {
+  const data = new Map()
+  globalThis.sessionStorage = { getItem: key => data.get(key), setItem: (key, value) => data.set(key, value) }
+  saveUnitSelection('p1', 's1', 'plan1', 'u1', { prompt: 'prompt1', review: 'review1' })
+  saveUnitSelection('p1', 's1', 'plan1', 'u2', { prompt: 'prompt2' })
+  assert.deepEqual(readUnitSelection('p1', 's1', 'plan1', 'u1'), { prompt: 'prompt1', review: 'review1' })
+  assert.deepEqual(readUnitSelection('p1', 's1', 'plan1', 'u2'), { prompt: 'prompt2' })
+  assert.deepEqual(readUnitSelection('p1', 's1', 'plan2', 'u1'), {})
+  assert.deepEqual(readUnitSelection('p2', 's1', 'plan1', 'u1'), {})
+  assert.deepEqual(readUnitSelection('p1', 's2', 'plan1', 'u1'), {})
+  for (const value of ['null', '["x"]', 'invalid', '{"prompt":12}']) {
+    globalThis.sessionStorage = { getItem: () => value }
+    assert.deepEqual(readUnitSelection('p1', 's1', 'plan1', 'u1'), {})
+  }
+  delete globalThis.sessionStorage
+})
 
 test('explicit business context wins; stale or deliberately empty selection never becomes latest', () => {
   const rows = [{ id: 'old' }, { id: 'new' }]

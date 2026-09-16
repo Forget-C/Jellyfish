@@ -3,6 +3,22 @@ type StoredContext = Partial<Record<WorkspaceSelection, string | null>>
 
 const storageKey = (projectId: string, sequenceId: string) => `directing-context:${projectId}:${sequenceId}`
 
+type UnitSelection = { prompt?: string; review?: string; reviewTask?: string }
+const unitKey = (projectId: string, sequenceId: string, planId: string, unitId: string) => `${storageKey(projectId, sequenceId)}:unit:${JSON.stringify([planId, unitId])}`
+
+/** 按计划与单元记住明确选择；调用方仍须用当前工作区校验引用归属。 */
+export function readUnitSelection(projectId: string, sequenceId: string, planId: string, unitId: string): UnitSelection {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(unitKey(projectId, sequenceId, planId, unitId)) || '{}')
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+    return Object.fromEntries(['prompt', 'review', 'reviewTask'].flatMap(key => typeof value[key] === 'string' ? [[key, value[key]]] : []))
+  } catch { return {} }
+}
+
+export function saveUnitSelection(projectId: string, sequenceId: string, planId: string, unitId: string, selection: UnitSelection) {
+  try { sessionStorage.setItem(unitKey(projectId, sequenceId, planId, unitId), JSON.stringify(selection)) } catch { /* 受限环境不阻止显式选择。 */ }
+}
+
 /** 只保存浏览位置，不保存业务数据、未保存正文或执行授权。禁用存储时仍可操作。 */
 export function readWorkspaceContext(projectId: string, sequenceId: string): StoredContext {
   try {

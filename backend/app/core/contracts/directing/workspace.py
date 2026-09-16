@@ -98,6 +98,12 @@ class ApplyDesignRequest(Contract):
     task_id: Identity
 
 
+class ReviewRequest(AIRequest):
+    """检查请求身份在当前场次内固定；重试不创建第二次模型检查。"""
+
+    request_id: Identity | None = None
+
+
 class DesignWrite(Contract):
     """六岗设计写入格式，前端通过 generated client 使用同一类型。"""
 
@@ -143,6 +149,7 @@ class CompileRequest(Contract):
 
     plan_revision_id: Identity
     unit_id: Identity
+    request_id: Identity | None = None
 
 
 class ShootRequest(Contract):
@@ -170,6 +177,12 @@ class WorkspaceRead(Contract):
     cuts: list[SequenceCutRevision]
     takes: list[TakeSnapshot]
     task_ids: list[Identity]
+
+
+class CompileResult(WorkspaceRead):
+    """编译响应明确返回本次操作产出的指令，不从工作区排序推测。"""
+
+    compiled_prompt_revision_id: Identity
 
 
 class TakeReviewWrite(Contract):

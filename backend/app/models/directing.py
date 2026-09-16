@@ -52,12 +52,14 @@ class DirectingRevision(Base, TimestampMixin):
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     source_key: Mapped[str | None] = mapped_column(String(64))
+    source_task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id", name="fk_directing_revision_source_task", ondelete="RESTRICT"))
     confirmed_by: Mapped[str | None] = mapped_column(String(64))
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime().with_variant(DATETIME(fsp=6), "mysql"))
 
     __table_args__ = (
         CheckConstraint("kind IN ('design','plan','prompt','review','cut','cut_review','repair','knowledge')", name="ck_directing_revision_kind"),
         CheckConstraint("version > 0", name="ck_directing_revision_version"),
+        UniqueConstraint("source_task_id", name="uq_directing_revision_source_task"),
         CheckConstraint("(confirmed_by IS NULL AND confirmed_at IS NULL) OR (confirmed_by IS NOT NULL AND confirmed_at IS NOT NULL)", name="ck_directing_revision_confirmation"),
     )
 

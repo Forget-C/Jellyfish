@@ -51,7 +51,7 @@ export function DirectingTasks({ projectId, taskIds, onResult, onSettled, onTask
     if (['queued', 'running', 'failed'].includes(task.status) || task.task_id === selectedTaskId) return true
     if (task.status !== 'succeeded' || !workspace) return !workspace && task.status === 'succeeded'
     if (task.design) return !designResultRecorded(task.design, workspace.designs)
-    if (task.review) return !workspace.reviews.some(row => JSON.stringify(row.content) === JSON.stringify(task.review))
+    if (task.review) return !workspace.reviews.some(row => row.source_task_id === task.task_id)
     return workspace.takes.some(take => take.task_id === task.task_id && take.annotation.review_status === 'unreviewed')
   }
   const renderTask = (task: DirectingTaskRead) => <Card key={task.task_id} size="small" data-task-id={task.task_id}>

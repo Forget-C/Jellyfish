@@ -37,8 +37,13 @@ class RevisionSnapshot(Contract, Generic[Content]):
 SceneDesignRevision = RevisionSnapshot[SceneDesign]
 ProductionPlanRevision = RevisionSnapshot[ProductionPlan]
 PromptRevision = RevisionSnapshot[Prompt]
-ReviewPacketRevision = RevisionSnapshot[ReviewPacket]
 SequenceCutRevision = RevisionSnapshot[SequenceCut]
+
+
+class ReviewPacketRevision(RevisionSnapshot[ReviewPacket]):
+    """模型检查应用一次后固定原任务身份；人工派生版本不占用原任务身份。"""
+
+    source_task_id: Identity | None = None
 
 
 class TakeSnapshot(Contract):

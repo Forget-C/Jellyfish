@@ -4,9 +4,10 @@ import pytest
 from sqlalchemy import func, select
 
 from app.core.contracts.directing.common import ROLES
-from app.models.directing import Take, DirectingAction, CutTakeReference
+from app.core.contracts.directing.workspace import ReviewRequest
+from app.models.directing import Take, DirectingAction, DirectingRevision, CutTakeReference
 from app.models.llm import Model, Provider
-from app.models.task import TaskInput
+from app.models.task import Task, TaskInput
 from app.services.directing.production import ProductionService
 from app.services.generation.media_execution import deliver_media
 from app.services.task_service import TaskService
@@ -36,6 +37,61 @@ async def prepare(db, design_payload=None):
               "rows": [{"role": role, "occurrence_id": "o1", "verdict": "pass", "rationale": "离线用例检查通过", "findings": []} for role in ROLES]}
     review = await frozen(service, sequence.id, "review", packet)
     return service, sequence.id, plan.id, prompt.id, review.id
+
+
+@pytest.mark.asyncio
+async def test_apply_review_retries_return_original_revision_and_keep_decisions(tmp_path):
+    """提交已成功但客户端未收到响应时，跨事务重试仍定位原任务版本；人工裁决另行派生。"""
+    async with database(tmp_path) as sessions:
+        async with sessions.begin() as db:
+            service, sequence_id, _, _, review_id = await prepare(db)
+            packet = (await service.read_revision(review_id)).content.model_dump(mode="json")
+            packet["rows"][0]["verdict"] = "revise"
+            db.add(Task(id="check1", kind="directing_review", status="succeeded", project_id="p1",
+                        target_type="directing_sequence", target_id=sequence_id,
+                        input_snapshot={"run_args": {"packet": packet}}, result=packet))
+            await db.flush()
+            applied = await service.apply_review(sequence_id, "check1")
+            applied_id = applied.id
+            assert applied.confirmed_at and applied.payload["rows"][0]["verdict"] == "revise"
+            assert (await service.apply_review(sequence_id, "check1")).id == applied_id
+            resolved = await service.resolve_review(sequence_id, applied_id, role="direction", occurrence_id="o1", reason="有意的停顿")
+            assert resolved.id != applied_id and resolved.source_task_id is None
+        async with sessions.begin() as db:
+            service = ProductionService(db, "p1")
+            assert (await service.apply_review(sequence_id, "check1")).id == applied_id
+            assert (await service.read_revision(applied_id)).source_task_id == "check1"
+            assert next(row for row in (await service.workspace(sequence_id)).reviews if row.id == applied_id).source_task_id == "check1"
+            assert await db.scalar(select(func.count()).select_from(DirectingRevision).where(DirectingRevision.source_task_id == "check1")) == 1
+            assert await db.scalar(select(func.count()).select_from(Task).where(Task.kind == "video_generation")) == 0
+            with pytest.raises(ValueError):
+                await ProductionService(db, "p2").apply_review(sequence_id, "check1")
+
+
+@pytest.mark.asyncio
+async def test_apply_review_rolls_back_failed_confirmation_and_rejects_wrong_scope(tmp_path, monkeypatch):
+    """失败确认不留下占用任务身份的半成品；任务范围和项目仍须匹配。"""
+    async with database(tmp_path) as sessions:
+        async with sessions.begin() as db:
+            service, sequence_id, _, _, review_id = await prepare(db)
+            packet = (await service.read_revision(review_id)).content.model_dump(mode="json")
+            db.add(Task(id="check1", kind="directing_review", status="succeeded", project_id="p1", target_id=sequence_id,
+                        input_snapshot={"run_args": {"packet": packet}}, result=packet))
+            await db.flush()
+            confirm = service.confirm_revision
+
+            async def reject(*args, **kwargs):
+                raise ValueError("模拟确认失败")
+
+            monkeypatch.setattr(service, "confirm_revision", reject)
+            with pytest.raises(ValueError, match="模拟确认失败"):
+                await service.apply_review(sequence_id, "check1")
+            assert await db.scalar(select(func.count()).select_from(DirectingRevision).where(DirectingRevision.source_task_id == "check1")) == 0
+            monkeypatch.setattr(service, "confirm_revision", confirm)
+            assert (await service.apply_review(sequence_id, "check1")).confirmed_at
+            other = await service.create_sequence(chapter_id="ch1", title="另一场", position=1)
+            with pytest.raises(ValueError, match="尚无可保存结果"):
+                await service.apply_review(other.id, "check1")
 
 
 @pytest.mark.asyncio
@@ -170,3 +226,56 @@ async def test_scene_context_is_not_emitted_as_current_unit_actions(tmp_path):
             assert '【shots[1]' in execution
             decision = next(d for d in prompt.decisions if d.section_path == '/staging/activities/0/path')
             assert '背景' in decision.explanation
+
+
+@pytest.mark.asyncio
+async def test_compile_request_recovers_original_and_rejects_scope_changes(tmp_path):
+    """响应丢失后跨事务恢复精确版本，明确的新请求才编译新版本。"""
+    async with database(tmp_path) as sessions:
+        async with sessions.begin() as db:
+            service, sequence_id, plan_id, _, _ = await prepare(db)
+            original = await service.compile_unit(sequence_id, plan_id, "u1", request_id="compile-retry")
+            original_id = original.id
+        async with sessions.begin() as db:
+            service = ProductionService(db, "p1")
+            recovered = await service.compile_unit(sequence_id, plan_id, "u1", request_id="compile-retry")
+            assert recovered.id == original_id
+            assert await db.scalar(select(func.count()).select_from(DirectingAction).where(DirectingAction.request_id == "compile-retry")) == 1
+            for changed_plan, changed_unit in (("another-plan", "u1"), (plan_id, "another-unit")):
+                with pytest.raises(ValueError, match="请求身份"):
+                    await service.compile_unit(sequence_id, changed_plan, changed_unit, request_id="compile-retry")
+            with pytest.raises(ValueError):
+                await ProductionService(db, "other-project").compile_unit(sequence_id, plan_id, "u1", request_id="compile-retry")
+            another = await service.compile_unit(sequence_id, plan_id, "u1", request_id="compile-new")
+            assert another.id != original_id
+
+
+@pytest.mark.asyncio
+async def test_review_request_recovers_task_and_rejects_changed_inputs(tmp_path):
+    """受理响应丢失后返回原任务，即使已完成也不能悄悄重新检查。"""
+    async with database(tmp_path) as sessions:
+        async with sessions.begin() as db:
+            service, sequence_id, plan_id, prompt_id, _ = await prepare(db)
+            db.add(Model(id="text-review", name="qwen-test", category="text", provider_id="provider1"))
+            await db.flush()
+            body = ReviewRequest(model_id="text-review", request_id="review-retry")
+            original = await service.submit_review(sequence_id, prompt_id, body)
+            task_id = original.id
+        async with sessions.begin() as db:
+            service = ProductionService(db, "p1")
+            recovered = await service.submit_review(sequence_id, prompt_id, body)
+            assert recovered.id == task_id
+            assert await db.scalar(select(func.count()).select_from(Task).where(Task.kind == "directing_review")) == 1
+            with pytest.raises(ValueError, match="请求身份"):
+                await service.submit_review(sequence_id, prompt_id, body.model_copy(update={"instruction": "新的要求"}))
+            another_prompt = await service.compile_unit(sequence_id, plan_id, "u1")
+            with pytest.raises(ValueError, match="请求身份"):
+                await service.submit_review(sequence_id, another_prompt.id, body)
+            with pytest.raises(ValueError):
+                await ProductionService(db, "other-project").submit_review(sequence_id, prompt_id, body)
+            recovered.status = "cancelled"
+        async with sessions.begin() as db:
+            service = ProductionService(db, "p1")
+            assert (await service.submit_review(sequence_id, prompt_id, body)).id == task_id
+            fresh = await service.submit_review(sequence_id, prompt_id, body.model_copy(update={"request_id": "review-new"}))
+            assert fresh.id != task_id

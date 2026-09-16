@@ -105,6 +105,7 @@ try {
     await page.getByText(value, { exact: true }).first().waitFor({ state: 'visible' })
   }
   async function choose(label, title) {
+    if (label === '查看或编辑生产计划') title = title.replace(/计划 (\d+)/, (_, number) => `计划 ${number.padStart(2, '0')}`)
     if (label === '选择候选 Take') { await page.locator('.cut-take-library button').filter({ hasText: new RegExp(`Take ${title.match(/Take (\d+)/)[1]}\\b`) }).click(); return }
     await page.getByRole('combobox', { name: label, exact: true }).locator('../..').click()
     await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: label === '查看或编辑设计版本' ? new RegExp('设计 0?' + title.match(/设计 (\d+)/)[1]) : title }).first().click()

@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.directing.workspace import (
     RegroupRequest, ExtractFrameRequest, ExtractedFrame, AssetSummary, AssetCreateRequest, VisualRequest, AIRequest, ApplyDesignRequest, ChapterSequences, RevisionWrite, SequenceCreate, SequenceRead,
-    CompileRequest, ShootRequest, TakeReviewWrite, MediaRead, ReviewDecisionRequest, DirectingTaskRead,
+    CompileRequest, CompileResult, ReviewRequest, ShootRequest, TakeReviewWrite, MediaRead, ReviewDecisionRequest, DirectingTaskRead,
     SequenceUpdate, TaskAccepted, VersionRequest, WorkspaceRead,
 )
 from app.core.contracts.directing.style import ProjectStyleRevision, StyleWrite
@@ -107,16 +107,19 @@ async def apply_design(project_id: str, sequence_id: str, body: ApplyDesignReque
     return success_response(await _call(service.workspace(sequence_id)))
 
 
-@router.post("/sequences/{sequence_id}/compile", response_model=ApiResponse[WorkspaceRead], operation_id="directing_compile")
+@router.post("/sequences/{sequence_id}/compile", response_model=ApiResponse[CompileResult], operation_id="directing_compile")
 async def compile_unit(project_id: str, sequence_id: str, body: CompileRequest, db: AsyncSession = Depends(get_db, scope="function")):
     """明确授权编译所选单元，生成不可变提示词。"""
     service = ProductionService(db, project_id)
-    await _call(service.compile_unit(sequence_id, body.plan_revision_id, body.unit_id))
-    return success_response(await _call(service.workspace(sequence_id)))
+    prompt = await _call(service.compile_unit(sequence_id, body.plan_revision_id, body.unit_id, request_id=body.request_id))
+    workspace = await _call(service.workspace(sequence_id))
+    if not any(row.id == prompt.id for row in workspace.prompts):
+        workspace.prompts.append(await _call(service.read_revision(prompt.id, for_update=True)))
+    return success_response(CompileResult(**workspace.model_dump(), compiled_prompt_revision_id=prompt.id))
 
 
 @router.post("/sequences/{sequence_id}/prompts/{prompt_id}/review", response_model=ApiResponse[TaskAccepted], operation_id="directing_review")
-async def review(project_id: str, sequence_id: str, prompt_id: str, body: AIRequest, db: AsyncSession = Depends(get_db, scope="function")):
+async def review(project_id: str, sequence_id: str, prompt_id: str, body: ReviewRequest, db: AsyncSession = Depends(get_db, scope="function")):
     """对固定提示词提交六岗联合审查。"""
     task = await _call(ProductionService(db, project_id).submit_review(sequence_id, prompt_id, body))
     return success_response(TaskAccepted(task_id=task.id))

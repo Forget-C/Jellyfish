@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.contracts.directing import SceneDesign, ProductionPlan, Prompt, ReviewPacket, SequenceCut, TakeAnnotation
 from app.core.contracts.directing.common import Identity, Source, references
 from app.core.contracts.directing.feedback import CutReview, RepairItem, KnowledgeCandidate
-from app.core.contracts.directing.revisions import RevisionSnapshot, TakeSnapshot
+from app.core.contracts.directing.revisions import ReviewPacketRevision, RevisionSnapshot, TakeSnapshot
 from app.core.contracts.directing.style import ProjectStyleProfile, ProjectStyleRevision, StyleWrite
 from app.models.directing import ActiveCut, CutFrame, ProjectStyleRecord, Sequence, DirectingRevision, RevisionDependency, Take, CutTakeReference
 from app.models.studio import Project, Chapter, Character, FileUsage, ProjectSceneLink, ProjectPropLink
@@ -180,9 +180,9 @@ class DirectingStore:
         return await self.sequence(sequence_id)
 
     async def revision(self, revision_id: str, *, kind: str | None = None,
-                       sequence_id: str | None = None, confirmed: bool = False) -> DirectingRevision:
-        """读取并重验已存文档，依赖只接受同场次已确认版本。"""
-        row = await self.db.get(DirectingRevision, revision_id, populate_existing=True)
+                       sequence_id: str | None = None, confirmed: bool = False, for_update: bool = False) -> DirectingRevision:
+        """读取并重验已存文档；幂等恢复使用当前读，避免等待锁后仍读取旧事务快照。"""
+        row = await self.db.get(DirectingRevision, revision_id, populate_existing=True, with_for_update=True if for_update else None)
         if row is None:
             raise ValueError("revision not found")
         await self.sequence(row.sequence_id)
@@ -201,16 +201,18 @@ class DirectingStore:
         return sha256(json.dumps([sequence.source, sequence.source_start, sequence.source_end,
                                  sequence.source_text], ensure_ascii=False, sort_keys=True).encode()).hexdigest()
 
-    async def read_revision(self, revision_id: str) -> RevisionSnapshot:
+    async def read_revision(self, revision_id: str, *, for_update: bool = False) -> RevisionSnapshot:
         """返回有明确项目、章节和类型的快照，供未来 API/编译消费。"""
-        row = await self.revision(revision_id)
+        row = await self.revision(revision_id, for_update=for_update)
         sequence = await self.sequence(row.sequence_id)
-        return RevisionSnapshot[CONTRACTS[row.kind]](
+        snapshot = ReviewPacketRevision if row.kind == "review" else RevisionSnapshot[CONTRACTS[row.kind]]
+        return snapshot(
             id=row.id, project_id=self.project_id, chapter_id=sequence.chapter_id,
             sequence_id=row.sequence_id, parent_id=row.parent_id, version=row.version,
             confirmed_by=row.confirmed_by, confirmed_at=row.confirmed_at,
             source_current=row.kind != "design" or row.source_key == self.source_key(sequence),
             content=CONTRACTS[row.kind].model_validate(row.payload),
+            **({"source_task_id": row.source_task_id} if row.kind == "review" else {}),
         )
 
     async def read_take(self, take_id: str) -> TakeSnapshot:
@@ -227,12 +229,19 @@ class DirectingStore:
 
     async def save_revision(self, sequence_id: str, *, kind: str, payload: dict,
                             revision_id: str | None = None, expected_version: int | None = None,
-                            parent_id: str | None = None) -> DirectingRevision:
+                            parent_id: str | None = None, source_task_id: str | None = None) -> DirectingRevision:
         """创建草稿或 CAS 更新草稿；冻结版本必须派生新 ID，引用索引与正文同事务。"""
         sequence = await self.sequence(sequence_id)
         if kind not in CONTRACTS:
             raise ValueError("unknown revision kind")
         content = CONTRACTS[kind].model_validate(payload)
+        if source_task_id is not None:
+            if kind != "review" or revision_id is not None or parent_id is not None:
+                raise ValueError("只有新的模型审稿版本可以绑定来源任务")
+            task = await self.db.get(Task, source_task_id)
+            if (task is None or task.project_id != self.project_id or task.target_id != sequence_id
+                    or task.kind != "directing_review" or task.status != "succeeded"):
+                raise ValueError("审稿来源任务与版本不匹配")
         async with self.db.begin_nested():
             dependencies, files, takes = await self._validate(sequence, content)
             if revision_id is None:
@@ -241,7 +250,7 @@ class DirectingStore:
                 if parent_id is not None:
                     await self.revision(parent_id, kind=kind, sequence_id=sequence_id, confirmed=True)
                 row = DirectingRevision(id=uuid4().hex, sequence_id=sequence_id, kind=kind,
-                                        parent_id=parent_id, version=1, payload=content.model_dump(mode="json"),
+                                        parent_id=parent_id, version=1, payload=content.model_dump(mode="json"), source_task_id=source_task_id,
                                         source_key=self.source_key(sequence) if kind == "design" else None)
                 self.db.add(row)
                 await self.db.flush()

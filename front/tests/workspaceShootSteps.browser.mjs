@@ -70,7 +70,7 @@ try {
   assert.equal(saved.units[0].references[0].purpose, 'identity')
   assert.deepEqual(saved.units[0].references[0].participant_ids, [personId])
   await page.getByRole('button', { name: '保存并确认拍摄准备', exact: true }).click()
-  await page.waitForFunction(() => document.querySelector('[data-workspace-target="plan-confirm"]')?.disabled)
+  await page.getByRole('button', { name: '生成试拍指令', exact: true }).waitFor()
   assert.equal(requests.filter(row => row.path.endsWith('/s1/revisions')).length, 1)
   assert.equal(requests.filter(row => row.path.endsWith('/p-new/confirm')).length, 2)
   assert.ok(!requests.some(row => /\/(compile|shoot|tasks)$/.test(row.path)))
@@ -78,7 +78,7 @@ try {
     await page.setViewportSize({ width, height: 1000 })
     await page.reload()
     await page.getByRole('tab', { name: '拍摄准备', exact: true }).waitFor()
-    for (const name of ['拍摄准备', '生成指令', '检查与试拍', '候选素材']) {
+    for (const name of ['拍摄准备', '指令与检查', '执行试拍', '候选素材']) {
       await page.getByRole('tab', { name, exact: true }).click()
       await page.waitForFunction(label => [...document.querySelectorAll('[role=tab]')].some(tab => tab.textContent.startsWith(label) && tab.getAttribute('aria-selected') === 'true'), name)
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1))

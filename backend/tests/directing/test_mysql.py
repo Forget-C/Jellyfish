@@ -11,9 +11,11 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.db import Base
-from app.models.directing import Take
+from app.models.directing import DirectingRevision, Take
+from app.models.task import Task
 from app.models.studio import Project, Chapter, FileItem
 from app.services.directing.store import DirectingStore, RevisionConflict
+from app.services.directing.production import ProductionService
 from tests.directing.samples import design_sample
 from tests.directing.test_store import setup_story, output
 
@@ -39,7 +41,7 @@ async def test_mysql_schema_roundtrip_and_concurrent_writes():
                     "include_object": lambda obj, name, type_, reflected, compare_to: (name if type_ == "table" else obj.table.name).startswith("directing_"),
                 })
                 assert not compare_metadata(context, Base.metadata)
-                assert sync.scalar(text("SELECT version_num FROM alembic_version")) == "8ac4e702bf58"
+                assert sync.scalar(text("SELECT version_num FROM alembic_version")) == "9bf5b2f0c813"
             await connection.run_sync(verify)
         async with sessions.begin() as db:
             db.add(Project(id="p1", name="测试", style="真人都市"))
@@ -131,6 +133,47 @@ async def test_mysql_schema_roundtrip_and_concurrent_writes():
 
         accepted = await asyncio.gather(accept_batch(), accept_batch())
         assert accepted[0] == accepted[1] and len(set(accepted[0])) == 2 and all(accepted[0])
+        async with sessions.begin() as db:
+            packet = (await DirectingStore(db, "p1").revision(items[0]["review_revision_id"])).payload
+            db.add(Task(id="review-concurrent", kind="directing_review", status="succeeded", project_id="p1",
+                        target_type="directing_sequence", target_id=sequence_id,
+                        input_snapshot={"run_args": {"packet": packet}}, result=packet))
+
+        async def apply_review():
+            """同一检查在两个独立连接并发保存，均返回唯一的原始版本。"""
+            async with sessions.begin() as db:
+                row = await ProductionService(db, "p1").apply_review(sequence_id, "review-concurrent")
+                return row.id
+
+        applied = await asyncio.gather(apply_review(), apply_review())
+        assert applied[0] == applied[1]
+        from app.core.contracts.directing.workspace import ReviewRequest
+        async with sessions.begin() as db:
+            db.add(Model(id="text-recovery", name="qwen-test", category="text", provider_id="provider1"))
+        recovery_sessions = async_sessionmaker(engine.execution_options(isolation_level="REPEATABLE READ"), expire_on_commit=False)
+
+        async def compile_same_request():
+            """默认重复读隔离级别下，场次锁与当前读共同恢复同一编译结果。"""
+            async with recovery_sessions.begin() as db:
+                row = await ProductionService(db, "p1").compile_unit(sequence_id, production.id, data["units"][0]["id"], request_id="compile-concurrent")
+                return row.id
+
+        compiled = await asyncio.gather(compile_same_request(), compile_same_request())
+        assert compiled[0] == compiled[1]
+
+        async def submit_same_review():
+            """检查受理使用冻结请求身份，两个连接仅创建一项模型任务。"""
+            async with recovery_sessions.begin() as db:
+                row = await ProductionService(db, "p1").submit_review(sequence_id, compiled[0],
+                    ReviewRequest(model_id="text-recovery", request_id="check-concurrent"))
+                return row.id
+
+        checked = await asyncio.gather(submit_same_review(), submit_same_review())
+        assert checked[0] == checked[1]
+        async with sessions() as db:
+            assert await db.scalar(select(func.count()).select_from(DirectingRevision).where(DirectingRevision.source_task_id == "review-concurrent")) == 1
+            assert await db.scalar(select(func.count()).select_from(Task).where(
+                Task.input_snapshot["review_request_id"].as_string() == "check-concurrent")) == 1
     finally:
         await engine.dispose()
 
@@ -175,5 +218,40 @@ async def test_mysql_feedback_confirmation_race():
         async with sessions() as db:
             state = await FeedbackService(db, 'p1').feedback(sid)
             assert state.active_cut_revision_id == replacement.id and state.current_review_id is None
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_mysql_compile_response_contains_recovered_prompt():
+    """两个真实事务并发调用编译路由，恢复响应也必须携带精确版本正文。"""
+    from app.api.v1.routes.studio.directing import compile_unit
+    from app.core.contracts.directing.workspace import CompileRequest
+    from app.models.directing import DirectingAction
+    value = os.environ.get('JELLYFISH_DIRECTING_MYSQL_URL')
+    if not value:
+        pytest.skip('JELLYFISH_DIRECTING_MYSQL_URL required')
+    url = make_url(value)
+    if url.get_backend_name() != 'mysql' or not (url.database or '').startswith('jellyfish_check_directing'):
+        raise ValueError('Only an isolated directing validation database is allowed')
+    engine = create_async_engine(value, isolation_level='REPEATABLE READ')
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with sessions() as db:
+            action = await db.scalar(select(DirectingAction).where(DirectingAction.request_id == 'compile-concurrent'))
+            prompt = await ProductionService(db, 'p1').revision(action.revision_id)
+            sequence_id, plan_id, unit_id = action.sequence_id, prompt.payload['plan_revision_id'], action.unit_id
+
+        async def compile_response():
+            """验证路由响应而不只验证服务返回的数据库行。"""
+            async with sessions.begin() as db:
+                response = await compile_unit('p1', sequence_id, CompileRequest(plan_revision_id=plan_id, unit_id=unit_id, request_id='compile-response'), db)
+                result = response.data
+                assert any(row.id == result.compiled_prompt_revision_id for row in result.prompts)
+                return result.compiled_prompt_revision_id
+
+        responses = await asyncio.gather(compile_response(), compile_response())
+        assert responses[0] == responses[1]
     finally:
         await engine.dispose()

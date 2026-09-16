@@ -7,6 +7,7 @@ import type { ApiResponse_AssetSummary_ } from '../models/ApiResponse_AssetSumma
 import type { ApiResponse_BatchRead_ } from '../models/ApiResponse_BatchRead_';
 import type { ApiResponse_ChapterAssemblyRead_ } from '../models/ApiResponse_ChapterAssemblyRead_';
 import type { ApiResponse_ChapterSequences_ } from '../models/ApiResponse_ChapterSequences_';
+import type { ApiResponse_CompileResult_ } from '../models/ApiResponse_CompileResult_';
 import type { ApiResponse_ContinuityRead_ } from '../models/ApiResponse_ContinuityRead_';
 import type { ApiResponse_CutFrameRead_ } from '../models/ApiResponse_CutFrameRead_';
 import type { ApiResponse_DirectingTaskRead_ } from '../models/ApiResponse_DirectingTaskRead_';
@@ -31,6 +32,7 @@ import type { FeedbackWrite } from '../models/FeedbackWrite';
 import type { RegroupRequest } from '../models/RegroupRequest';
 import type { RepairPlanRequest } from '../models/RepairPlanRequest';
 import type { ReviewDecisionRequest } from '../models/ReviewDecisionRequest';
+import type { ReviewRequest } from '../models/ReviewRequest';
 import type { RevisionWrite } from '../models/RevisionWrite';
 import type { SeamReviewRequest } from '../models/SeamReviewRequest';
 import type { SequenceCreate } from '../models/SequenceCreate';
@@ -337,7 +339,7 @@ export class StudioDirectingService {
     /**
      * Compile Unit
      * 明确授权编译所选单元，生成不可变提示词。
-     * @returns ApiResponse_WorkspaceRead_ Successful Response
+     * @returns ApiResponse_CompileResult_ Successful Response
      * @throws ApiError
      */
     public static directingCompile({
@@ -348,7 +350,7 @@ export class StudioDirectingService {
         projectId: string,
         sequenceId: string,
         requestBody: CompileRequest,
-    }): CancelablePromise<ApiResponse_WorkspaceRead_> {
+    }): CancelablePromise<ApiResponse_CompileResult_> {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/compile',
@@ -378,7 +380,7 @@ export class StudioDirectingService {
         projectId: string,
         sequenceId: string,
         promptId: string,
-        requestBody: AIRequest,
+        requestBody: ReviewRequest,
     }): CancelablePromise<ApiResponse_TaskAccepted_> {
         return __request(OpenAPI, {
             method: 'POST',

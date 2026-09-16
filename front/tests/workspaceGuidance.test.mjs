@@ -2,7 +2,26 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { loadSource, makeWorkspace, revision } from './directing-fixtures.mjs'
 
-const { workspaceGuidance } = await loadSource('workspaceGuidance')
+const { workspaceGuidance, reviewPacketPassed, pendingReviewResults } = await loadSource('workspaceGuidance')
+
+test('saved checks match their task identity even when another task produced identical text', () => {
+  const workspace = makeWorkspace()
+  const review = { mode: 'formal', occurrences: [{ prompt_revision_id: 'prompt1', plan_revision_id: 'p-old', unit_id: 'u1' }], rows: [] }
+  const tasks = ['check1', 'check2'].map(task_id => ({ task_id, kind: 'directing_review', status: 'succeeded', review }))
+  workspace.reviews = [{ ...revision('r1', review), source_task_id: 'check1' }]
+  assert.deepEqual(pendingReviewResults(workspace, tasks, 'p-old', 'u1', 'prompt1').map(row => row.task_id), ['check2'])
+})
+
+test('incomplete or duplicate passing rows cannot promise entry into shooting', () => {
+  const roles = ['direction', 'performance', 'staging', 'cinematography', 'continuity', 'prompt']
+  const packet = { mode: 'formal', occurrences: [{ id: 'o1', prompt_revision_id: 'p1' }], rows: [] }
+  assert.equal(reviewPacketPassed(packet, 'p1'), false)
+  packet.rows = roles.map(role => ({ role, occurrence_id: 'o1', verdict: 'pass' }))
+  assert.equal(reviewPacketPassed(packet, 'p1'), true)
+  assert.equal(reviewPacketPassed(packet, 'other'), false)
+  packet.rows[5] = { ...packet.rows[0] }
+  assert.equal(reviewPacketPassed(packet, 'p1'), false)
+})
 function input(stage = 'design') {
   const workspace = makeWorkspace()
   workspace.takes = []
@@ -83,6 +102,59 @@ test('fixed prompt and review identities govern the proposed action', () => {
   assert.equal(workspaceGuidance(data).target, 'shoot-confirm')
   review.content.occurrences = []
   assert.equal(workspaceGuidance(data).target, 'prompt-review')
+})
+
+test('accepted tasks block duplicates before the workspace list catches up, but not another selected prompt', () => {
+  const data = input('shoot')
+  data.workspace.task_ids = []
+  data.pending = [{ taskId: 'accepted', planId: 'p-old', unitId: 'u1', promptId: 'prompt1' }]
+  data.promptId = 'prompt1'
+  data.workspace.prompts = [revision('prompt1', { plan_revision_id: 'p-old', unit_id: 'u1' }), revision('prompt2', { plan_revision_id: 'p-old', unit_id: 'u1' })]
+  data.tasksState = 'ready'
+  assert.equal(workspaceGuidance(data).title, '先核对本次任务状态')
+  data.tasks = [{ task_id: 'accepted', kind: 'video_generation', status: 'running' }]
+  assert.equal(workspaceGuidance(data).title, '本次视频生成中')
+  data.promptId = 'prompt2'
+  assert.equal(workspaceGuidance(data).target, 'prompt-review')
+  data.tasksState = 'error'
+  assert.equal(workspaceGuidance(data).target, 'prompt-review')
+  data.promptId = 'prompt1'
+  assert.equal(workspaceGuidance(data).target, 'tasks')
+  data.tasksState = 'ready'; data.tasks[0].status = 'failed'
+  assert.equal(workspaceGuidance(data).target, 'prompt-review')
+})
+
+test('current review results precede old candidates and require exact unit identity', () => {
+  const data = input('shoot')
+  data.workspace.takes = makeWorkspace().takes
+  data.promptId = 'new-prompt'
+  data.workspace.prompts = [revision('new-prompt', { plan_revision_id: 'p-old', unit_id: 'u1' })]
+  const task = { task_id: 'review-new', kind: 'directing_review', status: 'succeeded', review: { occurrences: [{ prompt_revision_id: 'new-prompt', plan_revision_id: 'p-old', unit_id: 'u1' }], rows: [] } }
+  data.tasks = [task]
+  assert.equal(workspaceGuidance(data).taskId, 'review-new')
+  task.review.occurrences[0].unit_id = 'u2'
+  assert.equal(workspaceGuidance(data).target, 'prompt-review', 'another unit report and old prompt candidates do not replace the selected instruction')
+  task.status = 'running'
+  data.pending = [{ taskId: task.task_id, planId: 'p-old', unitId: 'u1', promptId: 'new-prompt' }]
+  assert.equal(workspaceGuidance(data).title, '本次指令检查中')
+  task.kind = 'video_generation'
+  assert.equal(workspaceGuidance(data).title, '本次视频生成中')
+})
+
+test('multiple unsaved checks require a choice and do not override a saved review being inspected', () => {
+  const data = input('shoot')
+  data.promptId = 'prompt1'
+  data.workspace.prompts = [revision('prompt1', { plan_revision_id: 'p-old', unit_id: 'u1' })]
+  data.tasks = ['check1', 'check2'].map(task_id => ({ task_id, kind: 'directing_review', status: 'succeeded', review: { occurrences: [{ prompt_revision_id: 'prompt1', plan_revision_id: 'p-old', unit_id: 'u1' }], rows: [] } }))
+  assert.equal(workspaceGuidance(data).title, '选择本轮检查结果')
+  assert.equal(workspaceGuidance(data).taskId, undefined)
+  data.reviewTaskId = 'check1'
+  assert.equal(workspaceGuidance(data).taskId, 'check1')
+  data.reviewTaskId = undefined
+  data.reviewId = 'saved'
+  data.workspace.reviews = [revision('saved', { mode: 'formal', occurrences: [{ prompt_revision_id: 'prompt1' }], rows: [] })]
+  assert.equal(workspaceGuidance(data).target, 'review')
+  assert.equal(workspaceGuidance(data).taskId, undefined)
 })
 
 test('shoot preparation directs missing models and edited confirmed plans to the exact next input', () => {

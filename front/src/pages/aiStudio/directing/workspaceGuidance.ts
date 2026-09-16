@@ -1,7 +1,7 @@
-import type { DirectingTaskRead, ProductionPlan_Input, WorkspaceRead } from '../../../services/generated'
+import type { DirectingTaskRead, ProductionPlan_Input, ReviewPacket, WorkspaceRead } from '../../../services/generated'
 import type { WorkspaceStage } from './workspaceNavigation'
 
-export type WorkspaceGuidance = { title: string; description: string; label: string; view: string; target: string; taskId?: string; takeId?: string }
+export type WorkspaceGuidance = { title: string; description: string; label: string; view: string; target: string; taskId?: string; takeId?: string; submissionUnknown?: boolean }
 export type SubmittedWorkspaceTask = { taskId: string; planId?: string; unitId?: string; promptId?: string }
 export type GuidanceInput = {
   workspace: WorkspaceRead
@@ -13,6 +13,7 @@ export type GuidanceInput = {
   unitId?: string
   promptId?: string
   reviewId?: string
+  reviewTaskId?: string
   designStale: boolean
   planStale: boolean
   tasks: DirectingTaskRead[]
@@ -21,11 +22,35 @@ export type GuidanceInput = {
   issue?: { message: string; stage: WorkspaceStage; target: string; planId?: string; unitId?: string }
 }
 
+/** 只返回精确指令范围内尚未保存的检查；不按返回顺序猜测用户选择。 */
+export function pendingReviewResults(workspace: WorkspaceRead, tasks: DirectingTaskRead[], planId?: string, unitId?: string, promptId?: string): DirectingTaskRead[] {
+  if (!planId || !unitId || !promptId) return []
+  return tasks.filter(task => task.kind === 'directing_review' && task.status === 'succeeded' && task.review?.occurrences.length && task.review.occurrences.every(row => row.prompt_revision_id === promptId && row.plan_revision_id === planId && row.unit_id === unitId) && !workspace.reviews.some(row => row.source_task_id === task.task_id))
+}
+
 /** 正式六岗结论必须完整，空清单与其他提示词的报告不能提示可执行。 */
 export function reviewCanExecute(review: WorkspaceRead['reviews'][number] | undefined, promptId: string | undefined): boolean {
-  if (!review?.confirmed_at || review.content.mode !== 'formal' || !review.content.occurrences.length || review.content.occurrences.some(row => row.prompt_revision_id !== promptId)) return false
+  return !!review?.confirmed_at && reviewPacketPassed(review.content, promptId)
+}
+
+/** 未保存报告也用完整六岗矩阵判断按钮文案；通过仍不代表已经确认或提交。 */
+export function reviewPacketPassed(packet: ReviewPacket | null | undefined, promptId: string | undefined): boolean {
+  if (!packet || packet.mode !== 'formal' || !packet.occurrences.length || packet.occurrences.some(row => row.prompt_revision_id !== promptId)) return false
   const roles = ['direction', 'performance', 'staging', 'cinematography', 'continuity', 'prompt']
-  return review.content.rows.length === review.content.occurrences.length * roles.length && review.content.occurrences.every(occurrence => roles.every(role => review.content.rows.some(row => row.occurrence_id === occurrence.id && row.role === role && row.verdict === 'pass')))
+  return packet.rows.length === packet.occurrences.length * roles.length && packet.occurrences.every(occurrence => roles.every(role => packet.rows.some(row => row.occurrence_id === occurrence.id && row.role === role && row.verdict === 'pass')))
+}
+
+/** 导航摘要复用主操作判断，不能把“有指令”当作当前进度。 */
+export function shootProgressLabel(guidance: WorkspaceGuidance, input: Pick<GuidanceInput, 'tasks' | 'promptId' | 'reviewId'>): string {
+  if (guidance.submissionUnknown) return '提交待核实'
+  if (guidance.target === 'tasks') {
+    const task = input.tasks.find(row => row.task_id === guidance.taskId)
+    if (!task || !['queued', 'running'].includes(task.status)) return '状态待核实'
+    return `${task.kind === 'directing_review' ? '检查' : '视频生成'}${task.status === 'queued' ? '排队中' : '中'}`
+  }
+  if (guidance.target === 'prompt-review') return input.promptId ? '待检查或选择结论' : '待选择指令'
+  if (guidance.target === 'review') return input.reviewId ? '检查需处理' : '待选择检查'
+  return ({ result: '待确认结论', 'shoot-confirm': '可开始试拍', 'take-review': '候选待审片', compile: '待生成指令', 'plan-confirm': '待确认准备', 'plan-version': '待核对计划', source: '待核对原文' } as Record<string, string>)[guidance.target] || '待完成准备'
 }
 
 /** 提示只使用当前对象和已知结果；不会把其他单元的失败或运行状态升级为全场阻碍。 */
@@ -66,16 +91,19 @@ export function workspaceGuidance(input: GuidanceInput): WorkspaceGuidance {
     if (!plan?.confirmed_at) return step('核对本次范围与参考', '保存并确认生产计划后，才能生成固定的执行指令。', '去确认单元与参考', 'shoot', 'plan-confirm')
     const unit = plan.content.units.find(row => row.id === unitId)
     if (!unit) return step('选择本次生成单元', '选择一个单元后继续；不会替你切换到另一个版本。', '选择生成单元', 'shoot', 'unit-select')
-    if (input.tasksState && input.tasksState !== 'ready' && pending?.some(item => workspace.task_ids.includes(item.taskId) && item.planId === plan.id && item.unitId === unitId)) return step('先核对本次任务状态', '本单元已有提交记录，等待状态读回后再决定下一步；其他独立单元仍可操作。', '查看本次任务状态', 'shoot', 'tasks')
-    const running = tasks.find(task => ['queued', 'running'].includes(task.status) && pending?.some(item => item.taskId === task.task_id && item.planId === plan.id && item.unitId === unitId))
-    if (running) return { ...step('本次任务正在执行', '可查看进度或取消；其他独立单元仍可准备和生成。', '查看本次任务', 'shoot', 'tasks'), taskId: running.task_id }
-    const take = workspace.takes.find(row => row.plan_revision_id === plan.id && row.unit_id === unitId && row.annotation.review_status === 'unreviewed')
-    if (take) return { ...step('这个单元有视频待审片', '先查看真实画面，再决定可用区间；生成成功不代表已经采用。', '查看待审视频', 'cut', 'take-review'), takeId: take.id }
+    const submitted = pending?.filter(item => item.planId === plan.id && item.unitId === unitId && (!promptId || !item.promptId || item.promptId === promptId)) || []
+    if (submitted.length && (input.tasksState && input.tasksState !== 'ready' || submitted.some(item => !tasks.some(task => task.task_id === item.taskId)))) return step('先核对本次任务状态', '本单元已有提交记录，等待状态读回后再决定下一步；其他独立单元仍可操作。', '查看本次任务状态', 'shoot', 'tasks')
+    const running = tasks.find(task => ['queued', 'running'].includes(task.status) && submitted.some(item => item.taskId === task.task_id))
+    if (running) return { ...step(running.kind === 'directing_review' ? '本次指令检查中' : '本次视频生成中', '可查看进度或取消；其他独立单元仍可准备和生成。', '查看本次任务', 'shoot', 'tasks'), taskId: running.task_id }
     const prompt = workspace.prompts.find(row => row.id === promptId && row.content.plan_revision_id === plan.id && row.content.unit_id === unitId)
+    const results = pendingReviewResults(workspace, tasks, plan.id, unitId, prompt?.id)
+    const result = results.find(task => task.task_id === input.reviewTaskId) || (!reviewId && results.length === 1 ? results[0] : undefined)
+    if (result) return { ...step('本次指令已有检查结果', '查看六岗结论，再明确保存本次审稿。', '查看指令检查结果', 'shoot', 'result'), taskId: result.task_id }
+    if (!reviewId && results.length > 1) return step('选择本轮检查结果', '这份指令有多次检查结果，请明确选择本次要确认的检查。', '选择检查结果', 'shoot', 'review')
+    const take = workspace.takes.find(row => row.plan_revision_id === plan.id && row.unit_id === unitId && row.annotation.review_status === 'unreviewed')
+    if (take && (!prompt || take.prompt_revision_id === prompt.id)) return { ...step('这个单元有视频待审片', '先查看真实画面，再决定可用区间；生成成功不代表已经采用。', '查看待审视频', 'cut', 'take-review'), takeId: take.id }
     if (!prompt && workspace.prompts.some(row => row.content.plan_revision_id === plan.id && row.content.unit_id === unitId)) return step('选择本次生成指令版本', '本单元已有指令，请明确选择要检查的版本；不会自动使用最新记录。', '选择生成指令', 'shoot', 'prompt-review')
     if (!prompt) return step('准备本次生成指令', '编译会检查当前单元的模型、时长、参考及依赖；不支持的输入需先修正。', '去准备生成指令', 'shoot', 'compile')
-    const result = tasks.slice().reverse().find(task => task.status === 'succeeded' && task.review?.occurrences.length && task.review.occurrences.every(row => row.prompt_revision_id === prompt.id) && !workspace.reviews.some(row => JSON.stringify(row.content) === JSON.stringify(task.review)))
-    if (result) return { ...step('本次指令已有检查结果', '查看六岗结论，再明确保存本次审稿。', '查看指令检查结果', 'shoot', 'result'), taskId: result.task_id }
     const review = workspace.reviews.find(row => row.id === reviewId && row.content.occurrences.length && row.content.occurrences.every(item => item.prompt_revision_id === prompt.id))
     if (!review) return step('检查本次生成指令', '审稿必须匹配当前提示词版本；可选择已有检查结果或发起检查。', '去检查生成指令', 'shoot', 'prompt-review')
     if (!reviewCanExecute(review, prompt.id)) return step('处理指令检查中的问题', '查看需修改项；艺术取舍可记录理由，模型与结构校验仍须通过。', '查看检查问题', 'shoot', 'review')

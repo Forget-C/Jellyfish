@@ -11,6 +11,7 @@ type DraftContext = {
   changed: () => void
   request: (transition: Transition) => void
   busy: boolean
+  pendingNavigation: boolean
   dirtyNames: string[]
 }
 const Context = createContext<DraftContext | null>(null)
@@ -68,7 +69,7 @@ export function WorkspaceDrafts({ children }: { children: ReactNode }) {
     } catch { setError('保存未完成，修改已保留。请检查页面中的错误后重试。') }
     finally { setSaving(false) }
   }
-  const value = { register, changed, request, busy: busyDrafts().length > 0, dirtyNames: dirtyDrafts().map(draft => draft.current.name) }
+  const value = { register, changed, request, pendingNavigation: !!pending, busy: busyDrafts().length > 0, dirtyNames: dirtyDrafts().map(draft => draft.current.name) }
   const processing = busyDrafts().length > 0
   const hasChanges = dirtyDrafts().length > 0
   return <Context.Provider value={value}>{children}
@@ -109,5 +110,5 @@ export function WorkspaceWriteBoundary({ busy, children }: { busy: boolean; chil
 
 export function useWorkspaceDraftStatus() {
   const context = useContext(Context)
-  return { names: context?.dirtyNames || [], resolve: () => context?.request({ action: () => {} }), transition: (action: () => void) => context ? context.request({ action }) : action() }
+  return { names: context?.dirtyNames || [], pendingNavigation: context?.pendingNavigation || false, resolve: () => context?.request({ action: () => {} }), transition: (action: () => void) => context ? context.request({ action }) : action() }
 }

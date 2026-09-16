@@ -1,0 +1,52 @@
+{
+  "sizes": [
+    {
+      "width": 1440,
+      "primary": {
+        "x": 918.96875,
+        "y": 216.296875,
+        "width": 157.03125,
+        "height": 32
+      }
+    },
+    {
+      "width": 1024,
+      "primary": {
+        "x": 846.96875,
+        "y": 216.296875,
+        "width": 157.03125,
+        "height": 32
+      }
+    },
+    {
+      "width": 768,
+      "primary": {
+        "x": 590.96875,
+        "y": 256.296875,
+        "width": 157.03125,
+        "height": 32
+      }
+    },
+    {
+      "width": 375,
+      "primary": {
+        "x": 209.96875,
+        "y": 244.296875,
+        "width": 157.03125,
+        "height": 32
+      }
+    }
+  ],
+  "writes": [
+    "/api/v1/studio/projects/p1/directing/sequences/s1/sources/resolve",
+    "/api/v1/film/tasks/check1/cancel",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/prompts/prompt1/review",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/sources/resolve",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/sources/resolve",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/shoot",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/sources/resolve",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/shoot",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/shoot"
+  ],
+  "errors": []
+}

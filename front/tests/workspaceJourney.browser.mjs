@@ -18,6 +18,9 @@ const workspace = makeWorkspace()
 for (const key of ['designs','plans','prompts','reviews','takes','cuts']) workspace[key] = []
 let project, chapter, sceneCreated = false, packet, activeId = null
 const feedback = { active_cut_revision_id: null, current_review_id: null, reviews: [], repairs: [], knowledge: [] }
+const compileRequests = [], reviewRequests = []
+const loseReviewResponse = process.env.JELLYFISH_TEST_REVIEW_LOST_RESPONSE === '1'
+const loseCompileResponse = process.env.JELLYFISH_TEST_COMPILE_LOST_RESPONSE === '1'
 const tasks = new Map(), writes = [], errors = [], steps = []
 const list = items => ({ items, total: items.length, pagination: { total: items.length, page: 1, page_size: 100, total_pages: 1 } })
 let browser, page
@@ -56,16 +59,26 @@ try {
     }
     if (path.endsWith('/compile')) {
       const plan = workspace.plans.find(row => row.id === body.plan_revision_id); assert.ok(plan.confirmed_at)
-      workspace.prompts.push(revision('prompt1', { plan_revision_id: plan.id, unit_id: body.unit_id, text: '固定拍摄范围：递出旧信，保持手部与旧信可见。', decisions: [], sources: [], format_version: 'v4' }))
-      return respond(workspace)
+      compileRequests.push(body.request_id)
+      assert.ok(body.request_id)
+      if (!workspace.prompts.length) workspace.prompts.push(revision('prompt1', { plan_revision_id: plan.id, unit_id: body.unit_id, text: '固定拍摄范围：递出旧信，保持手部与旧信可见。', decisions: [], sources: [], format_version: 'v4' }))
+      if (loseCompileResponse && compileRequests.length === 1) {
+        workspace.prompts.push(revision('unrelated-prompt', { ...workspace.prompts[0].content, text: '另一次操作的指令，不能默认选择' }))
+        return route.abort('failed')
+      }
+      return respond({ ...workspace, compiled_prompt_revision_id: 'prompt1' })
     }
     if (path.endsWith('/prompts/prompt1/review')) {
       const plan = workspace.plans[0], unit = plan.content.units[0], roles = ['direction','performance','staging','cinematography','continuity','prompt']
       packet = { mode: 'formal', roles, occurrences: [{ id: 'o1', prompt_revision_id: 'prompt1', plan_revision_id: plan.id, unit_id: unit.id, coverage_item_id: unit.coverage[0].id, shot_id: unit.coverage[0].shot_id, local_number: 1 }], rows: roles.map(role => ({ role, occurrence_id: 'o1', verdict: 'pass', rationale: '隔离回归审稿通过', findings: [] })), context: { state: 'unset' } }
-      tasks.set('review-task', { task_id: 'review-task', kind: 'directing_review', status: 'succeeded', error: null, review: packet }); workspace.task_ids.push('review-task'); return respond({ task_id: 'review-task' })
+      reviewRequests.push(body.request_id); assert.ok(body.request_id)
+      tasks.set('review-task', { task_id: 'review-task', kind: 'directing_review', status: 'succeeded', error: null, review: packet })
+      if (!workspace.task_ids.includes('review-task')) workspace.task_ids.push('review-task')
+      if (loseReviewResponse && reviewRequests.length === 1) return route.abort('failed')
+      return respond({ task_id: 'review-task' })
     }
     if (path.includes('/directing/tasks/')) return respond(tasks.get(path.split('/').at(-1)))
-    if (path.endsWith('/review/apply')) { assert.equal(body.task_id, 'review-task'); workspace.reviews.push(revision('review1', packet)); return respond(workspace) }
+    if (path.endsWith('/review/apply')) { assert.equal(body.task_id, 'review-task'); if (!workspace.reviews.some(row => row.source_task_id === body.task_id)) workspace.reviews.push({ ...revision('review1', packet), source_task_id: body.task_id }); return respond(workspace) }
     if (path.endsWith('/shoot')) {
       assert.equal(body.prompt_revision_id, 'prompt1'); assert.equal(body.review_revision_id, 'review1'); assert.equal(activeId, null)
       const take = structuredClone(makeWorkspace().takes[2]); Object.assign(take, { id: 'take1', task_id: 'shoot-task', project_id: project.id, chapter_id: chapter.id, plan_revision_id: workspace.plans[0].id, unit_id: workspace.plans[0].content.units[0].id })
@@ -114,15 +127,44 @@ try {
   await page.getByRole('combobox', { name: '视频模型', exact: true }).locator('../..').click()
   await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: '隔离视频模型' }).click()
   await page.getByRole('button', { name: '保存并确认拍摄准备', exact: true }).click()
-  await page.getByRole('tab', { name: '生成指令', exact: true }).click()
-  await page.getByRole('button', { name: '准备生成指令', exact: true }).click()
-  await page.locator('.prompt-reader').waitFor()
-  await page.getByRole('button', { name: '检查生成指令', exact: true }).click()
-  await context('当前进展')
-  await page.getByRole('region', { name: '下一步引导' }).getByRole('button', { name: '查看指令检查结果', exact: true }).click()
-  await page.getByRole('button', { name: '保存审稿结论', exact: true }).click()
-  await page.getByRole('tab', { name: '检查与试拍', exact: true }).click()
-  await page.getByRole('button', { name: '确认并开始生成视频', exact: true }).click()
+  await page.getByRole('button', { name: '生成试拍指令', exact: true }).click()
+  if (loseCompileResponse) {
+    await page.getByRole('button', { name: '核实本次指令生成', exact: true }).waitFor()
+    await page.reload()
+    await page.getByRole('button', { name: '核实本次指令生成', exact: true }).click()
+    await page.waitForURL(url => url.searchParams.get('prompt') === 'prompt1')
+    assert.equal(compileRequests.length, 2)
+    assert.equal(compileRequests[0], compileRequests[1])
+    assert.equal(workspace.prompts.length, 2, '恢复原结果，不重复编译，也不选择并发生成的其他版本')
+  }
+  await page.locator('.shoot-prompt-excerpt').waitFor()
+  assert.equal(await page.getByRole('tab', { name: '指令与检查', exact: true }).getAttribute('aria-selected'), 'true')
+  const compiledPrompt = new URL(page.url()).searchParams.get('prompt')
+  assert.ok(compiledPrompt)
+  await page.locator('.production-unit-list button[aria-pressed="true"]').click()
+  assert.equal(new URL(page.url()).searchParams.get('prompt'), compiledPrompt, '再次点击当前单元保留已选指令')
+  await page.getByRole('button', { name: '检查这份指令', exact: true }).click()
+  if (loseReviewResponse) {
+    await page.getByRole('button', { name: '核实本次检查', exact: true }).waitFor()
+    await page.reload()
+    await page.getByRole('button', { name: '核实本次检查', exact: true }).click()
+    await page.getByRole('button', { name: '确认结论，进入试拍', exact: true }).waitFor()
+    assert.equal(reviewRequests.length, 2)
+    assert.equal(reviewRequests[0], reviewRequests[1])
+    assert.equal(workspace.task_ids.filter(id => id === 'review-task').length, 1)
+    assert.equal(workspace.reviews.length, 0, '恢复检查不自动保存结论或开始试拍')
+    assert.equal(workspace.takes.length, 0)
+  }
+  await page.getByRole('region', { name: '本次检查结论', exact: true }).waitFor()
+  await page.getByRole('button', { name: '确认结论，进入试拍', exact: true }).click()
+  await page.waitForFunction(() => document.querySelector('[role=tab][aria-selected=true]') !== null && new URL(location.href).searchParams.get('focus') === 'shoot-confirm')
+  assert.equal(await page.getByRole('button', { name: '生成试拍指令', exact: true }).count(), 0)
+  assert.equal(await page.getByRole('tab', { name: '执行试拍', exact: true }).getAttribute('aria-selected'), 'true')
+  assert.equal(workspace.takes.length, 0, '确认检查结论不能自动生成视频')
+  const confirmedReview = new URL(page.url()).searchParams.get('review')
+  await page.locator('.production-unit-list button[aria-pressed="true"]').click()
+  assert.equal(new URL(page.url()).searchParams.get('review'), confirmedReview, '再次点击当前单元保留已选审稿')
+  await page.getByRole('button', { name: '开始试拍', exact: true }).click()
   await page.getByRole('tab', { name: '候选素材', exact: true }).click()
   await page.getByRole('button', { name: '查看视频 1 · 待审片', exact: true }).waitFor()
   await page.getByRole('button', { name: '任务中心', exact: true }).click()

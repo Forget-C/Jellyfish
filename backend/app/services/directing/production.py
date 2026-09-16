@@ -7,7 +7,7 @@ from sqlalchemy import select
 from app.core.contracts.directing.common import Note, ROLES, Source
 from app.core.contracts.directing.design import SceneDesign
 from app.core.contracts.directing.production import CompilationDecision, ProductionPlan, Prompt, ReviewPacket, ReviewOccurrence, ReviewRow
-from app.core.contracts.directing.workspace import AIRequest, VisualRequest, RegroupRequest
+from app.core.contracts.directing.workspace import AIRequest, ReviewRequest, VisualRequest, RegroupRequest
 from app.core.contracts.generation import (
     ImageGenerationOperationInput, GenerationCommand, GenerationDelivery, GenerationModality, GenerationOperation, GenerationSubmitRequest,
     GenerationTarget, GenerationTargetKind, VideoGenerationOperationInput,
@@ -19,7 +19,7 @@ from app.core.integrations.openai.video_capabilities import validate_openai_vide
 from app.core.integrations.vidu.video_capabilities import validate_vidu_video_options
 from app.core.integrations.kling.video_capabilities import validate_kling_video_options
 from app.core.integrations.volcengine.video_capabilities import validate_volcengine_video_options
-from app.models.directing import DirectingAction, Sequence
+from app.models.directing import DirectingAction, DirectingRevision, Sequence
 from app.models.llm import ModelCategoryKey, Provider
 from app.models.task import Task
 from app.models.studio import FileUsage
@@ -155,7 +155,24 @@ class ProductionService(DirectingAIService):
         validators[config.provider_key](options)
         return plan, unit, media
 
-    async def compile_unit(self, sequence_id: str, plan_id: str, unit_id: str):
+    async def compile_unit(self, sequence_id: str, plan_id: str, unit_id: str, *, request_id: str | None = None):
+        """同一编译请求返回原指令；请求身份不可跨场次、计划或单元复用。"""
+        if not request_id:
+            return await self._compile_unit(sequence_id, plan_id, unit_id)
+        async with self.db.begin_nested():
+            await self.sequence(sequence_id)
+            await self.db.get(Sequence, sequence_id, with_for_update=True, populate_existing=True)
+            action = await self.db.scalar(select(DirectingAction).where(DirectingAction.request_id == request_id).with_for_update())
+            if action:
+                if action.action != "compile" or action.sequence_id != sequence_id or action.unit_id != unit_id:
+                    raise ValueError("编译请求身份已用于其他操作，不能复用")
+                row = await self.revision(action.revision_id, kind="prompt", sequence_id=sequence_id, confirmed=True, for_update=True)
+                if row.payload["plan_revision_id"] != plan_id:
+                    raise ValueError("编译请求身份已用于其他计划，不能复用")
+                return row
+            return await self._compile_unit(sequence_id, plan_id, unit_id, request_id=request_id)
+
+    async def _compile_unit(self, sequence_id: str, plan_id: str, unit_id: str, *, request_id: str | None = None):
         """将适用工作单字段编译为有版本的文本及逐项去向，不截断关键语义。"""
         plan, unit, _ = await self.validate_unit(sequence_id, plan_id, unit_id)
         design_row = await self.revision(plan.design_revision_id, kind="design", sequence_id=sequence_id, confirmed=True)
@@ -254,11 +271,31 @@ class ProductionService(DirectingAIService):
             row = await self.save_revision(sequence_id, kind="prompt", payload=prompt.model_dump(mode="json"))
             row = await self.confirm_revision(row.id, expected_version=row.version, actor_id="local-user")
             self.db.add(DirectingAction(id=uuid4().hex, sequence_id=sequence_id, revision_id=row.id,
-                                       action="compile", actor_id="local-user", displayed_label="编译本次试拍", unit_id=unit_id))
+                                       action="compile", actor_id="local-user", displayed_label="编译本次试拍", unit_id=unit_id, request_id=request_id))
             await self.db.flush()
         return row
 
-    async def submit_review(self, sequence_id: str, prompt_id: str, body: AIRequest):
+    async def submit_review(self, sequence_id: str, prompt_id: str, body: AIRequest | ReviewRequest):
+        """场次锁内按请求身份恢复原检查；改变指令或检查参数必须明确新请求。"""
+        request_id = body.request_id if isinstance(body, ReviewRequest) else None
+        if not request_id:
+            return await self._submit_review(sequence_id, prompt_id, body)
+        request = {"prompt_id": prompt_id, "body": body.model_dump(mode="json", exclude={"request_id"})}
+        async with self.db.begin_nested():
+            await self.sequence(sequence_id)
+            await self.db.get(Sequence, sequence_id, with_for_update=True, populate_existing=True)
+            task = await self.db.scalar(select(Task).where(
+                Task.project_id == self.project_id, Task.target_id == sequence_id, Task.kind == "directing_review",
+                Task.input_snapshot["review_request_id"].as_string() == request_id,
+            ).with_for_update())
+            if task:
+                if task.input_snapshot.get("review_request") != request:
+                    raise ValueError("检查请求身份已用于其他指令或参数，不能复用")
+                return task
+            return await self._submit_review(sequence_id, prompt_id, body,
+                request_context={"review_request_id": request_id, "review_request": request})
+
+    async def _submit_review(self, sequence_id: str, prompt_id: str, body: AIRequest, *, request_context: dict | None = None):
         """固定提示词及逐镜出现项，让六岗在共同场次上下文审查。"""
         row = await self.revision(prompt_id, kind="prompt", sequence_id=sequence_id, confirmed=True)
         prompt = Prompt.model_validate(row.payload)
@@ -269,23 +306,28 @@ class ProductionService(DirectingAIService):
         packet = ReviewPacket(mode="formal", roles=list(ROLES), occurrences=occurrences,
                     rows=[ReviewRow(role=role, occurrence_id=o.id, verdict="pending", rationale="待审查", findings=[]) for role in ROLES for o in occurrences], context=Note())
         design = await self.revision(plan.design_revision_id)
-        return await self.submit_ai(kind="directing_review", body=body, sequence_id=sequence_id,
+        return await self.submit_ai(kind="directing_review", body=body, sequence_id=sequence_id, request_context=request_context,
                                    extra={"packet": packet.model_dump(mode="json"), "prompt": prompt.model_dump(mode="json"), "design": design.payload,
                                           "style_rules": [rule.model_dump(mode="json") for rule in await self.applicable_style(
                                               design.payload.get("style_revision_id"), sequence_id,
                                               (await get_model_by_category(self.db, ModelCategoryKey.video, model_or_id=unit.model_id)).name)]})
 
     async def apply_review(self, sequence_id: str, task_id: str):
-        """记录模型实际审稿结果，保留 revise 结论，不能用保存动作伪装通过。"""
-        task = await self.db.get(Task, task_id)
+        """同一检查任务只保存一次；重试返回原结论，保存不将 revise 改为通过。"""
+        await self.sequence(sequence_id)
+        task = await self.db.get(Task, task_id, with_for_update=True, populate_existing=True)
         if task is None or task.project_id != self.project_id or task.target_id != sequence_id or task.kind != "directing_review" or task.status != "succeeded":
             raise ValueError("审稿任务尚无可保存结果")
         packet = ReviewPacket.model_validate(task.result)
         original = ReviewPacket.model_validate(task.input_snapshot["run_args"]["packet"])
         if packet.occurrences != original.occurrences or packet.roles != original.roles:
             raise ValueError("审稿结果与送审范围不一致")
-        row = await self.save_revision(sequence_id, kind="review", payload=packet.model_dump(mode="json"))
-        return await self.confirm_revision(row.id, expected_version=row.version, actor_id="local-user")
+        existing = await self.db.scalar(select(DirectingRevision).where(DirectingRevision.source_task_id == task_id).with_for_update())
+        if existing:
+            return await self.revision(existing.id, kind="review", sequence_id=sequence_id, confirmed=True, for_update=True)
+        async with self.db.begin_nested():
+            row = await self.save_revision(sequence_id, kind="review", payload=packet.model_dump(mode="json"), source_task_id=task_id)
+            return await self.confirm_revision(row.id, expected_version=row.version, actor_id="local-user")
 
     async def prepare_shoot(self, sequence_id: str, *, prompt_id: str, review_id: str) -> GenerationCommand:
         """只读预检固定提示词、审稿、计划和模型输入，单次与批量共用且不创建任务。"""
