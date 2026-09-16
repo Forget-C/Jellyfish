@@ -1,7 +1,7 @@
 import { useWorkbenchDesktop } from './useWorkbenchDesktop'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Alert, Button, Drawer, Empty, Input, Modal, Select, Tabs } from 'antd'
+import { Alert, Button, Drawer, Empty, Input, Modal, Select, Segmented, Tabs } from 'antd'
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons'
 import type { SceneDesign_Input, WorkspaceRead } from '../../../services/generated'
 import { readWorkspaceContext, readDesignPosition, saveWorkspaceContext } from './workspaceContext'
@@ -12,7 +12,7 @@ import { DesignRelationEditor } from './DesignRelationEditor'
 import { DesignStoryboard } from './DesignStoryboard'
 import { emptyDesign } from './designTemplate'
 import { DesignFields, designAt, noteText, patchDesign } from './DesignFields'
-import { departmentNames, designObjects, shotIssues, scopeShots, scopeGraph, shotGraph, reorderScopeShots } from './designWorkspace'
+import { departmentNames, designObjects, shotIssues, scopeShots, scopeGraph, shotGraph, shotRelationPath, reorderScopeShots } from './designWorkspace'
 import type { DesignScope, DesignEdge } from './designWorkspace'
 import { SequenceNavigation } from './SequenceLayout'
 
@@ -24,6 +24,8 @@ export function DesignEditor({ value, onChange, disabled = false, active = true,
   const [selectionEpoch, setSelectionEpoch] = useState(0)
   const [relation, setRelation] = useState<{ edge?: DesignEdge; objectKey?: string }>()
   const [view, setView] = useState(['storyboard', 'relations', 'list'].includes(initialContext.current.designView || '') ? initialContext.current.designView! : 'storyboard')
+  const [shotView, setShotView] = useState(initialContext.current.designShotView === 'list' || initialContext.current.designView === 'list' ? 'list' : 'storyboard')
+  const switchShotView = (next: string) => { setShotView(next); setView(next); if (selected?.startsWith('shot:')) setRevealId(selected.slice(5)) }
   const auxiliaryReturn = useRef<{ view: string; selected?: string }>({ view: 'storyboard' })
   const openRoles = (nextRole?: string) => { if (view !== 'roles') auxiliaryReturn.current = { view, selected }; if (nextRole) setRole(nextRole); setView('roles') }
   const closeRoles = () => { setView(auxiliaryReturn.current.view); setSelected(auxiliaryReturn.current.selected) }
@@ -53,17 +55,17 @@ export function DesignEditor({ value, onChange, disabled = false, active = true,
   useEffect(() => {
     if (!rememberContext) return
     saveWorkspaceContext(rememberContext.projectId, rememberContext.sequenceId, {
-      designScope: scope, designView: view === 'roles' ? auxiliaryReturn.current.view : view,
+      designScope: scope, designShotView: shotView, designView: view === 'roles' ? auxiliaryReturn.current.view : view,
       designObject: selected ?? null, designQuery: query, designProblems: String(problems), designTab: tab,
     })
-  }, [rememberContext?.projectId, rememberContext?.sequenceId, scope, view, selected, query, problems, tab])
+  }, [rememberContext?.projectId, rememberContext?.sequenceId, scope, view, shotView, selected, query, problems, tab])
   const changeScope = (next: DesignScope) => {
     const allowed = next === 'all' ? objects.map(row => row.key) : [...scopeGraph(value, next).nodes.map(row => row.key), next]
     if (selected && !allowed.includes(selected)) setSelected(undefined)
     setScope(next); setScrollTop(0); setRelation(undefined)
     if (list.current) list.current.scrollTop = 0
   }
-  const [scopeHistory, setScopeHistory] = useState<Array<{ scope: DesignScope; selected?: string }>>([])
+  const [scopeHistory, setScopeHistory] = useState<Array<{ scope: DesignScope; selected?: string; query: string; problems: boolean }>>([])
   const previousRevision = useRef(revisionId)
   useEffect(() => {
     if (previousRevision.current === revisionId) return
@@ -73,15 +75,15 @@ export function DesignEditor({ value, onChange, disabled = false, active = true,
     if (selected && !allowed.includes(selected)) setSelected(undefined)
   }, [revisionId, scope, beat, objects, selected, value, view])
   const enterGraphScope = (id?: string) => {
-    const next: DesignScope = id ? `beat:${id}` : 'all'
+    const next: DesignScope = id === undefined ? 'all' : `beat:${id}`
     if (next === scope) return
-    setScopeHistory(previous => [...previous, { scope, selected }]); changeScope(next)
+    setScopeHistory(previous => [...previous, { scope, selected, query, problems }]); changeScope(next)
   }
   const returnGraphScope = () => {
     const previous = scopeHistory[scopeHistory.length - 1]
     if (!previous) return
     const next = previous.scope.startsWith('beat:') && !value.direction.beats.some(row => `beat:${row.id}` === previous.scope) ? 'all' : previous.scope
-    changeScope(next)
+    changeScope(next); setQuery(previous.query); setProblems(previous.problems)
     const allowed = next === 'all' ? objects : scopeGraph(value, next).nodes
     setSelected(allowed.some(row => row.key === previous.selected) ? previous.selected : undefined)
     setScopeHistory(history => history.slice(0, -1))
@@ -92,13 +94,9 @@ export function DesignEditor({ value, onChange, disabled = false, active = true,
   const filtered = useMemo(() => scopedShots.filter(row => {
     const index = value.direction.shots.indexOf(row)
     const names = value.direction.blocking_states.filter(b => row.blocking_state_ids.includes(b.id)).map(b => value.participants.find(p => p.id === b.participant_id)?.name).join(' ')
-    return (!problems || shotIssues(value, row.id).length) && `${index + 1} ${row.id} ${noteText(row.visible_result)} ${noteText(row.narrative_function)} ${names}`.toLowerCase().includes(query.toLowerCase())
+    return (!problems || shotIssues(value, row.id).length) && (!query || `${index + 1} ${row.id} ${noteText(row.visible_result)} ${noteText(row.narrative_function)} ${names} ${shotGraph(value, row.id).nodes.map(node => node.label).join(' ')}`.toLowerCase().includes(query.toLowerCase()))
   }), [value, scopedShots, query, problems])
-  const rows = useMemo(() => {
-    const groups = new Map<string, typeof filtered>()
-    filtered.forEach(row => { const group = beat || row.beat_ids.find(id => value.direction.beats.some(item => item.id === id)) || ''; groups.set(group, [...(groups.get(group) || []), row]) })
-    return [...groups].flatMap(([id, shots]) => [{ kind: 'group' as const, id, shots }, ...shots.map(shot => ({ kind: 'shot' as const, id: shot.id, shot }))])
-  }, [filtered, beat])
+  const rows = useMemo(() => filtered.map(shot => ({ id: shot.id, shot })), [filtered])
   useEffect(() => {
     const target = list.current
     if (!target) return
@@ -113,7 +111,7 @@ export function DesignEditor({ value, onChange, disabled = false, active = true,
   }
   useEffect(() => {
     if (!revealId || view !== 'list' || !list.current) return
-    const row = rows.findIndex(row => row.kind === 'shot' && row.id === revealId)
+    const row = rows.findIndex(row => row.id === revealId)
     if (row >= 0) list.current.scrollTop = Math.max(0, row * 40 - list.current.clientHeight / 2)
     setRevealId(undefined)
   }, [revealId, rows, view])
@@ -132,6 +130,12 @@ export function DesignEditor({ value, onChange, disabled = false, active = true,
   const showIssue = (id: string, issue: string) => {
     const target = value.direction.shots.find(row => row.id === id)
     const missing = target && ([['beat_ids', value.direction.beats], ['event_ids', value.events], ['blocking_state_ids', value.direction.blocking_states], ['criterion_ids', value.criteria]] as const).find(([key, rows]) => target[key].some(ref => !rows.some(row => row.id === ref)))?.[0]
+    if (issue === '关联缺失' && !missing) {
+      const graph = shotGraph(value, id)
+      const missingKeys = new Set(graph.nodes.filter(node => node.kind === 'missing').map(node => node.key))
+      const edge = graph.edges.find(edge => missingKeys.has(edge.to) || missingKeys.has(edge.from))
+      if (edge) { select(`shot:${id}`); setRelation({ edge }); return }
+    }
     const field = ({ '动作待明确': 'visible_result', '叙事待明确': 'narrative_function', '时长未填写': 'estimated_duration_ms', '未关联节拍': 'beat_ids', '关联缺失': missing || 'beat_ids' } as Record<string, string>)[issue]
     select(`shot:${id}`); setTab(field?.endsWith('_ids') ? 'relations' : 'narrative'); setIssueField(field)
   }
@@ -145,7 +149,7 @@ export function DesignEditor({ value, onChange, disabled = false, active = true,
   }, [issueField, selected, tab])
   const cameraIndex = value.cinematography.findIndex(row => row.shot_id === shotId)
   const shotIndex = value.direction.shots.findIndex(row => row.id === shotId)
-  const hiddenSelection = !!shotId && !filtered.some(row => row.id === shotId)
+  const hiddenSelection = shotId ? !filtered.some(row => row.id === shotId) : !!selected && view !== 'roles' && !!(query || problems) && selected !== 'overview' && !scopeGraph(value, scope, filtered.map(row => row.id)).nodes.some(node => node.key === selected)
   const moveShot = (id: string, delta: number) => {
     const index = filtered.findIndex(row => row.id === id), target = filtered[index + delta]
     if (target) update(reorderScopeShots(value, filtered.map(row => row.id), id, target.id))
@@ -157,6 +161,7 @@ export function DesignEditor({ value, onChange, disabled = false, active = true,
     {shot && <div className="design-issue-actions">{shotIssues(value, shot.id).map(issue => <Button type="link" size="small" key={issue} onClick={() => showIssue(shot.id, issue)}>{issue} · 定位字段</Button>)}</div>}
     {shot && <p className="design-secondary">覆盖节拍：{shot.beat_ids.map(id => `${value.direction.beats.findIndex(b => b.id === id) + 1} ${noteText(value.direction.beats.find(b => b.id === id)?.objective)}`).join('、') || '未关联'}</p>}
     {impact.length > 1 && <Alert type="info" message={`共享规则 · 修改将影响 ${impact.length} 个镜头`} description={impact.map(s => `镜头 ${value.direction.shots.indexOf(s) + 1}`).join('、')} />}
+    {selectedObject && !shot && impact.length > 0 && <section className="design-impact"><h3>关联路径 · {impact.length} 个镜头</h3>{impact.map(item => { const graph = shotGraph(value, item.id); const path = shotRelationPath(graph, item.id, selectedObject.key); return <details key={item.id}><summary>镜头 {value.direction.shots.indexOf(item) + 1} · {noteText(item.visible_result)}</summary><ol>{path.map((edge, index) => <li key={index}>{graph.nodes.find(node => node.key === edge.from)?.label} → {edge.label}{edge.indirect ? '（间接）' : ''} → {graph.nodes.find(node => node.key === edge.to)?.label}</li>)}</ol><Button size="small" onClick={() => { if (!scopedShots.some(shot => shot.id === item.id)) changeScope('all'); setQuery(''); setProblems(false); setView(shotView); reveal(item.id) }}>定位镜头 {value.direction.shots.indexOf(item) + 1}</Button>{item.beat_ids.filter(id => value.direction.beats.some(beat => beat.id === id)).map(id => <Button size="small" key={id} onClick={() => { setView('relations'); enterGraphScope(id) }}>进入节拍 {value.direction.beats.findIndex(beat => beat.id === id) + 1} 关系</Button>)}</details> })}</section>}
     {shot ? <Tabs activeKey={tab} onChange={setTab} items={[
       { key: 'narrative', label: '叙事', children: <DesignFields value={value} path={['direction', 'shots', shotIndex]} fields={['visible_result', 'narrative_function', 'estimated_duration_ms']} onChange={update} disabled={disabled} /> },
       { key: 'performance', label: '表演', children: <>{value.performance.beats.map((row, index) => shot.beat_ids.includes(row.beat_id) && <section className="design-related" key={index}><p>{value.participants.find(p => p.id === row.participant_id)?.name || '缺失人物引用'} · 共享节拍表演</p><p>{noteText(row.physical_action) || '身体动作待填写'}</p><Button onClick={() => select(`performance:${index}`)}>编辑表演与影响范围</Button></section>)}<Button onClick={() => { openRoles('performance') }}>完整表演审阅</Button></> },
@@ -178,9 +183,10 @@ export function DesignEditor({ value, onChange, disabled = false, active = true,
       <div className="design-navigation-bottom"><Button type="text" block onClick={() => setAssetsOpen(true)}>人物与场所</Button><Button type="text" block onClick={() => openRoles()}>全场规则</Button><Button type="text" block aria-pressed={problems} onClick={() => setProblems(!problems)}>设计问题 · {scopedShots.filter(s => shotIssues(value, s.id).length).length}</Button></div>
     </div></SequenceNavigation>}
     <section className="design-center">
-      <div className="design-view-toolbar"><div className="design-scope-heading"><strong>{scopeLabel}</strong><small>{scopedShots.length} 镜 · 预计 {scopedShots.reduce((n, row) => n + (row.estimated_duration_ms || 0), 0) / 1000} 秒</small></div><div className="design-view-tabs" role="tablist" aria-label="设计视图">{[['storyboard', '分镜'], ['relations', '关系']].map(([key, label]) => <button role="tab" aria-selected={view === key} key={key} onClick={() => setView(key)}>{label}</button>)}</div><Button aria-label="表格" aria-pressed={view === 'list'} onClick={() => setView('list')}>表格</Button>{!active && <Button onClick={() => openRoles()}>岗位审阅</Button>}<Input prefix={<SearchOutlined />} aria-label="搜索镜头、动作、人物" placeholder="搜索当前范围" value={query} onChange={event => { setQuery(event.target.value); setScrollTop(0); if (list.current) list.current.scrollTop = 0 }} allowClear /><Button aria-pressed={problems} onClick={() => setProblems(!problems)}>仅看问题</Button></div>
-      <div className="design-view-content" hidden={view !== 'list'}><div className="design-intent"><strong>本场意图：{noteText(value.direction.information_change) || '待明确'}</strong><Button type="link" onClick={() => select('overview')}>全场概览 ›</Button></div>
-        <div className="design-list-head" role="row"><span>镜头</span><span>可见动作</span><span>叙事作用</span><span>预计时长</span><span>待处理</span></div>
+      <div className="design-view-toolbar"><div className="design-scope-heading"><strong>{scopeLabel}</strong><small>{scopedShots.length} 镜 · 预计 {scopedShots.reduce((n, row) => n + (row.estimated_duration_ms || 0), 0) / 1000} 秒</small></div><div className="design-view-tabs" role="tablist" aria-label="设计视图"><button role="tab" aria-selected={view === 'storyboard' || view === 'list'} onClick={() => switchShotView(shotView)}>镜头</button><button role="tab" aria-selected={view === 'relations'} onClick={() => setView('relations')}>关系</button></div>{(view === 'storyboard' || view === 'list') && <Segmented aria-label="镜头展示方式" value={view} onChange={next => switchShotView(String(next))} options={[{ value: 'storyboard', label: '分镜' }, { value: 'list', label: '清单' }]} />}{!active && <Button onClick={() => openRoles()}>岗位审阅</Button>}<Input prefix={<SearchOutlined />} aria-label="搜索镜头、动作、人物" placeholder="搜索当前范围" value={query} onChange={event => { setQuery(event.target.value); setScrollTop(0); if (list.current) list.current.scrollTop = 0 }} allowClear /><Button aria-pressed={problems} onClick={() => setProblems(!problems)}>仅看问题</Button></div>
+      {(view === 'list' || view === 'storyboard') && <div className="design-intent"><strong>本场意图：{noteText(value.direction.information_change) || '待明确'}</strong><Button type="link" onClick={() => select('overview')}>全场概览 ›</Button></div>}
+      <div className="design-view-content" hidden={view !== 'list'}>
+        <div className="design-list-head" role="row"><span>镜头</span><span>可见动作</span><span>叙事作用</span><span>节拍</span><span>预计时长</span><span>待处理</span></div>
         <div className="design-shot-list" role="grid" aria-label="镜头清单" aria-rowcount={filtered.length} tabIndex={0} ref={list} onScroll={event => setScrollTop(event.currentTarget.scrollTop)} onKeyDown={event => {
           if (!['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter'].includes(event.key)) return
           event.preventDefault()
@@ -190,13 +196,13 @@ export function DesignEditor({ value, onChange, disabled = false, active = true,
           if (filtered[index]) reveal(filtered[index].id)
         }}>
           {!filtered.length && <Empty description="没有匹配的镜头" />}
-          <div style={{ height: rows.length * 40, position: 'relative' }}>{visible.map((row, index) => row.kind === 'group' ? <div className="design-group-row" style={{ top: (start + index) * 40 }} key={`group:${row.id}`}><strong>{row.id ? `${String(value.direction.beats.findIndex(b => b.id === row.id) + 1).padStart(2, '0')}　${noteText(value.direction.beats.find(b => b.id === row.id)?.objective) || '待明确节拍'}` : '未分组'}</strong><span>（{row.shots.length} 个镜头）</span></div> : <div className={`design-shot-row${shotId === row.id ? ' is-selected' : ''}`} role="row" aria-selected={shotId === row.id} data-shot-id={row.id} style={{ top: (start + index) * 40 }} key={row.id} onClick={() => select(`shot:${row.id}`)}>
-            <span>{String(value.direction.shots.indexOf(row.shot) + 1).padStart(2, '0')}</span><span title={noteText(row.shot.visible_result)}>{noteText(row.shot.visible_result) || '动作待填写'}{row.shot.beat_ids.length > 1 && <small> · 跨 {row.shot.beat_ids.length} 节拍</small>}</span><span title={noteText(row.shot.narrative_function)}>{noteText(row.shot.narrative_function) || '待填写'}</span><span>{row.shot.estimated_duration_ms ? `${row.shot.estimated_duration_ms / 1000}s` : '未填写'}</span><span className={shotIssues(value, row.id).length ? 'design-issue' : 'design-secondary'} title={shotIssues(value, row.id).join('；')}>{shotIssues(value, row.id)[0] || '未记录问题'}</span>
+          <div style={{ height: rows.length * 40, position: 'relative' }}>{visible.map((row, index) => <div className={`design-shot-row${shotId === row.id ? ' is-selected' : ''}`} role="row" aria-selected={shotId === row.id} data-shot-id={row.id} style={{ top: (start + index) * 40 }} key={row.id} onClick={() => select(`shot:${row.id}`)}>
+            <span>{String(value.direction.shots.indexOf(row.shot) + 1).padStart(2, '0')}</span><span title={noteText(row.shot.visible_result)}>{noteText(row.shot.visible_result) || '动作待填写'}{row.shot.beat_ids.length > 1 && <small> · 跨 {row.shot.beat_ids.length} 节拍</small>}</span><span title={noteText(row.shot.narrative_function)}>{noteText(row.shot.narrative_function) || '待填写'}</span><span title={row.shot.beat_ids.map(id => noteText(value.direction.beats.find(beat => beat.id === id)?.objective) || '缺失节拍').join('、')}>{row.shot.beat_ids.map(id => { const index = value.direction.beats.findIndex(beat => beat.id === id); return index < 0 ? '缺失' : String(index + 1).padStart(2, '0') }).join('、') || '未分组'}</span><span>{row.shot.estimated_duration_ms ? `${row.shot.estimated_duration_ms / 1000}s` : '未填写'}</span><span className={shotIssues(value, row.id).length ? 'design-issue' : 'design-secondary'} title={shotIssues(value, row.id).join('；')}>{shotIssues(value, row.id)[0] || '未记录问题'}</span>
           </div>)}</div>
         </div><div className="design-list-footer"><span>{filtered.length} / {scopedShots.length} 个镜头 · 预计 {scopedShots.reduce((n, s) => n + (s.estimated_duration_ms || 0), 0) / 1000} 秒</span>{!disabled && <Button size="small" icon={<PlusOutlined />} onClick={addShot}>新增镜头</Button>}</div></div>
       <div className="design-view-content" hidden={view !== 'storyboard'}><DesignStoryboard onIssue={showIssue} active={view === 'storyboard'} onRevealed={() => setRevealId(undefined)} rememberContext={rememberContext} key={revisionId} value={value} shots={filtered} selected={shotId} onSelect={id => select(`shot:${id}`)} revisionId={revisionId} cuts={cuts} scope={scope} revealId={revealId} onMove={disabled ? undefined : moveShot} />{!disabled && <div className="design-list-footer"><span>{filtered.length} / {scopedShots.length} 个镜头</span><Button size="small" icon={<PlusOutlined />} onClick={addShot}>新增镜头</Button></div>}</div>
-      <div className="design-view-content" hidden={view !== 'relations'}><DesignRelations onIssue={showIssue} key={revisionId} revisionId={revisionId} rememberContext={rememberContext} onReturn={scopeHistory.length ? returnGraphScope : undefined} value={value} scope={scope} visibleShotIds={filtered.map(row => row.id)} selected={selected} active={view === 'relations'} onSelect={select} onLocate={id => { setQuery(''); setProblems(false); setView('storyboard'); reveal(id) }} onRelation={edge => { setRelation({ edge }); if (!desktop) setDetailsOpen(true) }} onEditRelations={objectKey => { setRelation({ objectKey }); if (!desktop) setDetailsOpen(true) }} onBeatSelect={enterGraphScope} /></div>
-      <div className="design-view-content" hidden={view !== 'roles'}><Button onClick={closeRoles}>返回{auxiliaryReturn.current.view === 'relations' ? '关系' : auxiliaryReturn.current.view === 'list' ? '表格' : '分镜'}</Button><div className="design-role-browser"><Select aria-label="岗位" value={role} onChange={setRole} options={Object.entries({ ...departmentNames, participants: '人物与物件' }).map(([value, label]) => ({ value, label }))} /><h2>{departmentNames[role] || '人物与物件'}</h2><p className="design-secondary">选择对象查看全部字段；共享内容仅在原对象上编辑。</p>{objects.filter(o => o.kind === role).map(o => <button className={`design-role-row${selected === o.key ? ' is-selected' : ''}`} key={o.key} onClick={() => select(o.key)}>{o.label}<span>查看与编辑 ›</span></button>)}{!disabled && <Select<string> aria-label="新增岗位对象" value={undefined} placeholder="新增对象" options={Object.entries(role === 'direction' ? { beats: '节拍', anchors: '空间锚点', blocking_states: '调度', events: '事件', criteria: '验收要求' } : role === 'performance' ? { situations: '角色情境', beats: '节拍表演' } : role === 'staging' ? { activities: '镜内活动' } : role === 'sound' ? { dialogues: '对白' } : { [role]: departmentNames[role] || '人物与物件' }).filter(([key]) => key !== 'prompt').map(([value, label]) => ({ value, label }))} onChange={key => {
+      <div className="design-view-content" hidden={view !== 'relations'}><DesignRelations onUnassigned={() => { setScopeHistory(previous => [...previous, { scope, selected, query, problems }]); changeScope('unassigned') }} onIssue={showIssue} key={revisionId} revisionId={revisionId} rememberContext={rememberContext} onReturn={scopeHistory.length ? returnGraphScope : undefined} value={value} scope={scope} visibleShotIds={filtered.map(row => row.id)} selected={selected} active={view === 'relations'} onSelect={select} onLocate={id => { setQuery(''); setProblems(false); setView(shotView); reveal(id) }} onRelation={edge => { setRelation({ edge }); if (!desktop) setDetailsOpen(true) }} onEditRelations={objectKey => { setRelation({ objectKey }); if (!desktop) setDetailsOpen(true) }} onBeatSelect={enterGraphScope} /></div>
+      <div className="design-view-content" hidden={view !== 'roles'}><Button onClick={closeRoles}>返回{auxiliaryReturn.current.view === 'relations' ? '关系' : auxiliaryReturn.current.view === 'list' ? '清单' : '分镜'}</Button><div className="design-role-browser"><Select aria-label="岗位" value={role} onChange={setRole} options={Object.entries({ ...departmentNames, participants: '人物与物件' }).map(([value, label]) => ({ value, label }))} /><h2>{departmentNames[role] || '人物与物件'}</h2><p className="design-secondary">选择对象查看全部字段；共享内容仅在原对象上编辑。</p>{objects.filter(o => o.kind === role).map(o => <button className={`design-role-row${selected === o.key ? ' is-selected' : ''}`} key={o.key} onClick={() => select(o.key)}>{o.label}<span>查看与编辑 ›</span></button>)}{!disabled && <Select<string> aria-label="新增岗位对象" value={undefined} placeholder="新增对象" options={Object.entries(role === 'direction' ? { beats: '节拍', anchors: '空间锚点', blocking_states: '调度', events: '事件', criteria: '验收要求' } : role === 'performance' ? { situations: '角色情境', beats: '节拍表演' } : role === 'staging' ? { activities: '镜内活动' } : role === 'sound' ? { dialogues: '对白' } : { [role]: departmentNames[role] || '人物与物件' }).filter(([key]) => key !== 'prompt').map(([value, label]) => ({ value, label }))} onChange={key => {
           const path = ['events', 'criteria', 'cinematography', 'continuity', 'participants'].includes(key) ? [key] : [role, key]
           const rows = designAt(value, path)
           const sample = designAt(emptyDesign(), [...path, 0])

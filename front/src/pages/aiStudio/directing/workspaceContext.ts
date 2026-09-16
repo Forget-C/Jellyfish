@@ -1,4 +1,4 @@
-export type WorkspaceSelection = 'design' | 'plan' | 'unit' | 'prompt' | 'review' | 'cut' | 'take' | 'view' | 'designScope' | 'designView' | 'designObject' | 'designQuery' | 'designProblems' | 'designTab' | 'designGraph' | 'designListPosition' | 'designStoryboardPosition' | 'shootIdentity' | 'cutItem' | 'shootTab' | 'shootQuery' | 'shootScroll' | 'shootInspectorScroll' | 'cutTab' | 'cutFilter' | 'cutUnitFilter' | 'cutScale' | 'cutTimelineScroll' | 'cutViewerScroll' | 'cutInspectorScroll'
+export type WorkspaceSelection = 'design' | 'plan' | 'unit' | 'prompt' | 'review' | 'cut' | 'take' | 'view' | 'designScope' | 'designShotView' | 'designShowImages' | 'designView' | 'designObject' | 'designQuery' | 'designProblems' | 'designTab' | 'designOverview' | 'designGraph' | 'designListPosition' | 'designStoryboardPosition' | 'shootIdentity' | 'cutItem' | 'shootTab' | 'shootQuery' | 'shootScroll' | 'shootInspectorScroll' | 'cutTab' | 'cutFilter' | 'cutUnitFilter' | 'cutScale' | 'cutTimelineScroll' | 'cutViewerScroll' | 'cutInspectorScroll'
 type StoredContext = Partial<Record<WorkspaceSelection, string | null>>
 
 const storageKey = (projectId: string, sequenceId: string) => `directing-context:${projectId}:${sequenceId}`
@@ -26,7 +26,7 @@ export function restoreSelection<T extends { id: string }>(rows: T[], explicit: 
 export function readDesignPosition(raw: string | null | undefined, revisionId: string | undefined, scope: string): { top: number; density: number } {
   try {
     const row = JSON.parse(raw || '{}')
-    if (row.revisionId === revisionId && row.scope === scope && Number.isFinite(row.top) && row.top >= 0) return { top: row.top, density: row.density === 180 ? 180 : 220 }
+    if (row.revisionId === revisionId && row.scope === scope && Number.isFinite(row.top) && row.top >= 0) return { top: row.top, density: row.density === 220 ? 220 : 180 }
   } catch { /* 浏览状态损坏不阻止进入设计。 */ }
-  return { top: 0, density: 220 }
+  return { top: 0, density: 180 }
 }

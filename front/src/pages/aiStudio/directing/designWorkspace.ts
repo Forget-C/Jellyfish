@@ -156,5 +156,40 @@ export function shotIssues(value: SceneDesign_Input, shotId: string): string[] {
   for (const [ids, rows] of [[shot.beat_ids, value.direction.beats], [shot.event_ids, value.events], [shot.blocking_state_ids, value.direction.blocking_states], [shot.criterion_ids, value.criteria]] as const) {
     if (ids.some(id => !rows.some(row => row.id === id))) issues.push('关联缺失')
   }
+  if (shotGraph(value, shotId).nodes.some(node => node.kind === 'missing')) issues.push('关联缺失')
   return [...new Set(issues)]
+}
+
+/** 总览仅聚合真实镜头引用；节拍行可重复引用镜头，全场统计仍使用原镜头集合。 */
+export function sceneOverview(value: SceneDesign_Input, visibleIds?: string[]) {
+  const graphs = new Map(value.direction.shots.map(shot => [shot.id, shotGraph(value, shot.id)]))
+  const scopes: DesignScope[] = value.direction.beats.map(beat => `beat:${beat.id}` as DesignScope)
+  if (scopeShots(value, 'unassigned').length) scopes.push('unassigned')
+  const rows = scopes.map(scope => {
+    const shots = scopeShots(value, scope).filter(shot => !visibleIds || visibleIds.includes(shot.id))
+    const objects = new Map<string, DesignObject>()
+    shots.forEach(shot => graphs.get(shot.id)?.nodes.forEach(node => {
+      if (!node.key.startsWith('shot:') && !node.key.startsWith('beat:')) objects.set(node.key, node)
+    }))
+    return { scope, shots, objects: [...objects.values()] }
+  })
+  const frequency = new Map<string, number>()
+  rows.forEach(row => row.objects.forEach(node => frequency.set(node.key, (frequency.get(node.key) || 0) + 1)))
+  const rank = (node: DesignObject) => node.kind === 'missing' ? -1 : (frequency.get(node.key) || 0) * 10 + (node.key.startsWith('participant:') ? 3 : node.key.startsWith('event:') ? 2 : 0)
+  rows.forEach(row => row.objects.sort((a, b) => rank(b) - rank(a)))
+  return { rows, graphs, frequency }
+}
+
+/** 从镜头出发沿真实引用找解释路径；不以名称或推测补边，缺失引用仍可解释。 */
+export function shotRelationPath(graph: DesignGraph, shotId: string, target: string): DesignEdge[] {
+  const queue: Array<{ key: string; path: DesignEdge[] }> = [{ key: `shot:${shotId}`, path: [] }]
+  const seen = new Set<string>()
+  for (let index = 0; index < queue.length; index++) {
+    const { key, path } = queue[index]
+    if (key === target) return path
+    if (seen.has(key)) continue
+    seen.add(key)
+    graph.edges.filter(edge => edge.from === key && !seen.has(edge.to)).forEach(edge => queue.push({ key: edge.to, path: [...path, edge] }))
+  }
+  return []
 }

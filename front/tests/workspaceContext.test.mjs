@@ -31,3 +31,8 @@ test('design scrolling is restored only for matching revision and range', () => 
   assert.deepEqual(readDesignPosition(JSON.stringify({ revisionId: 'd1', scope: 'beat:a', top: 900, density: 180 }), 'd1', 'beat:a'), { top: 900, density: 180 })
   for (const raw of ['bad', 'null', '{"top":-1}', JSON.stringify({ revisionId: 'd2', scope: 'beat:a', top: 900 })]) assert.equal(readDesignPosition(raw, 'd1', 'beat:a').top, 0)
 })
+
+test('compact density is default and explicit standard density restores even at the top', () => {
+  assert.equal(readDesignPosition(undefined, 'd1', 'all').density, 180)
+  assert.deepEqual(readDesignPosition(JSON.stringify({ revisionId: 'd1', scope: 'all', top: 0, density: 220 }), 'd1', 'all'), { top: 0, density: 220 })
+})

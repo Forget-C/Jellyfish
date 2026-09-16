@@ -9,7 +9,7 @@ const source = await readFile(new URL('../src/pages/aiStudio/directing/designWor
 const valueSource = await readFile(new URL('../src/pages/aiStudio/directing/designValue.ts', import.meta.url), 'utf8')
 const compile = source => ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ES2020 } }).outputText
 const data = source => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`
-const { shotGraph, designObjects, shotIssues, scopeShots, scopeGraph, reorderScopeShots, relationBinding, relationOwner, changeRelation } = await import(data(compile(source).replaceAll("'./designValue'", JSON.stringify(data(compile(valueSource))))))
+const { sceneOverview, shotRelationPath, shotGraph, designObjects, shotIssues, scopeShots, scopeGraph, reorderScopeShots, relationBinding, relationOwner, changeRelation } = await import(data(compile(source).replaceAll("'./designValue'", JSON.stringify(data(compile(valueSource))))))
 
 test('beat ranges retain shared shot identities and expose unassigned or missing beats', () => {
   const value = makeWorkspace().designs[0].content
@@ -112,4 +112,41 @@ test('indirect relation navigation targets the object that owns the original ref
   const edges = shotGraph(value, 'shot1').edges
   assert.equal(relationOwner(edges.find(edge => edge.label === '节拍表演')), 'performance:0')
   assert.equal(relationOwner(edges.find(edge => edge.label === '表演人物')), 'performance:0')
+})
+
+
+test('scene overview keeps real shared identities, unassigned rows and explanatory paths', () => {
+  const value = makeWorkspace().designs[0].content
+  const shot = value.direction.shots[0]
+  value.direction.beats.push({ ...structuredClone(value.direction.beats[0]), id: 'beat2' })
+  value.direction.shots = [
+    { ...structuredClone(shot), id: 'one', beat_ids: ['beat1', 'beat2'] },
+    { ...structuredClone(shot), id: 'two', beat_ids: ['beat2'] },
+    { ...structuredClone(shot), id: 'three', beat_ids: ['beat1'] },
+    { ...structuredClone(shot), id: 'missing', beat_ids: ['deleted'] },
+  ]
+  value.participants.push({ ...structuredClone(value.participants[0]), id: 'same-name' })
+  const before = structuredClone(value)
+  const data = sceneOverview(value)
+  assert.deepEqual(data.rows.map(row => row.shots.map(shot => shot.id)), [['one', 'three'], ['one', 'two'], ['missing']])
+  assert.equal(new Set(data.rows.flatMap(row => row.shots.map(shot => shot.id))).size, 4)
+  assert.ok(!data.rows.some(row => row.objects.some(node => node.key === 'participant:same-name')))
+  assert.equal(data.frequency.get('participant:person1'), 3)
+  assert.deepEqual(shotRelationPath(data.graphs.get('one'), 'one', 'participant:person1').map(edge => edge.label), ['调度依据', '调度人物'])
+  assert.ok(shotRelationPath(data.graphs.get('one'), 'one', 'performance:0').some(edge => edge.indirect))
+  assert.deepEqual(shotRelationPath(data.graphs.get('one'), 'one', 'participant:same-name'), [])
+  assert.deepEqual(sceneOverview(value, ['two']).rows.map(row => row.shots.map(shot => shot.id)), [[], ['two'], []])
+  assert.deepEqual(value, before)
+  value.direction.beats = []
+  assert.equal(sceneOverview(value).rows[0].scope, 'unassigned')
+  assert.equal(sceneOverview(value).rows[0].shots.length, 4)
+})
+
+test('missing indirect participants remain issues with a real path to their owner', () => {
+  const value = makeWorkspace().designs[0].content
+  value.performance.beats[0].participant_id = 'removed-person'
+  assert.ok(shotIssues(value, 'shot1').includes('关联缺失'))
+  const path = shotRelationPath(shotGraph(value, 'shot1'), 'shot1', 'participant:removed-person')
+  assert.equal(path.at(-1).from, 'performance:0')
+  assert.equal(path.at(-1).indirect, true)
 })

@@ -98,7 +98,7 @@ try {
   }
   await page.goto(base + '?view=shoot&design=d2&plan=p-new&unit=u1')
   await page.getByRole('tab', { name: '导演设计', exact: true }).click()
-  await page.getByRole('button', { name: '表格', exact: true }).click()
+  await page.getByRole('tab', { name: '镜头', exact: true }).click(); await page.getByRole('radio', { name: '清单', exact: true }).locator('..').click()
   await page.locator('.design-intent').getByRole('button', { name: /全场概览/ }).click()
   const field = page.locator('textarea[aria-label="本场信息变化"]')
   await checkTextSave('设计', field, '保存设计草稿', () => workspace.designs[1].content.direction.information_change.text)

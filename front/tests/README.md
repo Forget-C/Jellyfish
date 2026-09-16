@@ -70,3 +70,17 @@ B5 响应式回归使用 1440×900、1024×768、768×1024、375×812，检查�
 - `node front/tests/sourceProvenance.browser.mjs`：五类来源、历史原文与模型名称、失败重试、只读历史、返回保留编辑、迟到响应隔离。使用隔离接口与ffmpeg合成媒体，验证读取失败后重试、真实入点播放和出点暂停；不验证生成内容质量。
 
 浏览器命令沿用上文 Playwright `NODE_PATH` 配置，各自启动4192/4193端口。测试结果和截图输出到独立临时目录。C5完整结果见 `site/static/images/directing-workbench/refinement/verification.json`：48项纯行为测试、8项后端来源/API测试、11组浏览器回归、四尺寸×16状态，以及1586×992框架几何。`workspaceDesignViews`另覆盖1/12/60/200镜头、表格/分镜滚动与版本隔离；`workspaceCut`核对精确片段、筛选、缩放及时间线重载恢复。后端Pylint的5项既有问题与验证边界在方案中单独记录。
+
+
+### D阶段镜头视图与全场关系总览
+
+```bash
+node --test front/tests/*.test.mjs
+node front/tests/workspaceSceneOverview.browser.mjs
+node front/tests/workspaceDesignViews.browser.mjs
+node front/tests/workspaceRefinement.browser.mjs
+```
+
+新增`workspaceSceneOverview.browser.mjs`沿用Node.js 20+、Playwright和上述`NODE_PATH`配置，监听本地4194端口，使用隔离接口替身，不调用真实模型。覆盖旧视图记忆映射、交错节拍的真实镜头顺序、未保存正文跨展示保留、共享高亮及真实路径、清除后重新选择、总览展开和滚动恢复、单节拍200镜头、无节拍及空场次创建。五种尺寸（1586×992、1440×900、1024×768、768×1024、375×812）分别检查分镜、清单、全场总览和节拍图的实际边界与主要控件命中，并保存20张截图及结果。
+
+既有浏览器回归已适配“镜头 / 关系”和“分镜 / 清单”入口；全场不能再直接使用详细图缩放，测试需明确进入节拍。最终结果归档于`site/static/images/directing-workbench/scene-overview/`，与C阶段历史证据分开。

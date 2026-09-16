@@ -1,0 +1,117 @@
+{
+  "date": "2026-09-16",
+  "baseCommit": "742d349",
+  "status": "passed",
+  "unitTests": 51,
+  "browserSuites": 9,
+  "dedicatedChecks": 25,
+  "dedicatedViewportStates": 20,
+  "existingResponsiveStates": 64,
+  "typecheck": "passed",
+  "sourcesUnchangedDuringBrowserRun": true,
+  "limitations": [
+    "Chromium and mocked APIs; no production writes or actual model generation.",
+    "No backend/API contract changes; backend tests and Pylint not rerun."
+  ],
+  "criteria": {
+    "D-A01": [
+      "workspaceSceneOverview/results.json",
+      "workspaceRefinement/results.json"
+    ],
+    "D-A02": [
+      "workspaceSceneOverview/results.json",
+      "workspaceSceneOverview/1586-总览.png"
+    ],
+    "D-A03": [
+      "workspaceSceneOverview/results.json",
+      "workspaceDesignViews/results.json"
+    ],
+    "D-A04": [
+      "unit-tests.log",
+      "workspaceSceneOverview/results.json",
+      "workspaceRefinement/results.json"
+    ],
+    "D-A05": [
+      "workspaceSceneOverview/results.json",
+      "workspaceRefinement/results.json",
+      "workspaceWrite.log",
+      "sourceProvenance.log",
+      "workspaceJourney.log"
+    ],
+    "D-A06": [
+      "workspaceSceneOverview/results.json",
+      "workspaceDesignViews/results.json",
+      "sequenceWorkbench/results.json"
+    ],
+    "D-A07": [
+      "workspaceSceneOverview/results.json",
+      "workspaceAcceptance.log",
+      "sequenceWorkbench/results.json"
+    ],
+    "D-A08": [
+      "typecheck.log",
+      "unit-tests.log",
+      "browser-results.json",
+      "source-fingerprints.json"
+    ],
+    "D-A09": [
+      "workspaceSceneOverview/results.json"
+    ],
+    "D-A10": [
+      "workspaceSceneOverview/results.json",
+      "workspaceDesignViews/results.json"
+    ],
+    "D-A11": [
+      "workspaceSceneOverview/results.json",
+      "workspaceRefinement/results.json",
+      "unit-tests.log"
+    ]
+  },
+  "artifacts": {
+    "browser-baseline-fingerprints.json": "7afad625c722a45762a9cd43b8e2d60d2caa0b7a271f504a04fc9cd4b2814a50",
+    "source-fingerprints.json": "6eeba9cb64b1f16f247a8a2ea1ebd4c0f396966440f3563cbe2e826334873ebf",
+    "workspaceSceneOverview.log": "c73f22bdbc98469d1811923ff2934d54eea62f16f6db44cfa2d561ded3386a0c",
+    "typecheck.log": "4de24afd71e68040771c987a8855ecdfa9493d086375288cd310d1877c62f791",
+    "unit-tests.log": "42a84a7cf66d56a3da6bae707096d5fede2be2422cc59d570b77041f9b993838",
+    "workspaceProduction.log": "f3e124683de441311a59fdca32f8d6e646ab5695552cc7fe475dd906ad662726",
+    "workspaceDesignViews.log": "40f4572fe87ea06f1884d6eb740800139bdfb5d88acdea338349dade7c73eb8c",
+    "workspaceAcceptance.log": "925b5b9aef1ca223f65ae2b0ff0c29c3b9c8887af18f1f536047c6b0a8342626",
+    "browser-results.json": "2452c4acb725cc49ce8d4e603cfdb96d3981c34884af73bc78eddb59858aedc0",
+    "workspaceWrite.log": "111993fb1b8ce566929a63c9a924ed298605b2b5fd5fdc03912ea8f8403d6778",
+    "workspaceRefinement.log": "df9f273b00775b4f651c09d3fb3aa19a5b96070072ef405f4005b7ab6b592b95",
+    "sequenceWorkbench.log": "a7b76193bccdc0dcaf52ae4d9808293699ade605d33bdb1562b893ea8c149932",
+    "workspaceJourney.log": "832b9ad3dd5261eb98f9bc424f237ef234ac5cd9ca02fadebc7eb28a12a1e7e7",
+    "sourceProvenance.log": "876de8183f4e644b7bab9467616f58fac8c2c4a4d0d6a959d07f3d07b55b4cfa",
+    "workspaceAcceptance/results.json": "93b64f58c245c62e063bb5e8fa602f5ef5967ffbf99464e996dff70650b09a38",
+    "workspaceRefinement/results.json": "5cb5387dd5bea73a1b0da18d232d34c7e332c0d84735e62391a63cd96f8fce6d",
+    "workspaceJourney/results.json": "03d689b9d8a1b6efb4f6ed8a3dfd9e267a67aff25ae64290f1e212318abf0b7e",
+    "sequenceWorkbench/results.json": "5de1e1d77fd114eaaeb905bd4794b7832bb1aca90de0e18e5c726cedd83f59de",
+    "sourceProvenance/results.json": "5b04edc3c3d1aef34234ca28a844a172d28b3643a1ee9d9cdcb8b2b13d15fa8c",
+    "workspaceDesignViews/results.json": "1c430760088b0161b3301cde2e9211bbeccda1c96b20862d05307e9a7adedb00",
+    "workspaceDesignViews/revision-differences.png": "97310b5c78f3fb9ed614e0e4062225b1e5dfe9b2cebb336b26aadd7ce9d78f7d",
+    "workspaceDesignViews/beat-aggregation-200.png": "157363d4137824d3de17eb521100ea15d9f552bd1e09dbee67069c258d600afe",
+    "workspaceDesignViews/explicit-preview-source.png": "695d12647d6df4181c3e81dab3ef9890fe76809f589bd842fa48699a3a124c5d",
+    "workspaceWrite/results.json": "8f67febfa585107819fd07256082f5a6d4957b4b38dee50394975bb154ddc86a",
+    "workspaceSceneOverview/768-分镜.png": "61a93a92479af4a02f2834855a2cbad8f5b53940e4125c6d936b84868202d83b",
+    "workspaceSceneOverview/1024-分镜.png": "e678b97cbea760f94cff71a99c4f6e228fa946b8661806b61b14eb80e4eafabd",
+    "workspaceSceneOverview/1440-分镜.png": "1106e86d75d5576a4caf11fb5b656855f99712c63b628873b8cd5fa5bf43a294",
+    "workspaceSceneOverview/1440-总览.png": "6e4e73e52a00b700df0c35cddfd8fb122c30f65a892cc1f0498027f7a6cd2383",
+    "workspaceSceneOverview/768-总览.png": "3b9433b1010994d1200b80fa33161f65428699d0fdb9b648f25be149fd259b66",
+    "workspaceSceneOverview/1024-总览.png": "da53893fc3db513da5fc57346410734f604a1d164ae5cb3e44cb04971f45d14d",
+    "workspaceSceneOverview/768-节拍图.png": "07a542db066d0d16263c6ff7a670e3bf5fe41f4ad51cf259f92d125690dc2a4b",
+    "workspaceSceneOverview/375-节拍图.png": "d78a3b80a36bd79c9571ccd14f7538d142a9b1fe5f17ed5b8127381416ccfaa3",
+    "workspaceSceneOverview/375-总览.png": "0ea6da5e72a33cb46fc2ab4c6b983db3c916599fca7156f865adb10a107d9d34",
+    "workspaceSceneOverview/results.json": "79f5e5011c6b0bed7a93feb0342959e7b735f9435f19f840c6fe839a90660d51",
+    "workspaceSceneOverview/1586-清单.png": "a934679f55280a4b4dbd7c29b43945e8ea0047376ea6e670186831669e5abaa6",
+    "workspaceSceneOverview/1586-节拍图.png": "1cc15097fc6a20451f0216446ffc056be42c69cd6c8b1b80027b5de9617872b1",
+    "workspaceSceneOverview/375-分镜.png": "468c1f307ce1480d0bd20604caea9fe1941034979325258dbcdd7a3b806f21ff",
+    "workspaceSceneOverview/1586-总览.png": "8c3f2a51c17025ef437a7afc47a9c7a16109dcd80c97d1d77360eb5e30dff10c",
+    "workspaceSceneOverview/1586-分镜.png": "d3f0b6770ac62e9572d414a43fbe8144337042104feed6fbb73104dc8429122c",
+    "workspaceSceneOverview/375-清单.png": "885d0fe11b8c13135fc1eeb8515bba7bddc01805a92b563541f3b669285ba347",
+    "workspaceSceneOverview/768-清单.png": "9e2ade9fefeea5e66032fa2fa3f40b34f5c132d27758aa647e417f3ae8535496",
+    "workspaceSceneOverview/1024-清单.png": "b289ab6abca2cd283a5d07b52919083533ec423ae78b08207a3377e23fbfaf5d",
+    "workspaceSceneOverview/1440-清单.png": "6ccd283963998feeb1a88ecf4283db7597b6e547185d397e89df4b43ebeefcc0",
+    "workspaceSceneOverview/1440-节拍图.png": "cddc767d13eeaaf06481df8898247b5efbb2ad5e820321560f7f49e5a841251e",
+    "workspaceSceneOverview/1024-节拍图.png": "f01065d56ed88b56138089498b936a100162fcb5a5a5a4463a72d30aa377b846"
+  }
+}

@@ -1,0 +1,3121 @@
+{
+  "checks": [
+    "范围与展示分离，跨节拍镜头保留身份，失效选择回到范围概览",
+    "跨节拍进入与返回恢复聚焦、画布视角及节点布局",
+    "选择联动，节点选择不重排，定位分镜与过滤范围编排保存正确",
+    "解除关系保存仅移除引用，不删除原对象",
+    "缺失引用节点可直接修复，保存不会删除其他验收要求",
+    "节点可添加合法引用并保存，间接边只能定位真实引用对象",
+    "重新进入工作区恢复设计范围、视图与对象",
+    "试拍重载恢复精确单元、筛选与内容滚动，隐藏选择有明确说明",
+    "一对多试拍入口逐项选择，准确定位计划/单元，返回保留设计对象"
+  ],
+  "errors": [],
+  "writes": [
+    {
+      "path": "/api/v1/studio/projects/p1/directing/sequences/s1/revisions",
+      "body": {
+        "document": {
+          "kind": "design",
+          "content": {
+            "style_revision_id": null,
+            "sources": [
+              {
+                "kind": "human",
+                "reference": "local-user",
+                "version": "manual-1"
+              }
+            ],
+            "participants": [
+              {
+                "id": "person1",
+                "name": "待命名人物",
+                "character_id": null,
+                "prop_id": null
+              }
+            ],
+            "events": [
+              {
+                "id": "event1",
+                "description": {
+                  "state": "unset"
+                }
+              }
+            ],
+            "criteria": [
+              {
+                "id": "criterion1",
+                "requirement": {
+                  "state": "unset"
+                }
+              },
+              {
+                "id": "criterion2",
+                "requirement": {
+                  "state": "unset"
+                }
+              }
+            ],
+            "direction": {
+              "viewpoint": {
+                "state": "unset"
+              },
+              "information_change": {
+                "state": "fact",
+                "text": "递出旧信，认出对方",
+                "sources": []
+              },
+              "relationship_change": {
+                "state": "unset"
+              },
+              "turning_point": {
+                "state": "unset"
+              },
+              "spatial_basis": {
+                "state": "unset"
+              },
+              "shootable_area": {
+                "state": "unset"
+              },
+              "axis": {
+                "state": "unset"
+              },
+              "scale": {
+                "state": "unset"
+              },
+              "control_level": {
+                "state": "unset"
+              },
+              "location_asset_id": null,
+              "immutable_facts": [],
+              "open_questions": [],
+              "anchors": [
+                {
+                  "id": "anchor1",
+                  "description": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "blocking_states": [
+                {
+                  "id": "state1",
+                  "participant_id": "person1",
+                  "anchor_ids": [
+                    "anchor1"
+                  ],
+                  "event_id": "event1",
+                  "position": {
+                    "state": "unset"
+                  },
+                  "orientation": {
+                    "state": "unset"
+                  },
+                  "initiative": {
+                    "state": "unset"
+                  },
+                  "path": {
+                    "state": "unset"
+                  },
+                  "transition_reason": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "beats": [
+                {
+                  "id": "beat1",
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "objective": {
+                    "state": "proposal",
+                    "text": "递信",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "obstacle": {
+                    "state": "unset"
+                  },
+                  "expected_change": {
+                    "state": "unset"
+                  },
+                  "must_show": {
+                    "state": "unset"
+                  }
+                },
+                {
+                  "id": "beat2",
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "objective": {
+                    "state": "proposal",
+                    "text": "认出",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "obstacle": {
+                    "state": "unset"
+                  },
+                  "expected_change": {
+                    "state": "unset"
+                  },
+                  "must_show": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "shots": [
+                {
+                  "id": "shot3",
+                  "beat_ids": [
+                    "beat1"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 3",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot2",
+                  "beat_ids": [
+                    "beat2"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 2",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot1",
+                  "beat_ids": [
+                    "beat1",
+                    "beat2"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1",
+                    "missing"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 1",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot4",
+                  "beat_ids": [
+                    "beat2"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 4",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot5",
+                  "beat_ids": [
+                    "beat1"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 5",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot6",
+                  "beat_ids": [
+                    "beat2"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 6",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot7",
+                  "beat_ids": [
+                    "beat1"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 7",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot8",
+                  "beat_ids": [
+                    "beat2"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 8",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot9",
+                  "beat_ids": [
+                    "beat1"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 9",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot10",
+                  "beat_ids": [
+                    "beat2"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 10",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot11",
+                  "beat_ids": [
+                    "beat1"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 11",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot12",
+                  "beat_ids": [],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 12",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                }
+              ]
+            },
+            "performance": {
+              "applicability": {
+                "state": "unset"
+              },
+              "situations": [
+                {
+                  "participant_id": "person1",
+                  "situation": {
+                    "state": "unset"
+                  },
+                  "relationship": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "beats": [
+                {
+                  "beat_id": "beat1",
+                  "participant_id": "person1",
+                  "received_event_ids": [
+                    "event1"
+                  ],
+                  "dialogue_ids": [],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "objective": {
+                    "state": "unset"
+                  },
+                  "obstacle": {
+                    "state": "unset"
+                  },
+                  "subtext": {
+                    "state": "unset"
+                  },
+                  "attention": {
+                    "state": "unset"
+                  },
+                  "internal_adjustment": {
+                    "state": "unset"
+                  },
+                  "physical_action": {
+                    "state": "unset"
+                  },
+                  "delivery": {
+                    "state": "unset"
+                  },
+                  "reaction_order": {
+                    "state": "unset"
+                  },
+                  "exit_state": {
+                    "state": "unset"
+                  },
+                  "avoid": {
+                    "state": "unset"
+                  },
+                  "gaze": {
+                    "state": "unset"
+                  },
+                  "breath": {
+                    "state": "unset"
+                  },
+                  "weight": {
+                    "state": "unset"
+                  },
+                  "hands": {
+                    "state": "unset"
+                  },
+                  "voice": {
+                    "state": "unset"
+                  }
+                }
+              ]
+            },
+            "staging": {
+              "activities": [
+                {
+                  "participant_id": "person1",
+                  "anchor_id": "anchor1",
+                  "trigger_event_id": "event1",
+                  "delay_ms": null,
+                  "depth": {
+                    "state": "unset"
+                  },
+                  "ongoing_task": {
+                    "state": "unset"
+                  },
+                  "path": {
+                    "state": "unset"
+                  },
+                  "attention": {
+                    "state": "unset"
+                  },
+                  "reaction_delay": {
+                    "state": "unset"
+                  },
+                  "intensity": {
+                    "state": "unset"
+                  },
+                  "entrances_exits": {
+                    "state": "unset"
+                  },
+                  "narrative_support": {
+                    "state": "unset"
+                  },
+                  "end_state": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "environment": {
+                "state": "unset"
+              },
+              "intentional_absence": {
+                "state": "unset"
+              }
+            },
+            "cinematography": [
+              {
+                "shot_id": "shot1",
+                "criterion_ids": [
+                  "criterion1"
+                ],
+                "composition": {
+                  "state": "unset"
+                },
+                "depth_layers": {
+                  "state": "unset"
+                },
+                "viewpoint": {
+                  "state": "unset"
+                },
+                "position": {
+                  "state": "unset"
+                },
+                "height_angle": {
+                  "state": "unset"
+                },
+                "lens_effect": {
+                  "state": "unset"
+                },
+                "depth_focus": {
+                  "state": "unset"
+                },
+                "support": {
+                  "state": "unset"
+                },
+                "movement_start": {
+                  "state": "unset"
+                },
+                "movement_trigger": {
+                  "state": "unset"
+                },
+                "movement_path": {
+                  "state": "unset"
+                },
+                "movement_speed": {
+                  "state": "unset"
+                },
+                "end_frame": {
+                  "state": "unset"
+                },
+                "light_sources": {
+                  "state": "unset"
+                },
+                "light_regions": {
+                  "state": "unset"
+                },
+                "exposure_color": {
+                  "state": "unset"
+                },
+                "optical_effects": {
+                  "state": "unset"
+                },
+                "motion_texture": {
+                  "state": "unset"
+                },
+                "technical_parameters": {
+                  "state": "unset"
+                },
+                "adjacent_requirements": {
+                  "state": "unset"
+                },
+                "prohibitions": {
+                  "state": "unset"
+                }
+              }
+            ],
+            "continuity": [
+              {
+                "id": "continuity1",
+                "domain": "hands_props",
+                "participant_id": "person1",
+                "event_id": "event1",
+                "before": {
+                  "state": "unset"
+                },
+                "change": {
+                  "state": "unset"
+                },
+                "after": {
+                  "state": "unset"
+                },
+                "following_constraint": {
+                  "state": "unset"
+                }
+              }
+            ],
+            "sound": {
+              "dialogues": [
+                {
+                  "id": "dialogue1",
+                  "participant_id": "person1",
+                  "version": "1",
+                  "content": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "sources": {
+                "state": "unset"
+              },
+              "ambience_actions": {
+                "state": "unset"
+              },
+              "music_constraints": {
+                "state": "unset"
+              },
+              "execution": "postproduction"
+            },
+            "prompt": {
+              "priorities": {
+                "state": "unset"
+              },
+              "binding_requirements": {
+                "state": "unset"
+              },
+              "sound_strategy": {
+                "state": "unset"
+              },
+              "prohibitions": {
+                "state": "unset"
+              }
+            }
+          }
+        },
+        "sequence_version": 1,
+        "revision_id": "d2",
+        "expected_version": 1
+      }
+    },
+    {
+      "path": "/api/v1/studio/projects/p1/directing/sequences/s1/revisions",
+      "body": {
+        "document": {
+          "kind": "design",
+          "content": {
+            "style_revision_id": null,
+            "sources": [
+              {
+                "kind": "human",
+                "reference": "local-user",
+                "version": "manual-1"
+              }
+            ],
+            "participants": [
+              {
+                "id": "person1",
+                "name": "待命名人物",
+                "character_id": null,
+                "prop_id": null
+              }
+            ],
+            "events": [
+              {
+                "id": "event1",
+                "description": {
+                  "state": "unset"
+                }
+              }
+            ],
+            "criteria": [
+              {
+                "id": "criterion1",
+                "requirement": {
+                  "state": "unset"
+                }
+              },
+              {
+                "id": "criterion2",
+                "requirement": {
+                  "state": "unset"
+                }
+              }
+            ],
+            "direction": {
+              "viewpoint": {
+                "state": "unset"
+              },
+              "information_change": {
+                "state": "fact",
+                "text": "递出旧信，认出对方",
+                "sources": []
+              },
+              "relationship_change": {
+                "state": "unset"
+              },
+              "turning_point": {
+                "state": "unset"
+              },
+              "spatial_basis": {
+                "state": "unset"
+              },
+              "shootable_area": {
+                "state": "unset"
+              },
+              "axis": {
+                "state": "unset"
+              },
+              "scale": {
+                "state": "unset"
+              },
+              "control_level": {
+                "state": "unset"
+              },
+              "location_asset_id": null,
+              "immutable_facts": [],
+              "open_questions": [],
+              "anchors": [
+                {
+                  "id": "anchor1",
+                  "description": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "blocking_states": [
+                {
+                  "id": "state1",
+                  "participant_id": "person1",
+                  "anchor_ids": [
+                    "anchor1"
+                  ],
+                  "event_id": "event1",
+                  "position": {
+                    "state": "unset"
+                  },
+                  "orientation": {
+                    "state": "unset"
+                  },
+                  "initiative": {
+                    "state": "unset"
+                  },
+                  "path": {
+                    "state": "unset"
+                  },
+                  "transition_reason": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "beats": [
+                {
+                  "id": "beat1",
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "objective": {
+                    "state": "proposal",
+                    "text": "递信",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "obstacle": {
+                    "state": "unset"
+                  },
+                  "expected_change": {
+                    "state": "unset"
+                  },
+                  "must_show": {
+                    "state": "unset"
+                  }
+                },
+                {
+                  "id": "beat2",
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "objective": {
+                    "state": "proposal",
+                    "text": "认出",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "obstacle": {
+                    "state": "unset"
+                  },
+                  "expected_change": {
+                    "state": "unset"
+                  },
+                  "must_show": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "shots": [
+                {
+                  "id": "shot3",
+                  "beat_ids": [
+                    "beat1"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 3",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot2",
+                  "beat_ids": [
+                    "beat2"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 2",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot1",
+                  "beat_ids": [
+                    "beat1",
+                    "beat2"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [],
+                  "criterion_ids": [
+                    "criterion1",
+                    "missing"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 1",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot4",
+                  "beat_ids": [
+                    "beat2"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 4",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot5",
+                  "beat_ids": [
+                    "beat1"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 5",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot6",
+                  "beat_ids": [
+                    "beat2"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 6",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot7",
+                  "beat_ids": [
+                    "beat1"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 7",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot8",
+                  "beat_ids": [
+                    "beat2"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 8",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot9",
+                  "beat_ids": [
+                    "beat1"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 9",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot10",
+                  "beat_ids": [
+                    "beat2"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 10",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot11",
+                  "beat_ids": [
+                    "beat1"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 11",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot12",
+                  "beat_ids": [],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 12",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                }
+              ]
+            },
+            "performance": {
+              "applicability": {
+                "state": "unset"
+              },
+              "situations": [
+                {
+                  "participant_id": "person1",
+                  "situation": {
+                    "state": "unset"
+                  },
+                  "relationship": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "beats": [
+                {
+                  "beat_id": "beat1",
+                  "participant_id": "person1",
+                  "received_event_ids": [
+                    "event1"
+                  ],
+                  "dialogue_ids": [],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "objective": {
+                    "state": "unset"
+                  },
+                  "obstacle": {
+                    "state": "unset"
+                  },
+                  "subtext": {
+                    "state": "unset"
+                  },
+                  "attention": {
+                    "state": "unset"
+                  },
+                  "internal_adjustment": {
+                    "state": "unset"
+                  },
+                  "physical_action": {
+                    "state": "unset"
+                  },
+                  "delivery": {
+                    "state": "unset"
+                  },
+                  "reaction_order": {
+                    "state": "unset"
+                  },
+                  "exit_state": {
+                    "state": "unset"
+                  },
+                  "avoid": {
+                    "state": "unset"
+                  },
+                  "gaze": {
+                    "state": "unset"
+                  },
+                  "breath": {
+                    "state": "unset"
+                  },
+                  "weight": {
+                    "state": "unset"
+                  },
+                  "hands": {
+                    "state": "unset"
+                  },
+                  "voice": {
+                    "state": "unset"
+                  }
+                }
+              ]
+            },
+            "staging": {
+              "activities": [
+                {
+                  "participant_id": "person1",
+                  "anchor_id": "anchor1",
+                  "trigger_event_id": "event1",
+                  "delay_ms": null,
+                  "depth": {
+                    "state": "unset"
+                  },
+                  "ongoing_task": {
+                    "state": "unset"
+                  },
+                  "path": {
+                    "state": "unset"
+                  },
+                  "attention": {
+                    "state": "unset"
+                  },
+                  "reaction_delay": {
+                    "state": "unset"
+                  },
+                  "intensity": {
+                    "state": "unset"
+                  },
+                  "entrances_exits": {
+                    "state": "unset"
+                  },
+                  "narrative_support": {
+                    "state": "unset"
+                  },
+                  "end_state": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "environment": {
+                "state": "unset"
+              },
+              "intentional_absence": {
+                "state": "unset"
+              }
+            },
+            "cinematography": [
+              {
+                "shot_id": "shot1",
+                "criterion_ids": [
+                  "criterion1"
+                ],
+                "composition": {
+                  "state": "unset"
+                },
+                "depth_layers": {
+                  "state": "unset"
+                },
+                "viewpoint": {
+                  "state": "unset"
+                },
+                "position": {
+                  "state": "unset"
+                },
+                "height_angle": {
+                  "state": "unset"
+                },
+                "lens_effect": {
+                  "state": "unset"
+                },
+                "depth_focus": {
+                  "state": "unset"
+                },
+                "support": {
+                  "state": "unset"
+                },
+                "movement_start": {
+                  "state": "unset"
+                },
+                "movement_trigger": {
+                  "state": "unset"
+                },
+                "movement_path": {
+                  "state": "unset"
+                },
+                "movement_speed": {
+                  "state": "unset"
+                },
+                "end_frame": {
+                  "state": "unset"
+                },
+                "light_sources": {
+                  "state": "unset"
+                },
+                "light_regions": {
+                  "state": "unset"
+                },
+                "exposure_color": {
+                  "state": "unset"
+                },
+                "optical_effects": {
+                  "state": "unset"
+                },
+                "motion_texture": {
+                  "state": "unset"
+                },
+                "technical_parameters": {
+                  "state": "unset"
+                },
+                "adjacent_requirements": {
+                  "state": "unset"
+                },
+                "prohibitions": {
+                  "state": "unset"
+                }
+              }
+            ],
+            "continuity": [
+              {
+                "id": "continuity1",
+                "domain": "hands_props",
+                "participant_id": "person1",
+                "event_id": "event1",
+                "before": {
+                  "state": "unset"
+                },
+                "change": {
+                  "state": "unset"
+                },
+                "after": {
+                  "state": "unset"
+                },
+                "following_constraint": {
+                  "state": "unset"
+                }
+              }
+            ],
+            "sound": {
+              "dialogues": [
+                {
+                  "id": "dialogue1",
+                  "participant_id": "person1",
+                  "version": "1",
+                  "content": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "sources": {
+                "state": "unset"
+              },
+              "ambience_actions": {
+                "state": "unset"
+              },
+              "music_constraints": {
+                "state": "unset"
+              },
+              "execution": "postproduction"
+            },
+            "prompt": {
+              "priorities": {
+                "state": "unset"
+              },
+              "binding_requirements": {
+                "state": "unset"
+              },
+              "sound_strategy": {
+                "state": "unset"
+              },
+              "prohibitions": {
+                "state": "unset"
+              }
+            }
+          }
+        },
+        "sequence_version": 1,
+        "revision_id": "d2",
+        "expected_version": 2
+      }
+    },
+    {
+      "path": "/api/v1/studio/projects/p1/directing/sequences/s1/revisions",
+      "body": {
+        "document": {
+          "kind": "design",
+          "content": {
+            "style_revision_id": null,
+            "sources": [
+              {
+                "kind": "human",
+                "reference": "local-user",
+                "version": "manual-1"
+              }
+            ],
+            "participants": [
+              {
+                "id": "person1",
+                "name": "待命名人物",
+                "character_id": null,
+                "prop_id": null
+              }
+            ],
+            "events": [
+              {
+                "id": "event1",
+                "description": {
+                  "state": "unset"
+                }
+              }
+            ],
+            "criteria": [
+              {
+                "id": "criterion1",
+                "requirement": {
+                  "state": "unset"
+                }
+              },
+              {
+                "id": "criterion2",
+                "requirement": {
+                  "state": "unset"
+                }
+              }
+            ],
+            "direction": {
+              "viewpoint": {
+                "state": "unset"
+              },
+              "information_change": {
+                "state": "fact",
+                "text": "递出旧信，认出对方",
+                "sources": []
+              },
+              "relationship_change": {
+                "state": "unset"
+              },
+              "turning_point": {
+                "state": "unset"
+              },
+              "spatial_basis": {
+                "state": "unset"
+              },
+              "shootable_area": {
+                "state": "unset"
+              },
+              "axis": {
+                "state": "unset"
+              },
+              "scale": {
+                "state": "unset"
+              },
+              "control_level": {
+                "state": "unset"
+              },
+              "location_asset_id": null,
+              "immutable_facts": [],
+              "open_questions": [],
+              "anchors": [
+                {
+                  "id": "anchor1",
+                  "description": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "blocking_states": [
+                {
+                  "id": "state1",
+                  "participant_id": "person1",
+                  "anchor_ids": [
+                    "anchor1"
+                  ],
+                  "event_id": "event1",
+                  "position": {
+                    "state": "unset"
+                  },
+                  "orientation": {
+                    "state": "unset"
+                  },
+                  "initiative": {
+                    "state": "unset"
+                  },
+                  "path": {
+                    "state": "unset"
+                  },
+                  "transition_reason": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "beats": [
+                {
+                  "id": "beat1",
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "objective": {
+                    "state": "proposal",
+                    "text": "递信",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "obstacle": {
+                    "state": "unset"
+                  },
+                  "expected_change": {
+                    "state": "unset"
+                  },
+                  "must_show": {
+                    "state": "unset"
+                  }
+                },
+                {
+                  "id": "beat2",
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "objective": {
+                    "state": "proposal",
+                    "text": "认出",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "obstacle": {
+                    "state": "unset"
+                  },
+                  "expected_change": {
+                    "state": "unset"
+                  },
+                  "must_show": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "shots": [
+                {
+                  "id": "shot3",
+                  "beat_ids": [
+                    "beat1"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 3",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot2",
+                  "beat_ids": [
+                    "beat2"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 2",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot1",
+                  "beat_ids": [
+                    "beat1",
+                    "beat2"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 1",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot4",
+                  "beat_ids": [
+                    "beat2"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 4",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot5",
+                  "beat_ids": [
+                    "beat1"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 5",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot6",
+                  "beat_ids": [
+                    "beat2"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 6",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot7",
+                  "beat_ids": [
+                    "beat1"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 7",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot8",
+                  "beat_ids": [
+                    "beat2"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 8",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot9",
+                  "beat_ids": [
+                    "beat1"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 9",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot10",
+                  "beat_ids": [
+                    "beat2"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 10",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot11",
+                  "beat_ids": [
+                    "beat1"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 11",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot12",
+                  "beat_ids": [],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 12",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                }
+              ]
+            },
+            "performance": {
+              "applicability": {
+                "state": "unset"
+              },
+              "situations": [
+                {
+                  "participant_id": "person1",
+                  "situation": {
+                    "state": "unset"
+                  },
+                  "relationship": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "beats": [
+                {
+                  "beat_id": "beat1",
+                  "participant_id": "person1",
+                  "received_event_ids": [
+                    "event1"
+                  ],
+                  "dialogue_ids": [],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "objective": {
+                    "state": "unset"
+                  },
+                  "obstacle": {
+                    "state": "unset"
+                  },
+                  "subtext": {
+                    "state": "unset"
+                  },
+                  "attention": {
+                    "state": "unset"
+                  },
+                  "internal_adjustment": {
+                    "state": "unset"
+                  },
+                  "physical_action": {
+                    "state": "unset"
+                  },
+                  "delivery": {
+                    "state": "unset"
+                  },
+                  "reaction_order": {
+                    "state": "unset"
+                  },
+                  "exit_state": {
+                    "state": "unset"
+                  },
+                  "avoid": {
+                    "state": "unset"
+                  },
+                  "gaze": {
+                    "state": "unset"
+                  },
+                  "breath": {
+                    "state": "unset"
+                  },
+                  "weight": {
+                    "state": "unset"
+                  },
+                  "hands": {
+                    "state": "unset"
+                  },
+                  "voice": {
+                    "state": "unset"
+                  }
+                }
+              ]
+            },
+            "staging": {
+              "activities": [
+                {
+                  "participant_id": "person1",
+                  "anchor_id": "anchor1",
+                  "trigger_event_id": "event1",
+                  "delay_ms": null,
+                  "depth": {
+                    "state": "unset"
+                  },
+                  "ongoing_task": {
+                    "state": "unset"
+                  },
+                  "path": {
+                    "state": "unset"
+                  },
+                  "attention": {
+                    "state": "unset"
+                  },
+                  "reaction_delay": {
+                    "state": "unset"
+                  },
+                  "intensity": {
+                    "state": "unset"
+                  },
+                  "entrances_exits": {
+                    "state": "unset"
+                  },
+                  "narrative_support": {
+                    "state": "unset"
+                  },
+                  "end_state": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "environment": {
+                "state": "unset"
+              },
+              "intentional_absence": {
+                "state": "unset"
+              }
+            },
+            "cinematography": [
+              {
+                "shot_id": "shot1",
+                "criterion_ids": [
+                  "criterion1"
+                ],
+                "composition": {
+                  "state": "unset"
+                },
+                "depth_layers": {
+                  "state": "unset"
+                },
+                "viewpoint": {
+                  "state": "unset"
+                },
+                "position": {
+                  "state": "unset"
+                },
+                "height_angle": {
+                  "state": "unset"
+                },
+                "lens_effect": {
+                  "state": "unset"
+                },
+                "depth_focus": {
+                  "state": "unset"
+                },
+                "support": {
+                  "state": "unset"
+                },
+                "movement_start": {
+                  "state": "unset"
+                },
+                "movement_trigger": {
+                  "state": "unset"
+                },
+                "movement_path": {
+                  "state": "unset"
+                },
+                "movement_speed": {
+                  "state": "unset"
+                },
+                "end_frame": {
+                  "state": "unset"
+                },
+                "light_sources": {
+                  "state": "unset"
+                },
+                "light_regions": {
+                  "state": "unset"
+                },
+                "exposure_color": {
+                  "state": "unset"
+                },
+                "optical_effects": {
+                  "state": "unset"
+                },
+                "motion_texture": {
+                  "state": "unset"
+                },
+                "technical_parameters": {
+                  "state": "unset"
+                },
+                "adjacent_requirements": {
+                  "state": "unset"
+                },
+                "prohibitions": {
+                  "state": "unset"
+                }
+              }
+            ],
+            "continuity": [
+              {
+                "id": "continuity1",
+                "domain": "hands_props",
+                "participant_id": "person1",
+                "event_id": "event1",
+                "before": {
+                  "state": "unset"
+                },
+                "change": {
+                  "state": "unset"
+                },
+                "after": {
+                  "state": "unset"
+                },
+                "following_constraint": {
+                  "state": "unset"
+                }
+              }
+            ],
+            "sound": {
+              "dialogues": [
+                {
+                  "id": "dialogue1",
+                  "participant_id": "person1",
+                  "version": "1",
+                  "content": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "sources": {
+                "state": "unset"
+              },
+              "ambience_actions": {
+                "state": "unset"
+              },
+              "music_constraints": {
+                "state": "unset"
+              },
+              "execution": "postproduction"
+            },
+            "prompt": {
+              "priorities": {
+                "state": "unset"
+              },
+              "binding_requirements": {
+                "state": "unset"
+              },
+              "sound_strategy": {
+                "state": "unset"
+              },
+              "prohibitions": {
+                "state": "unset"
+              }
+            }
+          }
+        },
+        "sequence_version": 1,
+        "revision_id": "d2",
+        "expected_version": 3
+      }
+    },
+    {
+      "path": "/api/v1/studio/projects/p1/directing/sequences/s1/revisions",
+      "body": {
+        "document": {
+          "kind": "design",
+          "content": {
+            "style_revision_id": null,
+            "sources": [
+              {
+                "kind": "human",
+                "reference": "local-user",
+                "version": "manual-1"
+              }
+            ],
+            "participants": [
+              {
+                "id": "person1",
+                "name": "待命名人物",
+                "character_id": null,
+                "prop_id": null
+              }
+            ],
+            "events": [
+              {
+                "id": "event1",
+                "description": {
+                  "state": "unset"
+                }
+              }
+            ],
+            "criteria": [
+              {
+                "id": "criterion1",
+                "requirement": {
+                  "state": "unset"
+                }
+              },
+              {
+                "id": "criterion2",
+                "requirement": {
+                  "state": "unset"
+                }
+              }
+            ],
+            "direction": {
+              "viewpoint": {
+                "state": "unset"
+              },
+              "information_change": {
+                "state": "fact",
+                "text": "递出旧信，认出对方",
+                "sources": []
+              },
+              "relationship_change": {
+                "state": "unset"
+              },
+              "turning_point": {
+                "state": "unset"
+              },
+              "spatial_basis": {
+                "state": "unset"
+              },
+              "shootable_area": {
+                "state": "unset"
+              },
+              "axis": {
+                "state": "unset"
+              },
+              "scale": {
+                "state": "unset"
+              },
+              "control_level": {
+                "state": "unset"
+              },
+              "location_asset_id": null,
+              "immutable_facts": [],
+              "open_questions": [],
+              "anchors": [
+                {
+                  "id": "anchor1",
+                  "description": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "blocking_states": [
+                {
+                  "id": "state1",
+                  "participant_id": "person1",
+                  "anchor_ids": [
+                    "anchor1"
+                  ],
+                  "event_id": "event1",
+                  "position": {
+                    "state": "unset"
+                  },
+                  "orientation": {
+                    "state": "unset"
+                  },
+                  "initiative": {
+                    "state": "unset"
+                  },
+                  "path": {
+                    "state": "unset"
+                  },
+                  "transition_reason": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "beats": [
+                {
+                  "id": "beat1",
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "objective": {
+                    "state": "proposal",
+                    "text": "递信",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "obstacle": {
+                    "state": "unset"
+                  },
+                  "expected_change": {
+                    "state": "unset"
+                  },
+                  "must_show": {
+                    "state": "unset"
+                  }
+                },
+                {
+                  "id": "beat2",
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "objective": {
+                    "state": "proposal",
+                    "text": "认出",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "obstacle": {
+                    "state": "unset"
+                  },
+                  "expected_change": {
+                    "state": "unset"
+                  },
+                  "must_show": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "shots": [
+                {
+                  "id": "shot3",
+                  "beat_ids": [
+                    "beat1"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 3",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot2",
+                  "beat_ids": [
+                    "beat2"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 2",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot1",
+                  "beat_ids": [
+                    "beat1",
+                    "beat2"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [],
+                  "criterion_ids": [
+                    "criterion1",
+                    "criterion2"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 1",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot4",
+                  "beat_ids": [
+                    "beat2"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 4",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot5",
+                  "beat_ids": [
+                    "beat1"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 5",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot6",
+                  "beat_ids": [
+                    "beat2"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 6",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot7",
+                  "beat_ids": [
+                    "beat1"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 7",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot8",
+                  "beat_ids": [
+                    "beat2"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 8",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot9",
+                  "beat_ids": [
+                    "beat1"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 9",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot10",
+                  "beat_ids": [
+                    "beat2"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 10",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot11",
+                  "beat_ids": [
+                    "beat1"
+                  ],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 11",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                },
+                {
+                  "id": "shot12",
+                  "beat_ids": [],
+                  "event_ids": [
+                    "event1"
+                  ],
+                  "blocking_state_ids": [
+                    "state1"
+                  ],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "narrative_function": {
+                    "state": "unset"
+                  },
+                  "visible_result": {
+                    "state": "proposal",
+                    "text": "明确动作 12",
+                    "sources": [
+                      {
+                        "kind": "human",
+                        "reference": "fixture",
+                        "version": "1"
+                      }
+                    ]
+                  },
+                  "estimated_duration_ms": 5000
+                }
+              ]
+            },
+            "performance": {
+              "applicability": {
+                "state": "unset"
+              },
+              "situations": [
+                {
+                  "participant_id": "person1",
+                  "situation": {
+                    "state": "unset"
+                  },
+                  "relationship": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "beats": [
+                {
+                  "beat_id": "beat1",
+                  "participant_id": "person1",
+                  "received_event_ids": [
+                    "event1"
+                  ],
+                  "dialogue_ids": [],
+                  "criterion_ids": [
+                    "criterion1"
+                  ],
+                  "objective": {
+                    "state": "unset"
+                  },
+                  "obstacle": {
+                    "state": "unset"
+                  },
+                  "subtext": {
+                    "state": "unset"
+                  },
+                  "attention": {
+                    "state": "unset"
+                  },
+                  "internal_adjustment": {
+                    "state": "unset"
+                  },
+                  "physical_action": {
+                    "state": "unset"
+                  },
+                  "delivery": {
+                    "state": "unset"
+                  },
+                  "reaction_order": {
+                    "state": "unset"
+                  },
+                  "exit_state": {
+                    "state": "unset"
+                  },
+                  "avoid": {
+                    "state": "unset"
+                  },
+                  "gaze": {
+                    "state": "unset"
+                  },
+                  "breath": {
+                    "state": "unset"
+                  },
+                  "weight": {
+                    "state": "unset"
+                  },
+                  "hands": {
+                    "state": "unset"
+                  },
+                  "voice": {
+                    "state": "unset"
+                  }
+                }
+              ]
+            },
+            "staging": {
+              "activities": [
+                {
+                  "participant_id": "person1",
+                  "anchor_id": "anchor1",
+                  "trigger_event_id": "event1",
+                  "delay_ms": null,
+                  "depth": {
+                    "state": "unset"
+                  },
+                  "ongoing_task": {
+                    "state": "unset"
+                  },
+                  "path": {
+                    "state": "unset"
+                  },
+                  "attention": {
+                    "state": "unset"
+                  },
+                  "reaction_delay": {
+                    "state": "unset"
+                  },
+                  "intensity": {
+                    "state": "unset"
+                  },
+                  "entrances_exits": {
+                    "state": "unset"
+                  },
+                  "narrative_support": {
+                    "state": "unset"
+                  },
+                  "end_state": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "environment": {
+                "state": "unset"
+              },
+              "intentional_absence": {
+                "state": "unset"
+              }
+            },
+            "cinematography": [
+              {
+                "shot_id": "shot1",
+                "criterion_ids": [
+                  "criterion1"
+                ],
+                "composition": {
+                  "state": "unset"
+                },
+                "depth_layers": {
+                  "state": "unset"
+                },
+                "viewpoint": {
+                  "state": "unset"
+                },
+                "position": {
+                  "state": "unset"
+                },
+                "height_angle": {
+                  "state": "unset"
+                },
+                "lens_effect": {
+                  "state": "unset"
+                },
+                "depth_focus": {
+                  "state": "unset"
+                },
+                "support": {
+                  "state": "unset"
+                },
+                "movement_start": {
+                  "state": "unset"
+                },
+                "movement_trigger": {
+                  "state": "unset"
+                },
+                "movement_path": {
+                  "state": "unset"
+                },
+                "movement_speed": {
+                  "state": "unset"
+                },
+                "end_frame": {
+                  "state": "unset"
+                },
+                "light_sources": {
+                  "state": "unset"
+                },
+                "light_regions": {
+                  "state": "unset"
+                },
+                "exposure_color": {
+                  "state": "unset"
+                },
+                "optical_effects": {
+                  "state": "unset"
+                },
+                "motion_texture": {
+                  "state": "unset"
+                },
+                "technical_parameters": {
+                  "state": "unset"
+                },
+                "adjacent_requirements": {
+                  "state": "unset"
+                },
+                "prohibitions": {
+                  "state": "unset"
+                }
+              }
+            ],
+            "continuity": [
+              {
+                "id": "continuity1",
+                "domain": "hands_props",
+                "participant_id": "person1",
+                "event_id": "event1",
+                "before": {
+                  "state": "unset"
+                },
+                "change": {
+                  "state": "unset"
+                },
+                "after": {
+                  "state": "unset"
+                },
+                "following_constraint": {
+                  "state": "unset"
+                }
+              }
+            ],
+            "sound": {
+              "dialogues": [
+                {
+                  "id": "dialogue1",
+                  "participant_id": "person1",
+                  "version": "1",
+                  "content": {
+                    "state": "unset"
+                  }
+                }
+              ],
+              "sources": {
+                "state": "unset"
+              },
+              "ambience_actions": {
+                "state": "unset"
+              },
+              "music_constraints": {
+                "state": "unset"
+              },
+              "execution": "postproduction"
+            },
+            "prompt": {
+              "priorities": {
+                "state": "unset"
+              },
+              "binding_requirements": {
+                "state": "unset"
+              },
+              "sound_strategy": {
+                "state": "unset"
+              },
+              "prohibitions": {
+                "state": "unset"
+              }
+            }
+          }
+        },
+        "sequence_version": 1,
+        "revision_id": "d2",
+        "expected_version": 4
+      }
+    }
+  ]
+}

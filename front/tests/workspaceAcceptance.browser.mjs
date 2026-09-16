@@ -84,11 +84,12 @@ try {
         await page.getByRole('textbox', { name: '本场信息变化', exact: true }).waitFor()
       }
       if (state === 'design-relations' || state === 'design-source') {
-        await page.getByRole('tab', { name: '分镜', exact: true }).click()
+        await page.getByRole('tab', { name: '镜头', exact: true }).click(); await page.getByRole('radio', { name: '分镜', exact: true }).locator('..').click()
         await page.getByRole('button', { name: '分镜 1', exact: true }).click()
         if (state === 'design-relations') {
           if (width < 1280 && await page.locator('.ant-drawer-open').count()) await page.locator('.ant-drawer-open').getByRole('button', { name: 'Close', exact: true }).click()
           await page.getByRole('tab', { name: '关系', exact: true }).click()
+          await page.locator('[data-beat-group="beat1"]').getByRole('button', { name: '进入节拍 1 关系', exact: true }).click()
           await page.getByRole('button', { name: '聚焦所选镜头', exact: true }).click()
           await page.locator('[data-graph-node="shot:shot1"]').waitFor()
         } else {
