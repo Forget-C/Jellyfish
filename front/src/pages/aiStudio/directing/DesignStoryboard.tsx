@@ -8,7 +8,7 @@ import type { DesignScope } from './designWorkspace'
 import { buildFileDownloadUrl } from '../assets/utils'
 
 /** 分镜直接展示原镜头；只复用用户选择的持久化预演绑定，范围编排不复制对象。 */
-export function DesignStoryboard({ value, shots, selected, onSelect, revisionId, cuts = [], scope = 'all', revealId, onMove, rememberContext, active = true, onRevealed, onIssue }: { value: SceneDesign_Input; onIssue?: (id: string, issue: string) => void; active?: boolean; onRevealed?: () => void; rememberContext?: { projectId: string; sequenceId: string }; shots: SceneDesign_Input['direction']['shots']; selected?: string; onSelect: (id: string) => void; revisionId?: string; cuts?: WorkspaceRead['cuts']; scope?: DesignScope; revealId?: string; onMove?: (id: string, delta: number) => void }) {
+export function DesignStoryboard({ value, shots, emptyDescription, onClearFilters, selected, onSelect, revisionId, cuts = [], scope = 'all', revealId, onMove, rememberContext, active = true, onRevealed, onIssue }: { emptyDescription?: string; onClearFilters?: () => void; value: SceneDesign_Input; onIssue?: (id: string, issue: string) => void; active?: boolean; onRevealed?: () => void; rememberContext?: { projectId: string; sequenceId: string }; shots: SceneDesign_Input['direction']['shots']; selected?: string; onSelect: (id: string) => void; revisionId?: string; cuts?: WorkspaceRead['cuts']; scope?: DesignScope; revealId?: string; onMove?: (id: string, delta: number) => void }) {
   const initial = useRef(readDesignPosition(rememberContext ? readWorkspaceContext(rememberContext.projectId, rememberContext.sequenceId).designStoryboardPosition : undefined, revisionId, scope))
   const [density, setDensity] = useState(initial.current.density)
   const [showImages, setShowImages] = useState(() => rememberContext ? readWorkspaceContext(rememberContext.projectId, rememberContext.sequenceId).designShowImages === 'true' : false)
@@ -48,7 +48,7 @@ export function DesignStoryboard({ value, shots, selected, onSelect, revisionId,
       const next = event.key === 'Home' ? 0 : event.key === 'End' ? shots.length - 1 : Math.max(0, Math.min(shots.length - 1, index + (event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowRight' ? 1 : event.key === 'ArrowUp' ? -columns : columns)))
       if (shots[next]) { onSelect(shots[next].id); reveal(shots[next].id) }
     }}>
-      {!shots.length && <Empty description="没有匹配的镜头" />}
+      {!shots.length && <Empty description={emptyDescription || '没有匹配的镜头'}>{onClearFilters && <Button onClick={onClearFilters}>清除筛选</Button>}</Empty>}
       <div style={{ height: layout.height, position: 'relative' }}>
         {layout.entries.filter(row => row.top + rowHeight >= scroll - rowHeight && row.top < scroll + size.height + rowHeight).map(({ shot, top, column }) => {
           const number = value.direction.shots.indexOf(shot) + 1

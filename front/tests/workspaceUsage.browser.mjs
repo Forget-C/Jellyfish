@@ -336,14 +336,14 @@ try {
   // Other document editors register their drafts with the same leave guard.
   const beforeOtherDrafts = writes.length
   await page.getByRole('tab', { name: '导演设计' }).click()
-  await page.getByRole('button', { name: '人物与场所', exact: true }).click()
+  await page.getByRole('button', { name: /^本场资产/ }).click()
   await page.getByRole('button', { name: '新建风格候选', exact: true }).click()
   await page.getByRole('textbox', { name: '风格标题' }).fill('保留克制表演')
   await closeDrawer()
   await page.getByRole('tab', { name: '剪辑验收' }).click()
   await modal.getByText('项目风格', { exact: true }).waitFor()
   await modal.getByRole('button', { name: '取消，继续编辑' }).click()
-  await page.getByRole('button', { name: '人物与场所', exact: true }).click()
+  await page.getByRole('button', { name: /^本场资产/ }).click()
   assert.equal(await page.getByRole('textbox', { name: '风格标题' }).inputValue(), '保留克制表演')
   await closeDrawer()
   await page.getByRole('tab', { name: '剪辑验收' }).click()

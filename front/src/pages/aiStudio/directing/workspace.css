@@ -332,3 +332,10 @@
   .design-selected-order { margin-left: 0; }
 }
 .design-storyboard-card:has(> .ant-select) .design-storyboard-order { bottom: 44px; }
+.design-navigation .design-assets-entry { min-height: 40px; height: auto; flex-shrink: 0; margin-bottom: 12px; padding: 8px; display: flex; flex-wrap: wrap; gap: 4px; border-color: #b9d5ff; color: #155db6; background: #f0f6ff; }
+.design-assets-entry .ant-tag { margin: 0; font-size: 11px; }
+.design-filter-status { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 8px; margin: 0 16px 8px; padding: 8px; background: #fff8e6; border: 1px solid #ffe0a3; border-radius: 4px; font-size: 12px; }
+.design-filter-status > span { min-width: 0; overflow-wrap: anywhere; }
+.design-problem-item { padding: 12px 0; border-top: 1px solid #e5eaf0; }
+.design-problem-item h3 { font-size: 14px; }
+.design-problem-item .ant-btn { text-align: left; height: auto; white-space: normal; }

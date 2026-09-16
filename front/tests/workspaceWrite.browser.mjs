@@ -133,7 +133,7 @@ try {
   await checkTextSave('生产计划', page.locator('[data-workspace-target="unit:u1"] textarea').first(), '保存生产计划草稿', () => workspace.plans[1].content.units[0].coverage[0].action_scope)
 
   await page.goto(base + '?view=design&design=d2')
-  await page.getByRole('button', { name: '人物与场所', exact: true }).click()
+  await page.getByRole('button', { name: /^本场资产/ }).click()
   await page.getByRole('button', { name: '新建风格候选', exact: true }).click()
   await checkTextSave('项目风格', page.locator('input[aria-label="风格标题"]'), '保存风格草稿', () => styles.at(-1).content.title)
 

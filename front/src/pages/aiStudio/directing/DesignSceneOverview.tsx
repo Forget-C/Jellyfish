@@ -7,7 +7,7 @@ import type { DesignScope } from './designWorkspace'
 import { readWorkspaceContext, saveWorkspaceContext } from './workspaceContext'
 
 /** 全场只选择对象和解释影响；进入局部范围必须使用明确入口。 */
-export function DesignSceneOverview({ value, active, visibleShotIds, selected, onSelect, onEnter, onIssue, revisionId, rememberContext }: { value: SceneDesign_Input; active: boolean; visibleShotIds?: string[]; selected?: string; onSelect: (key: string) => void; onEnter: (scope: DesignScope) => void; onIssue?: (id: string, issue: string) => void; revisionId?: string; rememberContext?: { projectId: string; sequenceId: string } }) {
+export function DesignSceneOverview({ value, emptyDescription, onClearFilters, active, visibleShotIds, selected, onSelect, onEnter, onIssue, revisionId, rememberContext }: { emptyDescription?: string; onClearFilters?: () => void; value: SceneDesign_Input; active: boolean; visibleShotIds?: string[]; selected?: string; onSelect: (key: string) => void; onEnter: (scope: DesignScope) => void; onIssue?: (id: string, issue: string) => void; revisionId?: string; rememberContext?: { projectId: string; sequenceId: string } }) {
   const data = useMemo(() => sceneOverview(value, visibleShotIds), [value, visibleShotIds])
   const initial = useRef<{ top: number; expanded: string[] }>({ top: 0, expanded: [] })
   const [expanded, setExpanded] = useState<string[]>(() => {
@@ -30,7 +30,7 @@ export function DesignSceneOverview({ value, active, visibleShotIds, selected, o
   return <>
     <div className="design-overview-tools"><span>选择对象查看影响 · 节拍统计不可直接相加</span>{affected.size > 0 && <Button size="small" onClick={() => setMuted(true)}>清除高亮</Button>}</div>
     <div className="design-scene-overview" ref={viewport} onScroll={event => save(event.currentTarget.scrollTop)} aria-label="全场关系总览">
-      {!total.length && <Empty description={value.direction.shots.length ? '没有匹配的镜头' : '暂无镜头，可在镜头视图新增'} />}
+      {!total.length && <Empty description={emptyDescription || (value.direction.shots.length ? '没有匹配的镜头' : '暂无镜头，可在镜头视图新增')}>{onClearFilters && <Button onClick={onClearFilters}>清除筛选</Button>}</Empty>}
       {data.rows.filter(row => !visibleShotIds || row.shots.length || visibleShotIds.length === value.direction.shots.length).map(row => {
         const beatIndex = value.direction.beats.findIndex(beat => `beat:${beat.id}` === row.scope)
         const label = beatIndex < 0 ? '未分组' : `节拍 ${beatIndex + 1} · ${noteText(value.direction.beats[beatIndex].objective) || '未命名节拍'}`

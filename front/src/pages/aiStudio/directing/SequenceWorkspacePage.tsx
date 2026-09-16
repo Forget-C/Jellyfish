@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Drawer, Dropdown, Empty, Image, Input, Modal, Select, Space, Spin, Tag, Typography } from 'antd'
 import { useLocation, useNavigate, useNavigationType, useParams, useSearchParams } from 'react-router-dom'
 import { StudioDirectingService } from '../../../services/generated'
-import type { DirectingTaskRead, ProductionPlan_Input, SceneDesign_Input, WorkspaceRead } from '../../../services/generated'
+import type { AssetSummary, DirectingTaskRead, ProductionPlan_Input, SceneDesign_Input, WorkspaceRead } from '../../../services/generated'
 import { SequenceLayout, SequenceNavigation } from './SequenceLayout'
 import { SourceLinks, SourceProvider } from './Sources'
 import type { SourceRead } from '../../../services/generated'
@@ -72,6 +72,15 @@ function SequenceWorkspace() {
   const initialSearch = useRef(search)
   initialSearch.current = search
   const [workspace, setWorkspace] = useState<WorkspaceRead>()
+  const [sceneAssets, setSceneAssets] = useState<AssetSummary[]>()
+  const [sceneAssetsError, setSceneAssetsError] = useState('')
+  const [assetReload, setAssetReload] = useState(0)
+  useEffect(() => {
+    let current = true
+    setSceneAssets(undefined); setSceneAssetsError('')
+    void StudioDirectingService.directingAssets({ projectId }).then(response => { if (current) setSceneAssets(response.data || []) }).catch(cause => { if (current) setSceneAssetsError(directingError(cause)) })
+    return () => { current = false }
+  }, [projectId, assetReload])
   usePageTitle(workspace?.sequence.id === sequenceId ? workspace?.sequence.title : undefined)
   const activeCut = useActiveCut(projectId, sequenceId, workspace)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -298,7 +307,7 @@ function SequenceWorkspace() {
         </div>
         {designStale && <Alert type="warning" message={`当前编辑修订 ${baseDesign!.version}，服务器版本已更新。`} action={<Button onClick={() => guardDesign(() => selectDesign(latestDesign, workspace.sequence.version))}>放弃本地编辑并载入最新设计</Button>} />}
         {baseDesign && !baseDesign.source_current && <Alert type="warning" message="此设计依据的场次范围已变化，请核对内容后保存为当前来源的设计。" />}
-        {design ? <DesignEditor onShoot={shotId => { if (baseDesign) setShotProduction({ designId: baseDesign.id, shotId }) }} shootUnavailable={designDirty || !baseDesign ? '先保存当前设计，再核对对应单元。' : designStale ? '请先核对服务器设计版本。' : undefined} rememberContext={{ projectId, sequenceId }} disabled={busy} revisionId={baseDesign?.id} cuts={workspace.cuts} active={view === 'design'} value={design} onChange={setDesign} assets={<><SceneAssets projectId={projectId} sequenceId={sequenceId} design={design} onChange={setDesign} /><StyleEditor projectId={projectId} sequenceId={sequenceId} value={design.style_revision_id} onChange={id => setDesign({ ...design, style_revision_id: id })} /></>} /> : <><SequenceNavigation><h2>场次结构</h2><Button type="text" onClick={() => setContextPanel('source')}>本场原文</Button></SequenceNavigation><div className="sequence-empty"><Empty description="从这场戏的行动与转折开始设计"><Space><Button type="primary" onClick={() => setContextPanel('ai')}>AI 起稿</Button><Button onClick={newDesign}>手动起稿</Button></Space></Empty></div></>}
+        {design ? <DesignEditor assetCatalog={sceneAssets} assetError={sceneAssetsError} onShoot={shotId => { if (baseDesign) setShotProduction({ designId: baseDesign.id, shotId }) }} shootUnavailable={designDirty || !baseDesign ? '先保存当前设计，再核对对应单元。' : designStale ? '请先核对服务器设计版本。' : undefined} rememberContext={{ projectId, sequenceId }} disabled={busy} revisionId={baseDesign?.id} cuts={workspace.cuts} active={view === 'design'} value={design} onChange={setDesign} assets={<><SceneAssets assets={sceneAssets} loadError={sceneAssetsError} onRetry={() => setAssetReload(value => value + 1)} onAssetsChange={setSceneAssets} projectId={projectId} sequenceId={sequenceId} design={design} onChange={setDesign} /><StyleEditor projectId={projectId} sequenceId={sequenceId} value={design.style_revision_id} onChange={id => setDesign({ ...design, style_revision_id: id })} /></>} /> : <><SequenceNavigation><h2>场次结构</h2><Button type="text" onClick={() => setContextPanel('source')}>本场原文</Button></SequenceNavigation><div className="sequence-empty"><Empty description="从这场戏的行动与转折开始设计"><Space><Button type="primary" onClick={() => setContextPanel('ai')}>AI 起稿</Button><Button onClick={newDesign}>手动起稿</Button></Space></Empty></div></>}
       </div> },
       { key: 'shoot', label: '单元试拍', children: <ProductionWorkbench tasks={tasks} submitted={pendingTask} tasksState={tasksState} onOpenTasks={() => setContextPanel('tasks')} focusRequest={focusTarget} active={view === 'shoot'} workspace={workspace} plan={plan} planId={basePlan?.id} selectedUnitId={unitId} onSelectUnit={id => { setUnitId(id); setPromptId(undefined); setReviewId(undefined) }}
         toolbar={<>        <Space wrap data-workspace-target="plan-version" tabIndex={-1}><Select aria-label="查看或编辑生产计划" placeholder="选择生产计划" value={basePlan?.id} style={{ minWidth: 240 }} options={workspace.plans.map((row, index) => ({ value: row.id, label: `计划 ${index + 1} · ${row.confirmed_at ? '已确认' : '草稿'}` }))} onChange={id => guardPlan(() => selectPlan(workspace.plans.find(row => row.id === id)))} />

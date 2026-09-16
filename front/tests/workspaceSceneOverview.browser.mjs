@@ -165,7 +165,7 @@ try {
   await page.goto(base)
   await page.getByRole('button', { name: /新增镜头/ }).waitFor()
   await page.getByRole('tab', { name: '关系', exact: true }).click()
-  await page.getByText('暂无镜头，可在镜头视图新增', { exact: true }).waitFor()
+  await page.getByLabel('全场关系总览', { exact: true }).getByText('本场尚无镜头，可新增镜头开始设计。', { exact: true }).waitFor()
   await selectView('分镜')
   await page.getByRole('button', { name: /新增镜头/ }).click()
   await page.waitForFunction(() => document.querySelector('[aria-label="分镜编排"]').getAttribute('aria-rowcount') === '1')

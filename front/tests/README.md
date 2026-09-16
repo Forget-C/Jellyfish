@@ -84,3 +84,5 @@ node front/tests/workspaceRefinement.browser.mjs
 新增`workspaceSceneOverview.browser.mjs`沿用Node.js 20+、Playwright和上述`NODE_PATH`配置，监听本地4194端口，使用隔离接口替身，不调用真实模型。覆盖旧视图记忆映射、交错节拍的真实镜头顺序、未保存正文跨展示保留、共享高亮及真实路径、清除后重新选择、总览展开和滚动恢复、单节拍200镜头、无节拍及空场次创建。五种尺寸（1586×992、1440×900、1024×768、768×1024、375×812）分别检查分镜、清单、全场总览和节拍图的实际边界与主要控件命中，并保存20张截图及结果。
 
 既有浏览器回归已适配“镜头 / 关系”和“分镜 / 清单”入口；全场不能再直接使用详细图缩放，测试需明确进入节拍。最终结果归档于`site/static/images/directing-workbench/scene-overview/`，与C阶段历史证据分开。
+
+`node front/tests/workspaceAssets.browser.mjs`使用同一运行环境，在4195端口隔离验证本场资产有效计数、未保存内容保留、问题面板、刷新后筛选恢复、三种展示的空结果恢复、无效引用、加载失败重试、问题定位和375px资产入口。业务请求均由接口替身处理。
