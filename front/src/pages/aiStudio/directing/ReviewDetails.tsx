@@ -1,20 +1,16 @@
 import { Card, Space, Typography } from 'antd'
+import { SourceLinks } from './Sources'
 import { FrozenDesignValue } from './PromptReader'
 import type { Note_Output, ReviewRow, SceneDesign_Input } from '../../../services/generated'
 
 const states = { unset: '未填写', unknown: '待确定', not_applicable: '不适用', none: '明确没有', fact: '已知事实', proposal: '建议' }
-const sourceKinds = { human: '人工', chapter: '章节原文', model: '模型', file: '文件', revision: '版本记录' }
 
 /** 原样呈现已保存的状态和来源，不将缺失信息补成事实或人工批准。 */
 function ReviewNote({ label, note }: { label: string; note: Note_Output }) {
   return <div>
     <Typography.Text strong>{label} · {states[note.state || 'unset']}</Typography.Text>
     <p style={{ whiteSpace: 'pre-wrap' }}>{note.text || note.reason || '未提供内容'}</p>
-    {note.sources?.length ? note.sources.map((source, index) => <p key={index}>
-      来源：{sourceKinds[source.kind]} · {source.reference} · 版本 {source.version}
-      {source.file_id && <> · 文件 {source.file_id}</>}
-      {source.media_range && <> · {source.media_range.source_in_ms / 1000}–{source.media_range.source_out_ms / 1000} 秒</>}
-    </p>) : <Typography.Text type="secondary">未提供来源</Typography.Text>}
+    {note.sources?.length ? <SourceLinks sources={note.sources} /> : <Typography.Text type="secondary">未提供来源</Typography.Text>}
   </div>
 }
 

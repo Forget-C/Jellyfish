@@ -28,6 +28,7 @@ try {
   await page.route('**/api/**', async route => {
     const request = route.request(), path = new URL(request.url()).pathname
     const respond = data => route.fulfill({ json: { success: true, data: structuredClone(data) } })
+    if (path.endsWith('/sources/resolve')) return respond(request.postDataJSON().sources.map(source => ({ source, status: source.kind === 'human' ? 'ready' : 'unavailable', label: source.kind === 'human' ? '人工填写' : '历史来源', description: '隔离来源记录' })))
     if (request.method() !== 'GET') {
       writes++
       const body = request.postDataJSON()
@@ -97,7 +98,8 @@ try {
   }
   await page.goto(base + '?view=shoot&design=d2&plan=p-new&unit=u1')
   await page.getByRole('tab', { name: '导演设计', exact: true }).click()
-  await page.locator('.design-navigation').getByRole('button', { name: /全场概览/ }).click()
+  await page.getByRole('button', { name: '表格', exact: true }).click()
+  await page.locator('.design-intent').getByRole('button', { name: /全场概览/ }).click()
   const field = page.locator('textarea[aria-label="本场信息变化"]')
   await checkTextSave('设计', field, '保存设计草稿', () => workspace.designs[1].content.direction.information_change.text)
 

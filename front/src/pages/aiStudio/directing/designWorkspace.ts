@@ -1,11 +1,80 @@
 import type { SceneDesign_Input } from '../../../services/generated'
-import { noteText } from './designValue'
+import { designAt, noteText, patchDesign } from './designValue'
 import type { DesignPath } from './designValue'
 
 export type DesignObject = { key: string; label: string; kind: string; path: DesignPath; fields?: string[] }
 export type DesignEdge = { from: string; to: string; label: string; indirect?: boolean }
 export type DesignGraph = { nodes: DesignObject[]; edges: DesignEdge[] }
+export type RelationBinding = { path: DesignPath; prefix: string; target: string; many: boolean; required: boolean }
 export const departmentNames: Record<string, string> = { direction: '总导演', performance: '表演指导', staging: '镜内执行', cinematography: '摄影指导', continuity: '场记与连续性', sound: '对白与声音', prompt: '提示词指导' }
+
+export type DesignScope = 'all' | 'unassigned' | `beat:${string}`
+
+/** 范围仅筛选原镜头；跨节拍镜头保持同一身份，全场统计不会重复。 */
+export function scopeShots(value: SceneDesign_Input, scope: DesignScope) {
+  return value.direction.shots.filter(shot => scope === 'all' || (scope === 'unassigned'
+    ? !shot.beat_ids.some(id => value.direction.beats.some(beat => beat.id === id))
+    : shot.beat_ids.includes(scope.slice(5))))
+}
+
+/** 仅重排筛选集合占用的槽位，隐藏镜头的相对顺序和全部对象内容保持不变。 */
+export function reorderScopeShots(value: SceneDesign_Input, visibleIds: string[], fromId: string, toId: string): SceneDesign_Input {
+  const ids = new Set(visibleIds)
+  const visible = value.direction.shots.filter(shot => ids.has(shot.id))
+  const from = visible.findIndex(shot => shot.id === fromId), to = visible.findIndex(shot => shot.id === toId)
+  if (from < 0 || to < 0 || from === to) return value
+  const reordered = [...visible]; reordered.splice(to, 0, ...reordered.splice(from, 1))
+  let index = 0
+  return { ...value, direction: { ...value.direction, shots: value.direction.shots.map(shot => ids.has(shot.id) ? reordered[index++] : shot) } }
+}
+
+/** 聚合范围中镜头的真实关系，不以同名对象或画布位置猜测关联。 */
+export function scopeGraph(value: SceneDesign_Input, scope: DesignScope, visibleShotIds?: string[]): DesignGraph {
+  const nodes = new Map<string, DesignObject>(), edges = new Map<string, DesignEdge>()
+  scopeShots(value, scope).filter(shot => !visibleShotIds || visibleShotIds.includes(shot.id)).forEach(shot => {
+    const graph = shotGraph(value, shot.id)
+    graph.nodes.forEach(node => nodes.set(node.key, node))
+    graph.edges.forEach(edge => edges.set(JSON.stringify([edge.from, edge.to, edge.label]), edge))
+  })
+  return { nodes: [...nodes.values()], edges: [...edges.values()] }
+}
+
+/** 间接展示边的引用实际写在表演/连续性对象上，不在节拍或事件上。 */
+export function relationOwner(edge: DesignEdge): string {
+  return edge.indirect && (edge.to.startsWith('performance:') || edge.to.startsWith('continuity:')) ? edge.to : edge.from
+}
+
+/** 只编辑已有契约支持的直接引用；间接边必须回到其原始对象。 */
+export function relationBinding(value: SceneDesign_Input, edge: DesignEdge): RelationBinding | undefined {
+  if (edge.indirect) return undefined
+  const fromKind = edge.from.slice(0, edge.from.indexOf(':')), fromId = edge.from.slice(edge.from.indexOf(':') + 1)
+  const toKind = edge.to.slice(0, edge.to.indexOf(':')), toId = edge.to.slice(edge.to.indexOf(':') + 1)
+  if (fromKind === 'shot') {
+    const index = value.direction.shots.findIndex(shot => shot.id === fromId)
+    const field = { beat: 'beat_ids', event: 'event_ids', criterion: 'criterion_ids', blocking: 'blocking_state_ids' }[toKind]
+    if (index >= 0 && field) return { path: ['direction', 'shots', index, field], prefix: toKind, target: toId, many: true, required: false }
+    if (toKind === 'camera' && value.cinematography[Number(toId)]?.shot_id === fromId) return { path: ['cinematography', Number(toId), 'shot_id'], prefix: 'shot', target: fromId, many: false, required: true }
+  }
+  if (fromKind === 'blocking') {
+    const index = value.direction.blocking_states.findIndex(row => row.id === fromId)
+    const field = { participant: 'participant_id', anchor: 'anchor_ids', event: 'event_id' }[toKind]
+    if (index >= 0 && field) return { path: ['direction', 'blocking_states', index, field], prefix: toKind, target: toId, many: toKind === 'anchor', required: toKind === 'participant' }
+  }
+  return undefined
+}
+
+export function changeRelation(value: SceneDesign_Input, binding: RelationBinding, next?: string): SceneDesign_Input {
+  if (!next && binding.required) return value
+  if (next && !designObjects(value).some(row => row.key === `${binding.prefix}:${next}`)) return value
+  const current = designAt(value, binding.path)
+  if (binding.many) {
+    if (!Array.isArray(current) || !current.includes(binding.target)) return value
+    const ids = current.filter((id: string) => id !== binding.target)
+    if (next && !ids.includes(next)) ids.push(next)
+    return patchDesign(value, binding.path, ids)
+  }
+  return current === binding.target ? patchDesign(value, binding.path, next ?? null) : value
+}
 
 /** 对象名从原字段产生，身份仍使用版本内 ID；不创造可编辑标题。 */
 export function designObjects(value: SceneDesign_Input): DesignObject[] {

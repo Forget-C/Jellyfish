@@ -43,6 +43,7 @@ try {
   await page.route('**/api/**', async route => {
     const request = route.request(), path = new URL(request.url()).pathname
     const respond = data => route.fulfill({ json: { success: true, data: structuredClone(data) } })
+    if (path.endsWith('/sources/resolve')) return respond(request.postDataJSON().sources.map(source => ({ source, status: source.kind === 'human' ? 'ready' : 'unavailable', label: source.kind === 'human' ? '人工填写' : '历史来源', description: '隔离来源记录' })))
     const reject = message => route.fulfill({ status: 409, json: { detail: message } })
     if (request.method() !== 'GET') writes.push({ path, body: request.postDataJSON() })
     if (path.endsWith('/s1')) return respond(workspace)
@@ -79,12 +80,13 @@ try {
   })
   const base = 'http://127.0.0.1:4180/projects/p1/chapters/ch1/sequences/s1'
   await page.goto(base + '?view=design&design=d2')
+  await page.getByRole('button', { name: '表格', exact: true }).click()
   const summary = page.locator('.sequence-stages .design-intent')
   await summary.getByText('本场意图：递出旧信，认出对方', { exact: true }).waitFor()
   assert.equal(await page.getByRole('textbox', { name: '本场信息变化', exact: true }).isVisible(), false)
   await page.screenshot({ path: join(output, 'design-overview.png'), fullPage: true })
   async function object(role, label) {
-    await page.locator('.design-navigation').getByRole('button', { name: '六岗与声音审阅', exact: true }).click()
+    await page.locator('.design-navigation').getByRole('button', { name: '全场规则', exact: true }).click()
     await choose('岗位', role)
     await page.locator('.design-role-row').filter({ hasText: label }).first().click()
   }
@@ -92,7 +94,8 @@ try {
     await page.getByRole('button', { name: '任务中心', exact: true }).click()
     await page.getByRole('button', { name: '查看本场任务与业务结果', exact: true }).click()
   }
-  await page.locator('.design-navigation').getByRole('button', { name: /全场概览/ }).click()
+  await page.getByRole('button', { name: '表格', exact: true }).click()
+  await summary.getByRole('button', { name: /全场概览/ }).click()
   const information = page.getByRole('textbox', { name: '本场信息变化', exact: true })
   await information.fill('人工修改：递信但尚未相认')
   await summary.getByText('本场意图：人工修改：递信但尚未相认', { exact: true }).waitFor()
@@ -110,7 +113,8 @@ try {
   for (const [index, [label, text]] of fieldEdits.entries()) { await object(...objectNames[index]); await page.getByRole('textbox', { name: label, exact: true }).fill(text) }
   await page.getByRole('button', { name: '保存设计草稿', exact: true }).click()
   await page.getByText('模拟保存失败，修改仍保留', { exact: true }).first().waitFor()
-  await page.locator('.design-navigation').getByRole('button', { name: /全场概览/ }).click()
+  await page.getByRole('button', { name: '表格', exact: true }).click()
+  await summary.getByRole('button', { name: /全场概览/ }).click()
   assert.equal(await information.inputValue(), '人工修改：递信但尚未相认')
   assert.equal(await page.getByRole('button', { name: '确认本轮设计', exact: true }).isDisabled(), true)
   saveFailure = false
@@ -146,7 +150,7 @@ try {
   await dialog.waitFor({ state: 'hidden' })
   assert.deepEqual(workspace.designs[1].content, saved)
   assert.equal(workspace.designs.at(-1).confirmed_at, null)
-  await page.getByRole('tab', { name: '镜头清单', exact: true }).click()
+  await page.getByRole('button', { name: '表格', exact: true }).click()
   await summary.getByText('本场意图：模型较早的建议', { exact: true }).waitFor()
   await tasksPanel()
   // Stored result and cancelled tasks move to full history; failures/running stay visible.

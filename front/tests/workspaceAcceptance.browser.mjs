@@ -31,6 +31,7 @@ try {
     await page.route('**/api/**', async route => {
       const request = route.request(), path = new URL(request.url()).pathname
       const respond = data => route.fulfill({ json: { success: true, data: structuredClone(data) } })
+      if (path.endsWith('/sources/resolve')) return respond(request.postDataJSON().sources.map(source => ({ source, status: source.kind === 'human' ? 'ready' : 'unavailable', label: source.kind === 'human' ? '人工填写' : '历史来源', description: '隔离来源记录' })))
       if (request.method() !== 'GET') writes.push(path)
       if (path.endsWith('/s1')) return respond(workspace)
       if (path.includes('/directing/tasks/')) return respond(taskRows.find(task => task.task_id === path.split('/').at(-1)))
@@ -55,7 +56,7 @@ try {
       assert.equal(await locator.evaluate(element => getComputedStyle(element).outlineStyle !== 'none'), true, 'Keyboard focus must be visible')
       await page.keyboard.press('Enter')
     }
-    for (const state of ['first', 'design', 'design-expanded', 'shoot', 'tasks', 'cut', 'cut-expanded', 'confirmed-cut', 'source-changed', 'adoption-error', 'media-error', 'continuity', 'feedback', 'ledger']) {
+    for (const state of ['first', 'design', 'design-expanded', 'design-relations', 'design-source', 'shoot', 'tasks', 'cut', 'cut-expanded', 'confirmed-cut', 'source-changed', 'adoption-error', 'media-error', 'continuity', 'feedback', 'ledger']) {
       console.log(`Checking ${width} ${state}`)
       workspace = makeWorkspace()
       workspace.sequence.title = '旧信重逢'
@@ -77,8 +78,26 @@ try {
       if (failure) await page.getByRole('button', { name: '当前采用待核对', exact: true }).waitFor()
       if (state === 'design-expanded') {
         if (width < 1280) await page.getByRole('button', { name: '场次导航', exact: true }).click()
-        await keyboard(page.locator('.design-navigation').getByRole('button', { name: /全场概览/ }))
+        await keyboard(page.locator('.design-navigation').getByRole('button', { name: /全场 ·/ }))
+        if (width < 1280) await page.getByRole('button', { name: '所选对象详情', exact: true }).click()
+        await keyboard(page.locator(width < 1280 ? '.ant-drawer-open' : '.design-inspector').getByRole('button', { name: '全场概览', exact: true }))
         await page.getByRole('textbox', { name: '本场信息变化', exact: true }).waitFor()
+      }
+      if (state === 'design-relations' || state === 'design-source') {
+        await page.getByRole('tab', { name: '分镜', exact: true }).click()
+        await page.getByRole('button', { name: '分镜 1', exact: true }).click()
+        if (state === 'design-relations') {
+          if (width < 1280 && await page.locator('.ant-drawer-open').count()) await page.locator('.ant-drawer-open').getByRole('button', { name: 'Close', exact: true }).click()
+          await page.getByRole('tab', { name: '关系', exact: true }).click()
+          await page.getByRole('button', { name: '聚焦所选镜头', exact: true }).click()
+          await page.locator('[data-graph-node="shot:shot1"]').waitFor()
+        } else {
+          if (width < 1280 && !(await page.locator('.ant-drawer-open').count())) await page.getByRole('button', { name: '所选对象详情', exact: true }).click()
+          const inspector = page.locator(width < 1280 ? '.ant-drawer-open' : '.design-inspector')
+          await inspector.getByRole('button', { name: /查看来源/ }).first().click()
+          await inspector.locator('.source-card').waitFor()
+          assert.equal(await inspector.locator('.source-card').evaluate(element => { const box = element.getBoundingClientRect(); return box.left >= 0 && box.right <= innerWidth && element.scrollWidth <= element.clientWidth + 1 }), true)
+        }
       }
       if (state === 'cut-expanded') {
         await keyboard(page.locator('summary').filter({ hasText: '对比另一条素材' }))
@@ -89,10 +108,11 @@ try {
       }
       if (state === 'shoot') {
         await page.getByRole('tab', { name: '生成指令', exact: true }).click()
-        const select = page.getByRole('combobox', { name: '选择编译单元', exact: true })
-        await select.focus(); await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter')
+        if (width < 1280) await page.getByRole('button', { name: '场次导航', exact: true }).click()
+        await keyboard(page.locator('.production-unit-list button').filter({ hasText: '单元 02' }))
         await page.waitForURL(url => url.searchParams.get('unit') === 'u2')
-        await select.focus(); await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowUp'); await page.keyboard.press('Enter')
+        if (width < 1280) await page.getByRole('button', { name: '场次导航', exact: true }).click()
+        await keyboard(page.locator('.production-unit-list button').filter({ hasText: '单元 01' }))
         await page.waitForURL(url => url.searchParams.get('unit') === 'u1')
         await page.keyboard.press('Escape')
       }
@@ -109,7 +129,8 @@ try {
           const box = element.getBoundingClientRect()
           return box.width > 0 && box.right > route.getBoundingClientRect().right + 2 && getComputedStyle(element).position !== 'absolute'
         }).slice(0, 12).map(element => ({ tag: element.tagName, class: element.className, text: element.textContent.slice(0, 80) }))
-        return { document: document.documentElement.scrollWidth, viewport: innerWidth, route: route.clientWidth, content: route.scrollWidth, wide }
+        const layout = document.querySelector('.sequence-layout')
+        return { layout: layout.clientWidth, layoutContent: layout.scrollWidth, document: document.documentElement.scrollWidth, viewport: innerWidth, route: route.clientWidth, content: route.scrollWidth, wide }
       })
       results.push({ width, height, state, ...dimensions })
       await page.screenshot({ path: join(output, `${width}-${state}.png`), fullPage: true, animations: 'disabled' })
@@ -162,7 +183,7 @@ try {
   }
   await writeFile(join(output, 'results.json'), JSON.stringify(results, null, 2))
   console.log(JSON.stringify({ output, results }, null, 2))
-  assert.ok(results.every(row => row.content <= row.route + 2 && row.document <= row.viewport + 2), 'Page overflow: inspect results.json and screenshots')
+  assert.ok(results.every(row => row.content <= row.route + 2 && row.document <= row.viewport + 2 && row.layoutContent <= row.layout + 2), 'Page overflow: inspect results.json and screenshots')
 } catch (error) {
   for (const context of browser?.contexts() || []) for (const page of context.pages()) {
     await page.screenshot({ path: join(output, 'failure.png') });

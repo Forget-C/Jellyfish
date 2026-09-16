@@ -1,3 +1,4 @@
+import { SourceLinks } from './Sources'
 import { useCallback, useEffect, useState } from 'react'
 import { Alert, Button, Card, Collapse, Empty, Image, Space, Spin, Tabs, Typography } from 'antd'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -48,7 +49,7 @@ export function LedgerPanel({ projectId, sequenceId }: { projectId: string; sequ
       {execution?.snapshot_available ? <p>实际执行：{execution.model_name} · {execution.provider_key} · {execution.seconds} 秒 · {execution.ratio} · 种子 {execution.seed ?? '未指定'} · {execution.status}</p> : <p>此条缺少完整实际执行快照，下方仅展示计划输入。</p>}
       {unit && <><p>计划模型：{unit.model_id} · {unit.duration_ms / 1000} 秒 · {unit.ratio} · 参数：{JSON.stringify(unit.parameters)}</p>
         {unit.coverage.map(item => <p key={item.id}>{item.shot_id}：{item.action_scope}</p>)}
-        <Space wrap>{unit.references.map(ref => <Space key={ref.id} direction="vertical">{ref.media_kind === 'image' ? <Image width={100} src={buildFileDownloadUrl(ref.file_id)} /> : <a href={buildFileDownloadUrl(ref.file_id)}>查看参考文件</a>}<span>{ref.purpose} · {ref.input_role} · {ref.source.reference}</span></Space>)}</Space></>}
+        <Space wrap>{unit.references.map(ref => <Space key={ref.id} direction="vertical">{ref.media_kind === 'image' ? <Image width={100} src={buildFileDownloadUrl(ref.file_id)} /> : <a href={buildFileDownloadUrl(ref.file_id)}>查看参考文件</a>}<span>{ref.purpose} · {ref.input_role}</span><SourceLinks sources={[ref.source]} /></Space>)}</Space></>}
       <Collapse items={[{ key: 'prompt', label: '查看固定提示词和编译去向', children: <><Typography.Paragraph copyable className="whitespace-pre-wrap">{prompt?.content.text}</Typography.Paragraph>{prompt?.content.decisions.map((item, i) => <p key={i}>{item.section_path}：{item.disposition} · {item.explanation}</p>)}</> },
         { key: 'design', label: '查看原设计与六岗依据', children: design ? <><p>风格版本：{design.content.style_revision_id || '未指定'}</p><div style={{ height: 680 }}><DesignEditor active={false} value={design.content} onChange={() => {}} disabled /></div></> : null }]} />
     </Space>
@@ -71,7 +72,7 @@ export function LedgerPanel({ projectId, sequenceId }: { projectId: string; sequ
         {workspace.prompts.map((prompt, index) => <Card key={prompt.id} title={`提示词 ${index + 1} · ${prompt.id}`}>
           <Link to={destination({ view: 'shoot', plan: prompt.content.plan_revision_id, unit: prompt.content.unit_id, prompt: prompt.id })}>核对此单元固定输入</Link><p>计划 {prompt.content.plan_revision_id} / 单元 {prompt.content.unit_id} · 非空白字符 {prompt.content.text.replace(/\s/g, '').length} · 格式 {prompt.content.format_version}</p>
           <Typography.Paragraph copyable className="whitespace-pre-wrap">{prompt.content.text}</Typography.Paragraph>
-          {prompt.content.sources.map((source, i) => <p key={i}>来源：{source.reference} / {source.version}</p>)}
+          <SourceLinks sources={prompt.content.sources} />
           {workspace.reviews.filter(review => review.content.occurrences.some(item => item.prompt_revision_id === prompt.id)).map(review => <details key={review.id}><summary>审稿 {review.id} · {review.confirmed_by || '草稿'}</summary>{review.content.rows.map((row, i) => <div key={i}><strong>{row.role} / {row.verdict}</strong><ReviewDetails row={row} /></div>)}</details>)}
           {data.actions.filter(action => action.revision_id === prompt.id || action.task_id && workspace.takes.some(take => take.prompt_revision_id === prompt.id && take.task_id === action.task_id)).map((action, i) => <p key={i}>{action.actor_id} · {action.displayed_label} · {action.created_at} · 任务 {action.task_id || '无'}</p>)}
           <p>产出：{workspace.takes.filter(take => take.prompt_revision_id === prompt.id).map(take => take.id).join('、') || '尚无 Take'}</p>
@@ -81,7 +82,7 @@ export function LedgerPanel({ projectId, sequenceId }: { projectId: string; sequ
         {workspace.takes.map((take, index) => <Card data-workspace-target={`ledger-take:${take.id}`} tabIndex={-1} key={take.id} title={`Take ${index + 1} · ${take.annotation.verdict || '未审'}`}>
           <Link to={destination({ view: 'cut', take: take.id, item: '' })}>审片此素材</Link><video controls preload="metadata" className="w-full" src={buildFileDownloadUrl(take.file_id)} />
           <details><summary>实际输入与完整来源</summary>{trace(take.id)}</details><p>观察：{take.annotation.rationale.text || take.annotation.rationale.reason || '未填写'}</p>
-          {take.annotation.coverage.map(item => <p key={item.id}>{item.media_range.source_in_ms / 1000}–{item.media_range.source_out_ms / 1000} 秒：{item.observation} · 来源 {item.source.reference}</p>)}
+          {take.annotation.coverage.map(item => <section key={item.id}><p>{item.media_range.source_in_ms / 1000}–{item.media_range.source_out_ms / 1000} 秒：{item.observation}</p><SourceLinks sources={[item.source]} /></section>)}
           {feedback.repairs.filter(({ revision, prepared_plan_ids }) => prepared_plan_ids?.includes(take.plan_revision_id) || revision.content.result_take_id === take.id || workspace.cuts.find(cut => cut.id === revision.content.cut_revision_id)?.content.items.some(item => 'take_id' in item && item.id === revision.content.item_id && item.take_id === take.id)).map(repair => <Card key={repair.revision.id} size="small" title={`返工 ${repair.revision.id}`}>
             <p>症状：{repair.revision.content.symptom.text}；假设：{repair.revision.content.root_cause_hypothesis.text}</p><p>主要调整：{repair.revision.content.primary_change.text}</p>
             <p>返工计划：{repair.prepared_plan_ids?.join("、") || "尚未准备"}</p><p>结果 Take：{repair.revision.content.result_take_id || '尚无'}；比较：{repair.revision.content.comparison?.text || '待比较'}</p><p>实际变化：{repair.changed_factors.join('、') || '未检测到差异'}；归因：{repair.revision.content.attribution}</p>

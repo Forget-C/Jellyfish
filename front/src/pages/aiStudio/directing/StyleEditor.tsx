@@ -1,3 +1,4 @@
+import { SourceLinks } from './Sources'
 import { useWorkspaceDraft, WorkspaceWriteBoundary } from './WorkspaceDrafts'
 import { useEffect, useState } from 'react'
 import { Alert, Button, Card, Input, Select, Space, Typography } from 'antd'
@@ -54,7 +55,7 @@ export function StyleEditor({ projectId, sequenceId, value, onChange }: {
             <Input.TextArea aria-label="规则例外" placeholder="适用例外（可留空）" value={rule.exceptions?.text || rule.exceptions?.reason || ''} onChange={event => patch(rule.id, { exceptions: event.target.value ? humanNote(event.target.value) : { state: 'unset' } })} />
             <Select mode="multiple" aria-label="规则适用场次" placeholder="留空适用于全项目" className="w-full" value={rule.sequence_ids} options={[...new Set([sequenceId, ...(rule.sequence_ids || [])])].map(id => ({ value: id, label: id === sequenceId ? '当前场次' : id }))} onChange={sequence_ids => patch(rule.id, { sequence_ids })} />
             <Select mode="tags" aria-label="规则适用模型" placeholder="限定模型名称；留空适用于所有模型" className="w-full" value={rule.model_names} onChange={model_names => patch(rule.id, { model_names })} />
-            <Typography.Text type="secondary">来源：{rule.sources.map(source => `${source.kind} · ${source.reference} · ${source.version}`).join('；')}</Typography.Text>
+            <SourceLinks sources={rule.sources} />
             <Input aria-label="规则来源说明" placeholder="填写反馈、会议或审片依据，保存为人工来源" onBlur={event => { if (event.target.value.trim()) patch(rule.id, { sources: humanNote(event.target.value).sources!.map(source => ({ ...source, reference: event.target.value })) }) }} />
           </Space>
         </Card>)}

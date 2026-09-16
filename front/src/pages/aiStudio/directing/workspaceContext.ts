@@ -1,4 +1,4 @@
-export type WorkspaceSelection = 'design' | 'plan' | 'unit' | 'prompt' | 'review' | 'cut' | 'take' | 'view'
+export type WorkspaceSelection = 'design' | 'plan' | 'unit' | 'prompt' | 'review' | 'cut' | 'take' | 'view' | 'designScope' | 'designView' | 'designObject' | 'designQuery' | 'designProblems' | 'designTab' | 'designGraph' | 'designListPosition' | 'designStoryboardPosition' | 'shootIdentity' | 'cutItem' | 'shootTab' | 'shootQuery' | 'shootScroll' | 'shootInspectorScroll' | 'cutTab' | 'cutFilter' | 'cutUnitFilter' | 'cutScale' | 'cutTimelineScroll' | 'cutViewerScroll' | 'cutInspectorScroll'
 type StoredContext = Partial<Record<WorkspaceSelection, string | null>>
 
 const storageKey = (projectId: string, sequenceId: string) => `directing-context:${projectId}:${sequenceId}`
@@ -20,4 +20,13 @@ export function saveWorkspaceContext(projectId: string, sequenceId: string, cont
 export function restoreSelection<T extends { id: string }>(rows: T[], explicit: string | null, remembered: string | null | undefined): T | undefined {
   const id = explicit ?? remembered
   return id === undefined ? rows.slice(-1)[0] : rows.find(row => row.id === id)
+}
+
+/** 只恢复同一设计版本及范围的滚动位置；损坏或过期记录按未保存处理。 */
+export function readDesignPosition(raw: string | null | undefined, revisionId: string | undefined, scope: string): { top: number; density: number } {
+  try {
+    const row = JSON.parse(raw || '{}')
+    if (row.revisionId === revisionId && row.scope === scope && Number.isFinite(row.top) && row.top >= 0) return { top: row.top, density: row.density === 180 ? 180 : 220 }
+  } catch { /* 浏览状态损坏不阻止进入设计。 */ }
+  return { top: 0, density: 220 }
 }

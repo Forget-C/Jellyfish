@@ -38,6 +38,7 @@ try {
     const request = route.request()
     const path = new URL(request.url()).pathname
     const respond = data => route.fulfill({ json: payload(structuredClone(data)) })
+    if (path.endsWith('/sources/resolve')) return respond(request.postDataJSON().sources.map(source => ({ source, status: source.kind === 'human' ? 'ready' : 'unavailable', label: source.kind === 'human' ? '人工填写' : '历史来源', description: '隔离来源记录' })))
     if (path.endsWith('/ux1-sample.mp4')) return route.fulfill({ body: media, contentType: 'video/mp4' })
     if (request.method() !== 'GET') writes.push({ path, body: request.postDataJSON() })
     if (path.endsWith('/s1/feedback')) {
@@ -104,6 +105,7 @@ try {
     await page.getByText(value, { exact: true }).first().waitFor({ state: 'visible' })
   }
   async function choose(label, title) {
+    if (label === '选择候选 Take') { await page.locator('.cut-take-library button').filter({ hasText: new RegExp(`Take ${title.match(/Take (\d+)/)[1]}\\b`) }).click(); return }
     await page.getByRole('combobox', { name: label, exact: true }).locator('../..').click()
     await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: label === '查看或编辑设计版本' ? new RegExp('设计 0?' + title.match(/设计 (\d+)/)[1]) : title }).first().click()
   }
@@ -147,7 +149,7 @@ try {
 
   // A03: review-passed but currently unused take remains a candidate; adopted take shows both ranges.
   await choose('选择候选 Take', 'Take 2 · u1')
-  assert.ok((await page.getByRole('combobox', { name: '选择候选 Take' }).locator('../..').innerText()).includes('整体可用'))
+  assert.ok((await page.getByLabel('当前候选素材', { exact: true }).innerText()).includes('整体可用'))
   await choose('选择候选 Take', 'Take 1 · u1')
   await text('当前采用：片段 1 · 1.000–2.000 秒')
   await text('当前采用：片段 2 · 4.000–5.000 秒')
@@ -185,7 +187,7 @@ try {
   await contextAction('刷新状态')
   await settled()
   await choose('选择候选 Take', 'Take 4 · u1')
-  assert.ok((await page.getByRole('combobox', { name: '选择候选 Take' }).locator('../..').innerText()).includes('当前未采用'))
+  assert.ok((await page.getByLabel('当前候选素材', { exact: true }).innerText()).includes('当前未采用'))
   assert.equal(activeId, 'c-draft')
 
   // A04: loading/error states cannot temporarily label everything as unadopted.

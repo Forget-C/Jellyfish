@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Button, Drawer, Empty, Tag } from 'antd'
 import type { Note_Input, Prompt, SceneDesign_Input, WorkspaceRead } from '../../../services/generated'
+import { SourceLinks } from './Sources'
 import { DesignNote } from './DesignNote'
 import { ReferencePreview } from './ReferencePreview'
 
 /** 只解析冻结设计中的 JSON pointer，不把字段路径回跳到较新的编辑版本。 */
 export function FrozenDesignValue({ design, pointer }: { design?: SceneDesign_Input; pointer: string }) {
   const value = pointer.startsWith('/') ? pointer.slice(1).split('/').reduce<unknown>((node, key) => node && typeof node === 'object' ? (node as Record<string, unknown>)[key.replace(/~1/g, '/').replace(/~0/g, '~')] : undefined, design) : undefined
-  return <div className="frozen-design-value">{value === undefined ? <span>此快照中未找到该字段，请核对原路径。</span> : value && typeof value === 'object' && 'state' in value ? <DesignNote note={value as Note_Input} /> : <pre>{typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}</pre>}</div>
+  return <div className="frozen-design-value">{value === undefined ? <span>此快照中未找到该字段，请核对原路径。</span> : value && typeof value === 'object' && 'state' in value ? <><DesignNote note={value as Note_Input} /><SourceLinks sources={(value as Note_Input).sources || []} /></> : <pre>{typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}</pre>}</div>
 }
 
 /** 正文片段与原编译映射一起阅读；文字重叠时展示所有关联决定，不推断来源。 */
@@ -33,7 +34,7 @@ export function PromptReader({ prompt, workspace, active = true }: { active?: bo
       <p>固定计划：{plan ? `计划 ${workspace.plans.indexOf(plan)+1}` : '缺失计划'} · 单元 {unit?.id || '缺失'} · {design ? `设计 ${workspace.designs.indexOf(design)+1}` : '缺失设计'}</p>
       {!selection?.length && <Empty description="此指令没有提供编译映射" />}
       {selection?.map(index => { const decision = prompt.decisions[index]; const reference = unit?.references.find(row => row.id === decision.reference_id); return <section className="prompt-decision" key={index}><Tag>{labels[decision.disposition]}</Tag><h3>{decision.section_path}</h3>{decision.text_excerpt && <blockquote>{decision.text_excerpt}</blockquote>}<p>{decision.explanation}</p><FrozenDesignValue design={design?.content} pointer={decision.section_path} />{decision.reference_id && (reference ? <ReferencePreview reference={reference} /> : <p>引用参考在此冻结单元中缺失。</p>)}</section> })}
-      <h3>完整指令来源</h3>{prompt.sources.map((source,index) => <p key={index}>{source.kind} · {source.reference} · {source.version}</p>)}
+      <h3>完整指令来源</h3><SourceLinks sources={prompt.sources} />
     </Drawer>
   </section>
 }

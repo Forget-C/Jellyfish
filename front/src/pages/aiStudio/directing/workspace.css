@@ -85,7 +85,7 @@
   .sequence-layout { grid-template-columns: minmax(0,1fr); }
   .design-workspace { grid-template-columns: minmax(0,1fr); }
   .workspace-stage-tabs > .ant-tabs-nav { padding-right: 118px; }
-  .design-detail-trigger { position: absolute; right: 16px; bottom: 42px; box-shadow: 0 2px 8px #0002; }
+  .design-detail-trigger { flex-shrink: 0; align-self: flex-end; margin: 4px 16px 8px; }
 }
 @media (max-width: 767px) {
   .workspace-stage-tabs > .ant-tabs-nav { padding: 0 96px 0 0; }
@@ -249,3 +249,60 @@
   .production-version-bar > .ant-space:first-child { flex-basis: 100%; }
   .production-version-bar > .ant-space:last-child { margin-left: auto; }
 }
+
+.design-view-content { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
+.design-view-content[hidden] { display: none; }
+.design-scope-heading { display: flex; flex-direction: column; min-width: 100px; flex: 1; overflow: hidden; }
+.design-scope-heading strong, .design-scope-heading small { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.design-scope-heading small { color: #667085; font-size: 12px; }
+.design-view-toolbar .design-view-tabs { margin-right: 0; gap: 4px; }
+.design-view-toolbar > .ant-input-affix-wrapper { width: 160px; }
+.design-storyboard-group { position: absolute; left: 8px; right: 8px; margin: 0; line-height: 32px; font-size: 13px; font-weight: 600; }
+.design-storyboard-card { display: flex; flex-direction: column; gap: 4px; }
+.design-storyboard-card > button { flex: 1; min-height: 0; height: auto; }
+.design-storyboard-card > .ant-select { position: static; width: 100%; }
+.design-storyboard-order { display: flex; gap: 4px; justify-content: flex-end; }
+.design-order-hint { margin: 0; padding: 4px 16px; color: #667085; font-size: 12px; }
+.design-graph-node { width: 200px; height: 108px; padding: 8px; justify-content: space-between; }
+.design-graph-node.is-selected { box-shadow: 0 0 0 2px #1677ff; }
+.design-node-select { border: 0; background: transparent; cursor: pointer; text-align: center; width: 100%; min-height: 44px; }
+.design-node-select small { color: #667085; }
+.design-node-actions { display: flex; gap: 8px; justify-content: center; }
+.design-node-actions button { padding: 0; border: 0; background: transparent; color: #1677ff; font-size: 12px; cursor: pointer; }
+.design-edge-hit { cursor: pointer; }
+.design-edge-hit:focus { stroke: #1677ff55; outline: none; }
+.design-relation-editor > .ant-btn { margin-bottom: 12px; }
+.design-relation-editor p { margin: 12px 0; }
+@media (max-width: 767px) {
+  .design-view-toolbar { flex-basis: auto; min-height: 136px; }
+  .design-view-toolbar .design-scope-heading { flex-basis: 100%; }
+  .design-view-toolbar .design-view-tabs { height: 32px; width: auto; }
+  .design-view-toolbar > .ant-input-affix-wrapper { flex-basis: 55%; }
+  .design-storyboard-tools { padding: 8px; }
+  .design-graph-tools .ant-btn { max-width: 100%; overflow: hidden; }
+}
+
+.design-node-actions .design-node-drag { cursor: grab; touch-action: none; }
+
+.source-links { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
+.source-links .ant-btn { height: auto; max-width: 100%; white-space: normal; text-align: left; padding: 0; font-size: 12px; }
+.source-links > div { min-width: 0; max-width: 100%; }
+.source-card { overflow-wrap: anywhere; }
+.source-card > p, .source-card blockquote { white-space: pre-wrap; }
+.source-card blockquote { margin: 12px 0; padding: 12px; background: #f6f8fb; max-height: 360px; overflow: auto; }
+.source-card video, .source-card audio, .source-card .ant-image { max-width: 100%; }
+.source-card > .ant-btn { margin: 8px 8px 8px 0; }
+.source-technical { margin-top: 20px; color: #667085; font-size: 12px; }
+.source-inspection > .ant-btn { margin-bottom: 16px; }
+
+.shot-production-target { height: auto; white-space: normal; text-align: left; }
+.shot-production-target small { display: block; color: #667085; }
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  [data-workspace-target="design-version"] { flex-basis: auto; flex-wrap: wrap; min-height: 104px; padding: 8px 16px; gap: 8px; }
+  [data-workspace-target="design-version"] .sequence-version-actions { margin-left: auto; }
+}
+
+.design-node-actions { flex-wrap: wrap; row-gap: 4px; }
+.design-issue-actions { display: flex; gap: 4px; flex-wrap: wrap; margin: 8px 0; }
+.design-issue-actions .ant-btn { color: #9a6400; }

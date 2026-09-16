@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { loadSource } from './directing-fixtures.mjs'
-const { productionRecords, uniqueNewRecord, designResultRecorded } = await loadSource('workspaceProduction')
+const { productionRecords, uniqueNewRecord, designResultRecorded, shotProductionTargets } = await loadSource('workspaceProduction')
 
 test('same unit name in different plans never mixes prompts, reviews or videos', () => {
   const prompt = (id, plan) => ({ id, content: { plan_revision_id: plan, unit_id: 'same' } })
@@ -31,4 +31,14 @@ test('editing a recorded suggestion does not make its task pending again when mo
   edited.direction.sources[0].reference = 'other-task'
   assert.equal(designResultRecorded(design, [{ content: edited }]), false)
   assert.equal(designResultRecorded(design, [{ content: { ...design, sources: [{ kind: 'human', reference: 'chapter', version: '2' }] } }]), true)
+})
+
+test('shot production destinations preserve design and plan identities and every matching unit', () => {
+  const unit = id => ({ id, coverage: [{ shot_id: 'shot', action_scope: '递信' }, { shot_id: 'shot', action_scope: '停手' }] })
+  const workspace = { plans: [{ id: 'old', confirmed_at: 'date', content: { design_revision_id: 'old-design', units: [unit('same')] } }, { id: 'a', content: { design_revision_id: 'design', units: [unit('same'), unit('second')] } }, { id: 'b', content: { design_revision_id: 'design', units: [unit('same')] } }] }
+  const targets = shotProductionTargets(workspace, 'design', 'shot')
+  assert.deepEqual(targets.map(row => [row.planId, row.unitId]), [['a', 'same'], ['a', 'second'], ['b', 'same']])
+  assert.equal(targets[0].label, '计划 2 · 单元 1')
+  assert.equal(targets[0].coverage, '递信；停手')
+  assert.deepEqual(shotProductionTargets(workspace, 'design', 'missing'), [])
 })

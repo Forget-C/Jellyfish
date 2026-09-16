@@ -1,3 +1,4 @@
+import { SourceLinks } from './Sources'
 import { Button, Card, Input, InputNumber, Select, Space, Typography } from 'antd'
 import type { Note_Input, ObservedRange, WorkspaceRead } from '../../../services/generated'
 import { humanNote } from './common'
@@ -11,7 +12,7 @@ export function FeedbackNote({ label, value, onChange }: { label: string; value:
     ]} onChange={state => onChange(state === 'fact' || state === 'proposal' ? { ...humanNote(value.text || ''), state } : { state, reason: value.reason || '' })} />
     <Input.TextArea aria-label={label} value={value.text || value.reason || ''} onChange={event => onChange(value.state === 'none' || value.state === 'not_applicable'
       ? { state: value.state, reason: event.target.value } : { ...humanNote(event.target.value), ...(value.state === 'fact' ? { state: 'fact' as const } : {}) })} />
-    {!!value.sources?.length && <Typography.Text type="secondary">来源：{value.sources.map(source => `${source.reference} · ${source.version}`).join('；')}</Typography.Text>}
+    {!!value.sources?.length && <SourceLinks sources={value.sources} />}
   </Space>
 }
 

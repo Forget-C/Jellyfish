@@ -1,0 +1,199 @@
+{
+  "date": "2026-09-15",
+  "browser": "Chromium with isolated API and synthetic media",
+  "suites": [
+    {
+      "script": "front/tests/workspaceRefinement.browser.mjs",
+      "evidence": "workspaceRefinement",
+      "files": [
+        "1024.png",
+        "375.png",
+        "768.png",
+        "beat-relations.png",
+        "results.json",
+        "storyboard.png"
+      ],
+      "result": "passed"
+    },
+    {
+      "script": "front/tests/sourceProvenance.browser.mjs",
+      "evidence": "sourceProvenance",
+      "files": [
+        "model-source.png",
+        "results.json"
+      ],
+      "result": "passed"
+    },
+    {
+      "script": "front/tests/workspaceDesignViews.browser.mjs",
+      "evidence": "workspaceDesignViews",
+      "files": [
+        "beat-aggregation-200.png",
+        "explicit-preview-source.png",
+        "results.json",
+        "revision-differences.png"
+      ],
+      "result": "passed"
+    },
+    {
+      "script": "front/tests/workspaceAcceptance.browser.mjs",
+      "evidence": "workspaceAcceptance",
+      "files": [
+        "1024-adoption-error.png",
+        "1024-confirmed-cut.png",
+        "1024-continuity.png",
+        "1024-cut-expanded.png",
+        "1024-cut.png",
+        "1024-design-expanded.png",
+        "1024-design-relations.png",
+        "1024-design-source.png",
+        "1024-design.png",
+        "1024-feedback.png",
+        "1024-first.png",
+        "1024-ledger.png",
+        "1024-media-error.png",
+        "1024-shoot.png",
+        "1024-source-changed.png",
+        "1024-tasks.png",
+        "1440-adoption-error.png",
+        "1440-confirmed-cut.png",
+        "1440-continuity.png",
+        "1440-cut-expanded.png",
+        "1440-cut.png",
+        "1440-design-expanded.png",
+        "1440-design-relations.png",
+        "1440-design-source.png",
+        "1440-design.png",
+        "1440-feedback.png",
+        "1440-first.png",
+        "1440-ledger.png",
+        "1440-media-error.png",
+        "1440-shoot.png",
+        "1440-source-changed.png",
+        "1440-tasks.png",
+        "375-adoption-error.png",
+        "375-confirmed-cut.png",
+        "375-continuity.png",
+        "375-cut-expanded.png",
+        "375-cut.png",
+        "375-design-expanded.png",
+        "375-design-relations.png",
+        "375-design-source.png",
+        "375-design.png",
+        "375-feedback.png",
+        "375-first.png",
+        "375-ledger.png",
+        "375-media-error.png",
+        "375-shoot.png",
+        "375-source-changed.png",
+        "375-tasks.png",
+        "768-adoption-error.png",
+        "768-confirmed-cut.png",
+        "768-continuity.png",
+        "768-cut-expanded.png",
+        "768-cut.png",
+        "768-design-expanded.png",
+        "768-design-relations.png",
+        "768-design-source.png",
+        "768-design.png",
+        "768-feedback.png",
+        "768-first.png",
+        "768-ledger.png",
+        "768-media-error.png",
+        "768-shoot.png",
+        "768-source-changed.png",
+        "768-tasks.png",
+        "results.json"
+      ],
+      "result": "passed"
+    },
+    {
+      "script": "front/tests/workspaceJourney.browser.mjs",
+      "evidence": "workspaceJourney",
+      "files": [
+        "1.png",
+        "2.png",
+        "3.png",
+        "4.png",
+        "5.png",
+        "results.json"
+      ],
+      "result": "passed"
+    },
+    {
+      "script": "front/tests/workspaceProduction.browser.mjs",
+      "evidence": "workspaceProduction",
+      "files": [
+        "design-overview.png",
+        "production-inputs.png"
+      ],
+      "result": "passed"
+    },
+    {
+      "script": "front/tests/workspaceCut.browser.mjs",
+      "evidence": "workspaceCut",
+      "files": [
+        "candidate-and-adopted.png",
+        "frame.png",
+        "mixed-timeline.png",
+        "restored-cut-context.png",
+        "seam-boundary-and-preserved-input.png"
+      ],
+      "result": "passed"
+    },
+    {
+      "script": "front/tests/workspaceGuidance.browser.mjs",
+      "evidence": "workspaceGuidance",
+      "files": [
+        "first-entry.png",
+        "next-step.png"
+      ],
+      "result": "passed"
+    },
+    {
+      "script": "front/tests/workspaceWrite.browser.mjs",
+      "evidence": "workspaceWrite",
+      "files": [
+        "results.json"
+      ],
+      "result": "passed"
+    },
+    {
+      "script": "front/tests/workspaceUsage.browser.mjs",
+      "evidence": "workspaceUsage",
+      "files": [
+        "ux1-cut.png"
+      ],
+      "result": "passed"
+    },
+    {
+      "script": "front/tests/sequenceWorkbench.browser.mjs",
+      "evidence": "sequenceWorkbench",
+      "files": [
+        "cut-desktop.png",
+        "design-1.png",
+        "design-1024-detail.png",
+        "design-12.png",
+        "design-1279-detail.png",
+        "design-200.png",
+        "design-375-detail.png",
+        "design-60.png",
+        "design-768-detail.png",
+        "design-relations.png",
+        "design-storyboard.png",
+        "results.json",
+        "shoot-desktop.png"
+      ],
+      "result": "passed"
+    }
+  ],
+  "unit_tests": 48,
+  "backend_tests": 8,
+  "responsive_states": 64,
+  "pylint": "5 pre-existing findings; no new findings in changed modules",
+  "limits": [
+    "No real model calls or model-quality claims",
+    "CSS viewports, not physical-device certification",
+    "Source/backend and unchanged pure behavior reuse passing evidence; nine affected browser suites rerun after central selector removal"
+  ]
+}

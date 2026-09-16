@@ -33,6 +33,7 @@ try {
     const request = route.request()
     const path = new URL(request.url()).pathname
     const respond = data => route.fulfill({ json: { success: true, data: structuredClone(data) } })
+    if (path.endsWith('/sources/resolve')) return respond(request.postDataJSON().sources.map(source => ({ source, status: source.kind === 'human' ? 'ready' : 'unavailable', label: source.kind === 'human' ? '人工填写' : '历史来源', description: '隔离来源记录' })))
     if (request.method() !== 'GET') writes.push({ path, body: request.postDataJSON() })
     if (path === '/api/v1/film/tasks') return respond({ items: tasks.has('review-task') ? [{ task_id: 'review-task', task_kind: 'directing_review', title: '指令回跳任务', status: tasks.get('review-task').status, stage: '', progress: null, cancel_requested: false, target_type: 'directing_sequence', target_id: 's1', project_id: 'p1', created_at_ts: Date.now(), updated_at_ts: Date.now(), source: { kind: 'sequence', id: 's1', project_id: 'p1', chapter_id: 'ch1', title: workspace.sequence.title } }] : [], next_cursor: null })
     if (path.endsWith('/chapters/ch1/assembly')) return respond({ chapter_id: 'ch1', title: '测试章节', sequences: [], transitions: [], gaps: [] })
@@ -83,6 +84,7 @@ try {
   async function choose(label, value) {
     await closeGuide()
     if (['选择编译单元', '选择生成指令版本'].includes(label)) await page.getByRole('tab', { name: '生成指令', exact: true }).click()
+    if (label === '选择编译单元') { await page.locator('.production-unit-list button').filter({ hasText: `单元 ${value.match(/单元 (\d+)/)[1].padStart(2, '0')}` }).click(); return }
     await page.getByRole('combobox', { name: label, exact: true }).locator('../..').click()
     await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: value }).first().click()
   }
@@ -212,15 +214,15 @@ try {
   await page.goBack()
   await closeGuide()
   await page.getByRole('tab', { name: '生成指令', exact: true }).click()
-  await page.getByRole('combobox', { name: '选择编译单元' }).waitFor()
-  assert.ok((await page.getByRole('combobox', { name: '选择编译单元' }).locator('../..').innerText()).includes('单元 2'))
+  await page.getByLabel('当前编译单元', { exact: true }).waitFor()
+  assert.ok((await page.getByLabel('当前编译单元', { exact: true }).innerText()).includes('单元 2'))
   await contextAction('本场原文')
   await page.getByRole('button', { name: '返回场次列表核对原文', exact: true }).click()
   await page.getByRole('button', { name: '进入场次', exact: true }).click()
   await closeGuide()
   await page.getByRole('tab', { name: '生成指令', exact: true }).click()
-  await page.getByRole('combobox', { name: '选择编译单元' }).waitFor()
-  assert.ok((await page.getByRole('combobox', { name: '选择编译单元' }).locator('../..').innerText()).includes('单元 2'))
+  await page.getByLabel('当前编译单元', { exact: true }).waitFor()
+  assert.ok((await page.getByLabel('当前编译单元', { exact: true }).innerText()).includes('单元 2'))
   await page.getByRole('button', { name: /任务中心/ }).click()
   const taskRow = page.getByText('指令回跳任务', { exact: true }).locator('../..')
   await taskRow.getByRole('button', { name: /查看/ }).click()
@@ -228,7 +230,7 @@ try {
   assert.equal(new URL(page.url()).searchParams.get('task'), 'review-task')
   assert.equal(new URL(page.url()).searchParams.get('view'), 'shoot')
   await page.getByRole('tab', { name: '生成指令', exact: true }).click()
-  assert.ok((await page.getByRole('combobox', { name: '选择编译单元' }).locator('../..').innerText()).includes('单元 1'))
+  assert.ok((await page.getByLabel('当前编译单元', { exact: true }).innerText()).includes('单元 1'))
   assert.equal(await page.locator('.prompt-reader').innerText(), '固定动作与参考')
   // Preparation inputs survive leaving; storage denial falls back to the same explicit guard.
   const beforePreparation = writes.length
@@ -285,7 +287,7 @@ try {
   await page.waitForURL(url => url.searchParams.get('unit') === 'u2')
   await page.reload()
   await page.getByRole('tab', { name: '生成指令', exact: true }).click()
-  assert.ok((await page.getByRole('combobox', { name: '选择编译单元' }).locator('../..').innerText()).includes('单元 2'))
+  assert.ok((await page.getByLabel('当前编译单元', { exact: true }).innerText()).includes('单元 2'))
   // A remote running task with no recoverable snapshot must never select a newer plan.
   tasks.set('remote-running', { task_id: 'remote-running', kind: 'video_generation', status: 'running', error: null, source_version: null })
   workspace.task_ids.push('remote-running')

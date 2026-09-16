@@ -15,6 +15,7 @@ import type { ApiResponse_LedgerRead_ } from '../models/ApiResponse_LedgerRead_'
 import type { ApiResponse_list_AssetSummary__ } from '../models/ApiResponse_list_AssetSummary__';
 import type { ApiResponse_list_BatchRead__ } from '../models/ApiResponse_list_BatchRead__';
 import type { ApiResponse_list_ProjectStyleRevision__ } from '../models/ApiResponse_list_ProjectStyleRevision__';
+import type { ApiResponse_list_SourceRead__ } from '../models/ApiResponse_list_SourceRead__';
 import type { ApiResponse_MediaRead_ } from '../models/ApiResponse_MediaRead_';
 import type { ApiResponse_SequenceRead_ } from '../models/ApiResponse_SequenceRead_';
 import type { ApiResponse_TaskAccepted_ } from '../models/ApiResponse_TaskAccepted_';
@@ -34,6 +35,7 @@ import type { SeamReviewRequest } from '../models/SeamReviewRequest';
 import type { SequenceCreate } from '../models/SequenceCreate';
 import type { SequenceUpdate } from '../models/SequenceUpdate';
 import type { ShootRequest } from '../models/ShootRequest';
+import type { SourceResolveRequest } from '../models/SourceResolveRequest';
 import type { StyleWrite } from '../models/StyleWrite';
 import type { TakeReviewWrite } from '../models/TakeReviewWrite';
 import type { TransitionWrite_Input } from '../models/TransitionWrite_Input';
@@ -149,6 +151,35 @@ export class StudioDirectingService {
                 'project_id': projectId,
                 'sequence_id': sequenceId,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Resolve Sources
+     * 批量只读解析来源，归属与历史匹配规则由领域服务维护。
+     * @returns ApiResponse_list_SourceRead__ Successful Response
+     * @throws ApiError
+     */
+    public static directingResolveSources({
+        projectId,
+        sequenceId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        requestBody: SourceResolveRequest,
+    }): CancelablePromise<ApiResponse_list_SourceRead__> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/sources/resolve',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

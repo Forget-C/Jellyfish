@@ -41,6 +41,7 @@ export type { ApiResponse_list_ExperimentSessionRead__ } from './models/ApiRespo
 export type { ApiResponse_list_ProjectStyleRevision__ } from './models/ApiResponse_list_ProjectStyleRevision__';
 export type { ApiResponse_list_PromptCategoryOptionRead__ } from './models/ApiResponse_list_PromptCategoryOptionRead__';
 export type { ApiResponse_list_ProviderSupportedRead__ } from './models/ApiResponse_list_ProviderSupportedRead__';
+export type { ApiResponse_list_SourceRead__ } from './models/ApiResponse_list_SourceRead__';
 export type { ApiResponse_MediaRead_ } from './models/ApiResponse_MediaRead_';
 export type { ApiResponse_ModelRead_ } from './models/ApiResponse_ModelRead_';
 export type { ApiResponse_ModelSettingsRead_ } from './models/ApiResponse_ModelSettingsRead_';
@@ -301,6 +302,8 @@ export type { ShotCoverage_Output } from './models/ShotCoverage_Output';
 export type { SoundDesign_Input } from './models/SoundDesign_Input';
 export type { SoundDesign_Output } from './models/SoundDesign_Output';
 export type { Source } from './models/Source';
+export type { SourceRead } from './models/SourceRead';
+export type { SourceResolveRequest } from './models/SourceResolveRequest';
 export type { SourceSpan } from './models/SourceSpan';
 export type { SpatialAnchor_Input } from './models/SpatialAnchor_Input';
 export type { SpatialAnchor_Output } from './models/SpatialAnchor_Output';

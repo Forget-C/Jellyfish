@@ -18,6 +18,8 @@ from app.core.contracts.directing.continuity import ContinuityRead, CutFrameRequ
 from app.core.contracts.directing.batch import BatchPrepare, BatchRead
 from app.services.studio.files import require_available_file
 from app.services.directing.store import RevisionConflict
+from app.services.directing.provenance import ProvenanceService
+from app.core.contracts.directing.provenance import SourceRead, SourceResolveRequest
 
 from app.services.directing.feedback import FeedbackService
 from app.core.contracts.directing.feedback import FeedbackRead, FeedbackWrite, ChapterAssemblyRead, TransitionWrite, RepairPlanRequest
@@ -58,6 +60,12 @@ async def update_sequence(project_id: str, chapter_id: str, sequence_id: str, bo
 async def workspace(project_id: str, sequence_id: str, db: AsyncSession = Depends(get_db, scope="function")):
     """三视图读取同一份场次上下文。"""
     return success_response(await _call(ProductionService(db, project_id).workspace(sequence_id)))
+
+
+@router.post("/sequences/{sequence_id}/sources/resolve", response_model=ApiResponse[list[SourceRead]], operation_id="directing_resolve_sources")
+async def resolve_sources(project_id: str, sequence_id: str, body: SourceResolveRequest, db: AsyncSession = Depends(get_db, scope="function")):
+    """批量只读解析来源，归属与历史匹配规则由领域服务维护。"""
+    return success_response(await _call(ProvenanceService(db, project_id).resolve_sources(sequence_id, body.sources)))
 
 
 @router.post("/sequences/{sequence_id}/revisions", response_model=ApiResponse[WorkspaceRead], operation_id="directing_save_revision")

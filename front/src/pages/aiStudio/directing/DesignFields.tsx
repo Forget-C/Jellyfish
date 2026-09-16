@@ -1,5 +1,6 @@
 import { Button, Input, InputNumber, Select, Typography } from 'antd'
 import type { Note_Input, SceneDesign_Input } from '../../../services/generated'
+import { SourceLinks } from './Sources'
 import { humanNote } from './common'
 import { emptyDesign } from './designTemplate'
 import { designLabels } from './designLabels'
@@ -24,7 +25,7 @@ export function DesignFields({ value, path, onChange, disabled = false, fields }
       const note = current as Note_Input
       return <div className="design-field"><div className="design-field-label"><label>{label}</label><Select aria-label={`${label}状态`} size="small" value={note.state || 'unset'} options={states} disabled={disabled} onChange={state => change(target, ['none', 'not_applicable'].includes(state) ? { state, reason: note.reason || '', sources: note.sources } : ['unset', 'unknown'].includes(state) ? { state } : { ...humanNote(note.text || ''), state })} /></div>
         <Input.TextArea aria-label={label} disabled={disabled} value={note.text || note.reason || ''} autoSize={{ minRows: 1, maxRows: 8 }} onChange={event => change(target, ['none', 'not_applicable'].includes(note.state || '') ? { ...note, reason: event.target.value } : { ...humanNote(event.target.value), state: note.state === 'fact' ? 'fact' : 'proposal' })} />
-        {!!note.sources?.length && <details className="design-source"><summary>字段来源 · {note.sources.length}</summary>{note.sources.map((source, i) => <p key={i}>{source.kind} · {source.reference} · {source.version}</p>)}</details>}
+        {!!note.sources?.length && <SourceLinks sources={note.sources} />}
       </div>
     }
     if (Array.isArray(current)) {

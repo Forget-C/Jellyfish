@@ -1,3 +1,4 @@
+import { SourceLinks } from './Sources'
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Image, Input, InputNumber, Modal, Pagination, Select, Space, Typography, Upload } from 'antd'
 import { LlmService, StudioFilesService } from '../../../services/generated'
@@ -75,7 +76,7 @@ export function PlanEditor({ projectId, workspace, design, value, onChange, disa
         {!unit.references.length && <Typography.Text type="secondary">尚未选入参考。是否可以纯文本试拍由目标模型决定。</Typography.Text>}
         {unit.references.map((ref, refIndex) => <Card key={ref.id} size="small" style={{ width: '100%' }}>
           <Space wrap><ReferencePreview reference={ref} />
-            <span>参考 {ref.ordinal + 1} · {ref.media_kind === 'image' ? '图片' : ref.media_kind === 'video' ? '视频' : '声音'}</span><details><summary>参考来源</summary>{ref.source.kind} · {ref.source.reference} · {ref.source.version}</details>
+            <span>参考 {ref.ordinal + 1} · {ref.media_kind === 'image' ? '图片' : ref.media_kind === 'video' ? '视频' : '声音'}</span><SourceLinks sources={[ref.source]} />
             <Select disabled={disabled} value={ref.purpose} style={{ width: 125 }} options={[{ value: 'identity', label: '人物身份' }, { value: 'space', label: '场所空间' }, { value: 'composition', label: '构图' }, { value: 'continuity', label: '连续性' }, { value: 'performance', label: '表演' }, { value: 'sound', label: '声音' }]} onChange={purpose => patch(unit.id, { references: unit.references.map(r => r.id === ref.id ? { ...r, purpose } : r) })} />
             <Select allowClear disabled={disabled} value={ref.input_role} style={{ width: 145 }} options={[{ value: 'first_frame', label: '首帧构图' }, { value: 'last_frame', label: '尾帧构图' }, { value: 'key_frame', label: '关键帧' }, { value: 'subject', label: '命名主体参考' }]} onChange={input_role => patch(unit.id, { references: unit.references.map(r => r.id === ref.id ? { ...r, input_role: input_role ?? undefined } : r) })} />
             <Select mode="multiple" disabled={disabled} placeholder="绑定人物/物件" style={{ minWidth: 180 }} value={ref.participant_ids} options={design.participants.map(p => ({ value: p.id, label: p.name }))} onChange={participant_ids => patch(unit.id, { references: unit.references.map(r => r.id === ref.id ? { ...r, participant_ids } : r) })} />

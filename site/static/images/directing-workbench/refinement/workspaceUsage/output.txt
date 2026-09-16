@@ -1,0 +1,11 @@
+{
+  "result": "A01–A04 and UX2 navigation/context/edit guard checks passed",
+  "writes": [
+    "/api/v1/studio/projects/p1/directing/sequences/s1/takes/t3",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/revisions",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/revisions/c-draft/confirm",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/revisions",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/revisions"
+  ],
+  "screenshot": "/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-ux1-xy0sFD/ux1-cut.png"
+}

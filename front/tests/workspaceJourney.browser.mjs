@@ -25,11 +25,12 @@ try {
   await server.listen(); browser = await chromium.launch({ headless: true })
   page = await browser.newPage({ viewport: { width: 1586, height: 992 } }); page.setDefaultTimeout(15000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: location.origin } })
-  page.on('pageerror', error => errors.push(error.message))
+  page.on('pageerror', error => { errors.push(error.message); console.error(error.stack) })
   await page.route('**/api/**', async route => {
     const request = route.request(), path = new URL(request.url()).pathname, method = request.method()
     const body = method === 'GET' ? undefined : request.postDataJSON()
     const respond = data => route.fulfill({ json: { success: true, data: structuredClone(data) } })
+    if (path.endsWith('/sources/resolve')) return respond(request.postDataJSON().sources.map(source => ({ source, status: source.kind === 'human' ? 'ready' : 'unavailable', label: source.kind === 'human' ? '人工填写' : '历史来源', description: '隔离来源记录' })))
     if (body) writes.push({ path, body })
     if (path.endsWith('/projects')) { if (body) project = { ...body, stats: { chapters: 0, roles: 0 }, created_at: '2026-09-15T00:00:00Z' }; return respond(body ? project : list(project ? [project] : [])) }
     if (project && path.endsWith(`/projects/${project.id}`)) return respond(project)
@@ -76,7 +77,7 @@ try {
       const range = request.headers().range?.match(/bytes=(\d+)-(\d*)/), start = range ? Number(range[1]) : 0, end = range?.[2] ? Math.min(Number(range[2]), media.length-1) : media.length-1
       return route.fulfill({ status: range ? 206 : 200, body: media.subarray(start,end+1), contentType: 'video/mp4', headers: { 'accept-ranges': 'bytes', 'content-length': String(end-start+1), ...(range ? { 'content-range': `bytes ${start}-${end}/${media.length}` } : {}) } })
     }
-    if (path.endsWith('/s1/feedback') && body) { assert.equal(body.document.kind, 'repair'); assert.equal(body.document.content.cut_revision_id, activeId); feedback.repairs.push({ revision: revision('repair1', body.document.content, false), prepared_plan_ids: [] }); return respond({ ...feedback, active_cut_revision_id: activeId }) }
+    if (path.endsWith('/s1/feedback') && body) { assert.equal(body.document.kind, 'repair'); assert.equal(body.document.content.cut_revision_id, activeId); feedback.repairs.push({ revision: revision('repair1', body.document.content, false), current: true, changed_factors: [], prepared_plan_ids: [] }); return respond({ ...feedback, active_cut_revision_id: activeId }) }
     if (path.endsWith('/style-options')) return respond({ visual_styles: ['现实'], styles: ['真人都市'] })
     if (path.endsWith('/model-settings')) return respond({ default_video_model_id: 'model1' })
     if (path.endsWith('/models')) return respond(list([{ id: 'model1', name: '隔离视频模型', category: 'video', enabled: true }]))
@@ -100,6 +101,7 @@ try {
   await page.getByRole('button', { name: '手动新建场次', exact: true }).click()
   await page.getByRole('button', { name: '创建并进入场次', exact: true }).click()
   await page.getByRole('button', { name: '手动起稿', exact: true }).click()
+  await page.getByRole('button', { name: '分镜 1', exact: true }).click()
   await page.getByRole('textbox', { name: '可见结果', exact: true }).fill('他把旧信递到她手边')
   await page.getByRole('textbox', { name: '叙事作用', exact: true }).fill('让她认出笔迹')
   await page.getByRole('button', { name: '保存设计草稿', exact: true }).click()
@@ -143,10 +145,12 @@ try {
   await page.getByRole('button', { name: '新建最小返工单', exact: true }).click()
   await page.getByRole('textbox', { name: '症状', exact: true }).fill('入点稍早，只调整此片段')
   await page.getByRole('button', { name: '保存反馈草稿', exact: true }).click()
+  await page.waitForURL(url => url.searchParams.get('feedback') === 'repair1')
+  await page.getByText('实际输入变化：尚无可比较新输入', { exact: true }).waitFor()
   assert.equal(feedback.repairs[0].revision.content.item_id, workspace.cuts[0].content.items[0].id)
   assert.equal(feedback.repairs[0].revision.content.cut_revision_id, activeId)
-  assert.deepEqual(errors, [])
   await record('局部返工保留片段与采用身份')
+  assert.deepEqual(errors, [])
   await writeFile(join(output, 'results.json'), JSON.stringify({ steps, writes, errors }, null, 2)); console.log(JSON.stringify({ output, steps }, null, 2))
 } catch (error) { if (page) { console.log(await page.locator('body').innerText()); await page.screenshot({ path: join(output, 'failure.png') }) }; console.log('Browser evidence:', output); throw error }
 finally { await browser?.close(); await server.close() }

@@ -11,7 +11,8 @@ description: "记录当前正在推进的开发计划、改造方案与阶段性
 
 当前计划入口：
 
-- [全站布局统一与场次工作台重设计计划](/docs/plans/frontend-shell-and-sequence-workbench-plan/)：先完成全站统一框架，再按已确认预览图实现新的场次工作台。
+- [场次工作台导航、视图与来源优化方案](/docs/plans/sequence-workbench-interaction-refinement/)：在已完成的 A/B 阶段基础上，明确范围与视图职责，优化节拍内操作、可读来源及三个工作空间；C1–C5已完成，MC验收及证据已归档。
+- [全站布局统一与场次工作台重设计计划](/docs/plans/frontend-shell-and-sequence-workbench-plan/)：A1–A3、B1–B5 已完成，保留框架规格、参考图及 MA/MB 验收记录。
 - [场次工作台体验优化实施计划](/docs/plans/directing-workbench-experience-plan/)
 - [场次工作台实施任务与依赖顺序](/docs/plans/directing-workbench-implementation-tasks/)
 - [场次创作与试拍剪辑工作台方案](/docs/plans/directing-workbench-refactor-plan/)

@@ -28,3 +28,11 @@ export function designResultRecorded(design: WorkspaceRead['designs'][number]['c
   const sources = new Set(modelSources(design))
   return revisions.some(row => JSON.stringify({ ...row.content, sources: design.sources }) === JSON.stringify(design) || modelSources(row.content).some(source => sources.has(source)))
 }
+
+/** 只按设计版本和镜头身份查找单元，保留跨计划同名单元及一对多覆盖。 */
+export function shotProductionTargets(workspace: WorkspaceRead, designId: string, shotId: string) {
+  return workspace.plans.flatMap((plan, planIndex) => plan.content.design_revision_id !== designId ? [] : plan.content.units.flatMap((unit, unitIndex) => {
+    const coverage = unit.coverage.filter(row => row.shot_id === shotId)
+    return coverage.length ? [{ planId: plan.id, unitId: unit.id, label: `计划 ${planIndex + 1} · 单元 ${unitIndex + 1}`, confirmed: !!plan.confirmed_at, coverage: coverage.map(row => row.action_scope).join('；') }] : []
+  }))
+}

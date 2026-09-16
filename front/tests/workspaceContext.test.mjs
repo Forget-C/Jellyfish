@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { loadSource } from './directing-fixtures.mjs'
 
-const { restoreSelection, readWorkspaceContext, saveWorkspaceContext } = await loadSource('workspaceContext')
+const { restoreSelection, readWorkspaceContext, saveWorkspaceContext, readDesignPosition } = await loadSource('workspaceContext')
 
 test('explicit business context wins; stale or deliberately empty selection never becomes latest', () => {
   const rows = [{ id: 'old' }, { id: 'new' }]
@@ -25,4 +25,9 @@ test('saved browsing position is isolated by project and scene and merges indepe
   assert.doesNotThrow(() => saveWorkspaceContext('p1', 's1', { plan: 'p1' }))
   assert.deepEqual(readWorkspaceContext('p1', 's1'), {})
   delete globalThis.sessionStorage
+})
+
+test('design scrolling is restored only for matching revision and range', () => {
+  assert.deepEqual(readDesignPosition(JSON.stringify({ revisionId: 'd1', scope: 'beat:a', top: 900, density: 180 }), 'd1', 'beat:a'), { top: 900, density: 180 })
+  for (const raw of ['bad', 'null', '{"top":-1}', JSON.stringify({ revisionId: 'd2', scope: 'beat:a', top: 900 })]) assert.equal(readDesignPosition(raw, 'd1', 'beat:a').top, 0)
 })

@@ -1,3 +1,5 @@
+import { readWorkspaceContext, saveWorkspaceContext } from './workspaceContext'
+import { useWorkspaceScroll } from './useWorkspaceScroll'
 import { useWorkbenchDesktop } from './useWorkbenchDesktop'
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
@@ -23,9 +25,13 @@ export function ProductionWorkbench({ active, focusRequest, tasks, submitted, ta
 }) {
   const [search] = useSearchParams()
   const focus = search.get('focus')
-  const [tab, setTab] = useState(() => ['review', 'shoot-confirm'].includes(focus || '') ? 'review' : ['compile', 'prompt-review'].includes(focus || '') || search.get('prompt') ? 'prompt' : 'prepare')
+  const [context] = useState(() => readWorkspaceContext(workspace.sequence.project_id, workspace.sequence.id))
+  const [tab, setTab] = useState(() => ['review', 'shoot-confirm'].includes(focus || '') ? 'review' : ['compile', 'prompt-review'].includes(focus || '') ? 'prompt' : context.shootIdentity === JSON.stringify([planId, selectedUnitId]) && ['prepare', 'prompt', 'review', 'takes'].includes(context.shootTab || '') ? context.shootTab! : search.get('prompt') ? 'prompt' : 'prepare')
   useEffect(() => { if (!focusRequest) return; if (['review', 'shoot-confirm'].includes(focus || '')) setTab('review'); else if (['compile', 'prompt-review'].includes(focus || '')) setTab('prompt'); else if (focus?.startsWith('unit:') || ['plan-version', 'plan-editor', 'unit-select'].includes(focus || '')) setTab('prepare') }, [focus, focusRequest])
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(context.shootQuery || '')
+  useEffect(() => { saveWorkspaceContext(workspace.sequence.project_id, workspace.sequence.id, { shootTab: tab, shootQuery: query, shootIdentity: JSON.stringify([planId, selectedUnitId]) }) }, [workspace.sequence.project_id, workspace.sequence.id, planId, selectedUnitId, tab, query])
+  const scrolling = useWorkspaceScroll(workspace.sequence.project_id, workspace.sequence.id, 'shootScroll', JSON.stringify([planId, selectedUnitId, tab]), '.ant-tabs-content-holder')
+  const inspectorScrolling = useWorkspaceScroll(workspace.sequence.project_id, workspace.sequence.id, 'shootInspectorScroll', JSON.stringify([planId, selectedUnitId, tab]))
   const [parameters, setParameters] = useState<HTMLDivElement | null>(null)
   const [open, setOpen] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
@@ -40,7 +46,7 @@ export function ProductionWorkbench({ active, focusRequest, tasks, submitted, ta
   }).join(' · ')
   const taskSummary = statusSummary(selectedTasks)
 
-  const inspector = <div className="production-inspector-content"><h2>{tab === 'prepare' ? '单元参数与检查' : '本次固定输入'}</h2><div ref={setParameters} style={{ display: tab === 'prepare' ? undefined : 'none' }} />{tab !== 'prepare' && (fixedInput || <Empty description="选择已编译的指令，查看其冻结输入" />)}</div>
+  const inspector = <div className="production-inspector-content" ref={inspectorScrolling}><h2>{tab === 'prepare' ? '单元参数与检查' : '本次固定输入'}</h2><div ref={setParameters} style={{ display: tab === 'prepare' ? undefined : 'none' }} />{tab !== 'prepare' && (fixedInput || <Empty description="选择已编译的指令，查看其冻结输入" />)}</div>
   return <InspectorContext.Provider value={parameters}><div className="sequence-stage-workspace production-workbench">
     {active && <SequenceNavigation><div className="design-navigation"><h2>拍摄单元</h2><Input.Search aria-label="搜索拍摄单元" placeholder="搜索动作范围" value={query} onChange={event => setQuery(event.target.value)} /><div className="production-unit-list">{plan?.units.filter(unit => unit.coverage.map(c => c.action_scope).join(' ').includes(query)).map(unit => {
       const takes = workspace.takes.filter(take => take.plan_revision_id === planId && take.unit_id === unit.id)
@@ -48,7 +54,8 @@ export function ProductionWorkbench({ active, focusRequest, tasks, submitted, ta
       return <button key={unit.id} aria-pressed={unit.id === selectedUnitId} onClick={() => onSelectUnit(unit.id)}><strong>单元 {String(plan.units.indexOf(unit)+1).padStart(2,'0')}</strong><span>{unit.coverage.map(c => c.action_scope).join('；') || '动作范围待填写'}</span><small>{prompts.length ? '已有指令' : '待编译'} · {takes.length} 个候选</small>{statusSummary(tasksForUnit(workspace, tasks, submitted, planId, unit.id)) && <small>{statusSummary(tasksForUnit(workspace, tasks, submitted, planId, unit.id))}</small>}</button>
     })}{!plan?.units.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚无拍摄单元" />}</div><Button onClick={() => setAdvancedOpen(true)}>拆分与重组</Button></div></SequenceNavigation>}
     <div className="sequence-version-bar production-version-bar">{toolbar}</div>
-    <div className="production-panels"><section className="production-center">
+    <div className="production-panels"><section className="production-center" ref={scrolling}>
+      {query && plan?.units.some(unit => unit.id === selectedUnitId && !unit.coverage.map(row => row.action_scope).join(' ').includes(query)) && <Alert type="info" message="所选单元不在筛选结果中" action={<Button onClick={() => setQuery('')}>清除筛选</Button>} />}
       {tasksState !== 'ready' ? <Alert type={tasksState === 'error' ? 'warning' : 'info'} message={tasksState === 'error' ? '任务状态暂不可用，请核对后再执行' : '正在核对任务状态'} /> : taskSummary && <div className="production-task-summary" role="status" data-unit-task-summary><strong>本单元 · {taskSummary}</strong><Button size="small" onClick={onOpenTasks}>查看任务记录</Button>{selectedTasks.filter(task => task.status === 'failed' && task.error).slice(-1).map(task => <p key={task.task_id}>{task.error}</p>)}</div>}
       <Tabs activeKey={tab} onChange={setTab} items={[
       { key: 'prepare', label: '动作与参考', forceRender: true, children: preparation },

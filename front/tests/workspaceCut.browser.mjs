@@ -37,6 +37,7 @@ try {
   await page.route('**/api/**', async route => {
     const request = route.request(), path = new URL(request.url()).pathname
     const respond = data => route.fulfill({ json: { success: true, data: structuredClone(data) } })
+    if (path.endsWith('/sources/resolve')) return respond(request.postDataJSON().sources.map(source => ({ source, status: source.kind === 'human' ? 'ready' : 'unavailable', label: source.kind === 'human' ? '人工填写' : '历史来源', description: '隔离来源记录' })))
     if (path.endsWith('/files/frame-file/download')) return route.fulfill({ body: frameImage, contentType: 'image/png' })
     if (path.endsWith('/sample.mp4') || path.includes('/files/') && path.endsWith('/download')) {
       const range = request.headers().range?.match(/bytes=(\d+)-(\d*)/)
@@ -172,7 +173,7 @@ try {
   await candidate().evaluate(async element => { if (element.readyState < 1) await new Promise(resolve => element.addEventListener('loadedmetadata', resolve, { once: true })); await new Promise(resolve => { element.addEventListener('seeked', resolve, { once: true }); element.currentTime = 1.25 }) })
   assert.equal(await candidate().evaluate(element => element.currentTime), 1.25)
   await page.getByRole('button', { name: '提取当前画面为参考', exact: true }).click()
-  await page.getByText('已保存参考图，来源 Take t1', { exact: false }).waitFor()
+  await page.getByText('已保存参考图，来自所选素材', { exact: false }).waitFor()
   assert.equal(writes.at(-1).body.at_ms, 1250)
   // Restore the original order before confirming, so only the changed a range affects a/b.
   await selectClip('b')
@@ -237,6 +238,24 @@ try {
   await page.getByRole('tab', { name: 'Take 实验账', exact: true, selected: true }).waitFor()
   await page.waitForFunction(() => document.activeElement?.getAttribute('data-workspace-target') === 'ledger-take:t1')
   assert.equal(writes.length, beforeLedger)
+  // Browsing memory keeps the exact repeated-Take clip, filters and timeline position.
+  await page.goto(base + '?view=cut&cut=c-active&take=t1')
+  await selectClip('b')
+  await choose('候选审片筛选', '待审片')
+  await choose('时间线缩放', '200%')
+  const timeline = page.getByRole('navigation', { name: '剪辑时间线', exact: true })
+  await page.waitForFunction(() => { const element = document.querySelector('.cut-timeline'); return element.scrollWidth > element.clientWidth })
+  await timeline.evaluate(element => { element.scrollLeft = element.scrollWidth })
+  const timelineLeft = await timeline.evaluate(element => element.scrollLeft)
+  assert.ok(timelineLeft > 0)
+  await page.waitForFunction(left => JSON.parse(JSON.parse(sessionStorage.getItem('directing-context:p1:s1') || '{}').cutTimelineScroll || '{}').left === left, timelineLeft)
+  await page.reload()
+  await page.locator('[data-workspace-target="cut-item:b"]').waitFor()
+  await page.waitForFunction(left => Math.abs(document.querySelector('.cut-timeline').scrollLeft - left) < 2, timelineLeft)
+  assert.ok((await page.getByRole('combobox', { name: '候选审片筛选', exact: true }).locator('../..').innerText()).includes('待审片'))
+  assert.ok((await page.getByRole('combobox', { name: '时间线缩放', exact: true }).locator('../..').innerText()).includes('200%'))
+  assert.equal(writes.length, beforeLedger)
+  await page.screenshot({ path: join(output, 'restored-cut-context.png') })
   assert.equal(writes.some(row => row.path.endsWith('/shoot')), false)
   assert.deepEqual(errors, [])
   console.log(JSON.stringify({ result: 'A13–A16 mixed timeline, playback, adoption and targeted repair checks passed', evidence: output }, null, 2))
