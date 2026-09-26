@@ -110,6 +110,13 @@ class ActorImage(Base, TimestampMixin):
     height: Mapped[int | None] = mapped_column(Integer, nullable=True, comment="高（px）")
     format: Mapped[str] = mapped_column(String(32), nullable=False, default="png", comment="格式")
 
+    is_primary: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        comment="是否定版主图；应用层需保证同一资产下至多一张",
+    )
+
     actor: Mapped["Actor"] = relationship(back_populates="images")
 
     __table_args__ = (
@@ -159,6 +166,13 @@ class SceneImage(Base, TimestampMixin):
     height: Mapped[int | None] = mapped_column(Integer, nullable=True)
     format: Mapped[str] = mapped_column(String(32), nullable=False, default="png")
 
+    is_primary: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        comment="是否定版主图；应用层需保证同一资产下至多一张",
+    )
+
     scene: Mapped["Scene"] = relationship(back_populates="images")
 
     __table_args__ = (
@@ -206,6 +220,13 @@ class PropImage(Base, TimestampMixin):
     height: Mapped[int | None] = mapped_column(Integer, nullable=True)
     format: Mapped[str] = mapped_column(String(32), nullable=False, default="png")
 
+    is_primary: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        comment="是否定版主图；应用层需保证同一资产下至多一张",
+    )
+
     prop: Mapped["Prop"] = relationship(back_populates="images")
 
     __table_args__ = (
@@ -252,6 +273,13 @@ class CostumeImage(Base, TimestampMixin):
     width: Mapped[int | None] = mapped_column(Integer, nullable=True)
     height: Mapped[int | None] = mapped_column(Integer, nullable=True)
     format: Mapped[str] = mapped_column(String(32), nullable=False, default="png")
+
+    is_primary: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        comment="是否定版主图；应用层需保证同一资产下至多一张",
+    )
 
     costume: Mapped["Costume"] = relationship(back_populates="images")
 

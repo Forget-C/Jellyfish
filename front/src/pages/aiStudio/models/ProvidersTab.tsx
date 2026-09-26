@@ -17,7 +17,7 @@ import {
   Empty,
   Grid,
 } from 'antd'
-import type { TableColumnsType } from 'antd'
+import type { FormInstance, TableColumnsType } from 'antd'
 import {
   PlusOutlined,
   EditOutlined,
@@ -34,14 +34,21 @@ import {
 } from '@ant-design/icons'
 import { LlmService } from '../../../services/generated/services/LlmService'
 import type { ProviderRead, ProviderStatus, ProviderSupportedRead } from '../../../services/generated'
+import { TechnicalDetailSection } from '../project/ProjectWorkbench/components/workbench/TechnicalDetailCollapse'
 import {
   PROVIDER_STATUS_MAP,
   SORT_OPTIONS,
   TABLE_ACTION_BTN_EDIT_CLASS,
   TABLE_ACTION_BTN_MORE_CLASS,
   TABLE_ACTION_BTN_TEST_CLASS,
-  maskUrl,
+  describeAddress,
+  describeCreatedBy,
+  describeForList,
+  isImplementationDetailText,
 } from './constants'
+
+/** 「这条描述含技术细节」时的悬停说明（全文在默认收起的「技术详情」里）。 */
+const DESCRIPTION_HIDDEN_HINT = '这条接入说明含技术细节，已收进「技术详情」'
 
 export default function ProvidersTab() {
   const [providers, setProviders] = useState<ProviderRead[]>([])
@@ -56,7 +63,6 @@ export default function ProvidersTab() {
   const [treeCollapsed, setTreeCollapsed] = useState(false)
   const [providerModalOpen, setProviderModalOpen] = useState(false)
   const [providerEditing, setProviderEditing] = useState<ProviderRead | null>(null)
-  const [testConnecting, setTestConnecting] = useState(false)
   const [form] = Form.useForm()
   const { lg } = Grid.useBreakpoint()
   const isLargeScreen = lg ?? false
@@ -137,18 +143,34 @@ export default function ProvidersTab() {
     return list
   }, [providers, sortBy])
 
-  const handleTestConnection = async (provider?: ProviderRead) => {
+  /**
+   * 配置检查（**不是**假的「连接成功」）。
+   *
+   * 为什么不叫「测试连接」：本环境没有连通性探测能力，唯一的真实连通性验证
+   * 就是发一次真实请求——那会产生费用，且演练模式下会被守卫拦下。
+   * 以前这里用 `setTimeout(800)` 后恒报「连接成功」，属于纯粹的假反馈，
+   * 正是「按钮存在但不知道接口有没有接通」的来源之一，已删除。
+   * 现在只核对后端确实下发的字段，并把「真实连通性怎么验」讲清楚。
+   *
+   * 文案口径（审计 §4.7）：`端点` 是开发术语（宽词表命中）、`门禁` 是主区禁词，
+   * 两个词都从这句用户能看到的提示里去掉，改用「本页不做连通性探测」「演练模式」。
+   */
+  const handleCheckConfig = (provider?: ProviderRead) => {
     const p = provider ?? selectedProvider
     if (!p) return
-    setTestConnecting(true)
-    try {
-      await new Promise((r) => setTimeout(r, 800))
-      message.success('连接成功')
-    } catch {
-      message.error('连接失败，请检查 Base URL 与 AK/SK')
-    } finally {
-      setTestConnecting(false)
+    const issues: string[] = []
+    if (!p.base_url?.trim()) issues.push('缺少接口地址')
+    if (p.status === 'disabled') issues.push('账号状态为「已停用」')
+    if (issues.length > 0) {
+      message.warning(`配置不完整：${issues.join('；')}`)
+      return
     }
+    message.info(
+      `${p.name}：配置完整（接口地址已填，账号状态「${p.status === 'active' ? '可用' : '测试中'}」）。` +
+        '本页不做连通性探测，真实连通性需要发起一次真实请求（会计费，演练模式下会被拦下）；' +
+        '请在各个生成入口顶部的状态条确认当前是否允许真实调用。',
+      8,
+    )
   }
 
   const handleSaveProvider = async () => {
@@ -250,14 +272,22 @@ export default function ProvidersTab() {
   const providerColumns: TableColumnsType<ProviderRead> = [
     { title: '名称', dataIndex: 'name', key: 'name', ellipsis: true, render: (n) => <Space>{n}</Space> },
     {
-      title: 'Base URL',
+      /* 审计 §4.7-548：标签保留（供应商配置页允许技术性最强），但**中文在前、英文括注**。
+         ⚠️ 同一列的悬停提示给出的是**同一个掩码值**：改前 `title={url}` 给完整地址，
+         而可见文本是掩码 —— hover 即见全文等于掩码白做（审计 §5.5-D 实测）。 */
+      title: '接口地址（Base URL）',
       dataIndex: 'base_url',
       key: 'base_url',
       ellipsis: true,
-      render: (url: string) => <Tooltip title={url}>{maskUrl(url)}</Tooltip>,
+      render: (url: string) => (
+        <Tooltip title={describeAddress(url)}>
+          <span>{describeAddress(url)}</span>
+        </Tooltip>
+      ),
     },
     {
-      title: 'AK/SK',
+      /* 审计 §4.7-549：已完成掩码（做对了）→ 只把标题改成「中文在前英文括注」，保留 `********`。 */
+      title: '访问密钥（AK/SK）',
       key: 'aksk',
       render: () => (
         <span>
@@ -267,11 +297,18 @@ export default function ProvidersTab() {
       ),
     },
     {
+      /* 审计 §4.7-550：**描述列原样直渲**是模式 4 的落点（运行时实测描述里写着
+         `image_service_openai_shim.py`、`/images/generations` 这类实现细节）。
+         含实现细节 → 列表只显示「自定义接入」，悬停不给全文，原文进「技术详情」。 */
       title: '描述',
       dataIndex: 'description',
       key: 'description',
       ellipsis: true,
-      render: (d: string) => <Tooltip title={d}>{d || '—'}</Tooltip>,
+      render: (d: string) => (
+        <Tooltip title={isImplementationDetailText(d) ? DESCRIPTION_HIDDEN_HINT : d || '—'}>
+          <span>{describeForList(d)}</span>
+        </Tooltip>
+      ),
     },
     {
       title: '状态',
@@ -283,11 +320,13 @@ export default function ProvidersTab() {
       ),
     },
     {
+      /* 审计 §4.7-551：创建人列原来直渲 `created_by` 原值（运行时实测显示 `integration`）。
+         现在服务账号映射为「系统预置」，真人用户名套业务句式。 */
       title: '创建人',
       dataIndex: 'created_by',
       key: 'created_by',
-      width: 100,
-      render: (c: string) => c || '—',
+      width: 120,
+      render: (c: string) => describeCreatedBy(c),
     },
     {
       title: '操作',
@@ -309,7 +348,7 @@ export default function ProvidersTab() {
               }}
             />
           </Tooltip>
-          <Tooltip title="测试连接">
+          <Tooltip title="检查配置（不做真实连通性探测：那会产生费用）">
             <Button
               type="text"
               size="small"
@@ -317,7 +356,7 @@ export default function ProvidersTab() {
               icon={<ThunderboltOutlined />}
               onClick={(e) => {
                 e.stopPropagation()
-                void handleTestConnection(record)
+                handleCheckConfig(record)
               }}
             />
           </Tooltip>
@@ -498,10 +537,10 @@ export default function ProvidersTab() {
                       icon={<ThunderboltOutlined />}
                       onClick={(e) => {
                         e.stopPropagation()
-                        handleTestConnection(p)
+                        handleCheckConfig(p)
                       }}
                     >
-                      测试
+                      检查配置
                     </Button>,
                     <Dropdown
                       key="more"
@@ -524,16 +563,17 @@ export default function ProvidersTab() {
                   ]}
                 >
                   <div className="font-medium mb-1">{p.name}</div>
-                  <div className="text-gray-500 text-sm mb-1 truncate" title={p.base_url}>
-                    Base URL：{maskUrl(p.base_url)}
+                  {/* 悬停提示与可见文本**同口径**（审计 §5.5-D）：都走 `describeAddress`。 */}
+                  <div className="text-gray-500 text-sm mb-1 truncate" title={describeAddress(p.base_url)}>
+                    接口地址：{describeAddress(p.base_url)}
                   </div>
-                  <div className="text-gray-500 text-sm mb-1">AK/SK：******** / ********</div>
-                  <div className="text-gray-500 text-sm line-clamp-2 mb-2">{p.description || '—'}</div>
+                  <div className="text-gray-500 text-sm mb-1">访问密钥：******** / ********</div>
+                  <div className="text-gray-500 text-sm line-clamp-2 mb-2">{describeForList(p.description)}</div>
                   <Tag color={PROVIDER_STATUS_MAP[p.status ?? 'active']?.color}>
                     {PROVIDER_STATUS_MAP[p.status ?? 'active']?.text}
                   </Tag>
                   {p.created_by && (
-                    <span className="text-xs text-gray-400 ml-2">创建：{p.created_by}</span>
+                    <span className="text-xs text-gray-400 ml-2">{describeCreatedBy(p.created_by)}</span>
                   )}
                 </Card>
               ))}
@@ -565,22 +605,41 @@ export default function ProvidersTab() {
                 <div className="font-medium">{selectedProvider.name}</div>
               </div>
               <div>
-                <div className="text-sm text-gray-500 mb-1">文本/通用 Base URL</div>
-                <Tooltip title={selectedProvider.base_url}>
-                  <span className="text-sm">{maskUrl(selectedProvider.base_url)}</span>
+                <div className="text-sm text-gray-500 mb-1">文本/通用接口地址</div>
+                {/* 悬停与可见文本同口径（审计 §5.5-D）；非公网地址带「仅本机可达」标注。 */}
+                <Tooltip title={describeAddress(selectedProvider.base_url)}>
+                  <span className="text-sm">{describeAddress(selectedProvider.base_url)}</span>
                 </Tooltip>
               </div>
               <div>
-                <div className="text-sm text-gray-500 mb-1">图片 Base URL（可选覆盖）</div>
-                <span className="text-sm">{selectedProvider.image_base_url ? maskUrl(selectedProvider.image_base_url) : '回退到文本/通用'}</span>
+                <div className="text-sm text-gray-500 mb-1">图片接口地址（可选覆盖）</div>
+                <span className="text-sm">
+                  {selectedProvider.image_base_url ? describeAddress(selectedProvider.image_base_url) : '回退到文本/通用'}
+                </span>
               </div>
               <div>
-                <div className="text-sm text-gray-500 mb-1">视频 Base URL（可选覆盖）</div>
-                <span className="text-sm">{selectedProvider.video_base_url ? maskUrl(selectedProvider.video_base_url) : '回退到文本/通用'}</span>
+                <div className="text-sm text-gray-500 mb-1">视频接口地址（可选覆盖）</div>
+                <span className="text-sm">
+                  {selectedProvider.video_base_url ? describeAddress(selectedProvider.video_base_url) : '回退到文本/通用'}
+                </span>
               </div>
               <div>
                 <div className="text-sm text-gray-500 mb-1">描述</div>
-                <div className="text-gray-700 text-sm">{selectedProvider.description || '—'}</div>
+                <div className="text-gray-700 text-sm">{describeForList(selectedProvider.description)}</div>
+                {/* 含实现细节的原始描述**只在这里**（默认收起的「技术详情」）全文可见。 */}
+                {isImplementationDetailText(selectedProvider.description ?? '') && (
+                  <div className="mt-1">
+                    <TechnicalDetailSection testId="provider-description-detail">
+                      <div className="text-[11px] leading-5 text-gray-600">
+                        {selectedProvider.description}
+                      </div>
+                    </TechnicalDetailSection>
+                  </div>
+                )}
+              </div>
+              <div>
+                <div className="text-sm text-gray-500 mb-1">创建人</div>
+                <div className="text-sm">{describeCreatedBy(selectedProvider.created_by)}</div>
               </div>
               <Space>
                 <Button
@@ -590,12 +649,8 @@ export default function ProvidersTab() {
                 >
                   编辑
                 </Button>
-                <Button
-                  icon={<ThunderboltOutlined />}
-                  loading={testConnecting}
-                  onClick={() => handleTestConnection()}
-                >
-                  测试连接
+                <Button icon={<ThunderboltOutlined />} onClick={() => handleCheckConfig()}>
+                  检查配置
                 </Button>
               </Space>
             </div>
@@ -616,16 +671,29 @@ export default function ProvidersTab() {
                 <div className="font-medium">{selectedProvider.name}</div>
               </div>
               <div>
-                <div className="text-sm text-gray-500 mb-1">文本/通用 Base URL</div>
-                <span className="text-sm">{maskUrl(selectedProvider.base_url)}</span>
+                <div className="text-sm text-gray-500 mb-1">文本/通用接口地址</div>
+                <span className="text-sm">{describeAddress(selectedProvider.base_url)}</span>
               </div>
               <div>
-                <div className="text-sm text-gray-500 mb-1">图片 Base URL（可选覆盖）</div>
-                <span className="text-sm">{selectedProvider.image_base_url ? maskUrl(selectedProvider.image_base_url) : '回退到文本/通用'}</span>
+                <div className="text-sm text-gray-500 mb-1">图片接口地址（可选覆盖）</div>
+                <span className="text-sm">{selectedProvider.image_base_url ? describeAddress(selectedProvider.image_base_url) : '回退到文本/通用'}</span>
               </div>
               <div>
-                <div className="text-sm text-gray-500 mb-1">视频 Base URL（可选覆盖）</div>
-                <span className="text-sm">{selectedProvider.video_base_url ? maskUrl(selectedProvider.video_base_url) : '回退到文本/通用'}</span>
+                <div className="text-sm text-gray-500 mb-1">视频接口地址（可选覆盖）</div>
+                <span className="text-sm">{selectedProvider.video_base_url ? describeAddress(selectedProvider.video_base_url) : '回退到文本/通用'}</span>
+              </div>
+              <div>
+                <div className="text-sm text-gray-500 mb-1">描述</div>
+                <div className="text-gray-700 text-sm">{describeForList(selectedProvider.description)}</div>
+                {isImplementationDetailText(selectedProvider.description ?? '') && (
+                  <div className="mt-1">
+                    <TechnicalDetailSection testId="provider-description-detail">
+                      <div className="text-[11px] leading-5 text-gray-600">
+                        {selectedProvider.description}
+                      </div>
+                    </TechnicalDetailSection>
+                  </div>
+                )}
               </div>
               <Space>
                 <Button
@@ -635,11 +703,8 @@ export default function ProvidersTab() {
                 >
                   编辑
                 </Button>
-                <Button
-                  icon={<ThunderboltOutlined />}
-                  onClick={() => handleTestConnection()}
-                >
-                  测试连接
+                <Button icon={<ThunderboltOutlined />} onClick={() => handleCheckConfig()}>
+                  检查配置
                 </Button>
               </Space>
             </div>
@@ -659,51 +724,112 @@ export default function ProvidersTab() {
         width={560}
         destroyOnClose
       >
-        <Form form={form} layout="vertical" className="pt-2">
-          <Form.Item name="name" label="名称" rules={[{ required: true, message: '请选择供应商' }]}>
-            <Select
-              showSearch
-              optionFilterProp="label"
-              loading={supportedLoading}
-              placeholder={supportedLoading ? '加载供应商清单…' : '选择供应商'}
-              options={providerNameOptions}
-              notFoundContent={supportedLoading ? '加载中…' : '暂无数据'}
-              onChange={(v) => applyDefaultBaseUrlForDisplayName(String(v))}
-            />
-          </Form.Item>
-          <Form.Item
-            name="base_url"
-            label="文本/通用 Base URL"
-            rules={[{ required: true }, { type: 'url', message: '请输入有效 URL' }]}
-          >
-            <Input placeholder="https://api.openai.com/v1" />
-          </Form.Item>
-          <Form.Item name="image_base_url" label="图片 Base URL（可选覆盖）" rules={[{ type: 'url', message: '请输入有效 URL' }]}>
-            <Input placeholder="留空则回退到文本/通用 Base URL" />
-          </Form.Item>
-          <Form.Item name="video_base_url" label="视频 Base URL（可选覆盖）" rules={[{ type: 'url', message: '请输入有效 URL' }]}>
-            <Input placeholder="留空则回退到文本/通用 Base URL" />
-          </Form.Item>
-          <Form.Item name="api_key" label="API Key" help={providerEditing ? '留空则不修改' : '请勿分享密钥'}>
-            <Input.Password placeholder="AK" />
-          </Form.Item>
-          <Form.Item name="api_secret" label="API Secret" help={providerEditing ? '留空则不修改' : undefined}>
-            <Input.Password placeholder="SK" />
-          </Form.Item>
-          <Form.Item name="description" label="描述">
-            <Input.TextArea rows={2} placeholder="支持 GPT 系列模型" />
-          </Form.Item>
-          <Form.Item name="status" label="状态" initialValue="active">
-            <Select
-              options={[
-                { label: '活跃', value: 'active' },
-                { label: '测试中', value: 'testing' },
-                { label: '禁用', value: 'disabled' },
-              ]}
-            />
-          </Form.Item>
-        </Form>
+        <ProviderTechnicalConfigFields
+          form={form}
+          providerEditing={providerEditing}
+          supportedLoading={supportedLoading}
+          providerNameOptions={providerNameOptions}
+          onProviderNameChange={applyDefaultBaseUrlForDisplayName}
+        />
       </Modal>
     </>
+  )
+}
+
+/* ------------------------------------------- 供应商技术配置区块（本页唯一技术性豁免） */
+
+export type ProviderTechnicalConfigFieldsProps = {
+  form: FormInstance
+  providerEditing: ProviderRead | null
+  supportedLoading: boolean
+  providerNameOptions: { label: string; value: string }[]
+  onProviderNameChange: (displayName: string) => void
+}
+
+/**
+ * **供应商技术配置区块**（编辑 / 新增供应商表单）。
+ *
+ * ## 这是本批登记的唯一技术性豁免范围，为什么
+ *
+ * 审计 §4.7 原文：「模型页是配置页，技术性最强」「供应商名（`apimart`）、`Base URL`、
+ * `AK/SK` 这些属本页核心功能，允许保留（标签保留（供应商配置页允许技术性最强））」。
+ * 本区块就是这些技术词汇的**唯一落点**：地址 / 密钥字段的标签、`AK` / `SK` 占位符。
+ *
+ * ## 豁免的口径（护栏里逐条钉住）
+ *
+ * 1. **范围由函数边界圈定，不用行号**（审计 §8.1.1：行号会随改动漂移）；
+ * 2. 标签一律「**中文在前、英文括注**」（「接口地址（Base URL）」「访问密钥（AK/SK）」）；
+ * 3. 裸写英文技术词（`Base URL` / `AK/SK` / `API Key` / `API Secret`）与裸写凭据占位符
+ *    （`AK` / `SK`）**只允许出现在本函数体内**，主区（表格列 / 卡片 / 详情面板）一律用
+ *    纯中文口径（「接口地址」「访问密钥」）；
+ * 4. **不许把主区内容搬进来**：本区块只做表单字段，不调 `message.*`、不渲列表；
+ * 5. 地址类占位符不许写死具体友商的域名（审计 §4.7-553：改前是 `https://api.openai.com/v1`）。
+ */
+function ProviderTechnicalConfigFields(props: ProviderTechnicalConfigFieldsProps) {
+  const { form, providerEditing, supportedLoading, providerNameOptions, onProviderNameChange } = props
+  /* 表单校验提示与标签必须同口径：改前 `label` 写「名称」而校验提示说「请选择供应商」。 */
+  const nameRequiredMessage = '请填写名称'
+  const invalidAddressMessage = '请输入有效的接口地址'
+  return (
+    <Form form={form} layout="vertical" className="pt-2">
+      <Form.Item name="name" label="名称" rules={[{ required: true, message: nameRequiredMessage }]}>
+        <Select
+          showSearch
+          optionFilterProp="label"
+          loading={supportedLoading}
+          placeholder={supportedLoading ? '加载供应商清单…' : '选择供应商'}
+          options={providerNameOptions}
+          notFoundContent={supportedLoading ? '加载中…' : '暂无数据'}
+          onChange={(v) => onProviderNameChange(String(v))}
+        />
+      </Form.Item>
+      <Form.Item
+        name="base_url"
+        label="文本/通用接口地址（Base URL）"
+        rules={[{ required: true }, { type: 'url', message: invalidAddressMessage }]}
+      >
+        <Input placeholder="例如：https://你的服务商接口地址/v1" />
+      </Form.Item>
+      <Form.Item
+        name="image_base_url"
+        label="图片接口地址（可选覆盖）"
+        rules={[{ type: 'url', message: invalidAddressMessage }]}
+      >
+        <Input placeholder="留空则回退到文本/通用接口地址" />
+      </Form.Item>
+      <Form.Item
+        name="video_base_url"
+        label="视频接口地址（可选覆盖）"
+        rules={[{ type: 'url', message: invalidAddressMessage }]}
+      >
+        <Input placeholder="留空则回退到文本/通用接口地址" />
+      </Form.Item>
+      <Form.Item
+        name="api_key"
+        label="访问密钥（API Key）"
+        help={providerEditing ? '留空则不修改' : '请勿分享密钥'}
+      >
+        <Input.Password placeholder="AK" />
+      </Form.Item>
+      <Form.Item
+        name="api_secret"
+        label="密钥口令（API Secret）"
+        help={providerEditing ? '留空则不修改' : undefined}
+      >
+        <Input.Password placeholder="SK" />
+      </Form.Item>
+      <Form.Item name="description" label="描述">
+        <Input.TextArea rows={2} placeholder="例如：本供应商负责的能力范围" />
+      </Form.Item>
+      <Form.Item name="status" label="状态" initialValue="active">
+        <Select
+          options={[
+            { label: '活跃', value: 'active' },
+            { label: '测试中', value: 'testing' },
+            { label: '禁用', value: 'disabled' },
+          ]}
+        />
+      </Form.Item>
+    </Form>
   )
 }

@@ -13,8 +13,10 @@ from app.models.studio import (
     Actor,
     Character,
     Costume,
+    Product,
     ProjectActorLink,
     ProjectCostumeLink,
+    ProjectProductLink,
     ProjectPropLink,
     ProjectSceneLink,
     Prop,
@@ -27,6 +29,7 @@ from app.schemas.studio.shots import (
     ProjectAssetLinkCreate,
     ProjectActorLinkRead,
     ProjectCostumeLinkRead,
+    ProjectProductLinkRead,
     ProjectPropLinkRead,
     ProjectSceneLinkRead,
     ShotLinkedAssetItem,
@@ -72,7 +75,20 @@ def _link_spec(entity_type: str) -> dict[str, Any]:
             "asset_model": Costume,
             "not_found": entity_not_found("Costume"),
         }
-    raise HTTPException(status_code=400, detail=invalid_choice("entity_type", ["actor", "scene", "prop", "costume"]))
+    if t == "product":
+        return {
+            "model": ProjectProductLink,
+            "field": "product_id",
+            "read_model": ProjectProductLinkRead,
+            "asset_model": Product,
+            "not_found": entity_not_found("Product"),
+        }
+    raise HTTPException(
+        status_code=400,
+        detail=invalid_choice(
+            "entity_type", ["actor", "scene", "prop", "costume", "product"]
+        ),
+    )
 
 
 async def create_project_asset_link(

@@ -65,6 +65,8 @@ def _score_frame_guidance_line(
     return score
 
 
+# 优先级 if 链：多个 return 是这段规则最清楚的表达（不该为了行数拆成状态机）
+# pylint: disable=too-many-return-statements
 def _build_frame_guidance_reason(
     *,
     frame_type: str,
@@ -115,6 +117,8 @@ def _build_frame_guidance_reason(
     return "当前已有更高优先级 guidance 进入最终 prompt，因此该条目未被保留。"
 
 
+# 优先级 if 链：多个 return 是这段规则最清楚的表达（不该为了行数拆成状态机）
+# pylint: disable=too-many-return-statements
 def _build_frame_guidance_reason_tag(
     *,
     frame_type: str,

@@ -142,9 +142,16 @@ def _parse_openai_images_payload(data: dict[str, Any]) -> ImageGenerationResult:
     if not images:
         raise RuntimeError(f"OpenAI images response has no usable data: {data!r}")
 
+    # 本地出图垫片（image_service_openai_shim.py）会在 shim_notes 里如实写明
+    # "参考图未透传 / 回退使用了非 OSS 地址" 这类事实。以前它被 extra="ignore" 丢掉，
+    # 上层就只能靠猜——关键帧恰恰是最需要参考图一致性的场景，不能靠猜。
+    raw_notes = data.get("shim_notes")
+    notes = [str(item) for item in raw_notes if str(item).strip()] if isinstance(raw_notes, list) else []
+
     return ImageGenerationResult(
         images=images,
         provider="openai",
-        provider_task_id=None,
+        provider_task_id=str(data.get("provider_task_id") or "") or None,
         status=str(data.get("status") or "succeeded"),
+        provider_notes=notes,
     )

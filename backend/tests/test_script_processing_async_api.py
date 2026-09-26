@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator
 
+import pytest
+
 from app.api.v1.routes import script_processing as script_processing_route
 from app.dependencies import get_db
 from app.main import app
@@ -20,6 +22,19 @@ from app.services.script_processing_tasks import (
     VARIANT_ANALYSIS_RELATION_TYPE,
 )
 from app.core.task_manager.types import TaskStatus
+from app.services.paid_outlet_guard import require_llm_outlet
+
+
+@pytest.fixture(autouse=True)
+def _bypass_paid_outlet_guard():
+    """本文件只验证「异步接口的响应壳」：建任务与 spawn 都已打桩，不会真的调用大模型。
+
+    真实付费出口守卫统一挂在 router 上（DRY_RUN 下返回 409），这里显式摘掉，
+    守卫本身由 ``test_paid_outlet_guard.py`` 覆盖。
+    """
+    app.dependency_overrides[require_llm_outlet] = lambda: None
+    yield
+    app.dependency_overrides.pop(require_llm_outlet, None)
 
 
 def _override_db():

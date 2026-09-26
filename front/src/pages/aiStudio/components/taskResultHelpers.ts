@@ -1,4 +1,5 @@
 import { FilmService } from '../../../services/generated'
+import { toUserFacingText } from './userFacingMessage.ts'
 
 type TaskResultRead = {
   status?: string | null
@@ -32,7 +33,10 @@ export async function handleTaskResult(taskId: string, options: HandleTaskResult
       return data
     }
     if (data.status === 'failed') {
-      const errorMessage = data.error || options.failedFallbackMessage
+      /* 审计 §4.4 模式 6 第 3 条：`data.error` 是后端原文，透传给 `onFailed` 前必须过管道
+         （`onFailed` 的实参在多数调用点直接进 `message.error` / Alert 主区）。
+         原文本身仍然留在 `data` 里 —— 需要排查的调用点从 `data.error` 读，不受影响。 */
+      const errorMessage = toUserFacingText(data.error, options.failedFallbackMessage)
       await options.onFailed?.(errorMessage, data)
       return data
     }

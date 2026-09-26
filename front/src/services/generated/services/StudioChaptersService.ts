@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ApiResponse_ChapterRead_ } from '../models/ApiResponse_ChapterRead_';
+import type { ApiResponse_dict_str__Any__ } from '../models/ApiResponse_dict_str__Any__';
 import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
 import type { ApiResponse_PaginatedData_ChapterRead__ } from '../models/ApiResponse_PaginatedData_ChapterRead__';
 import type { ChapterCreate } from '../models/ChapterCreate';
@@ -140,6 +141,39 @@ export class StudioChaptersService {
             url: '/api/v1/studio/chapters/{chapter_id}',
             path: {
                 'chapter_id': chapterId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * 集级资产清单（六步流程·步骤2：聚合提取候选 + 是否已有同名资产）
+     * 把一章内各镜头的提取候选按「类型 + 归一化名称」聚合成可确认的资产清单。
+     *
+     * 只聚合与提示，**不建资产、不写库**；每条会给出 ``recommendation``：
+     * 已有同名资产 → ``link_existing``（选用已有），否则 → ``create_new``（新建）。
+     * @returns ApiResponse_dict_str__Any__ Successful Response
+     * @throws ApiError
+     */
+    public static getChapterAssetCandidatesApiV1StudioChaptersChapterIdAssetCandidatesGet({
+        chapterId,
+        includeIgnored = false,
+    }: {
+        chapterId: string,
+        /**
+         * 是否把已忽略的候选也计入
+         */
+        includeIgnored?: boolean,
+    }): CancelablePromise<ApiResponse_dict_str__Any__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/chapters/{chapter_id}/asset-candidates',
+            path: {
+                'chapter_id': chapterId,
+            },
+            query: {
+                'include_ignored': includeIgnored,
             },
             errors: {
                 422: `Validation Error`,

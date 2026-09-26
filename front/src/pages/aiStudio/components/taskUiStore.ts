@@ -14,6 +14,14 @@ export type TaskUiItem = {
   startedAtTs?: number | null
   finishedAtTs?: number | null
   elapsedMs?: number | null
+  /**
+   * 后端 `updated_at_ts`：最后一次状态 / 进度变更时间（秒）。
+   *
+   * 审计 §4.4 R16（陈旧 `running` 任务仍标「运行中」）的判据就是它 ——
+   * 没有这个字段就只能拿 `startedAtTs` 猜，会把「刚开始但很久没更新」和
+   * 「24 小时前开始、刚刚还在更新」混为一谈。
+   */
+  updatedAtTs?: number | null
   relationType?: string | null
   relationEntityId?: string | null
   resourceType?: string | null
@@ -63,6 +71,7 @@ export function mergeTaskUiItems(
       startedAtTs: server?.started_at_ts ?? optimistic?.startedAtTs,
       finishedAtTs: server?.finished_at_ts ?? optimistic?.finishedAtTs,
       elapsedMs: server?.elapsed_ms ?? optimistic?.elapsedMs,
+      updatedAtTs: server?.updated_at_ts ?? optimistic?.updatedAtTs,
       relationType: server?.relation_type ?? optimistic?.relationType,
       relationEntityId: server?.relation_entity_id ?? optimistic?.relationEntityId,
       resourceType: server?.resource_type ?? optimistic?.resourceType,

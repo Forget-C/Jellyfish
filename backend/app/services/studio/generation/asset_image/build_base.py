@@ -49,6 +49,36 @@ class AssetImageBaseDraft(GenerationBaseDraft):
     default_images: list[str]
 
 
+
+def saved_image_prompt_for(entity: Any, *categories: Any) -> str:
+    """取该资产**已保存**的图片提示词（``image_prompts[<category>]``）。
+
+    这是「上一环确认保存的产物成为下一环实际使用的输入」的落点：
+    步骤 3 里用户确认保存的九槽位提示词，必须在生图时被真正读到，
+    而不是被通用模板/description 覆盖掉。
+
+    优先级（从高到低）：
+      1. 请求里显式传的 prompt（在 build_submission 里覆盖 base.prompt，不经过这里）
+      2. **本函数返回的已保存提示词**
+      3. PromptTemplate 渲染
+      4. fallback = 资产 description
+
+    多个候选类别按传入顺序取第一个命中的（例如角色正面先取 character_image_front）。
+    """
+    prompts = getattr(entity, "image_prompts", None)
+    if not isinstance(prompts, dict) or not prompts:
+        return ""
+    for category in categories:
+        key = str(getattr(category, "value", category) or "").strip()
+        if not key:
+            continue
+        value = prompts.get(key)
+        text = str(value or "").strip()
+        if text:
+            return text
+    return ""
+
+
 def _enum_value(value: Any) -> str:
     raw = getattr(value, "value", value)
     return str(raw or "")
@@ -64,11 +94,16 @@ async def _build_asset_prompt(
     visual_style: Any,
     style: Any,
     image_row: Any,
+    entity: Any = None,
 ) -> str:
     category = asset_prompt_category(
         relation_type=relation_type,
         is_front_view=is_front_view(image_row.view_angle),
     )
+    # 已保存的资产级图片提示词优先于通用模板（步骤 3 确认保存 → 生图实际使用）
+    saved = saved_image_prompt_for(entity, category)
+    if saved:
+        return saved
     return await build_prompt_with_template(
         db,
         category=category,
@@ -124,6 +159,7 @@ async def build_actor_image_base_draft(
         visual_style=actor.visual_style,
         style=actor.style,
         image_row=image_row,
+        entity=actor,
     )
     refs = []
     if not is_front_view(image_row.view_angle):
@@ -186,6 +222,7 @@ async def build_asset_image_base_draft(
         visual_style=asset.visual_style,
         style=asset.style,
         image_row=image_row,
+        entity=asset,
     )
     if not is_front_view(image_row.view_angle):
         refs = await _resolve_front_ref(
@@ -216,7 +253,15 @@ async def build_character_image_base_draft(
     if character is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=entity_not_found("Character"))
     image_row = await validate_character_image(db, character_id=character_id, image_id=image_id)
-    prompt = await build_prompt_with_template(
+    # 已保存的资产级图片提示词优先：正面取 character_image_front，其余取 character_image_other
+    saved_prompt = saved_image_prompt_for(
+        character,
+        PromptCategory.character_image_front if is_front_view(image_row.view_angle)
+        else PromptCategory.character_image_other,
+        # 兼容只存了 combined 的历史数据
+        PromptCategory.combined,
+    )
+    prompt = saved_prompt or await build_prompt_with_template(
         db,
         category=PromptCategory.combined,
         variables={

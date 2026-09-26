@@ -237,7 +237,8 @@ export default function AgentManagement() {
       key: 'type',
       width: 110,
       render: (type: AgentTypeKey) => (
-        <Tag color={typeColorMap[type] ?? 'default'}>{typeLabelMap[type] ?? type}</Tag>
+        /* 审计 §4.6 模式 3：未登记的类型码给中文兜底（`MAP[k] ?? k` 会把英文原值端给用户） */
+        <Tag color={typeColorMap[type] ?? 'default'}>{typeLabelMap[type] ?? '其他'}</Tag>
       ),
     },
     {

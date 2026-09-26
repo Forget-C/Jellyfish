@@ -30,7 +30,7 @@ import {
   UnorderedListOutlined,
   DownOutlined,
   RightOutlined,
-  ThunderboltOutlined,
+  QuestionCircleOutlined,
 } from '@ant-design/icons'
 import { LlmService } from '../../../services/generated/services/LlmService'
 import type {
@@ -39,15 +39,31 @@ import type {
   ProviderRead,
   ProviderSupportedRead,
 } from '../../../services/generated'
+import { TechnicalDetailSection } from '../project/ProjectWorkbench/components/workbench/TechnicalDetailCollapse'
 import {
   MODEL_CATEGORIES,
   TABLE_ACTION_BTN_EDIT_CLASS,
   TABLE_ACTION_BTN_MORE_CLASS,
-  TABLE_ACTION_BTN_TEST_CLASS,
   categoryLabelMap,
   categoryColorMap,
+  describeCreatedBy,
+  describeForList,
   SORT_OPTIONS,
 } from './constants'
+
+/** 「快速测试」为什么没有：`门禁` 是主区禁词，用户语言里只有「演练模式」（审计 §4.7）。 */
+const NO_QUICK_TEST_HINT =
+  '没有「快速测试」：唯一真实的验证方式是一次真实调用，会计费，且演练模式下会被拦下。请到生成入口顶部的状态条查看当前方案与运行模式。'
+
+/** 高级参数在列表里的计数口径（审计 §4.7-558：列表列只显示「已配置 N 项」）。 */
+function advancedParamCount(params: Record<string, unknown> | null | undefined): number {
+  return params && typeof params === 'object' ? Object.keys(params).length : 0
+}
+
+function advancedParamCountText(params: Record<string, unknown> | null | undefined): string {
+  const count = advancedParamCount(params)
+  return count > 0 ? `已配置 ${count} 项` : '—'
+}
 
 export default function ModelsTab() {
   const [providers, setProviders] = useState<ProviderRead[]>([])
@@ -303,15 +319,16 @@ export default function ModelsTab() {
       render: (id: string) => getProviderName(id),
     },
     {
-      title: '参数',
+      /* 审计 §4.7-558：改前列头是「参数」、单元格直接 `JSON.stringify(p).slice(0, 30)`、
+         悬停 `Tooltip title={JSON.stringify(p)}` —— 三个形态都是模式 2（后端参数原样直渲）。
+         现在列表只说「已配置 N 项」，完整参数进「技术详情」（默认收起）。 */
+      title: '高级参数',
       dataIndex: 'params',
       key: 'params',
-      ellipsis: true,
+      width: 120,
       render: (p: Record<string, unknown>) => (
-        <Tooltip title={JSON.stringify(p)}>
-          <span>
-            {p && Object.keys(p).length ? JSON.stringify(p).slice(0, 30) + '…' : '—'}
-          </span>
+        <Tooltip title={advancedParamCount(p) > 0 ? '完整参数在「技术详情」里可查' : '这条模型还没有配置参数'}>
+          <span>{advancedParamCountText(p)}</span>
         </Tooltip>
       ),
     },
@@ -320,14 +337,15 @@ export default function ModelsTab() {
       dataIndex: 'description',
       key: 'description',
       ellipsis: true,
-      render: (d: string) => <Tooltip title={d}>{d || '—'}</Tooltip>,
+      render: (d: string) => <Tooltip title={describeForList(d)}>{describeForList(d)}</Tooltip>,
     },
     {
+      /* 创建人口径与供应商页统一（审计 §4.7-551）：服务账号 → 「系统预置」，真人 → 「由 … 创建」。 */
       title: '创建人',
       dataIndex: 'created_by',
       key: 'created_by',
-      width: 100,
-      render: (c: string) => c || '—',
+      width: 120,
+      render: (c: string) => describeCreatedBy(c),
     },
     {
       title: '操作',
@@ -346,17 +364,6 @@ export default function ModelsTab() {
               onClick={(e) => {
                 e.stopPropagation()
                 openModelModal(record)
-              }}
-            />
-          </Tooltip>
-          <Tooltip title="测试生成">
-            <Button
-              type="text"
-              size="small"
-              className={TABLE_ACTION_BTN_TEST_CLASS}
-              icon={<ThunderboltOutlined />}
-              onClick={(e) => {
-                e.stopPropagation()
               }}
             />
           </Tooltip>
@@ -543,9 +550,6 @@ export default function ModelsTab() {
                     >
                       编辑
                     </Button>,
-                    <Button key="test" type="text" size="small" icon={<ThunderboltOutlined />}>
-                      测试生成
-                    </Button>,
                     <Dropdown
                       key="more"
                       menu={{
@@ -586,9 +590,9 @@ export default function ModelsTab() {
                   <div className="text-gray-500 text-sm mb-1">
                     供应商：{getProviderName(m.provider_id)}
                   </div>
-                  <div className="text-gray-500 text-sm line-clamp-2 mb-2">{m.description || '—'}</div>
+                  <div className="text-gray-500 text-sm line-clamp-2 mb-2">{describeForList(m.description)}</div>
                   {m.created_by && (
-                    <span className="text-xs text-gray-400">创建：{m.created_by}</span>
+                    <span className="text-xs text-gray-400">{describeCreatedBy(m.created_by)}</span>
                   )}
                 </Card>
               ))}
@@ -631,8 +635,9 @@ export default function ModelsTab() {
               </div>
               <div>
                 <div className="text-sm text-gray-500 mb-1">描述</div>
-                <div className="text-gray-700 text-sm">{selectedModel.description || '—'}</div>
+                <div className="text-gray-700 text-sm">{describeForList(selectedModel.description)}</div>
               </div>
+              <ModelAdvancedParamsDetail params={selectedModel.params} />
               <Space>
                 <Button
                   type="primary"
@@ -641,7 +646,11 @@ export default function ModelsTab() {
                 >
                   编辑
                 </Button>
-                <Button icon={<ThunderboltOutlined />}>快速测试</Button>
+                <Tooltip title={NO_QUICK_TEST_HINT}>
+                  <Button icon={<QuestionCircleOutlined />} disabled>
+                    快速测试（已移除）
+                  </Button>
+                </Tooltip>
               </Space>
             </div>
           </div>
@@ -666,6 +675,7 @@ export default function ModelsTab() {
                   {categoryLabelMap[selectedModel.category]}
                 </Tag>
               </div>
+              <ModelAdvancedParamsDetail params={selectedModel.params} />
               <Space>
                 <Button
                   type="primary"
@@ -674,7 +684,11 @@ export default function ModelsTab() {
                 >
                   编辑
                 </Button>
-                <Button icon={<ThunderboltOutlined />}>快速测试</Button>
+                <Tooltip title={NO_QUICK_TEST_HINT}>
+                  <Button icon={<QuestionCircleOutlined />} disabled>
+                    快速测试（已移除）
+                  </Button>
+                </Tooltip>
               </Space>
             </div>
           </Drawer>
@@ -695,7 +709,7 @@ export default function ModelsTab() {
       >
         <Form form={form} layout="vertical" className="pt-2">
           <Form.Item name="name" label="名称" rules={[{ required: true }]}>
-            <Input placeholder="例如：GPT-4" />
+            <Input placeholder="例如：文本生成模型 A" />
           </Form.Item>
           <Form.Item name="category" label="类别" rules={[{ required: true }]}>
             <Select options={MODEL_CATEGORIES.map((c) => ({ label: c.label, value: c.key }))} />
@@ -730,8 +744,11 @@ export default function ModelsTab() {
               message={unsupportedProviderWarning}
             />
           )}
-          <Form.Item name="params" label="参数（JSON）">
-            <Input.TextArea rows={3} placeholder='{"max_tokens": 4096, "temperature": 0.7}' />
+          {/* 审计 §4.7-558：`参数（JSON）` → 「高级参数（技术配置）」。
+              字段仍是同一个 `params`（本页核心功能，可编辑），只是标签换成业务说法；
+              完整参数值在详情面板的「技术详情」折叠区里可查（见下方 `technical-params-detail`）。 */}
+          <Form.Item name="params" label="高级参数（技术配置）">
+            <Input.TextArea rows={3} placeholder='例如：{"max_tokens": 4096, "temperature": 0.7}' />
           </Form.Item>
           <Form.Item name="description" label="描述">
             <Input.TextArea rows={2} />
@@ -739,5 +756,25 @@ export default function ModelsTab() {
         </Form>
       </Modal>
     </>
+  )
+}
+
+/**
+ * 模型的**高级参数**（原「参数（JSON）」）—— 收在默认收起的「技术详情」里。
+ *
+ * 审计 §4.7-558 的口径：列表列只显示「已配置 N 项」，完整参数进默认收起区块。
+ * 这里复用全仓**唯一**的技术详情折叠壳（`TechnicalDetailSection`，
+ * 审计 §8.1.1 第 1 条），不自建第二套 `<details>` / 「技术详情」标签。
+ */
+function ModelAdvancedParamsDetail(props: { params: Record<string, unknown> | null | undefined }) {
+  const { params } = props
+  const count = advancedParamCount(params)
+  if (count === 0) return null
+  return (
+    <TechnicalDetailSection testId="model-advanced-params-detail">
+      <div className="text-[11px] leading-5 text-gray-600">
+        {`高级参数（共 ${count} 项）：${JSON.stringify(params, null, 2)}`}
+      </div>
+    </TechnicalDetailSection>
   )
 }

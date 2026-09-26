@@ -3,6 +3,13 @@ import { Button, Space, notification } from 'antd'
 import type { ReactNode } from 'react'
 import type { RelationTaskState } from '../project/ProjectWorkbench/chapterDivisionTasks'
 import { useTaskUiStore } from './taskUiStore'
+import {
+  TASK_STALE_ADVICE,
+  TASK_STALE_STATUS_LABEL,
+  assessTaskFreshness,
+  formatTaskElapsedMs,
+  taskTimeLabel,
+} from './taskCopy'
 
 const SETTLED_TASK_RETAIN_MS = 8000
 
@@ -20,45 +27,27 @@ type RelationTaskNotificationOptions = {
   onNavigate?: (() => void) | null
 }
 
-function formatElapsedMs(elapsedMs?: number | null): string | null {
-  if (elapsedMs == null || elapsedMs < 0) return null
-  const totalSeconds = Math.floor(elapsedMs / 1000)
-  if (totalSeconds < 60) return `${totalSeconds} 秒`
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = totalSeconds % 60
-  if (minutes < 60) return seconds > 0 ? `${minutes} 分 ${seconds} 秒` : `${minutes} 分`
-  const hours = Math.floor(minutes / 60)
-  const remainMinutes = minutes % 60
-  return remainMinutes > 0 ? `${hours} 小时 ${remainMinutes} 分` : `${hours} 小时`
-}
-
-function formatStartedAt(startedAtTs?: number | null): string | null {
-  if (!startedAtTs) return null
-  return new Intl.DateTimeFormat('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).format(new Date(startedAtTs * 1000))
-}
-
 function buildDescription(task: RelationTaskState, runningDescription: string, cancellingDescription: string): ReactNode {
   const parts: string[] = []
   parts.push(`进度 ${Math.max(0, Math.min(100, Math.round(task.progress)))}%`)
-  const elapsedLabel = formatElapsedMs(task.elapsedMs)
-  if (elapsedLabel) {
+  /* 审计 §4.4 R16：通知里「已运行 2492 小时」同样会误导（后端没有该任务的更新记录时，
+     不能再按「正在运行」的口气报耗时）。 */
+  const freshness = assessTaskFreshness(task)
+  const elapsedLabel = formatTaskElapsedMs(task.elapsedMs)
+  if (freshness.stale) {
+    parts.push(TASK_STALE_STATUS_LABEL)
+  } else if (elapsedLabel) {
     parts.push(task.cancelRequested || task.finishedAtTs ? `累计耗时 ${elapsedLabel}` : `已运行 ${elapsedLabel}`)
   }
-  const startedAtLabel = formatStartedAt(task.startedAtTs)
+  const startedAtLabel = taskTimeLabel(freshness.stale ? freshness.lastUpdateTs : task.startedAtTs)
   if (startedAtLabel) {
-    parts.push(`开始于 ${startedAtLabel}`)
+    parts.push(freshness.stale ? `最后更新于 ${startedAtLabel}` : `开始于 ${startedAtLabel}`)
   }
   return (
     <div className="space-y-1">
       <div>{task.cancelRequested ? cancellingDescription : runningDescription}</div>
       {parts.length > 0 ? <div className="text-xs opacity-80">{parts.join(' · ')}</div> : null}
+      {freshness.stale ? <div className="text-xs text-amber-600">{TASK_STALE_ADVICE}</div> : null}
     </div>
   )
 }
@@ -149,8 +138,8 @@ export function useRelationTaskNotification({
     if (previousSettledKeyRef.current === settledKey) return
     previousSettledKeyRef.current = settledKey
 
-    const elapsedLabel = formatElapsedMs(settledTask.elapsedMs)
-    const startedAtLabel = formatStartedAt(settledTask.startedAtTs)
+    const elapsedLabel = formatTaskElapsedMs(settledTask.elapsedMs)
+    const startedAtLabel = taskTimeLabel(settledTask.startedAtTs)
     const details = [
       `进度 ${Math.max(0, Math.min(100, Math.round(settledTask.progress)))}%`,
       elapsedLabel ? `累计耗时 ${elapsedLabel}` : null,

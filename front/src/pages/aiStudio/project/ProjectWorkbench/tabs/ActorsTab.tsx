@@ -10,6 +10,7 @@ import { resolveAssetUrl } from '../../../assets/utils'
 import { DisplayImageCard } from '../../../assets/components/DisplayImageCard'
 import { ActorEntityFormModal } from '../../../assets/components/ActorEntityFormModal'
 import { encodeWorkbenchAssetEditReturnTo } from '../utils/workbenchAssetReturnTo'
+import { showUserError } from '../../../components/userFacingMessage'
 
 type ActorLike = {
   id: string
@@ -119,11 +120,16 @@ export function ActorsTab() {
       setLinkModalOpen(false)
       await loadLinks()
     } catch (e: unknown) {
-      const msg =
+      /**
+       * 审计 §4.2 模式 6：这里把后端响应体里的 `detail` 直接 `message.error` 上了主区，
+       * 属于第三层内容直渲。统一走 `showUserError`（掩码 → 去术语 → 业务化 → 中文兜底），
+       * 主区只出中文结论，原文进默认收起的「技术详情」。
+       */
+      const detail =
         e && typeof e === 'object' && 'body' in e && typeof (e as { body?: { detail?: string } }).body?.detail === 'string'
           ? (e as { body: { detail: string } }).body.detail
-          : '关联失败'
-      message.error(msg)
+          : ''
+      void showUserError(detail, '关联失败：请稍后重试，或展开「技术详情」查看原始信息')
     } finally {
       setLinkingId(null)
     }

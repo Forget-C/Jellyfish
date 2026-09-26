@@ -9,6 +9,12 @@ import asyncio
 from abc import ABC, abstractmethod
 from typing import Any, AsyncIterator
 
+from app.core.integrations.apimart.video import (
+    TERMINAL_STATUSES as APIMART_TERMINAL_STATUSES,
+    ApimartVideoApiAdapter,
+    extract_error as apimart_extract_error,
+    extract_video_url as apimart_extract_video_url,
+)
 from app.core.integrations.openai.video import OpenAIVideoApiAdapter
 from app.core.integrations.volcengine.video import VolcengineVideoApiAdapter
 from app.core.contracts.provider import ProviderConfig
@@ -22,6 +28,7 @@ __all__ = [
     "AbstractVideoGenerationTask",
     "OpenAIVideoGenerationTask",
     "VolcengineVideoGenerationTask",
+    "ApimartVideoGenerationTask",
     "VideoGenerationTask",
 ]
 
@@ -206,6 +213,83 @@ class VolcengineVideoGenerationTask(AbstractVideoGenerationTask):
         )
 
 
+class ApimartVideoGenerationTask(AbstractVideoGenerationTask):
+    """APIMart 视频任务：``POST /videos/generations`` + ``GET /tasks/{id}``。
+
+    与内置两家的差异集中在 adapter 与状态词；本类只负责轮询节奏与终态解析。
+    """
+
+    def __init__(
+        self,
+        *,
+        adapter: ApimartVideoApiAdapter | None = None,
+        provider_config: ProviderConfig,
+        input_: VideoGenerationInput,
+        poll_interval_s: float = 2.0,
+        timeout_s: float = 120.0,
+    ) -> None:
+        super().__init__(
+            provider_config=provider_config,
+            input_=input_,
+            poll_interval_s=poll_interval_s,
+            timeout_s=timeout_s,
+        )
+        self._adapter = adapter or ApimartVideoApiAdapter()
+
+    async def _create_task(self) -> None:
+        self._provider_task_id = await self._adapter.create_task(
+            cfg=self._cfg,
+            input_=self._input,
+            timeout_s=self._timeout_s,
+        )
+
+    async def _poll_and_get_result(self) -> VideoGenerationResult:
+        task_id = self._provider_task_id or ""
+        if not task_id:
+            raise RuntimeError("APIMart poll missing provider task id")
+
+        status_val = ""
+        video_url: str | None = None
+        # APIMart 的视频任务通常要几分钟（seedance 官方估时约 300s），
+        # 固定 2s 轮询会打出上百次请求，这里做温和退避（上限 10s）。
+        interval = max(1.0, float(self._poll_interval_s))
+        while True:
+            try:
+                meta = await self._adapter.get_task(
+                    cfg=self._cfg,
+                    task_id=task_id,
+                    timeout_s=self._timeout_s,
+                )
+            except Exception as exc:  # noqa: BLE001 - 轮询失败也必须把任务号带出来
+                # 出视频是付费出口：一旦这里丢了任务号，用户就没法去供应商后台追这次生成。
+                raise RuntimeError(
+                    f"轮询 APIMart 任务失败（任务已提交，provider_task_id={task_id}，"
+                    f"可在供应商后台按此 ID 查询/取回产物）：{type(exc).__name__}: {exc}"
+                ) from exc
+            payload = meta.get("data") if isinstance(meta.get("data"), dict) else meta
+            status_val = str((payload or {}).get("status") or "")
+            if status_val in APIMART_TERMINAL_STATUSES:
+                if status_val != "completed":
+                    raise RuntimeError(
+                        f"APIMart task not completed: status={status_val!r} error={apimart_extract_error(meta)!r}"
+                    )
+                video_url = apimart_extract_video_url(meta)
+                break
+            await asyncio.sleep(interval)
+            interval = min(10.0, interval * 1.5)
+
+        if not video_url:
+            raise RuntimeError(f"APIMart task completed without video url: meta={meta!r}")
+
+        return VideoGenerationResult(
+            url=video_url,
+            file_id=None,
+            provider_task_id=task_id,
+            provider="apimart",
+            status=status_val or "completed",
+        )
+
+
 class VideoGenerationTask(BaseTask):
     """按 provider 分派到 OpenAI / 火山实现；对外构造函数签名保持不变。"""
 
@@ -252,6 +336,21 @@ class VideoGenerationTask(BaseTask):
         timeout_s: float = 120.0,
     ) -> AbstractVideoGenerationTask:
         return VolcengineVideoGenerationTask(
+            provider_config=provider_config,
+            input_=input_,
+            poll_interval_s=poll_interval_s,
+            timeout_s=timeout_s,
+        )
+
+    @staticmethod
+    def _build_apimart_impl(
+        *,
+        provider_config: ProviderConfig,
+        input_: VideoGenerationInput,
+        poll_interval_s: float = 2.0,
+        timeout_s: float = 120.0,
+    ) -> AbstractVideoGenerationTask:
+        return ApimartVideoGenerationTask(
             provider_config=provider_config,
             input_=input_,
             poll_interval_s=poll_interval_s,

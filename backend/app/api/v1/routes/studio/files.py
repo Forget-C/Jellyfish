@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi.responses import Response
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db
 from app.schemas.common import ApiResponse, PaginatedData, created_response, empty_response, paginated_response, success_response
-from app.schemas.studio import FileDetailRead, FileRead, FileUpdate
+from app.schemas.studio import FileDetailRead, FileRead, FileUpdate, FileUploadRead
 from app.services.studio.file_usages import list_files_by_scope_paginated
 from app.services.studio.files import (
     build_download_response,
@@ -15,6 +17,7 @@ from app.services.studio.files import (
     get_file_detail as get_file_detail_service,
     get_storage_info,
     list_files_paginated,
+    register_external_file,
     update_file_meta as update_file_meta_service,
     upload_file,
 )
@@ -72,11 +75,58 @@ async def list_files_api(
     )
 
 
+class ExternalFileCreate(BaseModel):
+    """登记外部公网素材（不下载、不存副本）。"""
+
+    url: str = Field(..., min_length=1, description="公网可访问地址（http/https）")
+    name: str | None = Field(None, description="显示名（缺省取 URL 文件名）")
+    type: str | None = Field(None, description="素材类型：image / video / audio（缺省按后缀推断）")
+    project_id: str | None = Field(None, description="与 usage_kind 同时提供时写入 file_usages")
+    chapter_id: str | None = None
+    shot_id: str | None = None
+    usage_kind: str | None = None
+    source_ref: str | None = None
+
+
 @router.post(
-    "/upload",
+    "/external",
     response_model=ApiResponse[FileRead],
     status_code=status.HTTP_201_CREATED,
-    summary="上传文件并创建 FileItem 记录",
+    summary="登记外部公网素材（外链，不下载）",
+    description=(
+        "把外部公网地址登记成素材记录。用于「供应商要求公网可达」的场景（例如 APIMart 的 "
+        "audio_urls 只收公网 URL）；不下载内容、不在本地存储副本。"
+    ),
+)
+async def register_external_file_api(
+    body: ExternalFileCreate,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[FileRead]:
+    obj = await register_external_file(
+        db,
+        url=body.url,
+        name=body.name,
+        file_type=body.type,
+        project_id=body.project_id,
+        chapter_id=body.chapter_id,
+        shot_id=body.shot_id,
+        usage_kind=body.usage_kind,
+        source_ref=body.source_ref,
+    )
+    return created_response(FileRead.model_validate(obj))
+
+
+@router.post(
+    "/upload",
+    response_model=ApiResponse[FileUploadRead],
+    status_code=status.HTTP_201_CREATED,
+    summary="上传文件并创建 FileItem 记录（响应附带地址匿名可达性）",
+    description=(
+        "上传文件到对象存储并落库。响应在原有文件字段之外，**新增** "
+        "``url`` / ``url_reachable`` / ``url_probe`` / ``warnings``：说明这个地址"
+        "**上游能不能匿名取到**（真实故障 A：本机可读、公网 404 的地址交给上游 → 上游任务失败）。"
+        "不可达**不阻断上传**（文件已落库），但会如实告警并给出修法。"
+    ),
 )
 async def upload_file_api(
     file: UploadFile = File(..., description="要上传的二进制文件"),
@@ -87,8 +137,8 @@ async def upload_file_api(
     shot_id: str | None = Form(None),
     usage_kind: str | None = Form(None, description="与 project_id 同时提供时写入 file_usages"),
     source_ref: str | None = Form(None),
-) -> ApiResponse[FileRead]:
-    obj = await upload_file(
+) -> ApiResponse[FileUploadRead]:
+    outcome = await upload_file(
         db,
         file=file,
         name=name,
@@ -98,12 +148,13 @@ async def upload_file_api(
         usage_kind=usage_kind,
         source_ref=source_ref,
     )
-    return created_response(FileRead.model_validate(obj))
+    return created_response(FileUploadRead(**outcome.to_read()))
 
 
 @router.get(
     "/{file_id}/download",
-    summary="下载文件二进制内容",
+    summary="下载文件二进制内容（外链素材会 307 重定向到源地址）",
+    response_class=Response,
 )
 async def download_file_api(
     file_id: str,

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.models.llm import Model, ModelCategoryKey, ModelSettings, Provider
 from app.services.llm.provider_resolver import resolve_effective_base_url
+from app.services import paid_outlet_guard
 
 
 def _default_model_id(settings_row: ModelSettings | None, category: ModelCategoryKey) -> str | None:
@@ -48,6 +49,11 @@ def build_default_text_llm_sync(
     *,
     thinking: bool,
 ) -> BaseChatModel:
+    """worker 侧构造默认文本大模型；构造即代表即将真实调用，统一过 DRY_RUN 守卫。"""
+    paid_outlet_guard.require_outlet(
+        "worker 构造默认文本大模型（即将真实调用）",
+        outlet=paid_outlet_guard.OUTLET_LLM,
+    )
     provider, model = _require_provider_and_model_sync(db, category=ModelCategoryKey.text)
 
     api_key = (provider.api_key or "").strip()

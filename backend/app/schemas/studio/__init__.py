@@ -6,6 +6,7 @@ from app.schemas.studio.files import (
     FileRead,
     FileTypeEnum,
     FileUpdate,
+    FileUploadRead,
     FileUsageRead,
     FileUsageWrite,
 )

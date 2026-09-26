@@ -27,11 +27,10 @@ import {
   PlusOutlined,
   ReloadOutlined,
   ScissorOutlined,
-  VideoCameraOutlined,
 } from '@ant-design/icons'
 import type { ShotRead, ShotRuntimeSummaryRead, ShotStatus } from '../../../services/generated'
 import { ScriptProcessingService, StudioChaptersService, StudioShotsService } from '../../../services/generated'
-import { executeAsyncTaskCreate, executeTaskCancel } from '../components/taskActionHelpers'
+import { executeTaskCancel } from '../components/taskActionHelpers'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { getChapterShotEditPath, getChapterShotsPath, getChapterStudioPath } from '../project/ProjectWorkbench/routes'
 import { useCancelableRelationTask } from '../project/ProjectWorkbench/chapterDivisionTasks'
@@ -39,16 +38,44 @@ import { useRelationTaskNotification } from '../components/taskNotificationHelpe
 import { useTaskPageContext } from '../components/taskPageContext'
 import { createTaskSettledReloader } from '../components/taskResultHelpers'
 import { TASK_COPY } from '../components/taskCopy'
+import { showUserError } from '../components/userFacingMessage'
+/* 镜头状态的中文口径（本区域临时表，见文件头「需追加」说明） */
+import { shotStatusLabel } from './shotStudioCopy'
 
 const { Header, Content } = Layout
 type ShotListFilter = 'all' | 'pending' | 'generating' | 'ready'
 
+/**
+ * 分镜提取改为同步调用：本环境没有配置后台任务 worker（Celery broker 不可达、
+ * 也没有 worker 进程），异步接口只写任务记录、无人执行。这里改用
+ * `/api/v1/script-processing/divide`，AI 在本次 HTTP 请求内跑完并直接返回结果，
+ * 代价是请求会阻塞数十秒，因此按钮全程 loading 并禁止重复点击。
+ */
+const SYNC_EXTRACT_HINT =
+  '本环境未配置后台任务 worker，点击后 AI 会在本次请求内同步提取分镜，通常需要数十秒，请不要重复点击或关闭页面'
+const SYNC_EXTRACT_LOADING = 'AI 正在同步提取分镜，通常需要数十秒，请不要重复点击…'
+const SYNC_EXTRACT_MESSAGE_KEY = 'chapter-shots-sync-extract'
+
+/**
+ * 解析后端统一错误信封 `{code, message, data, meta}`：结构化细节优先取
+ * `meta.error.message`，其次信封 `message` / `detail`，最后才回退客户端 ApiError。
+ */
 function getErrorMessage(e: unknown) {
   if (!e) return '请求失败'
-  if (typeof e === 'string') return e
+  if (typeof e === 'string') return e.trim() || '请求失败'
   if (typeof e === 'object') {
     const maybeAny = e as any
-    const detail = maybeAny?.body?.detail ?? maybeAny?.detail
+    const body = maybeAny?.body
+    if (body && typeof body === 'object') {
+      const meta = (body.meta ?? {}) as Record<string, any>
+      const structured = meta?.error?.message
+      if (typeof structured === 'string' && structured.trim()) return structured
+      const envelopeMessage = body.message
+      if (typeof envelopeMessage === 'string' && envelopeMessage.trim()) return envelopeMessage
+      const envelopeDetail = body.detail
+      if (typeof envelopeDetail === 'string' && envelopeDetail.trim()) return envelopeDetail
+    }
+    const detail = maybeAny?.detail
     if (typeof detail === 'string' && detail.trim()) return detail
     const msg = maybeAny?.message
     if (typeof msg === 'string' && msg.trim()) return msg
@@ -56,10 +83,12 @@ function getErrorMessage(e: unknown) {
   return '请求失败'
 }
 
+/* 审计 §4.6 模式 3：原来直接渲 `{status}`（`pending` / `generating` / `ready` 英文原值）。
+   中文口径与列表页筛选器逐字一致；未登记状态给中文兜底，不回显原值。 */
 function statusTag(status?: ShotStatus) {
   if (!status) return <span className="text-gray-400">—</span>
   const color = status === 'ready' ? 'success' : 'default'
-  return <Tag color={color}>{status}</Tag>
+  return <Tag color={color}>{shotStatusLabel(status)}</Tag>
 }
 
 type ShotPreparationState = {
@@ -166,7 +195,7 @@ export function ChapterShotsPage() {
   }
 
   const reloadShotsAfterTaskSettled = useCallback(createTaskSettledReloader(refresh), [refresh])
-  const { task: chapterDivisionTask, settledTask: chapterDivisionSettledTask, trackTaskData, applyCancelData } = useCancelableRelationTask({
+  const { task: chapterDivisionTask, settledTask: chapterDivisionSettledTask, applyCancelData } = useCancelableRelationTask({
     enabled: !!chapterId,
     relationType: 'chapter_division',
     relationEntityId: chapterId,
@@ -285,29 +314,32 @@ export function ChapterShotsPage() {
       message.error('章节没有可用文本（condensed/raw 为空）')
       return
     }
+    // 同步请求会阻塞数十秒，这里显式挡住重复点击（按钮本身也在 loading）。
+    if (extracting) return
     setExtracting(true)
+    message.loading({ content: SYNC_EXTRACT_LOADING, key: SYNC_EXTRACT_MESSAGE_KEY, duration: 0 })
     try {
-      await executeAsyncTaskCreate({
-        request: () =>
-          ScriptProcessingService.divideScriptAsyncApiV1ScriptProcessingDivideAsyncPost({
-            requestBody: {
-              script_text: scriptText,
-              write_to_db: true,
-              chapter_id: chapterId,
-            },
-          }),
-        trackTaskData,
-        startedMessage: taskCopy.startedMessage,
-        reusedMessage: taskCopy.reusedMessage,
-        fallbackErrorMessage: '启动分镜提取失败',
-        getErrorMessage: (error) => getErrorMessage(error),
+      const res = await ScriptProcessingService.divideScriptApiV1ScriptProcessingDividePost({
+        requestBody: {
+          script_text: scriptText,
+          write_to_db: true,
+          chapter_id: chapterId,
+        },
       })
-    } catch {
-      // executeAsyncTaskCreate 已统一处理错误提示
+      const totalShots = res.data?.total_shots ?? res.data?.shots?.length ?? 0
+      message.destroy(SYNC_EXTRACT_MESSAGE_KEY)
+      message.success(`分镜提取完成，共 ${totalShots} 个分镜`)
+      await refresh()
+    } catch (error) {
+      message.destroy(SYNC_EXTRACT_MESSAGE_KEY)
+      /* 审计 §4.6 模式 6：`getErrorMessage` 会依次返回 `body.detail` / `body.message` /
+         `meta.error.message` 的**原文**，所以出口必须过统一管道（showUserError 的契约是
+         「主区只出中文结论 + 原文经掩码进技术详情」），不能直接 `message.error(原文)`。 */
+      void showUserError(getErrorMessage(error), '分镜提取失败，请稍后重试', '分镜提取')
     } finally {
       setExtracting(false)
     }
-  }, [chapterCondensedText, chapterId, chapterRawText])
+  }, [chapterCondensedText, chapterId, chapterRawText, extracting, refresh])
 
   const handleCancelChapterDivisionTask = useCallback(async () => {
     if (!chapterDivisionTask) return
@@ -563,18 +595,23 @@ export function ChapterShotsPage() {
 
         {shots.length > 0 ? (
           <Space>
+            {/*
+              分镜做完之后的「下一步」是资产准备，不再直接进分镜工作室：
+              直接进工作室会跳过 资产准备 → 整集视频提示词。
+              工作室入口保留为次按钮（单镜查看与补漏）。
+            */}
             <Button
               type="primary"
+              icon={<ScissorOutlined />}
+              onClick={() => navigate(`/projects/${projectId}?step=extract_assets`)}
+            >
+              下一步：提取资产
+            </Button>
+            <Button
               icon={<FileSearchOutlined />}
               onClick={() => navigate(getChapterStudioPath(projectId, chapterId))}
             >
-              进入分镜工作室
-            </Button>
-            <Button
-              icon={<VideoCameraOutlined />}
-              onClick={() => navigate(getChapterStudioPath(projectId, chapterId))}
-            >
-              继续当前镜头
+              进入分镜工作室（单镜查看）
             </Button>
           </Space>
         ) : null}
@@ -597,7 +634,11 @@ export function ChapterShotsPage() {
                 <Tag color="warning" className="!mr-0">
                   当前章节已存在分镜，若要重新提取，请先删除现有分镜
                 </Tag>
-              ) : null}
+              ) : (
+                <span className="text-[11px] font-normal text-gray-500">
+                  一键提取为同步执行：本环境未配置后台 worker，AI 在本次请求内跑完，通常需要数十秒
+                </span>
+              )}
             </div>
           }
           style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
@@ -634,7 +675,7 @@ export function ChapterShotsPage() {
                     ? '当前章节已有分镜提取任务在运行'
                     : shots.length > 0
                       ? '已存在分镜时不允许同步分镜，需先清空分镜'
-                      : undefined
+                      : SYNC_EXTRACT_HINT
                 }
               >
                 <span>
@@ -645,7 +686,13 @@ export function ChapterShotsPage() {
                     disabled={extracting || shots.length > 0 || !!chapterDivisionTask}
                     onClick={() => void handleOneClickExtract()}
                   >
-                    {chapterDivisionTask ? '分镜提取中' : shots.length === 0 ? '一键提取分镜' : '重新提取需先清空分镜'}
+                    {chapterDivisionTask
+                      ? '分镜提取中'
+                      : shots.length === 0
+                        ? extracting
+                          ? '同步提取中…'
+                          : '一键提取分镜'
+                        : '重新提取需先清空分镜'}
                   </Button>
                 </span>
               </Tooltip>

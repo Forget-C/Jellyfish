@@ -99,16 +99,18 @@ export default function SettingsTab() {
               options={videoModels.map((m) => ({ label: m.name, value: m.id }))}
             />
           </Form.Item>
-          <Form.Item name="api_timeout" label="API 超时（秒）">
+          <Form.Item name="api_timeout" label="接口超时（秒）">
             <InputNumber min={5} max={300} className="w-full" />
           </Form.Item>
+          {/* 审计 §4.7 模式 3：改前日志级别的**选项名**是英文枚举原值（Debug / Info / Warn / Error）
+              直渲。现在显示中文，写回后端的仍必须是原来的原值（`value` 不动）。 */}
           <Form.Item name="log_level" label="日志级别">
             <Select
               options={[
-                { label: 'Debug', value: 'debug' },
-                { label: 'Info', value: 'info' },
-                { label: 'Warn', value: 'warn' },
-                { label: 'Error', value: 'error' },
+                { label: '调试', value: 'debug' },
+                { label: '常规', value: 'info' },
+                { label: '警告', value: 'warn' },
+                { label: '错误', value: 'error' },
               ]}
             />
           </Form.Item>

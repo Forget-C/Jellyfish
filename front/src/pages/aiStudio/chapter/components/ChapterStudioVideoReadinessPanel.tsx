@@ -1,6 +1,10 @@
 import { Spin, Tag, Tooltip } from 'antd'
 import { VideoCameraAddOutlined } from '@ant-design/icons'
 import type { ShotRead, ShotVideoReadinessRead } from '../../../../services/generated'
+// 阶段 B ③（审计 §4.3 模式 3 / §5.1 R7-R8）：枚举原值一律过全仓唯一映射表，未登记项整行隐藏
+import { REFERENCE_MODE, labelFor, videoReadinessCheckLabel } from '../../components/enumLabels.ts'
+// 阶段 B ③（审计 §4.3 模式 6）：后端原文 → 主区中文结论
+import { toUserFacingText } from '../../components/userFacingMessage.ts'
 
 type ChapterStudioVideoReadinessPanelProps = {
   selectedShot: ShotRead | null
@@ -15,6 +19,16 @@ export function ChapterStudioVideoReadinessPanel({
   videoReadiness,
   videoReferenceMode,
 }: ChapterStudioVideoReadinessPanelProps) {
+  /**
+   * 只保留**已登记**的检查项。
+   *
+   * 审计 §4.3 模式 3 的口径是「为 `check.key` 建中文映射；**未登记项隐藏整行**
+   * 而不是回显原值」—— 运行时旧形态是整排 `未通过 · extraction_ready`，
+   * 后端将来新增一个 `_check` 就会把新的英文 code 端上主区。
+   */
+  const knownChecks = (videoReadiness?.checks ?? []).filter((check) => videoReadinessCheckLabel(check.key) !== null)
+  const failedChecks = knownChecks.filter((check) => !check.ok)
+
   return (
     <div className="cs-group">
       <div className="cs-group-title">
@@ -39,7 +53,7 @@ export function ChapterStudioVideoReadinessPanel({
                 {videoReadiness.ready ? '当前镜头已满足视频生成条件' : '当前镜头还不能直接生成视频'}
               </div>
               <div className="text-xs text-slate-500 mt-1">
-                当前按 <Tag className="!mx-1">{videoReferenceMode}</Tag> 参考模式检查视频生成条件。
+                当前按 <Tag className="!mx-1">{labelFor(REFERENCE_MODE, videoReferenceMode)}</Tag> 参考模式检查视频生成条件。
               </div>
             </div>
             <Tag color={videoReadiness.ready ? 'green' : 'gold'}>
@@ -48,20 +62,21 @@ export function ChapterStudioVideoReadinessPanel({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {(videoReadiness.checks ?? []).map((check) => (
-              <Tooltip key={check.key} title={check.message}>
+            {knownChecks.map((check) => (
+              // title 在**悬停即见**，与正文同一口径：后端原文先过掩码 + 业务化改写
+              <Tooltip key={check.key} title={toUserFacingText(check.message, '这一项有需要注意的地方')}>
                 <Tag color={check.ok ? 'green' : 'default'}>
-                  {check.ok ? '通过' : '未通过'} · {check.key}
+                  {check.ok ? '通过' : '未通过'} · {videoReadinessCheckLabel(check.key)}
                 </Tag>
               </Tooltip>
             ))}
           </div>
 
-          {(videoReadiness.checks ?? []).some((check) => !check.ok) ? (
+          {failedChecks.length ? (
             <div className="space-y-1">
-              {(videoReadiness.checks ?? []).filter((check) => !check.ok).map((check) => (
+              {failedChecks.map((check) => (
                 <div key={check.key} className="text-xs text-gray-600">
-                  • {check.message}
+                  • {toUserFacingText(check.message, '这一项有需要注意的地方')}
                 </div>
               ))}
             </div>

@@ -82,6 +82,8 @@ def _count_hits(text: str, keywords: tuple[str, ...]) -> int:
     return sum(1 for keyword in keywords if keyword in text)
 
 
+# 优先级 if 链：多个 return 是这段规则最清楚的表达（不该为了行数拆成状态机）
+# pylint: disable=too-many-return-statements
 def infer_action_beat_phase(*, text: str, index: int, total: int) -> ActionBeatPhase:
     """为单条动作拍点推断阶段。
 

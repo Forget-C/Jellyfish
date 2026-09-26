@@ -31,6 +31,7 @@ from app.services.studio.file_usages import (
     sync_usage_from_shot_context,
     upsert_file_usage,
 )
+from app.services import paid_outlet_guard
 from app.services.studio.shot_status import mark_shot_generating, recompute_shot_status
 from app.services.studio.image_tasks import load_provider_config, resolve_image_model
 from app.services.worker.async_task_support import cancel_if_requested_async
@@ -238,7 +239,7 @@ async def _resolve_related_shot_id(
     return image_row.shot_detail_id
 
 
-async def create_image_task_and_link(
+async def build_image_task_run_args(
     *,
     db: AsyncSession,
     model_id: str | None,
@@ -250,11 +251,13 @@ async def create_image_task_and_link(
     resolution_profile: str | None = None,
     purpose: str = "generic",
     render_context: dict | None = None,
-) -> str:
-    """创建图片生成任务，并建立任务关联。"""
-    store = SqlAlchemyTaskStore(db)
-    tm = TaskManager(store=store, strategies={})
+) -> tuple[dict, object]:
+    """组装图片生成任务的 run_args（模型 + 供应商配置 + 输入）。
 
+    抽出来的唯一理由：同进程内联执行那条路（``image_pipeline/frame_submit.py``）
+    必须和 Celery 路径用**同一个**构造函数，否则两条路会悄悄跑偏
+    （之前关键帧就是「建行不执行」，没人发现入参没人组装）。
+    """
     model = await resolve_image_model(db, model_id)
     provider_cfg = await load_provider_config(db, model.provider_id)
 
@@ -276,6 +279,51 @@ async def create_image_task_and_link(
         run_args["input"]["images"] = images
     if render_context:
         run_args["render_context"] = render_context
+    return run_args, model
+
+
+async def create_image_task_and_link(
+    *,
+    db: AsyncSession,
+    model_id: str | None,
+    relation_type: str,
+    relation_entity_id: str,
+    prompt: str,
+    images: list[dict[str, str]] | None = None,
+    target_ratio: str | None = None,
+    resolution_profile: str | None = None,
+    purpose: str = "generic",
+    render_context: dict | None = None,
+    enqueue: bool = True,
+) -> str:
+    """创建图片生成任务，并建立任务关联。
+
+    这是 studio 出图的**唯一**建任务入口：在写任何任务行之前先过 DRY_RUN 守卫，
+    避免建出一条注定要真实出图、真实计费的任务。
+
+    ``enqueue=False``（同进程内联执行用）：只建任务行 + 关联并提交，
+    **不**派发给 Celery —— 调用方负责自己把 ``run_image_generation_task`` 跑完。
+    本机没有 broker/worker 时，那条队列路径只会留下一条永远不会被执行的「排队中」。
+    """
+    paid_outlet_guard.require_outlet(
+        f"创建出图任务 relation={relation_type}:{relation_entity_id}",
+        outlet=paid_outlet_guard.OUTLET_IMAGE,
+    )
+    store = SqlAlchemyTaskStore(db)
+    tm = TaskManager(store=store, strategies={})
+
+    run_args, _model = await build_image_task_run_args(
+        db=db,
+        model_id=model_id,
+        relation_type=relation_type,
+        relation_entity_id=relation_entity_id,
+        prompt=prompt,
+        images=images,
+        target_ratio=target_ratio,
+        resolution_profile=resolution_profile,
+        purpose=purpose,
+        render_context=render_context,
+    )
 
     task_record = await tm.create(
         task=_CreateOnlyTask(),
@@ -300,6 +348,9 @@ async def create_image_task_and_link(
     if related_shot_id:
         await mark_shot_generating(db, shot_id=related_shot_id)
     await db.commit()
+
+    if not enqueue:
+        return task_record.id
 
     from app.tasks.execute_task import enqueue_task_execution
 
@@ -341,7 +392,16 @@ async def run_image_generation_task(
             await task.run()
             result = await task.get_result()
             if result is None:
-                raise RuntimeError("Image generation task returned no result")
+                # AbstractImageGenerationTask.run 会把异常吞进 _error，只留一个
+                # None 结果；直接抛 "no result" 会把真实原因（连不上垫片、
+                # 上游 4xx 等）丢掉，排障时只能靠猜。这里与视频任务保持一致，
+                # 从 status() 里把底层错误带出来。
+                status_dict = await task.status()
+                detailed_error = ""
+                if isinstance(status_dict, dict):
+                    detailed_error = str(status_dict.get("error") or "")
+                msg = detailed_error or "Image generation task returned no result"
+                raise RuntimeError(f"图片生成任务失败：{msg}")
             if await cancel_if_requested_async(store=store, task_id=task_id, session=session):
                 log_task_event("image_generation", task_id, "cancelled", stage="after_execute")
                 return

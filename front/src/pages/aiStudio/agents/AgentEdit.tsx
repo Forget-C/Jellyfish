@@ -180,7 +180,8 @@ export default function AgentEdit() {
                     onClick={() => setSelectedNodeId(selectedNodeId === node.id ? null : node.id)}
                   >
                     <span className="font-medium">{node.label}</span>
-                    <span className="ml-2 text-xs text-gray-400">({node.type})</span>
+                    {/* 审计 §4.6 模式 3：`({node.type})` 是英文节点类型码（`start` / `llm` / `end`），
+                        左侧中文标签已经说明是什么节点了 —— 按审计口径去掉，不另造说法。 */}
                   </div>
                   {i < workflowNodes.length - 1 && (
                     <div className="w-0.5 h-6 bg-gray-300" />

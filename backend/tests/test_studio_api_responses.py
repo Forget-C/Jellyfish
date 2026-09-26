@@ -16,6 +16,7 @@ from app.models.studio import (
     ProjectStyle,
     ProjectVisualStyle,
     Shot,
+    ShotDetail,
     ShotStatus,
 )
 
@@ -27,6 +28,8 @@ class _FakeStudioDB:
         self.projects: dict[str, Project] = {}
         self.chapters: dict[str, Chapter] = {}
         self.shots: dict[str, Shot] = {}
+        # 创建镜头现在会同时写入 1:1 的 ShotDetail（见 studio/shots.create），替身必须收得下。
+        self.shot_details: dict[str, ShotDetail] = {}
 
     async def get(self, model: type, entity_id: str):  # noqa: ANN001
         if model is Project:
@@ -35,6 +38,8 @@ class _FakeStudioDB:
             return self.chapters.get(entity_id)
         if model is Shot:
             return self.shots.get(entity_id)
+        if model is ShotDetail:
+            return self.shot_details.get(entity_id)
         return None
 
     def add(self, obj: object) -> None:
@@ -43,6 +48,9 @@ class _FakeStudioDB:
             return
         if isinstance(obj, Chapter):
             self.chapters[obj.id] = obj
+            return
+        if isinstance(obj, ShotDetail):
+            self.shot_details[obj.id] = obj
             return
         if isinstance(obj, Shot):
             self.shots[obj.id] = obj

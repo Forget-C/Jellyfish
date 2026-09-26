@@ -16,6 +16,15 @@ import {
   useTaskUiStore,
 } from './taskUiStore'
 import { useResolvedTaskCenterTasks } from './taskCenterMeta'
+import {
+  TASK_STALE_ADVICE,
+  TASK_STALE_STATUS_LABEL,
+  assessTaskFreshness,
+  formatTaskElapsedMs,
+  taskTimeLabel,
+  type TaskFreshness,
+} from './taskCopy'
+import { maskInternalIds } from './maskInternalIds'
 
 const TASK_CENTER_OPEN_STORAGE_KEY = 'jellyfish_task_center_open_v1'
 const TASK_CENTER_POSITION_STORAGE_KEY = 'jellyfish_task_center_position_v1'
@@ -80,31 +89,15 @@ function snapButtonPosition(position: { x: number; y: number }) {
   }
 }
 
-function formatElapsedMs(elapsedMs?: number | null): string | null {
-  if (elapsedMs == null || elapsedMs < 0) return null
-  const totalSeconds = Math.floor(elapsedMs / 1000)
-  if (totalSeconds < 60) return `${totalSeconds} 秒`
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = totalSeconds % 60
-  if (minutes < 60) return seconds > 0 ? `${minutes} 分 ${seconds} 秒` : `${minutes} 分`
-  const hours = Math.floor(minutes / 60)
-  const remainMinutes = minutes % 60
-  return remainMinutes > 0 ? `${hours} 小时 ${remainMinutes} 分` : `${hours} 小时`
-}
-
-function formatStartedAt(startedAtTs?: number | null): string | null {
-  if (!startedAtTs) return null
-  return new Intl.DateTimeFormat('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).format(new Date(startedAtTs * 1000))
-}
-
-function taskTone(task: TaskUiItem): { color: string; label: string } {
+/**
+ * 状态标签。
+ *
+ * 审计 §4.4 R16：陈旧任务（超过 `TASK_STALE_AFTER_HOURS` 小时没有任何更新）继续显示
+ * 「运行中」是**误导**。这里对「还在跑但早就断了」的任务改说「状态未知（超过 N 小时未更新）」，
+ * 而不是替它下「失败」的结论（前端无权改后端状态）。
+ */
+function taskTone(task: TaskUiItem, freshness: TaskFreshness): { color: string; label: string } {
+  if (freshness.stale) return { color: 'default', label: TASK_STALE_STATUS_LABEL }
   if (task.cancelRequested) return { color: 'orange', label: '取消中' }
   if (task.status === 'cancelled') return { color: 'orange', label: '已取消' }
   if (task.status === 'failed') return { color: 'red', label: '失败' }
@@ -112,6 +105,20 @@ function taskTone(task: TaskUiItem): { color: string; label: string } {
   if (task.status === 'streaming') return { color: 'cyan', label: '处理中' }
   if (task.status === 'running') return { color: 'blue', label: '运行中' }
   return { color: 'default', label: '排队中' }
+}
+
+/**
+ * 任务中心是**全站常驻角标**（审计原话）：它的文案会出现在每一个页面上，
+ * 所以主区口径必须格外保守 —— 宁可用「后台任务」这类中性词，也不许出现任务号 / 枚举原值。
+ *
+ * 两个字段都需要掩码：`title` 与 `sourceLabel` 都可能由**上游页面**直接塞进
+ * `upsertTask(...)`（例如 `sourceLabel: '章节：<uuid>'`），不是只有 `taskCopy` 一个来源。
+ * 这是整条链路唯一的渲染咽喉（审计 §4.4 模式 1 第 5 条），必须在这里兜住。
+ */
+function maskTaskText(text?: string | null): string | null {
+  const value = String(text ?? '')
+  if (!value.trim()) return null
+  return maskInternalIds(value)
 }
 
 export function TaskCenter() {
@@ -201,8 +208,13 @@ export function TaskCenter() {
   const taskKindOptions = useMemo(
     () =>
       Array.from(
-        new Set(resolvedTasks.map((task) => task.title).filter((value): value is string => !!value)),
+        new Set(
+          resolvedTasks
+            .map((task) => maskTaskText(task.title))
+            .filter((value): value is string => !!value),
+        ),
       ).map((title) => ({
+        // 下拉项的 label 也是主区：同样过掩码，避免把任务号摆进筛选列表
         label: title,
         value: title,
       })),
@@ -229,7 +241,7 @@ export function TaskCenter() {
         if (effectiveScopeFilter === 'current' && !isTaskHighlighted(task, activeContexts)) return false
         if (effectiveScopeFilter === 'active' && !['pending', 'running', 'streaming'].includes(task.status)) return false
         if (effectiveScopeFilter === 'settled' && !['succeeded', 'failed', 'cancelled'].includes(task.status)) return false
-        if (taskKindFilter && task.title !== taskKindFilter) return false
+        if (taskKindFilter && maskTaskText(task.title) !== taskKindFilter) return false
         return true
       }),
     [activeContexts, effectiveScopeFilter, resolvedTasks, taskKindFilter],
@@ -398,10 +410,15 @@ export function TaskCenter() {
                   <div key={group.key} className="space-y-2">
                     {group.title ? <div className="text-[11px] font-medium text-gray-400">{group.title}</div> : null}
                     {group.tasks.map((task) => {
-                      const tone = taskTone(task)
-                      const elapsed = formatElapsedMs(task.elapsedMs)
-                      const startedAt = formatStartedAt(task.startedAtTs)
+                      const freshness = assessTaskFreshness(task)
+                      const tone = taskTone(task, freshness)
+                      const elapsed = formatTaskElapsedMs(task.elapsedMs)
+                      const startedAt = taskTimeLabel(task.startedAtTs)
+                      const lastUpdateAt = taskTimeLabel(freshness.lastUpdateTs)
                       const highlighted = isTaskHighlighted(task, activeContexts)
+                      /* 渲染咽喉：两个字段都过掩码（审计 §4.4 模式 1 第 5 条） */
+                      const title = maskTaskText(task.title) ?? '后台任务'
+                      const sourceLabel = maskTaskText(task.sourceLabel)
                       return (
                         <div
                           key={task.taskId}
@@ -411,15 +428,25 @@ export function TaskCenter() {
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
-                              <div className="font-medium text-sm truncate">{task.title}</div>
-                              {task.sourceLabel ? <div className="mt-1 text-xs text-gray-500 truncate">{task.sourceLabel}</div> : null}
+                              <div className="font-medium text-sm truncate">{title}</div>
+                              {sourceLabel ? (
+                                <div className="mt-1 text-xs text-gray-500 truncate">{sourceLabel}</div>
+                              ) : null}
                               <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-500">
                                 {highlighted ? <Tag color="blue">当前页面</Tag> : null}
                                 <Tag color={tone.color}>{tone.label}</Tag>
                                 <span>进度 {Math.max(0, Math.min(100, Math.round(task.progress)))}%</span>
-                                {elapsed ? <span>耗时 {elapsed}</span> : null}
+                                {freshness.stale ? null : elapsed ? <span>耗时 {elapsed}</span> : null}
                               </div>
-                              {startedAt ? <div className="mt-1 text-xs text-gray-400">开始于 {startedAt}</div> : null}
+                              {freshness.stale ? (
+                                <div className="mt-1 text-xs text-amber-600">
+                                  {lastUpdateAt ? <div>最后更新于 {lastUpdateAt}</div> : null}
+                                  <div>{TASK_STALE_ADVICE}</div>
+                                </div>
+                              ) : null}
+                              {startedAt && !freshness.stale ? (
+                                <div className="mt-1 text-xs text-gray-400">开始于 {startedAt}</div>
+                              ) : null}
                             </div>
                             <div className="flex flex-col gap-2">
                               {task.onNavigate ? (
@@ -463,11 +490,14 @@ export function TaskCenter() {
                             percent={Math.max(0, Math.min(100, Math.round(task.progress)))}
                             size="small"
                             status={
-                              task.cancelRequested || task.status === 'failed'
-                                ? 'exception'
-                                : task.status === 'succeeded'
-                                  ? 'success'
-                                  : 'active'
+                              freshness.stale
+                                ? /* 陈旧任务不再显示「进行中」的动效条：那会让人觉得后台真的还在跑 */
+                                  'normal'
+                                : task.cancelRequested || task.status === 'failed'
+                                  ? 'exception'
+                                  : task.status === 'succeeded'
+                                    ? 'success'
+                                    : 'active'
                             }
                             showInfo={false}
                             className="mt-2"

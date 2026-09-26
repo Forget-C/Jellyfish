@@ -26,6 +26,7 @@ from app.services.studio.image_task_references import (
     pick_ordered_ref_file_ids,
     resolve_reference_file_ids_and_names_from_linked_items,
     resolve_reference_image_refs_by_file_ids,
+    resolve_reference_refs_with_warnings,
 )
 from app.services.studio.image_task_validation import (
     validate_actor_image,
@@ -154,6 +155,14 @@ async def test_resolve_reference_file_ids_and_names_filters_empty_file_ids():
 
 @pytest.mark.asyncio
 async def test_resolve_reference_image_refs_by_file_ids_returns_data_urls(monkeypatch):
+    # 明确钉成"本地驱动 + 无公网基址"：本机可能出现真的 S3/OSS 配置（例如验收用 .env），
+    # 那种情况下相对 key 会（正确地）解析成公网地址，本用例的"data URL"前提就不成立了。
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "storage_driver", "local", raising=False)
+    monkeypatch.setattr(settings, "s3_bucket_name", None, raising=False)
+    monkeypatch.setattr(settings, "s3_public_base_url", "", raising=False)
+
     file_obj = FileItem(id="file-1", name="sample.png", storage_key="images/sample.png")
     db = _FakeDB(mapping={(FileItem, "file-1"): file_obj})
 
@@ -165,13 +174,52 @@ async def test_resolve_reference_image_refs_by_file_ids_returns_data_urls(monkey
         assert key == "images/sample.png"
         return SimpleNamespace(content_type="image/png")
 
-    monkeypatch.setattr("app.services.studio.image_task_references.storage.download_file", _fake_download_file)
-    monkeypatch.setattr("app.services.studio.image_task_references.storage.get_file_info", _fake_get_file_info)
+    monkeypatch.setattr("app.utils.files.storage.download_file", _fake_download_file)
+    monkeypatch.setattr("app.utils.files.storage.get_file_info", _fake_get_file_info)
 
     refs = await resolve_reference_image_refs_by_file_ids(db, file_ids=["file-1"])
 
     assert len(refs) == 1
     assert refs[0]["image_url"].startswith("data:image/png;base64,")
+
+
+@pytest.mark.asyncio
+async def test_resolve_reference_image_refs_passes_public_url_through_without_download():
+    """storage_key 是公网地址（OSS / 外链）时必须原样返回。
+
+    回归点：以前这条函数不分公网/本地，直接把 ``https://…oss…`` 当相对路径拼到本地
+    存储根目录下（``backend/storage/https:/ai-shortdrama-assets…``），只要镜头绑定了
+    资产图，关键帧生成就 400。
+    """
+    oss_url = "https://ai-shortdrama-assets.oss-cn-beijing.aliyuncs.com/a/b.png"
+    file_obj = FileItem(id="file-oss", name="oss.png", storage_key=oss_url)
+    db = _FakeDB(mapping={(FileItem, "file-oss"): file_obj})
+
+    refs = await resolve_reference_image_refs_by_file_ids(db, file_ids=["file-oss"])
+
+    assert refs == [{"image_url": oss_url}]
+
+
+@pytest.mark.asyncio
+async def test_resolve_reference_refs_with_warnings_skips_broken_file(monkeypatch):
+    """坏掉的 file_id 只降级为 warning，不拖垮整批参考图。"""
+    good = FileItem(id="file-ok", name="ok.png", storage_key="images/ok.png")
+    db = _FakeDB(mapping={(FileItem, "file-ok"): good})  # file-bad 不在库里 → 解析失败
+
+    async def _fake_download_file(*, key: str):
+        return b"png-bytes"
+
+    async def _fake_get_file_info(*, key: str):
+        return SimpleNamespace(content_type="image/png")
+
+    monkeypatch.setattr("app.utils.files.storage.download_file", _fake_download_file)
+    monkeypatch.setattr("app.utils.files.storage.get_file_info", _fake_get_file_info)
+
+    refs, warnings = await resolve_reference_refs_with_warnings(db, file_ids=["file-bad", "file-ok"])
+
+    assert len(refs) == 1
+    assert len(warnings) == 1
+    assert "file-bad" in warnings[0]
 
 
 @pytest.mark.asyncio

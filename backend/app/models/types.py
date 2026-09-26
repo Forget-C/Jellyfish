@@ -23,6 +23,20 @@ class ProjectVisualStyle(str, Enum):
     anime = "动漫"
 
 
+class ProjectStartMode(str, Enum):
+    """项目的生产方式（起点）。
+
+    两种起点最终汇入同一条生产流程，只是第一步不同：
+
+    - ``script``  从剧本开始：导入/填写剧本 → 拆镜 → 资产准备 → 整集提示词 → 绑定 → 生成/导出；
+    - ``prompts`` 从视频提示词开始：创建后自动建默认章节，直接进「整集视频提示词」看板，
+      导入并确认后按顺序创建/匹配镜头，再继续资产准备或直接进入绑定。
+    """
+
+    script = "script"
+    prompts = "prompts"
+
+
 class ChapterStatus(str, Enum):
     """章节生产状态。"""
 
@@ -37,6 +51,32 @@ class ShotStatus(str, Enum):
     pending = "pending"
     generating = "generating"
     ready = "ready"
+
+
+class ShotVideoPromptDraftStatus(str, Enum):
+    """集级提示词看板的**草稿**状态（服务端草稿存储，与正式字段无关）。
+
+    只有三种落库状态；「未开始」**不落行**（没有草稿行的镜头就是未开始），
+    这样"未开始"和"失败"在数据层不会混淆 —— 读接口会把缺行渲染成 ``pending``。
+    """
+
+    running = "running"  # 已抢占生成中（带租约，超时自动释放）
+    ok = "ok"            # 生成成功，草稿可用
+    failed = "failed"    # 生成失败，带原因
+
+
+class DramaPlanDraftStatus(str, Enum):
+    """剧情方案草稿状态（``drama_plan_drafts.status``）。
+
+    与 :class:`ShotVideoPromptDraftStatus` 有**一处有意偏离**：那个表的「未开始」不落行，
+    而剧情方案的草稿行由**免费的 brief 保存**创建（用户填一半也要能存下来），
+    所以需要 ``none``（空串）表达"行已经有了，但从来没生成过"。
+    """
+
+    none = ""            # 行已存在（brief 已保存），但从未生成过
+    running = "running"  # 已抢占生成中（带租约，超时自动释放）
+    ok = "ok"            # 生成成功，plan 里有归一化后的草稿
+    failed = "failed"    # 生成失败，error 里带原因
 
 
 class ShotCandidateType(str, Enum):
@@ -133,14 +173,22 @@ class ShotFrameType(str, Enum):
 
 
 class FileType(str, Enum):
-    """文件类型（用于素材库与时间线引用）。"""
+    """文件类型（用于素材库与时间线引用）。
+
+    注：``type`` 在库中是 String(16) 列，所以**新增成员不需要改表结构**。
+    """
 
     image = "image"
     video = "video"
+    audio = "audio"
 
 
 class FileUsageKind(str, Enum):
-    """文件在项目业务链上的用途（file_usages.usage_kind）。"""
+    """文件在项目业务链上的用途（file_usages.usage_kind）。
+
+    注：``usage_kind`` 在库中是 ``String(32)`` 列，所以**新增成员不需要改表结构**
+    （与 :class:`FileType` 同一条约定）。
+    """
 
     shot_frame = "shot_frame"
     generated_video = "generated_video"
@@ -149,6 +197,14 @@ class FileUsageKind(str, Enum):
     task_link = "task_link"
     upload = "upload"
     api = "api"
+    #: **资产级声音**：角色 / 场景 / 道具 / 服装 **直接绑定**的一个音频文件。
+    #:
+    #: 需求清单第 6 条：声音改为直接绑定资产，工作室不再有逐镜声音绑定；
+    #: 之后镜头绑定了带声音的资产时，视频生成自动带出这个声音。
+    #:
+    #: 资产引用写在既有的 ``file_usages.source_ref`` 上（形如 ``character:char-1``），
+    #: 因此**不加列、不做迁移**。
+    asset_voice = "asset_voice"
 
 
 class TimelineClipType(str, Enum):

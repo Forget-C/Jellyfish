@@ -4,6 +4,7 @@ import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from '@ant
 import { StudioEntitiesApi } from '../../../../services/studioEntities'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { resolveAssetUrl } from '../utils'
+import { describeAssetDescription, stripAssetNamePrefix } from '../assetDescriptionCopy'
 import { DisplayImageCard } from '../components/DisplayImageCard'
 import { ActorEntityFormModal, type ActorEntityLike } from '../components/ActorEntityFormModal'
 
@@ -135,7 +136,8 @@ export function ActorsTab() {
           {filtered.map((a) => (
             <DisplayImageCard
               key={a.id}
-              title={<div className="truncate">{a.name}</div>}
+              /* 审计 §4.6 模式 1（数据侧）：资产名带 `SCENE_` / `CHAR_` 这类系统前缀，展示层剥离；保存仍用原名 */
+              title={<div className="truncate">{stripAssetNamePrefix(a.name)}</div>}
               imageUrl={resolveAssetUrl(a.thumbnail)}
               imageAlt={a.name}
               extra={
@@ -172,7 +174,10 @@ export function ActorsTab() {
               }
               meta={
                 <div>
-                  {a.description && <div className="text-xs text-gray-600 line-clamp-2">{a.description}</div>}
+                  {/* 审计 §4.6 模式 2：后端自动生成的描述里含英文字段名，展示层转述成中文 */}
+                  {a.description && (
+                    <div className="text-xs text-gray-600 line-clamp-2">{describeAssetDescription(a.description)}</div>
+                  )}
                   <div className="mt-2 flex flex-wrap gap-1">
                     {(a.tags ?? []).slice(0, 6).map((t: string) => (
                       <Tag key={t} className="m-0">

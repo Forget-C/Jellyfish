@@ -9,17 +9,25 @@ import {
   PictureOutlined,
   FileTextOutlined,
   ApiOutlined,
+  CloudSyncOutlined,
+  ThunderboltOutlined,
+  ReadOutlined,
 } from '@ant-design/icons'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { useAppStore } from '../store/useAppStore'
+import { useAppStore, userRoleLabel } from '../store/useAppStore'
 import { useTranslation } from 'react-i18next'
 import { TaskCenter } from '../pages/aiStudio/components/TaskCenter'
 import { TaskRuntimeProvider } from '../pages/aiStudio/components/TaskRuntimeProvider'
+import { RealRunModeBadge } from '../pages/aiStudio/components/RealRunModeBadge'
 
 const { Header, Sider, Content } = Layout
 
 const MainLayout: React.FC = () => {
-  const { t, i18n } = useTranslation('layout')
+  /* `layout` 是默认命名空间（导航 / 用户菜单都取自它）；
+     角色的中文显示名在 `settings` 命名空间里（`roleOptions`），
+     所以这里显式把两个命名空间都挂上，用 `settings:` 前缀取键 —— 避免把
+     「系统管理员」这份中文口径在代码里再手写一份（审计 §4.7 模式 3）。 */
+  const { t, i18n } = useTranslation(['layout', 'settings'])
   const location = useLocation()
   const navigate = useNavigate()
   const { token } = theme.useToken()
@@ -34,9 +42,12 @@ const MainLayout: React.FC = () => {
     if (location.pathname === '/projects' || location.pathname.startsWith('/projects/')) return ['projects']
     if (location.pathname.startsWith('/assets')) return ['assets']
     if (location.pathname.startsWith('/prompts')) return ['prompts']
+    if (location.pathname.startsWith('/prompt-flow')) return ['prompt-flow']
     if (location.pathname.startsWith('/files')) return ['files']
     if (location.pathname.startsWith('/agents')) return ['agents']
     if (location.pathname.startsWith('/models')) return ['models']
+    if (location.pathname.startsWith('/llm-pipeline')) return ['llm-pipeline']
+    if (location.pathname.startsWith('/drama-plan')) return ['drama-plan']
     if (location.pathname.startsWith('/settings')) return ['settings']
     return []
   }, [location.pathname])
@@ -49,9 +60,16 @@ const MainLayout: React.FC = () => {
       projects: '项目列表',
       assets: '资产管理',
       prompts: '提示词模板',
+      'prompt-flow': '提示词导入/交付',
       files: '文件管理',
-      agents: 'Agent管理',
+      /* 审计 §4.7 模式 3：`agents: 'Agent管理'` 里混英文不必要 —— 改中文。
+         ⚠️ 导航名 `'LLM 调试台（开发）'`（下一项 `llm-pipeline`）**不改名**：
+         用户已裁定该页「仅开发可见、阶段 B 不投工、导航入口淡化本轮不改路由」
+         （审计 §9.1 第 9 项），改名属产品命名决策，不在本次治理范围。 */
+      agents: '智能体管理',
       models: '模型管理',
+      'llm-pipeline': 'LLM 调试台（开发）',
+      'drama-plan': '剧情策划',
       settings: t('menu.settings'),
       chapters: '章节管理',
       studio: '分镜工作室',
@@ -59,6 +77,16 @@ const MainLayout: React.FC = () => {
       shots: '分镜',
       editor: '视频剪辑',
       edit: '编辑',
+      /* 资产子路径（审计 §4.6-R20 运行时实测：`/assets/scenes/{id}/edit` 的面包屑里
+         出现了英文段 `scenes` 与 percent-encoded 的内部 ID）。 */
+      actors: '演员',
+      scenes: '场景',
+      props: '道具',
+      costumes: '服装',
+      roles: '角色',
+      images: '图片',
+      videos: '视频',
+      audios: '声音',
     }
     path.forEach((segment, i) => {
       // 特殊：/projects/:projectId/chapters/:chapterId/* 中的 chapterId 段不展示（避免出现“章节”这一层）
@@ -89,7 +117,11 @@ const MainLayout: React.FC = () => {
       if (label === undefined) {
         if (path[0] === 'projects' && i === 1) label = '项目工作台'
         else if (path[2] === 'chapters' && i === 3) label = '章节'
-        else label = segment
+        /* 兜底**禁止回落 URL 段原样**（审计 §4.6-R20 / §7.2 序 4 点名）：
+           `/assets/scenes/{id}/edit` 的 `{id}` 段是 percent-encoded 的内部 ID，
+           未登记的英文段（`actors` / `roles` …）也会原样上屏 —— 两者都是 §2.3 模式 1/2。
+           未登记段一律说「详情」；已登记的路由段在 `pathLabels` 里补中文名。 */
+        else label = '详情'
       }
       items.push({
         key: href,
@@ -116,6 +148,17 @@ const MainLayout: React.FC = () => {
       label: <Link to="/prompts">提示词模板</Link>,
     },
     {
+      key: 'prompt-flow',
+      icon: <CloudSyncOutlined />,
+      label: <Link to="/prompt-flow">提示词导入/交付</Link>,
+    },
+    // 广告剧情流程：商品卖点 → 剧情方案 → 确认落成章节/分镜/资产（进工作台之前的入口）
+    {
+      key: 'drama-plan',
+      icon: <ReadOutlined />,
+      label: <Link to="/drama-plan">剧情策划</Link>,
+    },
+    {
       key: 'models',
       icon: <ApiOutlined />,
       label: <Link to="/models">模型管理</Link>,
@@ -124,6 +167,12 @@ const MainLayout: React.FC = () => {
       key: 'settings',
       icon: <SettingOutlined />,
       label: <Link to="/settings">{t('menu.settings')}</Link>,
+    },
+    // 开发调试入口：LLM 能力已嵌入生产流程的各步骤页面，此项仅供排查用
+    {
+      key: 'llm-pipeline',
+      icon: <ThunderboltOutlined />,
+      label: <Link to="/llm-pipeline">LLM 调试台（开发）</Link>,
     },
   ]
 
@@ -222,6 +271,9 @@ const MainLayout: React.FC = () => {
           </Space>
 
           <Space size="middle">
+            {/* 当前是「演练模式」还是「真实模式」：点开有各出口放行状态与中文开启步骤。
+                演练模式下被守卫拦住的记录也会在这里显示原因与开启办法。 */}
+            <RealRunModeBadge />
             <Select
               size="small"
               value={language}
@@ -248,7 +300,9 @@ const MainLayout: React.FC = () => {
                 <Avatar size={32} icon={<UserOutlined />} />
                 <div className="hidden md:flex flex-col leading-tight">
                   <span className="text-sm font-medium text-gray-800">{user.name}</span>
-                  <span className="text-xs text-gray-500">{user.role}</span>
+                  {/* 角色存的是稳定码（`admin` / `operator` / `guest`），显示走 i18n；
+                      未登记的码给「未知角色」兜底，**绝不把码本身渲到右上角**（审计 §4.7-R24 第 3 条）。 */}
+                  <span className="text-xs text-gray-500">{userRoleLabel(user.role, t)}</span>
                 </div>
               </div>
             </Dropdown>

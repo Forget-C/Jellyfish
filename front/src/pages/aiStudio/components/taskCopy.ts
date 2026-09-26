@@ -1,3 +1,8 @@
+// 任务类型的中文口径统一由 components/enumLabels.ts 提供（禁止各页各写一份）
+import { TASK_KIND, labelFor } from './enumLabels.ts'
+// 时间口径统一由 components/userFacingTime.ts 提供（只读基建，不许各页各写一份）
+import { formatUserFacingTime } from './userFacingTime.ts'
+
 export type TaskCopyPreset = {
   title: string
   runningDescription: string
@@ -30,9 +35,9 @@ export const TASK_COPY = {
   },
   scriptExtract: {
     title: '资产提取',
-    runningDescription: '任务完成后会自动刷新资产与对白候选，无需手动刷新页面。',
+    runningDescription: '任务完成后会自动刷新资产与待确认对白，无需手动刷新页面。',
     cancellingDescription: '已发送取消请求，系统会在当前步骤结束后停止，并在结束后自动刷新页面。',
-    successDescription: '资产提取已完成，候选内容已自动刷新。',
+    successDescription: '资产提取已完成，待确认内容已自动刷新。',
     cancelledDescription: '资产提取已取消。',
     failedDescription: '资产提取失败，请稍后重试。',
     startedMessage: '已开始资产提取',
@@ -193,11 +198,24 @@ export const RELATION_TYPE_LABEL_MAP: Record<string, string> = {
   shot_frame_image: '分镜图片',
 }
 
+/**
+ * 任务类型 → 中文标题。
+ *
+ * 审计 §4.4 模式 3：旧兜底 `taskKind.split('_').join(' ')` 会把**未登记的 kind 拼成英文**
+ * 上屏（运行时实测 `video` → 「video」）。现在改走全仓唯一的 `TASK_KIND` 映射表，
+ * 未登记一律给中文兜底「后台任务」，绝不回显原值。
+ */
 export function resolveTaskTitle(taskKind?: string | null): string {
-  if (!taskKind) return '后台任务'
-  return TASK_KIND_TITLE_MAP[taskKind] ?? taskKind.split('_').join(' ')
+  return labelFor(TASK_KIND, taskKind)
 }
 
+/**
+ * 任务来源标签（业务名）。
+ *
+ * 审计 §6.1「任务号一律进技术详情，主区不得出现」：这里原来在拿不到业务名时
+ * **回落渲染 `relationEntityId`**（内部 ID），等于把 UUID 当名称端给用户。
+ * 现在取不到业务名时只说「名称读取中」，任何情况下不落实体 ID。
+ */
 export function resolveTaskSourceLabel(
   relationType?: string | null,
   relationEntityId?: string | null,
@@ -205,5 +223,121 @@ export function resolveTaskSourceLabel(
   if (!relationType) return null
   const label = RELATION_TYPE_LABEL_MAP[relationType] ?? '关联对象'
   if (!relationEntityId) return label
-  return `${label}：${relationEntityId}`
+  return `${label}：名称读取中`
+}
+
+/**
+ * 关联类型 → 中文业务名；**未登记一律给「关联对象」**，绝不回显 `actor_image` 这类原值。
+ *
+ * 为什么单独抽出来：`taskCenterMeta.ts` 的异常分支（取实体详情失败）会把 `relation_type`
+ * 原样拼进主区文案 `「${relationType}：名称读取中」`——那是审计 §2.3 模式 3
+ * （英文枚举原值直渲），与 §4.4 模式 1 条目的建议口径（「演员：名称读取中」）冲突。
+ * 两个文件必须用同一份兜底，所以定义在这里。
+ */
+export function resolveRelationTypeLabel(relationType?: string | null): string {
+  const key = String(relationType ?? '').trim()
+  if (!key) return '关联对象'
+  return RELATION_TYPE_LABEL_MAP[key] ?? '关联对象'
+}
+
+/* ------------------------------------------------------------ 时间的统一口径 */
+
+/**
+ * 后台时间戳（秒）→ 主区中文时间。
+ *
+ * 审计 §8.1 要求「任务时间列 / 通知时间」这类高发点必须过 `userFacingTime` 的唯一实现
+ * （`formatUserFacingTime`），不允许在渲染点各写一份 `Intl.DateTimeFormat`：
+ * 那样既有口径分叉，又可能在某个分支漏掉机器时间串（ISO / `T` / `Z`）直渲。
+ *
+ * 空值 / 非法值返回 `null`，由调用方决定是整行隐藏还是给「—」。
+ */
+export function taskTimeLabel(tsSeconds?: number | null): string | null {
+  if (typeof tsSeconds !== 'number' || !Number.isFinite(tsSeconds) || tsSeconds <= 0) return null
+  return formatUserFacingTime(new Date(tsSeconds * 1000).toISOString())
+}
+
+/**
+ * 任务耗时 → 中文（秒 / 分 / 小时）。
+ *
+ * 原来 `TaskCenter.tsx` 与 `taskNotificationHelpers.tsx` 各有一份**逐字相同**的私有实现
+ * （审计 §3.5「同一出口两套口径」的同类问题），这里收敛成一处。
+ */
+export function formatTaskElapsedMs(elapsedMs?: number | null): string | null {
+  if (elapsedMs === null || elapsedMs === undefined || elapsedMs < 0) return null
+  const totalSeconds = Math.floor(elapsedMs / 1000)
+  if (totalSeconds < 60) return `${totalSeconds} 秒`
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  if (minutes < 60) return seconds > 0 ? `${minutes} 分 ${seconds} 秒` : `${minutes} 分`
+  const hours = Math.floor(minutes / 60)
+  const remainMinutes = minutes % 60
+  return remainMinutes > 0 ? `${hours} 小时 ${remainMinutes} 分` : `${hours} 小时`
+}
+
+/* -------------------------------------------------------- 陈旧任务的口径（R16） */
+
+/**
+ * 任务多久没有任何更新就算「状态未知」（小时）。
+ *
+ * 依据：真实出图 / 出视频 / 文本生成最多几分钟；后端任务表 `updated_at` 在每次
+ * 进度或状态变更时刷新（`core/task_manager/stores.py`），所以「6 小时没更新」
+ * 已经远超任何正常情况。
+ */
+export const TASK_STALE_AFTER_HOURS = 6
+
+/** 后端任务状态里「还在跑」的那几个（机器值，只用于判定，不上屏）。 */
+const ACTIVE_TASK_STATUS = new Set(['pending', 'running', 'streaming'])
+
+/** 陈旧任务的**主区状态文案**（审计 §4.4 R16 的固定模板）。 */
+export const TASK_STALE_STATUS_LABEL = `状态未知（超过 ${TASK_STALE_AFTER_HOURS} 小时未更新）`
+
+/**
+ * 陈旧任务的**建议动作**。
+ *
+ * ⚠️ 这里**刻意不提供「标记为已失效」按钮**：已核对后端
+ * `api/v1/routes/film/task_status.py`，任务相关写接口只有
+ * `POST /tasks/{task_id}/cancel`（取消）与 `PATCH /task-links/adopt`（采用状态），
+ * **没有**「把陈旧任务标记为失效」的接口。审计 R16 要求「给动作」，
+ * 但凭空造一个前端按钮会点出 404 —— 所以按用户口径改成如实的中文说明，
+ * 并把缺的接口登记为「待后端支持」（见本批报告）。
+ */
+export const TASK_STALE_ADVICE =
+  '这条任务看起来已经中断：可以点「取消」把它结束。当前版本还不支持手动标记为「已失效」。'
+
+export type TaskFreshnessInput = {
+  status?: string | null
+  cancelRequested?: boolean | null
+  /** 后端 `updated_at_ts`（最后一次状态 / 进度变更） */
+  updatedAtTs?: number | null
+  startedAtTs?: number | null
+  finishedAtTs?: number | null
+}
+
+export type TaskFreshness = {
+  /** 是否已判断为「状态未知」 */
+  stale: boolean
+  /** 最后更新（秒）；`null` = 后端没给时间，此时不下「状态未知」的结论 */
+  lastUpdateTs: number | null
+}
+
+/**
+ * 判定一条「还在跑」的任务是不是**其实早就断了**（审计 §4.4 R16）。
+ *
+ * 运行时实测：任务中心里有 4 条 `running` 任务分别显示
+ * 「耗时 2492 小时 30 分」「耗时 800 小时 30 分」「耗时 209 小时 42 分」却仍标「运行中」——
+ * 这不是 6 类泄漏模式，而是**误导**：用户会以为后台真的还在跑。
+ *
+ * 判定只依赖后端给的时间戳；没有时间戳时**不猜**（返回 `stale: false`）。
+ */
+export function assessTaskFreshness(task: TaskFreshnessInput, nowMs: number = Date.now()): TaskFreshness {
+  const lastUpdateTs = task.updatedAtTs ?? task.startedAtTs ?? null
+  const stillActive =
+    !task.cancelRequested &&
+    !task.finishedAtTs &&
+    ACTIVE_TASK_STATUS.has(String(task.status ?? '').trim())
+  if (!stillActive || typeof lastUpdateTs !== 'number' || !Number.isFinite(lastUpdateTs)) {
+    return { stale: false, lastUpdateTs }
+  }
+  const ageHours = (nowMs / 1000 - lastUpdateTs) / 3600
+  return { stale: ageHours > TASK_STALE_AFTER_HOURS, lastUpdateTs }
 }

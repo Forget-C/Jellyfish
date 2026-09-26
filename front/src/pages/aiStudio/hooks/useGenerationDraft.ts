@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 
 export type GenerationDraftState =
   | 'idle'
@@ -56,6 +56,15 @@ export function useGenerationDraft<TBase, TContext, TDerived, TSubmitResult = vo
   const [derived, setDerivedState] = useState<TDerived | null>(null)
   const [state, setState] = useState<GenerationDraftState>('idle')
   const [error, setError] = useState<string | null>(null)
+  /**
+   * 最近一次失败的原文。
+   *
+   * 为什么要有它：`submitNow` 以前在 derive/submit 失败时 **返回 null**，
+   * 调用方拿 null 去读 `.url` / `.taskId`，就只能显示
+   * 「出图未返回可用图片地址（status=unknown）」这类空话，真实原因（例如缺项目 ID）被吞掉。
+   * 现在 submitNow 一律抛出带原文的异常，这个 ref 负责把「上游为什么失败」带出来。
+   */
+  const lastErrorRef = useRef<string>('')
   const [lastDerivedAt, setLastDerivedAt] = useState<number | null>(null)
 
   const setBase = useCallback((updater: Updater<TBase>) => {
@@ -119,10 +128,13 @@ export function useGenerationDraft<TBase, TContext, TDerived, TSubmitResult = vo
       setDerivedState(next)
       setLastDerivedAt(Date.now())
       setState('derived')
+      lastErrorRef.current = ''
       return next
     } catch (err) {
+      const message = err instanceof Error ? err.message : 'derive failed'
+      lastErrorRef.current = message
       setState('error')
-      setError(err instanceof Error ? err.message : 'derive failed')
+      setError(message)
       return null
     }
   }, [base, context, derive])
@@ -135,19 +147,27 @@ export function useGenerationDraft<TBase, TContext, TDerived, TSubmitResult = vo
       (state !== 'derived' && state !== 'submitted')
     if (needsDerive) {
       nextDerived = await deriveNow()
-      if (!nextDerived) return null
+      if (!nextDerived) {
+        // 生成前的准备步骤失败：把真实原因抛出去，绝不静默返回 null。
+        throw new Error(lastErrorRef.current || '生成前的准备步骤失败（未能生成提交内容）')
+      }
     }
     const stableDerived = nextDerived as TDerived
     setState('submitting')
     setError(null)
     try {
       const result = await submit({ base, context, derived: stableDerived })
+      lastErrorRef.current = ''
       setState('submitted')
       return result
     } catch (err) {
+      // 关键修复：以前这里 catch 之后返回 null，调用方只能显示 status=unknown。
+      // 现在把原文同时写进 error 状态并抛出，页面显示的就是真实原因。
+      const message = err instanceof Error ? err.message : 'submit failed'
+      lastErrorRef.current = message
       setState('error')
-      setError(err instanceof Error ? err.message : 'submit failed')
-      return null
+      setError(message)
+      throw err instanceof Error ? err : new Error(message)
     }
   }, [base, context, deriveNow, derived, submit])
 

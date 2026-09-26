@@ -14,8 +14,11 @@ from app.models.studio import (
     CharacterImage,
     Costume,
     CostumeImage,
+    Product,
+    ProductImage,
     ProjectActorLink,
     ProjectCostumeLink,
+    ProjectProductLink,
     ProjectPropLink,
     ProjectSceneLink,
     Prop,
@@ -30,6 +33,7 @@ from app.schemas.studio.assets import (
     AssetUpdate,
     CharacterImageRead,
     CostumeImageRead,
+    ProductImageRead,
     PropImageRead,
     SceneImageRead,
 )
@@ -49,6 +53,7 @@ LINK_MODEL_BY_ENTITY: dict[str, tuple[type, str]] = {
     "scene": (ProjectSceneLink, "scene_id"),
     "prop": (ProjectPropLink, "prop_id"),
     "costume": (ProjectCostumeLink, "costume_id"),
+    "product": (ProjectProductLink, "product_id"),
 }
 
 
@@ -67,10 +72,12 @@ class EntitySpec:
 
 def normalize_entity_type(entity_type: str) -> str:
     value = entity_type.strip().lower()
-    if value not in {"actor", "character", "scene", "prop", "costume"}:
+    if value not in {"actor", "character", "scene", "prop", "costume", "product"}:
         raise HTTPException(
             status_code=400,
-            detail=invalid_choice("entity_type", ["actor", "character", "scene", "prop", "costume"]),
+            detail=invalid_choice(
+                "entity_type", ["actor", "character", "scene", "prop", "costume", "product"]
+            ),
         )
     return value
 
@@ -122,6 +129,18 @@ def entity_spec(entity_type: str) -> EntitySpec:
             create_model=AssetCreate,
             update_model=AssetUpdate,
             image_read_model=PropImageRead,
+            image_create_model=AssetImageCreate,
+            image_update_model=AssetImageUpdate,
+        )
+    if entity_type_norm == "product":
+        return EntitySpec(
+            model=Product,
+            image_model=ProductImage,
+            id_field="product_id",
+            read_model=None,
+            create_model=AssetCreate,
+            update_model=AssetUpdate,
+            image_read_model=ProductImageRead,
             image_create_model=AssetImageCreate,
             image_update_model=AssetImageUpdate,
         )

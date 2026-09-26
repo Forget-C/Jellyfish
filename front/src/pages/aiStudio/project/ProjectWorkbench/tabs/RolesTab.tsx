@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Card, Button, Empty, Modal, Input, message, Space, Select, Pagination } from 'antd'
-import { EditOutlined, PlusOutlined, UserOutlined } from '@ant-design/icons'
+import { EditOutlined, PlusOutlined, SearchOutlined, UserOutlined } from '@ant-design/icons'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   StudioProjectsService,
@@ -73,6 +73,13 @@ export function RolesTab() {
   const [formCostumeId, setFormCostumeId] = useState<string | undefined>(undefined)
 
   const [projectActorLinks, setProjectActorLinks] = useState<ProjectActorLinkRead[]>([])
+  /** 全局演员库选择器（不要求用户先去「项目演员」页关联再回来） */
+  const [actorPickerOpen, setActorPickerOpen] = useState(false)
+  const [actorKeyword, setActorKeyword] = useState('')
+  const [actorPage, setActorPage] = useState(1)
+  const [actorLibrary, setActorLibrary] = useState<ActorLike[]>([])
+  const [actorLibraryTotal, setActorLibraryTotal] = useState(0)
+  const [actorLibraryLoading, setActorLibraryLoading] = useState(false)
   const [projectCostumeLinks, setProjectCostumeLinks] = useState<ProjectCostumeLinkRead[]>([])
   const [actorsById, setActorsById] = useState<Record<string, ActorLike>>({})
   const [costumesById, setCostumesById] = useState<Record<string, CostumeLike>>({})
@@ -299,6 +306,48 @@ export function RolesTab() {
     setPage(1)
   }, [roleCards.length])
 
+  /** 演员库每页条数（后端 page_size 上限 100，这里用 6 一屏便于挑图）。 */
+  const ACTOR_LIBRARY_PAGE_SIZE = 6
+
+  const loadActorLibrary = useCallback(
+    async (keyword: string, page: number) => {
+      setActorLibraryLoading(true)
+      try {
+        const res = await StudioEntitiesApi.list('actor', {
+          q: keyword.trim() || null,
+          page,
+          pageSize: ACTOR_LIBRARY_PAGE_SIZE,
+        })
+        setActorLibrary((res.data?.items ?? []) as ActorLike[])
+        setActorLibraryTotal(Number(res.data?.pagination?.total ?? 0))
+      } catch {
+        message.error('演员库加载失败')
+        setActorLibrary([])
+        setActorLibraryTotal(0)
+      } finally {
+        setActorLibraryLoading(false)
+      }
+    },
+    []
+  )
+
+  useEffect(() => {
+    if (!actorPickerOpen) return
+    void loadActorLibrary(actorKeyword, actorPage)
+  }, [actorPickerOpen, actorKeyword, actorPage, loadActorLibrary])
+
+  /**
+   * 选中演员：**只写进表单**，不在这里建立项目关联。
+   *
+   * 为什么：用户可能只是看看、或随后取消创建——这时不该在项目里留下关联行。
+   * 关联由后端在创建/更新角色的**同一事务**内幂等确保（见
+   * `services/studio/entity_crud.py::_ensure_character_actor_link`）。
+   */
+  const pickActorFromLibrary = useCallback((actor: ActorLike) => {
+    setFormActorId(actor.id)
+    setActorPickerOpen(false)
+  }, [])
+
   const actorOptions = useMemo(() => {
     return projectActorLinks.map((l) => {
       const a = actorsById[l.actor_id]
@@ -469,10 +518,15 @@ export function RolesTab() {
             />
           </div>
           <div>
-            <div className="text-sm text-gray-600 mb-1">关联演员（必填）</div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="text-sm text-gray-600">关联演员（必填）</div>
+              <Button size="small" icon={<SearchOutlined />} onClick={() => setActorPickerOpen(true)}>
+                从演员库选择
+              </Button>
+            </div>
             <Select
-              className="w-full"
-              placeholder="选择当前项目已关联的演员"
+              className="w-full mt-1"
+              placeholder="选择已关联的演员，或点右上角「从演员库选择」"
               loading={loadingLinks}
               value={formActorId}
               onChange={(v) => setFormActorId(v)}
@@ -481,6 +535,10 @@ export function RolesTab() {
               optionFilterProp="searchLabel"
               filterOption={(input, option) => String(option?.searchLabel ?? '').toLowerCase().includes(input.toLowerCase())}
             />
+            <div className="mt-1 text-[11px] text-gray-400">
+              「项目角色」与「关联演员」是两种对象：角色名称、描述、服装属于本项目；
+              演员来自全局演员库，其定版图与文件被直接复用（不复制文件、不新建另一套演员数据）。
+            </div>
           </div>
           <div>
             <div className="text-sm text-gray-600 mb-1">关联服装（可选）</div>
@@ -495,6 +553,78 @@ export function RolesTab() {
               showSearch
               optionFilterProp="searchLabel"
               filterOption={(input, option) => String(option?.searchLabel ?? '').toLowerCase().includes(input.toLowerCase())}
+            />
+          </div>
+        </div>
+      </Modal>
+
+      {/* 全局演员库选择器：支持服务端搜索、分页与缩略图；选中即写进表单并确保项目关联 */}
+      <Modal
+        title="从演员库选择演员"
+        open={actorPickerOpen}
+        onCancel={() => setActorPickerOpen(false)}
+        footer={null}
+        width={680}
+        // 角色弹窗也是 Modal：不抬高层级会被它盖住，导致「选择」点不动（真实用户同样受影响）
+        zIndex={1200}
+      >
+        <div className="space-y-3">
+          <div className="text-[11px] text-gray-500">
+            演员来自全局演员库（可跨项目复用）；选中后角色会引用该演员的定版图与文件，
+            角色的名称 / 描述 / 服装仍然是本项目自己的字段。
+          </div>
+          <Input.Search
+            allowClear
+            placeholder="搜索演员名称 / 描述"
+            value={actorKeyword}
+            onChange={(e) => {
+              setActorKeyword(e.target.value)
+              setActorPage(1)
+            }}
+            onSearch={(value) => {
+              setActorKeyword(value)
+              setActorPage(1)
+            }}
+            data-testid="actor-library-search"
+          />
+          <div className="grid grid-cols-2 gap-2" data-testid="actor-library-list">
+            {actorLibrary.map((actor) => {
+              const url = resolveAssetUrl(actor.thumbnail)
+              const linked = projectActorLinks.some((link) => link.actor_id === actor.id)
+              return (
+                <div key={actor.id} className="flex items-center gap-2 rounded border border-gray-200 p-2">
+                  {url ? (
+                    <img src={url} alt="" className="w-10 h-10 rounded object-cover shrink-0" />
+                  ) : (
+                    <div className="w-10 h-10 rounded bg-gray-100 flex items-center justify-center text-gray-400 shrink-0">
+                      <UserOutlined />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm">{actor.name}</div>
+                    <div className="truncate text-[11px] text-gray-400">
+                      {linked ? '已在本项目' : '尚未关联本项目'}
+                    </div>
+                  </div>
+                  <Button size="small" type="primary" onClick={() => void pickActorFromLibrary(actor)}>
+                    选择
+                  </Button>
+                </div>
+              )
+            })}
+            {!actorLibraryLoading && actorLibrary.length === 0 ? (
+              <div className="col-span-2 py-6 text-center text-xs text-gray-400">没有匹配的演员</div>
+            ) : null}
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-gray-400">{`共 ${actorLibraryTotal} 位演员`}</span>
+            <Pagination
+              size="small"
+              current={actorPage}
+              total={actorLibraryTotal}
+              pageSize={ACTOR_LIBRARY_PAGE_SIZE}
+              hideOnSinglePage
+              onChange={(page) => setActorPage(page)}
             />
           </div>
         </div>

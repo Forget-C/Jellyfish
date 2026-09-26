@@ -1,16 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { formatUserFacingTime } from '../components/userFacingTime'
 import {
   Card,
   Input,
   Button,
   Progress,
+  Radio,
   Statistic,
   Row,
   Col,
   Modal,
   Form,
   Select,
-  InputNumber,
+  AutoComplete,
   Switch,
   message,
   Space,
@@ -29,16 +31,24 @@ import {
 import { useNavigate } from 'react-router-dom'
 import { chapters as mockChapters, projects as mockProjects, type Project } from '../../../mocks/data'
 import { StudioChaptersService, StudioProjectsService } from '../../../services/generated'
-import type { ChapterRead, ProjectRead, ProjectStyle } from '../../../services/generated'
+import type { ChapterRead, ProjectRead } from '../../../services/generated'
 import {
   ProjectVisualStyleAndStyleFields,
   type ProjectVisualStyleChoice,
 } from './ProjectVisualStyleAndStyleFields'
 import { useProjectStyleOptions } from './useProjectStyleOptions'
 import { getChapterPreparationState } from './ProjectWorkbench/chapterPreparation'
-import { ensureHasShotsBeforeShooting } from './ProjectWorkbench/ensureHasShotsBeforeShooting'
-import { getChapterShotsPath, getChapterStudioPath } from './ProjectWorkbench/routes'
+import { getChapterShotsPath } from './ProjectWorkbench/routes'
 import { loadProjectFlowStatsForChapters, type ProjectFlowStats } from './ProjectWorkbench/projectFlowStats'
+import {
+  OVERALL_STYLE_PRESETS,
+  resolveProjectVideoRatio,
+  START_MODE_OPTIONS,
+  resolveLandingStep,
+  resolveOverallStyleFields,
+  type OverallStyleKey,
+  type ProjectStartModeChoice,
+} from './projectStartPresets'
 
 type ViewMode = 'grid' | 'compact' | 'large'
 type FilterTab = 'all' | 'editRaw' | 'extractShots' | 'prepareShots' | 'generating' | 'ready'
@@ -59,6 +69,77 @@ type ProjectView = Project & {
   defaultVideoRatio?: string | null
 }
 
+/**
+ * 项目卡片上的时间显示。
+ *
+ * 只显示后端下发的真实创建时间（`created_at`）；拿不到就显示「—」，
+ * 绝不用 `new Date()` 兜底——那正是「每个项目的时间都等于打开页面那一刻」的来源。
+ *
+ * 阶段 B 第 2 批把实现搬到共享模块 `components/userFacingTime.ts`：
+ * 工作台步骤 1 的「更新时间」列原来直接渲 ISO 串（审计 §4.2 模式 3），
+ * 修法要求「复用这份既有实现」，所以这里改成从**唯一**实现取，
+ * 全仓不再有第二份 `YYYY-MM-DD HH:mm` 拼装。
+ */
+const formatProjectTime = formatUserFacingTime
+
+/**
+ * 「孤立项目 <内部编号>（迁移）」形态的项目名。
+ *
+ * 迁移时有些项目按内部编号自动生成了名字（例：`孤立项目 script_9c3aafd08a（迁移）`），
+ * 这种名字本身就是一个内部标识，直接渲染等于把内部编号端给用户看。
+ * 判定要求编号里含**连续 8 位以上十六进制字符**，这样用户自己起的
+ * 「孤立项目 1」之类不会被误判成自动生成的。
+ */
+const ORPHAN_PROJECT_NAME_PATTERN =
+  /^孤立项目[\s\u3000]+[\w-]*[0-9a-f]{8,}[\w-]*[\s\u3000]*(（迁移）|\(迁移\))?$/i
+
+/**
+ * 项目名的展示口径：只在名字形如「孤立项目 <内部编号>（迁移）」时才折叠成
+ * 「未命名项目（迁移）」，其余名字**一个字符都不改**地原样返回。
+ *
+ * 为什么放在展示层：改名要经过运营确认，前端不该写回库；但主区也不该出现内部编号，
+ * 所以在渲染前折叠。原名仍留在数据层（`ProjectView.name`），技术详情层需要时可直接取用。
+ *
+ * 导出为纯函数（只吃字符串、只吐字符串，不碰状态、不发请求），便于单独单测形态判断。
+ */
+export function displayProjectName(name: string): string {
+  const source = typeof name === 'string' ? name : ''
+  const matched = ORPHAN_PROJECT_NAME_PATTERN.exec(source.trim())
+  if (!matched) return name
+  return matched[1] ? '未命名项目（迁移）' : '未命名项目'
+}
+
+/**
+ * 排序下拉的中文文案。
+ *
+ * 为什么必须是一张「全集」映射表：`SortKey` 是内部键，而下拉的 `value` 用的就是 `sortKey`。
+ * 以前选项里**没有** `createdAt` 这一项，默认值却是 `'createdAt'` —— antd 在
+ * 「当前值在 options 里找不到」时会把 value 原样当文案渲染，于是「排序」后面直接跟着
+ * 那个内部键的英文原文（首屏可见）。用 `Record<SortKey, string>` 收口后，
+ * 任何一个合法键都必然有中文文案，内部键不可能再上屏。
+ *
+ * TODO(阶段B①): 迁移到 enumLabels.ts（SortKey）
+ */
+const SORT_KEY_LABELS: Record<SortKey, string> = {
+  updatedAt: '最近更新',
+  createdAt: '创建时间',
+  name: '名称 A-Z',
+  chapters: '章节数量',
+}
+
+/** 排序方向的业务说法：按当前排序键给出「新→旧」这类中文，不显示内部键，也不用裸箭头。 */
+const SORT_DIRECTION_LABELS: Record<SortKey, { asc: string; desc: string }> = {
+  updatedAt: { asc: '旧→新', desc: '新→旧' },
+  createdAt: { asc: '旧→新', desc: '新→旧' },
+  name: { asc: 'A→Z', desc: 'Z→A' },
+  chapters: { asc: '少→多', desc: '多→少' },
+}
+
+/** 下拉可选项：从上面的中文文案表推导，保证「有键必有中文文案」。 */
+const SORT_SELECT_OPTIONS: { label: string; value: SortKey }[] = (
+  Object.keys(SORT_KEY_LABELS) as SortKey[]
+).map((key) => ({ label: SORT_KEY_LABELS[key], value: key }))
+
 const ProjectLobby: React.FC = () => {
   const navigate = useNavigate()
   const [projects, setProjects] = useState<ProjectView[]>([])
@@ -66,7 +147,7 @@ const ProjectLobby: React.FC = () => {
   const [search, setSearch] = useState('')
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const [filterTab, setFilterTab] = useState<FilterTab>('all')
-  const [sortKey, setSortKey] = useState<SortKey>('updatedAt')
+  const [sortKey, setSortKey] = useState<SortKey>('createdAt')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [multiSelectMode, setMultiSelectMode] = useState(false)
@@ -93,10 +174,15 @@ const ProjectLobby: React.FC = () => {
       return typeof v === 'number' && Number.isFinite(v) ? v : 0
     }
 
-    const updatedAt =
-      (typeof stats.updated_at === 'string' && stats.updated_at) ||
-      (typeof stats.updatedAt === 'string' && stats.updatedAt) ||
-      new Date().toISOString()
+    /**
+     * 时间戳只认后端下发的真实值。
+     *
+     * 历史问题：这里原来读 `stats.updated_at`，后端从不写 stats，于是所有项目都回退成
+     * `new Date().toISOString()`——列表上每个项目的时间都等于「打开页面的那一刻」，
+     * 「最近更新」排序因此完全失效，卡片上显示的也是这个假时间。
+     */
+    const createdAt = typeof p.created_at === 'string' ? p.created_at : ''
+    const updatedAt = (typeof p.updated_at === 'string' && p.updated_at) || createdAt
 
     return {
       id: p.id,
@@ -112,6 +198,7 @@ const ProjectLobby: React.FC = () => {
         scenes: getNum('scenes'),
         props: getNum('props'),
       },
+      createdAt,
       updatedAt,
       visualStyle: (p.visual_style as ProjectVisualStyleChoice | undefined) ?? '现实',
       defaultVideoRatio: p.default_video_ratio ?? null,
@@ -131,9 +218,16 @@ const ProjectLobby: React.FC = () => {
       if (useMock) {
         setProjects(mockProjects)
       } else {
+        /**
+         * 一次拉满一页（100 条），不再写死 `pageSize: 10`。
+         *
+         * 为什么必须改：这个列表页**没有翻页控件、也没有服务端搜索**，写死 10 条意味着
+         * 第 11 个项目之后在项目列表里根本点不到 —— 新建完项目再回列表就"找不到自己的项目"。
+         * 列表页下方本来就靠 `filteredSorted` 做本地筛选/排序，条数放宽不会改变交互。
+         */
         const res = await StudioProjectsService.listProjectsApiV1StudioProjectsGet({
           page: 1,
-          pageSize: 10,
+          pageSize: 100,
         })
         const items = res.data?.items ?? []
         setProjects(items.map(toUIProject))
@@ -322,8 +416,10 @@ const ProjectLobby: React.FC = () => {
         av = a.stats.chapters
         bv = b.stats.chapters
       } else if (sortKey === 'createdAt') {
-        av = a.id
-        bv = b.id
+        // 真实创建时间：后端 created_at（ISO 字符串，可直接字典序比较）。
+        // 以前这里比较的是 a.id / b.id，跟时间毫无关系。
+        av = a.createdAt ?? ''
+        bv = b.createdAt ?? ''
       } else {
         av = a.updatedAt
         bv = b.updatedAt
@@ -376,9 +472,10 @@ const ProjectLobby: React.FC = () => {
     form.setFieldsValue({
       visual_style: defaultVisual,
       style: defaultStyle,
-      seed: Math.floor(Math.random() * 99999),
       unifyStyle: true,
       default_video_ratio: defaultVideoRatio,
+      startMode: 'script',
+      overallStyle: 'live_portrait',
     })
     setCreateModalOpen(true)
   }
@@ -388,32 +485,42 @@ const ProjectLobby: React.FC = () => {
     description?: string
     style: string
     visual_style: ProjectVisualStyleChoice
-    seed: number
     unifyStyle: boolean
     default_video_ratio?: string
+    startMode: ProjectStartModeChoice
+    overallStyle: OverallStyleKey
   }) => {
     try {
       const createdId = newProjectId()
+      const startMode: ProjectStartModeChoice = values.startMode ?? 'script'
+      // 「整体风格」预设覆盖三个既有列；选「其他自定义」时用用户自己填的值。
+      const preset = resolveOverallStyleFields(values.overallStyle)
       const res = await StudioProjectsService.createProjectApiV1StudioProjectsPost({
         requestBody: {
           id: createdId,
           name: values.name,
           description: values.description ?? '',
-          style: values.style as ProjectStyle,
-          visual_style: values.visual_style as any,
-          seed: values.seed,
+          style: preset?.style ?? values.style,
+          visual_style: (preset?.visual_style ?? values.visual_style) as any,
           unify_style: values.unifyStyle,
-          default_video_ratio: values.default_video_ratio || null,
+          // 方案 B（2026-09-23）：预设只负责「自动填入默认值」，用户手填的优先
+          default_video_ratio: resolveProjectVideoRatio(values.overallStyle, values.default_video_ratio),
+          start_mode: startMode as any,
           progress: 0,
         },
       })
       const created = res.data
       if (!created) throw new Error('empty project')
       const ui = toUIProject(created)
-      message.success('项目创建成功')
+      message.success(
+        startMode === 'prompts'
+          ? '项目创建成功：已自动创建默认章节，正在进入整集视频提示词看板'
+          : '项目创建成功',
+      )
       setCreateModalOpen(false)
       setProjects((prev) => (Array.isArray(prev) ? [...prev, ui] : [ui]))
-      navigate(`/projects/${ui.id}`)
+      // 两种起点汇入同一条生产流程，只是第一步不同
+      navigate(`/projects/${ui.id}?step=${resolveLandingStep(startMode)}`)
     } catch {
       message.error('创建失败')
     }
@@ -427,7 +534,6 @@ const ProjectLobby: React.FC = () => {
       description: p.description,
       style: p.style,
       visual_style: p.visualStyle ?? '现实',
-      seed: p.seed,
       unifyStyle: p.unifyStyle,
       default_video_ratio: p.defaultVideoRatio ?? undefined,
     })
@@ -439,7 +545,6 @@ const ProjectLobby: React.FC = () => {
     description?: string
     style: string
     visual_style: ProjectVisualStyleChoice
-    seed: number
     unifyStyle: boolean
     default_video_ratio?: string
   }) => {
@@ -450,9 +555,8 @@ const ProjectLobby: React.FC = () => {
         requestBody: {
           name: values.name,
           description: values.description ?? '',
-          style: values.style as ProjectStyle,
+          style: values.style,
           visual_style: values.visual_style as any,
-          seed: values.seed,
           unify_style: values.unifyStyle,
           default_video_ratio: values.default_video_ratio || null,
         },
@@ -509,16 +613,13 @@ const ProjectLobby: React.FC = () => {
       navigate(getChapterShotsPath(project.id, stageSummary.chapterId))
       return
     }
-    if (stageSummary.key === 'prepare_shots') {
-      navigate(getChapterStudioPath(project.id, stageSummary.chapterId))
+    if (stageSummary.key === 'prepare_shots' || stageSummary.key === 'shoot') {
+      // 有分镜之后不再从列表直接跳进分镜工作室：交给项目工作台，
+      // 由 `resolveProjectStep` 判定当前应该落在哪一步（资产提取 / 图片准备 / …）。
+      navigate(`/projects/${project.id}`)
       return
     }
-    void ensureHasShotsBeforeShooting({
-      projectId: project.id,
-      chapterId: stageSummary.chapterId,
-      storyboardCount: stageSummary.storyboardCount,
-      navigate,
-    })
+    navigate(`/projects/${project.id}`)
   }
 
   /**
@@ -584,10 +685,10 @@ const ProjectLobby: React.FC = () => {
             <div className="min-w-0">
               <div className="text-xs text-gray-500 mb-0.5">{p.style}</div>
               <div className={`${isCompact ? 'text-sm' : 'text-base'} font-semibold truncate text-gray-900`}>
-                {p.name}
+                {displayProjectName(p.name)}
               </div>
               <div className="text-[10px] text-gray-500 truncate">
-                {p.updatedAt}
+                {formatProjectTime(p.createdAt)}
               </div>
             </div>
             <div className="flex flex-col items-end gap-2">
@@ -680,7 +781,7 @@ const ProjectLobby: React.FC = () => {
         )}
 
         <div className={`mt-1 border-t border-gray-100 flex items-center justify-between gap-1 ${isCompact ? 'pt-1' : 'pt-1.5'}`}>
-          <span className="text-[11px] text-gray-500 truncate">{p.updatedAt}</span>
+          <span className="text-[11px] text-gray-500 truncate">{formatProjectTime(p.createdAt)}</span>
           <Space size="small" onClick={(e) => e.stopPropagation()}>
             <Button
               type="primary"
@@ -792,19 +893,16 @@ const ProjectLobby: React.FC = () => {
                 value={sortKey}
                 style={{ width: 128 }}
                 onChange={(value: SortKey) => setSortKey(value)}
-                options={[
-                  { label: '最近更新', value: 'updatedAt' },
-                  { label: '名称 A-Z', value: 'name' },
-                  { label: '章节数量', value: 'chapters' },
-                ]}
+                options={SORT_SELECT_OPTIONS}
               />
               <Button
                 size="small"
                 type="text"
                 className="text-[11px]"
+                title="切换排序方向"
                 onClick={() => setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
               >
-                {sortOrder === 'asc' ? '↑' : '↓'}
+                {SORT_DIRECTION_LABELS[sortKey][sortOrder]}
               </Button>
             </Space>
 
@@ -908,7 +1006,7 @@ const ProjectLobby: React.FC = () => {
                 <div className="space-y-2">
                   <div>
                     <div className="text-[11px] text-gray-500 mb-0.5">项目名称</div>
-                    <div className="font-medium">{selectedProject.name}</div>
+                    <div className="font-medium">{displayProjectName(selectedProject.name)}</div>
                   </div>
                   <div>
                     <div className="text-[11px] text-gray-500 mb-0.5">简介</div>
@@ -918,7 +1016,7 @@ const ProjectLobby: React.FC = () => {
                   </div>
                   <div className="flex items-center justify-between text-[11px] text-gray-500">
                     <span>视频风格：{selectedProject.style}</span>
-                    <span>种子：{selectedProject.seed}</span>
+                    <span>创建：{formatProjectTime(selectedProject.createdAt)}</span>
                   </div>
                   <div>
                     <div className="text-[11px] text-gray-500 mb-0.5">进度</div>
@@ -970,7 +1068,6 @@ const ProjectLobby: React.FC = () => {
               projectStyleOptions.defaultStyleByVisual?.[projectStyleOptions.visualStyles[0]?.value ?? '现实'] ??
               projectStyleOptions.stylesByVisual[projectStyleOptions.visualStyles[0]?.value ?? '现实']?.[0]?.value ??
               '真人都市',
-            seed: Math.floor(Math.random() * 99999),
             unifyStyle: true,
             default_video_ratio: defaultVideoRatio,
           }}
@@ -985,16 +1082,69 @@ const ProjectLobby: React.FC = () => {
           <Form.Item name="description" label="项目简介（选填）">
             <Input.TextArea rows={4} placeholder="项目简介与风格说明，建议 80–120 字" />
           </Form.Item>
-          <ProjectVisualStyleAndStyleFields form={form} options={projectStyleOptions} />
-          <Form.Item
-            name="seed"
-            label="全局种子值"
-            tooltip="固定种子可确保整部短剧视觉调性一致"
-          >
-            <InputNumber min={0} className="w-full" />
+          {/* 第一步：先选生产方式（两种起点最后汇入同一条生产流程） */}
+          <Form.Item name="startMode" label="生产方式" rules={[{ required: true }]}>
+            <Radio.Group className="w-full">
+              <Space direction="vertical" size={4} className="w-full">
+                {START_MODE_OPTIONS.map((option) => (
+                  <Radio key={option.key} value={option.key}>
+                    <span className="text-sm">{option.label}</span>
+                    <span className="ml-2 text-[11px] text-gray-500">{option.description}</span>
+                  </Radio>
+                ))}
+              </Space>
+            </Radio.Group>
           </Form.Item>
-          <Form.Item name="default_video_ratio" label="默认视频比例">
-            <Select allowClear placeholder="未设置时由模型/供应商决定" options={videoRatioOptions} />
+          {/* 第二步：项目整体风格（预设直接写进既有列：视觉风格 + 视频风格 + 画幅） */}
+          <Form.Item name="overallStyle" label="整体风格" rules={[{ required: true }]}>
+            <Radio.Group
+              className="w-full"
+              onChange={(event) => {
+                // 方案 B：选风格 = 把该风格的预设画幅**自动填进**下面的输入框（用户仍可手动改成别的）
+                const key = event.target.value as OverallStyleKey
+                const preset = resolveOverallStyleFields(key)
+                if (preset?.default_video_ratio) {
+                  form.setFieldValue('default_video_ratio', preset.default_video_ratio)
+                }
+              }}
+            >
+              <Space wrap size={6}>
+                {OVERALL_STYLE_PRESETS.map((preset) => (
+                  <Radio.Button key={preset.key} value={preset.key}>
+                    {preset.label}
+                  </Radio.Button>
+                ))}
+              </Space>
+            </Radio.Group>
+          </Form.Item>
+          <Form.Item shouldUpdate noStyle>
+            {() =>
+              form.getFieldValue('overallStyle') === 'custom' ? (
+                <ProjectVisualStyleAndStyleFields form={form} options={projectStyleOptions} />
+              ) : (
+                <div className="mb-3 text-[11px] text-gray-500">
+                  {OVERALL_STYLE_PRESETS.find((p) => p.key === form.getFieldValue('overallStyle'))?.description ??
+                    '选择整体风格后，视觉风格、视频风格与默认画幅会一并写入项目配置。'}
+                  （画幅会按风格自动带入，需要别的比例可以直接改；如需自己指定视觉风格 / 视频风格，请选「其他自定义」）
+                </div>
+              )
+            }
+          </Form.Item>
+          {/*
+            全局种子值暂时隐藏：目前没有任何生成路径消费项目级 seed
+            （图片/视频请求里的 seed 都是单次请求字段，前端也从不传），
+            留着只会让用户以为它能控制全片一致性。数据库字段保留兼容，不做迁移。
+          */}
+          <Form.Item
+            name="default_video_ratio"
+            label="默认视频比例"
+            tooltip="可选预设，也可直接输入自定义比例（格式如 9:16）；留空则由系统默认画幅决定"
+          >
+            <AutoComplete
+              allowClear
+              placeholder="选择或输入比例，如 9:16"
+              options={videoRatioOptions}
+            />
           </Form.Item>
           <Form.Item
             name="unifyStyle"
@@ -1035,11 +1185,16 @@ const ProjectLobby: React.FC = () => {
             <Input.TextArea rows={3} placeholder="项目简介与风格说明" />
           </Form.Item>
           <ProjectVisualStyleAndStyleFields form={editForm} options={projectStyleOptions} />
-          <Form.Item name="seed" label="全局种子值" tooltip="固定种子可确保整部短剧视觉调性一致">
-            <InputNumber min={0} className="w-full" />
-          </Form.Item>
-          <Form.Item name="default_video_ratio" label="默认视频比例">
-            <Select allowClear placeholder="未设置时由模型/供应商决定" options={videoRatioOptions} />
+          <Form.Item
+            name="default_video_ratio"
+            label="默认视频比例"
+            tooltip="可选预设，也可直接输入自定义比例（格式如 9:16）；留空则由系统默认画幅决定"
+          >
+            <AutoComplete
+              allowClear
+              placeholder="选择或输入比例，如 9:16"
+              options={videoRatioOptions}
+            />
           </Form.Item>
           <Form.Item name="unifyStyle" label="风格统一" valuePropName="checked" tooltip="开启后所有章节继承项目风格">
             <Switch />

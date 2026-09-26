@@ -152,6 +152,21 @@ class ShotDetailBase(BaseModel):
         "",
         description="镜头分镜关键帧提示词",
     )
+    audio_file_id: str | None = Field(
+        None, description="该镜头使用的音频文件 ID（files.type=audio）；声音绑定落在这里"
+    )
+    audio_opt_out: bool = Field(
+        False,
+        description="本镜明确标记无需声音（与 audio_file_id 互斥，默认 false=未表态）",
+    )
+    video_prompt: str = Field(
+        "",
+        description="镜头视频提示词（文生视频用；与帧图片提示词分离，可由外部平台导入）",
+    )
+    video_prompt_source: str = Field(
+        "",
+        description="视频提示词来源标记（jurilu / external / manual / internal；空表示未知）",
+    )
 
 
 class ShotDetailCreate(ShotDetailBase):
@@ -175,6 +190,16 @@ class ShotDetailUpdate(BaseModel):
     first_frame_prompt: str | None = None
     last_frame_prompt: str | None = None
     key_frame_prompt: str | None = None
+    video_prompt: str | None = None
+    video_prompt_source: str | None = None
+    audio_file_id: str | None = Field(None, description="该镜头使用的音频文件 ID（files.type=audio）")
+    audio_opt_out: bool | None = Field(
+        None,
+        description=(
+            "本镜**明确标记**无需声音。与 audio_file_id 互斥："
+            "置 true 时服务端会清空 audio_file_id；绑定音频时服务端会把本字段置 false。"
+        ),
+    )
 
 
 class ShotDetailRead(ShotDetailBase):
@@ -260,6 +285,13 @@ class ProjectCostumeLinkRead(ProjectLinkBase):
     thumbnail: str = Field("", description="服装缩略图下载地址")
 
 
+class ProjectProductLinkRead(ProjectLinkBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    product_id: str
+    thumbnail: str = Field("", description="商品缩略图下载地址")
+
+
 class ShotFrameImageBase(BaseModel):
     id: int = Field(..., description="图片行 ID")
     shot_detail_id: str = Field(..., description="所属镜头细节 ID")
@@ -291,7 +323,7 @@ class ShotFrameImageRead(ShotFrameImageBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-ShotLinkedAssetType = Literal["character", "prop", "scene", "costume"]
+ShotLinkedAssetType = Literal["character", "prop", "scene", "costume", "product"]
 
 
 class ShotLinkedAssetItem(BaseModel):

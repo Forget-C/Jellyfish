@@ -119,6 +119,12 @@ class ImageGenerationResult(BaseModel):
         None,
         description="供应商任务状态（同步接口通常为 succeeded/created 等）",
     )
+    provider_notes: list[str] = Field(
+        default_factory=list,
+        description="供应商/适配层给出的**如实说明**（例如本地出图垫片回传的 shim_notes："
+        "参考图未透传、回退使用了非 OSS 地址）。调用方必须把它透出给用户，"
+        "不要假装参考图一定生效。",
+    )
 
     @model_validator(mode="after")
     def _require_images(self) -> "ImageGenerationResult":

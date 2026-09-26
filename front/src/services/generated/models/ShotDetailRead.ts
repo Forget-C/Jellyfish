@@ -75,5 +75,21 @@ export type ShotDetailRead = {
      * 镜头分镜关键帧提示词
      */
     key_frame_prompt?: string;
+    /**
+     * 该镜头使用的音频文件 ID（files.type=audio）；声音绑定落在这里
+     */
+    audio_file_id?: (string | null);
+    /**
+     * 本镜明确标记无需声音（与 audio_file_id 互斥，默认 false=未表态）
+     */
+    audio_opt_out?: boolean;
+    /**
+     * 镜头视频提示词（文生视频用；与帧图片提示词分离，可由外部平台导入）
+     */
+    video_prompt?: string;
+    /**
+     * 视频提示词来源标记（jurilu / external / manual / internal；空表示未知）
+     */
+    video_prompt_source?: string;
 };
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy import JSON, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -24,6 +26,13 @@ class Scene(Base, TimestampMixin):
         comment="计划为该场景生成的视角图片数量（不含分镜帧）",
     )
     tags: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list, comment="标签")
+
+    image_prompts: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+        comment="按图片槽位类别缓存的 LLM 生成图片提示词（{category: prompt}）",
+    )
     prompt_template_id: Mapped[str | None] = mapped_column(
         String(64),
         ForeignKey("prompt_templates.id", ondelete="SET NULL"),
@@ -68,6 +77,13 @@ class Prop(Base, TimestampMixin):
         comment="计划为该道具生成的视角图片数量（不含分镜帧）",
     )
     tags: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list, comment="标签")
+
+    image_prompts: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+        comment="按图片槽位类别缓存的 LLM 生成图片提示词（{category: prompt}）",
+    )
     prompt_template_id: Mapped[str | None] = mapped_column(
         String(64),
         ForeignKey("prompt_templates.id", ondelete="SET NULL"),
@@ -117,6 +133,13 @@ class Costume(Base, TimestampMixin):
         comment="计划为该服装生成的视角图片数量（不含分镜帧）",
     )
     tags: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list, comment="标签")
+
+    image_prompts: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+        comment="按图片槽位类别缓存的 LLM 生成图片提示词（{category: prompt}）",
+    )
     prompt_template_id: Mapped[str | None] = mapped_column(
         String(64),
         ForeignKey("prompt_templates.id", ondelete="SET NULL"),
@@ -167,6 +190,13 @@ class Actor(Base, TimestampMixin):
         comment="计划为该演员形象生成的视角图片数量（不含分镜帧）",
     )
     tags: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list, comment="标签")
+
+    image_prompts: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+        comment="按图片槽位类别缓存的 LLM 生成图片提示词（{category: prompt}）",
+    )
     prompt_template_id: Mapped[str | None] = mapped_column(
         String(64),
         ForeignKey("prompt_templates.id", ondelete="SET NULL"),
@@ -219,6 +249,13 @@ class Character(Base, TimestampMixin):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False, comment="角色名称")
     description: Mapped[str] = mapped_column(Text, nullable=False, default="", comment="角色描述")
+
+    image_prompts: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+        comment="按图片槽位类别缓存的 LLM 生成图片提示词（{category: prompt}）",
+    )
     style: Mapped[ProjectStyle] = mapped_column(String(32), nullable=False, comment="题材/风格")
     visual_style: Mapped[ProjectVisualStyle] = mapped_column(
         String(16),

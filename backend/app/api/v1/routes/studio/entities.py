@@ -5,8 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.utils import error_envelope
 from app.dependencies import get_db
 from app.schemas.common import ApiResponse, PaginatedData, created_response, empty_response, paginated_response, success_response
 from app.schemas.studio.entity_existence import (
@@ -14,6 +16,8 @@ from app.schemas.studio.entity_existence import (
     EntityNameExistenceCheckResponse,
 )
 from app.services.studio import StudioEntitiesService
+from app.services.studio.entity_images import EntityImageSlotConflict
+from app.services.studio.primary_protection import PrimaryImageReplaceRequired
 
 router = APIRouter()
 
@@ -139,9 +143,18 @@ async def create_entity_image(
     entity_id: str,
     body: dict[str, Any],
     db: AsyncSession = Depends(get_db),
-) -> ApiResponse[dict[str, Any]]:
+) -> ApiResponse[dict[str, Any]] | JSONResponse:
     service = StudioEntitiesService(db)
-    payload = await service.create_entity_image(entity_type=entity_type, entity_id=entity_id, body=body)
+    try:
+        payload = await service.create_entity_image(entity_type=entity_type, entity_id=entity_id, body=body)
+    except PrimaryImageReplaceRequired as exc:
+        # 定版保护的 409：结构化明细进 meta.error（与 /image-pipeline/adopt 同形）。
+        # 其余 HTTPException 照旧走全局处理器，响应形状不变。
+        return error_envelope(code=exc.status_code, detail=exc.detail)
+    except EntityImageSlotConflict as exc:
+        # 同槽位重复建图（唯一约束 (资产ID, quality_level, view_angle)）：
+        # 以前是 IntegrityError 穿透成 500，现在是同一形制的结构化 409。
+        return error_envelope(code=exc.status_code, detail=exc.detail)
     return created_response(payload)
 
 
@@ -156,14 +169,18 @@ async def update_entity_image(
     image_id: int,
     body: dict[str, Any],
     db: AsyncSession = Depends(get_db),
-) -> ApiResponse[dict[str, Any]]:
+) -> ApiResponse[dict[str, Any]] | JSONResponse:
     service = StudioEntitiesService(db)
-    payload = await service.update_entity_image(
-        entity_type=entity_type,
-        entity_id=entity_id,
-        image_id=image_id,
-        body=body,
-    )
+    try:
+        payload = await service.update_entity_image(
+            entity_type=entity_type,
+            entity_id=entity_id,
+            image_id=image_id,
+            body=body,
+        )
+    except PrimaryImageReplaceRequired as exc:
+        # 同上：给这条写入路径同一个结构化 409（改 file_id / 设版顶掉既有定版时）
+        return error_envelope(code=exc.status_code, detail=exc.detail)
     return success_response(payload)
 
 

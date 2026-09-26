@@ -2,7 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { ProjectStyle } from './ProjectStyle';
+import type { ProjectStartMode } from './ProjectStartMode';
 import type { ProjectVisualStyle } from './ProjectVisualStyle';
 export type ProjectCreate = {
     /**
@@ -14,9 +14,9 @@ export type ProjectCreate = {
      */
     description?: string;
     /**
-     * 题材/风格
+     * 题材/风格（可用预设值，也可自定义）
      */
-    style: ProjectStyle;
+    style: string;
     /**
      * 画面表现形式
      */
@@ -37,6 +37,10 @@ export type ProjectCreate = {
      * 项目级默认视频比例；分镜未覆盖时生效
      */
     default_video_ratio?: (string | null);
+    /**
+     * 项目起点：script=从剧本开始；prompts=从视频提示词开始
+     */
+    start_mode?: ProjectStartMode;
     /**
      * 聚合统计（JSON）
      */

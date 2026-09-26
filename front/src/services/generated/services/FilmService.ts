@@ -26,6 +26,9 @@ export class FilmService {
     /**
      * 视频提示词预览
      * 预览视频生成的提示词与自动关联参考图。
+     *
+     * 同时给出**参考音频审计**：这条镜头绑定的声音会不会进请求、带的是哪个地址、没带是为什么。
+     * 术语澄清：这里说的永远是"**参考音频**"（作为输入），与"最终成片的音轨"是两件事。
      * @returns ApiResponse_VideoPromptPreviewResponse_ Successful Response
      * @throws ApiError
      */
@@ -47,6 +50,9 @@ export class FilmService {
     /**
      * 视频生成（任务版）
      * 创建视频生成任务并后台执行，结果通过 /tasks/{task_id}/result 获取。
+     *
+     * 会真实出视频（按次计费），因此先过 DRY_RUN 守卫：被拦截时返回 409，
+     * **不会**建任何任务行。
      * @returns ApiResponse_TaskCreated_ Successful Response
      * @throws ApiError
      */
@@ -66,7 +72,7 @@ export class FilmService {
         });
     }
     /**
-     * 镜头分镜帧提示词生成（任务版）
+     * 镜头分镜帧提示词生成（同进程内联执行的任务版）
      * @returns ApiResponse_TaskCreated_ Successful Response
      * @throws ApiError
      */

@@ -23,5 +23,15 @@ export type ShotDetailUpdate = {
     first_frame_prompt?: (string | null);
     last_frame_prompt?: (string | null);
     key_frame_prompt?: (string | null);
+    video_prompt?: (string | null);
+    video_prompt_source?: (string | null);
+    /**
+     * 该镜头使用的音频文件 ID（files.type=audio）
+     */
+    audio_file_id?: (string | null);
+    /**
+     * 本镜**明确标记**无需声音。与 audio_file_id 互斥：置 true 时服务端会清空 audio_file_id；绑定音频时服务端会把本字段置 false。
+     */
+    audio_opt_out?: (boolean | null);
 };
 

@@ -171,6 +171,11 @@ async def test_build_chat_model_from_provider_builds_chatopenai_with_model_param
 
 @pytest.mark.asyncio
 async def test_build_default_text_llm_supports_thinking_toggle(monkeypatch: pytest.MonkeyPatch) -> None:
+    # 构造默认文本大模型 = 准备真实付费调用，因此受 DRY_RUN 守卫管辖。
+    # 本用例只验证参数拼装（ChatOpenAI 已被替换成假类），这里显式放开闸门。
+    monkeypatch.setenv("JELLYFISH_DRY_RUN", "0")
+    monkeypatch.setenv("JELLYFISH_REAL_LLM_CONFIRMED", "1")
+
     class FakeChatOpenAI:
         def __init__(self, **kwargs):  # noqa: ANN003, ANN204
             self.kwargs = kwargs

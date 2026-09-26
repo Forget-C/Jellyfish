@@ -14,7 +14,13 @@ type ChapterShotPreparationGuideProps = {
   checklistItems: readonly ChecklistItem[]
   nextStepTitle: string
   nextStepDescription: string
-  onGoToStudio: () => void
+  /**
+   * 继续项目流程：回到项目工作台的下一个步骤。
+   *
+   * 以前这里叫 onGoToStudio，直接跳分镜工作室——分镜刚做完就进工作室会跳过
+   * 资产提取 / 图片准备 / 整集提示词 / 关联绑定。现在交给六步流程。
+   */
+  onContinueFlow: () => void
 }
 
 export function ChapterShotPreparationGuide({
@@ -22,7 +28,7 @@ export function ChapterShotPreparationGuide({
   checklistItems,
   nextStepTitle,
   nextStepDescription,
-  onGoToStudio,
+  onContinueFlow,
 }: ChapterShotPreparationGuideProps) {
   const [expanded, setExpanded] = useState(false)
 
@@ -32,7 +38,7 @@ export function ChapterShotPreparationGuide({
   )
 
   const summaryText = statusReady
-    ? '已完成准备，可进入工作室继续生成。'
+    ? '已完成准备，可继续项目流程。'
     : `还有 ${warningCount} 项待处理，建议先继续完成准备。`
 
   return (
@@ -62,13 +68,13 @@ export function ChapterShotPreparationGuide({
           >
             {expanded ? '收起' : '详情'}
           </Button>
-          <Tooltip title={statusReady ? '进入分镜工作室继续关键帧、图片和视频生成。' : '可以先进入工作室查看视频准备度；如需真正继续生成，建议先完成当前准备项。'}>
+          <Tooltip title="回到项目工作台，按顺序继续：剧本与分镜 → 资产准备 → 整集视频提示词 → 资产与声音绑定 → 生成与交付。分镜工作室保留单镜查看与补漏。">
             <Button
               type={statusReady ? 'primary' : 'default'}
               size="small"
-              onClick={onGoToStudio}
+              onClick={onContinueFlow}
             >
-              进入工作室
+              下一步：提取资产
             </Button>
           </Tooltip>
         </div>
@@ -77,7 +83,8 @@ export function ChapterShotPreparationGuide({
       {expanded ? (
         <div className="mt-2 space-y-2 border-t border-slate-200/70 pt-2">
           <div className="rounded-lg border border-slate-200 bg-white/70 px-3 py-2 text-xs text-slate-600">
-            这里负责当前镜头的准备工作：提取并确认资产、对白和基础信息。准备完成后，再进入分镜工作室继续关键帧、图片和视频生成。
+            这里负责当前镜头的准备工作：提取并确认资产、对白和基础信息。完成后再回到项目工作台继续后续步骤
+            （剧本与分镜 → 资产准备 → 整集视频提示词 → 资产与声音绑定 → 生成与交付）。
           </div>
 
           <div className="flex flex-wrap gap-2">

@@ -22,3 +22,22 @@ htmlcov/
 .jellyfish.db
 jellyfish.db
 .env
+
+# 运行时数据与本地临时密钥（不得提交）
+backend/storage/
+backend/.prompt_draft_secret
+.prompt_draft_secret
+
+# 运行时数据库 + 边车文件 + 迁移备份（不得提交；不要用 git add -f 强加）
+backend/*.db
+backend/*.db-wal
+backend/*.db-shm
+backend/*.db-journal
+backend/*.db.backup*
+backend/*.db.backup*-wal
+backend/*.db.backup*-shm
+backend/*.db.backup*-journal
+
+# 前端包管理产物：本仓库统一用 pnpm（pnpm-lock.yaml），npm 生成的 lock 不入库
+front/package-lock.json
+npm-debug.log*

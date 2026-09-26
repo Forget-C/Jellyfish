@@ -32,5 +32,16 @@ def bootstrap_builtin_providers() -> None:
                 supported_categories=(ModelCategoryKey.text,),
                 default_base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
             ),
+            ProviderSpec(
+                key="apimart",
+                display_name="APIMart",
+                aliases=("apimart", "apimart.ai", "api-mart"),
+                supported_categories=(
+                    ModelCategoryKey.text,
+                    ModelCategoryKey.image,
+                    ModelCategoryKey.video,
+                ),
+                default_base_url="https://api.apimart.ai/v1",
+            ),
         ]
     )

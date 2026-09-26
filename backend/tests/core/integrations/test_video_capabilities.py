@@ -50,7 +50,9 @@ def test_validate_video_options_rejects_capability_mismatch() -> None:
         capability=VideoModelCapability(supports_seed=False),
     )
     try:
-        inp = VideoGenerationInput(prompt="test", model="seedream-video-v1", seed=7)
+        # ratio 是 VideoGenerationInput 的必填字段；本用例只想验 seed 能力校验，
+        # 故显式补一个合法比例（原缺省会直接 ValidationError，测不到被断言的分支）。
+        inp = VideoGenerationInput(prompt="test", model="seedream-video-v1", ratio="16:9", seed=7)
         with pytest.raises(ValueError) as exc_info:
             validate_video_options(provider="volcengine", model=inp.model, input_=inp)
         assert "seed is not supported" in str(exc_info.value)

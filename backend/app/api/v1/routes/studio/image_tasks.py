@@ -13,6 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.image_generation import ImageResolutionProfile, ImageTargetRatio
 from app.dependencies import get_db
+from app.services.studio.bound_asset_files import (
+    resolve_shot_bound_files,
+    to_shot_linked_asset_items,
+)
 from app.models.studio import (
     ShotDetail,
     ShotFrameType,
@@ -393,10 +397,18 @@ async def create_shot_frame_image_generation_task(
         composition_anchor=render_guidance["composition_anchor"],
         screen_direction_guidance=render_guidance["screen_direction_guidance"],
     )
+    # 绑定资产 → 实际文件：调用方没显式给参考图时，用该镜头**已绑定资产的定版图**
+    # 作为参考图（角色/场景/道具/服装）。这样"关联绑定"的结果会真的进入生成请求，
+    # 而不是只停留在名称上（用户要求：必须明确实际使用的文件）。
+    # 预览与生成两条路径都走这里，保证"预览看到的参考图 = 生成实际用的参考图"。
+    frame_items = list(body.images or [])
+    if not frame_items:
+        bound_files = await resolve_shot_bound_files(db, shot_id=shot_id)
+        frame_items = to_shot_linked_asset_items(bound_files)
     context = _build_frame_context_service(
         shot_id=shot_id,
         frame_type=body.frame_type,
-        items=body.images,
+        items=frame_items,
     )
     submission = _build_frame_submission_payload_service(
         base=base,
@@ -478,10 +490,18 @@ async def render_shot_frame_prompt(
         composition_anchor=render_guidance["composition_anchor"],
         screen_direction_guidance=render_guidance["screen_direction_guidance"],
     )
+    # 绑定资产 → 实际文件：调用方没显式给参考图时，用该镜头**已绑定资产的定版图**
+    # 作为参考图（角色/场景/道具/服装）。这样"关联绑定"的结果会真的进入生成请求，
+    # 而不是只停留在名称上（用户要求：必须明确实际使用的文件）。
+    # 预览与生成两条路径都走这里，保证"预览看到的参考图 = 生成实际用的参考图"。
+    frame_items = list(body.images or [])
+    if not frame_items:
+        bound_files = await resolve_shot_bound_files(db, shot_id=shot_id)
+        frame_items = to_shot_linked_asset_items(bound_files)
     context = _build_frame_context_service(
         shot_id=shot_id,
         frame_type=body.frame_type,
-        items=body.images,
+        items=frame_items,
     )
     rendered = _to_rendered_shot_frame_prompt_read_service(
         derived=_derive_frame_preview_service(

@@ -3,6 +3,7 @@ import { Card, Input, Row, Col, Tag, Button, message, Modal, Space, Pagination }
 import { EditOutlined, DeleteOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useSearchParams } from 'react-router-dom'
 import { resolveAssetUrl } from '../utils'
+import { describeAssetDescription, stripAssetNamePrefix } from '../assetDescriptionCopy'
 import { DisplayImageCard } from '../components/DisplayImageCard'
 import {
   StudioAssetTypeFormModal,
@@ -235,7 +236,8 @@ export function AssetTypeTab({
               return (
                 <Col xs={24} sm={12} md={8} lg={6} key={a.id}>
                   <DisplayImageCard
-                    title={<span className="truncate">{a.name}</span>}
+                    /* 审计 §4.6 模式 1（数据侧）：展示层剥离 `SCENE_` / `PROP_` / `CHAR_` 这类系统前缀 */
+                    title={<span className="truncate">{stripAssetNamePrefix(a.name)}</span>}
                     imageUrl={thumbnailUrl}
                     imageAlt={a.name}
                     placeholder="未生成"
@@ -259,7 +261,10 @@ export function AssetTypeTab({
                     ]}
                     meta={
                       <>
-                        <div className="text-xs text-gray-500 mb-2 line-clamp-2">{a.description || '暂无描述'}</div>
+                        {/* 审计 §4.6 模式 2：后端自动生成的描述里含英文字段名，展示层转述成中文 */}
+                        <div className="text-xs text-gray-500 mb-2 line-clamp-2">
+                          {describeAssetDescription(a.description) || '暂无描述'}
+                        </div>
                         <div className="flex flex-wrap gap-1">
                           {typeof a.view_count === 'number' && <Tag color="blue">镜头 {a.view_count}</Tag>}
                           {(a.tags ?? []).slice(0, 3).map((t) => (

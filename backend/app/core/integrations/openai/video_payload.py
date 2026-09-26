@@ -16,6 +16,18 @@ def to_image_data_url(value: str) -> str:
     return f"data:image/png;base64,{v}"
 
 
+def to_audio_data_url(value: str, *, default_mime: str = "audio/mpeg") -> str:
+    """把纯 base64 或 data URL 归一成 ``data:audio/...;base64,...``。
+
+    与 ``to_image_data_url`` 同口径：已经是 data URL 的原样返回，纯 base64 补前缀。
+    """
+    text = (value or "").strip()
+    if not text:
+        return ""
+    if text.startswith("data:"):
+        return text
+    return f"data:{default_mime};base64,{text}"
+
 def pick_input_reference(input_: VideoGenerationInput) -> dict[str, str] | None:
     """OpenAI 仅支持单一 input_reference；优先级：key > first > last。"""
     for raw in (

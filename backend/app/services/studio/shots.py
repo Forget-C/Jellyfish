@@ -29,6 +29,7 @@ from app.services.common import (
     patch_model,
     require_entity,
 )
+from app.services.studio.shot_details import build_default_detail
 
 
 def _build_extraction_state(
@@ -204,10 +205,18 @@ async def create(
     *,
     body: ShotCreate,
 ) -> Shot:
-    """创建镜头。"""
+    """创建镜头，并同时写入 1:1 的默认细节行。
+
+    细节行的存在是下游链路的前提（提示词保存 / 音频绑定 / 参考帧 / 就绪判定
+    都要用到 `shot_details.id`）；以前只有「AI 拆分镜 / 巨日禄导入」会建细节行，
+    页面「创建分镜」建的镜头没有，导致手工建的镜头在后续每一步都失败。
+    """
     await ensure_not_exists(db, Shot, body.id, detail=entity_already_exists("Shot"))
     await require_entity(db, Chapter, body.chapter_id, detail=entity_not_found("Chapter"), status_code=400)
-    return await create_and_refresh(db, Shot(**body.model_dump()))
+    shot = await create_and_refresh(db, Shot(**body.model_dump()))
+    db.add(build_default_detail(shot.id))
+    await db.flush()
+    return shot
 
 
 async def get(

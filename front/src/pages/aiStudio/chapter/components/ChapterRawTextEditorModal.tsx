@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Button, Card, Collapse, Empty, Input, List, Modal, Space, Spin, Tag, message } from 'antd'
+import { Button, Card, Collapse, Empty, Input, List, Modal, Space, Spin, Tag, Tooltip, message } from 'antd'
 import {
   CloseCircleOutlined,
   DiffOutlined,
@@ -17,11 +17,15 @@ import {
   SCRIPT_SIMPLIFICATION_RELATION_TYPE,
   useCancelableRelationTask,
 } from '../../project/ProjectWorkbench/chapterDivisionTasks'
-import { executeAsyncTaskCreate, executeTaskCancel, notifyExistingTask } from '../../components/taskActionHelpers'
+import { executeTaskCancel, notifyExistingTask } from '../../components/taskActionHelpers'
 import { handleTaskResultSafely } from '../../components/taskResultHelpers'
 import { useRelationTaskNotification } from '../../components/taskNotificationHelpers'
 import { useTaskPageContext } from '../../components/taskPageContext'
 import { TASK_COPY } from '../../components/taskCopy'
+// 阶段 B ③（审计 §4.3 模式 6）：任务失败原文（`data.error`）与信封错误原文都要过管道
+import { showUserError } from '../../components/userFacingMessage'
+// 阶段 B ③（审计 §4.3 模式 2）：问题类型枚举原值不许直渲
+import { SCRIPT_ISSUE_TYPE, labelFor } from '../../components/enumLabels'
 
 type EditorMode = 'raw' | 'condensed' | 'compare'
 
@@ -30,6 +34,46 @@ type HistoryItem = {
   at: number
   rawText: string
   condensedText: string
+}
+
+/**
+ * 这三个 AI 动作改为同步调用：本环境没有配置后台任务 worker（Celery broker
+ * 不可达、也没有 worker 进程），异步接口只写任务记录、无人执行。同步接口
+ * `/api/v1/script-processing/*` 会在本次 HTTP 请求内跑完 LLM 并直接返回结果，
+ * 代价是请求阻塞数十秒，因此按钮全程 loading 并禁止重复点击。
+ */
+const SYNC_AI_HINT =
+  '本环境未配置后台任务 worker，AI 会在本次请求内同步执行，通常需要数十秒，请不要重复点击或关闭弹窗'
+const SYNC_CONSISTENCY_LOADING = 'AI 正在同步检查角色混淆，通常需要数十秒，请不要重复点击…'
+const SYNC_SIMPLIFY_LOADING = 'AI 正在同步精简剧本，通常需要数十秒，请不要重复点击…'
+const SYNC_OPTIMIZE_LOADING = 'AI 正在同步优化剧本，通常需要数十秒，请不要重复点击…'
+const SYNC_CONSISTENCY_MESSAGE_KEY = 'chapter-raw-sync-consistency'
+const SYNC_SIMPLIFY_MESSAGE_KEY = 'chapter-raw-sync-simplify'
+const SYNC_OPTIMIZE_MESSAGE_KEY = 'chapter-raw-sync-optimize'
+
+/**
+ * 把后端统一错误信封 `{code, message, data, meta}` 解析成可读提示：
+ * 结构化细节优先取 `meta.error.message`，其次信封 `message` / `detail`，
+ * 最后回退到客户端 ApiError 自带的 message（与 PromptFlowPage 的约定一致）。
+ */
+function describeEnvelopeError(error: unknown, fallback: string): string {
+  if (!error) return fallback
+  if (typeof error === 'string') return error.trim() || fallback
+  const err = error as { body?: unknown; message?: unknown }
+  const body = err.body
+  if (body && typeof body === 'object') {
+    const envelope = body as Record<string, unknown>
+    const meta = (envelope.meta ?? {}) as Record<string, unknown>
+    const metaError = (meta.error ?? {}) as Record<string, unknown>
+    const metaMessage = metaError.message
+    if (typeof metaMessage === 'string' && metaMessage.trim()) return metaMessage
+    const envelopeMessage = envelope.message
+    if (typeof envelopeMessage === 'string' && envelopeMessage.trim()) return envelopeMessage
+    const detail = envelope.detail
+    if (typeof detail === 'string' && detail.trim()) return detail
+  }
+  if (typeof err.message === 'string' && err.message.trim()) return err.message
+  return fallback
 }
 
 export function ChapterRawTextEditorModal({
@@ -63,98 +107,107 @@ export function ChapterRawTextEditorModal({
   const [compareCondensed, setCompareCondensed] = useState('')
   const [consistencyResult, setConsistencyResult] = useState<ScriptConsistencyCheckResult | null>(null)
 
+  // 同步接口直接返回结果，这里把「结果对象 → 界面状态」的落地逻辑单独抽出来，
+  // 既给同步调用复用，也继续给任务轮询的 onTaskSettled 复用（逻辑完全一致）。
+  const applyConsistencyResultValue = useCallback((resultValue: unknown) => {
+    setConsistencyResult(resultValue as ScriptConsistencyCheckResult)
+    const result = resultValue as Record<string, any>
+    if (result?.has_issues) {
+      message.warning(`发现 ${Array.isArray(result.issues) ? result.issues.length : 0} 个角色混淆问题`)
+    } else {
+      message.success('未发现角色混淆问题')
+    }
+  }, [])
+
   const applyConsistencyTaskResult = useCallback(async (taskId: string) => {
     await handleTaskResultSafely(taskId, {
       readErrorMessage: '读取一致性检查结果失败',
       failedFallbackMessage: '一致性检查失败',
-      onSucceeded: (resultValue) => {
-        setConsistencyResult(resultValue as ScriptConsistencyCheckResult)
-        const result = resultValue as Record<string, any>
-        if (result?.has_issues) {
-          message.warning(`发现 ${Array.isArray(result.issues) ? result.issues.length : 0} 个角色混淆问题`)
-        } else {
-          message.success('未发现角色混淆问题')
-        }
-      },
+      onSucceeded: (resultValue) => applyConsistencyResultValue(resultValue),
       onFailed: (errorMessage) => {
-        message.error(errorMessage)
+        // 审计 §4.3 模式 6：`errorMessage` 来自 taskResultHelpers 的 `data.error`（后端原文）
+        void showUserError(errorMessage, '一致性检查失败')
       },
       onReadError: () => {
         message.error('读取一致性检查结果失败')
       },
     })
-  }, [])
+  }, [applyConsistencyResultValue])
+
+  const applySimplifyResultValue = useCallback((resultValue: unknown) => {
+    const result = resultValue as Record<string, any>
+    const simplified = String(result?.simplified_script_text ?? '').trim()
+    if (!simplified) {
+      message.error('智能精简失败：未返回有效内容')
+      return
+    }
+    setCondensedText(simplified)
+    if (mode === 'compare') {
+      setCompareCondensed(simplified)
+    } else {
+      setMode('condensed')
+      setEditorText(simplified)
+    }
+    message.success('智能精简完成')
+  }, [mode])
 
   const applySimplifyResult = useCallback(async (taskId: string) => {
     await handleTaskResultSafely(taskId, {
       readErrorMessage: '读取智能精简结果失败',
       failedFallbackMessage: '智能精简失败',
-      onSucceeded: (resultValue) => {
-        const result = resultValue as Record<string, any>
-        const simplified = String(result?.simplified_script_text ?? '').trim()
-        if (!simplified) {
-          message.error('智能精简失败：未返回有效内容')
-          return
-        }
-        setCondensedText(simplified)
-        if (mode === 'compare') {
-          setCompareCondensed(simplified)
-        } else {
-          setMode('condensed')
-          setEditorText(simplified)
-        }
-        message.success('智能精简完成')
-      },
+      onSucceeded: (resultValue) => applySimplifyResultValue(resultValue),
       onFailed: (errorMessage) => {
-        message.error(errorMessage)
+        void showUserError(errorMessage, '智能精简失败')
       },
       onReadError: () => {
         message.error('读取智能精简结果失败')
       },
     })
-  }, [mode])
+  }, [applySimplifyResultValue])
+
+  const applyOptimizeResultValue = useCallback((resultValue: unknown) => {
+    const result = resultValue as Record<string, any>
+    const optimized = String(result?.optimized_script_text ?? '').trim()
+    if (!optimized) {
+      message.error('一键优化失败：未返回有效内容')
+      return
+    }
+    setRawText(optimized)
+    setEditorText(optimized)
+    setMode('raw')
+    setCompareRaw(optimized)
+    message.success('一键优化完成')
+  }, [])
 
   const applyOptimizeResult = useCallback(async (taskId: string) => {
     await handleTaskResultSafely(taskId, {
       readErrorMessage: '读取一键优化结果失败',
       failedFallbackMessage: '一键优化失败',
-      onSucceeded: (resultValue) => {
-        const result = resultValue as Record<string, any>
-        const optimized = String(result?.optimized_script_text ?? '').trim()
-        if (!optimized) {
-          message.error('一键优化失败：未返回有效内容')
-          return
-        }
-        setRawText(optimized)
-        setEditorText(optimized)
-        setMode('raw')
-        setCompareRaw(optimized)
-        message.success('一键优化完成')
-      },
+      onSucceeded: (resultValue) => applyOptimizeResultValue(resultValue),
       onFailed: (errorMessage) => {
-        message.error(errorMessage)
+        void showUserError(errorMessage, '一键优化失败')
       },
       onReadError: () => {
         message.error('读取一键优化结果失败')
       },
     })
-  }, [])
+  }, [applyOptimizeResultValue])
 
-  const { task: consistencyTask, settledTask: consistencySettledTask, trackTaskData: trackConsistencyTaskData, applyCancelData: applyConsistencyCancelData } = useCancelableRelationTask({
+  const { task: consistencyTask, settledTask: consistencySettledTask, applyCancelData: applyConsistencyCancelData } = useCancelableRelationTask({
     enabled: open && !!chapterId,
     relationType: CONSISTENCY_CHECK_RELATION_TYPE,
     relationEntityId: chapterId,
     onTaskSettled: applyConsistencyTaskResult,
   })
 
-  const { task: simplifyTask, settledTask: simplifySettledTask, trackTaskData: trackSimplifyTaskData, applyCancelData: applySimplifyCancelData } = useCancelableRelationTask({
+  const { task: simplifyTask, settledTask: simplifySettledTask, applyCancelData: applySimplifyCancelData } = useCancelableRelationTask({
     enabled: open && !!chapterId,
     relationType: SCRIPT_SIMPLIFICATION_RELATION_TYPE,
     relationEntityId: chapterId,
     onTaskSettled: applySimplifyResult,
   })
 
-  const { task: optimizeTask, settledTask: optimizeSettledTask, trackTaskData: trackOptimizeTaskData, applyCancelData: applyOptimizeCancelData } = useCancelableRelationTask({
+  const { task: optimizeTask, settledTask: optimizeSettledTask, applyCancelData: applyOptimizeCancelData } = useCancelableRelationTask({
     enabled: open && !!chapterId,
     relationType: SCRIPT_OPTIMIZATION_RELATION_TYPE,
     relationEntityId: chapterId,
@@ -218,6 +271,7 @@ export function ChapterRawTextEditorModal({
       message.warning('请先输入原文')
       return
     }
+    if (extracting) return
     if (notifyExistingTask(simplifyTask, {
       cancellingMessage: simplifyTaskCopy.cancellingMessage,
       runningMessage: simplifyTaskCopy.runningMessage,
@@ -225,22 +279,24 @@ export function ChapterRawTextEditorModal({
       return
     }
     setExtracting(true)
+    message.loading({ content: SYNC_SIMPLIFY_LOADING, key: SYNC_SIMPLIFY_MESSAGE_KEY, duration: 0 })
     try {
-      await executeAsyncTaskCreate({
-        request: () =>
-          ScriptProcessingService.simplifyScriptAsyncApiV1ScriptProcessingSimplifyScriptAsyncPost({
-            requestBody: {
-              chapter_id: chapterId ?? null,
-              script_text: rawText,
-            },
-          }),
-        trackTaskData: trackSimplifyTaskData,
-        startedMessage: simplifyTaskCopy.startedMessage,
-        reusedMessage: simplifyTaskCopy.reusedMessage,
-        fallbackErrorMessage: '智能精简失败',
+      const res = await ScriptProcessingService.simplifyScriptApiV1ScriptProcessingSimplifyScriptPost({
+        requestBody: {
+          chapter_id: chapterId ?? null,
+          script_text: rawText,
+        },
       })
-    } catch {
-      // executeAsyncTaskCreate 已统一处理错误提示
+      message.destroy(SYNC_SIMPLIFY_MESSAGE_KEY)
+      if (!res.data) {
+        message.error('智能精简失败：未返回有效内容')
+        return
+      }
+      applySimplifyResultValue(res.data)
+    } catch (error) {
+      message.destroy(SYNC_SIMPLIFY_MESSAGE_KEY)
+      // 审计 §4.3 模式 6：`describeEnvelopeError` 会原样返回 `meta.error.message` / `detail`
+      void showUserError(describeEnvelopeError(error, '智能精简失败'), '智能精简失败')
     } finally {
       setExtracting(false)
     }
@@ -252,6 +308,7 @@ export function ChapterRawTextEditorModal({
       message.warning('请先输入原文')
       return
     }
+    if (checkingConsistency) return
     if (notifyExistingTask(consistencyTask, {
       cancellingMessage: consistencyTaskCopy.cancellingMessage,
       runningMessage: consistencyTaskCopy.runningMessage,
@@ -259,19 +316,20 @@ export function ChapterRawTextEditorModal({
       return
     }
     setCheckingConsistency(true)
+    message.loading({ content: SYNC_CONSISTENCY_LOADING, key: SYNC_CONSISTENCY_MESSAGE_KEY, duration: 0 })
     try {
-      await executeAsyncTaskCreate({
-        request: () =>
-          ScriptProcessingService.checkConsistencyAsyncApiV1ScriptProcessingCheckConsistencyAsyncPost({
-            requestBody: { script_text: scriptText, chapter_id: chapterId ?? null },
-          }),
-        trackTaskData: trackConsistencyTaskData,
-        startedMessage: consistencyTaskCopy.startedMessage,
-        reusedMessage: consistencyTaskCopy.reusedMessage,
-        fallbackErrorMessage: '一致性检查失败',
+      const res = await ScriptProcessingService.checkConsistencyApiV1ScriptProcessingCheckConsistencyPost({
+        requestBody: { script_text: scriptText, chapter_id: chapterId ?? null },
       })
-    } catch {
-      // executeAsyncTaskCreate 已统一处理错误提示
+      message.destroy(SYNC_CONSISTENCY_MESSAGE_KEY)
+      if (!res.data) {
+        message.error('一致性检查失败：未返回有效结果')
+        return
+      }
+      applyConsistencyResultValue(res.data)
+    } catch (error) {
+      message.destroy(SYNC_CONSISTENCY_MESSAGE_KEY)
+      void showUserError(describeEnvelopeError(error, '一致性检查失败'), '一致性检查失败')
     } finally {
       setCheckingConsistency(false)
     }
@@ -303,6 +361,7 @@ export function ChapterRawTextEditorModal({
       message.info('请先进行角色混淆检查')
       return
     }
+    if (optimizingScript) return
     if (notifyExistingTask(optimizeTask, {
       cancellingMessage: optimizeTaskCopy.cancellingMessage,
       runningMessage: optimizeTaskCopy.runningMessage,
@@ -310,23 +369,24 @@ export function ChapterRawTextEditorModal({
       return
     }
     setOptimizingScript(true)
+    message.loading({ content: SYNC_OPTIMIZE_LOADING, key: SYNC_OPTIMIZE_MESSAGE_KEY, duration: 0 })
     try {
-      await executeAsyncTaskCreate({
-        request: () =>
-          ScriptProcessingService.optimizeScriptAsyncApiV1ScriptProcessingOptimizeScriptAsyncPost({
-            requestBody: {
-              chapter_id: chapterId ?? null,
-              script_text: scriptText,
-              consistency: consistencyResult as any,
-            },
-          }),
-        trackTaskData: trackOptimizeTaskData,
-        startedMessage: optimizeTaskCopy.startedMessage,
-        reusedMessage: optimizeTaskCopy.reusedMessage,
-        fallbackErrorMessage: '一键优化失败',
+      const res = await ScriptProcessingService.optimizeScriptApiV1ScriptProcessingOptimizeScriptPost({
+        requestBody: {
+          chapter_id: chapterId ?? null,
+          script_text: scriptText,
+          consistency: consistencyResult as any,
+        },
       })
-    } catch {
-      // executeAsyncTaskCreate 已统一处理错误提示
+      message.destroy(SYNC_OPTIMIZE_MESSAGE_KEY)
+      if (!res.data) {
+        message.error('一键优化失败：未返回有效内容')
+        return
+      }
+      applyOptimizeResultValue(res.data)
+    } catch (error) {
+      message.destroy(SYNC_OPTIMIZE_MESSAGE_KEY)
+      void showUserError(describeEnvelopeError(error, '一键优化失败'), '一键优化失败')
     } finally {
       setOptimizingScript(false)
     }
@@ -524,15 +584,19 @@ export function ChapterRawTextEditorModal({
               <Button size="small" type="primary" icon={<SaveOutlined />} loading={actionsLoading || saving} disabled={actionsLoading} onClick={() => void handleSave()}>
                 保存
               </Button>
-              <Button
-                size="small"
-                icon={<ReloadOutlined />}
-                loading={checkingConsistency || !!consistencyTask}
-                disabled={actionsLoading || !!consistencyTask}
-                onClick={() => void handleCheckConsistency()}
-              >
-                {consistencyTask ? '检查中' : '角色混淆检查'}
-              </Button>
+              <Tooltip title={SYNC_AI_HINT}>
+                <span>
+                  <Button
+                    size="small"
+                    icon={<ReloadOutlined />}
+                    loading={checkingConsistency || !!consistencyTask}
+                    disabled={actionsLoading || !!consistencyTask}
+                    onClick={() => void handleCheckConsistency()}
+                  >
+                    {consistencyTask ? '正在检查…' : '角色混淆检查'}
+                  </Button>
+                </span>
+              </Tooltip>
               {consistencyTask ? (
                 <Button
                   size="small"
@@ -544,15 +608,19 @@ export function ChapterRawTextEditorModal({
                   {consistencyTask.cancelRequested ? '正在取消' : '取消检查'}
                 </Button>
               ) : null}
-              <Button
-                size="small"
-                icon={<ThunderboltOutlined />}
-                loading={extracting || !!simplifyTask}
-                disabled={actionsLoading || !!simplifyTask}
-                onClick={() => void handleSmartSimplify()}
-              >
-                {simplifyTask ? '精简中' : '智能精简'}
-              </Button>
+              <Tooltip title={SYNC_AI_HINT}>
+                <span>
+                  <Button
+                    size="small"
+                    icon={<ThunderboltOutlined />}
+                    loading={extracting || !!simplifyTask}
+                    disabled={actionsLoading || !!simplifyTask}
+                    onClick={() => void handleSmartSimplify()}
+                  >
+                    {simplifyTask ? '精简中' : '智能精简'}
+                  </Button>
+                </span>
+              </Tooltip>
               {simplifyTask ? (
                 <Button
                   size="small"
@@ -648,6 +716,9 @@ export function ChapterRawTextEditorModal({
           </div>
         ) : (
           <div className="space-y-3">
+            <div className="text-[11px] text-gray-500 leading-5">
+              本环境未配置后台任务 worker：「角色混淆检查 / 智能精简 / 一键优化」都在本次请求内同步执行，通常需要数十秒，期间请勿重复点击。
+            </div>
             <Input.TextArea
               value={editorText}
               onChange={(e) => {
@@ -670,17 +741,21 @@ export function ChapterRawTextEditorModal({
                     <Tag color={consistencyResult.has_issues ? 'red' : 'green'}>
                       {consistencyResult.has_issues ? '发现问题' : '无问题'}
                     </Tag>
-                    <Tag>issues：{consistencyIssues.length}</Tag>
-                    <Button
-                      size="small"
-                      type="primary"
-                      icon={<ThunderboltOutlined />}
-                      loading={optimizingScript || !!optimizeTask}
-                      disabled={actionsLoading || !!optimizeTask}
-                      onClick={() => void handleOneClickOptimize()}
-                    >
-                      {optimizeTask ? '优化中' : '一键优化'}
-                    </Button>
+                    <Tag>问题 {consistencyIssues.length} 处</Tag>
+                    <Tooltip title={SYNC_AI_HINT}>
+                      <span>
+                        <Button
+                          size="small"
+                          type="primary"
+                          icon={<ThunderboltOutlined />}
+                          loading={optimizingScript || !!optimizeTask}
+                          disabled={actionsLoading || !!optimizeTask}
+                          onClick={() => void handleOneClickOptimize()}
+                        >
+                          {optimizeTask ? '优化中' : '一键优化'}
+                        </Button>
+                      </span>
+                    </Tooltip>
                     {optimizeTask ? (
                       <Button
                         size="small"
@@ -705,12 +780,12 @@ export function ChapterRawTextEditorModal({
                       <List.Item>
                         <div className="min-w-0">
                           <div className="font-medium">
-                            {it?.issue_type ? `[${it.issue_type}] ` : ''}
-                            Issue {idx + 1}
+                            {it?.issue_type ? `【${labelFor(SCRIPT_ISSUE_TYPE, it.issue_type)}】 ` : ''}
+                            第 {idx + 1} 处问题
                           </div>
                           <div className="text-sm">{it?.description}</div>
                           {it?.character_candidates?.length ? (
-                            <div className="text-xs text-gray-500 mt-1">候选角色：{it.character_candidates.join('、')}</div>
+                            <div className="text-xs text-gray-500 mt-1">相关角色：{it.character_candidates.join('、')}</div>
                           ) : null}
                           {it?.suggestion ? (
                             <div className="text-xs text-gray-500 mt-1">建议：{it.suggestion}</div>

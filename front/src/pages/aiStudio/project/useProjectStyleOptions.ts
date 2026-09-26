@@ -38,6 +38,18 @@ let cachedSnapshot: ProjectStyleOptionsSnapshot | null = null
 let loadingSnapshotPromise: Promise<ProjectStyleOptionsSnapshot> | null = null
 const FALLBACK_DEFAULT_VIDEO_RATIO = '16:9'
 
+/**
+ * 接口不可用时的兜底比例。宁可给一份常用比例的静态候选，
+ * 也不要让下拉是空的——空下拉会让用户以为「这个功能没有 9:16」。
+ * 正常路径下仍以接口返回的 allowed_ratios 为准。
+ */
+const FALLBACK_VIDEO_RATIOS: OptionItem[] = [
+  { value: '16:9', label: '16:9（横屏）' },
+  { value: '9:16', label: '9:16（竖屏）' },
+  { value: '1:1', label: '1:1（方形）' },
+  { value: '3:4', label: '3:4（竖版）' },
+]
+
 function normalizeOptionItems(items: OptionItem[] | null | undefined): OptionItem[] {
   if (!Array.isArray(items)) return []
   return items.filter((item) => item && typeof item.value === 'string' && typeof item.label === 'string')
@@ -91,14 +103,16 @@ async function loadProjectStyleOptionsSnapshot(): Promise<ProjectStyleOptionsSna
       }
       cachedSnapshot = snapshot
       return snapshot
-    } catch {
-      const snapshot: ProjectStyleOptionsSnapshot = {
+    } catch (error) {
+      // 失败时**不能**写 cachedSnapshot：cachedSnapshot 是模块级缓存，
+      // 一旦把「比例选项为空」的失败快照缓存下来，整个会话内所有弹窗的比例下拉
+      // 都会是空的，用户只有刷新页面才可能恢复。这里只返回本次的降级值，下次重试。
+      console.warn('[project-style-options] 风格/比例选项加载失败，本次不缓存，后续会重试', error)
+      return {
         options: FALLBACK_OPTIONS,
-        videoRatioOptions: [],
+        videoRatioOptions: FALLBACK_VIDEO_RATIOS,
         defaultVideoRatio: FALLBACK_DEFAULT_VIDEO_RATIO,
       }
-      cachedSnapshot = snapshot
-      return snapshot
     } finally {
       loadingSnapshotPromise = null
     }

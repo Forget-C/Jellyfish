@@ -15,8 +15,11 @@ from app.models.studio_asset_images import (
     PropImage,
     SceneImage,
 )
+from app.models.studio_asset_profiles import ChapterAssetProfile, ChapterAssetProfileRun
 from app.models.studio_prompts_files_timeline import FileItem, PromptTemplate, TimelineClip
 from app.models.studio_file_usages import FileUsage
+from app.models.studio_drama_plan import DramaPlanDraft
+from app.models.studio_products import Product, ProductImage, ProjectProductLink
 from app.models.studio_projects import (
     Chapter,
     Project,
@@ -33,6 +36,7 @@ from app.models.studio_shots import (
     ShotDetail,
     ShotDialogLine,
     ShotFrameImage,
+    ShotVideoPromptDraft,
 )
 from app.models.types import (
     AssetQualityLevel,
@@ -41,9 +45,12 @@ from app.models.types import (
     CameraMovement,
     CameraShotType,
     ChapterStatus,
+    DramaPlanDraftStatus,
+    DialogueLineMode,
     DialogueLineMode,
     FileType,
     FileUsageKind,
+    ProjectStartMode,
     ProjectStyle,
     ProjectVisualStyle,
     PromptCategory,
@@ -52,16 +59,21 @@ from app.models.types import (
     ShotDialogueCandidateStatus,
     ShotFrameType,
     ShotStatus,
+    ShotVideoPromptDraftStatus,
     TimelineClipType,
     VFXType,
 )
 
 __all__ = [
     # Enums
+    "ProjectStartMode",
     "ProjectStyle",
     "ProjectVisualStyle",
     "ChapterStatus",
     "ShotStatus",
+    "DramaPlanDraftStatus",
+    "ShotVideoPromptDraftStatus",
+    "ShotVideoPromptDraftStatus",
     "ShotCandidateType",
     "ShotCandidateStatus",
     "ShotDialogueCandidateStatus",
@@ -80,12 +92,15 @@ __all__ = [
     # Models
     "Project",
     "Chapter",
+    "ChapterAssetProfile",
+    "ChapterAssetProfileRun",
     "Scene",
     "Prop",
     "Costume",
     "Shot",
     "ShotDetail",
     "ShotFrameImage",
+    "ShotVideoPromptDraft",
     "ShotDialogLine",
     "ShotExtractedCandidate",
     "ShotExtractedDialogueCandidate",
@@ -101,6 +116,11 @@ __all__ = [
     "ProjectActorLink",
     "ProjectSceneLink",
     "ProjectPropLink",
+    "ProjectCostumeLink",
+    "Product",
+    "ProductImage",
+    "ProjectProductLink",
+    "DramaPlanDraft",
     "ProjectCostumeLink",
     "PromptTemplate",
     "FileItem",

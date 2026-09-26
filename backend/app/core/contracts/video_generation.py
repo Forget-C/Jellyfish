@@ -33,6 +33,10 @@ class VideoGenerationInput(BaseModel):
     model: Optional[str] = Field(None, description="视频模型名称（可选，供应商透传）")
     ratio: VideoRatio = Field(..., description="视频宽高比，业务层唯一主参数")
     seconds: Optional[int] = Field(None, description="时长（秒）（可选，供应商透传）")
+    resolution: Optional[str] = Field(
+        None,
+        description="分辨率档位（如 480p / 720p / 1080p）；未传时按供应商能力默认值解析",
+    )
     seed: Optional[int] = Field(
         None,
         ge=-1,
@@ -40,6 +44,32 @@ class VideoGenerationInput(BaseModel):
         description="随机种子，-1 或 [0, 2^32-1]，供应商/模型可能有差异",
     )
     watermark: Optional[bool] = Field(None, description="是否包含水印，供应商/模型可能有差异")
+
+    # ---- 音频（按 APIMart / seedance 官方协议对齐，2026-09-18 实读文档）----
+    # 三种东西必须分清，混起来就会得出错误结论：
+    #   1) ``generate_audio``：**供应商开关**，表示"视频带 AI 生成的配套音频"。
+    #      seedance 文档里**默认就是 true**，与下面上传的参考音频无关。
+    #   2) ``audio_urls``：**参考音频**（我们把已绑定的台词配音作为输入提交）。
+    #      seedance 支持，字段名就是 ``audio_urls``，接收公网 URL 或 ``asset://``，
+    #      最多 3 条、总时长 ≤15s，且需要与参考图片/参考视频一起使用。
+    #      **不接受 base64**，也不接受 localhost/相对地址（供应商抓不到）。
+    #   3) 首尾帧与参考音频互斥：官方警告"使用首尾帧图片（image_with_roles）时参考音频不可用"。
+    generate_audio: Optional[bool] = Field(
+        None,
+        description="是否生成配套音频（供应商开关，seedance 默认 true）；与参考音频无关",
+    )
+    audio_urls: list[str] = Field(
+        default_factory=list,
+        description="参考音频 URL 列表（公网地址或 asset://）；APIMart 与协议同名字段",
+    )
+    audio_base64: Optional[str] = Field(
+        None,
+        description="参考音频的内联形式（仅部分供应商支持；APIMart 不支持，不会被发出）",
+    )
+    audio_source_file_id: Optional[str] = Field(
+        None,
+        description="该音频来自哪条 files 记录（仅用于追溯，**不会**发给供应商）",
+    )
 
     @model_validator(mode="after")
     def require_prompt_or_any_reference(self) -> "VideoGenerationInput":

@@ -1,4 +1,4 @@
-import { Form, Select } from 'antd'
+import { AutoComplete, Form, Select } from 'antd'
 
 export type ProjectVisualStyleChoice = '现实' | '动漫'
 
@@ -94,8 +94,18 @@ export function ProjectVisualStyleAndStyleFields(props: FormModeProps | Controll
           {({ getFieldValue }) => {
             const visual = (getFieldValue('visual_style') as string | undefined) ?? resolvedOptions.visualStyles[0]?.value ?? '现实'
             return (
-              <Form.Item name="style" label="视频风格" rules={[{ required: true }]}>
-                <Select disabled={disabled} options={resolvedOptions.stylesByVisual[visual] ?? []} />
+              <Form.Item
+                name="style"
+                label="视频风格"
+                rules={[{ required: true }]}
+                tooltip="下面给的是预设，也可以直接输入自定义风格"
+              >
+                {/* 用 AutoComplete 而不是 Select：既能选预设，也能自由输入 */}
+                <AutoComplete
+                  disabled={disabled}
+                  options={resolvedOptions.stylesByVisual[visual] ?? []}
+                  placeholder="选择预设，或直接输入自定义风格"
+                />
               </Form.Item>
             )
           }}
@@ -123,12 +133,14 @@ export function ProjectVisualStyleAndStyleFields(props: FormModeProps | Controll
       </div>
       <div>
         <span className="text-gray-600 text-sm">{styleLabel ?? '视频风格'}</span>
-        <Select
+        {/* 与表单模式保持一致：可选项 + 可自由输入 */}
+        <AutoComplete
           className="mt-1 w-full"
           disabled={disabled}
           value={style}
-          onChange={(v) => onChange({ visual_style, style: String(v) })}
+          onChange={(v) => onChange({ visual_style, style: String(v ?? '') })}
           options={resolvedOptions.stylesByVisual[visual_style] ?? []}
+          placeholder="选择预设，或直接输入自定义风格"
         />
       </div>
     </div>

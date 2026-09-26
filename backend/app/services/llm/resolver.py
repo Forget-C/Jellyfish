@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.llm import Model, ModelCategoryKey, ModelSettings, Provider
 from app.services.common import entity_not_found
 from app.services.llm.provider_resolver import resolve_effective_base_url
+from app.services import paid_outlet_guard
 
 
 def _settings_model_id(settings_row: ModelSettings | None, category: ModelCategoryKey) -> str | None:
@@ -135,7 +136,15 @@ async def build_default_text_llm(
     *,
     thinking: bool,
 ) -> BaseChatModel:
-    """基于默认文本模型构造 ChatOpenAI。"""
+    """基于默认文本模型构造 ChatOpenAI。
+
+    构造即代表「准备真实调用大模型」，因此这里统一过 DRY_RUN 守卫：任何调用方
+    （legacy script-processing、技能、影视提取……）都绕不过去。
+    """
+    paid_outlet_guard.require_outlet(
+        "构造默认文本大模型（即将真实调用）",
+        outlet=paid_outlet_guard.OUTLET_LLM,
+    )
     model = await get_default_model_by_category(db, ModelCategoryKey.text)
     provider = await get_provider_by_model_or_id(db, model)
     return _build_chat_openai_model(

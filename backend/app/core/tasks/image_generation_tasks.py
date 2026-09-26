@@ -5,9 +5,11 @@
 
 from __future__ import annotations
 
+import os
 from abc import ABC, abstractmethod
 from typing import Any, AsyncIterator
 
+from app.core.integrations.apimart.images import ApimartImageApiAdapter
 from app.core.integrations.openai.images import OpenAIImageApiAdapter
 from app.core.integrations.volcengine.images import VolcengineImageApiAdapter
 from app.core.contracts.image_generation import (
@@ -31,8 +33,16 @@ __all__ = [
     "AbstractImageGenerationTask",
     "OpenAIImageGenerationTask",
     "VolcengineImageGenerationTask",
+    "ApimartImageGenerationTask",
     "ImageGenerationTask",
 ]
+
+
+# 单张图的 HTTP 等待上限。原默认 60s 只够 OpenAI 直连这种秒级返回的接口；
+# 走「OpenAI 兼容垫片 → 本地出图服务 → APIMart 异步出图」这条链路时，
+# 垫片是同步阻塞到出图完成的，实测单张约 60—90s，60s 必然踩线超时。
+# 可用 JELLYFISH_IMAGE_TIMEOUT_SECONDS 覆盖。
+DEFAULT_IMAGE_TIMEOUT_SECONDS = float(os.getenv("JELLYFISH_IMAGE_TIMEOUT_SECONDS", "600") or 600)
 
 
 class AbstractImageGenerationTask(BaseTask, ABC):
@@ -43,7 +53,7 @@ class AbstractImageGenerationTask(BaseTask, ABC):
         *,
         provider_config: ProviderConfig,
         input_: ImageGenerationInput,
-        timeout_s: float = 60.0,
+        timeout_s: float = DEFAULT_IMAGE_TIMEOUT_SECONDS,
     ) -> None:
         self._cfg = provider_config
         self._input = input_
@@ -98,7 +108,7 @@ class OpenAIImageGenerationTask(AbstractImageGenerationTask):
         adapter: OpenAIImageApiAdapter | None = None,
         provider_config: ProviderConfig,
         input_: ImageGenerationInput,
-        timeout_s: float = 60.0,
+        timeout_s: float = DEFAULT_IMAGE_TIMEOUT_SECONDS,
     ) -> None:
         super().__init__(provider_config=provider_config, input_=input_, timeout_s=timeout_s)
         self._adapter = adapter or OpenAIImageApiAdapter()
@@ -125,10 +135,37 @@ class VolcengineImageGenerationTask(AbstractImageGenerationTask):
         adapter: VolcengineImageApiAdapter | None = None,
         provider_config: ProviderConfig,
         input_: ImageGenerationInput,
-        timeout_s: float = 60.0,
+        timeout_s: float = DEFAULT_IMAGE_TIMEOUT_SECONDS,
     ) -> None:
         super().__init__(provider_config=provider_config, input_=input_, timeout_s=timeout_s)
         self._adapter = adapter or VolcengineImageApiAdapter()
+        self._deferred: ImageGenerationResult | None = None
+
+    async def _create_task(self) -> None:
+        self._deferred = await self._adapter.generate(
+            cfg=self._cfg,
+            inp=self._input,
+            timeout_s=self._timeout_s,
+        )
+
+    async def _poll_and_get_result(self) -> ImageGenerationResult:
+        assert self._deferred is not None
+        return self._deferred
+
+
+class ApimartImageGenerationTask(AbstractImageGenerationTask):
+    """APIMart 图片：协议同 OpenAI Images，走独立 adapter 以保留供应商语义。"""
+
+    def __init__(
+        self,
+        *,
+        adapter: ApimartImageApiAdapter | None = None,
+        provider_config: ProviderConfig,
+        input_: ImageGenerationInput,
+        timeout_s: float = DEFAULT_IMAGE_TIMEOUT_SECONDS,
+    ) -> None:
+        super().__init__(provider_config=provider_config, input_=input_, timeout_s=timeout_s)
+        self._adapter = adapter or ApimartImageApiAdapter()
         self._deferred: ImageGenerationResult | None = None
 
     async def _create_task(self) -> None:
@@ -151,7 +188,7 @@ class ImageGenerationTask(BaseTask):
         *,
         provider_config: ProviderConfig,
         input_: ImageGenerationInput,
-        timeout_s: float = 60.0,
+        timeout_s: float = DEFAULT_IMAGE_TIMEOUT_SECONDS,
     ) -> None:
         from app.bootstrap import bootstrap_all_registries
 
@@ -168,7 +205,7 @@ class ImageGenerationTask(BaseTask):
         *,
         provider_config: ProviderConfig,
         input_: ImageGenerationInput,
-        timeout_s: float = 60.0,
+        timeout_s: float = DEFAULT_IMAGE_TIMEOUT_SECONDS,
     ) -> AbstractImageGenerationTask:
         return OpenAIImageGenerationTask(
             provider_config=provider_config,
@@ -181,9 +218,22 @@ class ImageGenerationTask(BaseTask):
         *,
         provider_config: ProviderConfig,
         input_: ImageGenerationInput,
-        timeout_s: float = 60.0,
+        timeout_s: float = DEFAULT_IMAGE_TIMEOUT_SECONDS,
     ) -> AbstractImageGenerationTask:
         return VolcengineImageGenerationTask(
+            provider_config=provider_config,
+            input_=input_,
+            timeout_s=timeout_s,
+        )
+
+    @staticmethod
+    def _build_apimart_impl(
+        *,
+        provider_config: ProviderConfig,
+        input_: ImageGenerationInput,
+        timeout_s: float = DEFAULT_IMAGE_TIMEOUT_SECONDS,
+    ) -> AbstractImageGenerationTask:
+        return ApimartImageGenerationTask(
             provider_config=provider_config,
             input_=input_,
             timeout_s=timeout_s,

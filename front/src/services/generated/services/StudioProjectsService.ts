@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
 import type { ApiResponse_PaginatedData_ProjectRead__ } from '../models/ApiResponse_PaginatedData_ProjectRead__';
+import type { ApiResponse_ProjectAssetReadinessRead_ } from '../models/ApiResponse_ProjectAssetReadinessRead_';
 import type { ApiResponse_ProjectRead_ } from '../models/ApiResponse_ProjectRead_';
 import type { ApiResponse_ProjectStyleOptionsRead_ } from '../models/ApiResponse_ProjectStyleOptionsRead_';
 import type { ProjectCreate } from '../models/ProjectCreate';
@@ -31,7 +32,7 @@ export class StudioProjectsService {
     public static listProjectsApiV1StudioProjectsGet({
         q,
         order,
-        isDesc = false,
+        isDesc = true,
         page = 1,
         pageSize = 10,
     }: {
@@ -44,7 +45,7 @@ export class StudioProjectsService {
          */
         order?: (string | null),
         /**
-         * 是否倒序
+         * 是否倒序（默认按创建时间倒序：最新项目在最上面）
          */
         isDesc?: boolean,
         page?: number,
@@ -144,6 +145,32 @@ export class StudioProjectsService {
         return __request(OpenAPI, {
             method: 'DELETE',
             url: '/api/v1/studio/projects/{project_id}',
+            path: {
+                'project_id': projectId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * 项目资产准备清单（角色/场景/道具/服装同一口径）
+     * 第 2 步「资产准备」的**唯一数据源**。
+     *
+     * 资产表格、顶部统计与步骤判定都读这一份清单，不再各自去看
+     * `project_scene_links` / `project_prop_links` 之类关联行的读模型里
+     * 是否**偶然**带了 `image_prompts` —— 那正是「保存了提示词仍显示待完善」的根因。
+     * @returns ApiResponse_ProjectAssetReadinessRead_ Successful Response
+     * @throws ApiError
+     */
+    public static getProjectAssetReadinessApiV1StudioProjectsProjectIdAssetReadinessGet({
+        projectId,
+    }: {
+        projectId: string,
+    }): CancelablePromise<ApiResponse_ProjectAssetReadinessRead_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/asset-readiness',
             path: {
                 'project_id': projectId,
             },

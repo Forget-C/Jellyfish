@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
 from app.models.base import TimestampMixin
-from app.models.types import ChapterStatus, ProjectStyle, ProjectVisualStyle
+from app.models.types import ChapterStatus, ProjectStartMode, ProjectStyle, ProjectVisualStyle
 
 if TYPE_CHECKING:
     from app.models.studio_assets import Actor, Character, Costume, Prop, Scene
@@ -41,6 +41,14 @@ class Project(Base, TimestampMixin):
         nullable=True,
         default=None,
         comment="项目级默认视频比例（可为空；分镜未覆盖时使用）",
+    )
+    # 生产方式（起点）。旧项目一律回填为 "script"，因此老数据的行为完全不变。
+    start_mode: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default=ProjectStartMode.script.value,
+        server_default=ProjectStartMode.script.value,
+        comment="项目起点：script=从剧本开始；prompts=从视频提示词开始",
     )
     stats: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict, comment="聚合统计（JSON）")
 

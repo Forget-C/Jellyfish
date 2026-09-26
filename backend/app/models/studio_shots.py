@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -17,6 +18,7 @@ from app.models.types import (
     ShotDialogueCandidateStatus,
     ShotFrameType,
     ShotStatus,
+    ShotVideoPromptDraftStatus,
     VFXType,
 )
 
@@ -163,6 +165,20 @@ class ShotDetail(Base,TimestampMixin):
         nullable=False,
         comment="运镜方式（存 code：STATIC/PAN/...；展示可用 schemas.CAMERA_MOVEMENT_ZH）",
     )
+    audio_file_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("files.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="该镜头使用的音频文件 ID（files.type=audio）；声音绑定落在这一列",
+    )
+    audio_opt_out: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("0"),
+        comment="本镜**明确标记**无需声音（用户授权新增）：与 audio_file_id 互斥，默认 false=未表态",
+    )
     scene_id: Mapped[str | None] = mapped_column(
         String(64),
         ForeignKey("scenes.id", ondelete="SET NULL"),
@@ -215,6 +231,18 @@ class ShotDetail(Base,TimestampMixin):
     key_frame_prompt: Mapped[str] = mapped_column(
         Text, nullable=False, default="", comment="镜头分镜关键帧提示词",
     )
+    video_prompt: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="",
+        comment="镜头视频提示词（文生视频用；与帧图片提示词分离，可由外部平台导入）",
+    )
+    video_prompt_source: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="",
+        comment="视频提示词来源标记（如 jurilu / external / manual / internal；空表示未知）",
+    )
 
     shot: Mapped["Shot"] = relationship(back_populates="detail")
     scene: Mapped["Scene | None"] = relationship()
@@ -237,6 +265,96 @@ class ShotDetail(Base,TimestampMixin):
         Index("ix_shot_details_camera_shot", "camera_shot"),
         Index("ix_shot_details_angle", "angle"),
         Index("ix_shot_details_prompt_template_id", "prompt_template_id"),
+    )
+
+
+class ShotVideoPromptDraft(Base, TimestampMixin):
+    """集级「视频提示词看板」的**服务端草稿**（每镜一行）。
+
+    为什么必须有这张表（2026-09-19 修「整集提示词草稿丢失」）：
+    看板按「一次一镜」**真实调用**大模型（``POST /prompt-board/{id}/draft``），
+    草稿此前只活在浏览器内存里 —— 刷新页面 / 切走 / 中断就全丢，
+    用户已经付过费的生成结果无法恢复，只能重新花钱再生成一遍。
+    草稿落库后：刷新能恢复、中断能续跑、失败项能单独重试。
+
+    与正式字段的边界（硬约束）：
+    - 本表**只存草稿**，绝不写 ``shot_details.video_prompt``；写正式列只有一条路：
+      ``POST /prompt-board/{chapter_id}/save``（``origin → source`` 映射已存在）。
+    - ``/save`` 成功后由服务端删掉被写入镜头的草稿行（草稿已完成使命）。
+    - ``server_generated`` **只由服务端自己的真实生成路径**置 true：走接口写进来的
+      正文不算"大模型产物"，因此拿不到 ``draft_token``，也就无法按 ``llm_draft``
+      保存（沿用既有「来源必须自证」的守卫，不因为草稿落库而开口子）。
+
+    主键 = ``shot_id``（与 ``ShotDetail`` 一样与 ``shots`` 共享主键，一镜一行天然唯一）；
+    所有读写都**同时**按 ``(chapter_id, shot_id)`` 过滤，草稿不会被跨集读错或写错。
+    """
+
+    __tablename__ = "shot_video_prompt_drafts"
+
+    shot_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("shots.id", ondelete="CASCADE"),
+        primary_key=True,
+        comment="镜头 ID（与 shots.id 共享主键：一镜至多一份草稿）",
+    )
+    chapter_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("chapters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="所属章节 ID（与 shot_id 一起构成读写键，防跨集读写）",
+    )
+    status: Mapped[ShotVideoPromptDraftStatus] = mapped_column(
+        String(16),
+        nullable=False,
+        default=ShotVideoPromptDraftStatus.failed,
+        comment="草稿状态：running（生成中，带租约）/ ok（已完成）/ failed（失败）；未开始不落行",
+    )
+    prompt: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="",
+        comment="草稿正文（**不是**正式提示词；只有 /save 才会写入 shot_details.video_prompt）",
+    )
+    source: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="",
+        comment="草稿的流程来源标记（llm / jurilu / external_import / manual；与正式列同口径但互不影响）",
+    )
+    error: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", comment="失败原因（供页面展示与重试定位）"
+    )
+    model: Mapped[str] = mapped_column(
+        String(128), nullable=False, default="", comment="本次生成使用的模型名（便于对账费用）"
+    )
+    meta: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict, comment="附加信息（latency_ms / warnings / llm_called 等）"
+    )
+    server_generated: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("0"),
+        comment="是否由服务端真实生成路径写入（只有它为 true 才签发 draft_token）",
+    )
+    claim_token: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+        comment="当前「生成中」租约的持有者令牌（空 = 没有进行中的生成）",
+    )
+    claim_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="租约到期时间；到期后允许重新抢占（避免中断后永久卡住）",
+    )
+
+    shot: Mapped["Shot"] = relationship()
+    chapter: Mapped["Chapter"] = relationship()
+
+    __table_args__ = (
+        Index("ix_shot_video_prompt_drafts_status", "status"),
+        Index("ix_shot_video_prompt_drafts_chapter_shot", "chapter_id", "shot_id"),
     )
 
 

@@ -19,10 +19,16 @@ function toUIProject(p: ProjectRead): Project {
     const v = stats[key]
     return typeof v === 'number' && Number.isFinite(v) ? v : 0
   }
-  const updatedAt =
-    (typeof stats.updated_at === 'string' && stats.updated_at) ||
-    (typeof stats.updatedAt === 'string' && stats.updatedAt) ||
-    new Date().toISOString()
+  /**
+   * 时间戳只认后端下发的真实值（`created_at` / `updated_at`）。
+   *
+   * 历史问题：这里原来读 `stats.updated_at`，而后端从不写 stats，
+   * 于是所有项目都回退成 `new Date().toISOString()`——列表卡片上每个项目的时间
+   * 都等于「打开页面的那一刻」，按时间排序也彻底失效。缺失时留空串（界面显示「—」），
+   * 绝不再用当前时间兜底。
+   */
+  const createdAt = typeof p.created_at === 'string' ? p.created_at : ''
+  const updatedAt = typeof p.updated_at === 'string' ? p.updated_at : createdAt
   return {
     id: p.id,
     name: p.name,
@@ -37,7 +43,9 @@ function toUIProject(p: ProjectRead): Project {
       scenes: getNum('scenes'),
       props: getNum('props'),
     },
+    createdAt,
     updatedAt,
+    startMode: (p.start_mode as 'script' | 'prompts' | undefined) ?? 'script',
   }
 }
 

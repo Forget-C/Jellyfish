@@ -11,6 +11,14 @@ import {
 } from '@ant-design/icons'
 import type { Chapter } from '../../../../mocks/data'
 
+/**
+ * 旧的 10 个平级 Tab 定义。
+ *
+ * 六步流程（`projectSteps.ts` + `index.tsx`）上线后，主导航不再使用 `TAB_CONFIG`，
+ * 但这些 key 仍然是 URL 里的兼容参数（`?tab=chapters|roles|scenes|props|costumes|actors`
+ * 会被映射到对应步骤；`dashboard|files|edit|settings` 收进「其他」下拉）。
+ * 保留导出，避免影响仍在用旧链接的页面。
+ */
 export type TabKey =
   | 'dashboard'
   | 'chapters'

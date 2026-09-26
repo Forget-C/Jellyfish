@@ -21,9 +21,18 @@ function normalizeUpdateImagePayload(payload: UpdateImagePayload): UpdateImagePa
   }
 }
 
+/**
+ * 地址里没有资产编号时给用户看的话（审计 §4.6 模式 2）。
+ *
+ * 原来五处分别写 `缺少 character_id` / `缺少 actor_id` / `缺少 scene_id` /
+ * `缺少 prop_id` / `缺少 costume_id` —— **后端字段名直接上屏**，而且五处口径不一致。
+ * 用户要的是「怎么办」，不是字段名叫什么。
+ */
+const MISSING_ASSET_ID_TEXT = '地址里没有资产编号，请从项目工作台第 2 步「资产准备」进入'
+
 export const assetAdapters = {
   character: {
-    missingAssetIdText: '缺少 character_id',
+    missingAssetIdText: MISSING_ASSET_ID_TEXT,
     assetDisplayName: '角色',
     backTo: '/projects',
     relationType: 'character_image',
@@ -56,16 +65,9 @@ export const assetAdapters = {
         images: (data?.images ?? []) as string[],
       }
     },
-    createGenerationTask: async (id: string, imageId: number, payload: { prompt: string; images: string[] }) => {
-      const res = await StudioImageTasksService.createCharacterImageGenerationTaskApiV1StudioImageTasksCharactersCharacterIdImageTasksPost({
-        characterId: id,
-        requestBody: { image_id: imageId, model_id: null, prompt: payload.prompt, images: payload.images } as any,
-      })
-      return res.data?.task_id ?? null
-    },
   } satisfies AdapterConfig<any, any>,
   actor: {
-    missingAssetIdText: '缺少 actor_id',
+    missingAssetIdText: MISSING_ASSET_ID_TEXT,
     assetDisplayName: '演员',
     backTo: '/assets?tab=actor',
     relationType: 'actor_image',
@@ -98,16 +100,9 @@ export const assetAdapters = {
         images: (data?.images ?? []) as string[],
       }
     },
-    createGenerationTask: async (id: string, imageId: number, payload: { prompt: string; images: string[] }) => {
-      const res = await StudioImageTasksService.createActorImageGenerationTaskApiV1StudioImageTasksActorsActorIdImageTasksPost({
-        actorId: id,
-        requestBody: { image_id: imageId, model_id: null, prompt: payload.prompt, images: payload.images } as any,
-      })
-      return res.data?.task_id ?? null
-    },
   } satisfies AdapterConfig<any, any>,
   scene: {
-    missingAssetIdText: '缺少 scene_id',
+    missingAssetIdText: MISSING_ASSET_ID_TEXT,
     assetDisplayName: '场景',
     backTo: '/assets?tab=scene',
     relationType: 'scene_image',
@@ -141,17 +136,9 @@ export const assetAdapters = {
         images: (data?.images ?? []) as string[],
       }
     },
-    createGenerationTask: async (id: string, imageId: number, payload: { prompt: string; images: string[] }) => {
-      const res = await StudioImageTasksService.createAssetImageGenerationTaskApiV1StudioImageTasksAssetsAssetTypeAssetIdImageTasksPost({
-        assetType: 'scene',
-        assetId: id,
-        requestBody: { image_id: imageId, prompt: payload.prompt, images: payload.images } as any,
-      })
-      return res.data?.task_id ?? null
-    },
   } satisfies AdapterConfig<any, any>,
   prop: {
-    missingAssetIdText: '缺少 prop_id',
+    missingAssetIdText: MISSING_ASSET_ID_TEXT,
     assetDisplayName: '道具',
     backTo: '/assets?tab=prop',
     relationType: 'prop_image',
@@ -185,17 +172,9 @@ export const assetAdapters = {
         images: (data?.images ?? []) as string[],
       }
     },
-    createGenerationTask: async (id: string, imageId: number, payload: { prompt: string; images: string[] }) => {
-      const res = await StudioImageTasksService.createAssetImageGenerationTaskApiV1StudioImageTasksAssetsAssetTypeAssetIdImageTasksPost({
-        assetType: 'prop',
-        assetId: id,
-        requestBody: { image_id: imageId, prompt: payload.prompt, images: payload.images } as any,
-      })
-      return res.data?.task_id ?? null
-    },
   } satisfies AdapterConfig<any, any>,
   costume: {
-    missingAssetIdText: '缺少 costume_id',
+    missingAssetIdText: MISSING_ASSET_ID_TEXT,
     assetDisplayName: '服装',
     backTo: '/assets?tab=costume',
     relationType: 'costume_image',
@@ -228,14 +207,6 @@ export const assetAdapters = {
         prompt: (data?.prompt ?? '') as string,
         images: (data?.images ?? []) as string[],
       }
-    },
-    createGenerationTask: async (id: string, imageId: number, payload: { prompt: string; images: string[] }) => {
-      const res = await StudioImageTasksService.createAssetImageGenerationTaskApiV1StudioImageTasksAssetsAssetTypeAssetIdImageTasksPost({
-        assetType: 'costume',
-        assetId: id,
-        requestBody: { image_id: imageId, prompt: payload.prompt, images: payload.images } as any,
-      })
-      return res.data?.task_id ?? null
     },
   } satisfies AdapterConfig<any, any>,
 }

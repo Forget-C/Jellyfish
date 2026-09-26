@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 import uuid
 from datetime import UTC, datetime
@@ -15,6 +16,9 @@ from app.models.studio import ActorImage, CharacterImage, CostumeImage, PropImag
 from app.models.task_links import GenerationTaskLink
 from app.models.task import GenerationDeliveryMode, GenerationTask, GenerationTaskStatus
 from app.core.task_manager.types import DeliveryMode, TaskListItemView, TaskRecord, TaskStatus, TaskStatusView
+
+
+logger = logging.getLogger(__name__)
 
 
 def _now_ts() -> float:
@@ -33,8 +37,42 @@ def _to_app_mode(mode: str | GenerationDeliveryMode) -> DeliveryMode:
     return DeliveryMode(str(_enum_value(mode)))
 
 
+# 历史状态词 → 本应用状态。只用于读取期归一化，不写回数据库。
+_LEGACY_STATUS_ALIASES: dict[str, TaskStatus] = {
+    "completed": TaskStatus.succeeded,
+    "complete": TaskStatus.succeeded,
+    "success": TaskStatus.succeeded,
+    "partial_succeeded": TaskStatus.succeeded,
+    "partial_failed": TaskStatus.failed,
+    "error": TaskStatus.failed,
+    "timeout": TaskStatus.failed,
+    "timed_out": TaskStatus.failed,
+    "canceled": TaskStatus.cancelled,
+}
+
+
 def _to_app_status(status: str | GenerationTaskStatus) -> TaskStatus:
-    return TaskStatus(str(_enum_value(status)))
+    """把库里/枚举里的状态归一化成本应用的 TaskStatus。
+
+    历史数据里存在早期从中控台导入或旧执行器写入的状态词（如 ``completed``、
+    ``partial_failed``），它们不在 ``GenerationTaskStatus`` 白名单内。
+    早先这里直接 ``TaskStatus(...)``，一行历史数据就会让整个任务列表接口 500。
+    现在改为：能直接命中就命中，命中不了走等价映射，再不行降级为 pending 并
+    留一条 warning —— 只做读取期归一化，不动库。
+    """
+
+    raw = str(_enum_value(status))
+    try:
+        return TaskStatus(raw)
+    except ValueError:
+        pass
+
+    aliased = _LEGACY_STATUS_ALIASES.get(raw)
+    if aliased is not None:
+        return aliased
+
+    logger.warning("未知任务状态 %r，已降级为 pending（未修改数据库）", raw)
+    return TaskStatus.pending
 
 
 def _to_db_mode(mode: DeliveryMode) -> GenerationDeliveryMode:
@@ -43,6 +81,20 @@ def _to_db_mode(mode: DeliveryMode) -> GenerationDeliveryMode:
 
 def _to_db_status(status: TaskStatus) -> GenerationTaskStatus:
     return GenerationTaskStatus(status.value)
+
+
+def _normalize_datetime(value: datetime) -> datetime:
+    """把可能带时区的 datetime 归一到「无时区 UTC」，便于互相比较与相减。
+
+    库里同时存在两条写入路径：SQLAlchemy 写出的 ``YYYY-MM-DD HH:MM:SS``，以及
+    早期迁移脚本写出的 ISO ``YYYY-MM-DDTHH:MM:SS``。读回来有的带 tzinfo 有的
+    不带，直接相减会抛 ``can't subtract offset-naive and offset-aware datetimes``，
+    让整个任务列表接口 500。这里统一到 naive UTC 再算。
+    """
+
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(UTC).replace(tzinfo=None)
 
 
 def _datetime_ts(value: datetime | None) -> float | None:
@@ -58,7 +110,14 @@ def _elapsed_ms_from_datetimes(
     if started_at is None:
         return None
     end_at = finished_at or now or datetime.now(UTC).replace(tzinfo=None)
-    return max(0, int((end_at - started_at).total_seconds() * 1000))
+    try:
+        delta = _normalize_datetime(end_at) - _normalize_datetime(started_at)
+    except (TypeError, ValueError):
+        logger.warning(
+            "无法计算任务耗时：started_at=%r finished_at=%r", started_at, end_at, exc_info=True
+        )
+        return None
+    return max(0, int(delta.total_seconds() * 1000))
 
 
 def _is_terminal_status(status: TaskStatus) -> bool:

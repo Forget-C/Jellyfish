@@ -44,17 +44,21 @@ export function getChapterPreparationState(chapter: Chapter): ChapterPreparation
       key: 'shoot',
       text: '可进入拍摄',
       color: 'green',
-      hint: '当前章节已具备分镜，可继续进入拍摄',
-      primaryAction: '进入拍摄',
+      hint: '当前章节已具备分镜，继续后续步骤',
+      primaryAction: '继续后续步骤',
       primaryIcon: <VideoCameraOutlined />,
     }
   }
+  // 有分镜之后的「下一步」不再直接进分镜工作室：
+  // 六步流程要求先做资产提取 → 图片准备 → 整集视频提示词 → 关联绑定，最后才进工作室。
+  // 这里只把用户交回项目工作台，由 `resolveProjectStep`（唯一判定来源）决定落在哪一步；
+  // 工作室仍然保留「单镜查看与补漏」的入口（步骤条第 5/6 步、章节列表行内按钮）。
   return {
     key: 'prepare_shots',
     text: '待准备镜头',
     color: 'blue',
-    hint: '已有分镜，建议先进入分镜工作室补齐镜头准备',
-    primaryAction: '进入分镜工作室',
+    hint: '已有分镜，继续后续步骤（资产准备 → 整集视频提示词）',
+    primaryAction: '继续项目流程',
     primaryIcon: <FileSearchOutlined />,
   }
 }

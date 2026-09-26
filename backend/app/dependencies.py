@@ -7,6 +7,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import async_session_maker
+from app.services import paid_outlet_guard
 from app.services.llm.resolver import build_default_text_llm
 
 
@@ -41,6 +42,10 @@ class _ImageHttpRunnable:
         self._timeout_s = timeout_s
 
     def invoke(self, payload: dict) -> dict:  # noqa: ANN001
+        paid_outlet_guard.require_outlet(
+            "legacy _ImageHttpRunnable 真实出图（按张计费）",
+            outlet=paid_outlet_guard.OUTLET_IMAGE,
+        )
         try:
             import httpx
         except ImportError as e:  # pragma: no cover
@@ -56,6 +61,10 @@ class _ImageHttpRunnable:
             return data if isinstance(data, dict) else {"images": data}
 
     async def ainvoke(self, payload: dict) -> dict:  # noqa: ANN001
+        paid_outlet_guard.require_outlet(
+            "legacy _ImageHttpRunnable 真实出图（按张计费）",
+            outlet=paid_outlet_guard.OUTLET_IMAGE,
+        )
         try:
             import httpx
         except ImportError as e:  # pragma: no cover

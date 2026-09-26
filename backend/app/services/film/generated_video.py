@@ -1,13 +1,9 @@
 from __future__ import annotations
 
-import base64
-import mimetypes
-
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core import storage
 from app.core.db import async_session_maker
 from app.core.task_manager import SqlAlchemyTaskStore
 from app.core.task_manager.types import TaskStatus
@@ -46,31 +42,28 @@ async def validate_shot_and_duration(db: AsyncSession, shot_id: str) -> ShotDeta
 
 
 async def file_id_to_data_url(db: AsyncSession, *, file_id: str) -> str:
-    file_obj = await db.get(FileItem, file_id)
-    if file_obj is None or not file_obj.storage_key:
-        raise HTTPException(status_code=400, detail=f"Invalid image file_id: {file_id}")
+    """把 file_id 转成**供应商能用的图片地址**：公网地址优先，否则退化为 data URL。
+
+    为什么优先公网地址：APIMart 的视频接口只接受 ``http(s)://`` 或 ``asset://``
+    （实测 base64 data URL 会被直接 400：``Only http/https URLs or asset:// private
+    asset URLs are supported``）。而库里大量图片本来就是 OSS 公网地址
+    （``storage_key`` 形如 ``https://...oss...``），这种直接透传即可 ——
+    既省掉下载 + base64 的开销，又让请求能被接受。
+
+    本地存储的文件（``storage_key`` 是相对路径）仍然回退成 data URL：本机地址
+    供应商抓不到，data URL 至少对 openai / volcengine 这类适配器是有效的。
+
+    实现已抽到 ``app.utils.files.file_id_to_image_ref``（图片参考图那条路也要用同一份
+    判断，不能各写一份——图片路以前就是没这个分支，把 OSS 公网地址当相对路径用）。
+    """
+    from app.utils.files import file_id_to_image_ref
+
     try:
-        content = await storage.download_file(key=file_obj.storage_key)
-    except Exception:  # noqa: BLE001
+        return await file_id_to_image_ref(db, file_id=file_id)
+    except HTTPException:
+        raise
+    except Exception:  # noqa: BLE001 - 统一成 400，避免把存储层异常透出去
         raise HTTPException(status_code=400, detail=f"Invalid image file_id: {file_id}") from None
-    if not content:
-        raise HTTPException(status_code=400, detail=f"Invalid image file_id: {file_id}")
-
-    content_type: str | None = None
-    try:
-        info = await storage.get_file_info(key=file_obj.storage_key)
-        content_type = (info.content_type or "").strip().lower() or None
-    except Exception:  # noqa: BLE001
-        content_type = None
-    if not content_type:
-        guessed_type, _ = mimetypes.guess_type(file_obj.storage_key)
-        content_type = (guessed_type or "").strip().lower() or None
-    if not content_type or not content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail=f"Invalid image file_id: {file_id}")
-
-    image_format = content_type.split("/", 1)[1].split(";", 1)[0].strip().lower() or "png"
-    encoded = base64.b64encode(content).decode("ascii")
-    return f"data:image/{image_format};base64,{encoded}"
 
 
 async def preview_prompt_and_images(
@@ -81,7 +74,8 @@ async def preview_prompt_and_images(
     prompt: str | None,
     images: list[str] | None = None,
 ) -> tuple[str, list[str], dict | None]:
-    shot_detail = await validate_shot_and_duration(db, shot_id)
+    # 只为校验（镜头/时长不合法要 400/404），这里不用它的返回值。
+    await validate_shot_and_duration(db, shot_id)
     base = build_video_base_draft(shot_id=shot_id, prompt=prompt)
     context = await build_video_context(
         db,
@@ -143,6 +137,36 @@ async def resolve_effective_video_options(
     return req_ratio
 
 
+def _assert_frames_vendor_acceptable(*, provider: str, frame_map: dict[ShotFrameType, str]) -> None:
+    """第二层兜底：供应商不接受的参考帧引用**绝不出网**。
+
+    与计划预检 / 集级就绪判定共用 ``app.utils.files`` 里的同一份判定：
+    本机文件只能解析成 base64 data URL，而 APIMart 只接受 ``http(s)://`` / ``asset://``。
+    在这里拦下，报错信息就能说清"是哪一帧、为什么、怎么修"，
+    而不是让供应商 400（那会让人以为"计划说可生成、提交却失败"）。
+    """
+    from app.utils.files import is_vendor_accepted_ref, vendor_accepts_data_url
+
+    if vendor_accepts_data_url(provider):
+        return
+    bad = [
+        frame_type.value
+        for frame_type, ref in frame_map.items()
+        if str(ref or "").strip() and not is_vendor_accepted_ref(ref)
+    ]
+    if not bad:
+        return
+    raise HTTPException(
+        status_code=400,
+        detail=(
+            f"参考帧供应商无法访问：{'、'.join(bad)}。这些帧的文件是本机/相对地址，"
+            "只能解析成本机 data URL，而当前视频供应商只接受 http(s):// 或 asset://。"
+            "请把帧图片放到公网（OSS 等），或用 POST /api/v1/studio/files/external "
+            "登记公网图片后再设为该帧；纯文本生成请改用 reference_mode=text_only。"
+        ),
+    )
+
+
 async def build_run_args(
     db: AsyncSession,
     *,
@@ -173,6 +197,9 @@ async def build_run_args(
     required_frames = tuple(ShotFrameType(item) for item in REQUIRED_FRAMES_BY_MODE[reference_mode])
     frame_data_urls = [await file_id_to_data_url(db, file_id=file_id) for file_id in submission.images]
     frame_map = {ft: frame_data_urls[i] for i, ft in enumerate(required_frames)}
+
+    # 第二层兜底（与计划预检 / 就绪判定同一份判定）：供应商不接受的引用绝不发出去。
+    _assert_frames_vendor_acceptable(provider=provider_cfg.provider, frame_map=frame_map)
 
     run_args = {
         "shot_id": shot_id,

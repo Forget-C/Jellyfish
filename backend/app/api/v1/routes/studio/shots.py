@@ -68,6 +68,7 @@ from app.schemas.studio.shots import (
     ProjectActorLinkRead,
     ProjectAssetLinkCreate,
     ProjectCostumeLinkRead,
+    ProjectProductLinkRead,
     ShotAssetsOverviewRead,
     ShotLinkedAssetItem,
     ShotCreate,
@@ -824,3 +825,31 @@ async def delete_project_costume_link(
 ) -> ApiResponse[None]:
     await delete_project_asset_link_service(db, entity_type="costume", link_id=link_id)
     return empty_response()
+
+
+@links_router.post(
+    "/product",
+    response_model=ApiResponse[ProjectProductLinkRead],
+    status_code=status.HTTP_201_CREATED,
+    summary="创建项目-章节-镜头-商品关联",
+)
+async def create_project_product_link(
+    body: ProjectAssetLinkCreate,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[ProjectProductLinkRead]:
+    obj = await create_project_asset_link_service(db, entity_type="product", body=body)
+    return created_response(ProjectProductLinkRead.model_validate(obj))
+
+
+@links_router.delete(
+    "/product/{link_id}",
+    response_model=ApiResponse[None],
+    summary="删除项目-章节-镜头-商品关联",
+)
+async def delete_project_product_link(
+    link_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> ApiResponse[None]:
+    await delete_project_asset_link_service(db, entity_type="product", link_id=link_id)
+    return empty_response()
+

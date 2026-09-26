@@ -121,7 +121,8 @@ const PromptTemplateManager: FC = () => {
   const [categoryOptions, setCategoryOptions] = useState<Array<{ value: PromptCategory; label: string }>>(
     defaultPromptCategories.map((value) => ({
       value,
-      label: fallbackCategoryLabels[value] || value,
+      // 审计 §4.6 模式 3：未登记类别给中文兜底，不回显原值
+      label: fallbackCategoryLabels[value] || '未分类',
     })),
   )
   const [createForm] = Form.useForm<CreatePromptForm>()
@@ -401,7 +402,8 @@ const PromptTemplateManager: FC = () => {
                   </div>
                 )}
               >
-                <Tag>{categoryLabels[selected.category] || selected.category}</Tag>
+                {/* 审计 §4.6 模式 3：兜底不许回显 `selected.category` 原值（`MAP[k] ?? k` 坑） */}
+                <Tag>{categoryLabels[selected.category] || '未分类'}</Tag>
                 <p className="text-gray-600 text-sm mt-2">{selected.preview}</p>
                 <pre className="mt-3 p-3 bg-gray-50 rounded text-xs overflow-auto max-h-48">
                   {selected.content}

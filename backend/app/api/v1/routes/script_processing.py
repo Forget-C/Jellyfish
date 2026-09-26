@@ -40,6 +40,7 @@ from app.schemas.skills.costume_info_analysis import CostumeInfoAnalysisResult
 from app.schemas.skills.prop_info_analysis import PropInfoAnalysisResult
 from app.schemas.skills.scene_info_analysis import SceneInfoAnalysisResult
 from app.services.common import required_field
+from app.services.paid_outlet_guard import require_llm_outlet
 from app.services.script_processing_tasks import (
     create_consistency_task,
     create_costume_info_task,
@@ -83,7 +84,14 @@ from app.api.v1.routes.film.common import AsyncTaskCreateRead
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/script-processing", tags=["script-processing"])
+# 本文件下**所有**接口都会真实调用大模型：同步接口在本次 HTTP 请求内直接调用并按
+# token 计费，异步接口会排出一个必然调用大模型的 worker 任务。统一在 router 上挂
+# DRY_RUN 守卫，避免任何一条路径绕过闸门（放开方式见 app/services/paid_outlet_guard.py）。
+router = APIRouter(
+    prefix="/script-processing",
+    tags=["script-processing"],
+    dependencies=[Depends(require_llm_outlet)],
+)
 
 
 # ============================================================================

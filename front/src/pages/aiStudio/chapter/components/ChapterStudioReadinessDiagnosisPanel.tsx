@@ -95,11 +95,11 @@ export function ChapterStudioReadinessDiagnosisPanel({
           </div>
         </div>
       ) : !shotAssetsOverview ? (
-        <div className="text-xs text-gray-400 mt-3">当前分镜还没有可用的资产总览数据，请前往分镜编辑页处理提取与确认。</div>
+        <div className="text-xs text-gray-400 mt-3">当前分镜还没有读到资产情况，请前往分镜编辑页处理提取与确认。</div>
       ) : (
         <div className="space-y-4 mt-3">
           <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-500">
-            这里主要用于诊断当前镜头为什么仍然是 <span className="font-medium text-slate-700">pending</span>。如果需要修改提取结果、忽略候选或调整“无需提取”，请前往分镜编辑页处理。
+            这里主要用于诊断当前镜头为什么还在<span className="font-medium text-slate-700">「待确认」</span>状态。如果需要修改提取结果、忽略待确认项或调整“无需提取”，请前往分镜编辑页处理。
           </div>
           <div className="cs-readiness-summary">
             <div>
@@ -132,7 +132,7 @@ export function ChapterStudioReadinessDiagnosisPanel({
                 <div className="cs-readiness-item__header">
                   <span className="cs-readiness-item__label">{item.label}</span>
                   <Tag color={item.ready ? 'success' : item.expectedCount === 0 ? 'default' : 'warning'}>
-                    {item.expectedCount === 0 ? '无候选' : item.ready ? '已就绪' : `待处理 ${item.missing.length}`}
+                    {item.expectedCount === 0 ? '无需确认' : item.ready ? '已就绪' : `待处理 ${item.missing.length}`}
                   </Tag>
                 </div>
                 <div className="cs-readiness-item__meta">
@@ -162,7 +162,7 @@ export function ChapterStudioReadinessDiagnosisPanel({
                     })}
                   </div>
                 ) : (
-                  <div className="cs-readiness-item__empty">当前分镜的剧本提取结果里还没有这类候选资产</div>
+                  <div className="cs-readiness-item__empty">当前分镜的剧本提取结果里还没有提取到这类资产</div>
                 )}
               </div>
             ))}

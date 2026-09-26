@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models.studio import ChapterStatus, ProjectStyle, ProjectVisualStyle
+from app.models.studio import ChapterStatus, ProjectStartMode, ProjectStyle, ProjectVisualStyle
 
 
 PROJECT_STYLE_EXAMPLES = [x.value for x in ProjectStyle]
@@ -15,12 +16,33 @@ PROJECT_STYLE_EXAMPLES = [x.value for x in ProjectStyle]
 class ProjectBase(BaseModel):
     name: str = Field(..., description="项目名称")
     description: str = Field("", description="项目简介")
-    style: ProjectStyle = Field(..., description="题材/风格", examples=PROJECT_STYLE_EXAMPLES)
+    # style 允许自由文本（自定义风格），预设枚举值仍作为候选项下发。
+    # 长度上限 32 与 projects.style 列的 String(32) 对齐，避免写入后读回不一致。
+    style: str = Field(
+        ...,
+        max_length=32,
+        description="题材/风格（可用预设值，也可自定义）",
+        examples=PROJECT_STYLE_EXAMPLES,
+    )
     visual_style: ProjectVisualStyle = Field(ProjectVisualStyle.live_action, description="画面表现形式")
     seed: int = Field(0, description="随机种子")
     unify_style: bool = Field(True, description="是否统一风格")
     progress: int = Field(0, description="进度百分比（0-100）")
     default_video_ratio: str | None = Field(None, description="项目级默认视频比例；分镜未覆盖时生效")
+    start_mode: ProjectStartMode = Field(
+        ProjectStartMode.script,
+        description="项目起点：script=从剧本开始；prompts=从视频提示词开始",
+    )
+
+    @field_validator("start_mode", mode="before")
+    @classmethod
+    def _default_start_mode(cls, value: object) -> object:
+        """`None` 按 `script` 处理。
+
+        覆盖两种情况：① 迁移前写入、尚未回填的历史行；② 内存中刚构造还没 flush 的
+        ORM 对象（列默认值此时还没生效）。两者都不该让响应校验 500。
+        """
+        return ProjectStartMode.script if value is None else value
     stats: dict[str, Any] = Field(default_factory=dict, description="聚合统计（JSON）")
 
 
@@ -31,12 +53,13 @@ class ProjectCreate(ProjectBase):
 class ProjectUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
-    style: ProjectStyle | None = Field(None, description="题材/风格", examples=PROJECT_STYLE_EXAMPLES)
+    style: str | None = Field(None, max_length=32, description="题材/风格（可用预设值，也可自定义）", examples=PROJECT_STYLE_EXAMPLES)
     visual_style: ProjectVisualStyle | None = None
     seed: int | None = None
     unify_style: bool | None = None
     progress: int | None = None
     default_video_ratio: str | None = None
+    start_mode: ProjectStartMode | None = None
     stats: dict[str, Any] | None = None
 
 
@@ -44,6 +67,10 @@ class ProjectRead(ProjectBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    # 时间戳下发给前端：项目列表按真实创建时间排序并在卡片上显示，
+    # 而不是像以前那样用前端 `stats.updated_at`（后端从不写入）回退成「当前时间」。
+    created_at: datetime | None = Field(None, description="创建时间")
+    updated_at: datetime | None = Field(None, description="最后更新时间")
 
 
 class ChapterBase(BaseModel):

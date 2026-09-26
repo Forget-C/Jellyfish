@@ -10,7 +10,7 @@ from app.models.studio import Chapter, Project, Shot
 from app.services.common import entity_not_found, relation_mismatch
 
 
-AssetField = Literal["actor_id", "scene_id", "prop_id", "costume_id"]
+AssetField = Literal["actor_id", "scene_id", "prop_id", "costume_id", "product_id"]
 
 
 async def _ensure_project_exists(db: AsyncSession, project_id: str) -> None:
