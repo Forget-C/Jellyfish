@@ -17,6 +17,7 @@ import { ShootCandidates } from './ShootCandidates'
 import { ShootInstructions } from './ShootInstructions'
 import { PromptReader } from './PromptReader'
 import { ReviewDetails } from './ReviewDetails'
+import { contextForPrompt } from './readableText'
 import { ShootReview } from './ShootReview'
 import { StyleEditor } from './StyleEditor'
 import { SceneAssets } from './SceneAssets'
@@ -535,7 +536,7 @@ function SequenceWorkspace() {
 </>}
         prompt={basePlan?.confirmed_at ? records.prompts.length ? <ShootInstructions workspace={workspace} planId={basePlan.id} unitId={unitId} promptId={promptId} reviewId={reviewId} reviewTask={pendingReviewTask} tasks={tasks} onPrompt={id => { setPromptId(id); setReviewId(undefined); setReviewTaskId(undefined) }} onReview={(id, taskId) => { setReviewId(id); setReviewTaskId(taskId) }} regenerate={<>{!pendingCompile && <Button type="link" data-workspace-target="compile" disabled={!!compileSubmission.error || !unitId || planDirty || planStale || currentPromptPending} loading={busy} onClick={compileInstruction}>重新生成新版本</Button>}<p className="design-secondary">新版本需要重新检查，已有结果保留。</p></>} /> : <Empty description="拍摄准备已确认，使用上方主操作生成试拍指令。">{issue?.stage === 'shoot' && issue.planId === basePlan.id && issue.unitId === unitId && <Button disabled={!!compileSubmission.error || !unitId || planDirty || planStale || currentPromptPending} loading={busy} onClick={compileInstruction}>重试生成指令</Button>}</Empty> : null}
         review={pendingReviewTask?.review || selectedReview?.content ? <Space direction="vertical" className="w-full" data-workspace-target="review" tabIndex={-1}>
-          <ShootReview promptName={selectedPrompt ? revisionName(workspace.prompts, selectedPrompt.id, '指令') : '尚未选择指令'} packet={pendingReviewTask?.review || selectedReview?.content} pending={pendingReviewTask} derived={!!selectedReview?.parent_id} onSave={pendingReviewTask ? () => applyTaskResult(pendingReviewTask) : undefined} busy={busy} design={workspace.designs.find(design => design.id === frozenPlan?.content.design_revision_id)?.content} onResolve={row => { let reason = ''; Modal.confirm({ title: '接受此艺术偏离并记录理由', content: <Space direction="vertical" className="w-full"><ReviewDetails row={row} /><Input.TextArea placeholder="说明为什么保留当前方案；结构和模型能力校验仍不可绕过" onChange={event => { reason = event.target.value }} /></Space>, onOk: async () => {
+          <ShootReview promptName={selectedPrompt ? revisionName(workspace.prompts, selectedPrompt.id, '指令') : '尚未选择指令'} packet={pendingReviewTask?.review || selectedReview?.content} pending={pendingReviewTask} derived={!!selectedReview?.parent_id} onSave={pendingReviewTask ? () => applyTaskResult(pendingReviewTask) : undefined} busy={busy} workspace={workspace} onResolve={row => { let reason = ''; Modal.confirm({ title: '接受此艺术偏离并记录理由', content: <Space direction="vertical" className="w-full"><ReviewDetails row={row} context={contextForPrompt(workspace, selectedPrompt?.id)} /><Input.TextArea placeholder="说明为什么保留当前方案；结构和模型能力校验仍不可绕过" onChange={event => { reason = event.target.value }} /></Space>, onOk: async () => {
               const response = await StudioDirectingService.directingResolveReview({ projectId, sequenceId, reviewId: selectedReview!.id, requestBody: { role: row.role, occurrence_id: row.occurrence_id, reason } })
               if (response.data) { setWorkspace(response.data); setReviewId(uniqueNewRecord(workspace.reviews, productionRecords(response.data, basePlan?.id, unitId, promptId).reviews)?.id) }
             } }) }} />
@@ -562,7 +563,7 @@ function SequenceWorkspace() {
       {error && <Alert type="error" message={error} />}
       {!!result?.image_file_ids?.length && <><Typography.Paragraph>候选图已保存到本项目素材。请在生产计划中明确选择，才会加入本次参考；不会自动替换已确认素材。</Typography.Paragraph>{result.image_file_ids.map(id => <Image key={id} src={buildFileDownloadUrl(id)} alt="验证图候选" />)}</>}
       {result?.design && <DesignEditor active={false} value={result.design} onChange={() => {}} disabled />}
-      {result?.review?.rows.map(row => <Card key={row.role + row.occurrence_id} size="small" title={`${roles[row.role]} · ${row.verdict === 'pass' ? '通过' : row.verdict === 'pending' ? '待审' : '需修改'}`}><ReviewDetails row={row} /></Card>)}
+      {result?.review?.rows.map(row => <Card key={row.role + row.occurrence_id} size="small" title={`${roles[row.role]} · ${row.verdict === 'pass' ? '通过' : row.verdict === 'pending' ? '待审' : '需修改'}`}><ReviewDetails row={row} context={contextForPrompt(workspace, result.review?.occurrences.find(item => item.id === row.occurrence_id)?.prompt_revision_id)} /></Card>)}
     </Modal>
   </div></SequenceLayout></WorkspaceWriteBoundary></SourceProvider>
 }

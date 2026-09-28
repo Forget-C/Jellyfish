@@ -214,7 +214,7 @@
 .sequence-view-panels .ant-tabs-tabpane-active > .ant-space { box-sizing: border-box; }
 @media (max-width: 767px) { .workspace-stage-tabs .stage-tool-label { display: none; } .workspace-stage-tabs .ant-tabs-extra-content .ant-btn { padding: 0 4px; } }
 .prompt-reader { white-space: pre-wrap; line-height: 1.8; padding: 16px; border: 1px solid #e5eaf0; border-radius: 6px; margin: 12px 0; }
-.prompt-reader button { display: inline; border: 0; border-bottom: 1px dashed #1677ff; color: #145eb0; background: #edf5ff; padding: 0; white-space: pre-wrap; text-align: left; font: inherit; cursor: pointer; }
+.prompt-reader button { display: inline; border: 0; border-bottom: 1px dashed #1677ff; color: #145eb0; background: transparent; padding: 0; white-space: pre-wrap; text-align: left; font: inherit; cursor: pointer; }
 .prompt-decision { border-bottom: 1px solid #e5eaf0; padding: 16px 0; overflow-wrap: anywhere; }
 .prompt-decision h3 { font-size: 13px; font-weight: 600; }
 .prompt-decision blockquote { border-left: 3px solid #91caff; padding-left: 12px; color: #667085; }
@@ -505,3 +505,12 @@
 .shoot-execution-summary dd { margin: 0; }
 
 .production-steps > button:not(:last-child)::after { content: ''; width: 12px; height: 1px; background: #cbd5e1; margin-left: 6px; }
+
+/* 易读名称与编译依据共享正文位置；技术详情只在显式展开后展示。 */
+.prompt-view-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.readable-term { display: inline; border: 0; border-bottom: 1px dotted #1677ff; padding: 0; color: #145eb0; background: transparent; font: inherit; white-space: pre-wrap; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.readable-term:focus-visible { outline: 2px solid #1677ff; outline-offset: 2px; }
+.prompt-reader, .readable-entity, .review-raw, .prompt-inline-evidence { overflow-wrap: anywhere; min-width: 0; }
+.readable-entity pre, .review-raw pre, .prompt-inline-evidence pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+.readable-entity .ant-image { margin: 4px; }
+.prompt-inline-evidence:focus { outline: none; }
