@@ -26,6 +26,7 @@ try {
   workspace.takes = [{ ...workspace.takes[2], prompt_revision_id: 'older-prompt' }]
   const unit = workspace.plans[0].content.units[0]
   unit.references = [0, 1].map(ordinal => ({ id: `ref${ordinal}`, ordinal, file_id: `image${ordinal}`, media_kind: 'image', purpose: 'composition', input_role: ordinal ? 'subject' : 'first_frame', participant_ids: [], source: { kind: 'human', reference: 'author', version: '1' } }))
+  unit.references[1].asset_origin = { kind: 'character', id: 'historical-role', name: '选择时的张三' }
   workspace.prompts = [revision('prompt1', { plan_revision_id: 'p-old', unit_id: 'u1', text: '他缓缓递出旧信，对方低头辨认。保持手部和旧信清晰可见，镜头固定，动作克制。', decisions: [], sources: [], format_version: 'v4' })]
   workspace.reviews = []; workspace.task_ids = ['check1']
   workspace.prompts.forEach((row, index) => { row.display_number = index + 1 })
@@ -90,6 +91,8 @@ try {
   await page.locator('.production-unit-list').getByText('待确认结论 · 1 个候选', { exact: true }).waitFor()
   await page.getByRole('button', { name: '固定输入', exact: true }).click()
   await page.getByRole('region', { name: '本次固定输入详情' }).getByText('视频模型 A', { exact: true }).waitFor()
+  await page.getByRole('region', { name: '本次固定输入详情' }).getByText('提示词 + 2 张图片 · 1 组主体参考', { exact: true }).waitFor()
+  await page.getByRole('region', { name: '本次固定输入详情' }).getByText('来源：选择时的张三 · 选择时的资产记录 · 1 份', { exact: true }).waitFor()
   await page.getByRole('button', { name: '关闭指令详情' }).click()
   await page.waitForFunction(() => document.activeElement?.textContent === '固定输入')
   const detail = page.locator('.shoot-passed-summary')

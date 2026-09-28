@@ -25,6 +25,23 @@ def _strip_optional_b64(value: str | None) -> str | None:
 VideoRatio = Literal["16:9", "4:3", "1:1", "3:4", "9:16", "21:9"]
 
 
+class VideoReferenceCapabilities(BaseModel):
+    """当前适配器可传递的参考范围；空数量上限表示未知，不保证模型创作效果。"""
+
+    model_id: str
+    frame_roles: list[Literal["first_frame", "last_frame", "key_frame"]]
+    max_frames: int | None = None
+    subject_images: bool
+    subject_videos: bool
+    combine_subjects_and_frames: bool
+    max_subjects: int | None = None
+    max_images_per_subject: int | None = None
+    max_videos_per_subject: int | None = None
+    max_media_per_subject: int | None = None
+    max_total_subject_videos: int | None = None
+    limits_status: Literal["known", "partial"]
+
+
 class VideoSubjectReference(BaseModel):
     """视频一致性主体：业务层只引用已受控的媒体文件。"""
 

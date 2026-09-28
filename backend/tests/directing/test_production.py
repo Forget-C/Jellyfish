@@ -279,3 +279,81 @@ async def test_review_request_recovers_task_and_rejects_changed_inputs(tmp_path)
             assert (await service.submit_review(sequence_id, prompt_id, body)).id == task_id
             fresh = await service.submit_review(sequence_id, prompt_id, body.model_copy(update={"request_id": "review-new"}))
             assert fresh.id != task_id
+
+
+@pytest.mark.asyncio
+async def test_grouped_references_reach_provider_and_keep_history(tmp_path, monkeypatch):
+    """两图一主体贯穿编译、固定输入和真实媒体转换；旧输入不自动合组。"""
+    from app.core import storage
+    from app.models.studio import FileItem
+    from app.core.contracts.generation import ResolvedGenerationSnapshot
+    from app.services.generation.media_execution import build_media_input
+
+    async with database(tmp_path) as sessions:
+        async with sessions.begin() as db:
+            service, sequence, original_plan, original_prompt, _ = await prepare(db)
+            (await db.get(Provider, "provider1")).name = "Vidu"
+            (await db.get(Model, "model1")).name = "viduq2"
+            db.add(FileItem(id="image2", type="image", name="侧面", storage_key="files/side.png"))
+            await db.flush()
+            original = await service.revision(original_plan)
+            data = dict(original.payload)
+            data["units"] = [dict(data["units"][0])]
+            reference = {**data["units"][0]["references"][0], "input_role": "subject", "subject_group_id": "brother-ref", "purpose": "identity", "participant_ids": ["brother"]}
+            data["units"][0]["references"] = [{**reference, "id": "r2", "file_id": "image2", "ordinal": 1}, reference]
+            plan = await frozen(service, sequence, "plan", data)
+            prompt = await service.compile_unit(sequence, plan.id, "u1")
+            _, _, media = await service.validate_unit(sequence, plan.id, "u1")
+            assert [(s.name, [r.file_id for r in s.media]) for s in media.subjects] == [("brother-ref", ["image1", "image2"])]
+            assert "参考 @brother-ref" in prompt.payload["text"]
+            assert "参考 @r2" not in prompt.payload["text"]
+            assert (await service.revision(original_prompt)).payload["text"].count("参考 @r1") == 1
+            _, _, old_media = await service.validate_unit(sequence, original_plan, "u1")
+            assert old_media.frames.first.file_id == "image1"
+            legacy = {**data, "units": [{**data["units"][0], "references": [{**ref, "subject_group_id": None} for ref in data["units"][0]["references"]]}]}
+            legacy_plan = await frozen(service, sequence, "plan", legacy)
+            _, _, legacy_media = await service.validate_unit(sequence, legacy_plan.id, "u1")
+            assert [subject.name for subject in legacy_media.subjects] == ["r1", "r2"]
+            files = {key: await db.get(FileItem, key) for key in ("image1", "image2")}
+            snapshot = ResolvedGenerationSnapshot.model_validate({
+                "canonical_target": {"kind": "directing_unit", "entity_id": prompt.id},
+                "model_id": "model1", "execution_prompt": prompt.payload["text"],
+                "operation_input": {"kind": "video_generation", "ratio": "16:9", "seconds": 9}, "media": media.model_dump()})
+        async def download(*, key):
+            return key.encode()
+        monkeypatch.setattr(storage, "download_file", download)
+        from app.models.task import TaskInput
+        from app.services.generation.task_snapshot import split_snapshot, restore_snapshot
+        parameters, target_type, target_id, inputs = split_snapshot(snapshot)
+        task = Task(kind="video_generation", target_type=target_type, target_id=target_id, input_snapshot={**parameters, "model_name": "viduq2"})
+        restored = restore_snapshot(task, [(TaskInput(role_path=role, ordinal=ordinal, file_id=file_id), files[file_id]) for role, ordinal, file_id in reversed(inputs)])
+        result = await build_media_input(task, restored, files)
+        assert len(result.subject_references) == 1
+        assert len(result.subject_references[0].images) == 2
+        assert result.subject_references[0].images[0] != result.subject_references[0].images[1]
+        from app.core.integrations.vidu.video_payload import build_create_video_request
+        endpoint, body = build_create_video_request(result)
+        assert endpoint == "/ent/v2/reference2video"
+        assert body["subjects"][0]["name"] == "brother-ref"
+        assert body["subjects"][0]["images"] == result.subject_references[0].images
+
+
+@pytest.mark.asyncio
+async def test_frame_inputs_are_rejected_before_adapter_can_drop_them(tmp_path):
+    """帧数量与位置限制必须在编译前报错，不能显示两图却实际只发送一图。"""
+    async with database(tmp_path) as sessions:
+        async with sessions.begin() as db:
+            service, sequence, original, _, _ = await prepare(db)
+            row = await service.revision(original)
+            data = dict(row.payload)
+            data["units"] = [dict(data["units"][0])]
+            first = data["units"][0]["references"][0]
+            data["units"][0]["references"] = [first, {**first, "id": "second", "ordinal": 1, "input_role": "first_frame"}]
+            plan = await frozen(service, sequence, "plan", data)
+            with pytest.raises(ValueError, match="最多发送 1 张"):
+                await service.compile_unit(sequence, plan.id, "u1")
+            (await db.get(Provider, "provider1")).name = "Kling"
+            (await db.get(Model, "model1")).name = "kling-3.0-turbo"
+            await db.flush()
+            with pytest.raises(ValueError, match="不支持所选帧位置"):
+                await service.validate_unit(sequence, plan.id, "u1")

@@ -312,3 +312,61 @@ async def test_scoped_display_numbers_survive_reordering_and_retries(tmp_path):
             assert (await restored.read_revision(second_id)).display_number == 2
             assert (await restored.read_revision(first_id)).display_number == 1
             assert (await restored.read_take(take_id)).display_number == 1
+
+
+@pytest.mark.asyncio
+async def test_reference_asset_origin_checked_only_when_saving(tmp_path):
+    """选择来源必须真实，确认后资产名称或图片关联变化不改写固定参考。"""
+    from app.core.contracts.directing import ProductionPlan
+    from app.models.studio import Character, CharacterImage
+
+    async with database(tmp_path) as sessions:
+        async with sessions.begin() as db:
+            db.add_all([Character(id="role1", project_id="p1", name="哥哥", style="真人都市"),
+                        Character(id="foreign-role", project_id="p2", name="其他角色", style="真人都市"),
+                        FileItem(id="unlinked-image", type="image", name="未关联图", storage_key="files/unlinked.png"),
+                        FileItem(id="foreign-image", type="image", name="其他项目图", storage_key="files/foreign.png")])
+            await db.flush()
+            db.add(FileUsage(file_id="foreign-image", project_id="p2", chapter_id="ch2", usage_kind="upload"))
+            picture = CharacterImage(character_id="role1", file_id="image1")
+            db.add(picture)
+            await db.flush()
+            service = DirectingStore(db, "p1")
+            sequence = await service.create_sequence(chapter_id="ch1", title="test", position=0)
+            data = design_sample()
+            data["participants"][0]["character_id"] = "role1"
+            design = await frozen(service, sequence.id, "design", data)
+            data = plan_sample(design.id)
+            binding = {"id": "r1", "file_id": "image1", "media_kind": "image", "purpose": "identity", "participant_ids": ["brother"],
+                       "ordinal": 0, "source": SOURCE, "input_role": "subject", "asset_origin": {"kind": "character", "id": "role1", "name": "哥哥"}}
+            data["units"][0]["references"] = [binding]
+            for patch in ({"id": "missing"}, {"id": "foreign-role", "name": "其他角色"}, {"kind": "scene"}, {"name": "伪造名称"}):
+                bad = deepcopy(data)
+                bad["units"][0]["references"][0]["asset_origin"].update(patch)
+                with pytest.raises(ValueError, match="资产来源"):
+                    await service.save_revision(sequence.id, kind="plan", payload=bad)
+            for patch, message in (({"file_id": "unlinked-image"}, "资产来源"), ({"file_id": "foreign-image"}, "其他项目"), ({"participant_ids": ["missing"]}, "unknown reference participant")):
+                bad = deepcopy(data)
+                bad["units"][0]["references"][0].update(patch)
+                with pytest.raises(ValueError, match=message):
+                    await service.save_revision(sequence.id, kind="plan", payload=bad)
+            plan = await frozen(service, sequence.id, "plan", data)
+            (await db.get(Character, "role1")).name = "新名称"
+            picture.file_id = None
+            await db.flush()
+            content = ProductionPlan.model_validate((await service.revision(plan.id)).payload)
+            await service._validate(sequence, content)
+            assert content.units[0].references[0].asset_origin.name == "哥哥"
+            assert content.units[0].references[0].file_id == "image1"
+            from app.core.contracts.directing.workspace import RegroupRequest
+            from app.services.directing.production import ProductionService
+            regrouped = await ProductionService(db, "p1").regroup_units(sequence.id, RegroupRequest(plan_revision_id=plan.id, unit_ids=["u1"], operation="split"))
+            assert regrouped.payload["units"][0]["references"][0]["asset_origin"]["name"] == "哥哥"
+            inherited = deepcopy(data)
+            inherited["units"][0]["duration_ms"] = 8000
+            derived = await service.save_revision(sequence.id, kind="plan", payload=inherited, parent_id=plan.id)
+            assert derived.payload["units"][0]["references"][0]["asset_origin"]["name"] == "哥哥"
+            inherited["units"][0]["duration_ms"] = 7000
+            await service.save_revision(sequence.id, kind="plan", payload=inherited, revision_id=derived.id, expected_version=derived.version)
+            with pytest.raises(ValueError, match="资产来源"):
+                await service.save_revision(sequence.id, kind="plan", payload=data)

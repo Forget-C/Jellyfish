@@ -81,11 +81,13 @@ export type { ApiResponse_TaskResultRead_ } from './models/ApiResponse_TaskResul
 export type { ApiResponse_TaskStatusRead_ } from './models/ApiResponse_TaskStatusRead_';
 export type { ApiResponse_TextLabRunStatus_ } from './models/ApiResponse_TextLabRunStatus_';
 export type { ApiResponse_VideoGenerationOptionsRead_ } from './models/ApiResponse_VideoGenerationOptionsRead_';
+export type { ApiResponse_VideoReferenceCapabilities_ } from './models/ApiResponse_VideoReferenceCapabilities_';
 export type { ApiResponse_WorkspaceRead_ } from './models/ApiResponse_WorkspaceRead_';
 export type { ApplyDesignRequest } from './models/ApplyDesignRequest';
 export type { AssetCreateRequest } from './models/AssetCreateRequest';
 export type { AssetFieldSuggestion } from './models/AssetFieldSuggestion';
 export type { AssetImagePromptRenderBody } from './models/AssetImagePromptRenderBody';
+export type { AssetOrigin } from './models/AssetOrigin';
 export type { AssetPromptAudit } from './models/AssetPromptAudit';
 export type { AssetPromptReference } from './models/AssetPromptReference';
 export type { AssetSummary } from './models/AssetSummary';
@@ -353,6 +355,7 @@ export type { VideoGenerationOperationInput } from './models/VideoGenerationOper
 export type { VideoGenerationOptionsRead } from './models/VideoGenerationOptionsRead';
 export type { VideoMediaInput_Input } from './models/VideoMediaInput_Input';
 export type { VideoMediaInput_Output } from './models/VideoMediaInput_Output';
+export type { VideoReferenceCapabilities } from './models/VideoReferenceCapabilities';
 export type { VideoSubjectMediaReference } from './models/VideoSubjectMediaReference';
 export type { VisualRequest } from './models/VisualRequest';
 export type { WorkspaceRead } from './models/WorkspaceRead';

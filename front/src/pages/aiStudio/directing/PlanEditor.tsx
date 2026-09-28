@@ -1,9 +1,10 @@
 import { SourceLinks } from './Sources'
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Card, Image, Input, InputNumber, Modal, Pagination, Select, Space, Typography, Upload } from 'antd'
-import { LlmService, StudioFilesService } from '../../../services/generated'
-import type { AssetSummary, WorkspaceRead, FileRead, GenerationUnit_Input, ModelRead, ProductionPlan_Input, SceneDesign_Input, ReferenceBinding_Input } from '../../../services/generated'
-import { buildFileDownloadUrl } from '../assets/utils'
+import { Alert, Button, Card, Input, InputNumber, Select, Space, Typography } from 'antd'
+import { LlmService, StudioDirectingService } from '../../../services/generated'
+import type { AssetSummary, WorkspaceRead, VideoReferenceCapabilities, GenerationUnit_Input, ModelRead, ProductionPlan_Input, SceneDesign_Input, ReferenceBinding_Input } from '../../../services/generated'
+import { ReferencePicker } from './ReferencePicker'
+import { referenceGroups, referenceIssues, referencePurposes, referenceRoles, referenceSummary } from './referenceInput'
 import { ProductionParameters } from './ProductionWorkbench'
 import { ReferencePreview } from './ReferencePreview'
 import { DependencyEditor } from './DependencyEditor'
@@ -20,16 +21,21 @@ export function PlanEditor({ assets, assetError, onReloadAssets, projectId, work
   const [defaultModel, setDefaultModel] = useState('')
   const [error, setError] = useState('')
   const [picker, setPicker] = useState<string>()
-  const [assetPicker, setAssetPicker] = useState<string>()
-  const [assetPurpose, setAssetPurpose] = useState<ReferenceBinding_Input['purpose']>('identity')
-  const [assetRole, setAssetRole] = useState<ReferenceBinding_Input['input_role']>('subject')
-  useEffect(() => { setPicker(undefined); setAssetPicker(undefined) }, [planId, value.design_revision_id])
-  const linkedAssets = (assets || []).filter(asset => asset.kind === 'scene' ? design.direction.location_asset_id === asset.id : design.participants.some(person => (asset.kind === 'character' ? person.character_id : person.prop_id) === asset.id))
-  const [files, setFiles] = useState<FileRead[]>([])
-  const [query, setQuery] = useState('')
-  const [page, setPage] = useState(1)
-  const [total, setTotal] = useState(0)
-  const [allFiles, setAllFiles] = useState(false)
+  const [capability, setCapability] = useState<VideoReferenceCapabilities>()
+  const [capabilityError, setCapabilityError] = useState('')
+  const [attempt, setAttempt] = useState(0)
+  const selected = value.units.find(unit => unit.id === selectedUnitId) || value.units[0]
+  useEffect(() => { setPicker(undefined) }, [planId, value.design_revision_id, selected?.id, selected?.model_id, disabled])
+  useEffect(() => {
+    let current = true
+    setCapability(undefined); setCapabilityError('')
+    if (selected?.model_id) void StudioDirectingService.directingReferenceCapabilities({ projectId, modelId: selected.model_id }).then(response => {
+      if (!response.data?.model_id) throw new Error('模型能力暂不可用')
+      if (current) setCapability(response.data)
+    }).catch(cause => { if (current) setCapabilityError(directingError(cause)) })
+    return () => { current = false }
+  }, [projectId, selected?.model_id, attempt])
+  const activeCapability = capability?.model_id === selected?.model_id ? capability : undefined
   useEffect(() => {
     void Promise.all([LlmService.listModelsApiV1LlmModelsGet({ category: 'video', pageSize: 100 }), LlmService.getModelSettingsApiV1LlmModelSettingsGet()]).then(([list, settings]) => {
       setModels(list.data?.items || []); setDefaultModel(settings.data?.default_video_model_id || '')
@@ -43,23 +49,17 @@ export function PlanEditor({ assets, assetError, onReloadAssets, projectId, work
     return { id: 'coverage-' + crypto.randomUUID().slice(0, 8), shot_id: shot.id, beat_ids: shot.beat_ids,
       event_ids: shot.event_ids, action_scope: shot.visible_result.text || '请描述本次要拍的动作范围' }
   })
-  /** 查询现有素材，默认只展示当前项目关联项，也可明确选择公共文件。 */
-  const loadFiles = async (next = 1, global = allFiles) => {
-    try {
-      const response = await StudioFilesService.listFilesApiApiV1StudioFilesGet({ projectId: global ? undefined : projectId, q: query, page: next, pageSize: 20 })
-      setFiles((response.data?.items || []).filter(file => ['image', 'video', 'audio'].includes(file.type)))
-      setTotal(response.data?.pagination.total || 0); setPage(next)
-    } catch (cause) { setError(directingError(cause)) }
-  }
-  /** 明确添加一份文件；输入位置和用途仍可在单元内调整。 */
-  const addReference = (fileId: string, unitId = picker, mediaKind: ReferenceBinding_Input['media_kind'] = 'image', binding?: Pick<ReferenceBinding_Input, 'purpose' | 'input_role' | 'participant_ids'>) => {
-    if (latest.current.planId !== planId) return
+  /** 按当前计划和单元写入，快速重复选择不会重复添加或覆盖其他图片。 */
+  const addReference = (reference: ReferenceBinding_Input) => {
+    if (disabled || latest.current.planId !== planId || !picker || picker !== selected?.id) return
     const current = latest.current.value
-    const unit = current.units.find(item => item.id === unitId)
-    if (!unit || unit.references.some(ref => ref.file_id === fileId)) return
-    onChange({ ...current, units: current.units.map(row => row.id === unit.id ? { ...row, references: [...unit.references, { id: 'ref-' + crypto.randomUUID().slice(0, 8), file_id: fileId, media_kind: mediaKind, purpose: mediaKind === 'audio' ? 'sound' : 'composition', participant_ids: [], ordinal: unit.references.length, input_role: mediaKind === 'image' ? 'first_frame' : undefined, source: { kind: 'human', reference: 'local-user', version: 'reference-1', file_id: fileId }, ...binding }] } : row) })
+    const unit = current.units.find(item => item.id === picker)
+    if (!unit || unit.references.some(ref => ref.file_id === reference.file_id)) return
+    const existing = reference.asset_origin && reference.input_role === 'subject' ? unit.references.find(ref => ref.subject_group_id && ref.input_role === 'subject' && ref.purpose === reference.purpose && ref.asset_origin?.kind === reference.asset_origin?.kind && ref.asset_origin?.id === reference.asset_origin?.id && ref.asset_origin?.name === reference.asset_origin?.name && [...ref.participant_ids].sort().join() === [...reference.participant_ids].sort().join()) : undefined
+    const added = { ...reference, ordinal: Math.max(-1, ...unit.references.map(ref => ref.ordinal)) + 1, subject_group_id: existing?.subject_group_id || reference.subject_group_id }
+    const next = { ...current, units: current.units.map(row => row.id === unit.id ? { ...row, references: [...unit.references, added] } : row) }
+    latest.current = { value: next, planId }; onChange(next)
   }
-  const selected = value.units.find(unit => unit.id === selectedUnitId) || value.units[0]
   return <Space direction="vertical" size="middle" style={{ width: '100%' }}>
     {error && <Alert type="error" message={error} closable onClose={() => setError('')} />}
     <div className="production-preparation">
@@ -78,44 +78,39 @@ export function PlanEditor({ assets, assetError, onReloadAssets, projectId, work
         </Space>
 </ProductionParameters>
         <DependencyEditor projectId={projectId} workspace={workspace} unit={unit} onChange={update => patch(unit.id, update)} disabled={disabled} />
-        <Typography.Text strong>本次参考素材</Typography.Text>
-        {!unit.references.length && <Typography.Text type="secondary">尚未选入参考。是否可以纯文本试拍由目标模型决定。</Typography.Text>}
-        {unit.references.map((ref, refIndex) => <Card key={ref.id} size="small" style={{ width: '100%' }}>
-          <Space wrap><ReferencePreview reference={ref} />
-            <span>参考 {ref.ordinal + 1} · {ref.media_kind === 'image' ? '图片' : ref.media_kind === 'video' ? '视频' : '声音'}</span><SourceLinks sources={[ref.source]} />
-            <Select disabled={disabled} value={ref.purpose} style={{ width: 125 }} options={[{ value: 'identity', label: '人物身份' }, { value: 'space', label: '场所空间' }, { value: 'composition', label: '构图' }, { value: 'continuity', label: '连续性' }, { value: 'performance', label: '表演' }, { value: 'sound', label: '声音' }]} onChange={purpose => patch(unit.id, { references: unit.references.map(r => r.id === ref.id ? { ...r, purpose } : r) })} />
-            <Select allowClear disabled={disabled} value={ref.input_role} style={{ width: 145 }} options={[{ value: 'first_frame', label: '首帧构图' }, { value: 'last_frame', label: '尾帧构图' }, { value: 'key_frame', label: '关键帧' }, { value: 'subject', label: '命名主体参考' }]} onChange={input_role => patch(unit.id, { references: unit.references.map(r => r.id === ref.id ? { ...r, input_role: input_role ?? undefined } : r) })} />
-            <Select mode="multiple" disabled={disabled} placeholder="绑定人物/物件" style={{ minWidth: 180 }} value={ref.participant_ids} options={design.participants.map(p => ({ value: p.id, label: p.name }))} onChange={participant_ids => patch(unit.id, { references: unit.references.map(r => r.id === ref.id ? { ...r, participant_ids } : r) })} />
-            {!disabled && <><Button disabled={refIndex === 0} onClick={() => {
-              const next: ReferenceBinding_Input[] = [...unit.references]; [next[refIndex - 1], next[refIndex]] = [next[refIndex], next[refIndex - 1]]
-              patch(unit.id, { references: next.map((r, ordinal) => ({ ...r, ordinal })) })
-            }}>上移</Button><Button danger onClick={() => patch(unit.id, { references: unit.references.filter(r => r.id !== ref.id).map((r, ordinal) => ({ ...r, ordinal })) })}>移除</Button></>}
-          </Space>
-        </Card>)}
-        {!disabled && <Space wrap><Button onClick={() => setAssetPicker(unit.id)}>从本场资产选参考</Button><Button onClick={() => { setPicker(unit.id); void loadFiles() }}>从素材中选择</Button><Upload accept="image/*,video/*,audio/*" showUploadList={false} beforeUpload={file => {
-          void StudioFilesService.uploadFileApiApiV1StudioFilesUploadPost({ formData: { file: file as unknown as string, project_id: projectId, usage_kind: 'upload' } }).then(response => { if (response.data) addReference(response.data.id, unit.id, response.data.type as ReferenceBinding_Input['media_kind']) }).catch(cause => setError(directingError(cause)))
-          return false
-        }}><Button>上传参考素材</Button></Upload></Space>}
+        <Typography.Text strong>本次模型输入</Typography.Text>
+        {!activeCapability && <Alert type={capabilityError ? 'warning' : 'info'} message={capabilityError || (unit.model_id ? '正在核实模型参考能力' : '请选择视频模型')} action={capabilityError && <Button onClick={() => setAttempt(attempt + 1)}>重试读取能力</Button>} />}
+        {activeCapability && <Typography.Text type="secondary">{activeCapability.subject_images ? `支持主体图片${activeCapability.max_images_per_subject != null ? `，每个主体最多 ${activeCapability.max_images_per_subject} 张` : '，数量上限未知'}` : '不支持主体图片'}；{activeCapability.frame_roles.length ? `帧位置：${activeCapability.frame_roles.map(role => referenceRoles[role]).join('、')}${activeCapability.max_frames != null ? `，最多 ${activeCapability.max_frames} 张` : '，总数上限待核实'}` : '不支持帧参考'}。以提交检查为准。</Typography.Text>}
+        {referenceIssues(unit.references, activeCapability).map(message => <Alert key={message} type="warning" message={message} />)}
+        {!unit.references.length && <Typography.Text type="secondary">本次不发送图片。能否纯文本试拍仍需模型检查。</Typography.Text>}
+        {referenceGroups(unit.references).map(group => {
+          const ref = group[0]
+          const groupIds = new Set(group.map(item => item.id))
+          const update = (change: Partial<ReferenceBinding_Input>) => patch(unit.id, { references: unit.references.map(item => groupIds.has(item.id) ? { ...item, ...change } : item) })
+          return <Card key={ref.subject_group_id || ref.id} size="small" style={{ width: '100%' }} title={`${ref.asset_origin?.name || ref.participant_ids.map(id => design.participants.find(person => person.id === id)?.name || id).join('、') || '画面参考'} · ${referenceRoles[ref.input_role || 'subject']}`}>
+            <Space direction="vertical" style={{ width: '100%' }}>
+              <Space wrap>{group.map(item => <Space key={item.id} direction="vertical"><ReferencePreview reference={item} />
+                <span>{item.media_kind === 'image' ? '图片' : item.media_kind === 'video' ? '视频' : '声音'} {item.ordinal + 1}</span>
+                {!disabled && <Space><Button size="small" disabled={unit.references.indexOf(item) === 0} onClick={() => {
+                  const next = [...unit.references]; const index = next.indexOf(item); [next[index - 1], next[index]] = [next[index], next[index - 1]]
+                  patch(unit.id, { references: next.map((row, ordinal) => ({ ...row, ordinal })) })
+                }}>上移</Button><Button size="small" danger onClick={() => patch(unit.id, { references: unit.references.filter(row => row.id !== item.id).map((row, ordinal) => ({ ...row, ordinal })) })}>移除</Button></Space>}
+              </Space>)}</Space>
+              <Typography.Text type="secondary">{ref.asset_origin ? `来源：${ref.asset_origin.name} · 选择时的资产记录` : '来源：人工选入素材'}{ref.subject_group_id ? ` · 同一主体 ${group.length} 份素材` : ''}</Typography.Text>
+              <Space wrap><Select aria-label="参考用途" disabled={disabled} value={ref.purpose} style={{ width: 150 }} options={Object.entries(referencePurposes).map(([value, label]) => ({ value, label }))} onChange={purpose => update({ purpose })} />
+                <Select aria-label="参考输入位置" disabled={disabled} value={ref.input_role || 'subject'} style={{ width: 145 }} options={Object.entries(referenceRoles).map(([value, label]) => ({ value, label, disabled: value !== (ref.input_role || 'subject') && (group.length > 1 && value !== 'subject' || !!activeCapability && (value === 'subject' ? !activeCapability.subject_images : !activeCapability.frame_roles.includes(value as 'first_frame'))) }))} onChange={input_role => update({ input_role, subject_group_id: input_role === 'subject' ? ref.subject_group_id || 'group-' + crypto.randomUUID().slice(0, 8) : undefined })} />
+                <Select aria-label="参考对应人物或物件" mode="multiple" disabled={disabled || !!ref.asset_origin} placeholder="绑定人物/物件" style={{ minWidth: 180, maxWidth: '100%' }} value={ref.participant_ids} options={design.participants.map(person => ({ value: person.id, label: person.name }))} onChange={participant_ids => update({ participant_ids })} />
+                <SourceLinks sources={[ref.source]} />
+              </Space>
+            </Space>
+          </Card>
+        })}
+        {!disabled && <Button onClick={() => setPicker(unit.id)}>添加参考</Button>}
+        <Alert type="info" message={`拟发送：${referenceSummary(unit.references)}`} description="仅包含当前单元已选素材；保存并确认后进入指令检查。" />
       </Space>
     </Card>)}
     </div>
     {!disabled && <Button disabled={!design.direction.shots.length} onClick={() => onChange({ ...value, units: [...value.units, { id: 'unit-' + crypto.randomUUID().slice(0, 8), coverage: coverage([design.direction.shots[0].id]), references: [], model_id: defaultModel, duration_ms: 5000, ratio: '16:9', capability: { multi_shot: 'unknown' } }] })}>新增试拍 / 补拍单元</Button>}
-    <Modal title="从本场资产选择参考" open={!!assetPicker} onCancel={() => setAssetPicker(undefined)} footer={<Button onClick={() => setAssetPicker(undefined)}>完成选择</Button>}>
-      <p>只选入这次试拍需要的图片；本场关联不会自动提交图片。</p>
-      {!assets ? <Alert type={assetError ? 'error' : 'info'} message={assetError || '正在读取本场资产'} action={assetError && <Button onClick={onReloadAssets}>重试读取资产</Button>} /> : <>
-        <Space wrap><Select aria-label="资产参考用途" value={assetPurpose} onChange={setAssetPurpose} options={[{ value: 'identity', label: '人物／物件身份' }, { value: 'space', label: '场所空间' }, { value: 'composition', label: '构图' }, { value: 'continuity', label: '连续性' }]} />
-          <Select aria-label="资产参考输入位置" value={assetRole} onChange={setAssetRole} options={[{ value: 'subject', label: '命名主体参考' }, { value: 'first_frame', label: '首帧构图' }, { value: 'last_frame', label: '尾帧构图' }, { value: 'key_frame', label: '关键帧' }]} /></Space>
-        {!linkedAssets.length && <p>此计划依据的设计尚未关联资产。也可从素材中选择，或按模型能力进行纯文本试拍。</p>}
-        {linkedAssets.map(asset => <section key={`${asset.kind}:${asset.id}`} className="scene-asset-row"><strong>{asset.name}</strong>{!asset.image_file_ids?.length && <span>尚无可用图片；可在导演设计的本场资产中准备。</span>}
-          {asset.image_file_ids?.map((fileId, index) => <Space key={fileId}><Image width={64} src={buildFileDownloadUrl(fileId)} /><Button disabled={disabled || value.units.find(unit => unit.id === assetPicker)?.references.some(ref => ref.file_id === fileId)} onClick={() => addReference(fileId, assetPicker, 'image', { purpose: assetPurpose, input_role: assetRole, participant_ids: design.participants.filter(person => (asset.kind === 'character' ? person.character_id : asset.kind === 'prop' ? person.prop_id : null) === asset.id).map(person => person.id) })}>选入 {asset.name} 图片 {index + 1}</Button></Space>)}
-        </section>)}
-      </>}
-    </Modal>
-    <Modal title="选择本次参考素材" open={!!picker} onCancel={() => setPicker(undefined)} footer={<Button onClick={() => setPicker(undefined)}>完成选择</Button>}>
-      <Space direction="vertical" style={{ width: '100%' }}><Input.Search placeholder="搜索素材" value={query} onChange={event => setQuery(event.target.value)} onSearch={() => void loadFiles()} />
-        <Select value={allFiles ? 'all' : 'project'} options={[{ value: 'project', label: '当前项目素材' }, { value: 'all', label: '全部已有素材' }]} onChange={scope => { setAllFiles(scope === 'all'); void loadFiles(1, scope === 'all') }} />
-        {files.map(file => <Space key={file.id}>{file.type === 'image' ? <Image width={60} src={file.thumbnail || buildFileDownloadUrl(file.id)} /> : <span>{file.type === 'video' ? '视频' : '声音'}</span>}<span>{file.name}</span><Button onClick={() => addReference(file.id, picker, file.type as ReferenceBinding_Input['media_kind'])}>选入</Button></Space>)}
-        <Pagination current={page} total={total} pageSize={20} onChange={next => void loadFiles(next)} /></Space>
-    </Modal>
+    {!disabled && picker && picker === selected?.id && <ReferencePicker key={`${planId}:${value.design_revision_id}:${picker}:${selected.model_id}`} projectId={projectId} assets={assets} assetError={assetError} onReloadAssets={onReloadAssets} design={design} references={selected.references} capability={activeCapability} onAdd={addReference} onClose={() => setPicker(undefined)} />}
   </Space>
 }

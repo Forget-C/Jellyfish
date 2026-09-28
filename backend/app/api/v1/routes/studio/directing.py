@@ -9,6 +9,7 @@ from app.core.contracts.directing.workspace import (
     SequenceUpdate, TaskAccepted, VersionRequest, WorkspaceRead,
 )
 from app.core.contracts.directing.style import ProjectStyleRevision, StyleWrite
+from app.core.contracts.video_generation import VideoReferenceCapabilities
 from app.dependencies import get_db
 from app.schemas.common import ApiResponse, success_response
 from app.services.directing.production import ProductionService
@@ -36,6 +37,12 @@ async def _call(awaitable):
         raise HTTPException(status_code=409, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.get("/video-models/{model_id}/reference-capabilities", response_model=ApiResponse[VideoReferenceCapabilities], operation_id="directing_reference_capabilities")
+async def reference_capabilities(project_id: str, model_id: str, db: AsyncSession = Depends(get_db, scope="function")):
+    """返回当前视频适配范围，实际提交仍由服务校验文件与组合。"""
+    return success_response(await _call(ProductionService(db, project_id).reference_capabilities(model_id)))
 
 
 @router.get("/chapters/{chapter_id}", response_model=ApiResponse[ChapterSequences], operation_id="directing_chapter")

@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 from app.core.contracts.directing import SceneDesign, ProductionPlan, ReviewPacket, SequenceCut
 from app.core.contracts.directing.common import Note, ROLES
-from tests.directing.samples import design_sample, plan_sample
+from tests.directing.samples import SOURCE, design_sample, plan_sample
 
 
 @pytest.mark.parametrize("story", ["dialogue", "handover", "crowd"])
@@ -94,6 +94,27 @@ def review_sample():
     ]
     return {"mode": "formal", "roles": list(ROLES), "occurrences": occurrences, "context": {},
             "rows": [{"role": role, "occurrence_id": o["id"], "verdict": "pending", "rationale": "待人工核对", "findings": []} for role in ROLES for o in occurrences]}
+
+
+def test_subject_group_contract():
+    """同组表达相同主体和用途，不得与旧参考的模型名称冲突。"""
+    data = plan_sample()
+    binding = {"id": "r1", "file_id": "image1", "media_kind": "image", "purpose": "identity",
+               "participant_ids": ["brother"], "ordinal": 0, "source": SOURCE,
+               "input_role": "subject", "subject_group_id": "person",
+               "asset_origin": {"kind": "character", "id": "role1", "name": "哥哥"}}
+    data["units"][0]["references"] = [binding, {**binding, "id": "r2", "ordinal": 1}]
+    assert ProductionPlan.model_validate(data).units[0].references[0].subject_group_id == "person"
+    for patch in ({"purpose": "space"}, {"participant_ids": ["younger"]},
+                  {"asset_origin": None}, {"input_role": "first_frame"}):
+        bad = deepcopy(data)
+        bad["units"][0]["references"][1].update(patch)
+        with pytest.raises(ValidationError):
+            ProductionPlan.model_validate(bad)
+    bad = deepcopy(data)
+    bad["units"][0]["references"][1].update(id="person", subject_group_id=None)
+    with pytest.raises(ValidationError):
+        ProductionPlan.model_validate(bad)
 
 
 def test_exact_six_role_manifest():

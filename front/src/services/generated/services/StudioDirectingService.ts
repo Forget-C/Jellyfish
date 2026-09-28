@@ -21,6 +21,7 @@ import type { ApiResponse_list_SourceRead__ } from '../models/ApiResponse_list_S
 import type { ApiResponse_MediaRead_ } from '../models/ApiResponse_MediaRead_';
 import type { ApiResponse_SequenceRead_ } from '../models/ApiResponse_SequenceRead_';
 import type { ApiResponse_TaskAccepted_ } from '../models/ApiResponse_TaskAccepted_';
+import type { ApiResponse_VideoReferenceCapabilities_ } from '../models/ApiResponse_VideoReferenceCapabilities_';
 import type { ApiResponse_WorkspaceRead_ } from '../models/ApiResponse_WorkspaceRead_';
 import type { ApplyDesignRequest } from '../models/ApplyDesignRequest';
 import type { AssetCreateRequest } from '../models/AssetCreateRequest';
@@ -48,6 +49,31 @@ import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class StudioDirectingService {
+    /**
+     * Reference Capabilities
+     * 返回当前视频适配范围，实际提交仍由服务校验文件与组合。
+     * @returns ApiResponse_VideoReferenceCapabilities_ Successful Response
+     * @throws ApiError
+     */
+    public static directingReferenceCapabilities({
+        projectId,
+        modelId,
+    }: {
+        projectId: string,
+        modelId: string,
+    }): CancelablePromise<ApiResponse_VideoReferenceCapabilities_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/video-models/{model_id}/reference-capabilities',
+            path: {
+                'project_id': projectId,
+                'model_id': modelId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
     /**
      * Chapter
      * 返回章节原文和有序场次。

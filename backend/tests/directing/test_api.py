@@ -146,3 +146,37 @@ async def test_scene_transaction_commits_before_response_is_sent(tmp_path):
                 'source_version':chapter['source_version'],'span':{'start':0,'end':4}})
             assert response.status_code == 200
         assert states_at_response == [True, True]
+
+
+@pytest.mark.asyncio
+async def test_reference_capabilities_use_model_and_adapter_rules(tmp_path):
+    """返回的是当前接入范围，未知上限保留为空，不允许其他类别或不存在项目。"""
+    from app.models.llm import Provider, Model
+    async with database(tmp_path) as sessions:
+        async with sessions.begin() as db:
+            db.add_all([Provider(id="v", name="Vidu", api_key="test", base_url="https://example.invalid"),
+                        Provider(id="o", name="OpenAI", api_key="test", base_url="https://example.invalid"),
+                        Provider(id="k", name="Kling", api_key="test", base_url="https://example.invalid")])
+            await db.flush()
+            db.add_all([Model(id="v1", provider_id="v", name="viduq2", category="video"),
+                        Model(id="o1", provider_id="o", name="unknown-video", category="video"),
+                        Model(id="k1", provider_id="k", name="kling-3.0-turbo", category="video"),
+                        Model(id="k2", provider_id="k", name="kling-3.0", category="video"),
+                        Model(id="text", provider_id="o", name="text", category="text")])
+        async with client_for(sessions) as client:
+            base = "/api/v1/studio/projects/p1/directing/video-models/"
+            response = await client.get(base + "v1/reference-capabilities")
+            assert response.status_code == 200
+            data = response.json()["data"]
+            assert data["subject_images"] and data["max_images_per_subject"] == 3
+            assert data["max_subjects"] == 7 and not data["combine_subjects_and_frames"]
+            data = (await client.get(base + "o1/reference-capabilities")).json()["data"]
+            assert not data["subject_images"] and data["max_frames"] == 1
+            assert data["frame_roles"] == ["first_frame"]
+            assert data["max_subjects"] is None
+            data = (await client.get(base + "k1/reference-capabilities")).json()["data"]
+            assert data["frame_roles"] == []
+            data = (await client.get(base + "k2/reference-capabilities")).json()["data"]
+            assert data["frame_roles"] == ["first_frame", "last_frame"]
+            assert (await client.get(base + "text/reference-capabilities")).status_code == 422
+            assert (await client.get(base.replace("p1", "missing") + "v1/reference-capabilities")).status_code == 422

@@ -244,6 +244,13 @@ class DirectingStore:
                 raise ValueError("审稿来源任务与版本不匹配")
         async with self.db.begin_nested():
             dependencies, files, takes = await self._validate(sequence, content)
+            if isinstance(content, ProductionPlan):
+                previous = None
+                if revision_id or parent_id:
+                    previous_row = await self.revision(revision_id or parent_id, kind="plan", sequence_id=sequence_id,
+                                                       confirmed=bool(parent_id))
+                    previous = ProductionPlan.model_validate(previous_row.payload)
+                await self._validate_asset_origins(content, previous)
             if revision_id is None:
                 if expected_version is not None:
                     raise ValueError("new revision has no expected version")
@@ -301,6 +308,41 @@ class DirectingStore:
                     active.revision_id = row.id
                 await self.db.flush()
         return await self.revision(row.id)
+
+    async def _validate_asset_origins(self, plan: ProductionPlan, previous: ProductionPlan | None):
+        """只在保存选择时核对资产来源；已确认输入不随资产改名或换图变化。"""
+        from app.models.studio import Scene, Prop, CharacterImage, SceneImage, PropImage
+
+        design = SceneDesign.model_validate((await self.revision(plan.design_revision_id, kind="design", confirmed=True)).payload)
+        inherited = {(binding.file_id, binding.media_kind, binding.asset_origin.model_dump_json())
+                     for unit in previous.units for binding in unit.references if binding.asset_origin} if previous and previous.design_revision_id == plan.design_revision_id else set()
+        models = {"character": (Character, CharacterImage, CharacterImage.character_id),
+                  "scene": (Scene, SceneImage, SceneImage.scene_id), "prop": (Prop, PropImage, PropImage.prop_id)}
+        for unit in plan.units:
+            for binding in unit.references:
+                origin = binding.asset_origin
+                if origin is None:
+                    continue
+                if origin.kind != "scene" and any(getattr(person, origin.kind + "_id") != origin.id
+                        for person in design.participants if person.id in binding.participant_ids):
+                    raise ValueError("资产来源与参考绑定的参与者不符")
+                if (binding.file_id, binding.media_kind, origin.model_dump_json()) in inherited:
+                    continue
+                model, image_model, owner = models[origin.kind]
+                asset = await self.db.get(model, origin.id)
+                linked = ({design.direction.location_asset_id} if origin.kind == "scene" else
+                          {getattr(person, origin.kind + "_id") for person in design.participants})
+                if origin.kind == "character":
+                    in_project = asset and asset.project_id == self.project_id
+                else:
+                    link = ProjectSceneLink if origin.kind == "scene" else ProjectPropLink
+                    in_project = await self.db.scalar(select(link.id).where(link.project_id == self.project_id,
+                        getattr(link, origin.kind + "_id") == origin.id))
+                if not asset or not in_project or origin.id not in linked or asset.name != origin.name:
+                    raise ValueError("资产来源与当前项目、固定设计或名称不符")
+                if binding.media_kind != "image" or not await self.db.scalar(select(image_model.id).where(
+                        owner == origin.id, image_model.file_id == binding.file_id)):
+                    raise ValueError("资产来源中不存在所选图片")
 
     async def _validate(self, sequence, content):
         """解析版本、局部 ID、媒体与实际区间，返回派生索引而不产生第二份真值。"""

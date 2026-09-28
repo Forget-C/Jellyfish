@@ -19,6 +19,14 @@ class CoverageItem(Contract):
     action_scope: Text
 
 
+class AssetOrigin(Contract):
+    """选择图片时的项目资产身份及名称；固定后仅用于追溯。"""
+
+    kind: Literal["character", "scene", "prop"]
+    id: Identity
+    name: Text
+
+
 class ReferenceBinding(Contract):
     """本次输入的文件、用途与主体绑定，不自动跟随资产默认图。"""
 
@@ -30,10 +38,14 @@ class ReferenceBinding(Contract):
     ordinal: int = Field(ge=0)
     source: Source
     input_role: Literal["subject", "first_frame", "last_frame", "key_frame"] = "subject"
+    subject_group_id: Identity | None = None
+    asset_origin: AssetOrigin | None = None
 
     @model_validator(mode="after")
     def media_purpose(self):
         """声音引用只接受音频，其余视觉用途不能使用音频。"""
+        if self.subject_group_id and self.input_role != "subject":
+            raise ValueError("主体分组只能用于主体参考")
         if self.input_role != "subject" and self.media_kind != "image":
             raise ValueError("帧参考必须是图片")
         if (self.purpose == "sound") != (self.media_kind == "audio"):
@@ -92,6 +104,17 @@ class GenerationUnit(Contract):
         unique([r.id for r in self.references], "reference")
         unique([r.ordinal for r in self.references], "reference ordinal")
         unique([(r.plan_revision_id, r.unit_id) for r in self.dependencies], "unit dependency")
+        groups = {}
+        standalone = {r.id for r in self.references if not r.subject_group_id}
+        for binding in self.references:
+            if not binding.subject_group_id:
+                continue
+            if binding.subject_group_id in standalone:
+                raise ValueError("主体分组名称与独立参考冲突")
+            previous = groups.setdefault(binding.subject_group_id, binding)
+            if (set(previous.participant_ids) != set(binding.participant_ids)
+                    or previous.purpose != binding.purpose or previous.asset_origin != binding.asset_origin):
+                raise ValueError("同组参考必须具有相同主体、用途和资产来源")
         return self
 
 
