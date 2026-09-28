@@ -195,11 +195,11 @@ Cached spec file:
 
 - `front/openapi.json`
 
-With the backend dev server running at `http://127.0.0.1:8000`, run:
+With the backend dev server running at `http://127.0.0.1:8000` and loading the
+current workspace changes, run from the repository root:
 
 ```bash
-cd front
-pnpm run openapi:update
+pnpm --dir front run openapi:update
 ```
 
 ## 🐳 Docker Compose
@@ -212,7 +212,6 @@ The repository includes a ready-to-run compose setup under
 - Frontend: `http://localhost:7788`
 - Backend: `http://localhost:8000` (`/docs` for Swagger)
 - MySQL: `localhost:${MYSQL_PORT:-3306}`
-- Redis: `localhost:${REDIS_PORT:-6379}`
 - RustFS: `http://localhost:${RUSTFS_PORT:-9000}`
 
 ### Start
@@ -225,7 +224,7 @@ docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.y
 ## 🧑‍💻 Local Development
 
 To run the frontend and backend locally while using Compose-managed middleware,
-first copy the matching environment templates and start MySQL, Redis, RustFS,
+first copy the matching environment templates and start MySQL, RustFS,
 and the Compose migration and system-seed jobs:
 
 ```bash
@@ -233,7 +232,7 @@ cp deploy/compose/.env.example deploy/compose/.env
 cp backend/.env.example backend/.env
 cp front/.env.example front/.env
 docker compose --env-file deploy/compose/.env -f deploy/compose/docker-compose.yml \
-  up --build -d mysql redis rustfs backend-migrate backend-seed-system-data
+  up --build -d mysql rustfs backend-migrate backend-seed-system-data
 ```
 
 Keep `--build` when rerunning this command after updating the code so the
@@ -250,7 +249,7 @@ Compose file, update the corresponding values in `backend/.env` too.
 If `MYSQL_PORT` is changed in `deploy/compose/.env`, also update the port in
 `backend/.env`'s `DATABASE_URL` (for example, `127.0.0.1:13306`). Local processes
 use the published host port; Compose services continue to use `mysql:3306`.
-Restart the local backend and Celery worker after changing their environment.
+Restart the local backend and task worker after changing their environment.
 
 ### Backend
 
@@ -260,16 +259,16 @@ uv sync
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### Celery Worker
+### Task Worker
 
-图片、视频和脚本处理等异步任务需要单独启动 Celery Worker。保持 Redis 可用后，在另一个终端执行：
+图片、视频和脚本处理等异步任务需要单独启动任务 Worker。确保 MySQL 与对象存储可用后，在另一个终端执行：
 
 ```bash
 cd backend
-uv run celery -A app.core.celery_app:celery_app worker -l info
+uv run python -m app.task_worker
 ```
 
-Worker 与后端使用同一份 `backend/.env`：未显式设置 `CELERY_BROKER_URL` 时，会根据 `REDIS_HOST`、`REDIS_PORT` 与 `REDIS_DB` 自动连接 Compose 启动的 Redis。使用完整 Docker Compose 启动时，`celery-worker` 服务会自动运行，无需手动执行该命令。
+Worker 与后端使用同一份 `backend/.env`，直接读取 MySQL 任务表，不再依赖 Redis/Celery。使用完整 Docker Compose 启动时，`task-worker` 服务会自动运行，无需手动执行该命令。只启动一个 Worker 调度进程，不要与旧 Celery Worker 混跑。
 
 ### Frontend
 
