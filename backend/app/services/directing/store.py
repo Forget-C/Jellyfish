@@ -208,7 +208,7 @@ class DirectingStore:
         snapshot = ReviewPacketRevision if row.kind == "review" else RevisionSnapshot[CONTRACTS[row.kind]]
         return snapshot(
             id=row.id, project_id=self.project_id, chapter_id=sequence.chapter_id,
-            sequence_id=row.sequence_id, parent_id=row.parent_id, version=row.version,
+            sequence_id=row.sequence_id, parent_id=row.parent_id, version=row.version, display_number=row.display_number,
             confirmed_by=row.confirmed_by, confirmed_at=row.confirmed_at,
             source_current=row.kind != "design" or row.source_key == self.source_key(sequence),
             content=CONTRACTS[row.kind].model_validate(row.payload),
@@ -223,7 +223,7 @@ class DirectingStore:
             id=row.id, project_id=self.project_id, chapter_id=sequence.chapter_id,
             sequence_id=row.sequence_id, prompt_revision_id=row.prompt_revision_id,
             plan_revision_id=row.plan_revision_id, unit_id=row.unit_id, task_id=row.task_id,
-            output_ordinal=row.output_ordinal, file_id=row.file_id, version=row.version,
+            output_ordinal=row.output_ordinal, file_id=row.file_id, version=row.version, display_number=row.display_number,
             annotation=TakeAnnotation.model_validate(row.annotation),
         )
 
@@ -249,13 +249,16 @@ class DirectingStore:
                     raise ValueError("new revision has no expected version")
                 if parent_id is not None:
                     await self.revision(parent_id, kind=kind, sequence_id=sequence_id, confirmed=True)
-                row = DirectingRevision(id=uuid4().hex, sequence_id=sequence_id, kind=kind,
+                number = await self._next_display_number(sequence_id, content.plan_revision_id, content.unit_id, prompt=True) if isinstance(content, Prompt) else None
+                row = DirectingRevision(id=uuid4().hex, sequence_id=sequence_id, kind=kind, display_number=number,
                                         parent_id=parent_id, version=1, payload=content.model_dump(mode="json"), source_task_id=source_task_id,
                                         source_key=self.source_key(sequence) if kind == "design" else None)
                 self.db.add(row)
                 await self.db.flush()
             else:
                 row = await self.revision(revision_id, kind=kind, sequence_id=sequence_id)
+                if isinstance(content, Prompt) and (row.payload['plan_revision_id'], row.payload['unit_id']) != (content.plan_revision_id, content.unit_id):
+                    raise ValueError("指令所属计划与单元不可原地变更")
                 if parent_id is not None or expected_version is None:
                     raise ValueError("update requires expected_version and cannot change parent")
                 result = await self.db.execute(update(DirectingRevision).where(
@@ -565,7 +568,8 @@ class DirectingStore:
                     raise ValueError("output identity conflicts with existing take")
                 return existing
             await require_available_file(self.db, file_id=output.file_id, expected_type="video")
-            row = Take(id=uuid4().hex, sequence_id=sequence.id, prompt_revision_id=prompt_revision_id,
+            number = await self._next_display_number(sequence.id, prompt.plan_revision_id, prompt.unit_id, prompt=False)
+            row = Take(id=uuid4().hex, sequence_id=sequence.id, prompt_revision_id=prompt_revision_id, display_number=number,
                        plan_revision_id=prompt.plan_revision_id, unit_id=prompt.unit_id, task_id=task_id,
                        output_ordinal=output_ordinal, file_id=output.file_id, version=1,
                        annotation=TakeAnnotation(coverage=[], review_status="unreviewed", rationale={}, retained_ranges=[]).model_dump(mode="json"))
@@ -574,6 +578,23 @@ class DirectingStore:
                                     usage_kind=FileUsageKind.directing_take, source_ref=row.id)
             await self.db.flush()
         return row
+
+    async def _next_display_number(self, sequence_id: str, plan_id: str, unit_id: str, *, prompt: bool) -> int:
+        """场次锁内分配不可变编号；锁定读取避免MySQL重复读使用较早快照。"""
+        await self.db.get(Sequence, sequence_id, with_for_update=True, populate_existing=True)
+        if prompt:
+            query = select(DirectingRevision.display_number).where(
+                DirectingRevision.sequence_id == sequence_id, DirectingRevision.kind == 'prompt',
+                DirectingRevision.payload['plan_revision_id'].as_string() == plan_id,
+                DirectingRevision.payload['unit_id'].as_string() == unit_id,
+                DirectingRevision.display_number.is_not(None))
+            column = DirectingRevision.display_number
+        else:
+            query = select(Take.display_number).where(Take.sequence_id == sequence_id,
+                Take.plan_revision_id == plan_id, Take.unit_id == unit_id, Take.display_number.is_not(None))
+            column = Take.display_number
+        number = await self.db.scalar(query.order_by(column.desc()).limit(1).with_for_update())
+        return (number or 0) + 1
 
     async def annotate_take(self, take_id: str, *, expected_version: int, annotation: dict) -> Take:
         """CAS 保存实际覆盖与四类审片结论，来源、归属和区间不能混用。"""

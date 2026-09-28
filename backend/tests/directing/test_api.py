@@ -14,6 +14,36 @@ from tests.directing.samples import design_sample, plan_sample
 from tests.directing.test_store import database, frozen
 
 
+@pytest.mark.asyncio
+async def test_thumbnail_url_returns_project_scoped_cached_image(tmp_path, monkeypatch):
+    """媒体契约中的预览地址可直接读取，跨项目请求不触发存储或解码。"""
+    from unittest.mock import AsyncMock
+    from app.core import storage
+    from tests.directing.test_store import setup_story, output
+
+    frame = b'\x89PNG\r\n\x1a\npreview'
+    download = AsyncMock(return_value=frame)
+    monkeypatch.setattr(storage, 'download_file', download)
+    monkeypatch.setattr(storage, 'upload_file', AsyncMock())
+    monkeypatch.setattr('app.services.directing.media.extract_frame', lambda *args, **kwargs: frame)
+    async with database(tmp_path) as sessions:
+        async with sessions.begin() as db:
+            service, sequence_id, _, _, prompts = await setup_story(db)
+            await output(db, prompts[0])
+            take = await service.register_take(prompt_revision_id=prompts[0], task_id='task1', output_ordinal=0)
+        async with client_for(sessions) as client:
+            base = f'/api/v1/studio/projects/p1/directing/sequences/{sequence_id}/takes/{take.id}'
+            media = await client.get(base + '/media')
+            assert media.status_code == 200
+            url = media.json()['data']['thumbnail_url']
+            assert (await client.get(url.replace('/projects/p1/', '/projects/p2/'))).status_code == 422
+            download.assert_not_called()
+            response = await client.get(url)
+            assert response.status_code == 200 and response.content == frame
+            assert response.headers['content-type'] == 'image/png'
+            assert 'private' in response.headers['cache-control']
+
+
 @asynccontextmanager
 async def client_for(sessions):
     """每次 HTTP 请求使用独立事务，错误请求不得污染后续工作区。"""

@@ -1,0 +1,75 @@
+{
+  "date": "2026-09-16",
+  "scope": "三步单元试拍、稳定编号、真实缩略图及候选工作区；隔离业务与真实本地测试媒体",
+  "frontend_typecheck": "passed",
+  "frontend_unit_tests": {
+    "passed": 36,
+    "files": [
+      "workspaceUsage",
+      "workspaceProduction",
+      "workspaceGuidance",
+      "workspaceTaskContext"
+    ]
+  },
+  "backend_directing": {
+    "passed": 129,
+    "skipped": 3,
+    "skip_reason": "默认环境未配置独立MySQL；随后在临时MySQL 8.0.39容器中3项全部通过"
+  },
+  "backend_followup": {
+    "passed": 23,
+    "files": [
+      "test_media.py",
+      "test_migration.py"
+    ],
+    "reason": "补充缓存丢失重建与迁移说明一致性"
+  },
+  "mysql": {
+    "passed": 3,
+    "temporary_container_removed": true,
+    "coverage": [
+      "完整迁移和模型一致性",
+      "指令与候选在REPEATABLE READ旧快照下并发编号",
+      "同请求幂等与精确响应",
+      "采用与验收竞争"
+    ]
+  },
+  "browser_passed": [
+    "workspaceShootSteps",
+    "workspaceCompactReview",
+    "workspaceShootContext",
+    "workspaceShootFlow",
+    "workspaceShootProgress",
+    "workspaceProduction",
+    "workspaceJourney",
+    "workspaceJourney（编译与检查响应均丢失）",
+    "workspaceCut",
+    "workspaceUsage",
+    "workspaceWrite"
+  ],
+  "screenshots_widths": [
+    1440,
+    1024,
+    768,
+    375
+  ],
+  "media": "缩略图与播放器使用ffmpeg生成的一秒测试视频，非参考图冒充候选；外部供应商质量未在隔离UI回归中验证",
+  "pylint": {
+    "status": "existing_errors",
+    "changed_app_modules": "无报错",
+    "diagnostics": [
+      "task_worker.py:263 W0706",
+      "task_worker.py:355 R0911",
+      "studio_assets.py:31 E0213",
+      "lab_generation_tasks.py:32 W0611",
+      "task_queries.py:133 C0123"
+    ],
+    "baseline_files_unchanged": true
+  },
+  "api": "工作区后端8000端口cwd与新增契约确认后执行openapi:update；生成文件仅保留契约实质变化",
+  "migration": "a1c4e7b9d205，本地开发库已应用；冻结正文和业务关联不改写",
+  "media_late_response": "跨页延迟媒体响应释放后仍播放精确候选13",
+  "return_scroll": "从剪辑验收返回保留候选3及主区滚动",
+  "documentation_build": "passed",
+  "published_resource_check": "计划图片引用和全部25张截图在Hugo发布构建目录存在且与源文件一致"
+}

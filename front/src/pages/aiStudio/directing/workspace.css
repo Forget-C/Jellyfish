@@ -464,3 +464,44 @@
 
 .production-action-title { display: block; max-width: 100%; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .production-action-description { max-width: min(420px, calc(100vw - 48px)); max-height: 50vh; overflow: auto; overflow-wrap: anywhere; }
+
+/* 三步导航保持紧凑；数字表达顺序，状态来自实际记录。 */
+.production-step-navigation { flex-shrink: 0; }
+.production-steps { gap: 12px; min-height: 44px; }
+.production-steps > button { display: flex; align-items: center; gap: 6px; }
+.production-step-number { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border: 1px solid currentColor; border-radius: 50%; font-size: 12px; }
+.production-steps small { font-weight: 400; color: #667085; }
+.production-step-select { display: none; }
+.shoot-check-ready { padding: 16px 0; }
+.shoot-check-ready h3 { margin: 0 0 12px; font-size: 15px; }
+@media (min-width: 768px) and (max-width: 1100px) { .production-steps small { display: none; } }
+@media (max-width: 767px) {
+  .production-steps { display: none; }
+  .production-step-select { display: block; margin: 6px 12px; }
+}
+
+.shoot-candidates { margin-top: 16px; }
+.shoot-candidates > header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.shoot-candidates h3 { margin: 0 auto 0 0; font-size: 15px; }
+.shoot-candidates h3 small { color: #667085; }
+.shoot-candidate-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.shoot-candidate-items article { border: 1px solid #e1e7ee; border-radius: 6px; overflow: hidden; background: #fff; }
+.shoot-candidate-items article.is-selected { border-color: #1677ff; box-shadow: 0 0 0 1px #1677ff; }
+.shoot-candidate-items article > button { width: 100%; display: block; background: none; border: 0; text-align: left; padding: 0; cursor: pointer; color: inherit; }
+.shoot-candidate-thumbnail { position: relative; aspect-ratio: 16/9; background: #edf0f4; display: flex; align-items: center; justify-content: center; color: #667085; font-size: 12px; }
+.shoot-candidate-thumbnail img { width: 100%; height: 100%; object-fit: contain; }
+.shoot-candidate-thumbnail small { position: absolute; right: 6px; bottom: 6px; border-radius: 3px; padding: 1px 4px; background: #1f2937; color: #fff; }
+.shoot-candidate-info { display: grid; gap: 4px; padding: 10px; font-size: 12px; color: #667085; }
+.shoot-candidate-info strong { color: #1f2937; font-size: 14px; }
+.shoot-candidate-items.is-list { grid-template-columns: 1fr; }
+.shoot-candidate-items.is-list article > button { display: grid; grid-template-columns: 144px minmax(0, 1fr); }
+.shoot-candidate-preview video { width: 100%; max-height: 360px; background: #111; }
+@media (max-width: 767px) { .shoot-candidate-items { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); } .shoot-candidate-items.is-list article > button { grid-template-columns: 100px minmax(0, 1fr); } }
+
+.shoot-execution-summary { border-bottom: 1px solid #e5eaf0; padding-bottom: 8px; margin-bottom: 8px; }
+.shoot-execution-summary dl { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 4px 0; font-size: 12px; }
+.shoot-execution-summary dl > div { display: flex; gap: 6px; }
+.shoot-execution-summary dt { color: #667085; }
+.shoot-execution-summary dd { margin: 0; }
+
+.production-steps > button:not(:last-child)::after { content: ''; width: 12px; height: 1px; background: #cbd5e1; margin-left: 6px; }

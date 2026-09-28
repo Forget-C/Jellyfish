@@ -106,7 +106,7 @@ try {
   }
   async function choose(label, title) {
     if (label === '查看或编辑生产计划') title = title.replace(/计划 (\d+)/, (_, number) => `计划 ${number.padStart(2, '0')}`)
-    if (label === '选择候选 Take') { await page.locator('.cut-take-library button').filter({ hasText: new RegExp(`Take ${title.match(/Take (\d+)/)[1]}\\b`) }).click(); return }
+    if (label === '选择候选 Take') { await page.locator('.cut-take-library button').filter({ hasText: `候选 ${title.match(/Take (\d+)/)[1].padStart(2, '0')}` }).click(); return }
     await page.getByRole('combobox', { name: label, exact: true }).locator('../..').click()
     await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: label === '查看或编辑设计版本' ? new RegExp('设计 0?' + title.match(/设计 (\d+)/)[1]) : title }).first().click()
   }
@@ -117,7 +117,7 @@ try {
   assert.equal(writes.length, 0)
   await contextAction('当前进展')
   await page.getByText('查看采用区间与预演', { exact: true }).click()
-  assert.ok((await page.locator('body').innerText()).includes('片段 2 · Take 1 · 源区间 4.000–5.000 秒'))
+  assert.ok((await page.locator('body').innerText()).includes('片段 2 · 计划 1 · 单元 01 · 候选 01 · 源区间 4.000–5.000 秒'))
   await closeDrawer()
 
   // A04: opening and expanding every history group performs no business writes.
@@ -143,7 +143,7 @@ try {
   await page.getByRole('tab', { name: '单元试拍' , exact: true }).click()
   await text('当前查看： · 计划 2 · 草稿 · 固定设计依据：设计 1')
   await choose('查看或编辑生产计划', '计划 1 · 已确认')
-  await page.getByText('此计划的引用：Take 1（当前采用仍在引用）', { exact: false }).waitFor()
+  await page.getByText('此计划的引用：计划 1 · 单元 01 · 候选 01（当前采用仍在引用）', { exact: false }).waitFor()
   assert.equal(writes.length, 0)
   await settled()
   await page.getByRole('tab', { name: '剪辑验收' , exact: true }).click()
@@ -184,7 +184,7 @@ try {
   await text('当前采用：片段 1 · 0.800–4.600 秒')
 
   // A02: late successful output is a new candidate, not automatic adoption.
-  workspace.takes.push({ ...structuredClone(workspace.takes[2]), id: 't4', file_id: 'file4', task_id: 'new-success', annotation: { review_status: 'unreviewed', rationale: { state: 'unset' }, coverage: [], retained_ranges: [] } })
+  workspace.takes.push({ ...structuredClone(workspace.takes[2]), id: 't4', display_number: 4, file_id: 'file4', task_id: 'new-success', annotation: { review_status: 'unreviewed', rationale: { state: 'unset' }, coverage: [], retained_ranges: [] } })
   await contextAction('刷新状态')
   await settled()
   await choose('选择候选 Take', 'Take 4 · u1')

@@ -50,6 +50,7 @@ class DirectingRevision(Base, TimestampMixin):
     kind: Mapped[str] = mapped_column(String(16), nullable=False)
     parent_id: Mapped[str | None] = mapped_column(ForeignKey("directing_revisions.id", ondelete="RESTRICT"))
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    display_number: Mapped[int | None] = mapped_column(Integer, comment="指令在固定计划与单元内的不可变展示编号")
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     source_key: Mapped[str | None] = mapped_column(String(64))
     source_task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id", name="fk_directing_revision_source_task", ondelete="RESTRICT"))
@@ -88,6 +89,7 @@ class Take(Base, TimestampMixin):
     file_id: Mapped[str] = mapped_column(ForeignKey("files.id", ondelete="RESTRICT"), nullable=False)
     annotation: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    display_number: Mapped[int | None] = mapped_column(Integer, comment="候选在固定计划与单元内的不可变展示编号")
 
     __table_args__ = (
         ForeignKeyConstraint(["task_id", "output_ordinal"], ["task_outputs.task_id", "task_outputs.ordinal"], ondelete="RESTRICT"),

@@ -49,6 +49,9 @@ def test_foundation_migration_and_next_upgrade():
         review_source = revision_module("9bf5b2f0c813_add_review_source_task.py")
         review_source.op = migration.op
         review_source.upgrade()
+        display_numbers = revision_module("a1c4e7b9d205_add_directing_display_numbers.py")
+        display_numbers.op = migration.op
+        display_numbers.upgrade()
         context = MigrationContext.configure(connection, opts={"compare_type": True})
         assert not compare_metadata(context, Base.metadata)
         connection.execute(sa.text("INSERT INTO projects (id,name,description,style,visual_style,seed,unify_style,progress,stats) VALUES ('p','p','','drama','live_action',0,1,0,'{}')"))
@@ -66,6 +69,7 @@ def test_foundation_migration_and_next_upgrade():
         assert connection.scalar(sa.text("SELECT title FROM directing_sequences WHERE id='seq'")) == "scene"
         migration.op.drop_column("directing_sequences", "migration_probe")
         assert not compare_metadata(context, Base.metadata)
+        display_numbers.downgrade()
         review_source.downgrade()
         feedback.downgrade()
         continuity.downgrade()
@@ -155,3 +159,25 @@ def test_retirement_preserves_assets_and_blocks_active_legacy_tasks(active):
             assert 'storyboard_count' not in {c['name'] for c in sa.inspect(connection).get_columns('chapters')}
         assert connection.scalar(sa.text('SELECT content FROM directing_takes')) == 'retained'
     engine.dispose()
+
+
+def test_display_number_backfill_keeps_payloads_and_groups():
+    """历史编号只在原排序上分配一次，计划和单元分别计数，降级保留原数据。"""
+    engine = sa.create_engine("sqlite://")
+    with engine.begin() as connection:
+        connection.execute(sa.text("CREATE TABLE directing_revisions (id TEXT PRIMARY KEY, sequence_id TEXT, kind TEXT, payload TEXT, created_at TEXT)"))
+        connection.execute(sa.text("CREATE TABLE directing_takes (id TEXT PRIMARY KEY, sequence_id TEXT, plan_revision_id TEXT, unit_id TEXT, created_at TEXT)"))
+        payload = '{"plan_revision_id":"p1","unit_id":"u1","text":"same"}'
+        for identity, content in [('z', payload), ('a', payload), ('b', payload.replace('u1', 'u2')), ('c', payload.replace('p1', 'p2'))]:
+            connection.execute(sa.text("INSERT INTO directing_revisions VALUES (:id,'s','prompt',:payload,'2026-01-01')"), {'id': identity, 'payload': content})
+        for identity, unit in [('z', 'u1'), ('a', 'u1'), ('b', 'u2')]:
+            connection.execute(sa.text("INSERT INTO directing_takes VALUES (:id,'s','p1',:unit,'2026-01-01')"), {'id': identity, 'unit': unit})
+        migration = revision_module("a1c4e7b9d205_add_directing_display_numbers.py")
+        migration.op = Operations(MigrationContext.configure(connection))
+        migration.upgrade()
+        assert dict(connection.execute(sa.text('SELECT id, display_number FROM directing_revisions')).tuples().all()) == {'a': 1, 'b': 1, 'c': 1, 'z': 2}
+        assert dict(connection.execute(sa.text('SELECT id, display_number FROM directing_takes')).tuples().all()) == {'a': 1, 'b': 1, 'z': 2}
+        assert connection.scalar(sa.text("SELECT payload FROM directing_revisions WHERE id='a'")) == payload
+        migration.downgrade()
+        assert connection.scalar(sa.text('SELECT COUNT(*) FROM directing_takes')) == 3
+        assert connection.scalar(sa.text("SELECT payload FROM directing_revisions WHERE id='a'")) == payload

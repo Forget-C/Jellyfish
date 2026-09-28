@@ -17,8 +17,8 @@ def probe_duration(file) -> int:
     return round(duration * 1000)
 
 
-def extract_frame(content: bytes, at_ms: int) -> bytes:
-    """从本地视频字节准确提取 PNG，禁用网络协议并限制处理时间。"""
+def extract_frame(content: bytes, at_ms: int, *, thumbnail: bool = False) -> bytes:
+    """从本地字节提取 PNG；预览限制为最长边480，不改变业务参考取帧。"""
     import tempfile
 
     try:
@@ -26,7 +26,8 @@ def extract_frame(content: bytes, at_ms: int) -> bytes:
             file.write(content)
             file.flush()
             result = subprocess.run(['ffmpeg', '-v', 'error', '-protocol_whitelist', 'pipe,file',
-                '-i', file.name, '-ss', str(at_ms / 1000), '-frames:v', '1', '-f', 'image2pipe', '-vcodec', 'png', 'pipe:1'],
+                '-i', file.name, '-ss', str(at_ms / 1000),
+                *(['-vf', "scale=w='min(480,iw)':h='min(480,ih)':force_original_aspect_ratio=decrease"] if thumbnail else []), '-frames:v', '1', '-f', 'image2pipe', '-vcodec', 'png', 'pipe:1'],
                 capture_output=True, timeout=30, check=True)
     except subprocess.TimeoutExpired as error:
         raise ValueError('提取画面超时，请选择其他位置后重试') from error

@@ -41,7 +41,7 @@ async def test_mysql_schema_roundtrip_and_concurrent_writes():
                     "include_object": lambda obj, name, type_, reflected, compare_to: (name if type_ == "table" else obj.table.name).startswith("directing_"),
                 })
                 assert not compare_metadata(context, Base.metadata)
-                assert sync.scalar(text("SELECT version_num FROM alembic_version")) == "9bf5b2f0c813"
+                assert sync.scalar(text("SELECT version_num FROM alembic_version")) == "a1c4e7b9d205"
             await connection.run_sync(verify)
         async with sessions.begin() as db:
             db.add(Project(id="p1", name="测试", style="真人都市"))
@@ -253,5 +253,36 @@ async def test_mysql_compile_response_contains_recovered_prompt():
 
         responses = await asyncio.gather(compile_response(), compile_response())
         assert responses[0] == responses[1]
+
+        barrier = asyncio.Barrier(2)
+        async def create_numbered_prompt():
+            """先建立旧快照再并发追加，编号必须读取最新已提交的分配结果。"""
+            async with sessions.begin() as db:
+                service = ProductionService(db, 'p1')
+                source = await service.read_revision(prompt.id)
+                await barrier.wait()
+                row = await service.save_revision(sequence_id, kind='prompt', payload=source.content.model_dump(mode='json'))
+                return row.display_number
+
+        numbers = await asyncio.gather(create_numbered_prompt(), create_numbered_prompt())
+        assert len(set(numbers)) == 2 and max(numbers) - min(numbers) == 1
+
+        async with sessions.begin() as db:
+            await output(db, prompt.id, task_id='numbered-take-a')
+            await output(db, prompt.id, task_id='numbered-take-b')
+        barrier = asyncio.Barrier(2)
+        async def create_numbered_take(task_id):
+            """候选在旧事务快照下并发登记也不复用编号，重放仍返回原身份。"""
+            async with sessions.begin() as db:
+                await db.scalar(select(func.count()).select_from(Take))
+                await barrier.wait()
+                service = ProductionService(db, 'p1')
+                row = await service.register_take(prompt_revision_id=prompt.id, task_id=task_id, output_ordinal=0)
+                replay = await service.register_take(prompt_revision_id=prompt.id, task_id=task_id, output_ordinal=0)
+                assert replay.id == row.id and replay.display_number == row.display_number
+                return row.display_number
+
+        numbers = await asyncio.gather(create_numbered_take('numbered-take-a'), create_numbered_take('numbered-take-b'))
+        assert len(set(numbers)) == 2 and max(numbers) - min(numbers) == 1
     finally:
         await engine.dispose()

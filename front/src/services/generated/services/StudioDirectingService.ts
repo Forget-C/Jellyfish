@@ -516,6 +516,34 @@ export class StudioDirectingService {
         });
     }
     /**
+     * Take Thumbnail
+     * 读取同等归属保护的真实视频缩略图，派生缓存由服务处理。
+     * @returns binary Successful Response
+     * @throws ApiError
+     */
+    public static directingTakeThumbnail({
+        projectId,
+        sequenceId,
+        takeId,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        takeId: string,
+    }): CancelablePromise<Blob> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/takes/{take_id}/thumbnail',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'take_id': takeId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * Resolve Review
      * 派生保留人工取舍的审稿版本，原报告保持不变。
      * @returns ApiResponse_WorkspaceRead_ Successful Response

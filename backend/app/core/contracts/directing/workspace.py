@@ -199,6 +199,7 @@ class MediaRead(Contract):
     file_id: Identity
     url: str
     duration_ms: int | None
+    thumbnail_url: str | None = None
 
 
 class ReviewDecisionRequest(Contract):

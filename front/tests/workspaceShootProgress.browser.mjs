@@ -28,6 +28,7 @@ try {
   unit.references = [0, 1].map(ordinal => ({ id: `ref${ordinal}`, ordinal, file_id: `image${ordinal}`, media_kind: 'image', purpose: 'composition', input_role: ordinal ? 'subject' : 'first_frame', participant_ids: [], source: { kind: 'human', reference: 'author', version: '1' } }))
   workspace.prompts = [revision('prompt1', { plan_revision_id: 'p-old', unit_id: 'u1', text: '他缓缓递出旧信，对方低头辨认。保持手部和旧信清晰可见，镜头固定，动作克制。', decisions: [], sources: [], format_version: 'v4' })]
   workspace.reviews = []; workspace.task_ids = ['check1']
+  workspace.prompts.forEach((row, index) => { row.display_number = index + 1 })
   const roles = ['direction', 'performance', 'staging', 'cinematography', 'continuity', 'prompt']
   const packet = { mode: 'formal', roles, occurrences: [{ id: 'o1', prompt_revision_id: 'prompt1', plan_revision_id: 'p-old', unit_id: 'u1', coverage_item_id: 'cover1', shot_id: 'shot1', local_number: 1 }], rows: roles.map(role => ({ role, occurrence_id: 'o1', verdict: 'pass', rationale: '动作与镜头要求一致', findings: [] })), context: { state: 'unset' } }
   const tasks = new Map([['check1', { task_id: 'check1', kind: 'directing_review', status: 'running', error: null }]])
@@ -90,6 +91,7 @@ try {
   await page.getByRole('button', { name: '固定输入', exact: true }).click()
   await page.getByRole('region', { name: '本次固定输入详情' }).getByText('视频模型 A', { exact: true }).waitFor()
   await page.getByRole('button', { name: '关闭指令详情' }).click()
+  await page.waitForFunction(() => document.activeElement?.textContent === '固定输入')
   const detail = page.locator('.shoot-passed-summary')
   await detail.locator(':scope > summary').focus(); await page.keyboard.press('Enter')
   assert.equal(await detail.getAttribute('open'), '')
@@ -121,10 +123,10 @@ try {
   await page.getByRole('region', { name: '视频生成进度', exact: true }).getByText('进行中', { exact: true }).waitFor()
   await page.locator('.production-unit-list').getByText('视频生成中 · 1 个候选', { exact: true }).waitFor()
   assert.equal(await page.getByRole('button', { name: '开始试拍', exact: true }).count(), 0)
-  await page.getByRole('tab', { name: '候选素材', exact: true }).click()
-  await page.getByRole('button', { name: '查看视频 1 · 待审片', exact: true }).waitFor()
-  await page.getByRole('button', { name: '查看本次任务', exact: true }).click()
-  await page.getByRole('tab', { name: '执行试拍', exact: true, selected: true }).waitFor()
+  await page.getByRole('tab', { name: '试拍与候选', exact: true }).click()
+  await page.getByRole('button', { name: '预览候选 03', exact: true }).waitFor()
+  await page.getByRole('region', { name: '视频生成进度', exact: true }).waitFor()
+  await page.getByRole('tab', { name: '试拍与候选', exact: true, selected: true }).waitFor()
   Object.assign(tasks.get('video1'), { status: 'failed', error: '隔离视频失败，请核对模型配置' })
   await page.getByRole('region', { name: '视频生成进度', exact: true }).getByText('隔离视频失败，请核对模型配置', { exact: true }).waitFor()
   await page.getByRole('button', { name: '开始试拍', exact: true }).waitFor()
@@ -137,9 +139,9 @@ try {
   assert.equal(shootRequests.length, 2)
   assert.equal(shootRequests[0].request_id, shootRequests[1].request_id, 'refresh retries the original authorized submission')
   assert.deepEqual(await page.evaluate(() => JSON.parse(sessionStorage.getItem('directing-shoot-requests:p1:s1'))), [])
-  workspace.takes.push({ ...workspace.takes[0], id: 'new-take', task_id: 'video2', prompt_revision_id: 'prompt1' })
+  workspace.takes.push({ ...workspace.takes[0], id: 'new-take', display_number: 4, task_id: 'video2', prompt_revision_id: 'prompt1' })
   Object.assign(tasks.get('video2'), { status: 'succeeded' })
-  await page.getByRole('button', { name: '再拍一次', exact: true }).click()
+  await page.getByRole('button', { name: '同指令再拍一次', exact: true }).click()
   await page.locator('[data-inline-task-id="video3"]').getByText('进行中', { exact: true }).waitFor()
   assert.equal(shootRequests.length, 3)
   assert.notEqual(shootRequests[2].request_id, shootRequests[0].request_id, 'explicit reshoot creates a distinct request')

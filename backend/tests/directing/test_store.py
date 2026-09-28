@@ -285,3 +285,30 @@ async def test_planned_card_image_and_dialogue_keep_frozen_dependencies(tmp_path
             await upsert_file_usage(db, file_id='foreign-image', project_id='p2', chapter_id='ch2', usage_kind='upload')
             with pytest.raises(ValueError, match='not linked'):
                 await store.save_revision(sequence_id, kind='cut', payload={'items': [{**item, 'preview_file_id': 'foreign-image'}]})
+
+
+@pytest.mark.asyncio
+async def test_scoped_display_numbers_survive_reordering_and_retries(tmp_path):
+    """编号按单元分配且持久保存；读顺序、正文相同和重试不改变原身份。"""
+    async with database(tmp_path) as sessions:
+        async with sessions.begin() as db:
+            store, sequence_id, _, _, prompts = await setup_story(db)
+            first = await store.read_revision(prompts[0])
+            other = await store.read_revision(prompts[1])
+            assert first.display_number == other.display_number == 1
+            second = await frozen(store, sequence_id, "prompt", first.content.model_dump(mode="json"))
+            assert second.display_number == 2
+            assert (await store.read_revision(first.id)).display_number == 1
+            await output(db, first.id)
+            take = await store.register_take(prompt_revision_id=first.id, task_id="task1", output_ordinal=0)
+            retry = await store.register_take(prompt_revision_id=first.id, task_id="task1", output_ordinal=0)
+            assert take.id == retry.id and take.display_number == retry.display_number == 1
+            await output(db, second.id, "task2", "video2")
+            next_take = await store.register_take(prompt_revision_id=second.id, task_id="task2", output_ordinal=0)
+            assert next_take.display_number == 2
+            first_id, second_id, take_id = first.id, second.id, take.id
+        async with sessions.begin() as db:
+            restored = DirectingStore(db, "p1")
+            assert (await restored.read_revision(second_id)).display_number == 2
+            assert (await restored.read_revision(first_id)).display_number == 1
+            assert (await restored.read_take(take_id)).display_number == 1

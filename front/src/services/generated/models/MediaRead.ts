@@ -10,5 +10,6 @@ export type MediaRead = {
     file_id: string;
     url: string;
     duration_ms: (number | null);
+    thumbnail_url?: (string | null);
 };
 

@@ -1,6 +1,6 @@
 """场次工作区 API；业务校验由领域服务负责，事务必须在响应发送前提交。"""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.directing.workspace import (
@@ -157,7 +157,17 @@ async def take_media(project_id: str, sequence_id: str, take_id: str, db: AsyncS
     take = await _call(service.take(take_id, sequence_id=sequence_id))
     file = await require_available_file(db, file_id=take.file_id, lock=False, expected_type="video")
     return success_response(MediaRead(take_id=take.id, file_id=file.id,
-                                     url=f"/api/v1/studio/files/{file.id}/download", duration_ms=file.duration_ms))
+                                     url=f"/api/v1/studio/files/{file.id}/download", duration_ms=file.duration_ms,
+                                     thumbnail_url=f"/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/takes/{take.id}/thumbnail"))
+
+
+@router.get("/sequences/{sequence_id}/takes/{take_id}/thumbnail", response_class=Response,
+            responses={200: {"content": {"image/png": {"schema": {"type": "string", "format": "binary"}}}}},
+            operation_id="directing_take_thumbnail")
+async def take_thumbnail(project_id: str, sequence_id: str, take_id: str, db: AsyncSession = Depends(get_db, scope="function")):
+    """读取同等归属保护的真实视频缩略图，派生缓存由服务处理。"""
+    content = await _call(ProductionService(db, project_id).take_thumbnail(sequence_id, take_id))
+    return Response(content, media_type="image/png", headers={"Cache-Control": "private, max-age=3600"})
 
 
 @router.post("/sequences/{sequence_id}/reviews/{review_id}/resolve", response_model=ApiResponse[WorkspaceRead], operation_id="directing_resolve_review")

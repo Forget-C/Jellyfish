@@ -3,6 +3,7 @@ import { Alert, Button, Card, Space, Tag } from 'antd'
 import { FilmService, StudioDirectingService } from '../../../services/generated'
 import type { DirectingTaskRead, WorkspaceRead } from '../../../services/generated'
 import { designResultRecorded } from './workspaceProduction'
+import { candidateName } from './workspaceUsage'
 import { directingError } from './common'
 
 const titles: Record<string, string> = { directing_divide: '场次分析', directing_design: '导演设计', directing_review: '六部门审稿', image_generation: '验证图', video_generation: '单元试拍' }
@@ -62,7 +63,7 @@ export function DirectingTasks({ projectId, taskIds, onResult, onSettled, onTask
           try { await FilmService.cancelTaskApiV1FilmTasksTaskIdCancelPost({ taskId: task.task_id, requestBody: { reason: '用户取消' } }) }
           catch (cause) { setError(directingError(cause)) }
         }}>取消</Button>}
-        {workspace?.takes.filter(take => take.task_id === task.task_id).map((take, index) => <Button key={take.id} size="small" onClick={() => onTake?.(take.id)}>查看视频 {index + 1}{take.annotation.review_status === 'unreviewed' ? ' · 待审片' : ''}</Button>)}
+        {workspace?.takes.filter(take => take.task_id === task.task_id).map(take => <Button key={take.id} size="small" onClick={() => onTake?.(take.id)}>查看{candidateName(workspace, take.id, true)}{take.annotation.review_status === 'unreviewed' ? ' · 待审片' : ''}</Button>)}
         {task.status === 'succeeded' && (task.division || task.design || task.review || !!task.image_file_ids?.length) && <Button size="small" onClick={() => onResult?.(task)}>查看结果</Button>}
       </Space>
       {task.error && <Alert type="error" message={task.error} style={{ marginTop: 8 }} />}

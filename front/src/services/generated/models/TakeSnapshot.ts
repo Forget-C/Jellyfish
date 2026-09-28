@@ -18,6 +18,10 @@ export type TakeSnapshot = {
     output_ordinal: number;
     file_id: string;
     version: number;
+    /**
+     * 候选在固定计划与单元内的稳定编号
+     */
+    display_number?: (number | null);
     annotation: TakeAnnotation_Output;
 };
 

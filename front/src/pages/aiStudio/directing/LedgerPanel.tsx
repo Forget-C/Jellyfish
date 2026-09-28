@@ -1,3 +1,4 @@
+import { candidateName, revisionName } from './workspaceUsage'
 import { SourceLinks } from './Sources'
 import { useCallback, useEffect, useState } from 'react'
 import { Alert, Button, Card, Collapse, Empty, Image, Space, Spin, Tabs, Typography } from 'antd'
@@ -69,17 +70,17 @@ export function LedgerPanel({ projectId, sequenceId }: { projectId: string; sequ
       </Space> },
       { key: 'prompts', label: '提示词版本账', children: <Space direction="vertical" className="w-full">
         {!workspace.prompts.length && <Empty description="尚无提示词" />}
-        {workspace.prompts.map((prompt, index) => <Card key={prompt.id} title={`提示词 ${index + 1} · ${prompt.id}`}>
+        {workspace.prompts.map(prompt => <Card key={prompt.id} title={`${revisionName(workspace.plans, prompt.content.plan_revision_id, '计划')} · ${revisionName(workspace.prompts, prompt.id, '指令')}`}>
           <Link to={destination({ view: 'shoot', plan: prompt.content.plan_revision_id, unit: prompt.content.unit_id, prompt: prompt.id })}>核对此单元固定输入</Link><p>计划 {prompt.content.plan_revision_id} / 单元 {prompt.content.unit_id} · 非空白字符 {prompt.content.text.replace(/\s/g, '').length} · 格式 {prompt.content.format_version}</p>
           <Typography.Paragraph copyable className="whitespace-pre-wrap">{prompt.content.text}</Typography.Paragraph>
           <SourceLinks sources={prompt.content.sources} />
           {workspace.reviews.filter(review => review.content.occurrences.some(item => item.prompt_revision_id === prompt.id)).map(review => <details key={review.id}><summary>审稿 {review.id} · {review.confirmed_by || '草稿'}</summary>{review.content.rows.map((row, i) => <div key={i}><strong>{row.role} / {row.verdict}</strong><ReviewDetails row={row} /></div>)}</details>)}
           {data.actions.filter(action => action.revision_id === prompt.id || action.task_id && workspace.takes.some(take => take.prompt_revision_id === prompt.id && take.task_id === action.task_id)).map((action, i) => <p key={i}>{action.actor_id} · {action.displayed_label} · {action.created_at} · 任务 {action.task_id || '无'}</p>)}
-          <p>产出：{workspace.takes.filter(take => take.prompt_revision_id === prompt.id).map(take => take.id).join('、') || '尚无 Take'}</p>
+          <p>产出：{workspace.takes.filter(take => take.prompt_revision_id === prompt.id).map(take => candidateName(workspace, take.id, true)).join('、') || '尚无候选'}</p>
         </Card>)}
       </Space> },
       { key: 'takes', label: 'Take 实验账', children: <Space direction="vertical" className="w-full">
-        {workspace.takes.map((take, index) => <Card data-workspace-target={`ledger-take:${take.id}`} tabIndex={-1} key={take.id} title={`Take ${index + 1} · ${take.annotation.verdict || '未审'}`}>
+        {workspace.takes.map(take => <Card data-workspace-target={`ledger-take:${take.id}`} tabIndex={-1} key={take.id} title={`${candidateName(workspace, take.id, true)} · ${take.annotation.verdict || '未审'}`}>
           <Link to={destination({ view: 'cut', take: take.id, item: '' })}>审片此素材</Link><video controls preload="metadata" className="w-full" src={buildFileDownloadUrl(take.file_id)} />
           <details><summary>实际输入与完整来源</summary>{trace(take.id)}</details><p>观察：{take.annotation.rationale.text || take.annotation.rationale.reason || '未填写'}</p>
           {take.annotation.coverage.map(item => <section key={item.id}><p>{item.media_range.source_in_ms / 1000}–{item.media_range.source_out_ms / 1000} 秒：{item.observation}</p><SourceLinks sources={[item.source]} /></section>)}

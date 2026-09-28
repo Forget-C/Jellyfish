@@ -70,6 +70,7 @@ try {
   assert.equal(saved.units[0].references[0].purpose, 'identity')
   assert.deepEqual(saved.units[0].references[0].participant_ids, [personId])
   await page.getByRole('button', { name: '保存并确认拍摄准备', exact: true }).click()
+  await page.getByRole('button', { name: '进入指令检查', exact: true }).click()
   await page.getByRole('button', { name: '生成试拍指令', exact: true }).waitFor()
   assert.equal(requests.filter(row => row.path.endsWith('/s1/revisions')).length, 1)
   assert.equal(requests.filter(row => row.path.endsWith('/p-new/confirm')).length, 2)
@@ -77,10 +78,12 @@ try {
   for (const width of [1440, 1024, 768, 375]) {
     await page.setViewportSize({ width, height: 1000 })
     await page.reload()
-    await page.getByRole('tab', { name: '拍摄准备', exact: true }).waitFor()
-    for (const name of ['拍摄准备', '指令检查', '执行试拍', '候选素材']) {
-      await page.getByRole('tab', { name, exact: true }).click()
-      await page.waitForFunction(label => [...document.querySelectorAll('[role=tab]')].some(tab => tab.textContent.startsWith(label) && tab.getAttribute('aria-selected') === 'true'), name)
+    for (const name of ['拍摄准备', '指令检查', '试拍与候选']) {
+      if (width < 768) {
+        await page.locator('.production-step-select').click()
+        await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: name }).click()
+      } else await page.getByRole('tab', { name, exact: true }).click()
+      await page.getByRole('tabpanel', { name, exact: true }).waitFor()
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1))
       await page.screenshot({ path: join(output, `${width}-${name}.png`), animations: 'disabled' })
       results.push({ width, name })
@@ -88,5 +91,5 @@ try {
   }
   assert.deepEqual(errors, [])
   await writeFile(join(output, 'results.json'), JSON.stringify({ results, requests, errors }, null, 2))
-  console.log(JSON.stringify({ output, result: 'PASS explicit asset reference, save-success/confirm-failure retry, no implicit generation, four steps at four widths' }))
+  console.log(JSON.stringify({ output, result: 'PASS explicit asset reference, save-success/confirm-failure retry, no implicit generation, three steps at four widths' }))
 } catch (error) { if (page) { console.log(await page.locator('body').innerText()); await page.screenshot({ path: join(output, 'failure.png') }) } console.log(output); throw error } finally { await browser?.close(); await server.close() }

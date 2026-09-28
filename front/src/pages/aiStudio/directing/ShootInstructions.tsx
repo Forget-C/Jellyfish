@@ -21,7 +21,7 @@ export function ShootInstructions({ workspace, planId, unitId, promptId, reviewI
   const [previewId, setPreviewId] = useState<string>()
   const [tab, setTab] = useState('text')
   useEffect(() => { setPreviewId(undefined) }, [promptId, planId, unitId])
-  useEffect(() => { if (detail.request) { setTab(detail.request.tab); setPreviewId(undefined) } }, [detail.request])
+  useEffect(() => { if (detail.request && detail.request.tab !== 'candidate') { setTab(detail.request.tab); setPreviewId(undefined) } }, [detail.request])
   const records = productionRecords(workspace, planId, unitId, promptId)
   const current = records.prompt
   const preview = records.prompts.find(row => row.id === previewId) || current
@@ -30,7 +30,7 @@ export function ShootInstructions({ workspace, planId, unitId, promptId, reviewI
   const pending = pendingReviewResults(workspace, tasks, planId, unitId, promptId)
   const name = (id: string) => revisionName(workspace.prompts, id, '试拍指令')
   const checkName = (task: DirectingTaskRead) => `待确认检查 ${tasks.filter(row => row.kind === 'directing_review').findIndex(row => row.task_id === task.task_id) + 1}`
-  const checks = <div className="shoot-record-list"><h3>选择当前指令的检查记录</h3>
+  const checks = <div className="shoot-record-list" data-workspace-target="review" tabIndex={-1}><h3>选择当前指令的检查记录</h3>
     {pending.map(task => <div key={task.task_id} data-review-task={task.task_id}><strong>{checkName(task)}</strong><span>{reviewPacketPassed(task.review, promptId) ? '检查通过' : '待处理或待核对'} · 时间未提供</span><Button aria-pressed={task.task_id === reviewTask?.task_id} onClick={() => { onReview(undefined, task.task_id); detail.close() }}>选择此检查</Button></div>)}
     {records.reviews.map(row => <div key={row.id}><strong>{revisionName(workspace.reviews, row.id, '检查')}{row.parent_id ? ' · 含人工取舍' : ''}</strong><span>{reviewPacketPassed(row.content, promptId) ? '检查通过' : '待处理或待核对'} · {row.confirmed_at ? `保存于 ${row.confirmed_at.replace('T', ' ')}` : '保存时间未提供'}</span><Button aria-pressed={row.id === reviewId} onClick={() => { onReview(row.id); detail.close() }}>选择此检查</Button></div>)}
     {!pending.length && !records.reviews.length && <Empty description="这份指令尚无检查结果" />}
@@ -53,13 +53,15 @@ export function ShootInstructions({ workspace, planId, unitId, promptId, reviewI
   </SourceInspector>
   return <>
     <div className="shoot-instruction-context" data-workspace-target="prompt-review" tabIndex={-1}>
-      <strong>检查对象：{current ? name(current.id) : '尚未选择指令'}</strong>
+      <strong>{current ? records.prompts.length === 1 ? '本次指令' : `本次${name(current.id)} · 共${records.prompts.length}版` : '尚未选择指令'}</strong>
       {current && <Button type="link" onClick={() => detail.show({ tab: 'text' })}>查看指令</Button>}
       {(records.prompts.length > 1 || !current) && <Button onClick={() => detail.show({ tab: 'history' })}>{current ? '切换版本' : '选择指令版本'}</Button>}
       {current && <Button type="link" onClick={() => detail.show({ tab: 'input' })}>固定输入</Button>}
       <span className="shoot-check-context">{reviewTask ? `${checkName(reviewTask)} · 待确认结论` : review ? `${revisionName(workspace.reviews, review.id, '检查')} · 已保存${review.parent_id ? ' · 含人工取舍' : ''}` : pending.length + records.reviews.length ? '待选择检查记录' : '待检查'}</span>
       {!!(pending.length + records.reviews.length) && <Button type="text" onClick={() => detail.show({ tab: 'checks' })}>检查记录 · {pending.length + records.reviews.length}</Button>}
     </div>
-    {detail.target && detail.request && createPortal(content, detail.target)}
+    {!current && <section className="shoot-record-list" aria-label="选择本次指令"><h3>选择本次要检查的指令</h3>{records.prompts.map(row => <div key={row.id}><strong>{records.prompts.length === 1 ? '本次指令' : name(row.id)}</strong><span>{row.confirmed_at ? `固定于 ${row.confirmed_at.replace('T', ' ')}` : '固定时间暂不可用'}</span><Button onClick={() => onPrompt(row.id)}>使用此指令</Button></div>)}</section>}
+    {current && !review && !reviewTask && !!(pending.length + records.reviews.length) && checks}
+    {detail.target && detail.request && detail.request.tab !== 'candidate' && createPortal(content, detail.target)}
   </>
 }

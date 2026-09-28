@@ -57,10 +57,11 @@ try {
   packet.rows[6].verdict = 'pending'
   workspace.prompts[0].content.decisions = [{ section_path: '/direction/shots/0/visible_result', disposition: 'text', text_excerpt: '递出旧信', explanation: '依据本镜头可见动作' }]
   workspace.prompts.push(revision('prompt2', { ...workspace.prompts[0].content, text: '历史指令专属文本', decisions: [] }))
+  workspace.prompts.forEach((row, index) => { row.display_number = index + 1 })
   const base = 'http://127.0.0.1:4197/projects/p1/chapters/ch1/sequences/s1?view=shoot&design=d1&plan=p-old&unit=u1&prompt=prompt1&review=&focus=review'
   await page.goto(base)
   await page.getByRole('button', { name: '处理首个问题', exact: true }).waitFor()
-  const tabs = page.getByRole('tablist', { name: '单元工作区' })
+  const tabs = page.getByRole('tablist', { name: '单元试拍步骤' })
   await page.getByRole('button', { name: '查看完整动作范围', exact: true }).focus()
   await page.keyboard.press('Enter')
   await page.locator('.production-action-description').waitFor()
@@ -68,7 +69,7 @@ try {
   await page.getByRole('button', { name: '查看完整动作范围', exact: true }).click()
   await tabs.getByRole('tab', { name: '指令检查', exact: true }).focus()
   await page.keyboard.press('ArrowRight')
-  assert.equal(await tabs.getByRole('tab', { name: '执行试拍', exact: true }).getAttribute('aria-selected'), 'true')
+  assert.equal(await tabs.getByRole('tab', { name: '试拍与候选', exact: true }).getAttribute('aria-selected'), 'true')
   await page.keyboard.press('ArrowLeft')
   assert.equal(await tabs.getByRole('tab', { name: '指令检查', exact: true }).getAttribute('aria-selected'), 'true')
   const report = page.getByRole('region', { name: '本次检查结论' })
@@ -119,7 +120,7 @@ try {
   }
   await page.setViewportSize({ width: 1440, height: 1000 })
   await page.getByRole('button', { name: '切换版本', exact: true }).click()
-  await page.locator('.shoot-record-list > div').filter({ hasText: '试拍指令 2' }).getByRole('button', { name: '切换到此版本' }).click()
+  await page.locator('.shoot-record-list > div').filter({ hasText: '指令 v2' }).getByRole('button', { name: '切换到此版本' }).click()
   await page.waitForURL(url => url.searchParams.get('prompt') === 'prompt2')
   assert.equal(await report.count(), 0, 'other prompt never borrows this report')
   await page.getByRole('button', { name: '关闭指令详情' }).click()

@@ -18,7 +18,7 @@ import { buildFileDownloadUrl } from '../assets/utils'
 import { ContinuityPanel } from './ContinuityPanel'
 import { AdoptedCutPanel } from './AdoptedCutPanel'
 import { PlannedCard } from './PlannedCard'
-import { cutStatus, revisionName, takeRanges, takeUsage } from './workspaceUsage'
+import { candidateName, cutStatus, revisionName, takeRanges, takeUsage } from './workspaceUsage'
 import type { ActiveCutState, CutRevision } from './workspaceUsage'
 
 /** 候选审片与主视频粗剪，保留完整 Take，采用和审查是独立操作。 */
@@ -30,7 +30,7 @@ export function CutEditor({ projectId, workspace, activeCut, onChange, onSelecti
   const matchesTake = (take: WorkspaceRead['takes'][number]) => {
     const plan = workspace.plans.find(row => row.id === take.plan_revision_id)
     const index = plan?.content.units.findIndex(row => row.id === take.unit_id) ?? -1
-    return navigationMatches(query, revisionName(workspace.takes, take.id, 'Take'), `候选 ${workspace.takes.indexOf(take) + 1}`, index >= 0 ? `单元 ${String(index + 1).padStart(2, '0')}` : '', takeAction(workspace, take.id))
+    return navigationMatches(query, candidateName(workspace, take.id, true), candidateName(workspace, take.id), index >= 0 ? `单元 ${String(index + 1).padStart(2, '0')}` : '', takeAction(workspace, take.id))
   }
   const [panel, setPanel] = useState<'adopted' | 'preview' | 'details' | 'seams'>()
   const [inspectorTab, setInspectorTab] = useState(search.get('item') ? 'clip' : ['review', 'clip', 'source'].includes(context.cutTab || '') ? context.cutTab! : 'review')
@@ -135,7 +135,7 @@ export function CutEditor({ projectId, workspace, activeCut, onChange, onSelecti
   const editingDraft = dirty || !saved?.confirmed_at
   const adoptedRanges = activeCut.status === 'ready' ? takeRanges(activeCut.cut?.content, selected) : []
   const draftRanges = editingDraft ? takeRanges(cut, selected) : []
-  const takeOptions = workspace.takes.map(item => ({ value: item.id, label: `${revisionName(workspace.takes, item.id, 'Take')} · ${item.unit_id} · ${item.annotation.review_status === 'reviewed' && item.annotation.verdict ? ({ pass: '整体可用', retain: '局部保留', repair: '需修正', discard: '废弃' }[item.annotation.verdict]) : '未审片'} · ${takeUsage(activeCut, item.id)}` }))
+  const takeOptions = workspace.takes.map(item => ({ value: item.id, label: `${candidateName(workspace, item.id, true)} · ${item.annotation.review_status === 'reviewed' && item.annotation.verdict ? ({ pass: '整体可用', retain: '局部保留', repair: '需修正', discard: '废弃' }[item.annotation.verdict]) : '未审片'} · ${takeUsage(activeCut, item.id)}` }))
   /** 载入只改变本地编辑对象；有修改时明确放弃，任何版本切换都不等于确认采用。 */
   const loadCut = (next?: CutRevision) => {
     const load = () => { setNotice(''); setPlayIndex(undefined); setReplaceId(undefined); setSaved(next); setCut(structuredClone(next?.content || { items: [] })) }
@@ -238,12 +238,12 @@ export function CutEditor({ projectId, workspace, activeCut, onChange, onSelecti
             <Button disabled={'design_revision_id' in item} onClick={() => guardReview(() => { if ('media_range' in item) { rangeEdited.current = true; if (selected !== item.take_id) pendingRange.current = { takeId: item.take_id, start: item.media_range.source_in_ms / 1000, end: item.media_range.source_out_ms / 1000 }; setSelected(item.take_id); setStart(item.media_range.source_in_ms / 1000); setEnd(item.media_range.source_out_ms / 1000); setReplaceId(item.id) } })}>调整区间</Button>
             <Button danger onClick={() => { setPlayIndex(undefined); setCut(sequential({ items: cut.items.filter(row => row.id !== item.id) })); if (replaceId === item.id) setReplaceId(undefined) }}>移除</Button>
           </Space>
-          {'media_range' in item && <Typography.Paragraph>{takeAction(workspace, item.take_id)} · {revisionName(workspace.takes, item.take_id, 'Take')} · 完整素材未裁删</Typography.Paragraph>}
+          {'media_range' in item && <Typography.Paragraph>{takeAction(workspace, item.take_id)} · {candidateName(workspace, item.take_id, true)} · 完整素材未裁删</Typography.Paragraph>}
           {'design_revision_id' in item && <PlannedCard item={item} design={workspace.designs.find(row => row.id === item.design_revision_id)?.content} images={images} onImageSearch={q => { void searchPreviewImages(q) }} onChange={next => { setPlayIndex(undefined); setCut(sequential({ items: cut.items.map(row => row.id === item.id ? next : row) })) }} />}
         </Card>)}
 </> },
     { key: 'source', label: '来源', children: <>        {take && <Space direction="vertical" className="w-full">
-          <Typography.Text>当前查看：{revisionName(workspace.takes, take.id, 'Take')} · {revisionName(workspace.plans, take.plan_revision_id, '计划')} / {take.unit_id} <Tag>{takeUsage(activeCut, take.id)}</Tag></Typography.Text>
+          <Typography.Text>当前查看：{candidateName(workspace, take.id, true)} <Tag>{takeUsage(activeCut, take.id)}</Tag></Typography.Text>
           {adoptedRanges.map(range => <Typography.Text key={range}>当前采用：{range}</Typography.Text>)}
           {draftRanges.map(range => <Typography.Text key={range} type="warning">编辑草稿已选入：{range}（{dirty ? '未保存' : '已保存，未确认采用'}）</Typography.Text>)}
           <Typography.Text type="secondary">审片结论与采用分别记录。观看素材、保存审片或加入草稿不会改变当前采用。</Typography.Text>
@@ -263,7 +263,7 @@ export function CutEditor({ projectId, workspace, activeCut, onChange, onSelecti
     {search.get('view') === 'cut' && <SequenceNavigation><WorkbenchNavigation title="候选素材" query={query} onQuery={setQuery} placeholder="搜索候选、单元或动作"><Select aria-label="候选审片筛选" value={takeFilter} onChange={setTakeFilter} options={[{ value: 'all', label: '全部结论' }, { value: 'unreviewed', label: '待审片' }, { value: 'pass', label: '整体可用' }, { value: 'retain', label: '局部保留' }, { value: 'repair', label: '需修正' }, { value: 'discard', label: '废弃' }]} /><Select aria-label="候选来源单元" allowClear placeholder="所有计划与单元" value={unitFilter} onChange={setUnitFilter} options={workspace.plans.flatMap((plan, pi) => plan.content.units.map((unit, ui) => ({ value: `${plan.id}/${unit.id}`, label: `计划 ${pi+1} / 单元 ${ui+1}` })))} />
       <div className="cut-take-library">{!shownTakes.length && <div data-navigation-tool><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={workspace.takes.length ? '没有匹配的候选' : '尚无候选素材'}>{!!workspace.takes.length && <Button onClick={clearFilters}>清除筛选</Button>}</Empty></div>}{shownTakes.map(take => <button key={take.id} aria-pressed={selected === take.id} onClick={() => guardReview(() => { setPlayIndex(undefined); setSelected(take.id) })}>
         {media[take.id] ? <video muted preload="metadata" src={`${OpenAPI.BASE + media[take.id].url}#t=0.001`} aria-hidden="true" /> : <div className="cut-thumbnail-empty">媒体待载入</div>}
-        <strong>{revisionName(workspace.takes, take.id, 'Take')}</strong><span>{takeAction(workspace, take.id)}</span><small>{take.annotation.review_status === 'unreviewed' ? '待审片' : ({ pass: '整体可用', retain: '局部保留', repair: '需修正', discard: '废弃' }[take.annotation.verdict || 'retain'])} · {takeUsage(activeCut, take.id)}</small>
+        <strong>{candidateName(workspace, take.id, true)}</strong><span>{takeAction(workspace, take.id)}</span><small>{take.annotation.review_status === 'unreviewed' ? '待审片' : ({ pass: '整体可用', retain: '局部保留', repair: '需修正', discard: '废弃' }[take.annotation.verdict || 'retain'])} · {takeUsage(activeCut, take.id)}</small>
       </button>)}</div><Button onClick={() => setPanel('preview')}>添加节奏预演</Button></WorkbenchNavigation></SequenceNavigation>}
     <WorkbenchToolbar className="cut-version-bar"><div className="sequence-version-context">        <Select aria-label="查看或编辑剪辑版本" className="w-full" placeholder="新剪辑草稿" value={saved?.id} options={workspace.cuts.map(row => ({ value: row.id, label: `${revisionName(workspace.cuts, row.id, '剪辑')} · ${cutStatus(row, activeCut)}` }))} onChange={id => loadCut(workspace.cuts.find(row => row.id === id))} />
 <span>{dirty ? '草稿 · 未保存' : saved?.confirmed_at ? '已确认版本' : '草稿 · 已保存'}</span></div><Button onClick={() => setPanel('adopted')}>{activeCut.status !== 'ready' ? '当前采用待核对' : activeCut.cut ? `当前采用：${revisionName(workspace.cuts, activeCut.cut.id, '剪辑')}` : '尚无当前采用'}</Button><div className="sequence-version-actions"><Button loading={busy} disabled={stale} onClick={save}>{saved?.confirmed_at ? '保存为新剪辑草稿' : '保存剪辑草稿'}</Button><Button disabled={!saved || !!saved.confirmed_at || dirty || stale} loading={busy} onClick={async () => {
@@ -284,7 +284,7 @@ export function CutEditor({ projectId, workspace, activeCut, onChange, onSelecti
             advancePlayback(event.currentTarget)
           }
         }} />}
-<div style={{ display: playing ? 'none' : undefined }}>        {take && <Typography.Title level={5} style={{ margin: 0 }}>正在观看：{takeAction(workspace, take.id)} · {revisionName(workspace.takes, take.id, 'Take')}</Typography.Title>}
+<div style={{ display: playing ? 'none' : undefined }}>        {take && <Typography.Title level={5} style={{ margin: 0 }}>正在观看：{takeAction(workspace, take.id)} · {candidateName(workspace, take.id, true)}</Typography.Title>}
         {source && <video aria-label="当前候选播放器" ref={video} key={source.take_id} onPlay={() => setPlayIndex(undefined)} controls src={OpenAPI.BASE + source.url} style={{ width: '100%', maxHeight: 420, background: '#111' }} />}
         <Typography.Text>本次选取：{start.toFixed(3)}–{end.toFixed(3)} 秒 · 完整素材保留</Typography.Text>
         {!source?.duration_ms && <Alert type="warning" message="素材真实时长尚不可用，暂不能采用区间。" />}
@@ -296,7 +296,7 @@ export function CutEditor({ projectId, workspace, activeCut, onChange, onSelecti
             catch (cause) { setError(directingError(cause)) } finally { setBusy(false) }
           }}>提取当前画面为参考</Button><span>出点（秒）</span><InputNumber aria-label="候选出点秒数" min={0} precision={3} value={end} onChange={value => { rangeEdited.current = true; setEnd(value || 0) }} /><Button onClick={() => { rangeEdited.current = true; setEnd(Math.round((video.current?.currentTime || 0) * 1000) / 1000) }}>取当前出点</Button></Space>
         {frame && <Alert type="success" message={`已保存参考图，来自所选素材 · ${(frame.source.media_range?.source_in_ms || 0) / 1000} 秒。可在预演或生产计划中选择。`} />}
-</div>        <details><summary>对比另一条素材</summary><Select allowClear aria-label="对比候选素材" placeholder="选择另一条候选进行对比" className="w-full" value={comparison} options={workspace.takes.filter(item => item.id !== selected).map((item) => ({ value: item.id, label: `Take ${workspace.takes.findIndex(take => take.id === item.id) + 1} · ${item.unit_id}` }))} onChange={setComparison} />
+</div>        <details><summary>对比另一条素材</summary><Select allowClear aria-label="对比候选素材" placeholder="选择另一条候选进行对比" className="w-full" value={comparison} options={workspace.takes.filter(item => item.id !== selected).map((item) => ({ value: item.id, label: candidateName(workspace, item.id, true) }))} onChange={setComparison} />
         {comparison && comparison !== selected && media[comparison] && <Card size="small" title="对比素材（不会改变当前采用区间）"><video controls key={comparison} src={OpenAPI.BASE + media[comparison].url} className="w-full" style={{ maxHeight: 300, background: '#111' }} /></Card>}
         </details>
         <Space wrap><Select aria-label="替换草稿片段" allowClear placeholder="加入剪辑草稿，或选择要替换的草稿片段" style={{ minWidth: 280 }} value={replaceId} options={cut.items.map((item, index) => ({ value: item.id, label: `替换片段 ${index + 1}` }))} onChange={setReplaceId} /><Button disabled={!source?.duration_ms} onClick={adopt}>{replaceId ? '替换剪辑草稿中的此片段' : '把这一段加入剪辑草稿'}</Button></Space>

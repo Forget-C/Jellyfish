@@ -81,7 +81,7 @@ try {
     if (path.endsWith('/review/apply')) { assert.equal(body.task_id, 'review-task'); if (!workspace.reviews.some(row => row.source_task_id === body.task_id)) workspace.reviews.push({ ...revision('review1', packet), source_task_id: body.task_id }); return respond(workspace) }
     if (path.endsWith('/shoot')) {
       assert.equal(body.prompt_revision_id, 'prompt1'); assert.equal(body.review_revision_id, 'review1'); assert.equal(activeId, null)
-      const take = structuredClone(makeWorkspace().takes[2]); Object.assign(take, { id: 'take1', task_id: 'shoot-task', project_id: project.id, chapter_id: chapter.id, plan_revision_id: workspace.plans[0].id, unit_id: workspace.plans[0].content.units[0].id })
+      const take = structuredClone(makeWorkspace().takes[2]); Object.assign(take, { id: 'take1', display_number: 1, task_id: 'shoot-task', project_id: project.id, chapter_id: chapter.id, plan_revision_id: workspace.plans[0].id, unit_id: workspace.plans[0].content.units[0].id })
       workspace.takes.push(take); tasks.set('shoot-task', { task_id: 'shoot-task', kind: 'video_generation', status: 'succeeded', error: null }); workspace.task_ids.push('shoot-task'); return respond({ task_id: 'shoot-task' })
     }
     if (path.endsWith('/takes/take1') && body) { const take = workspace.takes[0]; assert.equal(body.expected_version, take.version); take.annotation = body.annotation; take.version++; return respond(workspace) }
@@ -127,6 +127,7 @@ try {
   await page.getByRole('combobox', { name: '视频模型', exact: true }).locator('../..').click()
   await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: '隔离视频模型' }).click()
   await page.getByRole('button', { name: '保存并确认拍摄准备', exact: true }).click()
+  await page.getByRole('button', { name: '进入指令检查', exact: true }).click()
   await page.getByRole('button', { name: '生成试拍指令', exact: true }).click()
   if (loseCompileResponse) {
     await page.getByRole('button', { name: '核实本次指令生成', exact: true }).waitFor()
@@ -161,17 +162,17 @@ try {
   await page.getByRole('button', { name: '确认结论，进入试拍', exact: true }).click()
   await page.waitForFunction(() => document.querySelector('[role=tab][aria-selected=true]') !== null && new URL(location.href).searchParams.get('focus') === 'shoot-confirm')
   assert.equal(await page.getByRole('button', { name: '生成试拍指令', exact: true }).count(), 0)
-  assert.equal(await page.getByRole('tab', { name: '执行试拍', exact: true }).getAttribute('aria-selected'), 'true')
+  assert.equal(await page.getByRole('tab', { name: '试拍与候选', exact: true }).getAttribute('aria-selected'), 'true')
   assert.equal(workspace.takes.length, 0, '确认检查结论不能自动生成视频')
   const confirmedReview = new URL(page.url()).searchParams.get('review')
   await page.locator('.production-unit-list button[aria-pressed="true"]').click()
   assert.equal(new URL(page.url()).searchParams.get('review'), confirmedReview, '再次点击当前单元保留已选审稿')
   await page.getByRole('button', { name: '开始试拍', exact: true }).click()
-  await page.getByRole('tab', { name: '候选素材', exact: true }).click()
-  await page.getByRole('button', { name: '查看视频 1 · 待审片', exact: true }).waitFor()
+  await page.getByRole('tab', { name: '试拍与候选', exact: true }).click()
+  await page.getByRole('button', { name: '预览候选 01', exact: true }).waitFor()
   await page.getByRole('button', { name: '任务中心', exact: true }).click()
   await page.getByRole('button', { name: '查看本场任务与业务结果', exact: true }).click()
-  await page.locator('[data-task-id="shoot-task"]').getByRole('button', { name: '查看视频 1 · 待审片', exact: true }).click()
+  await page.locator('[data-task-id="shoot-task"]').getByRole('button', { name: '查看计划 1 · 单元 01 · 候选 01 · 待审片', exact: true }).click()
   await page.waitForFunction(() => !document.querySelector('.ant-drawer-open'))
   await page.getByLabel('当前候选播放器', { exact: true }).evaluate(video => new Promise(resolve => { if (video.readyState >= 2) resolve(); else video.addEventListener('loadeddata', resolve, { once: true }) }))
   assert.equal(activeId, null); await record('单元确认、编译审稿与生成候选')

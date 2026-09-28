@@ -93,6 +93,31 @@ class WorkspaceService(DirectingStore):
             payload=body.document.content.model_dump(mode="json"), revision_id=body.revision_id,
             expected_version=body.expected_version, parent_id=body.parent_id)
 
+    async def take_thumbnail(self, sequence_id: str, take_id: str) -> bytes:
+        """真实视频首帧的派生缓存；文件锁避免重复解码，不创建素材或采用关系。"""
+        import asyncio
+        from botocore.exceptions import ClientError
+        from app.core import storage
+        from app.services.directing.media import extract_frame
+        from app.services.studio.files import require_available_file
+
+        take = await self.take(take_id, sequence_id=sequence_id)
+        file = await require_available_file(self.db, file_id=take.file_id, expected_type="video")
+        identity = sha256(file.storage_key.encode()).hexdigest()[:16]
+        key = f"previews/directing/{file.id}/{identity}-480-v1.png"
+        if file.thumbnail_key == key:
+            try:
+                return await storage.download_file(key=key)
+            except ClientError as error:
+                if error.response.get("Error", {}).get("Code") not in {"NoSuchKey", "404", "NotFound"}:
+                    raise
+        content = await storage.download_file(key=file.storage_key)
+        frame = await asyncio.to_thread(extract_frame, content, 0, thumbnail=True)
+        await storage.upload_file(key=key, data=frame, content_type="image/png")
+        file.thumbnail_key = key
+        await self.db.flush()
+        return frame
+
     async def extract_take_frame(self, sequence_id: str, take_id: str, at_ms: int, *, adopted_range=None, edge="start"):
         """提帧归档到当前项目，持久保留 Take 和毫秒位置，不改原视频。"""
         import asyncio

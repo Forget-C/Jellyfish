@@ -1,0 +1,30 @@
+7cc9e78be2230220745e3150398eeb2b6012c650eb4c5c74e0585771e0b3a3a7
+INFO  [alembic.runtime.migration] Context impl MySQLImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 05e1c5a7a117, initial schema
+INFO  [alembic.runtime.migration] Running upgrade 05e1c5a7a117 -> 2a7d9c4f8e31, reconcile legacy runtime data
+INFO  [alembic.runtime.migration] Running upgrade 2a7d9c4f8e31 -> 7c3e1b9a2d44, unify actor image template
+INFO  [alembic.runtime.migration] Running upgrade 7c3e1b9a2d44 -> 9d4f2a8c6b15, unify character, prop and costume image templates
+INFO  [alembic.runtime.migration] Running upgrade 9d4f2a8c6b15 -> b4d7f1a8c2e0, add experiment sessions
+INFO  [alembic.runtime.migration] Running upgrade b4d7f1a8c2e0 -> c6e2f4a9b301, add per-session experiment message sequence
+INFO  [alembic.runtime.migration] Running upgrade c6e2f4a9b301 -> d8f4a1e9b702, add unified generation contracts storage foundation
+INFO  [alembic.runtime.migration] Running upgrade d8f4a1e9b702 -> e2b7c6d9f4a3, remove model configuration revisions and repair generation timestamps
+INFO  [alembic.runtime.migration] Running upgrade e2b7c6d9f4a3 -> f1a2b3c4d5e6, add generation execution runs
+INFO  [alembic.runtime.migration] Running upgrade f1a2b3c4d5e6 -> a6b7c8d9e0f1, add generation run dispatch events
+INFO  [alembic.runtime.migration] Running upgrade a6b7c8d9e0f1 -> c7d8e9f0a1b2, add provider operations
+INFO  [alembic.runtime.migration] Running upgrade c7d8e9f0a1b2 -> d9e0f1a2b3c4, add media blobs and storage operation outbox
+INFO  [alembic.runtime.migration] Running upgrade d9e0f1a2b3c4 -> e0f1a2b3c4d5, allow pending blob artifacts
+INFO  [alembic.runtime.migration] Running upgrade e0f1a2b3c4d5 -> f2a3b4c5d6e7, Replace asset descriptions with structured facts; no historical data backfill.
+INFO  [alembic.runtime.migration] Running upgrade f2a3b4c5d6e7 -> 13b6a9d2e401, Consolidate task lifecycle and file identity; old execution history is not migrated.
+INFO  [alembic.runtime.migration] Running upgrade 13b6a9d2e401 -> 24c8e1a6b902, Add scene design, production, Take and cut foundations without converting old data.
+INFO  [alembic.runtime.migration] Running upgrade 24c8e1a6b902 -> 35d9f2b7ca03, Add frozen chapter excerpts and explicit directing action records.
+INFO  [alembic.runtime.migration] Running upgrade 35d9f2b7ca03 -> 46e0a3c8db14, Add project-scoped immutable style revisions.
+INFO  [alembic.runtime.migration] Running upgrade 46e0a3c8db14 -> 57f1b4d9ec25, Persist fixed batch manifests and per-item task acceptance.
+INFO  [alembic.runtime.migration] Running upgrade 57f1b4d9ec25 -> 68a2c5e0fd36, Record adopted-cut evidence and versioned continuity dependencies.
+INFO  [alembic.runtime.migration] Running upgrade 68a2c5e0fd36 -> 79b3d6f1ae47, Add typed review/repair/knowledge revisions and immutable chapter transitions.
+INFO  [alembic.runtime.migration] Running upgrade 79b3d6f1ae47 -> 8ac4e702bf58, Remove the replaced shot workflow while preserving projects, assets and media.
+INFO  [alembic.runtime.migration] Running upgrade 8ac4e702bf58 -> 9bf5b2f0c813, Persist the exact review task applied to a confirmed revision.
+INFO  [alembic.runtime.migration] Running upgrade 9bf5b2f0c813 -> a1c4e7b9d205, Persist scoped prompt and candidate labels independently of list ordering.
+...                                                                      [100%]
+3 passed in 4.38s
+jellyfish-shoot-flow-check-0916

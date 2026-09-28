@@ -128,3 +128,65 @@ def test_adopted_end_frame_stays_inside_actual_interval(tmp_path):
     assert (first_ms, last_ms, ending_ms) == (200, 1000, 5900)
     with pytest.raises(ValueError, match='没有可提取'):
         extract_boundary_frame(content, 101, 199, 'end')
+
+
+def test_thumbnail_uses_real_frame_with_bounded_dimensions(tmp_path):
+    """网格预览从真实视频解码，最长边限制480。"""
+    import struct
+    from app.services.directing.media import extract_frame
+
+    path = tmp_path / 'thumbnail.mp4'
+    subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=1280x720:rate=1',
+        '-t', '1', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', str(path)], check=True, timeout=30)
+    frame = extract_frame(path.read_bytes(), 0, thumbnail=True)
+    assert frame.startswith(b'\x89PNG')
+    assert struct.unpack('>II', frame[16:24]) == (480, 270)
+
+
+@pytest.mark.asyncio
+async def test_thumbnail_cache_reuses_bytes_without_creating_business_records(tmp_path, monkeypatch):
+    """重复读取复用缓存；其他项目在存储访问前拒绝，不新增业务记录。"""
+    from sqlalchemy import func, select
+    from botocore.exceptions import ClientError
+    from app.models.studio import FileItem, FileUsage
+    from app.models.directing import Take
+    from app.models.task import Task
+    from app.services.directing.production import ProductionService
+    from tests.directing.test_store import database, setup_story, output
+
+    cached, reads, decoded = {}, [], []
+    async def download(*, key):
+        reads.append(key)
+        if key.startswith('previews/') and key not in cached:
+            raise ClientError({'Error': {'Code': 'NoSuchKey'}}, 'GetObject')
+        return cached.get(key, b'video')
+    async def upload(*, key, data, content_type):
+        assert content_type == 'image/png'
+        cached[key] = data
+    def frame(content, at_ms, *, thumbnail=False):
+        assert content == b'video' and at_ms == 0 and thumbnail
+        decoded.append(content)
+        return b'\x89PNG\r\n\x1a\npreview'
+    monkeypatch.setattr(files.storage, 'download_file', download)
+    monkeypatch.setattr(files.storage, 'upload_file', upload)
+    monkeypatch.setattr('app.services.directing.media.extract_frame', frame)
+    async with database(tmp_path) as sessions:
+        async with sessions.begin() as db:
+            store, sequence_id, _, _, prompts = await setup_story(db)
+            await output(db, prompts[0])
+            take = await store.register_take(prompt_revision_id=prompts[0], task_id='task1', output_ordinal=0)
+            models = [FileItem, FileUsage, Take, Task]
+            before = [await db.scalar(select(func.count()).select_from(model)) for model in models]
+            with pytest.raises(ValueError):
+                await ProductionService(db, 'p2').take_thumbnail(sequence_id, take.id)
+            assert not reads
+            service = ProductionService(db, 'p1')
+            first = await service.take_thumbnail(sequence_id, take.id)
+            second = await service.take_thumbnail(sequence_id, take.id)
+            assert first == second and len(decoded) == 1
+            cached.clear()
+            assert await service.take_thumbnail(sequence_id, take.id) == first
+            assert len(decoded) == 2
+            assert [await db.scalar(select(func.count()).select_from(model)) for model in models] == before
+            assert (await db.get(FileItem, 'video1')).thumbnail_key in cached
+            assert (await store.read_take(take.id)).annotation.review_status == 'unreviewed'

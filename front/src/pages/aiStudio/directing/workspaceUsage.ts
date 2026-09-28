@@ -10,9 +10,24 @@ export function resolveActiveCut(workspace: WorkspaceRead, id: string | null | u
   return cut ? { status: 'ready', cut } : { status: 'error' }
 }
 
-export function revisionName(rows: Array<{ id: string }>, id: string, kind: string): string {
+export function revisionName(rows: Array<{ id: string; display_number?: number | null }>, id: string, kind: string): string {
   const index = rows.findIndex(row => row.id === id)
+  if (['指令', '提示词', '试拍指令'].includes(kind)) {
+    const number = rows[index]?.display_number
+    return number ? `指令 v${number}` : '指令版本暂不可用'
+  }
   return index < 0 ? `${kind} ${id}` : `${kind} ${index + 1}`
+}
+
+/** 编号来自服务端固定单元范围；跨单元展示时附上可读归属，避免同号混淆。 */
+export function candidateName(workspace: WorkspaceRead, id: string, qualified = false): string {
+  const take = workspace.takes.find(row => row.id === id)
+  if (!take) return '候选暂不可用'
+  const name = take.display_number ? `候选 ${String(take.display_number).padStart(2, '0')}` : '候选编号暂不可用'
+  if (!qualified) return name
+  const plan = workspace.plans.find(row => row.id === take.plan_revision_id)
+  const unit = plan?.content.units.findIndex(row => row.id === take.unit_id) ?? -1
+  return `${plan ? revisionName(workspace.plans, take.plan_revision_id, '计划') : '历史计划暂不可用'} · ${unit < 0 ? '历史单元暂不可用' : `单元 ${String(unit + 1).padStart(2, '0')}`} · ${name}`
 }
 
 export function takeRanges(cut: SequenceCut_Input | undefined, takeId: string): string[] {
@@ -40,7 +55,7 @@ export function revisionReferences(workspace: WorkspaceRead, active: ActiveCutSt
   const usedPlans = new Set(workspace.takes.filter(take => activeTakeIds.has(take.id)).map(take => take.plan_revision_id))
   if (kind === 'plan') return [
     ...workspace.prompts.filter(row => row.content.plan_revision_id === id).map(row => revisionName(workspace.prompts, row.id, '提示词')),
-    ...workspace.takes.filter(row => row.plan_revision_id === id).map(row => `${revisionName(workspace.takes, row.id, 'Take')}${activeTakeIds.has(row.id) ? '（当前采用仍在引用）' : ''}`),
+    ...workspace.takes.filter(row => row.plan_revision_id === id).map(row => `${candidateName(workspace, row.id, true)}${activeTakeIds.has(row.id) ? '（当前采用仍在引用）' : ''}`),
   ]
   return [
     ...workspace.plans.filter(row => row.content.design_revision_id === id).map(row => `${revisionName(workspace.plans, row.id, '计划')} · ${row.confirmed_at ? '已确认' : '草稿'}${usedPlans.has(row.id) ? '（当前采用仍在引用）' : ''}`),

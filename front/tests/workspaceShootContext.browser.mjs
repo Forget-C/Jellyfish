@@ -79,7 +79,6 @@ try {
   await page.getByText('待选择检查记录', { exact: true }).waitFor()
   await page.waitForFunction(() => document.activeElement?.getAttribute('data-workspace-target') === 'review')
   assert.equal(await page.getByRole('button', { name: '确认结论，进入试拍', exact: true }).count(), 0)
-  await page.getByRole('button', { name: /^检查记录 ·/ }).click()
   await page.locator('[data-review-task=check1]').getByRole('button', { name: '选择此检查' }).click()
   await page.locator('.shoot-passed-summary > summary').click()
   await page.locator('.shoot-passed-summary .shoot-review-row > summary').first().click()
@@ -101,7 +100,7 @@ try {
   await page.waitForURL(url => url.searchParams.get('review') === 'applied-check1' && url.searchParams.get('focus') === 'shoot-confirm')
   assert.equal(saveAttempts, 2, '响应丢失后只读核实，不自动再次提交')
   assert.equal(workspace.reviews.filter(row => row.source_task_id === 'check1').length, 1)
-  await page.getByRole('tab', { name: '执行试拍', exact: true, selected: true }).waitFor()
+  await page.getByRole('tab', { name: '试拍与候选', exact: true, selected: true }).waitFor()
   assert.equal(writes.filter(path => path.endsWith('/shoot')).length, 0, '恢复保存不会自动开拍')
   tasks[1].review.rows[0].verdict = 'revise'
   await page.reload()

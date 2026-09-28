@@ -118,7 +118,7 @@ try {
   await openAdopted()
   await side().getByText('画面：已验收通过', { exact: true }).waitFor()
   await side().getByText('声音：待后期', { exact: true }).waitFor()
-  await text('正在观看：递出旧信 · Take 1')
+  await text('正在观看：递出旧信 · 计划 1 · 单元 01 · 候选 01')
   await candidate().evaluate(element => new Promise(resolve => { if (element.readyState >= 1) resolve(); else element.addEventListener('loadedmetadata', resolve, { once: true }) }))
   assert.equal(await candidate().evaluate(element => element.duration), 6)
   await page.locator('[data-workspace-target="take-review"]').evaluate(element => element.scrollIntoView({ block: 'start' }))
@@ -168,7 +168,7 @@ try {
   await page.locator('[data-playing-item="pre"]').waitFor({ state: 'hidden' })
   // Existing media remains intact, comparison and extraction are available without adoption.
   await page.getByText('对比另一条素材', { exact: true }).click()
-  await choose('对比候选素材', 'Take 2')
+  await choose('对比候选素材', '候选 02')
   await text('对比素材（不会改变当前采用区间）')
   await candidate().evaluate(async element => { if (element.readyState < 1) await new Promise(resolve => element.addEventListener('loadedmetadata', resolve, { once: true })); await new Promise(resolve => { element.addEventListener('seeked', resolve, { once: true }); element.currentTime = 1.25 }) })
   assert.equal(await candidate().evaluate(element => element.currentTime), 1.25)

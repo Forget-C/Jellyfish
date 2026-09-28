@@ -3,7 +3,7 @@ import { Alert, Button, Card, Space, Typography } from 'antd'
 import { StudioDirectingService } from '../../../services/generated'
 import type { ContinuityRead, WorkspaceRead } from '../../../services/generated'
 import type { ActiveCutState } from './workspaceUsage'
-import { revisionName } from './workspaceUsage'
+import { candidateName, revisionName } from './workspaceUsage'
 import { takeAction } from './workspaceCut'
 
 /** 侧区只读取服务端确认采用；编辑草稿、审片与选区均不能更新这里的依据。 */
@@ -30,7 +30,7 @@ export function AdoptedCutPanel({ projectId, workspace, active, onOpen }: {
         <Typography.Text strong>{revisionName(workspace.cuts, cut.id, '剪辑')} · 已确认采用</Typography.Text>
         {cut.content.items.map((item, index) => <div key={item.id} style={{ width: '100%', padding: '8px 0', borderBottom: '1px solid #e5e7eb' }}>
           <Typography.Text strong>采用片段 {index + 1} · {'media_range' in item ? '真实区间' : '预演待替换'}</Typography.Text>
-          {'media_range' in item ? <><p>{takeAction(workspace, item.take_id)} · {revisionName(workspace.takes, item.take_id, 'Take')}</p><p>源区间 {(item.media_range.source_in_ms / 1000).toFixed(3)}–{(item.media_range.source_out_ms / 1000).toFixed(3)} 秒</p><Button size="small" onClick={() => onOpen('cut', item.id, item.take_id)}>查看采用片段 {index + 1}</Button></> : <p>预计 {item.estimated_duration_ms / 1000} 秒，不计作真实素材覆盖。</p>}
+          {'media_range' in item ? <><p>{takeAction(workspace, item.take_id)} · {candidateName(workspace, item.take_id, true)}</p><p>源区间 {(item.media_range.source_in_ms / 1000).toFixed(3)}–{(item.media_range.source_out_ms / 1000).toFixed(3)} 秒</p><Button size="small" onClick={() => onOpen('cut', item.id, item.take_id)}>查看采用片段 {index + 1}</Button></> : <p>预计 {item.estimated_duration_ms / 1000} 秒，不计作真实素材覆盖。</p>}
         </div>)}
         <Typography.Text>画面：{review ? review.content.verdict === 'pass' ? '已验收通过' : '需要调整' : '尚无当前版本的确认验收'}</Typography.Text>
         <Typography.Text>声音：{review ? ({ pending_postproduction: '待后期', reviewed: '已实际审听', not_applicable: '不适用' }[review.content.sound_status]) : '待核对'}</Typography.Text>

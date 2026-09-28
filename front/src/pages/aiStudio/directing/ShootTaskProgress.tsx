@@ -5,8 +5,8 @@ import type { DirectingTaskRead } from '../../../services/generated'
 import { directingError } from './common'
 
 /** 原工作区显示精确任务反馈；取消只发出请求，终态由业务轮询确认。 */
-export function ShootTaskProgress({ tasks, state, kind }: {
-  tasks: DirectingTaskRead[]; state: 'loading' | 'ready' | 'error'; kind: 'review' | 'video';
+export function ShootTaskProgress({ tasks, state, kind, sourceLabel }: {
+  tasks: DirectingTaskRead[]; state: 'loading' | 'ready' | 'error'; kind: 'review' | 'video'; sourceLabel?: (task: DirectingTaskRead) => string;
 }) {
   const [requested, setRequested] = useState<string[]>([])
   const [error, setError] = useState('')
@@ -18,6 +18,7 @@ export function ShootTaskProgress({ tasks, state, kind }: {
   if (!running.length && !failed.length && state === 'ready') return null
   const render = (task: DirectingTaskRead) => <div className="shoot-task-row" key={task.task_id} data-inline-task-id={task.task_id}>
     <strong>{name} {rows.indexOf(task) + 1}</strong><Tag>{({ queued: '排队中', running: '进行中', failed: '失败', cancelled: '已取消' } as Record<string, string>)[task.status]}</Tag>
+    {sourceLabel && <span>{sourceLabel(task)}</span>}
     {task.error && <p>{task.error}</p>}
     {requested.includes(task.task_id) && ['queued', 'running'].includes(task.status) ? <span>已请求取消，等待确认</span> : ['queued', 'running'].includes(task.status) && <Button size="small" disabled={state !== 'ready'} onClick={async () => {
       setError(''); setRequested(value => [...value, task.task_id])

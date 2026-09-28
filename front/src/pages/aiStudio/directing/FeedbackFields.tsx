@@ -1,3 +1,4 @@
+import { candidateName } from './workspaceUsage'
 import { SourceLinks } from './Sources'
 import { Button, Card, Input, InputNumber, Select, Space, Typography } from 'antd'
 import type { Note_Input, ObservedRange, WorkspaceRead } from '../../../services/generated'
@@ -25,7 +26,7 @@ export function RangeFields({ label, value, onChange }: { label: string; value: 
 /** 可增删有来源的好区间和问题证据，不另存复制的视频。 */
 export function ObservedRanges({ label, value, workspace, onChange }: { label: string; value: ObservedRange[]; workspace: WorkspaceRead; onChange: (value: ObservedRange[]) => void }) {
   return <Card size="small" title={label}>{value.map((row, index) => <Space key={index} direction="vertical" className="w-full">
-    <Select aria-label={`${label}素材 ${index + 1}`} className="w-full" value={row.take_id} options={workspace.takes.map((take, i) => ({ value: take.id, label: `Take ${i + 1} · ${take.unit_id}` }))} onChange={id => onChange(value.map((item, i) => i === index ? { ...item, take_id: id } : item))} />
+    <Select aria-label={`${label}素材 ${index + 1}`} className="w-full" value={row.take_id} options={workspace.takes.map(take => ({ value: take.id, label: candidateName(workspace, take.id, true) }))} onChange={id => onChange(value.map((item, i) => i === index ? { ...item, take_id: id } : item))} />
     <RangeFields label={`${label} ${index + 1}`} value={row.media_range} onChange={range => onChange(value.map((item, i) => i === index ? { ...item, media_range: range } : item))} />
     <Button danger onClick={() => onChange(value.filter((_, i) => i !== index))}>移除此区间</Button>
   </Space>)}<Button disabled={!workspace.takes.length} onClick={() => onChange([...value, { take_id: workspace.takes[0].id, media_range: { source_in_ms: 0, source_out_ms: 1000 } }])}>添加{label}</Button></Card>
