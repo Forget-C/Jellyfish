@@ -1,0 +1,108 @@
+{
+  "date": "2026-09-29",
+  "scope": "章节信息、默认详情、原文选区与 AI 候选逐场确认",
+  "typecheck": "passed",
+  "frontend_unit_tests": {
+    "passed": 104,
+    "command": "node --test front/tests/*.test.mjs"
+  },
+  "backend_tests": {
+    "passed": 44,
+    "command": "uv run pytest tests/directing/test_workspace.py tests/directing/test_contracts.py tests/directing/test_api.py -q"
+  },
+  "mysql_concurrency": {
+    "passed": 2,
+    "isolation_levels": [
+      "READ COMMITTED",
+      "REPEATABLE READ"
+    ],
+    "database": "独立临时 MySQL 9.0 容器及随机测试库，结束后均已移除",
+    "test": "tests/directing/test_mysql.py::test_mysql_concurrent_source_ranges"
+  },
+  "browser_tests": {
+    "chapterSourceSelection.browser.mjs": {
+      "result": "passed",
+      "evidence_source": "/private/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-source-selection-zi9Maw"
+    },
+    "chapterSequenceNavigation.browser.mjs": {
+      "result": "passed",
+      "evidence_source": "/private/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-chapter-scenes-bPqi4x"
+    },
+    "chapterListEditor.browser.mjs": {
+      "result": "passed",
+      "evidence_source": "/private/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-chapter-list-6N73Q9"
+    },
+    "workspaceJourney.browser.mjs": {
+      "result": "passed",
+      "evidence_source": "/private/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-journey-LLDmCp"
+    }
+  },
+  "openapi": "确认 8000 端口进程 cwd 为当前 backend，且响应包含新契约后完成 openapi:update；仅 3 个 schema 与 2 个相关 path 有语义差异",
+  "pylint": {
+    "result": "preexisting_failures",
+    "exit_code": 30,
+    "findings": [
+      "app/task_worker.py:264 W0706",
+      "app/task_worker.py:362 R0911",
+      "app/models/studio_assets.py:31 E0213",
+      "app/api/v1/routes/studio/lab_generation_tasks.py:32 W0611",
+      "app/services/task_queries.py:133 C0123"
+    ],
+    "unchanged_files_verified": true,
+    "changed_application_files_findings": 0
+  },
+  "viewports": [
+    1440,
+    1024,
+    768,
+    375
+  ],
+  "screenshots": [
+    "table-1440.png",
+    "scene-1440.png",
+    "source-1440.png",
+    "table-1024.png",
+    "scene-1024.png",
+    "source-1024.png",
+    "table-768.png",
+    "scene-768.png",
+    "source-768.png",
+    "table-375.png",
+    "scene-375.png",
+    "source-375.png"
+  ],
+  "acceptance": {
+    "S01-S04": [
+      "chapterSourceSelection.browser.mjs",
+      "chapterSequenceNavigation.browser.mjs",
+      "chapterListEditor.browser.mjs"
+    ],
+    "S05-S07": [
+      "chapterSourceSelection.browser.mjs",
+      "sourceSelection.test.mjs"
+    ],
+    "S08": [
+      "test_range_conflicts_unicode_adjacency_and_metadata",
+      "test_mysql_concurrent_source_ranges"
+    ],
+    "S09-S10": [
+      "chapterSourceSelection.browser.mjs",
+      "test_range_conflicts_unicode_adjacency_and_metadata"
+    ],
+    "S11-S12": [
+      "chapterSourceSelection.browser.mjs",
+      "chapterSequenceNavigation.browser.mjs",
+      "workspaceJourney.browser.mjs"
+    ],
+    "S13-S14": [
+      "chapterSourceSelection.browser.mjs",
+      "chapterListEditor.browser.mjs"
+    ]
+  },
+  "limitations": [
+    "浏览器回归拦截业务接口，不证明真实 AI 输出质量。",
+    "窄屏布局及键盘/原生选区路径已验证，未使用真实手机硬件。",
+    "全量 Pylint 既有 5 条问题未在本任务中扩展修复。"
+  ],
+  "newline_verification": "textarea CRLF/CR offsets converted back to original text; unit and browser save checks passed"
+}

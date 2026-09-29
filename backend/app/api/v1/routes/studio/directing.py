@@ -61,13 +61,13 @@ async def chapter_overview(project_id: str, chapter_id: str, db: AsyncSession = 
 
 @router.post("/chapters/{chapter_id}/sequences", response_model=ApiResponse[SequenceRead], operation_id="directing_create_sequence")
 async def create_sequence(project_id: str, chapter_id: str, body: SequenceCreate, db: AsyncSession = Depends(get_db, scope="function")):
-    """确认一段原文为正式场次。"""
+    """确认非空连续原文为正式场次；与同版本已有场次重叠时返回冲突。"""
     return success_response(await _call(ProductionService(db, project_id).write_sequence(chapter_id, body)))
 
 
 @router.put("/chapters/{chapter_id}/sequences/{sequence_id}", response_model=ApiResponse[SequenceRead], operation_id="directing_update_sequence")
 async def update_sequence(project_id: str, chapter_id: str, sequence_id: str, body: SequenceUpdate, db: AsyncSession = Depends(get_db, scope="function")):
-    """修改场次范围或顺序，旧版本更新返回冲突。"""
+    """比较版本修改名称/顺序；仅显式提交 span 才核对来源，新范围不得重叠。"""
     return success_response(await _call(ProductionService(db, project_id).write_sequence(chapter_id, body, sequence_id)))
 
 

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { projects as mockProjects, chapters as mockChapters, type Project, type Chapter as MockChapter } from '../../../../../mocks/data'
 import { StudioChaptersService, StudioProjectsService } from '../../../../../services/generated'
 import type { ChapterRead, ProjectRead } from '../../../../../services/generated'
@@ -41,8 +41,9 @@ function toUIProject(p: ProjectRead): Project {
   }
 }
 
-export type Chapter = MockChapter & {
+export type Chapter = Omit<MockChapter, 'sequenceCount'> & {
   rawText?: string
+  sequenceCount?: number
 }
 
 function toUIChapter(c: ChapterRead): Chapter {
@@ -53,7 +54,7 @@ function toUIChapter(c: ChapterRead): Chapter {
     title: c.title,
     summary: c.summary ?? '',
     rawText: c.raw_text ?? '',
-    sequenceCount: c.sequence_count ?? 0,
+    sequenceCount: c.sequence_count,
     status: c.status ?? 'draft',
     updatedAt: new Date().toISOString(),
   }
@@ -92,45 +93,49 @@ export function useProject(projectId: string | undefined) {
   return { project, loading, refresh: load }
 }
 
-export function useChapters(projectId: string | undefined) {
+/** 按服务端分页读取章节；迟到响应不覆盖新查询，读取失败与空列表分别表达。 */
+export function useChapters(projectId: string | undefined, { page = 1, pageSize = 100, query = '' } = {}) {
   const [chapters, setChapters] = useState<Chapter[]>([])
   const [loading, setLoading] = useState(true)
-
-  const patchChapterLocal = useCallback((chapterId: string, patch: Partial<Chapter>) => {
-    setChapters((prev) => prev.map((c) => (c.id === chapterId ? { ...c, ...patch } : c)))
-  }, [])
+  const [total, setTotal] = useState(0)
+  const [error, setError] = useState('')
+  const request = useRef(0)
 
   const load = useCallback(async () => {
+    const identity = ++request.current
     if (!projectId) {
       setChapters([])
+      setTotal(0)
       setLoading(false)
       return
     }
-    setLoading(true)
+    setLoading(true); setError('')
     try {
       if (useMock) {
-        setChapters(mockChapters.filter((c) => c.projectId === projectId))
+        const items = mockChapters.filter(c => c.projectId === projectId && `${c.title} ${c.summary}`.includes(query))
+        setChapters(items.slice((page - 1) * pageSize, page * pageSize)); setTotal(items.length)
       } else {
         const res = await StudioChaptersService.listChaptersApiV1StudioChaptersGet({
-          projectId,
-          page: 1,
-          pageSize: 100,
+          projectId, page, pageSize, q: query || undefined,
         })
-        const items = res.data?.items ?? []
-        setChapters(items.map(toUIChapter))
+        if (!res.data) throw new Error('章节列表读取失败')
+        if (identity === request.current) {
+          setChapters(res.data.items.map(toUIChapter)); setTotal(res.data.pagination?.total ?? res.data.items.length)
+        }
       }
     } catch {
-      setChapters(useMock ? mockChapters.filter((c) => c.projectId === projectId) : [])
+      if (identity === request.current) { setChapters([]); setError('章节列表读取失败，请重试') }
     } finally {
-      setLoading(false)
+      if (identity === request.current) setLoading(false)
     }
-  }, [projectId])
+  }, [projectId, page, pageSize, query])
 
   useEffect(() => {
     void load()
+    return () => { request.current++ }
   }, [load])
 
-  return { chapters, loading, refresh: load, patchChapterLocal }
+  return { chapters, loading, total, error, refresh: load }
 }
 
 export function useProjectCharacters(projectId: string | undefined) {

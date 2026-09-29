@@ -15,7 +15,7 @@ from app.core.contracts.directing.revisions import (
 
 
 class SourceSpan(Contract):
-    """按 Python Unicode 字符索引保存原文范围，客户端通过摘录定位，不自行按 UTF-16 偏移。"""
+    """原文连续半开区间，使用 Python Unicode 字符索引；浏览器须转换 UTF-16 选区。"""
 
     start: int = Field(ge=0)
     end: int = Field(gt=0)
@@ -29,7 +29,7 @@ class SourceSpan(Contract):
 
 
 class SequenceCreate(Contract):
-    """手动建场次或确认 AI 划场结果，共用当前原文版本。"""
+    """手动或 AI 确认范围；须含正文且不与同原文版本的其他场次相交。"""
 
     title: Text = Field(max_length=255)
     position: int = Field(ge=0)
@@ -38,9 +38,10 @@ class SequenceCreate(Contract):
 
 
 class SequenceUpdate(SequenceCreate):
-    """场次范围或标题改变时必须比较原版本。"""
+    """比较原版本；省略或置空 span 仅更新名称/顺序，保留原文依据及待核对状态。"""
 
     expected_version: int = Field(gt=0)
+    span: SourceSpan | None = None
 
 
 class SequenceRead(Contract):

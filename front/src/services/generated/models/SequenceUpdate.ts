@@ -4,13 +4,13 @@
 /* eslint-disable */
 import type { SourceSpan } from './SourceSpan';
 /**
- * 场次范围或标题改变时必须比较原版本。
+ * 比较原版本；省略或置空 span 仅更新名称/顺序，保留原文依据及待核对状态。
  */
 export type SequenceUpdate = {
     title: string;
     position: number;
     source_version: string;
-    span: SourceSpan;
+    span?: (SourceSpan | null);
     expected_version: number;
 };
 

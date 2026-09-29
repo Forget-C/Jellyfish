@@ -11,6 +11,9 @@ description: "记录当前正在推进的开发计划、改造方案与阶段性
 
 当前计划入口：
 
+- [章节入口与整章划分工作流优化计划](/docs/plans/chapter-division-workflow-plan/)：待实施；动态章节操作、章节组合单一入口、统一关闭、AI 默认视图及手动整章草稿，补齐身份保留、影响预览与原子保存。
+- [章节信息与原文选区划场优化计划](/docs/plans/chapter-source-selection-and-division-plan/)：已完成；五列章节表、默认详情、完整原文框选与 AI 候选逐场确认已落地，附四尺寸和 MySQL 并发证据，不增加跨章节待核对数量、粗剪数量。
+- [章节列表与场次抽屉交互优化计划](/docs/plans/chapter-list-and-sequence-drawer-plan/)：已完成；三列章节主表、统一原文保存提示、单层场次管理与浏览恢复已落地，不增加跨章节待核对数量、粗剪数量，附四尺寸验收证据。
 - [章节、场次与工作台交互优化任务计划](/docs/plans/chapter-sequence-workbench-interaction-plan/)：已完成；章节直达与详情分区、统一版本、稳定设计三视图和试拍关系图已落地，附最终验收矩阵、证据及检查限制。
 - [场次拍摄指令全生命周期与修改体验优化计划](/docs/plans/sequence-instruction-lifecycle/)：默认简洁、业务详情按需展开、技术诊断独立；已支持主动修改、同面板更新、真实预览、采用复检与恢复追溯；T1–T5 已完成，含四尺寸实际页面与验收限制。
 - [检查问题处理方向与 AI 修订计划](/docs/plans/sequence-review-ai-revision/)：逐项补充处理方向，统一生成可核对的修改方案，采用后衔接新指令与重新检查；T1–T4 已完成，含概念预览与隔离验收记录。

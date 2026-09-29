@@ -655,3 +655,57 @@
   .workspace-version-dialog .ant-modal-body { flex: 1; min-height: 0; overflow: auto; }
   .workspace-version-dialog .ant-modal-footer { flex-shrink: 0; }
 }
+.chapter-table .chapter-title-link { padding: 0; height: auto; max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: left; }
+.chapter-table .ant-table-cell { overflow-wrap: anywhere; }
+.chapter-scenes-layout { display: grid; grid-template-columns: minmax(260px, 2fr) minmax(0, 3fr); gap: 24px; height: calc(100% - 52px); }
+.chapter-scenes-list, .chapter-sequence-details { min-width: 0; overflow: auto; padding: 4px 12px 16px 4px; }
+.chapter-scene-selected { background: var(--ant-color-primary-bg, #e6f4ff); }
+.chapter-sequence-details > h3 { margin: 0 0 16px; overflow-wrap: anywhere; }
+.chapter-scenes-back { display: none; }
+@media (max-width: 767px) {
+  .chapter-manager .ant-drawer-content-wrapper { width: 100% !important; }
+  .chapter-manager .ant-drawer-body { padding: 16px; }
+  .chapter-scenes-layout { display: block; height: auto; }
+  .chapter-scenes-layout.has-selection .chapter-scenes-list, .chapter-scenes-placeholder { display: none; }
+  .chapter-scenes-back { display: inline-block; margin-bottom: 16px; }
+  .chapter-table .ant-table-cell { padding: 12px 6px !important; }
+  .chapter-table .ant-btn { padding-inline: 4px; }
+  .chapter-editor-modal { top: 0; max-width: 100vw; width: 100vw !important; margin: 0; padding-bottom: 0; }
+  .chapter-editor-modal .ant-modal-content { min-height: 100dvh; border-radius: 0; padding: 16px; }
+  .chapter-editor-modal .chapter-compare { grid-template-columns: minmax(0, 1fr); }
+}
+
+.chapter-table-preview { margin: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: #667085; }
+.chapter-source-excerpt { white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0; }
+.chapter-division { display: grid; gap: 12px; }
+.chapter-division-toolbar { margin-bottom: 16px; }
+.chapter-division-layout { display: grid; grid-template-columns: minmax(170px, 220px) minmax(0, 1fr) minmax(230px, 300px); gap: 20px; align-items: start; }
+.chapter-division-layout > * { min-width: 0; }
+.chapter-division-list, .chapter-division-editor { max-height: calc(100dvh - 220px); overflow: auto; padding: 4px; }
+.chapter-division-list > .ant-btn { height: auto; white-space: normal; text-align: left; margin-bottom: 8px; }
+.chapter-division-list > .ant-btn[aria-pressed=true] { border-color: #1677ff; background: #e6f4ff; }
+.chapter-division-list .ant-card { margin-bottom: 12px; }
+.chapter-source-reader { background: #fafcff; border: 1px solid #dbe4ef; border-radius: 8px; padding: 16px; }
+.chapter-source-reader > p { font-size: 12px; margin: 10px 0; }
+.chapter-source-text, .chapter-source-native { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 16px; line-height: 2.4; height: calc(100dvh - 340px); min-height: 260px; overflow: auto; padding: 16px; width: 100%; background: white; color: #263244; }
+.chapter-source-native { resize: vertical; border: 1px solid #b9c9dd; border-radius: 4px; }
+.source-assigned { background: #eaf3ff; }
+.source-candidate { border-bottom: 2px dashed #5e70b7; }
+.source-conflict { background: #ffe4e5; text-decoration: underline wavy #cf3b43; }
+.source-selection { background: #ffe5b4; }
+.source-boundary { user-select: none; font-style: normal; }
+.source-boundary::before { content: '【' attr(data-label) '】'; color: #406897; font-size: 11px; font-weight: 600; }
+.chapter-division-mobile { display: none; }
+@media (max-width: 1100px) {
+  .chapter-division-layout { grid-template-columns: minmax(140px, 170px) minmax(0, 1fr) minmax(180px, 220px); gap: 12px; }
+  .chapter-source-reader { padding: 10px; }
+}
+@media (max-width: 767px) {
+  .chapter-division-mobile { display: inline-flex; margin: 8px 0; }
+  .chapter-division-layout { display: block; }
+  .chapter-division-layout > * { display: none; }
+  .chapter-division-layout.show-list > .chapter-division-list, .chapter-division-layout.show-source > .chapter-source-reader, .chapter-division-layout.show-editor > .chapter-division-editor { display: block; }
+  .chapter-division-list, .chapter-division-editor { max-height: none; }
+  .chapter-source-text, .chapter-source-native { min-height: 220px; padding: 8px; }
+  .chapter-table .ant-table-cell:last-child { width: 100px; }
+}

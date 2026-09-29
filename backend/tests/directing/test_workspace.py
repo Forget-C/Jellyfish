@@ -80,7 +80,7 @@ async def test_scene_reorder_preserves_design_but_source_change_invalidates(tmp_
             chapter = await service.list_sequences("ch1")
             body = SequenceCreate(title="店内", position=0, source_version=chapter.source_version, span=SourceSpan(start=0, end=4))
             first = await service.write_sequence("ch1", body)
-            second = await service.write_sequence("ch1", body.model_copy(update={"position": 1}))
+            second = await service.write_sequence("ch1", body.model_copy(update={"position": 1, "span": SourceSpan(start=5, end=7)}))
             draft = await service.save_revision(first.id, kind="design", payload=design_sample())
             moved = await service.write_sequence("ch1", SequenceUpdate(**{**body.model_dump(), "position": 1}, expected_version=first.version), first.id)
             assert (await service.read_sequence(second.id)).position == 0
@@ -282,3 +282,47 @@ async def test_chapter_overview_query_count_is_constant(tmp_path):
                 assert 'payload' not in queries[2]
             finally:
                 event.remove(db.bind.sync_engine, 'before_cursor_execute', capture)
+
+
+@pytest.mark.asyncio
+async def test_range_conflicts_unicode_adjacency_and_metadata(tmp_path):
+    """连续范围互斥且可相邻，纯改名保留旧来源；历史冲突不会阻止无关更新。"""
+    from sqlalchemy import update
+    from app.models.directing import Sequence
+    async with database(tmp_path) as sessions:
+        async with sessions.begin() as db:
+            service = DirectingAIService(db, 'p1')
+            chapter_row = await service.chapter('ch1')
+            chapter_row.raw_text = '她😀推门。\n她😀推门。  '
+            await db.flush()
+            chapter = await service.list_sequences('ch1')
+            def body(start, end, position):
+                return SequenceCreate(title=f'场次{position}', position=position, source_version=chapter.source_version,
+                                      span=SourceSpan(start=start, end=end))
+            first = await service.write_sequence('ch1', body(0, 5, 0))
+            assert first.source_text == '她😀推门。'
+            with pytest.raises(RevisionConflict, match='重叠'):
+                await service.write_sequence('ch1', body(4, 7, 1))
+            second = await service.write_sequence('ch1', body(5, 11, 1))
+            assert second.source_text == '\n她😀推门。'
+            for start, end, error in [(11, 13, '正文'), (12, 14, '超出')]:
+                with pytest.raises(ValueError, match=error):
+                    await service.write_sequence('ch1', body(start, end, 2))
+            with pytest.raises(RevisionConflict, match='重叠'):
+                await service.write_sequence('ch1', SequenceUpdate(**body(4, 11, 1).model_dump(), expected_version=1), second.id)
+            # 模拟既有重叠数据，只改名称不能被迫承担历史修复。
+            await db.execute(update(Sequence).where(Sequence.id == second.id).values(source_start=4))
+            renamed = await service.write_sequence('ch1', SequenceUpdate(title='改名', position=0,
+                source_version=chapter.source_version, expected_version=1), first.id)
+            assert renamed.span == first.span and renamed.source == first.source
+            chapter_row.raw_text = '新增前缀' + chapter_row.raw_text
+            await db.flush()
+            chapter = await service.list_sequences('ch1')
+            renamed = await service.write_sequence('ch1', SequenceUpdate(title='再次改名', position=0,
+                source_version=chapter.source_version, expected_version=renamed.version, span=None), first.id)
+            assert renamed.source_changed and renamed.source_text == first.source_text and renamed.span == first.span
+            # 旧偏移不参与新版本重叠判断；重新核对时仍受当前范围约束。
+            third = await service.write_sequence('ch1', body(0, 4, 2))
+            with pytest.raises(RevisionConflict, match='重叠'):
+                await service.write_sequence('ch1', SequenceUpdate(**body(0, 5, 0).model_dump(), expected_version=renamed.version), first.id)
+            assert third.source_text == '新增前缀'

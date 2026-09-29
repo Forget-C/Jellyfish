@@ -3,7 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * 按 Python Unicode 字符索引保存原文范围，客户端通过摘录定位，不自行按 UTF-16 偏移。
+ * 原文连续半开区间，使用 Python Unicode 字符索引；浏览器须转换 UTF-16 选区。
  */
 export type SourceSpan = {
     start: number;

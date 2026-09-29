@@ -1,0 +1,45 @@
+{
+  "date": "2026-09-29",
+  "scope": "章节列表与场次抽屉交互优化",
+  "environment": "Chromium 隔离接口与示例数据；没有真实模型请求或生产数据写入",
+  "commands": {
+    "pnpm --dir front run typecheck": "passed",
+    "node --test front/tests/*.test.mjs": "101 passed",
+    "node front/tests/chapterListEditor.browser.mjs": "passed",
+    "node front/tests/chapterSequenceNavigation.browser.mjs": "passed",
+    "node front/tests/workspaceWrite.browser.mjs": "passed",
+    "node front/tests/workspaceJourney.browser.mjs": "passed"
+  },
+  "checks": {
+    "C01": "三列主表、105 章分页搜索；默认无逐章概览请求与跨章节统计",
+    "C02": "章节名称编辑、场次数量管理、零场与无原文创建入口",
+    "C03": "名称/精简文本无原文确认；原文、对比、AI 优化及关闭保存统一说明影响",
+    "C04": "保存仅调用章节 PATCH，场次读取显示变化，更新响应缺省计数不覆盖数量",
+    "C05": "标点变化也需确认；服务端来源保护不修改，范围核对不代表设计/计划自动修复",
+    "C06": "单层抽屉内保存及阶段直达，重复摘录位置保留",
+    "C07": "创建场次后刷新计数，未知计数不当零，读取失败与迟到响应隔离",
+    "C08": "取消/放弃/保存离开、写入中锁定、409 输入保留；共享写入回归通过",
+    "C09": "表格页码/搜索/滚动恢复；场次搜索、长列表滚动及工作台返回恢复",
+    "C10": "旧链接、显式无效场次及跨项目章节拒绝；不以浏览记忆替代显式目标",
+    "C11": "手动划场、过期 AI 建议、活动记录及章节组合仍可达；完整创作旅程通过",
+    "C12": "1440/1024/768/375 的主表、编辑器及抽屉检查；键盘、焦点、操作命中及窄屏返回列表"
+  },
+  "screenshots": [
+    "editor-1024.png",
+    "editor-1440.png",
+    "editor-375.png",
+    "editor-768.png",
+    "scene-1024.png",
+    "scene-1440.png",
+    "scene-375.png",
+    "scene-768.png",
+    "table-1024.png",
+    "table-1440.png",
+    "table-375.png",
+    "table-768.png"
+  ],
+  "limits": [
+    "未修改后端或外部接口；未重新运行后端测试或生成 OpenAPI。",
+    "浏览器检查使用 Chromium CSS 视口，不代表全部浏览器或真实手机硬件验证。"
+  ]
+}

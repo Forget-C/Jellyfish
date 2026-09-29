@@ -131,7 +131,7 @@ export class StudioDirectingService {
     }
     /**
      * Create Sequence
-     * 确认一段原文为正式场次。
+     * 确认非空连续原文为正式场次；与同版本已有场次重叠时返回冲突。
      * @returns ApiResponse_SequenceRead_ Successful Response
      * @throws ApiError
      */
@@ -160,7 +160,7 @@ export class StudioDirectingService {
     }
     /**
      * Update Sequence
-     * 修改场次范围或顺序，旧版本更新返回冲突。
+     * 比较版本修改名称/顺序；仅显式提交 span 才核对来源，新范围不得重叠。
      * @returns ApiResponse_SequenceRead_ Successful Response
      * @throws ApiError
      */

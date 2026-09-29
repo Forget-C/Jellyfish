@@ -84,14 +84,30 @@ class WorkspaceService(DirectingStore):
 
     async def write_sequence(self, chapter_id: str, body: SequenceCreate | SequenceUpdate,
                              sequence_id: str | None = None) -> SequenceRead:
-        """范围变化和原文版本比较在同一事务，保存真实选定摘录。"""
+        """章节锁内比较版本和范围冲突；仅改名称/顺序不重新确认原文依据。"""
         await self.chapter(chapter_id)
         chapter = await self.db.scalar(select(Chapter).where(Chapter.id == chapter_id).with_for_update().execution_options(populate_existing=True))
         version = sha256(chapter.raw_text.encode()).hexdigest()
         if body.source_version != version:
             raise RevisionConflict("章节原文已变化，请刷新并重新确认范围")
-        if body.span.end > len(chapter.raw_text):
-            raise ValueError("场次范围超出章节原文")
+        # 使用锁定读取得最新范围，避免 MySQL 可重复读快照遗漏刚提交的竞争写入。
+        siblings = list(await self.db.scalars(select(Sequence).where(Sequence.chapter_id == chapter_id)
+            .with_for_update().execution_options(populate_existing=True)))
+        previous = next((item for item in siblings if item.id == sequence_id), None)
+        if body.span is not None:
+            if body.span.end > len(chapter.raw_text):
+                raise ValueError("场次范围超出章节原文")
+            if not chapter.raw_text[body.span.start:body.span.end].strip():
+                raise ValueError("场次范围必须包含正文")
+            unchanged = previous is not None and previous.source["version"] == version and (
+                previous.source_start, previous.source_end) == (body.span.start, body.span.end)
+            if not unchanged:
+                for other in siblings:
+                    if (other.id == sequence_id or other.source["version"] != version
+                            or other.source_start is None or other.source_end is None):
+                        continue
+                    if body.span.start < other.source_end and other.source_start < body.span.end:
+                        raise RevisionConflict(f"原文范围与场次「{other.title}」重叠，请调整范围")
         async with self.db.begin_nested():
             if sequence_id is None:
                 if await self.db.scalar(select(Sequence.id).where(Sequence.chapter_id == chapter_id, Sequence.position == body.position)):
@@ -112,11 +128,12 @@ class WorkspaceService(DirectingStore):
                     await self.db.execute(update(Sequence).where(Sequence.id == other.id).values(position=old_position, version=other.version + 1))
                 row = await self.update_sequence(sequence_id, expected_version=body.expected_version,
                                                  title=body.title, position=body.position)
-            await self.db.execute(update(Sequence).where(Sequence.id == row.id).values(
-                source_start=body.span.start, source_end=body.span.end,
-                source_text=chapter.raw_text[body.span.start:body.span.end],
-                source=Source(kind="chapter", reference=chapter.id, version=version).model_dump(mode="json"),
-            ))
+            if body.span is not None:
+                await self.db.execute(update(Sequence).where(Sequence.id == row.id).values(
+                    source_start=body.span.start, source_end=body.span.end,
+                    source_text=chapter.raw_text[body.span.start:body.span.end],
+                    source=Source(kind="chapter", reference=chapter.id, version=version).model_dump(mode="json"),
+                ))
         return await self.read_sequence(row.id)
 
     async def save_workspace_revision(self, sequence_id: str, body: RevisionWrite):

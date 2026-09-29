@@ -4,7 +4,7 @@ import { Alert, Button, Modal, Space } from 'antd'
 import { useBeforeUnload, useBlocker } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 
-type Draft = { name: string; dirty: boolean; busy?: boolean; preserveOnStageChange?: boolean; save: () => Promise<boolean>; discard: () => void }
+type Draft = { name: string; dirty: boolean; busy?: boolean; saveWarning?: string; preserveOnStageChange?: boolean; save: () => Promise<boolean>; discard: () => void }
 type Transition = { action: () => void; cancel?: () => void }
 type DraftContext = {
   register: (id: string, draft: MutableRefObject<Draft>) => () => void
@@ -80,6 +80,7 @@ export function WorkspaceDrafts({ children }: { children: ReactNode }) {
     </Space>}>
       <p>{processing ? '请等待当前操作完成后再切换。' : hasChanges ? '继续前，请处理以下修改。保存不会确认版本、开始生成或改变当前采用。' : '当前没有未保存的修改，可以继续切换。'}</p>
       <ul>{dirtyDrafts().map(draft => <li key={draft.current.name}>{draft.current.name}</li>)}</ul>
+      {dirtyDrafts().filter(draft => draft.current.saveWarning).map(draft => <Alert key={draft.current.name} type="warning" showIcon message={draft.current.saveWarning} />)}
       {error && <Alert type="error" message={error} />}
     </Modal>
   </Context.Provider>

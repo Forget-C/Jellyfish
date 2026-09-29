@@ -44,8 +44,8 @@ try {
       const items = cut?.content.items.filter(item => item.kind === 'media') || []
       return respond({ chapter_id: chapter.id, title: chapter.title, sequences: cut ? [{ sequence_id: workspace.sequence.id, title: workspace.sequence.title, position: 0, cut_revision_id: cut.id, review_id: null, verdict: 'unreviewed', sound_status: 'pending_postproduction', source_changed: false, items, timeline_starts_ms: items.map(item => item.timeline_start_ms), duration_ms: items.reduce((total, item) => total + item.media_range.source_out_ms - item.media_range.source_in_ms, 0), gaps: [] }] : [], transitions: [], gaps: [] })
     }
-    if (chapter && path.endsWith(`/chapters/${chapter.id}`)) return respond(path.includes('/directing/') ? { chapter_id: chapter.id, title: chapter.title, raw_text: chapter.raw_text, source_version: 1, sequences: sceneCreated ? [workspace.sequence] : [], task_ids: [] } : chapter)
-    if (path.endsWith('/sequences') && body) { sceneCreated = true; workspace.sequence.title = body.title; workspace.sequence.source_text = chapter.raw_text.slice(body.span.start, body.span.end); return respond(workspace.sequence) }
+    if (chapter && path.endsWith(`/chapters/${chapter.id}`)) return respond(path.includes('/directing/') ? { chapter_id: chapter.id, title: chapter.title, raw_text: chapter.raw_text, source_version: '1', sequences: sceneCreated ? [workspace.sequence] : [], task_ids: [] } : chapter)
+    if (path.endsWith('/sequences') && body) { sceneCreated = true; workspace.sequence.title = body.title; workspace.sequence.span = body.span; workspace.sequence.source_text = chapter.raw_text.slice(body.span.start, body.span.end); return respond(workspace.sequence) }
     if (path.endsWith('/s1')) return respond(workspace)
     if (path.endsWith('/s1/feedback') && !body) return respond({ ...feedback, active_cut_revision_id: activeId })
     if (path.endsWith('/s1/continuity')) return respond({ active_cut_revision_id: activeId, frames: [], seams: [], units: [] })
@@ -115,9 +115,16 @@ try {
   await page.getByRole('button', { name: /新建章节/ }).click()
   await page.getByRole('textbox', { name: '章节标题', exact: true }).fill('旧信重逢')
   await page.getByRole('textbox', { name: '章节原文', exact: true }).fill('他递出旧信，她认出了他。')
-  await page.getByRole('button', { name: '创建并划分场次', exact: true }).click()
+  await page.getByRole('button', { name: '创建并继续', exact: true }).click()
   await page.getByRole('button', { name: '手动新建场次', exact: true }).click()
-  await page.getByRole('button', { name: '创建并进入场次', exact: true }).click()
+  await page.getByRole('textbox', { name: '场次标题', exact: true }).fill('旧信重逢')
+  await page.getByRole('button', { name: '键盘/触屏选区', exact: true }).click()
+  await page.getByRole('textbox', { name: '键盘或触屏选择原文', exact: true }).focus()
+  await page.keyboard.press('ControlOrMeta+A')
+  await page.getByRole('button', { name: '确认创建场次', exact: true }).click()
+  await page.getByRole('button', { name: '确认保存范围', exact: true }).waitFor()
+  await page.getByRole('button', { name: '返回场次列表', exact: true }).click()
+  await page.getByRole('button', { name: '继续设计', exact: true }).click()
   await page.getByRole('button', { name: '手动起稿', exact: true }).click()
   await page.getByRole('button', { name: '分镜 1', exact: true }).click()
   await page.getByRole('textbox', { name: '可见结果', exact: true }).fill('他把旧信递到她手边')

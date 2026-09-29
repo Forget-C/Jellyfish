@@ -286,3 +286,45 @@ async def test_mysql_compile_response_contains_recovered_prompt():
         assert len(set(numbers)) == 2 and max(numbers) - min(numbers) == 1
     finally:
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.parametrize('isolation', ['READ COMMITTED', 'REPEATABLE READ'])
+async def test_mysql_concurrent_source_ranges(isolation):
+    """两连接先建立读取快照，再竞争相交范围；章节锁和当前读只允许一方写入。"""
+    from uuid import uuid4
+    from app.core.contracts.directing.workspace import SequenceCreate, SourceSpan
+    from app.services.directing.workspace import WorkspaceService
+
+    value = os.environ.get('JELLYFISH_DIRECTING_MYSQL_URL')
+    if not value:
+        pytest.skip('JELLYFISH_DIRECTING_MYSQL_URL required')
+    url = make_url(value)
+    if url.get_backend_name() != 'mysql' or not (url.database or '').startswith('jellyfish_check_directing'):
+        raise ValueError('only an isolated directing validation database is allowed')
+    engine = create_async_engine(value, isolation_level=isolation)
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    project_id, chapter_id = f'p{uuid4().hex}', f'ch{uuid4().hex}'
+    barrier = asyncio.Barrier(2)
+    try:
+        async with sessions.begin() as db:
+            db.add(Project(id=project_id, name='范围并发测试', style='真人都市'))
+            await db.flush()
+            db.add(Chapter(id=chapter_id, project_id=project_id, index=1, title='章节', raw_text='她😀推门。第二场结束。'))
+        async def create(position):
+            async with sessions.begin() as db:
+                service = WorkspaceService(db, project_id)
+                chapter = await service.list_sequences(chapter_id)
+                await barrier.wait()
+                try:
+                    await service.write_sequence(chapter_id, SequenceCreate(title=f'竞争{position}', position=position,
+                        source_version=chapter.source_version, span=SourceSpan(start=position, end=5 + position)))
+                    return 'saved'
+                except RevisionConflict:
+                    return 'conflict'
+        assert sorted(await asyncio.wait_for(asyncio.gather(create(0), create(1)), 15)) == ['conflict', 'saved']
+        async with sessions.begin() as db:
+            assert len((await WorkspaceService(db, project_id).list_sequences(chapter_id)).sequences) == 1
+    finally:
+        await engine.dispose()
