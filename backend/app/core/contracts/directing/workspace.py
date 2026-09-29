@@ -6,6 +6,7 @@ from pydantic import Field, model_validator
 
 from app.core.contracts.directing.common import Contract, Identity, Source, Text, Role
 from app.core.contracts.directing.design import SceneDesign
+from app.core.contracts.directing.review_revision import ReviewRevisionCandidate, ReviewRevisionRequest, ReviewRevisionApplication
 from app.core.contracts.directing.production import ProductionPlan, ReviewPacket, SequenceCut, TakeAnnotation
 from app.core.contracts.directing.revisions import (
     SceneDesignRevision, ProductionPlanRevision, PromptRevision, ReviewPacketRevision,
@@ -66,6 +67,32 @@ class ChapterSequences(Contract):
     source_version: Text
     sequences: list[SequenceRead]
     task_ids: list[Identity] = Field(default_factory=list)
+
+
+class SequenceOverview(Contract):
+    """整场版本与素材计数，不表示选定计划的准备度或实际覆盖。"""
+
+    id: Identity
+    position: int
+    title: str
+    source_excerpt: str
+    source_changed: bool
+    design_count: int = Field(ge=0)
+    confirmed_design_count: int = Field(ge=0)
+    plan_count: int = Field(ge=0)
+    confirmed_plan_count: int = Field(ge=0)
+    take_count: int = Field(ge=0)
+    unreviewed_take_count: int = Field(ge=0)
+    active_cut_revision_id: Identity | None
+
+
+class ChapterOverview(Contract):
+    """章节有序场次的轻量概览，不携带设计、计划或工作区正文。"""
+
+    chapter_id: Identity
+    title: str
+    source_version: Text
+    sequences: list[SequenceOverview]
 
 
 class DivisionSuggestion(Contract):
@@ -221,6 +248,9 @@ class DirectingTaskRead(Contract):
     division: DivisionResult | None = None
     design: SceneDesign | None = None
     review: ReviewPacket | None = None
+    revision: ReviewRevisionCandidate | None = None
+    revision_request: ReviewRevisionRequest | None = None
+    revision_application: ReviewRevisionApplication | None = None
     image_file_ids: list[Identity] = Field(default_factory=list)
 
 

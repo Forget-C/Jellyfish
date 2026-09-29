@@ -55,7 +55,7 @@ export function ReferencePicker({ projectId, assets, assetError, onReloadAssets,
       source: { kind: 'human', reference: 'local-user', version: 'reference-1', file_id: fileId } })
   }
   const selected = (id: string) => references.some(ref => ref.file_id === id)
-  return <Drawer title="添加参考" open onClose={onClose} width="min(640px, 100vw)" extra={<Button onClick={onClose}>完成选择</Button>}>
+  return <Drawer title="添加参考" zIndex={1050} open onClose={onClose} width="min(640px, 100vw)" extra={<Button onClick={onClose}>完成选择</Button>}>
     <Space direction="vertical" style={{ width: '100%' }}>
       <p>选入当前单元使用的图片。本场关联不会自动提交图片。</p>
       {error && <Alert type="error" message={error} />}

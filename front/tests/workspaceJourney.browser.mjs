@@ -38,7 +38,12 @@ try {
     if (path.endsWith('/projects')) { if (body) project = { ...body, stats: { chapters: 0, roles: 0 }, created_at: '2026-09-15T00:00:00Z' }; return respond(body ? project : list(project ? [project] : [])) }
     if (project && path.endsWith(`/projects/${project.id}`)) return respond(project)
     if (path.endsWith('/chapters')) { if (body) { chapter = body; workspace.sequence.project_id = project.id; workspace.sequence.chapter_id = chapter.id }; return respond(body ? chapter : list(chapter ? [chapter] : [])) }
-    if (chapter && path.endsWith(`/chapters/${chapter.id}/assembly`)) return respond({ chapter_id: chapter.id, title: chapter.title, sequences: [], transitions: [], gaps: [] })
+    if (chapter && path.endsWith(`/chapters/${chapter.id}/overview`)) return respond({ chapter_id: chapter.id, title: chapter.title, source_version: '1', sequences: sceneCreated ? [{ ...workspace.sequence, source_excerpt: workspace.sequence.source_text, design_count: workspace.designs.length, confirmed_design_count: workspace.designs.filter(row => row.confirmed_at).length, plan_count: workspace.plans.length, confirmed_plan_count: workspace.plans.filter(row => row.confirmed_at).length, take_count: workspace.takes.length, unreviewed_take_count: workspace.takes.length, active_cut_revision_id: activeId }] : [] })
+    if (chapter && path.endsWith(`/chapters/${chapter.id}/assembly`)) {
+      const cut = workspace.cuts.find(row => row.id === activeId && row.confirmed_at)
+      const items = cut?.content.items.filter(item => item.kind === 'media') || []
+      return respond({ chapter_id: chapter.id, title: chapter.title, sequences: cut ? [{ sequence_id: workspace.sequence.id, title: workspace.sequence.title, position: 0, cut_revision_id: cut.id, review_id: null, verdict: 'unreviewed', sound_status: 'pending_postproduction', source_changed: false, items, timeline_starts_ms: items.map(item => item.timeline_start_ms), duration_ms: items.reduce((total, item) => total + item.media_range.source_out_ms - item.media_range.source_in_ms, 0), gaps: [] }] : [], transitions: [], gaps: [] })
+    }
     if (chapter && path.endsWith(`/chapters/${chapter.id}`)) return respond(path.includes('/directing/') ? { chapter_id: chapter.id, title: chapter.title, raw_text: chapter.raw_text, source_version: 1, sequences: sceneCreated ? [workspace.sequence] : [], task_ids: [] } : chapter)
     if (path.endsWith('/sequences') && body) { sceneCreated = true; workspace.sequence.title = body.title; workspace.sequence.source_text = chapter.raw_text.slice(body.span.start, body.span.end); return respond(workspace.sequence) }
     if (path.endsWith('/s1')) return respond(workspace)
@@ -127,7 +132,7 @@ try {
   await page.getByRole('combobox', { name: '视频模型', exact: true }).locator('../..').click()
   await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: '隔离视频模型' }).click()
   await page.getByRole('button', { name: '保存并确认拍摄准备', exact: true }).click()
-  await page.getByRole('button', { name: '进入指令检查', exact: true }).click()
+  await page.getByRole('button', { name: '进入指令与检查', exact: true }).click()
   await page.getByRole('button', { name: '生成试拍指令', exact: true }).click()
   if (loseCompileResponse) {
     await page.getByRole('button', { name: '核实本次指令生成', exact: true }).waitFor()
@@ -138,10 +143,10 @@ try {
     assert.equal(compileRequests[0], compileRequests[1])
     assert.equal(workspace.prompts.length, 2, '恢复原结果，不重复编译，也不选择并发生成的其他版本')
   }
-  await page.getByRole('button', { name: '查看指令', exact: true }).click()
-  await page.locator('.production-inspector .prompt-reader').waitFor()
+  await page.getByRole('button', { name: '查看完整指令', exact: true }).click()
+  await page.locator('.prompt-reader').waitFor()
   await page.getByRole('button', { name: '关闭指令详情' }).click()
-  assert.equal(await page.getByRole('tab', { name: '指令检查', exact: true }).getAttribute('aria-selected'), 'true')
+  assert.equal(await page.getByRole('tab', { name: '指令与检查', exact: true }).getAttribute('aria-selected'), 'true')
   const compiledPrompt = new URL(page.url()).searchParams.get('prompt')
   assert.ok(compiledPrompt)
   await page.locator('.production-unit-list button[aria-pressed="true"]').click()
@@ -187,7 +192,15 @@ try {
   await page.getByRole('button', { name: '当前采用：剪辑 1', exact: true }).waitFor()
   assert.deepEqual(workspace.cuts[0].content.items[0].media_range, { source_in_ms: 1000, source_out_ms: 4000 })
   await record('审片、精确区间与确认粗剪')
-  await context('验收与局部返工')
+  await page.getByRole('button', { name: '返回章节', exact: true }).click()
+  await page.locator('.ant-drawer-open').getByRole('textbox', { name: '场次标题', exact: true }).waitFor()
+  await page.locator('.ant-drawer-open').getByRole('button', { name: 'Close', exact: true }).click()
+  await page.getByRole('button', { name: '章节组合', exact: true }).click()
+  await page.getByText('尚未验收 · 声音待后期 · 3 秒', { exact: true }).waitFor()
+  assert.equal(await page.getByRole('button', { name: '按场次顺序播放', exact: true }).isDisabled(), false)
+  await record('章节组合消费已确认真实区间并保留声音状态')
+  await page.getByRole('link', { name: '查看场次验收与返工', exact: true }).click()
+
   await page.getByRole('button', { name: '新建最小返工单', exact: true }).click()
   await page.getByRole('textbox', { name: '症状', exact: true }).fill('入点稍早，只调整此片段')
   await page.getByRole('button', { name: '保存反馈草稿', exact: true }).click()

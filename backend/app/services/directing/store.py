@@ -209,7 +209,7 @@ class DirectingStore:
         return snapshot(
             id=row.id, project_id=self.project_id, chapter_id=sequence.chapter_id,
             sequence_id=row.sequence_id, parent_id=row.parent_id, version=row.version, display_number=row.display_number,
-            confirmed_by=row.confirmed_by, confirmed_at=row.confirmed_at,
+            created_at=row.created_at, confirmed_by=row.confirmed_by, confirmed_at=row.confirmed_at,
             source_current=row.kind != "design" or row.source_key == self.source_key(sequence),
             content=CONTRACTS[row.kind].model_validate(row.payload),
             **({"source_task_id": row.source_task_id} if row.kind == "review" else {}),

@@ -225,6 +225,19 @@ class ProductionService(DirectingAIService):
         plan, unit, _ = await self.validate_unit(sequence_id, plan_id, unit_id)
         design_row = await self.revision(plan.design_revision_id, kind="design", sequence_id=sequence_id, confirmed=True)
         design = SceneDesign.model_validate(design_row.payload)
+        text, decisions = await self.render_unit(sequence_id, design, unit)
+        prompt = Prompt(plan_revision_id=plan_id, unit_id=unit_id, format_version="jellyfish-scene-v4", text=text,
+                        decisions=decisions, sources=[Source(kind="revision", reference=design_row.id, version=str(design_row.version))])
+        async with self.db.begin_nested():
+            row = await self.save_revision(sequence_id, kind="prompt", payload=prompt.model_dump(mode="json"))
+            row = await self.confirm_revision(row.id, expected_version=row.version, actor_id="local-user")
+            self.db.add(DirectingAction(id=uuid4().hex, sequence_id=sequence_id, revision_id=row.id,
+                                       action="compile", actor_id="local-user", displayed_label="编译本次试拍", unit_id=unit_id, request_id=request_id))
+            await self.db.flush()
+        return row
+
+    async def render_unit(self, sequence_id, design, unit):
+        """预览和正式编译共享只读渲染，返回完整文本及字段去向。"""
         shots = {item.shot_id for item in unit.coverage}
         beats = {beat for item in unit.coverage for beat in item.beat_ids}
         blocking = {state for shot in design.direction.shots if shot.id in shots for state in shot.blocking_state_ids}
@@ -318,15 +331,7 @@ class ProductionService(DirectingAIService):
         text = "\n".join(lines)
         if len("".join(text.split())) > 5000:
             raise ValueError("执行文本超过 5000 非空白字符，请简化重复工作单内容或缩小单元范围；系统不会截断")
-        prompt = Prompt(plan_revision_id=plan_id, unit_id=unit_id, format_version="jellyfish-scene-v4", text=text,
-                        decisions=decisions, sources=[Source(kind="revision", reference=design_row.id, version=str(design_row.version))])
-        async with self.db.begin_nested():
-            row = await self.save_revision(sequence_id, kind="prompt", payload=prompt.model_dump(mode="json"))
-            row = await self.confirm_revision(row.id, expected_version=row.version, actor_id="local-user")
-            self.db.add(DirectingAction(id=uuid4().hex, sequence_id=sequence_id, revision_id=row.id,
-                                       action="compile", actor_id="local-user", displayed_label="编译本次试拍", unit_id=unit_id, request_id=request_id))
-            await self.db.flush()
-        return row
+        return text, decisions
 
     async def submit_review(self, sequence_id: str, prompt_id: str, body: AIRequest | ReviewRequest):
         """场次锁内按请求身份恢复原检查；改变指令或检查参数必须明确新请求。"""

@@ -1,0 +1,145 @@
+{
+  "writes": [
+    "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions/apply",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions/apply",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions/apply"
+  ],
+  "errors": [],
+  "sizes": [
+    {
+      "width": 1440,
+      "height": 1000,
+      "scroll": 1440
+    },
+    {
+      "width": 1024,
+      "height": 768,
+      "scroll": 1024
+    },
+    {
+      "width": 768,
+      "height": 1024,
+      "scroll": 768
+    },
+    {
+      "width": 375,
+      "height": 812,
+      "scroll": 375
+    }
+  ],
+  "requests": [
+    {
+      "prompt_revision_id": "prompt1",
+      "review_source": {
+        "kind": "review",
+        "id": "review1"
+      },
+      "instruction": "",
+      "edits": [],
+      "directions": [
+        {
+          "occurrence_id": "o1",
+          "role": "prompt",
+          "finding_index": 0,
+          "text": "",
+          "sound_execution": null
+        }
+      ],
+      "request_id": "782d33da-8295-4583-9bcd-63de2c25a9ea"
+    },
+    {
+      "prompt_revision_id": "prompt1",
+      "review_source": {
+        "kind": "review",
+        "id": "review1"
+      },
+      "instruction": "不要人物，保留后续动作",
+      "edits": [],
+      "directions": [
+        {
+          "occurrence_id": "o1",
+          "role": "prompt",
+          "finding_index": 0,
+          "text": "",
+          "sound_execution": null
+        }
+      ],
+      "request_id": "9098e97b-6174-4d8c-86bc-68ad5697f4df"
+    },
+    {
+      "prompt_revision_id": "prompt1",
+      "review_source": {
+        "kind": "review",
+        "id": "review1"
+      },
+      "instruction": "不要人物，保留后续动作",
+      "edits": [],
+      "directions": [
+        {
+          "occurrence_id": "o1",
+          "role": "prompt",
+          "finding_index": 0,
+          "text": "声音由后期添加",
+          "sound_execution": "postproduction"
+        }
+      ],
+      "request_id": "c7c58f3c-8069-495f-ba4b-6d16b9cddf41"
+    }
+  ],
+  "applications": [
+    {
+      "task_id": "revision3",
+      "input_identity": "revision3",
+      "candidate_identity": "candidate-revision3",
+      "instruction": "不要人物，保留后续动作",
+      "edits": [],
+      "directions": [
+        {
+          "occurrence_id": "o1",
+          "role": "prompt",
+          "finding_index": 0,
+          "text": "声音由后期添加",
+          "sound_execution": "postproduction"
+        }
+      ],
+      "request_id": "19c7a454-75ff-4747-a585-8e435b9ab050"
+    },
+    {
+      "task_id": "revision3",
+      "request_id": "19c7a454-75ff-4747-a585-8e435b9ab050",
+      "input_identity": "revision3",
+      "directions": [
+        {
+          "occurrence_id": "o1",
+          "role": "prompt",
+          "finding_index": 0,
+          "text": "声音由后期添加",
+          "sound_execution": "postproduction"
+        }
+      ],
+      "instruction": "不要人物，保留后续动作",
+      "edits": [],
+      "candidate_identity": "candidate-revision3"
+    },
+    {
+      "task_id": "revision3",
+      "request_id": "19c7a454-75ff-4747-a585-8e435b9ab050",
+      "input_identity": "revision3",
+      "directions": [
+        {
+          "occurrence_id": "o1",
+          "role": "prompt",
+          "finding_index": 0,
+          "text": "声音由后期添加",
+          "sound_execution": "postproduction"
+        }
+      ],
+      "instruction": "不要人物，保留后续动作",
+      "edits": [],
+      "candidate_identity": "candidate-revision3"
+    }
+  ]
+}

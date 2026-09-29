@@ -51,7 +51,7 @@ try {
   await close()
   await page.getByRole('button', { name: '本场资产 · 已关联 1', exact: true }).waitFor()
   await page.getByRole('button', { name: '全场规则', exact: true }).click()
-  await page.getByRole('tab', { name: '镜头', exact: true }).click()
+  await page.getByRole('tab', { name: '分镜', exact: true }).click()
   assert.equal(await page.getByRole('textbox', { name: '可见结果', exact: true }).inputValue(), '未保存修改')
   await page.getByRole('button', { name: '仅看问题', exact: true }).click()
   await page.locator('.ant-empty-description:visible').filter({ hasText: '当前范围没有符合筛选条件的镜头，原有 2 个镜头仍保留。' }).waitFor()
@@ -59,9 +59,8 @@ try {
   await page.reload()
   await page.getByRole('button', { name: '退出筛选', exact: true }).click()
   await page.getByRole('button', { name: '分镜 2', exact: true }).waitFor()
-  for (const mode of ['分镜', '清单', '关系']) {
-    if (mode === '关系') await page.getByRole('tab', { name: mode, exact: true }).click()
-    else await page.getByRole('radio', { name: mode, exact: true }).locator('..').click()
+  for (const mode of ['分镜', '清单', '关系图']) {
+    await page.getByRole('tab', { name: mode, exact: true }).click()
     await page.getByRole('textbox', { name: '搜索镜头、动作、人物', exact: true }).fill('不存在的动作')
     await page.locator('.ant-empty-description:visible').filter({ hasText: '当前范围没有符合筛选条件的镜头，原有 2 个镜头仍保留。' }).waitFor()
     await page.locator('.design-filter-status').getByRole('button', { name: '清除筛选', exact: true }).click()

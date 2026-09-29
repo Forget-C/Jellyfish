@@ -19,6 +19,9 @@ import { FilesTab } from './tabs/FilesTab'
 import { SettingsTab } from './tabs/SettingsTab'
 import { useProject, useChapters } from './hooks/useProjectData'
 import { WorkspaceLayout, WorkspaceScrollPanel } from '../../../../components'
+import { StudioDirectingService } from '../../../../services/generated'
+import { readRecentWork } from '../../directing/workspaceContext'
+import { chapterLocation, sequenceLocation } from '../../directing/chapterNavigation'
 
 const TAB_PARAM = 'tab'
 
@@ -35,13 +38,29 @@ const ProjectWorkbench: React.FC = () => {
   const { chapters } = useChapters(projectId)
   const [activeTab, setActiveTab] = useState<TabKey>(() => resolvedTab)
 
-  const recommendedChapter = [...chapters].sort((a, b) => a.index - b.index)[0]
+  const [recentDestination, setRecentDestination] = useState<string>()
+  useEffect(() => {
+    let active = true
+    setRecentDestination(undefined)
+    const recent = projectId ? readRecentWork(projectId) : undefined
+    if (projectId && recent && chapters.some(chapter => chapter.id === recent.chapterId)) {
+      StudioDirectingService.directingChapterOverview({ projectId, chapterId: recent.chapterId }).then(response => {
+        const sequence = response.data?.sequences.find(row => row.id === recent.sequenceId)
+        if (active && sequence) {
+          setRecentDestination(sequence.source_changed ? chapterLocation(projectId, recent.chapterId, recent.sequenceId)
+            : sequenceLocation(projectId, recent.chapterId, recent.sequenceId, recent.view))
+        }
+      }).catch(() => { /* 最近工作不可核实时，仍可从章节浏览。 */ })
+    }
+    return () => { active = false }
+  }, [projectId, chapters])
   const primaryCta = {
-    label: recommendedChapter ? '进入章节场次' : '创建第一章',
+    label: recentDestination ? '继续工作' : chapters.length ? '进入章节场次' : '创建第一章',
     hint: '章节原文 → 场次设计 → 单元试拍 → 审片剪辑',
     icon: <PlusOutlined />,
     onClick: () => {
-      if (recommendedChapter) navigate(`/projects/${projectId}/chapters/${recommendedChapter.id}/sequences`)
+      if (recentDestination) navigate(recentDestination)
+      else if (chapters.length) navigate(chapterLocation(projectId || ''))
       else setSearchParams({ tab: 'chapters', create: '1' })
     },
   }

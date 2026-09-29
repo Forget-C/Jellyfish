@@ -6,15 +6,16 @@ import { designResultRecorded } from './workspaceProduction'
 import { candidateName } from './workspaceUsage'
 import { directingError } from './common'
 
-const titles: Record<string, string> = { directing_divide: '场次分析', directing_design: '导演设计', directing_review: '六部门审稿', image_generation: '验证图', video_generation: '单元试拍' }
+const titles: Record<string, string> = { directing_divide: '场次分析', directing_design: '导演设计', directing_review: '六部门审稿', directing_review_revision: '检查修改方案', image_generation: '验证图', video_generation: '单元试拍' }
 const statuses: Record<string, string> = { queued: '等待执行', running: '执行中', succeeded: '已完成', failed: '失败', cancelled: '已取消' }
 
 /** 业务内任务结果面板；刷新可以恢复，成功结果由用户显式采用。 */
-export function DirectingTasks({ projectId, taskIds, onResult, onSettled, onTasks, selectedTaskId, onState, workspace, onTake }: {
-  onTake?: (id: string) => void; projectId: string; taskIds: string[]; workspace?: WorkspaceRead; onResult?: (task: DirectingTaskRead) => void; onSettled?: () => void; onTasks?: (tasks: DirectingTaskRead[]) => void; selectedTaskId?: string | null; onState?: (state: 'loading' | 'ready' | 'error') => void
+export function DirectingTasks({ retryKey = 0, projectId, taskIds, onResult, onSettled, onTasks, selectedTaskId, onState, workspace, onTake }: {
+  retryKey?: number; onTake?: (id: string) => void; projectId: string; taskIds: string[]; workspace?: WorkspaceRead; onResult?: (task: DirectingTaskRead) => void; onSettled?: () => void; onTasks?: (tasks: DirectingTaskRead[]) => void; selectedTaskId?: string | null; onState?: (state: 'loading' | 'ready' | 'error') => void
 }) {
   const [tasks, setTasks] = useState<DirectingTaskRead[]>([])
   const [error, setError] = useState('')
+  const [attempt, setAttempt] = useState(0)
   const key = taskIds.join(',')
   const settledCallback = useRef(onSettled)
   settledCallback.current = onSettled
@@ -46,7 +47,7 @@ export function DirectingTasks({ projectId, taskIds, onResult, onSettled, onTask
     }
     void load()
     return () => { active = false; window.clearTimeout(timer) }
-  }, [projectId, key])
+  }, [projectId, key, retryKey, attempt])
   if (!taskIds.length) return null
   const needsAttention = (task: DirectingTaskRead) => {
     if (['queued', 'running', 'failed'].includes(task.status) || task.task_id === selectedTaskId) return true
@@ -69,7 +70,7 @@ export function DirectingTasks({ projectId, taskIds, onResult, onSettled, onTask
       {task.error && <Alert type="error" message={task.error} style={{ marginTop: 8 }} />}
     </Card>
   return <Space direction="vertical" style={{ width: '100%' }} data-workspace-target="tasks" tabIndex={-1}>
-    {error && <Alert type="error" message={error} />}
+    {error && <Alert type="error" message={error} action={<Button onClick={() => setAttempt(value => value + 1)}>重试读取状态</Button>} />}
     <strong>进行中与需要处理的任务</strong>
     {tasks.slice().reverse().filter(needsAttention).map(renderTask)}
     <details><summary>完整任务记录 · {tasks.length} 项（含已完成与已取消）</summary>

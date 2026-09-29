@@ -58,11 +58,16 @@ try {
     await page.waitForFunction(() => [...document.querySelectorAll('.ant-drawer-mask')].every(el => !el.getClientRects().length || getComputedStyle(el).visibility === 'hidden'))
   }
   const selectView = async label => {
-    await page.getByRole('tab', { name: '镜头', exact: true }).click()
-    await page.getByRole('radio', { name: label, exact: true }).locator('..').click()
+    await page.getByRole('tab', { name: label, exact: true }).click()
   }
   const closeDetails = async () => { if (await page.locator('.ant-drawer-open').count()) await closeDrawer() }
   await page.goto(base)
+  const returnScope = async () => {
+    await page.getByRole('button', { name: '视图设置', exact: true }).click()
+    await page.getByRole('button', { name: '返回上一范围', exact: true }).click()
+    await page.getByRole('button', { name: '视图设置', exact: true }).click()
+    await page.locator('.ant-popover:visible').waitFor({ state: 'hidden' })
+  }
   const board = page.getByRole('grid', { name: '分镜编排', exact: true })
   await board.waitFor()
   for (const remembered of ['list', 'relations', 'storyboard']) {
@@ -81,7 +86,7 @@ try {
   await page.waitForFunction(() => document.querySelectorAll('[data-shot-id]').length === 12)
   assert.deepEqual(await page.locator('[data-shot-id]').evaluateAll(nodes => nodes.map(node => node.dataset.shotId)), Array.from({ length: 12 }, (_, i) => `shot${i+1}`))
   assert.equal(await page.locator('[data-shot-id="shot3"]').getAttribute('aria-selected'), 'true')
-  await page.getByRole('tab', { name: '关系', exact: true }).click()
+  await page.getByRole('tab', { name: '关系图', exact: true }).click()
   assert.equal(await page.getByRole('button', { name: '放大关系图', exact: true }).count(), 0)
   assert.equal(await page.getByText('完整关联', { exact: true }).count(), 0)
   const overview = page.getByLabel('全场关系总览', { exact: true })
@@ -98,7 +103,7 @@ try {
   assert.equal(await overview.locator('.design-overview-row.is-highlighted').count(), 2)
   await first.getByRole('button', { name: '进入节拍 1 关系', exact: true }).click()
   await page.getByRole('button', { name: '放大关系图', exact: true }).waitFor()
-  await page.getByRole('button', { name: '返回上一范围', exact: true }).click()
+  await returnScope()
   await overview.waitFor()
   await first.getByRole('button', { name: '选择镜头 3', exact: true }).click()
   await selectView('分镜')
@@ -112,7 +117,7 @@ try {
       await closeDetails()
       if (mode === '分镜' || mode === '清单') await selectView(mode)
       else {
-        await page.getByRole('tab', { name: '关系', exact: true }).click()
+        await page.getByRole('tab', { name: '关系图', exact: true }).click()
         if (mode === '节拍图') await page.locator('[data-beat-group="beat1"]').getByRole('button', { name: '进入节拍 1 关系', exact: true }).click()
       }
       await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
@@ -126,7 +131,7 @@ try {
       assert.ok(metrics.controls.every(row => row.visible), JSON.stringify({ mode, metrics }))
       await page.screenshot({ path: join(output, `${width}-${mode}.png`) })
       results.push({ width, height, mode, metrics })
-      if (mode === '节拍图') await page.getByRole('button', { name: '返回上一范围', exact: true }).click()
+      if (mode === '节拍图') await returnScope()
     }
   }
   await page.setViewportSize({ width: 1586, height: 992 })
@@ -135,7 +140,7 @@ try {
   await page.evaluate(() => sessionStorage.clear())
   design.direction.shots = Array.from({ length: 200 }, (_, i) => ({ ...structuredClone(shot), id: `shot${i+1}`, beat_ids: ['beat1'], visible_result: note(`集中镜头 ${i+1}`) }))
   await page.goto(base)
-  await page.getByRole('tab', { name: '关系', exact: true }).click()
+  await page.getByRole('tab', { name: '关系图', exact: true }).click()
   await page.getByRole('button', { name: '展开剩余188镜', exact: true }).click()
   const enter = page.locator('[data-beat-group="beat1"]').getByRole('button', { name: '进入节拍 1 关系', exact: true })
   await enter.focus()
@@ -143,7 +148,7 @@ try {
   assert.ok(overviewTop > 0)
   await page.waitForFunction(top => JSON.parse(JSON.parse(sessionStorage.getItem('directing-context:p1:s1')).designOverview).top === top, overviewTop)
   await page.keyboard.press('Enter')
-  await page.getByRole('button', { name: '返回上一范围', exact: true }).click()
+  await returnScope()
   await page.waitForFunction(top => Math.abs(document.querySelector('.design-scene-overview').scrollTop - top) < 2, overviewTop)
   await page.getByRole('button', { name: '选择镜头 200', exact: true }).press('Enter')
   assert.match(await page.locator('.design-inspector h2').innerText(), /镜头 200/)
@@ -155,7 +160,7 @@ try {
   results.push('单节拍200镜头可展开、键盘选择、全量搜索并在清单定位同一镜头')
   design.direction.beats = []
   await page.goto(base)
-  await page.getByRole('tab', { name: '关系', exact: true }).click()
+  await page.getByRole('tab', { name: '关系图', exact: true }).click()
   await page.locator('[data-beat-group="unassigned"]').waitFor()
   await page.getByRole('button', { name: '进入未分组关系', exact: true }).click()
   await page.getByLabel('镜头关系画布', { exact: true }).waitFor()
@@ -164,7 +169,7 @@ try {
   await page.evaluate(() => sessionStorage.clear())
   await page.goto(base)
   await page.getByRole('button', { name: /新增镜头/ }).waitFor()
-  await page.getByRole('tab', { name: '关系', exact: true }).click()
+  await page.getByRole('tab', { name: '关系图', exact: true }).click()
   await page.getByLabel('全场关系总览', { exact: true }).getByText('本场尚无镜头，可新增镜头开始设计。', { exact: true }).waitFor()
   await selectView('分镜')
   await page.getByRole('button', { name: /新增镜头/ }).click()

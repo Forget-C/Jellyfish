@@ -9,8 +9,8 @@ import { revisionName } from './workspaceUsage'
 import { referenceGroups, referenceRoles, referenceSummary } from './referenceInput'
 
 /** 只展示所选指令冻结的计划；名称读取失败不替换模型或借用当前编辑参数。 */
-export function ShootFixedInput({ workspace, prompt, review, onHistory, compact = false }: {
-  workspace: WorkspaceRead; prompt: WorkspaceRead['prompts'][number]; review?: WorkspaceRead['reviews'][number]; onHistory?: () => void; compact?: boolean;
+export function ShootFixedInput({ workspace, prompt, review, onHistory, compact = false, summaryOnly = false }: {
+  workspace: WorkspaceRead; prompt: WorkspaceRead['prompts'][number]; review?: WorkspaceRead['reviews'][number]; onHistory?: () => void; compact?: boolean; summaryOnly?: boolean;
 }) {
   const detail = useContext(ProductionDetailContext)
   const plan = workspace.plans.find(row => row.id === prompt.content.plan_revision_id)
@@ -31,6 +31,7 @@ export function ShootFixedInput({ workspace, prompt, review, onHistory, compact 
   if (!plan || !unit) return <p>此指令的固定计划暂不可用，请核对版本依据。</p>
   const summary = <dl><div><dt>模型</dt><dd>{model?.id === unit.model_id ? model.name : failed ? '模型名称暂不可用' : '正在读取模型名称'}{failed && <Button type="link" size="small" onClick={() => setAttempt(value => value + 1)}>重试</Button>}</dd></div>
       <div><dt>{compact ? '计划时长' : '时长'}</dt><dd>{unit.duration_ms / 1000} 秒</dd></div><div><dt>画幅</dt><dd>{unit.ratio}</dd></div><div><dt>将发送</dt><dd>{referenceSummary(unit.references)}</dd></div></dl>
+  if (summaryOnly) return <section className="shoot-settings-strip" aria-label="拍摄设置摘要">{summary}<Button type="link" onClick={() => detail.show({ tab: 'input' })}>拍摄设置</Button></section>
   if (compact) return <section className="shoot-execution-summary" aria-label="本次执行依据"><div><strong>{revisionName(workspace.prompts, prompt.id, '指令')}</strong><span>{review ? ' · 检查结论已保存' : ' · 尚未选择检查结论'}</span><Button type="link" onClick={() => detail.show({ tab: 'input' })}>查看执行依据</Button></div>{summary}</section>
   return <section className="shoot-fixed-input" aria-label="本次固定输入详情">{summary}
     <div className="shoot-fixed-references">{referenceGroups(unit.references).map(group => <figure key={group[0].id}>
@@ -43,9 +44,9 @@ export function ShootFixedInput({ workspace, prompt, review, onHistory, compact 
       const index = design?.content.direction.shots.findIndex(shot => shot.id === item.shot_id) ?? -1
       return <p key={item.id}><strong>{index < 0 ? '历史镜头' : `镜头 ${String(index + 1).padStart(2, '0')}`}</strong> · {item.action_scope}</p>
     })}
-    <h3>版本来源链</h3><div className="shoot-version-chain"><Tag>{revisionName(workspace.designs, plan.content.design_revision_id, '设计')}</Tag><span>→</span><Tag>{revisionName(workspace.plans, plan.id, '计划')}</Tag><span>→</span><Tag>{revisionName(workspace.prompts, prompt.id, '指令')}</Tag></div>
+    <details><summary>版本来源链</summary><div className="shoot-version-chain"><Tag>{revisionName(workspace.designs, plan.content.design_revision_id, '设计')}</Tag><span>→</span><Tag>{revisionName(workspace.plans, plan.id, '计划')}</Tag><span>→</span><Tag>{revisionName(workspace.prompts, prompt.id, '指令')}</Tag></div>
     {review && <p>{revisionName(workspace.reviews, review.id, '检查')} · {review.parent_id ? '含人工取舍' : '结论已保存'}</p>}
-    <Button type="link" onClick={onHistory}>查看版本依据</Button>
-    <details><summary>全部固定参数与技术标识</summary><p>模型：{unit.model_id}</p><p>计划：{plan.id} · 单元：{unit.id} · 指令：{prompt.id}</p>{Object.entries(unit.parameters || {}).map(([key, value]) => <p key={key}>{({ seed: '随机种子', guidance_scale: '提示词引导强度' } as Record<string, string>)[key] || key}：{typeof value === 'object' ? JSON.stringify(value) : String(value)}</p>)}</details>
+    <Button type="link" onClick={onHistory}>查看版本依据</Button></details>
+    <details><summary>更多拍摄设置</summary>{Object.entries(unit.parameters || {}).map(([key, value]) => <p key={key}>{({ seed: '随机种子', guidance_scale: '提示词引导强度' } as Record<string, string>)[key] || key}：{typeof value === 'object' ? JSON.stringify(value) : String(value)}</p>)}</details><details><summary>技术详情</summary><p>模型：{unit.model_id}</p><p>计划：{plan.id} · 单元：{unit.id} · 指令：{prompt.id}</p></details>
   </section>
 }

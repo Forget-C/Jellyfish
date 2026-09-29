@@ -144,3 +144,11 @@ def test_planned_actual_range_separation(item):
     """计划时长和实际源时间码不可互换。"""
     with pytest.raises(ValidationError):
         SequenceCut.model_validate({"items": [item]})
+
+
+def test_revision_progress_only_belongs_to_task_contract():
+    """修订任务信息不得扩展项目资产接口。"""
+    from app.core.contracts.directing.workspace import AssetSummary, DirectingTaskRead
+    fields = {'revision', 'revision_request', 'revision_application'}
+    assert fields <= set(DirectingTaskRead.model_json_schema()['properties'])
+    assert not fields & set(AssetSummary.model_json_schema()['properties'])

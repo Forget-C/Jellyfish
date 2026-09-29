@@ -40,11 +40,15 @@ async def test_late_ai_suggestion_does_not_overwrite_manual_edit(tmp_path):
             sequence_id = sequence.id
             draft = await service.save_revision(sequence_id, kind="design", payload=design_sample())
             draft_id = draft.id
+            created_at = (await service.read_revision(draft_id)).created_at
+            assert created_at == draft.created_at
+            assert created_at is not None
             db.add(Task(id="ai1", kind="directing_design", status="succeeded", project_id="p1", target_type="directing_sequence", target_id=sequence_id,
                         input_snapshot={"run_args": {"starting_revision_id": draft_id, "starting_version": 1, "source": sequence.source, "sequence_version": sequence.version}},
                         result=design_sample("crowd")))
             await db.flush()
             await service.save_revision(sequence_id, kind="design", payload=design_sample("handover"), revision_id=draft_id, expected_version=1)
+            assert (await service.read_revision(draft_id)).created_at == created_at
             adopted = await service.apply_design(sequence_id, "ai1")
             assert adopted.id != draft_id
             assert (await service.read_revision(draft_id)).content.direction.information_change.text == "哥哥交出借条，弟弟不接"
@@ -161,3 +165,120 @@ def test_design_reports_all_dangling_references_together():
         SceneDesign.model_validate(payload)
     assert 'missing_beat' in str(error.value)
     assert 'missing_shot' in str(error.value)
+
+
+@pytest.mark.asyncio
+async def test_chapter_overview_empty_and_project_isolation(tmp_path):
+    """空章节保留身份，其他项目不能读取其概览。"""
+    async with database(tmp_path) as sessions:
+        async with sessions.begin() as db:
+            service = DirectingAIService(db, 'p1')
+            overview = await service.chapter_overview('ch1')
+            assert overview.chapter_id == 'ch1' and overview.title == '借钱'
+            assert overview.sequences == []
+            with pytest.raises(ValueError, match='章节'):
+                await DirectingAIService(db, 'p2').chapter_overview('ch1')
+
+
+@pytest.mark.asyncio
+async def test_chapter_overview_counts_order_source_and_active_cut(tmp_path):
+    """整场统计不受计划选择影响，采用指针不被最新草稿代替。"""
+    from tests.directing.samples import plan_sample
+    from tests.directing.test_store import setup_story, output, frozen
+
+    async with database(tmp_path) as sessions:
+        async with sessions.begin() as db:
+            store, scene_id, design_id, _, prompts = await setup_story(db)
+            service = DirectingAIService(db, 'p1')
+            await store.save_revision(scene_id, kind='design', payload=design_sample())
+            plan = await frozen(store, scene_id, 'plan', plan_sample(design_id))
+            await store.save_revision(scene_id, kind='plan', payload=plan_sample(design_id))
+            prompt = await frozen(store, scene_id, 'prompt', dict((await store.revision(prompts[0])).payload, plan_revision_id=plan.id))
+            for index, prompt_id in enumerate([prompts[0], prompt.id]):
+                await output(db, prompt_id, task_id=f'overview{index}')
+                take = await store.register_take(prompt_revision_id=prompt_id, task_id=f'overview{index}', output_ordinal=0)
+            await store.annotate_take(take.id, expected_version=1, annotation=dict(take.annotation, review_status='reviewed', verdict='discard'))
+            cut = await frozen(store, scene_id, 'cut', {'items': []})
+            await store.save_revision(scene_id, kind='cut', payload={'items': []})
+            chapter = await service.chapter('ch1')
+            chapter.raw_text = '新原文' * 100
+            await db.flush()
+            last = await service.create_sequence(chapter_id='ch1', title='后场', position=2)
+            middle = await service.create_sequence(chapter_id='ch1', title='中场', position=1)
+            overview = await service.chapter_overview('ch1')
+            assert [row.id for row in overview.sequences] == [scene_id, middle.id, last.id]
+            first = overview.sequences[0]
+            assert first.source_excerpt == '兄弟在店中交谈' and first.source_changed
+            assert not overview.sequences[-1].source_changed
+            assert len(overview.sequences[-1].source_excerpt) == 160
+            assert (first.design_count, first.confirmed_design_count) == (2, 1)
+            assert (first.plan_count, first.confirmed_plan_count) == (3, 2)
+            assert (first.take_count, first.unreviewed_take_count) == (2, 1)
+            assert first.active_cut_revision_id == cut.id
+            assert overview.sequences[-1].active_cut_revision_id is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('invalid', ['draft', 'kind', 'owner', 'payload'])
+async def test_chapter_overview_rejects_invalid_active_cut(tmp_path, invalid):
+    """损坏的采用指针必须报错，不能显示为空。"""
+    from datetime import datetime
+    from app.models.directing import ActiveCut, DirectingRevision
+
+    async with database(tmp_path) as sessions:
+        async with sessions.begin() as db:
+            service = DirectingAIService(db, 'p1')
+            scene = await service.create_sequence(chapter_id='ch1', title='一', position=0)
+            other = await service.create_sequence(chapter_id='ch1', title='二', position=1)
+            revision = DirectingRevision(id='bad-cut', sequence_id=other.id if invalid == 'owner' else scene.id,
+                kind='design' if invalid == 'kind' else 'cut', payload={} if invalid == 'payload' else {'items': []},
+                confirmed_at=None if invalid == 'draft' else datetime.now(), confirmed_by=None if invalid == 'draft' else 'author')
+            db.add(revision)
+            await db.flush()
+            db.add(ActiveCut(sequence_id=scene.id, revision_id=revision.id))
+            await db.flush()
+            with pytest.raises(ValueError):
+                await service.chapter_overview('ch1')
+
+
+@pytest.mark.asyncio
+async def test_chapter_overview_rejects_invalid_take_annotation(tmp_path):
+    """未审计数使用类型契约，不能容忍审查状态和结论矛盾。"""
+    from tests.directing.test_store import setup_story, output
+
+    async with database(tmp_path) as sessions:
+        async with sessions.begin() as db:
+            store, _, _, _, prompts = await setup_story(db)
+            await output(db, prompts[0])
+            take = await store.register_take(prompt_revision_id=prompts[0], task_id='task1', output_ordinal=0)
+            take.annotation = dict(take.annotation, review_status='reviewed')
+            await db.flush()
+            with pytest.raises(ValueError, match='review status and verdict disagree'):
+                await DirectingAIService(db, 'p1').chapter_overview('ch1')
+
+
+@pytest.mark.asyncio
+async def test_chapter_overview_query_count_is_constant(tmp_path):
+    """一场和三十场均批量读取，不逐场获取工作区或版本正文。"""
+    from sqlalchemy import event
+
+    async with database(tmp_path) as sessions:
+        async with sessions.begin() as db:
+            service = DirectingAIService(db, 'p1')
+            await service.create_sequence(chapter_id='ch1', title='一', position=0)
+            queries = []
+            def capture(_connection, _cursor, statement, _parameters, _context, _executemany):
+                queries.append(statement)
+            event.listen(db.bind.sync_engine, 'before_cursor_execute', capture)
+            try:
+                await service.chapter_overview('ch1')
+                first_count = len(queries)
+                for position in range(1, 30):
+                    await service.create_sequence(chapter_id='ch1', title=str(position), position=position)
+                queries.clear()
+                overview = await service.chapter_overview('ch1')
+                assert len(overview.sequences) == 30
+                assert len(queries) == first_count == 5
+                assert 'payload' not in queries[2]
+            finally:
+                event.remove(db.bind.sync_engine, 'before_cursor_execute', capture)

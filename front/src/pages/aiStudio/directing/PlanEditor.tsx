@@ -1,3 +1,4 @@
+import { useContext } from 'react'
 import { SourceLinks } from './Sources'
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Input, InputNumber, Select, Space, Typography } from 'antd'
@@ -5,7 +6,7 @@ import { LlmService, StudioDirectingService } from '../../../services/generated'
 import type { AssetSummary, WorkspaceRead, VideoReferenceCapabilities, GenerationUnit_Input, ModelRead, ProductionPlan_Input, SceneDesign_Input, ReferenceBinding_Input } from '../../../services/generated'
 import { ReferencePicker } from './ReferencePicker'
 import { referenceGroups, referenceIssues, referencePurposes, referenceRoles, referenceSummary } from './referenceInput'
-import { ProductionParameters } from './ProductionWorkbench'
+import { ProductionInputContext, ProductionParameters } from './ProductionWorkbench'
 import { ReferencePreview } from './ReferencePreview'
 import { DependencyEditor } from './DependencyEditor'
 import { directingError } from './common'
@@ -24,6 +25,7 @@ export function PlanEditor({ assets, assetError, onReloadAssets, projectId, work
   const [capability, setCapability] = useState<VideoReferenceCapabilities>()
   const [capabilityError, setCapabilityError] = useState('')
   const [attempt, setAttempt] = useState(0)
+  const inputSection = useContext(ProductionInputContext)
   const selected = value.units.find(unit => unit.id === selectedUnitId) || value.units[0]
   useEffect(() => { setPicker(undefined) }, [planId, value.design_revision_id, selected?.id, selected?.model_id, disabled])
   useEffect(() => {
@@ -63,22 +65,22 @@ export function PlanEditor({ assets, assetError, onReloadAssets, projectId, work
   return <Space direction="vertical" size="middle" style={{ width: '100%' }}>
     {error && <Alert type="error" message={error} closable onClose={() => setError('')} />}
     <div className="production-preparation">
-    {value.units.filter(unit => unit.id === selected?.id).map(unit => <Card className="xl:col-start-1 xl:row-start-1 min-w-0" key={unit.id} title={`本次要拍：${unit.coverage.map(item => item.action_scope).join('；') || '待填写动作范围'}`} data-workspace-target={`unit:${unit.id}`} tabIndex={-1} extra={!disabled && <Button danger onClick={() => onChange({ ...value, units: value.units.filter(item => item.id !== unit.id) })}>移除单元</Button>}>
+    {value.units.filter(unit => unit.id === selected?.id).map(unit => <Card className="xl:col-start-1 xl:row-start-1 min-w-0" key={unit.id} title={inputSection ? undefined : `本次要拍：${unit.coverage.map(item => item.action_scope).join('；') || '待填写动作范围'}`} data-workspace-target={`unit:${unit.id}`} tabIndex={-1} extra={!disabled && <Button danger onClick={() => onChange({ ...value, units: value.units.filter(item => item.id !== unit.id) })}>移除单元</Button>}>
       {issue?.unitId === unit.id && <Alert type="error" message={issue.message} />}
-      <Space direction="vertical" style={{ width: '100%' }}>
-        <details><summary>单元身份</summary>{unit.id} · 计划：{planId || '未保存'}</details><Typography.Text>本次覆盖镜头</Typography.Text>
+      <Space className="production-input-fields" direction="vertical" style={{ width: '100%' }}>
+        <div hidden={!!inputSection && inputSection !== 'coverage'}><details><summary>单元身份</summary>{unit.id} · 计划：{planId || '未保存'}</details><Typography.Text>本次覆盖镜头</Typography.Text>
         <Select mode="multiple" disabled={disabled} style={{ width: '100%' }} value={unit.coverage.map(item => item.shot_id)} options={design.direction.shots.map((shot, i) => ({ value: shot.id, label: `镜头 ${i + 1} · ${shot.visible_result.text || '待确定内容'}` }))} onChange={ids => patch(unit.id, { coverage: coverage(ids).map(row => unit.coverage.find(old => old.shot_id === row.shot_id) || row) })} />
         {unit.coverage.map(item => <div key={item.id} style={{ width: '100%' }}><Typography.Text type="secondary">动作范围 · {item.shot_id}</Typography.Text><Input.TextArea disabled={disabled} value={item.action_scope} onChange={event => patch(unit.id, { coverage: unit.coverage.map(row => row.id === item.id ? { ...row, action_scope: event.target.value } : row) })} /></div>)}
         {unit.coverage.length > 1 && <Alert type="warning" message="计划包含多个镜头，当前多镜执行能力未验证。保存并确认后，可在重组面板明确拆分。" />}
-        <ProductionParameters>        <Space wrap>
+        </div><ProductionParameters>        <Space wrap>
           <span data-workspace-target={`unit-model:${unit.id}`} tabIndex={-1}><Select aria-label="视频模型" disabled={disabled} placeholder="选择视频模型" style={{ minWidth: 220 }} value={unit.model_id || undefined} options={models.map(model => ({ value: model.id, label: model.name }))} onChange={model_id => patch(unit.id, { model_id })} /></span>
           <span>时长（秒）</span><InputNumber disabled={disabled} min={1} precision={0} value={unit.duration_ms / 1000} onChange={seconds => patch(unit.id, { duration_ms: (seconds || 1) * 1000 })} />
           <Select aria-label="画幅" disabled={disabled} value={unit.ratio} options={['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'].map(ratio => ({ value: ratio, label: ratio }))} onChange={ratio => patch(unit.id, { ratio })} />
-          <span>种子（可留空）</span><InputNumber disabled={disabled} min={-1} precision={0} value={typeof unit.parameters?.seed === 'number' ? unit.parameters.seed : null} onChange={seed => patch(unit.id, { parameters: seed === null ? Object.fromEntries(Object.entries(unit.parameters || {}).filter(([key]) => key !== 'seed')) : { ...unit.parameters, seed } })} />
+          <details><summary>更多拍摄设置</summary><span>种子（可留空）</span><InputNumber disabled={disabled} min={-1} precision={0} value={typeof unit.parameters?.seed === 'number' ? unit.parameters.seed : null} onChange={seed => patch(unit.id, { parameters: seed === null ? Object.fromEntries(Object.entries(unit.parameters || {}).filter(([key]) => key !== 'seed')) : { ...unit.parameters, seed } })} /></details>
         </Space>
 </ProductionParameters>
-        <DependencyEditor projectId={projectId} workspace={workspace} unit={unit} onChange={update => patch(unit.id, update)} disabled={disabled} />
-        <Typography.Text strong>本次模型输入</Typography.Text>
+        <div hidden={!!inputSection && inputSection !== 'dependency'}><DependencyEditor projectId={projectId} workspace={workspace} unit={unit} onChange={update => patch(unit.id, update)} disabled={disabled} /></div>
+        <div hidden={!!inputSection && inputSection !== 'reference'}><Typography.Text strong>本次模型输入</Typography.Text>
         {!activeCapability && <Alert type={capabilityError ? 'warning' : 'info'} message={capabilityError || (unit.model_id ? '正在核实模型参考能力' : '请选择视频模型')} action={capabilityError && <Button onClick={() => setAttempt(attempt + 1)}>重试读取能力</Button>} />}
         {activeCapability && <Typography.Text type="secondary">{activeCapability.subject_images ? `支持主体图片${activeCapability.max_images_per_subject != null ? `，每个主体最多 ${activeCapability.max_images_per_subject} 张` : '，数量上限未知'}` : '不支持主体图片'}；{activeCapability.frame_roles.length ? `帧位置：${activeCapability.frame_roles.map(role => referenceRoles[role]).join('、')}${activeCapability.max_frames != null ? `，最多 ${activeCapability.max_frames} 张` : '，总数上限待核实'}` : '不支持帧参考'}。以提交检查为准。</Typography.Text>}
         {referenceIssues(unit.references, activeCapability).map(message => <Alert key={message} type="warning" message={message} />)}
@@ -107,6 +109,7 @@ export function PlanEditor({ assets, assetError, onReloadAssets, projectId, work
         })}
         {!disabled && <Button onClick={() => setPicker(unit.id)}>添加参考</Button>}
         <Alert type="info" message={`拟发送：${referenceSummary(unit.references)}`} description="仅包含当前单元已选素材；保存并确认后进入指令检查。" />
+        </div>
       </Space>
     </Card>)}
     </div>

@@ -105,3 +105,31 @@ node front/tests/workspaceShootSteps.browser.mjs
 `node --test front/tests/readableText.test.mjs` 验证固定快照名称、字段与枚举、主体组、同名对象、镜头与单元顺序、完整合法 ID 边界、数字／普通词保护、缺失降级、字段路径以及重复编译摘录的原文坐标。
 
 `workspaceShootProgress.browser.mjs` 还覆盖易读／原文切换及两种复制、名称详情与焦点返回、历史预览隔离、单条检查原始数据、检查回跳与重复片段高亮、无映射提示、只读操作不写入、375px 名称详情；原有检查与试拍流程、四尺寸回归继续保留。沿用上文 Playwright 环境，所有业务接口均为隔离替身，不调用真实视频模型。
+
+### 检查问题方向与 AI 修订
+
+`node --test front/tests/reviewRevision.test.mjs front/tests/workspacePreparation.test.mjs` 验证逐项身份、同源检查保存后的方向延续、版本隔离、空方向、过期输入及草稿存储。
+
+`node front/tests/workspaceReviewRevision.browser.mjs` 沿用上述 Playwright 环境并监听 4197 端口，不能与占用该端口的资产回归同时运行。使用隔离接口验证方向刷新恢复、空方向生成、迟到方案禁止采用、明确声音选择、真实前后预览、固定编辑区与单次建议消费、采用中断和响应丢失后同身份继续、新检查衔接及 1440／1024／768／375px 控件与边界。结果及截图保存在输出的临时目录，不调用真实模型。
+
+后端 `tests/directing/test_review_revision.py` 负责真实契约、数据库版本隔离、声音选择、错误建议、并发与分步恢复，接口替身不能代替这些验证。
+
+### 指令全生命周期
+
+`node front/tests/workspaceInstructionLifecycle.browser.mjs` 使用 4196 端口及隔离数据，覆盖默认收起正文、固定编辑区和检查侧栏、未检查主动修改、结果不抢占面板、人工字段直接预览、采用复检、跨计划历史、通过后修改与无变化不采用。四尺寸默认页面截图与请求记录写入测试输出目录。
+
+`reviewRevision.test.mjs` 同时覆盖人工字段原值和单位换算、精确字段映射、已保存产物对应的恢复动作。`workspaceReviewRevision.browser.mjs` 验证在固定主区修改方向、声音选择及更新方案。浏览器替身只验证交互和请求契约；真实预览不写版本、候选身份和采用一致性由后端 directing 测试验证。
+
+### 章节场次入口与连续划场
+
+`node --test front/tests/chapterNavigation.test.mjs` 验证来源核对优先、阶段恢复、整场计数建议入口和规范路由。
+
+`node front/tests/chapterSequenceNavigation.browser.mjs` 沿用上述 Playwright 环境，默认监听 4201，可用 `CHAPTER_NAV_PORT` 指定空闲端口。隔离接口验证详情按需加载、名称与顺序保存留页、未保存关闭及后退跨章保护、冲突保留输入、连续划场、旧链接面板定位、概览与原文读取恢复、过期建议只读，以及长列表返回恢复。1440／1024／768／375 宽度下检查标题键盘入口、页面与抽屉宽度及保存按钮命中；版本弹窗和试拍图由下述专项覆盖。
+
+### 工作台统一版本
+
+`node --test front/tests/workspaceVersions.test.mjs` 验证待选设计／计划／剪辑关联、空选择、失效与跨场身份。`node front/tests/workspaceVersions.browser.mjs` 使用 4202 端口和隔离接口，验证取消不生效、计划固定设计联动、剪辑独立、历史内嵌比较、创建及派生信息、预演时长说明，以及浏览不发业务写请求。覆盖保存失败保持原上下文、保存派生后应用待选对象、失效身份修复、四尺寸与键盘选项／Escape／焦点返回。AI 修订后依据同步由 `workspaceReviewRevision.browser.mjs` 覆盖。
+
+### 试拍关系图
+
+`node --test front/tests/productionGraph.test.mjs` 验证历史计划身份、多分支依赖与缺失来源、一单元多镜头、参考独立性、多指令候选归属和当前草稿不能替代固定指令依据。`node front/tests/workspaceProductionGraph.browser.mjs` 使用 4203 端口与隔离接口，验证输入节点复用详情表单、历史单元只读、候选回跳、四种宽度及浏览零写入。图形组件使用 `ProductionRelationGraph.tsx`，避免与纯规则 `productionGraph.ts` 在大小写不敏感文件系统上冲突。保存／确认、参考及模型变更由 `workspaceShootSteps.browser.mjs` 覆盖；固定指令恢复由 `workspaceShootContext.browser.mjs` 覆盖；验证图、批量拍摄和重组由 `workspaceProduction.browser.mjs` 覆盖。这些隔离回归不证明真实供应商可用性或生成内容质量。

@@ -5,7 +5,8 @@ import type { DirectingTaskRead } from '../../../services/generated'
 import { directingError } from './common'
 
 /** 原工作区显示精确任务反馈；取消只发出请求，终态由业务轮询确认。 */
-export function ShootTaskProgress({ tasks, state, kind, sourceLabel }: {
+export function ShootTaskProgress({ tasks, state, kind, sourceLabel, onRetry, onOpenTasks }: {
+  onRetry?: () => void; onOpenTasks?: () => void;
   tasks: DirectingTaskRead[]; state: 'loading' | 'ready' | 'error'; kind: 'review' | 'video'; sourceLabel?: (task: DirectingTaskRead) => string;
 }) {
   const [requested, setRequested] = useState<string[]>([])
@@ -27,7 +28,7 @@ export function ShootTaskProgress({ tasks, state, kind, sourceLabel }: {
     }}>取消{name}</Button>}
   </div>
   return <section className="shoot-task-progress" aria-label={`${name}进度`}>
-    {state !== 'ready' && <Alert type="warning" message={state === 'loading' ? '正在核对任务状态' : '状态读取失败，正在重试；核实前请勿重复提交。'} />}
+    {state !== 'ready' && <Alert type="warning" message={state === 'loading' ? '正在核对任务状态' : '状态读取失败，正在重试；核实前请勿重复提交。'} action={state === 'error' && <><Button size="small" onClick={onRetry}>重试读取状态</Button>{onOpenTasks && <Button type="link" size="small" onClick={onOpenTasks}>查看相关任务</Button>}</>} />}
     {running.map(render)}
     {!!failed.length && <details open={!running.length && !rows.some(row => row.status === 'succeeded')}><summary>失败与取消记录 · {failed.length}</summary>{failed.map(render)}<p className="design-secondary">已有内容仍保留。核对原因后，可通过上方主操作重新提交。</p></details>}
     {error && <Alert type="error" message={error} />}

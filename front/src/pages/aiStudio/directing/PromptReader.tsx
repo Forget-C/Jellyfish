@@ -15,7 +15,7 @@ export function FrozenDesignValue({ design, pointer }: { design?: SceneDesign_In
 }
 
 /** 正文片段与原编译映射一起阅读；文字重叠时展示所有关联决定，不推断来源。 */
-export function PromptReader({ prompt, workspace, active = true, inline = false, paths }: { active?: boolean; prompt: Prompt; workspace: WorkspaceRead; inline?: boolean; paths?: string[] }) {
+export function PromptReader({ prompt, workspace, active = true, inline = false, paths, onEdit }: { active?: boolean; prompt: Prompt; workspace: WorkspaceRead; inline?: boolean; paths?: string[]; onEdit?: (paths: string[]) => void }) {
   const [selection, setSelection] = useState<number[]>()
   const [part, setPart] = useState<ReadableSegment>()
   const [view, setView] = useState<'readable' | 'raw'>('readable')
@@ -43,6 +43,7 @@ export function PromptReader({ prompt, workspace, active = true, inline = false,
     catch { setCopyState('复制失败，请选择正文复制') }
   }
   const unmappedPaths = paths?.filter(path => !prompt.decisions.some(row => row.section_path === path || row.section_path.startsWith(path + '/') || path.startsWith(row.section_path + '/'))) || []
+  const editPaths = part ? (selection || []).map(index => prompt.decisions[index].section_path) : paths || (selection || []).map(index => prompt.decisions[index].section_path)
   const labels = { text: '写入正文', reference: '由参考表达', equivalent: '等效表达', unexpressed: '未表达' }
   const details = <>
       <p>固定计划：{plan ? `计划 ${workspace.plans.indexOf(plan)+1}` : '缺失计划'} · 单元 {unit && plan ? plan.content.units.indexOf(unit) + 1 : '不可用'} · {design ? `设计 ${workspace.designs.indexOf(design)+1}` : '缺失设计'}</p>
@@ -50,6 +51,7 @@ export function PromptReader({ prompt, workspace, active = true, inline = false,
       {!part && !selection?.length && <Empty description={paths ? "这些问题字段没有可准确对应的编译映射；请核对原固定依据。" : "此指令没有提供编译映射"} />}
       {unmappedPaths.map(path => <section key={path}><h3>{readablePath(path, context)}</h3><code>{path}</code><FrozenDesignValue design={design?.content} pointer={path} /></section>)}
       {selection?.map(index => { const decision = prompt.decisions[index]; const reference = unit?.references.find(row => row.id === decision.reference_id); return <section className="prompt-decision" key={index}><Tag>{labels[decision.disposition]}</Tag><h3>{readablePath(decision.section_path, context)}</h3><details><summary>原始字段路径</summary><code>{decision.section_path}</code></details>{decision.text_excerpt && <blockquote>{decision.text_excerpt}</blockquote>}<p><ReadableText text={decision.explanation} context={context} /></p><FrozenDesignValue design={design?.content} pointer={decision.section_path} />{decision.reference_id && (reference ? <ReferencePreview reference={reference} /> : <p>引用参考在此冻结单元中缺失。</p>)}</section> })}
+      {onEdit && (editPaths.length ? <Button onClick={() => onEdit(editPaths)}>修改这段对应内容</Button> : <><p>这段文字没有可准确对应的编辑字段，可描述希望如何调整。</p><Button onClick={() => onEdit([])}>说明希望怎么改</Button></>)}
       <h3>完整指令来源</h3><SourceLinks sources={prompt.sources} />
   </>
   return <section className="production-instruction"><h2>完整生成指令</h2>

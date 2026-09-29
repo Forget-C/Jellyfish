@@ -84,12 +84,17 @@ try {
     if (await page.getByRole('button', { name: '更多场次操作', exact: true }).isVisible()) await page.getByRole('button', { name: '更多场次操作', exact: true }).click()
     else await page.getByRole('button', { name: /阶段工具/ }).click()
     await page.getByRole('menuitem', { name: label, exact: true }).click()
+    if (label === '版本与历史') await page.getByRole('tab', { name: '查看与比较', exact: true }).click()
   }
-  async function closeDrawer() { await page.locator('.ant-drawer-open').last().getByRole('button', { name: 'Close', exact: true }).click(); await page.waitForTimeout(350) }
+  async function closeDrawer() { if (await page.getByRole('dialog', { name: '版本与依据', exact: true }).isVisible()) { await page.getByRole('dialog', { name: '版本与依据', exact: true }).getByRole('button', { name: /^取\s*消$/ }).click(); return } await page.locator('.ant-drawer-open').last().getByRole('button', { name: 'Close', exact: true }).click(); await page.waitForTimeout(350) }
   async function text(value) {
+    if (/^当前查看： · 计划/.test(value)) {
+      const summary = page.locator('summary').filter({ hasText: /^版本与引用$/ })
+      if (!await summary.locator('..').evaluate(element => element.open)) await summary.click()
+    }
     if (/^当前查看： · (设计|剪辑)/.test(value)) {
       const [, kind, number] = value.match(/(设计|剪辑) (\d+)/)
-      const selector = page.getByRole('combobox', { name: kind === '设计' ? '查看或编辑设计版本' : '查看或编辑剪辑版本', exact: true }).locator('../..')
+      const selector = page.getByRole('button', { name: /^版本与依据/ })
       await selector.waitFor()
       assert.match(await selector.innerText(), new RegExp(kind + ' 0?' + number))
       return
@@ -105,7 +110,15 @@ try {
     await page.getByText(value, { exact: true }).first().waitFor({ state: 'visible' })
   }
   async function choose(label, title) {
-    if (label === '查看或编辑生产计划') title = title.replace(/计划 (\d+)/, (_, number) => `计划 ${number.padStart(2, '0')}`)
+    const versionKind = { '查看或编辑设计版本': ['选择设计版本', '设计'], '查看或编辑生产计划': ['从所有计划定位依据', '计划'], '查看或编辑剪辑版本': ['选择剪辑版本', '剪辑'] }[label]
+    if (versionKind) {
+      if (!await page.getByRole('dialog', { name: '版本与依据', exact: true }).isVisible()) await page.getByRole('button', { name: /^版本与依据/ }).click()
+      await page.getByRole('combobox', { name: versionKind[0], exact: true }).locator('../..').click()
+      const number = title.match(/\d+/)[0]
+      await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: new RegExp(`^${versionKind[1]} ${number} ·`) }).first().click()
+      await page.getByRole('button', { name: '切换工作上下文', exact: true }).click()
+      return
+    }
     if (label === '选择候选 Take') { await page.locator('.cut-take-library button').filter({ hasText: `候选 ${title.match(/Take (\d+)/)[1].padStart(2, '0')}` }).click(); return }
     await page.getByRole('combobox', { name: label, exact: true }).locator('../..').click()
     await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: label === '查看或编辑设计版本' ? new RegExp('设计 0?' + title.match(/设计 (\d+)/)[1]) : title }).first().click()
@@ -122,23 +135,23 @@ try {
 
   // A04: opening and expanding every history group performs no business writes.
   await contextAction('版本与历史')
-  const drawer = page.locator('.ant-drawer-open')
+  const drawer = page.getByRole('dialog', { name: '版本与依据', exact: true })
   for (const summary of await drawer.locator('summary').all()) await summary.click()
   assert.ok((await drawer.innerText()).includes('当前采用仍在引用'))
   await drawer.getByRole('tab', { name: '剪辑版本', exact: true }).click()
   assert.ok((await drawer.innerText()).includes('剪辑 1 · 已确认 · 历史版本'))
   assert.equal(writes.length, 0)
-  await drawer.getByRole('button', { name: 'Close' }).click()
+  await closeDrawer()
 
   // A01: latest draft remains explicitly a viewing choice, while older dependencies stay in use.
   await page.getByRole('tab', { name: '导演设计' , exact: true }).click()
   await text('当前查看： · 设计 2 · 草稿')
   await choose('查看或编辑设计版本', '设计 1 · 已确认')
   await contextAction('版本与历史')
-  await page.locator('.ant-drawer-open').getByRole('tab', { name: '设计版本', exact: true }).click()
-  const references = page.locator('.ant-drawer-open details').filter({ has: page.getByText('当前采用与版本引用', { exact: true }) })
-  if (!await references.evaluate(element => element.open)) await references.locator('summary').click()
-  await page.locator('.ant-drawer-open').getByText('计划 1 · 已确认（当前采用仍在引用）', { exact: false }).waitFor()
+  await page.getByRole('dialog', { name: '版本与依据', exact: true }).getByRole('tab', { name: '设计版本', exact: true }).click()
+  const references = page.getByRole('dialog', { name: '版本与依据', exact: true }).locator('details').filter({ has: page.getByText('当前采用与版本引用', { exact: true }) })
+  if (!await references.evaluate(element => element.open)) await references.locator(':scope > summary').click()
+  await page.getByRole('dialog', { name: '版本与依据', exact: true }).getByText('计划 1 · 已确认（当前采用仍在引用）', { exact: false }).waitFor()
   await closeDrawer()
   await page.getByRole('tab', { name: '单元试拍' , exact: true }).click()
   await text('当前查看： · 计划 2 · 草稿 · 固定设计依据：设计 1')
@@ -199,8 +212,8 @@ try {
   assert.equal(pendingFeedback.length, 1)
   const writesBeforeHistory = writes.length
   await contextAction('版本与历史')
-  assert.ok(!(await page.locator('.ant-drawer-open').innerText()).includes('当前未采用'))
-  await page.locator('.ant-drawer-open').getByRole('button', { name: 'Close' }).click()
+  assert.ok(!(await page.getByRole('dialog', { name: '版本与依据', exact: true }).innerText()).includes('当前未采用'))
+  await closeDrawer()
   feedbackMode = 'fail'
   await contextAction('刷新状态')
   await text('采用状态暂不可用，请刷新状态重试。')
@@ -259,7 +272,7 @@ try {
     if (['visual', 'batch', 'continuity', 'feedback', 'ledger'].includes(view)) {
       await contextAction('当前进展')
       await page.getByRole('region', { name: '下一步引导' }).getByRole('button').click()
-      await page.waitForFunction(target => document.activeElement?.getAttribute('data-workspace-target') === target, view)
+      await page.waitForFunction(target => document.activeElement?.getAttribute('data-workspace-target') === target, view, { timeout: 10000 })
     }
     await contextAction('刷新状态')
     await settled()
@@ -272,6 +285,9 @@ try {
   await text('当前查看： · 设计 2 · 草稿')
   assert.equal(new URL(page.url()).searchParams.get('returnTo'), '/projects/p1')
   await page.getByRole('tab', { name: '单元试拍' }).click()
+  await text('先选择已确认的导演设计')
+  assert.ok(!new URL(page.url()).searchParams.get('plan'))
+  await choose('查看或编辑生产计划', '计划 1 · 已确认')
   await text('当前查看： · 计划 1 · 基线已确认，修改将派生新版本 · 固定设计依据：设计 1')
   await page.getByRole('tab', { name: '剪辑验收' }).click()
   await text('当前查看： · 剪辑 1 · 已确认 · 历史版本')
@@ -303,7 +319,7 @@ try {
   failRevisionSave = false
   await modal.getByRole('button', { name: '保存后继续' }).click()
   await modal.waitFor({ state: 'hidden' })
-  await text('当前查看： · 设计 2 · 草稿')
+  await text('当前查看： · 设计 1 · 基线已确认，修改将派生新版本')
   assert.equal(activeId, 'c-draft')
   assert.equal(workspace.cuts.at(-1).confirmed_at, null)
   await page.getByRole('tab', { name: '剪辑验收' }).click()
@@ -316,7 +332,7 @@ try {
   await page.getByRole('tab', { name: '导演设计' }).click()
   await modal.getByRole('button', { name: '放弃修改并继续' }).click()
   await modal.waitFor({ state: 'hidden' })
-  await text('当前查看： · 设计 2 · 草稿')
+  await text('当前查看： · 设计 1 · 基线已确认，修改将派生新版本')
   assert.equal(writes.length, writesBeforeDiscard)
   // A page-wide navigation must also protect an edited design, without saving on cancel.
   await page.getByRole('button', { name: '＋ 新建设计⌄', exact: true }).click()
@@ -351,6 +367,7 @@ try {
   await modal.getByRole('button', { name: '放弃修改并继续' }).click()
   await page.getByRole('tab', { name: '单元试拍' }).click()
   const actionScope = page.locator('[data-workspace-target="unit:u1"] textarea').first()
+  await page.getByRole('button', { name: '镜头范围', exact: true }).click()
   await actionScope.fill('保留递信的局部动作')
   await page.getByRole('tab', { name: '剪辑验收' }).click()
   assert.equal(await modal.count(), 0)
@@ -415,6 +432,7 @@ try {
   await page.screenshot({ path: join(output, 'ux1-cut.png'), fullPage: true })
   console.log(JSON.stringify({ result: 'A01–A04 and UX2 navigation/context/edit guard checks passed', writes: writes.map(row => row.path), screenshot: join(output, 'ux1-cut.png') }, null, 2))
 } catch (error) {
+  console.error(error)
   if (page) { await page.screenshot({ path: join(output, 'failure.png'), fullPage: true }); console.error((await page.locator('body').innerText()).slice(-7000)) }
   console.error('Browser evidence:', output)
   throw error

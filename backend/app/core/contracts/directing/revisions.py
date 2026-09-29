@@ -21,6 +21,7 @@ class RevisionSnapshot(Contract, Generic[Content]):
     sequence_id: Identity
     parent_id: Identity | None
     version: int = Field(gt=0)
+    created_at: datetime | None = Field(default=None, description="版本最初创建时间；不随草稿保存或确认改变")
     display_number: int | None = Field(default=None, gt=0, description="指令在固定计划与单元内的稳定编号；其他版本不使用")
     confirmed_by: Identity | None
     confirmed_at: datetime | None

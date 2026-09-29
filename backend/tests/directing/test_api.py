@@ -180,3 +180,15 @@ async def test_reference_capabilities_use_model_and_adapter_rules(tmp_path):
             assert data["frame_roles"] == ["first_frame", "last_frame"]
             assert (await client.get(base + "text/reference-capabilities")).status_code == 422
             assert (await client.get(base.replace("p1", "missing") + "v1/reference-capabilities")).status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_chapter_overview_api_is_lightweight_and_project_scoped(tmp_path):
+    """概览独立响应契约，不允许跨项目读取。"""
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        path = '/api/v1/studio/projects/p1/directing/chapters/ch1/overview'
+        response = await client.get(path)
+        assert response.status_code == 200
+        assert set(response.json()['data']) == {'chapter_id', 'title', 'source_version', 'sequences'}
+        assert response.json()['data']['sequences'] == []
+        assert (await client.get(path.replace('/p1/', '/p2/'))).status_code == 422

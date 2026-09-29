@@ -98,7 +98,7 @@ try {
   }
   await page.goto(base + '?view=shoot&design=d2&plan=p-new&unit=u1')
   await page.getByRole('tab', { name: '导演设计', exact: true }).click()
-  await page.getByRole('tab', { name: '镜头', exact: true }).click(); await page.getByRole('radio', { name: '清单', exact: true }).locator('..').click()
+  await page.getByRole('tab', { name: '清单', exact: true }).click()
   await page.locator('.design-intent').getByRole('button', { name: /全场概览/ }).click()
   const field = page.locator('textarea[aria-label="本场信息变化"]')
   await checkTextSave('设计', field, '保存设计草稿', () => workspace.designs[1].content.direction.information_change.text)
@@ -130,6 +130,7 @@ try {
   checks.push('等待中的导航在保存完成后可继续，不重复提交已保存内容')
 
   await page.goto(base + '?view=shoot&plan=p-new&unit=u1')
+  await page.getByRole('button', { name: '镜头范围', exact: true }).click()
   await checkTextSave('生产计划', page.locator('[data-workspace-target="unit:u1"] textarea').first(), '保存生产计划草稿', () => workspace.plans[1].content.units[0].coverage[0].action_scope)
 
   await page.goto(base + '?view=design&design=d2')

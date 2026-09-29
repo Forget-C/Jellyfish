@@ -36,6 +36,8 @@ try {
     if (path.endsWith('/sources/resolve')) return respond(request.postDataJSON().sources.map(source => ({ source, status: source.kind === 'human' ? 'ready' : 'unavailable', label: source.kind === 'human' ? '人工填写' : '历史来源', description: '隔离来源记录' })))
     if (request.method() !== 'GET') writes.push({ path, body: request.postDataJSON() })
     if (path === '/api/v1/film/tasks') return respond({ items: tasks.has('review-task') ? [{ task_id: 'review-task', task_kind: 'directing_review', title: '指令回跳任务', status: tasks.get('review-task').status, stage: '', progress: null, cancel_requested: false, target_type: 'directing_sequence', target_id: 's1', project_id: 'p1', created_at_ts: Date.now(), updated_at_ts: Date.now(), source: { kind: 'sequence', id: 's1', project_id: 'p1', chapter_id: 'ch1', title: workspace.sequence.title } }] : [], next_cursor: null })
+    if (path.endsWith('/chapters')) return respond({ items: [{ id: 'ch1', project_id: 'p1', index: 1, title: '测试章节', raw_text: workspace.sequence.source_text, status: 'draft' }], total: 1 })
+    if (path.endsWith('/chapters/ch1/overview')) return respond({ chapter_id: 'ch1', title: '测试章节', source_version: '1', sequences: [{ ...workspace.sequence, source_excerpt: workspace.sequence.source_text, design_count: workspace.designs.length, confirmed_design_count: workspace.designs.filter(row => row.confirmed_at).length, plan_count: workspace.plans.length, confirmed_plan_count: workspace.plans.filter(row => row.confirmed_at).length, take_count: workspace.takes.length, unreviewed_take_count: workspace.takes.length, active_cut_revision_id: null }] })
     if (path.endsWith('/chapters/ch1/assembly')) return respond({ chapter_id: 'ch1', title: '测试章节', sequences: [], transitions: [], gaps: [] })
     if (path.endsWith('/chapters/ch1')) return respond({ chapter_id: 'ch1', title: '测试章节', raw_text: workspace.sequence.source_text, source_version: '1', sequences: [workspace.sequence], task_ids: [] })
     if (path.endsWith('/s1')) return respond(workspace)
@@ -80,14 +82,23 @@ try {
   async function closeGuide() {
     if (await guide().isVisible()) await page.locator('.ant-drawer-open').filter({ has: guide() }).getByRole('button', { name: 'Close', exact: true }).click()
   }
-  const text = value => page.getByText(value, { exact: true }).first().waitFor()
+  const text = async value => {
+    if (value.startsWith('当前查看： · 计划')) {
+      const heading = page.locator('summary').filter({ hasText: /^计划与历史记录$/ })
+      if (await heading.isVisible() && !await heading.locator('..').evaluate(element => element.open)) await heading.click()
+      const reference = page.locator('summary').filter({ hasText: /^版本与引用$/ })
+      if (!await reference.locator('..').evaluate(element => element.open)) await reference.click()
+    }
+    await page.getByText(value, { exact: true }).first().waitFor()
+  }
   async function choose(label, value) {
     await closeGuide()
-    if (['选择编译单元', '选择生成指令版本'].includes(label)) await page.getByRole('tab', { name: '指令检查', exact: true }).click()
+    if (['选择编译单元', '选择生成指令版本'].includes(label)) await page.getByRole('tab', { name: '指令与检查', exact: true }).click()
     if (label === '选择编译单元') { await page.locator('.production-unit-list button').filter({ hasText: `单元 ${value.match(/单元 (\d+)/)[1].padStart(2, '0')}` }).click(); return }
     if (label === '选择生成指令版本') {
-      if (await page.getByText(`检查对象：试拍${value}`, { exact: true }).isVisible()) return
-      await page.getByRole('button', { name: /^(切换版本|选择指令版本)$/ }).click()
+      const prompt = workspace.prompts[Number(value.match(/\d+/)[0]) - 1]
+      if (new URL(page.url()).searchParams.get('prompt') === prompt?.id) return
+      await page.getByRole('button', { name: /^(历史记录|选择指令版本)$/ }).filter({ visible: true }).last().click()
       const row = page.locator('.shoot-record-list > div').filter({ has: page.getByText(`试拍${value}`, { exact: true }) })
       await row.getByRole('button', { name: '切换到此版本' }).click()
       await page.getByRole('button', { name: '关闭指令详情' }).click(); return
@@ -148,7 +159,7 @@ try {
   await guide().getByRole('button', { name: '去准备生成指令' }).click()
   await focused('compile')
   await closeGuide()
-  await page.getByRole('tab', { name: '指令检查', exact: true }).click()
+  await page.getByRole('tab', { name: '指令与检查', exact: true }).click()
   await page.getByRole('button', { name: /^(生成试拍指令|重试生成指令)$/, exact: true }).click()
   await openGuide()
   await guide().getByText('当前模型要求首帧参考', { exact: true }).waitFor()
@@ -162,7 +173,7 @@ try {
   await choose('选择编译单元', '单元 1')
   compileError = '当前执行器不支持声音参考，请保留声音设计并安排后期'
   await closeGuide()
-  await page.getByRole('tab', { name: '指令检查', exact: true }).click()
+  await page.getByRole('tab', { name: '指令与检查', exact: true }).click()
   await page.getByRole('button', { name: /^(生成试拍指令|重试生成指令)$/, exact: true }).click()
   await openGuide()
   await guide().getByText(compileError, { exact: true }).waitFor()
@@ -173,7 +184,7 @@ try {
   // A06/A08: a submitted review belongs to one unit and survives refresh.
   compileError = ''
   await closeGuide()
-  await page.getByRole('tab', { name: '指令检查', exact: true }).click()
+  await page.getByRole('tab', { name: '指令与检查', exact: true }).click()
   await page.getByRole('button', { name: /^(生成试拍指令|重试生成指令)$/, exact: true }).click()
   await openGuide()
   await guide().getByRole('button', { name: '去检查生成指令' }).click()
@@ -220,14 +231,14 @@ try {
   await page.waitForURL(url => url.pathname === '/assets')
   await page.goBack()
   await closeGuide()
-  await page.getByRole('tab', { name: '指令检查', exact: true }).click()
+  await page.getByRole('tab', { name: '指令与检查', exact: true }).click()
   await page.locator('.production-next-step h2').waitFor()
   assert.ok((await page.locator('.production-next-step h2').innerText()).includes('单元 02'))
   await contextAction('本场原文')
   await page.getByRole('button', { name: '返回场次列表核对原文', exact: true }).click()
-  await page.getByRole('button', { name: '进入场次', exact: true }).click()
+  await page.getByRole('button', { name: '继续试拍', exact: true }).click()
   await closeGuide()
-  await page.getByRole('tab', { name: '指令检查', exact: true }).click()
+  await page.getByRole('tab', { name: '指令与检查', exact: true }).click()
   await page.locator('.production-next-step h2').waitFor()
   assert.ok((await page.locator('.production-next-step h2').innerText()).includes('单元 02'))
   await page.getByRole('button', { name: /任务中心/ }).click()
@@ -236,10 +247,10 @@ try {
   await page.waitForURL(url => url.searchParams.get('task') === 'review-task')
   assert.equal(new URL(page.url()).searchParams.get('task'), 'review-task')
   assert.equal(new URL(page.url()).searchParams.get('view'), 'shoot')
-  await page.getByRole('tab', { name: '指令检查', exact: true }).click()
+  await page.getByRole('tab', { name: '指令与检查', exact: true }).click()
   assert.ok((await page.locator('.production-next-step h2').innerText()).includes('单元 01'))
-  await page.getByRole('button', { name: '查看指令', exact: true }).click()
-  assert.equal(await page.locator('.production-inspector .prompt-reader').innerText(), '固定动作与参考')
+  await page.getByRole('button', { name: '查看完整指令', exact: true }).click()
+  assert.equal(await page.locator('.ant-drawer-open .prompt-reader').innerText(), '固定动作与参考')
   await page.getByRole('button', { name: '关闭指令详情' }).click()
   // Preparation inputs survive leaving; storage denial falls back to the same explicit guard.
   const beforePreparation = writes.length
@@ -290,14 +301,14 @@ try {
   await page.waitForURL(url => url.searchParams.get('plan') === 'p-old')
   await focused('plan-version')
   await text('当前查看： · 计划 1 · 基线已确认，修改将派生新版本 · 固定设计依据：设计 1')
-  await page.getByRole('tab', { name: '指令检查', exact: true }).click()
-  await page.getByRole('button', { name: '查看指令', exact: true }).click()
-  assert.equal(await page.locator('.production-inspector .prompt-reader').innerText(), '固定动作与参考')
+  await page.getByRole('tab', { name: '指令与检查', exact: true }).click()
+  await page.getByRole('button', { name: '查看完整指令', exact: true }).click()
+  assert.equal(await page.locator('.ant-drawer-open .prompt-reader').innerText(), '固定动作与参考')
   await page.getByRole('button', { name: '关闭指令详情' }).click()
   await choose('选择编译单元', '单元 2')
   await page.waitForURL(url => url.searchParams.get('unit') === 'u2')
   await page.reload()
-  await page.getByRole('tab', { name: '指令检查', exact: true }).click()
+  await page.getByRole('tab', { name: '指令与检查', exact: true }).click()
   assert.ok((await page.locator('.production-next-step h2').innerText()).includes('单元 02'))
   // A remote running task with no recoverable snapshot must never select a newer plan.
   tasks.set('remote-running', { task_id: 'remote-running', kind: 'video_generation', status: 'running', error: null, source_version: null })

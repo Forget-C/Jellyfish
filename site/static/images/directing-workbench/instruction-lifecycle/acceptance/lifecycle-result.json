@@ -1,0 +1,105 @@
+{
+  "sizes": [
+    {
+      "scroll": 1440,
+      "width": 1440
+    },
+    {
+      "scroll": 1024,
+      "width": 1024
+    },
+    {
+      "scroll": 768,
+      "width": 768
+    },
+    {
+      "scroll": 375,
+      "width": 375
+    }
+  ],
+  "requests": [
+    {
+      "path": "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions",
+      "body": {
+        "prompt_revision_id": "prompt1",
+        "instruction": "镜头保持固定，延长到6秒。",
+        "edits": [],
+        "directions": [],
+        "request_id": "0787a53c-9829-41d4-bf78-e3583b1ea48a"
+      },
+      "id": "revision-1"
+    },
+    {
+      "path": "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions/preview",
+      "body": {
+        "prompt_revision_id": "prompt1",
+        "instruction": "",
+        "edits": [
+          {
+            "target": "unit",
+            "path": "/duration_ms",
+            "before": 5000,
+            "after": 6000
+          }
+        ],
+        "directions": [],
+        "request_id": "84dccf40-5333-4e63-81a9-755b828e4f10"
+      },
+      "id": "revision-2"
+    },
+    {
+      "path": "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions",
+      "body": {
+        "prompt_revision_id": "prompt1",
+        "review_source": {
+          "kind": "review",
+          "id": "review-pass"
+        },
+        "instruction": "再延长一秒",
+        "edits": [],
+        "directions": [],
+        "request_id": "664cb009-e357-4f21-b3c1-3fbded25201b"
+      },
+      "id": "revision-3"
+    },
+    {
+      "path": "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions",
+      "body": {
+        "prompt_revision_id": "prompt1",
+        "review_source": {
+          "kind": "review",
+          "id": "review-pass"
+        },
+        "instruction": "保持不变",
+        "edits": [],
+        "directions": [],
+        "request_id": "b7c1f348-ba35-45b8-aa0b-8ef4fa2d0621"
+      },
+      "id": "revision-4"
+    },
+    {
+      "path": "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions",
+      "body": {
+        "prompt_revision_id": "prompt1",
+        "review_source": {
+          "kind": "review",
+          "id": "review-pass"
+        },
+        "instruction": "需要同期声音",
+        "edits": [],
+        "directions": [],
+        "request_id": "c45df763-70ad-4e85-b450-3b2adad514dd"
+      },
+      "id": "revision-5"
+    }
+  ],
+  "writes": [
+    "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions/preview",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions/apply",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions"
+  ],
+  "errors": []
+}

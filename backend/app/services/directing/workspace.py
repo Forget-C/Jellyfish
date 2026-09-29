@@ -6,9 +6,10 @@ from sqlalchemy import func, or_, select, update
 
 from app.core.contracts.directing.common import Source
 from app.core.contracts.directing.workspace import (
-    RevisionWrite, ChapterSequences, SequenceCreate, SequenceRead, SequenceUpdate, SourceSpan, WorkspaceRead,
+    RevisionWrite, ChapterOverview, SequenceOverview, ChapterSequences, SequenceCreate, SequenceRead, SequenceUpdate, SourceSpan, WorkspaceRead,
 )
-from app.models.directing import DirectingRevision, Sequence, Take
+from app.core.contracts.directing.production import SequenceCut, TakeAnnotation
+from app.models.directing import ActiveCut, DirectingRevision, Sequence, Take
 from app.models.studio import Chapter
 from app.models.task import Task
 from app.services.directing.store import DirectingStore, RevisionConflict
@@ -44,6 +45,42 @@ class WorkspaceService(DirectingStore):
                                 task_ids=list(await self.db.scalars(select(Task.id).where(
                                     Task.project_id == self.project_id, Task.target_type == "directing_chapter",
                                     Task.target_id == chapter_id).order_by(Task.created_at))))
+
+    async def chapter_overview(self, chapter_id: str) -> ChapterOverview:
+        """批量读取整场计数；只解析采用指针正文，查询数不随场次数增加。"""
+        chapter = await self.chapter(chapter_id)
+        source_version = sha256(chapter.raw_text.encode()).hexdigest()
+        rows = list(await self.db.execute(select(Sequence.id, Sequence.position, Sequence.title,
+            Sequence.source, func.substr(Sequence.source_text, 1, 160).label("excerpt"))
+            .where(Sequence.chapter_id == chapter_id).order_by(Sequence.position)))
+        summaries = {row.id: SequenceOverview(id=row.id, position=row.position, title=row.title,
+            source_excerpt=row.excerpt, source_changed=Source.model_validate(row.source).version != source_version,
+            design_count=0, confirmed_design_count=0, plan_count=0, confirmed_plan_count=0,
+            take_count=0, unreviewed_take_count=0, active_cut_revision_id=None) for row in rows}
+        if summaries:
+            revisions = await self.db.execute(select(DirectingRevision.sequence_id, DirectingRevision.kind,
+                func.count(DirectingRevision.id), func.count(DirectingRevision.confirmed_at))
+                .where(DirectingRevision.sequence_id.in_(summaries), DirectingRevision.kind.in_(["design", "plan"]))
+                .group_by(DirectingRevision.sequence_id, DirectingRevision.kind))
+            for sequence_id, kind, total, confirmed in revisions:
+                setattr(summaries[sequence_id], kind + "_count", total)
+                setattr(summaries[sequence_id], "confirmed_" + kind + "_count", confirmed)
+            takes = await self.db.execute(select(Take.sequence_id, Take.annotation).where(Take.sequence_id.in_(summaries)))
+            for sequence_id, payload in takes:
+                annotation = TakeAnnotation.model_validate(payload)
+                summaries[sequence_id].take_count += 1
+                summaries[sequence_id].unreviewed_take_count += annotation.review_status == "unreviewed"
+            cuts = await self.db.execute(select(ActiveCut.sequence_id, ActiveCut.revision_id,
+                DirectingRevision.sequence_id, DirectingRevision.kind, DirectingRevision.confirmed_at,
+                DirectingRevision.payload).outerjoin(DirectingRevision, DirectingRevision.id == ActiveCut.revision_id)
+                .where(ActiveCut.sequence_id.in_(summaries)))
+            for sequence_id, revision_id, owner_id, kind, confirmed_at, payload in cuts:
+                if owner_id != sequence_id or kind != "cut" or confirmed_at is None:
+                    raise ValueError("当前采用版本不属于场次或未经确认")
+                SequenceCut.model_validate(payload)
+                summaries[sequence_id].active_cut_revision_id = revision_id
+        return ChapterOverview(chapter_id=chapter.id, title=chapter.title, source_version=source_version,
+                               sequences=list(summaries.values()))
 
     async def write_sequence(self, chapter_id: str, body: SequenceCreate | SequenceUpdate,
                              sequence_id: str | None = None) -> SequenceRead:

@@ -51,9 +51,11 @@ async def test_review_active_cut_and_workspace(tmp_path):
             changed = deepcopy(cut.payload)
             changed['items'][0]['media_range']['source_out_ms'] = 6000
             draft = await service.save_revision(sid, kind='cut', payload=changed, parent_id=cut.id)
+            assert (await service.chapter_assembly('ch1')).sequences == assembly.sequences
             stale = await service.save_revision(sid, kind='cut_review', payload=review(cut.id))
             assert (await service.feedback(sid)).current_review_id == accepted.id
             await service.confirm_revision(draft.id, expected_version=1, actor_id='author')
+            assert (await service.chapter_assembly('ch1')).sequences[0].cut_revision_id == draft.id
             assert (await service.feedback(sid)).current_review_id is None
             with pytest.raises(RevisionConflict, match='采用版本'):
                 await service.confirm_revision(stale.id, expected_version=1, actor_id='author')

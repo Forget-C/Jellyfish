@@ -10,6 +10,7 @@ from sqlalchemy import select
 from app.core.contracts.directing.common import Source
 from app.core.contracts.directing.design import SceneDesign
 from app.core.contracts.directing.production import ReviewPacket
+from app.core.contracts.directing.review_revision import ReviewRevisionCandidate
 from app.core.contracts.directing.workspace import AIRequest, DivisionResult, DirectingTaskRead
 from app.models.directing import DirectingRevision
 from app.models.llm import ModelCategoryKey, Provider
@@ -20,7 +21,7 @@ from app.services.llm.provider_resolver import resolve_provider_config_from_prov
 from app.services.llm.resolver import get_model_by_category
 from app.services.task_service import TaskService
 
-RESULT_CONTRACTS = {"directing_divide": DivisionResult, "directing_design": SceneDesign, "directing_review": ReviewPacket}
+RESULT_CONTRACTS = {"directing_divide": DivisionResult, "directing_design": SceneDesign, "directing_review": ReviewPacket, "directing_review_revision": ReviewRevisionCandidate}
 
 
 class DirectingOutputError(ValueError):
@@ -31,6 +32,7 @@ def generate_directing_result(kind: str, llm, args: dict):
     """在 Worker 有界线程执行，返回严格结构，绝不由模型直接批准或覆盖工作单。"""
     contract = RESULT_CONTRACTS[kind]
     instruction = {
+        "directing_review_revision": "评估固定检查意见（review=null 时为用户主动修改，不得伪造问题）和整体 instruction。人工 request.edits 必须原样保留，不得覆盖；主动修改 changes.problem_keys 和 outcomes 可为空；用 summary 的 status/reason/choices 说明整体结果，status 为 planned、needs_choice、unresolved 或 unchanged。无实际变化用 unchanged，超出范围用 unresolved，必要选择用 needs_choice 和至少两项 choices，不能伪造检查问题。preview_text/candidate_identity/source_prompt_revision_id 留空，由服务端渲染。仅替换 revision_context.allowed_design_fields 或 allowed_unit_fields 列出的已有字段；before 必须逐字复制固定字段，input_identity 原样返回。不得增加 applicable_shot_ids 等不存在字段，不得增删身份或引用。sound.execution 只有 generated/postproduction/unknown。检查意见不是事实，不能通过删除正确设计掩盖编译器或供应商限制；此类问题返回 unresolved。原文事实优先；必要创作取舍返回 needs_choice 及至少两个简短选项，不猜测用户意图。每个 problem_keys 中的问题都必须有 outcome，即使用户没有填写方向，planned 必须关联实际修改。不能修复的问题明确解释。只输出必要修改，不能宣称新检查通过。Note 新来源使用 revision_context.task_identity。声音制作方式必须有 direction.sound_execution 明确选择才能拟落实，不能从自由文本猜测。",
         "directing_divide": "将章节分成连续叙事场次。excerpt 必须逐字复制原文中连续的一段，不得改写，按原文顺序排列。不同地点或时间转换可分场，不按镜头分场。",
         "directing_design": "根据场次原文、已有资产与人工意见，设计可拍摄的六部门工作单。已有资产只有适用于本场时才引用其 ID，不得凭空编造资产 ID，不得让资产设定改变原文事实。镜头与节拍使用稳定 ID。保留剧情事实。所有角色、对白、背景行为和摄影必须有因果。未知技术值标 unknown，不适用给理由。不得自称用户确认。每镜必须有摄影行。所有有内容的 Note 必须带 model 来源，reference 使用所提供的 task_identity，version 使用 1。",
         "directing_review": "以六部门分别审查本轮每个镜头出现项。严格保留提供的 roles 和 occurrences，不得减少、更换、合并。同一镜头不同单元分别检查。每行给出 pass 或 revise、具体理由及可执行修改建议。检查共同空间、先后反应、参考绑定、摄影、声音和相邻衔接。模型不能授权用户执行。",
@@ -70,6 +72,9 @@ def generate_directing_result(kind: str, llm, args: dict):
             raise ValueError("模型改变了送审清单")
         if any(row.verdict == "pending" for row in result.rows):
             raise ValueError("审稿未完成")
+    if kind == "directing_review_revision":
+        from app.services.directing.review_revision import validate_candidate  # pylint: disable=import-outside-toplevel
+        result, _, _ = validate_candidate(args["revision_context"], result)
     if kind == "directing_design":
         # 风格身份来自用户冻结输入，不采信模型生成的其他版本 ID。
         result.style_revision_id = args.get("style_revision_id")
@@ -118,8 +123,10 @@ class DirectingAIService(WorkspaceService):
             args.update(starting_revision_id=revision.id, starting_version=revision.version, previous_design=revision.payload)
         if extra:
             args.update(extra)
+        if kind == "directing_review_revision":
+            args["revision_context"]["task_identity"] = args["task_identity"]
         return await TaskService(self.db).submit(
-            kind=kind, title={"directing_divide": "分析章节场次", "directing_design": "生成导演方案", "directing_review": "六部门审稿"}[kind],
+            kind=kind, title={"directing_divide": "分析章节场次", "directing_design": "生成导演方案", "directing_review": "六部门审稿", "directing_review_revision": "生成检查修改方案"}[kind],
             snapshot={**(request_context or {}), "model_id": model.id, "model_name": model.name, "provider_key": config.provider_key, "run_args": args},
             provider_id=provider.id, project_id=self.project_id,
             target_type="directing_sequence" if sequence_id else "directing_chapter", target_id=sequence_id or chapter_id,
@@ -153,11 +160,14 @@ class DirectingAIService(WorkspaceService):
         if task is None or task.project_id != self.project_id or task.target_type not in {"directing_chapter", "directing_sequence", "directing_unit", "directing_image"}:
             raise ValueError("任务不属于当前工作区")
         result = {}
-        result_key = {"directing_divide": "division", "directing_design": "design", "directing_review": "review"}.get(task.kind)
+        result_key = {"directing_divide": "division", "directing_design": "design", "directing_review": "review", "directing_review_revision": "revision"}.get(task.kind)
         if task.status == "succeeded" and result_key:
             result[result_key] = RESULT_CONTRACTS[task.kind].model_validate(task.result)
         if task.status == "succeeded" and task.target_type == "directing_image":
             result["image_file_ids"] = list(await self.db.scalars(select(TaskOutput.file_id).where(TaskOutput.task_id == task.id).order_by(TaskOutput.ordinal)))
+        if task.kind == "directing_review_revision":
+            result["revision_request"] = task.input_snapshot.get("revision_request")
+            result["revision_application"] = task.input_snapshot.get("revision_application")
         return DirectingTaskRead(task_id=task.id, kind=task.kind, status=task.status,
                                  error=task.error_message,
                                  source_version=task.input_snapshot.get("run_args", {}).get("source_version"), **result)

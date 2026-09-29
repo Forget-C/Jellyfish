@@ -6,11 +6,13 @@ import type { AIRequest } from '../models/AIRequest';
 import type { ApiResponse_AssetSummary_ } from '../models/ApiResponse_AssetSummary_';
 import type { ApiResponse_BatchRead_ } from '../models/ApiResponse_BatchRead_';
 import type { ApiResponse_ChapterAssemblyRead_ } from '../models/ApiResponse_ChapterAssemblyRead_';
+import type { ApiResponse_ChapterOverview_ } from '../models/ApiResponse_ChapterOverview_';
 import type { ApiResponse_ChapterSequences_ } from '../models/ApiResponse_ChapterSequences_';
 import type { ApiResponse_CompileResult_ } from '../models/ApiResponse_CompileResult_';
 import type { ApiResponse_ContinuityRead_ } from '../models/ApiResponse_ContinuityRead_';
 import type { ApiResponse_CutFrameRead_ } from '../models/ApiResponse_CutFrameRead_';
 import type { ApiResponse_DirectingTaskRead_ } from '../models/ApiResponse_DirectingTaskRead_';
+import type { ApiResponse_EditableRevisionFields_ } from '../models/ApiResponse_EditableRevisionFields_';
 import type { ApiResponse_ExtractedFrame_ } from '../models/ApiResponse_ExtractedFrame_';
 import type { ApiResponse_FeedbackRead_ } from '../models/ApiResponse_FeedbackRead_';
 import type { ApiResponse_LedgerRead_ } from '../models/ApiResponse_LedgerRead_';
@@ -19,11 +21,13 @@ import type { ApiResponse_list_BatchRead__ } from '../models/ApiResponse_list_Ba
 import type { ApiResponse_list_ProjectStyleRevision__ } from '../models/ApiResponse_list_ProjectStyleRevision__';
 import type { ApiResponse_list_SourceRead__ } from '../models/ApiResponse_list_SourceRead__';
 import type { ApiResponse_MediaRead_ } from '../models/ApiResponse_MediaRead_';
+import type { ApiResponse_ReviewRevisionApplication_ } from '../models/ApiResponse_ReviewRevisionApplication_';
 import type { ApiResponse_SequenceRead_ } from '../models/ApiResponse_SequenceRead_';
 import type { ApiResponse_TaskAccepted_ } from '../models/ApiResponse_TaskAccepted_';
 import type { ApiResponse_VideoReferenceCapabilities_ } from '../models/ApiResponse_VideoReferenceCapabilities_';
 import type { ApiResponse_WorkspaceRead_ } from '../models/ApiResponse_WorkspaceRead_';
 import type { ApplyDesignRequest } from '../models/ApplyDesignRequest';
+import type { ApplyReviewRevisionRequest } from '../models/ApplyReviewRevisionRequest';
 import type { AssetCreateRequest } from '../models/AssetCreateRequest';
 import type { BatchPrepare } from '../models/BatchPrepare';
 import type { CompileRequest } from '../models/CompileRequest';
@@ -34,6 +38,7 @@ import type { RegroupRequest } from '../models/RegroupRequest';
 import type { RepairPlanRequest } from '../models/RepairPlanRequest';
 import type { ReviewDecisionRequest } from '../models/ReviewDecisionRequest';
 import type { ReviewRequest } from '../models/ReviewRequest';
+import type { ReviewRevisionRequest } from '../models/ReviewRevisionRequest';
 import type { RevisionWrite } from '../models/RevisionWrite';
 import type { SeamReviewRequest } from '../models/SeamReviewRequest';
 import type { SequenceCreate } from '../models/SequenceCreate';
@@ -90,6 +95,31 @@ export class StudioDirectingService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Chapter Overview
+     * 返回有序场次的整场计数与已确认采用身份。
+     * @returns ApiResponse_ChapterOverview_ Successful Response
+     * @throws ApiError
+     */
+    public static directingChapterOverview({
+        projectId,
+        chapterId,
+    }: {
+        projectId: string,
+        chapterId: string,
+    }): CancelablePromise<ApiResponse_ChapterOverview_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/overview',
             path: {
                 'project_id': projectId,
                 'chapter_id': chapterId,
@@ -1230,6 +1260,123 @@ export class StudioDirectingService {
                 'project_id': projectId,
                 'sequence_id': sequenceId,
                 'revision_id': revisionId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Generate Review Revision
+     * 冻结检查和方向并生成局部候选，不写入设计。
+     * @returns ApiResponse_TaskAccepted_ Successful Response
+     * @throws ApiError
+     */
+    public static directingGenerateReviewRevision({
+        projectId,
+        sequenceId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        requestBody: ReviewRevisionRequest,
+    }): CancelablePromise<ApiResponse_TaskAccepted_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/review-revisions',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Apply Review Revision
+     * 采用已展示修改并恢复编译与重新检查，绝不提交拍摄。
+     * @returns ApiResponse_ReviewRevisionApplication_ Successful Response
+     * @throws ApiError
+     */
+    public static directingApplyReviewRevision({
+        projectId,
+        sequenceId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        requestBody: ApplyReviewRevisionRequest,
+    }): CancelablePromise<ApiResponse_ReviewRevisionApplication_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/review-revisions/apply',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Revision Fields
+     * 读取当前指令允许修改的字段。
+     * @returns ApiResponse_EditableRevisionFields_ Successful Response
+     * @throws ApiError
+     */
+    public static directingRevisionFields({
+        projectId,
+        sequenceId,
+        promptRevisionId,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        promptRevisionId: string,
+    }): CancelablePromise<ApiResponse_EditableRevisionFields_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/review-revisions/fields',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+            },
+            query: {
+                'prompt_revision_id': promptRevisionId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Preview Review Revision
+     * 直接编辑生成可恢复的同步预览，不调用 AI。
+     * @returns ApiResponse_TaskAccepted_ Successful Response
+     * @throws ApiError
+     */
+    public static directingPreviewReviewRevision({
+        projectId,
+        sequenceId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        requestBody: ReviewRevisionRequest,
+    }): CancelablePromise<ApiResponse_TaskAccepted_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/review-revisions/preview',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
             },
             body: requestBody,
             mediaType: 'application/json',

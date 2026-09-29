@@ -72,7 +72,8 @@ try {
       failure = state === 'adoption-error'
       mediaFailure = state === 'media-error'
       const view = ['cut', 'cut-expanded', 'confirmed-cut', 'adoption-error', 'media-error'].includes(state) ? 'cut' : state === 'tasks' ? 'shoot' : ['shoot', 'continuity', 'feedback', 'ledger'].includes(state) ? state : 'design'
-      await page.goto(`http://127.0.0.1:4182/projects/p1/chapters/ch1/sequences/s1?view=${view}&design=d1&plan=p-old&unit=u1&cut=${state === 'confirmed-cut' ? 'c-active' : 'c-draft'}&take=${state === 'cut' ? 't3' : 't1'}`)
+      const selection = state === 'first' ? 'design=&plan=&unit=&cut=&take=' : `design=d1&plan=p-old&unit=u1&cut=${state === 'confirmed-cut' ? 'c-active' : 'c-draft'}&take=${state === 'cut' ? 't3' : 't1'}`
+      await page.goto(`http://127.0.0.1:4182/projects/p1/chapters/ch1/sequences/s1?view=${view}&${selection}`)
       await page.locator('.workspace-stage-tabs').waitFor()
       if (view === 'cut' && !mediaFailure) await page.getByLabel('当前候选播放器', { exact: true }).evaluate(video => new Promise(resolve => { if (video.readyState >= 2) resolve(); else video.addEventListener('loadeddata', resolve, { once: true }) }))
       if (failure) await page.getByRole('button', { name: '当前采用待核对', exact: true }).waitFor()
@@ -84,13 +85,15 @@ try {
         await page.getByRole('textbox', { name: '本场信息变化', exact: true }).waitFor()
       }
       if (state === 'design-relations' || state === 'design-source') {
-        await page.getByRole('tab', { name: '镜头', exact: true }).click(); await page.getByRole('radio', { name: '分镜', exact: true }).locator('..').click()
+        await page.getByRole('tab', { name: '分镜', exact: true }).click()
         await page.getByRole('button', { name: '分镜 1', exact: true }).click()
         if (state === 'design-relations') {
           if (width < 1280 && await page.locator('.ant-drawer-open').count()) await page.locator('.ant-drawer-open').getByRole('button', { name: 'Close', exact: true }).click()
-          await page.getByRole('tab', { name: '关系', exact: true }).click()
+          await page.getByRole('tab', { name: '关系图', exact: true }).click()
           await page.locator('[data-beat-group="beat1"]').getByRole('button', { name: '进入节拍 1 关系', exact: true }).click()
+          await page.getByRole('button', { name: '视图设置', exact: true }).click()
           await page.getByRole('button', { name: '聚焦所选镜头', exact: true }).click()
+          await page.getByRole('button', { name: '视图设置', exact: true }).click()
           await page.locator('[data-graph-node="shot:shot1"]').waitFor()
         } else {
           if (width < 1280 && !(await page.locator('.ant-drawer-open').count())) await page.getByRole('button', { name: '所选对象详情', exact: true }).click()
@@ -108,7 +111,7 @@ try {
         await keyboard(inspector.locator('summary').filter({ hasText: '完整素材、实际观察与来源' }))
       }
       if (state === 'shoot') {
-        await page.getByRole('tab', { name: '生成指令', exact: true }).click()
+        await page.getByRole('button', { name: '进入指令与检查', exact: true }).click()
         if (width < 1280) await page.getByRole('button', { name: '场次导航', exact: true }).click()
         await keyboard(page.locator('.production-unit-list button').filter({ hasText: '单元 02' }))
         await page.waitForURL(url => url.searchParams.get('unit') === 'u2')
@@ -140,7 +143,7 @@ try {
       const actions = [page.getByRole('tab', { name: '导演设计', exact: true }), page.getByRole('tab', { name: '单元试拍', exact: true }), page.getByRole('tab', { name: '剪辑验收', exact: true })]
       if (view === 'cut') actions.push(page.getByRole('button', { name: '保存剪辑草稿', exact: true }).or(page.getByRole('button', { name: '保存为新剪辑草稿', exact: true })), page.getByRole('button', { name: '确认并设为当前采用', exact: true }))
       if (view === 'cut') actions.push(...await page.locator('.cut-save-actions button').all())
-      if (state === 'shoot') actions.push(page.getByRole('button', { name: '准备生成指令', exact: true }))
+      if (state === 'shoot') actions.push(page.getByRole('button', { name: '生成试拍指令', exact: true }))
       if (view === 'design' && state !== 'first') actions.push(page.getByRole('button', { name: '保存为新设计草稿', exact: true }), page.getByRole('button', { name: /^(准备|继续)试拍 →$/ }))
       for (const action of actions) {
         assert.equal(await action.evaluate(element => {
@@ -152,9 +155,10 @@ try {
       if (state === 'first') {
         await keyboard(page.getByRole('button', { name: '更多场次操作', exact: true }))
         await page.getByRole('menuitem', { name: '版本与历史', exact: true }).click()
-        await page.locator('.ant-drawer-content').filter({ hasText: '版本与历史（只读）' }).waitFor()
+        await page.getByRole('dialog', { name: '版本与依据', exact: true }).waitFor()
+        await page.getByRole('dialog', { name: '版本与依据', exact: true }).getByRole('button', { name: /^取\s*消$/ }).focus()
         await page.keyboard.press('Escape')
-        await page.locator('.ant-drawer-content').filter({ hasText: '版本与历史（只读）' }).waitFor({ state: 'hidden' })
+        await page.getByRole('dialog', { name: '版本与依据', exact: true }).waitFor({ state: 'hidden' })
         if (width === 375) {
           const menu = page.getByRole('button', { name: '打开主导航', exact: true })
           await menu.focus(); await page.keyboard.press('Enter')

@@ -1,7 +1,7 @@
 import { usePageTitle } from '../../../layouts/pageTitle'
 import { flushSync } from 'react-dom'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Alert, Button, Card, Drawer, Dropdown, Empty, Image, Input, Modal, Select, Space, Spin, Tag, Typography } from 'antd'
+import { Alert, Button, Card, Drawer, Dropdown, Empty, Image, Input, Modal, Space, Spin, Tag, Typography } from 'antd'
 import { useLocation, useNavigate, useNavigationType, useParams, useSearchParams } from 'react-router-dom'
 import { ApiError, StudioDirectingService } from '../../../services/generated'
 import type { AssetSummary, DirectingTaskRead, ProductionPlan_Input, SceneDesign_Input, WorkspaceRead } from '../../../services/generated'
@@ -12,13 +12,16 @@ import { DesignEditor } from './DesignEditor'
 import { cutDestination } from './workspaceCut'
 import { productionRecords, shotProductionTargets, uniqueNewRecord } from './workspaceProduction'
 import { WorkbenchToolbar } from './WorkbenchChrome'
+import { SequenceSwitcher } from './SequenceSwitcher'
 import { ShootFixedInput } from './ShootFixedInput'
 import { ShootCandidates } from './ShootCandidates'
 import { ShootInstructions } from './ShootInstructions'
+import { ShootReview } from './ShootReview'
 import { PromptReader } from './PromptReader'
 import { ReviewDetails } from './ReviewDetails'
 import { contextForPrompt } from './readableText'
-import { ShootReview } from './ShootReview'
+import { ReviewRevisionPanel } from './ReviewRevisionPanel'
+import { reviewDirectionScope } from './reviewRevision'
 import { StyleEditor } from './StyleEditor'
 import { SceneAssets } from './SceneAssets'
 import { VisualPanel } from './VisualPanel'
@@ -36,7 +39,9 @@ import { emptyDesign } from './designTemplate'
 import { directingError } from './common'
 import { buildFileDownloadUrl } from '../assets/utils'
 import { useActiveCut } from './useActiveCut'
-import { ActiveCutSummary, CutItems, WorkspaceHistory } from './WorkspaceHistory'
+import { ActiveCutSummary, CutItems } from './WorkspaceHistory'
+import { WorkspaceVersionDialog } from './WorkspaceVersionDialog'
+import type { WorkspaceVersionsSelection } from './workspaceVersions'
 import { revisionName, revisionReferences } from './workspaceUsage'
 import { WorkspaceDrafts, useWorkspaceDraft, useWorkspaceDraftStatus, WorkspaceWriteBoundary } from './WorkspaceDrafts'
 import { WorkspaceStages } from './WorkspaceStages'
@@ -109,6 +114,7 @@ function SequenceWorkspace() {
   const [plan, setPlan] = useState<ProductionPlan_Input>()
   const [preparationDesignId, setPreparationDesignId] = useState<string>()
   const [unavailablePlanId, setUnavailablePlanId] = useState<string>()
+  const [unavailableDesignId, setUnavailableDesignId] = useState<string>()
   const [promptId, setPromptId] = useState<string>()
   const [reviewId, setReviewId] = useState<string>()
   const [reviewTaskId, setReviewTaskId] = useState<string>()
@@ -118,10 +124,14 @@ function SequenceWorkspace() {
   currentOperationContext.current = operationContext
   const mounted = useRef(true)
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
-  const [cutSelection, setCutSelection] = useState<{ cut: string | null; take: string | null }>()
+  const [cutSwitch, setCutSwitch] = useState<{ id: string | null; serial: number }>()
+  const [cutSelection, setCutSelection] = useState<{ cut: string | null; take: string | null } | undefined>(() => search.has('cut') ? { cut: search.get('cut') || null, take: search.get('take') || null } : undefined)
+  const versionContext = useRef({ workspace, baseDesign, basePlan, unavailableDesignId, unavailablePlanId, cutSelection, search })
+  versionContext.current = { workspace, baseDesign, basePlan, unavailableDesignId, unavailablePlanId, cutSelection, search }
   const creative = useWorkspacePreparation('创作想法', `${projectId}:${sequenceId}:creative`, { instruction: '' })
   const instruction = creative.value.instruction
   const [tasks, setTasks] = useState<DirectingTaskRead[]>([])
+  const [tasksRetry, setTasksRetry] = useState(0)
   const [tasksState, setTasksState] = useState<'loading' | 'ready' | 'error'>('loading')
   const [pendingTask, setPendingTask] = useState(() => readSubmittedTasks(projectId, sequenceId))
   const [issue, setIssue] = useState<GuidanceInput['issue']>()
@@ -148,7 +158,7 @@ function SequenceWorkspace() {
     catch { return { requests: [] as ReturnType<typeof readShootRequests>, error: '无法读取试拍提交记录，请先核对任务记录；恢复浏览器存储后刷新重试。' } }
   })
   /** 只在明确选择或保存时加载编辑基线，轮询不覆盖本地工作单。 */
-  const selectDesign = useCallback((revision?: DesignRevision, sequenceVersion?: number) => { setEditingSequenceVersion(sequenceVersion); setBaseDesign(revision); setDesign(revision ? structuredClone(revision.content) : undefined) }, [])
+  const selectDesign = useCallback((revision?: DesignRevision, sequenceVersion?: number) => { setUnavailableDesignId(undefined); setEditingSequenceVersion(sequenceVersion); setBaseDesign(revision); setDesign(revision ? structuredClone(revision.content) : undefined) }, [])
   const selectPlan = useCallback((revision?: PlanRevision) => { setUnavailablePlanId(undefined); setBasePlan(revision); setPlan(revision ? structuredClone(revision.content) : undefined); setUnitId(revision?.content.units[0]?.id); setPromptId(undefined); setReviewId(undefined); setReviewTaskId(undefined) }, [])
   /** 状态轮询只更新服务端上下文，编辑版本保持独立。 */
   const reload = useCallback(async () => {
@@ -169,6 +179,7 @@ function SequenceWorkspace() {
         const requestedDesign = query.get('design') ?? (taskPlan ? restoredPlan?.content.design_revision_id : undefined) ?? context.design
         const restoredDesign = restoreSelection(response.data.designs, requestedDesign ?? null, context.design)
         selectDesign(restoredDesign, response.data.sequence.version)
+        if (requestedDesign && !restoredDesign) setUnavailableDesignId(requestedDesign)
         setPreparationDesignId(query.get('prepareDesign') || (!restoredDesign && requestedDesign ? requestedDesign : undefined))
         selectPlan(restoredPlan)
         const requestedPlan = query.get('plan') ?? taskPlan ?? (taskId && !taskContext ? null : context.plan)
@@ -189,12 +200,12 @@ function SequenceWorkspace() {
   useEffect(() => {
     if (loaded.current !== sequenceId || workspace?.sequence.id !== sequenceId) return
     if (basePlan && unitId) saveUnitSelection(projectId, sequenceId, basePlan.id, unitId, { prompt: promptId, review: reviewId, reviewTask: reviewTaskId })
-    const selection = { design: baseDesign?.id ?? null, plan: basePlan?.id ?? unavailablePlanId ?? null, prepareDesign: preparationDesignId ?? null, unit: unitId ?? null, prompt: promptId ?? null, review: reviewId ?? null, ...cutSelection }
+    const selection = { design: baseDesign?.id ?? unavailableDesignId ?? null, plan: basePlan?.id ?? unavailablePlanId ?? null, prepareDesign: preparationDesignId ?? null, unit: unitId ?? null, prompt: promptId ?? null, review: reviewId ?? null, ...cutSelection }
     saveWorkspaceContext(projectId, sequenceId, { ...selection, ...(search.has('view') ? { view: workspaceView(search.get('view')) } : {}) })
     const next = new URLSearchParams(search)
     for (const [key, value] of Object.entries(selection)) next.set(key, value ?? '')
     if (next.toString() !== search.toString()) setSearch(next, { replace: true, state: { directingContextSync: true } })
-  }, [projectId, sequenceId, workspace, baseDesign, basePlan, preparationDesignId, unavailablePlanId, unitId, promptId, reviewId, reviewTaskId, cutSelection, search, setSearch])
+  }, [projectId, sequenceId, workspace, baseDesign, basePlan, preparationDesignId, unavailableDesignId, unavailablePlanId, unitId, promptId, reviewId, reviewTaskId, cutSelection, search, setSearch])
   /** 业务按钮共用错误和运行状态，但不自动授权下一步。 */
   const run = async (action: () => Promise<void>, retryInPlace = false) => {
     setBusy(true); setError(''); setIssue(undefined)
@@ -216,8 +227,11 @@ function SequenceWorkspace() {
     if (response.data) {
       const saved = baseDesign && !baseDesign.confirmed_at ? response.data.designs.find(row => row.id === baseDesign.id) : response.data.designs.slice(-1)[0]
       if (!saved) throw new Error('未找到已保存的设计版本')
-      setWorkspace(response.data)
-      selectDesign(saved, response.data.sequence.version)
+      const savedWorkspace = response.data
+      flushSync(() => {
+        setWorkspace(savedWorkspace)
+        selectDesign(saved, savedWorkspace.sequence.version)
+      })
     }
   })
   /** 生产计划与设计分开确认；参考变化会生成新的计划版本。 */
@@ -230,8 +244,11 @@ function SequenceWorkspace() {
       const candidates = response.data.plans.filter(row => !workspace?.plans.some(previous => previous.id === row.id))
       const saved = basePlan && !basePlan.confirmed_at ? response.data.plans.find(row => row.id === basePlan.id) : candidates.length === 1 ? candidates[0] : undefined
       if (!saved) throw new Error('未找到已保存的计划版本')
-      setWorkspace(response.data); selectPlan(saved)
-      if (saved.content.units.some(unit => unit.id === unitId)) setUnitId(unitId)
+      const savedWorkspace = response.data
+      flushSync(() => {
+        setWorkspace(savedWorkspace); selectPlan(saved)
+        if (saved.content.units.some(unit => unit.id === unitId)) setUnitId(unitId)
+      })
       return saved
     }
     throw new Error('未找到已保存的计划版本')
@@ -347,14 +364,14 @@ function SequenceWorkspace() {
       setPreparationDesignId(designId); changeView('shoot')
     })
   }
-  const selectUnit = (id: string) => {
+  const selectUnit = (id: string) => draftStatus.transition(() => {
     if (id === unitId || !basePlan?.content.units.some(row => row.id === id)) return
     const remembered = readUnitSelection(projectId, sequenceId, basePlan.id, id)
     const matching = productionRecords(workspace, basePlan.id, id, remembered.prompt)
     setUnitId(id); setPromptId(matching.prompt?.id)
     setReviewId(matching.reviews.find(row => row.id === remembered.review)?.id)
     setReviewTaskId(remembered.reviewTask)
-  }
+  })
   /** 写入本次明确查看的结果；按结论定位，保存不隐式开拍。 */
   const applyTaskResult = (task: DirectingTaskRead) => { const operationLocation = window.location.href; let reviewTarget = 'review'; let advance = false; guardDesign(() => { void run(async () => {
       if (!task) return
@@ -446,7 +463,31 @@ function SequenceWorkspace() {
       setReviewTaskId(response.data.task_id); advance = true
     }).then(ok => { if (ok && advance && mounted.current) changeView('shoot', 'review') })
   }
-  const newDesign = () => guardDesign(() => { setBaseDesign(undefined); setEditingSequenceVersion(workspace.sequence.version); setDesign(emptyDesign()) })
+  const applyVersions = (next: WorkspaceVersionsSelection) => draftStatus.transition(() => {
+    // 保存可能派生新版本；完成草稿保护后再读取基线，应用弹窗中明确选择的对象。
+    const { workspace, baseDesign, basePlan, unavailableDesignId, unavailablePlanId, cutSelection, search } = versionContext.current
+    if (!workspace) return
+    if (next.design !== (baseDesign?.id || unavailableDesignId || null)) selectDesign(workspace.designs.find(row => row.id === next.design), workspace.sequence.version)
+    if (next.plan !== (basePlan?.id || unavailablePlanId || null)) {
+      const selected = workspace.plans.find(row => row.id === next.plan)
+      selectPlan(selected); setPreparationDesignId(next.design || undefined)
+      const rememberedContext = readWorkspaceContext(projectId, sequenceId)
+      const unit = selected?.content.units.find(row => rememberedContext.plan === selected.id && row.id === rememberedContext.unit) || selected?.content.units[0]
+      if (selected && unit) {
+        const remembered = readUnitSelection(projectId, sequenceId, selected.id, unit.id)
+        const matching = productionRecords(workspace, selected.id, unit.id, remembered.prompt)
+        setUnitId(unit.id); setPromptId(matching.prompt?.id)
+        setReviewId(matching.reviews.find(row => row.id === remembered.review)?.id); setReviewTaskId(remembered.reviewTask)
+      }
+    }
+    const currentCut = (cutSelection ? cutSelection.cut : restoreSelection(workspace.cuts, search.get('cut'), readWorkspaceContext(projectId, sequenceId).cut)?.id ?? null)
+    if (next.cut !== currentCut) {
+      setCutSelection(current => ({ cut: next.cut, take: current?.take || null }))
+      setCutSwitch(current => ({ id: next.cut, serial: (current?.serial || 0) + 1 }))
+    }
+    setHistoryOpen(false)
+  })
+  const newDesign = () => guardDesign(() => { selectDesign(undefined, workspace.sequence.version); setDesign(emptyDesign()) })
   const productionTargets = shotProduction ? shotProductionTargets(workspace, shotProduction.designId, shotProduction.shotId) : []
   const openShotProduction = (target?: { planId: string; unitId: string }) => {
     if (!shotProduction) return
@@ -473,7 +514,11 @@ function SequenceWorkspace() {
   }
   return <SourceProvider projectId={projectId} sequenceId={sequenceId} renderRevision={renderSourceRevision}><WorkspaceWriteBoundary busy={busy}><SequenceLayout footer={<><span>{workspace.sequence.title}</span><span>{stage === 'design' ? `${design?.direction.shots.length || 0} 个镜头 · 计划时长` : stage === 'shoot' ? `${plan?.units.length || 0} 个单元 · 候选不自动采用` : '实际媒体与预演分别核对'}</span></>}><div className="sequence-workspace" role="region" aria-label="场次工作区">
     {!['design', 'shoot', 'cut'].includes(view) && <SequenceNavigation><div className="design-navigation"><h2>{stage === 'shoot' ? '试拍工具' : '剪辑与验收'}</h2>{Object.entries(workspaceViews).filter(([key, item]) => item.stage === stage || key === 'ledger').map(([key, item]) => <Button key={key} type="text" aria-pressed={key === view} onClick={() => changeView(key)}>{item.title}</Button>)}<Button onClick={() => setHistoryOpen(true)}>版本与历史</Button><Button onClick={() => setContextPanel('source')}>本场原文</Button></div></SequenceNavigation>}
-    <WorkspaceHistory open={historyOpen} onClose={() => setHistoryOpen(false)} workspace={workspace} active={activeCut} />
+    {unavailableDesignId && <Alert type="warning" message="链接指定的设计暂不可用，请重新选择版本" action={<Button onClick={() => setHistoryOpen(true)}>选择可用设计</Button>} />}
+    <WorkspaceVersionDialog open={historyOpen} onClose={() => setHistoryOpen(false)} workspace={workspace} active={activeCut}
+      selection={{ design: baseDesign?.id || unavailableDesignId || null, plan: basePlan?.id || unavailablePlanId || null,
+        cut: (cutSelection ? cutSelection.cut : restoreSelection(workspace.cuts, search.get('cut'), readWorkspaceContext(projectId, sequenceId).cut)?.id ?? null) }}
+      onApply={applyVersions} />
     <Drawer title={contextPanel === 'source' ? '本场原文与来源' : contextPanel === 'help' ? '当前进展' : 'AI 建议'} width={560} open={!!contextPanel && contextPanel !== 'tasks'} onClose={() => setContextPanel(undefined)}>
       {contextPanel === 'source' && <><Typography.Paragraph style={{ whiteSpace: 'pre-wrap' }}>{workspace.sequence.source_text}</Typography.Paragraph><Button onClick={() => navigate(`/projects/${projectId}/chapters/${chapterId}/sequences`)}>返回场次列表核对原文</Button></>}
       {contextPanel === 'help' && <><WorkspaceNextStep guidance={guidance} busy={busy} running={tasks.filter(task => ['queued', 'running'].includes(task.status)).length} onAction={followGuidance} /><ActiveCutSummary active={activeCut} workspace={workspace} /></>}
@@ -494,10 +539,12 @@ function SequenceWorkspace() {
     {stage === 'cut' && search.get('returnView') === 'shoot' && <Button onClick={() => { const next = withWorkspaceView(search, 'shoot'); next.delete('returnView'); next.set('focus', 'shoot-confirm'); setSearch(next) }}>返回试拍与候选</Button>}
     {stage === 'shoot' && search.get('returnView') === 'design' && <Button onClick={() => { const next = withWorkspaceView(search, 'design'); next.delete('returnView'); next.delete('focus'); setSearch(next) }}>返回镜头设计</Button>}
     {['design', 'shoot', 'cut'].includes(view) && ['feedback', 'continuity', 'ledger'].includes(search.get('returnView') || '') && <Button onClick={() => { const next = cutDestination(search, { view: search.get('returnView')! }); next.delete('returnView'); setSearch(next) }}>返回问题与记录</Button>}
+    <Button className="workspace-versions-entry" onClick={() => setHistoryOpen(true)}>版本与依据 · {baseDesign ? revisionName(workspace.designs, baseDesign.id, '设计') : unavailableDesignId ? '设计不可用' : '尚无设计'} {basePlan && basePlan.content.design_revision_id !== baseDesign?.id ? '｜计划依据另一设计｜' : '→'} {basePlan ? revisionName(workspace.plans, basePlan.id, '计划') : '尚无计划'} ｜ {cutSelection?.cut ? revisionName(workspace.cuts, cutSelection.cut, '剪辑') : '剪辑上下文'}</Button>
+    <SequenceSwitcher projectId={projectId} chapterId={chapterId} sequenceId={sequenceId} title={workspace.sequence.title} stage={stage} />
     <WorkspaceStages onContext={key => { if (key === 'history') setHistoryOpen(true); else if (key === 'refresh') { void reload() } else setContextPanel(key as 'help' | 'source') }} view={view} onChange={changeView} items={[
       { key: 'design', label: '导演设计', children: <div className="sequence-stage-workspace">
         <WorkbenchToolbar data-workspace-target="design-version" tabIndex={-1}>
-          <div className="sequence-version-context"><Select aria-label="查看或编辑设计版本" placeholder="选择设计版本" value={baseDesign?.id} options={workspace.designs.map((row, index) => ({ value: row.id, label: `设计 ${String(index + 1).padStart(2, '0')}` }))} onChange={id => guardDesign(() => selectDesign(workspace.designs.find(row => row.id === id), workspace.sequence.version))} /><span>{!design ? '尚无设计' : designDirty ? '草稿 · 未保存' : baseDesign?.confirmed_at ? '已确认' : '草稿 · 已保存'}</span></div>
+          <div className="sequence-version-context"><span>{baseDesign ? revisionName(workspace.designs, baseDesign.id, '设计') : unavailableDesignId ? '设计不可用' : '尚无设计'}</span><span>{!design ? '尚无设计' : designDirty ? '草稿 · 未保存' : baseDesign?.confirmed_at ? '已确认' : '草稿 · 已保存'}</span></div>
           <div className="sequence-version-actions"><Dropdown trigger={['click']} menu={{ items: [{ key: 'new', label: '手动起稿', onClick: newDesign }, ...(baseDesign?.confirmed_at ? [{ key: 'derive', label: '从此版本派生草稿', onClick: () => { void saveDesign() } }] : []), { key: 'history', label: '版本与历史', onClick: () => setHistoryOpen(true) }] }}><Button className="sequence-secondary-action">＋ 新建设计⌄</Button></Dropdown><Button className="sequence-secondary-action" onClick={() => setContextPanel('ai')}>✧ AI 建议</Button>
             {design && <><Button loading={busy} onClick={saveDesign}>{baseDesign?.confirmed_at ? '保存为新设计草稿' : '保存设计草稿'}</Button>{!baseDesign?.confirmed_at && <Button type="primary" data-workspace-target="design-confirm" disabled={!baseDesign || !!baseDesign.confirmed_at || designDirty || designStale} loading={busy} onClick={() => run(async () => {
               const response = await StudioDirectingService.directingConfirmRevision({ projectId, sequenceId, revisionId: baseDesign!.id, requestBody: { expected_version: baseDesign!.version } })
@@ -510,7 +557,17 @@ function SequenceWorkspace() {
         {baseDesign && !baseDesign.source_current && <Alert type="warning" message="此设计依据的场次范围已变化，请核对内容后保存为当前来源的设计。" />}
         {design ? <DesignEditor assetCatalog={sceneAssets} assetError={sceneAssetsError} onShoot={shotId => { if (baseDesign) setShotProduction({ designId: baseDesign.id, shotId }) }} shootUnavailable={designDirty || !baseDesign ? '先保存当前设计，再核对对应单元。' : designStale ? '请先核对服务器设计版本。' : undefined} rememberContext={{ projectId, sequenceId }} disabled={busy} revisionId={baseDesign?.id} cuts={workspace.cuts} active={view === 'design'} value={design} onChange={setDesign} assets={<><SceneAssets confirmed={!!baseDesign?.confirmed_at} dirty={designDirty} assets={sceneAssets} loadError={sceneAssetsError} onRetry={reloadSceneAssets} onAssetsChange={setSceneAssets} projectId={projectId} sequenceId={sequenceId} design={design} onChange={setDesign} /><StyleEditor projectId={projectId} sequenceId={sequenceId} value={design.style_revision_id} onChange={id => setDesign({ ...design, style_revision_id: id })} /></>} /> : <><SequenceNavigation><h2>场次结构</h2><Button type="text" onClick={() => setContextPanel('source')}>本场原文</Button></SequenceNavigation><div className="sequence-empty"><Empty description="从这场戏的行动与转折开始设计"><Space><Button type="primary" onClick={() => setContextPanel('ai')}>AI 起稿</Button><Button onClick={newDesign}>手动起稿</Button></Space></Empty></div></>}
       </div> },
-      { key: 'shoot', label: '单元试拍', children: <ProductionWorkbench unitProgress={unitProgress} reviewNeedsAttention={!!(pendingReviewTask?.review || selectedReview?.content)?.rows.some(row => row.verdict !== 'pass')} busy={busy} prepareAction={{ label: '保存并确认拍摄准备', run: confirmPlan, disabled: planStale || !plan?.units.length }}
+      { key: 'shoot', label: '单元试拍', children: <ProductionWorkbench onRetryTasks={() => setTasksRetry(value => value + 1)} onGraphNavigate={node => draftStatus.transition(() => {
+          const next = new URLSearchParams(search)
+          next.set('plan', node.planId); next.set('unit', node.unitId)
+          if (node.kind === 'take') { next.set('view', 'cut'); next.set('take', node.objectId); next.set('focus', 'take-review'); next.set('returnView', 'shoot') }
+          else {
+            next.set('view', 'shoot'); next.set('focus', 'prompt-review')
+            const prompt = node.kind === 'prompt' ? node.objectId : workspace.reviews.find(row => row.id === node.objectId)?.content.occurrences.find(row => row.plan_revision_id === node.planId && row.unit_id === node.unitId)?.prompt_revision_id
+            next.set('prompt', prompt || ''); next.set('review', node.kind === 'review' ? node.objectId : ''); next.delete('task')
+          }
+          setSearch(next)
+        })} unitProgress={unitProgress} reviewNeedsAttention={!!(pendingReviewTask?.review || selectedReview?.content)?.rows.some(row => row.verdict !== 'pass')} busy={busy} prepareAction={{ label: '保存并确认拍摄准备', run: confirmPlan, disabled: planStale || !plan?.units.length }}
         checkAction={pendingCompile || !records.prompts.length ? { target: 'compile', recovering: !!pendingCompile, label: pendingCompile ? '核实本次指令生成' : '生成试拍指令', run: compileInstruction, disabled: !!compileSubmission.error || !unitId || planDirty || planStale || (!pendingCompile && currentPromptPending) }
           : pendingCheck ? { recovering: true, label: '核实本次检查', run: checkInstruction, disabled: !!reviewSubmission.error || planDirty || planStale }
           : pendingReviewTask ? { label: reviewPacketPassed(pendingReviewTask.review, promptId) ? '确认结论，进入试拍' : '保存检查结论', run: () => applyTaskResult(pendingReviewTask) }
@@ -518,25 +575,30 @@ function SequenceWorkspace() {
           : undefined}
         shootAction={{ recovering: !!pendingShoot, label: pendingShoot ? '核实本次提交' : records.takes.some(take => take.prompt_revision_id === promptId) ? '同指令再拍一次' : '开始试拍', run: shootUnit, disabled: !!shootSubmission.error || !selectedPrompt?.confirmed_at || !reviewCanExecute(selectedReview, promptId) || selectedPrompt.content.plan_revision_id !== basePlan?.id || selectedPrompt.content.unit_id !== unitId || planDirty || planStale || (!pendingShoot && currentPromptPending) }} planReady={!!basePlan?.confirmed_at && !planDirty && !planStale} promptId={promptId} reviewId={reviewId} tasks={tasks} submitted={pendingTask} tasksState={tasksState} onOpenTasks={() => setContextPanel('tasks')} focusRequest={focusTarget ? `${location.key}:${focusTarget}` : null} active={view === 'shoot'} workspace={workspace} plan={plan} planId={basePlan?.id} selectedUnitId={unitId} onSelectUnit={selectUnit}
         start={!plan?.units.length ? <ShootPreparation unavailablePlanId={unavailablePlanId} workspace={workspace} currentPlanId={basePlan?.id} designId={plan?.design_revision_id || preparationDesignId || baseDesign?.id} onDesign={id => { if (!plan) { setUnavailablePlanId(undefined); setPreparationDesignId(id) } else guardPlan(() => { selectPlan(undefined); setPreparationDesignId(id) }) }} onBack={() => changeView('design')} onRetry={() => { void reload().then(current => { const restored = current?.plans.find(row => row.id === unavailablePlanId); if (restored) selectPlan(restored) }) }} onPlan={id => guardPlan(() => selectPlan(workspace.plans.find(row => row.id === id)))} onCreate={next => { const apply = () => { setUnavailablePlanId(undefined); if (plan?.design_revision_id !== next.design_revision_id) setBasePlan(undefined); setPlan(next); setUnitId(next.units[0]?.id); setPromptId(undefined); setReviewId(undefined) }; if (plan?.design_revision_id === next.design_revision_id && !plan.units.length) apply(); else guardPlan(apply) }} /> : undefined}
-        toolbar={<><Space wrap data-workspace-target="plan-version" tabIndex={-1}><Select aria-label="查看或编辑生产计划" placeholder="选择生产计划" value={basePlan?.id} style={{ minWidth: 200 }} options={workspace.plans.map((row, index) => ({ value: row.id, label: `计划 ${String(index + 1).padStart(2, '0')} · ${row.confirmed_at ? '已确认' : '草稿'}` }))} onChange={id => guardPlan(() => selectPlan(workspace.plans.find(row => row.id === id)))} /><Typography.Text type="secondary">依据：{plan ? revisionName(workspace.designs, plan.design_revision_id, '设计') : '尚未选择'}</Typography.Text></Space>
+        toolbar={<><Space wrap data-workspace-target="plan-version" tabIndex={-1}><span>{basePlan ? revisionName(workspace.plans, basePlan.id, '计划') : '尚无计划'}</span><Typography.Text type="secondary">依据：{plan ? revisionName(workspace.designs, plan.design_revision_id, '设计') : '尚未选择'}</Typography.Text></Space>
           <Space wrap><Button onClick={() => setHistoryOpen(true)}>历史记录</Button>{(planDirty || !basePlan?.confirmed_at) && <Button loading={busy} disabled={!plan?.units.length} onClick={savePlan}>{basePlan?.confirmed_at ? '保存为新计划草稿' : '保存生产计划草稿'}</Button>}
           <Dropdown trigger={['click']} menu={{ items: [
             { key: 'new', label: '从已确认设计创建新计划', children: workspace.designs.filter(row => row.confirmed_at).map(row => ({ key: row.id, label: revisionName(workspace.designs, row.id, '设计'), onClick: () => guardPlan(() => { selectPlan(undefined); setPreparationDesignId(row.id) }) })) },
             ...(basePlan?.confirmed_at && !planDirty ? [{ key: 'derive', label: '保存为新计划草稿', onClick: () => { void savePlan() } }] : []),
           ] }}><Button aria-label="更多计划操作">···</Button></Dropdown></Space></>}
         preparation={<>
-        {plan && <Space direction="vertical">
+        {plan && <details><summary>版本与引用</summary><Space direction="vertical">
           <Typography.Text>{planDirty ? '当前编辑：未保存草稿' : '当前查看：'}{basePlan ? ` · ${revisionName(workspace.plans, basePlan.id, '计划')} · ${basePlan.confirmed_at ? '基线已确认，修改将派生新版本' : '草稿'}` : ' · 新计划'} · 固定设计依据：{revisionName(workspace.designs, plan.design_revision_id, '设计')}</Typography.Text>
           {basePlan && <Typography.Text type="secondary">此计划的引用：{revisionReferences(workspace, activeCut, 'plan', basePlan.id).join('；') || '暂无提示词或素材引用'}。查看或编辑不改变已有引用。</Typography.Text>}
-        </Space>}
+        </Space></details>}
         {planStale && <Alert type="warning" message={`当前编辑计划修订 ${basePlan!.version}，服务器版本已更新。`} action={<Button onClick={() => guardPlan(() => selectPlan(latestPlan))}>放弃本地编辑并载入最新计划</Button>} />}
         {plan && planDesign ? <><div data-workspace-target="plan-editor" tabIndex={-1}><PlanEditor assets={sceneAssets} assetError={sceneAssetsError} onReloadAssets={reloadSceneAssets} disabled={busy} planId={basePlan?.id} selectedUnitId={unitId} projectId={projectId} workspace={workspace} design={planDesign.content} value={plan} onChange={setPlan} issue={issue?.stage === 'shoot' && issue.planId === basePlan?.id ? issue : undefined} /></div>
 
 </> : <Alert type="warning" message="当前计划的设计依据不可用，请重试或重新选择计划。" action={<Button onClick={() => { void reload() }}>重试读取依据</Button>} />}
 </>}
-        prompt={basePlan?.confirmed_at ? records.prompts.length ? <ShootInstructions workspace={workspace} planId={basePlan.id} unitId={unitId} promptId={promptId} reviewId={reviewId} reviewTask={pendingReviewTask} tasks={tasks} onPrompt={id => { setPromptId(id); setReviewId(undefined); setReviewTaskId(undefined) }} onReview={(id, taskId) => { setReviewId(id); setReviewTaskId(taskId) }} regenerate={<>{!pendingCompile && <Button type="link" data-workspace-target="compile" disabled={!!compileSubmission.error || !unitId || planDirty || planStale || currentPromptPending} loading={busy} onClick={compileInstruction}>重新生成新版本</Button>}<p className="design-secondary">新版本需要重新检查，已有结果保留。</p></>} /> : <Empty description="拍摄准备已确认，使用上方主操作生成试拍指令。">{issue?.stage === 'shoot' && issue.planId === basePlan.id && issue.unitId === unitId && <Button disabled={!!compileSubmission.error || !unitId || planDirty || planStale || currentPromptPending} loading={busy} onClick={compileInstruction}>重试生成指令</Button>}</Empty> : null}
-        review={pendingReviewTask?.review || selectedReview?.content ? <Space direction="vertical" className="w-full" data-workspace-target="review" tabIndex={-1}>
-          <ShootReview promptName={selectedPrompt ? revisionName(workspace.prompts, selectedPrompt.id, '指令') : '尚未选择指令'} packet={pendingReviewTask?.review || selectedReview?.content} pending={pendingReviewTask} derived={!!selectedReview?.parent_id} onSave={pendingReviewTask ? () => applyTaskResult(pendingReviewTask) : undefined} busy={busy} workspace={workspace} onResolve={row => { let reason = ''; Modal.confirm({ title: '接受此艺术偏离并记录理由', content: <Space direction="vertical" className="w-full"><ReviewDetails row={row} context={contextForPrompt(workspace, selectedPrompt?.id)} /><Input.TextArea placeholder="说明为什么保留当前方案；结构和模型能力校验仍不可绕过" onChange={event => { reason = event.target.value }} /></Space>, onOk: async () => {
+        prompt={basePlan?.confirmed_at ? records.prompts.length ? <ShootInstructions workspace={workspace} planId={basePlan.id} unitId={unitId} promptId={promptId} reviewId={reviewId} reviewTask={pendingReviewTask} tasks={tasks} onPrompt={(id, source, candidates) => draftStatus.transition(() => { const row = workspace.prompts.find(item => item.id === id); if (row && row.content.plan_revision_id !== basePlan?.id) { selectPlan(workspace.plans.find(item => item.id === row.content.plan_revision_id)); setUnitId(row.content.unit_id) }; setPromptId(id); setReviewId(source?.kind === 'review' ? source.id : undefined); setReviewTaskId(source?.kind === 'task' ? source.id : undefined); if (candidates) changeView('shoot', 'shoot-confirm') })} onReview={(id, taskId) => draftStatus.transition(() => { setReviewId(id); setReviewTaskId(taskId) })} regenerate={<>{!pendingCompile && <Button type="link" data-workspace-target="compile" disabled={!!compileSubmission.error || !unitId || planDirty || planStale || currentPromptPending} loading={busy} onClick={compileInstruction}>重新生成新版本</Button>}<p className="design-secondary">新版本需要重新检查，已有结果保留。</p></>} /> : <Empty description="拍摄准备已确认，使用主操作生成试拍指令。" /> : null}
+        adjustment={selectedPrompt ? <ReviewRevisionPanel key={reviewDirectionScope(projectId, sequenceId, promptId || '', selectedReview, pendingReviewTask?.task_id)} scope={reviewDirectionScope(projectId, sequenceId, promptId || '', selectedReview, pendingReviewTask?.task_id)} projectId={projectId} sequenceId={sequenceId} promptId={promptId || ''} reviewSource={pendingReviewTask ? { kind: 'task', id: pendingReviewTask.task_id } : selectedReview ? { kind: 'review', id: selectedReview.id } : undefined} disabled={busy || planDirty || planStale || designStale} onPrepare={() => changeView('shoot', `unit-model:${unitId}`)} onDesign={() => draftStatus.transition(() => { selectDesign(workspace.designs.find(row => row.id === basePlan?.content.design_revision_id), workspace.sequence.version); changeView('design', 'design-editor') })} onTask={taskId => { setPendingTask(rememberSubmittedTask(projectId, sequenceId, { taskId, planId: basePlan?.id, unitId, promptId })); void reload() }} onApplied={(next, nextPlanId, nextPromptId, nextTaskId) => {
+            const appliedPlan = next.plans.find(row => row.id === nextPlanId)
+            selectDesign(next.designs.find(row => row.id === appliedPlan?.content.design_revision_id), next.sequence.version)
+            setPendingTask(rememberSubmittedTask(projectId, sequenceId, { taskId: nextTaskId, planId: nextPlanId, unitId: next.prompts.find(row => row.id === nextPromptId)?.content.unit_id, promptId: nextPromptId })); setWorkspace(next); selectPlan(next.plans.find(row => row.id === nextPlanId)); setPromptId(nextPromptId); setReviewId(undefined); setReviewTaskId(nextTaskId)
+          }} packet={pendingReviewTask?.review || selectedReview?.content} workspace={workspace} /> : null}
+        review={selectedPrompt ? <Space direction="vertical" className="w-full" data-workspace-target="review" tabIndex={-1}>
+          <ShootReview promptName={selectedPrompt ? revisionName(workspace.prompts, selectedPrompt.id, '指令') : '尚未选择指令'} packet={pendingReviewTask?.review || selectedReview?.content} pending={pendingReviewTask} derived={!!selectedReview?.parent_id} busy={busy} workspace={workspace} onResolve={row => { let reason = ''; Modal.confirm({ title: '接受此艺术偏离并记录理由', content: <Space direction="vertical" className="w-full"><ReviewDetails row={row} context={contextForPrompt(workspace, selectedPrompt?.id)} /><Input.TextArea placeholder="说明为什么保留当前方案；结构和模型能力校验仍不可绕过" onChange={event => { reason = event.target.value }} /></Space>, onOk: async () => {
               const response = await StudioDirectingService.directingResolveReview({ projectId, sequenceId, reviewId: selectedReview!.id, requestBody: { role: row.role, occurrence_id: row.occurrence_id, reason } })
               if (response.data) { setWorkspace(response.data); setReviewId(uniqueNewRecord(workspace.reviews, productionRecords(response.data, basePlan?.id, unitId, promptId).reviews)?.id) }
             } }) }} />
@@ -552,13 +614,13 @@ function SequenceWorkspace() {
       { key: 'visual', label: '视觉验证', children: <VisualPanel projectId={projectId} workspace={workspace} onSubmitted={reload} /> },
       { key: 'ledger', label: '三本账', children: <LedgerPanel key={sequenceId} projectId={projectId} sequenceId={sequenceId} /> },
       { key: 'feedback', label: '场次验收与返工', children: <FeedbackPanel key={sequenceId} projectId={projectId} workspace={workspace} onRefresh={async () => { await reload() }} /> },
-      { key: 'cut', label: '审片与粗剪', children: <CutEditor key={workspace.sequence.id} projectId={projectId} workspace={workspace} activeCut={activeCut} onChange={setWorkspace} onSelection={setCutSelection} /> },
+      { key: 'cut', label: '审片与粗剪', children: <CutEditor switchRequest={cutSwitch} key={workspace.sequence.id} projectId={projectId} workspace={workspace} activeCut={activeCut} onChange={setWorkspace} onSelection={setCutSelection} /> },
     ]} />
     <Modal title="镜头对应的试拍单元" open={!!shotProduction} footer={null} onCancel={() => setShotProduction(undefined)}>
       <p>按当前已保存设计精确关联；不同计划中的同名单元分别列出。选择只定位工作区，不执行拍摄。</p>
       {productionTargets.length ? <Space direction="vertical" className="w-full">{productionTargets.map(target => <Button block className="shot-production-target" key={`${target.planId}:${target.unitId}`} onClick={() => openShotProduction(target)}>{target.label} · {target.confirmed ? '已确认' : '草稿'}<small>{target.coverage}</small></Button>)}</Space> : <><Empty description="当前设计中的此镜头尚未关联生产单元" /><p>{workspace.designs.find(row => row.id === shotProduction?.designId)?.confirmed_at ? '可在试拍准备中从本设计创建计划，再配置单元覆盖。' : '请先确认导演设计，然后从该设计创建生产计划。'}</p><Button onClick={() => openShotProduction()}>前往试拍准备</Button></>}
     </Modal>
-    <Drawer title="本场任务与结果" width={560} open={contextPanel === 'tasks'} onClose={() => setContextPanel(undefined)} forceRender><DirectingTasks onTake={id => { setContextPanel(undefined); const query = new URLSearchParams(search); query.set('view', 'cut'); query.set('take', id); query.set('focus', 'take-review'); setSearch(query) }} workspace={workspace} selectedTaskId={search.get('task')} onState={setTasksState} onTasks={setTasks} projectId={projectId} taskIds={[...new Set([...workspace.task_ids, ...pendingTask.map(item => item.taskId)])]} onSettled={reload} onResult={task => { setResult(task); setContextPanel(undefined) }} /></Drawer>
+    <Drawer title="本场任务与结果" width={560} open={contextPanel === 'tasks'} onClose={() => setContextPanel(undefined)} forceRender><DirectingTasks retryKey={tasksRetry} onTake={id => { setContextPanel(undefined); const query = new URLSearchParams(search); query.set('view', 'cut'); query.set('take', id); query.set('focus', 'take-review'); setSearch(query) }} workspace={workspace} selectedTaskId={search.get('task')} onState={setTasksState} onTasks={setTasks} projectId={projectId} taskIds={[...new Set([...workspace.task_ids, ...pendingTask.map(item => item.taskId)])]} onSettled={reload} onResult={task => { setResult(task); setContextPanel(undefined) }} /></Drawer>
     <Modal title={result?.image_file_ids?.length ? '验证图候选' : result?.design ? '导演建议' : '审稿结果'} open={!!result} width={900} onCancel={() => setResult(undefined)} footer={result?.image_file_ids?.length ? null : <Button type="primary" loading={busy} onClick={() => { if (result) applyTaskResult(result) }}>{result?.design ? '写入可编辑草稿' : '保存审稿结论'}</Button>}>
       {error && <Alert type="error" message={error} />}
       {!!result?.image_file_ids?.length && <><Typography.Paragraph>候选图已保存到本项目素材。请在生产计划中明确选择，才会加入本次参考；不会自动替换已确认素材。</Typography.Paragraph>{result.image_file_ids.map(id => <Image key={id} src={buildFileDownloadUrl(id)} alt="验证图候选" />)}</>}

@@ -45,6 +45,7 @@ try {
   const tasks = new Map([['check1', { task_id: 'check1', kind: 'directing_review', status: 'running', error: null }]])
   const writes = [], errors = [], sizes = []
   let taskUnavailable = false
+  let taskReads = 0
   const shootRequests = []
   let loseShootResponse = true
   page.on('pageerror', error => errors.push(error.message))
@@ -54,6 +55,7 @@ try {
     if (request.method() !== 'GET') writes.push(path)
     if (path.endsWith('/s1')) return respond(workspace)
     if (path.includes('/directing/tasks/')) {
+      taskReads++
       if (taskUnavailable) return route.fulfill({ status: 503, json: { detail: '任务状态读取失败' } })
       return respond(tasks.get(path.split('/').at(-1)))
     }
@@ -71,6 +73,7 @@ try {
       // 接受响应先到、工作区任务索引滞后时，仍应直接核实这个确切任务。
       return respond({ task_id: 'check2' })
     }
+    if (path.endsWith('/review-revisions/fields')) return respond({ prompt_revision_id: 'prompt1', fields: [{ target: 'design', path: '/performance/beats/0/physical_action', value: { state: 'proposal', text: '递出旧信', sources: [] } }, { target: 'unit', path: '/duration_ms', value: 5000 }] })
     if (path.endsWith('/sources/resolve')) return respond([])
     if (path.endsWith('/feedback')) return respond({ reviews: [], repairs: [], knowledge: [] })
     if (path.endsWith('/models/model1')) return respond({ id: 'model1', name: '视频模型 A', category: 'video' })
@@ -95,18 +98,23 @@ try {
   await page.getByRole('region', { name: '检查进度', exact: true }).getByText('状态读取失败，正在重试；核实前请勿重复提交。', { exact: true }).waitFor()
   assert.equal(writes.filter(path => path.endsWith('/prompts/prompt1/review')).length, 1)
   assert.equal(await page.getByRole('button', { name: '检查这份指令', exact: true }).count(), 0)
+  const beforeRetryReads = taskReads
+  const beforeRetryWrites = writes.filter(path => !path.endsWith('/sources/resolve')).length
   taskUnavailable = false
+  await page.getByRole('region', { name: '检查进度', exact: true }).getByRole('button', { name: '重试读取状态', exact: true }).click()
   Object.assign(tasks.get('check2'), { status: 'succeeded', review: packet })
   await page.getByRole('button', { name: '确认结论，进入试拍', exact: true }).waitFor()
+  assert.ok(taskReads > beforeRetryReads)
+  assert.equal(writes.filter(path => !path.endsWith('/sources/resolve')).length, beforeRetryWrites)
   await page.locator('.production-unit-list').getByText('待确认结论 · 1 个候选', { exact: true }).waitFor()
-  await page.getByRole('button', { name: '固定输入', exact: true }).click()
+  await page.getByRole('button', { name: '拍摄设置', exact: true }).click()
   await page.getByRole('region', { name: '本次固定输入详情' }).getByText('视频模型 A', { exact: true }).waitFor()
   await page.getByRole('region', { name: '本次固定输入详情' }).getByText('提示词 + 2 张图片 · 1 组主体参考', { exact: true }).waitFor()
   await page.getByRole('region', { name: '本次固定输入详情' }).getByText('来源：选择时的张三 · 选择时的资产记录 · 1 份', { exact: true }).waitFor()
   await page.getByRole('button', { name: '关闭指令详情' }).click()
-  await page.waitForFunction(() => document.activeElement?.textContent === '固定输入')
+  await page.waitForFunction(() => document.activeElement?.textContent === '拍摄设置')
   const readsBefore = writes.filter(path => !path.endsWith('/sources/resolve')).length
-  await page.getByRole('button', { name: '查看指令', exact: true }).click()
+  await page.getByRole('button', { name: '查看完整指令', exact: true }).click()
   const reader = page.locator('.prompt-reader')
   await page.getByRole('radio', { name: '易读视图', exact: true }).locator('../..').waitFor()
   assert.ok((await reader.innerText()).includes('人物/物件：林岚'))
@@ -142,7 +150,7 @@ try {
   await page.getByRole('button', { name: '关闭指令详情' }).click()
   assert.equal(writes.filter(path => !path.endsWith('/sources/resolve')).length, readsBefore)
   assert.equal(workspace.prompts[0].content.text, promptText)
-  await page.getByRole('button', { name: '查看指令', exact: true }).click()
+  await page.getByRole('button', { name: '查看完整指令', exact: true }).click()
   await page.getByRole('tab', { name: '版本记录', exact: true }).click()
   await page.getByRole('button', { name: '查看此版本', exact: true }).last().click()
   await page.getByText(/仅查看历史，当前工作对象仍为/).waitFor()
@@ -170,7 +178,14 @@ try {
   await row.getByRole('button', { name: '查看相关指令与固定依据', exact: true }).last().click()
   await page.getByText('这些问题字段没有可准确对应的编译映射；请核对原固定依据。', { exact: true }).waitFor()
   assert.equal(await reader.locator('.is-highlighted').count(), 0)
-  await page.getByRole('button', { name: '关闭指令详情' }).click()
+  // 从未映射的检查路径进入后，重新选择正文片段，编辑必须跟随新选段。
+  await reader.getByRole('button', { name: '查看编译依据', exact: true }).filter({ hasText: '可见身体动作' }).first().click()
+  await page.getByRole('button', { name: '修改这段对应内容', exact: true }).click()
+  await page.getByRole('region', { name: '修改方案', exact: true }).waitFor()
+  await page.getByRole('textbox').filter({ hasText: '递出旧信' }).waitFor()
+  assert.equal(await page.getByRole('textbox', { name: '时长（秒）', exact: true }).count(), 0)
+  assert.equal(await page.getByText('这段内容不在当前单元可直接修改的范围内。可填写修改要求，或前往导演设计核对共享内容。', { exact: true }).count(), 0)
+  await page.getByRole('button', { name: '收起编辑', exact: true }).click()
   assert.deepEqual(packet, originalPacket)
   assert.deepEqual(unit.references, originalReferences)
   assert.equal(writes.filter(path => !path.endsWith('/sources/resolve')).length, readsBefore)
@@ -184,7 +199,7 @@ try {
     await page.locator('.shoot-passed-summary > summary').evaluate(element => element.blur())
     const primary = page.getByRole('button', { name: '确认结论，进入试拍', exact: true })
     await primary.scrollIntoViewIfNeeded()
-    assert.equal(await page.locator('.production-next-step .ant-btn-primary').count(), 1)
+    assert.equal(await page.locator('.shoot-check-action .ant-btn-primary').count(), 1)
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1))
     const box = await primary.boundingBox()
     assert.ok(box && box.x >= 0 && box.x + box.width <= width + 1 && box.y >= 0 && box.y + box.height <= 1000)

@@ -1,0 +1,103 @@
+{
+  "results": [
+    {
+      "name": "desktop geometry",
+      "geometry": {
+        ".app-topbar": {
+          "x": 0,
+          "y": 0,
+          "width": 1586,
+          "height": 48
+        },
+        ".app-nav-rail": {
+          "x": 0,
+          "y": 48,
+          "width": 64,
+          "height": 944
+        },
+        ".sequence-navigation": {
+          "x": 64,
+          "y": 48,
+          "width": 208,
+          "height": 912
+        },
+        ".workspace-stage-tabs": {
+          "x": 272,
+          "y": 133,
+          "width": 1314,
+          "height": 48
+        },
+        ".sequence-version-bar": {
+          "x": 272,
+          "y": 181,
+          "width": 1314,
+          "height": 44
+        },
+        ".design-view-toolbar": {
+          "x": 272,
+          "y": 225,
+          "width": 970,
+          "height": 56
+        },
+        ".design-inspector": {
+          "x": 1242,
+          "y": 225,
+          "width": 344,
+          "height": 735
+        },
+        ".sequence-status": {
+          "x": 64,
+          "y": 960,
+          "width": 1522,
+          "height": 32
+        }
+      }
+    },
+    {
+      "name": "navigation and inspector resize, collapse and restore",
+      "passed": true
+    },
+    {
+      "name": "graph branches and shared storyboard selection",
+      "passed": true
+    },
+    {
+      "name": "1 shots virtual navigation",
+      "passed": true
+    },
+    {
+      "name": "60 shots virtual navigation",
+      "passed": true
+    },
+    {
+      "name": "200 shots virtual navigation",
+      "passed": true
+    },
+    {
+      "name": "responsive 1279",
+      "passed": true
+    },
+    {
+      "name": "responsive 1024",
+      "passed": true
+    },
+    {
+      "name": "responsive 768",
+      "passed": true
+    },
+    {
+      "name": "responsive 375",
+      "passed": true
+    },
+    {
+      "name": "shoot desktop layout",
+      "passed": true
+    },
+    {
+      "name": "cut desktop layout",
+      "passed": true
+    }
+  ],
+  "errors": [],
+  "writes": []
+}

@@ -25,6 +25,7 @@ from app.models.llm import Model, ModelCategoryKey, Provider
 from app.models.task import Task
 from app.services.file_cleanup import FileCleaner
 from app.services.directing.ai import DirectingOutputError
+from app.services.directing.review_revision import ReviewRevisionService
 from app.services.directing.store import DirectingStore, ContinuityNotReady
 from app.services.generation.media_execution import build_media_input, deliver_media, load_media_context, store_media_output
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
@@ -297,7 +298,7 @@ class TaskWorker:
                           max_retries=0, timeout=self.limits.request_seconds, http_async_client=self.client)
             if task.kind != "text_chat":
                 params["callbacks"] = [ScriptStopHandler(stopped, monotonic() + self.limits.execution_seconds)]
-            directing = task.kind in {"directing_divide", "directing_design", "directing_review"}
+            directing = task.kind in {"directing_divide", "directing_design", "directing_review", "directing_review_revision"}
             if directing:
                 # 长工作单持续接收分片，避免非流式等待完整响应触发读取超时。
                 params["streaming"] = True
@@ -324,6 +325,12 @@ class TaskWorker:
             result = generated.model_dump()
 
             deliver = None
+            if task.kind == "directing_review_revision":
+                async def deliver(db, current):
+                    """候选和服务端预览同时完成，展示历史无需重读模型配置。"""
+                    candidate = await ReviewRevisionService(db, current.project_id).complete_candidate(current, result)
+                    result.clear()
+                    result.update(candidate.model_dump(mode="json"))
         async with self.sessions() as db:
             await TaskService(db).finish(task.id, result=result, deliver=deliver)
             await db.commit()

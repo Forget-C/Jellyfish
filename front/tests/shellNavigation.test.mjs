@@ -9,7 +9,7 @@ const { pageBreadcrumbs, mainNavigation } = await import(`data:text/javascript;b
 test('scene breadcrumbs preserve valid parent routes and readable names', () => {
   assert.deepEqual(pageBreadcrumbs('/projects/p1/chapters/ch1/sequences/s1', { project: '旧信', chapter: '第二章', page: '旧信重逢' }), [
     { label: '项目', to: '/projects' }, { label: '旧信', to: '/projects/p1' },
-    { label: '第二章', to: '/projects/p1/chapters/ch1/sequences' }, { label: '旧信重逢' },
+    { label: '第二章', to: '/projects/p1?tab=chapters&chapter=ch1&sequence=s1' }, { label: '旧信重逢' },
   ])
   assert.equal(pageBreadcrumbs('/projects/private-id')[1].label, '项目工作台')
   assert.equal(pageBreadcrumbs('/projects/p1/chapters/private-id/sequences').at(-1).label, '章节场次')

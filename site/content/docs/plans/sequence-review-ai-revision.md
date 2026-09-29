@@ -2,12 +2,14 @@
 title: "检查问题处理方向与 AI 修订计划"
 description: "支持逐项补充处理方向，由 AI 提出受约束的修改，用户采用后衔接新指令与重新检查。"
 weight: 36
-status: planned
+status: completed
 ---
 
-> 2026-09-28。待实施方案，承接[拍摄指令与检查结果可读化计划](/docs/plans/sequence-prompt-readable-view/)。本轮先形成计划与概念预览，不修改业务代码或真实场次数据。
+> 2026-09-28。T1–T4 已完成实现与离线验收，承接[拍摄指令与检查结果可读化计划](/docs/plans/sequence-prompt-readable-view/)。基于 `7d2c006` 实施；自动化验收使用隔离数据，不调用真实视频模型。
 
 ## 1. 目标与范围
+
+后续体验优化见[场次拍摄指令全生命周期与修改体验优化计划](/docs/plans/sequence-instruction-lifecycle/)：补齐主动修改、同面板更新方案与恢复引导。本文件保留上一轮实现范围和验收记录，不代表后续优化已完成。
 
 用户无需懂字段或编写提示词：查看问题，可选补充处理方向，核对 AI 提出的具体修改，采用后由系统生成新指令并重新检查。
 
@@ -59,7 +61,7 @@ status: planned
 - 保存后只是“待重新检查”，不能直接把旧问题标为通过。
 - 检查通过后提供“进入试拍”；仍有问题则展示新检查并允许继续补充方向，不自动循环修复。
 - 若关联或模型能力无法继承，停在具体待处理项，例如“重新选择这张不可用参考”，不要求用户从头建立全部计划。
-- 中途失败保留已完成步骤，提供“继续处理”；不重复创建设计、计划、指令或检查任务。
+- 中途失败保留已完成步骤，提供“继续处理”；不重复创建设计、计划、指令或检查任务。后台明确返回暂停时，也可“保留版本，重新调整方向”，另建方案，不删除已保存产物。已完成操作恢复优先返回原结果，不因后来原文变化而丢失已完成身份。
 - 手机上沿用现有详情抽屉／单列布局；采用按钮可见，关闭后保留方向、结果和焦点位置。
 
 ## 4. 数据与执行边界
@@ -75,7 +77,7 @@ status: planned
 
 - 同时提供原文、固定设计／单元范围、实际指令、检查意见、用户方向、真实字段及合法选项。检查意见是待评估材料，不能压过原文事实和明确创作要求。
 - 只返回本次必要的字段修改、理由和问题对应关系；沿用现有任务与模型调用能力，不直接重写整个场次并整体覆盖。
-- 修订 DTO 放在 `backend/app/core/contracts/directing`。首期只支持既有设计／当前单元字段的有限替换；不提供任意 JSON 操作或增删镜头／参与者能力。
+- 修订 DTO 放在 `backend/app/core/contracts/directing`。首期只支持既有设计／当前单元字段的有限替换；不提供任意 JSON 操作或增删镜头／参与者能力。声音制作方式通过逐项 `sound_execution` 显式选择；自由文本不直接授权技术执行值，冲突选择需要用户统一。
 - 服务端按固定对象身份定位，校验字段白名单、值类型、合法枚举、完整设计关联、项目归属及实际差异范围。用户方向不能绕过这些校验。
 - 无法确定目标、需要扩大修改范围、方向相互冲突或能力不支持时，返回清晰的未解决原因或有限选项，不猜测、不部分静默采用。
 - 如果问题来自编译或模型接入，明确说明，不能通过删改正确设计规避实现问题。首期不自动修复程序代码，也不承诺可以修复所有检查意见。
@@ -95,10 +97,10 @@ status: planned
 
 涉及：`front/src/pages/aiStudio/directing/ShootReview.tsx`、`ReviewDetails.tsx`、`SequenceWorkspacePage.tsx`，复用现有草稿机制，新增局部纯逻辑模块 `reviewRevision.ts` 及测试 `front/tests/reviewRevision.test.mjs`。
 
-- [ ] 增加逐项可选输入、自动保存与失败提示；生成按钮统一放在当前检查区。
-- [ ] 实现固定检查身份和问题键；覆盖多岗位、多出现项、同一行多个问题、无具体 findings 的行级方向。
-- [ ] 验证刷新恢复、版本切换隔离、同源检查保存后转接，以及新检查不按序号误套旧方向。
-- [ ] 补齐方案过期判定，方向变动或目标变化时禁止采用；处理生成中的输入变动与迟到结果。
+- [x] 增加逐项可选输入、自动保存与失败提示；生成按钮统一放在当前检查区。
+- [x] 实现固定检查身份和问题键；覆盖多岗位、多出现项、同一行多个问题、无具体 findings 的行级方向。
+- [x] 验证刷新恢复、版本切换隔离、同源检查保存后转接，以及新检查不按序号误套旧方向。
+- [x] 补齐方案过期判定，方向变动或目标变化时禁止采用；处理生成中的输入变动与迟到结果。
 
 验收：用户能只用自然语言补充方向；空白可继续；方向不丢失、不跨版本串用、不修改检查结论。
 
@@ -106,10 +108,10 @@ status: planned
 
 涉及：`backend/app/core/contracts/directing/production.py`、`workspace.py`，`backend/app/services/directing/ai.py`、`production.py` 和对应任务分派；必要的跨步骤业务逻辑放局部 `review_revision.py`。接口在 `backend/app/api/v1/routes/studio/directing.py`，扩展相关契约／服务／API 测试。
 
-- [ ] 定义最小修订输入与结果契约，携带问题来源、方向、有限字段修改和未解决原因。
-- [ ] 复用通用任务执行，冻结完整上下文，补充合法字段／枚举与背景和本次动作边界。
-- [ ] 对候选修改执行实际契约和范围校验；拒绝越权字段、不存在对象、跨项目引用、非法声音值和未声明的扩展修改。
-- [ ] 用本次空镜／人物约束和声音安排作为固定回归案例；覆盖检查建议错误、方向冲突、无可执行修改及模型失败。
+- [x] 定义最小修订输入与结果契约，携带问题来源、方向、有限字段修改和未解决原因。
+- [x] 复用通用任务执行，冻结完整上下文，补充合法字段／枚举与背景和本次动作边界。
+- [x] 对候选修改执行实际契约和范围校验；拒绝越权字段、不存在对象、跨项目引用、非法声音值和未声明的扩展修改。
+- [x] 用本次空镜／人物约束和声音安排作为固定回归案例；覆盖检查建议错误、方向冲突、无可执行修改及模型失败。
 
 验收：生成成功只产生可核对的候选方案；错误建议不能被直接应用，正确的其他镜头设计不被删除。
 
@@ -117,22 +119,22 @@ status: planned
 
 涉及：新增 `front/src/pages/aiStudio/directing/ReviewRevisionPanel.tsx`，接入 `ProductionWorkbench.tsx`、`SequenceWorkspacePage.tsx` 和相关样式；后端沿 T2 的 service 编排复用 DirectingStore、编译及检查接口。
 
-- [ ] 在现有详情区展示真实修改前后、方向处理说明、影响范围及待用户选择项；移动端沿用详情抽屉。
-- [ ] 采用前重新核对输入身份、版本及候选校验结果；一次采用只作用于已展示方案。
-- [ ] 串联保存新版本、核对当前单元、编译新指令、重新检查，提供清晰阶段状态。
-- [ ] 验证请求重复、响应丢失、页面刷新、保存成功但编译／检查失败后的恢复；任何恢复不得重复创建产物。
-- [ ] 验证其他草稿、固定单元、历史指令、旧检查及视频保持不变；缺失或不适用参考停在明确的处理项。
+- [x] 在现有详情区展示真实修改前后、方向处理说明、影响范围及待用户选择项；移动端沿用详情抽屉。
+- [x] 采用前重新核对输入身份、版本及候选校验结果；一次采用只作用于已展示方案。
+- [x] 串联保存新版本、核对当前单元、编译新指令、重新检查，提供清晰阶段状态。
+- [x] 验证请求重复、响应丢失、页面刷新、保存成功但编译／检查失败后的恢复；任何恢复不得重复创建产物。
+- [x] 验证其他草稿、固定单元、历史指令、旧检查及视频保持不变；缺失或不适用参考停在明确的处理项。
 
 验收：用户采用后无需手工穿梭版本；过程可恢复，旧问题不自动变通过，不自动拍摄。
 
 ### T4：回归、契约与文档收口
 
-- [ ] 扩展 `backend/tests/directing/test_contracts.py`、`test_production.py`、`test_store.py`、`test_api.py`；如独立 service 需要，新增 `test_review_revision.py`。覆盖固定来源、非法修改、候选不写入、幂等恢复、新旧版本隔离和新指令重新审稿。
-- [ ] 新增 `front/tests/workspaceReviewRevision.browser.mjs`，复用现有隔离接口模式，覆盖方向保存、无方向生成、生成后改方向、过期结果、前后对照、采用与中断恢复、重新检查及移动端操作；回归 `workspaceShootProgress.browser.mjs`。
-- [ ] 对外契约变化后，确认当前工作区后端已加载，再运行 `pnpm --dir front run openapi:update`；前端使用 generated client，不新增手写 service。
-- [ ] 运行前端相关纯逻辑测试、`pnpm --dir front run typecheck`、上述浏览器回归；后端运行受影响测试及 `uv run pylint app`，区分既有与新增问题。
-- [ ] 核对 1440／1024／768／375px，确认问题输入、方案关闭和采用按钮可操作、无横向溢出；业务请求使用隔离替身，不以真实拍摄作为常规回归。
-- [ ] 实施后再更新本计划验收记录、`front/tests/README.md`、相关操作说明，以及真实发生变化的架构边界。本次文档阶段不将未来方案写入当前架构。
+- [x] 新增 `backend/tests/directing/test_review_revision.py`，补充 `test_contracts.py` 的接口边界回归，并复用 `test_production.py`、`test_store.py`、`test_api.py` 及整个 directing 测试集。覆盖固定来源、非法修改、候选不写入、幂等恢复、新旧版本隔离和新指令重新审稿。
+- [x] 新增 `front/tests/workspaceReviewRevision.browser.mjs`，复用现有隔离接口模式，覆盖方向保存、无方向生成、生成后改方向、过期结果、前后对照、采用与中断恢复、重新检查及移动端操作；回归 `workspaceShootProgress.browser.mjs`。
+- [x] 对外契约变化后，确认当前工作区后端已加载，再运行 `pnpm --dir front run openapi:update`；前端使用 generated client，不新增手写 service。
+- [x] 运行前端相关纯逻辑测试、`pnpm --dir front run typecheck`、上述浏览器回归；后端运行受影响测试及 `uv run pylint app`，区分既有与新增问题。
+- [x] 核对 1440／1024／768／375px，确认问题输入、方案关闭和采用按钮可操作、无横向溢出；业务请求使用隔离替身，不以真实拍摄作为常规回归。
+- [x] 实施后再更新本计划验收记录、`front/tests/README.md`、相关操作说明，以及真实发生变化的架构边界。当前真实生效的边界已同步至架构文档。
 
 ## 6. 预览与完成标准
 
@@ -150,3 +152,26 @@ status: planned
 6. 旧检查、其他单元及已有视频保留；重新检查未通过时不能宣称问题已解决。
 
 设计参考：[Notion AI 的接受／放弃／调整交互](https://www.notion.com/help/guides/notion-ai-for-docs)、[Word Copilot 的修改预览](https://support.microsoft.com/en-us/word/copilot/edit-rewrite-content)。借鉴局部修改后确认的方式，不引入完整聊天编辑器。
+
+## 7. 实施与验收记录（2026-09-28）
+
+已完成：逐项方向、同源检查草稿延续、真实差异侧栏、声音显式选择、输入过期保护、新版本与新检查衔接，以及采用恢复。新增 `ReviewRevisionService` 使用现有任务、DirectingStore、编译及审稿能力；没有新增聊天、通用流程引擎或数据表。
+
+实施中补强了三个必要边界：SQLite 使用数据库写锁串行核实重复请求；采用前检查必填设计内容及实际单元能力，避免保存无法编译的确认版本；声音选择冲突不会被模型静默决定。仅单元参数变化时复用原设计。存储失败后的方向切换受共享草稿保护，采用请求期间锁定编辑，完成后恢复操作。
+
+| 验证 | 结果 |
+| --- | --- |
+| `node --test front/tests/reviewRevision.test.mjs front/tests/readableText.test.mjs front/tests/workspacePreparation.test.mjs front/tests/workspaceTaskContext.test.mjs front/tests/workspaceGuidance.test.mjs` | 37 项通过 |
+| `pnpm --dir front run typecheck` | 通过 |
+| `workspaceReviewRevision.browser.mjs` | 通过；方向刷新恢复、存储失败保护、空方向、迟到方案、声音选择、前后预览、采用写入锁定、响应丢失及恢复；1440／1024／768／375px 均可操作、无横向溢出 |
+| `workspaceShootProgress.browser.mjs` | 通过；原指令阅读、检查与试拍流程及四尺寸回归 |
+| `uv run pytest tests/directing tests/services/test_task_service.py tests/services/test_task_worker.py tests/services/test_script_execution.py tests/architecture/test_generation_worker_boundaries.py -q`（backend） | 170 passed，3 skipped；修订专项 15 项覆盖真实 SQLite 并发、非法建议、冲突方向、实际差异、版本隔离、分步恢复、能力失败回滚及模型故障 |
+| `uv run pylint app`（backend） | 9.99；仍有 5 项既有问题，本次相关服务无新增问题 |
+| `pnpm --dir front run openapi:update` | 已确认 8000 端口进程来自本工作区并加载新增接口，再同步；清理生成器产生的无关空行差异 |
+| 规格审查与代码质量复核 | 已修复发现的问题并复核通过 |
+
+浏览器结果目录：`/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-review-revision-8d8SL2`、`/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-shoot-progress-QXAQzV`。截图已检查桌面侧栏及手机抽屉。
+
+验证边界：3 项 MySQL 测试缺少 `JELLYFISH_DIRECTING_MYSQL_URL`，本次并发验证使用真实 SQLite 数据库。没有调用真实付费模型、生成视频或修改真实场次。更新运行环境时须让后端 API 与独立任务 Worker 都加载本次代码，旧 Worker 不识别新增任务类型。异步新检查任务受理后的模型失败沿用显式重新检查入口，不自动重试。声音选择表达制作方向，不代表实际产物已完成。
+
+既有 Pylint 问题：`task_worker.py` 的 `try-except-raise`、`too-many-return-statements`，`studio_assets.py` 的 `no-self-argument`，`lab_generation_tasks.py` 的未使用导入，以及 `task_queries.py` 的 `unidiomatic-typecheck`。本轮不修改这些无关代码。

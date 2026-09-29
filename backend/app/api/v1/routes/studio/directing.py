@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.directing.workspace import (
-    RegroupRequest, ExtractFrameRequest, ExtractedFrame, AssetSummary, AssetCreateRequest, VisualRequest, AIRequest, ApplyDesignRequest, ChapterSequences, RevisionWrite, SequenceCreate, SequenceRead,
+    RegroupRequest, ExtractFrameRequest, ExtractedFrame, AssetSummary, AssetCreateRequest, VisualRequest, AIRequest, ApplyDesignRequest, ChapterOverview, ChapterSequences, RevisionWrite, SequenceCreate, SequenceRead,
     CompileRequest, CompileResult, ReviewRequest, ShootRequest, TakeReviewWrite, MediaRead, ReviewDecisionRequest, DirectingTaskRead,
     SequenceUpdate, TaskAccepted, VersionRequest, WorkspaceRead,
 )
@@ -13,6 +13,8 @@ from app.core.contracts.video_generation import VideoReferenceCapabilities
 from app.dependencies import get_db
 from app.schemas.common import ApiResponse, success_response
 from app.services.directing.production import ProductionService
+from app.services.directing.review_revision import ReviewRevisionService
+from app.core.contracts.directing.review_revision import ReviewRevisionRequest, ApplyReviewRevisionRequest, ReviewRevisionApplication, EditableRevisionFields
 from app.services.directing.batch import BatchService
 from app.services.directing.continuity import ContinuityService
 from app.core.contracts.directing.continuity import ContinuityRead, CutFrameRequest, CutFrameRead, SeamReviewRequest
@@ -49,6 +51,12 @@ async def reference_capabilities(project_id: str, model_id: str, db: AsyncSessio
 async def chapter(project_id: str, chapter_id: str, db: AsyncSession = Depends(get_db, scope="function")):
     """返回章节原文和有序场次。"""
     return success_response(await _call(ProductionService(db, project_id).list_sequences(chapter_id)))
+
+
+@router.get("/chapters/{chapter_id}/overview", response_model=ApiResponse[ChapterOverview], operation_id="directing_chapter_overview")
+async def chapter_overview(project_id: str, chapter_id: str, db: AsyncSession = Depends(get_db, scope="function")):
+    """返回有序场次的整场计数与已确认采用身份。"""
+    return success_response(await _call(ProductionService(db, project_id).chapter_overview(chapter_id)))
 
 
 @router.post("/chapters/{chapter_id}/sequences", response_model=ApiResponse[SequenceRead], operation_id="directing_create_sequence")
@@ -188,7 +196,7 @@ async def resolve_review(project_id: str, sequence_id: str, review_id: str, body
 @router.get("/tasks/{task_id}", response_model=ApiResponse[DirectingTaskRead], operation_id="directing_task")
 async def task_detail(project_id: str, task_id: str, db: AsyncSession = Depends(get_db, scope="function")):
     """读取当前项目的导演建议和错误，保持业务结果在场次面板。"""
-    return success_response(await _call(ProductionService(db, project_id).read_task(task_id)))
+    return success_response(await _call(ReviewRevisionService(db, project_id).read_task(task_id)))
 
 
 @router.get("/styles", response_model=ApiResponse[list[ProjectStyleRevision]], operation_id="directing_styles")
@@ -339,3 +347,29 @@ async def prepare_repair_plan(project_id: str, sequence_id: str, revision_id: st
     service = FeedbackService(db, project_id)
     await _call(service.prepare_repair_plan(sequence_id, revision_id, body))
     return success_response(await _call(service.workspace(sequence_id)))
+
+
+@router.post('/sequences/{sequence_id}/review-revisions', response_model=ApiResponse[TaskAccepted], operation_id='directing_generate_review_revision')
+async def generate_review_revision(project_id: str, sequence_id: str, body: ReviewRevisionRequest, db: AsyncSession = Depends(get_db, scope='function')):
+    """冻结检查和方向并生成局部候选，不写入设计。"""
+    task = await _call(ReviewRevisionService(db, project_id).generate_revision(sequence_id, body))
+    return success_response(TaskAccepted(task_id=task.id))
+
+
+@router.post('/sequences/{sequence_id}/review-revisions/apply', response_model=ApiResponse[ReviewRevisionApplication], operation_id='directing_apply_review_revision')
+async def apply_review_revision(project_id: str, sequence_id: str, body: ApplyReviewRevisionRequest, db: AsyncSession = Depends(get_db, scope='function')):
+    """采用已展示修改并恢复编译与重新检查，绝不提交拍摄。"""
+    return success_response(await _call(ReviewRevisionService(db, project_id).apply_revision(sequence_id, body)))
+
+
+@router.get('/sequences/{sequence_id}/review-revisions/fields', response_model=ApiResponse[EditableRevisionFields], operation_id='directing_revision_fields')
+async def revision_fields(project_id: str, sequence_id: str, prompt_revision_id: str, db: AsyncSession = Depends(get_db, scope='function')):
+    """读取当前指令允许修改的字段。"""
+    return success_response(await _call(ReviewRevisionService(db, project_id).editable_fields(sequence_id, prompt_revision_id)))
+
+
+@router.post('/sequences/{sequence_id}/review-revisions/preview', response_model=ApiResponse[TaskAccepted], operation_id='directing_preview_review_revision')
+async def preview_review_revision(project_id: str, sequence_id: str, body: ReviewRevisionRequest, db: AsyncSession = Depends(get_db, scope='function')):
+    """直接编辑生成可恢复的同步预览，不调用 AI。"""
+    task = await _call(ReviewRevisionService(db, project_id).preview_revision(sequence_id, body))
+    return success_response(TaskAccepted(task_id=task.id))

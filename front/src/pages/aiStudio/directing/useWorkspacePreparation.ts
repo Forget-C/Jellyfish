@@ -24,6 +24,7 @@ export function useWorkspacePreparation<T extends Preparation>(name: string, sco
     const next = { ...latest, value, saved: ok ? value : latest.saved, error: ok ? '' : '准备输入未能暂存到本浏览器；离开前请重试保存或明确放弃。' }
     current.current = next
     setState(next)
+    return ok
   }, [scope])
   /** 服务端补齐的默认值不算人工编辑，存储受限时也不制造未保存警告。 */
   const initialize = useCallback((patch: Partial<T>) => {

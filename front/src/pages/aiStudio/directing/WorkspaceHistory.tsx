@@ -29,7 +29,7 @@ export function ActiveCutSummary({ active, workspace }: { active: ActiveCutState
 }
 
 /** 历史浏览仅呈现快照和真实引用，不切换编辑基线、不调用任何写入接口。 */
-export function WorkspaceHistory({ open, onClose, workspace, active }: { open: boolean; onClose: () => void; workspace: WorkspaceRead; active: ActiveCutState }) {
+export function WorkspaceHistory({ open, onClose, workspace, active, embedded = false }: { embedded?: boolean; open: boolean; onClose: () => void; workspace: WorkspaceRead; active: ActiveCutState }) {
   const [kind, setKind] = useState('design')
   const [beforeId, setBeforeId] = useState<string>()
   const [afterId, setAfterId] = useState<string>()
@@ -40,7 +40,7 @@ export function WorkspaceHistory({ open, onClose, workspace, active }: { open: b
   const changes = before && after ? revisionDifferences(before.content, after.content) : []
   const display = (value: unknown): string => value === undefined ? '—' : value === null ? '空值' : typeof value === 'string' ? ({ unset: '未填写', unknown: '待确定', proposal: '设计建议', fact: '已知事实', none: '明确没有', not_applicable: '不适用' } as Record<string, string>)[value] || value : typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)
   const names = kind === 'design' ? '设计' : kind === 'plan' ? '计划' : '剪辑'
-  return <Drawer title="版本与历史（只读）" open={open} onClose={onClose} width={960}>
+  const content = <>
     <Tabs activeKey={kind} onChange={key => { setKind(key); setBeforeId(undefined); setAfterId(undefined) }} items={[{ key: 'design', label: '设计版本' }, { key: 'plan', label: '生产计划版本' }, { key: 'cut', label: '剪辑版本' }]} />
     <p>浏览快照与比较不会切换编辑基线或当前采用。草稿保存只保留最新修订，不虚构逐次保存历史。</p>
     <Space wrap><Select aria-label="比较基准版本" placeholder="选择基准版本" style={{ width: 220 }} value={beforeId} options={records.map((row, index) => ({ value: row.id, label: `${names} ${index + 1} · ${row.confirmed_at ? '已确认' : '草稿'} · 修订 ${row.version}` }))} onChange={setBeforeId} />
@@ -51,5 +51,6 @@ export function WorkspaceHistory({ open, onClose, workspace, active }: { open: b
       {kind === 'design' ? <div style={{ height: 680 }}><DesignEditor active={false} key={after.id} value={workspace.designs.find(row => row.id === after.id)!.content} onChange={() => {}} disabled /></div> : kind === 'cut' ? <CutItems workspace={workspace} cut={workspace.cuts.find(row => row.id === after.id)!.content} /> : <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(after.content, null, 2)}</pre>}
     </>}
     <details style={{ marginTop: 24 }}><summary>当前采用与版本引用</summary><ActiveCutSummary active={active} workspace={workspace} />{records.map(row => <p key={row.id}>{revisionName(records, row.id, names)} · {kind === 'cut' ? cutStatus(workspace.cuts.find(cut => cut.id === row.id)!, active) : revisionReferences(workspace, active, kind as 'design' | 'plan', row.id).join('；') || '暂无引用'}</p>)}</details>
-  </Drawer>
+  </>
+  return embedded ? content : <Drawer title="版本与历史（只读）" open={open} onClose={onClose} width={960}>{content}</Drawer>
 }

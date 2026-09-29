@@ -53,3 +53,17 @@ test('compact density is default and explicit standard density restores even at 
   assert.equal(readDesignPosition(undefined, 'd1', 'all').density, 180)
   assert.deepEqual(readDesignPosition(JSON.stringify({ revisionId: 'd1', scope: 'all', top: 0, density: 220 }), 'd1', 'all'), { top: 0, density: 220 })
 })
+
+test('recent work is project scoped and rejects broken identities or stages', async () => {
+  const { readRecentWork, saveRecentWork } = await loadSource('workspaceContext')
+  const data = new Map()
+  globalThis.sessionStorage = { getItem: key => data.get(key), setItem: (key, value) => data.set(key, value) }
+  saveRecentWork('p1', { chapterId: 'ch1', sequenceId: 's1', view: 'shoot' })
+  assert.deepEqual(readRecentWork('p1'), { chapterId: 'ch1', sequenceId: 's1', view: 'shoot' })
+  assert.equal(readRecentWork('p2'), undefined)
+  for (const value of ['null', 'bad', '{"chapterId":"ch1","sequenceId":"","view":"shoot"}', '{"chapterId":"ch1","sequenceId":"s1","view":"unknown"}']) {
+    globalThis.sessionStorage = { getItem: () => value }
+    assert.equal(readRecentWork('p1'), undefined)
+  }
+  delete globalThis.sessionStorage
+})

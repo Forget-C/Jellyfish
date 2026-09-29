@@ -25,7 +25,7 @@ export function pageBreadcrumbs(pathname: string, titles: NavigationTitles = {})
     }
     if ((path.length === 5 || path.length === 6) && path[2] === 'chapters' && path[3] && path[4] === 'sequences') {
       if (!path[5]) return [...items, { label: titles.page || '章节场次' }]
-      return [...items, { label: titles.chapter || '章节', to: `${project}/chapters/${path[3]}/sequences` }, { label: titles.page || '场次工作台' }]
+      return [...items, { label: titles.chapter || '章节', to: `${project}?tab=chapters&chapter=${path[3]}&sequence=${path[5]}` }, { label: titles.page || '场次工作台' }]
     }
     return [{ label: '页面未找到' }]
   }

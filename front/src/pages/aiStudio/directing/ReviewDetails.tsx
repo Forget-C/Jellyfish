@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { Button, Card, Space, Typography } from 'antd'
 import { SourceLinks } from './Sources'
 import { FrozenDesignValue } from './PromptReader'
@@ -22,7 +23,7 @@ function ReviewNote({ label, note, context, onInspect }: { label: string; note: 
 }
 
 /** 审稿结果、执行取舍和台账共用详情；字段路径仅展示，不猜测或跳转设计版本。 */
-export function ReviewDetails({ row, design, context: suppliedContext, compact = false, hideRationale = false, onInspect }: { row: ReviewRow; design?: SceneDesign_Input; context?: ReadableContext; compact?: boolean; hideRationale?: boolean; onInspect?: (paths: string[]) => void }) {
+export function ReviewDetails({ row, design, context: suppliedContext, compact = false, hideRationale = false, onInspect, directionInput }: { row: ReviewRow; design?: SceneDesign_Input; context?: ReadableContext; compact?: boolean; hideRationale?: boolean; onInspect?: (paths: string[]) => void; directionInput?: (index: number) => ReactNode }) {
   const context = suppliedContext || readableContext(design)
   const [part, setPart] = useState<ReadableSegment>()
   const identity = JSON.stringify([row, context.identity || context.design])
@@ -46,8 +47,10 @@ export function ReviewDetails({ row, design, context: suppliedContext, compact =
         {!finding.affected_paths.length && <p>未指定影响对象</p>}
       </details>
       {!!finding.affected_paths.length && onInspect && <button type="button" className="shoot-text-action" onClick={() => onInspect(finding.affected_paths)}>查看相关指令与固定依据</button>}
+      {directionInput?.(index)}
     </section>)}
     {!row.findings.length && <p className="design-secondary">未提供具体问题详情，结论以原检查状态为准。</p>}
+    {!row.findings.length && directionInput?.(-1)}
     {details}
   </div>
   return <>
