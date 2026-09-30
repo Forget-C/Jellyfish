@@ -1,18 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Modal, Image, Input, Pagination, Select, Space, Upload } from 'antd'
 import { StudioFilesService } from '../../../services/generated'
-import type { AssetSummary, FileRead, ReferenceBinding_Input as Reference, SceneDesign_Input, VideoReferenceCapabilities } from '../../../services/generated'
+import type { AssetSummary, FileRead, GenerationUnit_Input, ReferenceBinding_Input as Reference, SceneDesign_Input, VideoReferenceCapabilities } from '../../../services/generated'
 import { buildFileDownloadUrl } from '../assets/utils'
 import { directingError } from './common'
 import { SourceLinks } from './Sources'
 import { ReferencePreview } from './ReferencePreview'
 import { referenceGroups, referenceIssues, referencePurposes, referenceSummary, referenceRoles } from './referenceInput'
+import { shotParticipantRelations } from './productionGraph'
 
 /** 对象与参考共用的事务式编辑弹窗；仅应用时更新单元，设计资产修改仍经过版本流程。 */
-export function ReferencePicker({ projectId, assets, assetError, onReloadAssets, design, references, capability, initialParticipantIds, initialAssetId, initialRole, initialPurpose, title, referenceIds, location = false, disabled = false, capabilityError, onRetryCapability, dependencyReferenceIds = [], onApply, onEditAssets, onClose }: {
+export function ReferencePicker({ projectId, assets, assetError, onReloadAssets, design, coverage = [], references, capability, initialParticipantIds, initialAssetId, initialRole, initialPurpose, title, referenceIds, location = false, disabled = false, capabilityError, onRetryCapability, dependencyReferenceIds = [], onApply, onEditAssets, onInspectDesign, onClose }: {
   projectId: string; assets?: AssetSummary[]; assetError?: string; onReloadAssets?: () => void; design: SceneDesign_Input;
   initialParticipantIds?: string[]; initialAssetId?: string; initialRole?: Reference['input_role']; initialPurpose?: Reference['purpose']; title?: string; referenceIds?: string[]; location?: boolean; disabled?: boolean; capabilityError?: string; onRetryCapability?: () => void; dependencyReferenceIds?: string[];
-  references: Reference[]; capability?: VideoReferenceCapabilities; onApply: (references: Reference[]) => void; onEditAssets?: () => void; onClose: () => void;
+  coverage?: GenerationUnit_Input['coverage']; references: Reference[]; capability?: VideoReferenceCapabilities; onApply: (references: Reference[]) => void; onEditAssets?: () => void; onInspectDesign?: (objectKey: string) => void; onClose: () => void;
 }) {
   const [tab, setTab] = useState('assets')
   const [role, setRole] = useState<NonNullable<Reference['input_role']>>(initialRole || 'subject')
@@ -41,6 +42,10 @@ export function ReferencePicker({ projectId, assets, assetError, onReloadAssets,
   useEffect(() => { active.current = true; return () => { active.current = false; request.current++ } }, [])
   const close = () => { active.current = false; request.current++; onClose() }
   const roles = (Object.keys(referenceRoles) as NonNullable<Reference['input_role']>[]).filter(value => !capability || (value === 'subject' ? capability.subject_images || capability.subject_videos : capability.frame_roles.includes(value)))
+  const scopes = coverage.map(row => ({ coverage: row, ...shotParticipantRelations(design, row.shot_id) }))
+  const related = new Set(scopes.filter(row => row.known).flatMap(row => row.participants.map(person => person.id)))
+  const pending = new Set(scopes.filter(row => !row.known).flatMap(row => row.participants.map(person => person.id)))
+  const participantOptions = ['当前单元设计对象', '范围待核对的设计关联', '其他场内对象'].map((label, index) => ({ label, options: design.participants.filter(person => (related.has(person.id) ? 0 : pending.has(person.id) ? 1 : 2) === index).map(person => ({ value: person.id, label: person.name })) })).filter(group => group.options.length)
   const inputRole = role && roles.includes(role) ? role : roles.includes('subject') ? 'subject' : roles[0]
   const linked = (assets || []).filter(asset => asset.kind === 'scene' ? design.direction.location_asset_id === asset.id : design.participants.some(person => (asset.kind === 'character' ? person.character_id : person.prop_id) === asset.id))
   const matching = assetId ? (assets || []).filter(asset => asset.id === assetId) : linked.filter(asset => asset.kind === 'scene' ? location || !participantIds.length : design.participants.some(person => participantIds.includes(person.id) && (asset.kind === 'character' ? person.character_id : person.prop_id) === asset.id))
@@ -83,6 +88,10 @@ export function ReferencePicker({ projectId, assets, assetError, onReloadAssets,
   return <Modal title={title && title !== '添加参考' ? title : adding ? '添加参考' : '本单元参考'} zIndex={1050} open onCancel={close} width={640} styles={{ body: { maxHeight: 'min(70vh, calc(100dvh - 200px))', overflowY: 'auto' } }} footer={<Space><Button onClick={close}>{disabled ? '关闭' : '取消'}</Button>{!disabled && <Button type="primary" onClick={() => { if (JSON.stringify(references) !== JSON.stringify(baseline.current)) { setError('当前单元输入已变化，请取消并重新打开后编辑'); return }; active.current = false; onApply(latest.current); close() }}>应用到本单元</Button>}</Space>}>
     <Space direction="vertical" style={{ width: '100%' }}>
       {onEditAssets && <p>设计资产关联使用固定设计版本。<Button type="link" disabled={disabled || JSON.stringify(draft) !== JSON.stringify(baseline.current)} onClick={() => { close(); onEditAssets() }}>前往导演设计修改关联</Button></p>}
+      {!!scopes.length && <details><summary>查看设计关联依据</summary><p>镜头设计范围不代表部分动作中的实际可见对象，也不代表已选入模型参考。</p>{scopes.map(row => <p key={row.coverage.id}>镜头 {design.direction.shots.findIndex(shot => shot.id === row.coverage.shot_id) + 1} · {row.known ? row.participants.map(person => design.participants.find(item => item.id === person.id)?.name || '对象引用不可用').join('、') || '明确无参与对象' : '范围待核对；现有调度与表演仅作关联依据'}{onInspectDesign && <Button type="link" disabled={disabled || JSON.stringify(draft) !== JSON.stringify(baseline.current)} onClick={() => { close(); onInspectDesign(`shot:${row.coverage.shot_id}`) }}>查看镜头设计关联</Button>}</p>)}
+        {onInspectDesign && design.staging.activities.map((row, index) => initialParticipantIds?.includes(row.participant_id) && <p key={`activity:${index}`}>全场背景活动 · {row.ongoing_task.text || row.ongoing_task.reason}<Button type="link" disabled={disabled || JSON.stringify(draft) !== JSON.stringify(baseline.current)} onClick={() => { close(); onInspectDesign(`activity:${index}`) }}>查看背景依据</Button></p>)}
+        {onInspectDesign && design.continuity.filter(row => row.participant_id && initialParticipantIds?.includes(row.participant_id)).map(row => <p key={row.id}>全场连续性 · {row.after.text || row.after.reason}<Button type="link" disabled={disabled || JSON.stringify(draft) !== JSON.stringify(baseline.current)} onClick={() => { close(); onInspectDesign(`continuity:${row.id}`) }}>查看连续性依据</Button></p>)}
+      </details>}
       {references.some(ref => dependencyReferenceIds.includes(ref.id) && JSON.stringify(draft.find(row => row.id === ref.id)) !== JSON.stringify(ref)) && <Alert type="warning" message="本次修改涉及实际落幅依赖；应用后需要重新核对或绑定落幅。" />}
       {!capability && <Alert type="warning" message={capabilityError || "模型能力待核实；可准备参考，提交前仍需检查"} action={capabilityError && <Button onClick={onRetryCapability}>重试读取能力</Button>} />}
       {!roles.length && <Alert type="info" message="当前模型接入仅支持纯文本，请更换模型后添加参考" />}
@@ -112,7 +121,8 @@ export function ReferencePicker({ projectId, assets, assetError, onReloadAssets,
       {!disabled && choosing && <fieldset style={{ border: 0, padding: 0, width: '100%' }}><Space direction="vertical" style={{ width: '100%' }}>
       {replaceId && <Alert type="info" message="请选择替换素材" action={<Button onClick={() => setReplaceId(undefined)}>取消替换</Button>} />}
       <p>选择绑定对象，再选入对应资产的具体图片。</p>
-      <Select aria-label="本次参考绑定人物或物件" mode="multiple" value={participantIds} placeholder="选择人物或物件" style={{ width: '100%' }} options={design.participants.map(person => ({ value: person.id, label: person.name }))} onChange={value => { setAssetId(undefined); setParticipantIds(value); setError('') }} />
+      {scopes.some(row => !row.known) && <Alert type="info" message="覆盖镜头的参与对象范围待核对；候选分组不代表完整出镜名单。" />}
+      <Select aria-label="本次参考绑定人物或物件" mode="multiple" value={participantIds} placeholder="选择人物或物件" style={{ width: '100%' }} options={participantOptions} onChange={value => { setAssetId(undefined); setParticipantIds(value); setError('') }} />
 
       {error && <Alert type="error" message={error} />}
       <Select aria-label="本次素材资产" allowClear placeholder="选择素材资产，不修改设计关联" value={assetId} style={{ width: '100%' }} options={linked.filter(asset => !location || asset.kind === 'scene').map(asset => ({ value: asset.id, label: asset.name }))} onChange={id => { setAssetId(id); const asset = linked.find(row => row.id === id); if (asset) setParticipantIds(asset.kind === 'scene' ? [] : design.participants.filter(person => (asset.kind === 'character' ? person.character_id : person.prop_id) === id).map(person => person.id)) }} />

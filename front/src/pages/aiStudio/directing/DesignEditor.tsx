@@ -19,8 +19,10 @@ import type { DesignScope, DesignEdge } from './designWorkspace'
 import { WorkbenchNavigation, WorkbenchObjectBar, WorkbenchInspector, navigationMatches } from './WorkbenchChrome'
 import { SequenceNavigation } from './SequenceLayout'
 
+export type DesignFocus = { revisionId: string; objectKey?: string; assets?: boolean; serial: number }
+
 /** 范围与共享选择驱动分镜、关系画布与对象详情，所有编辑直接更新唯一设计内容。 */
-export function DesignEditor({ value, onChange, disabled = false, active = true, assets, assetCatalog, assetError, revisionId, cuts, rememberContext, onShoot, shootUnavailable }: { value: SceneDesign_Input; onChange: (value: SceneDesign_Input) => void; disabled?: boolean; active?: boolean; revisionId?: string; cuts?: WorkspaceRead['cuts']; assets?: ReactNode; assetCatalog?: AssetSummary[]; assetError?: string; rememberContext?: { projectId: string; sequenceId: string }; onShoot?: (shotId: string) => void; shootUnavailable?: string }) {
+export function DesignEditor({ focusRequest, value, onChange, disabled = false, active = true, assets, assetCatalog, assetError, revisionId, cuts, rememberContext, onShoot, shootUnavailable }: { focusRequest?: DesignFocus; value: SceneDesign_Input; onChange: (value: SceneDesign_Input) => void; disabled?: boolean; active?: boolean; revisionId?: string; cuts?: WorkspaceRead['cuts']; assets?: ReactNode; assetCatalog?: AssetSummary[]; assetError?: string; rememberContext?: { projectId: string; sequenceId: string }; onShoot?: (shotId: string) => void; shootUnavailable?: string }) {
   const initialContext = useRef(rememberContext ? readWorkspaceContext(rememberContext.projectId, rememberContext.sequenceId) : {})
   const [selected, setSelected] = useState<string | undefined>(initialContext.current.designObject || undefined)
   const [tab, setTab] = useState(['narrative', 'performance', 'camera', 'relations'].includes(initialContext.current.designTab || '') ? initialContext.current.designTab! : 'narrative')
@@ -128,6 +130,18 @@ export function DesignEditor({ value, onChange, disabled = false, active = true,
     if (row >= 0) list.current.scrollTop = Math.max(0, row * 40 - list.current.clientHeight / 2)
     setRevealId(undefined)
   }, [revealId, rows, view])
+  const focusedRequest = useRef<number>()
+  useEffect(() => {
+    if (!active || !focusRequest || focusRequest.revisionId !== revisionId || focusedRequest.current === focusRequest.serial) return
+    focusedRequest.current = focusRequest.serial
+    setScope('all'); setQuery(''); setProblems(false); setRelation(undefined)
+    setAssetsOpen(!!focusRequest.assets)
+    if (focusRequest.objectKey && objects.some(row => row.key === focusRequest.objectKey)) {
+      setSelected(focusRequest.objectKey); setView('storyboard'); setSelectionEpoch(previous => previous + 1)
+      if (focusRequest.objectKey.startsWith('shot:')) { setTab('relations'); setRevealId(focusRequest.objectKey.slice(5)) }
+      if (!desktop) setDetailsOpen(true)
+    }
+  }, [active, focusRequest, revisionId, objects, desktop])
   const update = (next: SceneDesign_Input) => onChange(next)
   const addShot = () => {
     const id = 'shot-' + crypto.randomUUID().slice(0, 8)
@@ -143,14 +157,14 @@ export function DesignEditor({ value, onChange, disabled = false, active = true,
   const [issueField, setIssueField] = useState<string>()
   const showIssue = (id: string, issue: string) => {
     const target = value.direction.shots.find(row => row.id === id)
-    const missing = target && ([['beat_ids', value.direction.beats], ['event_ids', value.events], ['blocking_state_ids', value.direction.blocking_states], ['criterion_ids', value.criteria]] as const).find(([key, rows]) => target[key].some(ref => !rows.some(row => row.id === ref)))?.[0]
+    const missing = target && ([['beat_ids', value.direction.beats], ['event_ids', value.events], ['blocking_state_ids', value.direction.blocking_states], ['criterion_ids', value.criteria], ['participant_ids', value.participants]] as const).find(([key, rows]) => target[key]?.some(ref => !rows.some(row => row.id === ref)))?.[0]
     if (issue === '关联缺失' && !missing) {
       const graph = shotGraph(value, id)
       const missingKeys = new Set(graph.nodes.filter(node => node.kind === 'missing').map(node => node.key))
       const edge = graph.edges.find(edge => missingKeys.has(edge.to) || missingKeys.has(edge.from))
       if (edge) { select(`shot:${id}`); setRelation({ edge }); return }
     }
-    const field = ({ '动作待明确': 'visible_result', '叙事待明确': 'narrative_function', '时长未填写': 'estimated_duration_ms', '未关联节拍': 'beat_ids', '关联缺失': missing || 'beat_ids' } as Record<string, string>)[issue]
+    const field = ({ '动作待明确': 'visible_result', '叙事待明确': 'narrative_function', '时长未填写': 'estimated_duration_ms', '未关联节拍': 'beat_ids', '参与对象范围待核对': 'participant_ids', '关联缺失': missing || 'beat_ids' } as Record<string, string>)[issue]
     select(`shot:${id}`); setTab(field?.endsWith('_ids') ? 'relations' : 'narrative'); setIssueField(field)
   }
   useEffect(() => {
@@ -180,7 +194,7 @@ export function DesignEditor({ value, onChange, disabled = false, active = true,
       { key: 'narrative', label: '叙事', children: <DesignFields value={value} path={['direction', 'shots', shotIndex]} fields={['visible_result', 'narrative_function', 'estimated_duration_ms']} onChange={update} disabled={disabled} /> },
       { key: 'performance', label: '表演', children: <>{value.performance.beats.map((row, index) => shot.beat_ids.includes(row.beat_id) && <section className="design-related" key={index}><p>{value.participants.find(p => p.id === row.participant_id)?.name || '缺失人物引用'} · 共享节拍表演</p><p>{noteText(row.physical_action) || '身体动作待填写'}</p><Button onClick={() => select(`performance:${index}`)}>编辑表演与影响范围</Button></section>)}<Button onClick={() => { openRoles('performance') }}>完整表演审阅</Button></> },
       { key: 'camera', label: '摄影', children: cameraIndex >= 0 ? <><DesignFields value={value} path={['cinematography', cameraIndex]} fields={['composition', 'lens_effect', 'movement_path', 'end_frame']} onChange={update} disabled={disabled} /><details><summary>完整摄影参数与验收依据</summary><DesignFields value={value} path={['cinematography', cameraIndex]} fields={Object.keys(value.cinematography[cameraIndex]).filter(key => !['composition', 'lens_effect', 'movement_path', 'end_frame'].includes(key))} onChange={update} disabled={disabled} /></details></> : <Empty description="此镜头尚无摄影设计">{!disabled && <Button onClick={() => onChange({ ...value, cinematography: [...value.cinematography, { ...emptyDesign().cinematography[0], shot_id: shot.id, criterion_ids: [] }] })}>添加摄影设计</Button>}</Empty> },
-      { key: 'relations', label: '关联', children: <><DesignFields value={value} path={['direction', 'shots', shotIndex]} fields={['beat_ids', 'event_ids', 'blocking_state_ids', 'criterion_ids']} onChange={update} disabled={disabled} /><h3>相关对象</h3>{objects.filter(o => o.key.startsWith('blocking:') && shot.blocking_state_ids.includes(o.key.slice(9)) || o.key.startsWith('event:') && shot.event_ids.includes(o.key.slice(6)) || o.key.startsWith('criterion:') && shot.criterion_ids.includes(o.key.slice(10))).map(o => <Button block type="text" className="design-object-link" key={o.key} onClick={() => select(o.key)}>{o.label}</Button>)}<Button onClick={() => { openRoles('sound') }}>声音与连续性审阅</Button></> },
+      { key: 'relations', label: '关联', children: <><DesignFields value={value} path={['direction', 'shots', shotIndex]} fields={['participant_ids', 'beat_ids', 'event_ids', 'blocking_state_ids', 'criterion_ids']} onChange={update} disabled={disabled} /><h3>相关对象</h3>{objects.filter(o => o.key.startsWith('participant:') && shot.participant_ids?.includes(o.key.slice(12)) || o.key.startsWith('blocking:') && shot.blocking_state_ids.includes(o.key.slice(9)) || o.key.startsWith('event:') && shot.event_ids.includes(o.key.slice(6)) || o.key.startsWith('criterion:') && shot.criterion_ids.includes(o.key.slice(10))).map(o => <Button block type="text" className="design-object-link" key={o.key} onClick={() => select(o.key)}>{o.label}</Button>)}<Button onClick={() => { openRoles('sound') }}>声音与连续性审阅</Button></> },
     ]} /> : <DesignFields value={value} path={selectedObject.path} fields={selectedObject.fields} onChange={update} disabled={disabled} />}
     {!disabled && typeof selectedObject.path[selectedObject.path.length - 1] === 'number' && <Button danger onClick={() => Modal.confirm({ title: `移除${selectedObject.label}`, content: '会从当前设计草稿移除此对象。其他对象保留原引用，缺失关联会明确标记，保存前需要修复。', onOk: () => { const path = selectedObject.path.slice(0, -1); const index = selectedObject.path[selectedObject.path.length - 1]; update(patchDesign(value, path, designAt(value, path).filter((_: unknown, i: number) => i !== index))); setSelected(undefined) } })}>移除当前对象</Button>}
     <h3>设计来源</h3><SourceLinks sources={value.sources} /><details className="design-source"><summary>对象技术身份</summary><p>{selectedObject.key}</p></details>

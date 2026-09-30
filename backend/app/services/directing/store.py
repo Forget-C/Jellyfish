@@ -309,7 +309,10 @@ class DirectingStore:
             # 确认采用与执行受理共用场次锁，草稿不会改变实际连续性依据。
             if row.kind == "cut":
                 await self.db.scalar(select(Sequence).where(Sequence.id == row.sequence_id).with_for_update())
-            await self._validate(await self.sequence(row.sequence_id), CONTRACTS[row.kind].model_validate(row.payload))
+            # 旧已确认设计仍可读取；本次设计确认必须明确镜头对象范围。
+            content = CONTRACTS[row.kind].model_validate(row.payload,
+                context={"require_shot_participants": row.kind == "design" and row.confirmed_at is None})
+            await self._validate(await self.sequence(row.sequence_id), content)
             result = await self.db.execute(update(DirectingRevision).where(
                 DirectingRevision.id == row.id, DirectingRevision.version == expected_version,
                 DirectingRevision.confirmed_at.is_(None),

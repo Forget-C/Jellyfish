@@ -31,6 +31,10 @@ def test_story_roundtrip(story):
     (("direction", "shots", 0, "id"), "../bad"),
     (("direction", "shots", 1, "id"), "s1"),
     (("direction", "shots", 0, "estimated_duration_ms"), "4000"),
+    (("direction", "shots", 0, "participant_ids"), ["missing"]),
+    (("direction", "shots", 0, "participant_ids"), ["brother", "brother"]),
+    (("direction", "shots", 0, "participant_ids"), "brother"),
+    (("direction", "shots", 0, "participant_ids"), [1]),
 ])
 def test_invalid_shared_references(path, value):
     """未知、重复身份和隐式数值转换在写入前被拒绝。"""
@@ -53,6 +57,22 @@ def test_missing_role_and_unknown_field_are_errors():
     data["confirmed_by"] = "model"
     with pytest.raises(ValidationError):
         SceneDesign.model_validate(data)
+
+
+@pytest.mark.parametrize("value", [None, [], ["brother"]])
+def test_shot_participant_scope_roundtrip(value):
+    """范围未知、明确无对象、明确名单分别往返，不借其他工作单推断。"""
+    data = design_sample()
+    data["direction"]["shots"][0]["participant_ids"] = value
+    parsed = SceneDesign.model_validate(data)
+    assert SceneDesign.model_validate_json(parsed.model_dump_json()).direction.shots[0].participant_ids == value
+    if value is None:
+        with pytest.raises(ValidationError, match="s1.*参与对象范围待核对"):
+            SceneDesign.model_validate(data, context={"require_shot_participants": True})
+        del data["direction"]["shots"][0]["participant_ids"]
+        assert SceneDesign.model_validate(data).direction.shots[0].participant_ids is None
+    else:
+        assert SceneDesign.model_validate(data, context={"require_shot_participants": True}).direction.shots[0].participant_ids == value
 
 
 @pytest.mark.parametrize("value", [{"state": "fact", "text": "事实"}, {"state": "not_applicable"}, {"state": "none"}, {"state": "unknown", "text": "已确认"}])

@@ -183,7 +183,8 @@ def validate_candidate(context, raw):
             raise ValueError('整体拟落实必须关联实际修改')
         if candidate.summary.status == 'unchanged' and candidate.changes:
             raise ValueError('无变化说明不能包含实际修改')
-    proposed_design = SceneDesign.model_validate(design)
+    proposed_design = SceneDesign.model_validate(design,
+        context={"require_shot_participants": any(change.target == 'design' for change in candidate.changes)})
     proposed_unit = GenerationUnit.model_validate(unit)
     shots = {item.shot_id for item in proposed_unit.coverage}
     beats = {beat for item in proposed_unit.coverage for beat in item.beat_ids}

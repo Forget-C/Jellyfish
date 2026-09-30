@@ -12,7 +12,7 @@ export function DesignRelationEditor({ value, edge, objectKey, disabled, onChang
   const label = (key: string) => objects.find(row => row.key === key)?.label || '缺失引用'
   const affected = value.direction.shots.filter(shot => shotGraph(value, shot.id).nodes.some(node => node.key === (edge?.from || objectKey)))
   const raw = object ? designAt(value, object.path) : undefined
-  const fields = raw && typeof raw === 'object' ? Object.keys(raw).filter(key => (key.endsWith('_ids') || key.endsWith('_id')) && !['character_id', 'prop_id', 'location_asset_id', 'style_revision_id'].includes(key)) : []
+  const fields = raw && typeof raw === 'object' ? [...new Set([...Object.keys(raw), ...(objectKey?.startsWith('shot:') ? ['participant_ids'] : [])])].filter(key => (key.endsWith('_ids') || key.endsWith('_id')) && !['character_id', 'prop_id', 'location_asset_id', 'style_revision_id'].includes(key)) : []
   return <div className="design-relation-editor"><Button onClick={onClose}>返回对象详情</Button><h2>{edge ? edge.label : `${object?.label || '对象'} · 关联`}</h2>
     {affected.length > 1 && <Alert type="info" message={`共享关联 · 修改影响 ${affected.length} 个镜头`} description={affected.map(shot => `镜头 ${value.direction.shots.indexOf(shot) + 1}`).join('、')} />}
     {edge ? <><p>{label(edge.from)} → {label(edge.to)}</p>{edge.indirect ? <><Alert type="info" message="这是间接关系，请修改原始对象的引用" /><Button onClick={() => { onSelect(relationOwner(edge)); onClose() }}>定位原始关联</Button></> : binding ? <>

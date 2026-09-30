@@ -281,7 +281,17 @@ class ProductionService(DirectingAIService):
                 identity = ", ".join(f"{key}={value[key]}" for key in ("id", "participant_id", "beat_id", "shot_id") if value.get(key) is not None)
                 if identity:
                     lines.append(f"【{label}: {identity}】")
+                if path.startswith("/direction/shots/") and "participant_ids" in value:
+                    participant_ids = value["participant_ids"]
+                    names = [person.name for person in design.participants if person.id in (participant_ids or [])]
+                    scope = "范围待核对（历史设计）" if participant_ids is None else "、".join(names) or "明确无参与对象"
+                    line = f"镜头参与对象：{scope}；仅表达设计范围，不代表本次参考输入或实际媒体覆盖。"
+                    lines.append(line)
+                    decisions.append(CompilationDecision(section_path=path + "/participant_ids", disposition="text",
+                        explanation="保留明确名单、明确无对象与历史待核对的区别", text_excerpt=line))
                 for key, child in value.items():
+                    if key == "participant_ids" and path.startswith("/direction/shots/"):
+                        continue
                     if key not in ("style_revision_id", "id", "participant_id", "beat_id", "shot_id") and (key != "sources" or path == "/sound"):
                         emit(child, path + "/" + key, key)
             elif isinstance(value, list):

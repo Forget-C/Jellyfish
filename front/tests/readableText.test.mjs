@@ -108,7 +108,7 @@ test('legal dotted and colon identities are resolved whole, never as shorter pre
   u.references.push({ ...u.references[0], id: 'ref0.old', subject_group_id: null, ordinal: 2, asset_origin: { name: '历史参考' } })
   const c = readableContext(d, u)
   const output = text => readableSegments(text, c, { compiled: true }).map(row => row.label).join('')
-  assert.equal(output('participant_ids[1]：person1.old'), '关联人物[1]：历史角色')
+  assert.equal(output('participant_ids[1]：person1.old'), '参与对象[1]：历史角色')
   assert.equal(output('participant_id：person1:next'), '人物/物件：后续角色')
   assert.equal(output('person1.old 正在离开'), '历史角色 正在离开')
   assert.equal(output('person1.unavailable 正在离开'), 'person1.unavailable 正在离开')

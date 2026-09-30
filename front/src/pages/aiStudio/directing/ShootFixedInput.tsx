@@ -42,7 +42,8 @@ export function ShootFixedInput({ workspace, prompt, review, onHistory, compact 
     {!unit.references.length && <p className="design-secondary">本次不发送图片，能否生成仍以模型校验为准。</p>}
     <h3>本次动作</h3>{unit.coverage.map(item => {
       const index = design?.content.direction.shots.findIndex(shot => shot.id === item.shot_id) ?? -1
-      return <p key={item.id}><strong>{index < 0 ? '历史镜头' : `镜头 ${String(index + 1).padStart(2, '0')}`}</strong> · {item.action_scope}</p>
+      const ids = design?.content.direction.shots[index]?.participant_ids
+      return <div key={item.id}><p><strong>{index < 0 ? '历史镜头' : `镜头 ${String(index + 1).padStart(2, '0')}`}</strong> · {item.action_scope}</p><p className="design-secondary">固定设计参与对象：{ids == null ? '范围待核对' : ids.map(id => design?.content.participants.find(row => row.id === id)?.name || '历史对象暂不可用').join('、') || '明确无参与对象'} · 与实际参考输入分别表达</p></div>
     })}
     <details><summary>版本来源链</summary><div className="shoot-version-chain"><Tag>{revisionName(workspace.designs, plan.content.design_revision_id, '设计')}</Tag><span>→</span><Tag>{revisionName(workspace.plans, plan.id, '计划')}</Tag><span>→</span><Tag>{revisionName(workspace.prompts, prompt.id, '指令')}</Tag></div>
     {review && <p>{revisionName(workspace.reviews, review.id, '检查')} · {review.parent_id ? '含人工取舍' : '结论已保存'}</p>}

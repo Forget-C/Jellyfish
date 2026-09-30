@@ -11,6 +11,7 @@ description: "记录当前正在推进的开发计划、改造方案与阶段性
 
 当前计划入口：
 
+- [单元拍摄准备对象关联补全计划](/docs/plans/unit-preparation-object-relations-plan/)：已完成标签修复、镜头参与对象契约、单元范围投影与 graph 参考绑定验收；历史设计按版本流程核对，不自动回填。
 - [生产计划与单元拍摄准备关系图改造计划](/docs/plans/production-preparation-graph-plan/)：已完成；统一图形交互，以当前单元节点承接准备和参考编辑，将跨单元总览放回计划层，角色、物件、场所和参考主体已统一 modal，已归档空状态、固定来源与响应式验收证据。
 - [场次工作台版本管理交互改造计划](/docs/plans/workspace-version-management-plan/)：已完成；分类版本列表、只读比较、受保护编辑及导航行右侧入口已落地，附四尺寸截图、28 项行为测试和 8 组浏览器回归记录。
 - [场次划分统一编辑与历史版本计划](/docs/plans/chapter-division-version-editor-plan/)：代码与验收已完成；统一 AI／手动编辑、历史 Modal、不可变保存版本和受控恢复，附 HTTP、浏览器及 MySQL 验证；业务库部署步骤见接入指南。

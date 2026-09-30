@@ -26,7 +26,7 @@ export const ProductionDetailContext = createContext<{ target: HTMLElement | nul
 type InputSection = 'unit' | 'coverage' | 'reference' | 'dependency'
 export type ProductionInputSelection = { section: InputSection; node?: ProductionGraphNode; serial: number }
 type ModelState = { modelId?: string; name?: string; capability?: VideoReferenceCapabilities; error?: string }
-export const ProductionInputContext = createContext<(ProductionInputSelection & { onModel: (value: ModelState) => void; onEditAssets?: () => void }) | undefined>(undefined)
+export const ProductionInputContext = createContext<(ProductionInputSelection & { onModel: (value: ModelState) => void; onEditAssets?: () => void; onInspectDesign?: (objectKey: string) => void }) | undefined>(undefined)
 
 const InspectorContext = createContext<HTMLElement | null>(null)
 export function ProductionParameters({ children }: { children: ReactNode }) {
@@ -39,9 +39,9 @@ const steps = [['prepare', '拍摄准备'], ['prompt', '指令与检查'], ['tak
 const restoreStep = (value?: string | null) => value === 'review' || value === 'takes' ? 'takes' : value === 'prompt' ? 'prompt' : 'prepare'
 
 /** 版本控制、单元导航、工作内容和参数检查固定分区，切页不卸载编辑器。 */
-export function ProductionWorkbench({ onRetryTasks, assets, assetError, onRetryAssets, onEditAssets, unitProgress, reviewNeedsAttention, prepareAction, checkAction, shootAction, busy, planReady, promptId, reviewId, active, focusRequest, tasks, submitted, tasksState, onOpenTasks, plan, planId, workspace, selectedUnitId, onSelectUnit, toolbar, start, preparation, prompt, adjustment, review, execution, candidates, advanced }: {
+export function ProductionWorkbench({ onRetryTasks, assets, assetError, onRetryAssets, onEditAssets, onInspectDesign, unitProgress, reviewNeedsAttention, prepareAction, checkAction, shootAction, busy, planReady, promptId, reviewId, active, focusRequest, tasks, submitted, tasksState, onOpenTasks, plan, planId, workspace, selectedUnitId, onSelectUnit, toolbar, start, preparation, prompt, adjustment, review, execution, candidates, advanced }: {
   onRetryTasks: () => void;
-  assets?: AssetSummary[]; assetError?: string; onRetryAssets?: () => void; onEditAssets?: () => void;
+  assets?: AssetSummary[]; assetError?: string; onRetryAssets?: () => void; onEditAssets?: () => void; onInspectDesign?: (objectKey: string) => void;
   unitProgress: Record<string, string>; reviewNeedsAttention: boolean;
   prepareAction: StepAction; checkAction?: StepAction; shootAction: StepAction; busy: boolean; planReady: boolean; promptId?: string; reviewId?: string;
   tasks: DirectingTaskRead[]; submitted: SubmittedWorkspaceTask[]; tasksState: 'loading' | 'ready' | 'error'; onOpenTasks: () => void;
@@ -170,7 +170,7 @@ export function ProductionWorkbench({ onRetryTasks, assets, assetError, onRetryA
           setExternalInput(undefined)
           setInput(current => ({ section: node.kind === 'coverage' || node.kind === 'dependency' ? node.kind : node.kind === 'unit' ? 'unit' : 'reference', node, serial: current.serial + 1 }))
           setOpen(!['participant', 'location', 'reference'].includes(node.kind))
-        }} />}{!!records.prompts.length && <Button type="link" onClick={() => go('prompt')}>查看本计划固定指令 · {records.prompts.length} 份</Button>}{!!records.takes.length && <Button type="link" onClick={() => go('takes')}>查看本计划候选 · {records.takes.length} 个</Button>}{createPortal(<ProductionInputContext.Provider value={{ ...input, onModel: setModelState, onEditAssets }}>{preparation}</ProductionInputContext.Provider>, preparationHost)}</div>
+        }} />}{!!records.prompts.length && <Button type="link" onClick={() => go('prompt')}>查看本计划固定指令 · {records.prompts.length} 份</Button>}{!!records.takes.length && <Button type="link" onClick={() => go('takes')}>查看本计划候选 · {records.takes.length} 个</Button>}{createPortal(<ProductionInputContext.Provider value={{ ...input, onModel: setModelState, onEditAssets, onInspectDesign }}>{preparation}</ProductionInputContext.Provider>, preparationHost)}</div>
         <div hidden={tab !== 'prompt'}>{prompt}</div>
         {tab === 'prompt' && <div className="shoot-studio-layout">
           <div className="shoot-studio-editor">{!planReady ? <Empty description="先保存并确认本次拍摄准备" /> : adjustment}</div>

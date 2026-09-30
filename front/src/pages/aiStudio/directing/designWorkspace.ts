@@ -51,7 +51,7 @@ export function relationBinding(value: SceneDesign_Input, edge: DesignEdge): Rel
   const toKind = edge.to.slice(0, edge.to.indexOf(':')), toId = edge.to.slice(edge.to.indexOf(':') + 1)
   if (fromKind === 'shot') {
     const index = value.direction.shots.findIndex(shot => shot.id === fromId)
-    const field = { beat: 'beat_ids', event: 'event_ids', criterion: 'criterion_ids', blocking: 'blocking_state_ids' }[toKind]
+    const field = { beat: 'beat_ids', event: 'event_ids', criterion: 'criterion_ids', blocking: 'blocking_state_ids', participant: 'participant_ids' }[toKind]
     if (index >= 0 && field) return { path: ['direction', 'shots', index, field], prefix: toKind, target: toId, many: true, required: false }
     if (toKind === 'camera' && value.cinematography[Number(toId)]?.shot_id === fromId) return { path: ['cinematography', Number(toId), 'shot_id'], prefix: 'shot', target: fromId, many: false, required: true }
   }
@@ -121,6 +121,7 @@ export function shotGraph(value: SceneDesign_Input, shotId: string): DesignGraph
   const shot = value.direction.shots.find(row => row.id === shotId)
   if (!shot) return { nodes: [], edges: [] }
   const center = `shot:${shot.id}`; include(center)
+  shot.participant_ids?.forEach(id => link(center, `participant:${id}`, '参与对象'))
   shot.beat_ids.forEach(id => link(center, `beat:${id}`, '覆盖节拍'))
   shot.event_ids.forEach(id => link(center, `event:${id}`, '关联事件'))
   shot.criterion_ids.forEach(id => link(center, `criterion:${id}`, '验收依据'))
@@ -153,7 +154,8 @@ export function shotIssues(value: SceneDesign_Input, shotId: string): string[] {
   if (['unset', 'unknown'].includes(shot.narrative_function.state || 'unset')) issues.push('叙事待明确')
   if (!shot.estimated_duration_ms) issues.push('时长未填写')
   if (!shot.beat_ids.length) issues.push('未关联节拍')
-  for (const [ids, rows] of [[shot.beat_ids, value.direction.beats], [shot.event_ids, value.events], [shot.blocking_state_ids, value.direction.blocking_states], [shot.criterion_ids, value.criteria]] as const) {
+  if (shot.participant_ids == null) issues.push('参与对象范围待核对')
+  for (const [ids, rows] of [[shot.beat_ids, value.direction.beats], [shot.event_ids, value.events], [shot.blocking_state_ids, value.direction.blocking_states], [shot.criterion_ids, value.criteria], [shot.participant_ids || [], value.participants]] as const) {
     if (ids.some(id => !rows.some(row => row.id === id))) issues.push('关联缺失')
   }
   if (shotGraph(value, shotId).nodes.some(node => node.kind === 'missing')) issues.push('关联缺失')

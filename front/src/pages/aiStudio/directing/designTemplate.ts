@@ -18,7 +18,7 @@ export function emptyDesign(): SceneDesign_Input {
       location_asset_id: null, immutable_facts: [], open_questions: [], anchors: [{ id: 'anchor1', description: { state: 'unset' } }],
       blocking_states: [{ id: 'state1', participant_id: 'person1', anchor_ids: ['anchor1'], event_id: 'event1', ...unsetFields(['position', 'orientation', 'initiative', 'path', 'transition_reason']) }],
       beats: [{ id: 'beat1', event_ids: ['event1'], ...unsetFields(['objective', 'obstacle', 'expected_change', 'must_show']) }],
-      shots: [{ id: 'shot1', beat_ids: ['beat1'], event_ids: ['event1'], blocking_state_ids: ['state1'], criterion_ids: ['criterion1'], ...unsetFields(['narrative_function', 'visible_result']), estimated_duration_ms: 5000 }],
+      shots: [{ id: 'shot1', beat_ids: ['beat1'], event_ids: ['event1'], blocking_state_ids: ['state1'], participant_ids: null, criterion_ids: ['criterion1'], ...unsetFields(['narrative_function', 'visible_result']), estimated_duration_ms: 5000 }],
     },
     performance: { applicability: { state: 'unset' }, situations: [{ participant_id: 'person1', ...unsetFields(['situation', 'relationship']) }],
       beats: [{ beat_id: 'beat1', participant_id: 'person1', received_event_ids: ['event1'], dialogue_ids: [], criterion_ids: ['criterion1'],

@@ -64,7 +64,7 @@ try {
   const files = () => selectOption('参考素材来源', '已有素材')
   const count = () => graph.locator('[data-node-kind="reference"]:not([data-node-action])').count()
   await node('participant', 'person1').click()
-  await modal.getByText('角色：张三', { exact: true }).waitFor()
+  await modal.getByText('对象：张三', { exact: true }).waitFor()
   assert.ok(await graph.locator('[data-node-kind="participant"][data-node-id="person1"]').innerText().then(text => text.includes('未关联资产')))
   assert.equal(await graph.locator('[data-node-kind="location"]').count(), 1)
   await files()

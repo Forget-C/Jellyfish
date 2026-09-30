@@ -10,6 +10,8 @@ status: completed
 >
 > 承接[场次工作台版本管理交互改造计划](/docs/plans/workspace-version-management-plan/)、[本场资产与单元参考输入优化计划](/docs/plans/sequence-asset-reference-input/)与[单元试拍步骤与候选素材工作区优化计划](/docs/plans/sequence-workbench-shoot-flow/)。当前实现与约束以[场次工作台数据基础](/docs/architecture/directing-foundation/)为准，前序计划的验收记录保留。
 
+后续核查发现：静态物件可能只有文字及全场背景关联，现有投影不能完整表达镜头参与对象。该缺口及未知类型标签修复已由[单元拍摄准备对象关联补全计划](/docs/plans/unit-preparation-object-relations-plan/)落地：明确逐镜名单驱动准备图，历史未知名单仍需按版本流程核对；本页原有交互验收不代表历史数据已经回填。
+
 本计划解决三个问题：试拍关系图与导演设计关系图的体验不一致；当前单元准备混入全计划范围；参考、依赖等操作仍依赖图外分类按钮。目标是让用户围绕当前单元直接看清“拍什么、输入什么、依赖什么、还需处理什么”，并通过节点进入对应编辑。
 
 ## 1. 现状与决策

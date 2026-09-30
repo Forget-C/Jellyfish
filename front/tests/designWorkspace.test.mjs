@@ -11,6 +11,24 @@ const compile = source => ts.transpileModule(source, { compilerOptions: { target
 const data = source => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`
 const { sceneOverview, shotRelationPath, shotGraph, designObjects, shotIssues, scopeShots, scopeGraph, reorderScopeShots, relationBinding, relationOwner, changeRelation } = await import(data(compile(source).replaceAll("'./designValue'", JSON.stringify(data(compile(valueSource))))))
 
+test('shot participant relations are explicit, editable and independent of background evidence', () => {
+  const value = makeWorkspace().designs[0].content
+  value.participants.push({ id: 'van', name: '白色面包车' })
+  assert.ok(shotIssues(value, 'shot1').includes('参与对象范围待核对'))
+  value.direction.shots[0].participant_ids = ['van']
+  assert.ok(!shotIssues(value, 'shot1').includes('参与对象范围待核对'))
+  const graph = shotGraph(value, 'shot1')
+  const edge = graph.edges.find(row => row.from === 'shot:shot1' && row.to === 'participant:van')
+  assert.equal(edge.label, '参与对象')
+  assert.equal(shotRelationPath(graph, 'shot1', 'participant:van').length, 1)
+  const next = changeRelation(value, relationBinding(value, edge))
+  assert.deepEqual(next.direction.shots[0].participant_ids, [])
+  assert.ok(!shotIssues(next, 'shot1').includes('参与对象范围待核对'))
+  assert.deepEqual(next.direction.blocking_states, value.direction.blocking_states)
+  value.direction.shots[0].participant_ids = ['missing']
+  assert.ok(shotIssues(value, 'shot1').includes('关联缺失'))
+})
+
 test('beat ranges retain shared shot identities and expose unassigned or missing beats', () => {
   const value = makeWorkspace().designs[0].content
   value.direction.beats.push({ ...structuredClone(value.direction.beats[0]), id: 'beat2' })

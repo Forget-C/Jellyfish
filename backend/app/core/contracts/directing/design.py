@@ -1,6 +1,6 @@
 """六部门共享的场次设计快照；字段供后续编辑、编译、审稿共同消费。"""
 
-from pydantic import Field, model_validator
+from pydantic import Field, ValidationInfo, model_validator
 
 from app.core.contracts.directing.common import Contract, Identity, Note, Source, Text, references, unique
 
@@ -67,6 +67,8 @@ class ShotCoverage(Contract):
     beat_ids: list[Identity] = Field(min_length=1)
     event_ids: list[Identity]
     blocking_state_ids: list[Identity]
+    participant_ids: list[Identity] | None = Field(default=None,
+        description="镜头参与人物／物件 ID；null 为范围待核对，空列表为明确无对象，不代表参考输入或实际媒体覆盖。")
     criterion_ids: list[Identity]
     narrative_function: Note
     visible_result: Note
@@ -247,7 +249,7 @@ class SceneDesign(Contract):
     prompt: PromptDirection
 
     @model_validator(mode="after")
-    def linked_work_sheets(self):
+    def linked_work_sheets(self, info: ValidationInfo):
         """逐岗解析共享身份，防止拆镜后表演丢失或跨版本错配。"""
         errors = []
 
@@ -273,8 +275,11 @@ class SceneDesign(Contract):
             check(references, row.anchor_ids, ids["anchor"], "anchor")
             check(references, [row.event_id] if row.event_id else [], ids["event"], "event")
         for shot in self.direction.shots:
+            if shot.participant_ids is None and (info.context or {}).get("require_shot_participants"):
+                errors.append(f"镜头 {shot.id} 的参与对象范围待核对；请选择人物／物件或明确无对象")
             for key, values in (("beat", shot.beat_ids), ("event", shot.event_ids),
-                                ("blocking", shot.blocking_state_ids), ("criterion", shot.criterion_ids)):
+                                ("blocking", shot.blocking_state_ids), ("criterion", shot.criterion_ids),
+                                ("participant", shot.participant_ids or [])):
                 check(unique, values, key)
                 check(references, values, ids[key], key)
         check(unique, [(r.beat_id, r.participant_id) for r in self.performance.beats], "performance row")

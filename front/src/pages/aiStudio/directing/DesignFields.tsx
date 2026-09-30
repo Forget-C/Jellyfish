@@ -21,6 +21,14 @@ export function DesignFields({ value, path, onChange, disabled = false, fields }
   }
   const render = (current: unknown, target: DesignPath, template: unknown): React.ReactNode => {
     const key = String(target[target.length - 1]); const label = designLabels[key] || key
+    if (key === 'participant_ids' && target[0] === 'direction' && target[1] === 'shots') {
+      const ids = current as string[] | null | undefined, choices = options(key)
+      return <div className="design-field"><Typography.Text type={ids == null ? 'warning' : 'secondary'}>{ids == null ? '参与对象范围待核对' : ids.length ? '已明确镜头参与对象' : '已明确无参与对象'}</Typography.Text>
+        <Select mode="multiple" aria-label="镜头参与对象" placeholder="选择本镜头的人物或物件" disabled={disabled} value={ids || []} options={[...choices, ...(ids || []).filter(id => !choices.some(row => row.value === id)).map(id => ({ value: id, label: `缺失引用 · ${id}` }))]} onChange={next => change(target, next)} style={{ width: '100%' }} />
+        <div><Button size="small" disabled={disabled || ids?.length === 0} onClick={() => change(target, [])}>明确无对象</Button><Button size="small" disabled={disabled || ids == null} onClick={() => change(target, null)}>标为待核对</Button></div>
+        <Typography.Text type="secondary">包含车辆与道具；仅表达镜头设计范围，不会自动选入参考图片。</Typography.Text>
+      </div>
+    }
     if (current && typeof current === 'object' && !Array.isArray(current) && 'state' in current) {
       const note = current as Note_Input
       return <div className="design-field"><div className="design-field-label"><label>{label}</label><Select aria-label={`${label}状态`} size="small" value={note.state || 'unset'} options={states} disabled={disabled} onChange={state => change(target, ['none', 'not_applicable'].includes(state) ? { state, reason: note.reason || '', sources: note.sources } : ['unset', 'unknown'].includes(state) ? { state } : { ...humanNote(note.text || ''), state })} /></div>
@@ -36,7 +44,11 @@ export function DesignFields({ value, path, onChange, disabled = false, fields }
       return <div className="design-field-array">{current.map((row, index) => <section key={index}><div className="design-field-label"><strong>{label} {index + 1}</strong>{!disabled && <Button size="small" danger onClick={() => change(target, current.filter((_, i) => i !== index))}>移除</Button>}</div>{render(row, [...target, index], Array.isArray(template) ? template[0] : undefined)}</section>)}
         {!disabled && <Button onClick={() => { const next = structuredClone((Array.isArray(template) ? template[0] : undefined) || current[0] || { state: 'unset' }); if (next && typeof next === 'object' && 'id' in next) next.id = 'item-' + crypto.randomUUID().slice(0, 8); change(target, [...current, next]) }}>添加{label}</Button>}</div>
     }
-    if (current && typeof current === 'object') return <>{Object.entries(current).filter(([name]) => !['sources', 'style_revision_id'].includes(name) || (target[0] === 'sound' && name === 'sources')).filter(([name]) => target.length !== path.length || !fields || fields.includes(name)).map(([name, child]) => <div className="design-field" key={name}>{!(child && typeof child === 'object' && 'state' in child) && <label>{designLabels[name] || name}</label>}{render(child, [...target, name], (template as Record<string, unknown>)?.[name])}</div>)}</>
+    if (current && typeof current === 'object') {
+      // 历史镜头可以缺少可选字段，仍须显示核对入口；只投影，不修改历史快照。
+      const object = target.length === 3 && target[0] === 'direction' && target[1] === 'shots' ? { participant_ids: null, ...current } : current
+      return <>{Object.entries(object).filter(([name]) => !['sources', 'style_revision_id'].includes(name) || (target[0] === 'sound' && name === 'sources')).filter(([name]) => target.length !== path.length || !fields || fields.includes(name)).map(([name, child]) => <div className="design-field" key={name}>{!(child && typeof child === 'object' && 'state' in child) && <label>{designLabels[name] || name}</label>}{render(child, [...target, name], (template as Record<string, unknown>)?.[name])}</div>)}</>
+    }
     if (['id', 'character_id', 'prop_id', 'location_asset_id'].includes(key)) return <Typography.Text type="secondary">{typeof current === 'string' && current ? current : '未关联资产'}</Typography.Text>
     if (key.endsWith('_id')) {
       const choices = options(key)

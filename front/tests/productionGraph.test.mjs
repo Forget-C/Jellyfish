@@ -5,6 +5,55 @@ const { buildProductionGraph } = await loadSource('productionGraph')
 const actual = (graph, kind) => graph.nodes.filter(node => node.kind === kind && !node.action)
 const reference = (id, extra = {}) => ({ id, file_id: `file-${id}`, media_kind: 'image', purpose: 'identity', participant_ids: ['person1'], ordinal: 0, source: { kind: 'human', reference: id, version: '1' }, ...extra })
 
+test('explicit shot objects include an unbound van without adding the other shot baton or shared performance', () => {
+  const workspace = makeWorkspace(), plan = workspace.plans[0].content, design = workspace.designs[0].content
+  design.participants.push({ id: 'van', name: '白色面包车' }, { id: 'baton', name: '警用甩棍' })
+  design.direction.shots[0].participant_ids = ['van']
+  design.direction.shots.push({ ...structuredClone(design.direction.shots[0]), id: 'shot2', participant_ids: ['person1', 'baton'] })
+  const before = structuredClone(workspace)
+  let graph = buildProductionGraph(workspace, 'p-old', plan, 'u1')
+  assert.deepEqual(actual(graph, 'participant').map(node => node.objectId), ['van'])
+  const van = actual(graph, 'participant')[0]
+  assert.equal(van.label, '对象：白色面包车')
+  assert.match(van.detail, /本次未选参考.*镜头参与对象/)
+  assert.ok(graph.edges.some(edge => edge.from === van.id && edge.to === actual(graph, 'coverage')[0].id && edge.kind === 'context'))
+  assert.deepEqual(workspace, before)
+  plan.units[0].references = [reference('baton-reference', { participant_ids: ['baton'] })]
+  graph = buildProductionGraph(workspace, 'p-old', plan, 'u1')
+  const baton = actual(graph, 'participant').find(node => node.objectId === 'baton')
+  assert.match(baton.detail, /仅本次参考关联/)
+  assert.ok(!graph.edges.some(edge => edge.from === baton.id && edge.kind === 'context'))
+  assert.ok(graph.edges.some(edge => edge.from === baton.id && edge.kind === 'binding'))
+  plan.units[0].references = []
+  assert.deepEqual(actual(buildProductionGraph(workspace, 'p-old', plan, 'u1'), 'participant').map(node => node.objectId), ['van'])
+})
+
+test('explicit empty scope excludes legacy inference while unknown scope preserves marked evidence', () => {
+  const workspace = makeWorkspace(), plan = workspace.plans[0].content, shot = workspace.designs[0].content.direction.shots[0]
+  for (const participant_ids of [null, undefined, []]) {
+    shot.participant_ids = participant_ids
+    const graph = buildProductionGraph(workspace, 'p-old', plan, 'u1')
+    assert.equal(actual(graph, 'participant').length, participant_ids == null ? 1 : 0)
+    assert.equal(actual(graph, 'coverage')[0].scopeUnknown, participant_ids == null)
+    assert.match(actual(graph, 'coverage')[0].detail, participant_ids == null ? /范围待核对/ : /明确无参与对象/)
+  }
+})
+
+test('one explicit object links to every coverage occurrence and survives removing its last reference', () => {
+  const workspace = makeWorkspace(), plan = workspace.plans[0].content
+  workspace.designs[0].content.direction.shots[0].participant_ids = ['person1']
+  plan.units[0].coverage.push({ ...plan.units[0].coverage[0], id: 'second-coverage', action_scope: '局部动作' })
+  plan.units[0].references = [reference('selected')]
+  let graph = buildProductionGraph(workspace, 'p-old', plan, 'u1')
+  const node = actual(graph, 'participant')[0]
+  assert.deepEqual(node.coverageIds, ['cover1', 'second-coverage'])
+  assert.equal(graph.edges.filter(edge => edge.kind === 'context' && edge.from === node.id).length, 2)
+  plan.units[0].references = []
+  graph = buildProductionGraph(workspace, 'p-old', plan, 'u1')
+  assert.equal(actual(graph, 'participant')[0].id, node.id)
+  assert.equal(actual(graph, 'reference').length, 0)
+})
+
 test('current unit graph retains precise historical dependency and never infers adjacency', () => {
   const workspace = makeWorkspace(), plan = structuredClone(workspace.plans[1].content)
   plan.units.push({ ...structuredClone(plan.units[0]), id: 'u2', dependencies: [{ plan_revision_id: 'p-old', unit_id: 'u1', frame_id: 'frame1', reference_id: 'ref1' }] })
@@ -53,7 +102,7 @@ test('one unit covering several shots keeps independent coverage identities and 
   const graph = buildProductionGraph(workspace, 'p-old', plan, 'u1')
   assert.deepEqual(actual(graph, 'coverage').map(node => node.objectId), ['cover1', 'second-range'])
   assert.deepEqual(actual(graph, 'coverage').map(node => node.label), ['镜头 01', '镜头 02'])
-  assert.deepEqual(actual(graph, 'coverage').map(node => node.detail), ['递出旧信', '第二段动作'])
+  assert.deepEqual(actual(graph, 'coverage').map(node => node.detail), ['递出旧信 · 参与对象范围待核对', '第二段动作 · 参与对象范围待核对'])
 })
 
 test('direct and indirect design participants are distinguished without introducing the whole cast', () => {
@@ -73,6 +122,35 @@ test('already-selected outside participants survive scope reduction and missing 
   assert.equal(actual(graph, 'reference').length, 1)
   assert.equal(actual(graph, 'participant')[0].missing, true)
   assert.equal(actual(graph, 'participant')[0].objectId, 'missing')
+})
+
+test('participant labels require an asset type and keep unclassified objects neutral', () => {
+  const workspace = makeWorkspace(), plan = workspace.plans[0].content, design = workspace.designs[0].content
+  design.participants = [
+    { id: 'actor', name: '张三', character_id: 'character1', prop_id: null },
+    { id: 'linked-prop', name: '旧信', character_id: null, prop_id: 'prop1' },
+    { id: 'van', name: '白色面包车', character_id: null, prop_id: null },
+    { id: 'baton', name: '警用甩棍' },
+    { id: 'unlinked-person', name: '李四', character_id: null, prop_id: null },
+  ]
+  plan.units[0].coverage = []
+  plan.units[0].references = [...design.participants.map(row => row.id), 'missing'].map(id => reference(id, { participant_ids: [id] }))
+  const graph = buildProductionGraph(workspace, 'p-old', plan, 'u1')
+  assert.deepEqual(actual(graph, 'participant').map(node => node.label), ['角色：张三', '物件：旧信', '对象：白色面包车', '对象：警用甩棍', '对象：李四', '对象：引用不可用'])
+  for (const node of actual(graph, 'participant')) assert.match(node.detail, /仅本次参考关联/)
+  assert.match(actual(graph, 'reference').find(node => node.objectId === 'missing').label, /对象引用不可用/)
+})
+
+test('unclassified design objects remain visible and actionable before selecting references', () => {
+  const workspace = makeWorkspace(), plan = workspace.plans[0].content
+  workspace.designs[0].content.participants[0].name = '白色面包车'
+  const graph = buildProductionGraph(workspace, 'p-old', plan, 'u1', [])
+  const node = actual(graph, 'participant')[0]
+  assert.equal(node.label, '对象：白色面包车')
+  assert.equal(node.objectId, 'person1')
+  assert.equal(node.missing, false)
+  assert.match(node.detail, /未关联资产 · 本次未选参考 · 设计调度关联/)
+  assert.ok(graph.edges.some(edge => edge.kind === 'context' && edge.from === node.id))
 })
 
 test('asset availability and fixed selected inputs coexist instead of overwriting each other', () => {
