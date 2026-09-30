@@ -6,7 +6,8 @@ import { buildFileDownloadUrl } from '../assets/utils'
 import { directingError } from './common'
 
 /** 显式声明历史单元依赖，选入实际落幅时同时建立真实图片输入绑定。 */
-export function DependencyEditor({ projectId, workspace, unit, onChange, disabled }: {
+export function DependencyEditor({ projectId, workspace, unit, onChange, disabled, selectedSource }: {
+  selectedSource?: { planId: string; unitId: string };
   projectId: string; workspace: WorkspaceRead; unit: GenerationUnit_Input; onChange: (value: Partial<GenerationUnit_Input>) => void; disabled: boolean
 }) {
   const [state, setState] = useState<ContinuityRead>()
@@ -44,7 +45,7 @@ export function DependencyEditor({ projectId, workspace, unit, onChange, disable
       {error && <Alert type="error" message={error} />}
       <Typography.Text type="secondary">选择已确认计划中的来源单元，再绑定当前实际采用的落幅。参考输入位置可在下方调整，多个首帧或不支持的输入会阻止提交。</Typography.Text>
       <Space wrap><Select aria-label="前段来源单元" disabled={disabled} showSearch optionFilterProp="label" placeholder="选择来源计划与单元" style={{ width: 350 }} value={source} options={options} onChange={setSource} /><Button disabled={disabled || !source} onClick={add}>声明依赖</Button><Button onClick={() => { void reload() }}>刷新实际落幅</Button></Space>
-      {(unit.dependencies || []).map((link, index) => {
+      {(unit.dependencies || []).filter(link => !selectedSource || link.plan_revision_id === selectedSource.planId && link.unit_id === selectedSource.unitId).map((link, index) => {
         const frame = state?.frames.find(row => row.id === link.frame_id)
         return <Space key={`${link.plan_revision_id}/${link.unit_id}`} direction="vertical" className="w-full">
           <Typography.Text>依赖 {index + 1} · {link.plan_revision_id} / {link.unit_id}</Typography.Text>

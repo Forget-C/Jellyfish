@@ -130,7 +130,7 @@ try {
   checks.push('等待中的导航在保存完成后可继续，不重复提交已保存内容')
 
   await page.goto(base + '?view=shoot&plan=p-new&unit=u1')
-  await page.getByRole('button', { name: '镜头范围', exact: true }).click()
+  await page.locator('.production-graph-node[data-node-kind="coverage"]:not([data-node-action]) .design-node-select').first().click()
   await checkTextSave('生产计划', page.locator('[data-workspace-target="unit:u1"] textarea').first(), '保存生产计划草稿', () => workspace.plans[1].content.units[0].coverage[0].action_scope)
 
   await page.goto(base + '?view=design&design=d2')

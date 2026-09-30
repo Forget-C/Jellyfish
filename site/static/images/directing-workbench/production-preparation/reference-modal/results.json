@@ -1,0 +1,16 @@
+{
+  "results": [
+    "unlinked role and location remain visible; modal add/rebind/replace/remove cancel leaves plan untouched; apply updates exact reference identity",
+    "reordering is staged until apply; all references can be inspected in the same modal without changing plan data",
+    "unlinked location can use explicit temporary space reference; prop node uses the same modal; fixed design association stays unchanged",
+    "four widths and touch support one modal; coverage/model/dependency retain original editors; browsing and local apply make zero business writes"
+  ],
+  "snapshots": [
+    1440,
+    1024,
+    768,
+    375
+  ],
+  "writes": [],
+  "errors": []
+}

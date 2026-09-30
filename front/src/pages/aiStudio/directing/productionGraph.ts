@@ -1,71 +1,99 @@
-import type { ProductionPlan_Input, WorkspaceRead } from '../../../services/generated'
+import type { AssetSummary, ContinuityRead, ProductionPlan_Input, WorkspaceRead } from '../../../services/generated'
 
 export type ProductionGraphNode = {
-  id: string; kind: 'coverage' | 'reference' | 'dependency' | 'unit' | 'prompt' | 'review' | 'take';
-  label: string; detail: string; planId: string; unitId: string; objectId: string; external?: boolean;
+  id: string; kind: 'coverage' | 'reference' | 'dependency' | 'unit' | 'participant' | 'location';
+  label: string; detail: string; planId: string; unitId: string; objectId: string;
+  external?: boolean; missing?: boolean; action?: 'add'; indirect?: boolean;
+  referenceIds?: string[]; assetId?: string; sourcePlanId?: string; sourceUnitId?: string;
 }
-export type ProductionGraphEdge = { from: string; to: string; kind: 'coverage' | 'reference' | 'dependency' | 'prompt' | 'review' | 'take' }
+export type ProductionGraphEdge = { from: string; to: string; kind: 'coverage' | 'reference' | 'dependency' | 'context' | 'binding'; indirect?: boolean }
 const key = (...parts: string[]) => JSON.stringify(parts)
 
-/** 从明确引用投影关系。列表相邻不形成依赖，历史单元始终保留计划身份。 */
-export function buildProductionGraph(workspace: WorkspaceRead, planId: string, plan: ProductionPlan_Input, unitId?: string) {
+/** 准备图只投影当前草稿的真实输入；总览只显示计划单元、覆盖和明确依赖，不借用草稿解释历史指令。 */
+export function buildProductionGraph(workspace: WorkspaceRead, planId: string, plan: ProductionPlan_Input, unitId?: string, assets?: AssetSummary[], continuity?: ContinuityRead) {
   const nodes = new Map<string, ProductionGraphNode>()
   const edges: ProductionGraphEdge[] = []
   const selected = plan.units.filter(unit => !unitId || unit.id === unitId)
-  const savedPlan = workspace.plans.find(row => row.id === planId)
   const design = workspace.designs.find(row => row.id === plan.design_revision_id)?.content
-  const changed = (id: string) => JSON.stringify(savedPlan?.content.units.find(row => row.id === id)) !== JSON.stringify(plan.units.find(row => row.id === id))
   const add = (node: ProductionGraphNode) => { nodes.set(node.id, node); return node.id }
-  const connect = (from: string, to: string, kind: ProductionGraphEdge['kind']) => {
-    if (!edges.some(edge => edge.from === from && edge.to === to && edge.kind === kind)) edges.push({ from, to, kind })
+  const connect = (from: string, to: string, kind: ProductionGraphEdge['kind'], indirect = false) => {
+    if (!edges.some(edge => edge.from === from && edge.to === to && edge.kind === kind)) edges.push({ from, to, kind, indirect })
   }
   for (const unit of selected) {
-    const target = add({ id: changed(unit.id) ? key('unit', planId, unit.id, 'draft') : key('unit', planId, unit.id), kind: 'unit', label: `单元 ${plan.units.indexOf(unit) + 1}`,
-      detail: `${unit.duration_ms / 1000} 秒 · ${unit.ratio}`, planId, unitId: unit.id, objectId: unit.id })
+    const base = { planId, unitId: unit.id }
+    const target = add({ ...base, id: key('unit', planId, unit.id), kind: 'unit', label: `单元 ${String(plan.units.indexOf(unit) + 1).padStart(2, '0')}`,
+      detail: `${unit.model_id ? '已选择模型' : '模型待选择'} · ${unit.duration_ms / 1000} 秒 · ${unit.ratio}`, objectId: unit.id })
+    const participants = new Map<string, boolean>()
     for (const coverage of unit.coverage) {
       const shotIndex = design?.direction.shots.findIndex(shot => shot.id === coverage.shot_id) ?? -1
-      const source = add({ id: key('coverage', planId, unit.id, coverage.id), kind: 'coverage', label: '镜头范围',
-        detail: `${shotIndex < 0 ? '镜头不可用' : `镜头 ${String(shotIndex + 1).padStart(2, '0')}`} · 本单元第 ${unit.coverage.indexOf(coverage) + 1} 段`, planId, unitId: unit.id, objectId: coverage.id })
+      const shot = design?.direction.shots[shotIndex]
+      const source = add({ ...base, id: key('coverage', planId, unit.id, coverage.id), kind: 'coverage', label: shot ? `镜头 ${String(shotIndex + 1).padStart(2, '0')}` : '镜头不可用',
+        detail: coverage.action_scope || '动作范围待填写', objectId: coverage.id, missing: !shot })
       connect(source, target, 'coverage')
-    }
-    for (const reference of unit.references) {
-      const source = add({ id: key('reference', planId, unit.id, reference.id), kind: 'reference', label: `${({ image: '图片', video: '视频', audio: '声音' })[reference.media_kind]}参考 ${unit.references.indexOf(reference) + 1}`,
-        detail: ({ identity: '主体外观', space: '空间', composition: '构图', continuity: '连续性', performance: '表演', sound: '声音' })[reference.purpose], planId, unitId: unit.id, objectId: reference.id })
-      connect(source, target, 'reference')
+      for (const id of shot?.blocking_state_ids || []) {
+        const person = design?.direction.blocking_states.find(row => row.id === id)?.participant_id
+        if (person) participants.set(person, false)
+      }
+      for (const row of design?.performance.beats || []) if (shot?.beat_ids.includes(row.beat_id) && !participants.has(row.participant_id)) participants.set(row.participant_id, true)
     }
     for (const dependency of unit.dependencies || []) {
       const sourceUnit = workspace.plans.find(row => row.id === dependency.plan_revision_id)?.content.units.find(row => row.id === dependency.unit_id)
-      const internal = dependency.plan_revision_id === planId && !changed(dependency.unit_id) && selected.some(row => row.id === dependency.unit_id)
-      const source = internal ? key('unit', planId, dependency.unit_id) : add({
-        id: key('dependency', dependency.plan_revision_id, dependency.unit_id, dependency.frame_id || '', dependency.reference_id || ''),
-        kind: 'dependency', label: dependency.plan_revision_id === planId ? '其他单元落幅' : '历史计划落幅',
-        detail: !sourceUnit ? '固定来源单元不可用' : dependency.frame_id && dependency.reference_id ? '已绑定落幅与参考' : '落幅或参考待配置',
-        planId: dependency.plan_revision_id, unitId: dependency.unit_id, objectId: dependency.frame_id || '', external: true,
+      const frame = continuity?.frames.find(row => row.id === dependency.frame_id)
+      const reference = unit.references.find(row => row.id === dependency.reference_id)
+      const validFrame = !!frame?.current && frame.edge === 'end' && frame.plan_revision_id === dependency.plan_revision_id && frame.unit_id === dependency.unit_id && frame.file_id === reference?.file_id
+      const internal = !unitId && dependency.plan_revision_id === planId && selected.some(row => row.id === dependency.unit_id)
+      const source = internal ? key('unit', planId, dependency.unit_id) : add({ ...base,
+        id: key('dependency', planId, unit.id, dependency.plan_revision_id, dependency.unit_id), kind: 'dependency',
+        label: dependency.plan_revision_id === planId ? '其他单元落幅' : '历史计划落幅', objectId: key(dependency.plan_revision_id, dependency.unit_id),
+        sourcePlanId: dependency.plan_revision_id, sourceUnitId: dependency.unit_id, external: true,
+        referenceIds: reference ? [reference.id] : [], missing: !sourceUnit || !dependency.frame_id || !reference || !!continuity && !validFrame,
+        detail: !sourceUnit ? '固定来源单元不可用' : !dependency.frame_id || !reference ? '落幅或参考待配置' : !continuity ? '已绑定 · 实际落幅待核实' : !validFrame ? '实际落幅已变化 · 待处理' : `实际片段 ${frame!.item_id} · ${frame!.at_ms / 1000} 秒`,
       })
       connect(source, target, 'dependency')
     }
-    const prompts = workspace.prompts.filter(row => row.content.plan_revision_id === planId && row.content.unit_id === unit.id)
-    let promptSource = target
-    if (prompts.length && changed(unit.id)) {
-      const frozen = savedPlan?.content.units.find(row => row.id === unit.id)
-      promptSource = add({ id: key('unit', planId, unit.id), kind: 'unit', label: '指令的固定单元',
-        detail: frozen ? `${frozen.duration_ms / 1000} 秒 · ${frozen.ratio} · 已保存依据` : '固定依据不可用',
-        planId, unitId: unit.id, objectId: unit.id, external: true })
+    if (!unitId) continue
+    // 添加入口不进入业务数据；非空集合也保留追加操作。
+    for (const kind of ['coverage', 'reference', 'dependency'] as const) {
+      add({ ...base, id: key('add', planId, unit.id, kind), kind, label: { coverage: '＋添加覆盖镜头', reference: '＋添加参考', dependency: '＋添加落幅依赖' }[kind],
+        detail: { coverage: unit.coverage.length ? '追加本次动作范围' : '尚未配置镜头范围', reference: unit.references.length ? '人物、场所或临时素材' : '本次未选参考（可选）', dependency: '只绑定明确的实际落幅来源（可选）' }[kind], objectId: '', action: 'add' })
     }
-    for (const prompt of prompts) {
-      const promptId = add({ id: key('prompt', prompt.id), kind: 'prompt', label: prompt.display_number ? `指令 v${prompt.display_number}` : `指令 ${prompts.indexOf(prompt) + 1}`,
-        detail: prompt.confirmed_at ? '固定执行输入' : '草稿', planId, unitId: unit.id, objectId: prompt.id })
-      connect(promptSource, promptId, 'prompt')
-      for (const review of workspace.reviews.filter(row => row.content.occurrences.some(item => item.prompt_revision_id === prompt.id && item.plan_revision_id === planId && item.unit_id === unit.id))) {
-        const reviewId = add({ id: key('review', review.id), kind: 'review', label: '指令检查', detail: review.confirmed_at ? '已确认结论' : '待确认', planId, unitId: unit.id, objectId: review.id })
-        connect(promptId, reviewId, 'review')
-      }
+    const designParticipants = new Set(participants.keys())
+    const referenceNodes = new Map<string, string>()
+    const groups = new Map<string, typeof unit.references>()
+    for (const reference of [...unit.references].sort((a, b) => a.ordinal - b.ordinal)) {
+      const groupId = (reference.input_role || 'subject') === 'subject' ? reference.subject_group_id || reference.id : reference.id
+      groups.set(groupId, [...groups.get(groupId) || [], reference])
+      for (const id of reference.participant_ids) if (!participants.has(id)) participants.set(id, true)
     }
-    for (const take of workspace.takes.filter(row => row.plan_revision_id === planId && row.unit_id === unit.id)) {
-      const takeId = add({ id: key('take', take.id), kind: 'take', label: `候选 ${take.display_number || workspace.takes.indexOf(take) + 1}`,
-        detail: take.annotation.review_status === 'unreviewed' ? '待审片' : '已有审片记录', planId, unitId: unit.id, objectId: take.id })
-      const promptId = key('prompt', take.prompt_revision_id)
-      if (nodes.has(promptId)) connect(promptId, takeId, 'take')
+    for (const [groupId, group] of groups) {
+      const reference = group[0]
+      const names = reference.participant_ids.map(id => design?.participants.find(row => row.id === id)?.name || '人物引用不可用').join('、')
+      const role = { subject: '主体参考', first_frame: '起始画面', last_frame: '结束画面', key_frame: '关键帧' }[reference.input_role || 'subject']
+      const source = add({ ...base, id: key('reference', planId, unit.id, groupId), kind: 'reference', label: `${reference.asset_origin?.name || names || '画面参考'} · ${role}`,
+        detail: `已选入本次输入 · ${group.length} 份素材`, objectId: reference.id, referenceIds: group.map(row => row.id) })
+      group.forEach(row => referenceNodes.set(row.id, source))
+      connect(source, target, 'reference')
+    }
+    for (const [id, indirect] of participants) {
+      const person = design?.participants.find(row => row.id === id)
+      const assetId = person?.character_id || person?.prop_id || undefined
+      const asset = assets?.find(row => row.id === assetId && row.kind === (person?.character_id ? 'character' : 'prop'))
+      const references = unit.references.filter(row => row.participant_ids.includes(id))
+      const status = !assetId ? '未关联资产' : !assets ? '资产状态待核实' : !asset ? '关联资产不可用' : asset.image_file_ids === undefined ? '可选图片待核实' : !asset.image_file_ids.length ? '资产暂无可选图片' : '资产图片可供选择'
+      const source = add({ ...base, id: key('participant', planId, unit.id, id), kind: 'participant', label: `${person?.prop_id ? '物件' : '角色'}：${person?.name || '引用不可用'}`,
+        detail: `${status} · ${references.length ? `本次已选 ${references.length} 份参考` : '本次未选参考'} · ${!designParticipants.has(id) ? '已选输入人物' : indirect ? '间接设计关联' : '设计调度关联'}`,
+        objectId: id, assetId, missing: !person, indirect })
+      if (designParticipants.has(id)) connect(source, target, 'context', indirect)
+      for (const reference of references) connect(source, referenceNodes.get(reference.id)!, 'binding')
+    }
+    if (design || unit.references.some(row => row.asset_origin?.kind === 'scene')) {
+      const assetId = design?.direction.location_asset_id || undefined
+      const asset = assets?.find(row => row.kind === 'scene' && row.id === assetId)
+      const references = unit.references.filter(row => row.asset_origin?.kind === 'scene' || row.purpose === 'space')
+      const status = !assetId ? '未关联场所资产' : !assets ? '资产状态待核实' : !asset ? '关联资产不可用' : asset.image_file_ids === undefined ? '可选图片待核实' : asset.image_file_ids.length ? '资产图片可供选择' : '资产暂无可选图片'
+      const source = add({ ...base, id: key('location', planId, unit.id), kind: 'location', label: `场所：${asset?.name || '待关联场所'}`, detail: `${status} · ${references.length ? `本次已选 ${references.length} 份空间参考` : '本次未选空间参考'}`, objectId: assetId || '', assetId })
+      if (assetId) connect(source, target, 'context')
+      references.forEach(row => connect(source, referenceNodes.get(row.id)!, 'binding'))
     }
   }
   return { nodes: [...nodes.values()], edges }

@@ -1,0 +1,17 @@
+{
+  "results": [
+    "specific coverage/dependency selection; overview browsing preserves draft and layout; cancel unit switch retains context and makes zero writes",
+    "participant-context picker; explicit grouped multi-image input; file replacement preserves count; local edits produce zero business writes",
+    "four widths: preparation, parameter inspector and overview remain reachable without page overflow; touch opens the unit inspector at 375px",
+    "zoom/focus/layout are browsing operations; explicit overview unit switch uses discard protection and restores saved inputs",
+    "empty coverage/reference/dependency collections can be populated and appended via nodes; incomplete declared dependency is marked; interface placeholders never write themselves"
+  ],
+  "snapshot": {
+    "375": "width: 1120px; height: 710px; transform: translate(0px, 463.21px) scale(0.320536);",
+    "768": "width: 1120px; height: 710px; transform: translate(0px, 100px) scale(0.6);",
+    "1024": "width: 1120px; height: 710px; transform: translate(0px, 18.8571px) scale(0.828571);",
+    "1440": "width: 1120px; height: 710px; transform: translate(0px, 28.9643px) scale(0.707143);"
+  },
+  "writes": [],
+  "errors": []
+}

@@ -102,7 +102,7 @@ try {
 
   await page.getByRole('tab', { name: '单元试拍', exact: true }).click()
   await page.getByRole('tab', { name: '拍摄准备', exact: true }).click()
-  await page.getByRole('button', { name: '镜头范围', exact: true }).click()
+  await page.locator('.production-graph-node[data-node-kind="coverage"]:not([data-node-action]) .design-node-select').first().click()
   await page.locator('[data-workspace-target="unit:u1"] textarea').first().fill('计划另存后返回选定的历史依据')
   await open('cut'); await edit('cut', 'c-old'); await page.getByRole('button', { name: '保存后继续', exact: true }).click()
   await dialog.waitFor({ state: 'hidden' }); await checkUrl('cut', 'c-old'); await checkUrl('plan', 'p-old')

@@ -6,7 +6,8 @@ import type { ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 import { Alert, Button, Drawer, Empty, Popover, Select } from 'antd'
-import type { DirectingTaskRead, ProductionPlan_Input, WorkspaceRead } from '../../../services/generated'
+import { StudioDirectingService } from '../../../services/generated'
+import type { AssetSummary, ContinuityRead, DirectingTaskRead, ProductionPlan_Input, VideoReferenceCapabilities, WorkspaceRead } from '../../../services/generated'
 import { productionRecords } from './workspaceProduction'
 import { pendingReviewResults, reviewCanExecute } from './workspaceGuidance'
 import { tasksForUnit, taskWorkspaceContext, unitTaskSummary } from './workspaceTaskContext'
@@ -17,12 +18,15 @@ import { ShootTaskProgress } from './ShootTaskProgress'
 import { revisionName } from './workspaceUsage'
 import { ProductionRelationGraph } from './ProductionRelationGraph'
 import type { ProductionGraphNode } from './productionGraph'
-import { useWorkspaceDraftStatus } from './WorkspaceDrafts'
+import { directingError } from './common'
 
 type DetailRequest = { tab: 'text' | 'input' | 'history' | 'checks' | 'candidate' | 'revision'; paths?: string[]; suggestion?: string; takeId?: string }
 export const ProductionDetailContext = createContext<{ target: HTMLElement | null; request?: DetailRequest; show: (request: DetailRequest) => void; close: () => void; consume: () => void }>({ target: null, show: () => {}, close: () => {}, consume: () => {} })
 
-export const ProductionInputContext = createContext<'unit' | 'coverage' | 'reference' | 'dependency' | undefined>(undefined)
+type InputSection = 'unit' | 'coverage' | 'reference' | 'dependency'
+export type ProductionInputSelection = { section: InputSection; node?: ProductionGraphNode; serial: number }
+type ModelState = { modelId?: string; name?: string; capability?: VideoReferenceCapabilities; error?: string }
+export const ProductionInputContext = createContext<(ProductionInputSelection & { onModel: (value: ModelState) => void; onEditAssets?: () => void }) | undefined>(undefined)
 
 const InspectorContext = createContext<HTMLElement | null>(null)
 export function ProductionParameters({ children }: { children: ReactNode }) {
@@ -35,13 +39,13 @@ const steps = [['prepare', '拍摄准备'], ['prompt', '指令与检查'], ['tak
 const restoreStep = (value?: string | null) => value === 'review' || value === 'takes' ? 'takes' : value === 'prompt' ? 'prompt' : 'prepare'
 
 /** 版本控制、单元导航、工作内容和参数检查固定分区，切页不卸载编辑器。 */
-export function ProductionWorkbench({ onRetryTasks, onGraphNavigate, unitProgress, reviewNeedsAttention, prepareAction, checkAction, shootAction, busy, planReady, promptId, reviewId, active, focusRequest, tasks, submitted, tasksState, onOpenTasks, plan, planId, workspace, selectedUnitId, onSelectUnit, toolbar, start, preparation, prompt, adjustment, review, execution, candidates, advanced }: {
+export function ProductionWorkbench({ onRetryTasks, assets, assetError, onRetryAssets, onEditAssets, unitProgress, reviewNeedsAttention, prepareAction, checkAction, shootAction, busy, planReady, promptId, reviewId, active, focusRequest, tasks, submitted, tasksState, onOpenTasks, plan, planId, workspace, selectedUnitId, onSelectUnit, toolbar, start, preparation, prompt, adjustment, review, execution, candidates, advanced }: {
   onRetryTasks: () => void;
-  onGraphNavigate: (node: ProductionGraphNode) => void;
+  assets?: AssetSummary[]; assetError?: string; onRetryAssets?: () => void; onEditAssets?: () => void;
   unitProgress: Record<string, string>; reviewNeedsAttention: boolean;
   prepareAction: StepAction; checkAction?: StepAction; shootAction: StepAction; busy: boolean; planReady: boolean; promptId?: string; reviewId?: string;
   tasks: DirectingTaskRead[]; submitted: SubmittedWorkspaceTask[]; tasksState: 'loading' | 'ready' | 'error'; onOpenTasks: () => void;
-  active: boolean; focusRequest: string | null; plan?: ProductionPlan_Input; planId?: string; workspace: WorkspaceRead; selectedUnitId?: string; onSelectUnit: (id: string) => void;
+  active: boolean; focusRequest: string | null; plan?: ProductionPlan_Input; planId?: string; workspace: WorkspaceRead; selectedUnitId?: string; onSelectUnit: (id: string, onSelected?: () => void) => void;
   start?: ReactNode; toolbar: ReactNode; preparation: ReactNode; prompt: ReactNode; adjustment: ReactNode; review: ReactNode; execution: ReactNode; candidates: ReactNode; advanced: ReactNode;
 }) {
   const [search, setSearch] = useSearchParams()
@@ -54,10 +58,26 @@ export function ProductionWorkbench({ onRetryTasks, onGraphNavigate, unitProgres
   useEffect(() => { saveWorkspaceContext(workspace.sequence.project_id, workspace.sequence.id, { shootTab: tab, shootQuery: query, shootIdentity: JSON.stringify([planId, selectedUnitId]) }) }, [workspace.sequence.project_id, workspace.sequence.id, planId, selectedUnitId, tab, query])
   const scrolling = useWorkspaceScroll(workspace.sequence.project_id, workspace.sequence.id, 'shootScroll', JSON.stringify([planId, selectedUnitId, tab]), '.production-content')
   const inspectorScrolling = useWorkspaceScroll(workspace.sequence.project_id, workspace.sequence.id, 'shootInspectorScroll', JSON.stringify([planId, selectedUnitId, tab]))
-  const draftStatus = useWorkspaceDraftStatus()
-  const [inputSection, setInputSection] = useState<'unit' | 'coverage' | 'reference' | 'dependency'>('unit')
+  const [input, setInput] = useState<ProductionInputSelection>({ section: 'unit', serial: 0 })
+  const inputSection = input.section
+  const setInputSection = (section: InputSection) => setInput(current => ({ section, serial: current.serial + 1 }))
+  const [modelState, setModelState] = useState<ModelState>({})
+  const [continuity, setContinuity] = useState<ContinuityRead>()
+  const [continuityError, setContinuityError] = useState('')
+  const [continuityAttempt, setContinuityAttempt] = useState(0)
+  const dependencyIdentity = JSON.stringify(plan?.units.flatMap(unit => unit.dependencies || []))
+  useEffect(() => {
+    let current = true
+    setContinuity(undefined); setContinuityError('')
+    if (!plan?.units.some(unit => unit.dependencies?.length)) return
+    void StudioDirectingService.directingContinuity({ projectId: workspace.sequence.project_id, sequenceId: workspace.sequence.id }).then(response => {
+      if (!response.data || !Array.isArray(response.data.frames)) throw new Error('实际落幅状态暂不可用')
+      if (current) setContinuity(response.data)
+    }).catch(cause => { if (current) setContinuityError(directingError(cause)) })
+    return () => { current = false }
+  }, [workspace.sequence.project_id, workspace.sequence.id, workspace.cuts, dependencyIdentity, continuityAttempt])
   const [externalInput, setExternalInput] = useState<ProductionGraphNode>()
-  useEffect(() => { setExternalInput(undefined) }, [planId, selectedUnitId])
+  useEffect(() => { setExternalInput(undefined); setInputSection('unit') }, [planId, selectedUnitId])
   const [preparationHost] = useState(() => document.createElement('div'))
   const [parameters, setParameters] = useState<HTMLDivElement | null>(null)
   const [open, setOpen] = useState(false)
@@ -79,6 +99,10 @@ export function ProductionWorkbench({ onRetryTasks, onGraphNavigate, unitProgres
   const [checkExpanded, setCheckExpanded] = useState(false)
   useEffect(() => { setCheckExpanded(false) }, [promptId, selectedUnitId])
   const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [reorganizing, setReorganizing] = useState(false)
+  const advancedTrigger = useRef<HTMLElement>()
+  const closeAdvanced = () => { setAdvancedOpen(false); requestAnimationFrame(() => advancedTrigger.current?.isConnected && advancedTrigger.current.focus({ preventScroll: true })) }
+  const openAdvanced = () => { advancedTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : undefined; setReorganizing(false); setAdvancedOpen(true) }
   const previousPlan = useRef(planId)
   useEffect(() => { if (previousPlan.current !== planId && advancedOpen) { setAdvancedOpen(false); setTab('prepare') } previousPlan.current = planId }, [planId, advancedOpen])
   useEffect(() => { if (!active) { setOpen(false); setAdvancedOpen(false) } }, [active])
@@ -94,16 +118,16 @@ export function ProductionWorkbench({ onRetryTasks, onGraphNavigate, unitProgres
   const selectedReview = records.reviews.find(row => row.id === reviewId)
   const waitingChecks = pendingReviewResults(workspace, tasks, planId, selectedUnitId, promptId)
   const checkLabel = promptTasks.some(task => task.kind === 'directing_review' && ['queued', 'running'].includes(task.status)) ? '检查中' : selectedReview ? reviewCanExecute(selectedReview, promptId) ? '可开始试拍' : '检查需处理' : waitingChecks.length ? '待确认结论' : records.reviews.length ? '待选择检查' : records.prompt ? '待检查' : records.prompts.length ? '待选择指令' : '待生成指令'
-  const frozenUnit = externalInput && workspace.plans.find(row => row.id === externalInput.planId)?.content.units.find(row => row.id === externalInput.unitId)
+  const frozenUnit = externalInput && workspace.plans.find(row => row.id === externalInput.sourcePlanId)?.content.units.find(row => row.id === externalInput.sourceUnitId)
   const inspector = <div className="production-inspector-content" ref={inspectorScrolling}><div hidden={tab !== 'prepare'}>
-    {externalInput && <><h2>{externalInput.label}</h2><p>{externalInput.detail}</p><p>{revisionName(workspace.plans, externalInput.planId, '计划')} · 固定历史依据</p>
+    {externalInput && <><h2>{externalInput.label}</h2><p>{externalInput.detail}</p><p>{revisionName(workspace.plans, externalInput.sourcePlanId || '', '计划')} · 固定历史依据</p>
       {frozenUnit ? <><p>{frozenUnit.duration_ms / 1000} 秒 · {frozenUnit.ratio}</p><p>{frozenUnit.coverage.map(row => row.action_scope).join('；')}</p><p>{frozenUnit.references.length} 项参考输入</p></> : <Alert type="warning" message="历史单元暂不可用，当前草稿不会替代它" />}
-      <Button onClick={() => { setExternalInput(undefined); setInputSection('dependency') }}>编辑当前单元依赖</Button></>}
+      <Button onClick={() => { setInput(current => ({ section: 'dependency', node: externalInput, serial: current.serial + 1 })); setExternalInput(undefined) }}>编辑当前单元依赖</Button></>}
     <div hidden={!!externalInput}><h2>{{ unit: '单元参数', coverage: '镜头与动作范围', reference: '参考输入', dependency: '前段落幅依赖' }[inputSection]}</h2><div hidden={inputSection !== 'unit'} ref={setParameters} /><div ref={node => { if (node && preparationHost.parentElement !== node) node.appendChild(preparationHost) }} /></div>
   </div><div ref={setCandidateTarget} hidden={tab !== 'takes'} /></div>
   const matchesUnit = (unit: NonNullable<ProductionPlan_Input['units']>[number]) => navigationMatches(query, `单元 ${String(plan!.units.indexOf(unit) + 1).padStart(2, '0')}`, ...unit.coverage.map(row => row.action_scope))
   const shownUnits = plan?.units.filter(matchesUnit) || []
-  const detailVisible = tab === 'prepare' || tab === 'takes' && !!detailRequest
+  const detailVisible = tab === 'prepare' && (inputSection !== 'reference' || !!externalInput) || tab === 'takes' && !!detailRequest
   const go = (step: string) => { setTab(step); if (search.has('focus')) { const next = new URLSearchParams(search); next.delete('focus'); setSearch(next, { replace: true }) } }
   const reviewing = promptTasks.some(task => task.kind === 'directing_review' && ['queued', 'running'].includes(task.status))
   const shooting = promptTasks.some(task => task.kind === 'video_generation' && ['queued', 'running'].includes(task.status))
@@ -124,8 +148,8 @@ export function ProductionWorkbench({ onRetryTasks, onGraphNavigate, unitProgres
       const takes = workspace.takes.filter(take => take.plan_revision_id === planId && take.unit_id === unit.id)
       const runningSummary = unitTaskSummary(tasksForUnit(workspace, tasks, submitted, planId, unit.id).filter(task => ['queued', 'running'].includes(task.status)))
       return <button key={unit.id} aria-pressed={unit.id === selectedUnitId} onClick={() => onSelectUnit(unit.id)}><strong>单元 {String(plan!.units.indexOf(unit)+1).padStart(2,'0')}</strong><span>{unit.coverage.map(c => c.action_scope).join('；') || '动作范围待填写'}</span><small>{unitProgress[unit.id]} · {takes.length} 个候选</small>{runningSummary && <small>{runningSummary}</small>}</button>
-    })}{!!plan?.units.length && !shownUnits.length && <div data-navigation-tool><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的单元"><Button onClick={() => setQuery('')}>清除搜索</Button></Empty></div>}{!plan?.units.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚无拍摄单元" />}</div>{!start && <><Button type="text" onClick={onOpenTasks}>本场任务记录 · {new Set([...workspace.task_ids, ...submitted.map(item => item.taskId)]).size}</Button><Button onClick={() => setAdvancedOpen(true)}>拆分与重组</Button></>}</WorkbenchNavigation></SequenceNavigation>}
-    {!start && <WorkbenchToolbar className="production-version-bar">{tab === 'prepare' ? toolbar : <details><summary>计划与历史记录</summary>{toolbar}</details>}</WorkbenchToolbar>}
+    })}{!!plan?.units.length && !shownUnits.length && <div data-navigation-tool><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的单元"><Button onClick={() => setQuery('')}>清除搜索</Button></Empty></div>}{!plan?.units.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚无拍摄单元" />}</div>{!start && <><Button type="text" onClick={onOpenTasks}>本场任务记录 · {new Set([...workspace.task_ids, ...submitted.map(item => item.taskId)]).size}</Button></>}</WorkbenchNavigation></SequenceNavigation>}
+    {!start && <WorkbenchToolbar className="production-version-bar">{tab === 'prepare' ? <>{toolbar}<Button onClick={openAdvanced}>生产计划总览</Button></> : <details><summary>计划与历史记录</summary>{toolbar}<Button onClick={openAdvanced}>生产计划总览</Button></details>}</WorkbenchToolbar>}
     <div className={`production-panels${start || !detailVisible ? ' is-starting' : ''}${tab === 'takes' && detailRequest ? ' has-instruction' : ''}`}><section className="production-center" ref={scrolling}>
       {query && plan?.units.some(unit => unit.id === selectedUnitId && !matchesUnit(unit)) && <Alert type="info" message="所选单元不在筛选结果中" action={<Button onClick={() => setQuery('')}>清除筛选</Button>} />}
       {tasksState !== 'ready' && <Alert type={tasksState === 'error' ? 'warning' : 'info'} message={tasksState === 'error' ? '任务状态暂不可用，请核对后再执行' : '正在核对任务状态'} />}
@@ -140,18 +164,13 @@ export function ProductionWorkbench({ onRetryTasks, onGraphNavigate, unitProgres
         }}>{steps.map(([key, label], index) => <button type="button" role="tab" aria-label={label} id={`${tabsId}-${key}`} aria-controls={`${tabsId}-content`} aria-selected={tab === key} tabIndex={tab === key ? 0 : -1} key={key} onClick={() => go(key)}><span className="production-step-number" aria-hidden="true">{index + 1}</span><span>{label}</span><small>{stepStatus[index]}</small></button>)}</div>
         <Select className="production-step-select" aria-label="切换试拍步骤" value={tab} onChange={go} options={steps.map(([value, label], index) => ({ value, label: `第${index + 1}步／共3步 · ${label} · ${stepStatus[index]}` }))} />
       </div><div className="production-content" id={`${tabsId}-content`} role="tabpanel" aria-label={steps.find(([key]) => key === tab)?.[1]}>
-        <div hidden={tab !== 'prepare'}>{plan && <ProductionRelationGraph workspace={workspace} planId={planId || 'unsaved'} plan={plan} unitId={selectedUnitId} onSelect={node => {
-          if (['prompt', 'review', 'take'].includes(node.kind)) { onGraphNavigate(node); return }
+        <div hidden={tab !== 'prepare'}>{plan && <ProductionRelationGraph workspace={workspace} planId={planId || 'unsaved'} plan={plan} unitId={selectedUnitId} assets={assets} assetError={assetError} onRetryAssets={onRetryAssets} continuity={continuity} continuityError={continuityError} onRetryContinuity={() => setContinuityAttempt(value => value + 1)} capability={modelState.modelId === selectedUnit?.model_id ? modelState.capability : undefined} modelName={modelState.modelId === selectedUnit?.model_id ? modelState.name : undefined} active={active && tab === 'prepare'} disabled={busy} onSelect={node => {
+          trigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : undefined
           if (node.external) { setExternalInput(node); setOpen(true); return }
-          const showInput = () => {
-            setExternalInput(undefined)
-            if (!node.external && node.unitId !== selectedUnitId) onSelectUnit(node.unitId)
-            setInputSection(node.kind === 'coverage' || node.kind === 'reference' || node.kind === 'dependency' ? node.kind : 'unit')
-            requestAnimationFrame(() => setOpen(true))
-          }
-          if (!node.external && node.unitId !== selectedUnitId) draftStatus.transition(showInput)
-          else showInput()
-        }} />}{createPortal(<ProductionInputContext.Provider value={inputSection}>{preparation}</ProductionInputContext.Provider>, preparationHost)}</div>
+          setExternalInput(undefined)
+          setInput(current => ({ section: node.kind === 'coverage' || node.kind === 'dependency' ? node.kind : node.kind === 'unit' ? 'unit' : 'reference', node, serial: current.serial + 1 }))
+          setOpen(!['participant', 'location', 'reference'].includes(node.kind))
+        }} />}{!!records.prompts.length && <Button type="link" onClick={() => go('prompt')}>查看本计划固定指令 · {records.prompts.length} 份</Button>}{!!records.takes.length && <Button type="link" onClick={() => go('takes')}>查看本计划候选 · {records.takes.length} 个</Button>}{createPortal(<ProductionInputContext.Provider value={{ ...input, onModel: setModelState, onEditAssets }}>{preparation}</ProductionInputContext.Provider>, preparationHost)}</div>
         <div hidden={tab !== 'prompt'}>{prompt}</div>
         {tab === 'prompt' && <div className="shoot-studio-layout">
           <div className="shoot-studio-editor">{!planReady ? <Empty description="先保存并确认本次拍摄准备" /> : adjustment}</div>
@@ -167,8 +186,18 @@ export function ProductionWorkbench({ onRetryTasks, onGraphNavigate, unitProgres
       </div></>}
 
       </section>{!start && <WorkbenchInspector className="production-inspector" visible={detailVisible} title={tab === 'prepare' ? '单元参数与检查' : undefined} closable={tab === 'prepare'} open={open && tab !== 'prompt'} onClose={closeDetail} width={tab === 'prepare' ? 344 : 440}>{inspector}</WorkbenchInspector>}</div>
-    {!desktop && !start && tab === 'prepare' && <Button className="design-detail-trigger" onClick={() => setOpen(true)}>参数与检查</Button>}
+    {!desktop && !start && tab === 'prepare' && <Button className="design-detail-trigger" onClick={() => { setInputSection('unit'); setExternalInput(undefined); setOpen(true) }}>参数与检查</Button>}
     <Drawer title={null} closable={false} width="min(720px, 100vw)" open={open && tab === 'prompt' && detailRequest?.tab !== 'revision'} onClose={closeDetail} forceRender><div className="shoot-business-details" ref={setDetailTarget} /></Drawer>
-    <Drawer title="拆分或重组生产计划" width={640} open={advancedOpen} onClose={() => setAdvancedOpen(false)}>{advanced || <p>请先保存并确认生产计划。</p>}</Drawer>
+    <Drawer title={reorganizing ? '拆分或重组生产计划' : '生产计划总览'} width="min(1200px, 100vw)" open={advancedOpen} onClose={closeAdvanced}>
+      {reorganizing ? <><Button onClick={() => setReorganizing(false)}>返回计划总览</Button>{advanced || <p>请先保存并确认生产计划。</p>}</> : <>
+        <p>{planId ? revisionName(workspace.plans, planId, '计划') : '未保存生产计划'} · 当前计划共 {plan?.units.length || 0} 个单元 · 只读总览</p>
+        <Button disabled={!planReady || busy} onClick={() => setReorganizing(true)}>拆分与重组</Button>
+        {!planReady && <p>保存并确认计划后可拆分或重组；本地草稿仍可浏览。</p>}
+        {plan && <ProductionRelationGraph workspace={workspace} planId={planId || 'unsaved'} plan={plan} overview active={active && advancedOpen} continuity={continuity} onSelect={node => {
+          if (node.kind !== 'unit') return
+          onSelectUnit(node.unitId, () => { closeAdvanced(); go('prepare') })
+        }} />}
+      </>}
+    </Drawer>
   </div></InspectorContext.Provider></ProductionDetailContext.Provider>
 }

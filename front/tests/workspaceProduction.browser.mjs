@@ -274,6 +274,7 @@ try {
   assert.deepEqual(writes.find(row => row.path.endsWith('/batches/prepare')).body.items, [{ prompt_revision_id: 'new-input-a', review_revision_id: 'review-1' }])
   await page.getByRole('button', { name: '单元与生成指令', exact: true }).click()
   await choose('查看或编辑生产计划', '计划 2')
+  await page.locator('.production-version-bar').getByRole('button', { name: '生产计划总览', exact: true }).click()
   await page.getByRole('button', { name: '拆分与重组', exact: true }).click()
   await choose('重组单元', '单元 1')
   await page.keyboard.press('Escape')

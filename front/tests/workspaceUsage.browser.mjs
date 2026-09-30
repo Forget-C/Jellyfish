@@ -370,7 +370,7 @@ try {
   await modal.getByRole('button', { name: '放弃修改并继续' }).click()
   await page.getByRole('tab', { name: '单元试拍' }).click()
   const actionScope = page.locator('[data-workspace-target="unit:u1"] textarea').first()
-  await page.getByRole('button', { name: '镜头范围', exact: true }).click()
+  await page.locator('.production-graph-node[data-node-kind="coverage"]:not([data-node-action]) .design-node-select').first().click()
   await actionScope.fill('保留递信的局部动作')
   await page.getByRole('tab', { name: '剪辑验收' }).click()
   assert.equal(await modal.count(), 0)

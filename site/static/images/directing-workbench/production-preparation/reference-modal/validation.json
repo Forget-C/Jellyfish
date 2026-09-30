@@ -1,0 +1,56 @@
+{
+  "date": "2026-09-30",
+  "typecheck": "passed",
+  "behavior_tests": {
+    "passed": 29,
+    "files": [
+      "productionGraph.test.mjs",
+      "referenceInput.test.mjs",
+      "workspacePreparation.test.mjs",
+      "workspaceProduction.test.mjs",
+      "workspaceContext.test.mjs"
+    ]
+  },
+  "browser_scripts_passed": [
+    "workspaceReferenceModal.browser.mjs",
+    "workspaceProductionGraph.browser.mjs",
+    "workspaceShootSteps.browser.mjs",
+    "workspaceVersions.browser.mjs",
+    "workspaceWrite.browser.mjs"
+  ],
+  "requirements": {
+    "uniform_modal": [
+      "participant",
+      "prop",
+      "location",
+      "reference"
+    ],
+    "transactional_edits": [
+      "add",
+      "participant_binding",
+      "replace",
+      "remove",
+      "reorder"
+    ],
+    "cancel_and_apply": "cancel does not affect plan; apply updates local plan only",
+    "unlinked_objects": "role and location remain actionable; temporary space references use actual files",
+    "source_scope": "design association remains immutable; compatible asset binding enforced; manual references can rebind",
+    "preserved_editors": [
+      "coverage",
+      "unit_parameters",
+      "historical_dependency"
+    ],
+    "responsive_widths": [
+      1440,
+      1024,
+      768,
+      375
+    ],
+    "touch": "Chromium emulation",
+    "modal_business_writes": 0,
+    "modal_page_errors": 0,
+    "same_modal_all_references": "passed",
+    "reorder_cancel_and_apply": "passed"
+  },
+  "scope": "Mocked API regression, not real paid model generation or mobile device certification"
+}
