@@ -246,6 +246,7 @@ class ReviewRevisionService(ProductionService):
 
     async def generate_revision(self, sequence_id, body):
         """同一请求身份重试返回原任务，候选生成不会写入任何设计版本。"""
+        await self.current_sequence(sequence_id)
         await self.sequence(sequence_id)
         # SQLite 忽略 FOR UPDATE；无值变化的写锁也串行化同场次请求。
         await self.db.execute(update(Sequence).where(Sequence.id == sequence_id).values(version=Sequence.version))
@@ -330,6 +331,7 @@ class ReviewRevisionService(ProductionService):
 
     async def apply_revision(self, sequence_id, body):
         """以任务锁串行推进步骤；每步输出和身份一起持久化，失败只回滚当前步骤。"""
+        await self.current_sequence(sequence_id)
         await self.sequence(sequence_id)
         async def read_application(*, locked=False):
             """恢复已完成请求只读取；待执行请求在场次写锁内重新核对身份。"""

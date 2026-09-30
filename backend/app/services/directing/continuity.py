@@ -31,6 +31,7 @@ class ContinuityService(WorkspaceService):
 
     async def extract_cut_frame(self, sequence_id: str, body: CutFrameRequest) -> CutFrameRead:
         """从明确采用的真实区间提取首尾帧，预演卡不能成为真实接缝证据。"""
+        await self.current_sequence(sequence_id)
         _, items = await self.current_items(sequence_id, expected_cut_id=body.cut_revision_id)
         item = next((item for item in items if item.id == body.item_id), None)
         if item is None or item.kind != 'media':
@@ -57,6 +58,7 @@ class ContinuityService(WorkspaceService):
 
     async def review_seam(self, sequence_id: str, body: SeamReviewRequest):
         """用户看到真实入落幅后显式审查；与采用确认共用锁，保存不可变结论。"""
+        await self.current_sequence(sequence_id)
         await self.sequence(sequence_id)
         await self.db.scalar(select(Sequence).where(Sequence.id == sequence_id).with_for_update())
         _, items = await self.current_items(sequence_id, expected_cut_id=body.cut_revision_id)

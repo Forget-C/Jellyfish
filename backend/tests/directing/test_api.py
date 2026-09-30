@@ -192,3 +192,79 @@ async def test_chapter_overview_api_is_lightweight_and_project_scoped(tmp_path):
         assert set(response.json()['data']) == {'chapter_id', 'title', 'source_version', 'sequences'}
         assert response.json()['data']['sequences'] == []
         assert (await client.get(path.replace('/p1/', '/p2/'))).status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_chapter_division_preview_commit_receipt_and_history(tmp_path):
+    """HTTP 预览零写入、原子保存幂等、历史深链接与跨项目保护。"""
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        base = '/api/v1/studio/projects/p1/directing'
+        path = base + '/chapters/ch1'
+        chapter = (await client.get(path)).json()['data']
+        draft = {'source_version': chapter['source_version'], 'baseline': [], 'members': [
+            {'key': 'a', 'title': '前场', 'span': {'start': 0, 'end': 3}},
+            {'key': 'b', 'title': '后场', 'span': {'start': 3, 'end': 7}}], 'lineage': [], 'exited_sequence_ids': []}
+        preview = await client.post(path + '/division/preview', json=draft)
+        assert preview.status_code == 200
+        assert (await client.get(path)).json()['data']['sequences'] == []
+        body = {'request_id': 'atomic', 'draft': draft, 'preview_token': preview.json()['data']['preview_token']}
+        saved = await client.put(path + '/division', json=body)
+        assert saved.status_code == 200
+        assert (await client.put(path + '/division', json=body)).json() == saved.json()
+        assert (await client.get(path + '/division/receipts/atomic')).json() == saved.json()
+        assert (await client.get(path + '/division/receipts/missing')).json()['data'] is None
+        rows = saved.json()['data']['chapter']['sequences']
+        assert len(rows) == 2
+        draft.update(baseline=[{'sequence_id': row['id'], 'version': row['version']} for row in rows],
+            members=[{'key': 'b', 'sequence_id': rows[1]['id'], 'title': rows[1]['title'], 'span': rows[1]['span']}],
+            exited_sequence_ids=[rows[0]['id']], lineage=[{'sequence_id': rows[0]['id'], 'target_keys': []},
+                                                       {'sequence_id': rows[1]['id'], 'target_keys': ['b']}])
+        preview = (await client.post(path + '/division/preview', json=draft)).json()['data']
+        body = {'request_id': 'retire', 'draft': draft, 'preview_token': preview['preview_token'], 'identity_changes_confirmed': True}
+        assert (await client.put(path + '/division', json=body)).status_code == 200
+        history = (await client.get(path + '/history')).json()['data']
+        assert history[0]['id'] == rows[0]['id'] and history[0]['is_current'] is False
+        old = (await client.get(base + '/sequences/' + rows[0]['id'])).json()['data']
+        assert old['sequence']['is_current'] is False
+        assert (await client.get(path.replace('/p1/', '/p2/') + '/history')).status_code == 422
+        assert len((await client.get(path + '/overview')).json()['data']['sequences']) == 1
+
+
+@pytest.mark.asyncio
+async def test_division_history_http_contracts_are_read_only_and_scoped(tmp_path):
+    """通过真实 HTTP 序列化验证摘要、版本、分析及旧回执，不绕过响应 DTO。"""
+    from app.models.directing import DivisionCommit
+    from app.models.task import Task
+    from app.services.directing.division import DivisionService
+    from tests.directing.test_division import setup_two
+
+    async with database(tmp_path) as sessions:
+        async with sessions.begin() as db:
+            service = DivisionService(db, 'p1')
+            await setup_two(service)
+            chapter = await service.list_sequences('ch1')
+            db.add(Task(id='history-ai', project_id='p1', target_type='directing_chapter', target_id='ch1',
+                kind='directing_divide', status='succeeded', input_snapshot={'division_versioning': 1,
+                    'private_configuration': 'must-not-leak', 'run_args': {'script_text': chapter.raw_text,
+                    'source_version': chapter.source_version, 'division_baseline': {row.id: row.version for row in chapter.sequences}}},
+                result={'scenes': [{'title': '分析方案', 'excerpt': chapter.raw_text, 'purpose': '叙事'}]}))
+            db.add(DivisionCommit(chapter_id='ch1', request_id='incomplete', request_hash='0' * 64, response={}))
+        async with client_for(sessions) as client:
+            path = '/api/v1/studio/projects/p1/directing/chapters/ch1'
+            before = (await client.get(path)).json()
+            endpoints = ['/division/history?page_size=2', '/division/versions/' + chapter.current_version.id,
+                         '/division/analyses/history-ai', '/division/history/receipts/incomplete']
+            responses = []
+            for endpoint in endpoints:
+                response = await client.get(path + endpoint)
+                assert response.status_code == 200, response.text
+                assert 'must-not-leak' not in response.text and 'private_configuration' not in response.text
+                responses.append(response.json()['data'])
+                assert (await client.get(path.replace('/p1/', '/p2/') + endpoint)).status_code == 422
+            assert len(responses[0]['items']) == 2 and responses[0]['total'] == 4
+            assert responses[1]['chapter']['current_version']['id'] == chapter.current_version.id
+            assert responses[2]['result']['scenes'][0]['title'] == '分析方案'
+            assert responses[3]['issues'] and responses[3]['chapter'] is None
+            assert (await client.get(path + '/division/history?page=0')).status_code == 422
+            assert (await client.get(path + '/division/history?page_size=101')).status_code == 422
+            assert (await client.get(path)).json() == before

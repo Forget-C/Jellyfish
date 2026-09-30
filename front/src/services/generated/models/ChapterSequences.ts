@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { DivisionVersionRef } from './DivisionVersionRef';
 import type { SequenceRead } from './SequenceRead';
 /**
  * 章节原文与场次清单，支持刷新后恢复正确上下文。
@@ -13,5 +14,6 @@ export type ChapterSequences = {
     source_version: string;
     sequences: Array<SequenceRead>;
     task_ids?: Array<string>;
+    current_version?: (DivisionVersionRef | null);
 };
 

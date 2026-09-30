@@ -43,6 +43,7 @@ class FeedbackService(ContinuityService):
 
     async def write_feedback(self, sequence_id: str, body: FeedbackWrite):
         """保存草稿或从已确认记录派生新版本，修订沿用 CAS。"""
+        await self.current_sequence(sequence_id)
         return await self.save_revision(sequence_id, kind=body.document.kind, payload=body.document.content.model_dump(mode='json'),
             revision_id=body.revision_id, expected_version=body.expected_version, parent_id=body.parent_id)
 
@@ -98,7 +99,7 @@ class FeedbackService(ContinuityService):
         await self.db.scalar(select(Chapter).where(Chapter.id == chapter_id).with_for_update())
         ids = [body.left_sequence_id, body.right_sequence_id]
         for identity in sorted(ids):
-            sequence = await self.sequence(identity)
+            sequence = await self.current_sequence(identity)
             if sequence.chapter_id != chapter_id:
                 raise ValueError('跨场审查只能使用本章节场次')
             await self.db.scalar(select(Sequence).where(Sequence.id == identity).with_for_update())
@@ -160,6 +161,7 @@ class FeedbackService(ContinuityService):
 
     async def prepare_repair_plan(self, sequence_id, repair_id, body):
         """复制问题所属单元的明确覆盖为局部草稿，保留好片段且不执行模型。"""
+        await self.current_sequence(sequence_id)
         from copy import deepcopy
         from app.core.contracts.directing.production import ProductionPlan
         row = await self.revision(repair_id, kind='repair', sequence_id=sequence_id, confirmed=True)

@@ -13,7 +13,8 @@ description: "记录当前正在推进的开发计划、改造方案与阶段性
 
 - [生产计划与单元拍摄准备关系图改造计划](/docs/plans/production-preparation-graph-plan/)：已完成；统一图形交互，以当前单元节点承接准备和参考编辑，将跨单元总览放回计划层，角色、物件、场所和参考主体已统一 modal，已归档空状态、固定来源与响应式验收证据。
 - [场次工作台版本管理交互改造计划](/docs/plans/workspace-version-management-plan/)：已完成；分类版本列表、只读比较、受保护编辑及导航行右侧入口已落地，附四尺寸截图、28 项行为测试和 8 组浏览器回归记录。
-- [章节入口与整章划分工作流优化计划](/docs/plans/chapter-division-workflow-plan/)：待实施；动态章节操作、章节组合单一入口、统一关闭、AI 默认视图及手动整章草稿，补齐身份保留、影响预览与原子保存。
+- [场次划分统一编辑与历史版本计划](/docs/plans/chapter-division-version-editor-plan/)：代码与验收已完成；统一 AI／手动编辑、历史 Modal、不可变保存版本和受控恢复，附 HTTP、浏览器及 MySQL 验证；业务库部署步骤见接入指南。
+- [章节入口与整章划分工作流优化计划](/docs/plans/chapter-division-workflow-plan/)：已完成；动态入口、AI／手动整章草稿、身份保留、影响预览、原子保存及历史只读已落地，附四尺寸、完整主流程和 MySQL 迁移／并发／回滚证据。
 - [章节信息与原文选区划场优化计划](/docs/plans/chapter-source-selection-and-division-plan/)：已完成；五列章节表、默认详情、完整原文框选与 AI 候选逐场确认已落地，附四尺寸和 MySQL 并发证据，不增加跨章节待核对数量、粗剪数量。
 - [章节列表与场次抽屉交互优化计划](/docs/plans/chapter-list-and-sequence-drawer-plan/)：已完成；三列章节主表、统一原文保存提示、单层场次管理与浏览恢复已落地，不增加跨章节待核对数量、粗剪数量，附四尺寸验收证据。
 - [章节、场次与工作台交互优化任务计划](/docs/plans/chapter-sequence-workbench-interaction-plan/)：已完成；章节直达与详情分区、统一版本、稳定设计三视图和试拍关系图已落地，附最终验收矩阵、证据及检查限制。

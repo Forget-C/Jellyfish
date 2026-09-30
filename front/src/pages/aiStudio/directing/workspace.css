@@ -702,12 +702,15 @@
 .chapter-table-preview { margin: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: #667085; }
 .chapter-source-excerpt { white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0; }
 .chapter-division { display: grid; gap: 12px; }
-.chapter-division-toolbar { margin-bottom: 16px; }
+.chapter-division-toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.chapter-division-toolbar > .ant-space { margin-left: auto; }
+.division-history-table .ant-table-cell { overflow-wrap: anywhere; }
+.division-history-detail section { margin: 12px 0; }
 .chapter-division-layout { display: grid; grid-template-columns: minmax(170px, 220px) minmax(0, 1fr) minmax(230px, 300px); gap: 20px; align-items: start; }
 .chapter-division-layout > * { min-width: 0; }
 .chapter-division-list, .chapter-division-editor { max-height: calc(100dvh - 220px); overflow: auto; padding: 4px; }
-.chapter-division-list > .ant-btn { height: auto; white-space: normal; text-align: left; margin-bottom: 8px; }
-.chapter-division-list > .ant-btn[aria-pressed=true] { border-color: #1677ff; background: #e6f4ff; }
+.chapter-division-members > .ant-btn { height: auto; white-space: normal; text-align: left; margin-bottom: 8px; }
+.chapter-division-members > .ant-btn[aria-pressed=true] { border-color: #1677ff; background: #e6f4ff; }
 .chapter-division-list .ant-card { margin-bottom: 12px; }
 .chapter-source-reader { background: #fafcff; border: 1px solid #dbe4ef; border-radius: 8px; padding: 16px; }
 .chapter-source-reader > p { font-size: 12px; margin: 10px 0; }

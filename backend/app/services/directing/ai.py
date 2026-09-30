@@ -12,10 +12,10 @@ from app.core.contracts.directing.design import SceneDesign
 from app.core.contracts.directing.production import ReviewPacket
 from app.core.contracts.directing.review_revision import ReviewRevisionCandidate
 from app.core.contracts.directing.workspace import AIRequest, DivisionResult, DirectingTaskRead
-from app.models.directing import DirectingRevision
+from app.models.directing import DirectingRevision, Sequence
 from app.models.llm import ModelCategoryKey, Provider
 from app.models.task import Task, TaskOutput
-from app.models.studio import Character, Scene, Prop, ProjectSceneLink, ProjectPropLink
+from app.models.studio import Chapter, Character, Scene, Prop, ProjectSceneLink, ProjectPropLink
 from app.services.directing.workspace import WorkspaceService
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.llm.resolver import get_model_by_category
@@ -87,6 +87,8 @@ class DirectingAIService(WorkspaceService):
     async def submit_ai(self, *, kind: str, body: AIRequest, chapter_id: str | None = None,
                         sequence_id: str | None = None, extra: dict | None = None, request_context: dict | None = None) -> Task:
         """冻结原文、人工意见和起始版本，避免 AI 在后台读取变化中的工作区。"""
+        if sequence_id:
+            await self.current_sequence(sequence_id)
         if kind not in RESULT_CONTRACTS:
             raise ValueError("未知导演操作")
         model = await get_model_by_category(self.db, ModelCategoryKey.text, model_or_id=body.model_id)
@@ -101,6 +103,11 @@ class DirectingAIService(WorkspaceService):
                         sequence_version=sequence.version, chapter_id=sequence.chapter_id,
                         source=sequence.source.model_dump(mode="json"))
         else:
+            await self.chapter(chapter_id)
+            await self.db.scalar(select(Chapter).where(Chapter.id == chapter_id).with_for_update().execution_options(populate_existing=True))
+            members = list(await self.db.scalars(select(Sequence).where(Sequence.chapter_id == chapter_id,
+                Sequence.is_current.is_(True)).order_by(Sequence.id).with_for_update().execution_options(populate_existing=True)))
+            args['division_baseline'] = {row.id: row.version for row in members}
             chapter = await self.list_sequences(chapter_id)
             args.update(script_text=chapter.raw_text, chapter_id=chapter.chapter_id, source_version=chapter.source_version)
         if not args["script_text"].strip():
@@ -127,14 +134,15 @@ class DirectingAIService(WorkspaceService):
             args["revision_context"]["task_identity"] = args["task_identity"]
         return await TaskService(self.db).submit(
             kind=kind, title={"directing_divide": "分析章节场次", "directing_design": "生成导演方案", "directing_review": "六部门审稿", "directing_review_revision": "生成检查修改方案"}[kind],
-            snapshot={**(request_context or {}), "model_id": model.id, "model_name": model.name, "provider_key": config.provider_key, "run_args": args},
+            snapshot={**(request_context or {}), "model_id": model.id, "model_name": model.name, "provider_key": config.provider_key, "run_args": args,
+                      **({'division_versioning': 1} if kind == 'directing_divide' else {})},
             provider_id=provider.id, project_id=self.project_id,
             target_type="directing_sequence" if sequence_id else "directing_chapter", target_id=sequence_id or chapter_id,
         )
 
     async def apply_design(self, sequence_id: str, task_id: str) -> DirectingRevision:
         """显式采用成功建议；迟到结果生成独立草稿，不覆盖更新后的人工版本。"""
-        sequence = await self.sequence(sequence_id)
+        sequence = await self.current_sequence(sequence_id)
         task = await self.db.get(Task, task_id)
         if task is None or task.project_id != self.project_id or task.target_id != sequence_id or task.kind != "directing_design" or task.status != "succeeded":
             raise ValueError("没有可采用的导演任务结果")
@@ -170,4 +178,5 @@ class DirectingAIService(WorkspaceService):
             result["revision_application"] = task.input_snapshot.get("revision_application")
         return DirectingTaskRead(task_id=task.id, kind=task.kind, status=task.status,
                                  error=task.error_message,
+                                 division_baseline=task.input_snapshot.get("run_args", {}).get("division_baseline"),
                                  source_version=task.input_snapshot.get("run_args", {}).get("source_version"), **result)

@@ -7,9 +7,10 @@ import { readSourceSelection, textareaSpan } from './sourceSelection'
 export type SourceMark = { id: string; label: string; span: SourceSpan; candidate?: boolean }
 
 /** 只读原文与原生选区共用真实文本；边界标签用装饰层呈现，不进入复制或偏移。 */
-export function ChapterSourceSelection({ projectId, chapterId, raw, marks, span, focusId, onSelect, onScene }: {
+export function ChapterSourceSelection({ projectId, chapterId, raw, marks, span, focusId, onSelect, onScene, readOnly = false }: {
   projectId: string; chapterId: string; raw: string; marks: SourceMark[]; span?: SourceSpan; focusId?: string
   onSelect: (span: SourceSpan) => void; onScene: (id: string) => void
+  readOnly?: boolean
 }) {
   const root = useRef<HTMLDivElement>(null)
   const plain = useRef<HTMLTextAreaElement>(null)
@@ -20,11 +21,12 @@ export function ChapterSourceSelection({ projectId, chapterId, raw, marks, span,
   selected.current = onSelect
   const chars = Array.from(raw)
   const scrollTop = useRef(readChapterBrowse(projectId, chapterId).sourceTop || 0)
+  const lastFocus = useRef(scrollTop.current ? focusId : undefined)
   const cuts = [...new Set([0, chars.length, ...marks.flatMap(mark => [mark.span.start, mark.span.end]),
     ...(span ? [span.start, span.end] : [])])].filter(value => value >= 0 && value <= chars.length).sort((a, b) => a - b)
   useEffect(() => {
     const read = () => {
-      if (!root.current || dragging.current) return
+      if (readOnly || !root.current || dragging.current) return
       const value = readSourceSelection(root.current)
       if (value) {
         // 高亮切分会重建文本节点；先结束原生选区，避免 DOM 重排反向改写已确认的范围。
@@ -38,8 +40,10 @@ export function ChapterSourceSelection({ projectId, chapterId, raw, marks, span,
     document.addEventListener('selectionchange', read)
     document.addEventListener('pointerup', release)
     return () => { document.removeEventListener('selectionchange', read); document.removeEventListener('pointerup', release) }
-  }, [])
+  }, [readOnly])
   useEffect(() => {
+    if (lastFocus.current === focusId) return
+    lastFocus.current = focusId
     if (focusId && root.current) {
       const element = [...root.current.querySelectorAll<HTMLElement>('[data-mark-id]')].find(node => node.dataset.markId === focusId)
       element?.scrollIntoView({ block: 'center' })
@@ -59,7 +63,7 @@ export function ChapterSourceSelection({ projectId, chapterId, raw, marks, span,
       <strong>完整章节原文</strong>
       <Button onClick={() => setNative(value => !value)}>{native ? '返回范围高亮' : '键盘/触屏选区'}</Button>
     </Space>
-    <p className="text-gray-500">框选连续原文后确认范围。浅蓝为已划分，虚线为 AI 候选，橙色为当前选区；红色表示重叠。</p>
+    <p className="text-gray-500">{readOnly ? '正在只读查看历史原文和场次范围。' : '框选连续原文后确认范围。浅蓝为已划分，虚线为 AI 候选，橙色为当前选区；红色表示重叠。'}</p>
     {native ? <><p>正文只读。使用方向键及 Shift 选择，或长按文本拖动选区手柄。</p>
       <textarea ref={plain} aria-label="键盘或触屏选择原文" className="chapter-source-native" readOnly value={raw} onScroll={event => rememberScroll(event.currentTarget.scrollTop)} onKeyDown={event => {
         // 只读文本在部分平台上用方向键滚动；显式提供逐字符键盘选择，跳过 UTF-16 代理对。
@@ -78,10 +82,10 @@ export function ChapterSourceSelection({ projectId, chapterId, raw, marks, span,
         const start = event.shiftKey ? Math.min(anchor, next) : next, end = event.shiftKey ? Math.max(anchor, next) : next
         input.setSelectionRange(start, end, next < anchor ? 'backward' : 'forward')
         const value = textareaSpan(raw, start, end)
-        if (value) onSelect(value)
+        if (value && !readOnly) onSelect(value)
       }} onSelect={event => {
         const input = event.currentTarget, value = textareaSpan(raw, input.selectionStart, input.selectionEnd)
-        if (value) onSelect(value)
+        if (value && !readOnly) onSelect(value)
       }} /></> : <div ref={root} className="chapter-source-text" onScroll={event => rememberScroll(event.currentTarget.scrollTop)} onPointerDown={() => { dragging.current = true }} onClick={event => {
         if (selectedByPointer.current) { selectedByPointer.current = false; return }
         if (!document.getSelection()?.isCollapsed) return

@@ -16,7 +16,8 @@ const media = await readFile(join(output, 'sample.mp4'))
 const server = await createServer({ root, server: { host: '127.0.0.1', port: 4188, strictPort: true, open: false } })
 const workspace = makeWorkspace()
 for (const key of ['designs','plans','prompts','reviews','takes','cuts']) workspace[key] = []
-let project, chapter, sceneCreated = false, packet, activeId = null
+let project, chapter, sceneCreated = false, packet, activeId = null, divisionVersion = null
+const divisionVersions = new Map()
 const feedback = { active_cut_revision_id: null, current_review_id: null, reviews: [], repairs: [], knowledge: [] }
 const compileRequests = [], reviewRequests = []
 const loseReviewResponse = process.env.JELLYFISH_TEST_REVIEW_LOST_RESPONSE === '1'
@@ -37,15 +38,29 @@ try {
     if (body) writes.push({ path, body })
     if (path.endsWith('/projects')) { if (body) project = { ...body, stats: { chapters: 0, roles: 0 }, created_at: '2026-09-15T00:00:00Z' }; return respond(body ? project : list(project ? [project] : [])) }
     if (project && path.endsWith(`/projects/${project.id}`)) return respond(project)
-    if (path.endsWith('/chapters')) { if (body) { chapter = body; workspace.sequence.project_id = project.id; workspace.sequence.chapter_id = chapter.id }; return respond(body ? chapter : list(chapter ? [chapter] : [])) }
+    if (path.endsWith('/chapters')) { if (body) { chapter = body; workspace.sequence.project_id = project.id; workspace.sequence.chapter_id = chapter.id }; return respond(body ? chapter : list(chapter ? [{ ...chapter, sequence_count: sceneCreated ? 1 : 0 }] : [])) }
     if (chapter && path.endsWith(`/chapters/${chapter.id}/overview`)) return respond({ chapter_id: chapter.id, title: chapter.title, source_version: '1', sequences: sceneCreated ? [{ ...workspace.sequence, source_excerpt: workspace.sequence.source_text, design_count: workspace.designs.length, confirmed_design_count: workspace.designs.filter(row => row.confirmed_at).length, plan_count: workspace.plans.length, confirmed_plan_count: workspace.plans.filter(row => row.confirmed_at).length, take_count: workspace.takes.length, unreviewed_take_count: workspace.takes.length, active_cut_revision_id: activeId }] : [] })
     if (chapter && path.endsWith(`/chapters/${chapter.id}/assembly`)) {
       const cut = workspace.cuts.find(row => row.id === activeId && row.confirmed_at)
       const items = cut?.content.items.filter(item => item.kind === 'media') || []
       return respond({ chapter_id: chapter.id, title: chapter.title, sequences: cut ? [{ sequence_id: workspace.sequence.id, title: workspace.sequence.title, position: 0, cut_revision_id: cut.id, review_id: null, verdict: 'unreviewed', sound_status: 'pending_postproduction', source_changed: false, items, timeline_starts_ms: items.map(item => item.timeline_start_ms), duration_ms: items.reduce((total, item) => total + item.media_range.source_out_ms - item.media_range.source_in_ms, 0), gaps: [] }] : [], transitions: [], gaps: [] })
     }
-    if (chapter && path.endsWith(`/chapters/${chapter.id}`)) return respond(path.includes('/directing/') ? { chapter_id: chapter.id, title: chapter.title, raw_text: chapter.raw_text, source_version: '1', sequences: sceneCreated ? [workspace.sequence] : [], task_ids: [] } : chapter)
-    if (path.endsWith('/sequences') && body) { sceneCreated = true; workspace.sequence.title = body.title; workspace.sequence.span = body.span; workspace.sequence.source_text = chapter.raw_text.slice(body.span.start, body.span.end); return respond(workspace.sequence) }
+    if (chapter && path.endsWith(`/chapters/${chapter.id}`)) return respond(path.includes('/directing/') ? { chapter_id: chapter.id, title: chapter.title, raw_text: chapter.raw_text, source_version: '1', current_version: divisionVersion, sequences: sceneCreated ? [workspace.sequence] : [], task_ids: [] } : chapter)
+    if (path.endsWith('/division/history')) return respond({ items: [...divisionVersions.values()].reverse().map(row => ({ id: row.current_version.id, kind: 'version', number: row.current_version.number, origin: 'manual', status: 'saved', created_at: '2026-09-30T12:00:00Z', is_current: row.current_version.id === divisionVersion.id })), total: divisionVersions.size, active_task_ids: [], page: 1, page_size: 10 })
+    if (path.includes('/division/versions/')) {
+      const snapshot = divisionVersions.get(path.split('/').at(-1))
+      return respond({ version: { ...snapshot.current_version, kind: 'version', origin: 'manual' }, chapter: snapshot, restored_baseline: [], mapping: {}, source_revision_id: null, base_revision_id: null })
+    }
+    if (path.endsWith('/division/preview')) return respond({ preview_token: 'journey-preview', impacts: body.members.map(member => ({ key: member.key, before: null, after: member, changes: ['added'], design_count: 0, plan_count: 0, take_count: 0, cut_count: 0 })), blockers: [], unassigned_character_count: 0, identity_confirmation_required: false })
+    if (path.endsWith('/division') && method === 'PUT') {
+      const member = body.draft.members[0]
+      Object.assign(workspace.sequence, { title: member.title, span: member.span, source_text: [...chapter.raw_text].slice(member.span.start, member.span.end).join(''), is_current: true, version: sceneCreated ? workspace.sequence.version + 1 : 1 })
+      sceneCreated = true
+      divisionVersion = { id: `division-v${divisionVersions.size + 1}`, number: divisionVersions.size + 1 }
+      const snapshot = { chapter_id: chapter.id, title: chapter.title, raw_text: chapter.raw_text, source_version: '1', current_version: divisionVersion, sequences: [workspace.sequence], task_ids: [] }
+      divisionVersions.set(divisionVersion.id, structuredClone(snapshot))
+      return respond({ request_id: body.request_id, chapter: snapshot, created_sequence_ids: member.sequence_id ? {} : { [member.key]: workspace.sequence.id }, impacts: [] })
+    }
     if (path.endsWith('/s1')) return respond(workspace)
     if (path.endsWith('/s1/feedback') && !body) return respond({ ...feedback, active_cut_revision_id: activeId })
     if (path.endsWith('/s1/continuity')) return respond({ active_cut_revision_id: activeId, frames: [], seams: [], units: [] })
@@ -116,14 +131,35 @@ try {
   await page.getByRole('textbox', { name: '章节标题', exact: true }).fill('旧信重逢')
   await page.getByRole('textbox', { name: '章节原文', exact: true }).fill('他递出旧信，她认出了他。')
   await page.getByRole('button', { name: '创建并继续', exact: true }).click()
-  await page.getByRole('button', { name: '手动新建场次', exact: true }).click()
+  await page.getByRole('region', { name: '完整章节原文', exact: true }).waitFor()
+  await page.getByRole('button', { name: '新增场次', exact: true }).click()
   await page.getByRole('textbox', { name: '场次标题', exact: true }).fill('旧信重逢')
   await page.getByRole('button', { name: '键盘/触屏选区', exact: true }).click()
   await page.getByRole('textbox', { name: '键盘或触屏选择原文', exact: true }).focus()
   await page.keyboard.press('ControlOrMeta+A')
-  await page.getByRole('button', { name: '确认创建场次', exact: true }).click()
-  await page.getByRole('button', { name: '确认保存范围', exact: true }).waitFor()
-  await page.getByRole('button', { name: '返回场次列表', exact: true }).click()
+  await page.getByRole('button', { name: '保存新版本', exact: true }).click()
+  await page.getByRole('button', { name: '保存本章划分', exact: true }).click()
+  await page.getByText('已保存为 v1。', { exact: true }).waitFor()
+  await page.getByRole('textbox', { name: '场次标题', exact: true }).fill('暂时改名')
+  await page.getByRole('button', { name: '保存新版本', exact: true }).click()
+  await page.getByRole('button', { name: '保存本章划分', exact: true }).click()
+  await page.getByText('已保存为 v2。', { exact: true }).waitFor()
+  await page.getByRole('button', { name: '历史版本', exact: true }).click()
+  const historyModal = page.getByRole('dialog', { name: '历史版本', exact: true })
+  await historyModal.getByRole('row').filter({ has: page.getByText('v1', { exact: true }) }).getByRole('button', { name: '展开', exact: true }).click()
+  await historyModal.getByRole('button', { name: '基于此版本编辑', exact: true }).click()
+  await page.getByText('历史方案已载入草稿。请核对范围与身份，保存将形成新版本。', { exact: true }).waitFor()
+  assert.equal(await page.getByRole('textbox', { name: '场次标题', exact: true }).inputValue(), '旧信重逢')
+  await page.getByRole('button', { name: '保存新版本', exact: true }).click()
+  await page.getByRole('button', { name: '保存本章划分', exact: true }).click()
+  await page.getByText('已保存为 v3。', { exact: true }).waitFor()
+  assert.equal(writes.filter(row => row.path.endsWith('/division')).at(-1).body.draft.source_revision_id, 'division-v1')
+  assert.equal(workspace.sequence.id, 's1')
+  assert.equal(divisionVersions.get('division-v1').sequences[0].title, '旧信重逢')
+  await record('章节版本保存与历史恢复保留场次身份')
+  await page.locator('.ant-drawer-open').getByRole('button', { name: 'Close', exact: true }).click()
+  await page.locator('.ant-drawer-open').waitFor({ state: 'hidden' })
+  await page.getByRole('button', { name: '场次管理', exact: true }).click()
   await page.getByRole('button', { name: '继续设计', exact: true }).click()
   await page.getByRole('button', { name: '手动起稿', exact: true }).click()
   await page.getByRole('button', { name: '分镜 1', exact: true }).click()

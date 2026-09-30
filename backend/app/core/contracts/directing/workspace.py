@@ -57,6 +57,14 @@ class SequenceRead(Contract):
     span: SourceSpan | None
     source_text: str
     source_changed: bool
+    is_current: bool = True
+
+
+class DivisionVersionRef(Contract):
+    """章节划分展示版本；与场次并发修订号区分。"""
+
+    id: Identity
+    number: int = Field(gt=0)
 
 
 class ChapterSequences(Contract):
@@ -68,6 +76,7 @@ class ChapterSequences(Contract):
     source_version: Text
     sequences: list[SequenceRead]
     task_ids: list[Identity] = Field(default_factory=list)
+    current_version: DivisionVersionRef | None = None
 
 
 class SequenceOverview(Contract):
@@ -246,6 +255,7 @@ class DirectingTaskRead(Contract):
     status: str
     error: str | None
     source_version: str | None
+    division_baseline: dict[Identity, int] | None = None
     division: DivisionResult | None = None
     design: SceneDesign | None = None
     review: ReviewPacket | None = None

@@ -42,6 +42,7 @@ class DirectingStore:
         """绑定事务会话和上层已鉴权的项目，所有查询都重新核对归属。"""
         self.db = db
         self.project_id = ID_ADAPTER.validate_python(project_id)
+        self._writing_sequences: set[str] = set()
 
     async def style_revision(self, revision_id: str, *, confirmed: bool = False) -> ProjectStyleRecord:
         """只读取本项目风格，设计只能引用已确认快照。"""
@@ -142,6 +143,8 @@ class DirectingStore:
 
     async def sequence(self, sequence_id: str) -> Sequence:
         """按章节项目查询场次，隐藏其他项目对象。"""
+        if sequence_id in self._writing_sequences:
+            return await self.db.get(Sequence, sequence_id, with_for_update=True, populate_existing=True)
         result = await self.db.scalar(select(Sequence).join(Chapter, Chapter.id == Sequence.chapter_id).where(
             Sequence.id == sequence_id, Chapter.project_id == self.project_id,
         ).execution_options(populate_existing=True))
@@ -149,12 +152,21 @@ class DirectingStore:
             raise ValueError("sequence not found in project")
         return result
 
+    async def current_sequence(self, sequence_id: str) -> Sequence:
+        """生产写入先锁定场次并核对成员状态，后续场次读取保持当前读；历史读取和任务交付除外。"""
+        await self.sequence(sequence_id)
+        row = await self.db.get(Sequence, sequence_id, with_for_update=True, populate_existing=True)
+        self._writing_sequences.add(sequence_id)
+        if not row.is_current:
+            raise RevisionConflict("场次已退出当前划分，仅可查看历史成果")
+        return row
+
     async def create_sequence(self, *, chapter_id: str, title: str, position: int) -> Sequence:
         """建立叙事场次并保存原文摘要版本，不执行原文提取任务。"""
         ID_ADAPTER.validate_python(chapter_id)
         if not title.strip() or len(title) > 255 or (not isinstance(position, int) or isinstance(position, bool)) or position < 0:
             raise ValueError("invalid sequence title or position")
-        chapter = await self.db.scalar(select(Chapter).where(Chapter.id == chapter_id, Chapter.project_id == self.project_id))
+        chapter = await self.db.scalar(select(Chapter).where(Chapter.id == chapter_id, Chapter.project_id == self.project_id).with_for_update().execution_options(populate_existing=True))
         if chapter is None:
             raise ValueError("chapter not found in project")
         source = Source(kind="chapter", reference=chapter.id, version=sha256(chapter.raw_text.encode()).hexdigest())
@@ -168,7 +180,9 @@ class DirectingStore:
 
     async def update_sequence(self, sequence_id: str, *, expected_version: int, title: str, position: int) -> Sequence:
         """通过版本比较更新场次标题和顺序，防止迟到保存覆盖人工修改。"""
-        await self.sequence(sequence_id)
+        row = await self.sequence(sequence_id)
+        await self.db.scalar(select(Chapter).where(Chapter.id == row.chapter_id).with_for_update())
+        await self.current_sequence(sequence_id)
         if not title.strip() or len(title) > 255 or (not isinstance(position, int) or isinstance(position, bool)) or position < 0:
             raise ValueError("invalid sequence title or position")
         async with self.db.begin_nested():
@@ -231,7 +245,7 @@ class DirectingStore:
                             revision_id: str | None = None, expected_version: int | None = None,
                             parent_id: str | None = None, source_task_id: str | None = None) -> DirectingRevision:
         """创建草稿或 CAS 更新草稿；冻结版本必须派生新 ID，引用索引与正文同事务。"""
-        sequence = await self.sequence(sequence_id)
+        sequence = await self.current_sequence(sequence_id)
         if kind not in CONTRACTS:
             raise ValueError("unknown revision kind")
         content = CONTRACTS[kind].model_validate(payload)
@@ -281,6 +295,8 @@ class DirectingStore:
     async def confirm_revision(self, revision_id: str, *, expected_version: int, actor_id: str) -> DirectingRevision:
         """由应用的人工作用域登记确认；模型工作单不能自行填写批准人。"""
         ID_ADAPTER.validate_python(actor_id)
+        row = await self.revision(revision_id)
+        await self.current_sequence(row.sequence_id)
         row = await self.revision(revision_id)
         if row.kind in ('cut_review', 'repair'):
             await self.db.scalar(select(Sequence).where(Sequence.id == row.sequence_id).with_for_update())
@@ -641,6 +657,7 @@ class DirectingStore:
     async def annotate_take(self, take_id: str, *, expected_version: int, annotation: dict) -> Take:
         """CAS 保存实际覆盖与四类审片结论，来源、归属和区间不能混用。"""
         row = await self.take(take_id)
+        await self.current_sequence(row.sequence_id)
         content = TakeAnnotation.model_validate(annotation)
         plan_row = await self.revision(row.plan_revision_id, kind="plan", confirmed=True)
         unit = self._unit(ProductionPlan.model_validate(plan_row.payload), row.unit_id)

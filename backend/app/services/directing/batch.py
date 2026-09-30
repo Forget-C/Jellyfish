@@ -36,6 +36,7 @@ class BatchService(ProductionService):
 
     async def prepare_batch(self, sequence_id: str, body: BatchPrepare) -> BatchRead:
         """保存固定选择与逐项预检结果，不创建任务或访问模型。"""
+        await self.current_sequence(sequence_id)
         await self.sequence(sequence_id)
         identities = set()
         for item in body.items:
@@ -87,6 +88,7 @@ class BatchService(ProductionService):
 
     async def submit_batch(self, sequence_id: str, batch_id: str, *, expected_version: int) -> BatchRead:
         """一次显式受理，每项独立 savepoint；重放同批返回原任务，不自动重试失败项。"""
+        await self.current_sequence(sequence_id)
         batch = await self._batch(sequence_id, batch_id, lock=True)
         if batch.status == 'submitted':
             return await self.read_batch(sequence_id, batch_id)

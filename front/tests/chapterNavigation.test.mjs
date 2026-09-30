@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { loadSource } from './directing-fixtures.mjs'
 
-const { sequenceAction, chapterLocation, sequenceLocation, readChapterBrowse, saveChapterBrowse } = await loadSource('chapterNavigation')
+const { chapterAction, sequenceAction, chapterLocation, sequenceLocation, readChapterBrowse, saveChapterBrowse } = await loadSource('chapterNavigation')
 const scene = { id: 's1', source_changed: false, confirmed_design_count: 0, plan_count: 0, take_count: 0, unreviewed_take_count: 0, active_cut_revision_id: null }
 
 test('source verification precedes remembered work; unknown remembered stages are ignored', () => {
@@ -49,4 +49,14 @@ test('chapter browsing stays isolated and tolerates damaged or unavailable stora
     assert.doesNotThrow(() => saveChapterBrowse('p1', 'ch1', { query: '仍可操作' }))
     assert.deepEqual(readChapterBrowse('p1', 'ch1'), {})
   } finally { delete globalThis.sessionStorage }
+})
+
+test('chapter actions distinguish missing source, known counts and unknown data', () => {
+  assert.deepEqual(chapterAction({ rawText: '' }), { label: '填写原文', target: 'edit' })
+  assert.equal(chapterAction({ rawText: '原文', sequenceCount: 0 }).target, 'source')
+  assert.equal(chapterAction({ rawText: '原文', sequenceCount: 2 }).label, '场次管理')
+  assert.equal(chapterAction({ rawText: '原文' }).label, '查看场次')
+  assert.equal(chapterAction({ sequenceCount: 0 }).label, '查看场次')
+  assert.equal(chapterAction({ rawText: '  ', sequenceCount: 2 }).target, 'edit')
+  assert.equal(chapterAction({ rawText: '', sequenceCount: 2 }, true).target, 'manage')
 })

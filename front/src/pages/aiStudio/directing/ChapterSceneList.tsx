@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Empty, Input, List, Space, Tag } from 'antd'
 import { useNavigate } from 'react-router-dom'
-import { StudioDirectingService, type ChapterOverview } from '../../../services/generated'
+import { StudioDirectingService, type ChapterOverview, type SequenceRead } from '../../../services/generated'
 import { directingError } from './common'
 import { readChapterBrowse, saveChapterBrowse, sequenceAction, sequenceLocation } from './chapterNavigation'
 import { readWorkspaceContext } from './workspaceContext'
@@ -12,6 +12,14 @@ export function ChapterSceneList({ projectId, chapterId, onDetails, onSource, se
   selectedId?: string; refreshKey?: number; onRestore: (sequenceId: string) => void
 }) {
   const navigate = useNavigate()
+  const [history, setHistory] = useState<SequenceRead[]>()
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [historyError, setHistoryError] = useState('')
+  const loadHistory = async () => {
+    setHistoryOpen(true); setHistoryError('')
+    try { const response = await StudioDirectingService.directingChapterHistory({ projectId, chapterId }); if (!response.data) throw new Error('历史场次读取失败'); setHistory(response.data) }
+    catch (cause) { setHistoryError(directingError(cause)) }
+  }
   const [overview, setOverview] = useState<ChapterOverview>()
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -77,5 +85,12 @@ export function ChapterSceneList({ projectId, chapterId, onDetails, onSource, se
             : onDetails(sequence.id)}>{action.label}</Button>
         </Space>
       </List.Item>
-    }} /></div>
+    }} />
+    <Button onClick={() => historyOpen ? setHistoryOpen(false) : void loadHistory()}>{historyOpen ? '收起历史场次' : '查看历史场次'}</Button>
+    {historyOpen && <section aria-label="历史场次"><p>已退出当前划分，保留原身份和成果。</p>
+      {historyError && <Alert type="error" message={historyError} action={<Button onClick={() => void loadHistory()}>重试历史读取</Button>} />}
+      {history?.length === 0 && <p>暂无历史场次</p>}
+      {history?.map(row => <Button block key={row.id} style={{ whiteSpace: 'normal', height: 'auto', textAlign: 'left' }} onClick={() => onDetails(row.id)}>{row.title} · 历史</Button>)}
+    </section>}
+  </div>
 }

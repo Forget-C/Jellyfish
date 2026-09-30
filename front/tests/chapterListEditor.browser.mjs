@@ -13,6 +13,7 @@ const server = await createServer({ root, server: { host: '127.0.0.1', port, str
 const evidence = await mkdtemp(join(tmpdir(), 'jellyfish-chapter-list-'))
 const chapters = Array.from({ length: 105 }, (_, i) => ({ id: `ch${i + 1}`, project_id: 'p1', index: i + 1, title: `章节 ${i + 1}`, raw_text: '她推开门。', condensed_text: '推门。', sequence_count: i === 0 ? 2 : 0, status: 'draft' }))
 delete chapters[104].sequence_count
+chapters[2].raw_text = ''
 const writes = [], requests = [], errors = []
 const taskResults = { check: { has_issues: false, issues: [], summary: "无混淆" }, optimize: { optimized_script_text: "她推开门。优化后的原文。" } }
 let sourceChanged = false, failSave = false, failRead = false, holdSave = false, releaseSave
@@ -68,6 +69,10 @@ try {
   await page.getByRole('button', { name: '章节 1 · 2 场', exact: true }).waitFor()
   assert.deepEqual(await page.getByRole('columnheader').allTextContents(), ['章节名称', '原文预览', '原文字数', '场次数量', '操作'])
   assert.equal(requests.some(row => /overview|assembly|sequences/.test(row.path)), false)
+  const row = title => page.locator('.ant-table-row').filter({ has: page.getByRole('button', { name: title, exact: true }) })
+  await row('1. 章节 1 · 编辑章节').getByRole('button', { name: '场次管理', exact: true }).waitFor()
+  await row('2. 章节 2 · 编辑章节').getByRole('button', { name: '划分场次', exact: true }).waitFor()
+  await row('3. 章节 3 · 编辑章节').getByRole('button', { name: '填写原文', exact: true }).waitFor()
   assert.equal(await page.locator('.ant-drawer-open').count(), 0)
   await page.getByRole('button', { name: '10. 章节 10 · 编辑章节', exact: true }).scrollIntoViewIfNeeded()
   const tableTop = await page.locator('.app-workspace-scroll').evaluate(element => element.scrollTop)

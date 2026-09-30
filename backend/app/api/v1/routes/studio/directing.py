@@ -1,6 +1,6 @@
 """场次工作区 API；业务校验由领域服务负责，事务必须在响应发送前提交。"""
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.directing.workspace import (
@@ -8,6 +8,10 @@ from app.core.contracts.directing.workspace import (
     CompileRequest, CompileResult, ReviewRequest, ShootRequest, TakeReviewWrite, MediaRead, ReviewDecisionRequest, DirectingTaskRead,
     SequenceUpdate, TaskAccepted, VersionRequest, WorkspaceRead,
 )
+from app.core.contracts.directing.division import DivisionDraft, DivisionPreview, DivisionSave, DivisionSaved
+from app.services.directing.division import DivisionService
+from app.core.contracts.directing.division_history import DivisionAnalysisDetail, DivisionHistoryPage, DivisionReceiptDetail, DivisionVersionDetail
+from app.services.directing.division_history import DivisionHistoryService
 from app.core.contracts.directing.style import ProjectStyleRevision, StyleWrite
 from app.core.contracts.video_generation import VideoReferenceCapabilities
 from app.dependencies import get_db
@@ -57,6 +61,54 @@ async def chapter(project_id: str, chapter_id: str, db: AsyncSession = Depends(g
 async def chapter_overview(project_id: str, chapter_id: str, db: AsyncSession = Depends(get_db, scope="function")):
     """返回有序场次的整场计数与已确认采用身份。"""
     return success_response(await _call(ProductionService(db, project_id).chapter_overview(chapter_id)))
+
+
+@router.get("/chapters/{chapter_id}/history", response_model=ApiResponse[list[SequenceRead]], operation_id="directing_chapter_history")
+async def chapter_history(project_id: str, chapter_id: str, db: AsyncSession = Depends(get_db, scope="function")):
+    """按需列出历史场次，不参与当前数量与章节组合。"""
+    return success_response(await _call(DivisionService(db, project_id).historical_sequences(chapter_id)))
+
+
+@router.get("/chapters/{chapter_id}/division/history", response_model=ApiResponse[DivisionHistoryPage], operation_id="directing_division_history")
+async def division_history(project_id: str, chapter_id: str, page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100), db: AsyncSession = Depends(get_db, scope="function")):
+    """分页列出保存版本及未关联的分析记录，不加载所有历史正文。"""
+    return success_response(await _call(DivisionHistoryService(db, project_id).history(chapter_id, page=page, page_size=page_size)))
+
+
+@router.get("/chapters/{chapter_id}/division/versions/{version_id}", response_model=ApiResponse[DivisionVersionDetail], operation_id="directing_division_version")
+async def division_version(project_id: str, chapter_id: str, version_id: str, db: AsyncSession = Depends(get_db, scope="function")):
+    """按需读取保存时的完整快照；查看不切换当前版本。"""
+    return success_response(await _call(DivisionHistoryService(db, project_id).version_detail(chapter_id, version_id)))
+
+
+@router.get("/chapters/{chapter_id}/division/history/receipts/{request_id}", response_model=ApiResponse[DivisionReceiptDetail], operation_id="directing_division_legacy_receipt")
+async def division_legacy_receipt(project_id: str, chapter_id: str, request_id: str, db: AsyncSession = Depends(get_db, scope="function")):
+    """只读查看尚未接入的旧保存记录，缺失数据保留说明。"""
+    return success_response(await _call(DivisionHistoryService(db, project_id).receipt_detail(chapter_id, request_id)))
+
+
+@router.get("/chapters/{chapter_id}/division/analyses/{task_id}", response_model=ApiResponse[DivisionAnalysisDetail], operation_id="directing_division_analysis")
+async def division_analysis(project_id: str, chapter_id: str, task_id: str, db: AsyncSession = Depends(get_db, scope="function")):
+    """展开分析时读取业务快照，旧资料缺失不冒充完整版本。"""
+    return success_response(await _call(DivisionHistoryService(db, project_id).analysis_detail(chapter_id, task_id)))
+
+
+@router.post("/chapters/{chapter_id}/division/preview", response_model=ApiResponse[DivisionPreview], operation_id="directing_preview_division")
+async def preview_division(project_id: str, chapter_id: str, body: DivisionDraft, db: AsyncSession = Depends(get_db, scope="function")):
+    """校验最终范围和完整集合，返回实际影响及阻塞；不写正式场次。"""
+    return success_response(await _call(DivisionService(db, project_id).preview_division(chapter_id, body)))
+
+
+@router.put("/chapters/{chapter_id}/division", response_model=ApiResponse[DivisionSaved], operation_id="directing_save_division")
+async def save_division(project_id: str, chapter_id: str, body: DivisionSave, db: AsyncSession = Depends(get_db, scope="function")):
+    """确认预览后原子保存；同请求同内容重试返回回执，不重复创建。"""
+    return success_response(await _call(DivisionService(db, project_id).save_division(chapter_id, body)))
+
+
+@router.get("/chapters/{chapter_id}/division/receipts/{request_id}", response_model=ApiResponse[DivisionSaved | None], operation_id="directing_division_receipt")
+async def division_receipt(project_id: str, chapter_id: str, request_id: str, db: AsyncSession = Depends(get_db, scope="function")):
+    """响应丢失后核对回执；不存在返回 null，不能据此更换请求身份盲目重放。"""
+    return success_response(await _call(DivisionService(db, project_id).division_receipt(chapter_id, request_id)))
 
 
 @router.post("/chapters/{chapter_id}/sequences", response_model=ApiResponse[SequenceRead], operation_id="directing_create_sequence")

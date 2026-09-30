@@ -3,16 +3,18 @@ title: "章节入口与整章划分工作流优化计划"
 description: "统一章节动态操作与抽屉关闭，默认进入 AI 分析视图，建立手动整章划分草稿、影响预览与原子保存。"
 date: 2026-09-29
 weight: 37
-status: planned
+status: completed
 ---
 
 # 章节入口与整章划分工作流优化计划
 
-> 状态：待实施。本计划承接[章节信息与原文选区划场优化计划](/docs/plans/chapter-source-selection-and-division-plan/)；前序完成状态与验收记录保留。本文件记录未来方案，不代表当前实现。
+> 状态：已完成（2026-09-29）。T1–T6 已落地，W01–W18 验收记录见末尾；当前实现已同步至场次工作台架构文档。本计划承接[章节信息与原文选区划场优化计划](/docs/plans/chapter-source-selection-and-division-plan/)，保留阶段实施和验证记录。
 >
 > 核心约定：手动划分默认编辑本章全部场次组成的方案，保存时校验整章、仅更新实际变化的对象。不将“整章编辑”解释为全部场次失效、全部删除重建或自动迁移已有成果。
 >
 > 延续用户约束：章节列表仍为主页面，场次管理保持左右分栏；不增加跨章节的待核对数量、粗剪数量及相关列、汇总或逐章请求。
+
+> 后续优化见[场次划分统一编辑与历史版本计划](/docs/plans/chapter-division-version-editor-plan/)（待实施）：统一编辑区和历史入口，并补齐保存版本与历史恢复。本文保留前序双视图和整章保存阶段的完成记录。
 
 ## 1. 现状与评估
 
@@ -196,20 +198,21 @@ AI 视图以操作说明、分析进度和候选场次清单为主体。原文�
 | T5 AI 到整章草稿 | 候选原文定位、身份映射、拆分/合并/退出确认、采用到草稿及最终整章保存 | 0 场首次划分与已有成果重划；重复文本、无法定位、过期任务、迟到结果；无确认零正式写入；生产成果不自动迁移 |
 | T6 综合验收与文档 | 四尺寸、键盘/原生选区、端到端流程；当前架构与测试说明；归档实际证据 | 相关前后端检查及截图；核对当前数量/组合/历史链接/任务约束；逐项填写验收矩阵与限制 |
 
-- [ ] T1 动态入口与统一关闭完成。
-- [ ] T2 AI 默认视图与状态操作完成。
-- [ ] T3 整章契约、身份规则、迁移和事务保存完成。
-- [ ] T4 手动整章编辑与影响预览完成。
-- [ ] T5 AI 整章草稿应用与映射确认完成。
-- [ ] T6 综合验收、证据及文档同步完成。
+- [x] T1 动态入口与统一关闭完成。
+- [x] T2 AI 默认视图与状态操作完成。
+- [x] T3 整章契约、身份规则、迁移和事务保存完成。
+- [x] T4 手动整章编辑与影响预览完成。
+- [x] T5 AI 整章草稿应用与映射确认完成。
+- [x] T6 综合验收、证据及文档同步完成。
 
 实施时复用已有测试并新增缺失用例。前端代码修改后运行 `pnpm --dir front run typecheck`；导航、选区和草稿的相关纯函数及浏览器回归至少包括：
 
 ```bash
-node --test front/tests/chapterNavigation.test.mjs front/tests/sourceSelection.test.mjs front/tests/workspaceContext.test.mjs
+node --test front/tests/chapterDivision.test.mjs front/tests/chapterNavigation.test.mjs front/tests/sourceSelection.test.mjs front/tests/workspaceContext.test.mjs
 node front/tests/chapterListEditor.browser.mjs
 node front/tests/chapterSequenceNavigation.browser.mjs
 node front/tests/chapterSourceSelection.browser.mjs
+node front/tests/chapterDivision.browser.mjs
 node front/tests/workspaceJourney.browser.mjs
 ```
 
@@ -240,4 +243,94 @@ node front/tests/workspaceJourney.browser.mjs
 | W17 | 1440／1024／768／375px 布局和主要操作可用，无整页横向溢出；焦点与浏览位置恢复 |
 | W18 | 无新增跨章节待核对/粗剪统计或逐章请求；新建章节到划分、设计、试拍、粗剪及组合的流程仍可完成 |
 
-本轮仅整理任务计划，未实施上述变更。后续在本文件补充实际命令结果、数据库与浏览器证据及未完成项；功能稳定落地后再更新当前架构文档。
+## 9. 实施记录（2026-09-29）
+
+已实现入口与展示阶段：
+
+- 表格动态主操作和数量快捷入口；未知原文或数量不当作空章，缺少原文的历史场次仍可从数量入口进入。
+- 章节组合仅保留表格入口；移除划场和组合的内部返回按钮，统一关闭至表格，保存留页并记录最近场次。清理原有返回范围按钮的专用状态。
+- 普通划场默认 AI，范围定位显式手动；AI 以操作与候选为主，核对后再展开原文。模式切换和查看结果保留草稿，不自动写入。
+- 当前结果、过期结果、重新分析、进行中任务及读取异常分别展示。原文对照进入时恢复阅读位置。
+
+以上为入口阶段记录。后续整章编辑与验证进展见下文；全部验收矩阵补齐后统一勾选。
+
+验证记录：
+
+- `pnpm --dir front run typecheck`：通过。
+- 导航、选区、工作台上下文纯函数：14/14 通过。
+- `chapterListEditor.browser.mjs`：通过，含动态主操作、分页、懒加载和四尺寸；截图目录 `/private/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-chapter-list-W5yHBP`。
+- `chapterSequenceNavigation.browser.mjs`：通过，含关闭保护、保存留页、浏览恢复、唯一组合入口及旧深链接；截图目录 `/private/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-chapter-scenes-Dp3SDP`。
+- `chapterSourceSelection.browser.mjs`：通过，含 AI 默认、模式切换保留草稿、滚动恢复、Unicode/CRLF、冲突及 1440/1024/768/375px；截图目录 `/private/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-source-selection-KVsXV5`。
+- `workspaceJourney.browser.mjs`：通过，覆盖新建项目至划场、设计、生产、粗剪、组合及局部返工；证据目录 `/private/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-journey-7I6GfR`。
+- 浏览器脚本使用本机缓存 Node 24 与 Playwright，通过 `NODE_PATH` 指向缓存依赖；系统 Node 18 不满足该 Playwright 版本要求。未更改项目依赖。
+- 入口阶段无后端或外部接口变更，复用已有 OpenAPI/client；后续 T3 契约接入 HTTP 时重新生成。
+
+### T3 事务基础阶段记录
+
+- 新增 `contracts/directing/division.py`：完整成员版本基线、最终有序清单、明确退出与身份去向、影响预览、提交和幂等回执。重复、漏传、悬空或互相矛盾的身份在契约层拒绝。
+- 迁移 `b2d6e8f0a413` 增加 `is_current` 和计算列 `current_position`；当前顺序唯一、历史顺序可重叠，原 ID/外键/成果不删除。出现历史成员后拒绝无损条件不成立的降级。新增事务回执表。
+- `DivisionService` 在章节锁内校验完整集合和最终范围，预览绑定草稿及成果版本/采用/任务状态，保存点内统一排序、更新、创建、退出及回执。未变化成员不升版本；新建身份稳定，重放返回原回执，不重复创建。
+- 当前列表、概览和章节数量按当前成员查询；单场接口拒绝历史成员编辑。整章 HTTP、生产写入生命周期限制及引用阻塞已接入；此阶段尚未接入历史浏览与整章界面，后续进展见 T4/T5 记录。
+- `tests/directing/test_division.py` 新增 14 项，覆盖完整身份契约、共享边界、重排、未变化版本、身份保留、幂等恢复、后续写入失败回滚、最终范围、旧集合/原文/成果版本/任务状态冲突。
+- directing 全套首跑：190 通过、5 个 MySQL 用例因未指定隔离库跳过，迁移链测试 1 项失败（漏加载新迁移）；补齐迁移链并增加用例后，`test_migration.py test_division.py test_workspace.py` 共 36 项通过。未将 SQLite 测试作为 MySQL 并发证据。
+- `uv run pylint app`：5 项现有诊断，位于 `task_worker.py`、`studio_assets.py`、`lab_generation_tasks.py`、`task_queries.py`，本轮修改文件无诊断。命令日志 `/private/tmp/jellyfish-division-pylint.log`。
+
+### T3 生命周期、HTTP 与 MySQL 验证
+
+- 生产、批量受理、版本保存/确认、修订采用、素材审查及生成实体校验要求当前成员；先持有场次锁，后续场次读取继续使用当前读。历史读取与已发任务交付保留，退出不丢结果。
+- 退出预览检查非终态任务与跨场版本/Take 引用索引；任务持锁时用 NOWAIT 返回可处理冲突，避免交付与退出形成反向等待。确认时重新核对任务状态、成果版本及采用身份。
+- `SequenceRead.is_current` 区分历史身份；`GET chapters/{id}/history` 按需读取历史。新增 `POST division/preview`、`PUT division`、`GET division/receipts/{request_id}`，包含完整项目隔离和幂等语义。
+- AI 分析冻结 `division_baseline`，整章草稿可带 `source_task_id`；原文或完整成员版本集合与任务基线不匹配时拒绝应用，不能仅凭原文版本通过。
+- 已确认本机 8000 服务工作目录为当前 backend，且 OpenAPI 包含新路径及字段；运行 `pnpm --dir front run openapi:update` 并通过 typecheck。去掉生成器对无关文件增加的空白行，没有手写 service。
+- 最终 directing 回归：197 通过，7 个需要显式隔离库的 MySQL 用例在默认运行中跳过；生成 entity gate 与 submitter 回归 5 通过。
+- 独立 `mysql:9.0` 容器中新建随机隔离库，执行完整 Alembic 到 `b2d6e8f0a413`，7 个 MySQL 用例通过：包含 READ COMMITTED / REPEATABLE READ、双整章竞争、同请求重放、预先建立快照后单场修改引发旧整章冲突。日志 `/private/tmp/jellyfish-atomic-division-mysql.log`。测试库已删除，未迁移用户业务库。
+- 新增历史读取/禁止新生产/已发任务交付、旧 AI 集合基线、跨场依赖阻塞及 HTTP 预览零写入/回执/历史 API 验证；SQLite 中后续写入失败回滚已覆盖。带历史成果的数据迁移与 MySQL 中途失败回滚仍需补充最终证据。
+- Pylint 条件表达式新增提示已修复，最终只剩前述 5 项既有诊断；日志 `/private/tmp/jellyfish-division-lifecycle-pylint.log`。
+
+### T4/T5 整章界面与浏览器验证
+
+- 手动本地全章清单、共享边界、排序／改名／新增／移出和来源映射接入统一预览与一次提交。修改预览后的草稿必须重新预览；未变化场次保持版本。
+- AI 候选逐一定位和明确身份，采用到同一草稿；人工草稿替换前对照确认。未采用的候选调整也受离开保护；过期原文或成员基线禁止采用。
+- 明确冲突保留全章输入；响应丢失冻结原提交，通过回执核对或同请求重试恢复。历史入口按需加载，工作区只读保留成果。
+- `chapterDivision.test.mjs` 与导航／选区／上下文纯函数共 19 项通过；`pnpm --dir front run typecheck` 通过。
+- `chapterDivision.browser.mjs`：共享边界、预览、响应丢失、冲突、退出／历史、AI 定位与保留身份、Escape 和四尺寸通过。证据目录 `/private/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-whole-division-YPvvlv`。
+- 迁移旧浏览器用例到整章提交：`chapterSourceSelection.browser.mjs` 通过（真实鼠标、跨节点、emoji、重复文本、CRLF、过期来源、写入保护及四尺寸），目录 `/private/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-source-selection-2PGKb0`；`chapterSequenceNavigation.browser.mjs` 通过，目录 `/private/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-chapter-scenes-YK3jwM`。
+- 修复默认场次定位覆盖原文阅读位置的回归；上述原文用例验证重新进入后恢复滚动。
+- `workspaceJourney.browser.mjs` 通过：新建项目至章节划分、设计、试拍、粗剪、组合、局部返工完整流程，目录 `/private/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-journey-YDLv7h`。
+
+### T6 最终验收记录
+
+- 隔离 MySQL 9.0 完整迁移及真实连接验证共 **10 项通过**。新增带成果迁移逐字段比较设计、计划、素材、采用和引用；READ COMMITTED / REPEATABLE READ 下，先执行多场更新和新增，再让回执插入失败，提交外层事务后用新连接确认没有半成功，原请求重试成功。日志 `/private/tmp/jellyfish-division-mysql-final.log`。随机库和临时容器均已删除。
+- 整章服务新增明确拆分后合并用例，验证保留原设计身份、不复制成果、退出对象仍可读；`test_division.py` **18 项通过**。后端应用未再修改，复用此前 directing 全套 197 通过及生成入口 5 通过结果；新用例单独验证，不把跳过的 MySQL 用例计为通过。
+- 章节表格最终回归通过，目录 `/private/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-chapter-list-xWRnZv`。`workspaceVersions.browser.mjs` 通过，历史版本只读初始化不影响正常版本选择、取消和保存后切换。
+- 整章最终浏览器证据目录 `/private/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-whole-division-nZzkaf`（含四尺寸手动视图和 `preview-375.png`）。预览截图等待真实弹窗动画结束后拍摄，已人工核对。回归补齐人工方案替换确认、原文相同但集合过期、零场已有结果、失败及进行中状态、迟到结果／原文刷新不覆盖草稿、预览冲突后对照最新、历史精确版本及失效链接；375px 预览保存按钮真实可点击且无横向溢出。
+- `pnpm --dir front run typecheck` 与 `git diff --check` 通过；Pylint 复用最终日志，仅前述 5 项既有诊断，无新增诊断。
+
+| 验收项 | 结果与证据 |
+| --- | --- |
+| W01 | 通过：`chapterNavigation.test.mjs`、章节表格浏览器覆盖无原文、零场、已有场次及未知状态。 |
+| W02 | 通过：章节导航浏览器核对唯一组合入口、兼容深链接及真实粗剪缺口。 |
+| W03 | 通过：整章保存留页、关闭至表格，导航浏览器验证最近场次／表格浏览恢复。 |
+| W04 | 通过：默认 AI 与显式手动入口、模式切换零分析／零正式写入。 |
+| W05 | 通过：整章浏览器覆盖当前／过期／失败／进行中和零场已有结果。 |
+| W06 | 通过：候选查看、迟到结果和原文刷新均保留人工草稿，替换需要明确确认。 |
+| W07 | 通过：选区浏览器覆盖鼠标、跨节点、重复文本、emoji、CRLF、键盘与触屏表面；纯函数覆盖 CR。 |
+| W08 | 通过：共享边界整章保存；纯函数及服务拒绝第三场冲突、空白／空范围／越界／未定位，允许未分配原文。 |
+| W09 | 通过：预览展示完整差异、前后范围、成果数量及映射；草稿编辑后清除预览与身份确认。 |
+| W10 | 通过：服务无变化对象完全相等，单场仅名称／顺序保留来源，拆分／合并不搬迁设计。 |
+| W11 | 通过：拆分／合并／退出显式身份确认，历史读取与指定版本深链接、当前数量和组合过滤均覆盖。 |
+| W12 | 通过：任务／跨场依赖阻塞、当前成员写入门禁、已发任务向原身份交付的服务及生成入口测试。 |
+| W13 | 通过：完整集合基线校验、MySQL 两种隔离级别下整章竞争及单场竞争。 |
+| W14 | 通过：SQLite 和 MySQL 后续写入失败回滚、重复请求重放、浏览器响应丢失回执恢复及冲突保留。 |
+| W15 | 通过：关闭／Escape／后退／切章、人工方案替换、候选调整和写入中导航保护；全宽划场无可点击背景，遮罩与关闭使用同一受保护回调。 |
+| W16 | 通过：空库及带成果 MySQL 迁移、排序约束／历史身份保留；OpenAPI/client 已从当前工作区服务生成。 |
+| W17 | 通过：四尺寸表格、详情及划场浏览器，375px 预览操作；正文阅读位置与表格焦点恢复。 |
+| W18 | 通过：表格懒加载检查及完整 `workspaceJourney.browser.mjs`，从创建到组合／局部返工。 |
+
+### 使用与验证边界
+
+- 新结构需要迁移后使用。从 `backend` 目录，在确认连接目标并完成备份后运行 `uv run alembic upgrade head`。本轮只迁移隔离测试库，**未修改用户业务数据库**。
+- 存在已退出的历史场次时迁移拒绝降级；需恢复升级前备份，不自动激活或重新编号历史对象。
+- 浏览器使用隔离 API 数据和真实 Chromium，完整主流程使用本地测试视频；不作为真实供应商生成或生产部署验证。本轮未提交 Git、未部署、未调用收费模型。
+- 截图与日志在上述本机临时目录，浏览器脚本可重新生成；未向仓库加入生成截图或改动既有 `design-previews/`。
+- Pylint 既有 5 项诊断仍需另行处理，本轮不扩大修改范围。

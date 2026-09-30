@@ -68,6 +68,7 @@ class ProductionService(DirectingAIService):
 
     async def regroup_units(self, sequence_id: str, body: RegroupRequest):
         """用户明确重组固定计划；保留其他单元和历史证据依赖，不改提示词、任务或剪辑。"""
+        await self.current_sequence(sequence_id)
         row = await self.revision(body.plan_revision_id, kind="plan", sequence_id=sequence_id, confirmed=True)
         plan = ProductionPlan.model_validate(row.payload)
         selected_ids = set(body.unit_ids)
@@ -115,6 +116,7 @@ class ProductionService(DirectingAIService):
 
     async def generate_visual(self, sequence_id: str, body: VisualRequest):
         """复用统一图片生成管线，只交付候选文件，不修改设计、资产默认图或参考。"""
+        await self.current_sequence(sequence_id)
         row = await self.revision(body.design_revision_id, kind="design", sequence_id=sequence_id, confirmed=True)
         sequence = await self.sequence(sequence_id)
         if row.source_key != self.source_key(sequence):
@@ -205,6 +207,7 @@ class ProductionService(DirectingAIService):
 
     async def compile_unit(self, sequence_id: str, plan_id: str, unit_id: str, *, request_id: str | None = None):
         """同一编译请求返回原指令；请求身份不可跨场次、计划或单元复用。"""
+        await self.current_sequence(sequence_id)
         if not request_id:
             return await self._compile_unit(sequence_id, plan_id, unit_id)
         async with self.db.begin_nested():
@@ -335,6 +338,7 @@ class ProductionService(DirectingAIService):
 
     async def submit_review(self, sequence_id: str, prompt_id: str, body: AIRequest | ReviewRequest):
         """场次锁内按请求身份恢复原检查；改变指令或检查参数必须明确新请求。"""
+        await self.current_sequence(sequence_id)
         request_id = body.request_id if isinstance(body, ReviewRequest) else None
         if not request_id:
             return await self._submit_review(sequence_id, prompt_id, body)
@@ -372,6 +376,7 @@ class ProductionService(DirectingAIService):
 
     async def apply_review(self, sequence_id: str, task_id: str):
         """同一检查任务只保存一次；重试返回原结论，保存不将 revise 改为通过。"""
+        await self.current_sequence(sequence_id)
         await self.sequence(sequence_id)
         task = await self.db.get(Task, task_id, with_for_update=True, populate_existing=True)
         if task is None or task.project_id != self.project_id or task.target_id != sequence_id or task.kind != "directing_review" or task.status != "succeeded":
@@ -389,6 +394,7 @@ class ProductionService(DirectingAIService):
 
     async def prepare_shoot(self, sequence_id: str, *, prompt_id: str, review_id: str) -> GenerationCommand:
         """只读预检固定提示词、审稿、计划和模型输入，单次与批量共用且不创建任务。"""
+        await self.current_sequence(sequence_id)
         sequence = await self.read_sequence(sequence_id)
         if sequence.source_changed:
             raise ValueError("章节原文已变化，请重新核对当前场次")
@@ -415,6 +421,7 @@ class ProductionService(DirectingAIService):
 
     async def shoot(self, sequence_id: str, *, prompt_id: str, review_id: str, request_id: str):
         """版本检查、明确执行授权与幂等任务创建在同一短事务完成。"""
+        await self.current_sequence(sequence_id)
         async with self.db.begin_nested():
             await self.sequence(sequence_id)
             await self.db.get(Sequence, sequence_id, with_for_update=True, populate_existing=True)
@@ -434,6 +441,7 @@ class ProductionService(DirectingAIService):
 
     async def resolve_review(self, sequence_id: str, review_id: str, *, role: str, occurrence_id: str, reason: str):
         """用户接受一项艺术偏离时派生审稿版本，原模型结论和拒绝的建议仍可追溯。"""
+        await self.current_sequence(sequence_id)
         if not reason.strip():
             raise ValueError("请说明接受此偏离的理由")
         original = await self.revision(review_id, kind="review", sequence_id=sequence_id, confirmed=True)

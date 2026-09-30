@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { Alert, Button, Input, InputNumber, Space, Spin } from 'antd'
 import { useNavigate } from 'react-router-dom'
@@ -8,11 +8,10 @@ import { sequenceLocation } from './chapterNavigation'
 import { useWorkspaceDraft, WorkspaceWriteBoundary } from './WorkspaceDrafts'
 
 /** 场次管理容器内的编辑区；保存保留当前场次，离开沿用统一草稿保护。 */
-export function SequenceDetails({ projectId, chapterId, sequenceId, onClose, onSaved, onRange, focusRange }: {
-  projectId: string; chapterId: string; sequenceId?: string; onClose: () => void; onSaved: () => void; onRange: () => void; focusRange?: boolean
+export function SequenceDetails({ projectId, chapterId, sequenceId, onClose, onSaved, onRange }: {
+  projectId: string; chapterId: string; sequenceId?: string; onClose: () => void; onSaved: () => void; onRange: () => void
 }) {
   const navigate = useNavigate()
-  const rangeButton = useRef<HTMLButtonElement>(null)
   const [chapter, setChapter] = useState<ChapterSequences>()
   const [sequence, setSequence] = useState<SequenceRead>()
   const [title, setTitle] = useState('')
@@ -29,15 +28,15 @@ export function SequenceDetails({ projectId, chapterId, sequenceId, onClose, onS
     setSequence(undefined); setChapter(undefined); setError('')
     if (!sequenceId) return
     setLoading(true)
-    StudioDirectingService.directingChapter({ projectId, chapterId }).then(response => {
-      const found = response.data?.sequences.find(item => item.id === sequenceId)
+    StudioDirectingService.directingChapter({ projectId, chapterId }).then(async response => {
+      let found = response.data?.sequences.find(item => item.id === sequenceId)
+      if (!found) { const history = await StudioDirectingService.directingChapterHistory({ projectId, chapterId }); found = history.data?.find(row => row.id === sequenceId) }
       if (!found || !response.data) throw new Error('场次不存在或不属于当前章节')
       if (active) { setChapter(response.data); apply(found) }
     }).catch(cause => { if (active) setError(directingError(cause)) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [projectId, chapterId, sequenceId, retry])
-  useEffect(() => { if (focusRange && sequence) rangeButton.current?.focus({ preventScroll: true }) }, [focusRange, sequence?.id])
   const dirty = !!sequence && (title !== sequence.title || position !== sequence.position)
   /** 使用打开时的原文与场次版本提交；冲突保留输入，不能用刷新悄悄覆盖编辑基线。 */
   const save = async () => {
@@ -61,12 +60,13 @@ export function SequenceDetails({ projectId, chapterId, sequenceId, onClose, onS
     <Button className="chapter-scenes-back" onClick={onClose}>返回场次列表</Button>
     <h3>{sequence?.title || '场次详情'}</h3>
     {error && <Alert type="error" showIcon message={error} action={!sequence && <Button onClick={() => setRetry(value => value + 1)}>重试</Button>} />}
-    {loading ? <Spin /> : sequence && <WorkspaceWriteBoundary busy={busy}><Space direction="vertical" size="large" style={{ width: '100%' }}>
+    {sequence?.is_current === false && <><Alert type="info" message="场次已退出当前划分，历史成果保留；不能发起新的生产写入。" /><p className="chapter-source-excerpt">{sequence.source_text}</p><Button onClick={() => navigate(sequenceLocation(projectId, chapterId, sequence.id, 'design'))}>查看历史成果</Button></>}
+    {loading ? <Spin /> : sequence && sequence.is_current !== false && <WorkspaceWriteBoundary busy={busy}><Space direction="vertical" size="large" style={{ width: '100%' }}>
       {sequence.source_changed && <Alert type="warning" message="章节原文已变化，请在原文中重新核对范围；修改名称或顺序不会更新来源" />}
       <label>场次名称<Input aria-label="场次标题" value={title} onChange={event => setTitle(event.target.value)} /></label>
       <Space>场次顺序<InputNumber aria-label="场次顺序" min={1} precision={0} value={position + 1} onChange={value => setPosition((value || 1) - 1)} /></Space>
       <section aria-label="场次原文范围"><strong>原文范围</strong><p className="chapter-source-excerpt">{sequence.source_text}</p>
-        <Button ref={rangeButton} onClick={onRange}>在原文中调整范围</Button></section>
+        <Button onClick={onRange}>在原文中调整范围</Button></section>
       <Space wrap>
         <Button type="primary" loading={busy} disabled={!dirty} onClick={() => { void save() }}>保存</Button>
         <Button onClick={async () => { if (await save()) navigate(sequenceLocation(projectId, chapterId, sequence.id, 'design')) }}>保存并打开工作台</Button>

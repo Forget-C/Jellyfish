@@ -13,7 +13,7 @@ from app.core.contracts.generation import (
 )
 from app.core.contracts.media import ImageMediaInput, MediaReference, VideoMediaInput
 from app.models.experiment_sessions import ExperimentSession
-from app.models.directing import DirectingRevision
+from app.models.directing import DirectingRevision, Sequence
 from app.models.llm import Model, ModelCategoryKey, ModelSettings, Provider, ProviderStatus
 from app.models.studio_prompts_files_timeline import FileItem
 from app.models.types import FileType
@@ -110,6 +110,10 @@ class GenerationEntityGate:
             )
         elif target.kind == GenerationTargetKind.script_processing:
             exists = bool(target.entity_id)
+        if exists and target.kind in (GenerationTargetKind.directing_image, GenerationTargetKind.directing_unit):
+            sequence = await db.get(Sequence, revision.sequence_id, with_for_update=True, populate_existing=True)
+            if sequence is None or not sequence.is_current:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="场次已退出当前划分，不能发起生成")
         if not exists:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="target_not_found")
 

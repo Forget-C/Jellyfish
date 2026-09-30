@@ -13,6 +13,7 @@ from app.models.directing import ActiveCut, DirectingRevision, Sequence, Take
 from app.models.studio import Chapter
 from app.models.task import Task
 from app.services.directing.store import DirectingStore, RevisionConflict
+from app.services.directing.division_versions import current_version, record_version
 
 
 class WorkspaceService(DirectingStore):
@@ -29,8 +30,12 @@ class WorkspaceService(DirectingStore):
         """返回原文变化提示，旧场次摘录不自动更新。"""
         row = await self.sequence(sequence_id)
         chapter = await self.chapter(row.chapter_id)
+        return self.sequence_read(row, chapter)
+
+    def sequence_read(self, row: Sequence, chapter: Chapter) -> SequenceRead:
+        """序列化已读取的对象；锁定写事务不得用旧快照重新查询覆盖当前读。"""
         return SequenceRead(id=row.id, project_id=self.project_id, chapter_id=row.chapter_id,
-                            title=row.title, position=row.position, version=row.version,
+                            title=row.title, position=row.position, version=row.version, is_current=row.is_current,
                             source=Source.model_validate(row.source), source_text=row.source_text,
                             span=SourceSpan(start=row.source_start, end=row.source_end) if row.source_end else None,
                             source_changed=row.source["version"] != sha256(chapter.raw_text.encode()).hexdigest())
@@ -38,13 +43,21 @@ class WorkspaceService(DirectingStore):
     async def list_sequences(self, chapter_id: str) -> ChapterSequences:
         """读取章节原文及有序场次，供人工划场和 AI 建议确认。"""
         chapter = await self.chapter(chapter_id)
-        rows = list(await self.db.scalars(select(Sequence).where(Sequence.chapter_id == chapter_id).order_by(Sequence.position)))
+        rows = list(await self.db.scalars(select(Sequence).where(Sequence.chapter_id == chapter_id, Sequence.is_current.is_(True)).order_by(Sequence.position)))
         return ChapterSequences(chapter_id=chapter.id, title=chapter.title, raw_text=chapter.raw_text,
                                 source_version=sha256(chapter.raw_text.encode()).hexdigest(),
+                                current_version=await current_version(self.db, chapter_id),
                                 sequences=[await self.read_sequence(row.id) for row in rows],
                                 task_ids=list(await self.db.scalars(select(Task.id).where(
                                     Task.project_id == self.project_id, Task.target_type == "directing_chapter",
                                     Task.target_id == chapter_id).order_by(Task.created_at))))
+
+    async def historical_sequences(self, chapter_id: str) -> list[SequenceRead]:
+        """按需读取退出的场次；不混入当前数量、默认选择和章节组合。"""
+        await self.chapter(chapter_id)
+        identities = await self.db.scalars(select(Sequence.id).where(Sequence.chapter_id == chapter_id,
+            Sequence.is_current.is_(False)).order_by(Sequence.position, Sequence.id))
+        return [await self.read_sequence(identity) for identity in identities]
 
     async def chapter_overview(self, chapter_id: str) -> ChapterOverview:
         """批量读取整场计数；只解析采用指针正文，查询数不随场次数增加。"""
@@ -52,7 +65,7 @@ class WorkspaceService(DirectingStore):
         source_version = sha256(chapter.raw_text.encode()).hexdigest()
         rows = list(await self.db.execute(select(Sequence.id, Sequence.position, Sequence.title,
             Sequence.source, func.substr(Sequence.source_text, 1, 160).label("excerpt"))
-            .where(Sequence.chapter_id == chapter_id).order_by(Sequence.position)))
+            .where(Sequence.chapter_id == chapter_id, Sequence.is_current.is_(True)).order_by(Sequence.position)))
         summaries = {row.id: SequenceOverview(id=row.id, position=row.position, title=row.title,
             source_excerpt=row.excerpt, source_changed=Source.model_validate(row.source).version != source_version,
             design_count=0, confirmed_design_count=0, plan_count=0, confirmed_plan_count=0,
@@ -91,9 +104,16 @@ class WorkspaceService(DirectingStore):
         if body.source_version != version:
             raise RevisionConflict("章节原文已变化，请刷新并重新确认范围")
         # 使用锁定读取得最新范围，避免 MySQL 可重复读快照遗漏刚提交的竞争写入。
-        siblings = list(await self.db.scalars(select(Sequence).where(Sequence.chapter_id == chapter_id)
+        siblings = list(await self.db.scalars(select(Sequence).where(Sequence.chapter_id == chapter_id, Sequence.is_current.is_(True))
             .with_for_update().execution_options(populate_existing=True)))
         previous = next((item for item in siblings if item.id == sequence_id), None)
+        if sequence_id is not None and previous is None:
+            raise ValueError("场次不属于本章当前划分，不能修改")
+        if previous:
+            if not isinstance(body, SequenceUpdate):
+                raise ValueError("场次章节或版本不匹配")
+            if previous.version != body.expected_version:
+                raise RevisionConflict("场次已被修改，请刷新后重试")
         if body.span is not None:
             if body.span.end > len(chapter.raw_text):
                 raise ValueError("场次范围超出章节原文")
@@ -108,22 +128,23 @@ class WorkspaceService(DirectingStore):
                         continue
                     if body.span.start < other.source_end and other.source_start < body.span.end:
                         raise RevisionConflict(f"原文范围与场次「{other.title}」重叠，请调整范围")
+        source_unchanged = body.span is None or unchanged
+        if previous and previous.title == body.title and previous.position == body.position and source_unchanged:
+            return self.sequence_read(previous, chapter)
         async with self.db.begin_nested():
+            if siblings and not await current_version(self.db, chapter_id, locked=True):
+                await record_version(self.db, self.division_snapshot(chapter, siblings), origin='baseline')
             if sequence_id is None:
-                if await self.db.scalar(select(Sequence.id).where(Sequence.chapter_id == chapter_id, Sequence.position == body.position)):
+                if await self.db.scalar(select(Sequence.id).where(Sequence.chapter_id == chapter_id, Sequence.is_current.is_(True), Sequence.position == body.position)):
                     raise RevisionConflict("此场次顺序已被使用，请刷新后重试")
                 row = await self.create_sequence(chapter_id=chapter_id, title=body.title, position=body.position)
             else:
-                row = await self.sequence(sequence_id)
-                if row.chapter_id != chapter_id or not isinstance(body, SequenceUpdate):
-                    raise ValueError("场次章节或版本不匹配")
-                if row.version != body.expected_version:
-                    raise RevisionConflict("场次已被修改，请刷新后重试")
-                other = await self.db.scalar(select(Sequence).where(Sequence.chapter_id == chapter_id,
+                row = previous
+                other = await self.db.scalar(select(Sequence).where(Sequence.chapter_id == chapter_id, Sequence.is_current.is_(True),
                     Sequence.position == body.position, Sequence.id != sequence_id))
                 if other is not None:
                     old_position = row.position
-                    temporary = (await self.db.scalar(select(func.max(Sequence.position)).where(Sequence.chapter_id == chapter_id))) + 1
+                    temporary = (await self.db.scalar(select(func.max(Sequence.position)).where(Sequence.chapter_id == chapter_id, Sequence.is_current.is_(True)))) + 1
                     await self.db.execute(update(Sequence).where(Sequence.id == sequence_id).values(position=temporary))
                     await self.db.execute(update(Sequence).where(Sequence.id == other.id).values(position=old_position, version=other.version + 1))
                 row = await self.update_sequence(sequence_id, expected_version=body.expected_version,
@@ -134,10 +155,20 @@ class WorkspaceService(DirectingStore):
                     source_text=chapter.raw_text[body.span.start:body.span.end],
                     source=Source(kind="chapter", reference=chapter.id, version=version).model_dump(mode="json"),
                 ))
+            members = list(await self.db.scalars(select(Sequence).where(Sequence.chapter_id == chapter_id,
+                Sequence.is_current.is_(True)).order_by(Sequence.position).with_for_update().execution_options(populate_existing=True)))
+            await record_version(self.db, self.division_snapshot(chapter, members), origin='manual')
         return await self.read_sequence(row.id)
+
+    def division_snapshot(self, chapter: Chapter, members: list[Sequence]) -> ChapterSequences:
+        """冻结锁定后的有序成员和当前原文，绝不把异步任务列表混入保存版本。"""
+        return ChapterSequences(chapter_id=chapter.id, title=chapter.title, raw_text=chapter.raw_text,
+            source_version=sha256(chapter.raw_text.encode()).hexdigest(),
+            sequences=[self.sequence_read(row, chapter) for row in sorted(members, key=lambda item: item.position)])
 
     async def save_workspace_revision(self, sequence_id: str, body: RevisionWrite):
         """比较用户编辑时看到的场次，避免旧页面内容被标成新来源。"""
+        await self.current_sequence(sequence_id)
         await self.db.scalar(select(Sequence).where(Sequence.id == sequence_id).with_for_update())
         sequence = await self.read_sequence(sequence_id)
         if body.document.kind == "design":
@@ -174,6 +205,7 @@ class WorkspaceService(DirectingStore):
 
     async def extract_take_frame(self, sequence_id: str, take_id: str, at_ms: int, *, adopted_range=None, edge="start"):
         """提帧归档到当前项目，持久保留 Take 和毫秒位置，不改原视频。"""
+        await self.current_sequence(sequence_id)
         import asyncio
         from io import BytesIO
         from fastapi import UploadFile
@@ -235,6 +267,7 @@ class WorkspaceService(DirectingStore):
 
     async def create_asset(self, sequence_id, body):
         """项目锁串行化同次请求；返回精确实体，不能凭列表顺序或同名资产猜测。"""
+        await self.current_sequence(sequence_id)
         from uuid import uuid5, NAMESPACE_URL
         from app.models.studio import Project
         from app.services.studio.entities import StudioEntitiesService

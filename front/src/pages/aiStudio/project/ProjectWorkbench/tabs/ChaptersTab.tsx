@@ -8,7 +8,7 @@ import { useChapters, newId } from '../hooks/useProjectData'
 import { ChapterRawTextEditorModal } from '../../../chapter/components/ChapterRawTextEditorModal'
 import { directingError } from '../../../directing/common'
 import { ChapterSceneList } from '../../../directing/ChapterSceneList'
-import { chapterLocation, readChapterBrowse, saveChapterBrowse } from '../../../directing/chapterNavigation'
+import { chapterAction, chapterLocation, readChapterBrowse, saveChapterBrowse } from '../../../directing/chapterNavigation'
 import { SequenceDetails } from '../../../directing/SequenceDetails'
 import { WorkspaceDrafts, useWorkspaceDraft } from '../../../directing/WorkspaceDrafts'
 import { ChapterSourcePanel } from '../../../directing/ChapterSourcePanel'
@@ -32,7 +32,6 @@ function ChaptersContent() {
   const [busy, setBusy] = useState(false)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
-  const [returnRangeFocus, setReturnRangeFocus] = useState(false)
   const [revision, setRevision] = useState(0)
   const [linkedChapter, setLinkedChapter] = useState<ChapterRead>()
   const [chapterError, setChapterError] = useState('')
@@ -45,8 +44,6 @@ function ChaptersContent() {
   const selectedChapter = fromPage || (linkedChapter?.id === chapterId ? linkedChapter : undefined)
   const root = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLElement | null>(null)
-  const sourceSaved = useRef<{ chapter: string; sequence: string }>()
-  useEffect(() => { sourceSaved.current = undefined }, [chapterId, panel])
   const lastEditing = useRef(editingId)
   useEffect(() => {
     if (lastEditing.current && !editingId) restoreFocus()
@@ -88,32 +85,31 @@ function ChaptersContent() {
   }, [params, setParams])
   const closePanel = () => setParams(previous => {
     const next = new URLSearchParams(previous)
-    for (const key of ['chapter', 'sequence', 'panel', 'edit']) next.delete(key)
+    for (const key of ['chapter', 'sequence', 'panel', 'edit', 'mode']) next.delete(key)
     return next
   }, { replace: true })
-  const showPanel = (value?: string) => {
-    setReturnRangeFocus(panel === 'source' && !value)
-    setParams(previous => {
-      const next = new URLSearchParams(previous)
-      if (value) next.set('panel', value); else {
-        next.delete('panel')
-        if (panel === 'source' && sourceSaved.current?.chapter === chapterId) next.set('sequence', sourceSaved.current.sequence)
-      }
-      return next
-    }, { replace: true })
-  }
+  const showSource = (manual = false) => setParams(previous => {
+    const next = new URLSearchParams(previous)
+    next.set('panel', 'source')
+    if (manual) next.set('mode', 'manual'); else next.delete('mode')
+    return next
+  }, { replace: true })
   const selectSequence = (id?: string) => {
-    setReturnRangeFocus(false)
     setParams(previous => {
       const next = new URLSearchParams(previous)
       if (id) next.set('sequence', id); else next.delete('sequence')
       return next
     }, { replace: true })
   }
-  const openChapter = (id: string, edit = false) => {
+  const openEditor = (id: string) => {
     trigger.current = document.activeElement as HTMLElement
-    if (edit) navigate(`${chapterLocation(projectId)}&edit=${encodeURIComponent(id)}`)
-    else navigate(chapterLocation(projectId, id))
+    navigate(`${chapterLocation(projectId)}&edit=${encodeURIComponent(id)}`)
+  }
+  const openAction = (chapter: { id: string; rawText?: string; sequenceCount?: number }, count = false) => {
+    const action = chapterAction(chapter, count)
+    trigger.current = document.activeElement as HTMLElement
+    navigate(action.target === 'edit' ? `${chapterLocation(projectId)}&edit=${encodeURIComponent(chapter.id)}`
+      : `${chapterLocation(projectId, chapter.id)}${action.target === 'source' ? '&panel=source' : ''}`)
   }
   const editCurrent = () => setParams(previous => {
     const next = new URLSearchParams(previous); next.set('edit', chapterId); return next
@@ -159,14 +155,11 @@ function ChaptersContent() {
         : <Table rowKey="id" className="chapter-table" dataSource={chapters} loading={loading}
           pagination={{ current: page, pageSize: 10, total, showSizeChanger: false, onChange: next => changePage(next) }}
           locale={{ emptyText: <Empty description={query ? '没有匹配的章节' : '添加第一章，开始划分场次'} /> }} columns={[
-            { title: '章节名称', key: 'title', width: '24%', render: (_, chapter) => <><Button type="link" className="chapter-title-link" aria-label={`${chapter.index}. ${chapter.title} · 编辑章节`} onClick={() => openChapter(chapter.id, true)}>{chapter.index}. {chapter.title}</Button><div className="text-gray-500">编辑章节</div></> },
+            { title: '章节名称', key: 'title', width: '24%', render: (_, chapter) => <><Button type="link" className="chapter-title-link" aria-label={`${chapter.index}. ${chapter.title} · 编辑章节`} onClick={() => openEditor(chapter.id)}>{chapter.index}. {chapter.title}</Button><div className="text-gray-500">编辑章节</div></> },
             { title: '原文预览', key: 'preview', responsive: ['lg'], render: (_, chapter) => <p className="chapter-table-preview">{chapter.rawText || '未填写原文'}</p> },
             { title: '原文字数', key: 'words', width: 100, responsive: ['md'], render: (_, chapter) => chapter.rawText?.length ?? 0 },
-            { title: '场次数量', key: 'count', width: 100, render: (_, chapter) => <Button type="link" aria-label={`${chapter.title} · ${chapter.sequenceCount === undefined ? '查看场次' : `${chapter.sequenceCount} 场`}`} onClick={() => openChapter(chapter.id)}>{chapter.sequenceCount === undefined ? '查看场次' : `${chapter.sequenceCount} 场`}</Button> },
-            { title: '操作', key: 'actions', width: 160, render: (_, chapter) => <Space wrap size={4}><Button type="primary" onClick={() => {
-              trigger.current = document.activeElement as HTMLElement
-              navigate(`${chapterLocation(projectId, chapter.id)}&panel=source`)
-            }}>划分场次</Button><Button onClick={() => {
+            { title: '场次数量', key: 'count', width: 100, render: (_, chapter) => <Button type="link" aria-label={`${chapter.title} · ${chapter.sequenceCount === undefined ? '查看场次' : `${chapter.sequenceCount} 场`}`} onClick={() => openAction(chapter, true)}>{chapter.sequenceCount === undefined ? '查看场次' : `${chapter.sequenceCount} 场`}</Button> },
+            { title: '操作', key: 'actions', width: 160, render: (_, chapter) => <Space wrap size={4}><Button type="primary" onClick={() => openAction(chapter)}>{chapterAction(chapter).label}</Button><Button onClick={() => {
               trigger.current = document.activeElement as HTMLElement
               navigate(`${chapterLocation(projectId, chapter.id)}&panel=assembly`)
             }}>章节组合</Button></Space> },
@@ -177,18 +170,15 @@ function ChaptersContent() {
       afterOpenChange={open => { if (!open && !editingId) restoreFocus() }}>
       {chapterError ? <Alert type="error" message={chapterError} action={<Button onClick={() => setChapterRetry(value => value + 1)}>重试</Button>} />
         : !selectedChapter ? <Spin /> : <>
-          <Space wrap style={{ marginBottom: 16 }}>
-            {panel ? <Button onClick={() => showPanel()}>返回场次列表</Button> : <Button onClick={() => showPanel('source')}>划分场次</Button>}
-            {panel !== 'assembly' && <Button onClick={() => showPanel('assembly')}>章节组合</Button>}
-          </Space>
-          {panel === 'source' ? <ChapterSourcePanel key={chapterId} projectId={projectId} chapterId={chapterId} refreshKey={revision} sequenceId={sequenceId}
-            onChanged={id => { sourceSaved.current = { chapter: chapterId, sequence: id }; setRevision(value => value + 1); void refresh() }} onEdit={editCurrent} />
+          {!panel && <Space wrap style={{ marginBottom: 16 }}><Button onClick={() => showSource()}>调整划分</Button></Space>}
+          {panel === 'source' ? <ChapterSourcePanel key={chapterId} projectId={projectId} chapterId={chapterId} refreshKey={revision} sequenceId={params.get('mode') === 'manual' ? sequenceId : undefined}
+            onChanged={id => { saveChapterBrowse(projectId, chapterId, { sequence: id }); setRevision(value => value + 1); void refresh() }} onEdit={editCurrent} />
             : panel === 'assembly' ? <ChapterAssemblyPanel projectId={projectId} chapterId={chapterId} />
               : <div className={`chapter-scenes-layout${sequenceId ? ' has-selection' : ''}`}>
                 <div className="chapter-scenes-list"><ChapterSceneList key={chapterId} projectId={projectId} chapterId={chapterId}
-                  selectedId={sequenceId} refreshKey={revision} onDetails={selectSequence} onRestore={selectSequence} onSource={() => showPanel('source')} /></div>
-                {sequenceId ? <SequenceDetails projectId={projectId} chapterId={chapterId} sequenceId={sequenceId} focusRange={returnRangeFocus}
-                  onSaved={() => setRevision(value => value + 1)} onClose={() => selectSequence()} onRange={() => showPanel('source')} />
+                  selectedId={sequenceId} refreshKey={revision} onDetails={selectSequence} onRestore={selectSequence} onSource={() => showSource()} /></div>
+                {sequenceId ? <SequenceDetails projectId={projectId} chapterId={chapterId} sequenceId={sequenceId}
+                  onSaved={() => setRevision(value => value + 1)} onClose={() => selectSequence()} onRange={() => showSource(true)} />
                   : <Empty className="chapter-scenes-placeholder" description="选择场次，查看详情或编辑原文范围" />}
               </div>}
         </>}

@@ -52,6 +52,12 @@ def test_foundation_migration_and_next_upgrade():
         display_numbers = revision_module("a1c4e7b9d205_add_directing_display_numbers.py")
         display_numbers.op = migration.op
         display_numbers.upgrade()
+        division = revision_module("b2d6e8f0a413_add_chapter_division_membership.py")
+        division.op = migration.op
+        division.upgrade()
+        versions = revision_module("c3e7f9a1b524_add_chapter_division_versions.py")
+        versions.op = migration.op
+        versions.upgrade()
         context = MigrationContext.configure(connection, opts={"compare_type": True})
         assert not compare_metadata(context, Base.metadata)
         connection.execute(sa.text("INSERT INTO projects (id,name,description,style,visual_style,seed,unify_style,progress,stats) VALUES ('p','p','','drama','live_action',0,1,0,'{}')"))
@@ -69,6 +75,8 @@ def test_foundation_migration_and_next_upgrade():
         assert connection.scalar(sa.text("SELECT title FROM directing_sequences WHERE id='seq'")) == "scene"
         migration.op.drop_column("directing_sequences", "migration_probe")
         assert not compare_metadata(context, Base.metadata)
+        versions.downgrade()
+        division.downgrade()
         display_numbers.downgrade()
         review_source.downgrade()
         feedback.downgrade()

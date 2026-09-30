@@ -12,6 +12,12 @@ import type { ApiResponse_CompileResult_ } from '../models/ApiResponse_CompileRe
 import type { ApiResponse_ContinuityRead_ } from '../models/ApiResponse_ContinuityRead_';
 import type { ApiResponse_CutFrameRead_ } from '../models/ApiResponse_CutFrameRead_';
 import type { ApiResponse_DirectingTaskRead_ } from '../models/ApiResponse_DirectingTaskRead_';
+import type { ApiResponse_DivisionAnalysisDetail_ } from '../models/ApiResponse_DivisionAnalysisDetail_';
+import type { ApiResponse_DivisionHistoryPage_ } from '../models/ApiResponse_DivisionHistoryPage_';
+import type { ApiResponse_DivisionPreview_ } from '../models/ApiResponse_DivisionPreview_';
+import type { ApiResponse_DivisionReceiptDetail_ } from '../models/ApiResponse_DivisionReceiptDetail_';
+import type { ApiResponse_DivisionSaved_ } from '../models/ApiResponse_DivisionSaved_';
+import type { ApiResponse_DivisionVersionDetail_ } from '../models/ApiResponse_DivisionVersionDetail_';
 import type { ApiResponse_EditableRevisionFields_ } from '../models/ApiResponse_EditableRevisionFields_';
 import type { ApiResponse_ExtractedFrame_ } from '../models/ApiResponse_ExtractedFrame_';
 import type { ApiResponse_FeedbackRead_ } from '../models/ApiResponse_FeedbackRead_';
@@ -19,11 +25,13 @@ import type { ApiResponse_LedgerRead_ } from '../models/ApiResponse_LedgerRead_'
 import type { ApiResponse_list_AssetSummary__ } from '../models/ApiResponse_list_AssetSummary__';
 import type { ApiResponse_list_BatchRead__ } from '../models/ApiResponse_list_BatchRead__';
 import type { ApiResponse_list_ProjectStyleRevision__ } from '../models/ApiResponse_list_ProjectStyleRevision__';
+import type { ApiResponse_list_SequenceRead__ } from '../models/ApiResponse_list_SequenceRead__';
 import type { ApiResponse_list_SourceRead__ } from '../models/ApiResponse_list_SourceRead__';
 import type { ApiResponse_MediaRead_ } from '../models/ApiResponse_MediaRead_';
 import type { ApiResponse_ReviewRevisionApplication_ } from '../models/ApiResponse_ReviewRevisionApplication_';
 import type { ApiResponse_SequenceRead_ } from '../models/ApiResponse_SequenceRead_';
 import type { ApiResponse_TaskAccepted_ } from '../models/ApiResponse_TaskAccepted_';
+import type { ApiResponse_Union_DivisionSaved__NoneType__ } from '../models/ApiResponse_Union_DivisionSaved__NoneType__';
 import type { ApiResponse_VideoReferenceCapabilities_ } from '../models/ApiResponse_VideoReferenceCapabilities_';
 import type { ApiResponse_WorkspaceRead_ } from '../models/ApiResponse_WorkspaceRead_';
 import type { ApplyDesignRequest } from '../models/ApplyDesignRequest';
@@ -32,6 +40,8 @@ import type { AssetCreateRequest } from '../models/AssetCreateRequest';
 import type { BatchPrepare } from '../models/BatchPrepare';
 import type { CompileRequest } from '../models/CompileRequest';
 import type { CutFrameRequest } from '../models/CutFrameRequest';
+import type { DivisionDraft } from '../models/DivisionDraft';
+import type { DivisionSave } from '../models/DivisionSave';
 import type { ExtractFrameRequest } from '../models/ExtractFrameRequest';
 import type { FeedbackWrite } from '../models/FeedbackWrite';
 import type { RegroupRequest } from '../models/RegroupRequest';
@@ -123,6 +133,234 @@ export class StudioDirectingService {
             path: {
                 'project_id': projectId,
                 'chapter_id': chapterId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Chapter History
+     * 按需列出历史场次，不参与当前数量与章节组合。
+     * @returns ApiResponse_list_SequenceRead__ Successful Response
+     * @throws ApiError
+     */
+    public static directingChapterHistory({
+        projectId,
+        chapterId,
+    }: {
+        projectId: string,
+        chapterId: string,
+    }): CancelablePromise<ApiResponse_list_SequenceRead__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/history',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Division History
+     * 分页列出保存版本及未关联的分析记录，不加载所有历史正文。
+     * @returns ApiResponse_DivisionHistoryPage_ Successful Response
+     * @throws ApiError
+     */
+    public static directingDivisionHistory({
+        projectId,
+        chapterId,
+        page = 1,
+        pageSize = 20,
+    }: {
+        projectId: string,
+        chapterId: string,
+        page?: number,
+        pageSize?: number,
+    }): CancelablePromise<ApiResponse_DivisionHistoryPage_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/division/history',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+            },
+            query: {
+                'page': page,
+                'page_size': pageSize,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Division Version
+     * 按需读取保存时的完整快照；查看不切换当前版本。
+     * @returns ApiResponse_DivisionVersionDetail_ Successful Response
+     * @throws ApiError
+     */
+    public static directingDivisionVersion({
+        projectId,
+        chapterId,
+        versionId,
+    }: {
+        projectId: string,
+        chapterId: string,
+        versionId: string,
+    }): CancelablePromise<ApiResponse_DivisionVersionDetail_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/division/versions/{version_id}',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+                'version_id': versionId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Division Legacy Receipt
+     * 只读查看尚未接入的旧保存记录，缺失数据保留说明。
+     * @returns ApiResponse_DivisionReceiptDetail_ Successful Response
+     * @throws ApiError
+     */
+    public static directingDivisionLegacyReceipt({
+        projectId,
+        chapterId,
+        requestId,
+    }: {
+        projectId: string,
+        chapterId: string,
+        requestId: string,
+    }): CancelablePromise<ApiResponse_DivisionReceiptDetail_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/division/history/receipts/{request_id}',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+                'request_id': requestId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Division Analysis
+     * 展开分析时读取业务快照，旧资料缺失不冒充完整版本。
+     * @returns ApiResponse_DivisionAnalysisDetail_ Successful Response
+     * @throws ApiError
+     */
+    public static directingDivisionAnalysis({
+        projectId,
+        chapterId,
+        taskId,
+    }: {
+        projectId: string,
+        chapterId: string,
+        taskId: string,
+    }): CancelablePromise<ApiResponse_DivisionAnalysisDetail_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/division/analyses/{task_id}',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+                'task_id': taskId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Preview Division
+     * 校验最终范围和完整集合，返回实际影响及阻塞；不写正式场次。
+     * @returns ApiResponse_DivisionPreview_ Successful Response
+     * @throws ApiError
+     */
+    public static directingPreviewDivision({
+        projectId,
+        chapterId,
+        requestBody,
+    }: {
+        projectId: string,
+        chapterId: string,
+        requestBody: DivisionDraft,
+    }): CancelablePromise<ApiResponse_DivisionPreview_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/division/preview',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Save Division
+     * 确认预览后原子保存；同请求同内容重试返回回执，不重复创建。
+     * @returns ApiResponse_DivisionSaved_ Successful Response
+     * @throws ApiError
+     */
+    public static directingSaveDivision({
+        projectId,
+        chapterId,
+        requestBody,
+    }: {
+        projectId: string,
+        chapterId: string,
+        requestBody: DivisionSave,
+    }): CancelablePromise<ApiResponse_DivisionSaved_> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/division',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Division Receipt
+     * 响应丢失后核对回执；不存在返回 null，不能据此更换请求身份盲目重放。
+     * @returns ApiResponse_Union_DivisionSaved__NoneType__ Successful Response
+     * @throws ApiError
+     */
+    public static directingDivisionReceipt({
+        projectId,
+        chapterId,
+        requestId,
+    }: {
+        projectId: string,
+        chapterId: string,
+        requestId: string,
+    }): CancelablePromise<ApiResponse_Union_DivisionSaved__NoneType__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/division/receipts/{request_id}',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+                'request_id': requestId,
             },
             errors: {
                 422: `Validation Error`,

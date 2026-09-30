@@ -17,6 +17,7 @@ export type DirectingTaskRead = {
     status: string;
     error: (string | null);
     source_version: (string | null);
+    division_baseline?: (Record<string, any> | null);
     division?: (DivisionResult | null);
     design?: (SceneDesign_Output | null);
     review?: (ReviewPacket | null);

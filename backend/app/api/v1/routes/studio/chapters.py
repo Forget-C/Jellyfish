@@ -62,7 +62,7 @@ async def list_chapters(
     if chapter_ids:
         count_stmt = (
             select(Sequence.chapter_id, func.count(Sequence.id))
-            .where(Sequence.chapter_id.in_(chapter_ids))
+            .where(Sequence.chapter_id.in_(chapter_ids), Sequence.is_current.is_(True))
             .group_by(Sequence.chapter_id)
         )
         res = await db.execute(count_stmt)
@@ -116,7 +116,7 @@ async def get_chapter(
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[ChapterRead]:
     obj = await get_or_404(db, Chapter, chapter_id, detail=entity_not_found("Chapter"))
-    count_stmt = select(func.count(Sequence.id)).where(Sequence.chapter_id == chapter_id)
+    count_stmt = select(func.count(Sequence.id)).where(Sequence.chapter_id == chapter_id, Sequence.is_current.is_(True))
     res = await db.execute(count_stmt)
     sequence_count = int(res.scalar() or 0)
     return success_response(ChapterRead.model_validate(obj).model_copy(update={"sequence_count": sequence_count}))

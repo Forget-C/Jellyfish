@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint, Integer, JSON, String, Text, UniqueConstraint, func, text
+from sqlalchemy import Boolean, Computed, CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint, Integer, JSON, String, Text, UniqueConstraint, func, text
 from sqlalchemy.dialects.mysql import DATETIME
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -19,6 +19,8 @@ class Sequence(Base, TimestampMixin):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     chapter_id: Mapped[str] = mapped_column(ForeignKey("chapters.id", ondelete="RESTRICT"), nullable=False, index=True)
     position: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("1"))
+    current_position: Mapped[int | None] = mapped_column(Integer, Computed("CASE WHEN is_current THEN position ELSE NULL END", persisted=True))
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     source: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     source_start: Mapped[int | None] = mapped_column(Integer)
@@ -27,14 +29,67 @@ class Sequence(Base, TimestampMixin):
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     __table_args__ = (
-        UniqueConstraint("chapter_id", "position", name="uq_directing_sequence_position"),
+        UniqueConstraint("chapter_id", "current_position", name="uq_directing_sequence_current_position"),
         CheckConstraint("position >= 0 AND version > 0", name="ck_directing_sequence_numbers"),
     )
+
+
+class DivisionCommit(Base, TimestampMixin):
+    """整章事务内保存幂等回执；外层事务失败时与场次变更一同回滚。"""
+
+    __tablename__ = "directing_division_commits"
+
+    chapter_id: Mapped[str] = mapped_column(ForeignKey("chapters.id", ondelete="RESTRICT"), primary_key=True)
+    request_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    response: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
 
 
 def revision_created_at() -> datetime:
     """应用侧保存微秒创建时间，保证连续创建版本的展示顺序。"""
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+class DivisionVersion(Base):
+    """不可变的整章保存快照；对象并发版本与章节展示版本分别计数。"""
+
+    __tablename__ = 'directing_division_versions'
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    chapter_id: Mapped[str] = mapped_column(ForeignKey('chapters.id', ondelete='RESTRICT'), nullable=False)
+    number: Mapped[int] = mapped_column(Integer, nullable=False)
+    origin: Mapped[str] = mapped_column(String(16), nullable=False)
+    source_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    sequence_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_task_id: Mapped[str | None] = mapped_column(ForeignKey('tasks.id', ondelete='RESTRICT'))
+    source_revision_id: Mapped[str | None] = mapped_column(ForeignKey('directing_division_versions.id', ondelete='RESTRICT'))
+    base_revision_id: Mapped[str | None] = mapped_column(ForeignKey('directing_division_versions.id', ondelete='RESTRICT'))
+    request_id: Mapped[str | None] = mapped_column(String(64))
+    snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    mapping: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True).with_variant(DATETIME(fsp=6), 'mysql'),
+                                                default=revision_created_at, server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint('chapter_id', 'number', name='uq_division_version_number'),
+        UniqueConstraint('chapter_id', 'id', name='uq_division_version_chapter_identity'),
+        UniqueConstraint('chapter_id', 'request_id', name='uq_division_version_request'),
+        CheckConstraint('number > 0 AND sequence_count >= 0', name='ck_division_version_numbers'),
+        CheckConstraint("origin IN ('manual','ai','restore','imported','baseline')", name='ck_division_version_origin'),
+    )
+
+
+class DivisionHead(Base):
+    """当前生效划分；复合外键禁止指向另一章节的快照。"""
+
+    __tablename__ = 'directing_division_heads'
+
+    chapter_id: Mapped[str] = mapped_column(ForeignKey('chapters.id', ondelete='RESTRICT'), primary_key=True)
+    revision_id: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    __table_args__ = (ForeignKeyConstraint(['chapter_id', 'revision_id'],
+        ['directing_division_versions.chapter_id', 'directing_division_versions.id'],
+        name='fk_division_head_version', ondelete='RESTRICT'),)
 
 
 class DirectingRevision(Base, TimestampMixin):

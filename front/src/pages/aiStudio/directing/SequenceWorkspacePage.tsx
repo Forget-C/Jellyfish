@@ -39,7 +39,7 @@ import { emptyDesign } from './designTemplate'
 import { directingError } from './common'
 import { buildFileDownloadUrl } from '../assets/utils'
 import { useActiveCut } from './useActiveCut'
-import { ActiveCutSummary, CutItems } from './WorkspaceHistory'
+import { ActiveCutSummary, CutItems, WorkspaceHistory } from './WorkspaceHistory'
 import { WorkspaceVersionDialog } from './WorkspaceVersionDialog'
 import { workspaceVersionEditErrors, type WorkspaceVersionKind, type WorkspaceVersionsSelection } from './workspaceVersions'
 import { revisionName, revisionReferences } from './workspaceUsage'
@@ -523,6 +523,19 @@ function SequenceWorkspace() {
     if (promptRevision) return <PromptReader prompt={promptRevision.content} workspace={workspace} />
     return <Alert type="warning" message="此历史修订未在工作区中找到；当前版本不会代替它展示" />
   }
+  if (workspace.sequence.is_current === false) return <SourceProvider projectId={projectId} sequenceId={sequenceId} renderRevision={renderSourceRevision}>
+    <SequenceLayout footer={<span>历史场次 · 只读</span>}><Space direction="vertical" style={{ width: '100%' }}>
+      <Button onClick={() => navigate(`/projects/${projectId}?tab=chapters&chapter=${chapterId}&sequence=${sequenceId}`)}>返回章节</Button>
+      <Alert type="info" message={`${workspace.sequence.title} · 已退出当前划分`} description="历史身份、设计、素材、粗剪和来源保留。此页只读，不发起新的生产写入。" />
+      <p className="chapter-source-excerpt">{workspace.sequence.source_text}</p>
+      <WorkspaceHistory key={`${sequenceId}:${search.get('design')}:${search.get('plan')}:${search.get('cut')}`} open embedded onClose={() => {}} workspace={workspace} active={activeCut}
+        initialSelection={search.get('cut') ? { kind: 'cut', revisionId: search.get('cut')! } : search.get('plan') ? { kind: 'plan', revisionId: search.get('plan')! } : search.get('design') ? { kind: 'design', revisionId: search.get('design')! } : undefined} />
+      <details><summary>历史素材 · {workspace.takes.length} 项</summary>{workspace.takes.map(take => <Card key={take.id} size="small" title={`素材 ${take.display_number || take.id}`}>
+        <video controls preload="none" style={{ maxWidth: '100%' }} src={buildFileDownloadUrl(take.file_id)} /><p>审查：{take.annotation.review_status} · 原计划 {take.plan_revision_id} / {take.unit_id}</p>
+      </Card>)}</details>
+      <details><summary>历史提示词 · {workspace.prompts.length} 项</summary>{workspace.prompts.map(prompt => <PromptReader key={prompt.id} prompt={prompt.content} workspace={workspace} />)}</details>
+    </Space></SequenceLayout>
+  </SourceProvider>
   return <SourceProvider projectId={projectId} sequenceId={sequenceId} renderRevision={renderSourceRevision}><WorkspaceWriteBoundary busy={busy}><SequenceLayout footer={<><span>{workspace.sequence.title}</span><span>{stage === 'design' ? `${design?.direction.shots.length || 0} 个镜头 · 计划时长` : stage === 'shoot' ? `${plan?.units.length || 0} 个单元 · 候选不自动采用` : '实际媒体与预演分别核对'}</span></>}><div className="sequence-workspace" role="region" aria-label="场次工作区">
     {!['design', 'shoot', 'cut'].includes(view) && <SequenceNavigation><div className="design-navigation"><h2>{stage === 'shoot' ? '试拍工具' : '剪辑与验收'}</h2>{Object.entries(workspaceViews).filter(([key, item]) => item.stage === stage || key === 'ledger').map(([key, item]) => <Button key={key} type="text" aria-pressed={key === view} onClick={() => changeView(key)}>{item.title}</Button>)}<Button onClick={() => setContextPanel('source')}>本场原文</Button></div></SequenceNavigation>}
     {unavailableDesignId && <Alert type="warning" message="链接指定的设计暂不可用，请重新选择版本" action={<Button onClick={() => openHistory('design')}>选择可用设计</Button>} />}

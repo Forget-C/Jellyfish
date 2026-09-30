@@ -41,7 +41,7 @@ async def test_mysql_schema_roundtrip_and_concurrent_writes():
                     "include_object": lambda obj, name, type_, reflected, compare_to: (name if type_ == "table" else obj.table.name).startswith("directing_"),
                 })
                 assert not compare_metadata(context, Base.metadata)
-                assert sync.scalar(text("SELECT version_num FROM alembic_version")) == "a1c4e7b9d205"
+                assert sync.scalar(text("SELECT version_num FROM alembic_version")) == "c3e7f9a1b524"
             await connection.run_sync(verify)
         async with sessions.begin() as db:
             db.add(Project(id="p1", name="测试", style="真人都市"))
@@ -326,5 +326,374 @@ async def test_mysql_concurrent_source_ranges(isolation):
         assert sorted(await asyncio.wait_for(asyncio.gather(create(0), create(1)), 15)) == ['conflict', 'saved']
         async with sessions.begin() as db:
             assert len((await WorkspaceService(db, project_id).list_sequences(chapter_id)).sequences) == 1
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.parametrize('isolation', ['READ COMMITTED', 'REPEATABLE READ'])
+async def test_mysql_atomic_division_competition(isolation):
+    """独立连接的旧快照、整章竞争、同请求重放及单场竞争均不能覆盖已提交版本。"""
+    from uuid import uuid4
+    from app.core.contracts.directing.division import DivisionDraft, DivisionSave
+    from app.core.contracts.directing.workspace import SequenceUpdate
+    from app.services.directing.division import DivisionService
+    value = os.environ.get('JELLYFISH_DIRECTING_MYSQL_URL')
+    if not value:
+        pytest.skip('JELLYFISH_DIRECTING_MYSQL_URL required')
+    url = make_url(value)
+    if url.get_backend_name() != 'mysql' or not (url.database or '').startswith('jellyfish_check_directing'):
+        raise ValueError('only an isolated directing validation database is allowed')
+    engine = create_async_engine(value, isolation_level=isolation)
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    project_id, chapter_id = 'p-' + uuid4().hex, 'ch-' + uuid4().hex
+    try:
+        async with sessions.begin() as db:
+            db.add(Project(id=project_id, name='整章并发', style='真人'))
+            await db.flush()
+            db.add(Chapter(id=chapter_id, project_id=project_id, index=1, title='章节', raw_text='前场😀后场。'))
+        async with sessions.begin() as db:
+            service = DivisionService(db, project_id)
+            chapter = await service.list_sequences(chapter_id)
+            draft = DivisionDraft(source_version=chapter.source_version, baseline=[], members=[
+                {'key': 'a', 'title': '前场', 'span': {'start': 0, 'end': 3}},
+                {'key': 'b', 'title': '后场', 'span': {'start': 3, 'end': 6}}], lineage=[], exited_sequence_ids=[])
+            preview = await service.preview_division(chapter_id, draft)
+            body = DivisionSave(request_id='first', draft=draft, preview_token=preview.preview_token)
+        async def submit(body):
+            async with sessions.begin() as db:
+                try:
+                    return await DivisionService(db, project_id).save_division(chapter_id, body)
+                except RevisionConflict:
+                    return 'conflict'
+        results = await asyncio.gather(submit(body), submit(body))
+        assert results[0] == results[1] and results[0] != 'conflict'
+        rows = results[0].chapter.sequences
+        def make_draft():
+            return DivisionDraft(source_version=draft.source_version,
+                baseline=[{'sequence_id': row.id, 'version': row.version} for row in rows],
+                members=[{'key': row.id, 'sequence_id': row.id, 'title': row.title, 'span': row.span} for row in rows],
+                lineage=[{'sequence_id': row.id, 'target_keys': [row.id]} for row in rows], exited_sequence_ids=[])
+        left, right = make_draft(), make_draft()
+        left.members[0].span.end = 4
+        left.members[1].span.start = 4
+        right.members.reverse()
+        async with sessions.begin() as db:
+            service = DivisionService(db, project_id)
+            left_preview = await service.preview_division(chapter_id, left)
+            right_preview = await service.preview_division(chapter_id, right)
+        responses = await asyncio.gather(
+            submit(DivisionSave(request_id='left', draft=left, preview_token=left_preview.preview_token)),
+            submit(DivisionSave(request_id='right', draft=right, preview_token=right_preview.preview_token)))
+        assert sum(response == 'conflict' for response in responses) == 1
+        rows = next(response.chapter.sequences for response in responses if response != 'conflict')
+        # 在独立事务中预先建立快照，然后提交另一连接的单场改名。
+        async with sessions.begin() as stale_db:
+            stale = DivisionService(stale_db, project_id)
+            await stale.list_sequences(chapter_id)
+            pending = make_draft()
+            pending.members[0].title = '旧页面的名称'
+            preview = await stale.preview_division(chapter_id, pending)
+            await stale_db.commit()
+        async with sessions.begin() as stale_db:
+            stale = DivisionService(stale_db, project_id)
+            await stale.list_sequences(chapter_id)
+            async with sessions.begin() as db:
+                await DivisionService(db, project_id).write_sequence(chapter_id,
+                    SequenceUpdate(title='另一编辑者', position=rows[0].position, expected_version=rows[0].version,
+                                   source_version=draft.source_version), rows[0].id)
+            with pytest.raises(RevisionConflict, match='集合'):
+                await stale.save_division(chapter_id, DivisionSave(request_id='stale', draft=pending, preview_token=preview.preview_token))
+        async with sessions.begin() as db:
+            latest = await DivisionService(db, project_id).list_sequences(chapter_id)
+            assert latest.sequences[0].title == '另一编辑者'
+            assert latest.sequences[1].id == rows[1].id
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_mysql_division_migration_preserves_populated_history():
+    """在隔离库已有设计、素材、采用及引用上往返结构升级，逐字段核对旧数据。"""
+    from alembic.operations import Operations
+    from tests.directing.test_migration import revision_module
+    value = os.environ.get('JELLYFISH_DIRECTING_MYSQL_URL')
+    if not value:
+        pytest.skip('JELLYFISH_DIRECTING_MYSQL_URL required')
+    url = make_url(value)
+    if url.get_backend_name() != 'mysql' or not (url.database or '').startswith('jellyfish_check_directing'):
+        raise ValueError('only an isolated directing validation database is allowed')
+    engine = create_async_engine(value)
+    try:
+        async with engine.begin() as connection:
+            def verify(sync):
+                migration = revision_module('b2d6e8f0a413_add_chapter_division_membership.py')
+                migration.op = Operations(MigrationContext.configure(sync))
+                migration.downgrade()
+                tables = [table for table in Base.metadata.sorted_tables if table.name.startswith('directing_') and table.name != 'directing_division_commits']
+                def snapshot():
+                    result = {}
+                    for table in tables:
+                        columns = [column for column in table.c if column.name not in ('is_current', 'current_position')]
+                        result[table.name] = sync.execute(select(*columns).order_by(*table.primary_key.columns)).mappings().all()
+                    return result
+                before = snapshot()
+                # 本文件前置主流程生成真实业务成果，避免空表通过数据保留检查。
+                for name in ('directing_sequences', 'directing_revisions', 'directing_takes', 'directing_active_cuts', 'directing_revision_dependencies'):
+                    assert before[name], name
+                migration.upgrade()
+                assert snapshot() == before
+                assert sync.scalar(text('SELECT COUNT(*) FROM directing_sequences WHERE is_current != 1 OR current_position != position')) == 0
+                assert sync.scalar(text('SELECT COUNT(*) FROM directing_division_commits')) == 0
+            await connection.run_sync(verify)
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.parametrize('isolation', ['READ COMMITTED', 'REPEATABLE READ'])
+async def test_mysql_division_later_failure_rolls_back(isolation):
+    """后续 SQL 失败后提交外层事务，仍不得留下改名、临时顺序、新身份或回执。"""
+    from uuid import uuid4
+    from sqlalchemy import event
+    from app.core.contracts.directing.division import DivisionDraft, DivisionSave
+    from app.models.directing import DivisionCommit, Sequence
+    from app.services.directing.division import DivisionService
+    value = os.environ.get('JELLYFISH_DIRECTING_MYSQL_URL')
+    if not value:
+        pytest.skip('JELLYFISH_DIRECTING_MYSQL_URL required')
+    url = make_url(value)
+    if url.get_backend_name() != 'mysql' or not (url.database or '').startswith('jellyfish_check_directing'):
+        raise ValueError('only an isolated directing validation database is allowed')
+    engine = create_async_engine(value, isolation_level=isolation)
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    project_id, chapter_id = 'p-' + uuid4().hex, 'ch-' + uuid4().hex
+    try:
+        async with sessions.begin() as db:
+            db.add(Project(id=project_id, name='失败回滚', style='真人'))
+            await db.flush()
+            db.add(Chapter(id=chapter_id, project_id=project_id, index=1, title='章节', raw_text='前场后场终场'))
+            await db.flush()
+            service = DivisionService(db, project_id)
+            chapter = await service.list_sequences(chapter_id)
+            draft = DivisionDraft(source_version=chapter.source_version, baseline=[], members=[
+                {'key': 'a', 'title': '前场', 'span': {'start': 0, 'end': 2}},
+                {'key': 'b', 'title': '后场', 'span': {'start': 2, 'end': 4}}], lineage=[], exited_sequence_ids=[])
+            preview = await service.preview_division(chapter_id, draft)
+            before = (await service.save_division(chapter_id, DivisionSave(request_id='initial', draft=draft, preview_token=preview.preview_token))).chapter
+        async with sessions.begin() as db:
+            service = DivisionService(db, project_id)
+            rows = before.sequences
+            draft = DivisionDraft(source_version=before.source_version,
+                baseline=[{'sequence_id': row.id, 'version': row.version} for row in rows],
+                members=[{'key': 'new', 'title': '终场', 'span': {'start': 4, 'end': 6}},
+                         *[{'key': row.id, 'sequence_id': row.id, 'title': '调整' + row.title, 'span': row.span} for row in reversed(rows)]],
+                lineage=[{'sequence_id': row.id, 'target_keys': [row.id]} for row in rows], exited_sequence_ids=[])
+            preview = await service.preview_division(chapter_id, draft)
+            writes = []
+            def fail_receipt(connection, cursor, statement, parameters, context, executemany):
+                if statement.startswith(('INSERT INTO directing_sequences', 'UPDATE directing_sequences')):
+                    writes.append(statement)
+                if statement.startswith('INSERT INTO directing_division_commits'):
+                    raise RuntimeError('receipt storage failed')
+            event.listen(engine.sync_engine, 'before_cursor_execute', fail_receipt)
+            try:
+                with pytest.raises(RuntimeError, match='receipt storage failed'):
+                    await service.save_division(chapter_id, DivisionSave(request_id='failed', draft=draft, preview_token=preview.preview_token))
+            finally:
+                event.remove(engine.sync_engine, 'before_cursor_execute', fail_receipt)
+            assert len(writes) >= 4
+        # 新连接验证，外层事务已正常提交，不能靠测试清理事务掩盖半成功。
+        async with sessions.begin() as db:
+            service = DivisionService(db, project_id)
+            assert await service.list_sequences(chapter_id) == before
+            assert await db.scalar(select(func.count()).select_from(Sequence).where(Sequence.chapter_id == chapter_id)) == 2
+            assert await db.get(DivisionCommit, (chapter_id, 'failed')) is None
+            saved = await service.save_division(chapter_id, DivisionSave(request_id='failed', draft=draft, preview_token=preview.preview_token))
+            assert len(saved.chapter.sequences) == 3
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.parametrize('isolation', ['READ COMMITTED', 'REPEATABLE READ'])
+async def test_mysql_legacy_import_is_atomic_and_idempotent(isolation):
+    """两个持旧读快照的连接同时接入同一回执，只生成一个版本及一个当前指向。"""
+    from uuid import uuid4
+    from sqlalchemy import delete
+    from app.core.contracts.directing.division import DivisionDraft, DivisionSave
+    from app.models.directing import DivisionHead, DivisionVersion
+    from app.services.directing.division import DivisionService
+    from app.services.directing.division_import import DivisionImportService
+    from app.services.directing.division_history import DivisionHistoryService
+    value = os.environ.get('JELLYFISH_DIRECTING_MYSQL_URL')
+    if not value:
+        pytest.skip('JELLYFISH_DIRECTING_MYSQL_URL required')
+    url = make_url(value)
+    if url.get_backend_name() != 'mysql' or not (url.database or '').startswith('jellyfish_check_directing'):
+        raise ValueError('only an isolated directing validation database is allowed')
+    engine = create_async_engine(value, isolation_level=isolation)
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    project_id, chapter_id = 'p-' + uuid4().hex, 'ch-' + uuid4().hex
+    try:
+        async with sessions.begin() as db:
+            db.add(Project(id=project_id, name='旧记录接入', style='真人'))
+            await db.flush()
+            db.add(Chapter(id=chapter_id, project_id=project_id, index=1, title='章节', raw_text='甲乙丙丁'))
+            await db.flush()
+            service = DivisionService(db, project_id)
+            chapter = await service.list_sequences(chapter_id)
+            draft = DivisionDraft(source_version=chapter.source_version, baseline=[], members=[
+                {'key': 'old', 'title': '保存内容', 'span': {'start': 0, 'end': 4}}], lineage=[], exited_sequence_ids=[])
+            preview = await service.preview_division(chapter_id, draft)
+            saved = await service.save_division(chapter_id, DivisionSave(request_id='legacy', draft=draft, preview_token=preview.preview_token))
+            await db.execute(delete(DivisionHead).where(DivisionHead.chapter_id == chapter_id))
+            await db.execute(delete(DivisionVersion).where(DivisionVersion.chapter_id == chapter_id))
+        barrier = asyncio.Barrier(2)
+        async def importing():
+            async with sessions.begin() as db:
+                importer = DivisionImportService(db, project_id)
+                await importer.list_sequences(chapter_id)
+                await barrier.wait()
+                return await importer.import_history(chapter_id)
+        results = await asyncio.wait_for(asyncio.gather(importing(), importing()), 15)
+        assert sum(row['imported'] for row in results) == 1
+        assert sum(row['skipped'] for row in results) == 1
+        async with sessions.begin() as db:
+            assert await db.scalar(select(func.count()).select_from(DivisionVersion).where(DivisionVersion.chapter_id == chapter_id)) == 1
+            current = await DivisionService(db, project_id).list_sequences(chapter_id)
+            assert current.current_version.number == 1 and current.sequences == saved.chapter.sequences
+            history = await DivisionHistoryService(db, project_id).history(chapter_id)
+            assert history.total == 1 and history.items[0].is_current
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_mysql_version_migration_with_existing_production_data():
+    """有快照时拒绝降级；从前序结构升级不会改写已有成果和回执。"""
+    from alembic.operations import Operations
+    from tests.directing.test_migration import revision_module
+    value = os.environ.get('JELLYFISH_DIRECTING_MYSQL_URL')
+    if not value:
+        pytest.skip('JELLYFISH_DIRECTING_MYSQL_URL required')
+    url = make_url(value)
+    if url.get_backend_name() != 'mysql' or not (url.database or '').startswith('jellyfish_check_directing'):
+        raise ValueError('only an isolated directing validation database is allowed')
+    engine = create_async_engine(value)
+    try:
+        async with engine.begin() as connection:
+            def verify(sync):
+                from app.models.directing import DivisionVersion
+                migration = revision_module('c3e7f9a1b524_add_chapter_division_versions.py')
+                migration.op = Operations(MigrationContext.configure(sync))
+                with pytest.raises(RuntimeError):
+                    migration.downgrade()
+                # 仅重置隔离测试库的新版本夹具，模拟升级前仍有真实旧生产记录的状态。
+                sync.execute(text('DELETE FROM directing_division_heads'))
+                for identity in sync.scalars(select(DivisionVersion.id).order_by(DivisionVersion.number.desc())).all():
+                    sync.execute(text('DELETE FROM directing_division_versions WHERE id=:id'), {'id': identity})
+                migration.downgrade()
+                tables = [table for table in Base.metadata.sorted_tables if table.name.startswith('directing_')
+                    and table.name not in ('directing_division_versions', 'directing_division_heads')]
+                def snapshot():
+                    return {table.name: sync.execute(select(table).order_by(*table.primary_key.columns)).mappings().all() for table in tables}
+                before = snapshot()
+                assert before['directing_revisions'] and before['directing_takes'] and before['directing_division_commits']
+                migration.upgrade()
+                assert snapshot() == before
+                assert sync.scalar(text('SELECT COUNT(*) FROM directing_division_versions')) == 0
+            await connection.run_sync(verify)
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.parametrize('isolation', ['READ COMMITTED', 'REPEATABLE READ'])
+async def test_mysql_restore_replay_and_competing_edit(isolation):
+    """恢复重放同一版本；恢复与普通编辑争用章节锁，不倒退历史对象版本。"""
+    from uuid import uuid4
+    from app.core.contracts.directing.division import DivisionDraft, DivisionSave
+    from app.models.directing import DivisionVersion, Sequence
+    from app.services.directing.division import DivisionService
+    value = os.environ.get('JELLYFISH_DIRECTING_MYSQL_URL')
+    if not value:
+        pytest.skip('JELLYFISH_DIRECTING_MYSQL_URL required')
+    url = make_url(value)
+    if url.get_backend_name() != 'mysql' or not (url.database or '').startswith('jellyfish_check_directing'):
+        raise ValueError('only an isolated directing validation database is allowed')
+    engine = create_async_engine(value, isolation_level=isolation)
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    project_id, chapter_id = 'p-' + uuid4().hex, 'ch-' + uuid4().hex
+    async def make_request(db, draft, request_id):
+        preview = await DivisionService(db, project_id).preview_division(chapter_id, draft)
+        return DivisionSave(request_id=request_id, draft=draft, preview_token=preview.preview_token, identity_changes_confirmed=True)
+    try:
+        async with sessions.begin() as db:
+            db.add(Project(id=project_id, name='历史恢复竞争', style='真人'))
+            await db.flush()
+            db.add(Chapter(id=chapter_id, project_id=project_id, index=1, title='章节', raw_text='甲乙丙丁'))
+            await db.flush()
+            service = DivisionService(db, project_id)
+            chapter = await service.list_sequences(chapter_id)
+            draft = DivisionDraft(source_version=chapter.source_version, baseline=[], members=[
+                {'key': 'a', 'title': '前场', 'span': {'start': 0, 'end': 2}},
+                {'key': 'b', 'title': '后场', 'span': {'start': 2, 'end': 4}}], exited_sequence_ids=[], lineage=[])
+            original = (await service.save_division(chapter_id, await make_request(db, draft, 'initial'))).chapter
+        async def retire_and_restore_request(request_id):
+            async with sessions.begin() as db:
+                service = DivisionService(db, project_id)
+                current = await service.list_sequences(chapter_id)
+                first, second = current.sequences
+                retired = DivisionDraft(source_version=current.source_version,
+                    baseline=[{'sequence_id': row.id, 'version': row.version} for row in current.sequences],
+                    members=[{'key': second.id, 'sequence_id': second.id, 'title': second.title, 'span': second.span}],
+                    exited_sequence_ids=[first.id], lineage=[{'sequence_id': first.id, 'target_keys': []}, {'sequence_id': second.id, 'target_keys': [second.id]}])
+                latest = (await service.save_division(chapter_id, await make_request(db, retired, request_id + '-retire'))).chapter
+                old = await db.get(Sequence, first.id, populate_existing=True)
+                restore = DivisionDraft(source_version=latest.source_version, source_revision_id=original.current_version.id,
+                    baseline=[{'sequence_id': row.id, 'version': row.version} for row in latest.sequences],
+                    members=[{'key': row.id, 'sequence_id': row.id, 'title': row.title, 'span': row.span} for row in original.sequences],
+                    restored_baseline=[{'sequence_id': first.id, 'version': old.version}], exited_sequence_ids=[],
+                    lineage=[{'sequence_id': second.id, 'target_keys': [second.id]}])
+                return await make_request(db, restore, request_id), latest
+        body, _ = await retire_and_restore_request('restore-1')
+        async def submit(body, barrier):
+            async with sessions.begin() as db:
+                service = DivisionService(db, project_id)
+                await service.list_sequences(chapter_id)
+                await barrier.wait()
+                try:
+                    return await service.save_division(chapter_id, body)
+                except RevisionConflict:
+                    return 'conflict'
+        barrier = asyncio.Barrier(2)
+        replay = await asyncio.wait_for(asyncio.gather(submit(body, barrier), submit(body, barrier)), 15)
+        assert replay[0] == replay[1] and replay[0] != 'conflict'
+        assert replay[0].chapter.current_version.number == 3
+        assert replay[0].chapter.sequences[0].version == 3
+        restore, latest = await retire_and_restore_request('restore-2')
+        async with sessions.begin() as db:
+            row = latest.sequences[0]
+            rename = DivisionDraft(source_version=latest.source_version,
+                baseline=[{'sequence_id': row.id, 'version': row.version}],
+                members=[{'key': row.id, 'sequence_id': row.id, 'title': '并发改名', 'span': row.span}],
+                exited_sequence_ids=[], lineage=[{'sequence_id': row.id, 'target_keys': [row.id]}])
+            competing = await make_request(db, rename, 'rename')
+        barrier = asyncio.Barrier(2)
+        results = await asyncio.wait_for(asyncio.gather(submit(restore, barrier), submit(competing, barrier)), 15)
+        assert sum(row == 'conflict' for row in results) == 1
+        async with sessions.begin() as db:
+            numbers = list(await db.scalars(select(DivisionVersion.number).where(DivisionVersion.chapter_id == chapter_id).order_by(DivisionVersion.number)))
+            assert numbers == [1, 2, 3, 4, 5]
+            current = await DivisionService(db, project_id).list_sequences(chapter_id)
+            assert current.current_version.number == 5
+            assert (await db.get(Sequence, original.sequences[0].id)).version >= 4
     finally:
         await engine.dispose()
