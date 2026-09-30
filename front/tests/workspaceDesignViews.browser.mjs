@@ -40,6 +40,7 @@ try {
     if (path.endsWith('/sources/resolve')) return respond(request.postDataJSON().sources.map(source => ({ source, status: 'ready', label: '人工填写', description: '测试来源' })))
     if (request.method() !== 'GET') writes.push(path)
     if (path.endsWith('/s1')) return respond(workspace)
+    if (path.endsWith('/overview')) return respond({ sequences: [{ ...workspace.sequence, source_excerpt: '', confirmed_design_count: 1, plan_count: 2 }] })
     if (path.endsWith('/s1/feedback')) return respond({ active_cut_revision_id: 'c-active', current_review_id: null, reviews: [], repairs: [], knowledge: [] })
     if (path.endsWith('/download')) { images.push(path); return route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="#bcd6fa"/><text x="30" y="90" font-size="24">明确绑定的测试预演</text></svg>' }) }
     if (path.endsWith('/film/tasks')) return respond({ items: [], next_cursor: null })
@@ -49,13 +50,16 @@ try {
   const base = 'http://127.0.0.1:4187/projects/p1/chapters/ch1/sequences/s1?view=design&design=d2'
   const choose = async (label, option) => {
     const version = label === '查看或编辑设计版本'
-    if (version) { await page.locator('.workspace-versions-entry').click(); label = '选择设计版本'; option = option.replace(' 0', ' ') }
+    if (version) {
+      await page.locator('.workspace-versions-entry').click()
+      await page.getByRole('dialog', { name: '版本与依据', exact: true }).locator('tr[data-row-key]').filter({ has: page.getByText(option.replace(' 0', ' '), { exact: true }) }).getByRole('button', { name: /^(基于此版本编辑|继续编辑草稿)$/ }).click()
+      return
+    }
 
     await page.getByRole('combobox', { name: label, exact: true }).locator('../..').click()
     const popup = page.locator('.ant-select-dropdown:visible').last()
     await popup.locator('.ant-select-item-option').filter({ hasText: option }).first().click()
     await popup.waitFor({ state: 'hidden' })
-    if (version) await page.getByRole('button', { name: '切换工作上下文', exact: true }).click()
   }
   const closeDrawer = async () => {
     await page.locator('.ant-drawer-open').last().getByRole('button', { name: 'Close', exact: true }).click()
@@ -179,20 +183,20 @@ try {
   await choose('查看或编辑设计版本', '设计 02')
   await page.getByRole('tab', { name: '清单', exact: true }).click()
   const baseline = new URL(page.url()).searchParams.get('design')
-  await page.getByRole('button', { name: '更多场次操作', exact: true }).click()
-  await page.getByRole('menuitem', { name: '版本与历史', exact: true }).click()
-  await page.getByRole('tab', { name: '查看与比较', exact: true }).click()
-  await choose('比较基准版本', '设计 1')
-  await choose('查看或比较的历史版本', '设计 2')
+  await page.locator('.workspace-versions-entry').click()
+  const versionDialog = page.getByRole('dialog', { name: '版本与依据', exact: true })
+  for (const id of ['d1', 'd2']) await versionDialog.locator(`tr[data-row-key="${id}"]`).getByRole('button', { name: '加入比较', exact: true }).click()
+  await versionDialog.getByRole('button', { name: '比较所选版本', exact: true }).click()
   const changes = page.locator('.revision-differences')
   await changes.getByText('新增', { exact: true }).first().waitFor()
   assert.ok((await changes.innerText()).includes('设计建议'))
   assert.ok((await changes.innerText()).includes('design-views-fixture'))
   await page.screenshot({ path: join(output, 'revision-differences.png') })
-  await page.getByRole('tab', { name: '完整快照', exact: true }).click()
+  await versionDialog.getByRole('button', { name: '返回版本列表', exact: true }).click()
+  await versionDialog.locator('tr[data-row-key="d2"]').getByRole('button', { name: '查看版本', exact: true }).click()
   await page.locator('.ant-modal:visible').getByRole('button', { name: '岗位审阅', exact: true }).click()
   await page.locator('.ant-modal:visible').getByRole('combobox', { name: '岗位', exact: true }).waitFor()
-  await page.locator('.ant-modal:visible').getByRole('button', { name: /^取\s*消$/ }).click()
+  await page.locator('.ant-modal:visible').getByRole('button', { name: /^关\s*闭$/ }).click()
   await page.locator('.ant-modal:visible').waitFor({ state: 'hidden' })
   assert.equal(new URL(page.url()).searchParams.get('design'), baseline)
   for (const width of [1440, 1024, 768, 375]) {
@@ -207,7 +211,7 @@ try {
     if (width < 1280) {
       const version = await page.locator('.workspace-versions-entry').boundingBox()
       const navigation = await page.getByRole('button', { name: '场次导航', exact: true }).boundingBox()
-      assert.ok(version.x + version.width <= navigation.x, `${width}: version and navigation overlap`)
+      assert.ok(version.x + version.width <= navigation.x || navigation.y + navigation.height <= version.y, `${width}: version and navigation overlap`)
     }
     await page.screenshot({ path: join(output, `stable-toolbar-${width}.png`) })
   }

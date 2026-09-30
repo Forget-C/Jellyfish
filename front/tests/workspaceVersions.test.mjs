@@ -30,3 +30,21 @@ test('conflicting plan/design is explicit, while cross-plan cut sources do not c
   assert.deepEqual(workspaceVersionErrors(workspace, { design: 'd1', plan: 'p-new', cut: 'c-active' }), [])
   assert.deepEqual(selectWorkspaceVersion(workspace, { design: 'd1', plan: 'p-new', cut: 'c-active' }, 'plan', null), { design: 'd1', plan: null, cut: 'c-active' })
 })
+
+const { orderedWorkspaceVersions, workspaceVersionEditErrors } = await loadSource('workspaceVersions')
+test('display sorting preserves original numbering input and missing-date order', () => {
+  const rows = [{ id: 'missing' }, { id: 'old', created_at: '2026-09-01T00:00:00Z' }, { id: 'invalid', created_at: 'unknown' }, { id: 'new', created_at: '2026-09-30T00:00:00Z' }]
+  assert.deepEqual(orderedWorkspaceVersions(rows).map(row => row.id), ['new', 'old', 'missing', 'invalid'])
+  assert.deepEqual(rows.map(row => row.id), ['missing', 'old', 'invalid', 'new'])
+})
+
+test('editing validates the target and fixed design without blocking recovery on unrelated broken links', () => {
+  const workspace = makeWorkspace()
+  assert.deepEqual(workspaceVersionEditErrors(workspace, { design: 'missing', plan: 'missing', cut: 'c-draft' }, 'cut'), [])
+  assert.deepEqual(workspaceVersionEditErrors(workspace, { design: 'd1', plan: 'p-old', cut: 'missing' }, 'plan'), [])
+  assert.ok(workspaceVersionEditErrors(workspace, { design: 'd1', plan: 'p-old', cut: 'missing' }, 'cut').length)
+  workspace.designs[0].confirmed_at = null
+  assert.ok(workspaceVersionEditErrors(workspace, { design: 'd1', plan: 'p-old', cut: null }, 'plan').length)
+  workspace.sequence.is_current = false
+  assert.ok(workspaceVersionEditErrors(workspace, { design: 'd2', plan: null, cut: null }, 'design').length)
+})

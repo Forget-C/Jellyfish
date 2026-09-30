@@ -153,10 +153,9 @@ try {
         }), true, `${width} ${state}: clipped or obscured action ${await action.innerText()} ${JSON.stringify(await action.evaluate(element => { const box = element.getBoundingClientRect(); return { box: box.toJSON(), hit: document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)?.outerHTML, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth } }))}`)
       }
       if (state === 'first') {
-        await keyboard(page.getByRole('button', { name: '更多场次操作', exact: true }))
-        await page.getByRole('menuitem', { name: '版本与历史', exact: true }).click()
+        await keyboard(page.getByRole('button', { name: '版本与依据', exact: true }))
         await page.getByRole('dialog', { name: '版本与依据', exact: true }).waitFor()
-        await page.getByRole('dialog', { name: '版本与依据', exact: true }).getByRole('button', { name: /^取\s*消$/ }).focus()
+        await page.getByRole('dialog', { name: '版本与依据', exact: true }).getByRole('button', { name: /^关\s*闭$/ }).focus()
         await page.keyboard.press('Escape')
         await page.getByRole('dialog', { name: '版本与依据', exact: true }).waitFor({ state: 'hidden' })
         if (width === 375) {

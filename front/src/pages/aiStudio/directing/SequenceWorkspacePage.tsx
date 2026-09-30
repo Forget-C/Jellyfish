@@ -41,7 +41,7 @@ import { buildFileDownloadUrl } from '../assets/utils'
 import { useActiveCut } from './useActiveCut'
 import { ActiveCutSummary, CutItems } from './WorkspaceHistory'
 import { WorkspaceVersionDialog } from './WorkspaceVersionDialog'
-import type { WorkspaceVersionsSelection } from './workspaceVersions'
+import { workspaceVersionEditErrors, type WorkspaceVersionKind, type WorkspaceVersionsSelection } from './workspaceVersions'
 import { revisionName, revisionReferences } from './workspaceUsage'
 import { WorkspaceDrafts, useWorkspaceDraft, useWorkspaceDraftStatus, WorkspaceWriteBoundary } from './WorkspaceDrafts'
 import { WorkspaceStages } from './WorkspaceStages'
@@ -104,6 +104,8 @@ function SequenceWorkspace() {
   usePageTitle(workspace?.sequence.id === sequenceId ? workspace?.sequence.title : undefined)
   const activeCut = useActiveCut(projectId, sequenceId, workspace)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [historyKind, setHistoryKind] = useState<WorkspaceVersionKind>('design')
+  const openHistory = (kind: WorkspaceVersionKind = stage === 'shoot' ? 'plan' : stage) => { setHistoryKind(kind); setHistoryOpen(true) }
   const [shotProduction, setShotProduction] = useState<{ designId: string; shotId: string }>()
   const [contextPanel, setContextPanel] = useState<'source' | 'ai' | 'tasks' | 'help'>()
   useEffect(() => { const open = () => setContextPanel('tasks'); window.addEventListener('sequence-open-task-results', open); return () => window.removeEventListener('sequence-open-task-results', open) }, [])
@@ -463,12 +465,14 @@ function SequenceWorkspace() {
       setReviewTaskId(response.data.task_id); advance = true
     }).then(ok => { if (ok && advance && mounted.current) changeView('shoot', 'review') })
   }
-  const applyVersions = (next: WorkspaceVersionsSelection) => draftStatus.transition(() => {
+  const applyVersions = (next: WorkspaceVersionsSelection, kind: WorkspaceVersionKind) => draftStatus.transition(() => {
     // 保存可能派生新版本；完成草稿保护后再读取基线，应用弹窗中明确选择的对象。
     const { workspace, baseDesign, basePlan, unavailableDesignId, unavailablePlanId, cutSelection, search } = versionContext.current
     if (!workspace) return
-    if (next.design !== (baseDesign?.id || unavailableDesignId || null)) selectDesign(workspace.designs.find(row => row.id === next.design), workspace.sequence.version)
-    if (next.plan !== (basePlan?.id || unavailablePlanId || null)) {
+    const errors = workspaceVersionEditErrors(workspace, next, kind)
+    if (errors.length) { setError(errors.join('；')); return }
+    if (kind === 'design' || next.design !== (baseDesign?.id || unavailableDesignId || null)) selectDesign(workspace.designs.find(row => row.id === next.design), workspace.sequence.version)
+    if (kind === 'plan' || next.plan !== (basePlan?.id || unavailablePlanId || null)) {
       const selected = workspace.plans.find(row => row.id === next.plan)
       selectPlan(selected); setPreparationDesignId(next.design || undefined)
       const rememberedContext = readWorkspaceContext(projectId, sequenceId)
@@ -481,11 +485,12 @@ function SequenceWorkspace() {
       }
     }
     const currentCut = (cutSelection ? cutSelection.cut : restoreSelection(workspace.cuts, search.get('cut'), readWorkspaceContext(projectId, sequenceId).cut)?.id ?? null)
-    if (next.cut !== currentCut) {
+    if (kind === 'cut' || next.cut !== currentCut) {
       setCutSelection(current => ({ cut: next.cut, take: current?.take || null }))
       setCutSwitch(current => ({ id: next.cut, serial: (current?.serial || 0) + 1 }))
     }
     setHistoryOpen(false)
+    changeView(kind === 'plan' ? 'shoot' : kind, kind === 'plan' ? 'plan-version' : kind === 'design' ? 'design-editor' : 'cut-editor')
   })
   const newDesign = () => guardDesign(() => { selectDesign(undefined, workspace.sequence.version); setDesign(emptyDesign()) })
   const productionTargets = shotProduction ? shotProductionTargets(workspace, shotProduction.designId, shotProduction.shotId) : []
@@ -513,12 +518,12 @@ function SequenceWorkspace() {
     return <Alert type="warning" message="此历史修订未在工作区中找到；当前版本不会代替它展示" />
   }
   return <SourceProvider projectId={projectId} sequenceId={sequenceId} renderRevision={renderSourceRevision}><WorkspaceWriteBoundary busy={busy}><SequenceLayout footer={<><span>{workspace.sequence.title}</span><span>{stage === 'design' ? `${design?.direction.shots.length || 0} 个镜头 · 计划时长` : stage === 'shoot' ? `${plan?.units.length || 0} 个单元 · 候选不自动采用` : '实际媒体与预演分别核对'}</span></>}><div className="sequence-workspace" role="region" aria-label="场次工作区">
-    {!['design', 'shoot', 'cut'].includes(view) && <SequenceNavigation><div className="design-navigation"><h2>{stage === 'shoot' ? '试拍工具' : '剪辑与验收'}</h2>{Object.entries(workspaceViews).filter(([key, item]) => item.stage === stage || key === 'ledger').map(([key, item]) => <Button key={key} type="text" aria-pressed={key === view} onClick={() => changeView(key)}>{item.title}</Button>)}<Button onClick={() => setHistoryOpen(true)}>版本与历史</Button><Button onClick={() => setContextPanel('source')}>本场原文</Button></div></SequenceNavigation>}
-    {unavailableDesignId && <Alert type="warning" message="链接指定的设计暂不可用，请重新选择版本" action={<Button onClick={() => setHistoryOpen(true)}>选择可用设计</Button>} />}
+    {!['design', 'shoot', 'cut'].includes(view) && <SequenceNavigation><div className="design-navigation"><h2>{stage === 'shoot' ? '试拍工具' : '剪辑与验收'}</h2>{Object.entries(workspaceViews).filter(([key, item]) => item.stage === stage || key === 'ledger').map(([key, item]) => <Button key={key} type="text" aria-pressed={key === view} onClick={() => changeView(key)}>{item.title}</Button>)}<Button onClick={() => setContextPanel('source')}>本场原文</Button></div></SequenceNavigation>}
+    {unavailableDesignId && <Alert type="warning" message="链接指定的设计暂不可用，请重新选择版本" action={<Button onClick={() => openHistory('design')}>选择可用设计</Button>} />}
     <WorkspaceVersionDialog open={historyOpen} onClose={() => setHistoryOpen(false)} workspace={workspace} active={activeCut}
       selection={{ design: baseDesign?.id || unavailableDesignId || null, plan: basePlan?.id || unavailablePlanId || null,
         cut: (cutSelection ? cutSelection.cut : restoreSelection(workspace.cuts, search.get('cut'), readWorkspaceContext(projectId, sequenceId).cut)?.id ?? null) }}
-      onApply={applyVersions} />
+      initialKind={historyKind} onApply={applyVersions} />
     <Drawer title={contextPanel === 'source' ? '本场原文与来源' : contextPanel === 'help' ? '当前进展' : 'AI 建议'} width={560} open={!!contextPanel && contextPanel !== 'tasks'} onClose={() => setContextPanel(undefined)}>
       {contextPanel === 'source' && <><Typography.Paragraph style={{ whiteSpace: 'pre-wrap' }}>{workspace.sequence.source_text}</Typography.Paragraph><Button onClick={() => navigate(`/projects/${projectId}/chapters/${chapterId}/sequences`)}>返回场次列表核对原文</Button></>}
       {contextPanel === 'help' && <><WorkspaceNextStep guidance={guidance} busy={busy} running={tasks.filter(task => ['queued', 'running'].includes(task.status)).length} onAction={followGuidance} /><ActiveCutSummary active={activeCut} workspace={workspace} /></>}
@@ -539,18 +544,18 @@ function SequenceWorkspace() {
     {stage === 'cut' && search.get('returnView') === 'shoot' && <Button onClick={() => { const next = withWorkspaceView(search, 'shoot'); next.delete('returnView'); next.set('focus', 'shoot-confirm'); setSearch(next) }}>返回试拍与候选</Button>}
     {stage === 'shoot' && search.get('returnView') === 'design' && <Button onClick={() => { const next = withWorkspaceView(search, 'design'); next.delete('returnView'); next.delete('focus'); setSearch(next) }}>返回镜头设计</Button>}
     {['design', 'shoot', 'cut'].includes(view) && ['feedback', 'continuity', 'ledger'].includes(search.get('returnView') || '') && <Button onClick={() => { const next = cutDestination(search, { view: search.get('returnView')! }); next.delete('returnView'); setSearch(next) }}>返回问题与记录</Button>}
-    <Button className="workspace-versions-entry" onClick={() => setHistoryOpen(true)}>版本与依据 · {baseDesign ? revisionName(workspace.designs, baseDesign.id, '设计') : unavailableDesignId ? '设计不可用' : '尚无设计'} {basePlan && basePlan.content.design_revision_id !== baseDesign?.id ? '｜计划依据另一设计｜' : '→'} {basePlan ? revisionName(workspace.plans, basePlan.id, '计划') : '尚无计划'} ｜ {cutSelection?.cut ? revisionName(workspace.cuts, cutSelection.cut, '剪辑') : '剪辑上下文'}</Button>
-    <SequenceSwitcher projectId={projectId} chapterId={chapterId} sequenceId={sequenceId} title={workspace.sequence.title} stage={stage} />
-    <WorkspaceStages onContext={key => { if (key === 'history') setHistoryOpen(true); else if (key === 'refresh') { void reload() } else setContextPanel(key as 'help' | 'source') }} view={view} onChange={changeView} items={[
+    <SequenceSwitcher projectId={projectId} chapterId={chapterId} sequenceId={sequenceId} title={workspace.sequence.title} stage={stage}
+      actions={<Button className="workspace-versions-entry" aria-label="版本与依据" onClick={() => openHistory()}><span className="workspace-versions-label">版本与依据</span><span className="workspace-versions-short">版本</span></Button>} />
+    <WorkspaceStages onContext={key => { if (key === 'refresh') { void reload() } else setContextPanel(key as 'help' | 'source') }} view={view} onChange={changeView} items={[
       { key: 'design', label: '导演设计', children: <div className="sequence-stage-workspace">
         <WorkbenchToolbar data-workspace-target="design-version" tabIndex={-1}>
           <div className="sequence-version-context"><span>{baseDesign ? revisionName(workspace.designs, baseDesign.id, '设计') : unavailableDesignId ? '设计不可用' : '尚无设计'}</span><span>{!design ? '尚无设计' : designDirty ? '草稿 · 未保存' : baseDesign?.confirmed_at ? '已确认' : '草稿 · 已保存'}</span></div>
-          <div className="sequence-version-actions"><Dropdown trigger={['click']} menu={{ items: [{ key: 'new', label: '手动起稿', onClick: newDesign }, ...(baseDesign?.confirmed_at ? [{ key: 'derive', label: '从此版本派生草稿', onClick: () => { void saveDesign() } }] : []), { key: 'history', label: '版本与历史', onClick: () => setHistoryOpen(true) }] }}><Button className="sequence-secondary-action">＋ 新建设计⌄</Button></Dropdown><Button className="sequence-secondary-action" onClick={() => setContextPanel('ai')}>✧ AI 建议</Button>
+          <div className="sequence-version-actions"><Dropdown trigger={['click']} menu={{ items: [{ key: 'new', label: '手动起稿', onClick: newDesign }, ...(baseDesign?.confirmed_at ? [{ key: 'derive', label: '从此版本派生草稿', onClick: () => { void saveDesign() } }] : [])] }}><Button className="sequence-secondary-action">＋ 新建设计⌄</Button></Dropdown><Button className="sequence-secondary-action" onClick={() => setContextPanel('ai')}>✧ AI 建议</Button>
             {design && <><Button loading={busy} onClick={saveDesign}>{baseDesign?.confirmed_at ? '保存为新设计草稿' : '保存设计草稿'}</Button>{!baseDesign?.confirmed_at && <Button type="primary" data-workspace-target="design-confirm" disabled={!baseDesign || !!baseDesign.confirmed_at || designDirty || designStale} loading={busy} onClick={() => run(async () => {
               const response = await StudioDirectingService.directingConfirmRevision({ projectId, sequenceId, revisionId: baseDesign!.id, requestBody: { expected_version: baseDesign!.version } })
               if (response.data) { setWorkspace(response.data); selectDesign(response.data.designs.find(row => row.id === baseDesign!.id), response.data.sequence.version) }
             })}>确认本轮设计</Button>}{baseDesign?.confirmed_at && <Button type="primary" disabled={designDirty || designStale} onClick={() => prepareShoot(baseDesign.id)}>{plan?.design_revision_id === baseDesign.id || workspace.plans.filter(row => row.content.design_revision_id === baseDesign.id).length === 1 ? '继续试拍 →' : '准备试拍 →'}</Button>}</>}
-            <Dropdown trigger={['click']} menu={{ items: [{ key: 'new', label: '新建设计', children: [{ key: 'manual', label: '手动起稿', onClick: newDesign }, ...(baseDesign?.confirmed_at ? [{ key: 'derive', label: '从此版本派生草稿', onClick: () => { void saveDesign() } }] : [])] }, { key: 'ai', label: 'AI 建议', onClick: () => setContextPanel('ai') }, { key: 'source', label: '本场原文', onClick: () => setContextPanel('source') }, { key: 'history', label: '版本与历史', onClick: () => setHistoryOpen(true) }, { key: 'tasks', label: '本场任务与结果', onClick: () => setContextPanel('tasks') }, { key: 'refresh', label: '刷新状态', onClick: () => { void reload() } }, { key: 'help', label: '当前进展', onClick: () => setContextPanel('help') }, ...(baseDesign?.confirmed_at ? [{ key: 'shoot', label: '为此设计准备试拍', onClick: () => prepareShoot(baseDesign.id) }] : [])] }}><Button aria-label="更多场次操作">•••</Button></Dropdown>
+            <Dropdown trigger={['click']} menu={{ items: [{ key: 'new', label: '新建设计', children: [{ key: 'manual', label: '手动起稿', onClick: newDesign }, ...(baseDesign?.confirmed_at ? [{ key: 'derive', label: '从此版本派生草稿', onClick: () => { void saveDesign() } }] : [])] }, { key: 'ai', label: 'AI 建议', onClick: () => setContextPanel('ai') }, { key: 'source', label: '本场原文', onClick: () => setContextPanel('source') }, { key: 'tasks', label: '本场任务与结果', onClick: () => setContextPanel('tasks') }, { key: 'refresh', label: '刷新状态', onClick: () => { void reload() } }, { key: 'help', label: '当前进展', onClick: () => setContextPanel('help') }, ...(baseDesign?.confirmed_at ? [{ key: 'shoot', label: '为此设计准备试拍', onClick: () => prepareShoot(baseDesign.id) }] : [])] }}><Button aria-label="更多场次操作">•••</Button></Dropdown>
           </div>
         </WorkbenchToolbar>
         {designStale && <Alert type="warning" message={`当前编辑修订 ${baseDesign!.version}，服务器版本已更新。`} action={<Button onClick={() => guardDesign(() => selectDesign(latestDesign, workspace.sequence.version))}>放弃本地编辑并载入最新设计</Button>} />}
@@ -576,7 +581,7 @@ function SequenceWorkspace() {
         shootAction={{ recovering: !!pendingShoot, label: pendingShoot ? '核实本次提交' : records.takes.some(take => take.prompt_revision_id === promptId) ? '同指令再拍一次' : '开始试拍', run: shootUnit, disabled: !!shootSubmission.error || !selectedPrompt?.confirmed_at || !reviewCanExecute(selectedReview, promptId) || selectedPrompt.content.plan_revision_id !== basePlan?.id || selectedPrompt.content.unit_id !== unitId || planDirty || planStale || (!pendingShoot && currentPromptPending) }} planReady={!!basePlan?.confirmed_at && !planDirty && !planStale} promptId={promptId} reviewId={reviewId} tasks={tasks} submitted={pendingTask} tasksState={tasksState} onOpenTasks={() => setContextPanel('tasks')} focusRequest={focusTarget ? `${location.key}:${focusTarget}` : null} active={view === 'shoot'} workspace={workspace} plan={plan} planId={basePlan?.id} selectedUnitId={unitId} onSelectUnit={selectUnit}
         start={!plan?.units.length ? <ShootPreparation unavailablePlanId={unavailablePlanId} workspace={workspace} currentPlanId={basePlan?.id} designId={plan?.design_revision_id || preparationDesignId || baseDesign?.id} onDesign={id => { if (!plan) { setUnavailablePlanId(undefined); setPreparationDesignId(id) } else guardPlan(() => { selectPlan(undefined); setPreparationDesignId(id) }) }} onBack={() => changeView('design')} onRetry={() => { void reload().then(current => { const restored = current?.plans.find(row => row.id === unavailablePlanId); if (restored) selectPlan(restored) }) }} onPlan={id => guardPlan(() => selectPlan(workspace.plans.find(row => row.id === id)))} onCreate={next => { const apply = () => { setUnavailablePlanId(undefined); if (plan?.design_revision_id !== next.design_revision_id) setBasePlan(undefined); setPlan(next); setUnitId(next.units[0]?.id); setPromptId(undefined); setReviewId(undefined) }; if (plan?.design_revision_id === next.design_revision_id && !plan.units.length) apply(); else guardPlan(apply) }} /> : undefined}
         toolbar={<><Space wrap data-workspace-target="plan-version" tabIndex={-1}><span>{basePlan ? revisionName(workspace.plans, basePlan.id, '计划') : '尚无计划'}</span><Typography.Text type="secondary">依据：{plan ? revisionName(workspace.designs, plan.design_revision_id, '设计') : '尚未选择'}</Typography.Text></Space>
-          <Space wrap><Button onClick={() => setHistoryOpen(true)}>历史记录</Button>{(planDirty || !basePlan?.confirmed_at) && <Button loading={busy} disabled={!plan?.units.length} onClick={savePlan}>{basePlan?.confirmed_at ? '保存为新计划草稿' : '保存生产计划草稿'}</Button>}
+          <Space wrap>{(planDirty || !basePlan?.confirmed_at) && <Button loading={busy} disabled={!plan?.units.length} onClick={savePlan}>{basePlan?.confirmed_at ? '保存为新计划草稿' : '保存生产计划草稿'}</Button>}
           <Dropdown trigger={['click']} menu={{ items: [
             { key: 'new', label: '从已确认设计创建新计划', children: workspace.designs.filter(row => row.confirmed_at).map(row => ({ key: row.id, label: revisionName(workspace.designs, row.id, '设计'), onClick: () => guardPlan(() => { selectPlan(undefined); setPreparationDesignId(row.id) }) })) },
             ...(basePlan?.confirmed_at && !planDirty ? [{ key: 'derive', label: '保存为新计划草稿', onClick: () => { void savePlan() } }] : []),

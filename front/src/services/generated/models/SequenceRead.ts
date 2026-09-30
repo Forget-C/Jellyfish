@@ -18,5 +18,6 @@ export type SequenceRead = {
     span: (SourceSpan | null);
     source_text: string;
     source_changed: boolean;
+    is_current?: boolean;
 };
 

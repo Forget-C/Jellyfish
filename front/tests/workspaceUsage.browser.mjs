@@ -80,13 +80,13 @@ try {
   })
   const url = 'http://127.0.0.1:4178/projects/p1/chapters/ch1/sequences/s1?view=cut'
   async function contextAction(label) {
+    if (label === '版本与历史') { await page.locator('.workspace-versions-entry').click(); return }
     await page.locator('.workspace-stage-tabs').waitFor()
     if (await page.getByRole('button', { name: '更多场次操作', exact: true }).isVisible()) await page.getByRole('button', { name: '更多场次操作', exact: true }).click()
     else await page.getByRole('button', { name: /阶段工具/ }).click()
     await page.getByRole('menuitem', { name: label, exact: true }).click()
-    if (label === '版本与历史') await page.getByRole('tab', { name: '查看与比较', exact: true }).click()
   }
-  async function closeDrawer() { if (await page.getByRole('dialog', { name: '版本与依据', exact: true }).isVisible()) { await page.getByRole('dialog', { name: '版本与依据', exact: true }).getByRole('button', { name: /^取\s*消$/ }).click(); return } await page.locator('.ant-drawer-open').last().getByRole('button', { name: 'Close', exact: true }).click(); await page.waitForTimeout(350) }
+  async function closeDrawer() { if (await page.getByRole('dialog', { name: '版本与依据', exact: true }).isVisible()) { await page.getByRole('dialog', { name: '版本与依据', exact: true }).getByRole('button', { name: /^关\s*闭$/ }).click(); await page.getByRole('dialog', { name: '版本与依据', exact: true }).waitFor({ state: 'hidden' }); return } await page.locator('.ant-drawer-open').last().getByRole('button', { name: 'Close', exact: true }).click(); await page.waitForTimeout(350) }
   async function text(value) {
     if (/^当前查看： · 计划/.test(value)) {
       const summary = page.locator('summary').filter({ hasText: /^版本与引用$/ })
@@ -96,7 +96,9 @@ try {
       const [, kind, number] = value.match(/(设计|剪辑) (\d+)/)
       const selector = page.getByRole('button', { name: /^版本与依据/ })
       await selector.waitFor()
-      assert.match(await selector.innerText(), new RegExp(kind + ' 0?' + number))
+      await selector.click()
+      assert.match(await page.locator('.workspace-version-context').innerText(), new RegExp(kind + ' 0?' + number))
+      await closeDrawer()
       return
     }
     if (/^当前采用：剪辑|^正在核对当前采用|^采用状态暂不可用|^尚未确认采用剪辑/.test(value)) {
@@ -110,13 +112,13 @@ try {
     await page.getByText(value, { exact: true }).first().waitFor({ state: 'visible' })
   }
   async function choose(label, title) {
-    const versionKind = { '查看或编辑设计版本': ['选择设计版本', '设计'], '查看或编辑生产计划': ['从所有计划定位依据', '计划'], '查看或编辑剪辑版本': ['选择剪辑版本', '剪辑'] }[label]
+    const versionKind = { '查看或编辑设计版本': ['设计版本', '设计'], '查看或编辑生产计划': ['生产计划版本', '计划'], '查看或编辑剪辑版本': ['剪辑版本', '剪辑'] }[label]
     if (versionKind) {
       if (!await page.getByRole('dialog', { name: '版本与依据', exact: true }).isVisible()) await page.getByRole('button', { name: /^版本与依据/ }).click()
-      await page.getByRole('combobox', { name: versionKind[0], exact: true }).locator('../..').click()
+      const versionDialog = page.getByRole('dialog', { name: '版本与依据', exact: true })
+      await versionDialog.getByRole('tab', { name: versionKind[0], exact: true }).click()
       const number = title.match(/\d+/)[0]
-      await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: new RegExp(`^${versionKind[1]} ${number} ·`) }).first().click()
-      await page.getByRole('button', { name: '切换工作上下文', exact: true }).click()
+      await versionDialog.locator('tr[data-row-key]').filter({ has: page.getByText(`${versionKind[1]} ${number}`, { exact: true }) }).getByRole('button', { name: /^(基于此版本编辑|继续编辑草稿)$/ }).click()
       return
     }
     if (label === '选择候选 Take') { await page.locator('.cut-take-library button').filter({ hasText: `候选 ${title.match(/Take (\d+)/)[1].padStart(2, '0')}` }).click(); return }
@@ -129,17 +131,19 @@ try {
   await text('当前查看： · 剪辑 3 · 草稿')
   assert.equal(writes.length, 0)
   await contextAction('当前进展')
-  await page.getByText('查看采用区间与预演', { exact: true }).click()
+  await page.locator('.ant-drawer-open').getByText('查看采用区间与预演', { exact: true }).click()
   assert.ok((await page.locator('body').innerText()).includes('片段 2 · 计划 1 · 单元 01 · 候选 01 · 源区间 4.000–5.000 秒'))
   await closeDrawer()
 
   // A04: opening and expanding every history group performs no business writes.
   await contextAction('版本与历史')
   const drawer = page.getByRole('dialog', { name: '版本与依据', exact: true })
-  for (const summary of await drawer.locator('summary').all()) await summary.click()
+  await drawer.getByRole('tab', { name: '设计版本', exact: true }).click()
+  await drawer.locator('tr[data-row-key="d1"] .ant-table-row-expand-icon').click()
   assert.ok((await drawer.innerText()).includes('当前采用仍在引用'))
   await drawer.getByRole('tab', { name: '剪辑版本', exact: true }).click()
-  assert.ok((await drawer.innerText()).includes('剪辑 1 · 已确认 · 历史版本'))
+  await drawer.locator('tr[data-row-key="c-old"] .ant-table-row-expand-icon').click()
+  assert.ok((await drawer.innerText()).includes('已确认 · 历史版本'))
   assert.equal(writes.length, 0)
   await closeDrawer()
 
@@ -149,8 +153,7 @@ try {
   await choose('查看或编辑设计版本', '设计 1 · 已确认')
   await contextAction('版本与历史')
   await page.getByRole('dialog', { name: '版本与依据', exact: true }).getByRole('tab', { name: '设计版本', exact: true }).click()
-  const references = page.getByRole('dialog', { name: '版本与依据', exact: true }).locator('details').filter({ has: page.getByText('当前采用与版本引用', { exact: true }) })
-  if (!await references.evaluate(element => element.open)) await references.locator(':scope > summary').click()
+  await page.getByRole('dialog', { name: '版本与依据', exact: true }).locator('tr[data-row-key="d1"] .ant-table-row-expand-icon').click()
   await page.getByRole('dialog', { name: '版本与依据', exact: true }).getByText('计划 1 · 已确认（当前采用仍在引用）', { exact: false }).waitFor()
   await closeDrawer()
   await page.getByRole('tab', { name: '单元试拍' , exact: true }).click()

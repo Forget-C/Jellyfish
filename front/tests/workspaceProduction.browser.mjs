@@ -182,9 +182,9 @@ try {
   async function choose(label, option) {
     if (label === '查看或编辑生产计划') {
       await page.getByRole('button', { name: /^版本与依据/ }).click()
-      await page.getByRole('combobox', { name: '从所有计划定位依据', exact: true }).locator('../..').click()
-      await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: new RegExp(`^计划 ${option.match(/\d+/)[0]} ·`) }).click()
-      await page.getByRole('button', { name: '切换工作上下文', exact: true }).click()
+      const versionDialog = page.getByRole('dialog', { name: '版本与依据', exact: true })
+      await versionDialog.getByRole('tab', { name: '生产计划版本', exact: true }).click()
+      await versionDialog.locator('tr[data-row-key]').filter({ has: page.getByText(`计划 ${option.match(/\d+/)[0]}`, { exact: true }) }).getByRole('button', { name: /^(基于此版本编辑|继续编辑草稿)$/ }).click()
       return
     }
     if (label === '选择生成指令版本') {
@@ -207,11 +207,13 @@ try {
   assert.ok(!(await unitSummary.innerText()).includes('供应商未生成'))
   const beforeTaskBrowse = writes.length
   await choose('查看或编辑生产计划', '计划 1')
+  await page.getByRole('tab', { name: '试拍与候选', exact: true }).click()
   await unitSummary.getByText('供应商未生成视频，请核对后重试', { exact: true }).waitFor()
   await page.getByRole('button', { name: /本场任务记录/ }).click()
   await page.locator('[data-task-id="failed"]').waitFor()
   await page.locator('.ant-drawer-open').getByRole('button', { name: 'Close', exact: true }).click()
   await choose('查看或编辑生产计划', '计划 2')
+  await page.getByRole('tab', { name: '试拍与候选', exact: true }).click()
   await unitSummary.locator('[data-inline-task-id="new-running"]').waitFor()
   assert.equal(writes.length, beforeTaskBrowse)
 

@@ -27,7 +27,7 @@ export function SequenceLayout({ children, footer }: { children: ReactNode; foot
           event.currentTarget.setPointerCapture(event.pointerId)
         }} onPointerMove={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) setWidth(Math.max(176, Math.min(280, event.clientX - 64))) }} />}
       </aside>}
-      <main className="sequence-main">{compact && <Button aria-label="场次导航" className="sequence-mobile-navigation" icon={<MenuOutlined />} onClick={() => setOpen(true)}>场次导航</Button>}{children}</main>
+      <main className="sequence-main">{compact && <div className="sequence-mobile-tools"><Button aria-label="场次导航" className="sequence-mobile-navigation" icon={<MenuOutlined />} onClick={() => setOpen(true)}>场次导航</Button></div>}{children}</main>
       <footer className="sequence-status">{footer}<Button type="text" size="small" onClick={() => { setWidth(208); setCollapsed(false); window.dispatchEvent(new Event('sequence-reset-layout')) }}>恢复默认布局</Button></footer>
       {compact && <Drawer title="场次导航" placement="left" width={272} open={open} onClose={() => setOpen(false)} forceRender>{navigation}</Drawer>}
     </div>
