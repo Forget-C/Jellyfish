@@ -72,8 +72,10 @@ try {
   assert.equal(await candidates.locator('article').count(), 12)
   assert.ok(new Set(mediaReads).size <= 12, 'grid only reads the first page')
   assert.equal(await page.locator('.shoot-candidates video').count(), 0, 'grid does not create video players')
+  const gridWidth = await candidates.evaluate(element => element.getBoundingClientRect().width)
   await candidates.getByRole('button', { name: '预览候选 02', exact: true }).click()
   await page.getByRole('region', { name: '候选快速预览' }).getByText(/实际时长未知/).waitFor()
+  assert.equal(await candidates.evaluate(element => element.getBoundingClientRect().width), gridWidth, 'opening preview preserves candidate grid width')
   const player = page.getByRole('region', { name: '候选快速预览' }).locator('video')
   assert.equal(await player.evaluate(node => node.autoplay), false)
   await candidates.getByRole('button', { name: '预览候选 01', exact: true }).click()
@@ -147,8 +149,10 @@ try {
   await page.reload()
   for (const width of [1440, 1024, 768, 375]) {
     await page.setViewportSize({ width, height: 1000 })
+    if (width < 1280) await page.getByRole('button', { name: '执行与候选详情', exact: true }).click()
     await page.locator('[data-inline-task-id="running-old"]').getByText('进行中', { exact: true }).waitFor()
     await page.screenshot({ path: join(output, `running-candidates-${width}.png`), animations: 'disabled' })
+    if (width < 1280) { await page.keyboard.press('Escape'); await page.getByRole('dialog').filter({ has: page.locator('.production-inspector-content') }).waitFor({ state: 'hidden' }) }
   }
   workspace.takes = []
   await page.reload()

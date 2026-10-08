@@ -25,7 +25,9 @@
 .sequence-version-context > span { font-size: 12px; color: #667085; border-left: 1px solid #e5eaf0; padding-left: 12px; white-space: nowrap; }
 .sequence-version-actions .ant-btn-primary { height: 40px; min-width: 120px; }
 .sequence-empty { display: grid; place-items: center; flex: 1; }
-.design-workspace { display: grid; grid-template-columns: minmax(0,1fr) var(--sequence-inspector-width, 344px); min-height: 0; flex: 1; }
+/* D 区共用分栏与断点；各阶段只补充主内容、详情及剪辑时间线。 */
+.workbench-content { display: grid; grid-template-columns: minmax(0, 1fr) var(--sequence-inspector-width, 344px); min-height: 0; min-width: 0; flex: 1; }
+.design-stage-frame { display: flex; flex-direction: column; min-height: 0; min-width: 0; flex: 1; }
 .design-center { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .design-view-toolbar { flex: 0 0 56px; padding: 0 16px; display: flex; gap: 8px; align-items: center; }
 .design-view-tabs { display: flex; align-self: stretch; flex-shrink: 0; margin-right: auto; gap: 12px; }
@@ -83,7 +85,7 @@
   .sequence-layout { grid-template-columns: minmax(0,1fr); }
   .sequence-main { display: flex; flex-direction: column; }
   .sequence-main > .sequence-workspace { height: auto; flex: 1; }
-  .design-workspace { grid-template-columns: minmax(0,1fr); }
+  .workbench-content { grid-template-columns: minmax(0, 1fr); }
   .workspace-stage-tabs > .ant-tabs-nav { padding-right: 8px; }
   .design-detail-trigger { flex-shrink: 0; align-self: flex-end; margin: 4px 16px 8px; }
 }
@@ -145,7 +147,6 @@
 .revision-differences h3 { font-size: 14px; overflow-wrap: anywhere; }
 .revision-differences section > div { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
 .revision-differences pre { padding: 12px; background: #f7f9fc; white-space: pre-wrap; overflow-wrap: anywhere; font-family: inherit; font-size: 13px; max-height: 400px; overflow: auto; }
-.production-panels { display: grid; grid-template-columns: minmax(0,1fr) 344px; flex: 1; min-height: 0; }
 .production-center { min-height: 0; min-width: 0; display: flex; flex-direction: column; }
 .production-content { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px; }
 .production-center .ant-tabs-tabpane { padding: 16px; }
@@ -169,11 +170,10 @@
 .production-version-bar > .ant-space:first-child .ant-select { min-width: 150px !important; width: 160px; }
 .production-version-bar > .ant-space:last-child { flex-shrink: 0; }
 .production-instruction h2 { font-size: 14px; font-weight: 600; margin: 12px 0; }
-@media (max-width: 1279px) { .production-panels { grid-template-columns: minmax(0,1fr); } }
 .cut-workbench { height: 100%; }
 .cut-workbench > fieldset { height: 100%; }
 .sequence-view-panels .ant-tabs-tabpane-active > fieldset { height: 100%; }
-.cut-work-area { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0,1fr) 344px; grid-template-rows: minmax(0,1fr) 260px; }
+.cut-work-area { grid-template-rows: minmax(0,1fr) 260px; }
 .cut-monitor-area { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .cut-monitor-toolbar { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid #e5eaf0; }
 .cut-monitor-toolbar .ant-select { flex: 1; min-width: 0; }
@@ -208,7 +208,6 @@
 .cut-save-actions { margin-top: 8px; }
 .cut-save-actions .ant-btn { font-size: 12px; padding: 0 8px; }
 .cut-version-bar .sequence-version-context > .ant-select { width: 240px; }
-@media (max-width: 1279px) { .cut-work-area { grid-template-columns: minmax(0,1fr); } }
 @media (max-width: 767px) { .cut-work-area { grid-template-rows: minmax(0,1fr) 284px; } .cut-monitor-toolbar { padding: 8px; } .cut-monitor-toolbar .ant-btn { font-size: 12px; } .cut-timeline-area { padding: 8px; } .cut-timeline-heading { gap: 4px; flex-wrap: wrap; } .cut-version-bar .sequence-version-context > .ant-select { width: 170px; } }
 .cut-timeline:empty { display: none; }
 .cut-timeline-area > .ant-empty { flex: 1; margin: 8px; min-height: 0; }
@@ -340,8 +339,6 @@
 .design-problem-item h3 { font-size: 14px; }
 .design-problem-item .ant-btn { text-align: left; height: auto; white-space: normal; }
 
-.production-panels.is-starting { grid-template-columns: minmax(0, 1fr); }
-.production-panels.is-starting .production-center { overflow-y: auto; }
 .shoot-preparation { max-width: 800px; padding: 24px; }
 .shoot-preparation > .ant-select { min-width: 180px; margin: 0 12px 12px 0; }
 .shoot-preparation h2 { font-size: 18px; margin: 0 0 12px; }
@@ -405,7 +402,6 @@
 
 /* 指令检查：正文按需阅读，主要面积留给问题。 */
 .production-version-bar { flex-basis: 44px; min-height: 44px; }
-.production-panels.has-instruction { grid-template-columns: minmax(0,1fr) minmax(400px, 440px); }
 .production-inspector[hidden] { display: none; }
 .production-object-heading { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 8px; }
 .production-object-heading h2 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -435,7 +431,6 @@
 .shoot-text-action { background: none; border: 0; color: #1677ff; cursor: pointer; padding: 4px 0; }
 .prompt-reader .is-highlighted { background: #fff1b8; }
 .prompt-inline-evidence { margin-top: 16px; padding-top: 12px; border-top: 1px solid #e5eaf0; }
-@media (max-width: 1279px) { .production-panels.has-instruction { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 767px) {
   .production-version-bar { padding: 8px; flex-basis: auto; }
   .production-content { padding: 8px; }
@@ -535,30 +530,23 @@
 .review-revision-panel summary, .production-version-bar summary { cursor: pointer; }
 .review-revision-panel ul { padding-left: 20px; }
 .revision-field { display: grid; gap: 8px; margin: 12px 0; }
-.production-version-bar > details { width: 100%; }
-.production-version-bar > details[open] { display: flex; flex-wrap: wrap; }
-.production-version-bar:has(> details[open]) { flex-basis: auto; }
 
-/* 固定试拍工作区：主区调整，侧栏核对；辅助阅读不挤占编辑器。 */
-.is-instruction-studio .production-next-step { padding: 24px 28px 16px; }
-.is-instruction-studio .production-object-heading { display: block; width: 100%; }
-.is-instruction-studio .production-object-heading h2 { font-size: 22px; line-height: 1.5; }
-.is-instruction-studio .production-local-tabs { padding-inline: 28px; }
-.is-instruction-studio .production-content { padding: 16px 28px 32px; }
-.is-instruction-studio .shoot-instruction-context { border: 0; border-radius: 0; margin: 0; padding: 0 0 12px; gap: 8px 20px; }
+/* 三步骤继承同一对象栏、步骤栏和双栏内容；局部内容不改变框架尺寸。 */
+.production-version-bar { flex-wrap: wrap; }
+.production-next-step > .ant-btn, .production-next-step > [role=status] { flex-shrink: 0; }
+.production-next-step > .ant-btn { min-width: 180px; }
+.production-next-step > [role=status] { min-width: 180px; text-align: right; }
+.production-auxiliary-summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 16px; border-bottom: 1px solid #e5eaf0; flex-shrink: 0; font-size: 13px; }
 .shoot-settings-strip { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 12px 0 20px; border-bottom: 1px solid #e5eaf0; margin-bottom: 28px; }
 .shoot-settings-strip dl { display: flex; flex-wrap: wrap; gap: 12px 24px; margin: 0; }
 .shoot-settings-strip dl > div { display: flex; gap: 8px; font-size: 13px; align-items: baseline; }
 .shoot-settings-strip dt { color: #788496; }
 .shoot-settings-strip dd { margin: 0; overflow-wrap: anywhere; }
 .shoot-settings-strip > .ant-btn { margin-left: auto; }
-.shoot-studio-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 290px); gap: 32px; align-items: start; }
 .shoot-studio-editor, .shoot-check-sidebar { min-width: 0; overflow-wrap: anywhere; }
-.shoot-check-sidebar { border-left: 1px solid #e5eaf0; padding-left: 24px; }
 .shoot-check-sidebar > header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 20px; }
 .shoot-check-sidebar > header h2 { margin: 0; font-size: 18px; font-weight: 600; }
 .shoot-check-sidebar > header > span { font-size: 13px; color: #788496; }
-.shoot-mobile-check-toggle { display: none; }
 .shoot-check-sidebar .shoot-review-report { border: 0; padding: 0; }
 .shoot-check-sidebar .shoot-review-report > header { gap: 8px; font-size: 13px; }
 .shoot-check-sidebar .shoot-review-report > header small { flex-basis: 100%; }
@@ -566,8 +554,7 @@
 .shoot-check-sidebar .shoot-review-row p { margin: 6px 0; }
 .shoot-check-sidebar .shoot-review-row > .ant-btn { padding-left: 0; }
 .shoot-check-sidebar .shoot-task-progress { background: #f7faff; border: 0; }
-.shoot-check-action { margin-top: 22px; padding-top: 18px; border-top: 1px solid #e5eaf0; }
-.shoot-check-action .ant-btn, .shoot-check-details .ant-btn { white-space: normal; height: auto; min-height: 32px; }
+.shoot-check-details .ant-btn { white-space: normal; height: auto; min-height: 32px; }
 .review-revision-panel { gap: 16px; }
 .review-revision-panel h2 { font-size: 18px; font-weight: 600; margin: 0; }
 .revision-current-unit { border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 10px; }
@@ -593,27 +580,10 @@
 .review-revision-actions:empty { display: none; }
 .shoot-business-details { min-width: 0; overflow-wrap: anywhere; }
 .shoot-business-details pre { white-space: pre-wrap; overflow-wrap: anywhere; }
-@media (max-width: 1100px) {
-  .shoot-studio-layout { grid-template-columns: minmax(0, 1fr) 245px; gap: 24px; }
-  .shoot-check-sidebar { padding-left: 20px; }
-}
 @media (max-width: 767px) {
-  .is-instruction-studio .production-next-step { padding: 16px 16px 12px; }
-  .is-instruction-studio .production-object-heading h2 { font-size: 19px; }
-  .is-instruction-studio .production-content { padding: 12px 16px 24px; }
   .shoot-settings-strip { margin-bottom: 22px; padding-bottom: 16px; }
   .shoot-settings-strip dl { gap: 8px 16px; }
   .shoot-settings-strip dl > div { font-size: 12px; }
-  .shoot-studio-layout { display: flex; flex-direction: column; gap: 24px; }
-  .shoot-studio-editor, .shoot-check-sidebar { width: 100%; }
-  .shoot-check-sidebar { order: -1; border-left: 0; border-bottom: 1px solid #e5eaf0; padding: 0 0 20px; }
-  .shoot-check-sidebar > header { margin-bottom: 0; }
-  .shoot-check-sidebar > header h2 { font-size: 16px; }
-  .shoot-mobile-check-toggle { display: inline-flex; padding-inline: 0; }
-  .shoot-check-sidebar:not(.is-expanded) .shoot-check-details { display: none; }
-  .shoot-check-sidebar.is-expanded .shoot-check-details { padding-top: 16px; }
-  .shoot-check-sidebar .shoot-task-progress { margin-top: 16px; }
-  .shoot-check-action { padding-top: 10px; margin-top: 10px; border: 0; }
   .revision-current-unit { padding: 18px; }
   .review-revision-panel { gap: 14px; }
   .review-revision-panel > section:not(.revision-current-unit):not(.revision-field-editor) { padding: 16px; }

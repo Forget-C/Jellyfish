@@ -1,0 +1,655 @@
+TAP version 13
+# Subtest: whole draft keeps every identity and version; stale offsets are not painted
+ok 1 - whole draft keeps every identity and version; stale offsets are not painted
+  ---
+  duration_ms: 2.5795
+  ...
+# Subtest: shared boundary updates only two adjacent ranges and can be reverted without reconfirming
+ok 2 - shared boundary updates only two adjacent ranges and can be reverted without reconfirming
+  ---
+  duration_ms: 0.304
+  ...
+# Subtest: crossing a third member does not swallow it; incomplete/overlapping/out-of-bounds ranges cannot submit
+ok 3 - crossing a third member does not swallow it; incomplete/overlapping/out-of-bounds ranges cannot submit
+  ---
+  duration_ms: 0.124958
+  ...
+# Subtest: exit and split/merge targets remain explicit without deleting the baseline
+ok 4 - exit and split/merge targets remain explicit without deleting the baseline
+  ---
+  duration_ms: 0.094583
+  ...
+# Subtest: complete baseline catches addition, removal and any member version change
+ok 5 - complete baseline catches addition, removal and any member version change
+  ---
+  duration_ms: 0.08
+  ...
+# Subtest: AI loading keeps ambiguous ranges unresolved and excludes local excerpts from request
+ok 6 - AI loading keeps ambiguous ranges unresolved and excludes local excerpts from request
+  ---
+  duration_ms: 0.115667
+  ...
+# Subtest: historical loading preserves identities, uses current baseline and clears old source offsets
+ok 7 - historical loading preserves identities, uses current baseline and clears old source offsets
+  ---
+  duration_ms: 0.113333
+  ...
+# Subtest: source verification precedes remembered work; unknown remembered stages are ignored
+ok 8 - source verification precedes remembered work; unknown remembered stages are ignored
+  ---
+  duration_ms: 0.424959
+  ...
+# Subtest: primary action follows review, adopted cut, design and production preparation
+ok 9 - primary action follows review, adopted cut, design and production preparation
+  ---
+  duration_ms: 0.053375
+  ...
+# Subtest: canonical destinations preserve identities and explicit stage
+ok 10 - canonical destinations preserve identities and explicit stage
+  ---
+  duration_ms: 0.188042
+  ...
+# Subtest: chapter browsing stays isolated and tolerates damaged or unavailable storage
+ok 11 - chapter browsing stays isolated and tolerates damaged or unavailable storage
+  ---
+  duration_ms: 0.504458
+  ...
+# Subtest: chapter actions distinguish missing source, known counts and unknown data
+ok 12 - chapter actions distinguish missing source, known counts and unknown data
+  ---
+  duration_ms: 0.098167
+  ...
+# Subtest: shot participant relations are explicit, editable and independent of background evidence
+ok 13 - shot participant relations are explicit, editable and independent of background evidence
+  ---
+  duration_ms: 2.064334
+  ...
+# Subtest: beat ranges retain shared shot identities and expose unassigned or missing beats
+ok 14 - beat ranges retain shared shot identities and expose unassigned or missing beats
+  ---
+  duration_ms: 0.352834
+  ...
+# Subtest: reordering a filtered range preserves hidden slots, references and immutable source data
+ok 15 - reordering a filtered range preserves hidden slots, references and immutable source data
+  ---
+  duration_ms: 0.605792
+  ...
+# Subtest: graph branches represent actual direct and indirect references, including missing IDs
+ok 16 - graph branches represent actual direct and indirect references, including missing IDs
+  ---
+  duration_ms: 0.270125
+  ...
+# Subtest: object editing retains untouched roles, shared identities, sources and Note states
+ok 17 - object editing retains untouched roles, shared identities, sources and Note states
+  ---
+  duration_ms: 0.422208
+  ...
+# Subtest: revision compare uses stable identities and separately reports reordering and Note/source changes
+ok 18 - revision compare uses stable identities and separately reports reordering and Note/source changes
+  ---
+  duration_ms: 0.27875
+  ...
+# Subtest: revision compare distinguishes adding/removing objects and never mutates either snapshot
+ok 19 - revision compare distinguishes adding/removing objects and never mutates either snapshot
+  ---
+  duration_ms: 0.089125
+  ...
+# Subtest: relation editing changes only legal direct references and distinguishes unlinking from deletion
+ok 20 - relation editing changes only legal direct references and distinguishes unlinking from deletion
+  ---
+  duration_ms: 0.476917
+  ...
+# Subtest: relation identities retain colon segments and stale edges cannot add references
+ok 21 - relation identities retain colon segments and stale edges cannot add references
+  ---
+  duration_ms: 0.1745
+  ...
+# Subtest: indirect relation navigation targets the object that owns the original reference
+ok 22 - indirect relation navigation targets the object that owns the original reference
+  ---
+  duration_ms: 0.193875
+  ...
+# Subtest: scene overview keeps real shared identities, unassigned rows and explanatory paths
+ok 23 - scene overview keeps real shared identities, unassigned rows and explanatory paths
+  ---
+  duration_ms: 2.779042
+  ...
+# Subtest: missing indirect participants remain issues with a real path to their owner
+ok 24 - missing indirect participants remain issues with a real path to their owner
+  ---
+  duration_ms: 0.756292
+  ...
+# Subtest: explicit shot objects include an unbound van without adding the other shot baton or shared performance
+ok 25 - explicit shot objects include an unbound van without adding the other shot baton or shared performance
+  ---
+  duration_ms: 2.590083
+  ...
+# Subtest: explicit empty scope excludes legacy inference while unknown scope preserves marked evidence
+ok 26 - explicit empty scope excludes legacy inference while unknown scope preserves marked evidence
+  ---
+  duration_ms: 0.331917
+  ...
+# Subtest: one explicit object links to every coverage occurrence and survives removing its last reference
+ok 27 - one explicit object links to every coverage occurrence and survives removing its last reference
+  ---
+  duration_ms: 0.2175
+  ...
+# Subtest: current unit graph retains precise historical dependency and never infers adjacency
+ok 28 - current unit graph retains precise historical dependency and never infers adjacency
+  ---
+  duration_ms: 0.271042
+  ...
+# Subtest: preparation never projects edited draft as the source of historical prompts and candidates
+ok 29 - preparation never projects edited draft as the source of historical prompts and candidates
+  ---
+  duration_ms: 0.235041
+  ...
+# Subtest: legacy references remain distinct while explicit subject groups preserve every file and ordinal
+ok 30 - legacy references remain distinct while explicit subject groups preserve every file and ordinal
+  ---
+  duration_ms: 0.258166
+  ...
+# Subtest: frame references do not collapse into subject groups and all non-person media remain visible
+ok 31 - frame references do not collapse into subject groups and all non-person media remain visible
+  ---
+  duration_ms: 0.521833
+  ...
+# Subtest: one unit covering several shots keeps independent coverage identities and fixed design numbering
+ok 32 - one unit covering several shots keeps independent coverage identities and fixed design numbering
+  ---
+  duration_ms: 0.210833
+  ...
+# Subtest: direct and indirect design participants are distinguished without introducing the whole cast
+ok 33 - direct and indirect design participants are distinguished without introducing the whole cast
+  ---
+  duration_ms: 0.344208
+  ...
+# Subtest: already-selected outside participants survive scope reduction and missing identities remain explicit
+ok 34 - already-selected outside participants survive scope reduction and missing identities remain explicit
+  ---
+  duration_ms: 0.189125
+  ...
+# Subtest: participant labels require an asset type and keep unclassified objects neutral
+ok 35 - participant labels require an asset type and keep unclassified objects neutral
+  ---
+  duration_ms: 0.234042
+  ...
+# Subtest: unclassified design objects remain visible and actionable before selecting references
+ok 36 - unclassified design objects remain visible and actionable before selecting references
+  ---
+  duration_ms: 0.154041
+  ...
+# Subtest: asset availability and fixed selected inputs coexist instead of overwriting each other
+ok 37 - asset availability and fixed selected inputs coexist instead of overwriting each other
+  ---
+  duration_ms: 0.253625
+  ...
+# Subtest: empty and populated collections retain interface-only append nodes without mutating payload
+ok 38 - empty and populated collections retain interface-only append nodes without mutating payload
+  ---
+  duration_ms: 0.165166
+  ...
+# Subtest: dependency validity distinguishes unknown, missing binding and stale actual frames
+ok 39 - dependency validity distinguishes unknown, missing binding and stale actual frames
+  ---
+  duration_ms: 0.228417
+  ...
+# Subtest: plan overview shows explicit branching dependencies and boundary identities with no input expansion
+ok 40 - plan overview shows explicit branching dependencies and boundary identities with no input expansion
+  ---
+  duration_ms: 0.225792
+  ...
+# Subtest: real reference bindings stay direct even when the design participant is indirect
+ok 41 - real reference bindings stay direct even when the design participant is indirect
+  ---
+  duration_ms: 0.133542
+  ...
+# Subtest: large explicit groups keep all stable reference identities in one input node
+ok 42 - large explicit groups keep all stable reference identities in one input node
+  ---
+  duration_ms: 0.282917
+  ...
+# Subtest: missing fixed design and invalid selected unit do not substitute another version or unit
+ok 43 - missing fixed design and invalid selected unit do not substitute another version or unit
+  ---
+  duration_ms: 2.714458
+  ...
+# Subtest: unlinked location remains actionable and temporary space input binds without fabricating a design asset
+ok 44 - unlinked location remains actionable and temporary space input binds without fabricating a design asset
+  ---
+  duration_ms: 0.283708
+  ...
+# Subtest: compiler fields, typed identities, groups and coverage keep exact original ranges
+ok 45 - compiler fields, typed identities, groups and coverage keep exact original ranges
+  ---
+  duration_ms: 2.538792
+  ...
+# Subtest: free prose preserves words, short substrings, natural pronouns and ambiguous identities
+ok 46 - free prose preserves words, short substrings, natural pronouns and ambiguous identities
+  ---
+  duration_ms: 0.321458
+  ...
+# Subtest: same names are distinguished and snapshots never use current asset data
+ok 47 - same names are distinguished and snapshots never use current asset data
+  ---
+  duration_ms: 0.3815
+  ...
+# Subtest: unknown typed references and absent snapshots remain visible, unsupported format keeps field text
+ok 48 - unknown typed references and absent snapshots remain visible, unsupported format keeps field text
+  ---
+  duration_ms: 0.0855
+  ...
+# Subtest: paths use actual fixed objects and never invent a match for missing indexes
+ok 49 - paths use actual fixed objects and never invent a match for missing indexes
+  ---
+  duration_ms: 0.181375
+  ...
+# Subtest: repeated and overlapping excerpts retain all source decisions in raw coordinates
+ok 50 - repeated and overlapping excerpts retain all source decisions in raw coordinates
+  ---
+  duration_ms: 0.334792
+  ...
+# Subtest: actual compiler primitive list labels retain type context when IDs collide
+ok 51 - actual compiler primitive list labels retain type context when IDs collide
+  ---
+  duration_ms: 0.1935
+  ...
+# Subtest: review field paths resolve to fixed objects and missing prompt cannot borrow current selection
+ok 52 - review field paths resolve to fixed objects and missing prompt cannot borrow current selection
+  ---
+  duration_ms: 0.366875
+  ...
+# Subtest: numeric or ordinary names used as IDs cannot rewrite timings or prose
+ok 53 - numeric or ordinary names used as IDs cannot rewrite timings or prose
+  ---
+  duration_ms: 0.341
+  ...
+# Subtest: legal dotted and colon identities are resolved whole, never as shorter prefixes
+ok 54 - legal dotted and colon identities are resolved whole, never as shorter prefixes
+  ---
+  duration_ms: 0.778208
+  ...
+# Subtest: all six continuity domains use the actual contract vocabulary
+ok 55 - all six continuity domains use the actual contract vocabulary
+  ---
+  duration_ms: 0.115458
+  ...
+# Subtest: explicit groups use the default subject role, legacy references remain separate
+ok 56 - explicit groups use the default subject role, legacy references remain separate
+  ---
+  duration_ms: 0.671625
+  ...
+# Subtest: changing a model reports incompatible inputs without changing them
+ok 57 - changing a model reports incompatible inputs without changing them
+  ---
+  duration_ms: 0.461209
+  ...
+# Subtest: frame positions, group limits and unsupported sound are checked separately
+ok 58 - frame positions, group limits and unsupported sound are checked separately
+  ---
+  duration_ms: 0.190542
+  ...
+# Subtest: every finding and row without findings has distinct immutable key; passes omitted
+ok 59 - every finding and row without findings has distinct immutable key; passes omitted
+  ---
+  duration_ms: 0.675584
+  ...
+# Subtest: saved original review continues source task draft; manual derivative stays isolated
+ok 60 - saved original review continues source task draft; manual derivative stays isolated
+  ---
+  duration_ms: 0.087542
+  ...
+# Subtest: all issues submitted even with blank direction; stale keys never cross checks
+ok 61 - all issues submitted even with blank direction; stale keys never cross checks
+  ---
+  duration_ms: 0.075958
+  ...
+# Subtest: any direction, source or fixed version change invalidates candidate identity including late results
+ok 62 - any direction, source or fixed version change invalidates candidate identity including late results
+  ---
+  duration_ms: 0.2325
+  ...
+# Subtest: direct edits preserve frozen values, convert seconds, omit unchanged fields and keep explicit sound choice
+ok 63 - direct edits preserve frozen values, convert seconds, omit unchanged fields and keep explicit sound choice
+  ---
+  duration_ms: 0.167208
+  ...
+# Subtest: recovery action is based on persisted products, not only generic blocked stage
+ok 64 - recovery action is based on persisted products, not only generic blocked stage
+  ---
+  duration_ms: 0.044
+  ...
+# Subtest: paragraph editing only offers related allowed fields and never falls back for shared paths
+ok 65 - paragraph editing only offers related allowed fields and never falls back for shared paths
+  ---
+  duration_ms: 0.068833
+  ...
+# Subtest: counts only resolvable project assets by kind and identity, not participant names or duplicate references
+ok 66 - counts only resolvable project assets by kind and identity, not participant names or duplicate references
+  ---
+  duration_ms: 2.475375
+  ...
+# Subtest: loading and failed catalogs are unverified, not missing assets; names alone are not links
+ok 67 - loading and failed catalogs are unverified, not missing assets; names alone are not links
+  ---
+  duration_ms: 0.236417
+  ...
+# Subtest: scene breadcrumbs preserve valid parent routes and readable names
+ok 68 - scene breadcrumbs preserve valid parent routes and readable names
+  ---
+  duration_ms: 0.753083
+  ...
+# Subtest: asset and role parents return to their exact category
+ok 69 - asset and role parents return to their exact category
+  ---
+  duration_ms: 0.088208
+  ...
+# Subtest: unknown nested routes never pretend to identify a valid object
+ok 70 - unknown nested routes never pretend to identify a valid object
+  ---
+  duration_ms: 0.09325
+  ...
+# Subtest: source requests deduplicate complete identities and batch at most 100
+ok 71 - source requests deduplicate complete identities and batch at most 100
+  ---
+  duration_ms: 18.77
+  ...
+# Subtest: failed or mismatched responses can be retried without caching another identity
+ok 72 - failed or mismatched responses can be retried without caching another identity
+  ---
+  duration_ms: 0.357416
+  ...
+# Subtest: native offsets preserve Unicode, repeated text, newlines and reverse selections
+ok 73 - native offsets preserve Unicode, repeated text, newlines and reverse selections
+  ---
+  duration_ms: 0.819708
+  ...
+# Subtest: range conflicts ignore self and outdated ranges, allow adjacent ranges
+ok 74 - range conflicts ignore self and outdated ranges, allow adjacent ranges
+  ---
+  duration_ms: 0.181834
+  ...
+# Subtest: textarea CRLF and CR offsets map back to untouched source characters
+ok 75 - textarea CRLF and CR offsets map back to untouched source characters
+  ---
+  duration_ms: 0.089041
+  ...
+# Subtest: each unit remembers explicit versions independently across plans and handles broken storage
+ok 76 - each unit remembers explicit versions independently across plans and handles broken storage
+  ---
+  duration_ms: 0.803708
+  ...
+# Subtest: explicit business context wins; stale or deliberately empty selection never becomes latest
+ok 77 - explicit business context wins; stale or deliberately empty selection never becomes latest
+  ---
+  duration_ms: 0.070708
+  ...
+# Subtest: saved browsing position is isolated by project and scene and merges independent panels
+ok 78 - saved browsing position is isolated by project and scene and merges independent panels
+  ---
+  duration_ms: 0.227333
+  ...
+# Subtest: design scrolling is restored only for matching revision and range
+ok 79 - design scrolling is restored only for matching revision and range
+  ---
+  duration_ms: 0.0935
+  ...
+# Subtest: compact density is default and explicit standard density restores even at the top
+ok 80 - compact density is default and explicit standard density restores even at the top
+  ---
+  duration_ms: 0.048333
+  ...
+# Subtest: recent work is project scoped and rejects broken identities or stages
+ok 81 - recent work is project scoped and rejects broken identities or stages
+  ---
+  duration_ms: 17.536958
+  ...
+# Subtest: mixed cuts retain repeated Take ranges and keep estimated duration separate from real media
+ok 82 - mixed cuts retain repeated Take ranges and keep estimated duration separate from real media
+  ---
+  duration_ms: 0.85075
+  ...
+# Subtest: timeline endpoint includes existing gaps without counting them as real coverage
+ok 83 - timeline endpoint includes existing gaps without counting them as real coverage
+  ---
+  duration_ms: 0.050125
+  ...
+# Subtest: repair links pin the exact cut and item and retain the feedback return identity
+ok 84 - repair links pin the exact cut and item and retain the feedback return identity
+  ---
+  duration_ms: 0.300542
+  ...
+# Subtest: readable action names are derived from the Take’s fixed plan and unit
+ok 85 - readable action names are derived from the Take’s fixed plan and unit
+  ---
+  duration_ms: 0.433917
+  ...
+# Subtest: saved checks match their task identity even when another task produced identical text
+ok 86 - saved checks match their task identity even when another task produced identical text
+  ---
+  duration_ms: 1.202166
+  ...
+# Subtest: incomplete or duplicate passing rows cannot promise entry into shooting
+ok 87 - incomplete or duplicate passing rows cannot promise entry into shooting
+  ---
+  duration_ms: 0.163291
+  ...
+# Subtest: first entry describes an output and proposes generation without performing it
+ok 88 - first entry describes an output and proposes generation without performing it
+  ---
+  duration_ms: 0.288458
+  ...
+# Subtest: source and concurrent versions precede generation; existing media remains accessible
+ok 89 - source and concurrent versions precede generation; existing media remains accessible
+  ---
+  duration_ms: 0.122459
+  ...
+# Subtest: design drafts lead to confirmation and confirmed designs lead to preparation
+ok 90 - design drafts lead to confirmation and confirmed designs lead to preparation
+  ---
+  duration_ms: 0.111167
+  ...
+# Subtest: provider rejection is scoped to its plan and unit; empty references alone are not a blocker
+ok 91 - provider rejection is scoped to its plan and unit; empty references alone are not a blocker
+  ---
+  duration_ms: 0.217709
+  ...
+# Subtest: task progress is only primary for the submitted unit; matching candidates lead to review
+ok 92 - task progress is only primary for the submitted unit; matching candidates lead to review
+  ---
+  duration_ms: 0.227792
+  ...
+# Subtest: unread task state cannot recommend a duplicate submission and remains scoped to its unit
+ok 93 - unread task state cannot recommend a duplicate submission and remains scoped to its unit
+  ---
+  duration_ms: 0.1675
+  ...
+# Subtest: fixed prompt and review identities govern the proposed action
+ok 94 - fixed prompt and review identities govern the proposed action
+  ---
+  duration_ms: 0.282208
+  ...
+# Subtest: accepted tasks block duplicates before the workspace list catches up, but not another selected prompt
+ok 95 - accepted tasks block duplicates before the workspace list catches up, but not another selected prompt
+  ---
+  duration_ms: 0.356291
+  ...
+# Subtest: current review results precede old candidates and require exact unit identity
+ok 96 - current review results precede old candidates and require exact unit identity
+  ---
+  duration_ms: 0.208166
+  ...
+# Subtest: multiple unsaved checks require a choice and do not override a saved review being inspected
+ok 97 - multiple unsaved checks require a choice and do not override a saved review being inspected
+  ---
+  duration_ms: 0.20075
+  ...
+# Subtest: shoot preparation directs missing models and edited confirmed plans to the exact next input
+ok 98 - shoot preparation directs missing models and edited confirmed plans to the exact next input
+  ---
+  duration_ms: 0.159041
+  ...
+# Subtest: multi-occurrence completeness distinguishes pending, missing rows and duplicate identities
+ok 99 - multi-occurrence completeness distinguishes pending, missing rows and duplicate identities
+  ---
+  duration_ms: 0.161875
+  ...
+# Subtest: all existing business links resolve to their stage without losing their target
+ok 100 - all existing business links resolve to their stage without losing their target
+  ---
+  duration_ms: 0.467666
+  ...
+# Subtest: stage changes preserve frozen input and return context and do not mutate the original URL
+ok 101 - stage changes preserve frozen input and return context and do not mutate the original URL
+  ---
+  duration_ms: 0.248125
+  ...
+# Subtest: local preparations retain recognized fields, isolate scope, and never mutate defaults
+ok 102 - local preparations retain recognized fields, isolate scope, and never mutate defaults
+  ---
+  duration_ms: 0.921458
+  ...
+# Subtest: same unit name in different plans never mixes prompts, reviews or videos
+ok 103 - same unit name in different plans never mixes prompts, reviews or videos
+  ---
+  duration_ms: 0.766375
+  ...
+# Subtest: concurrent response never chooses the last new version as this operation result
+ok 104 - concurrent response never chooses the last new version as this operation result
+  ---
+  duration_ms: 0.063834
+  ...
+# Subtest: editing a recorded suggestion does not make its task pending again when model provenance remains
+ok 105 - editing a recorded suggestion does not make its task pending again when model provenance remains
+  ---
+  duration_ms: 0.242791
+  ...
+# Subtest: shot production destinations preserve design and plan identities and every matching unit
+ok 106 - shot production destinations preserve design and plan identities and every matching unit
+  ---
+  duration_ms: 0.196458
+  ...
+# Subtest: unit task summary distinguishes review from video execution and preserves concurrent tasks
+ok 107 - unit task summary distinguishes review from video execution and preserves concurrent tasks
+  ---
+  duration_ms: 0.50825
+  ...
+# Subtest: multiple submitted unit identities survive refresh and stay scoped to project and scene
+ok 108 - multiple submitted unit identities survive refresh and stay scoped to project and scene
+  ---
+  duration_ms: 0.366125
+  ...
+# Subtest: task recovery uses actual identities and refuses to invent a plan for an unknown task
+ok 109 - task recovery uses actual identities and refuses to invent a plan for an unknown task
+  ---
+  duration_ms: 0.089875
+  ...
+# Subtest: unit task summary separates plan versions and includes explicit multi-unit review occurrences
+ok 110 - unit task summary separates plan versions and includes explicit multi-unit review occurrences
+  ---
+  duration_ms: 0.159792
+  ...
+# Subtest: unverified shooting identities survive refresh, remain scoped and fail closed on broken storage
+ok 111 - unverified shooting identities survive refresh, remain scoped and fail closed on broken storage
+  ---
+  duration_ms: 0.253875
+  ...
+# Subtest: compile recovery retains each exact plan and unit request independently
+ok 112 - compile recovery retains each exact plan and unit request independently
+  ---
+  duration_ms: 0.551666
+  ...
+# Subtest: review recovery preserves exact prompt requests independently and rejects corrupt storage
+ok 113 - review recovery preserves exact prompt requests independently and rejects corrupt storage
+  ---
+  duration_ms: 0.185333
+  ...
+# Subtest: uses the active pointer, not the newest draft or another confirmed revision
+ok 114 - uses the active pointer, not the newest draft or another confirmed revision
+  ---
+  duration_ms: 1.37325
+  ...
+# Subtest: missing pointer, unknown cut, unconfirmed cut and another sequence remain unknown
+ok 115 - missing pointer, unknown cut, unconfirmed cut and another sequence remain unknown
+  ---
+  duration_ms: 0.196
+  ...
+# Subtest: loading and errors never claim a take is not adopted
+ok 116 - loading and errors never claim a take is not adopted
+  ---
+  duration_ms: 0.184834
+  ...
+# Subtest: all adopted source ranges are shown, with no fabricated range from the planned item
+ok 117 - all adopted source ranges are shown, with no fabricated range from the planned item
+  ---
+  duration_ms: 0.173458
+  ...
+# Subtest: review pass, previous adoption, and new generation do not imply current adoption
+ok 118 - review pass, previous adoption, and new generation do not imply current adoption
+  ---
+  duration_ms: 0.154625
+  ...
+# Subtest: editing and saving a new cut does not replace the adopted cut
+ok 119 - editing and saving a new cut does not replace the adopted cut
+  ---
+  duration_ms: 0.142583
+  ...
+# Subtest: confirmation and current/historical adoption are separate labels
+ok 120 - confirmation and current/historical adoption are separate labels
+  ---
+  duration_ms: 0.146166
+  ...
+# Subtest: old designs and plans retain their actual current-media and preview references
+ok 121 - old designs and plans retain their actual current-media and preview references
+  ---
+  duration_ms: 0.285333
+  ...
+# Subtest: history and unknown adoption reads preserve source data and never infer current references
+ok 122 - history and unknown adoption reads preserve source data and never infer current references
+  ---
+  duration_ms: 0.83
+  ...
+# Subtest: version labels use the full collection, without renumbering filtered versions
+ok 123 - version labels use the full collection, without renumbering filtered versions
+  ---
+  duration_ms: 0.174292
+  ...
+# Subtest: scoped prompt and candidate labels use persistent numbers, not visible ordering
+ok 124 - scoped prompt and candidate labels use persistent numbers, not visible ordering
+  ---
+  duration_ms: 16.777041
+  ...
+# Subtest: plan selection follows its fixed design while cut stays independent
+ok 125 - plan selection follows its fixed design while cut stays independent
+  ---
+  duration_ms: 1.488417
+  ...
+# Subtest: draft browsing and explicit empty selection are legal; missing and foreign versions never become latest
+ok 126 - draft browsing and explicit empty selection are legal; missing and foreign versions never become latest
+  ---
+  duration_ms: 0.286708
+  ...
+# Subtest: conflicting plan/design is explicit, while cross-plan cut sources do not constrain selection
+ok 127 - conflicting plan/design is explicit, while cross-plan cut sources do not constrain selection
+  ---
+  duration_ms: 0.252125
+  ...
+# Subtest: display sorting preserves original numbering input and missing-date order
+ok 128 - display sorting preserves original numbering input and missing-date order
+  ---
+  duration_ms: 0.224667
+  ...
+# Subtest: editing validates the target and fixed design without blocking recovery on unrelated broken links
+ok 129 - editing validates the target and fixed design without blocking recovery on unrelated broken links
+  ---
+  duration_ms: 0.196417
+  ...
+1..129
+# tests 129
+# suites 0
+# pass 129
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 561.453208

@@ -248,7 +248,7 @@ try {
   await timeline.evaluate(element => { element.scrollLeft = element.scrollWidth })
   const timelineLeft = await timeline.evaluate(element => element.scrollLeft)
   assert.ok(timelineLeft > 0)
-  await page.waitForFunction(left => JSON.parse(JSON.parse(sessionStorage.getItem('directing-context:p1:s1') || '{}').cutTimelineScroll || '{}').left === left, timelineLeft)
+  await page.waitForFunction(left => Object.values(JSON.parse(JSON.parse(sessionStorage.getItem('directing-context:p1:s1') || '{}').cutTimelineScroll || '{}').positions || {}).some(position => position.left === left), timelineLeft)
   await page.reload()
   await page.locator('[data-workspace-target="cut-item:b"]').waitFor()
   await page.waitForFunction(left => Math.abs(document.querySelector('.cut-timeline').scrollLeft - left) < 2, timelineLeft)

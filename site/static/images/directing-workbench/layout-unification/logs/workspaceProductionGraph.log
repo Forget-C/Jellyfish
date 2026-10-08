@@ -1,0 +1,14 @@
+{
+  "output": "/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-production-graph-GSnyFb",
+  "results": [
+    "specific coverage/dependency selection; overview browsing preserves draft and layout; cancel unit switch retains context and makes zero writes",
+    "participant-context picker; explicit grouped multi-image input; file replacement preserves count; local edits produce zero business writes",
+    "four widths: preparation, parameter inspector and overview remain reachable without page overflow; touch opens the unit inspector at 375px",
+    "zoom/focus/layout are browsing operations; explicit overview unit switch uses discard protection and restores saved inputs",
+    "empty coverage/reference/dependency collections can be populated and appended via nodes; incomplete declared dependency is marked; interface placeholders never write themselves",
+    "selected files are hidden; only chosen participants and props expose matching assets; unlinked objects show an empty state; multiple assets bind independently"
+  ]
+}
+Browserslist: browsers data (caniuse-lite) is 6 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme

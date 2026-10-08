@@ -199,7 +199,7 @@ try {
     await page.locator('.shoot-passed-summary > summary').evaluate(element => element.blur())
     const primary = page.getByRole('button', { name: '确认结论，进入试拍', exact: true })
     await primary.scrollIntoViewIfNeeded()
-    assert.equal(await page.locator('.shoot-check-action .ant-btn-primary').count(), 1)
+    assert.equal(await page.locator('.production-next-step .ant-btn-primary').count(), 1)
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1))
     const box = await primary.boundingBox()
     assert.ok(box && box.x >= 0 && box.x + box.width <= width + 1 && box.y >= 0 && box.y + box.height <= 1000)

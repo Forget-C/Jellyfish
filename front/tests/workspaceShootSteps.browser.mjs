@@ -156,15 +156,29 @@ try {
   assert.equal(requests.filter(row => row.path.endsWith('/s1/revisions')).length, 1)
   assert.equal(requests.filter(row => row.path.endsWith('/p-new/confirm')).length, 2)
   assert.ok(!requests.some(row => /\/(compile|shoot|tasks)$/.test(row.path)))
-  for (const width of [1440, 1024, 768, 375]) {
+  for (const width of [1440, 1280, 1024, 768, 375]) {
     await page.setViewportSize({ width, height: 1000 })
     await page.reload()
+    let previousLayout
+    const browsingWrites = requests.length
     for (const name of ['拍摄准备', '指令与检查', '试拍与候选']) {
       if (width < 768) {
         await page.locator('.production-step-select').click()
         await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: name }).click()
       } else await page.getByRole('tab', { name, exact: true }).click()
       await page.getByRole('tabpanel', { name, exact: true }).waitFor()
+      const layout = await page.evaluate(() => {
+        const rect = selector => { const box = document.querySelector(selector).getBoundingClientRect(); return { x: box.x, y: box.y, width: box.width }; }
+        return { heading: rect('.production-next-step'), steps: rect('.production-step-navigation'), content: rect('.production-panels'), primary: rect('.production-next-step > .ant-btn-primary') };
+      })
+      if (previousLayout) assert.deepEqual(layout, previousLayout, 'step changes preserve header, navigation, content and primary action geometry')
+      previousLayout = layout
+      if (width >= 1280) {
+        const sidebar = await page.locator('.production-inspector').boundingBox()
+        assert.ok(sidebar && Math.abs(sidebar.width - 344) < 1)
+        assert.equal(sidebar.y, layout.content.y, 'inspector begins below the shared step navigation')
+      }
+      assert.equal(requests.length, browsingWrites, 'step navigation does not write business data')
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1))
       await page.screenshot({ path: join(output, `${width}-${name}.png`), animations: 'disabled' })
       results.push({ width, name })

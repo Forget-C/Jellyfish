@@ -137,3 +137,12 @@ node front/tests/workspaceShootSteps.browser.mjs
 ### 试拍关系图
 
 `node --test front/tests/productionGraph.test.mjs` 验证历史计划身份、多分支依赖与缺失来源、一单元多镜头、参考独立性、多指令候选归属和当前草稿不能替代固定指令依据。`node front/tests/workspaceProductionGraph.browser.mjs` 使用 4203 端口与隔离接口，验证输入节点复用详情表单、历史单元只读、候选回跳、四种宽度及浏览零写入。图形组件使用 `ProductionRelationGraph.tsx`，避免与纯规则 `productionGraph.ts` 在大小写不敏感文件系统上冲突。保存／确认、参考及模型变更由 `workspaceShootSteps.browser.mjs` 覆盖；固定指令恢复由 `workspaceShootContext.browser.mjs` 覆盖；验证图、批量拍摄和重组由 `workspaceProduction.browser.mjs` 覆盖。这些隔离回归不证明真实供应商可用性或生成内容质量。
+
+
+### 工作台五层框架与试拍布局统一
+
+`node front/tests/workspaceLayout.browser.mjs` 使用 4214 端口、上述 Playwright 环境及 ffmpeg 合成媒体，在 1440／1280／1024／768／375px 检查三个阶段的场次栏、阶段栏、内部导航与内容边界、剪辑播放器和时间线共存、无横向溢出，保存 15 张实际页面截图和几何数据。另验证步骤独立滚动、阶段返回、前进后退、刷新、旧滚动记录恢复、窄屏辅助抽屉焦点返回以及零业务写入。
+
+`workspaceShootSteps.browser.mjs` 在上述五宽度逐步比较单元标题、主操作、步骤栏、内容起点及桌面 344px 辅助栏；`workspaceShootFlow.browser.mjs` 验证预览打开后候选网格宽度不变。`workspaceCompactReview.browser.mjs` 验证窄屏检查抽屉处理后关闭，再阅读完整指令；主操作断言位于统一标题栏。共享滚动存储以 `positions[identity]` 保留多个对象／视图位置，剪辑回归继续验证刷新后的实际位置。
+
+本次实际结果、截图及两项可在改动前复现的既有失败见[布局统一计划](../../site/content/docs/plans/sequence-workbench-layout-unification-plan.md)。接口替身不验证真实供应商、模型生成质量或全部浏览器。

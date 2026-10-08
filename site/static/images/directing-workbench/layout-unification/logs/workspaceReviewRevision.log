@@ -1,0 +1,4 @@
+Browserslist: browsers data (caniuse-lite) is 6 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-review-revision-jVObqF

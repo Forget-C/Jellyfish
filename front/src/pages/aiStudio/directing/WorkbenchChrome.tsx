@@ -48,5 +48,5 @@ export function WorkbenchInspector({ children, className, title, open, onClose, 
   const desktop = useWorkbenchDesktop()
   const [container] = useState(() => { const node = document.createElement('div'); node.className = 'workbench-inspector-host'; return node })
   const mount = (node: HTMLElement | null) => { if (node && container.parentElement !== node) node.appendChild(container); nameWorkbenchDialog(node, title || '指令详情') }
-  return <>{desktop ? <aside className={className} hidden={!visible} ref={mount} /> : <Drawer title={title} closable={closable} open={open} onClose={onClose} width={`min(${width}px, 100vw)`} styles={{ body: { padding: 0 } }} forceRender><div className="workbench-inspector-host" ref={mount} /></Drawer>}{createPortal(children, container)}</>
+  return <>{desktop ? <aside className={className} aria-label={title} hidden={!visible} ref={mount} /> : <Drawer title={title} closable={closable} open={open} onClose={onClose} width={`min(${width}px, 100vw)`} styles={{ body: { padding: 0 } }} forceRender><div className="workbench-inspector-host" ref={mount} /></Drawer>}{createPortal(children, container)}</>
 }

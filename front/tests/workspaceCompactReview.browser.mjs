@@ -109,6 +109,10 @@ try {
     const header = await page.locator('.shoot-instruction-context').boundingBox()
     assert.ok(header && header.height > 0 && header.width <= width, JSON.stringify(header))
     await page.screenshot({ path: join(output, `issues-${width}.png`), animations: 'disabled' })
+    if (width < 1280) {
+      await page.keyboard.press('Escape')
+      await page.getByRole('dialog', { name: '指令检查', exact: true }).waitFor({ state: 'hidden' })
+    }
     await page.getByRole('button', { name: '查看完整指令', exact: true }).click()
     await page.getByRole('button', { name: '关闭指令详情' }).waitFor()
     if (width < 1280) await page.waitForFunction(() => { const box = document.querySelector('.ant-drawer-open .ant-drawer-content-wrapper')?.getBoundingClientRect(); return box && box.x >= -1 && box.right <= innerWidth + 1 })
