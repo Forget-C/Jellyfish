@@ -1,0 +1,168 @@
+{
+  "nodes": [
+    {
+      "type": "source",
+      "tone": "neutral",
+      "selected": true,
+      "missing": false,
+      "stale": false,
+      "radius": "8px",
+      "padding": "8px",
+      "border": "rgb(220, 228, 238)",
+      "style": "solid",
+      "background": "rgb(248, 250, 255)",
+      "outline": "2px",
+      "outlineColor": "rgb(22, 119, 255)",
+      "titleSize": "14px",
+      "titleLine": "20px",
+      "badge": "▤ 编译依据",
+      "badgeSize": "12px"
+    },
+    {
+      "type": "source",
+      "tone": "neutral",
+      "selected": false,
+      "missing": false,
+      "stale": false,
+      "radius": "8px",
+      "padding": "8px",
+      "border": "rgb(220, 228, 238)",
+      "style": "solid",
+      "background": "rgb(248, 250, 255)",
+      "outline": "3px",
+      "outlineColor": "rgb(36, 50, 71)",
+      "titleSize": "14px",
+      "titleLine": "20px",
+      "badge": "▤ 编译依据",
+      "badgeSize": "12px"
+    },
+    {
+      "type": "source",
+      "tone": "neutral",
+      "selected": false,
+      "missing": false,
+      "stale": false,
+      "radius": "8px",
+      "padding": "8px",
+      "border": "rgb(220, 228, 238)",
+      "style": "solid",
+      "background": "rgb(248, 250, 255)",
+      "outline": "3px",
+      "outlineColor": "rgb(36, 50, 71)",
+      "titleSize": "14px",
+      "titleLine": "20px",
+      "badge": "▤ 编译依据",
+      "badgeSize": "12px"
+    },
+    {
+      "type": "text",
+      "tone": "blue",
+      "selected": false,
+      "missing": false,
+      "stale": false,
+      "radius": "8px",
+      "padding": "8px",
+      "border": "rgb(143, 195, 255)",
+      "style": "solid",
+      "background": "rgb(238, 246, 255)",
+      "outline": "3px",
+      "outlineColor": "rgb(36, 50, 71)",
+      "titleSize": "14px",
+      "titleLine": "20px",
+      "badge": "≡ 指令正文",
+      "badgeSize": "12px"
+    },
+    {
+      "type": "request",
+      "tone": "blue",
+      "selected": false,
+      "missing": false,
+      "stale": false,
+      "radius": "8px",
+      "padding": "8px",
+      "border": "rgb(143, 195, 255)",
+      "style": "solid",
+      "background": "rgb(238, 246, 255)",
+      "outline": "3px",
+      "outlineColor": "rgb(36, 50, 71)",
+      "titleSize": "14px",
+      "titleLine": "20px",
+      "badge": "≡ 调整要求",
+      "badgeSize": "12px"
+    },
+    {
+      "type": "request",
+      "tone": "blue",
+      "selected": false,
+      "missing": false,
+      "stale": false,
+      "radius": "8px",
+      "padding": "8px",
+      "border": "rgb(143, 195, 255)",
+      "style": "solid",
+      "background": "rgb(238, 246, 255)",
+      "outline": "3px",
+      "outlineColor": "rgb(36, 50, 71)",
+      "titleSize": "14px",
+      "titleLine": "20px",
+      "badge": "≡ 调整要求",
+      "badgeSize": "12px"
+    },
+    {
+      "type": "change",
+      "tone": "green",
+      "selected": false,
+      "missing": false,
+      "stale": true,
+      "radius": "8px",
+      "padding": "8px",
+      "border": "rgb(213, 217, 223)",
+      "style": "solid",
+      "background": "rgb(243, 244, 246)",
+      "outline": "3px",
+      "outlineColor": "rgb(36, 50, 71)",
+      "titleSize": "14px",
+      "titleLine": "20px",
+      "badge": "↗ 候选变化",
+      "badgeSize": "12px"
+    }
+  ],
+  "edges": [
+    {
+      "selected": "false",
+      "stroke": "rgb(138, 153, 173)",
+      "width": "1.5px",
+      "arrow": "rgb(138, 153, 173)"
+    },
+    {
+      "selected": "false",
+      "stroke": "rgb(138, 153, 173)",
+      "width": "1.5px",
+      "arrow": "rgb(138, 153, 173)"
+    },
+    {
+      "selected": "false",
+      "stroke": "rgb(138, 153, 173)",
+      "width": "1.5px",
+      "arrow": "rgb(138, 153, 173)"
+    },
+    {
+      "selected": "false",
+      "stroke": "rgb(22, 119, 255)",
+      "width": "1.5px",
+      "arrow": "rgb(22, 119, 255)"
+    },
+    {
+      "selected": "false",
+      "stroke": "rgb(138, 153, 173)",
+      "width": "1.5px",
+      "arrow": "rgb(138, 153, 173)"
+    },
+    {
+      "selected": "false",
+      "stroke": "rgb(138, 153, 173)",
+      "width": "1.5px",
+      "arrow": "rgb(138, 153, 173)"
+    }
+  ]
+}

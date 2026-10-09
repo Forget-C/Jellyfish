@@ -21,6 +21,7 @@ try {
   const workspace = makeWorkspace()
   workspace.plans = [workspace.plans[0]]; workspace.cuts = []; workspace.reviews = []
   workspace.prompts = [revision('prompt1', { plan_revision_id: 'p-old', unit_id: 'u1', text: '固定原指令', decisions: [], sources: [], format_version: 'jellyfish-scene-v4' })]
+  workspace.designs[0].content.prompt.binding_requirements = { state: 'proposal', text: '全场人物要求', sources: [] }
   const roles = ['direction', 'performance', 'staging', 'cinematography', 'continuity', 'prompt']
   const packet = { mode: 'formal', roles, occurrences: [{ id: 'o1', prompt_revision_id: 'prompt1', plan_revision_id: 'p-old', unit_id: 'u1', coverage_item_id: 'cover1', shot_id: 'shot1', local_number: 1 }], rows: roles.map(role => ({ role, occurrence_id: 'o1', verdict: role === 'prompt' ? 'revise' : 'pass', rationale: role === 'prompt' ? '空镜不应出现人物' : '一致', findings: role === 'prompt' ? [{ observation: '空镜与人物要求冲突', affected_paths: ['/prompt/binding_requirements'], suggestion: { state: 'proposal', text: '按镜头约束人物', sources: [] }, acceptance: { state: 'proposal', text: '空镜无人物', sources: [] } }] : [] })), context: { state: 'unset' } }
   workspace.reviews = [revision('review1', packet), revision('review2', structuredClone(packet))]
@@ -38,7 +39,7 @@ try {
     if (request.method() !== 'GET') writes.push(path)
     if (path.endsWith('/s1')) return respond(workspace)
     if (path.includes('/directing/tasks/')) return respond(tasks.get(path.split('/').at(-1)))
-    if (path.endsWith('/review-revisions/fields')) return respond({ prompt_revision_id: 'prompt1', fields: [{ target: 'unit', path: '/duration_ms', value: 5000 }, { target: 'design', path: '/sound/execution', value: 'unknown' }] })
+    if (path.endsWith('/review-revisions/fields')) return respond({ prompt_revision_id: 'prompt1', fields: [{ target: 'unit', path: '/duration_ms', value: workspace.plans[0].content.units[0].duration_ms }, { target: 'design', path: '/sound/execution', value: 'unknown' }, { target: 'design', path: '/prompt/binding_requirements', value: workspace.designs[0].content.prompt.binding_requirements }] })
     if (path.endsWith('/review-revisions')) {
       const body = request.postDataJSON(); requests.push(body)
       const id = `revision${requests.length}`

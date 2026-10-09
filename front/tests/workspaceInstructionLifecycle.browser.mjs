@@ -19,7 +19,7 @@ try {
   page.setDefaultTimeout(10000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: location.origin } })
   const workspace = makeWorkspace()
-  workspace.plans = [workspace.plans[0]]; workspace.cuts = []; workspace.reviews = []; workspace.task_ids = []
+  workspace.plans = [workspace.plans[0]]; workspace.plans[0].content.units[0].duration_ms = 5000; workspace.cuts = []; workspace.reviews = []; workspace.task_ids = []
   workspace.prompts = [revision('prompt1', { plan_revision_id: 'p-old', unit_id: 'u1', text: '原指令全文', decisions: [], sources: [], format_version: 'jellyfish-scene-v4' })]
   const tasks = new Map(), requests = [], writes = [], errors = [], sizes = []
   const fields = [{ target: 'unit', path: '/duration_ms', value: 5000 }, { target: 'design', path: '/sound/execution', value: 'unknown' }]
@@ -110,6 +110,17 @@ try {
   await page.getByRole('button', { name: '查看修订前指令', exact: true }).click()
   await page.getByText('历史预览', { exact: true }).first().waitFor()
   assert.ok(page.url().includes('prompt=prompt-next'))
+  const historyRequests = requests.length
+  await page.getByRole('tab', { name: '历史关联图', exact: true }).click()
+  const historyGraph = page.getByRole('region', { name: '完整指令要求关系', exact: true })
+  await historyGraph.waitFor()
+  await historyGraph.locator('[data-canvas-type="camera"]').first().click()
+  assert.equal(await historyGraph.getByRole('button', { name: '调整此要求', exact: true }).count(), 0)
+  assert.equal(await historyGraph.getByRole('button', { name: '前往导演设计核对', exact: true }).count(), 0)
+  await historyGraph.locator('summary').filter({ hasText: '全部固定输入' }).click()
+  await historyGraph.getByText('5 秒', { exact: true }).waitFor()
+  assert.ok(page.url().includes('prompt=prompt-next'), 'historical graph does not switch the working prompt')
+  assert.equal(requests.length, historyRequests, 'historical graph does not request revisions')
   await page.getByRole('button', { name: '切换到此版本', exact: true }).click()
   await page.waitForURL(url => url.searchParams.get('plan') === 'p-old')
   // 全通过检查也允许主动修改，仍精确绑定原检查来源。

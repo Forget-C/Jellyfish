@@ -1,3 +1,4 @@
+import { assertCanvasVisuals } from './canvasVisualAssertions.mjs'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { mkdtemp, writeFile } from 'node:fs/promises'
@@ -53,10 +54,21 @@ try {
   assert.equal(await graph.locator('[data-node-kind="take"]').count(), 0)
   assert.equal(await page.getByLabel('试拍关系范围').count(), 0)
   for (const label of ['镜头范围', '参考输入', '落幅依赖', '单元参数']) assert.equal(await graph.getByRole('button', { name: label, exact: true }).count(), 0)
+  await graph.getByText(/^全部生产关系 ·/).click()
+  const dependencyRelation = graph.locator('.production-graph-relation-list').getByRole('button', { name: /→ 实际落幅依赖 →/ }).first()
+  await dependencyRelation.focus(); await dependencyRelation.press('Enter')
+  const relationship = graph.getByRole('region', { name: '生产关系说明', exact: true })
+  await relationship.waitFor()
+  assert.match(await relationship.innerText(), /dependencies\/0/)
+  await relationship.getByRole('button', { name: '关闭关系说明', exact: true }).click()
+  assert.equal(await dependencyRelation.evaluate(node => document.activeElement === node), true)
+  assert.deepEqual(writes, [], 'relationship browsing does not edit preparation')
+  await graph.getByText(/^全部生产关系 ·/).click()
   await select('dependency').click()
   await page.getByText('计划 2 · 固定历史依据', { exact: true }).waitFor()
   await page.getByRole('button', { name: '编辑当前单元依赖', exact: true }).click()
   await page.getByRole('combobox', { name: '依赖 1 实际落幅', exact: true }).waitFor()
+  await writeFile(join(output, 'visuals.json'), JSON.stringify(await assertCanvasVisuals(graph), null, 2))
   await select('coverage').click()
   await page.getByRole('textbox', { name: '动作范围 cover1', exact: true }).fill('单元准备草稿保留')
   const canvas = graph.locator('.production-graph-canvas')

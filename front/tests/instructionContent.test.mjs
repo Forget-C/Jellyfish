@@ -52,7 +52,19 @@ test('legacy and unknown text remain readable without a fabricated source or loc
   assert.deepEqual(instructionBlocks({ text: '', format_version, decisions: [] }, 'empty'), [])
 })
 
-const { instructionRelations } = await import(await moduleUrl('instructionRelations'))
+const { instructionRelations, instructionRelationBrowse, instructionRelationKey } = await import(await moduleUrl('instructionRelations'))
+
+test('auxiliary browsing restores only current node and relation identities, preserving safe disclosures', () => {
+  const edge = { from: 'fixed-source', to: 'fixed-text', label: '固定依据', kind: 'source' }
+  const graph = { nodes: [{ id: 'fixed-source' }, { id: 'fixed-text' }], edges: [edge] }
+  const valid = { selected: 'fixed-source', selectedEdge: instructionRelationKey(edge), expanded: ['source', 'revision'], allRelations: true }
+  assert.deepEqual(instructionRelationBrowse(valid, graph), valid)
+  assert.deepEqual(instructionRelationBrowse({ ...valid, selected: 'other-version', selectedEdge: 'old-candidate', expanded: ['source', 'source', 'foreign', null, {}] }, graph), { selected: undefined, selectedEdge: undefined, expanded: ['source'], allRelations: true })
+  for (const invalid of [null, [], 'invalid', 1]) assert.deepEqual(instructionRelationBrowse(invalid, graph), { expanded: [], allRelations: false })
+  assert.equal(instructionRelationBrowse({ allRelations: 'true' }, graph).allRelations, false)
+  assert.equal(instructionRelationBrowse(valid, { nodes: [], edges: [] }).selected, undefined)
+  assert.equal(instructionRelationBrowse(valid, { nodes: [], edges: [] }).selectedEdge, undefined)
+})
 
 test('relations require frozen excerpts, check occurrence and explicit problem identity', () => {
   const prompt = { text: '推进\n推进', format_version, decisions: [{ section_path: '/cinematography/0/movement_path', disposition: 'text', text_excerpt: '推进', explanation: '固定摄影' }] }
@@ -137,4 +149,17 @@ test('candidate issue links never cross review sources even with identical occur
   const args = { prompt, promptId: 'p', block: instructionBlocks(prompt, 'p')[0], packet, candidate, stale: true, instruction: '', scope: null, reviewSource: 'review:new', candidateReviewSource: 'review:old' }
   assert.equal(instructionRelations(args).edges.some(edge => edge.label === '方案关联问题'), false)
   assert.equal(instructionRelations({ ...args, candidateReviewSource: 'review:new' }).edges.some(edge => edge.label === '方案关联问题'), true)
+})
+
+test('indirect instruction edges retain actual intermediate fields independent of issue or draft status', () => {
+  const path = '/cinematography/0/movement_path'
+  const prompt = { text: '推进', format_version, decisions: [{ section_path: path, disposition: 'text', text_excerpt: '推进', explanation: '' }] }
+  const packet = { occurrences: [{ id: 'o', prompt_revision_id: 'p', local_number: 1, shot_id: 's' }], rows: [{ occurrence_id: 'o', role: 'cinematography', verdict: 'revise', findings: [{ affected_paths: ['/cinematography/0'], observation: '出画' }] }] }
+  const candidate = { candidate_identity: 'c', changes: [{ target: 'design', path, before: '推进', after: '固定', reason: '修改' }] }
+  const args = { prompt, promptId: 'p', block: instructionBlocks(prompt, 'p')[0], packet, candidate, instruction: '保持构图', scope: [{ target: 'design', path }], frozenInstruction: '保持构图' }
+  for (const stale of [false, true]) {
+    const graph = instructionRelations({ ...args, stale })
+    assert.equal(graph.edges.find(edge => edge.label === '写入正文').via, undefined)
+    for (const kind of ['issue', 'target', 'change']) assert.deepEqual(graph.edges.find(edge => edge.kind === kind).via, [path])
+  }
 })

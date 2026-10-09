@@ -1,0 +1,120 @@
+{
+  "nodes": [
+    {
+      "type": "unit",
+      "tone": "blue",
+      "selected": false,
+      "missing": false,
+      "stale": false,
+      "radius": "8px",
+      "padding": "8px",
+      "border": "rgb(143, 195, 255)",
+      "style": "solid",
+      "background": "rgb(238, 246, 255)",
+      "outline": "3px",
+      "outlineColor": "rgb(36, 50, 71)",
+      "titleSize": "14px",
+      "titleLine": "20px",
+      "badge": "▣ 生产单元",
+      "badgeSize": "12px"
+    },
+    {
+      "type": "coverage",
+      "tone": "green",
+      "selected": false,
+      "missing": false,
+      "stale": false,
+      "radius": "8px",
+      "padding": "8px",
+      "border": "rgb(114, 199, 180)",
+      "style": "solid",
+      "background": "rgb(241, 250, 246)",
+      "outline": "3px",
+      "outlineColor": "rgb(36, 50, 71)",
+      "titleSize": "14px",
+      "titleLine": "20px",
+      "badge": "◆ 覆盖",
+      "badgeSize": "12px"
+    },
+    {
+      "type": "dependency",
+      "tone": "violet",
+      "selected": true,
+      "missing": true,
+      "stale": false,
+      "radius": "8px",
+      "padding": "8px",
+      "border": "rgb(212, 136, 6)",
+      "style": "dashed",
+      "background": "rgb(255, 247, 230)",
+      "outline": "2px",
+      "outlineColor": "rgb(22, 119, 255)",
+      "titleSize": "14px",
+      "titleLine": "20px",
+      "badge": "↗ 前段依赖",
+      "badgeSize": "12px"
+    },
+    {
+      "type": "participant",
+      "tone": "rose",
+      "selected": false,
+      "missing": false,
+      "stale": false,
+      "radius": "8px",
+      "padding": "8px",
+      "border": "rgb(237, 156, 187)",
+      "style": "solid",
+      "background": "rgb(255, 244, 247)",
+      "outline": "3px",
+      "outlineColor": "rgb(36, 50, 71)",
+      "titleSize": "14px",
+      "titleLine": "20px",
+      "badge": "● 人物／物件",
+      "badgeSize": "12px"
+    },
+    {
+      "type": "location",
+      "tone": "violet",
+      "selected": false,
+      "missing": false,
+      "stale": false,
+      "radius": "8px",
+      "padding": "8px",
+      "border": "rgb(183, 156, 232)",
+      "style": "solid",
+      "background": "rgb(248, 244, 255)",
+      "outline": "3px",
+      "outlineColor": "rgb(36, 50, 71)",
+      "titleSize": "14px",
+      "titleLine": "20px",
+      "badge": "⌖ 场所",
+      "badgeSize": "12px"
+    }
+  ],
+  "edges": [
+    {
+      "selected": "false",
+      "stroke": "rgb(138, 153, 173)",
+      "width": "1.5px",
+      "arrow": "rgb(138, 153, 173)"
+    },
+    {
+      "selected": "true",
+      "stroke": "rgb(22, 119, 255)",
+      "width": "2.5px",
+      "arrow": "rgb(22, 119, 255)"
+    },
+    {
+      "selected": "false",
+      "stroke": "rgb(138, 153, 173)",
+      "width": "1.5px",
+      "arrow": "rgb(138, 153, 173)"
+    },
+    {
+      "selected": "false",
+      "stroke": "rgb(138, 153, 173)",
+      "width": "1.5px",
+      "arrow": "rgb(138, 153, 173)"
+    }
+  ]
+}

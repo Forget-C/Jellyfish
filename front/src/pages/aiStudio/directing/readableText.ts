@@ -57,8 +57,11 @@ export function contextForPrompt(workspace: WorkspaceRead, promptId?: string): R
   return { ...readableContext(design?.content, unit), identity: JSON.stringify([workspace.sequence.id, promptId, plan?.id, design?.id]), snapshotLabel: `固定依据：${prompt ? revisionName(workspace.prompts, prompt.id, '指令') : '指令缺失'} · ${plan ? `计划 ${workspace.plans.indexOf(plan) + 1}` : '计划缺失'} · ${design ? `设计 ${workspace.designs.indexOf(design) + 1}` : '设计缺失'}` }
 }
 
-export function fixedValue(design: SceneDesign_Input | undefined, pointer: string): unknown {
-  return pointer.startsWith('/') ? pointer.slice(1).split('/').reduce<unknown>((node, key) => node && typeof node === 'object' ? (node as Record<string, unknown>)[key.replace(/~1/g, '/').replace(/~0/g, '~')] : undefined, design) : undefined
+export function fixedValue(value: unknown, pointer: string): unknown {
+  return pointer.startsWith('/') ? pointer.slice(1).split('/').reduce<unknown>((node, raw) => {
+    const key = raw.replace(/~1/g, '/').replace(/~0/g, '~')
+    return node && typeof node === 'object' && Object.prototype.hasOwnProperty.call(node, key) ? (node as Record<string, unknown>)[key] : undefined
+  }, value) : undefined
 }
 
 /** 数组位置必须在固定快照中真实存在；未知字段保留原名称。 */

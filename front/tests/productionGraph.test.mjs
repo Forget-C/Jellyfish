@@ -1,9 +1,23 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { loadSource, makeWorkspace, revision } from './directing-fixtures.mjs'
-const { buildProductionGraph } = await loadSource('productionGraph')
+const { buildProductionGraph, productionRelationEvidence } = await loadSource('productionGraph')
 const actual = (graph, kind) => graph.nodes.filter(node => node.kind === kind && !node.action)
 const reference = (id, extra = {}) => ({ id, file_id: `file-${id}`, media_kind: 'image', purpose: 'identity', participant_ids: ['person1'], ordinal: 0, source: { kind: 'human', reference: id, version: '1' }, ...extra })
+
+test('relation evidence follows actual fixed coverage and space bindings without inventing asset origins', () => {
+  const workspace = makeWorkspace(), plan = workspace.plans[0].content
+  workspace.designs[0].content.direction.shots[0].participant_ids = ['person1']
+  plan.units[0].references = [reference('space', { purpose: 'space', participant_ids: [] })]
+  const graph = buildProductionGraph(workspace, 'p-old', plan, 'u1')
+  const locationBinding = graph.edges.find(edge => edge.kind === 'binding' && graph.nodes.find(node => node.id === edge.from)?.kind === 'location')
+  assert.ok(locationBinding)
+  assert.deepEqual(productionRelationEvidence(workspace, plan, graph, locationBinding), [{ target: 'plan', path: '/units/0/references/0/purpose' }])
+  const coverage = graph.edges.find(edge => edge.kind === 'coverage')
+  assert.deepEqual(productionRelationEvidence(workspace, plan, graph, coverage), [{ target: 'plan', path: '/units/0/coverage/0' }])
+  const participation = graph.edges.find(edge => edge.kind === 'context' && graph.nodes.find(node => node.id === edge.from)?.kind === 'participant')
+  assert.ok(productionRelationEvidence(workspace, plan, graph, participation).some(row => row.path === '/direction/shots/0/participant_ids'))
+})
 
 test('explicit shot objects include an unbound van without adding the other shot baton or shared performance', () => {
   const workspace = makeWorkspace(), plan = workspace.plans[0].content, design = workspace.designs[0].content
@@ -110,8 +124,13 @@ test('direct and indirect design participants are distinguished without introduc
   design.participants.push({ id: 'indirect', name: '李四' }, { id: 'elsewhere', name: '全场其他人物' })
   design.performance.beats.push({ ...structuredClone(design.performance.beats[0]), participant_id: 'indirect' })
   const graph = buildProductionGraph(workspace, 'p-old', plan, 'u1')
-  assert.deepEqual(actual(graph, 'participant').map(node => [node.objectId, node.indirect]), [['person1', false], ['indirect', true]])
+  assert.deepEqual(actual(graph, 'participant').map(node => [node.objectId, node.indirect]), [['person1', true], ['indirect', true]])
   assert.ok(graph.edges.some(edge => edge.kind === 'context' && edge.indirect))
+  const blocking = graph.edges.find(edge => edge.kind === 'context' && graph.nodes.find(node => node.id === edge.from)?.objectId === 'person1')
+  assert.ok(productionRelationEvidence(workspace, plan, graph, blocking).some(row => row.path === '/direction/blocking_states/0/participant_id'))
+  design.direction.shots[0].participant_ids = ['person1']
+  const explicit = buildProductionGraph(workspace, 'p-old', plan, 'u1')
+  assert.deepEqual(actual(explicit, 'participant').map(node => [node.objectId, node.indirect]), [['person1', false]])
 })
 
 test('already-selected outside participants survive scope reduction and missing identities remain explicit', () => {
@@ -149,7 +168,7 @@ test('unclassified design objects remain visible and actionable before selecting
   assert.equal(node.label, '对象：白色面包车')
   assert.equal(node.objectId, 'person1')
   assert.equal(node.missing, false)
-  assert.match(node.detail, /未关联资产 · 本次未选参考 · 设计调度关联/)
+  assert.match(node.detail, /未关联资产 · 本次未选参考 · 间接设计关联/)
   assert.ok(graph.edges.some(edge => edge.kind === 'context' && edge.from === node.id))
 })
 

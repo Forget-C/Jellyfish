@@ -1,0 +1,110 @@
+{
+  "sizes": [
+    {
+      "scroll": 1440,
+      "width": 1440
+    },
+    {
+      "scroll": 1024,
+      "width": 1024
+    },
+    {
+      "scroll": 768,
+      "width": 768
+    },
+    {
+      "scroll": 375,
+      "width": 375
+    }
+  ],
+  "requests": [
+    {
+      "path": "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions",
+      "body": {
+        "prompt_revision_id": "prompt1",
+        "instruction": "镜头保持固定，延长到6秒。",
+        "edits": [],
+        "directions": [],
+        "scope": null,
+        "request_id": "2496179b-7a83-4acb-8dc3-025ab72c3886"
+      },
+      "id": "revision-1"
+    },
+    {
+      "path": "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions/preview",
+      "body": {
+        "prompt_revision_id": "prompt1",
+        "instruction": "",
+        "edits": [
+          {
+            "target": "unit",
+            "path": "/duration_ms",
+            "before": 5000,
+            "after": 6000
+          }
+        ],
+        "directions": [],
+        "scope": null,
+        "request_id": "b55a9cbe-f89d-4b9b-a47f-c33c989a59f7"
+      },
+      "id": "revision-2"
+    },
+    {
+      "path": "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions",
+      "body": {
+        "prompt_revision_id": "prompt1",
+        "review_source": {
+          "kind": "review",
+          "id": "review-pass"
+        },
+        "instruction": "再延长一秒",
+        "edits": [],
+        "directions": [],
+        "scope": null,
+        "request_id": "ad32a5d3-08fc-4949-8c10-2980ff638793"
+      },
+      "id": "revision-3"
+    },
+    {
+      "path": "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions",
+      "body": {
+        "prompt_revision_id": "prompt1",
+        "review_source": {
+          "kind": "review",
+          "id": "review-pass"
+        },
+        "instruction": "保持不变",
+        "edits": [],
+        "directions": [],
+        "scope": null,
+        "request_id": "d8b475c1-d283-45f7-b4f1-5d8ae620c8ee"
+      },
+      "id": "revision-4"
+    },
+    {
+      "path": "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions",
+      "body": {
+        "prompt_revision_id": "prompt1",
+        "review_source": {
+          "kind": "review",
+          "id": "review-pass"
+        },
+        "instruction": "需要同期声音",
+        "edits": [],
+        "directions": [],
+        "scope": null,
+        "request_id": "256b56f6-649b-44b6-b406-9b4003cb0c6f"
+      },
+      "id": "revision-5"
+    }
+  ],
+  "writes": [
+    "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions/preview",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions/apply",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions"
+  ],
+  "errors": []
+}

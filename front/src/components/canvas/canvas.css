@@ -1,0 +1,21 @@
+.canvas-node { min-width: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: 8px; border: 1px solid var(--canvas-node-border, #dce4ee); border-radius: 8px; background: var(--canvas-node-background, #f8faff); color: #243247; font-family: inherit; font-size: 14px; line-height: 20px; cursor: pointer; overflow-wrap: anywhere; }
+.canvas-node[data-canvas-tone="blue"] { --canvas-node-border: #8fc3ff; --canvas-node-background: #eef6ff; }
+.canvas-node[data-canvas-tone="green"] { --canvas-node-border: #72c7b4; --canvas-node-background: #f1faf6; }
+.canvas-node[data-canvas-tone="rose"] { --canvas-node-border: #ed9cbb; --canvas-node-background: #fff4f7; }
+.canvas-node[data-canvas-tone="violet"] { --canvas-node-border: #b79ce8; --canvas-node-background: #f8f4ff; }
+.canvas-node[data-canvas-tone="amber"] { --canvas-node-border: #e0b45f; --canvas-node-background: #fff9ee; }
+:where(.canvas-node-frame) { position: absolute; width: 200px; height: 108px; align-items: center; justify-content: space-between; }
+.canvas-node strong { font-size: 14px; line-height: 20px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.canvas-node small { font-size: 12px; line-height: 16px; color: #627188; }
+.canvas-node-type { display: block; font-size: 12px; line-height: 16px; color: #627188; }
+.canvas-node.is-stale { --canvas-node-border: #d5d9df; --canvas-node-background: #f3f4f6; }
+.canvas-node.is-missing { --canvas-node-border: #d48806; --canvas-node-background: #fff7e6; border-style: dashed; }
+.canvas-node.is-selected { outline: 2px solid #1677ff; outline-offset: 1px; }
+.canvas-node.is-muted { opacity: .65; }
+.canvas-node:focus-visible, .canvas-node button:focus-visible, .canvas-edge-hit:focus-visible { outline: 2px solid #1677ff; outline-offset: 2px; }
+.canvas-edge { --canvas-edge-color: #8a99ad; }
+.canvas-edge[data-canvas-tone="amber"] { --canvas-edge-color: #c99638; }
+.canvas-edge[data-canvas-tone="green"] { --canvas-edge-color: #389674; }
+.canvas-edge[data-canvas-tone="blue"], .canvas-edge[data-selected="true"] { --canvas-edge-color: #1677ff; }
+.canvas-edge-hit { cursor: pointer; pointer-events: stroke; }
+.canvas-edge-hit:focus-visible { stroke: #1677ff55; }

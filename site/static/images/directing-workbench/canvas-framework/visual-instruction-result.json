@@ -1,0 +1,61 @@
+{
+  "requests": [
+    {
+      "path": "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions",
+      "body": {
+        "prompt_revision_id": "prompt1",
+        "instruction": "停步后固定机位",
+        "edits": [],
+        "directions": [],
+        "scope": [
+          {
+            "target": "design",
+            "path": "/cinematography/0/movement_path"
+          }
+        ],
+        "request_id": "29ff4773-c0be-40c9-ae9a-0fbd70e03279"
+      },
+      "id": "revision-1"
+    },
+    {
+      "path": "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions",
+      "body": {
+        "prompt_revision_id": "prompt1",
+        "instruction": "停步后固定机位",
+        "edits": [],
+        "directions": [],
+        "scope": [
+          {
+            "target": "design",
+            "path": "/cinematography/0/movement_path"
+          }
+        ],
+        "request_id": "03bb4f1b-102c-41c9-b074-53f692436121"
+      },
+      "id": "revision-2"
+    }
+  ],
+  "applications": [
+    {
+      "task_id": "revision-2",
+      "input_identity": "revision-2",
+      "candidate_identity": "hash-revision-2",
+      "instruction": "停步后固定机位",
+      "edits": [],
+      "directions": [],
+      "scope": [
+        {
+          "target": "design",
+          "path": "/cinematography/0/movement_path"
+        }
+      ],
+      "request_id": "6e3f7849-fb08-4920-99ed-491accc1ec4a"
+    }
+  ],
+  "writes": [
+    "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions/apply"
+  ],
+  "errors": []
+}

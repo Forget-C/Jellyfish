@@ -1,8 +1,10 @@
-import { useContext, useEffect, useRef, useState } from 'react'
+import { useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Button, Input, Modal, Select, Space, Tag } from 'antd'
 import { ApiError, StudioDirectingService } from '../../../services/generated'
 import type { DirectingTaskRead, ApplyReviewRevisionRequest, ReviewRevisionRequest, WorkspaceRead, EditableRevisionField, ReviewPacket, RevisionFieldTarget } from '../../../services/generated'
 import { InstructionContent } from './InstructionContentView'
+import { InstructionOptimizationPreview } from './InstructionOptimizationPreview'
+import { instructionOptimization } from './instructionOptimization'
 import { relatedInstructionPath } from './instructionContent'
 import { ProductionDetailContext } from './ProductionWorkbench'
 import { useWorkspaceDraft } from './WorkspaceDrafts'
@@ -70,6 +72,7 @@ export function ReviewRevisionPanel(props: Props) {
   const draftRef = useRef(draft)
   draftRef.current = draft
   const candidate = task?.revision
+  const optimization = useMemo(() => instructionOptimization(workspace, promptId, fields, localScope, candidate, stale), [workspace, promptId, fields, draft.value.scopeRequest, candidate, stale])
   // 原任务直接保存的检查沿用显式来源身份；人工派生检查仍保持独立。
   const graphReviewSource = (source?: ReviewRevisionRequest['review_source']) => source ? reviewDirectionScope(projectId, sequenceId, promptId, source.kind === 'review' ? workspace.reviews.find(row => row.id === source.id) || { id: source.id } : undefined, source.kind === 'task' ? source.id : undefined) : undefined
   useEffect(() => {
@@ -143,7 +146,7 @@ export function ReviewRevisionPanel(props: Props) {
     finally { if (mounted.current) setBusy(false) }
   }
   const apply = async () => {
-    if (busy || disabled || (!applying && scopeConflict) || (!applying && (stale || !candidate))) return
+    if (busy || disabled || (!applying && scopeConflict) || (!applying && (stale || !candidate || optimization.issues.length))) return
     const body: ApplyReviewRevisionRequest = applying ? JSON.parse(draft.value.application) : { task_id: draft.value.taskId, input_identity: candidate!.input_identity, candidate_identity: candidate!.candidate_identity, instruction: draft.value.instruction, edits, directions, scope: localScope, request_id: crypto.randomUUID() }
     if (!draft.update({ application: JSON.stringify(body) })) { setError('采用身份未能暂存，请恢复浏览器存储后重试。'); return }
     setBusy(true); setError(''); setProgress('正在保存修订、核对单元并重新检查…')
@@ -182,7 +185,7 @@ export function ReviewRevisionPanel(props: Props) {
     for (const row of packet?.rows || []) for (const index of row.findings.length ? row.findings.map((_, i) => i) : [-1]) if (revisionIssueKey(row, index) === key) return readable(row.findings[index]?.observation || row.rationale)
     return '本次修改要求'
   }
-  const canApply = candidate && (!candidate.summary || candidate.summary.status === 'planned') && !!candidate.preview_text && !!candidate.candidate_identity && (candidate.changes || []).length > 0 && (candidate.outcomes || []).every(row => row.status === 'planned')
+  const canApply = candidate && !optimization.issues.length && (!candidate.summary || candidate.summary.status === 'planned') && !!candidate.preview_text && !!candidate.candidate_identity && (candidate.changes || []).length > 0 && (candidate.outcomes || []).every(row => row.status === 'planned')
   const adjustScope = (next: RevisionFieldTarget[] | null, label: string) => {
     if (applying) return
     const change = () => {
@@ -224,6 +227,7 @@ export function ReviewRevisionPanel(props: Props) {
       </section>}
       <div className="instruction-target"><span>调整对象：</span>{parsedScope.invalid ? <><Tag color="orange">调整范围草稿无法读取</Tag><Button disabled={applying} onClick={() => adjustScope(null, '')}>清除范围并核对整体要求</Button></> : localScope ? <><Tag color="blue">{draft.value.scopeLabel || '所选字段'} · {localScope.length} 项</Tag><Button type="link" disabled={applying} onClick={() => adjustScope(null, '')}>改为整体调整</Button></> : <Tag>整份指令</Tag>}</div>
       {scopeConflict && <Alert type="warning" message="已有字段编辑或检查方向超出调整范围，请核对输入或改为整体调整。" />}
+      {(localScope || candidate?.changes?.length) && <InstructionOptimizationPreview impact={optimization} scope={localScope} context={context} onLocate={path => detail.show({ tab: 'content', paths: [path] })} />}
       <label htmlFor="revision-instruction">你希望怎么改？</label>
       <Input.TextArea id="revision-instruction" value={draft.value.instruction} disabled={applying} maxLength={8000} autoSize={{ minRows: 3, maxRows: 8 }} placeholder="例如：保留人物停步，镜头改为固定机位；对白交给后期。" onChange={event => draft.update({ instruction: event.target.value })} />
       {controls}

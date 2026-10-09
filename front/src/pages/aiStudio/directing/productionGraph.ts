@@ -10,6 +10,48 @@ export type ProductionGraphNode = {
 export type ProductionGraphEdge = { from: string; to: string; kind: 'coverage' | 'reference' | 'dependency' | 'context' | 'binding'; indirect?: boolean }
 const key = (...parts: string[]) => JSON.stringify(parts)
 
+/** 关系说明按精确覆盖、引用和固定设计列出依据，不按节点名猜测可编辑路径。 */
+export function productionRelationEvidence(workspace: WorkspaceRead, plan: ProductionPlan_Input, graph: { nodes: ProductionGraphNode[] }, edge: ProductionGraphEdge) {
+  const from = graph.nodes.find(node => node.id === edge.from), to = graph.nodes.find(node => node.id === edge.to)
+  const evidence: Array<{ target: 'design' | 'plan'; path: string }> = []
+  if (!from || !to) return evidence
+  const unitIndex = plan.units.findIndex(unit => unit.id === to.unitId), unit = plan.units[unitIndex]
+  if (!unit) return evidence
+  const add = (target: 'design' | 'plan', path: string) => { if (!evidence.some(row => row.target === target && row.path === path)) evidence.push({ target, path }) }
+  const prefix = `/units/${unitIndex}`
+  if (edge.kind === 'coverage') add('plan', `${prefix}/coverage/${unit.coverage.findIndex(row => row.id === from.objectId)}`)
+  if (edge.kind === 'reference' || edge.kind === 'binding') unit.references.forEach((reference, index) => {
+    if (!(edge.kind === 'reference' ? from : to).referenceIds?.includes(reference.id)) return
+    add('plan', `${prefix}/references/${index}${edge.kind === 'binding' ? from.kind === 'participant' ? '/participant_ids' : unit.references[index].asset_origin?.kind === 'scene' ? '/asset_origin' : '/purpose' : ''}`)
+  })
+  if (edge.kind === 'dependency') unit.dependencies?.forEach((dependency, index) => {
+    if (dependency.plan_revision_id === (from.sourcePlanId || from.planId) && dependency.unit_id === (from.sourceUnitId || from.unitId)) add('plan', `${prefix}/dependencies/${index}`)
+  })
+  if (edge.kind === 'context') {
+    const design = workspace.designs.find(row => row.id === plan.design_revision_id)?.content
+    if (from.kind === 'location' && design?.direction.location_asset_id === from.objectId) add('design', '/direction/location_asset_id')
+    const coverageIndex = unit.coverage.findIndex(row => row.id === to.objectId), coverage = unit.coverage[coverageIndex]
+    const shotIndex = design?.direction.shots.findIndex(row => row.id === coverage?.shot_id) ?? -1, shot = design?.direction.shots[shotIndex]
+    if (from.kind === 'participant' && shot) {
+      add('plan', `${prefix}/coverage/${coverageIndex}/shot_id`)
+      if (shot.participant_ids?.includes(from.objectId)) add('design', `/direction/shots/${shotIndex}/participant_ids`)
+      else if (shot.participant_ids == null) {
+        design!.direction.blocking_states.forEach((state, index) => {
+          if (shot.blocking_state_ids.includes(state.id) && state.participant_id === from.objectId) {
+            add('design', `/direction/shots/${shotIndex}/blocking_state_ids`); add('design', `/direction/blocking_states/${index}/participant_id`)
+          }
+        })
+        design!.performance.beats.forEach((beat, index) => {
+          if (shot.beat_ids.includes(beat.beat_id) && beat.participant_id === from.objectId) {
+            add('design', `/direction/shots/${shotIndex}/beat_ids`); add('design', `/performance/beats/${index}/beat_id`); add('design', `/performance/beats/${index}/participant_id`)
+          }
+        })
+      }
+    }
+  }
+  return evidence
+}
+
 /** 明确名单决定镜头范围；历史未知只保留调度／表演依据，不能冒充完整名单。 */
 export function shotParticipantRelations(design: SceneDesign_Input | undefined, shotId: string) {
   const shot = design?.direction.shots.find(row => row.id === shotId)
@@ -17,7 +59,7 @@ export function shotParticipantRelations(design: SceneDesign_Input | undefined, 
   const participants = new Map<string, boolean>()
   for (const id of shot?.blocking_state_ids || []) {
     const person = design?.direction.blocking_states.find(row => row.id === id)?.participant_id
-    if (person) participants.set(person, false)
+    if (person) participants.set(person, true)
   }
   for (const row of design?.performance.beats || []) if (shot?.beat_ids.includes(row.beat_id) && !participants.has(row.participant_id)) participants.set(row.participant_id, true)
   return { known: false, participants: [...participants].map(([id, indirect]) => ({ id, indirect })) }
@@ -98,7 +140,7 @@ export function buildProductionGraph(workspace: WorkspaceRead, planId: string, p
       const status = !assetId ? '未关联资产' : !assets ? '资产状态待核实' : !asset ? '关联资产不可用' : asset.image_file_ids === undefined ? '可选图片待核实' : !asset.image_file_ids.length ? '资产暂无可选图片' : '资产图片可供选择'
       // Participant 没有独立类型；未关联资产时不能把物件默认归为角色。
       const source = add({ ...base, id: key('participant', planId, unit.id, id), kind: 'participant', label: `${person?.prop_id ? '物件' : person?.character_id ? '角色' : '对象'}：${person?.name || '引用不可用'}`,
-        detail: `${status} · ${references.length ? `本次已选 ${references.length} 份参考` : '本次未选参考'} · ${!designParticipants.has(id) ? '仅本次参考关联' : relations.some(row => !row.unknown) ? '镜头参与对象' : indirect ? '间接设计关联' : '设计调度关联'}${relations.some(row => row.unknown) ? ' · 范围待核对' : ''}`,
+        detail: `${status} · ${references.length ? `本次已选 ${references.length} 份参考` : '本次未选参考'} · ${!designParticipants.has(id) ? '仅本次参考关联' : relations.some(row => !row.unknown) ? '镜头参与对象' : '间接设计关联'}${relations.some(row => row.unknown) ? ' · 范围待核对' : ''}`,
         objectId: id, assetId, missing: !person, indirect, coverageIds: relations.map(row => row.coverageId) })
       relations.forEach(row => connect(source, row.nodeId, 'context', row.indirect))
       for (const reference of references) connect(source, referenceNodes.get(reference.id)!, 'binding')

@@ -1,3 +1,4 @@
+import { assertCanvasVisuals } from './canvasVisualAssertions.mjs'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { mkdtemp, writeFile } from 'node:fs/promises'
@@ -16,6 +17,8 @@ const workspace = makeWorkspace()
 const note = text => ({ state: 'proposal', text, sources: [{ kind: 'human', reference: 'design-views-fixture', version: '2' }] })
 const design = workspace.designs[1].content
 const shot = structuredClone(design.direction.shots[0])
+// 本用例只制造一处缺失验收引用；其余镜头明确参与对象，避免同时引入范围待核对问题。
+shot.participant_ids = ['person1']
 design.direction.shots = Array.from({ length: 200 }, (_, i) => ({ ...structuredClone(shot), id: `shot${i+1}`, beat_ids: [i < 100 ? 'beat1' : 'beat2'], visible_result: note(`明确动作 ${i+1}`), narrative_function: note(`叙事作用 ${i+1}`) }))
 design.direction.beats.push({ ...structuredClone(design.direction.beats[0]), id: 'beat2', objective: note('确认身份') })
 design.direction.shots[0].beat_ids.push('beat2')
@@ -132,6 +135,8 @@ try {
   const sharedNode = page.locator('[data-graph-node^="participant:"]').first()
   const sharedKey = await sharedNode.getAttribute('data-graph-node')
   await sharedNode.locator('.design-node-select').click()
+  await writeFile(join(output, 'visuals.json'), JSON.stringify(await assertCanvasVisuals(page.locator('.design-graph-canvas')), null, 2))
+  await page.screenshot({ path: join(output, 'shared-node-visuals.png') })
   const sharedHeading = await page.locator('.design-inspector h2').innerText()
   await page.getByRole('tab', { name: '分镜', exact: true }).click()
   await page.locator('.design-storyboard-card.is-related').first().waitFor()

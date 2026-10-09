@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Button, Radio, Select, Tag } from 'antd'
 import type { EditableRevisionField, Prompt, ReviewPacket, ReviewRevisionCandidate, RevisionFieldTarget, WorkspaceRead } from '../../../services/generated'
 import { InstructionRelationGraph } from './InstructionRelationGraph'
+import { GenerationInstructionGraphView } from './GenerationInstructionGraphView'
 import { ProductionDetailContext } from './ProductionWorkbench'
 import { decisionRanges } from './readableText'
 import { ReadableText } from './ReadableContent'
@@ -20,12 +21,13 @@ export function InstructionContent({ prompt, promptId, workspace, fields, candid
   const [remembered] = useState(() => { try { const value = JSON.parse(sessionStorage.getItem(storageKey) || '{}'); return value && typeof value === 'object' && !Array.isArray(value) ? value : {} } catch { return {} } })
   const [view, setView] = useState<'structured' | 'graph' | 'raw'>(['structured', 'graph', 'raw'].includes(remembered.view) ? remembered.view : readOnly ? 'graph' : 'structured')
   const [selected, setSelected] = useState<string>(typeof remembered.selected === 'string' ? remembered.selected : '')
+  const [graphLens, setGraphLens] = useState<'requirements' | 'provenance'>(remembered.graphLens === 'provenance' ? 'provenance' : 'requirements')
   const [locationError, setLocationError] = useState('')
   const [missingPaths, setMissingPaths] = useState<string[]>([])
   const [locatedPaths, setLocatedPaths] = useState<string[]>([])
   const [locations, setLocations] = useState<string[]>([])
   const root = useRef<HTMLElement>(null)
-  useEffect(() => { try { sessionStorage.setItem(storageKey, JSON.stringify({ view, selected })) } catch { /* 浏览记忆不影响业务操作。 */ } }, [storageKey, view, selected])
+  useEffect(() => { try { sessionStorage.setItem(storageKey, JSON.stringify({ view, selected, graphLens })) } catch { /* 浏览记忆不影响业务操作。 */ } }, [storageKey, view, selected, graphLens])
   const [copied, setCopied] = useState('')
   const context = contextForPrompt(workspace, promptId)
   const blocks = instructionBlocks(prompt, promptId)
@@ -43,6 +45,7 @@ export function InstructionContent({ prompt, promptId, workspace, fields, candid
   }, [focusTarget, view])
   const navigate = (id: string, mode: 'structured' | 'graph') => {
     setSelected(id); setView(mode); setLocationError('')
+    if (mode === 'graph') setGraphLens('provenance')
     setFocusTarget({ id, mode })
   }
   useEffect(() => {
@@ -66,7 +69,9 @@ export function InstructionContent({ prompt, promptId, workspace, fields, candid
     <p className="design-secondary">{readOnly ? '历史只读；查看不改变当前工作对象。' : '当前固定指令；修改预览尚未采用。背景信息不能追加为本次执行动作。'}</p>
     {locationError && <p role="status">{locationError}<Button onClick={() => detail.show({ tab: 'text', paths: missingPaths })}>查看完整固定依据</Button></p>}
     {locations.length > 1 && <div aria-label="问题关联的正文位置"><p>该问题涉及 {locations.length} 处正文：</p>{locations.map((id, index) => { const block = blocks.find(row => row.id === id)!; return <Button key={id} onClick={() => navigate(id, view === 'graph' ? 'graph' : 'structured')}>{index + 1} · {blockShotLabels(block, prompt.decisions, context).join('、') || block.title}</Button> })}</div>}
-    {view === 'graph' && focused ? <><Select aria-label="选择关联图内容" className="w-full" value={focused.id} options={graphBlocks.map((block, index) => ({ value: block.id, label: `${index + 1} · ${blockShotLabels(block, prompt.decisions, context).join('、') || '单元'} · ${block.title}${!block.text ? ' · ' + readablePath(blockPaths(block, prompt.decisions)[0], context) : ''} · ${block.section === 'background' ? '场次背景' : block.section === 'execution' ? '本次执行' : '指令内容'}` }))} onChange={setSelected} /><InstructionRelationGraph prompt={prompt} promptId={promptId} block={focused} packet={packet} reviewSource={reviewSource} candidateReviewSource={candidateReviewSource} candidate={candidate} stale={stale} instruction={instruction} scope={scope} frozenInstruction={frozenInstruction} context={context} fields={fields} readOnly={readOnly} onDesign={onDesign} onPrepare={onPrepare} onAdjust={onAdjust} onSuggestion={onSuggestion} onEditField={path => detail.show({ tab: 'revision', paths: [path] })} onLocate={() => navigate(focused.id, 'structured')} /></> : view === 'raw' ? <pre className="prompt-reader">{prompt.text}</pre> : <div className="instruction-card-grid">{blocks.map(block => {
+    {view === 'graph' && <Radio.Group aria-label="指令关系观察视角" value={graphLens} optionType="button" options={[{ label: '完整要求关系', value: 'requirements' }, { label: '依据、检查与修订', value: 'provenance' }]} onChange={event => setGraphLens(event.target.value)} />}
+    {view === 'graph' && graphLens === 'requirements' ? <GenerationInstructionGraphView key={`${storageKey}:${context.snapshotLabel}`} workspace={workspace} promptId={promptId} fields={fields} readOnly={readOnly} onProvenance={id => navigate(id, 'graph')} onLocate={id => navigate(id, 'structured')} onAdjust={onAdjust} onDesign={onDesign} onPrepare={onPrepare} /> :
+    view === 'graph' && focused ? <><Select aria-label="选择关联图内容" className="w-full" value={focused.id} options={graphBlocks.map((block, index) => ({ value: block.id, label: `${index + 1} · ${blockShotLabels(block, prompt.decisions, context).join('、') || '单元'} · ${block.title}${!block.text ? ' · ' + readablePath(blockPaths(block, prompt.decisions)[0], context) : ''} · ${block.section === 'background' ? '场次背景' : block.section === 'execution' ? '本次执行' : '指令内容'}` }))} onChange={setSelected} /><InstructionRelationGraph key={JSON.stringify([context.identity, promptId, focused.id, reviewSource, readOnly])} prompt={prompt} promptId={promptId} block={focused} packet={packet} reviewSource={reviewSource} candidateReviewSource={candidateReviewSource} candidate={candidate} stale={stale} instruction={instruction} scope={scope} frozenInstruction={frozenInstruction} context={context} fields={fields} readOnly={readOnly} onDesign={onDesign} onPrepare={onPrepare} onAdjust={onAdjust} onSuggestion={onSuggestion} onEditField={path => detail.show({ tab: 'revision', paths: [path] })} onLocate={() => navigate(focused.id, 'structured')} /></> : view === 'raw' ? <pre className="prompt-reader">{prompt.text}</pre> : <div className="instruction-card-grid">{blocks.map(block => {
       const targets = context.design && context.unit ? scopeForBlock(block, prompt.decisions, fields) : []
       const active = !!scope?.length && targets.some(target => scope.some(item => item.target === target.target && item.path === target.path))
       const issues = packet?.rows.filter(row => row.verdict !== 'pass' && packet.occurrences.some(occurrence => occurrence.id === row.occurrence_id && occurrence.prompt_revision_id === promptId)).flatMap(row => row.findings.filter(finding => blockFindings(block, prompt.decisions, finding))) || []
