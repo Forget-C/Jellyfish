@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { CompilationDecision } from './CompilationDecision';
 import type { RevisionDirectionOutcome } from './RevisionDirectionOutcome';
 import type { RevisionFieldChange } from './RevisionFieldChange';
 import type { RevisionSummary } from './RevisionSummary';
@@ -13,6 +14,7 @@ export type ReviewRevisionCandidate = {
     changes?: Array<RevisionFieldChange>;
     summary?: (RevisionSummary | null);
     preview_text?: (string | null);
+    preview_decisions?: (Array<CompilationDecision> | null);
     candidate_identity?: (string | null);
     source_prompt_revision_id?: (string | null);
     outcomes?: Array<RevisionDirectionOutcome>;

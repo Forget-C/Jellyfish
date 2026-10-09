@@ -26,7 +26,7 @@ try {
   workspace.takes = [{ ...workspace.takes[2], prompt_revision_id: 'older-prompt' }]
   const unit = workspace.plans[0].content.units[0]
   unit.references = [0, 1].map(ordinal => ({ id: `ref${ordinal}`, ordinal, file_id: `image${ordinal}`, media_kind: 'image', purpose: 'composition', input_role: ordinal ? 'subject' : 'first_frame', participant_ids: [], source: { kind: 'human', reference: 'author', version: '1' } }))
-  workspace.prompts = [revision('prompt1', { plan_revision_id: 'p-old', unit_id: 'u1', text: '他缓缓递出旧信，对方低头辨认。保持手部和旧信清晰可见，镜头固定，动作克制。', decisions: [], sources: [], format_version: 'v4' })]
+  workspace.prompts = [revision('prompt1', { plan_revision_id: 'p-old', unit_id: 'u1', text: '【本次执行动作】\n【shots[1]: shot_id=shot1】\n他缓缓递出旧信，对方低头辨认。保持手部和旧信清晰可见，镜头固定，动作克制。\n【shots[2]: shot_id=shot1】\n第二段仍递出旧信。', decisions: [], sources: [], format_version: 'jellyfish-scene-v4' })]
   workspace.reviews = []; workspace.task_ids = ['check1']
   const roles = ['direction', 'performance', 'staging', 'cinematography', 'continuity', 'prompt']
   const packet = { mode: 'formal', roles, occurrences: [{ id: 'o1', prompt_revision_id: 'prompt1', plan_revision_id: 'p-old', unit_id: 'u1', coverage_item_id: 'cover1', shot_id: 'shot1', local_number: 1 }], rows: roles.map(role => ({ role, occurrence_id: 'o1', verdict: 'pass', rationale: '动作与镜头要求一致', findings: [] })), context: { state: 'unset' } }
@@ -62,7 +62,7 @@ try {
   await page.goto(base)
   await page.getByRole('button', { name: '按以上建议调整', exact: true }).waitFor()
   const tabs = page.getByRole('tablist', { name: '单元试拍步骤' })
-  assert.ok((await page.getByRole('region', { name: '这次拍什么', exact: true }).innerText()).includes(unit.coverage[0].action_scope))
+  assert.ok((await page.getByRole('region', { name: '本次指令正文', exact: true }).innerText()).includes(unit.coverage[0].action_scope))
   await tabs.getByRole('tab', { name: '指令与检查', exact: true }).focus()
   await page.keyboard.press('ArrowRight')
   assert.equal(await tabs.getByRole('tab', { name: '试拍与候选', exact: true }).getAttribute('aria-selected'), 'true')
@@ -77,6 +77,15 @@ try {
   await report.getByRole('button', { name: '加入修改要求', exact: true }).first().click()
   await page.waitForFunction(() => document.activeElement?.id === 'revision-instruction')
   assert.ok((await page.locator('#revision-instruction').inputValue()).includes('统一为右手递出'))
+  await report.getByRole('button', { name: '定位正文', exact: true }).first().click()
+  const mainContent = page.getByRole('region', { name: '本次指令正文', exact: true })
+  await mainContent.locator('.instruction-card.is-focused').waitFor()
+  const locations = mainContent.getByLabel('问题关联的正文位置')
+  assert.equal(await locations.getByRole('button').count(), 2)
+  await locations.getByRole('button').nth(1).focus(); await page.keyboard.press('Enter')
+  await page.waitForFunction(() => document.activeElement?.textContent === '本次动作')
+  assert.ok((await mainContent.locator('.instruction-card.is-focused').innerText()).includes('第二段仍'))
+  assert.ok(await mainContent.locator('.is-highlighted').count() >= 2)
   const contextBefore = page.url()
   await page.getByRole('button', { name: '查看完整指令', exact: true }).click()
   await page.locator('.ant-drawer-open').getByText('他缓缓', { exact: false }).first().waitFor()
@@ -93,16 +102,31 @@ try {
   await page.getByRole('button', { name: '查看此版本', exact: true }).nth(1).click()
   await page.getByText('历史指令专属文本', { exact: true }).waitFor()
   assert.equal(page.url(), contextBefore, 'preview does not change execution context')
+  const historyDrawer = page.locator('.ant-drawer-open')
+  await historyDrawer.getByRole('tab', { name: '历史关联图', exact: true }).click()
+  const historyGraph = historyDrawer.getByRole('region', { name: '指令关联图', exact: true })
+  await historyGraph.locator('.node-text').click()
+  await historyGraph.getByRole('region', { name: '关联节点详情', exact: true }).waitFor()
+  assert.equal(await historyGraph.getByRole('button', { name: '调整这部分', exact: true }).count(), 0)
+  assert.equal(await historyGraph.getByRole('button', { name: '加入修改要求', exact: true }).count(), 0)
+  assert.equal(await historyDrawer.getByRole('button', { name: '直接编辑', exact: true }).count(), 0)
+  assert.equal(page.url(), contextBefore)
+  assert.equal(writes.length, 0)
+  await historyGraph.getByRole('button', { name: '定位正文卡片', exact: true }).click()
+  await historyDrawer.getByRole('tabpanel', { name: '历史关联图', exact: true }).getByText('历史指令专属文本', { exact: true }).waitFor()
   await page.getByRole('button', { name: '关闭指令详情' }).click()
   await report.locator('[data-review-problem] > summary').first().click()
   await page.getByRole('button', { name: '查看相关指令与固定依据', exact: true }).click()
-  await page.locator('.prompt-reader .is-highlighted').waitFor()
+  await page.locator('.prompt-reader .is-highlighted').first().waitFor()
   assert.equal(await page.locator('.ant-drawer-open .prompt-reader').count(), 1, 'evidence opens the exact instruction in the detail drawer')
   await page.getByRole('button', { name: '关闭指令详情' }).click()
   for (const width of [1440, 1024, 768, 375]) {
     await page.setViewportSize({ width, height: 1000 })
     await page.locator('.production-content').evaluate(el => { el.scrollTop = 0 })
-    if (width < 1280 && await page.getByRole('button', { name: '查看并处理', exact: true }).isVisible()) await page.getByRole('button', { name: '查看并处理', exact: true }).click()
+    if (width < 1280) {
+      await page.getByRole('button', { name: '查看并处理', exact: true }).waitFor()
+      await page.getByRole('button', { name: '查看并处理', exact: true }).click()
+    }
     await page.getByRole('button', { name: '按以上建议调整', exact: true }).waitFor()
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1))

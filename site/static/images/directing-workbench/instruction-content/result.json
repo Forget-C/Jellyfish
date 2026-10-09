@@ -1,0 +1,25 @@
+{
+  "requests": [
+    {
+      "path": "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions",
+      "body": {
+        "prompt_revision_id": "prompt1",
+        "instruction": "停步后固定机位",
+        "edits": [],
+        "directions": [],
+        "scope": [
+          {
+            "target": "design",
+            "path": "/cinematography/0/movement_path"
+          }
+        ],
+        "request_id": "9588467d-d9a6-494f-b324-c8fe4af1a38a"
+      },
+      "id": "revision-1"
+    }
+  ],
+  "writes": [
+    "/api/v1/studio/projects/p1/directing/sequences/s1/review-revisions"
+  ],
+  "errors": []
+}

@@ -76,6 +76,13 @@ def validate_candidate(context, raw):
     """按冻结白名单生成真实候选；拒绝伪造 before、扩展字段或遗漏方向。"""
     candidate = ReviewRevisionCandidate.model_validate(raw)
     edits = context.get('request', {}).get('edits', [])
+    scope = context.get('request', {}).get('scope')
+    if scope is not None:
+        targets = {(item['target'], item['path']) for item in scope}
+        if any((item.target, item.path) not in targets for item in candidate.changes):
+            raise ValueError('方案修改超出所选调整范围，请重新生成或改为整体调整')
+        if any((item['target'], item['path']) not in targets for item in edits):
+            raise ValueError('人工编辑超出所选调整范围')
     if len({(edit['target'], edit['path']) for edit in edits}) != len(edits):
         raise ValueError('同一字段不能重复修改')
     human_source = {'kind': 'human', 'reference': context.get('request', {}).get('request_id', context['input_identity']), 'version': '1'}
@@ -241,6 +248,30 @@ class ReviewRevisionService(ProductionService):
         context['input_identity'] = fingerprint(context)
         context['allowed_design_fields'] = allowed_fields(context['design'], context['unit'])
         context['allowed_unit_fields'] = {'/duration_ms': unit.duration_ms, '/ratio': unit.ratio}
+        if body.scope is not None:
+            targets = {(item.target, item.path) for item in body.scope}
+            if len(targets) != len(body.scope):
+                raise ValueError('调整范围包含重复字段')
+            for target, path in targets:
+                if path not in context['allowed_' + target + '_fields']:
+                    raise ValueError('调整范围不属于当前单元可编辑字段：' + path)
+            if any((edit.target, edit.path) not in targets for edit in body.edits):
+                raise ValueError('人工编辑超出所选调整范围')
+            scoped_keys = []
+            for row in (packet.rows if packet else []):
+                if row.verdict == 'pass':
+                    continue
+                for index, finding in enumerate(row.findings):
+                    # 检查路径属于固定设计；只有明确涉及范围内字段的问题进入局部修订。
+                    if any(target == 'design' and (path == affected or path.startswith(affected + '/') or affected.startswith(path + '/'))
+                           for target, path in targets for affected in finding.affected_paths):
+                        scoped_keys.append(problem_key({'occurrence_id': row.occurrence_id, 'role': row.role, 'finding_index': index}))
+            if any(problem_key(item) not in scoped_keys for item in directions):
+                raise ValueError('检查方向超出所选调整范围，请重新选择或改为整体调整')
+            context['problem_keys'] = scoped_keys
+            for target in ('design', 'unit'):
+                field_key = 'allowed_' + target + '_fields'
+                context[field_key] = {path: value for path, value in context[field_key].items() if (target, path) in targets}
         context['design_schema'] = SceneDesign.model_json_schema()
         context['unit_schema'] = GenerationUnit.model_json_schema()
         return context
@@ -277,10 +308,14 @@ class ReviewRevisionService(ProductionService):
     async def candidate_preview(self, sequence_id, context, raw):
         """候选内容和完整编译文本绑定身份，模型不能自报预览。"""
         candidate, design, unit = validate_candidate(context, raw)
-        candidate.preview_text, _ = await self.render_unit(sequence_id, design, unit)
+        candidate.preview_text, candidate.preview_decisions = await self.render_unit(sequence_id, design, unit)
         candidate.source_prompt_revision_id = context['prompt_revision_id']
         candidate.candidate_identity = None
-        candidate.candidate_identity = fingerprint(candidate.model_dump(mode='json', exclude={'summary'} if candidate.summary is None else set()))
+        excluded = {'summary'} if candidate.summary is None else set()
+        if 'scope' not in context['request']:
+            # 已保存旧任务的身份不因新增展示映射改变，原采用请求仍可恢复。
+            excluded.add('preview_decisions')
+        candidate.candidate_identity = fingerprint(candidate.model_dump(mode='json', exclude=excluded))
         return candidate
 
     async def read_task(self, task_id):
@@ -345,6 +380,7 @@ class ReviewRevisionService(ProductionService):
             directions = sorted([item.model_dump(mode='json') for item in body.directions], key=problem_key)
             if (body.input_identity != current_context['input_identity'] or directions != current_context['directions']
                     or body.instruction != current_context['request'].get('instruction', '')
+                    or (None if body.scope is None else [item.model_dump(mode='json') for item in body.scope]) != current_context['request'].get('scope')
                     or [edit.model_dump(mode='json') for edit in body.edits] != current_context['request'].get('edits', [])):
                 raise RevisionConflict('方向或输入已变化，请重新生成方案')
             current_state = current_snapshot.get('revision_application')

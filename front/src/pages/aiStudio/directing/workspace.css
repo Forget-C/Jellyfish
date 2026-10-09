@@ -706,3 +706,44 @@
   .chapter-source-text, .chapter-source-native { min-height: 220px; padding: 8px; }
   .chapter-table .ant-table-cell:last-child { width: 100px; }
 }
+
+.instruction-content > header, .instruction-card > header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.instruction-content > header { margin-bottom: 16px; }
+.instruction-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 14px; }
+.instruction-card { min-width: 0; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px; background: #fff; }
+.instruction-card.is-selected { border-color: #1677ff; box-shadow: 0 0 0 1px #1677ff; }
+.instruction-card h3 { margin: 0; }
+.instruction-card-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; margin: 16px 0; }
+.instruction-card-preview { border-radius: 8px; padding: 12px; background: #edf9f3; overflow-wrap: anywhere; }
+.instruction-card-preview ins { color: #167b57; text-decoration: none; }
+.instruction-card-preview del { color: #788496; }
+.instruction-target { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.instruction-card.is-focused { outline: 2px solid #b6d6ff; outline-offset: 2px; }
+.instruction-card-text .readable-term { display: inline; border: 0; border-bottom: 1px dashed #1677ff; background: transparent; color: #145eb0; padding: 0; font: inherit; text-align: left; white-space: pre-wrap; cursor: pointer; }
+.instruction-relations { container-type: inline-size; margin-top: 18px; min-width: 0; }
+.instruction-relation-columns { position: relative; display: grid; grid-template-columns: 1fr; gap: 20px; }
+.instruction-relation-column { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.instruction-relation-column h3 { margin: 0; }
+.instruction-relation-node { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 8px; width: 100%; padding: 16px; border: 1px solid #dce4ee; border-radius: 10px; text-align: left; background: #fff; cursor: pointer; overflow-wrap: anywhere; }
+.instruction-relation-node span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.instruction-relation-node.is-selected { border-color: #1677ff; outline: 1px solid #1677ff; }
+.instruction-relation-node.node-issue { background: #fff9ee; border-color: #eedab2; }
+.instruction-relation-node.node-change { background: #edf9f3; }
+.instruction-relation-node small { color: #627188; }
+.instruction-relation-lines { display: none; position: absolute; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.instruction-relation-lines path { stroke: #92a0b5; stroke-width: 1.5; fill: none; }
+.instruction-relation-node.is-muted { opacity: .65; }
+.instruction-relation-lines .relation-issue { stroke: #c99638; stroke-dasharray: 5 4; }
+.instruction-relation-lines .relation-target { stroke: #1677ff; stroke-dasharray: 5 4; }
+.instruction-relation-lines .relation-change { stroke: #389674; }
+.instruction-relation-detail { margin-top: 16px; padding: 16px; border: 1px solid #dce4ee; border-radius: 10px; background: #fff; }
+.instruction-relation-detail header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.instruction-relation-detail pre { overflow-wrap: anywhere; white-space: pre-wrap; }
+@container (min-width: 880px) {
+  .instruction-relation-columns { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 72px; }
+  .instruction-relation-lines { display: block; }
+}
+.instruction-relation-summary { margin: 16px 0; padding: 14px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8faff; overflow-wrap: anywhere; }
+.instruction-relation-summary h3 { margin: 0 0 10px; }
+.instruction-relation-node.is-stale { background: #f3f4f6; border-color: #d5d9df; }
+.instruction-relation-lines .relation-stale { stroke: #9aa3b1; }

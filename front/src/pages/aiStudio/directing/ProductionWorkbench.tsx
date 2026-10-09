@@ -20,8 +20,8 @@ import { ProductionRelationGraph } from './ProductionRelationGraph'
 import type { ProductionGraphNode } from './productionGraph'
 import { directingError } from './common'
 
-type DetailRequest = { tab: 'text' | 'input' | 'history' | 'checks' | 'candidate' | 'revision'; paths?: string[]; suggestion?: string; takeId?: string }
-export const ProductionDetailContext = createContext<{ target: HTMLElement | null; request?: DetailRequest; show: (request: DetailRequest) => void; close: () => void; consume: () => void }>({ target: null, show: () => {}, close: () => {}, consume: () => {} })
+type DetailRequest = { tab: 'text' | 'input' | 'history' | 'checks' | 'candidate' | 'revision' | 'content'; paths?: string[]; suggestion?: string; takeId?: string }
+export const ProductionDetailContext = createContext<{ target: HTMLElement | null; relationTarget?: HTMLElement | null; request?: DetailRequest; show: (request: DetailRequest) => void; close: () => void; consume: () => void }>({ target: null, show: () => {}, close: () => {}, consume: () => {} })
 
 type InputSection = 'unit' | 'coverage' | 'reference' | 'dependency'
 export type ProductionInputSelection = { section: InputSection; node?: ProductionGraphNode; serial: number }
@@ -82,20 +82,21 @@ export function ProductionWorkbench({ onRetryTasks, assets, assetError, onRetryA
   const [parameters, setParameters] = useState<HTMLDivElement | null>(null)
   const [open, setOpen] = useState(false)
   const [candidateTarget, setCandidateTarget] = useState<HTMLDivElement | null>(null)
+  const [relationTarget, setRelationTarget] = useState<HTMLDivElement | null>(null)
   const [detailTarget, setDetailTarget] = useState<HTMLDivElement | null>(null)
   const [detailRequest, setDetailRequest] = useState<DetailRequest>()
   const trigger = useRef<HTMLElement>()
   const showDetail = (request: DetailRequest) => {
     trigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : undefined
     setDetailRequest(request)
-    if (request.tab === 'revision') {
+    if (request.tab === 'content') { setTab('prompt'); setOpen(false) } else if (request.tab === 'revision') {
       setTab('prompt'); setOpen(false)
       requestAnimationFrame(() => { const input = document.getElementById('revision-instruction'); input?.scrollIntoView({ block: 'center' }); input?.focus({ preventScroll: true }) })
     } else setOpen(true)
   }
   const closeDetail = () => { setDetailRequest(undefined); setOpen(false); requestAnimationFrame(() => trigger.current?.isConnected && trigger.current.focus({ preventScroll: true })) }
   useEffect(() => { setDetailRequest(undefined); setOpen(false) }, [planId, selectedUnitId, active])
-  useEffect(() => { setDetailRequest(current => tab === 'prompt' && current?.tab === 'revision' ? current : undefined); setOpen(false) }, [tab])
+  useEffect(() => { setDetailRequest(current => tab === 'prompt' && current && ['revision', 'content'].includes(current.tab) ? current : undefined); setOpen(false) }, [tab])
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [reorganizing, setReorganizing] = useState(false)
   const advancedTrigger = useRef<HTMLElement>()
@@ -144,7 +145,7 @@ export function ProductionWorkbench({ onRetryTasks, assets, assetError, onRetryA
     <div hidden={tab !== 'prompt'} className="shoot-check-sidebar" aria-label="指令检查">
       <header><h2>检查结论</h2><span role="status">{checkLabel}</span></header>
       <ShootTaskProgress onRetry={onRetryTasks} onOpenTasks={onOpenTasks} tasks={promptTasks} state={tasksState} kind="review" />
-      <div className="shoot-check-details">{planReady && review}</div>
+      <div ref={setRelationTarget} /><div className="shoot-check-details">{planReady && review}</div>
       {planReady && records.prompt && !selectedReview && !waitingChecks.length && !reviewing && <p className="design-secondary">检查当前指令后确认结论，再开始试拍。</p>}
     </div>
     <div hidden={tab !== 'takes'}>
@@ -154,7 +155,7 @@ export function ProductionWorkbench({ onRetryTasks, assets, assetError, onRetryA
       {!detailRequest && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="选择候选查看快速预览" />}
     </div>
   </div>
-  return <ProductionDetailContext.Provider value={{ target: tab === 'takes' ? candidateTarget : detailTarget, request: detailRequest, show: showDetail, close: closeDetail, consume: () => setDetailRequest(undefined) }}><InspectorContext.Provider value={parameters}><div className="sequence-stage-workspace production-workbench">
+  return <ProductionDetailContext.Provider value={{ relationTarget, target: tab === 'takes' ? candidateTarget : detailTarget, request: detailRequest, show: showDetail, close: closeDetail, consume: () => setDetailRequest(undefined) }}><InspectorContext.Provider value={parameters}><div className="sequence-stage-workspace production-workbench">
     {active && <SequenceNavigation><WorkbenchNavigation title="拍摄单元" query={query} onQuery={setQuery} placeholder="搜索单元编号或动作"><div className="production-unit-list">{shownUnits.map(unit => {
       const takes = workspace.takes.filter(take => take.plan_revision_id === planId && take.unit_id === unit.id)
       const runningSummary = unitTaskSummary(tasksForUnit(workspace, tasks, submitted, planId, unit.id).filter(task => ['queued', 'running'].includes(task.status)))

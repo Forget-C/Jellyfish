@@ -120,7 +120,7 @@ node front/tests/workspaceShootSteps.browser.mjs
 
 ### 指令全生命周期
 
-`node front/tests/workspaceInstructionLifecycle.browser.mjs` 使用 4196 端口及隔离数据，覆盖默认收起正文、固定编辑区和检查侧栏、未检查主动修改、结果不抢占面板、人工字段直接预览、采用复检、跨计划历史、通过后修改与无变化不采用。四尺寸默认页面截图与请求记录写入测试输出目录。
+`node front/tests/workspaceInstructionLifecycle.browser.mjs` 使用 4196 端口及隔离数据，覆盖默认结构化正文、固定编辑区和检查侧栏、未检查主动修改、结果不抢占面板、人工字段直接预览、采用复检、跨计划历史、通过后修改与无变化不采用。四尺寸默认页面截图与请求记录写入测试输出目录。
 
 `reviewRevision.test.mjs` 同时覆盖人工字段原值和单位换算、精确字段映射、已保存产物对应的恢复动作。`workspaceReviewRevision.browser.mjs` 验证在固定主区修改方向、声音选择及更新方案。浏览器替身只验证交互和请求契约；真实预览不写版本、候选身份和采用一致性由后端 directing 测试验证。
 
@@ -146,3 +146,7 @@ node front/tests/workspaceShootSteps.browser.mjs
 `workspaceShootSteps.browser.mjs` 在上述五宽度逐步比较单元标题、主操作、步骤栏、内容起点及桌面 344px 辅助栏；`workspaceShootFlow.browser.mjs` 验证预览打开后候选网格宽度不变。`workspaceCompactReview.browser.mjs` 验证窄屏检查抽屉处理后关闭，再阅读完整指令；主操作断言位于统一标题栏。共享滚动存储以 `positions[identity]` 保留多个对象／视图位置，剪辑回归继续验证刷新后的实际位置。
 
 本次实际结果、截图及两项可在改动前复现的既有失败见[布局统一计划](../../site/content/docs/plans/sequence-workbench-layout-unification-plan.md)。接口替身不验证真实供应商、模型生成质量或全部浏览器。
+
+### 单元指令内容区（实施中）
+
+`node --test front/tests/instructionContent.test.mjs front/tests/reviewRevision.test.mjs` 覆盖固定正文全量保留、背景与执行边界、重复和重叠映射、字段归属、路径层级匹配、局部范围存储及损坏范围阻止提交。`node front/tests/workspaceInstructionContent.browser.mjs` 使用 4216 端口，验证真实分块正文、从摄影卡片选择范围、刷新恢复、提交精确 scope、切回整体范围保留输入、原文切换、四尺寸和零采用／拍摄写入。运行环境沿用上文 Codex Node.js / Playwright。专项还覆盖关联图节点查看、真实候选与过期草稿分离、图视图刷新恢复、返回正文焦点、1920px 三列及窄屏纵向布局；检查问题定位由 compact-review 回归验证。图只读关系的证据约束由 instructionContent 单元测试验证，包括无正文决定、固定单元参数和跨检查来源隔离。浏览器专项验证超过三项的展开／收起、键盘选择节点和内容、来源直接编辑、生成中编辑与迟到候选不抢焦点；compact-review 覆盖多处正文定位、精确片段高亮及历史关联图只读。

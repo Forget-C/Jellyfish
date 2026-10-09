@@ -5,6 +5,7 @@ from typing import Any, Literal
 from pydantic import Field
 
 from app.core.contracts.directing.common import Contract, Identity, Role, Text
+from app.core.contracts.directing.production import CompilationDecision
 
 
 class RevisionReviewSource(Contract):
@@ -24,11 +25,16 @@ class ReviewDirection(Contract):
     sound_execution: Literal['generated', 'postproduction'] | None = None
 
 
-class RevisionEdit(Contract):
-    """人工指定已有字段的精确替换，不代表检查问题。"""
+class RevisionFieldTarget(Contract):
+    """局部修改的精确字段身份；空范围不代表整体修改。"""
 
     target: Literal['design', 'unit']
     path: Text
+
+
+class RevisionEdit(RevisionFieldTarget):
+    """人工指定已有字段的精确替换，不代表检查问题。"""
+
     before: Any
     after: Any
 
@@ -55,6 +61,7 @@ class ReviewRevisionRequest(Contract):
     review_source: RevisionReviewSource | None = None
     instruction: str = Field(default="", max_length=8000)
     edits: list[RevisionEdit] = Field(default_factory=list, max_length=100)
+    scope: list[RevisionFieldTarget] | None = Field(default=None, min_length=1, max_length=100)
     directions: list[ReviewDirection] = Field(default_factory=list, max_length=200)
     model_id: Identity | None = None
     request_id: Identity
@@ -95,6 +102,7 @@ class ReviewRevisionCandidate(Contract):
     changes: list[RevisionFieldChange] = Field(default_factory=list, max_length=100)
     summary: RevisionSummary | None = None
     preview_text: str | None = None
+    preview_decisions: list[CompilationDecision] | None = None
     candidate_identity: str | None = None
     source_prompt_revision_id: Identity | None = None
     outcomes: list[RevisionDirectionOutcome] = Field(default_factory=list)
@@ -106,6 +114,7 @@ class ApplyReviewRevisionRequest(Contract):
     task_id: Identity
     instruction: str = Field(default="", max_length=8000)
     edits: list[RevisionEdit] = Field(default_factory=list, max_length=100)
+    scope: list[RevisionFieldTarget] | None = Field(default=None, min_length=1, max_length=100)
     candidate_identity: str | None = None
     input_identity: Text
     directions: list[ReviewDirection] = Field(default_factory=list)

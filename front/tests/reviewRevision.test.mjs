@@ -67,3 +67,10 @@ test('paragraph editing only offers related allowed fields and never falls back 
   assert.deepEqual(api.matchingRevisionFields(fields, ['/cinematography/0/movement/text']), [fields[1]])
   assert.deepEqual(api.matchingRevisionFields(fields), fields)
 })
+
+test('local scope survives storage and corrupt or duplicate scope cannot silently grant whole instruction', () => {
+  const scope = [{ target: 'design', path: '/cinematography/0/movement_path' }]
+  assert.deepEqual(api.readRevisionScope(JSON.stringify(scope)), { scope, invalid: false })
+  assert.deepEqual(api.readRevisionScope(''), { scope: null, invalid: false })
+  for (const value of ['bad json', '[]', '[null]', JSON.stringify([...scope, ...scope]), '[{"target":"task","path":"/a"}]']) assert.equal(api.readRevisionScope(value).invalid, true)
+})

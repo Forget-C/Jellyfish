@@ -41,6 +41,7 @@ export function ShootReview({ packet, pending, derived, promptName, workspace, o
       <p>{readableSegments(row.rationale || '未提供结论说明', context(row.occurrence_id)).map(part => part.label).join('')}</p>
       {row.findings.map((finding, findingIndex) => <p className="design-secondary" key={findingIndex}>建议：{readableSegments(finding.suggestion.text || finding.suggestion.reason || '未提供修改建议', context(row.occurrence_id)).map(part => part.label).join('')}</p>)}
       <Button type="link" onClick={() => addSuggestions([row])}>加入修改要求</Button>
+<Button type="link" onClick={() => detail.show({ tab: 'content', paths: row.findings.flatMap(finding => finding.affected_paths) })}>定位正文</Button>
       <details data-review-problem tabIndex={-1}><summary>查看依据与检查明细</summary>
         <ReviewDetails row={row} context={context(row.occurrence_id)} compact onInspect={paths => detail.show({ tab: 'text', paths })} />
         {!pending && row.verdict === 'revise' && <Button onClick={() => onResolve(row)}>记录人工取舍</Button>}

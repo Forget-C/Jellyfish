@@ -1,4 +1,14 @@
-import type { EditableRevisionField, ReviewPacket, ReviewRow, RevisionEdit, ReviewRevisionApplication } from '../../../services/generated'
+import type { EditableRevisionField, ReviewPacket, ReviewRow, RevisionEdit, ReviewRevisionApplication, RevisionFieldTarget } from '../../../services/generated'
+
+/** 范围草稿沿用现有字符串存储；损坏内容阻止提交，不能默认为整体授权。 */
+export function readRevisionScope(encoded: string): { scope: RevisionFieldTarget[] | null; invalid: boolean } {
+  if (!encoded) return { scope: null, invalid: false }
+  try {
+    const value = JSON.parse(encoded)
+    if (!Array.isArray(value) || !value.length || value.some(item => !item || !['design', 'unit'].includes(item.target) || typeof item.path !== 'string' || !item.path.startsWith('/')) || new Set(value.map(item => `${item.target}:${item.path}`)).size !== value.length) return { scope: null, invalid: true }
+    return { scope: value, invalid: false }
+  } catch { return { scope: null, invalid: true } }
+}
 
 type ReviewSource = { id: string; source_task_id?: string | null; parent_id?: string | null }
 

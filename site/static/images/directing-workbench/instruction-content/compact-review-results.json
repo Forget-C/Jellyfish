@@ -1,0 +1,85 @@
+{
+  "sizes": [
+    {
+      "width": 1440,
+      "header": {
+        "x": 288,
+        "y": 325,
+        "width": 792,
+        "height": 42
+      },
+      "bars": [
+        {
+          "className": "sequence-version-bar workbench-toolbar production-version-bar",
+          "height": 44
+        },
+        {
+          "className": "production-local-tabs production-steps",
+          "height": 44
+        }
+      ]
+    },
+    {
+      "width": 1024,
+      "header": {
+        "x": 80,
+        "y": 414,
+        "width": 928,
+        "height": 42
+      },
+      "bars": [
+        {
+          "className": "sequence-version-bar workbench-toolbar production-version-bar",
+          "height": 44
+        },
+        {
+          "className": "production-local-tabs production-steps",
+          "height": 44
+        }
+      ]
+    },
+    {
+      "width": 768,
+      "header": {
+        "x": 80,
+        "y": 449,
+        "width": 672,
+        "height": 42
+      },
+      "bars": [
+        {
+          "className": "sequence-version-bar workbench-toolbar production-version-bar",
+          "height": 79
+        },
+        {
+          "className": "production-local-tabs production-steps",
+          "height": 44
+        }
+      ]
+    },
+    {
+      "width": 375,
+      "header": {
+        "x": 8,
+        "y": 456.84375,
+        "width": 359,
+        "height": 66.421875
+      },
+      "bars": [
+        {
+          "className": "sequence-version-bar workbench-toolbar production-version-bar",
+          "height": 49
+        },
+        {
+          "className": "production-local-tabs production-steps",
+          "height": 0
+        }
+      ]
+    }
+  ],
+  "writes": [
+    "/api/v1/studio/projects/p1/directing/sequences/s1/sources/resolve",
+    "/api/v1/studio/projects/p1/directing/sequences/s1/sources/resolve"
+  ],
+  "errors": []
+}

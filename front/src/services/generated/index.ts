@@ -311,6 +311,7 @@ export type { ReviewRow } from './models/ReviewRow';
 export type { RevisionDirectionOutcome } from './models/RevisionDirectionOutcome';
 export type { RevisionEdit } from './models/RevisionEdit';
 export type { RevisionFieldChange } from './models/RevisionFieldChange';
+export type { RevisionFieldTarget } from './models/RevisionFieldTarget';
 export type { RevisionReviewSource } from './models/RevisionReviewSource';
 export type { RevisionSnapshot_CutReview_ } from './models/RevisionSnapshot_CutReview_';
 export type { RevisionSnapshot_KnowledgeCandidate_ } from './models/RevisionSnapshot_KnowledgeCandidate_';

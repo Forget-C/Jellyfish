@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 import { Alert, Button, Empty, Tabs, Tag } from 'antd'
 import type { DirectingTaskRead, WorkspaceRead, RevisionReviewSource } from '../../../services/generated'
 import { ProductionDetailContext } from './ProductionWorkbench'
+import { InstructionContent } from './InstructionContentView'
 import { PromptReader } from './PromptReader'
 import { ShootFixedInput } from './ShootFixedInput'
 import { SourceInspector } from './Sources'
@@ -21,7 +22,7 @@ export function ShootInstructions({ workspace, planId, unitId, promptId, reviewI
   const [previewId, setPreviewId] = useState<string>()
   const [tab, setTab] = useState('text')
   useEffect(() => { setPreviewId(undefined) }, [promptId, planId, unitId])
-  useEffect(() => { if (detail.request && !['candidate', 'revision'].includes(detail.request.tab)) { setTab(detail.request.tab); setPreviewId(undefined) } }, [detail.request])
+  useEffect(() => { if (detail.request && !['candidate', 'revision', 'content'].includes(detail.request.tab)) { setTab(detail.request.tab); setPreviewId(undefined) } }, [detail.request])
   const records = productionRecords(workspace, planId, unitId, promptId)
   const current = records.prompt
   const originTasks = tasks.filter(task => task.revision_application?.prompt_revision_id === current?.id)
@@ -42,6 +43,7 @@ export function ShootInstructions({ workspace, planId, unitId, promptId, reviewI
     {historical && <Alert type="info" message={`仅查看历史，当前工作对象仍为${current ? name(current.id) : '未选择'}`} action={<Button onClick={() => { onPrompt(preview!.id, sourceFor(preview!.id)); setPreviewId(undefined); detail.close() }}>切换到此版本</Button>} />}
     <Tabs activeKey={tab === 'checks' ? 'history' : tab} onChange={setTab} items={[
       { key: 'text', label: '指令正文', children: preview ? <><p className="design-secondary">{historical ? '历史预览' : '当前检查对象'} · {revisionName(workspace.plans, preview.content.plan_revision_id, '计划')} · 单元 {String(workspace.plans.find(row => row.id === planId)?.content.units.findIndex(row => row.id === unitId)! + 1).padStart(2, '0')}</p><PromptReader key={preview.id} prompt={preview.content} workspace={workspace} inline onEdit={historical ? undefined : paths => detail.show({ tab: 'revision', paths })} paths={historical ? undefined : detail.request?.paths} />{!historical && <><Button onClick={() => detail.show({ tab: 'revision' })}>调整这份指令</Button><details><summary>重新编译</summary><p>仅重新编译固定依据，不会自动改变创作方向。需要修改请使用“调整这份指令”。</p>{regenerate}</details></>}</> : <Empty description="选择指令版本后查看正文" /> },
+      ...(historical && preview ? [{ key: 'relations', label: '历史关联图', children: <InstructionContent key={`${preview.id}:history`} prompt={preview.content} promptId={preview.id} workspace={workspace} fields={[]} stale={false} scope={null} instruction="" readOnly onAdjust={() => {}} onSuggestion={() => {}} onEdit={() => {}} /> }] : []),
       { key: 'input', label: '固定输入', children: preview ? <ShootFixedInput key={preview.id} workspace={workspace} prompt={preview} review={historical ? undefined : review} onHistory={() => setTab('history')} /> : <Empty description="尚未选择指令" /> },
       { key: 'history', label: '版本记录', children: tab === 'checks' ? <><Button onClick={() => setTab('history')}>返回指令版本</Button>{checks}</> : <><div className="shoot-record-list">{origins.map(row => <div key={`origin-${row.id}`}><strong>从上一版修改而来</strong><span>{revisionName(workspace.plans, row.content.plan_revision_id, '计划')} · {name(row.id)}</span><Button onClick={() => { setPreviewId(row.id); setTab('text') }}>查看修订前指令</Button><Button onClick={() => { onPrompt(row.id, sourceFor(row.id), true); detail.close() }}>返回原计划查看候选</Button></div>)}{records.prompts.map(row => {
         const related = productionRecords(workspace, planId, unitId, row.id).reviews
@@ -63,6 +65,6 @@ export function ShootInstructions({ workspace, planId, unitId, promptId, reviewI
     {current && <ShootFixedInput workspace={workspace} prompt={current} summaryOnly />}
     {!current && <section className="shoot-record-list" aria-label="选择本次指令"><h3>选择本次要检查的指令</h3>{records.prompts.map(row => <div key={row.id}><strong>{records.prompts.length === 1 ? '本次指令' : name(row.id)}</strong><span>{row.confirmed_at ? `固定于 ${row.confirmed_at.replace('T', ' ')}` : '固定时间暂不可用'}</span><Button onClick={() => onPrompt(row.id)}>使用此指令</Button></div>)}</section>}
     {current && !review && !reviewTask && !!(pending.length + records.reviews.length) && checks}
-    {detail.target && detail.request && !['candidate', 'revision'].includes(detail.request.tab) && createPortal(content, detail.target)}
+    {detail.target && detail.request && !['candidate', 'revision', 'content'].includes(detail.request.tab) && createPortal(content, detail.target)}
   </>
 }

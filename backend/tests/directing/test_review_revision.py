@@ -276,7 +276,7 @@ async def test_task_source_api_restores_request_and_blocks_unresolved_adoption(t
             task.result = {'input_identity': context['input_identity'], 'changes': [{'target': 'design', 'path': '/sound/execution', 'before': 'postproduction', 'after': 'unknown', 'reason': '拟改动', 'problem_keys': context['problem_keys']}], 'outcomes': [{'problem_key': key, 'status': 'unresolved', 'reason': '必须先修复编译器，不能删除正确设计', 'choices': []} for key in context['problem_keys']]}
         async with client_for(sessions) as client:
             detail = (await client.get(f'/api/v1/studio/projects/p1/directing/tasks/{task_id}')).json()['data']
-            assert detail['revision_request'] == {**body, 'instruction': '', 'edits': []}
+            assert detail['revision_request'] == {**body, 'instruction': '', 'edits': [], 'scope': None}
             assert detail['revision']['outcomes'][0]['status'] == 'unresolved'
             response = await client.post(base + '/apply', json={'task_id': task_id, 'input_identity': context['input_identity'], 'request_id': 'api-adopt', 'directions': [], 'candidate_identity': detail['revision']['candidate_identity']})
             assert response.status_code == 422 and '未解决' in response.text
@@ -663,3 +663,79 @@ def test_deferred_review_sound_also_updates_planned_global_summary():
     assert candidate.outcomes[0].status == 'needs_choice'
     assert candidate.summary.status == 'needs_choice'
     assert candidate.summary.choices == candidate.outcomes[0].choices
+
+
+@pytest.mark.asyncio
+async def test_local_scope_freezes_allowed_fields_and_resumes_exact_adoption(tmp_path):
+    from app.core.contracts.directing.review_revision import ReviewRevisionRequest, ApplyReviewRevisionRequest
+    from app.models.llm import Model
+    from app.services.directing.review_revision import ReviewRevisionService, validate_candidate
+    from app.services.directing.store import RevisionConflict
+    from tests.directing.test_production import prepare
+    from tests.directing.test_store import database
+
+    async with database(tmp_path) as sessions:
+        async with sessions.begin() as db:
+            _, sequence_id, _, prompt_id, _ = await prepare(db)
+            db.add(Model(id='text-review', name='qwen-test', category='text', provider_id='provider1'))
+            service = ReviewRevisionService(db, 'p1')
+            scope = [{'target': 'unit', 'path': '/duration_ms'}]
+            body = ReviewRevisionRequest(prompt_revision_id=prompt_id, request_id='local-preview', model_id='text-review',
+                scope=scope, edits=[{'target': 'unit', 'path': '/duration_ms', 'before': 6000, 'after': 8000}])
+            fields = await service.editable_fields(sequence_id, prompt_id)
+            body.edits[0].before = next(field.value for field in fields.fields if field.path == '/duration_ms')
+            task = await service.preview_revision(sequence_id, body)
+            context = task.input_snapshot['run_args']['revision_context']
+            assert context['allowed_design_fields'] == {}
+            assert list(context['allowed_unit_fields']) == ['/duration_ms']
+            assert (await service.preview_revision(sequence_id, body)).id == task.id
+            with pytest.raises(ValueError, match='超出所选调整范围'):
+                validate_candidate(context, {'input_identity': context['input_identity'], 'changes': [
+                    {'target': 'unit', 'path': '/ratio', 'before': context['unit']['ratio'], 'after': '9:16', 'reason': '越界'}]})
+            candidate = (await service.read_task(task.id)).revision
+            assert candidate.preview_decisions
+            request = ApplyReviewRevisionRequest(task_id=task.id, input_identity=candidate.input_identity,
+                candidate_identity=candidate.candidate_identity, edits=body.edits, request_id='local-apply')
+            with pytest.raises(RevisionConflict, match='方向或输入已变化'):
+                await service.apply_revision(sequence_id, request)
+            request.scope = body.scope
+            applied = await service.apply_revision(sequence_id, request)
+            assert applied.stage == 'reviewing', applied.error
+            assert (await service.apply_revision(sequence_id, request)).prompt_revision_id == applied.prompt_revision_id
+            prompt = (await service.revision(applied.prompt_revision_id)).payload
+            assert prompt['text'] == candidate.preview_text
+            assert prompt['decisions'] == [item.model_dump(mode='json') for item in candidate.preview_decisions]
+
+
+@pytest.mark.asyncio
+async def test_local_scope_rejects_empty_duplicate_foreign_and_conflicting_input(tmp_path):
+    from pydantic import ValidationError
+    from app.core.contracts.directing.review_revision import ReviewRevisionRequest
+    from app.services.directing.review_revision import ReviewRevisionService
+    from tests.directing.test_production import prepare
+    from tests.directing.test_store import database
+
+    with pytest.raises(ValidationError):
+        ReviewRevisionRequest(prompt_revision_id='prompt', request_id='empty', scope=[])
+    async with database(tmp_path) as sessions:
+        async with sessions.begin() as db:
+            _, sequence_id, _, prompt_id, review_id = await prepare(db)
+            service = ReviewRevisionService(db, 'p1')
+            field = {'target': 'unit', 'path': '/duration_ms'}
+            for scope in [[field, field], [{'target': 'design', 'path': '/participants/0/name'}],
+                          [{'target': 'unit', 'path': '/duration_ms/unknown'}]]:
+                with pytest.raises(ValueError, match='调整范围'):
+                    await service.freeze_revision_input(sequence_id, ReviewRevisionRequest(
+                        prompt_revision_id=prompt_id, request_id='bad-scope', scope=scope))
+            with pytest.raises(ValueError, match='人工编辑超出'):
+                await service.freeze_revision_input(sequence_id, ReviewRevisionRequest(prompt_revision_id=prompt_id,
+                    request_id='bad-edit', scope=[field], edits=[{'target': 'unit', 'path': '/ratio', 'before': '16:9', 'after': '9:16'}]))
+            from tests.directing.test_store import frozen
+            packet = deepcopy((await service.revision(review_id)).payload)
+            packet['rows'][0]['verdict'] = 'revise'
+            review_id = (await frozen(service, sequence_id, 'review', packet)).id
+            with pytest.raises(ValueError, match='检查方向超出'):
+                await service.freeze_revision_input(sequence_id, ReviewRevisionRequest(prompt_revision_id=prompt_id,
+                    request_id='bad-direction', scope=[field], review_source={'kind': 'review', 'id': review_id},
+                    directions=[{'occurrence_id': packet['rows'][0]['occurrence_id'], 'role': packet['rows'][0]['role'],
+                                 'finding_index': -1, 'text': '其他问题'}]))

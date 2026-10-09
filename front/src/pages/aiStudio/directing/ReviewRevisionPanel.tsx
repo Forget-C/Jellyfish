@@ -1,11 +1,13 @@
 import { useContext, useEffect, useRef, useState } from 'react'
-import { Alert, Button, Input, Select, Space, Tag } from 'antd'
+import { Alert, Button, Input, Modal, Select, Space, Tag } from 'antd'
 import { ApiError, StudioDirectingService } from '../../../services/generated'
-import type { DirectingTaskRead, ApplyReviewRevisionRequest, ReviewRevisionRequest, WorkspaceRead, EditableRevisionField, ReviewPacket } from '../../../services/generated'
+import type { DirectingTaskRead, ApplyReviewRevisionRequest, ReviewRevisionRequest, WorkspaceRead, EditableRevisionField, ReviewPacket, RevisionFieldTarget } from '../../../services/generated'
+import { InstructionContent } from './InstructionContentView'
+import { relatedInstructionPath } from './instructionContent'
 import { ProductionDetailContext } from './ProductionWorkbench'
 import { useWorkspaceDraft } from './WorkspaceDrafts'
 import { useWorkspacePreparation } from './useWorkspacePreparation'
-import { revisionDirections, revisionInputIdentity, revisionIssueKey, directRevisionEdits, revisionRecoveryLabel, matchingRevisionFields } from './reviewRevision'
+import { reviewDirectionScope, revisionDirections, revisionInputIdentity, revisionIssueKey, directRevisionEdits, revisionRecoveryLabel, matchingRevisionFields, readRevisionScope } from './reviewRevision'
 import { contextForPrompt, readablePath, readableSegments } from './readableText'
 import { directingError } from './common'
 
@@ -24,7 +26,7 @@ const stageLabel = (stage: 'saved' | 'compiled' | 'reviewing' | 'blocked') => ({
 export function ReviewRevisionPanel(props: Props) {
   const { scope, projectId, sequenceId, promptId, reviewSource, workspace, packet, disabled, onTask, onApplied } = props
   const detail = useContext(ProductionDetailContext)
-  const draft = useWorkspacePreparation('问题处理方向', scope, { instruction: '', fieldValues: {} as Record<string, string>, directions: {} as Record<string, string>, soundChoices: {} as Record<string, string>, request: '', taskId: '', identity: '', application: '' })
+  const draft = useWorkspacePreparation('问题处理方向', scope, { instruction: '', fieldValues: {} as Record<string, string>, directions: {} as Record<string, string>, soundChoices: {} as Record<string, string>, request: '', taskId: '', identity: '', application: '', scopeRequest: '', scopeLabel: '' })
   const [fields, setFields] = useState<EditableRevisionField[]>([])
   const [fieldsError, setFieldsError] = useState('')
   const [fieldEditorOpen, setFieldEditorOpen] = useState(false)
@@ -41,12 +43,18 @@ export function ReviewRevisionPanel(props: Props) {
   const prompt = workspace.prompts.find(row => row.id === promptId)
   const plan = workspace.plans.find(row => row.id === prompt?.content.plan_revision_id)
   const design = workspace.designs.find(row => row.id === plan?.content.design_revision_id)
-  const directions = packet ? revisionDirections(packet, draft.value.directions).map(({ direction, ...issue }) => {
+  const parsedScope = readRevisionScope(draft.value.scopeRequest)
+  const localScope = parsedScope.scope
+  const allDirections = packet ? revisionDirections(packet, draft.value.directions).map(({ direction, ...issue }) => {
     const choice: string | undefined = draft.value.soundChoices[revisionIssueKey(issue, issue.finding_index)]
     return { ...issue, text: direction, sound_execution: choice === 'generated' || choice === 'postproduction' ? choice as 'generated' | 'postproduction' : null }
   }) : []
+  const inScope = (target: string, path: string) => !localScope || localScope.some(item => item.target === target && item.path === path)
+  const directionInScope = (issue: typeof allDirections[number]) => !localScope || packet?.rows.find(row => row.occurrence_id === issue.occurrence_id && row.role === issue.role)?.findings[issue.finding_index]?.affected_paths.some(path => localScope?.some(item => item.target === 'design' && relatedInstructionPath(item.path, path)))
+  const directions = allDirections.filter(directionInScope)
   const edits = directRevisionEdits(fields, draft.value.fieldValues)
-  const identity = revisionInputIdentity([scope, workspace.sequence, prompt, plan, design, packet, draft.value.instruction, draft.value.fieldValues], directions)
+  const scopeConflict = parsedScope.invalid || edits.some(edit => !inScope(edit.target, edit.path)) || allDirections.some(issue => !directionInScope(issue) && (issue.text.trim() || issue.sound_execution))
+  const identity = revisionInputIdentity([scope, workspace.sequence, prompt, plan, design, packet, draft.value.instruction, draft.value.fieldValues, localScope], directions)
   useEffect(() => {
     let active = true
     void StudioDirectingService.directingRevisionFields({ projectId, sequenceId, promptRevisionId: promptId }).then(response => {
@@ -62,9 +70,11 @@ export function ReviewRevisionPanel(props: Props) {
   const draftRef = useRef(draft)
   draftRef.current = draft
   const candidate = task?.revision
+  // 原任务直接保存的检查沿用显式来源身份；人工派生检查仍保持独立。
+  const graphReviewSource = (source?: ReviewRevisionRequest['review_source']) => source ? reviewDirectionScope(projectId, sequenceId, promptId, source.kind === 'review' ? workspace.reviews.find(row => row.id === source.id) || { id: source.id } : undefined, source.kind === 'task' ? source.id : undefined) : undefined
   useEffect(() => {
     if (!task?.revision_application || !task.revision || !task.revision_request) return
-    const body: ApplyReviewRevisionRequest = { task_id: task.task_id, request_id: task.revision_application.request_id, input_identity: task.revision.input_identity, directions: task.revision_request.directions || [], instruction: task.revision_request.instruction, edits: task.revision_request.edits, candidate_identity: task.revision.candidate_identity }
+    const body: ApplyReviewRevisionRequest = { task_id: task.task_id, request_id: task.revision_application.request_id, input_identity: task.revision.input_identity, directions: task.revision_request.directions || [], instruction: task.revision_request.instruction, edits: task.revision_request.edits, scope: task.revision_request.scope, candidate_identity: task.revision.candidate_identity }
     const application = JSON.stringify(body)
     if (draftRef.current.value.application !== application) draftRef.current.update({ application })
   }, [task])
@@ -73,7 +83,7 @@ export function ReviewRevisionPanel(props: Props) {
   useWorkspaceDraft({ name: '采用修改方案', dirty: false, busy: busy && applying, save: async () => true, discard: () => {} })
   const context = contextForPrompt(workspace, promptId)
   const fieldLabel = (field: EditableRevisionField) => field.path === '/duration_ms' ? '时长（秒）' : field.path === '/ratio' ? '画幅' : field.path === '/sound/execution' ? '声音制作方式' : readablePath(field.path, context)
-  const availableFields = matchingRevisionFields(fields, fieldPaths)
+  const availableFields = matchingRevisionFields(fields.filter(field => inScope(field.target, field.path)), fieldPaths)
   const selectedField = availableFields.find(field => `${field.target}:${field.path}` === fieldKey) || availableFields[0]
   useEffect(() => {
     if (detail.request?.tab !== 'revision' || handledRequest.current === detail.request) return
@@ -115,10 +125,10 @@ export function ReviewRevisionPanel(props: Props) {
   }, [projectId, draft.value.taskId])
 
   const generate = async () => {
-    if (busy || applying || disabled) return
+    if (busy || applying || disabled || scopeConflict) return
     const frozen = identity
     const recover = draft.value.request && !draft.value.taskId && draft.value.identity === frozen
-    const body: ReviewRevisionRequest = recover ? JSON.parse(draft.value.request) : { prompt_revision_id: promptId, review_source: reviewSource, instruction: draft.value.instruction, edits, directions, request_id: crypto.randomUUID() }
+    const body: ReviewRevisionRequest = recover ? JSON.parse(draft.value.request) : { prompt_revision_id: promptId, review_source: reviewSource, instruction: draft.value.instruction, edits, directions, scope: localScope, request_id: crypto.randomUUID() }
     // 先保存请求身份，响应丢失后继续核实同一次生成。
     if (!draft.update({ request: JSON.stringify(body), taskId: '', identity: frozen })) { setError('请求身份未能暂存，请恢复浏览器存储后重试。'); return }
     setTask(undefined); setBusy(true); setError('')
@@ -133,8 +143,8 @@ export function ReviewRevisionPanel(props: Props) {
     finally { if (mounted.current) setBusy(false) }
   }
   const apply = async () => {
-    if (busy || disabled || (!applying && (stale || !candidate))) return
-    const body: ApplyReviewRevisionRequest = applying ? JSON.parse(draft.value.application) : { task_id: draft.value.taskId, input_identity: candidate!.input_identity, candidate_identity: candidate!.candidate_identity, instruction: draft.value.instruction, edits, directions, request_id: crypto.randomUUID() }
+    if (busy || disabled || (!applying && scopeConflict) || (!applying && (stale || !candidate))) return
+    const body: ApplyReviewRevisionRequest = applying ? JSON.parse(draft.value.application) : { task_id: draft.value.taskId, input_identity: candidate!.input_identity, candidate_identity: candidate!.candidate_identity, instruction: draft.value.instruction, edits, directions, scope: localScope, request_id: crypto.randomUUID() }
     if (!draft.update({ application: JSON.stringify(body) })) { setError('采用身份未能暂存，请恢复浏览器存储后重试。'); return }
     setBusy(true); setError(''); setProgress('正在保存修订、核对单元并重新检查…')
     try {
@@ -173,22 +183,28 @@ export function ReviewRevisionPanel(props: Props) {
     return '本次修改要求'
   }
   const canApply = candidate && (!candidate.summary || candidate.summary.status === 'planned') && !!candidate.preview_text && !!candidate.candidate_identity && (candidate.changes || []).length > 0 && (candidate.outcomes || []).every(row => row.status === 'planned')
+  const adjustScope = (next: RevisionFieldTarget[] | null, label: string) => {
+    if (applying) return
+    const change = () => {
+      draft.update({ scopeRequest: next ? JSON.stringify(next) : '', scopeLabel: label })
+      setFieldPaths(next?.filter(item => item.target === 'design').map(item => item.path)); setFieldKey('')
+      requestAnimationFrame(() => document.getElementById('revision-instruction')?.focus())
+    }
+    if (JSON.stringify(next) !== JSON.stringify(localScope) && (draft.value.instruction.trim() || edits.length || allDirections.some(issue => issue.text.trim()))) {
+      Modal.confirm({ title: '更改调整对象', content: '已有修改要求和字段编辑会保留。请核对它们是否适用于新对象；范围外内容需要处理后才能生成方案。', okText: '更改对象并保留输入', cancelText: '保持当前对象', onOk: change })
+    } else change()
+  }
   const controls = <div className="review-revision-controls">
     <small role="status">修改要求自动暂存于本浏览器。</small>
     {task?.status === 'failed' && <Alert type="error" message={task.error || '修改方案生成失败，可重新生成。'} />}
     {!directions.length && !draft.value.instruction.trim() && !edits.length && <p>填写修改要求，或直接编辑一项内容后生成方案。</p>}
     <Space wrap>
-      {!applying && <Button type={canApply && !stale ? 'default' : 'primary'} loading={busy || generating} disabled={disabled || workspace.sequence.source_changed || !!draft.error || generating || (!directions.length && !draft.value.instruction.trim() && !edits.length) || (!!Object.keys(draft.value.fieldValues).length && (!fields.length || !!fieldsError))} onClick={() => { void generate() }}>{draft.value.request && !draft.value.taskId && !stale ? '核实本次生成' : candidate || stale ? '更新修改方案' : '生成修改方案'}</Button>}
+      {!applying && <Button type={canApply && !stale ? 'default' : 'primary'} loading={busy || generating} disabled={scopeConflict || disabled || workspace.sequence.source_changed || !!draft.error || generating || (!directions.length && !draft.value.instruction.trim() && !edits.length) || (!!Object.keys(draft.value.fieldValues).length && (!fields.length || !!fieldsError))} onClick={() => { void generate() }}>{draft.value.request && !draft.value.taskId && !stale ? '核实本次生成' : candidate || stale ? '更新修改方案' : edits.length && !draft.value.instruction.trim() && !directions.some(row => row.text.trim()) ? '预览修改' : '生成修改方案'}</Button>}
 
     </Space>
   </div>
   return <section className="review-revision-panel" data-workspace-target="revision" aria-label="修改方案">
-      <section className="revision-current-unit" aria-label="这次拍什么">
-        <header><h2>这次拍什么</h2><Button onClick={() => { setFieldPaths(undefined); setFieldEditorOpen(open => !open) }} aria-expanded={fieldEditorOpen}>直接编辑</Button></header>
-        {context.unit?.coverage.map((coverage, index) => <div key={coverage.id}><strong>{context.entities.find(entity => entity.kind === '镜头' && entity.id === coverage.shot_id)?.label || '历史镜头暂不可用'} · 本单元第 {index + 1} 段</strong><p>{readable(coverage.action_scope) || '动作范围未填写'}</p>{context.design?.performance.beats.filter(beat => coverage.beat_ids.includes(beat.beat_id) && beat.physical_action.text).map((beat, beatIndex) => <p className="design-secondary" key={beatIndex}>{readable(beat.participant_id)}：{readable(beat.physical_action)}</p>)}</div>)}
-        {!context.unit && <p>当前指令的固定单元暂不可用。</p>}
-        <small className="design-secondary">依据当前指令的固定版本；修改草稿不会改变当前指令。</small>
-      </section>
+      {prompt && <InstructionContent key={promptId} prompt={prompt.content} promptId={promptId} workspace={workspace} fields={fields} candidate={candidate} stale={stale} packet={packet} scope={localScope} instruction={draft.value.instruction} frozenInstruction={task?.revision_request?.instruction} candidateReviewSource={graphReviewSource(task?.revision_request?.review_source)} reviewSource={graphReviewSource(reviewSource)} onSuggestion={suggestion => detail.show({ tab: 'revision', suggestion })} onAdjust={adjustScope} onDesign={props.onDesign} onPrepare={props.onPrepare} onEdit={() => { setFieldPaths(undefined); setFieldEditorOpen(open => !open) }} />}
       {fieldEditorOpen && <section className="revision-field-editor" aria-label="直接编辑"><header><h3>直接编辑</h3><Button onClick={() => setFieldEditorOpen(false)}>收起编辑</Button></header>
         {fieldsError && <Alert type="warning" message="可编辑内容读取失败，已填写内容保留。" action={<Button onClick={() => setFieldAttempt(value => value + 1)}>重试读取</Button>} />}
         {!fields.length && !fieldsError && <p>正在读取可编辑内容…</p>}
@@ -206,6 +222,8 @@ export function ReviewRevisionPanel(props: Props) {
         <p className="design-secondary">只改这些字段可直接预览，不调用 AI。更换模型或参考、调整共享内容需修改对应依据，当前要求会保留。</p>
         <Space wrap><Button onClick={props.onPrepare}>前往拍摄准备</Button><Button onClick={props.onDesign}>前往导演设计</Button></Space>
       </section>}
+      <div className="instruction-target"><span>调整对象：</span>{parsedScope.invalid ? <><Tag color="orange">调整范围草稿无法读取</Tag><Button disabled={applying} onClick={() => adjustScope(null, '')}>清除范围并核对整体要求</Button></> : localScope ? <><Tag color="blue">{draft.value.scopeLabel || '所选字段'} · {localScope.length} 项</Tag><Button type="link" disabled={applying} onClick={() => adjustScope(null, '')}>改为整体调整</Button></> : <Tag>整份指令</Tag>}</div>
+      {scopeConflict && <Alert type="warning" message="已有字段编辑或检查方向超出调整范围，请核对输入或改为整体调整。" />}
       <label htmlFor="revision-instruction">你希望怎么改？</label>
       <Input.TextArea id="revision-instruction" value={draft.value.instruction} disabled={applying} maxLength={8000} autoSize={{ minRows: 3, maxRows: 8 }} placeholder="例如：保留人物停步，镜头改为固定机位；对白交给后期。" onChange={event => draft.update({ instruction: event.target.value })} />
       {controls}
@@ -235,7 +253,7 @@ export function ReviewRevisionPanel(props: Props) {
       {task?.revision_application?.stage === 'blocked' && !busy && <Button onClick={reviseAgain}>保留版本，重新调整方向</Button>}
       {candidate && !candidate.changes?.length && <p>本次没有可执行的变化，不会创建新版本。请核对要求或返回当前指令。</p>}
       {candidate && !canApply && !!candidate.changes?.length && <p>仍有必要选择、无法执行的问题或未完成的指令预览，请核对后更新方案。</p>}
-      <div className="review-revision-actions">{(applying || canApply && !stale) && <Button type="primary" loading={busy} disabled={disabled || (!applying && (!canApply || stale || !!draft.error))} onClick={() => { void apply() }}>{applying ? revisionRecoveryLabel(task?.revision_application) : '采用并重新检查'}</Button>}</div>
+      <div className="review-revision-actions">{(applying || canApply && !stale) && <Button type="primary" loading={busy} disabled={disabled || (!applying && (!canApply || stale || scopeConflict || !!draft.error))} onClick={() => { void apply() }}>{applying ? revisionRecoveryLabel(task?.revision_application) : '采用并重新检查'}</Button>}</div>
       <small>采用后生成新版本并重新检查；检查通过前不会标记为已解决，也不会自动拍摄。</small>
     </section>
 }

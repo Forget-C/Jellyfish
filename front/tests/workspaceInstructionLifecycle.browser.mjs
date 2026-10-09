@@ -67,7 +67,7 @@ try {
   // 主编辑器无需打开抽屉即可输入，检查结论在固定侧栏。
   await page.getByRole('textbox', { name: '你希望怎么改？' }).waitFor()
   await page.getByRole('complementary', { name: '指令检查' }).waitFor()
-  assert.equal(await page.getByText('原指令全文', { exact: true }).isVisible(), false)
+  assert.equal(await page.getByText('原指令全文', { exact: true }).isVisible(), true)
   assert.equal(await page.getByText('技术详情', { exact: true }).isVisible(), false)
   for (const [width, height] of [[1440, 1000], [1024, 768], [768, 1024], [375, 812]]) {
     await page.setViewportSize({ width, height })
