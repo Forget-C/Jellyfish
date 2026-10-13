@@ -23,5 +23,5 @@ export function canvasConnection(from: { left: number; top: number; width: numbe
   const x2 = sameColumn || !reverse ? to.left : to.left + to.width
   const y1 = from.top + from.height / 2, y2 = to.top + to.height / 2
   const control = sameColumn ? Math.min(x1, x2) - 14 : (x1 + x2) / 2
-  return { d: `M${x1},${y1} C${control},${y1} ${control},${y2} ${x2},${y2}`, x: (x1 + x2) / 2, y: (y1 + y2) / 2 - 8 }
+  return { start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, d: `M${x1},${y1} C${control},${y1} ${control},${y2} ${x2},${y2}`, x: (x1 + x2) / 2, y: (y1 + y2) / 2 - 8 }
 }

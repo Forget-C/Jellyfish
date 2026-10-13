@@ -6,6 +6,7 @@ import type { AIRequest } from '../models/AIRequest';
 import type { ApiResponse_AssetSummary_ } from '../models/ApiResponse_AssetSummary_';
 import type { ApiResponse_BatchRead_ } from '../models/ApiResponse_BatchRead_';
 import type { ApiResponse_ChapterAssemblyRead_ } from '../models/ApiResponse_ChapterAssemblyRead_';
+import type { ApiResponse_ChapterDeliveriesRead_ } from '../models/ApiResponse_ChapterDeliveriesRead_';
 import type { ApiResponse_ChapterOverview_ } from '../models/ApiResponse_ChapterOverview_';
 import type { ApiResponse_ChapterSequences_ } from '../models/ApiResponse_ChapterSequences_';
 import type { ApiResponse_CompileResult_ } from '../models/ApiResponse_CompileResult_';
@@ -21,14 +22,43 @@ import type { ApiResponse_DivisionVersionDetail_ } from '../models/ApiResponse_D
 import type { ApiResponse_EditableRevisionFields_ } from '../models/ApiResponse_EditableRevisionFields_';
 import type { ApiResponse_ExtractedFrame_ } from '../models/ApiResponse_ExtractedFrame_';
 import type { ApiResponse_FeedbackRead_ } from '../models/ApiResponse_FeedbackRead_';
+import type { ApiResponse_InstructionBasisRead_ } from '../models/ApiResponse_InstructionBasisRead_';
+import type { ApiResponse_InstructionCheckComparison_ } from '../models/ApiResponse_InstructionCheckComparison_';
+import type { ApiResponse_InstructionCheckConfirmation_ } from '../models/ApiResponse_InstructionCheckConfirmation_';
 import type { ApiResponse_LedgerRead_ } from '../models/ApiResponse_LedgerRead_';
 import type { ApiResponse_list_AssetSummary__ } from '../models/ApiResponse_list_AssetSummary__';
 import type { ApiResponse_list_BatchRead__ } from '../models/ApiResponse_list_BatchRead__';
+import type { ApiResponse_list_InstructionCheckRead__ } from '../models/ApiResponse_list_InstructionCheckRead__';
 import type { ApiResponse_list_ProjectStyleRevision__ } from '../models/ApiResponse_list_ProjectStyleRevision__';
+import type { ApiResponse_list_SceneCutReviewRead__ } from '../models/ApiResponse_list_SceneCutReviewRead__';
+import type { ApiResponse_list_SceneDeliveryRead__ } from '../models/ApiResponse_list_SceneDeliveryRead__';
+import type { ApiResponse_list_SceneDesignSuggestionRead__ } from '../models/ApiResponse_list_SceneDesignSuggestionRead__';
+import type { ApiResponse_list_SceneEndFrameRead__ } from '../models/ApiResponse_list_SceneEndFrameRead__';
+import type { ApiResponse_list_SceneExportRead__ } from '../models/ApiResponse_list_SceneExportRead__';
+import type { ApiResponse_list_SceneInstructionSuggestionRead__ } from '../models/ApiResponse_list_SceneInstructionSuggestionRead__';
+import type { ApiResponse_list_SceneSeamReviewRead__ } from '../models/ApiResponse_list_SceneSeamReviewRead__';
+import type { ApiResponse_list_SceneTakeLibraryRead__ } from '../models/ApiResponse_list_SceneTakeLibraryRead__';
+import type { ApiResponse_list_SceneTakeReviewRead__ } from '../models/ApiResponse_list_SceneTakeReviewRead__';
+import type { ApiResponse_list_SceneVersionRead__ } from '../models/ApiResponse_list_SceneVersionRead__';
+import type { ApiResponse_list_SceneVideoRead__ } from '../models/ApiResponse_list_SceneVideoRead__';
 import type { ApiResponse_list_SequenceRead__ } from '../models/ApiResponse_list_SequenceRead__';
 import type { ApiResponse_list_SourceRead__ } from '../models/ApiResponse_list_SourceRead__';
 import type { ApiResponse_MediaRead_ } from '../models/ApiResponse_MediaRead_';
 import type { ApiResponse_ReviewRevisionApplication_ } from '../models/ApiResponse_ReviewRevisionApplication_';
+import type { ApiResponse_SceneCopyReadiness_ } from '../models/ApiResponse_SceneCopyReadiness_';
+import type { ApiResponse_SceneCutReviewRead_ } from '../models/ApiResponse_SceneCutReviewRead_';
+import type { ApiResponse_SceneDeliveryRead_ } from '../models/ApiResponse_SceneDeliveryRead_';
+import type { ApiResponse_SceneDesignPreview_ } from '../models/ApiResponse_SceneDesignPreview_';
+import type { ApiResponse_SceneEndFrameRead_ } from '../models/ApiResponse_SceneEndFrameRead_';
+import type { ApiResponse_SceneExportInspection_ } from '../models/ApiResponse_SceneExportInspection_';
+import type { ApiResponse_SceneExportRead_ } from '../models/ApiResponse_SceneExportRead_';
+import type { ApiResponse_SceneInstructionApply_ } from '../models/ApiResponse_SceneInstructionApply_';
+import type { ApiResponse_SceneInstructionPreview_ } from '../models/ApiResponse_SceneInstructionPreview_';
+import type { ApiResponse_SceneSeamReviewRead_ } from '../models/ApiResponse_SceneSeamReviewRead_';
+import type { ApiResponse_SceneTakeReviewRead_ } from '../models/ApiResponse_SceneTakeReviewRead_';
+import type { ApiResponse_SceneVersionRead_ } from '../models/ApiResponse_SceneVersionRead_';
+import type { ApiResponse_SceneVideoPreparation_ } from '../models/ApiResponse_SceneVideoPreparation_';
+import type { ApiResponse_SceneVideoSaveResult_ } from '../models/ApiResponse_SceneVideoSaveResult_';
 import type { ApiResponse_SequenceRead_ } from '../models/ApiResponse_SequenceRead_';
 import type { ApiResponse_TaskAccepted_ } from '../models/ApiResponse_TaskAccepted_';
 import type { ApiResponse_Union_DivisionSaved__NoneType__ } from '../models/ApiResponse_Union_DivisionSaved__NoneType__';
@@ -44,12 +74,32 @@ import type { DivisionDraft } from '../models/DivisionDraft';
 import type { DivisionSave } from '../models/DivisionSave';
 import type { ExtractFrameRequest } from '../models/ExtractFrameRequest';
 import type { FeedbackWrite } from '../models/FeedbackWrite';
+import type { InstructionBasisConfirm } from '../models/InstructionBasisConfirm';
+import type { InstructionCheckRequest } from '../models/InstructionCheckRequest';
 import type { RegroupRequest } from '../models/RegroupRequest';
 import type { RepairPlanRequest } from '../models/RepairPlanRequest';
 import type { ReviewDecisionRequest } from '../models/ReviewDecisionRequest';
 import type { ReviewRequest } from '../models/ReviewRequest';
 import type { ReviewRevisionRequest } from '../models/ReviewRevisionRequest';
 import type { RevisionWrite } from '../models/RevisionWrite';
+import type { SceneCutReviewCreate } from '../models/SceneCutReviewCreate';
+import type { SceneDeliveryCreate } from '../models/SceneDeliveryCreate';
+import type { SceneDesignPreviewRequest } from '../models/SceneDesignPreviewRequest';
+import type { SceneDesignRequest } from '../models/SceneDesignRequest';
+import type { SceneEndFrameCreate } from '../models/SceneEndFrameCreate';
+import type { SceneExportInspect } from '../models/SceneExportInspect';
+import type { SceneExportRequest } from '../models/SceneExportRequest';
+import type { SceneExportRetry } from '../models/SceneExportRetry';
+import type { SceneInstructionRequest } from '../models/SceneInstructionRequest';
+import type { SceneSeamReviewCreate } from '../models/SceneSeamReviewCreate';
+import type { SceneTakeReviewConfirm } from '../models/SceneTakeReviewConfirm';
+import type { SceneVersionCopy } from '../models/SceneVersionCopy';
+import type { SceneVersionCreate } from '../models/SceneVersionCreate';
+import type { SceneVersionSave } from '../models/SceneVersionSave';
+import type { SceneVideoPrepareRequest } from '../models/SceneVideoPrepareRequest';
+import type { SceneVideoRetryRequest } from '../models/SceneVideoRetryRequest';
+import type { SceneVideoSaveRequest } from '../models/SceneVideoSaveRequest';
+import type { SceneVideoSubmitRequest } from '../models/SceneVideoSubmitRequest';
 import type { SeamReviewRequest } from '../models/SeamReviewRequest';
 import type { SequenceCreate } from '../models/SequenceCreate';
 import type { SequenceUpdate } from '../models/SequenceUpdate';
@@ -483,6 +533,448 @@ export class StudioDirectingService {
         });
     }
     /**
+     * Scene Versions
+     * 浏览已存在的场次版本，不创建默认方案。
+     * @returns ApiResponse_list_SceneVersionRead__ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneVersions({
+        projectId,
+        sequenceId,
+    }: {
+        projectId: string,
+        sequenceId: string,
+    }): CancelablePromise<ApiResponse_list_SceneVersionRead__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Scene Version
+     * 显式创建空方案，历史执行记录不变。
+     * @returns ApiResponse_SceneVersionRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingCreateSceneVersion({
+        projectId,
+        sequenceId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        requestBody: SceneVersionCreate,
+    }): CancelablePromise<ApiResponse_SceneVersionRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Scene Version
+     * 读取具有固定原文依据的当前方案。
+     * @returns ApiResponse_SceneVersionRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneVersion({
+        projectId,
+        sequenceId,
+        versionId,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+    }): CancelablePromise<ApiResponse_SceneVersionRead_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Save Scene Version
+     * 更新同一版本，保存并不确认设计或发起执行。
+     * @returns ApiResponse_SceneVersionRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingSaveSceneVersion({
+        projectId,
+        sequenceId,
+        versionId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        requestBody: SceneVersionSave,
+    }): CancelablePromise<ApiResponse_SceneVersionRead_> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Scene Copy Readiness
+     * 核实当前关联任务，取消请求与终态分别表达。
+     * @returns ApiResponse_SceneCopyReadiness_ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneCopyReadiness({
+        projectId,
+        sequenceId,
+        versionId,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+    }): CancelablePromise<ApiResponse_SceneCopyReadiness_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/copy-readiness',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Copy Scene Version
+     * 复制点击时完整内容，事务内重新核验，不预先保存原版本。
+     * @returns ApiResponse_SceneVersionRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingCopySceneVersion({
+        projectId,
+        sequenceId,
+        versionId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        requestBody: SceneVersionCopy,
+    }): CancelablePromise<ApiResponse_SceneVersionRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/copy',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Scene Take Library
+     * 浏览同场次素材及其原生产依据，不复制或写入判断。
+     * @returns ApiResponse_list_SceneTakeLibraryRead__ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneTakeLibrary({
+        projectId,
+        sequenceId,
+        versionId,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+    }): CancelablePromise<ApiResponse_list_SceneTakeLibraryRead__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/take-library',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Scene Take Reviews
+     * 只读查看当前版本的固定素材审片记录。
+     * @returns ApiResponse_list_SceneTakeReviewRead__ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneTakeReviews({
+        projectId,
+        sequenceId,
+        versionId,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+    }): CancelablePromise<ApiResponse_list_SceneTakeReviewRead__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/take-reviews',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Confirm Scene Take Review
+     * 明确复核当前已保存判断，或核实同一保存修订的既有复核记录。
+     * @returns ApiResponse_SceneTakeReviewRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingConfirmSceneTakeReview({
+        projectId,
+        sequenceId,
+        versionId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        requestBody: SceneTakeReviewConfirm,
+    }): CancelablePromise<ApiResponse_SceneTakeReviewRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/take-reviews',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Scene Cut Reviews
+     * 查看固定整场验收及当前适用性，不更新既有记录。
+     * @returns ApiResponse_list_SceneCutReviewRead__ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneCutReviews({
+        projectId,
+        sequenceId,
+        versionId,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+    }): CancelablePromise<ApiResponse_list_SceneCutReviewRead__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/cut-reviews',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Scene Cut Review
+     * 明确记录已保存剪辑的人工结论，或核实原请求结果。
+     * @returns ApiResponse_SceneCutReviewRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingCreateSceneCutReview({
+        projectId,
+        sequenceId,
+        versionId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        requestBody: SceneCutReviewCreate,
+    }): CancelablePromise<ApiResponse_SceneCutReviewRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/cut-reviews',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Scene End Frames
+     * 读取原素材实际落幅及其当前适用性。
+     * @returns ApiResponse_list_SceneEndFrameRead__ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneEndFrames({
+        projectId,
+        sequenceId,
+        versionId,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+    }): CancelablePromise<ApiResponse_list_SceneEndFrameRead__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/end-frames',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Scene End Frame
+     * 显式提取保存采用的真实边界，不替换依赖或启动生成。
+     * @returns ApiResponse_SceneEndFrameRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingCreateSceneEndFrame({
+        projectId,
+        sequenceId,
+        versionId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        requestBody: SceneEndFrameCreate,
+    }): CancelablePromise<ApiResponse_SceneEndFrameRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/end-frames',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Scene Seam Reviews
+     * 查看固定接缝审查及当前适用性，不更新既有记录。
+     * @returns ApiResponse_list_SceneSeamReviewRead__ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneSeamReviews({
+        projectId,
+        sequenceId,
+        versionId,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+    }): CancelablePromise<ApiResponse_list_SceneSeamReviewRead__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/seam-reviews',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Scene Seam Review
+     * 明确记录已保存真实接缝的人工结论，或核实原请求结果。
+     * @returns ApiResponse_SceneSeamReviewRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingCreateSceneSeamReview({
+        projectId,
+        sequenceId,
+        versionId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        requestBody: SceneSeamReviewCreate,
+    }): CancelablePromise<ApiResponse_SceneSeamReviewRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/seam-reviews',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * Save Revision
      * 保存设计、计划或粗剪草稿。
      * @returns ApiResponse_WorkspaceRead_ Successful Response
@@ -564,6 +1056,101 @@ export class StudioDirectingService {
             path: {
                 'project_id': projectId,
                 'chapter_id': chapterId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Scene Design Suggestions
+     * 读取本版本的建议任务和固定依据，历史版本也可查看。
+     * @returns ApiResponse_list_SceneDesignSuggestionRead__ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneDesignSuggestions({
+        projectId,
+        sequenceId,
+        versionId,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+    }): CancelablePromise<ApiResponse_list_SceneDesignSuggestionRead__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/design-suggestions',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Scene Design Suggest
+     * 冻结本版本明确选择的原文与整场设计，提交只生成建议。
+     * @returns ApiResponse_TaskAccepted_ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneDesignSuggest({
+        projectId,
+        sequenceId,
+        versionId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        requestBody: SceneDesignRequest,
+    }): CancelablePromise<ApiResponse_TaskAccepted_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/design-suggestions',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Scene Design Preview
+     * 重新核对当前输入与建议，不保存、不创建业务版本。
+     * @returns ApiResponse_SceneDesignPreview_ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneDesignPreview({
+        projectId,
+        sequenceId,
+        versionId,
+        taskId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        taskId: string,
+        requestBody: SceneDesignPreviewRequest,
+    }): CancelablePromise<ApiResponse_SceneDesignPreview_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/design-suggestions/{task_id}/preview',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+                'task_id': taskId,
             },
             body: requestBody,
             mediaType: 'application/json',
@@ -1393,6 +1980,88 @@ export class StudioDirectingService {
         });
     }
     /**
+     * Chapter Deliveries
+     * 读取章节明确使用的固定场次内容。
+     * @returns ApiResponse_ChapterDeliveriesRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingChapterDeliveries({
+        projectId,
+        chapterId,
+    }: {
+        projectId: string,
+        chapterId: string,
+    }): CancelablePromise<ApiResponse_ChapterDeliveriesRead_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/chapters/{chapter_id}/deliveries',
+            path: {
+                'project_id': projectId,
+                'chapter_id': chapterId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Scene Deliveries
+     * 读取原场次的全部固定交付来源。
+     * @returns ApiResponse_list_SceneDeliveryRead__ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneDeliveries({
+        projectId,
+        sequenceId,
+    }: {
+        projectId: string,
+        sequenceId: string,
+    }): CancelablePromise<ApiResponse_list_SceneDeliveryRead__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/deliveries',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Scene Delivery
+     * 明确更新章节使用，重复核实不重新激活旧交付。
+     * @returns ApiResponse_SceneDeliveryRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingCreateSceneDelivery({
+        projectId,
+        sequenceId,
+        versionId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        requestBody: SceneDeliveryCreate,
+    }): CancelablePromise<ApiResponse_SceneDeliveryRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/deliveries',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * Chapter Assembly
      * 查询章节顺序播放依据、验收缺口与跨场审查。
      * @returns ApiResponse_ChapterAssemblyRead_ Successful Response
@@ -1618,6 +2287,726 @@ export class StudioDirectingService {
             },
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Scene Instruction Suggest
+     * 固定本次输入，仅提交当前单元的指令建议。
+     * @returns ApiResponse_TaskAccepted_ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneInstructionSuggest({
+        projectId,
+        sequenceId,
+        versionId,
+        unitId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        unitId: string,
+        requestBody: SceneInstructionRequest,
+    }): CancelablePromise<ApiResponse_TaskAccepted_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/instruction-suggestions',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+                'unit_id': unitId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Scene Instruction Suggestions
+     * 读取本单元指令任务的真实状态、固定输入与结果。
+     * @returns ApiResponse_list_SceneInstructionSuggestionRead__ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneInstructionSuggestions({
+        projectId,
+        sequenceId,
+        versionId,
+        unitId,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        unitId: string,
+    }): CancelablePromise<ApiResponse_list_SceneInstructionSuggestionRead__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/instruction-suggestions',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+                'unit_id': unitId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Scene Instruction Preview
+     * 重新核对原单元及输入后返回整份建议，不保存或生成视频。
+     * @returns ApiResponse_SceneInstructionPreview_ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneInstructionPreview({
+        projectId,
+        sequenceId,
+        versionId,
+        unitId,
+        taskId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        unitId: string,
+        taskId: string,
+        requestBody: SceneDesignPreviewRequest,
+    }): CancelablePromise<ApiResponse_SceneInstructionPreview_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/instruction-suggestions/{task_id}/preview',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+                'unit_id': unitId,
+                'task_id': taskId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Instruction Basis
+     * 比较当前正文的已确认依据，不保存或发起生成。
+     * @returns ApiResponse_InstructionBasisRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingInstructionBasis({
+        projectId,
+        sequenceId,
+        versionId,
+        unitId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        unitId: string,
+        requestBody: SceneDesignPreviewRequest,
+    }): CancelablePromise<ApiResponse_InstructionBasisRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/instruction-basis',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+                'unit_id': unitId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Confirm Instruction Basis
+     * 用户明确确认已核对正文，建立独立回执；并不等同于检查通过。
+     * @returns ApiResponse_InstructionBasisRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingConfirmInstructionBasis({
+        projectId,
+        sequenceId,
+        versionId,
+        unitId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        unitId: string,
+        requestBody: InstructionBasisConfirm,
+    }): CancelablePromise<ApiResponse_InstructionBasisRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/instruction-basis/confirm',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+                'unit_id': unitId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Scene Instruction Apply
+     * 明确采用建议，返回一起应用的正文与依据；不保存版本或生成视频。
+     * @returns ApiResponse_SceneInstructionApply_ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneInstructionApply({
+        projectId,
+        sequenceId,
+        versionId,
+        unitId,
+        taskId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        unitId: string,
+        taskId: string,
+        requestBody: SceneDesignPreviewRequest,
+    }): CancelablePromise<ApiResponse_SceneInstructionApply_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/instruction-suggestions/{task_id}/apply',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+                'unit_id': unitId,
+                'task_id': taskId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Instruction Check
+     * 明确提交本单元检查，不自动应用结论。
+     * @returns ApiResponse_TaskAccepted_ Successful Response
+     * @throws ApiError
+     */
+    public static directingInstructionCheck({
+        projectId,
+        sequenceId,
+        versionId,
+        unitId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        unitId: string,
+        requestBody: InstructionCheckRequest,
+    }): CancelablePromise<ApiResponse_TaskAccepted_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/instruction-checks',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+                'unit_id': unitId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Instruction Checks
+     * 读取固定检查输入及真实状态，查看不构成生成授权。
+     * @returns ApiResponse_list_InstructionCheckRead__ Successful Response
+     * @throws ApiError
+     */
+    public static directingInstructionChecks({
+        projectId,
+        sequenceId,
+        versionId,
+        unitId,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        unitId: string,
+    }): CancelablePromise<ApiResponse_list_InstructionCheckRead__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/instruction-checks',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+                'unit_id': unitId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Instruction Check Compare
+     * 核对当前正文与检查原输入，比较不授权生成。
+     * @returns ApiResponse_InstructionCheckComparison_ Successful Response
+     * @throws ApiError
+     */
+    public static directingInstructionCheckCompare({
+        projectId,
+        sequenceId,
+        versionId,
+        unitId,
+        taskId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        unitId: string,
+        taskId: string,
+        requestBody: SceneDesignPreviewRequest,
+    }): CancelablePromise<ApiResponse_InstructionCheckComparison_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/instruction-checks/{task_id}/compare',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+                'unit_id': unitId,
+                'task_id': taskId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Instruction Check Confirm
+     * 用户明确核对检查结果后返回可绑定身份，不保存或执行视频。
+     * @returns ApiResponse_InstructionCheckConfirmation_ Successful Response
+     * @throws ApiError
+     */
+    public static directingInstructionCheckConfirm({
+        projectId,
+        sequenceId,
+        versionId,
+        unitId,
+        taskId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        unitId: string,
+        taskId: string,
+        requestBody: SceneDesignPreviewRequest,
+    }): CancelablePromise<ApiResponse_InstructionCheckConfirmation_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/instruction-checks/{task_id}/confirm',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+                'unit_id': unitId,
+                'task_id': taskId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Scene Video Prepare
+     * 按原保存修订核验实际视频输入，不创建任务。
+     * @returns ApiResponse_SceneVideoPreparation_ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneVideoPrepare({
+        projectId,
+        sequenceId,
+        versionId,
+        unitId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        unitId: string,
+        requestBody: SceneVideoPrepareRequest,
+    }): CancelablePromise<ApiResponse_SceneVideoPreparation_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/video/prepare',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+                'unit_id': unitId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Scene Video Submit
+     * 按明确保存内容提交视频；历史场次仅可核实已受理的同一原请求。
+     * @returns ApiResponse_TaskAccepted_ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneVideoSubmit({
+        projectId,
+        sequenceId,
+        versionId,
+        unitId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        unitId: string,
+        requestBody: SceneVideoSubmitRequest,
+    }): CancelablePromise<ApiResponse_TaskAccepted_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/video',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+                'unit_id': unitId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Scene Videos
+     * 查看原单元固定执行和真实候选素材。
+     * @returns ApiResponse_list_SceneVideoRead__ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneVideos({
+        projectId,
+        sequenceId,
+        versionId,
+        unitId,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        unitId: string,
+    }): CancelablePromise<ApiResponse_list_SceneVideoRead__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/video',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+                'unit_id': unitId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Scene Video Save Submit
+     * 保存原内容后核验并提交；历史场次仅核实既有执行，不再次保存。
+     * @returns ApiResponse_SceneVideoSaveResult_ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneVideoSaveSubmit({
+        projectId,
+        sequenceId,
+        versionId,
+        unitId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        unitId: string,
+        requestBody: SceneVideoSaveRequest,
+    }): CancelablePromise<ApiResponse_SceneVideoSaveResult_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/video/save-and-submit',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+                'unit_id': unitId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Scene Take Media
+     * 读取经原执行归属校验的候选播放地址和实测时长，查看不采用。
+     * @returns ApiResponse_MediaRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneTakeMedia({
+        projectId,
+        sequenceId,
+        versionId,
+        unitId,
+        takeId,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        unitId: string,
+        takeId: string,
+    }): CancelablePromise<ApiResponse_MediaRead_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/takes/{take_id}/media',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+                'unit_id': unitId,
+                'take_id': takeId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Scene Video Retry
+     * 重新核验原失败／取消执行的固定输入，创建关联原任务的新执行。
+     * @returns ApiResponse_TaskAccepted_ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneVideoRetry({
+        projectId,
+        sequenceId,
+        versionId,
+        unitId,
+        executionId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        unitId: string,
+        executionId: string,
+        requestBody: SceneVideoRetryRequest,
+    }): CancelablePromise<ApiResponse_TaskAccepted_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/video/{execution_id}/retry',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+                'unit_id': unitId,
+                'execution_id': executionId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Submit Scene Export
+     * 导出指定保存修订，响应丢失后使用同一请求核实。
+     * @returns ApiResponse_SceneExportRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingSubmitSceneExport({
+        projectId,
+        sequenceId,
+        versionId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        requestBody: SceneExportRequest,
+    }): CancelablePromise<ApiResponse_SceneExportRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/exports',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * List Scene Exports
+     * 读取固定导出记录及成功文件入口。
+     * @returns ApiResponse_list_SceneExportRead__ Successful Response
+     * @throws ApiError
+     */
+    public static directingListSceneExports({
+        projectId,
+        sequenceId,
+        versionId,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+    }): CancelablePromise<ApiResponse_list_SceneExportRead__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/exports',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Retry Scene Export
+     * 明确重试失败或取消的固定输入，不采用当前编辑。
+     * @returns ApiResponse_SceneExportRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingRetrySceneExport({
+        projectId,
+        sequenceId,
+        versionId,
+        taskId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        taskId: string,
+        requestBody: SceneExportRetry,
+    }): CancelablePromise<ApiResponse_SceneExportRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/exports/{task_id}/retry',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+                'task_id': taskId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Inspect Scene Export
+     * 读取真实媒体的有效画面与缩放需求，不保存当前编辑或提交任务。
+     * @returns ApiResponse_SceneExportInspection_ Successful Response
+     * @throws ApiError
+     */
+    public static directingInspectSceneExport({
+        projectId,
+        sequenceId,
+        versionId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        requestBody: SceneExportInspect,
+    }): CancelablePromise<ApiResponse_SceneExportInspection_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/export-inspection',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Delete Scene Export File
+     * 明确删除单份导出成果，保留成功事实并复用业务引用保护。
+     * @returns ApiResponse_SceneExportRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingDeleteSceneExportFile({
+        projectId,
+        sequenceId,
+        versionId,
+        taskId,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        taskId: string,
+    }): CancelablePromise<ApiResponse_SceneExportRead_> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/exports/{task_id}/file',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+                'task_id': taskId,
+            },
             errors: {
                 422: `Validation Error`,
             },

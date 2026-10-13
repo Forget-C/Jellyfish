@@ -150,6 +150,11 @@ class ProductionService(DirectingAIService):
         if design.source_key != self.source_key(await self.sequence(sequence_id)) or (await self.read_sequence(sequence_id)).source_changed:
             raise ValueError("设计依据的原文或场次范围已变化，请核对设计并确认新计划")
         unit = self._unit(plan, unit_id)
+        media = await self.validate_prepared_unit(sequence_id, unit, text)
+        return plan, unit, media
+
+    async def validate_prepared_unit(self, sequence_id, unit, text="准备检查"):
+        """核对明确单元的供应商输入；可编辑版本复用同一检查，不创建历史计划。"""
         if len(unit.coverage) > 1:
             raise ValueError("当前模型尚未验证精确多镜生成，请在计划中明确拆成单镜试拍单元后再编译")
         dependency_errors = await self.continuity_errors(sequence_id, unit)
@@ -203,7 +208,7 @@ class ProductionService(DirectingAIService):
         validators = {"openai": validate_openai_video_options, "vidu": validate_vidu_video_options,
                       "kling": validate_kling_video_options, "volcengine": validate_volcengine_video_options}
         validators[config.provider_key](options)
-        return plan, unit, media
+        return media
 
     async def compile_unit(self, sequence_id: str, plan_id: str, unit_id: str, *, request_id: str | None = None):
         """同一编译请求返回原指令；请求身份不可跨场次、计划或单元复用。"""

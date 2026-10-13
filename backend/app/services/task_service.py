@@ -17,11 +17,11 @@ from app.models.studio import FileItem
 from app.models.task import Task, TaskInput, TaskOutput
 
 TASK_KINDS = frozenset({
-    "text_chat", "image_generation", "video_generation",
+    "text_chat", "image_generation", "video_generation", "scene_export",
     "script_consistency",
     "script_character_portrait", "script_prop_info", "script_scene_info", "script_costume_info",
     "script_optimize", "script_simplify",
-    "directing_divide", "directing_design", "directing_review", "directing_review_revision",
+    "directing_divide", "directing_design", "directing_review", "directing_review_revision", "directing_instruction", "directing_instruction_check",
 })
 MEDIA_KINDS = frozenset({"image_generation", "video_generation"})
 Delivery = Callable[[AsyncSession, Task], Awaitable[None]]

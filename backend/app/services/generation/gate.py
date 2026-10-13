@@ -13,7 +13,7 @@ from app.core.contracts.generation import (
 )
 from app.core.contracts.media import ImageMediaInput, MediaReference, VideoMediaInput
 from app.models.experiment_sessions import ExperimentSession
-from app.models.directing import DirectingRevision, Sequence
+from app.models.directing import DirectingRevision, Sequence, SceneVideoExecution, SceneVersionRecord
 from app.models.llm import Model, ModelCategoryKey, ModelSettings, Provider, ProviderStatus
 from app.models.studio_prompts_files_timeline import FileItem
 from app.models.types import FileType
@@ -101,6 +101,15 @@ class GenerationEntityGate:
         elif target.kind == GenerationTargetKind.directing_unit:
             revision = await db.get(DirectingRevision, target.entity_id)
             exists = revision is not None and revision.kind == "prompt" and revision.confirmed_at is not None
+        elif target.kind == GenerationTargetKind.scene_video:
+            execution = await db.get(SceneVideoExecution, target.entity_id)
+            version = await db.get(SceneVersionRecord, execution.version_id) if execution else None
+            sequence = await db.get(Sequence, version.sequence_id, with_for_update=True, populate_existing=True) if version else None
+            exists = sequence is not None
+            if sequence is not None and not sequence.is_current:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="场次已退出当前划分，不能发起生成")
+            if execution and execution.preparation['request'] != command.request.model_dump(mode='json'):
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="执行输入与固定视频记录不一致")
         elif target.kind == GenerationTargetKind.asset_image_slot:
             exists = target.slot_id is not None and await self._asset_slot_belongs_to(
                 db,

@@ -18,7 +18,7 @@ import AgentEdit from './pages/aiStudio/agents/AgentEdit.tsx'
 import ModelManagement from './pages/aiStudio/models/ModelManagement'
 import ExperimentLabPage from './pages/aiStudio/experiment/ExperimentLabPage'
 import ChapterSequencesPage from './pages/aiStudio/directing/ChapterSequencesPage'
-import SequenceWorkspacePage from './pages/aiStudio/directing/SequenceWorkspacePage'
+import CanvasSequenceWorkbench from './pages/aiStudio/directing/CanvasSequenceWorkbench'
 import './App.css'
 
 /** 兼容旧实验室地址，并保留原 URL 的会话定位参数。 */
@@ -36,7 +36,7 @@ const router = createBrowserRouter(createRoutesFromElements(
           <Route path="projects/:projectId" element={<ProjectWorkbench />} />
           <Route path="projects/:projectId/roles/:characterId/edit" element={<RoleDetailPage />} />
           <Route path="projects/:projectId/chapters/:chapterId/sequences" element={<ChapterSequencesPage />} />
-          <Route path="projects/:projectId/chapters/:chapterId/sequences/:sequenceId" element={<SequenceWorkspacePage />} />
+          <Route path="projects/:projectId/chapters/:chapterId/sequences/:sequenceId" element={<CanvasSequenceWorkbench />} />
           <Route path="assets" element={<AssetManager />} />
           <Route path="assets/actors/:actorImageId/edit" element={<ActorAssetEditPage />} />
           <Route path="assets/scenes/:sceneId/edit" element={<SceneAssetEditPage />} />

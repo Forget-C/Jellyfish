@@ -47,8 +47,7 @@ const ProjectWorkbench: React.FC = () => {
       StudioDirectingService.directingChapterOverview({ projectId, chapterId: recent.chapterId }).then(response => {
         const sequence = response.data?.sequences.find(row => row.id === recent.sequenceId)
         if (active && sequence) {
-          setRecentDestination(sequence.source_changed ? chapterLocation(projectId, recent.chapterId, recent.sequenceId)
-            : sequenceLocation(projectId, recent.chapterId, recent.sequenceId, recent.view))
+          setRecentDestination(sequenceLocation(projectId, recent.chapterId, recent.sequenceId, recent.view))
         }
       }).catch(() => { /* 最近工作不可核实时，仍可从章节浏览。 */ })
     }

@@ -24,7 +24,33 @@ from app.services.directing.continuity import ContinuityService
 from app.core.contracts.directing.continuity import ContinuityRead, CutFrameRequest, CutFrameRead, SeamReviewRequest
 from app.core.contracts.directing.batch import BatchPrepare, BatchRead
 from app.services.studio.files import require_available_file
-from app.services.directing.store import RevisionConflict
+from app.services.directing.store import DirectingStore, RevisionConflict
+from app.core.contracts.directing.scene_delivery import SceneDeliveryCreate, SceneDeliveryRead, ChapterDeliveriesRead
+from app.services.directing.scene_delivery import SceneDeliveryService
+from app.services.directing.scene_take import SceneTakeService
+from app.core.contracts.directing.scene_take_library import SceneTakeLibraryRead
+from app.core.contracts.directing.scene_end_frame import SceneEndFrameCreate, SceneEndFrameRead
+from app.services.directing.scene_end_frame import SceneEndFrameService
+from app.core.contracts.directing.scene_seam_review import SceneSeamReviewCreate, SceneSeamReviewRead
+from app.services.directing.scene_seam_review import SceneSeamReviewService
+from app.core.contracts.directing.scene_cut_review import SceneCutReviewCreate, SceneCutReviewRead
+from app.services.directing.scene_cut_review import SceneCutReviewService
+from app.core.contracts.directing.scene_take_review import SceneTakeReviewRead, SceneTakeReviewConfirm
+from app.core.contracts.directing.scene_instruction import SceneInstructionApply, SceneInstructionRequest, SceneInstructionPreview, SceneInstructionSuggestionRead
+from app.services.directing.scene_instruction import SceneInstructionService
+from app.core.contracts.directing.instruction_check import InstructionCheckRequest, InstructionCheckRead, InstructionCheckComparison, InstructionCheckConfirmation
+from app.core.contracts.directing.scene_video import SceneVideoRetryRequest, SceneVideoPrepareRequest, SceneVideoPreparation, SceneVideoSubmitRequest, SceneVideoRead, SceneVideoSaveRequest, SceneVideoSaveResult
+from app.services.directing.scene_video import SceneVideoService
+from app.services.directing.instruction_check import InstructionCheckService
+from app.services.directing.instruction_basis import InstructionBasisService
+from app.core.contracts.directing.instruction_basis import InstructionBasisConfirm, InstructionBasisRead
+from app.core.contracts.directing.scene_copy import SceneVersionCopy, SceneCopyReadiness
+from app.services.directing.scene_copy import SceneCopyService
+from app.core.contracts.directing.scene_export import SceneExportRequest, SceneExportRead, SceneExportRetry, SceneExportInspect, SceneExportInspection
+from app.services.directing.scene_export import SceneExportService
+from app.core.contracts.directing.scene_version import SceneVersionCreate, SceneVersionRead, SceneVersionSave
+from app.core.contracts.directing.scene_design import SceneDesignRequest, SceneDesignPreviewRequest, SceneDesignPreview, SceneDesignSuggestionRead
+from app.services.directing.scene_design import SceneDesignService
 from app.services.directing.provenance import ProvenanceService
 from app.core.contracts.directing.provenance import SourceRead, SourceResolveRequest
 
@@ -135,6 +161,96 @@ async def resolve_sources(project_id: str, sequence_id: str, body: SourceResolve
     return success_response(await _call(ProvenanceService(db, project_id).resolve_sources(sequence_id, body.sources)))
 
 
+@router.get('/sequences/{sequence_id}/versions', response_model=ApiResponse[list[SceneVersionRead]], operation_id='directing_scene_versions')
+async def scene_versions(project_id: str, sequence_id: str, db: AsyncSession = Depends(get_db, scope='function')):
+    """浏览已存在的场次版本，不创建默认方案。"""
+    return success_response(await _call(DirectingStore(db, project_id).list_scene_versions(sequence_id)))
+
+
+@router.post('/sequences/{sequence_id}/versions', response_model=ApiResponse[SceneVersionRead], operation_id='directing_create_scene_version')
+async def create_scene_version(project_id: str, sequence_id: str, body: SceneVersionCreate, db: AsyncSession = Depends(get_db, scope='function')):
+    """显式创建空方案，历史执行记录不变。"""
+    return success_response(await _call(DirectingStore(db, project_id).create_scene_version(sequence_id, body)))
+
+
+@router.get('/sequences/{sequence_id}/versions/{version_id}', response_model=ApiResponse[SceneVersionRead], operation_id='directing_scene_version')
+async def scene_version(project_id: str, sequence_id: str, version_id: str, db: AsyncSession = Depends(get_db, scope='function')):
+    """读取具有固定原文依据的当前方案。"""
+    return success_response(await _call(DirectingStore(db, project_id).read_scene_version(sequence_id, version_id)))
+
+
+@router.put('/sequences/{sequence_id}/versions/{version_id}', response_model=ApiResponse[SceneVersionRead], operation_id='directing_save_scene_version')
+async def save_scene_version(project_id: str, sequence_id: str, version_id: str, body: SceneVersionSave, db: AsyncSession = Depends(get_db, scope='function')):
+    """更新同一版本，保存并不确认设计或发起执行。"""
+    return success_response(await _call(DirectingStore(db, project_id).save_scene_version(sequence_id, version_id, body)))
+
+
+@router.get('/sequences/{sequence_id}/versions/{version_id}/copy-readiness', response_model=ApiResponse[SceneCopyReadiness], operation_id='directing_scene_copy_readiness')
+async def scene_copy_readiness(project_id: str, sequence_id: str, version_id: str, db: AsyncSession = Depends(get_db, scope='function')):
+    """核实当前关联任务，取消请求与终态分别表达。"""
+    return success_response(await _call(SceneCopyService(db, project_id).copy_readiness(sequence_id, version_id)))
+
+
+@router.post('/sequences/{sequence_id}/versions/{version_id}/copy', response_model=ApiResponse[SceneVersionRead], operation_id='directing_copy_scene_version')
+async def copy_scene_version(project_id: str, sequence_id: str, version_id: str, body: SceneVersionCopy, db: AsyncSession = Depends(get_db, scope='function')):
+    """复制点击时完整内容，事务内重新核验，不预先保存原版本。"""
+    return success_response(await _call(SceneCopyService(db, project_id).copy_version(sequence_id, version_id, body)))
+
+
+@router.get('/sequences/{sequence_id}/versions/{version_id}/take-library', response_model=ApiResponse[list[SceneTakeLibraryRead]], operation_id='directing_scene_take_library')
+async def scene_take_library(project_id: str, sequence_id: str, version_id: str, db: AsyncSession = Depends(get_db, scope='function')):
+    """浏览同场次素材及其原生产依据，不复制或写入判断。"""
+    return success_response(await _call(SceneTakeService(db, project_id).list_scene_takes(sequence_id, version_id)))
+
+
+@router.get('/sequences/{sequence_id}/versions/{version_id}/take-reviews', response_model=ApiResponse[list[SceneTakeReviewRead]], operation_id='directing_scene_take_reviews')
+async def scene_take_reviews(project_id: str, sequence_id: str, version_id: str, db: AsyncSession = Depends(get_db, scope='function')):
+    """只读查看当前版本的固定素材审片记录。"""
+    return success_response(await _call(SceneTakeService(db, project_id).list_take_reviews(sequence_id, version_id)))
+
+
+@router.post('/sequences/{sequence_id}/versions/{version_id}/take-reviews', response_model=ApiResponse[SceneTakeReviewRead], operation_id='directing_confirm_scene_take_review')
+async def confirm_scene_take_review(project_id: str, sequence_id: str, version_id: str, body: SceneTakeReviewConfirm, db: AsyncSession = Depends(get_db, scope='function')):
+    """明确复核当前已保存判断，或核实同一保存修订的既有复核记录。"""
+    return success_response(await _call(SceneTakeService(db, project_id).confirm_take_review(sequence_id, version_id, body)))
+
+
+@router.get('/sequences/{sequence_id}/versions/{version_id}/cut-reviews', response_model=ApiResponse[list[SceneCutReviewRead]], operation_id='directing_scene_cut_reviews')
+async def scene_cut_reviews(project_id: str, sequence_id: str, version_id: str, db: AsyncSession = Depends(get_db, scope='function')):
+    """查看固定整场验收及当前适用性，不更新既有记录。"""
+    return success_response(await _call(SceneCutReviewService(db, project_id).list_cut_reviews(sequence_id, version_id)))
+
+
+@router.post('/sequences/{sequence_id}/versions/{version_id}/cut-reviews', response_model=ApiResponse[SceneCutReviewRead], operation_id='directing_create_scene_cut_review')
+async def create_scene_cut_review(project_id: str, sequence_id: str, version_id: str, body: SceneCutReviewCreate, db: AsyncSession = Depends(get_db, scope='function')):
+    """明确记录已保存剪辑的人工结论，或核实原请求结果。"""
+    return success_response(await _call(SceneCutReviewService(db, project_id).create_cut_review(sequence_id, version_id, body)))
+
+
+@router.get('/sequences/{sequence_id}/versions/{version_id}/end-frames', response_model=ApiResponse[list[SceneEndFrameRead]], operation_id='directing_scene_end_frames')
+async def scene_end_frames(project_id: str, sequence_id: str, version_id: str, db: AsyncSession = Depends(get_db, scope='function')):
+    """读取原素材实际落幅及其当前适用性。"""
+    return success_response(await _call(SceneEndFrameService(db, project_id).list_end_frames(sequence_id, version_id)))
+
+
+@router.post('/sequences/{sequence_id}/versions/{version_id}/end-frames', response_model=ApiResponse[SceneEndFrameRead], operation_id='directing_create_scene_end_frame')
+async def create_scene_end_frame(project_id: str, sequence_id: str, version_id: str, body: SceneEndFrameCreate, db: AsyncSession = Depends(get_db, scope='function')):
+    """显式提取保存采用的真实边界，不替换依赖或启动生成。"""
+    return success_response(await _call(SceneEndFrameService(db, project_id).create_end_frame(sequence_id, version_id, body)))
+
+
+@router.get('/sequences/{sequence_id}/versions/{version_id}/seam-reviews', response_model=ApiResponse[list[SceneSeamReviewRead]], operation_id='directing_scene_seam_reviews')
+async def scene_seam_reviews(project_id: str, sequence_id: str, version_id: str, db: AsyncSession = Depends(get_db, scope='function')):
+    """查看固定接缝审查及当前适用性，不更新既有记录。"""
+    return success_response(await _call(SceneSeamReviewService(db, project_id).list_seam_reviews(sequence_id, version_id)))
+
+
+@router.post('/sequences/{sequence_id}/versions/{version_id}/seam-reviews', response_model=ApiResponse[SceneSeamReviewRead], operation_id='directing_create_scene_seam_review')
+async def create_scene_seam_review(project_id: str, sequence_id: str, version_id: str, body: SceneSeamReviewCreate, db: AsyncSession = Depends(get_db, scope='function')):
+    """明确记录已保存真实接缝的人工结论，或核实原请求结果。"""
+    return success_response(await _call(SceneSeamReviewService(db, project_id).create_seam_review(sequence_id, version_id, body)))
+
+
 @router.post("/sequences/{sequence_id}/revisions", response_model=ApiResponse[WorkspaceRead], operation_id="directing_save_revision")
 async def save_revision(project_id: str, sequence_id: str, body: RevisionWrite, db: AsyncSession = Depends(get_db, scope="function")):
     """保存设计、计划或粗剪草稿。"""
@@ -157,6 +273,25 @@ async def analyze(project_id: str, chapter_id: str, body: AIRequest, db: AsyncSe
     """提交原文划场建议，结果通过通用任务查询。"""
     task = await _call(ProductionService(db, project_id).submit_ai(kind="directing_divide", body=body, chapter_id=chapter_id))
     return success_response(TaskAccepted(task_id=task.id))
+
+
+@router.get("/sequences/{sequence_id}/versions/{version_id}/design-suggestions", response_model=ApiResponse[list[SceneDesignSuggestionRead]], operation_id="directing_scene_design_suggestions")
+async def scene_design_suggestions(project_id: str, sequence_id: str, version_id: str, db: AsyncSession = Depends(get_db, scope="function")):
+    """读取本版本的建议任务和固定依据，历史版本也可查看。"""
+    return success_response(await _call(SceneDesignService(db, project_id).list_design(sequence_id, version_id)))
+
+
+@router.post("/sequences/{sequence_id}/versions/{version_id}/design-suggestions", response_model=ApiResponse[TaskAccepted], operation_id="directing_scene_design_suggest")
+async def scene_design_suggest(project_id: str, sequence_id: str, version_id: str, body: SceneDesignRequest, db: AsyncSession = Depends(get_db, scope="function")):
+    """冻结本版本明确选择的原文与整场设计，提交只生成建议。"""
+    task = await _call(SceneDesignService(db, project_id).submit_design(sequence_id, version_id, body))
+    return success_response(TaskAccepted(task_id=task.id))
+
+
+@router.post("/sequences/{sequence_id}/versions/{version_id}/design-suggestions/{task_id}/preview", response_model=ApiResponse[SceneDesignPreview], operation_id="directing_scene_design_preview")
+async def scene_design_preview(project_id: str, sequence_id: str, version_id: str, task_id: str, body: SceneDesignPreviewRequest, db: AsyncSession = Depends(get_db, scope="function")):
+    """重新核对当前输入与建议，不保存、不创建业务版本。"""
+    return success_response(await _call(SceneDesignService(db, project_id).preview_design(sequence_id, version_id, task_id, body.content)))
 
 
 @router.post("/sequences/{sequence_id}/design", response_model=ApiResponse[TaskAccepted], operation_id="directing_generate_design")
@@ -373,6 +508,24 @@ async def ledger(project_id: str, sequence_id: str, db: AsyncSession = Depends(g
     return success_response(await _call(FeedbackService(db, project_id).ledger(sequence_id)))
 
 
+@router.get('/chapters/{chapter_id}/deliveries', response_model=ApiResponse[ChapterDeliveriesRead], operation_id='directing_chapter_deliveries')
+async def chapter_deliveries(project_id: str, chapter_id: str, db: AsyncSession = Depends(get_db, scope='function')):
+    """读取章节明确使用的固定场次内容。"""
+    return success_response(await _call(SceneDeliveryService(db, project_id).chapter_deliveries(chapter_id)))
+
+
+@router.get('/sequences/{sequence_id}/deliveries', response_model=ApiResponse[list[SceneDeliveryRead]], operation_id='directing_scene_deliveries')
+async def scene_deliveries(project_id: str, sequence_id: str, db: AsyncSession = Depends(get_db, scope='function')):
+    """读取原场次的全部固定交付来源。"""
+    return success_response(await _call(SceneDeliveryService(db, project_id).list_deliveries(sequence_id)))
+
+
+@router.post('/sequences/{sequence_id}/versions/{version_id}/deliveries', response_model=ApiResponse[SceneDeliveryRead], operation_id='directing_create_scene_delivery')
+async def create_scene_delivery(project_id: str, sequence_id: str, version_id: str, body: SceneDeliveryCreate, db: AsyncSession = Depends(get_db, scope='function')):
+    """明确更新章节使用，重复核实不重新激活旧交付。"""
+    return success_response(await _call(SceneDeliveryService(db, project_id).create_delivery(sequence_id, version_id, body)))
+
+
 @router.get('/chapters/{chapter_id}/assembly', response_model=ApiResponse[ChapterAssemblyRead], operation_id='directing_chapter_assembly')
 async def chapter_assembly(project_id: str, chapter_id: str, db: AsyncSession = Depends(get_db, scope='function')):
     """查询章节顺序播放依据、验收缺口与跨场审查。"""
@@ -425,3 +578,133 @@ async def preview_review_revision(project_id: str, sequence_id: str, body: Revie
     """直接编辑生成可恢复的同步预览，不调用 AI。"""
     task = await _call(ReviewRevisionService(db, project_id).preview_revision(sequence_id, body))
     return success_response(TaskAccepted(task_id=task.id))
+
+
+@router.post('/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/instruction-suggestions', response_model=ApiResponse[TaskAccepted], operation_id='directing_scene_instruction_suggest')
+async def scene_instruction_suggest(project_id: str, sequence_id: str, version_id: str, unit_id: str, body: SceneInstructionRequest, db: AsyncSession = Depends(get_db, scope='function')):
+    """固定本次输入，仅提交当前单元的指令建议。"""
+    task = await _call(SceneInstructionService(db, project_id).submit_instruction(sequence_id, version_id, unit_id, body))
+    return success_response(TaskAccepted(task_id=task.id))
+
+
+@router.get('/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/instruction-suggestions', response_model=ApiResponse[list[SceneInstructionSuggestionRead]], operation_id='directing_scene_instruction_suggestions')
+async def scene_instruction_suggestions(project_id: str, sequence_id: str, version_id: str, unit_id: str, db: AsyncSession = Depends(get_db, scope='function')):
+    """读取本单元指令任务的真实状态、固定输入与结果。"""
+    return success_response(await _call(SceneInstructionService(db, project_id).list_instructions(sequence_id, version_id, unit_id)))
+
+
+@router.post('/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/instruction-suggestions/{task_id}/preview', response_model=ApiResponse[SceneInstructionPreview], operation_id='directing_scene_instruction_preview')
+async def scene_instruction_preview(project_id: str, sequence_id: str, version_id: str, unit_id: str, task_id: str, body: SceneDesignPreviewRequest, db: AsyncSession = Depends(get_db, scope='function')):
+    """重新核对原单元及输入后返回整份建议，不保存或生成视频。"""
+    return success_response(await _call(SceneInstructionService(db, project_id).preview_instruction(sequence_id, version_id, unit_id, task_id, body.content)))
+
+
+@router.post('/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/instruction-basis', response_model=ApiResponse[InstructionBasisRead], operation_id='directing_instruction_basis')
+async def instruction_basis(project_id: str, sequence_id: str, version_id: str, unit_id: str, body: SceneDesignPreviewRequest, db: AsyncSession = Depends(get_db, scope='function')):
+    """比较当前正文的已确认依据，不保存或发起生成。"""
+    return success_response(await _call(InstructionBasisService(db, project_id).basis_status(sequence_id, version_id, unit_id, body.content)))
+
+
+@router.post('/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/instruction-basis/confirm', response_model=ApiResponse[InstructionBasisRead], operation_id='directing_confirm_instruction_basis')
+async def confirm_instruction_basis(project_id: str, sequence_id: str, version_id: str, unit_id: str, body: InstructionBasisConfirm, db: AsyncSession = Depends(get_db, scope='function')):
+    """用户明确确认已核对正文，建立独立回执；并不等同于检查通过。"""
+    return success_response(await _call(InstructionBasisService(db, project_id).confirm_basis(sequence_id, version_id, unit_id, body)))
+
+
+@router.post('/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/instruction-suggestions/{task_id}/apply', response_model=ApiResponse[SceneInstructionApply], operation_id='directing_scene_instruction_apply')
+async def scene_instruction_apply(project_id: str, sequence_id: str, version_id: str, unit_id: str, task_id: str, body: SceneDesignPreviewRequest, db: AsyncSession = Depends(get_db, scope='function')):
+    """明确采用建议，返回一起应用的正文与依据；不保存版本或生成视频。"""
+    return success_response(await _call(InstructionBasisService(db, project_id).apply_instruction(sequence_id, version_id, unit_id, task_id, body.content)))
+
+
+@router.post('/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/instruction-checks', response_model=ApiResponse[TaskAccepted], operation_id='directing_instruction_check')
+async def instruction_check(project_id: str, sequence_id: str, version_id: str, unit_id: str, body: InstructionCheckRequest, db: AsyncSession = Depends(get_db, scope='function')):
+    """明确提交本单元检查，不自动应用结论。"""
+    task = await _call(InstructionCheckService(db, project_id).submit_check(sequence_id, version_id, unit_id, body))
+    return success_response(TaskAccepted(task_id=task.id))
+
+
+@router.get('/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/instruction-checks', response_model=ApiResponse[list[InstructionCheckRead]], operation_id='directing_instruction_checks')
+async def instruction_checks(project_id: str, sequence_id: str, version_id: str, unit_id: str, db: AsyncSession = Depends(get_db, scope='function')):
+    """读取固定检查输入及真实状态，查看不构成生成授权。"""
+    return success_response(await _call(InstructionCheckService(db, project_id).list_checks(sequence_id, version_id, unit_id)))
+
+
+@router.post('/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/instruction-checks/{task_id}/compare', response_model=ApiResponse[InstructionCheckComparison], operation_id='directing_instruction_check_compare')
+async def instruction_check_compare(project_id: str, sequence_id: str, version_id: str, unit_id: str, task_id: str, body: SceneDesignPreviewRequest, db: AsyncSession = Depends(get_db, scope='function')):
+    """核对当前正文与检查原输入，比较不授权生成。"""
+    return success_response(await _call(InstructionCheckService(db, project_id).compare_check(sequence_id, version_id, unit_id, task_id, body.content)))
+
+
+@router.post('/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/instruction-checks/{task_id}/confirm', response_model=ApiResponse[InstructionCheckConfirmation], operation_id='directing_instruction_check_confirm')
+async def instruction_check_confirm(project_id: str, sequence_id: str, version_id: str, unit_id: str, task_id: str, body: SceneDesignPreviewRequest, db: AsyncSession = Depends(get_db, scope='function')):
+    """用户明确核对检查结果后返回可绑定身份，不保存或执行视频。"""
+    return success_response(await _call(InstructionCheckService(db, project_id).confirm_check(sequence_id, version_id, unit_id, task_id, body.content)))
+
+
+@router.post('/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/video/prepare', response_model=ApiResponse[SceneVideoPreparation], operation_id='directing_scene_video_prepare')
+async def scene_video_prepare(project_id: str, sequence_id: str, version_id: str, unit_id: str, body: SceneVideoPrepareRequest, db: AsyncSession = Depends(get_db, scope='function')):
+    """按原保存修订核验实际视频输入，不创建任务。"""
+    return success_response(await _call(SceneVideoService(db, project_id).prepare_video(sequence_id, version_id, unit_id, body)))
+
+
+@router.post('/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/video', response_model=ApiResponse[TaskAccepted], operation_id='directing_scene_video_submit')
+async def scene_video_submit(project_id: str, sequence_id: str, version_id: str, unit_id: str, body: SceneVideoSubmitRequest, db: AsyncSession = Depends(get_db, scope='function')):
+    """按明确保存内容提交视频；历史场次仅可核实已受理的同一原请求。"""
+    task = await _call(SceneVideoService(db, project_id).submit_video(sequence_id, version_id, unit_id, body))
+    return success_response(TaskAccepted(task_id=task.id))
+
+
+@router.get('/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/video', response_model=ApiResponse[list[SceneVideoRead]], operation_id='directing_scene_videos')
+async def scene_videos(project_id: str, sequence_id: str, version_id: str, unit_id: str, db: AsyncSession = Depends(get_db, scope='function')):
+    """查看原单元固定执行和真实候选素材。"""
+    return success_response(await _call(DirectingStore(db, project_id).read_scene_videos(sequence_id, version_id, unit_id)))
+
+
+@router.post('/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/video/save-and-submit', response_model=ApiResponse[SceneVideoSaveResult], operation_id='directing_scene_video_save_submit')
+async def scene_video_save_submit(project_id: str, sequence_id: str, version_id: str, unit_id: str, body: SceneVideoSaveRequest, db: AsyncSession = Depends(get_db, scope='function')):
+    """保存原内容后核验并提交；历史场次仅核实既有执行，不再次保存。"""
+    return success_response(await _call(SceneVideoService(db, project_id).save_and_submit_video(sequence_id, version_id, unit_id, body)))
+
+
+@router.get('/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/takes/{take_id}/media', response_model=ApiResponse[MediaRead], operation_id='directing_scene_take_media')
+async def scene_take_media(project_id: str, sequence_id: str, version_id: str, unit_id: str, take_id: str, db: AsyncSession = Depends(get_db, scope='function')):
+    """读取经原执行归属校验的候选播放地址和实测时长，查看不采用。"""
+    return success_response(await _call(DirectingStore(db, project_id).scene_take_media(sequence_id, version_id, unit_id, take_id)))
+
+
+@router.post('/sequences/{sequence_id}/versions/{version_id}/units/{unit_id}/video/{execution_id}/retry', response_model=ApiResponse[TaskAccepted], operation_id='directing_scene_video_retry')
+async def scene_video_retry(project_id: str, sequence_id: str, version_id: str, unit_id: str, execution_id: str, body: SceneVideoRetryRequest, db: AsyncSession = Depends(get_db, scope='function')):
+    """重新核验原失败／取消执行的固定输入，创建关联原任务的新执行。"""
+    task = await _call(SceneVideoService(db, project_id).retry_video(sequence_id, version_id, unit_id, execution_id, body))
+    return success_response(TaskAccepted(task_id=task.id))
+
+
+@router.post('/sequences/{sequence_id}/versions/{version_id}/exports', response_model=ApiResponse[SceneExportRead], operation_id='directing_submit_scene_export')
+async def submit_scene_export(project_id: str, sequence_id: str, version_id: str, body: SceneExportRequest, db: AsyncSession = Depends(get_db, scope='function')):
+    """导出指定保存修订，响应丢失后使用同一请求核实。"""
+    return success_response(await _call(SceneExportService(db, project_id).submit_export(sequence_id, version_id, body)))
+
+
+@router.get('/sequences/{sequence_id}/versions/{version_id}/exports', response_model=ApiResponse[list[SceneExportRead]], operation_id='directing_list_scene_exports')
+async def list_scene_exports(project_id: str, sequence_id: str, version_id: str, db: AsyncSession = Depends(get_db, scope='function')):
+    """读取固定导出记录及成功文件入口。"""
+    return success_response(await _call(SceneExportService(db, project_id).list_exports(sequence_id, version_id)))
+
+
+@router.post('/sequences/{sequence_id}/versions/{version_id}/exports/{task_id}/retry', response_model=ApiResponse[SceneExportRead], operation_id='directing_retry_scene_export')
+async def retry_scene_export(project_id: str, sequence_id: str, version_id: str, task_id: str, body: SceneExportRetry, db: AsyncSession = Depends(get_db, scope='function')):
+    """明确重试失败或取消的固定输入，不采用当前编辑。"""
+    return success_response(await _call(SceneExportService(db, project_id).retry_export(sequence_id, version_id, task_id, body)))
+
+
+@router.post('/sequences/{sequence_id}/versions/{version_id}/export-inspection', response_model=ApiResponse[SceneExportInspection], operation_id='directing_inspect_scene_export')
+async def inspect_scene_export(project_id: str, sequence_id: str, version_id: str, body: SceneExportInspect, db: AsyncSession = Depends(get_db, scope='function')):
+    """读取真实媒体的有效画面与缩放需求，不保存当前编辑或提交任务。"""
+    return success_response(await _call(SceneExportService(db, project_id).inspect_export(sequence_id, version_id, body)))
+
+
+@router.delete('/sequences/{sequence_id}/versions/{version_id}/exports/{task_id}/file', response_model=ApiResponse[SceneExportRead], operation_id='directing_delete_scene_export_file')
+async def delete_scene_export_file(project_id: str, sequence_id: str, version_id: str, task_id: str, db: AsyncSession = Depends(get_db, scope='function')):
+    """明确删除单份导出成果，保留成功事实并复用业务引用保护。"""
+    return success_response(await _call(SceneExportService(db, project_id).delete_export_file(sequence_id, version_id, task_id)))

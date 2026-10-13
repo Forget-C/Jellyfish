@@ -28,6 +28,8 @@ class TaskSourceRead(BaseModel):
     title: str
     project_id: str | None = None
     chapter_id: str | None = None
+    version_id: str | None = None
+    unit_id: str | None = None
 
 
 class TaskListItemRead(TaskStatusRead):

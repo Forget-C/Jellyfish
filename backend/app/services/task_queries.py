@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 import json
 
 from fastapi import HTTPException
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.task import TERMINAL_TASK_STATUSES
@@ -80,7 +80,13 @@ class TaskQueries:
             raise HTTPException(status_code=422, detail="invalid_task_page_size")
         if created_from is not None and created_before is not None and _utc_naive(created_from) >= _utc_naive(created_before):
             raise HTTPException(status_code=422, detail="invalid_task_date_range")
-        stmt = select(*_VIEW_COLUMNS, Task.input_snapshot["target_parent_id"].as_string().label("target_parent_id"))
+        stmt = select(*_VIEW_COLUMNS, Task.input_snapshot["target_parent_id"].as_string().label("target_parent_id"),
+            case(*[(Task.kind == kind, Task.input_snapshot[key]['version_id'].as_string())
+                for kind, key in [('directing_instruction', 'scene_instruction'),
+                    ('directing_instruction_check', 'instruction_check'), ('directing_design', 'scene_design')]]).label('scene_version_id'),
+            case(*[(Task.kind == kind, Task.input_snapshot[key]['unit_id'].as_string())
+                for kind, key in [('directing_instruction', 'scene_instruction'),
+                    ('directing_instruction_check', 'instruction_check')]]).label('scene_unit_id'))
         for column, value in ((Task.kind, task_kind), (Task.target_type, target_type),
                               (Task.target_id, target_id), (Task.project_id, project_id)):
             if value is not None:

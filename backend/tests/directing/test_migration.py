@@ -58,6 +58,33 @@ def test_foundation_migration_and_next_upgrade():
         versions = revision_module("c3e7f9a1b524_add_chapter_division_versions.py")
         versions.op = migration.op
         versions.upgrade()
+        scene_versions = revision_module('d4f8a2c6e735_add_scene_versions.py')
+        scene_versions.op = migration.op
+        scene_versions.upgrade()
+        instruction_bases = revision_module("e5a9b3d7f846_add_instruction_bases.py")
+        instruction_bases.op = migration.op
+        instruction_bases.upgrade()
+        scene_video = revision_module("f6b0c4e8a957_add_scene_video_execution.py")
+        scene_video.op = migration.op
+        scene_video.upgrade()
+        take_reviews = revision_module('a7d1e5f9b068_add_scene_take_reviews.py')
+        take_reviews.op = migration.op
+        take_reviews.upgrade()
+        cut_reviews = revision_module('b8e2f6a0c179_add_scene_cut_reviews.py')
+        cut_reviews.op = migration.op
+        cut_reviews.upgrade()
+        seam_reviews = revision_module('c9f3a7b1d280_add_scene_seam_reviews.py')
+        seam_reviews.op = migration.op
+        seam_reviews.upgrade()
+        end_frames = revision_module('d0a4b8c2e391_add_scene_end_frames.py')
+        end_frames.op = migration.op
+        end_frames.upgrade()
+        deliveries = revision_module('e1b5c9d3f402_add_scene_deliveries.py')
+        deliveries.op = migration.op
+        deliveries.upgrade()
+        copies = revision_module('f2c6d0e4a513_add_scene_copy_origins.py')
+        copies.op = migration.op
+        copies.upgrade()
         context = MigrationContext.configure(connection, opts={"compare_type": True})
         assert not compare_metadata(context, Base.metadata)
         connection.execute(sa.text("INSERT INTO projects (id,name,description,style,visual_style,seed,unify_style,progress,stats) VALUES ('p','p','','drama','live_action',0,1,0,'{}')"))
@@ -75,6 +102,57 @@ def test_foundation_migration_and_next_upgrade():
         assert connection.scalar(sa.text("SELECT title FROM directing_sequences WHERE id='seq'")) == "scene"
         migration.op.drop_column("directing_sequences", "migration_probe")
         assert not compare_metadata(context, Base.metadata)
+        connection.execute(sa.text("INSERT INTO directing_scene_versions (id,sequence_id,title,revision,source_bases,content,create_request_id) VALUES ('v','seq','v',1,'[]','{}','request')"))
+        connection.execute(sa.text("INSERT INTO directing_instruction_bases (id,version_id,unit_id,request_id,request_hash,inputs,instruction) VALUES ('basis','v','unit','confirm','hash','{}','text')"))
+        with pytest.raises(RuntimeError, match='Instruction bases exist'):
+            instruction_bases.downgrade()
+        assert connection.scalar(sa.text("SELECT COUNT(*) FROM directing_instruction_bases")) == 1
+        connection.execute(sa.text("DELETE FROM directing_instruction_bases"))
+        connection.execute(sa.text("INSERT INTO directing_scene_video_executions (id,version_id,unit_id,request_id,request_hash,preparation) VALUES ('execute','v','unit','video','hash','{}')"))
+        with pytest.raises(RuntimeError, match='Scene video executions exist'):
+            scene_video.downgrade()
+        assert connection.scalar(sa.text("SELECT COUNT(*) FROM directing_scene_video_executions")) == 1
+        connection.execute(sa.text("DELETE FROM directing_scene_video_executions"))
+        connection.execute(sa.text("INSERT INTO directing_scene_take_reviews (id,version_id,revision,take_kind,take_id,content) VALUES ('review','v',1,'scene_video','take','{}')"))
+        with pytest.raises(RuntimeError, match='Scene take reviews exist'):
+            take_reviews.downgrade()
+        assert connection.scalar(sa.text("SELECT COUNT(*) FROM directing_scene_take_reviews")) == 1
+        connection.execute(sa.text("DELETE FROM directing_scene_take_reviews"))
+        take_reviews.downgrade()
+        connection.execute(sa.text("INSERT INTO directing_scene_cut_reviews (id,version_id,request_id,review,content) VALUES ('cut-review','v','request','{}','{}')"))
+        with pytest.raises(RuntimeError, match='Scene cut reviews exist'):
+            cut_reviews.downgrade()
+        assert connection.scalar(sa.text("SELECT COUNT(*) FROM directing_scene_cut_reviews")) == 1
+        connection.execute(sa.text("DELETE FROM directing_scene_cut_reviews"))
+        connection.execute(sa.text("INSERT INTO directing_scene_seam_reviews (id,version_id,request_id,review,content) VALUES ('seam-review','v','request','{}','{}')"))
+        with pytest.raises(RuntimeError, match='Scene seam reviews exist'):
+            seam_reviews.downgrade()
+        assert connection.scalar(sa.text("SELECT COUNT(*) FROM directing_scene_seam_reviews")) == 1
+        connection.execute(sa.text("DELETE FROM directing_scene_seam_reviews"))
+        connection.execute(sa.text("INSERT INTO directing_scene_end_frames (id,version_id,request_id,request,clip,file_id,at_ms) VALUES ('frame','v','request','{}','{}','file',0)"))
+        with pytest.raises(RuntimeError, match='Scene end frames exist'):
+            end_frames.downgrade()
+        assert connection.scalar(sa.text("SELECT COUNT(*) FROM directing_scene_end_frames")) == 1
+        connection.execute(sa.text("DELETE FROM directing_scene_end_frames"))
+        end_frames.downgrade()
+        connection.execute(sa.text("INSERT INTO directing_scene_deliveries (id,sequence_id,version_id,request_id,revision,version_title,content) VALUES ('delivery','seq','v','request',1,'A','{}')"))
+        with pytest.raises(RuntimeError, match='Scene deliveries exist'):
+            deliveries.downgrade()
+        assert connection.scalar(sa.text("SELECT COUNT(*) FROM directing_scene_deliveries")) == 1
+        connection.execute(sa.text("DELETE FROM directing_scene_deliveries"))
+        deliveries.downgrade()
+        connection.execute(sa.text("INSERT INTO directing_scene_copy_origins (version_id,source_version_id,request) VALUES ('v','v','{}')"))
+        with pytest.raises(RuntimeError, match='Scene copy origins exist'):
+            copies.downgrade()
+        assert connection.scalar(sa.text("SELECT COUNT(*) FROM directing_scene_copy_origins")) == 1
+        connection.execute(sa.text("DELETE FROM directing_scene_copy_origins"))
+        copies.downgrade()
+        seam_reviews.downgrade()
+        cut_reviews.downgrade()
+        connection.execute(sa.text("DELETE FROM directing_scene_versions"))
+        scene_video.downgrade()
+        instruction_bases.downgrade()
+        scene_versions.downgrade()
         versions.downgrade()
         division.downgrade()
         display_numbers.downgrade()

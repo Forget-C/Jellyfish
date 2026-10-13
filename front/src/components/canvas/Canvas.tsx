@@ -59,6 +59,8 @@ export function useCanvasViewport(contextKey: string, transform: CanvasTransform
       onChange(previous => ({ ...previous, x: previous.x + (event.key === 'ArrowLeft' ? 30 : event.key === 'ArrowRight' ? -30 : 0), y: previous.y + (event.key === 'ArrowUp' ? 30 : event.key === 'ArrowDown' ? -30 : 0) }))
     },
     onPointerDown: event => {
+      // Portal 内弹窗/下拉框仍沿 React 树冒泡，不能把其选择动作当作画布平移。
+      if (!event.currentTarget.contains(event.target as Node)) return
       if (event.button !== 0 || (event.target as Element).closest('button, [role=button], [data-canvas-node], input, select, textarea, a, audio, video')) return
       event.currentTarget.setPointerCapture(event.pointerId)
       drag.current = { x: event.clientX, y: event.clientY, left: transform.x, top: transform.y }

@@ -21,7 +21,6 @@ export function saveChapterBrowse(projectId: string, chapterId: string, value: C
 
 /** 整场汇总仅用于建议入口，不作为执行准备度或采用状态的替代判断。 */
 export function sequenceAction(sequence: SequenceOverview, remembered?: string | null): Action {
-  if (sequence.source_changed) return { label: '核对原文', view: null }
   if (remembered === 'design' || remembered === 'shoot' || remembered === 'cut') {
     return { label: { design: '继续设计', shoot: '继续试拍', cut: '继续剪辑' }[remembered], view: remembered }
   }

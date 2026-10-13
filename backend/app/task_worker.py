@@ -25,6 +25,8 @@ from app.models.llm import Model, ModelCategoryKey, Provider
 from app.models.task import Task
 from app.services.file_cleanup import FileCleaner
 from app.services.directing.ai import DirectingOutputError
+from app.services.directing.scene_export_execution import execute_scene_export
+from app.services.directing.scene_export_render import render_scene_cut
 from app.services.directing.review_revision import ReviewRevisionService
 from app.services.directing.store import DirectingStore, ContinuityNotReady
 from app.services.generation.media_execution import build_media_input, deliver_media, load_media_context, store_media_output
@@ -203,6 +205,11 @@ class TaskWorker:
                 task = await self._load(task_id)
                 if task is None:
                     return
+                if task.kind == 'scene_export':
+                    await execute_scene_export(self.sessions, task,
+                        lambda content, sources, profile: self._render_scene(task, content, sources, profile),
+                        lambda: self._load(task.id))
+                    return
                 if task.kind not in MEDIA_KINDS:
                     await self._text(task)
                     return
@@ -211,7 +218,7 @@ class TaskWorker:
                 inp = await build_media_input(task, snapshot, files)
                 if await self._load(task_id) is None:
                     return
-                if task.target_type == "directing_unit":
+                if task.target_type in {"directing_unit", "scene_video"}:
                     async with self.sessions() as db:
                         await DirectingStore(db, task.project_id).validate_task_continuity(task)
                 result = await MediaProvider(self.client).submit(cfg, inp)
@@ -298,7 +305,7 @@ class TaskWorker:
                           max_retries=0, timeout=self.limits.request_seconds, http_async_client=self.client)
             if task.kind != "text_chat":
                 params["callbacks"] = [ScriptStopHandler(stopped, monotonic() + self.limits.execution_seconds)]
-            directing = task.kind in {"directing_divide", "directing_design", "directing_review", "directing_review_revision"}
+            directing = task.kind in {"directing_divide", "directing_design", "directing_review", "directing_review_revision", "directing_instruction", "directing_instruction_check"}
             if directing:
                 # 长工作单持续接收分片，避免非流式等待完整响应触发读取超时。
                 params["streaming"] = True
@@ -334,6 +341,19 @@ class TaskWorker:
         async with self.sessions() as db:
             await TaskService(db).finish(task.id, result=result, deliver=deliver)
             await db.commit()
+
+    async def _render_scene(self, task, content, sources, profile):
+        """FFmpeg 在线程池执行；超时后仍保留名额至临时文件实际清理完成。"""
+        future = asyncio.wrap_future(self.text_pool.submit(render_scene_cut, content, sources, profile))
+        self.text_threads[task.id] = future
+
+        def done(completed):
+            self.text_threads.pop(task.id, None)
+            if not completed.cancelled():
+                completed.exception()
+
+        future.add_done_callback(done)
+        return await asyncio.shield(future)
 
     async def _run_script(self, task: Task, llm, args: dict, stopped: Event):
         """等待超时不代表线程退出；线程实际结束前继续占用文本名额。"""

@@ -4,7 +4,7 @@ export type DesignPath = Array<string | number>
 export function designAt(value: unknown, path: DesignPath): any {
   return path.reduce<any>((node, key) => node?.[key], value)
 }
-export function patchDesign(value: SceneDesign_Input, path: DesignPath, next: unknown): SceneDesign_Input {
+export function patchDesign<T extends SceneDesign_Input>(value: T, path: DesignPath, next: unknown): T {
   const copy = structuredClone(value)
   const parent = designAt(copy, path.slice(0, -1))
   parent[path[path.length - 1]] = next

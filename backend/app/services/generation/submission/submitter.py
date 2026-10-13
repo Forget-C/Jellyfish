@@ -44,7 +44,7 @@ class GenerationSubmitter:
         self._entity_gate = entity_gate
         self._capability_registry = capability_registry
 
-    async def submit_async(self, db: AsyncSession, command: GenerationCommand) -> GenerationAccepted:
+    async def submit_async(self, db: AsyncSession, command: GenerationCommand, *, retry_of_task_id: str | None = None) -> GenerationAccepted:
         """在调用方事务中创建任务与输入关系，不额外维护投递表或执行状态。"""
         self._capability_registry.require_supported(
             operation=command.operation, delivery=command.delivery, target_kind=command.target.kind,
@@ -52,10 +52,10 @@ class GenerationSubmitter:
         if command.delivery is not GenerationDelivery.async_polling:
             raise ValueError("submit_async requires async_polling delivery")
         snapshot = await self._entity_gate.validate(db, command)
-        return await self.persist_async_task(db=db, command=command, snapshot=snapshot)
+        return await self.persist_async_task(db=db, command=command, snapshot=snapshot, retry_of_task_id=retry_of_task_id)
 
     async def persist_async_task(
-        self, *, db: AsyncSession, command: GenerationCommand, snapshot: ResolvedGenerationSnapshot,
+        self, *, db: AsyncSession, command: GenerationCommand, snapshot: ResolvedGenerationSnapshot, retry_of_task_id: str | None = None,
     ) -> GenerationAccepted:
         """冻结模型路由身份；凭据仍在执行期解析，媒体引用只存在于 task_inputs。"""
         model = await db.get(Model, snapshot.model_id)
@@ -80,11 +80,11 @@ class GenerationSubmitter:
             }[snapshot.operation_input.operation]
         source = (await resolve_task_sources(db, [SimpleNamespace(
             id="submission", target_type=target_type, target_id=target_id,
-            target_parent_id=data.get("target_parent_id"),
+            target_parent_id=data.get("target_parent_id"), scene_version_id=None, scene_unit_id=None,
         )])).get("submission")
         task = await TaskService(db).submit(
             kind=kind, snapshot=data, title=kind, target_type=target_type, target_id=target_id,
             expected_target_version=snapshot.expected_version_id, provider_id=provider.id,
-            execution_mode=mode, inputs=inputs, project_id=source.project_id if source else None,
+            execution_mode=mode, inputs=inputs, project_id=source.project_id if source else None, retry_of_task_id=retry_of_task_id,
         )
         return GenerationAccepted(task_id=task.id)

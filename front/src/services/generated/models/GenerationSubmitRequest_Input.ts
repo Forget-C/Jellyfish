@@ -12,7 +12,7 @@ import type { VideoMediaInput_Input } from './VideoMediaInput_Input';
 /**
  * 业务路由接收的请求；目标、模态、operation 与 delivery 由路径决定。
  */
-export type GenerationSubmitRequest = {
+export type GenerationSubmitRequest_Input = {
     model_id?: (string | null);
     execution_prompt?: (string | null);
     media?: (ImageMediaInput | VideoMediaInput_Input | null);

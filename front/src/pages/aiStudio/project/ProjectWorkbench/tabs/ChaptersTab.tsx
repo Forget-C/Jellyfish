@@ -12,7 +12,7 @@ import { chapterAction, chapterLocation, readChapterBrowse, saveChapterBrowse } 
 import { SequenceDetails } from '../../../directing/SequenceDetails'
 import { WorkspaceDrafts, useWorkspaceDraft } from '../../../directing/WorkspaceDrafts'
 import { ChapterSourcePanel } from '../../../directing/ChapterSourcePanel'
-import { ChapterAssemblyPanel } from '../../../directing/ChapterAssemblyPanel'
+import { ChapterDeliveryPanel } from '../../../directing/ChapterDeliveryPanel'
 import '../../../directing/workspace.css'
 
 /** 章节表格负责总览；仅打开指定章节后加载场次管理内容。 */
@@ -173,7 +173,7 @@ function ChaptersContent() {
           {!panel && <Space wrap style={{ marginBottom: 16 }}><Button onClick={() => showSource()}>调整划分</Button></Space>}
           {panel === 'source' ? <ChapterSourcePanel key={chapterId} projectId={projectId} chapterId={chapterId} refreshKey={revision} sequenceId={params.get('mode') === 'manual' ? sequenceId : undefined}
             onChanged={id => { saveChapterBrowse(projectId, chapterId, { sequence: id }); setRevision(value => value + 1); void refresh() }} onEdit={editCurrent} />
-            : panel === 'assembly' ? <ChapterAssemblyPanel projectId={projectId} chapterId={chapterId} />
+            : panel === 'assembly' ? <ChapterDeliveryPanel projectId={projectId} chapterId={chapterId} />
               : <div className={`chapter-scenes-layout${sequenceId ? ' has-selection' : ''}`}>
                 <div className="chapter-scenes-list"><ChapterSceneList key={chapterId} projectId={projectId} chapterId={chapterId}
                   selectedId={sequenceId} refreshKey={revision} onDetails={selectSequence} onRestore={selectSequence} onSource={() => showSource()} /></div>

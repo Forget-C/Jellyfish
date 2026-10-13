@@ -12,7 +12,7 @@ export type { DesignPath } from './designValue'
 const states = [{ value: 'unset', label: '未填写' }, { value: 'proposal', label: '设计建议' }, { value: 'fact', label: '已知事实' }, { value: 'unknown', label: '待确定' }, { value: 'not_applicable', label: '不适用' }, { value: 'none', label: '明确没有' }]
 
 /** 对象字段写入原契约路径，保留 Note 状态及来源；不存在可编辑的摘要副本。 */
-export function DesignFields({ value, path, onChange, disabled = false, fields }: { value: SceneDesign_Input; path: DesignPath; onChange: (next: SceneDesign_Input) => void; disabled?: boolean; fields?: string[] }) {
+export function DesignFields<T extends SceneDesign_Input>({ value, path, onChange, disabled = false, fields, onAdd, onRemove }: { value: T; path: DesignPath; onChange: (next: T) => void; disabled?: boolean; fields?: string[]; onAdd?: (path: DesignPath, template: unknown) => void; onRemove?: (path: DesignPath, index: number) => void }) {
   const blank = emptyDesign()
   const change = (target: DesignPath, next: unknown) => onChange(patchDesign(value, target, next))
   const options = (key: string) => {
@@ -41,8 +41,8 @@ export function DesignFields({ value, path, onChange, disabled = false, fields }
         const choices = options(key)
         return <Select mode="multiple" aria-label={label} disabled={disabled} value={current} options={[...choices, ...current.filter(id => !choices.some(c => c.value === id)).map(id => ({ value: id, label: `缺失引用 · ${id}` }))]} onChange={next => change(target, next)} style={{ width: '100%' }} />
       }
-      return <div className="design-field-array">{current.map((row, index) => <section key={index}><div className="design-field-label"><strong>{label} {index + 1}</strong>{!disabled && <Button size="small" danger onClick={() => change(target, current.filter((_, i) => i !== index))}>移除</Button>}</div>{render(row, [...target, index], Array.isArray(template) ? template[0] : undefined)}</section>)}
-        {!disabled && <Button onClick={() => { const next = structuredClone((Array.isArray(template) ? template[0] : undefined) || current[0] || { state: 'unset' }); if (next && typeof next === 'object' && 'id' in next) next.id = 'item-' + crypto.randomUUID().slice(0, 8); change(target, [...current, next]) }}>添加{label}</Button>}</div>
+      return <div className="design-field-array">{current.map((row, index) => <section key={index}><div className="design-field-label"><strong>{label} {index + 1}</strong>{!disabled && <Button size="small" danger aria-label={`移除${label} ${index + 1}`} onClick={() => onRemove ? onRemove(target, index) : change(target, current.filter((_, i) => i !== index))}>移除</Button>}</div>{render(row, [...target, index], Array.isArray(template) ? template[0] : undefined)}</section>)}
+        {!disabled && <Button onClick={() => { const next = structuredClone((Array.isArray(template) ? template[0] : undefined) || current[0] || { state: 'unset' }); if (onAdd) { onAdd(target, next); return }; if (next && typeof next === 'object' && 'id' in next) next.id = 'item-' + crypto.randomUUID().slice(0, 8); change(target, [...current, next]) }}>添加{label}</Button>}</div>
     }
     if (current && typeof current === 'object') {
       // 历史镜头可以缺少可选字段，仍须显示核对入口；只投影，不修改历史快照。

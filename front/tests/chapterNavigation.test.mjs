@@ -5,8 +5,8 @@ import { loadSource } from './directing-fixtures.mjs'
 const { chapterAction, sequenceAction, chapterLocation, sequenceLocation, readChapterBrowse, saveChapterBrowse } = await loadSource('chapterNavigation')
 const scene = { id: 's1', source_changed: false, confirmed_design_count: 0, plan_count: 0, take_count: 0, unreviewed_take_count: 0, active_cut_revision_id: null }
 
-test('source verification precedes remembered work; unknown remembered stages are ignored', () => {
-  assert.equal(sequenceAction({ ...scene, source_changed: true }, 'shoot').view, null)
+test('chapter revision changes do not redirect away from a version with fixed basis; unknown stages are ignored', () => {
+  assert.equal(sequenceAction({ ...scene, source_changed: true }, 'shoot').view, 'shoot')
   assert.equal(sequenceAction(scene, 'shoot').view, 'shoot')
   assert.equal(sequenceAction(scene, 'unknown').view, 'design')
 })

@@ -41,6 +41,7 @@
     "eslint-plugin-react-hooks": "^4.6.0",
     "msw": "^2.6.6",
     "openapi-typescript-codegen": "^0.30.0",
+    "playwright": "^1.64.0",
     "postcss": "^8.4.32",
     "tailwindcss": "^3.3.6",
     "typescript": "^5.2.2",

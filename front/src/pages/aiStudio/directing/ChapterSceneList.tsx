@@ -72,7 +72,6 @@ export function ChapterSceneList({ projectId, chapterId, onDetails, onSource, se
           <Button type="link" onClick={() => onDetails(sequence.id)} style={{ padding: 0, height: 'auto', maxWidth: '100%', whiteSpace: 'normal', overflowWrap: 'anywhere', textAlign: 'left', fontWeight: 600 }}>{sequence.position + 1}. {sequence.title}</Button>
           <p style={{ color: '#64748b', overflowWrap: 'anywhere', margin: '8px 0' }}>{sequence.source_excerpt}</p>
           <Space wrap size={4}>
-            {sequence.source_changed && <Tag color="warning">原文已变化</Tag>}
             {!!sequence.unreviewed_take_count && <Tag color="processing">{sequence.unreviewed_take_count} 个候选待审</Tag>}
             {sequence.active_cut_revision_id && <Tag color="success">已有确认粗剪</Tag>}
             {!sequence.confirmed_design_count && <Tag>设计待确认</Tag>}

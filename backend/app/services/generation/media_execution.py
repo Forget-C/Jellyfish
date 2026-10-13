@@ -107,7 +107,7 @@ async def store_media_output(sessions, client: httpx.AsyncClient, *, task_id: st
         if await db.get(TaskOutput, (task_id, ordinal)) is not None:
             return
         task = await db.get(Task, task_id)
-        measure_duration = task is not None and task.target_type == "directing_unit"
+        measure_duration = task is not None and task.target_type in {"directing_unit", "scene_video"}
     try:
         info = await storage.get_file_info(key=key)
     except ClientError as error:
@@ -181,6 +181,14 @@ async def deliver_media(db: AsyncSession, task: Task) -> None:
                                  .where(TaskInput.task_id == task.id))).all()
     snapshot = restore_snapshot(task, relations)
     outputs = list(await db.scalars(select(TaskOutput).where(TaskOutput.task_id == task.id)))
+    if snapshot.canonical_target.kind == GenerationTargetKind.scene_video:
+        from app.services.directing.store import DirectingStore
+        store = DirectingStore(db, task.project_id)
+        for output in outputs:
+            await store.register_scene_take(task, output)
+            output.delivery_status = 'published'
+            output.delivery_reason = 'candidate_take'
+        return
     if snapshot.canonical_target.kind == GenerationTargetKind.directing_unit:
         from app.services.directing.store import DirectingStore
 

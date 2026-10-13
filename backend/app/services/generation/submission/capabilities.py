@@ -98,6 +98,7 @@ _DEFAULT_TARGET_CAPABILITIES: Mapping[
     (GenerationOperation.video_generation, GenerationTargetKind.experiment_session): frozenset({
         GenerationDelivery.async_polling,
     }),
+    (GenerationOperation.video_generation, GenerationTargetKind.scene_video): frozenset({GenerationDelivery.async_polling}),
     (GenerationOperation.video_generation, GenerationTargetKind.directing_unit): frozenset({
         GenerationDelivery.async_polling,
     }),

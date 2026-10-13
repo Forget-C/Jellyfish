@@ -9,7 +9,10 @@ from sqlalchemy import select
 
 from app.core.contracts.directing.common import Source
 from app.core.contracts.directing.design import SceneDesign
+from app.core.contracts.directing.scene_version import EditableSceneDesign
 from app.core.contracts.directing.production import ReviewPacket
+from app.core.contracts.directing.instruction_check import InstructionCheckResult
+from app.core.contracts.directing.scene_instruction import SceneInstructionResult, SceneInstructionScope
 from app.core.contracts.directing.review_revision import ReviewRevisionCandidate
 from app.core.contracts.directing.workspace import AIRequest, DivisionResult, DirectingTaskRead
 from app.models.directing import DirectingRevision, Sequence
@@ -21,7 +24,7 @@ from app.services.llm.provider_resolver import resolve_provider_config_from_prov
 from app.services.llm.resolver import get_model_by_category
 from app.services.task_service import TaskService
 
-RESULT_CONTRACTS = {"directing_divide": DivisionResult, "directing_design": SceneDesign, "directing_review": ReviewPacket, "directing_review_revision": ReviewRevisionCandidate}
+RESULT_CONTRACTS = {"directing_instruction_check": InstructionCheckResult, "directing_instruction": SceneInstructionResult, "directing_divide": DivisionResult, "directing_design": SceneDesign, "directing_review": ReviewPacket, "directing_review_revision": ReviewRevisionCandidate}
 
 
 class DirectingOutputError(ValueError):
@@ -30,13 +33,19 @@ class DirectingOutputError(ValueError):
 
 def generate_directing_result(kind: str, llm, args: dict):
     """在 Worker 有界线程执行，返回严格结构，绝不由模型直接批准或覆盖工作单。"""
-    contract = RESULT_CONTRACTS[kind]
+    contract = EditableSceneDesign if kind == 'directing_design' and args.get('scene_version_design') else RESULT_CONTRACTS[kind]
     instruction = {
+        "directing_instruction_check": "检查 instruction 是否准确表达 inputs 的当前原文、相关设计和单元准备。unit_id 必须保持 inputs.unit.id，每个 coverage.id 必须有 direction、performance、staging、cinematography、continuity、prompt 六行，occurrence_id 使用 coverage.id。逐行给出 pass 或 revise、具体理由和可执行问题建议，不得漏行、合并或返回 pending。不能更改正文、凭空补充素材或授权生成。",
+        "directing_instruction": "仅依据给定原文、设计、当前单元和明确参考编写可直接执行的拍摄指令。只返回原 unit.id 和完整正文 text，不修改设计、单元身份或参考，不声称检查通过或已生成视频。保留动作因果、人物与摄影及声音约束，不编造未提供素材。requirements 是用户本次编写要求。",
         "directing_review_revision": "评估固定检查意见（review=null 时为用户主动修改，不得伪造问题）和整体 instruction。人工 request.edits 必须原样保留，不得覆盖；主动修改 changes.problem_keys 和 outcomes 可为空；用 summary 的 status/reason/choices 说明整体结果，status 为 planned、needs_choice、unresolved 或 unchanged。无实际变化用 unchanged，超出范围用 unresolved，必要选择用 needs_choice 和至少两项 choices，不能伪造检查问题。preview_text/candidate_identity/source_prompt_revision_id 留空，由服务端渲染。仅替换 revision_context.allowed_design_fields 或 allowed_unit_fields 列出的已有字段；before 必须逐字复制固定字段，input_identity 原样返回。不得增加 applicable_shot_ids 等不存在字段，不得增删身份或引用。sound.execution 只有 generated/postproduction/unknown。检查意见不是事实，不能通过删除正确设计掩盖编译器或供应商限制；此类问题返回 unresolved。原文事实优先；必要创作取舍返回 needs_choice 及至少两个简短选项，不猜测用户意图。每个 problem_keys 中的问题都必须有 outcome，即使用户没有填写方向，planned 必须关联实际修改。不能修复的问题明确解释。只输出必要修改，不能宣称新检查通过。Note 新来源使用 revision_context.task_identity。声音制作方式必须有 direction.sound_execution 明确选择才能拟落实，不能从自由文本猜测。",
         "directing_divide": "将章节分成连续叙事场次。excerpt 必须逐字复制原文中连续的一段，不得改写，按原文顺序排列。不同地点或时间转换可分场，不按镜头分场。",
         "directing_design": "根据场次原文、已有资产与人工意见，设计可拍摄的六部门工作单。已有资产只有适用于本场时才引用其 ID，不得凭空编造资产 ID，不得让资产设定改变原文事实。镜头与节拍使用稳定 ID。保留剧情事实。所有角色、对白、背景行为和摄影必须有因果。未知技术值标 unknown，不适用给理由。不得自称用户确认。每镜必须有摄影行，并明确 participant_ids，引用本工作单的参与对象 ID；包括实际参与的静态车辆与手持物件。明确无对象用空列表，不得省略或使用 null，不因同一节拍或全场名单就把其他镜头对象加入。所有有内容的 Note 必须带 model 来源，reference 使用所提供的 task_identity，version 使用 1。",
         "directing_review": "以六部门分别审查本轮每个镜头出现项。严格保留提供的 roles 和 occurrences，不得减少、更换、合并。同一镜头不同单元分别检查。每行给出 pass 或 revise、具体理由及可执行修改建议。检查共同空间、先后反应、参考绑定、摄影、声音和相邻衔接。模型不能授权用户执行。",
     }[kind]
+    if args.get('design_scope'):
+        instruction += '\n这是预先限定范围的局部修订。只能替换 design_scope 中列出的完整 Note，必须保留其余字段、来源、对象身份、顺序与关联，返回完整工作单；不得补齐范围外的未完成字段。'
+    if args.get('instruction_scope'):
+        instruction += '\n这是预先限定的正文局部修订。instruction_scope 的 start/end 是原 unit.instruction 的 Unicode 字符半开范围，只修改此范围，范围外逐字保留；仍返回完整正文 text，不只返回替换片段。'
     messages = [
         SystemMessage(content=instruction + '\nNote 的 fact/proposal 必须有 text 和 sources；其余状态不得带 text，none/not_applicable 必须有 reason。Source.version 必须是字符串，例如 "1"。所有关联 ID 必须存在于本工作单对应列表。\n仅返回符合以下 JSON Schema 的 JSON 对象，不添加 Markdown：\n' + json.dumps(contract.model_json_schema(), ensure_ascii=False)),
         HumanMessage(content=json.dumps(args, ensure_ascii=False)),
@@ -50,7 +59,7 @@ def generate_directing_result(kind: str, llm, args: dict):
         if text.startswith("```") and "\n" in text:
             text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
         try:
-            result = contract.model_validate_json(text, context={"require_shot_participants": kind == "directing_design"})
+            result = contract.model_validate_json(text, context={"require_shot_participants": kind == "directing_design" and not args.get("design_scope")})
             break
         except ValidationError as error:
             errors = error.errors(include_url=False, include_input=False, include_context=False)
@@ -60,6 +69,12 @@ def generate_directing_result(kind: str, llm, args: dict):
             # 只允许一次结构纠错，继续沿用 Worker 的取消回调和总时限。
             messages.extend([AIMessage(content=content), HumanMessage(content=
                 "只修正以下结构或关联错误，保留原文事实和既有设计意图，返回完整 JSON：\n" + json.dumps(errors, ensure_ascii=False))])
+    if kind == "directing_instruction" and result.unit_id != args["unit"]["id"]:
+        raise ValueError("模型更改了当前单元身份")
+    if kind == "directing_instruction" and args.get('instruction_scope'):
+        SceneInstructionScope.model_validate(args['instruction_scope']).validate_text(args['unit']['instruction'], result.text)
+    if kind == "directing_instruction_check":
+        result.validate_scope(args["inputs"]["unit"]["id"], [item["id"] for item in args["inputs"]["unit"]["coverage"]])
     if kind == "directing_divide":
         cursor = 0
         for scene in result.scenes:
@@ -77,7 +92,12 @@ def generate_directing_result(kind: str, llm, args: dict):
         result, _, _ = validate_candidate(args["revision_context"], result)
     if kind == "directing_design":
         # 风格身份来自用户冻结输入，不采信模型生成的其他版本 ID。
-        result.style_revision_id = args.get("style_revision_id")
+        if args.get('design_scope'):
+            from app.services.directing.scene_design_scope import validate_design_scope  # pylint: disable=import-outside-toplevel
+            previous = EditableSceneDesign.model_validate(args['previous_design']).model_dump(mode='json')
+            validate_design_scope(args['design_scope'], previous, result.model_dump(mode='json'))
+        else:
+            result.style_revision_id = args.get("style_revision_id")
     return result
 
 
@@ -89,7 +109,7 @@ class DirectingAIService(WorkspaceService):
         """冻结原文、人工意见和起始版本，避免 AI 在后台读取变化中的工作区。"""
         if sequence_id:
             await self.current_sequence(sequence_id)
-        if kind not in RESULT_CONTRACTS:
+        if kind not in RESULT_CONTRACTS or kind in {"directing_instruction", "directing_instruction_check"}:
             raise ValueError("未知导演操作")
         model = await get_model_by_category(self.db, ModelCategoryKey.text, model_or_id=body.model_id)
         provider = await self.db.get(Provider, model.provider_id)
@@ -146,6 +166,8 @@ class DirectingAIService(WorkspaceService):
         task = await self.db.get(Task, task_id)
         if task is None or task.project_id != self.project_id or task.target_id != sequence_id or task.kind != "directing_design" or task.status != "succeeded":
             raise ValueError("没有可采用的导演任务结果")
+        if task.input_snapshot.get("scene_design"):
+            raise ValueError("场次版本建议须在原版本预览并明确应用")
         args = task.input_snapshot["run_args"]
         content = SceneDesign.model_validate(task.result)
         # Model provenance stays separate from the exact chapter version used for generation.
@@ -168,8 +190,10 @@ class DirectingAIService(WorkspaceService):
         if task is None or task.project_id != self.project_id or task.target_type not in {"directing_chapter", "directing_sequence", "directing_unit", "directing_image"}:
             raise ValueError("任务不属于当前工作区")
         result = {}
-        result_key = {"directing_divide": "division", "directing_design": "design", "directing_review": "review", "directing_review_revision": "revision"}.get(task.kind)
-        if task.status == "succeeded" and result_key:
+        result_key = {"directing_instruction_check": "instruction_check", "directing_instruction": "scene_instruction", "directing_divide": "division", "directing_design": "design", "directing_review": "review", "directing_review_revision": "revision"}.get(task.kind)
+        if task.status == "succeeded" and result_key and task.input_snapshot.get("scene_design"):
+            result["scene_design"] = EditableSceneDesign.model_validate(task.result)
+        elif task.status == "succeeded" and result_key:
             result[result_key] = RESULT_CONTRACTS[task.kind].model_validate(task.result)
         if task.status == "succeeded" and task.target_type == "directing_image":
             result["image_file_ids"] = list(await self.db.scalars(select(TaskOutput.file_id).where(TaskOutput.task_id == task.id).order_by(TaskOutput.ordinal)))

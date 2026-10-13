@@ -4,7 +4,7 @@
 /* eslint-disable */
 import type { ApiResponse_ExperimentTaskCreated_ } from '../models/ApiResponse_ExperimentTaskCreated_';
 import type { ApiResponse_TaskCreated_ } from '../models/ApiResponse_TaskCreated_';
-import type { GenerationSubmitRequest } from '../models/GenerationSubmitRequest';
+import type { GenerationSubmitRequest_Input } from '../models/GenerationSubmitRequest_Input';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -22,7 +22,7 @@ export class StudioGenerationTasksService {
     }: {
         actorId: string,
         slotId: number,
-        requestBody: GenerationSubmitRequest,
+        requestBody: GenerationSubmitRequest_Input,
     }): CancelablePromise<ApiResponse_TaskCreated_> {
         return __request(OpenAPI, {
             method: 'POST',
@@ -51,7 +51,7 @@ export class StudioGenerationTasksService {
     }: {
         characterId: string,
         slotId: number,
-        requestBody: GenerationSubmitRequest,
+        requestBody: GenerationSubmitRequest_Input,
     }): CancelablePromise<ApiResponse_TaskCreated_> {
         return __request(OpenAPI, {
             method: 'POST',
@@ -82,7 +82,7 @@ export class StudioGenerationTasksService {
         assetType: 'prop' | 'scene' | 'costume',
         assetId: string,
         slotId: number,
-        requestBody: GenerationSubmitRequest,
+        requestBody: GenerationSubmitRequest_Input,
     }): CancelablePromise<ApiResponse_TaskCreated_> {
         return __request(OpenAPI, {
             method: 'POST',
@@ -110,7 +110,7 @@ export class StudioGenerationTasksService {
         requestBody,
     }: {
         sessionId: string,
-        requestBody: GenerationSubmitRequest,
+        requestBody: GenerationSubmitRequest_Input,
     }): CancelablePromise<ApiResponse_ExperimentTaskCreated_> {
         return __request(OpenAPI, {
             method: 'POST',
@@ -136,7 +136,7 @@ export class StudioGenerationTasksService {
         requestBody,
     }: {
         sessionId: string,
-        requestBody: GenerationSubmitRequest,
+        requestBody: GenerationSubmitRequest_Input,
     }): CancelablePromise<ApiResponse_ExperimentTaskCreated_> {
         return __request(OpenAPI, {
             method: 'POST',

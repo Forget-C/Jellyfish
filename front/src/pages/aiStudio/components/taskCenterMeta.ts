@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { NavigateFunction } from 'react-router-dom'
+import { useLocation, type NavigateFunction } from 'react-router-dom'
 import { StudioChaptersService, type TaskSourceRead } from '../../../services/generated'
 import { StudioEntitiesApi } from '../../../services/studioEntities'
 import type { TaskUiItem } from './taskUiStore'
@@ -18,6 +18,17 @@ function sourceMeta(source: TaskSourceRead | null | undefined, task: TaskUiItem)
   else if (kind === 'sequence' && projectId && chapterId) {
     const view = task.taskKind === 'directing_design' ? 'design' : task.taskKind === 'image_generation' ? 'visual' : 'shoot'
     const query = new URLSearchParams({ view, task: task.taskId, focus: 'tasks' })
+    if (task.taskKind === 'scene_export' && source.version_id) {
+      query.set('version', source.version_id); query.set('exportVersion', source.version_id); query.set('exportTask', task.taskId); query.set('view', 'cut')
+    }
+    const historyKind = task.taskKind === 'directing_instruction' ? 'instructions' : task.taskKind === 'directing_instruction_check' ? 'checks' : task.taskKind === 'directing_design' ? 'design' : task.taskKind === 'video_generation' && source.unit_id ? 'videos' : undefined
+    if (historyKind && source.version_id) {
+      query.set('version', source.version_id)
+      query.set('sceneTask', task.taskId)
+      query.set('taskVersion', source.version_id)
+      query.set('taskKind', historyKind)
+      if (source.unit_id) query.set('taskUnit', source.unit_id)
+    }
     navigateTo = `/projects/${projectId}/chapters/${chapterId}/sequences/${id}?${query}`
   }
   else if (kind === 'project') navigateTo = `/projects/${id}`
@@ -162,6 +173,7 @@ export function useResolvedTaskCenterTasks(
   tasks: TaskUiItem[],
   navigate: NavigateFunction,
 ): TaskUiItem[] {
+  const location = useLocation()
   const [metaMap, setMetaMap] = useState<Record<string, ResolvedTaskMeta>>({})
   const loadingKeysRef = useRef<Set<string>>(new Set())
 
@@ -210,7 +222,24 @@ export function useResolvedTaskCenterTasks(
           return {
             ...task,
             sourceLabel: meta.sourceLabel ?? null,
-            onNavigate: meta.navigateTo ? () => navigate(meta.navigateTo!) : null,
+            onNavigate: meta.navigateTo ? () => {
+              const target = new URL(meta.navigateTo!, window.location.origin)
+              if (task.taskKind === 'scene_export' && task.source?.version_id && target.pathname === location.pathname) {
+                const query = new URLSearchParams(location.search)
+                for (const key of ['sceneTask', 'taskVersion', 'taskKind', 'taskUnit']) query.delete(key)
+                query.set('exportVersion', task.source.version_id)
+                query.set('exportTask', task.taskId)
+                navigate(`${location.pathname}?${query}`)
+              } else if (target.searchParams.has('sceneTask') && target.pathname === location.pathname) {
+                const query = new URLSearchParams(location.search)
+                for (const key of ['exportTask', 'exportVersion', 'sceneTask', 'taskVersion', 'taskKind', 'taskUnit']) query.delete(key)
+                for (const key of ['sceneTask', 'taskVersion', 'taskKind', 'taskUnit']) {
+                  const value = target.searchParams.get(key)
+                  if (value) query.set(key, value)
+                }
+                navigate(`${location.pathname}?${query}`)
+              } else navigate(meta.navigateTo!)
+            } : null,
           }
         }
         const key = metaKeyForTask(task)
@@ -227,6 +256,6 @@ export function useResolvedTaskCenterTasks(
               : null),
         }
       }),
-    [metaMap, navigate, tasks],
+    [metaMap, navigate, tasks, location.pathname, location.search],
   )
 }

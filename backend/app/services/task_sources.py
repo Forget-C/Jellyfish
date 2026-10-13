@@ -3,7 +3,7 @@
 from sqlalchemy import select
 
 from app.models.experiment_sessions import ExperimentSession
-from app.models.directing import Sequence, DirectingRevision
+from app.models.directing import Sequence, DirectingRevision, SceneVideoExecution, SceneVersionRecord
 from app.models.studio import Actor, Character, Scene, Prop, Costume, Chapter, Project
 from app.schemas.task import TaskSourceRead
 
@@ -16,7 +16,7 @@ _SCRIPT_TARGETS = {
 
 
 async def resolve_task_sources(db, rows) -> dict[str, TaskSourceRead]:
-    """每类来源最多一次批量查询，来源删除后保留任务历史且不返回失效导航。"""
+    """按来源类型及场次版本批量核实；来源失效不猜测替代编辑对象。"""
     grouped: dict[str, dict[str, str]] = {}
     for row in rows:
         kind, identity = row.target_type, row.target_id
@@ -42,14 +42,19 @@ async def resolve_task_sources(db, rows) -> dict[str, TaskSourceRead]:
             for row in (await db.execute(select(*columns).where(model.id.in_(ids)))).all():
                 found[row.id] = TaskSourceRead(kind=kind, id=row.id, title=row.name,
                                                project_id=row.project_id if kind == "character" else None)
-        elif kind in {"directing_sequence", "directing_unit", "directing_image"}:
+        elif kind in {"directing_sequence", "directing_unit", "directing_image", "scene_video", "scene_export"}:
             query = select(Sequence.id, Sequence.title, Sequence.chapter_id, Chapter.project_id).join(Chapter, Chapter.id == Sequence.chapter_id)
-            if kind in {"directing_unit", "directing_image"}:
+            if kind == 'scene_export':
+                query = query.add_columns(SceneVersionRecord.id.label('lookup_id')).join(SceneVersionRecord, SceneVersionRecord.sequence_id == Sequence.id).where(SceneVersionRecord.id.in_(ids))
+            elif kind == 'scene_video':
+                query = query.add_columns(SceneVideoExecution.id.label('lookup_id'), SceneVideoExecution.version_id, SceneVideoExecution.unit_id).join(SceneVersionRecord, SceneVersionRecord.sequence_id == Sequence.id).join(SceneVideoExecution, SceneVideoExecution.version_id == SceneVersionRecord.id).where(SceneVideoExecution.id.in_(ids))
+            elif kind in {"directing_unit", "directing_image"}:
                 query = query.add_columns(DirectingRevision.id.label("lookup_id")).join(DirectingRevision, DirectingRevision.sequence_id == Sequence.id).where(DirectingRevision.id.in_(ids))
             else:
                 query = query.add_columns(Sequence.id.label("lookup_id")).where(Sequence.id.in_(ids))
             for row in (await db.execute(query)).all():
-                found[row.lookup_id] = TaskSourceRead(kind="sequence", id=row.id, title=row.title, chapter_id=row.chapter_id, project_id=row.project_id)
+                found[row.lookup_id] = TaskSourceRead(kind="sequence", id=row.id, title=row.title, chapter_id=row.chapter_id, project_id=row.project_id, version_id=row.lookup_id if kind == "scene_export" else row.version_id if kind == "scene_video" else None,
+                    unit_id=row.unit_id if kind == "scene_video" else None)
         elif kind == "directing_chapter":
             for row in (await db.execute(select(Chapter.id, Chapter.title, Chapter.project_id).where(Chapter.id.in_(ids)))).all():
                 found[row.id] = TaskSourceRead(kind="chapter", id=row.id, title=row.title, chapter_id=row.id, project_id=row.project_id)
@@ -64,4 +69,16 @@ async def resolve_task_sources(db, rows) -> dict[str, TaskSourceRead]:
                 for row in (await db.execute(select(Project.id, Project.name).where(Project.id.in_(remaining)))).all():
                     found[row.id] = TaskSourceRead(kind="project", id=row.id, title=row.name, project_id=row.id)
         result.update({task_id: found[identity] for task_id, identity in identities.items() if identity in found})
+    version_ids = {row.scene_version_id for row in rows if row.scene_version_id}
+    if version_ids:
+        versions = dict((await db.execute(select(SceneVersionRecord.id, SceneVersionRecord.sequence_id)
+            .where(SceneVersionRecord.id.in_(version_ids)))).all())
+        for row in rows:
+            source = result.get(row.id)
+            if not row.scene_version_id or not source:
+                continue
+            if versions.get(row.scene_version_id) != source.id or source.project_id != row.project_id:
+                result.pop(row.id, None)
+                continue
+            result[row.id] = source.model_copy(update={'version_id': row.scene_version_id, 'unit_id': row.scene_unit_id})
     return result

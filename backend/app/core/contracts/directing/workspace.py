@@ -6,6 +6,9 @@ from pydantic import Field, model_validator
 
 from app.core.contracts.directing.common import Contract, Identity, Source, Text, Role
 from app.core.contracts.directing.design import SceneDesign
+from app.core.contracts.directing.scene_version import EditableSceneDesign
+from app.core.contracts.directing.instruction_check import InstructionCheckResult
+from app.core.contracts.directing.scene_instruction import SceneInstructionResult
 from app.core.contracts.directing.review_revision import ReviewRevisionCandidate, ReviewRevisionRequest, ReviewRevisionApplication
 from app.core.contracts.directing.production import ProductionPlan, ReviewPacket, SequenceCut, TakeAnnotation
 from app.core.contracts.directing.revisions import (
@@ -258,6 +261,9 @@ class DirectingTaskRead(Contract):
     division_baseline: dict[Identity, int] | None = None
     division: DivisionResult | None = None
     design: SceneDesign | None = None
+    scene_design: EditableSceneDesign | None = None
+    scene_instruction: SceneInstructionResult | None = None
+    instruction_check: InstructionCheckResult | None = None
     review: ReviewPacket | None = None
     revision: ReviewRevisionCandidate | None = None
     revision_request: ReviewRevisionRequest | None = None

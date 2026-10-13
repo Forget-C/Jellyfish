@@ -1,0 +1,207 @@
+"""持续编辑的场次方案；未完成内容与固定执行契约分别校验。"""
+
+from datetime import datetime
+from typing import Literal
+
+from pydantic import ConfigDict, Field, model_validator
+
+from app.core.contracts.directing.common import Contract, Identity, Note, Source, references, unique
+from app.core.contracts.directing.production import GenerationUnit, ModelCapability, ReferenceBinding
+from app.core.contracts.directing.scene_take import SceneTakeJudgment
+from app.core.contracts.directing.scene_timeline import SceneTimeline
+from app.core.contracts.directing.design import (
+    Beat, BlockingState, CameraShot, ContinuityState, Criterion, Direction, Event,
+    Participant, Performance, PromptDirection, SceneDesign, ShotCoverage,
+    SoundDesign, SpatialAnchor, Staging,
+)
+
+
+class EditableShotCoverage(ShotCoverage):
+    """人工镜头允许尚未分配节拍；已填写关联仍由工作单验证身份。"""
+
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
+    beat_ids: list[Identity] = Field(default_factory=list)
+
+
+class EditableDirection(Direction):
+    """允许尚无节拍和镜头，已填写的身份及关联继续使用设计校验。"""
+
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
+    viewpoint: Note = Field(default_factory=Note)
+    information_change: Note = Field(default_factory=Note)
+    relationship_change: Note = Field(default_factory=Note)
+    turning_point: Note = Field(default_factory=Note)
+    immutable_facts: list[Note] = Field(default_factory=list)
+    spatial_basis: Note = Field(default_factory=Note)
+    shootable_area: Note = Field(default_factory=Note)
+    axis: Note = Field(default_factory=Note)
+    scale: Note = Field(default_factory=Note)
+    open_questions: list[Note] = Field(default_factory=list)
+    control_level: Note = Field(default_factory=Note)
+    beats: list[Beat] = Field(default_factory=list)
+    anchors: list[SpatialAnchor] = Field(default_factory=list)
+    blocking_states: list[BlockingState] = Field(default_factory=list)
+    shots: list[EditableShotCoverage] = Field(default_factory=list)
+
+
+class EditableSceneDesign(SceneDesign):
+    """空工作单表达未填信息，不为保存构造虚假的镜头或业务完成状态。"""
+
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
+    direction: EditableDirection = Field(default_factory=EditableDirection)
+    participants: list[Participant] = Field(default_factory=list)
+    events: list[Event] = Field(default_factory=list)
+    criteria: list[Criterion] = Field(default_factory=list)
+    performance: Performance = Field(default_factory=lambda: Performance(
+        situations=[], beats=[], applicability=Note()))
+    staging: Staging = Field(default_factory=lambda: Staging(
+        activities=[], environment=Note(), intentional_absence=Note()))
+    cinematography: list[CameraShot] = Field(default_factory=list)
+    continuity: list[ContinuityState] = Field(default_factory=list)
+    sound: SoundDesign = Field(default_factory=lambda: SoundDesign(
+        dialogues=[], sources=Note(), ambience_actions=Note(), music_constraints=Note(),
+        execution='unknown'))
+    prompt: PromptDirection = Field(default_factory=lambda: PromptDirection(
+        priorities=Note(), binding_requirements=Note(), sound_strategy=Note(), prohibitions=Note()))
+
+
+class SceneVersionSource(Contract):
+    """版本明确采用的原文及原始位置，章节更新不改写该依据。"""
+
+    source: Source
+    start: int | None = Field(default=None, ge=0)
+    end: int | None = Field(default=None, ge=0)
+    text: str
+
+    @model_validator(mode='after')
+    def chapter_excerpt(self):
+        """原文依据只能是章节摘录，边界须成对且与 Unicode 字符数一致。"""
+        if self.source.kind != 'chapter' or self.source.file_id or self.source.media_range:
+            raise ValueError('scene basis must reference chapter text')
+        if ((self.start is None) != (self.end is None)
+                or self.start is not None and (self.end <= self.start or self.end - self.start != len(self.text))):
+            raise ValueError('source range does not match excerpt')
+        return self
+
+
+class EditableCoverageItem(Contract):
+    """单元的镜头出现项允许尚未填写动作范围；已有节拍与事件须属于该镜头。"""
+
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
+    id: Identity
+    shot_id: Identity
+    beat_ids: list[Identity] = Field(default_factory=list)
+    event_ids: list[Identity] = Field(default_factory=list)
+    action_scope: str = ''
+
+
+class SceneFrameDependency(Contract):
+    """按版本和单次采用声明依赖，落幅证据与实际参考必须成对绑定。"""
+
+    version_id: Identity
+    clip_id: Identity
+    frame_id: Identity | None = None
+    reference_id: Identity | None = None
+
+    @model_validator(mode='after')
+    def paired_evidence(self):
+        """未绑定可保存；不能只登记证据而漏掉模型参考输入。"""
+        if (self.frame_id is None) != (self.reference_id is None):
+            raise ValueError('实际落幅证据和参考输入必须同时选择')
+        return self
+
+
+class EditableUnitPreparation(GenerationUnit):
+    """准备中的单元可缺模型或时长，执行前另做准备度与模型能力检查。"""
+
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
+    scene_dependencies: list[SceneFrameDependency] = Field(default_factory=list)
+    coverage: list[EditableCoverageItem] = Field(min_length=1)
+    references: list[ReferenceBinding] = Field(default_factory=list)
+    model_id: Identity | None = None
+    duration_ms: int | None = Field(default=None, gt=0)
+    capability: ModelCapability = Field(default_factory=ModelCapability)
+
+
+    @model_validator(mode='after')
+    def scene_dependency_identities(self):
+        """同一单元不能重复声明同一次采用，参考输入也不能复用给两份落幅。"""
+        unique([(link.version_id, link.clip_id) for link in self.scene_dependencies], 'scene dependency')
+        unique([link.reference_id for link in self.scene_dependencies if link.reference_id], 'scene dependency reference')
+        return self
+
+
+class EditableGenerationUnit(EditableUnitPreparation):
+    """正文与依据确认分别保存，普通编辑不自动确认新依据。"""
+
+    instruction_basis_id: Identity | None = None
+    instruction_check_task_id: Identity | None = None
+    instruction: str = Field(default='', description='当前单元的可编辑指令正文；保存不代表检查通过或授权生成。')
+    instruction_source: Source | None = Field(default=None, description='当前正文的人工或真实任务来源；正文改写时同步更新。')
+
+
+class SceneVersionContent(Contract):
+    """四画布共用的可编辑内容；按已交付能力扩展强类型字段。"""
+
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
+    basis: SceneVersionSource
+    design: EditableSceneDesign
+    output_aspect_ratio: Literal['16:9', '9:16', '1:1'] = '16:9'
+    units: list[EditableGenerationUnit] = Field(default_factory=list)
+    take_judgments: list[SceneTakeJudgment] = Field(default_factory=list)
+    timeline: SceneTimeline = Field(default_factory=SceneTimeline)
+
+    @model_validator(mode='after')
+    def unit_references(self):
+        """局部身份按固定 ID 核对；设计修改不能让现有单元静默引用另一镜头。"""
+        unique([unit.id for unit in self.units], 'unit')
+        unique([(item.take_kind, item.take_id) for item in self.take_judgments], '素材判断')
+        shots = {shot.id: shot for shot in self.design.direction.shots}
+        for unit in self.units:
+            for item in unit.coverage:
+                if item.shot_id not in shots:
+                    raise ValueError(f'单元 {unit.id} 的覆盖 {item.id} 引用镜头 {item.shot_id}，请先处理该引用')
+                references(item.beat_ids, shots[item.shot_id].beat_ids, f'单元 {unit.id} 镜头节拍')
+                references(item.event_ids, shots[item.shot_id].event_ids, f'单元 {unit.id} 镜头事件')
+            for binding in unit.references:
+                references(binding.participant_ids, [row.id for row in self.design.participants],
+                           f'单元 {unit.id} 参考 {binding.id} 参与对象')
+        return self
+
+
+class SceneVersionCreate(Contract):
+    """只有显式创建才产生新方案，请求身份供重复提交核实。"""
+
+    request_id: Identity
+    title: str = Field(min_length=1, max_length=255, pattern=r'\S')
+
+
+class SceneVersionSave(Contract):
+    """保存沿用方案身份，revision 仅用于并发保护，不是可选历史版本。"""
+
+    request_id: Identity
+    expected_revision: int = Field(gt=0)
+    content: SceneVersionContent
+
+
+class SceneVersionRead(Contract):
+    """带归属与保存状态的场次版本，不向用户暴露多层草稿确认。"""
+
+    id: Identity
+    project_id: Identity
+    chapter_id: Identity
+    sequence_id: Identity
+    title: str
+    revision: int = Field(gt=0)
+    source: SceneVersionSource
+    content: SceneVersionContent
+    copied_from_version_id: Identity | None
+    last_save_request_id: Identity | None
+    created_at: datetime
+    updated_at: datetime
