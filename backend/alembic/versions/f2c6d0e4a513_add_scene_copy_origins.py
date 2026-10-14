@@ -10,11 +10,12 @@ depends_on = None
 
 def upgrade():
     """Existing versions have no inferred copy relationship."""
+    # 与 ORM 一致由写入端提供空对象，避免 MySQL 拒绝 JSON 字面量默认值。
     op.create_table('directing_scene_copy_origins',
         sa.Column('version_id', sa.String(64), sa.ForeignKey('directing_scene_versions.id', ondelete='RESTRICT'), primary_key=True),
         sa.Column('source_version_id', sa.String(64), sa.ForeignKey('directing_scene_versions.id', ondelete='RESTRICT'), nullable=False),
         sa.Column('request', sa.JSON(), nullable=False),
-        sa.Column('review_ids', sa.JSON(), nullable=False, server_default='{}'))
+        sa.Column('review_ids', sa.JSON(), nullable=False))
 
 
 def downgrade():

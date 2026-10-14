@@ -141,7 +141,7 @@ def test_foundation_migration_and_next_upgrade():
         assert connection.scalar(sa.text("SELECT COUNT(*) FROM directing_scene_deliveries")) == 1
         connection.execute(sa.text("DELETE FROM directing_scene_deliveries"))
         deliveries.downgrade()
-        connection.execute(sa.text("INSERT INTO directing_scene_copy_origins (version_id,source_version_id,request) VALUES ('v','v','{}')"))
+        connection.execute(sa.text("INSERT INTO directing_scene_copy_origins (version_id,source_version_id,request,review_ids) VALUES ('v','v','{}','{}')"))
         with pytest.raises(RuntimeError, match='Scene copy origins exist'):
             copies.downgrade()
         assert connection.scalar(sa.text("SELECT COUNT(*) FROM directing_scene_copy_origins")) == 1
@@ -267,3 +267,18 @@ def test_display_number_backfill_keeps_payloads_and_groups():
         migration.downgrade()
         assert connection.scalar(sa.text('SELECT COUNT(*) FROM directing_takes')) == 3
         assert connection.scalar(sa.text("SELECT payload FROM directing_revisions WHERE id='a'")) == payload
+
+
+def test_scene_copy_migration_has_no_json_literal_default():
+    """实际迁移生成的 MySQL DDL 不得含 JSON 字面量默认值。"""
+    import io
+
+    output = io.StringIO()
+    migration = revision_module('f2c6d0e4a513_add_scene_copy_origins.py')
+    migration.op = Operations(MigrationContext.configure(dialect_name='mysql', opts={
+        'as_sql': True, 'output_buffer': output,
+    }))
+    migration.upgrade()
+    ddl = output.getvalue()
+    assert 'review_ids JSON NOT NULL' in ddl
+    assert "review_ids JSON NOT NULL DEFAULT" not in ddl, ddl
