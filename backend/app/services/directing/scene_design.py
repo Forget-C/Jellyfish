@@ -1,5 +1,4 @@
 """场次版本的 AI 建议冻结、预览与应用前校验；不改写可编辑内容。"""
-import json
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -14,6 +13,7 @@ from app.models.task import Task
 from app.services.directing.ai import DirectingAIService
 from app.services.directing.store import RevisionConflict
 from app.services.directing.scene_design_scope import validate_design_scope
+from app.services.directing.scene_design_sources import validate_model_sources
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.llm.resolver import get_model_by_category
 from app.services.task_service import TaskService
@@ -119,7 +119,7 @@ class SceneDesignService(DirectingAIService):
         await self._validate_content(sequence, version_id, content)
         proposed = EditableSceneDesign.model_validate(task.result)
         validate_design_scope(request.scope, original.design.model_dump(mode='json'), proposed.model_dump(mode='json'))
-        self._validate_model_sources(original.design, proposed, task.input_snapshot['run_args']['task_identity'])
+        validate_model_sources(original.design, proposed, task.input_snapshot['run_args']['task_identity'])
         if proposed.style_revision_id != original.design.style_revision_id:
             raise ValueError('建议修改了本次范围外的项目风格依据')
         if request.scope is None and original.basis.source not in proposed.sources:
@@ -127,22 +127,3 @@ class SceneDesignService(DirectingAIService):
         candidate = content.model_copy(update={'design': proposed})
         await self._validate_content(sequence, version_id, candidate)
         return SceneDesignPreview(task_id=task.id, scope=request.scope, basis=original.basis, before=original.design, design=proposed)
-
-    @staticmethod
-    def _validate_model_sources(original, proposed, task_identity):
-        """保留原有 Note 来源，新生成的事实或提议必须指向本次真实模型任务。"""
-        def notes(value):
-            if isinstance(value, dict):
-                if value.get('state') in {'fact', 'proposal'} and 'text' in value:
-                    yield value
-                for child in value.values():
-                    yield from notes(child)
-            elif isinstance(value, list):
-                for child in value:
-                    yield from notes(child)
-        known = {json.dumps(note, sort_keys=True) for note in notes(original.model_dump(mode='json'))}
-        for note in notes(proposed.model_dump(mode='json')):
-            if json.dumps(note, sort_keys=True) not in known and not any(
-                    source.get('kind') == 'model' and source.get('reference') == task_identity
-                    and source.get('version') == '1' for source in note.get('sources', [])):
-                raise ValueError('建议新增内容缺少本次模型任务来源，请重新生成')

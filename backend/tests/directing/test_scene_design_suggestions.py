@@ -1,4 +1,6 @@
 """场次方案 AI 建议的真实 HTTP、事务和任务生命周期边界。"""
+import json
+from types import SimpleNamespace
 from copy import deepcopy
 from uuid import uuid4
 
@@ -7,6 +9,7 @@ import pytest
 from app.models.llm import Model, Provider
 from app.models.task import Task
 from app.services.task_service import TaskService
+from app.services.directing.ai import DirectingOutputError, generate_directing_result
 from tests.directing.test_api import client_for
 from tests.directing.test_scene_versions import sequence_path
 from tests.directing.test_store import database
@@ -44,7 +47,12 @@ async def test_whole_design_preview_preserves_version_and_rejects_new_manual_edi
                 'sources': [{'kind': 'model', 'reference': task.input_snapshot['run_args']['task_identity'], 'version': '1'}]}
             service = TaskService(db)
             assert await service.claim(task_id, worker_id='test-worker')
-            await service.finish(task_id, result=result)
+            invalid = deepcopy(result)
+            invalid['direction']['viewpoint']['sources'] = [version['content']['basis']['source']]
+            responses = iter([invalid, result])
+            generated = generate_directing_result('directing_design', SimpleNamespace(invoke=lambda _: SimpleNamespace(content=json.dumps(next(responses)))), task.input_snapshot['run_args'])
+            assert generated.direction.viewpoint.sources[0].kind == 'model'
+            await service.finish(task_id, result=generated.model_dump(mode='json'))
         preview = await client.post(detail + '/design-suggestions/' + task_id + '/preview', json={'content': version['content']})
         assert preview.status_code == 200, preview.text
         assert preview.json()['data']['design']['direction']['viewpoint']['text'] == '从弟弟的观察视点展开'
@@ -163,3 +171,38 @@ async def test_design_preview_rejects_file_source_deleted_after_task_finishes(tm
         rejected = await client.post(detail + '/design-suggestions/' + task_id + '/preview', json={'content': content})
         assert rejected.status_code == 410
         assert (await client.get(detail)).json()['data'] == version
+
+
+@pytest.mark.parametrize('source', [
+    {'kind': 'chapter', 'reference': 'chapter', 'version': '1'},
+    {'kind': 'human', 'reference': 'author', 'version': '1'},
+    {'kind': 'model', 'reference': 'old-task', 'version': '1'},
+    {'kind': 'model', 'reference': 'current-task', 'version': '2'},
+])
+@pytest.mark.parametrize('scope', [None, ['/direction/information_change']])
+def test_generation_retries_invalid_task_sources_before_returning_success(source, scope):
+    """结构合法的错误来源必须在完成前纠错；保留原人工内容不应触发误判。"""
+    from app.core.contracts.directing.scene_version import EditableSceneDesign
+
+    original = EditableSceneDesign(sources=[{'kind': 'chapter', 'reference': 'chapter', 'version': '1'}]).model_dump(mode='json')
+    original['direction']['viewpoint'] = {'state': 'proposal', 'text': '保留人工视点',
+        'sources': [{'kind': 'human', 'reference': 'author', 'version': '1'}]}
+    invalid = deepcopy(original)
+    invalid['direction']['information_change'] = {'state': 'proposal', 'text': '读信后产生迟疑', 'sources': [source]}
+    corrected = deepcopy(invalid)
+    corrected['direction']['information_change']['sources'] = [{'kind': 'model', 'reference': 'current-task', 'version': '1'}]
+    args = {'scene_version_design': True, 'task_identity': 'current-task', 'previous_design': original,
+        'design_scope': scope}
+    messages_seen = []
+
+    def invoke(messages):
+        messages_seen.append(list(messages))
+        return SimpleNamespace(content=json.dumps(invalid if len(messages_seen) == 1 else corrected))
+
+    result = generate_directing_result('directing_design', SimpleNamespace(invoke=invoke), args)
+    assert len(messages_seen) == 2
+    assert result.direction.information_change.sources[0].reference == 'current-task'
+    assert result.direction.viewpoint == EditableSceneDesign.model_validate(original).direction.viewpoint
+    assert '来源' in messages_seen[1][-1].content
+    with pytest.raises(DirectingOutputError, match='来源'):
+        generate_directing_result('directing_design', SimpleNamespace(invoke=lambda _: SimpleNamespace(content=json.dumps(invalid))), args)

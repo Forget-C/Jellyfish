@@ -1,3 +1,4 @@
+import { workbenchControl } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -60,39 +61,66 @@ try {
   const originalDesign = (await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.content.design
   await page.goto(`http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
-  await page.getByRole('switch', { name: '自动保存', exact: true }).click()
+  await (await workbenchControl(page, '保存设置', 'switch', '自动保存')).click()
+  await page.getByRole('button', { name: '保存设置', exact: true }).click()
   await page.getByRole('button', { name: '编辑画布', exact: true }).click()
-  await page.getByRole('button', { name: '时间线', exact: true }).click()
-  await page.locator('.canvas-workbench-toolbar').getByRole('button', { name: 'AI 提取设计 · 整场', exact: true }).click()
+  await page.getByRole('button', { name: '定位画布节点', exact: true }).click()
+  await page.getByRole('menuitem', { name: '时间线', exact: true }).click()
+  await (await workbenchControl(page, '更多操作', 'button', 'AI 设计')).click()
   await page.getByRole('textbox', { name: '设计要求（可选）', exact: true }).fill('保留点击时的设计要求')
   let firstRequest
   await page.route('**/design-suggestions', async route => {
     if (route.request().method() === 'POST') { firstRequest = route.request().postDataJSON(); await route.abort('failed') }
     else await route.continue()
   })
-  await page.getByRole('button', { name: '生成整场设计建议', exact: true }).click()
+  await page.locator('.scene-ai-footer').getByRole('button', { name: '重新生成整场', exact: true }).click()
   await page.getByText(/提交未核实，保留本次请求/).waitFor()
-  await page.getByRole('button', { name: '关闭建议', exact: true }).click()
-  await page.getByRole('button', { name: '另存为新版本', exact: true }).click()
+  await page.getByRole('dialog', { name: 'AI 设计', exact: true }).locator('.ant-modal-close').click()
+  await (await workbenchControl(page, '版本管理', 'button', '另存为新版本')).click()
   await page.getByText('设计提交结果尚未核实，请先核实原设计请求。', { exact: true }).waitFor({ timeout: 5000 })
   assert.equal((await (await fetch(versionsUrl)).json()).data.length, 1)
   await page.reload()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
-  await page.locator('.canvas-workbench-toolbar').getByRole('button', { name: 'AI 提取设计 · 整场', exact: true }).click()
+  await (await workbenchControl(page, '更多操作', 'button', 'AI 设计')).click()
   await page.getByRole('button', { name: '核实原设计请求', exact: true }).waitFor()
   await page.unroute('**/design-suggestions')
   const submitted = page.waitForRequest(request => request.method() === 'POST' && request.url().endsWith('/design-suggestions'))
   await page.getByRole('button', { name: '核实原设计请求', exact: true }).click()
   assert.deepEqual((await submitted).postDataJSON(), firstRequest)
   await page.getByText('状态：等待执行', { exact: true }).waitFor()
-  await page.getByRole('button', { name: '关闭建议', exact: true }).click()
-  await page.getByRole('button', { name: '另存为新版本', exact: true }).click()
+  const ai = page.getByRole('dialog', { name: 'AI 设计', exact: true })
+  await ai.locator('.scene-ai-context summary').click()
+  const geometry = () => ai.evaluate(node => ({ top: node.querySelector('.scene-ai-result-heading').getBoundingClientRect().top, scroll: node.querySelector('.ant-modal-body').scrollTop, open: node.querySelector('.scene-ai-context').open }))
+  let release, started
+  const gate = new Promise(resolve => { release = resolve })
+  const arrived = new Promise(resolve => { started = resolve })
+  await page.route('**/design-suggestions', async route => {
+    if (route.request().method() !== 'GET') return route.continue()
+    started()
+    await gate
+    await route.abort('failed')
+  })
+  const beforeRefresh = await geometry()
+  await Promise.race([arrived, delay(10000).then(() => { throw new Error('设计轮询未执行') })])
+  try {
+    assert.equal(await ai.locator('.ant-spin').count(), 0)
+    assert.deepEqual(await geometry(), beforeRefresh)
+  } finally { release() }
+  await ai.getByText('刷新失败，已保留上次状态', { exact: true }).waitFor()
+  assert.deepEqual(await geometry(), beforeRefresh)
+  await page.unroute('**/design-suggestions')
+  await ai.getByRole('button', { name: '重试读取建议', exact: true }).click()
+  await ai.getByText('刷新失败，已保留上次状态', { exact: true }).waitFor({ state: 'hidden' })
+  assert.deepEqual(await geometry(), beforeRefresh)
+
+  await page.getByRole('dialog', { name: 'AI 设计', exact: true }).locator('.ant-modal-close').click()
+  await (await workbenchControl(page, '版本管理', 'button', '另存为新版本')).click()
   await page.getByText(/关联任务尚未结束：/).waitFor()
   const tasksUrl = `${versionsUrl}/${version.id}/design-suggestions`
   const tasks = (await (await fetch(tasksUrl)).json()).data
   assert.equal(tasks.length, 1)
   assert.equal((await fetch(`${api}/browser-test/design-tasks/${tasks[0].task_id}/complete`, { method: 'POST' })).status, 200)
-  await page.getByRole('button', { name: '另存为新版本', exact: true }).click()
+  await (await workbenchControl(page, '版本管理', 'button', '另存为新版本')).click()
   await page.waitForURL(url => url.searchParams.get('version') !== version.id)
   const copiedId = new URL(page.url()).searchParams.get('version')
   const copied = (await (await fetch(`${versionsUrl}/${copiedId}`)).json()).data

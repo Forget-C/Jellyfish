@@ -1,0 +1,39 @@
+:is(.canvas-workbench, .canvas-workbench-dialog, .canvas-task-center, .workbench-ui) .wb-action.ant-btn {
+  height: var(--wb-control); min-height: var(--wb-control); border-radius: var(--wb-radius); box-shadow: none;
+}
+:is(.canvas-workbench, .canvas-workbench-dialog, .canvas-task-center, .workbench-ui) .wb-action.ant-btn:not(:disabled):not(.ant-btn-dangerous) {
+  color: var(--wb-text); background: var(--wb-raised); border-color: var(--wb-border);
+}
+:is(.canvas-workbench, .canvas-workbench-dialog, .canvas-task-center, .workbench-ui) .wb-action.ant-btn[data-variant="primary"]:not(:disabled) {
+  color: #fff; background: var(--wb-primary); border-color: var(--wb-strongBorder); font-weight: 500;
+}
+:is(.canvas-workbench, .canvas-workbench-dialog, .canvas-task-center, .workbench-ui) .wb-action.ant-btn[data-variant="quiet"]:not(:disabled) { background: transparent; border-color: transparent; }
+:is(.canvas-workbench, .canvas-workbench-dialog, .canvas-task-center, .workbench-ui) .wb-action.ant-btn:not(:disabled):not(.ant-btn-dangerous):hover { background: var(--wb-secondary); border-color: var(--wb-strongBorder); }
+:is(.canvas-workbench, .canvas-workbench-dialog, .canvas-task-center, .workbench-ui) .wb-action.ant-btn[data-variant="primary"]:not(:disabled):hover { background: var(--wb-hover); }
+:is(.canvas-workbench, .canvas-workbench-dialog, .canvas-task-center, .workbench-ui) .wb-action.ant-btn[aria-pressed="true"]:not(:disabled) { background: var(--wb-selected); border-color: var(--wb-strongBorder); }
+:is(.canvas-workbench, .canvas-workbench-dialog, .canvas-task-center, .workbench-ui) .wb-action.ant-btn:disabled { color: var(--wb-disabled); background: var(--wb-disabledSurface); border-color: var(--wb-disabledBorder); }
+:is(.canvas-workbench, .canvas-workbench-dialog, .canvas-task-center, .workbench-ui) .wb-action.ant-btn:focus-visible { outline: 1px solid var(--wb-focus); outline-offset: 2px; }
+.wb-icon-trigger { display: inline-flex; }
+.wb-icon-action { width: var(--wb-control); padding: 0; }
+.wb-icon-action .anticon { font-size: var(--wb-icon); }
+.wb-dialog-actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-top: 12px; border-top: 1px solid var(--wb-border); }
+.wb-dialog-actions > div { display: flex; gap: var(--wb-spacing); }
+.wb-modal .ant-modal-body { scrollbar-gutter: stable; }
+:is(.wb-modal, .canvas-task-center, .workbench-ui), :is(.wb-modal, .canvas-task-center, .workbench-ui) * { scrollbar-width: thin; scrollbar-color: var(--wb-primary) transparent; color-scheme: dark; }
+:is(.wb-modal, .canvas-task-center, .workbench-ui) ::-webkit-scrollbar { width: 6px; height: 6px; }
+:is(.wb-modal, .canvas-task-center, .workbench-ui) ::-webkit-scrollbar-track { background: transparent; }
+:is(.wb-modal, .canvas-task-center, .workbench-ui) ::-webkit-scrollbar-thumb { background: var(--wb-primary); border-radius: 6px; }
+:is(.wb-modal, .canvas-task-center, .workbench-ui) ::-webkit-scrollbar-thumb:hover { background: var(--wb-strongBorder); }
+:is(.wb-modal, .canvas-task-center, .workbench-ui) ::-webkit-scrollbar-corner { background: transparent; }
+@media (max-width: 640px) { .wb-dialog-actions .wb-action.ant-btn { height: auto; min-height: 36px; white-space: normal; } }
+.canvas-text-preview p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; margin-top: 0; }
+.canvas-text-preview .is-collapsed { display: -webkit-box; -webkit-line-clamp: var(--wb-preview-lines, 6); -webkit-box-orient: vertical; overflow: hidden; }
+.canvas-text-preview > .wb-action.ant-btn { margin-top: -4px; padding-inline: 0; }
+.wb-examples { min-height: 100%; padding: 24px; background: var(--wb-canvas); color: var(--wb-text); }
+.wb-examples > section { max-width: 960px; padding: 24px; margin: 24px 0; background: var(--wb-surface); border: 1px solid var(--wb-border); border-radius: var(--wb-radius); }
+.wb-example-row { display: flex; flex-wrap: wrap; gap: 12px; }
+.wb-example-caption { color: var(--wb-muted); font-size: 12px; font-weight: 400; }
+
+:is(.canvas-workbench, .canvas-workbench-dialog, .canvas-task-center, .workbench-ui) .wb-action.ant-btn[aria-pressed="true"]:not(:disabled):not(.ant-btn-dangerous):hover { background: var(--wb-selectedHover); }
+
+:is(.canvas-workbench, .canvas-workbench-dialog, .canvas-task-center, .workbench-ui) .wb-action.ant-btn[data-size="large"] { height: var(--wb-prominent); min-height: var(--wb-prominent); font-size: 14px; }

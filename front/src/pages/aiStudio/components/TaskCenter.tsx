@@ -1,3 +1,5 @@
+import type { ButtonProps } from 'antd'
+import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
 import { Button, Drawer, Empty, Progress, Segmented, Select, Tag } from 'antd'
 import {
   ArrowLeftOutlined,
@@ -16,6 +18,11 @@ import {
 } from './taskUiStore'
 import { useResolvedTaskCenterTasks } from './taskCenterMeta'
 import { TaskHistory } from './TaskHistory'
+
+/** 工作台实例复用灰阶动作；全站任务中心继续使用原主题。 */
+function TaskCenterButton({ workbench, type, danger, ...props }: ButtonProps & { workbench: boolean }) {
+  return workbench ? <WorkbenchButton {...props} variant={danger ? 'danger' : type === 'text' ? 'quiet' : type === 'primary' ? 'primary' : 'secondary'} /> : <Button {...props} type={type} danger={danger} />
+}
 
 const TASK_CENTER_OPEN_STORAGE_KEY = 'jellyfish_task_center_open_v1'
 const TASK_CENTER_PAGE_SIZE = 3
@@ -166,11 +173,11 @@ export function TaskCenter({ workbench = false }: { workbench?: boolean }) {
   }, [activeContexts, effectiveScopeFilter, pagedTasks])
   return (
     <>
-      <Button type="text" className="app-task-trigger" aria-label="任务中心" aria-expanded={open} onClick={toggleOpen}>
+      <TaskCenterButton workbench={workbench} type="text" className="app-task-trigger" aria-label="任务中心" aria-expanded={open} onClick={toggleOpen}>
         任务 {(!workbench || summaryCounts.active > 0) && <span className="app-task-count" aria-label={`${workbench ? '排队及运行任务' : '运行中任务'} ${summaryCounts.active}`}>{workbench && summaryCounts.active > 99 ? '99+' : summaryCounts.active}</span>}<DownOutlined className={workbench ? 'canvas-menu-chevron' : undefined} />
-      </Button>
-      <Drawer title="任务中心" rootClassName={workbench ? 'canvas-task-center' : undefined} className="app-task-drawer" width={416} open={open} onClose={() => setOpen(false)} extra={<Button onClick={() => { setHistoryOpen(true); setOpen(false) }}>历史</Button>}>
-        {/\/chapters\/[^/]+\/sequences\/[^/]+$/.test(location.pathname) && <Button block style={{ marginBottom: 12 }} onClick={() => { setOpen(false); window.dispatchEvent(new Event('sequence-open-task-results')) }}>查看本场任务与业务结果</Button>}
+      </TaskCenterButton>
+      <Drawer title="任务中心" rootClassName={workbench ? 'canvas-task-center' : undefined} className="app-task-drawer" width={416} open={open} onClose={() => setOpen(false)} extra={<TaskCenterButton workbench={workbench} onClick={() => { setHistoryOpen(true); setOpen(false) }}>历史</TaskCenterButton>}>
+        {/\/chapters\/[^/]+\/sequences\/[^/]+$/.test(location.pathname) && <TaskCenterButton workbench={workbench} block style={{ marginBottom: 12 }} onClick={() => { setOpen(false); window.dispatchEvent(new Event('sequence-open-task-results')) }}>查看本场任务与业务结果</TaskCenterButton>}
             <div className="app-task-filters mb-3 flex flex-col gap-2">
               <Segmented
                 size="small"
@@ -235,7 +242,7 @@ export function TaskCenter({ workbench = false }: { workbench?: boolean }) {
                             </div>
                             <div className="app-task-actions flex flex-col gap-2">
                               {task.onNavigate ? (
-                                <Button
+                                <TaskCenterButton workbench={workbench}
                                   size="small"
                                   icon={<ArrowRightOutlined />}
                                   onClick={() => {
@@ -244,10 +251,10 @@ export function TaskCenter({ workbench = false }: { workbench?: boolean }) {
                                   }}
                                 >
                                   查看
-                                </Button>
+                                </TaskCenterButton>
                               ) : null}
                               {task.onCancel ? (
-                                <Button
+                                <TaskCenterButton workbench={workbench}
                                   size="small"
                                   danger
                                   icon={<CloseCircleOutlined />}
@@ -255,9 +262,9 @@ export function TaskCenter({ workbench = false }: { workbench?: boolean }) {
                                   onClick={task.onCancel}
                                 >
                                   {task.cancelRequested ? '正在取消' : '取消'}
-                                </Button>
+                                </TaskCenterButton>
                               ) : task.status === 'queued' || task.status === 'running' ? (
-                                <Button
+                                <TaskCenterButton workbench={workbench}
                                   size="small"
                                   danger
                                   icon={<CloseCircleOutlined />}
@@ -267,7 +274,7 @@ export function TaskCenter({ workbench = false }: { workbench?: boolean }) {
                                   }}
                                 >
                                   {task.cancelRequested ? '正在取消' : '取消'}
-                                </Button>
+                                </TaskCenterButton>
                               ) : null}
                             </div>
                           </div>
@@ -291,18 +298,20 @@ export function TaskCenter({ workbench = false }: { workbench?: boolean }) {
                 ))}
                 {filteredTasks.length > TASK_CENTER_PAGE_SIZE ? (
                   <div className="flex items-center justify-end gap-1 pt-1 text-xs text-gray-500">
-                    <Button
+                    <TaskCenterButton workbench={workbench}
                       size="small"
                       type="text"
                       icon={<ArrowLeftOutlined />}
+                      aria-label="上一页任务" title="上一页任务"
                       disabled={currentPage <= 1}
                       onClick={() => setPage((prev) => Math.max(1, prev - 1))}
                     />
                     <span className="min-w-[32px] text-center">{currentPage}/{totalPages}</span>
-                    <Button
+                    <TaskCenterButton workbench={workbench}
                       size="small"
                       type="text"
                       icon={<ArrowRightOutlined />}
+                      aria-label="下一页任务" title="下一页任务"
                       disabled={currentPage >= totalPages}
                       onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
                     />

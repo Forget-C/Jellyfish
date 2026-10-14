@@ -33,6 +33,7 @@ async function locate(name) {
   await page.getByRole('menuitem', { name, exact: true }).click()
 }
 async function screenshot(name) {
+  await page.evaluate(async () => { await new Promise(requestAnimationFrame); await Promise.all(document.getAnimations().filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity).map(animation => animation.finished.catch(() => {}))) })
   await page.screenshot({ path: join(output, `${name}.png`), animations: 'disabled' })
 }
 async function checkChrome(name) {
@@ -92,7 +93,51 @@ try {
   assert.equal(await page.locator('.scene-relations-tree-content').count(), 0)
   await checkChrome('empty-director')
   await screenshot('empty-director')
+  await page.getByRole('button', { name: 'AI 设计', exact: true }).click()
+  const ai = page.getByRole('dialog', { name: 'AI 设计', exact: true })
+  await ai.getByRole('button', { name: '生成场次设计', exact: true }).waitFor()
+  assert.equal(await ai.getByRole('button', { name: '调整部分设计', exact: true }).count(), 0)
+  assert.equal(await ai.getByRole('button', { name: '展开原文', exact: true }).count(), 0)
+  await ai.getByRole('button', { name: '只设计部分内容', exact: true }).click()
+  assert.equal(await ai.getByRole('button', { name: '生成所选内容', exact: true }).isDisabled(), true)
+  await ai.getByRole('button', { name: '整场设计', exact: true }).click()
+  await ai.getByRole('textbox', { name: '设计要求（可选）', exact: true }).fill('保留关闭前的要求')
+  await ai.getByRole('button', { name: '取消', exact: true }).click()
+  await page.getByRole('button', { name: 'AI 设计', exact: true }).click()
+  assert.equal(await ai.getByRole('textbox', { name: '设计要求（可选）', exact: true }).inputValue(), '保留关闭前的要求')
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 960 })
+    const submit = ai.getByRole('button', { name: '生成场次设计', exact: true })
+    await submit.click({ trial: true })
+    const bounds = await submit.boundingBox()
+    assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width && bounds.y + bounds.height <= (width === 390 ? 844 : 960))
+    await screenshot(`ai-prepare-${width}`)
+  }
+  await ai.getByRole('button', { name: '取消', exact: true }).click()
+  await page.setViewportSize({ width: 1440, height: 960 })
   const version = (await (await fetch(versionsUrl)).json()).data[0]
+  const versionRoute = '**/versions'
+  await page.route(versionRoute, async route => {
+    const response = await route.fetch()
+    const data = await response.json()
+    data.data.find(row => row.id === version.id).content.basis.text = '长原文验证：他把旧信放在桌上，她缓缓抬头。'.repeat(100)
+    await route.fulfill({ response, json: data })
+  })
+  await page.reload()
+  await page.getByRole('button', { name: 'AI 设计', exact: true }).click()
+  await ai.getByRole('button', { name: '展开原文', exact: true }).click()
+  assert.equal(await ai.locator('.scene-ai-source-text').count(), 1)
+  assert.equal(await ai.locator('.scene-ai-source .is-collapsed').count(), 0)
+  const scrollStyle = await ai.locator('.ant-modal-body').evaluate(node => ({ gutter: getComputedStyle(node).scrollbarGutter, color: getComputedStyle(node).scrollbarColor, height: node.clientHeight, content: node.scrollHeight }))
+  assert.equal(scrollStyle.gutter, 'stable')
+  assert.equal(scrollStyle.color, 'rgb(80, 80, 80) rgba(0, 0, 0, 0)')
+  assert.ok(scrollStyle.content > scrollStyle.height)
+  await ai.locator('.ant-modal-body').evaluate(node => { node.scrollTop = 180 })
+  await screenshot('ai-long-source')
+  await ai.getByRole('button', { name: '收起原文', exact: true }).click()
+  assert.equal(await ai.locator('.scene-ai-source .is-collapsed').count(), 1)
+  await ai.getByRole('button', { name: '取消', exact: true }).click()
+  await page.unroute(versionRoute)
   const content = version.content
   const note = text => ({ state: 'proposal', text, sources: [{ kind: 'human', reference: 'style', version: '1' }] })
   content.design.direction.viewpoint = note('从她的视点观察旧信，保留停顿和目光中的犹豫。'.repeat(18))

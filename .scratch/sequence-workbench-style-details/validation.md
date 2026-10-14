@@ -93,3 +93,37 @@
 - 四画布浏览器回归通过：`PLAYWRIGHT_CHANNEL=chrome /opt/homebrew/bin/node front/tests/sceneWorkbenchStyle.browser.mjs`，证据目录 `jellyfish-workbench-style-36WtHI`。首次间距检查捕获弹窗缩放动画中间态，增加等待弹窗动画结束后复验通过。
 - 已检查桌面与窄屏实际截图：[桌面](evidence/wand-entry-1440.png)、[窄屏](evidence/wand-entry-390.png)。
 - 尚未提交。
+
+## AI 设计弹窗重组
+
+入口和标题统一为 AI 设计，按准备／生成中／结果展示。首次与已有人工内容采用不同操作文案，局部仍限定已有字段。生成和应用置于固定底部，关闭不丢输入。原文、历史与固定依据可展开；结果显示六岗摘要和完整差异。
+
+验证通过：
+- `pnpm --dir front run typecheck`。
+- `PLAYWRIGHT_CHANNEL=chrome /opt/homebrew/bin/node front/tests/sceneWorkbenchStyle.browser.mjs`：首次空设计、局部未选禁用、关闭保留输入、1440／390px 主动作可见及原有四画布回归。证据 `jellyfish-workbench-style-Doouij`。
+- 同运行环境 `sceneVersionWorkbench.browser.mjs`：生成、提交未核实恢复、当前编辑差异、手动应用、局部字段范围及原有版本回归。证据 `jellyfish-scene-version-W7vWXu`。
+- `sceneDesignReferences.browser.mjs`：引用冲突阻止应用，修复后应用和撤销。证据 `jellyfish-scene-version-xAJyJ9`。
+- `sceneCopyDesignTasks.browser.mjs`：原请求持久化和核实、运行中复制保护、未应用结果不会自动写入副本。证据 `jellyfish-scene-version-gBXiLF`。
+- `git diff --check`。后两项回归中的旧工具栏直达定位已同步为当前菜单路径。
+
+人工检查[桌面准备页](evidence/ai-prepare-1440.png)、[窄屏准备页](evidence/ai-prepare-390.png)、[局部设计](evidence/ai-partial-design.png)与[结果差异页](evidence/ai-result-preview.png)。未调用真实生成供应商，浏览器测试使用本地测试服务。尚未提交。
+
+## 原文展开、轮询与滚动修复
+
+- 原文只有一个文本节点，按实际行数检测展开入口，短文不显示按钮；长文展开／收起通过浏览器验证。
+- 首次读取才显示加载图标，后台刷新与错误使用固定高度状态区域。延迟 GET、失败及手动重试前后，对比标题坐标、正文 scrollTop 与依据展开状态一致。
+- AI 弹窗使用暗灰细滚动条和 stable gutter，取消差异正文的独立纵向高度上限；长原文滚动时底部生成按钮仍可见。
+- 类型检查、diff 检查通过。样式回归通过（`jellyfish-workbench-style-tx6mBE`），请求恢复与轮询回归通过（`jellyfish-scene-version-p5kMLp`）。均使用 `PLAYWRIGHT_CHANNEL=chrome /opt/homebrew/bin/node` 运行对应脚本。
+- 已检查[长原文截图](evidence/ai-long-source.png)。系统自动隐藏滚动条时截图不一定显示滑块，标准滚动条配色与 gutter 已通过计算样式断言。
+- 上轮结果应用及引用冲突验证复用，本轮未改这些逻辑。尚未提交。
+
+## 来源成功判定与结果区优化
+
+根因：生成阶段仅验证结构，新增 Note 缺少本次模型来源却能返回成功；应用预览才校验来源。将原应用规则提取为共享校验，在生成结束前执行，与结构错误共用一次纠错；不移除应用校验，不伪造来源。
+
+- 回归先红：`backend/.venv/bin/python -m pytest tests/directing/test_scene_design_suggestions.py -k generation_retries -q`（在 backend 中使用 `.venv/bin/python`），正确测试数据下四类来源均在应重试处失败：实际仅调用一次模型。
+- 修复后整场／局部覆盖 chapter-only、伪造人工来源、旧任务、错误版本和保留人工 Note；集成测试串联错误来源→纠错→TaskService.finish→HTTP preview。相关四个文件共 40 测试通过：test_scene_design_suggestions、test_workspace、test_participant_scope、test_style。
+- 前端类型检查及 diff 检查通过；工作台样式（kKAmtM）、请求恢复与静默轮询（Nw5YAL）、引用修复及历史来源错误重新生成入口（uHrBcl）浏览器回归通过。首次图标检查发现装饰图标影响按钮可访问名称，已用 aria-hidden 修正；引用修复断言改为等待异步内容更新。
+- [结果分区与新设计按钮](evidence/ai-basis-and-actions.png)已人工检查。
+- `UV_CACHE_DIR=/tmp/jellyfish-uv-cache uv run pylint app` 已执行，未通过：未改动文件中的 task_worker.py 两项、studio_assets.py 一项、lab_generation_tasks.py 一项、task_queries.py 一项，共 5 项既有问题；本次修改文件没有 Pylint 报告。未顺手修改无关代码。
+- 未调用真实付费模型；测试模拟模型回复并使用真实生成校验与 HTTP 预览。未读取或改写用户已有任务数据，历史不合格结果仍需重新生成。尚未提交。

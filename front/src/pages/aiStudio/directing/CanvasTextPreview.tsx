@@ -1,14 +1,26 @@
-import { useState } from 'react'
-import { Button } from 'antd'
+import { useEffect, useId, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
+import { DownOutlined, UpOutlined } from '@ant-design/icons'
+import { WorkbenchButton } from './ui/WorkbenchButton'
 
-/** 长正文先显示摘要；展开仅影响阅读，不修改业务内容。 */
-export function CanvasTextPreview({ text, label }: { text: string; label: string }) {
+/** 单一正文按实际行数原位展开；响应宽度变化，不改变业务内容。 */
+export function CanvasTextPreview({ text, label, lines = 6, paragraphClassName = '' }: { text: string; label: string; lines?: number; paragraphClassName?: string }) {
   const [expanded, setExpanded] = useState(false)
-  const long = text.length > 160 || text.split('\n').length > 5
-  return <div className="canvas-text-preview">
-    <p className={long && !expanded ? 'is-collapsed' : undefined}>{text}</p>
-    {long && <Button type="text" size="small" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>
-      {expanded ? `收起${label}` : `展开${label}`}
-    </Button>}
+  const [overflows, setOverflows] = useState(false)
+  const paragraph = useRef<HTMLParagraphElement>(null)
+  const id = useId()
+  useEffect(() => {
+    setExpanded(false)
+    const node = paragraph.current
+    if (!node) return
+    const measure = () => setOverflows(node.scrollHeight > parseFloat(getComputedStyle(node).lineHeight) * lines + 1)
+    const observer = new ResizeObserver(measure)
+    observer.observe(node)
+    measure()
+    return () => observer.disconnect()
+  }, [text, lines])
+  return <div className="canvas-text-preview" style={{ '--wb-preview-lines': lines } as CSSProperties}>
+    <p id={id} ref={paragraph} className={`${paragraphClassName} ${expanded ? '' : 'is-collapsed'}`}>{text}</p>
+    {overflows && <WorkbenchButton variant="quiet" size="small" icon={expanded ? <UpOutlined aria-hidden="true" /> : <DownOutlined aria-hidden="true" />} aria-expanded={expanded} aria-controls={id} onClick={() => setExpanded(value => !value)}>{expanded ? `收起${label}` : `展开${label}`}</WorkbenchButton>}
   </div>
 }

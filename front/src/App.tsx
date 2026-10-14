@@ -1,4 +1,5 @@
 import type React from 'react'
+import { lazy, Suspense } from 'react'
 import { createBrowserRouter, createRoutesFromElements, RouterProvider, Navigate, Route, useLocation } from 'react-router-dom'
 import MainLayout from './layouts/MainLayout'
 import Settings from './pages/Settings'
@@ -29,7 +30,10 @@ function LegacyLabRedirect({ mode }: { mode: 'text' | 'image' | 'video' }) {
   return <Navigate to={`/lab?${params.toString()}`} replace />
 }
 
+const WorkbenchExamples = import.meta.env.DEV ? lazy(() => import('./pages/aiStudio/directing/ui/WorkbenchExamples')) : undefined
+
 const router = createBrowserRouter(createRoutesFromElements(
+      <>
         <Route path="/" element={<MainLayout />}>
           <Route index element={<Navigate to="/projects" replace />} />
           <Route path="projects" element={<ProjectLobby />} />
@@ -54,6 +58,8 @@ const router = createBrowserRouter(createRoutesFromElements(
           <Route path="settings" element={<Settings />} />
           <Route path="*" element={<NotFound />} />
         </Route>
+          {WorkbenchExamples && <Route path="/dev/workbench-ui" element={<Suspense fallback={<p>加载组件示例…</p>}><WorkbenchExamples /></Suspense>} />}
+      </>
 ))
 
 const App: React.FC = () => <RouterProvider router={router} />

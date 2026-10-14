@@ -1,7 +1,9 @@
+import { WorkbenchTheme } from './ui/WorkbenchTheme'
+import { WorkbenchButton, WorkbenchIconButton } from './ui/WorkbenchButton'
 import { SourceProvider } from './Sources'
 import { SceneSourceRevision } from './SceneSourceRevision'
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, ConfigProvider, Input, Modal, Select, Space, Spin, Switch, theme } from 'antd'
+import { Alert, Button, Input, Modal, Select, Space, Spin, Switch } from 'antd'
 import { ArrowLeftOutlined, DownOutlined, MoreOutlined, RedoOutlined, SaveOutlined, UndoOutlined } from '@ant-design/icons'
 import { CanvasToolbarMenu } from './CanvasToolbarMenu'
 import { CanvasTextPreview } from './CanvasTextPreview'
@@ -815,7 +817,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
     return () => window.clearTimeout(timer)
   }, [autoSave, dirty, draft, busy, deliveryBusy, exportBusy, copyLocked, copyError, failure, readonly, transition, leaving, recovery, handingOff])
 
-  return <SourceProvider projectId={projectId} sequenceId={sequenceId} renderRevision={source => <SceneSourceRevision key={`${source.revision_id}:${source.source.version}`} projectId={projectId} sequenceId={sequenceId} source={source} />}><ConfigProvider theme={{ algorithm: theme.darkAlgorithm, token: { colorBgBase: '#0d0d0d', colorBgLayout: '#141414', colorPrimaryBg: '#303030', controlOutlineWidth: 1, colorBgContainer: '#1b1b1b', colorBgElevated: '#242424', colorBorder: '#383838', colorText: '#e5e5e5', colorTextSecondary: '#a3a3a3', borderRadius: 8 }, components: { Segmented: { itemSelectedBg: '#383838', itemSelectedColor: '#e5e5e5', itemHoverBg: '#2d2d2d' }, Select: { optionSelectedBg: '#383838' } } }} getPopupContainer={trigger => trigger?.closest<HTMLElement>('.canvas-workbench-dialog') || trigger?.closest<HTMLElement>('.canvas-workbench') || document.body}><section ref={node => { if (node) node.inert = copyLocked }} className="canvas-workbench" data-canvas={canvas} aria-label="场次画布工作台" onBlurCapture={event => {
+  return <SourceProvider projectId={projectId} sequenceId={sequenceId} renderRevision={source => <SceneSourceRevision key={`${source.revision_id}:${source.source.version}`} projectId={projectId} sequenceId={sequenceId} source={source} />}><WorkbenchTheme><section ref={node => { if (node) node.inert = copyLocked }} className="canvas-workbench" data-canvas={canvas} aria-label="场次画布工作台" onBlurCapture={event => {
     if (event.target instanceof HTMLTextAreaElement) {
       const element = event.target
       lastEditing.current = { element, start: element.selectionStart, end: element.selectionEnd, scrollTop: element.scrollTop }
@@ -837,8 +839,8 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
           <h3>场次版本</h3>
           <Select aria-label="场次版本" placeholder="尚无场次版本" value={selectedId} disabled={handingOff || !!recovery || busy === 'create' || leaving || loadState !== 'ready'}
             options={versions.map(row => ({ value: row.id, label: row.title }))} onChange={select} />
-          <Button data-menu-close onClick={() => void requestTransition({ action: () => { void create() } })} disabled={handingOff || !!recovery || busy === 'create' || leaving || readonly || loadState !== 'ready'} loading={busy === 'create'}>新建场次版本</Button>
-          <Button data-menu-close disabled={!selected || readonly || !!recovery || handingOff || leaving || deliveryBusy || exportBusy || busy === 'create' || loadState !== 'ready'} onClick={() => void copyVersion()}>另存为新版本</Button>
+          <WorkbenchButton data-menu-close onClick={() => void requestTransition({ action: () => { void create() } })} disabled={handingOff || !!recovery || busy === 'create' || leaving || readonly || loadState !== 'ready'} loading={busy === 'create'}>新建场次版本</WorkbenchButton>
+          <WorkbenchButton data-menu-close disabled={!selected || readonly || !!recovery || handingOff || leaving || deliveryBusy || exportBusy || busy === 'create' || loadState !== 'ready'} onClick={() => void copyVersion()}>另存为新版本</WorkbenchButton>
         </CanvasToolbarMenu>
         <CanvasToolbarMenu label="保存设置" caption={<span role="status" aria-live="polite">{!selected ? loadState === 'loading' ? '读取中' : '尚无版本' : sequence?.is_current === false ? '历史场次 · 只读' : readonly ? '只读' : status}</span>}>
           <label>自动保存 <Switch aria-label="自动保存" checked={autoSave} onChange={value => {
@@ -846,13 +848,13 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
             try { localStorage.setItem(autoSavePreference, value ? 'on' : 'off') } catch { /* 存储不可用时仍可在本页选择。 */ }
           }} /></label>
         </CanvasToolbarMenu>
-        {selected && <Button aria-label={saveLabel} type={dirty || videoUnverified ? "primary" : "text"} title={saveLabel} icon={<SaveOutlined />} onClick={() => void save()} disabled={handingOff || !!recovery || (!dirty && !pendingSave.current) || !!busy || deliveryBusy || exportBusy || readonly || loadState !== 'ready'} loading={busy === 'save'} />}
+        {selected && <WorkbenchIconButton label={saveLabel} variant={dirty || videoUnverified ? "primary" : "quiet"} icon={<SaveOutlined />} onClick={() => void save()} disabled={handingOff || !!recovery || (!dirty && !pendingSave.current) || !!busy || deliveryBusy || exportBusy || readonly || loadState !== 'ready'} loading={busy === 'save'} />}
       </div>
       <nav className="canvas-toolbar-views" aria-label="画布切换">
-        <Button onClick={() => { setEditor(undefined); setCanvas('director') }} type="text" aria-pressed={canvas === 'director'}>导演画布</Button>
-        <Button disabled={!selected} onClick={() => { setEditor(undefined); setCanvas('units') }} type="text" aria-pressed={canvas === 'units'}>单元画布</Button>
-        <Button disabled={!selected} onClick={() => { setEditor(undefined); setCanvas('instructions') }} type="text" aria-pressed={canvas === 'instructions'}>指令画布</Button>
-        <Button disabled={!selected} onClick={() => { setEditor(undefined); setCanvas('edit') }} type="text" aria-pressed={canvas === 'edit'}>编辑画布</Button>
+        <WorkbenchButton onClick={() => { setEditor(undefined); setCanvas('director') }} variant="quiet" aria-pressed={canvas === 'director'}>导演画布</WorkbenchButton>
+        <WorkbenchButton disabled={!selected} onClick={() => { setEditor(undefined); setCanvas('units') }} variant="quiet" aria-pressed={canvas === 'units'}>单元画布</WorkbenchButton>
+        <WorkbenchButton disabled={!selected} onClick={() => { setEditor(undefined); setCanvas('instructions') }} variant="quiet" aria-pressed={canvas === 'instructions'}>指令画布</WorkbenchButton>
+        <WorkbenchButton disabled={!selected} onClick={() => { setEditor(undefined); setCanvas('edit') }} variant="quiet" aria-pressed={canvas === 'edit'}>编辑画布</WorkbenchButton>
       </nav>
       <div className="canvas-toolbar-actions">
         <div ref={setPrimaryHost} className="canvas-toolbar-primary" />
@@ -902,8 +904,8 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       </div>
     </header>
     <nav className="canvas-history-controls" aria-label="编辑历史">
-      <Button aria-label="撤销" title="撤销" type="text" icon={<UndoOutlined />} onClick={() => stepHistory('undo')} disabled={handingOff || !selected || !histories.current.get(selected.id)?.undo.length || readonly || leaving || busy === 'create'} />
-      <Button aria-label="重做" title="重做" type="text" icon={<RedoOutlined />} onClick={() => stepHistory('redo')} disabled={handingOff || !selected || !histories.current.get(selected.id)?.redo.length || readonly || leaving || busy === 'create'} />
+      <WorkbenchIconButton label="撤销" variant="quiet" icon={<UndoOutlined />} onClick={() => stepHistory('undo')} disabled={handingOff || !selected || !histories.current.get(selected.id)?.undo.length || readonly || leaving || busy === 'create'} />
+      <WorkbenchIconButton label="重做" variant="quiet" icon={<RedoOutlined />} onClick={() => stepHistory('redo')} disabled={handingOff || !selected || !histories.current.get(selected.id)?.redo.length || readonly || leaving || busy === 'create'} />
     </nav>
     {selected && content && <SceneDesignSuggestions triggerHost={canvas === 'director' ? primaryHost : moreHost} key={`design:${selected.id}`} projectId={projectId} sequenceId={sequenceId} version={selected} content={content}
       disabled={readonly || handingOff || !!recovery || busy === 'create' || leaving} open={currentEditor === 'ai'}
@@ -1074,7 +1076,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       {copyBusy && <Spin />}<p>正在保护点击时的完整编辑，核实完成前请勿离开。不会为另存额外保存原版本，也不会重新执行生成任务。</p>
       {copyError && <Alert type="warning" message={copyError} />}
     </Modal>
-  </ConfigProvider></SourceProvider>
+  </WorkbenchTheme></SourceProvider>
 }
 
 /** 路由上下文改变时隔离在途响应；版本之间仍共用同一工作台。 */

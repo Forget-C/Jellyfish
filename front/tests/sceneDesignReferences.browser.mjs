@@ -1,3 +1,4 @@
+import { workbenchControl } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -49,13 +50,23 @@ try {
   const saved = await fetch(`${versionsUrl}/${version.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: version.revision, content }) })
   assert.equal(saved.status, 200, await saved.text())
   await page.goto(`http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
-  await page.getByRole('button', { name: 'AI 提取设计 · 整场', exact: true }).click()
-  await page.getByRole('button', { name: '生成整场设计建议', exact: true }).click()
+  await (await workbenchControl(page, '更多操作', 'button', 'AI 设计')).click()
+  await page.locator('.scene-ai-footer').getByRole('button', { name: '重新生成整场', exact: true }).click()
   await page.getByText('状态：等待执行', { exact: true }).waitFor()
   const tasks = (await (await fetch(`${versionsUrl}/${version.id}/design-suggestions`)).json()).data
   assert.equal((await fetch(`${api}/browser-test/design-tasks/${tasks[0].task_id}/complete?remove_shot_id=shot-one`, { method: 'POST' })).status, 200)
   await page.getByText('建议与当前单元引用冲突，整次应用已阻止', { exact: true }).waitFor()
   assert.equal(await page.getByRole('button', { name: '应用到当前版本', exact: true }).isDisabled(), true)
+  const ai = page.getByRole('dialog', { name: 'AI 设计', exact: true })
+  await ai.locator('.scene-ai-context summary').click()
+  assert.equal(await ai.getByRole('region', { name: '设计要求', exact: true }).getByText('未填写', { exact: true }).count(), 1)
+  assert.equal(await ai.getByRole('region', { name: '原文依据', exact: true }).getByText('未填写', { exact: true }).count(), 0)
+  const newDesign = ai.getByRole('button', { name: '发起新设计', exact: true })
+  assert.equal(await newDesign.locator('.anticon-plus').count(), 1)
+  assert.notEqual(await newDesign.evaluate(node => getComputedStyle(node).borderStyle), 'none')
+  await newDesign.click({ trial: true })
+  await page.screenshot({ path: join(output, 'ai-basis-and-actions.png'), animations: 'disabled' })
+
   assert.equal((await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.content.design.direction.shots.length, 2)
   await page.getByRole('button', { name: '定位单元 1 · 覆盖 1', exact: true }).click()
   await page.getByRole('combobox', { name: '覆盖 1 所属镜头', exact: true }).press('ArrowDown')
@@ -65,10 +76,15 @@ try {
   assert.equal(repaired.units[0].coverage[0].shot_id, 'shot-two')
   assert.equal(repaired.units[0].coverage[0].action_scope, '保留实际拍摄范围')
   assert.equal(repaired.design.direction.shots.length, 2)
-  await page.getByRole('button', { name: '查看设计建议', exact: true }).click()
-  assert.equal(await page.getByText('建议与当前单元引用冲突，整次应用已阻止', { exact: true }).count(), 0)
+  await (await workbenchControl(page, '更多操作', 'button', 'AI 设计')).click()
+  await page.getByText('建议与当前单元引用冲突，整次应用已阻止', { exact: true }).waitFor({ state: 'hidden' })
+  await page.route('**/design-suggestions/*/preview', route => route.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ detail: '结果来源校验未通过：新增内容缺少本次模型任务来源，请重新生成' }) }))
   await page.getByRole('button', { name: '应用到当前版本', exact: true }).click()
-  await page.getByRole('button', { name: '关闭建议', exact: true }).waitFor({ state: 'hidden' })
+  await ai.getByRole('button', { name: '重新生成设计', exact: true }).waitFor()
+  await page.unroute('**/design-suggestions/*/preview')
+
+  await page.getByRole('button', { name: '应用到当前版本', exact: true }).click()
+  await page.getByRole('dialog', { name: 'AI 设计', exact: true }).waitFor({ state: 'hidden' })
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   const applied = (await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.content
   assert.deepEqual(applied.design.direction.shots.map(row => row.id), ['shot-two'])

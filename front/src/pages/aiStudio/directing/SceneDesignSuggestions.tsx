@@ -1,6 +1,10 @@
+import { WorkbenchButton as Button } from './ui/WorkbenchButton'
+import { WorkbenchModal as Modal, WorkbenchDialogActions } from './ui/WorkbenchModal'
+import { CanvasTextPreview } from './CanvasTextPreview'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Alert, Button, Input, Modal, Radio, Select, Space, Spin } from 'antd'
+import { AimOutlined, FileTextOutlined, HistoryOutlined, PlusOutlined, EditOutlined } from '@ant-design/icons'
+import { Alert, Input, Select, Spin } from 'antd'
 import { ApiError, FilmService, StudioDirectingService } from '../../../services/generated'
 import type { SceneDesignRequest, SceneDesignSuggestionRead, SceneVersionContent_Output, SceneVersionRead } from '../../../services/generated'
 import { directingError } from './common'
@@ -40,6 +44,22 @@ function scopeFields(value: unknown, path = '', title = '', identity = ''): Scop
   return Object.entries(row).flatMap(([key, child]) => scopeFields(child, `${path}/${key}`, `${title ? title + ' / ' : ''}${labels[key] || key}`, identity))
 }
 
+/** 来源与默认结构不算已填写；人工添加的对象或正文同样属于已有设计。 */
+function hasDesignContent(value: unknown): boolean {
+  if (Array.isArray(value)) return value.length > 0
+  if (!value || typeof value !== 'object') return false
+  const row = value as Record<string, unknown>
+  if ('state' in row) return typeof row.text === 'string' && !!row.text.trim()
+  return Object.entries(row).some(([key, child]) => key !== 'sources' && key !== 'style_revision_id' && hasDesignContent(child))
+}
+
+function designSummary(value: unknown): string {
+  if (!value || typeof value !== 'object') return ''
+  const row = value as Record<string, unknown>
+  if ('state' in row) return typeof row.text === 'string' ? row.text : ''
+  return Object.entries(row).filter(([key]) => key !== 'sources').map(([, child]) => designSummary(child)).find(Boolean) || ''
+}
+
 /** 建议与编辑内容分开；每次应用先核实固定依据，整份结果只进入一次编辑历史。 */
 export function SceneDesignSuggestions({ triggerHost, projectId, sequenceId, version, content, disabled, open, onOpenChange, onChange, onLocateUnit }: {
   triggerHost?: HTMLElement | null
@@ -59,6 +79,7 @@ export function SceneDesignSuggestions({ triggerHost, projectId, sequenceId, ver
   const fields = scopeFields(content.design)
   const validScope = scope.length > 0 && scope.length <= 100 && scope.every(field => fields.some(option => option.value === field.value && option.identity === field.identity))
   const [selectedId, setSelectedId] = useState<string>()
+  const [preparing, setPreparing] = useState(false)
   const [busy, setBusy] = useState(false)
   const [locatingUnit, setLocatingUnit] = useState(false)
   useEffect(() => { if (open) setLocatingUnit(false) }, [open])
@@ -90,7 +111,7 @@ export function SceneDesignSuggestions({ triggerHost, projectId, sequenceId, ver
         if (!active) return
         setRows(result.data); setReadError('')
         const matching = result.data.find(row => row.request_id === pending.current?.request_id)
-        if (matching) { clearPending(matching.request_id); setSelectedId(matching.task_id); setError('') }
+        if (matching) { clearPending(matching.request_id); setSelectedId(matching.task_id); setPreparing(false); setError('') }
         if (result.data.some(row => !terminal.includes(row.status))) timer = setTimeout(() => void read(), 2500)
       } catch (cause) { if (active) setReadError(directingError(cause)) }
       finally { if (active) setReading(false) }
@@ -98,7 +119,8 @@ export function SceneDesignSuggestions({ triggerHost, projectId, sequenceId, ver
     void read()
     return () => { active = false; clearTimeout(timer) }
   }, [projectId, sequenceId, version.id, attempt, open])
-  const selected = rows?.find(row => row.task_id === selectedId)
+  const selected = preparing ? undefined : selectedId ? rows?.find(row => row.task_id === selectedId) : rows?.find(row => !terminal.includes(row.status)) || rows?.[0]
+  const awaitingSelection = !preparing && !!selectedId && !selected
   const running = rows?.some(row => !terminal.includes(row.status))
   const submit = async () => {
     if (live.current.disabled || busy || !pending.current && limited && !validScope) return
@@ -110,7 +132,7 @@ export function SceneDesignSuggestions({ triggerHost, projectId, sequenceId, ver
       const result = await StudioDirectingService.directingSceneDesignSuggest({ projectId, sequenceId, versionId: version.id, requestBody: request })
       if (!result.data) throw new Error('提交结果尚未核实')
       if (!mounted.current) return
-      clearPending(request.request_id); setSelectedId(result.data.task_id); setAttempt(value => value + 1)
+      clearPending(request.request_id); setSelectedId(result.data.task_id); setPreparing(false); setAttempt(value => value + 1)
     } catch (cause) {
       if (mounted.current) {
         const rejected = cause instanceof ApiError && cause.status >= 400 && cause.status < 500 && cause.status !== 408
@@ -142,56 +164,86 @@ export function SceneDesignSuggestions({ triggerHost, projectId, sequenceId, ver
   const empty = (value: unknown) => value == null || Array.isArray(value) && !value.length
   const currentDifferences = selected ? revisionDifferences(selected.before, content.design).filter(change => !empty(change.before) || !empty(change.after)) : []
   const display = (value: unknown) => typeof value === 'string' ? value : JSON.stringify(value, null, 2) ?? '未填写'
-  const triggerLabel = running ? '查看设计任务' : rows?.some(row => row.status === 'succeeded') ? '查看设计建议' : 'AI 提取设计 · 整场'
-  const trigger = <Button className="scene-design-launch" aria-label={triggerLabel} title={running ? '查看当前执行进度' : '整场设计建议'} aria-haspopup="dialog" onClick={() => onOpenChange(true)}>
+  const hasDesign = hasDesignContent(content.design)
+  const generating = selected && !terminal.includes(selected.status)
+  const generateLabel = limited ? (hasDesign ? '生成调整方案' : '生成所选内容') : (hasDesign ? '重新生成整场' : '生成场次设计')
+  const triggerLabel = 'AI 设计'
+  const trigger = <Button size="large" className="scene-design-launch" aria-label={triggerLabel} title={running ? '查看当前执行进度' : '整场设计建议'} aria-haspopup="dialog" onClick={() => onOpenChange(true)}>
     <svg className="scene-design-launch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
       <path d="m4 20 11-11 3 3L7 23z" transform="translate(0 -2)" />
       <path d="m12 10 3 3M6 3v4M4 5h4M19 2v6M16 5h6M20 16v4M18 18h4" />
     </svg>
-    <span>{triggerLabel === 'AI 提取设计 · 整场' ? 'AI 提取设计' : triggerLabel}</span>
+    <span>{triggerLabel}</span>
   </Button>
   return <>
     {triggerHost === undefined ? trigger : triggerHost && createPortal(trigger, triggerHost)}
-    <Modal rootClassName="canvas-workbench-dialog" title="AI 设计建议" open={open} focusTriggerAfterClose={!locatingUnit} width={960} styles={{ body: { maxHeight: 'calc(100dvh - 240px)', overflowY: 'auto' } }}
-      onCancel={() => onOpenChange(false)} footer={<Button onClick={() => onOpenChange(false)}>关闭建议</Button>}>
-      <p>使用本版本明确选择的原文。整场提取不受当前镜头选择影响；局部修订须在生成前明确允许修改的字段。结果先预览，再整次应用。</p>
-      {reading && <Spin size="small" />}
-      {readError && <Alert type="error" message="建议任务读取失败，已知内容保留" description={readError}
-        action={<Button onClick={() => setAttempt(value => value + 1)}>重试读取建议</Button>} />}
-      {error && <Alert type="error" message={error} />}
-      {pending.current ? <Button disabled={busy || disabled} onClick={() => void submit()}>核实原设计请求</Button> : <>
-        <label>设计建议范围</label>
-        <Radio.Group className="scene-design-scope" aria-label="设计建议范围" value={limited ? 'limited' : 'whole'} disabled={disabled || busy}
-          onChange={event => setLimited(event.target.value === 'limited')}>
-          <Radio.Button value="whole">整场提取</Radio.Button><Radio.Button value="limited">限定范围修订</Radio.Button>
-        </Radio.Group>
-        {limited && <>
-          <p>仅替换选中的完整内容字段；身份、引用和对象增删不属于局部修订范围。</p>
-          <Select aria-label="允许修改的字段" mode="multiple" showSearch optionFilterProp="label" style={{ width: '100%' }}
-            disabled={disabled || busy} options={fields} value={scope.map(field => field.value)}
-            onChange={values => setScope(values.flatMap(path => fields.find(field => field.value === path) || []))} />
-          {scope.length > 0 && !validScope && <Alert type="warning" message="所选范围已失效或超过 100 项，请重新明确选择字段" />}
-        </>}
-        <label htmlFor="scene-design-instruction">设计要求（可选）</label>
-        <Input.TextArea id="scene-design-instruction" value={instruction} disabled={disabled || busy} onChange={event => setInstruction(event.target.value)} />
-        <Button className="scene-design-generate" disabled={disabled || busy || reading || !!readError || !rows || running || limited && !validScope} onClick={() => void submit()}>{limited ? '生成局部修订建议' : '生成整场设计建议'}</Button>
-      </>}
-      {rows && !rows.length && !reading && !readError && <p>当前版本尚无设计建议。</p>}
-      {!!rows?.length && <Select aria-label="设计建议记录" placeholder="选择本次建议查看" value={selectedId} style={{ width: '100%', marginTop: 16 }}
-        options={rows.map((row, index) => ({ value: row.task_id, label: `建议 ${rows.length - index} · ${statusNames[row.status] || row.status}` }))}
-        onChange={id => { setSelectedId(id); setError('') }} />}
+    <Modal rootClassName="scene-ai-design-dialog" title="AI 设计" open={open} focusTriggerAfterClose={!locatingUnit}
+      onCancel={() => onOpenChange(false)} footer={<WorkbenchDialogActions className="scene-ai-footer" secondary={<Button variant="quiet" onClick={() => onOpenChange(false)}>{selected?.design ? '暂不应用' : generating ? '稍后查看' : '取消'}</Button>}>
+        {pending.current ? <Button variant="primary" disabled={busy || disabled} loading={busy} onClick={() => void submit()}>核实原设计请求</Button>
+          : selected?.design ? <Button variant="primary" disabled={disabled || busy || !!readError || !differences.length || !!unitConflicts.length} loading={busy} onClick={() => void apply()}>应用到当前版本</Button>
+          : generating ? <Button disabled={busy || disabled} onClick={async () => {
+            setBusy(true)
+            try { await FilmService.cancelTaskApiV1FilmTasksTaskIdCancelPost({ taskId: selected.task_id, requestBody: { reason: '用户取消设计建议' } }); setAttempt(value => value + 1) }
+            catch (cause) { setError(directingError(cause)) }
+            finally { setBusy(false) }
+          }}>取消本次设计任务</Button>
+          : selected ? <Button variant="primary" disabled={busy || disabled || running} onClick={() => { setPreparing(true); setError('') }}>调整后重新生成</Button>
+          : <Button variant="primary" className="scene-design-generate" disabled={disabled || busy || reading || !!readError || !rows || running || awaitingSelection || limited && !validScope} loading={busy} onClick={() => void submit()}>{generateLabel}</Button>}
+      </WorkbenchDialogActions>}>
+      <div className="scene-ai-intro"><p>根据原文生成六岗设计，供你检查并应用。</p><span>结果不会自动覆盖当前设计</span></div>
+      <ol className="scene-ai-stages" aria-label="设计流程">
+        {['准备', '生成中', '查看结果'].map((label, index) => <li key={label} aria-current={index === (generating || awaitingSelection ? 1 : selected ? 2 : 0) ? 'step' : undefined}><span>{index + 1}</span>{label}</li>)}
+      </ol>
+      <div className="scene-ai-refresh-status" role="status">
+        {!rows && reading && <><Spin size="small" /><span>正在读取设计任务…</span></>}
+        {readError && <><span title={readError}>{rows ? '刷新失败，已保留上次状态' : '建议任务读取失败，已知内容保留'}</span><Button variant="quiet" size="small" disabled={reading} onClick={() => setAttempt(value => value + 1)}>重试读取建议</Button></>}
+      </div>
+      {error && <Alert type="error" message={error} action={error.includes('结果来源校验未通过') && selected?.design ? <Button icon={<PlusOutlined aria-hidden="true" />} disabled={busy || disabled || running} onClick={() => { setPreparing(true); setError('') }}>重新生成设计</Button> : undefined} />}
+      {!!rows?.length && <div className="scene-ai-history">
+        <details><summary><HistoryOutlined aria-hidden="true" /> 历史 · {rows.length}</summary><Select aria-label="设计建议记录" placeholder="选择本次建议查看" value={selected?.task_id} style={{ width: '100%' }}
+          options={rows.map((row, index) => ({ value: row.task_id, label: `设计 ${rows.length - index} · ${statusNames[row.status] || row.status}` }))}
+          onChange={id => { setSelectedId(id); setPreparing(false); setError('') }} /></details>
+        {selected && !generating && <Button className="scene-ai-new-design" icon={<PlusOutlined aria-hidden="true" />} disabled={busy || disabled || running || !!pending.current} onClick={() => { setPreparing(true); setError('') }}>发起新设计</Button>}
+      </div>}
+      {pending.current && <Alert type="info" message="上次提交尚未核实" description="请先核实原请求，避免重复生成。原设计要求与范围已保留。" />}
+      {awaitingSelection && <p role="status">正在读取本次设计任务…</p>}
+      {!selected && !awaitingSelection && !pending.current && <div className="scene-ai-prepare">
+        <section className="scene-ai-source"><h3><FileTextOutlined aria-hidden="true" /> 原文依据</h3><CanvasTextPreview text={content.basis.text || '当前版本尚无原文'} label="原文" lines={4} paragraphClassName="scene-ai-source-text" />
+          <span>使用当前版本采用的原文，不受画布中选中镜头影响。</span>
+        </section>
+        <section className="scene-ai-settings"><h3>{hasDesign ? '继续完善场次设计' : '从原文开始设计'}</h3>
+          <p>{limited ? '只生成所选字段的内容，其他设计保持不变。' : '统筹总导演、表演、镜内执行、摄影、连续性与声音设计。'}</p>
+          <div className="scene-ai-scope" role="group" aria-label="设计范围">
+            <Button className="canvas-choice" aria-pressed={!limited} disabled={disabled || busy} onClick={() => setLimited(false)}>{hasDesign ? '重新生成整场' : '整场设计'}</Button>
+            <Button variant="quiet" className="canvas-choice" aria-pressed={limited} disabled={disabled || busy} onClick={() => setLimited(true)}>{hasDesign ? '调整部分设计' : '只设计部分内容'}</Button>
+          </div>
+          {limited && <div className="scene-ai-field-picker">
+            <label htmlFor="scene-design-fields">选择要设计的内容</label>
+            <Select id="scene-design-fields" aria-label="允许修改的字段" mode="multiple" showSearch optionFilterProp="label" style={{ width: '100%' }}
+              disabled={disabled || busy} options={fields} value={scope.map(field => field.value)}
+              onChange={values => setScope(values.flatMap(path => fields.find(field => field.value === path) || []))} />
+            <small>可补全空字段或修改已有内容；不会新增镜头、人物等对象，也不改变引用关系。</small>
+            {scope.length > 0 && !validScope && <Alert type="warning" message="所选范围已失效或超过 100 项，请重新明确选择字段" />}
+          </div>}
+          <label htmlFor="scene-design-instruction">设计要求（可选）</label>
+          <Input.TextArea id="scene-design-instruction" autoSize={{ minRows: 3, maxRows: 6 }} placeholder="例如：突出人物犹豫的情绪，镜头节奏保持克制" value={instruction} disabled={disabled || busy} onChange={event => setInstruction(event.target.value)} />
+        </section>
+      </div>}
       {selected && <section className="scene-design-suggestions" aria-label="设计建议预览">
-        <p>状态：{statusNames[selected.status] || selected.status}</p><h3>本次范围：{selected.scope ? '限定字段修订' : '整场设计'}</h3>
-        {selected.scope && <ul>{selected.scope.map(path => <li key={path}>{scopeFields(selected.before).find(field => field.value === path)?.label || '原字段不可用'}</li>)}</ul>}
-        <h3>本次固定原文</h3><p>{selected.basis.text}</p>
-        <p>{selected.instruction || '未补充设计要求'}</p>
+        <div className="scene-ai-result-heading"><h3>{generating ? '正在准备你的场次设计' : selected.design ? '检查本次设计' : '本次设计未完成'}</h3><span role="status">状态：{statusNames[selected.status] || selected.status}</span></div>
+        {generating && <p>任务在后台执行，可以关闭窗口稍后查看。完成后先检查结果，再应用到当前版本。</p>}
+        <details className="scene-ai-context"><summary><FileTextOutlined aria-hidden="true" /> 依据与要求 <span className="scene-ai-scope-tag"><AimOutlined aria-hidden="true" /> {selected.scope ? `部分 · ${selected.scope.length} 项` : '整场'}</span></summary>
+          {selected.scope && <ul>{selected.scope.map(path => <li key={path}>{scopeFields(selected.before).find(field => field.value === path)?.label || '原字段不可用'}</li>)}</ul>}
+          <div className="scene-ai-basis-sections">
+            <section aria-label="原文依据"><h4><FileTextOutlined aria-hidden="true" /> 原文依据</h4><p>{selected.basis.text}</p></section>
+            <section aria-label="设计要求"><h4><EditOutlined aria-hidden="true" /> 设计要求 {!selected.instruction.trim() && <span className="scene-ai-empty-tag">未填写</span>}</h4>{!!selected.instruction.trim() && <p>{selected.instruction}</p>}</section>
+          </div>
+        </details>
         {selected.error && <Alert type="error" message={selected.error} />}
-        {!terminal.includes(selected.status) && <Button disabled={busy || disabled} onClick={async () => {
-          setBusy(true)
-          try { await FilmService.cancelTaskApiV1FilmTasksTaskIdCancelPost({ taskId: selected.task_id, requestBody: { reason: '用户取消设计建议' } }); setAttempt(value => value + 1) }
-          catch (cause) { setError(directingError(cause)) }
-          finally { setBusy(false) }
-        }}>取消本次设计任务</Button>}
+        {selected.design && <div className="scene-ai-departments">{(['direction', 'performance', 'staging', 'cinematography', 'continuity', 'sound'] as const).map(role => <section key={role}>
+          <h4>{designLabels[role]}</h4><p>{designSummary(selected.design![role]) || '暂无正文内容'}</p>
+          <span>{differences.filter(change => change.path === role || change.path.startsWith(`${role}.`) || change.path.startsWith(`${role}[`)).length} 项变更</span>
+        </section>)}</div>}
         {!!currentDifferences.length && <section aria-label="当前编辑与建议依据的差异">
           <Alert type="warning" message="设计已变化，旧建议不能覆盖当前编辑" description="请核对以下位置，按当前内容重新发起建议。" />
           {currentDifferences.map((change, index) => <details key={index}><summary>{fieldLabel(change.path, content.design)}</summary>
@@ -210,7 +262,6 @@ export function SceneDesignSuggestions({ triggerHost, projectId, sequenceId, ver
             <p>生成前</p><pre>{display(change.before)}</pre><p>建议</p><pre>{display(change.after)}</pre>
           </details>)}
           {!differences.length && <p>建议与原设计一致。</p>}
-          <Space><Button type="primary" disabled={disabled || busy || !!readError || !differences.length || !!unitConflicts.length} onClick={() => void apply()}>应用到当前版本</Button></Space>
         </section>}
       </section>}
     </Modal>

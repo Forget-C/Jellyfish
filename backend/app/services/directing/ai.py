@@ -20,6 +20,7 @@ from app.models.llm import ModelCategoryKey, Provider
 from app.models.task import Task, TaskOutput
 from app.models.studio import Chapter, Character, Scene, Prop, ProjectSceneLink, ProjectPropLink
 from app.services.directing.workspace import WorkspaceService
+from app.services.directing.scene_design_sources import DesignSourceError, validate_model_sources
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.llm.resolver import get_model_by_category
 from app.services.task_service import TaskService
@@ -60,15 +61,19 @@ def generate_directing_result(kind: str, llm, args: dict):
             text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
         try:
             result = contract.model_validate_json(text, context={"require_shot_participants": kind == "directing_design" and not args.get("design_scope")})
+            if kind == 'directing_design' and args.get('scene_version_design'):
+                validate_model_sources(EditableSceneDesign.model_validate(args['previous_design']), result, args['task_identity'])
             break
-        except ValidationError as error:
-            errors = error.errors(include_url=False, include_input=False, include_context=False)
+        except (ValidationError, DesignSourceError) as error:
+            errors = error.errors(include_url=False, include_input=False, include_context=False) if isinstance(error, ValidationError) else [{'loc': ['sources'], 'msg': str(error)}]
             if attempt == 1:
+                if isinstance(error, DesignSourceError):
+                    raise DirectingOutputError(str(error)) from None
                 paths = [(".".join(map(str, item["loc"])) or "工作单关联") + "：" + item["msg"] for item in errors[:8]]
                 raise DirectingOutputError("导演输出结构校验失败，请重新生成或手动修正：" + "、".join(paths)) from None
-            # 只允许一次结构纠错，继续沿用 Worker 的取消回调和总时限。
+            # 结构与来源共用一次纠错，继续沿用 Worker 的取消回调和总时限。
             messages.extend([AIMessage(content=content), HumanMessage(content=
-                "只修正以下结构或关联错误，保留原文事实和既有设计意图，返回完整 JSON：\n" + json.dumps(errors, ensure_ascii=False))])
+                "只修正以下结构、关联或来源错误，保留原文事实和既有设计意图，返回完整 JSON：\n" + json.dumps(errors, ensure_ascii=False))])
     if kind == "directing_instruction" and result.unit_id != args["unit"]["id"]:
         raise ValueError("模型更改了当前单元身份")
     if kind == "directing_instruction" and args.get('instruction_scope'):
