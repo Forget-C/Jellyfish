@@ -1,4 +1,5 @@
 """场次版本的 AI 建议冻结、预览与应用前校验；不改写可编辑内容。"""
+from datetime import UTC
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -96,7 +97,7 @@ class SceneDesignService(DirectingAIService):
         for task in tasks:
             request = SceneDesignRequest.model_validate(task.input_snapshot['scene_design']['request'])
             result.append(SceneDesignSuggestionRead(task_id=task.id, scope=request.scope, request_id=request.request_id,
-                status=task.status, error=task.error_message, instruction=request.instruction,
+                created_at=task.created_at.replace(tzinfo=UTC), status=task.status, error=task.error_message, instruction=request.instruction,
                 basis=request.content.basis, before=request.content.design,
                 design=EditableSceneDesign.model_validate(task.result) if task.status == 'succeeded' else None))
         return result

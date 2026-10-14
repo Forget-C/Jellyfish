@@ -51,7 +51,7 @@ async def test_whole_design_preview_preserves_version_and_rejects_new_manual_edi
             invalid['direction']['viewpoint']['sources'] = [version['content']['basis']['source']]
             responses = iter([invalid, result])
             generated = generate_directing_result('directing_design', SimpleNamespace(invoke=lambda _: SimpleNamespace(content=json.dumps(next(responses)))), task.input_snapshot['run_args'])
-            assert generated.direction.viewpoint.sources[0].kind == 'model'
+            assert [source.kind for source in generated.direction.viewpoint.sources] == ['chapter', 'model']
             await service.finish(task_id, result=generated.model_dump(mode='json'))
         preview = await client.post(detail + '/design-suggestions/' + task_id + '/preview', json={'content': version['content']})
         assert preview.status_code == 200, preview.text
@@ -71,6 +71,7 @@ async def test_whole_design_preview_preserves_version_and_rejects_new_manual_edi
         tasks = (await client.get(detail + '/design-suggestions')).json()['data']
         assert [row['task_id'] for row in tasks] == [task_id]
         assert tasks[0]['status'] == 'succeeded'
+        assert tasks[0]['created_at'].endswith('Z')
         assert tasks[0]['basis'] == version['content']['basis']
         # 新方案任务不能从旧端点采用为独立设计草稿。
         assert (await client.post(path + '/design/apply', json={'task_id': task_id})).status_code == 422
@@ -174,7 +175,6 @@ async def test_design_preview_rejects_file_source_deleted_after_task_finishes(tm
 
 
 @pytest.mark.parametrize('source', [
-    {'kind': 'chapter', 'reference': 'chapter', 'version': '1'},
     {'kind': 'human', 'reference': 'author', 'version': '1'},
     {'kind': 'model', 'reference': 'old-task', 'version': '1'},
     {'kind': 'model', 'reference': 'current-task', 'version': '2'},
@@ -206,3 +206,32 @@ def test_generation_retries_invalid_task_sources_before_returning_success(source
     assert '来源' in messages_seen[1][-1].content
     with pytest.raises(DirectingOutputError, match='来源'):
         generate_directing_result('directing_design', SimpleNamespace(invoke=lambda _: SimpleNamespace(content=json.dumps(invalid))), args)
+
+
+@pytest.mark.parametrize('scope', [None, ['/direction/information_change']])
+def test_generation_records_task_provenance_for_chapter_facts(scope):
+    """真实模型会只给原文事实标章节来源，生成服务应补记实际执行来源。"""
+    from app.core.contracts.directing.scene_version import EditableSceneDesign
+    from app.services.directing.scene_design_sources import validate_model_sources
+
+    source = {'kind': 'chapter', 'reference': 'chapter', 'version': '1'}
+    original = EditableSceneDesign(sources=[source]).model_dump(mode='json')
+    original['direction']['viewpoint'] = {'state': 'fact', 'text': '保留已有事实', 'sources': [source]}
+    output = deepcopy(original)
+    output['direction']['information_change'] = {'state': 'fact', 'text': '读信后产生迟疑', 'sources': [source]}
+    calls = []
+    def invoke(messages):
+        calls.append(messages)
+        return SimpleNamespace(content=json.dumps(output))
+    args = {'scene_version_design': True, 'task_identity': 'current-task', 'previous_design': original,
+        'design_scope': scope, 'source': source}
+    result = generate_directing_result('directing_design', SimpleNamespace(invoke=invoke), args)
+    assert len(calls) == 1
+    note = result.direction.information_change
+    assert [(item.kind, item.reference) for item in note.sources] == [('chapter', 'chapter'), ('model', 'current-task')]
+    assert result.direction.viewpoint == EditableSceneDesign.model_validate(original).direction.viewpoint
+    validate_model_sources(EditableSceneDesign.model_validate(original), result, 'current-task')
+    assert output['direction']['information_change']['sources'] == [source]
+    args['source'] = {**source, 'version': 'other-version'}
+    with pytest.raises(DirectingOutputError, match='来源'):
+        generate_directing_result('directing_design', SimpleNamespace(invoke=invoke), args)

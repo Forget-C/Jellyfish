@@ -11,6 +11,7 @@ export type SceneDesignSuggestionRead = {
     task_id: string;
     scope: (Array<string> | null);
     request_id: string;
+    created_at: string;
     status: string;
     error: (string | null);
     instruction: string;

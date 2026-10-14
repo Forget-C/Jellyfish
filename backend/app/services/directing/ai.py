@@ -20,7 +20,7 @@ from app.models.llm import ModelCategoryKey, Provider
 from app.models.task import Task, TaskOutput
 from app.models.studio import Chapter, Character, Scene, Prop, ProjectSceneLink, ProjectPropLink
 from app.services.directing.workspace import WorkspaceService
-from app.services.directing.scene_design_sources import DesignSourceError, validate_model_sources
+from app.services.directing.scene_design_sources import DesignSourceError, record_chapter_generation_source, validate_model_sources
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.llm.resolver import get_model_by_category
 from app.services.task_service import TaskService
@@ -62,7 +62,9 @@ def generate_directing_result(kind: str, llm, args: dict):
         try:
             result = contract.model_validate_json(text, context={"require_shot_participants": kind == "directing_design" and not args.get("design_scope")})
             if kind == 'directing_design' and args.get('scene_version_design'):
-                validate_model_sources(EditableSceneDesign.model_validate(args['previous_design']), result, args['task_identity'])
+                original = EditableSceneDesign.model_validate(args['previous_design'])
+                result = record_chapter_generation_source(original, result, args['task_identity'], args.get('source'))
+                validate_model_sources(original, result, args['task_identity'])
             break
         except (ValidationError, DesignSourceError) as error:
             errors = error.errors(include_url=False, include_input=False, include_context=False) if isinstance(error, ValidationError) else [{'loc': ['sources'], 'msg': str(error)}]

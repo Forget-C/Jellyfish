@@ -317,3 +317,8 @@
 .scene-ai-basis-sections > section + section { border-top: 1px solid #383838; }
 .scene-ai-basis-sections h4 { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; font-size: 13px; }
 .scene-ai-basis-sections p { margin: 0; }
+
+.scene-ai-version-owner { margin: 0 0 12px; color: var(--wb-muted); overflow-wrap: anywhere; }
+.scene-ai-version-owner strong { color: var(--wb-text); font-weight: 500; }
+.scene-ai-apply-target { align-self: center; max-width: 240px; color: var(--wb-muted); overflow-wrap: anywhere; font-size: 12px; }
+@media (max-width: 640px) { .scene-ai-apply-target { max-width: 140px; } }

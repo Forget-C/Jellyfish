@@ -1,4 +1,6 @@
 """可编辑场次版本的 AI 设计请求与整份预览，不建立独立设计草稿。"""
+from datetime import datetime
+
 from pydantic import Field
 
 from app.core.contracts.directing.common import Contract, Identity
@@ -38,6 +40,7 @@ class SceneDesignSuggestionRead(Contract):
     task_id: Identity
     scope: list[str] | None
     request_id: Identity
+    created_at: datetime
     status: str
     error: str | None
     instruction: str

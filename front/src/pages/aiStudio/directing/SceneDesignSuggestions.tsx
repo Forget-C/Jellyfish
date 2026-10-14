@@ -4,7 +4,7 @@ import { CanvasTextPreview } from './CanvasTextPreview'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AimOutlined, FileTextOutlined, HistoryOutlined, PlusOutlined, EditOutlined } from '@ant-design/icons'
-import { Alert, Input, Select, Spin } from 'antd'
+import { Alert, Input, Select, Spin, message } from 'antd'
 import { ApiError, FilmService, StudioDirectingService } from '../../../services/generated'
 import type { SceneDesignRequest, SceneDesignSuggestionRead, SceneVersionContent_Output, SceneVersionRead } from '../../../services/generated'
 import { directingError } from './common'
@@ -27,7 +27,7 @@ const fieldLabel = (path: string, design?: SceneDesignSuggestionRead['before']) 
   const collection = /^([^[]+)\[(.+)\]$/.exec(part)
   return collection ? `${labels[collection[1]] || collection[1]}（${collection[2]}）` : labels[part] || part
 }).join(' / ')
-const statusNames: Record<string, string> = { queued: '等待执行', running: '执行中', succeeded: '已完成', failed: '失败', cancelled: '已取消' }
+const statusNames: Record<string, string> = { queued: '等待执行', running: '执行中', succeeded: '已生成', failed: '失败', cancelled: '已取消' }
 
 type ScopeField = { value: string; label: string; identity: string }
 /** 选择完整内容字段；列表对象身份随选择保留，重排后不能按旧下标选中另一对象。 */
@@ -68,6 +68,7 @@ export function SceneDesignSuggestions({ triggerHost, projectId, sequenceId, ver
   onChange: (content: SceneVersionContent_Output) => void
   onLocateUnit: (conflict: UnitReferenceConflict) => void
 }) {
+  const [messageApi, messageContext] = message.useMessage()
   const [rows, setRows] = useState<SceneDesignSuggestionRead[]>()
   const [reading, setReading] = useState(true)
   const [readError, setReadError] = useState('')
@@ -155,6 +156,7 @@ export function SceneDesignSuggestions({ triggerHost, projectId, sequenceId, ver
       if (!mounted.current) return
       if (live.current.disabled || live.current.content !== snapshot) throw new Error('核对期间内容发生变化，请重新查看差异后应用')
       onChange({ ...snapshot, design: result.data.design }); onOpenChange(false)
+      void messageApi.success(`设计已应用到「${version.title}」`)
     } catch (cause) { if (mounted.current) setError(directingError(cause)) }
     finally { if (mounted.current) setBusy(false) }
   }
@@ -167,6 +169,9 @@ export function SceneDesignSuggestions({ triggerHost, projectId, sequenceId, ver
   const hasDesign = hasDesignContent(content.design)
   const generating = selected && !terminal.includes(selected.status)
   const generateLabel = limited ? (hasDesign ? '生成调整方案' : '生成所选内容') : (hasDesign ? '重新生成整场' : '生成场次设计')
+  const recordStatus = (row: SceneDesignSuggestionRead) => row.design
+    ? !revisionDifferences(row.design, content.design).length ? '与当前设计一致' : !revisionDifferences(row.before, content.design).length ? '待应用' : '待核对'
+    : statusNames[row.status] || row.status
   const triggerLabel = 'AI 设计'
   const trigger = <Button size="large" className="scene-design-launch" aria-label={triggerLabel} title={running ? '查看当前执行进度' : '整场设计建议'} aria-haspopup="dialog" onClick={() => onOpenChange(true)}>
     <svg className="scene-design-launch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
@@ -176,11 +181,12 @@ export function SceneDesignSuggestions({ triggerHost, projectId, sequenceId, ver
     <span>{triggerLabel}</span>
   </Button>
   return <>
+    {messageContext}
     {triggerHost === undefined ? trigger : triggerHost && createPortal(trigger, triggerHost)}
     <Modal rootClassName="scene-ai-design-dialog" title="AI 设计" open={open} focusTriggerAfterClose={!locatingUnit}
       onCancel={() => onOpenChange(false)} footer={<WorkbenchDialogActions className="scene-ai-footer" secondary={<Button variant="quiet" onClick={() => onOpenChange(false)}>{selected?.design ? '暂不应用' : generating ? '稍后查看' : '取消'}</Button>}>
         {pending.current ? <Button variant="primary" disabled={busy || disabled} loading={busy} onClick={() => void submit()}>核实原设计请求</Button>
-          : selected?.design ? <Button variant="primary" disabled={disabled || busy || !!readError || !differences.length || !!unitConflicts.length} loading={busy} onClick={() => void apply()}>应用到当前版本</Button>
+          : selected?.design ? <><span className="scene-ai-apply-target" title={`写入「${version.title}」`}>写入「{version.title}」</span><Button variant="primary" disabled={disabled || busy || !!readError || !differences.length || !!unitConflicts.length} loading={busy} onClick={() => void apply()}>应用设计</Button></>
           : generating ? <Button disabled={busy || disabled} onClick={async () => {
             setBusy(true)
             try { await FilmService.cancelTaskApiV1FilmTasksTaskIdCancelPost({ taskId: selected.task_id, requestBody: { reason: '用户取消设计建议' } }); setAttempt(value => value + 1) }
@@ -190,6 +196,7 @@ export function SceneDesignSuggestions({ triggerHost, projectId, sequenceId, ver
           : selected ? <Button variant="primary" disabled={busy || disabled || running} onClick={() => { setPreparing(true); setError('') }}>调整后重新生成</Button>
           : <Button variant="primary" className="scene-design-generate" disabled={disabled || busy || reading || !!readError || !rows || running || awaitingSelection || limited && !validScope} loading={busy} onClick={() => void submit()}>{generateLabel}</Button>}
       </WorkbenchDialogActions>}>
+      <p className="scene-ai-version-owner">所属版本：<strong>{version.title}</strong></p>
       <div className="scene-ai-intro"><p>根据原文生成六岗设计，供你检查并应用。</p><span>结果不会自动覆盖当前设计</span></div>
       <ol className="scene-ai-stages" aria-label="设计流程">
         {['准备', '生成中', '查看结果'].map((label, index) => <li key={label} aria-current={index === (generating || awaitingSelection ? 1 : selected ? 2 : 0) ? 'step' : undefined}><span>{index + 1}</span>{label}</li>)}
@@ -200,8 +207,8 @@ export function SceneDesignSuggestions({ triggerHost, projectId, sequenceId, ver
       </div>
       {error && <Alert type="error" message={error} action={error.includes('结果来源校验未通过') && selected?.design ? <Button icon={<PlusOutlined aria-hidden="true" />} disabled={busy || disabled || running} onClick={() => { setPreparing(true); setError('') }}>重新生成设计</Button> : undefined} />}
       {!!rows?.length && <div className="scene-ai-history">
-        <details><summary><HistoryOutlined aria-hidden="true" /> 历史 · {rows.length}</summary><Select aria-label="设计建议记录" placeholder="选择本次建议查看" value={selected?.task_id} style={{ width: '100%' }}
-          options={rows.map((row, index) => ({ value: row.task_id, label: `设计 ${rows.length - index} · ${statusNames[row.status] || row.status}` }))}
+        <details><summary><HistoryOutlined aria-hidden="true" /> 生成记录 · {rows.length} <span className="scene-ai-empty-tag">当前版本</span></summary><Select aria-label="生成记录" placeholder="选择生成记录" value={selected?.task_id} style={{ width: '100%' }}
+          options={rows.map(row => ({ value: row.task_id, label: `${new Date(row.created_at).toLocaleString('zh-CN', { hour12: false })} · ${row.scope ? '局部设计' : '整场设计'} · ${recordStatus(row)}` }))}
           onChange={id => { setSelectedId(id); setPreparing(false); setError('') }} /></details>
         {selected && !generating && <Button className="scene-ai-new-design" icon={<PlusOutlined aria-hidden="true" />} disabled={busy || disabled || running || !!pending.current} onClick={() => { setPreparing(true); setError('') }}>发起新设计</Button>}
       </div>}
@@ -230,7 +237,7 @@ export function SceneDesignSuggestions({ triggerHost, projectId, sequenceId, ver
         </section>
       </div>}
       {selected && <section className="scene-design-suggestions" aria-label="设计建议预览">
-        <div className="scene-ai-result-heading"><h3>{generating ? '正在准备你的场次设计' : selected.design ? '检查本次设计' : '本次设计未完成'}</h3><span role="status">状态：{statusNames[selected.status] || selected.status}</span></div>
+        <div className="scene-ai-result-heading"><h3>{generating ? '正在准备你的场次设计' : selected.design ? '检查本次设计' : '本次设计未完成'}</h3><span role="status">状态：{recordStatus(selected)}</span></div>
         {generating && <p>任务在后台执行，可以关闭窗口稍后查看。完成后先检查结果，再应用到当前版本。</p>}
         <details className="scene-ai-context"><summary><FileTextOutlined aria-hidden="true" /> 依据与要求 <span className="scene-ai-scope-tag"><AimOutlined aria-hidden="true" /> {selected.scope ? `部分 · ${selected.scope.length} 项` : '整场'}</span></summary>
           {selected.scope && <ul>{selected.scope.map(path => <li key={path}>{scopeFields(selected.before).find(field => field.value === path)?.label || '原字段不可用'}</li>)}</ul>}
