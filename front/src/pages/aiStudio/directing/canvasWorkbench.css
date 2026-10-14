@@ -23,7 +23,7 @@
 .canvas-workbench .ant-alert-message, .canvas-workbench .ant-alert-description { color: #e5e5e5; }
 .canvas-workbench-dialog .ant-modal-content, .canvas-workbench-dialog .ant-modal-header { color: #e5e5e5; background: #1b1b1b; }
 .canvas-workbench-dialog .ant-modal-title, .canvas-workbench-dialog .ant-modal-body, .canvas-workbench-dialog .ant-alert-message, .canvas-workbench-dialog .ant-alert-description { color: #e5e5e5; }
-.canvas-workbench-dialog .ant-btn { color: #e5e5e5; background: #242424; border-color: #383838; }
+.canvas-workbench-dialog .ant-btn:where(:not(.ant-btn-dangerous):not(.ant-btn-link):not(:disabled)) { color: #e5e5e5; background: #242424; border-color: #383838; }
 .canvas-workbench-dialog .ant-btn-primary { background: #1668dc; border-color: #3c89e8; }
 .canvas-workbench-dialog .ant-btn:disabled { color: #737373; background: #171717; border-color: #2d2d2d; }
 .canvas-workbench-dialog .ant-modal-close { color: #e5e5e5; }
@@ -36,8 +36,8 @@
 .canvas-workbench .ant-select-dropdown, .canvas-workbench-dialog .ant-select-dropdown { background: #1b1b1b !important; }
 .canvas-workbench .ant-select-item, .canvas-workbench-dialog .ant-select-item { color: #e5e5e5 !important; }
 .canvas-workbench .ant-select-item-option-active, .canvas-workbench-dialog .ant-select-item-option-active { background: #242424 !important; }
-.canvas-workbench .ant-select-item-option-selected, .canvas-workbench-dialog .ant-select-item-option-selected { background: #164b85 !important; }
-.canvas-workbench-card .ant-btn { color: #e5e5e5; background: #242424; border-color: #383838; }
+.canvas-workbench .ant-select-item-option-selected, .canvas-workbench-dialog .ant-select-item-option-selected { background: #383838 !important; }
+.canvas-workbench-card .ant-btn:where(:not(.ant-btn-dangerous):not(.ant-btn-link):not(.ant-btn-primary):not(:disabled)) { color: #e5e5e5; background: #242424; border-color: #383838; }
 .canvas-workbench-dialog .design-field > label { display: block; color: #a3a3a3; margin-bottom: 6px; }
 .canvas-manual-shots .ant-select-selector, .canvas-manual-shots .ant-input-number { color: #e5e5e5 !important; background: #141414 !important; border-color: #383838 !important; }
 .canvas-source-comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
@@ -66,12 +66,12 @@
 .director-canvas-title { display: flex; align-items: center; gap: 8px; height: 32px; color: #969696; font-size: 13px; }
 .director-canvas-title h2 { margin: 0; font-size: inherit; font-weight: 500; }
 .director-canvas-title button { color: #969696; background: transparent; border: 0; cursor: grab; padding: 4px 8px; }
-.director-canvas-title button:focus-visible { outline: 2px solid #69aaff; }
+.director-canvas-title button:focus-visible { outline: 1px solid #69aaff; }
 .director-canvas-title .director-node-menu { margin-left: auto; opacity: 0; }
 .director-canvas-object:is(:hover, :focus-within) .director-node-menu { opacity: 1; }
 .director-canvas-object-content { position: relative; }
 .director-node-open { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; border-radius: 12px; background: transparent; cursor: pointer; }
-.director-canvas-object-content:has(.director-node-open:focus-visible) { outline: 2px solid #69aaff; outline-offset: -2px; }
+.director-canvas-object-content:has(.director-node-open:focus-visible) { outline: 1px solid #69aaff; outline-offset: -2px; }
 .director-node-summary { position: relative; pointer-events: none; }
 .director-node-summary :is(button, a, input, select, textarea, summary, [role="combobox"]) { pointer-events: auto; }
 .canvas-workbench .ant-dropdown-menu { background: #1b1b1b !important; }
@@ -155,11 +155,11 @@
 .scene-relations-tree-row { display: flex; align-items: flex-start; }
 .scene-relations-tree-row > .ant-btn:first-child { flex-shrink: 0; padding-inline: 6px; }
 .scene-relations-tree .ant-btn-text { min-width: 0; white-space: normal; height: auto; text-align: left; overflow-wrap: anywhere; }
-.scene-relations-tree [aria-current="location"] { background: #164b85; }
+.scene-relations-tree [aria-current="location"] { background: #383838; }
 
 .scene-relations-tree .ant-btn { color: #e5e5e5; background: #242424; border-color: #383838; }
 .scene-relations-tree .ant-btn-text { background: transparent; border-color: transparent; }
-.scene-relations-tree .ant-btn-text[aria-current="location"] { background: #164b85; }
+.scene-relations-tree .ant-btn-text[aria-current="location"] { background: #383838; }
 
 .scene-overview-dialog .ant-modal-body { height: calc(100dvh - 160px); display: flex; flex-direction: column; overflow: auto; }
 .scene-overview-viewport { flex: 1; min-height: 120px; overflow: auto; border: 1px solid #383838; border-radius: 8px; background: #0d0d0d; }
@@ -167,8 +167,8 @@
 .scene-overview-graph h3 { position: absolute; top: 8px; margin: 0; font-size: 14px; }
 .scene-overview-graph svg { position: absolute; inset: 0; pointer-events: none; }
 .scene-overview-node { position: absolute; width: 192px; height: 68px; overflow: auto; padding: 8px; color: #e5e5e5; background: #1b1b1b; border: 1px solid #383838; border-radius: 8px; text-align: left; overflow-wrap: anywhere; }
-.scene-overview-node.is-related { border-color: #72b5ff; }
-.scene-overview-node[aria-pressed="true"] { background: #164b85; outline: 2px solid #72b5ff; }
+.scene-overview-node.is-related { border-color: #737373; }
+.scene-overview-node[aria-pressed="true"] { background: #383838; border-color: #a3a3a3; box-shadow: inset 0 0 0 1px #a3a3a3; }
 .scene-overview-detail { flex-shrink: 0; max-height: 35dvh; overflow: auto; padding: 12px; }
 
 
@@ -207,7 +207,7 @@
 .canvas-text-preview .is-collapsed { display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
 .canvas-text-preview > .ant-btn { margin-top: -4px; padding-inline: 0; }
 .canvas-workbench-card p:first-child, .canvas-text-preview p:first-child { margin-top: 0; }
-.canvas-workbench-card :is(input, textarea, button, select):focus-visible { outline: 2px solid #69aaff; outline-offset: 2px; }
+.canvas-workbench-card :is(input, textarea, button, select):focus-visible { outline: 1px solid #69aaff; outline-offset: 2px; }
 .canvas-quick-editor, .director-relations-navigation { width: min(400px, calc(100vw - 32px)); border-color: #383838; }
 .canvas-quick-editor { top: var(--workbench-content-top, 80px); }
 .scene-relations-toggle { width: 32px; height: 32px; flex-shrink: 0; }
@@ -244,3 +244,37 @@
 .canvas-shot-picker nav { max-height: 240px; overflow: auto; }
 .canvas-shot-picker .ant-space { width: 100%; gap: 4px !important; }
 .canvas-shot-picker .ant-btn { text-align: left; width: 100%; }
+
+/* 工作台中的选择控件使用灰阶；生成与提交主操作保留强调色。 */
+.canvas-workbench .canvas-menu-caption { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.canvas-menu-chevron { flex: none; font-size: 12px; color: #a3a3a3; transition: transform .15s; }
+.canvas-workbench button[aria-expanded="true"] .canvas-menu-chevron { transform: rotate(180deg); }
+.canvas-workbench .canvas-toolbar-menu > .ant-btn[aria-expanded="true"], .canvas-workbench .app-task-trigger[aria-expanded="true"] { background: #242424; }
+.canvas-workbench .app-task-trigger { display: inline-flex; align-items: center; gap: 8px; }
+.canvas-workbench .app-task-count { background: #2d2d2d; color: #d4d4d4; border-radius: 6px; font-variant-numeric: tabular-nums; }
+.canvas-workbench .canvas-choice[aria-pressed="true"], .canvas-workbench-dialog .canvas-choice[aria-pressed="true"] { color: #f5f5f5; background: #383838; border-color: #525252; box-shadow: none; }
+.canvas-workbench .canvas-choice:not(:disabled):hover, .canvas-workbench-dialog .canvas-choice:not(:disabled):hover { color: #f5f5f5; background: #303030; border-color: #626262; }
+.canvas-workbench .canvas-choice[aria-pressed="true"]:hover, .canvas-workbench-dialog .canvas-choice[aria-pressed="true"]:hover { background: #404040; }
+:is(.canvas-workbench, .canvas-workbench-dialog, .canvas-task-center) .ant-btn:focus-visible { outline: 1px solid #69aaff; outline-offset: 2px; }
+.canvas-task-center .app-task-card { color: #e5e5e5; background: #1b1b1b; border: 1px solid #383838; border-radius: 8px; padding: 12px; margin: 8px 0; }
+.canvas-task-center .app-task-card.is-current { background: #242424; border-color: #626262; }
+.canvas-task-center .text-gray-500, .canvas-task-center .text-gray-400 { color: #a3a3a3; }
+.canvas-task-center .ant-segmented-group { flex-wrap: wrap; gap: 2px; }
+.canvas-task-center .app-task-filters { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.canvas-task-center .app-task-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.canvas-task-center .app-task-card-header > div:first-child { min-width: 0; }
+.canvas-task-center .app-task-title { color: #e5e5e5; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 6px; }
+.canvas-task-center .app-task-actions { display: flex; flex: none; flex-direction: column; gap: 8px; }
+
+.canvas-workbench-dialog .scene-design-scope .ant-radio-button-wrapper-checked:not(.ant-radio-button-wrapper-disabled) { color: #e5e5e5; background: #383838; border-color: #626262; }
+.canvas-workbench-dialog .scene-design-scope .ant-radio-button-wrapper-checked:not(.ant-radio-button-wrapper-disabled)::before { background: #626262; }
+.canvas-workbench-dialog .scene-design-scope .ant-radio-button-wrapper:not(.ant-radio-button-wrapper-disabled):hover { color: #f5f5f5; background: #404040; }
+.scene-overview-node:focus-visible { outline: 1px solid #69aaff; outline-offset: 2px; }
+
+.canvas-workbench-dialog .scene-design-generate { margin-block: 12px; }
+.canvas-workbench-dialog .scene-design-generate:not(:disabled):hover { color: #f5f5f5; background: #303030; border-color: #626262; }
+
+.canvas-workbench .scene-design-launch.ant-btn { display: inline-flex; align-items: center; gap: 8px; height: 38px; min-height: 38px; padding: 0 12px; color: #e5e5e5; background: #2d2d2d; border: 1px solid #525252; border-radius: 8px; box-shadow: none; font-weight: 500; white-space: nowrap; }
+.canvas-workbench .scene-design-launch.ant-btn:not(:disabled):hover { color: #f5f5f5; background: #383838; border-color: #737373; }
+.canvas-workbench .scene-design-launch.ant-btn:not(:disabled):active { background: #242424; border-color: #626262; }
+.scene-design-launch-icon { width: 20px; height: 20px; flex: none; }

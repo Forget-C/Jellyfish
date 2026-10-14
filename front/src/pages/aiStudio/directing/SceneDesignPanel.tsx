@@ -166,10 +166,10 @@ export function SceneDesignPanel({ navigationOpen, onNavigationOpenChange: setNa
     <Modal rootClassName="canvas-workbench-dialog" width={880} title="全场六岗设计" open={open}
       afterClose={() => (editorTrigger.current?.isConnected ? editorTrigger.current : navigationTrigger.current)?.focus({ preventScroll: true })}
       onCancel={() => { setOpen(false); setPending(undefined) }} footer={<Button onClick={() => { setOpen(false); setPending(undefined) }}>完成编辑</Button>}>
-      <Space wrap>{roles.map(role => <Button key={role} onClick={() => navigate([role])} type={path[0] === role ? 'primary' : 'default'}>
+      <Space wrap>{roles.map(role => <Button key={role} onClick={() => navigate([role])} className="canvas-choice" aria-pressed={path[0] === role}>
         {departmentNames[role] || designLabels[role]}
       </Button>)}</Space>
-      <Button onClick={() => navigate(['assets'])} type={path[0] === 'assets' ? 'primary' : 'default'}>项目资产关联</Button>
+      <Button onClick={() => navigate(['assets'])} className="canvas-choice" aria-pressed={path[0] === 'assets'}>项目资产关联</Button>
       <h3>{path[0] === 'assets' ? '项目资产关联' : pathLabel(pending?.path || path)}</h3>
       {error && <Alert type="warning" message={error} description={<Space wrap>{references.map((reference, i) =>
         <Button key={i} onClick={() => navigate(reference)}>定位：{pathLabel(reference.path)}</Button>)}

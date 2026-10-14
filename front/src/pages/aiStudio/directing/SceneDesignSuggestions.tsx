@@ -142,7 +142,14 @@ export function SceneDesignSuggestions({ triggerHost, projectId, sequenceId, ver
   const empty = (value: unknown) => value == null || Array.isArray(value) && !value.length
   const currentDifferences = selected ? revisionDifferences(selected.before, content.design).filter(change => !empty(change.before) || !empty(change.after)) : []
   const display = (value: unknown) => typeof value === 'string' ? value : JSON.stringify(value, null, 2) ?? '未填写'
-  const trigger = <Button onClick={() => onOpenChange(true)}>{running ? '查看设计任务' : rows?.some(row => row.status === 'succeeded') ? '查看设计建议' : 'AI 提取设计 · 整场'}</Button>
+  const triggerLabel = running ? '查看设计任务' : rows?.some(row => row.status === 'succeeded') ? '查看设计建议' : 'AI 提取设计 · 整场'
+  const trigger = <Button className="scene-design-launch" aria-label={triggerLabel} title={running ? '查看当前执行进度' : '整场设计建议'} aria-haspopup="dialog" onClick={() => onOpenChange(true)}>
+    <svg className="scene-design-launch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+      <path d="m4 20 11-11 3 3L7 23z" transform="translate(0 -2)" />
+      <path d="m12 10 3 3M6 3v4M4 5h4M19 2v6M16 5h6M20 16v4M18 18h4" />
+    </svg>
+    <span>{triggerLabel === 'AI 提取设计 · 整场' ? 'AI 提取设计' : triggerLabel}</span>
+  </Button>
   return <>
     {triggerHost === undefined ? trigger : triggerHost && createPortal(trigger, triggerHost)}
     <Modal rootClassName="canvas-workbench-dialog" title="AI 设计建议" open={open} focusTriggerAfterClose={!locatingUnit} width={960} styles={{ body: { maxHeight: 'calc(100dvh - 240px)', overflowY: 'auto' } }}
@@ -167,7 +174,7 @@ export function SceneDesignSuggestions({ triggerHost, projectId, sequenceId, ver
         </>}
         <label htmlFor="scene-design-instruction">设计要求（可选）</label>
         <Input.TextArea id="scene-design-instruction" value={instruction} disabled={disabled || busy} onChange={event => setInstruction(event.target.value)} />
-        <Button type="primary" disabled={disabled || busy || reading || !!readError || !rows || running || limited && !validScope} onClick={() => void submit()}>{limited ? '生成局部修订建议' : '生成整场设计建议'}</Button>
+        <Button className="scene-design-generate" disabled={disabled || busy || reading || !!readError || !rows || running || limited && !validScope} onClick={() => void submit()}>{limited ? '生成局部修订建议' : '生成整场设计建议'}</Button>
       </>}
       {rows && !rows.length && !reading && !readError && <p>当前版本尚无设计建议。</p>}
       {!!rows?.length && <Select aria-label="设计建议记录" placeholder="选择本次建议查看" value={selectedId} style={{ width: '100%', marginTop: 16 }}

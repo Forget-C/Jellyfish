@@ -815,7 +815,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
     return () => window.clearTimeout(timer)
   }, [autoSave, dirty, draft, busy, deliveryBusy, exportBusy, copyLocked, copyError, failure, readonly, transition, leaving, recovery, handingOff])
 
-  return <SourceProvider projectId={projectId} sequenceId={sequenceId} renderRevision={source => <SceneSourceRevision key={`${source.revision_id}:${source.source.version}`} projectId={projectId} sequenceId={sequenceId} source={source} />}><ConfigProvider theme={{ algorithm: theme.darkAlgorithm, token: { colorBgBase: '#0d0d0d', colorBgContainer: '#1b1b1b', colorBgElevated: '#242424', colorBorder: '#383838', colorText: '#e5e5e5', colorTextSecondary: '#a3a3a3', borderRadius: 8 } }} getPopupContainer={trigger => trigger?.closest<HTMLElement>('.canvas-workbench-dialog') || trigger?.closest<HTMLElement>('.canvas-workbench') || document.body}><section ref={node => { if (node) node.inert = copyLocked }} className="canvas-workbench" data-canvas={canvas} aria-label="场次画布工作台" onBlurCapture={event => {
+  return <SourceProvider projectId={projectId} sequenceId={sequenceId} renderRevision={source => <SceneSourceRevision key={`${source.revision_id}:${source.source.version}`} projectId={projectId} sequenceId={sequenceId} source={source} />}><ConfigProvider theme={{ algorithm: theme.darkAlgorithm, token: { colorBgBase: '#0d0d0d', colorBgLayout: '#141414', colorPrimaryBg: '#303030', controlOutlineWidth: 1, colorBgContainer: '#1b1b1b', colorBgElevated: '#242424', colorBorder: '#383838', colorText: '#e5e5e5', colorTextSecondary: '#a3a3a3', borderRadius: 8 }, components: { Segmented: { itemSelectedBg: '#383838', itemSelectedColor: '#e5e5e5', itemHoverBg: '#2d2d2d' }, Select: { optionSelectedBg: '#383838' } } }} getPopupContainer={trigger => trigger?.closest<HTMLElement>('.canvas-workbench-dialog') || trigger?.closest<HTMLElement>('.canvas-workbench') || document.body}><section ref={node => { if (node) node.inert = copyLocked }} className="canvas-workbench" data-canvas={canvas} aria-label="场次画布工作台" onBlurCapture={event => {
     if (event.target instanceof HTMLTextAreaElement) {
       const element = event.target
       lastEditing.current = { element, start: element.selectionStart, end: element.selectionEnd, scrollTop: element.scrollTop }
@@ -833,7 +833,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       <div className="canvas-toolbar-identity">
         <Link className="canvas-back" title="返回章节" aria-label="返回章节" to={`/projects/${projectId}/chapters/${chapterId}/sequences`}><ArrowLeftOutlined /></Link>
         <strong className="canvas-sequence-name" title={sequence?.title}>{sequence?.title || '场次工作台'}</strong>
-        <CanvasToolbarMenu label="版本管理" caption={<><span className="canvas-version-name">{selected?.title || '场次版本'}</span><DownOutlined /></>}>
+        <CanvasToolbarMenu label="版本管理" caption={<span className="canvas-menu-caption"><span className="canvas-version-name">{selected?.title || '场次版本'}</span><DownOutlined className="canvas-menu-chevron" /></span>}>
           <h3>场次版本</h3>
           <Select aria-label="场次版本" placeholder="尚无场次版本" value={selectedId} disabled={handingOff || !!recovery || busy === 'create' || leaving || loadState !== 'ready'}
             options={versions.map(row => ({ value: row.id, label: row.title }))} onChange={select} />
@@ -856,7 +856,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       </nav>
       <div className="canvas-toolbar-actions">
         <div ref={setPrimaryHost} className="canvas-toolbar-primary" />
-        <TaskCenter />
+        <TaskCenter workbench />
         <div ref={setNavigationHost} className="canvas-toolbar-navigation" />
         <CanvasToolbarMenu label="更多操作" icon={<MoreOutlined />}>
           <div className="canvas-more-actions" ref={setMoreHost} />

@@ -1,0 +1,58 @@
+[
+  {
+    "name": "关系树当前对象",
+    "background": "rgba(255, 255, 255, 0.12)",
+    "color": "rgb(229, 229, 229)",
+    "border": "rgba(0, 0, 0, 0)",
+    "outline": "3px",
+    "passes": true
+  },
+  {
+    "name": "总览选中对象",
+    "background": "rgb(56, 56, 56)",
+    "color": "rgb(229, 229, 229)",
+    "border": "rgb(163, 163, 163)",
+    "outline": "3px",
+    "passes": true
+  },
+  {
+    "name": "设计数组移除按钮",
+    "background": "rgba(0, 0, 0, 0)",
+    "color": "rgb(220, 68, 70)",
+    "border": "rgb(220, 68, 70)",
+    "outline": "3px",
+    "passes": true
+  },
+  {
+    "name": "设计建议范围选中态",
+    "background": "rgb(56, 56, 56)",
+    "color": "rgb(229, 229, 229)",
+    "border": "rgb(98, 98, 98)",
+    "outline": "3px",
+    "passes": true
+  },
+  {
+    "name": "整场设计生成按钮",
+    "background": "rgb(36, 36, 36)",
+    "color": "rgb(229, 229, 229)",
+    "border": "rgb(56, 56, 56)",
+    "outline": "3px",
+    "passes": true
+  },
+  {
+    "name": "设计生成按钮悬停",
+    "background": "rgb(48, 48, 48)",
+    "color": "rgb(245, 245, 245)",
+    "border": "rgb(98, 98, 98)",
+    "outline": "3px",
+    "passes": true
+  },
+  {
+    "name": "禁用的设计生成按钮",
+    "background": "rgb(23, 23, 23)",
+    "color": "rgb(115, 115, 115)",
+    "border": "rgb(45, 45, 45)",
+    "outline": "3px",
+    "passes": true
+  }
+]

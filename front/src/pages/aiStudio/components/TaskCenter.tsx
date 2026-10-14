@@ -54,7 +54,7 @@ function taskTone(task: TaskUiItem): { color: string; label: string } {
 }
 
 /** 展示近期活动任务，并提供独立的完整历史查询入口。 */
-export function TaskCenter() {
+export function TaskCenter({ workbench = false }: { workbench?: boolean }) {
   const [historyOpen, setHistoryOpen] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
@@ -167,11 +167,11 @@ export function TaskCenter() {
   return (
     <>
       <Button type="text" className="app-task-trigger" aria-label="任务中心" aria-expanded={open} onClick={toggleOpen}>
-        任务 <span className="app-task-count" aria-label={`运行中任务 ${summaryCounts.active}`}>{summaryCounts.active}</span><DownOutlined />
+        任务 {(!workbench || summaryCounts.active > 0) && <span className="app-task-count" aria-label={`${workbench ? '排队及运行任务' : '运行中任务'} ${summaryCounts.active}`}>{workbench && summaryCounts.active > 99 ? '99+' : summaryCounts.active}</span>}<DownOutlined className={workbench ? 'canvas-menu-chevron' : undefined} />
       </Button>
-      <Drawer title="任务中心" className="app-task-drawer" width={416} open={open} onClose={() => setOpen(false)} extra={<Button onClick={() => { setHistoryOpen(true); setOpen(false) }}>历史</Button>}>
+      <Drawer title="任务中心" rootClassName={workbench ? 'canvas-task-center' : undefined} className="app-task-drawer" width={416} open={open} onClose={() => setOpen(false)} extra={<Button onClick={() => { setHistoryOpen(true); setOpen(false) }}>历史</Button>}>
         {/\/chapters\/[^/]+\/sequences\/[^/]+$/.test(location.pathname) && <Button block style={{ marginBottom: 12 }} onClick={() => { setOpen(false); window.dispatchEvent(new Event('sequence-open-task-results')) }}>查看本场任务与业务结果</Button>}
-            <div className="mb-3 flex flex-col gap-2">
+            <div className="app-task-filters mb-3 flex flex-col gap-2">
               <Segmented
                 size="small"
                 value={scopeFilter}
@@ -217,13 +217,13 @@ export function TaskCenter() {
                       return (
                         <div
                           key={task.taskId}
-                          className={`rounded-lg border px-3 py-2 ${
-                            highlighted ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white'
+                          className={`app-task-card rounded-lg border px-3 py-2 ${
+                            workbench ? (highlighted ? 'is-current' : '') : highlighted ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white'
                           }`}
                         >
-                          <div className="flex items-start justify-between gap-2">
+                          <div className="app-task-card-header flex items-start justify-between gap-2">
                             <div className="min-w-0">
-                              <div className="font-medium text-sm truncate">{task.title}</div>
+                              <div className="app-task-title font-medium text-sm truncate">{task.title}</div>
                               {task.sourceLabel ? <div className="mt-1 text-xs text-gray-500 truncate">{task.sourceLabel}</div> : null}
                               <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-500">
                                 {highlighted ? <Tag color="blue">当前页面</Tag> : null}
@@ -233,7 +233,7 @@ export function TaskCenter() {
                               </div>
                               {startedAt ? <div className="mt-1 text-xs text-gray-400">开始于 {startedAt}</div> : null}
                             </div>
-                            <div className="flex flex-col gap-2">
+                            <div className="app-task-actions flex flex-col gap-2">
                               {task.onNavigate ? (
                                 <Button
                                   size="small"

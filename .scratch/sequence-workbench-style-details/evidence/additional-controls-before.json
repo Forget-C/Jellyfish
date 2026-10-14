@@ -1,0 +1,42 @@
+[
+  {
+    "name": "关系树当前对象",
+    "background": "rgba(0, 0, 0, 0)",
+    "color": "rgb(229, 229, 229)",
+    "border": "rgba(0, 0, 0, 0)",
+    "outline": "3px",
+    "passes": true
+  },
+  {
+    "name": "总览选中对象",
+    "background": "rgb(22, 75, 133)",
+    "color": "rgb(229, 229, 229)",
+    "border": "rgb(114, 181, 255)",
+    "outline": "2px",
+    "passes": false
+  },
+  {
+    "name": "设计数组移除按钮",
+    "background": "rgb(36, 36, 36)",
+    "color": "rgb(229, 229, 229)",
+    "border": "rgb(56, 56, 56)",
+    "outline": "3px",
+    "passes": false
+  },
+  {
+    "name": "设计建议范围选中态",
+    "background": "rgb(27, 27, 27)",
+    "color": "rgb(22, 104, 220)",
+    "border": "rgb(22, 104, 220)",
+    "outline": "3px",
+    "passes": false
+  },
+  {
+    "name": "禁用的设计生成按钮",
+    "background": "rgb(22, 104, 220)",
+    "color": "rgb(229, 229, 229)",
+    "border": "rgb(60, 137, 232)",
+    "outline": "3px",
+    "passes": false
+  }
+]

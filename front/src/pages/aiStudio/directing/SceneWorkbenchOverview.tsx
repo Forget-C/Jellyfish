@@ -114,7 +114,7 @@ export function SceneWorkbenchOverview({ projectId, sequenceId, versionId, conte
       <svg aria-hidden="true" width="100%" height="100%">{edges.map((edge, index) => {
         const from = positions.get(edge.from), to = positions.get(edge.to)
         if (!from || !to) return null
-        return <line key={index} x1={from.x + 96} y1={from.y + 34} x2={to.x + 96} y2={to.y + 34} stroke={edge.from === selected || edge.to === selected ? '#72b5ff' : '#405069'} strokeWidth={edge.from === selected || edge.to === selected ? 3 : 1} />
+        return <line key={index} x1={from.x + 96} y1={from.y + 34} x2={to.x + 96} y2={to.y + 34} stroke={edge.from === selected || edge.to === selected ? '#a3a3a3' : '#484848'} strokeWidth={edge.from === selected || edge.to === selected ? 3 : 1} />
       })}</svg>
       {rows.map(node => <button key={node.id} type="button" data-overview-id={node.id} className={`scene-overview-node${highlighted.has(node.id) ? ' is-related' : ''}`} style={{ left: positions.get(node.id)!.x, top: positions.get(node.id)!.y }} aria-pressed={selected === node.id} aria-label={`选择总览对象：${node.label}`} onClick={() => setSelected(node.id)}>{node.label}</button>)}
     </div></div>

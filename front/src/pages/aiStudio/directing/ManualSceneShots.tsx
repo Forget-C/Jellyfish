@@ -38,7 +38,7 @@ export function ManualSceneShots({ value, disabled, onChange, selectedId, onSele
       onEdit()
     }}>手动添加镜头</Button>
     <details className="canvas-shot-picker"><summary>选择镜头 · {value.shots.length} 个</summary><nav aria-label="镜头选择"><Space direction="vertical">{value.shots.map((shot, i) => <Button key={shot.id}
-      type={shot.id === selectedId ? 'primary' : 'text'} aria-pressed={shot.id === selectedId} onClick={() => { onSelect(shot.id); onEdit() }}>
+      type="text" className="canvas-choice" aria-pressed={shot.id === selectedId} onClick={() => { onSelect(shot.id); onEdit() }}>
       镜头 {i + 1}：{shot.visible_result.text || '未填写可见结果'}
     </Button>)}</Space></nav></details>
     {selectedId && !selected && <Alert type="warning" message="原对象不可用，请重新选择镜头" />}

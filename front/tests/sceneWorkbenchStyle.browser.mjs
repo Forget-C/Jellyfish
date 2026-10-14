@@ -1,3 +1,4 @@
+import { checkWorkbenchStyleDetails } from './workbenchStyleDetails.mjs'
 import { workbenchShot } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -204,6 +205,7 @@ try {
   await page.evaluate(key => localStorage.removeItem(key), deliveryKey)
   await feedback.getByRole('button', { name: '重读交付凭据', exact: true }).click()
   await feedback.getByRole('button', { name: '重读交付凭据', exact: true }).waitFor({ state: 'hidden' })
+  await checkWorkbenchStyleDetails(page, output)
   assert.deepEqual(errors, [])
   await writeFile(join(output, 'measurements.json'), JSON.stringify(measurements, null, 2))
   console.log(`PASS four-canvas style, desktop/narrow controls, shared floating panels, unchanged viewport, saved/unsaved input, real media, timeline and export menus; evidence: ${output}`)

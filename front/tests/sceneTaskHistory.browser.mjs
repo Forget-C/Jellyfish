@@ -1,3 +1,4 @@
+import { workbenchControl } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -101,7 +102,8 @@ try {
   const versionB = (await createdB.json()).data
   await page.goto(`http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${versionB.id}`)
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
-  await page.getByRole('switch', { name: '自动保存', exact: true }).click()
+  await (await workbenchControl(page, '保存设置', 'switch', '自动保存')).click()
+  await page.getByRole('button', { name: '保存设置', exact: true }).click()
   await page.getByRole('button', { name: '编辑叙事视点', exact: true }).click()
   await page.getByRole('textbox', { name: '叙事视点', exact: true }).fill('B 尚未保存的观察视点')
   await page.getByRole('button', { name: '任务中心', exact: true }).click()
