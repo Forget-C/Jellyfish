@@ -15,5 +15,5 @@ export function CanvasQuickEditor({ title, children, onClose }: { title: string;
   return createPortal(<aside ref={panel} className="canvas-quick-editor canvas-workbench-dialog" aria-label={title}>
     <header><h2>{title}</h2><Button onClick={onClose}>关闭编辑区</Button></header>
     {children}
-  </aside>, document.body)
+  </aside>, document.querySelector('.canvas-workbench') || document.body)
 }

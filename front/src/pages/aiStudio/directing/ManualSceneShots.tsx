@@ -1,6 +1,7 @@
 import { Alert, Button, Input, InputNumber, Select, Space } from 'antd'
 import type { EditableDirection_Output, EditableShotCoverage_Output } from '../../../services/generated'
 import { humanNote } from './common'
+import { CanvasTextPreview } from './CanvasTextPreview'
 import { CanvasQuickEditor } from './CanvasQuickEditor'
 
 /** 镜头起稿只建立真实工作对象；列表顺序由明确操作修改，未分配节拍仍可保存。 */
@@ -27,7 +28,6 @@ export function ManualSceneShots({ value, disabled, onChange, selectedId, onSele
     onChange({ ...value, shots })
   }
   return <section className="canvas-workbench-card canvas-manual-shots" aria-label="人工镜头设计">
-    <h2>镜头设计</h2>
     {!value.shots.length && <p>当前不存在镜头。可先写下可见结果，稍后补充节拍与关系。</p>}
     <Button disabled={disabled} onClick={() => {
       const id = crypto.randomUUID()
@@ -37,12 +37,12 @@ export function ManualSceneShots({ value, disabled, onChange, selectedId, onSele
       onSelect(id)
       onEdit()
     }}>手动添加镜头</Button>
-    <nav aria-label="镜头选择"><Space wrap>{value.shots.map((shot, i) => <Button key={shot.id}
-      type={shot.id === selectedId ? 'primary' : 'default'} onClick={() => { onSelect(shot.id); onEdit() }}>
+    <details className="canvas-shot-picker"><summary>选择镜头 · {value.shots.length} 个</summary><nav aria-label="镜头选择"><Space direction="vertical">{value.shots.map((shot, i) => <Button key={shot.id}
+      type={shot.id === selectedId ? 'primary' : 'text'} aria-pressed={shot.id === selectedId} onClick={() => { onSelect(shot.id); onEdit() }}>
       镜头 {i + 1}：{shot.visible_result.text || '未填写可见结果'}
-    </Button>)}</Space></nav>
+    </Button>)}</Space></nav></details>
     {selectedId && !selected && <Alert type="warning" message="原对象不可用，请重新选择镜头" />}
-    {selected && <><p>{selected.visible_result.text || '可见结果尚未填写'}</p>
+    {selected && <><CanvasTextPreview text={selected.visible_result.text || '可见结果尚未填写'} label="镜头描述" />
       <Button onClick={onEdit}>编辑当前镜头</Button></>}
     {selected && editing && <CanvasQuickEditor title="镜头编辑" onClose={onClose}>
       <label htmlFor="manual-shot-result">镜头可见结果</label>

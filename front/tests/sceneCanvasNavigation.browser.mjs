@@ -1,3 +1,4 @@
+import { workbenchControl, workbenchShot } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -52,10 +53,10 @@ try {
   assert.equal(saved.status, 200, await saved.text())
   await page.goto(`http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
-  await page.getByRole('switch', { name: '自动保存', exact: true }).click()
+  await (await workbenchControl(page, '保存设置', 'switch', '自动保存')).click()
   const shot = async (index, name) => {
     await page.getByRole('button', { name: '导演画布', exact: true }).click()
-    await page.getByRole('button', { name: `镜头 ${index}：${name}`, exact: true }).click()
+    await (await workbenchShot(page, `镜头 ${index}：${name}`)).click()
   }
   await shot(1, 'A')
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
@@ -97,6 +98,7 @@ try {
   assert.equal(await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).count(), 0)
   await page.getByText('原单元不可用或不属于当前镜头，请重新选择。', { exact: true }).waitFor()
   const relations = page.getByRole('navigation', { name: '场次关系树', exact: true })
+  await relations.getByRole('button', { name: '展开关系树', exact: true }).click()
   await relations.getByRole('button', { name: '展开镜头 1', exact: true }).click({ timeout: 5000 })
   assert.equal(await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).count(), 0)
   await relations.getByRole('button', { name: '展开单元 2', exact: true }).click()
@@ -129,7 +131,7 @@ try {
   await primary.getByRole('button', { name: '核对当前单元指令依据', exact: true }).waitFor()
   const toolbarBounds = await page.locator('.canvas-workbench-toolbar').boundingBox()
   const primaryBounds = await primary.boundingBox()
-  assert.ok(primaryBounds.y >= toolbarBounds.y + toolbarBounds.height, '窄屏主操作不能被顶部工具栏覆盖')
+  assert.ok(primaryBounds.y >= toolbarBounds.y && primaryBounds.y + primaryBounds.height <= toolbarBounds.y + toolbarBounds.height, '窄屏主操作位于工具栏操作区内')
   await primary.getByRole('button', { name: '核对当前单元指令依据', exact: true }).click()
   await relations.getByRole('button', { name: '展开关系树', exact: true }).click()
   await relations.getByRole('button', { name: '定位镜头 60：密集镜头 60', exact: true }).click()

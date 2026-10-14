@@ -1,0 +1,1262 @@
+[
+  {
+    "name": "empty-director",
+    "width": 1440,
+    "height": 960,
+    "background": "rgb(13, 13, 13)",
+    "toolbar": {
+      "x": 16,
+      "y": 8,
+      "width": 1408,
+      "height": 48
+    },
+    "viewport": {
+      "x": 0,
+      "y": 68,
+      "width": 1440,
+      "height": 892
+    },
+    "buttons": [
+      {
+        "label": "版本管理",
+        "x": 112,
+        "y": 16,
+        "width": 112.140625,
+        "height": 32
+      },
+      {
+        "label": "保存设置",
+        "x": 230.140625,
+        "y": 16,
+        "width": 68,
+        "height": 32
+      },
+      {
+        "label": "保存",
+        "x": 304.140625,
+        "y": 16,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "导演画布",
+        "x": 553,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "单元画布",
+        "x": 637,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "指令画布",
+        "x": 721,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "编辑画布",
+        "x": 805,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "AI 提取设计 · 整场",
+        "x": 1095.75,
+        "y": 16,
+        "width": 144.25,
+        "height": 32
+      },
+      {
+        "label": "任务中心",
+        "x": 1246,
+        "y": 16,
+        "width": 102,
+        "height": 32
+      },
+      {
+        "label": "展开关系树",
+        "x": 1354,
+        "y": 16,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "更多操作",
+        "x": 1392,
+        "y": 16,
+        "width": 32,
+        "height": 32
+      }
+    ],
+    "card": "rgb(27, 27, 27)"
+  },
+  {
+    "name": "director-1440",
+    "width": 1440,
+    "height": 960,
+    "background": "rgb(13, 13, 13)",
+    "toolbar": {
+      "x": 16,
+      "y": 8,
+      "width": 1408,
+      "height": 48
+    },
+    "viewport": {
+      "x": 0,
+      "y": 68,
+      "width": 1440,
+      "height": 892
+    },
+    "buttons": [
+      {
+        "label": "版本管理",
+        "x": 112,
+        "y": 16,
+        "width": 112.140625,
+        "height": 32
+      },
+      {
+        "label": "保存设置",
+        "x": 230.140625,
+        "y": 16,
+        "width": 68,
+        "height": 32
+      },
+      {
+        "label": "保存",
+        "x": 304.140625,
+        "y": 16,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "导演画布",
+        "x": 553,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "单元画布",
+        "x": 637,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "指令画布",
+        "x": 721,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "编辑画布",
+        "x": 805,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "AI 提取设计 · 整场",
+        "x": 1095.75,
+        "y": 16,
+        "width": 144.25,
+        "height": 32
+      },
+      {
+        "label": "任务中心",
+        "x": 1246,
+        "y": 16,
+        "width": 102,
+        "height": 32
+      },
+      {
+        "label": "展开关系树",
+        "x": 1354,
+        "y": 16,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "更多操作",
+        "x": 1392,
+        "y": 16,
+        "width": 32,
+        "height": 32
+      }
+    ],
+    "card": "rgb(27, 27, 27)"
+  },
+  {
+    "name": "units-1440",
+    "width": 1440,
+    "height": 960,
+    "background": "rgb(13, 13, 13)",
+    "toolbar": {
+      "x": 16,
+      "y": 8,
+      "width": 1408,
+      "height": 48
+    },
+    "viewport": {
+      "x": 0,
+      "y": 68,
+      "width": 1440,
+      "height": 892
+    },
+    "buttons": [
+      {
+        "label": "版本管理",
+        "x": 112,
+        "y": 16,
+        "width": 112.140625,
+        "height": 32
+      },
+      {
+        "label": "保存设置",
+        "x": 230.140625,
+        "y": 16,
+        "width": 68,
+        "height": 32
+      },
+      {
+        "label": "保存",
+        "x": 304.140625,
+        "y": 16,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "导演画布",
+        "x": 553,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "单元画布",
+        "x": 637,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "指令画布",
+        "x": 721,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "编辑画布",
+        "x": 805,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "任务中心",
+        "x": 1246,
+        "y": 16,
+        "width": 102,
+        "height": 32
+      },
+      {
+        "label": "展开关系树",
+        "x": 1354,
+        "y": 16,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "更多操作",
+        "x": 1392,
+        "y": 16,
+        "width": 32,
+        "height": 32
+      }
+    ],
+    "card": "rgb(27, 27, 27)"
+  },
+  {
+    "name": "instructions-1440",
+    "width": 1440,
+    "height": 960,
+    "background": "rgb(13, 13, 13)",
+    "toolbar": {
+      "x": 16,
+      "y": 8,
+      "width": 1408,
+      "height": 48
+    },
+    "viewport": {
+      "x": 0,
+      "y": 68,
+      "width": 1440,
+      "height": 892
+    },
+    "buttons": [
+      {
+        "label": "版本管理",
+        "x": 112,
+        "y": 16,
+        "width": 112.140625,
+        "height": 32
+      },
+      {
+        "label": "保存设置",
+        "x": 230.140625,
+        "y": 16,
+        "width": 68,
+        "height": 32
+      },
+      {
+        "label": "保存",
+        "x": 304.140625,
+        "y": 16,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "导演画布",
+        "x": 553,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "单元画布",
+        "x": 637,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "指令画布",
+        "x": 721,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "编辑画布",
+        "x": 805,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "正在核实指令建议",
+        "x": 1096,
+        "y": 16,
+        "width": 144,
+        "height": 32
+      },
+      {
+        "label": "任务中心",
+        "x": 1246,
+        "y": 16,
+        "width": 102,
+        "height": 32
+      },
+      {
+        "label": "展开关系树",
+        "x": 1354,
+        "y": 16,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "更多操作",
+        "x": 1392,
+        "y": 16,
+        "width": 32,
+        "height": 32
+      }
+    ],
+    "card": "rgb(27, 27, 27)"
+  },
+  {
+    "name": "edit-1440",
+    "width": 1440,
+    "height": 960,
+    "background": "rgb(13, 13, 13)",
+    "toolbar": {
+      "x": 16,
+      "y": 8,
+      "width": 1408,
+      "height": 48
+    },
+    "viewport": {
+      "x": 0,
+      "y": 68,
+      "width": 1440,
+      "height": 892
+    },
+    "buttons": [
+      {
+        "label": "版本管理",
+        "x": 112,
+        "y": 16,
+        "width": 112.140625,
+        "height": 32
+      },
+      {
+        "label": "保存设置",
+        "x": 230.140625,
+        "y": 16,
+        "width": 68,
+        "height": 32
+      },
+      {
+        "label": "保存",
+        "x": 304.140625,
+        "y": 16,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "导演画布",
+        "x": 553,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "单元画布",
+        "x": 637,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "指令画布",
+        "x": 721,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "编辑画布",
+        "x": 805,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "导出",
+        "x": 1176.203125,
+        "y": 16,
+        "width": 63.796875,
+        "height": 32
+      },
+      {
+        "label": "任务中心",
+        "x": 1246,
+        "y": 16,
+        "width": 102,
+        "height": 32
+      },
+      {
+        "label": "展开关系树",
+        "x": 1354,
+        "y": 16,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "更多操作",
+        "x": 1392,
+        "y": 16,
+        "width": 32,
+        "height": 32
+      }
+    ],
+    "card": "rgb(27, 27, 27)"
+  },
+  {
+    "name": "director-1280",
+    "width": 1280,
+    "height": 960,
+    "background": "rgb(13, 13, 13)",
+    "toolbar": {
+      "x": 16,
+      "y": 8,
+      "width": 1248,
+      "height": 48
+    },
+    "viewport": {
+      "x": 0,
+      "y": 68,
+      "width": 1280,
+      "height": 892
+    },
+    "buttons": [
+      {
+        "label": "版本管理",
+        "x": 112,
+        "y": 16,
+        "width": 112.140625,
+        "height": 32
+      },
+      {
+        "label": "保存设置",
+        "x": 230.140625,
+        "y": 16,
+        "width": 68,
+        "height": 32
+      },
+      {
+        "label": "保存",
+        "x": 304.140625,
+        "y": 16,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "导演画布",
+        "x": 473,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "单元画布",
+        "x": 557,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "指令画布",
+        "x": 641,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "编辑画布",
+        "x": 725,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "AI 提取设计 · 整场",
+        "x": 935.75,
+        "y": 16,
+        "width": 144.25,
+        "height": 32
+      },
+      {
+        "label": "任务中心",
+        "x": 1086,
+        "y": 16,
+        "width": 102,
+        "height": 32
+      },
+      {
+        "label": "展开关系树",
+        "x": 1194,
+        "y": 16,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "更多操作",
+        "x": 1232,
+        "y": 16,
+        "width": 32,
+        "height": 32
+      }
+    ],
+    "card": "rgb(27, 27, 27)"
+  },
+  {
+    "name": "units-1280",
+    "width": 1280,
+    "height": 960,
+    "background": "rgb(13, 13, 13)",
+    "toolbar": {
+      "x": 16,
+      "y": 8,
+      "width": 1248,
+      "height": 48
+    },
+    "viewport": {
+      "x": 0,
+      "y": 68,
+      "width": 1280,
+      "height": 892
+    },
+    "buttons": [
+      {
+        "label": "版本管理",
+        "x": 112,
+        "y": 16,
+        "width": 112.140625,
+        "height": 32
+      },
+      {
+        "label": "保存设置",
+        "x": 230.140625,
+        "y": 16,
+        "width": 68,
+        "height": 32
+      },
+      {
+        "label": "保存",
+        "x": 304.140625,
+        "y": 16,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "导演画布",
+        "x": 473,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "单元画布",
+        "x": 557,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "指令画布",
+        "x": 641,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "编辑画布",
+        "x": 725,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "任务中心",
+        "x": 1086,
+        "y": 16,
+        "width": 102,
+        "height": 32
+      },
+      {
+        "label": "展开关系树",
+        "x": 1194,
+        "y": 16,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "更多操作",
+        "x": 1232,
+        "y": 16,
+        "width": 32,
+        "height": 32
+      }
+    ],
+    "card": "rgb(27, 27, 27)"
+  },
+  {
+    "name": "instructions-1280",
+    "width": 1280,
+    "height": 960,
+    "background": "rgb(13, 13, 13)",
+    "toolbar": {
+      "x": 16,
+      "y": 8,
+      "width": 1248,
+      "height": 48
+    },
+    "viewport": {
+      "x": 0,
+      "y": 68,
+      "width": 1280,
+      "height": 892
+    },
+    "buttons": [
+      {
+        "label": "版本管理",
+        "x": 112,
+        "y": 16,
+        "width": 112.140625,
+        "height": 32
+      },
+      {
+        "label": "保存设置",
+        "x": 230.140625,
+        "y": 16,
+        "width": 68,
+        "height": 32
+      },
+      {
+        "label": "保存",
+        "x": 304.140625,
+        "y": 16,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "导演画布",
+        "x": 473,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "单元画布",
+        "x": 557,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "指令画布",
+        "x": 641,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "编辑画布",
+        "x": 725,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "正在核实指令建议",
+        "x": 936,
+        "y": 16,
+        "width": 144,
+        "height": 32
+      },
+      {
+        "label": "任务中心",
+        "x": 1086,
+        "y": 16,
+        "width": 102,
+        "height": 32
+      },
+      {
+        "label": "展开关系树",
+        "x": 1194,
+        "y": 16,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "更多操作",
+        "x": 1232,
+        "y": 16,
+        "width": 32,
+        "height": 32
+      }
+    ],
+    "card": "rgb(27, 27, 27)"
+  },
+  {
+    "name": "edit-1280",
+    "width": 1280,
+    "height": 960,
+    "background": "rgb(13, 13, 13)",
+    "toolbar": {
+      "x": 16,
+      "y": 8,
+      "width": 1248,
+      "height": 48
+    },
+    "viewport": {
+      "x": 0,
+      "y": 68,
+      "width": 1280,
+      "height": 892
+    },
+    "buttons": [
+      {
+        "label": "版本管理",
+        "x": 112,
+        "y": 16,
+        "width": 112.140625,
+        "height": 32
+      },
+      {
+        "label": "保存设置",
+        "x": 230.140625,
+        "y": 16,
+        "width": 68,
+        "height": 32
+      },
+      {
+        "label": "保存",
+        "x": 304.140625,
+        "y": 16,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "导演画布",
+        "x": 473,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "单元画布",
+        "x": 557,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "指令画布",
+        "x": 641,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "编辑画布",
+        "x": 725,
+        "y": 16,
+        "width": 82,
+        "height": 32
+      },
+      {
+        "label": "导出",
+        "x": 1016.203125,
+        "y": 16,
+        "width": 63.796875,
+        "height": 32
+      },
+      {
+        "label": "任务中心",
+        "x": 1086,
+        "y": 16,
+        "width": 102,
+        "height": 32
+      },
+      {
+        "label": "展开关系树",
+        "x": 1194,
+        "y": 16,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "更多操作",
+        "x": 1232,
+        "y": 16,
+        "width": 32,
+        "height": 32
+      }
+    ],
+    "card": "rgb(27, 27, 27)"
+  },
+  {
+    "name": "director-390",
+    "width": 390,
+    "height": 844,
+    "background": "rgb(13, 13, 13)",
+    "toolbar": {
+      "x": 12,
+      "y": 8,
+      "width": 366,
+      "height": 128
+    },
+    "viewport": {
+      "x": 0,
+      "y": 148,
+      "width": 390,
+      "height": 696
+    },
+    "buttons": [
+      {
+        "label": "版本管理",
+        "x": 157.859375,
+        "y": 12,
+        "width": 112.140625,
+        "height": 32
+      },
+      {
+        "label": "保存设置",
+        "x": 274,
+        "y": 12,
+        "width": 68,
+        "height": 32
+      },
+      {
+        "label": "保存",
+        "x": 346,
+        "y": 12,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "导演画布",
+        "x": 16,
+        "y": 56,
+        "width": 88,
+        "height": 32
+      },
+      {
+        "label": "单元画布",
+        "x": 106,
+        "y": 56,
+        "width": 88,
+        "height": 32
+      },
+      {
+        "label": "指令画布",
+        "x": 196,
+        "y": 56,
+        "width": 88,
+        "height": 32
+      },
+      {
+        "label": "编辑画布",
+        "x": 286,
+        "y": 56,
+        "width": 88,
+        "height": 32
+      },
+      {
+        "label": "AI 提取设计 · 整场",
+        "x": 12,
+        "y": 100,
+        "width": 144.25,
+        "height": 32
+      },
+      {
+        "label": "任务中心",
+        "x": 222,
+        "y": 100,
+        "width": 80,
+        "height": 32
+      },
+      {
+        "label": "展开关系树",
+        "x": 308,
+        "y": 100,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "更多操作",
+        "x": 346,
+        "y": 100,
+        "width": 32,
+        "height": 32
+      }
+    ],
+    "card": "rgb(27, 27, 27)"
+  },
+  {
+    "name": "units-390",
+    "width": 390,
+    "height": 844,
+    "background": "rgb(13, 13, 13)",
+    "toolbar": {
+      "x": 12,
+      "y": 8,
+      "width": 366,
+      "height": 128
+    },
+    "viewport": {
+      "x": 0,
+      "y": 148,
+      "width": 390,
+      "height": 696
+    },
+    "buttons": [
+      {
+        "label": "版本管理",
+        "x": 157.859375,
+        "y": 12,
+        "width": 112.140625,
+        "height": 32
+      },
+      {
+        "label": "保存设置",
+        "x": 274,
+        "y": 12,
+        "width": 68,
+        "height": 32
+      },
+      {
+        "label": "保存",
+        "x": 346,
+        "y": 12,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "导演画布",
+        "x": 16,
+        "y": 56,
+        "width": 88,
+        "height": 32
+      },
+      {
+        "label": "单元画布",
+        "x": 106,
+        "y": 56,
+        "width": 88,
+        "height": 32
+      },
+      {
+        "label": "指令画布",
+        "x": 196,
+        "y": 56,
+        "width": 88,
+        "height": 32
+      },
+      {
+        "label": "编辑画布",
+        "x": 286,
+        "y": 56,
+        "width": 88,
+        "height": 32
+      },
+      {
+        "label": "查看当前指令",
+        "x": 12,
+        "y": 100,
+        "width": 116,
+        "height": 32
+      },
+      {
+        "label": "任务中心",
+        "x": 222,
+        "y": 100,
+        "width": 80,
+        "height": 32
+      },
+      {
+        "label": "展开关系树",
+        "x": 308,
+        "y": 100,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "更多操作",
+        "x": 346,
+        "y": 100,
+        "width": 32,
+        "height": 32
+      }
+    ],
+    "card": "rgb(27, 27, 27)"
+  },
+  {
+    "name": "instructions-390",
+    "width": 390,
+    "height": 844,
+    "background": "rgb(13, 13, 13)",
+    "toolbar": {
+      "x": 12,
+      "y": 8,
+      "width": 366,
+      "height": 128
+    },
+    "viewport": {
+      "x": 0,
+      "y": 148,
+      "width": 390,
+      "height": 696
+    },
+    "buttons": [
+      {
+        "label": "版本管理",
+        "x": 157.859375,
+        "y": 12,
+        "width": 112.140625,
+        "height": 32
+      },
+      {
+        "label": "保存设置",
+        "x": 274,
+        "y": 12,
+        "width": 68,
+        "height": 32
+      },
+      {
+        "label": "保存",
+        "x": 346,
+        "y": 12,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "导演画布",
+        "x": 16,
+        "y": 56,
+        "width": 88,
+        "height": 32
+      },
+      {
+        "label": "单元画布",
+        "x": 106,
+        "y": 56,
+        "width": 88,
+        "height": 32
+      },
+      {
+        "label": "指令画布",
+        "x": 196,
+        "y": 56,
+        "width": 88,
+        "height": 32
+      },
+      {
+        "label": "编辑画布",
+        "x": 286,
+        "y": 56,
+        "width": 88,
+        "height": 32
+      },
+      {
+        "label": "核对当前单元指令依据",
+        "x": 12,
+        "y": 100,
+        "width": 172,
+        "height": 32
+      },
+      {
+        "label": "任务中心",
+        "x": 222,
+        "y": 100,
+        "width": 80,
+        "height": 32
+      },
+      {
+        "label": "展开关系树",
+        "x": 308,
+        "y": 100,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "更多操作",
+        "x": 346,
+        "y": 100,
+        "width": 32,
+        "height": 32
+      }
+    ],
+    "card": "rgb(27, 27, 27)"
+  },
+  {
+    "name": "edit-390",
+    "width": 390,
+    "height": 844,
+    "background": "rgb(13, 13, 13)",
+    "toolbar": {
+      "x": 12,
+      "y": 8,
+      "width": 366,
+      "height": 128
+    },
+    "viewport": {
+      "x": 0,
+      "y": 148,
+      "width": 390,
+      "height": 696
+    },
+    "buttons": [
+      {
+        "label": "版本管理",
+        "x": 157.859375,
+        "y": 12,
+        "width": 112.140625,
+        "height": 32
+      },
+      {
+        "label": "保存设置",
+        "x": 274,
+        "y": 12,
+        "width": 68,
+        "height": 32
+      },
+      {
+        "label": "保存",
+        "x": 346,
+        "y": 12,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "导演画布",
+        "x": 16,
+        "y": 56,
+        "width": 88,
+        "height": 32
+      },
+      {
+        "label": "单元画布",
+        "x": 106,
+        "y": 56,
+        "width": 88,
+        "height": 32
+      },
+      {
+        "label": "指令画布",
+        "x": 196,
+        "y": 56,
+        "width": 88,
+        "height": 32
+      },
+      {
+        "label": "编辑画布",
+        "x": 286,
+        "y": 56,
+        "width": 88,
+        "height": 32
+      },
+      {
+        "label": "导出",
+        "x": 12,
+        "y": 100,
+        "width": 63.796875,
+        "height": 32
+      },
+      {
+        "label": "任务中心",
+        "x": 222,
+        "y": 100,
+        "width": 80,
+        "height": 32
+      },
+      {
+        "label": "展开关系树",
+        "x": 308,
+        "y": 100,
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "更多操作",
+        "x": 346,
+        "y": 100,
+        "width": 32,
+        "height": 32
+      }
+    ],
+    "card": "rgb(27, 27, 27)"
+  }
+]

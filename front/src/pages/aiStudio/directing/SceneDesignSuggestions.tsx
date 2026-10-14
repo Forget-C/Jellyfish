@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Alert, Button, Input, Modal, Radio, Select, Space, Spin } from 'antd'
 import { ApiError, FilmService, StudioDirectingService } from '../../../services/generated'
 import type { SceneDesignRequest, SceneDesignSuggestionRead, SceneVersionContent_Output, SceneVersionRead } from '../../../services/generated'
@@ -40,7 +41,8 @@ function scopeFields(value: unknown, path = '', title = '', identity = ''): Scop
 }
 
 /** 建议与编辑内容分开；每次应用先核实固定依据，整份结果只进入一次编辑历史。 */
-export function SceneDesignSuggestions({ projectId, sequenceId, version, content, disabled, open, onOpenChange, onChange, onLocateUnit }: {
+export function SceneDesignSuggestions({ triggerHost, projectId, sequenceId, version, content, disabled, open, onOpenChange, onChange, onLocateUnit }: {
+  triggerHost?: HTMLElement | null
   projectId: string; sequenceId: string; version: SceneVersionRead; content: SceneVersionContent_Output
   disabled: boolean; open: boolean; onOpenChange: (open: boolean) => void
   onChange: (content: SceneVersionContent_Output) => void
@@ -140,8 +142,9 @@ export function SceneDesignSuggestions({ projectId, sequenceId, version, content
   const empty = (value: unknown) => value == null || Array.isArray(value) && !value.length
   const currentDifferences = selected ? revisionDifferences(selected.before, content.design).filter(change => !empty(change.before) || !empty(change.after)) : []
   const display = (value: unknown) => typeof value === 'string' ? value : JSON.stringify(value, null, 2) ?? '未填写'
+  const trigger = <Button onClick={() => onOpenChange(true)}>{running ? '查看设计任务' : rows?.some(row => row.status === 'succeeded') ? '查看设计建议' : 'AI 提取设计 · 整场'}</Button>
   return <>
-    <Button onClick={() => onOpenChange(true)}>{running ? '查看设计任务' : rows?.some(row => row.status === 'succeeded') ? '查看设计建议' : 'AI 提取设计 · 整场'}</Button>
+    {triggerHost === undefined ? trigger : triggerHost && createPortal(trigger, triggerHost)}
     <Modal rootClassName="canvas-workbench-dialog" title="AI 设计建议" open={open} focusTriggerAfterClose={!locatingUnit} width={960} styles={{ body: { maxHeight: 'calc(100dvh - 240px)', overflowY: 'auto' } }}
       onCancel={() => onOpenChange(false)} footer={<Button onClick={() => onOpenChange(false)}>关闭建议</Button>}>
       <p>使用本版本明确选择的原文。整场提取不受当前镜头选择影响；局部修订须在生成前明确允许修改的字段。结果先预览，再整次应用。</p>

@@ -41,7 +41,9 @@ export function resolveTarget(value: EditableSceneDesign_Output, target: DesignT
 }
 
 /** 单个编辑区复用六岗字段；创建关系须明确选对象，删除先定位真实引用。 */
-export function SceneDesignPanel({ projectId, value, units, disabled, onChange, focusRequest, onSelectShot, onFocusHandled, open, onOpenChange: setOpen, onLocateUnit }: {
+export function SceneDesignPanel({ navigationOpen, onNavigationOpenChange: setNavigationOpen, projectId, value, units, disabled, onChange, focusRequest, onSelectShot, onFocusHandled, open, onOpenChange: setOpen, onLocateUnit }: {
+  navigationOpen: boolean
+  onNavigationOpenChange: (open: boolean) => void
   projectId: string
   value: EditableSceneDesign_Output
   units: EditableGenerationUnit_Output[]
@@ -57,7 +59,6 @@ export function SceneDesignPanel({ projectId, value, units, disabled, onChange, 
   const [target, setTarget] = useState<DesignTarget>({ path: ['direction'] })
   const resolved = resolveTarget(value, target)
   const path = resolved || target.path
-  const [navigationOpen, setNavigationOpen] = useState(false)
   const navigationTrigger = useRef<HTMLButtonElement>(null)
   const editorTrigger = useRef<HTMLElement>()
   const [pending, setPending] = useState<{ path: DesignPath; row: Record<string, unknown>; required: string[] }>()
@@ -146,7 +147,7 @@ export function SceneDesignPanel({ projectId, value, units, disabled, onChange, 
   const closeNavigation = () => { setNavigationOpen(false); navigationTrigger.current?.focus({ preventScroll: true }) }
   return <>
     <Button onClick={event => openEditor(event.currentTarget)}>编辑六岗设计</Button>
-    <Button ref={navigationTrigger} aria-expanded={navigationOpen} onClick={() => setNavigationOpen(previous => !previous)}>关系导航</Button>
+    <Button ref={navigationTrigger} aria-expanded={navigationOpen} onClick={() => setNavigationOpen(!navigationOpen)}>关系导航</Button>
     {navigationOpen && createPortal(<aside className="director-relations-navigation" aria-label="场次关系导航" onKeyDown={event => {
       if (event.key === 'Escape') { event.stopPropagation(); closeNavigation() }
     }}>
@@ -161,7 +162,7 @@ export function SceneDesignPanel({ projectId, value, units, disabled, onChange, 
           {index + 1} · {row.name || '未填写'}
         </Button>)}
       </details>)}
-    </aside>, document.body)}
+    </aside>, document.querySelector('.canvas-workbench') || document.body)}
     <Modal rootClassName="canvas-workbench-dialog" width={880} title="全场六岗设计" open={open}
       afterClose={() => (editorTrigger.current?.isConnected ? editorTrigger.current : navigationTrigger.current)?.focus({ preventScroll: true })}
       onCancel={() => { setOpen(false); setPending(undefined) }} footer={<Button onClick={() => { setOpen(false); setPending(undefined) }}>完成编辑</Button>}>

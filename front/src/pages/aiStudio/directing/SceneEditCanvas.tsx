@@ -88,7 +88,6 @@ export function SceneEditCanvas({ projectId, sequenceId, versionId, revision, co
   const editDisabled = disabled || loading || !!error || !take?.available
   return <DirectorCanvasSurface focusTarget={focusTarget} contextKey={`${versionId}:edit`} ariaLabel="编辑画布视口" labels={['同场次素材', '当前素材', '方案判断', '时间线']} initialPositions={{ 方案判断: { x: 800, y: 0 }, 时间线: { x: 0, y: 740 } }}>
     <section className="canvas-workbench-card">
-      <h2>同场次素材</h2>
       <Button loading={loading} onClick={() => setAttempt(value => value + 1)}>刷新素材库</Button>
       {error && <Alert type="warning" message="素材库读取失败" description={error} />}
       {!loading && !error && !takes.length && <p>本场暂无已登记素材。</p>}
@@ -106,7 +105,6 @@ export function SceneEditCanvas({ projectId, sequenceId, versionId, revision, co
       })}
     </section>
     <section className="canvas-workbench-card" id="scene-current-take" tabIndex={-1} aria-label="当前源素材">
-      <h2>当前素材</h2>
       {!take ? <p>{selected ? loading || error ? '原素材仍待核实，请重试读取；未选择替代素材。' : '原素材已不可用，请重新选择；未选择替代素材。' : '明确选择素材后查看来源与预览。'}</p> : <>
         <p>素材：{take.take_id}</p><p>文件：{take.file_id}</p><p>原所属{take.take_kind === 'scene_video' ? '场次版本' : '生产计划'}：{take.origin_id}</p>
         {take.take_kind === 'scene_video' && <OpenTakeVersion key={selected} disabled={loading || !!error} onOpen={() => onOpenVersion({ versionId: take.origin_id, unitId: take.unit_id })} />}
@@ -126,7 +124,6 @@ export function SceneEditCanvas({ projectId, sequenceId, versionId, revision, co
       </>}
     </section>
     <section className="canvas-workbench-card" id="scene-take-judgment" tabIndex={-1}>
-      <h2>当前方案判断</h2>
       {!take ? <p>先明确选择素材。</p> : <>
         <p>判断仅属于当前场次版本，可撤销并沿工作台保存。</p>
         <Select aria-label="当前方案素材审查" style={{ width: '100%' }} disabled={editDisabled} value={annotation.verdict || 'unreviewed'}

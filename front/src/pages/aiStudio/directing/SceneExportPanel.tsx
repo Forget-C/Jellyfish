@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Alert, Button, Modal, Popover, Select, Space } from 'antd'
 import { ApiError, FilmService, StudioDirectingService } from '../../../services/generated'
 import type { SceneExportRead, SceneExportRequest, SceneVersionRead, SceneVersionContent_Output, SceneExportInspection } from '../../../services/generated'
@@ -10,7 +11,8 @@ const terminal = ['succeeded', 'failed', 'cancelled']
 const statuses: Record<string, string> = { queued: '等待执行', running: '执行中', succeeded: '已完成', failed: '失败', cancelled: '已取消' }
 
 /** 保存后提交固定修订；跨画布保持挂载，未知结果只能核实原凭据。 */
-export function SceneExportPanel({ projectId, sequenceId, versionId, dirty, disabled, onSave, onBusy, focusTaskId, currentClipIds, onLocate, historical, content, historyOnly = false, onClose }: {
+export function SceneExportPanel({ feedbackHost, triggerHost, projectId, sequenceId, versionId, dirty, disabled, onSave, onBusy, focusTaskId, currentClipIds, onLocate, historical, content, historyOnly = false, onClose }: {
+  feedbackHost?: HTMLElement | null; triggerHost?: HTMLElement | null
   historyOnly?: boolean; onClose?: () => void
   content: SceneVersionContent_Output
   historical: boolean
@@ -55,6 +57,7 @@ export function SceneExportPanel({ projectId, sequenceId, versionId, dirty, disa
   const [rows, setRows] = useState<SceneExportRead[]>()
   const [attempt, setAttempt] = useState(0)
   const [busy, setBusy] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [open, setOpen] = useState(!!focusTaskId)
   const [selectedId, setSelectedId] = useState<string | undefined>(focusTaskId)
   const [cancelling, setCancelling] = useState(false)
@@ -128,7 +131,12 @@ export function SceneExportPanel({ projectId, sequenceId, versionId, dirty, disa
   const selected = selectedId ? rows?.find(row => row.task_id === selectedId) : rows?.[0]
   const dimensions = (tier: number) => content.output_aspect_ratio === '16:9' ? `${tier * 16 / 9}×${tier}` : content.output_aspect_ratio === '9:16' ? `${tier}×${tier * 16 / 9}` : `${tier}×${tier}`
   const scaled = measured?.data?.clips.filter(clip => clip.needs_upscale) || []
-  return <span>
+  const trigger = <Button aria-label={pending || storageError ? '查看导出待核实状态' : '导出'} data-menu-close onClick={() => setSettingsOpen(true)}>{pending || storageError ? '查看导出待核实状态' : '导出'}</Button>
+  return <>
+    {!historyOnly && (triggerHost ? createPortal(trigger, triggerHost) : trigger)}
+    {!historyOnly && feedbackHost && (pending || storageError || error) && createPortal(<Alert type="warning" message={pending ? '导出提交待核实' : storageError || error}
+      action={<Button onClick={() => setSettingsOpen(true)}>处理导出状态</Button>} />, feedbackHost)}
+    <Modal rootClassName="canvas-workbench-dialog" title="整场导出" open={!historyOnly && settingsOpen} onCancel={() => setSettingsOpen(false)} footer={<Button onClick={() => setSettingsOpen(false)}>返回画布</Button>}>
     {!historyOnly && <><Select aria-label="导出尺寸" value={size} disabled={busy || !!pending || historical} onChange={setSize} style={{ width: 190 }}
       options={([1080, 720] as const).map(tier => ({ value: tier, label: `${tier} 档 · ${dimensions(tier)}` }))} />
     {!measured && <span>正在核实导出媒体尺寸…</span>}
@@ -151,6 +159,7 @@ export function SceneExportPanel({ projectId, sequenceId, versionId, dirty, disa
     {!historyOnly && storageError && <Alert type="warning" message={storageError} action={<Button onClick={() => {
       try { setPending(readPending()); setStorageError('') } catch { setStorageError('本地导出凭据仍无法读取，请恢复后重读。') }
     }}>重读导出凭据</Button>} />}
+    </Modal>
     <Modal title="整场导出记录" open={open} destroyOnClose onCancel={close} closable={!historyOnly || (!busy && !pending && !storageError)} maskClosable={!historyOnly || (!busy && !pending && !storageError)} footer={<Button disabled={historyOnly && (busy || !!pending || !!storageError)} onClick={close}>返回画布</Button>} width={800} rootClassName="canvas-workbench-dialog">
       {historyOnly && <Alert type="info" message="正在只读查看其他版本的固定导出依据；按原记录重试归属该版本，不保存或替换当前编辑。" />}
       {historyOnly && storageError && <Alert type="warning" message={storageError} action={<Button onClick={() => {
@@ -206,5 +215,5 @@ export function SceneExportPanel({ projectId, sequenceId, versionId, dirty, disa
       <p>文件仍被其他业务使用时会拒绝删除。</p>
       {deleteError && <Alert type="warning" message={deleteError} />}
     </Modal>
-  </span>
+  </>
 }

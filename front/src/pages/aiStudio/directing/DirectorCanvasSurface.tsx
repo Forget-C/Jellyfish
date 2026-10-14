@@ -1,6 +1,7 @@
 import { Children, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button, Dropdown, Space } from 'antd'
+import { Button, Dropdown, Space, Tooltip } from 'antd'
+import { AimOutlined, EnvironmentOutlined, MinusOutlined, PlusOutlined, ToolOutlined, UserOutlined } from '@ant-design/icons'
 import { CanvasDragHandle, CanvasEdge, useCanvasViewport } from '../../../components/canvas/Canvas'
 import { canvasConnection } from '../../../components/canvas/geometry'
 import type { CanvasPoint, CanvasTransform } from '../../../components/canvas/geometry'
@@ -137,7 +138,7 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
           }} style={{ left: point.x, top: point.y }}>
             <div className="director-canvas-title"><CanvasDragHandle contextKey={contextKey} label={label} offset={point}
               scale={view.transform.scale} onMove={next => setView(previous => ({ ...previous, positions: { ...previous.positions, [id]: next } }))} />
-              <span>{label}</span><Dropdown menu={menu} trigger={['click']}>
+              <h2>{label}</h2><Dropdown menu={menu} trigger={['click']}>
                 <Button className="director-node-menu" aria-label={`更多操作：${label}`} disabled={!node.onInspect}
                   onClick={event => { menuTrigger.current = event.currentTarget }}>⋯</Button>
               </Dropdown></div>
@@ -152,14 +153,17 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
         })}
       </div>
     </div>
-    <nav className="director-canvas-tools" aria-label="导演画布工具">{tools.map(tool => <Button key={tool.label} data-director-tool={tool.label} draggable onDragStart={event => { event.dataTransfer.setData(toolDrag, tool.label); event.dataTransfer.effectAllowed = 'link' }} onClick={event => tool.onClick(event.currentTarget)}>{tool.label}</Button>)}</nav>
-    <nav className="director-canvas-locations" aria-label="画布对象定位">{nodes.slice(0, labels.length).map(node =>
-      <Button key={node.id} onClick={() => locate(node.id)}>{node.label}</Button>)}</nav>
+    <nav className="director-canvas-tools" aria-label="导演画布工具">{tools.map(tool => <Tooltip key={tool.label} title={tool.label} placement="right"><Button type="text" aria-label={tool.label} icon={tool.label === '角色工具' ? <UserOutlined /> : tool.label === '场所工具' ? <EnvironmentOutlined /> : <ToolOutlined />} key={tool.label} data-director-tool={tool.label} draggable onDragStart={event => { event.dataTransfer.setData(toolDrag, tool.label); event.dataTransfer.effectAllowed = 'link' }} onClick={event => tool.onClick(event.currentTarget)} /></Tooltip>)}</nav>
+    <div className="director-canvas-bottom">
+      <Dropdown trigger={['click']} menu={{ items: nodes.slice(0, labels.length).map(node => ({ key: node.id, label: node.label, onClick: () => locate(node.id) })) }}>
+        <Button type="text" aria-label="定位画布节点" title="定位画布节点" icon={<AimOutlined />} />
+      </Dropdown>
     <Space className="director-canvas-controls" aria-label="画布视口控制">
-      <Button aria-label="缩小画布" onClick={() => viewport.zoom(-.1)}>−</Button>
+      <Button type="text" title="缩小画布" icon={<MinusOutlined />} aria-label="缩小画布" onClick={() => viewport.zoom(-.1)} />
       <span>{Math.round(view.transform.scale * 100)}%</span>
-      <Button aria-label="放大画布" onClick={() => viewport.zoom(.1)}>＋</Button>
-      <Button onClick={fit}>适应画布</Button>
+      <Button type="text" title="放大画布" icon={<PlusOutlined />} aria-label="放大画布" onClick={() => viewport.zoom(.1)} />
+      <Button type="text" onClick={fit}>适应画布</Button>
     </Space>
+    </div>
   </>
 }

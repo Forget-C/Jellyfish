@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { useSceneUnitPreparation } from './useSceneUnitPreparation'
 import { useEffect, useState } from 'react'
 import { Alert, Button, Input, InputNumber, Modal, Select, Space, Spin } from 'antd'
@@ -13,7 +14,8 @@ import { SourceLinks } from './Sources'
 import { SceneInstructionSuggestions } from './SceneInstructionSuggestions'
 
 /** 单元和设计共用一份可编辑方案；画布浏览不创建单元，也不选择替代对象。 */
-export function SceneUnitCanvas({ projectId, sequenceId, versionId, revision, content, shotId, unitId, disabled, onSelectShot, onSelectUnit, onChange, focusRequest, onOpenInstruction, onInstructionTask, onOpenEdit }: {
+export function SceneUnitCanvas({ primaryHost, projectId, sequenceId, versionId, revision, content, shotId, unitId, disabled, onSelectShot, onSelectUnit, onChange, focusRequest, onOpenInstruction, onInstructionTask, onOpenEdit }: {
+  primaryHost: HTMLElement | null
   projectId: string; sequenceId: string; versionId: string; revision: number; content: SceneVersionContent_Output; shotId?: string; unitId?: string; disabled: boolean
   onOpenEdit: (clipId: string) => void
   onOpenInstruction: (taskId?: string) => void
@@ -88,16 +90,14 @@ export function SceneUnitCanvas({ projectId, sequenceId, versionId, revision, co
     else setFocusTarget({ nodeId: issue.nodeId || '单元设置', fieldId: issue.fieldId, serial: Date.now() })
   }
   return <section className="scene-unit-canvas">
-    {unit && <nav className="scene-unit-primary" aria-label="当前单元主操作"><strong>当前单元 {allUnits.indexOf(unit) + 1}</strong>
-      {!missing.length && <span role="status">当前单元基础准备已齐备</span>}
+    {unit && primaryHost && createPortal(<nav className="scene-unit-primary" aria-label="当前单元主操作"><strong>当前单元 {allUnits.indexOf(unit) + 1}</strong>
       {<SceneInstructionSuggestions onPrepare={missing.length ? () => locateIssue(missing[0]) : undefined} key={unit.id} compact projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision}
         unitId={unit.id} content={content} disabled={disabled} onChange={onChange} onOpen={onOpenInstruction} onTask={onInstructionTask} />}
-    </nav>}
+    </nav>, primaryHost)}
     <DirectorCanvasSurface key={`${versionId}:units:${unitId || 'empty'}`} focusTarget={focusTarget} initialPositions={{ 参考素材: { x: 800, y: 0 } }} contextKey={`${versionId}:units:${unitId || 'empty'}`} labels={['镜头依据', '单元设置', '参考素材']} ariaLabel="单元画布视口"
       relations={unit ? [{ from: '镜头依据', to: '单元设置', label: '动作覆盖' }, { from: '参考素材', to: '单元设置', label: '明确输入' }] : []}>
       <section className="canvas-workbench-card">
-        <h2>当前镜头</h2>
-        <Select aria-label="单元所属镜头" placeholder="明确选择镜头" value={shotId} style={{ width: '100%' }}
+          <Select aria-label="单元所属镜头" placeholder="明确选择镜头" value={shotId} style={{ width: '100%' }}
           options={content.design.direction.shots.map((row, index) => ({ value: row.id, label: `镜头 ${index + 1}：${row.visible_result.text || '未填写'}` }))}
           onChange={onSelectShot} />
         {!shot && <p>{shotId ? '原镜头已不可用，请重新选择' : '先选择镜头，再建立或选择单元'}</p>}
@@ -110,9 +110,9 @@ export function SceneUnitCanvas({ projectId, sequenceId, versionId, revision, co
         </>}
       </section>
       <section className="canvas-workbench-card">
-        <h2>单元准备</h2>
-        {!unit ? <p>明确选择单元后编辑；浏览不创建数据。</p> : <>
+          {!unit ? <p>明确选择单元后编辑；浏览不创建数据。</p> : <>
           <p>单元 {allUnits.indexOf(unit) + 1} · 当前场次版本</p>
+          {!missing.length && <p role="status">当前单元基础准备已齐备</p>}
           {missing.length > 0 && <Alert type="warning" message="本单元待准备" description={<ul>{missing.map(item => <li key={item.message}><Button type="link" onClick={() => locateIssue(item)}>{item.message}</Button></li>)}</ul>} />}
           {unit.coverage.map((item, index) => {
             const sourceShot = content.design.direction.shots.find(row => row.id === item.shot_id)
@@ -157,7 +157,6 @@ export function SceneUnitCanvas({ projectId, sequenceId, versionId, revision, co
         </>}
       </section>
       <section className="canvas-workbench-card">
-        <h2>明确的参考输入</h2>
         {unit ? <><p>{unit.references.length} 项参考；项目资产不会自动成为输入。</p>
           {unit.references.map(binding => <p key={binding.id}>{binding.asset_origin?.name || binding.file_id} · {referencePurposes[binding.purpose]}</p>)}
           <Space><Button id="scene-unit-references" disabled={disabled} onClick={() => setPicker(unit.id)}>编辑本单元参考</Button></Space></> : <p>先选择单元</p>}

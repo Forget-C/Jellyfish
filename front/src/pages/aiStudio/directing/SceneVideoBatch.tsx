@@ -102,7 +102,7 @@ export function SceneVideoBatch({ projectId, sequenceId, version, content, disab
   }
   return <>
     <Button disabled={disabled} onClick={() => setOpen(true)}>批量拍摄</Button>
-    <Modal title="批量预检与拍摄" open={open} onCancel={() => setOpen(false)} footer={null} width={720}>
+    <Modal rootClassName="canvas-workbench-dialog" title="批量预检与拍摄" open={open} onCancel={() => setOpen(false)} footer={null} width={720}>
       <p>选择单元的当前指令及已确认检查，先逐项预检，再明确提交。预检不自动保存或拍摄。</p>
       {error && <Alert type="error" message={error} />}
       {storageError && <Alert type="error" message={storageError} />}

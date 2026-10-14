@@ -2,6 +2,9 @@ import { SourceProvider } from './Sources'
 import { SceneSourceRevision } from './SceneSourceRevision'
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, ConfigProvider, Input, Modal, Select, Space, Spin, Switch, theme } from 'antd'
+import { ArrowLeftOutlined, DownOutlined, MoreOutlined, RedoOutlined, SaveOutlined, UndoOutlined } from '@ant-design/icons'
+import { CanvasToolbarMenu } from './CanvasToolbarMenu'
+import { CanvasTextPreview } from './CanvasTextPreview'
 import { Link, useBeforeUnload, useBlocker, useParams, useSearchParams } from 'react-router-dom'
 import { ApiError, StudioDirectingService } from '../../../services/generated'
 import type { SceneVersionContent_Output, SceneVersionCopy, SceneVersionCreate, SceneVersionRead, SceneVideoSaveResult, SequenceRead } from '../../../services/generated'
@@ -95,6 +98,11 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
   const [shotSelections, setShotSelections] = useState<Record<string, string>>({})
   const [designFocus, setDesignFocus] = useState<DesignFocusRequest & { versionId: string }>()
   const [editor, setEditor] = useState<{ versionId: string; kind: 'viewpoint' | 'shot' | 'design' | 'source' | 'ai' }>()
+  const [navigation, setNavigation] = useState<{ versionId: string; kind: 'relations' | 'designNavigation' }>()
+  const [primaryHost, setPrimaryHost] = useState<HTMLDivElement | null>(null)
+  const [navigationHost, setNavigationHost] = useState<HTMLDivElement | null>(null)
+  const [feedbackHost, setFeedbackHost] = useState<HTMLDivElement | null>(null)
+  const [moreHost, setMoreHost] = useState<HTMLDivElement | null>(null)
   const toolbar = useRef<HTMLElement>(null)
   const notices = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -203,7 +211,17 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
   const currentDirectVideo = directVideos.pending.find(row => row.versionId === selectedId && row.unitId === unitSelections[selectedId || ''])
   const currentShotId = selected ? shotSelections[selected.id] : undefined
   const currentEditor = editor?.versionId === selected?.id ? editor?.kind : undefined
-  const openEditor = (kind: 'viewpoint' | 'shot' | 'design' | 'source' | 'ai') => { if (selected) setEditor({ versionId: selected.id, kind }) }
+  const openEditor = (kind: 'viewpoint' | 'shot' | 'design' | 'source' | 'ai') => {
+    if (!selected) return
+    if (kind === 'viewpoint' || kind === 'shot') setNavigation(undefined)
+    setEditor({ versionId: selected.id, kind })
+  }
+  const currentNavigation = navigation?.versionId === selected?.id ? navigation?.kind : undefined
+  const openNavigation = (kind: 'relations' | 'designNavigation') => {
+    if (!selected) return
+    setEditor(previous => previous?.kind === 'viewpoint' || previous?.kind === 'shot' ? undefined : previous)
+    setNavigation({ versionId: selected.id, kind })
+  }
   const graph = content && currentShotId ? shotGraph(content.design, currentShotId) : { nodes: [], edges: [] }
   const graphIdentity = (key: string) => {
     if (key === `shot:${currentShotId}`) return '镜头设计'
@@ -218,7 +236,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
     onInspect: node.kind === 'missing' ? undefined : (trigger: HTMLElement) => {
       if (selected && content) setDesignFocus({ versionId: selected.id, target: targetFor(content.design, node.path), trigger, serial: Date.now() })
     },
-    content: <section className="canvas-workbench-card"><h2>{node.label}</h2>
+    content: <section className="canvas-workbench-card">
       <Button disabled={node.kind === 'missing'} aria-label={`查看关系对象：${node.label}`} onClick={event => {
         if (selected && content) setDesignFocus({ versionId: selected.id, target: targetFor(content.design, node.path), trigger: event.currentTarget, serial: Date.now() })
       }}>查看或编辑</Button>
@@ -231,7 +249,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
   if (content?.design.direction.shots.some(shot => shot.id === currentShotId) && content.design.direction.location_asset_id) {
     const id = `location:${content.design.direction.location_asset_id}`
     graphObjects.push({ id, label: '本场场所', onInspect: trigger => openAssetTool('scene', trigger),
-      content: <section className="canvas-workbench-card"><h2>本场场所</h2><p>关联项目场所，点击查看或调整关联。</p></section> })
+      content: <section className="canvas-workbench-card"><p>关联项目场所，点击查看或调整关联。</p></section> })
     graphRelations.push({ from: '镜头设计', to: id, label: '共享场所' })
   }
   if (content?.design.direction.shots.some(shot => shot.id === currentShotId)) graphRelations.push({ from: '全场共享', to: '镜头设计', label: '全场约束' })
@@ -797,7 +815,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
     return () => window.clearTimeout(timer)
   }, [autoSave, dirty, draft, busy, deliveryBusy, exportBusy, copyLocked, copyError, failure, readonly, transition, leaving, recovery, handingOff])
 
-  return <SourceProvider projectId={projectId} sequenceId={sequenceId} renderRevision={source => <SceneSourceRevision key={`${source.revision_id}:${source.source.version}`} projectId={projectId} sequenceId={sequenceId} source={source} />}><ConfigProvider theme={{ algorithm: theme.darkAlgorithm }} getPopupContainer={trigger => trigger?.closest<HTMLElement>('.canvas-workbench-dialog') || trigger?.closest<HTMLElement>('.canvas-workbench') || document.body}><section ref={node => { if (node) node.inert = copyLocked }} className="canvas-workbench" aria-label="场次画布工作台" onBlurCapture={event => {
+  return <SourceProvider projectId={projectId} sequenceId={sequenceId} renderRevision={source => <SceneSourceRevision key={`${source.revision_id}:${source.source.version}`} projectId={projectId} sequenceId={sequenceId} source={source} />}><ConfigProvider theme={{ algorithm: theme.darkAlgorithm, token: { colorBgBase: '#0d0d0d', colorBgContainer: '#1b1b1b', colorBgElevated: '#242424', colorBorder: '#383838', colorText: '#e5e5e5', colorTextSecondary: '#a3a3a3', borderRadius: 8 } }} getPopupContainer={trigger => trigger?.closest<HTMLElement>('.canvas-workbench-dialog') || trigger?.closest<HTMLElement>('.canvas-workbench') || document.body}><section ref={node => { if (node) node.inert = copyLocked }} className="canvas-workbench" data-canvas={canvas} aria-label="场次画布工作台" onBlurCapture={event => {
     if (event.target instanceof HTMLTextAreaElement) {
       const element = event.target
       lastEditing.current = { element, start: element.selectionStart, end: element.selectionEnd, scrollTop: element.scrollTop }
@@ -812,79 +830,99 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
     }
   }}>
     <header ref={toolbar} className="canvas-workbench-toolbar">
-      <Link to={`/projects/${projectId}/chapters/${chapterId}/sequences`}>返回章节</Link>
-      <strong>{sequence?.title || '场次工作台'}</strong>
-      <TaskCenter />
-      <Button disabled={!selected || readonly || !!recovery || handingOff || leaving || deliveryBusy || exportBusy || busy === 'create' || loadState !== 'ready'} onClick={() => void copyVersion()}>另存为新版本</Button>
-      {copyError && !copyLocked && <Alert type="warning" message={copyError} closable onClose={() => setCopyError('')} />}
-      <Button onClick={() => { setEditor(undefined); setCanvas('director') }}>导演画布</Button>
-      <Button disabled={!selected} onClick={() => { setEditor(undefined); setCanvas('units') }}>单元画布</Button>
-      <Button disabled={!selected} onClick={() => { setEditor(undefined); setCanvas('instructions') }}>指令画布</Button>
-      <Button disabled={!selected} onClick={() => { setEditor(undefined); setCanvas('edit') }}>编辑画布</Button>
-      {selected && content && <SceneExportPanel key={`export:${selected.id}`} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} dirty={dirty}
-        content={content} historical={sequence?.is_current === false}
-        currentClipIds={content.timeline.items.map(item => item.id)} onLocate={clipId => { setEditor(undefined); setCanvas('edit'); setMediaFocus({ versionId: selected.id, target: { kind: 'clip', clipId }, serial: Date.now() }) }}
-        focusTaskId={exportVersionId === selected.id ? params.get('exportTask') || undefined : undefined} onClose={closeExportHistory}
-        disabled={(readonly && sequence?.is_current !== false) || !!busy || deliveryBusy || historyExportBusy || handingOff || !!recovery || leaving || !!pendingSave.current || loadState !== 'ready'} onBusy={setExportBusy}
-        onSave={async () => {
-          const target = latest.current.selected
-          const submitted = latest.current.content
-          if (!target || !submitted || !ownership.canEdit() || !(await save())) return undefined
-          const response = await StudioDirectingService.directingSceneVersion({ projectId, sequenceId, versionId: target.id })
-          if (!response.data || !sameContent(response.data.content, submitted)) throw new Error('保存结果与本次导出内容不一致，未提交导出；请核对后重试。')
-          return response.data
-        }} />}
-      {historyTaskId && <Modal title="任务固定记录 · 只读" open={!transition} width={900} styles={{ body: { maxHeight: '60vh', overflowY: 'auto' } }} onCancel={closeTaskHistory} footer={<Space><Button onClick={closeTaskHistory}>返回当前工作</Button><Button loading={historyNavigating} disabled={readonly || !!busy || !!recovery || handingOff || leaving} onClick={() => void openTaskOrigin()}>打开所属版本继续编辑</Button></Space>}>
-        {historyNavigationError && <Alert type="warning" message={historyNavigationError} />}
-        {historyVersionId && historyTaskKind === 'design' ? <OverviewDesignHistory key={`${historyVersionId}:${historyTaskId}`} projectId={projectId} sequenceId={sequenceId} versionId={historyVersionId} focusTaskId={historyTaskId} /> :
-          historyVersionId && historyUnitId && (historyTaskKind === 'instructions' || historyTaskKind === 'checks' || historyTaskKind === 'videos') ? <OverviewUnitHistory key={`${historyVersionId}:${historyUnitId}:${historyTaskId}`} projectId={projectId} sequenceId={sequenceId} versionId={historyVersionId} unitId={historyUnitId} focusTaskId={historyTaskId} taskKind={historyTaskKind} /> :
-            <Alert type="warning" message="任务原始归属不完整，无法核实固定记录。" />}
-      </Modal>}
-      {exportHistory && <SceneExportPanel key={`history-export:${exportHistory.id}`} projectId={projectId} sequenceId={sequenceId} versionId={exportHistory.id}
-        content={exportHistory.content} dirty={false} historical={sequence?.is_current === false} historyOnly
-        currentClipIds={[]} onLocate={() => {}} onSave={async () => undefined} onClose={closeExportHistory}
-        focusTaskId={params.get('exportTask') || undefined} onBusy={setHistoryExportBusy}
-        disabled={(readonly && sequence?.is_current !== false) || !!busy || deliveryBusy || currentExportBusy || handingOff || !!recovery || leaving || !!pendingSave.current || loadState !== 'ready'} />}
-      {loadState === 'ready' && params.get('exportTask') && exportVersionId !== selectedId && !exportHistory && <Modal title="整场导出记录" open onCancel={closeExportHistory} footer={<Button onClick={closeExportHistory}>返回画布</Button>}>
-        <Alert type="warning" message="导出所属版本不可用，未切换或替换当前编辑。" />
-      </Modal>}
-      {selected && content && <SceneDeliveryPanel key={`delivery:${selected.id}`} projectId={projectId} chapterId={chapterId} sequenceId={sequenceId} versionId={selected.id}
-        hasItems={!!content.timeline.items.length} disabled={readonly || !!busy || deliveryBusy || exportBusy || handingOff || !!recovery || leaving || !!pendingSave.current || loadState !== 'ready'} onBusy={setDeliveryBusy}
-        onSave={async () => {
-          const original = latest.current
-          const target = original.selected
-          const submitted = original.content
-          if (!target || !submitted || !ownership.canEdit() || !(await save())) return undefined
-          const response = await StudioDirectingService.directingSceneVersion({ projectId, sequenceId, versionId: target.id })
-          if (!response.data || !sameContent(response.data.content, submitted)) throw new Error('保存结果与本次交付内容不一致，未更新章节；请重新核对后明确交付。')
-          return response.data
-        }} />}
-      {selected && content && <SceneDesignSuggestions key={`design:${selected.id}`} projectId={projectId} sequenceId={sequenceId} version={selected} content={content}
-        disabled={readonly || handingOff || !!recovery || busy === 'create' || leaving} open={currentEditor === 'ai'}
-        onOpenChange={open => open ? openEditor('ai') : setEditor(undefined)} onChange={editContent}
-        onLocateUnit={locateUnitReference} />}
-      {selected && content && <SceneVideoBatch activities={videoActivities.filter(row => row.versionId === selected.id)} pending={directVideos.pending.filter(row => row.versionId === selected.id)} storageError={directVideos.storageError}
-        onVerify={unitId => { const request = directVideos.pending.find(row => row.versionId === selected.id && row.unitId === unitId); if (request) void directVideos.retry(request) }} key={`batch:${selected.id}`} projectId={projectId} sequenceId={sequenceId} version={selected} content={content}
-        disabled={readonly || !!busy || handingOff || !!recovery || leaving || !!pendingSave.current || loadState !== 'ready'}
-        onLocate={unitId => locateVideoUnit({ versionId: selected.id, unitId })}
-        onSubmit={preparation => {
-          if (!ownership.canEdit() || !selected || preparation.version_id !== selected.id) return false
-          return directVideos.submit({ projectId, sequenceId, versionId: selected.id, unitId: preparation.unit_id,
-            versionTitle: selected.title, unitLabel: `单元 ${content.units.findIndex(unit => unit.id === preparation.unit_id) + 1}`,
-            request: { request_id: crypto.randomUUID(), expected_revision: selected.revision, expected_preparation: preparation } })
-        }} />}
-      <label>自动保存 <Switch aria-label="自动保存" checked={autoSave} onChange={value => {
-        setAutoSave(value)
-        try { localStorage.setItem(autoSavePreference, value ? 'on' : 'off') } catch { /* 存储不可用时仍可在本页选择。 */ }
-      }} /></label>
-      <Select aria-label="场次版本" placeholder="尚无场次版本" value={selectedId} disabled={handingOff || !!recovery || busy === 'create' || leaving || loadState !== 'ready'}
-        options={versions.map(row => ({ value: row.id, label: row.title }))} onChange={select} />
-      <Button onClick={() => void requestTransition({ action: () => { void create() } })} disabled={handingOff || !!recovery || busy === 'create' || leaving || readonly || loadState !== 'ready'} loading={busy === 'create'}>新建场次版本</Button>
-      <Button aria-label="撤销" onClick={() => stepHistory('undo')} disabled={handingOff || !selected || !histories.current.get(selected.id)?.undo.length || readonly || leaving || busy === 'create'}>撤销</Button>
-      <Button aria-label="重做" onClick={() => stepHistory('redo')} disabled={handingOff || !selected || !histories.current.get(selected.id)?.redo.length || readonly || leaving || busy === 'create'}>重做</Button>
-      {selected && <><span role="status" aria-live="polite">{sequence?.is_current === false ? '历史场次 · 只读' : readonly ? '只读' : status}</span>
-        <Button aria-label={saveLabel} type="primary" onClick={() => void save()} disabled={handingOff || !!recovery || (!dirty && !pendingSave.current) || !!busy || deliveryBusy || exportBusy || readonly || loadState !== 'ready'} loading={busy === 'save'}>{saveLabel}</Button></>}
+      <div className="canvas-toolbar-identity">
+        <Link className="canvas-back" title="返回章节" aria-label="返回章节" to={`/projects/${projectId}/chapters/${chapterId}/sequences`}><ArrowLeftOutlined /></Link>
+        <strong className="canvas-sequence-name" title={sequence?.title}>{sequence?.title || '场次工作台'}</strong>
+        <CanvasToolbarMenu label="版本管理" caption={<><span className="canvas-version-name">{selected?.title || '场次版本'}</span><DownOutlined /></>}>
+          <h3>场次版本</h3>
+          <Select aria-label="场次版本" placeholder="尚无场次版本" value={selectedId} disabled={handingOff || !!recovery || busy === 'create' || leaving || loadState !== 'ready'}
+            options={versions.map(row => ({ value: row.id, label: row.title }))} onChange={select} />
+          <Button data-menu-close onClick={() => void requestTransition({ action: () => { void create() } })} disabled={handingOff || !!recovery || busy === 'create' || leaving || readonly || loadState !== 'ready'} loading={busy === 'create'}>新建场次版本</Button>
+          <Button data-menu-close disabled={!selected || readonly || !!recovery || handingOff || leaving || deliveryBusy || exportBusy || busy === 'create' || loadState !== 'ready'} onClick={() => void copyVersion()}>另存为新版本</Button>
+        </CanvasToolbarMenu>
+        <CanvasToolbarMenu label="保存设置" caption={<span role="status" aria-live="polite">{!selected ? loadState === 'loading' ? '读取中' : '尚无版本' : sequence?.is_current === false ? '历史场次 · 只读' : readonly ? '只读' : status}</span>}>
+          <label>自动保存 <Switch aria-label="自动保存" checked={autoSave} onChange={value => {
+            setAutoSave(value)
+            try { localStorage.setItem(autoSavePreference, value ? 'on' : 'off') } catch { /* 存储不可用时仍可在本页选择。 */ }
+          }} /></label>
+        </CanvasToolbarMenu>
+        {selected && <Button aria-label={saveLabel} type={dirty || videoUnverified ? "primary" : "text"} title={saveLabel} icon={<SaveOutlined />} onClick={() => void save()} disabled={handingOff || !!recovery || (!dirty && !pendingSave.current) || !!busy || deliveryBusy || exportBusy || readonly || loadState !== 'ready'} loading={busy === 'save'} />}
+      </div>
+      <nav className="canvas-toolbar-views" aria-label="画布切换">
+        <Button onClick={() => { setEditor(undefined); setCanvas('director') }} type="text" aria-pressed={canvas === 'director'}>导演画布</Button>
+        <Button disabled={!selected} onClick={() => { setEditor(undefined); setCanvas('units') }} type="text" aria-pressed={canvas === 'units'}>单元画布</Button>
+        <Button disabled={!selected} onClick={() => { setEditor(undefined); setCanvas('instructions') }} type="text" aria-pressed={canvas === 'instructions'}>指令画布</Button>
+        <Button disabled={!selected} onClick={() => { setEditor(undefined); setCanvas('edit') }} type="text" aria-pressed={canvas === 'edit'}>编辑画布</Button>
+      </nav>
+      <div className="canvas-toolbar-actions">
+        <div ref={setPrimaryHost} className="canvas-toolbar-primary" />
+        <TaskCenter />
+        <div ref={setNavigationHost} className="canvas-toolbar-navigation" />
+        <CanvasToolbarMenu label="更多操作" icon={<MoreOutlined />}>
+          <div className="canvas-more-actions" ref={setMoreHost} />
+          <div className="canvas-more-actions" data-menu-close>
+            {selected && content && <SceneVideoBatch activities={videoActivities.filter(row => row.versionId === selected.id)} pending={directVideos.pending.filter(row => row.versionId === selected.id)} storageError={directVideos.storageError}
+              onVerify={unitId => { const request = directVideos.pending.find(row => row.versionId === selected.id && row.unitId === unitId); if (request) void directVideos.retry(request) }} key={`batch:${selected.id}`} projectId={projectId} sequenceId={sequenceId} version={selected} content={content}
+              disabled={readonly || !!busy || handingOff || !!recovery || leaving || !!pendingSave.current || loadState !== 'ready'}
+              onLocate={unitId => locateVideoUnit({ versionId: selected.id, unitId })}
+              onSubmit={preparation => {
+                if (!ownership.canEdit() || !selected || preparation.version_id !== selected.id) return false
+                return directVideos.submit({ projectId, sequenceId, versionId: selected.id, unitId: preparation.unit_id,
+                  versionTitle: selected.title, unitLabel: `单元 ${content.units.findIndex(unit => unit.id === preparation.unit_id) + 1}`,
+                  request: { request_id: crypto.randomUUID(), expected_revision: selected.revision, expected_preparation: preparation } })
+              }} />}
+          </div>
+          <div className="canvas-more-actions">
+            {selected && content && <SceneExportPanel feedbackHost={feedbackHost} triggerHost={canvas === 'edit' || currentExportBusy ? primaryHost : undefined} key={`export:${selected.id}`} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} dirty={dirty}
+              content={content} historical={sequence?.is_current === false}
+              currentClipIds={content.timeline.items.map(item => item.id)} onLocate={clipId => { setEditor(undefined); setCanvas('edit'); setMediaFocus({ versionId: selected.id, target: { kind: 'clip', clipId }, serial: Date.now() }) }}
+              focusTaskId={exportVersionId === selected.id ? params.get('exportTask') || undefined : undefined} onClose={closeExportHistory}
+              disabled={(readonly && sequence?.is_current !== false) || !!busy || deliveryBusy || historyExportBusy || handingOff || !!recovery || leaving || !!pendingSave.current || loadState !== 'ready'} onBusy={setExportBusy}
+              onSave={async () => {
+                const target = latest.current.selected
+                const submitted = latest.current.content
+                if (!target || !submitted || !ownership.canEdit() || !(await save())) return undefined
+                const response = await StudioDirectingService.directingSceneVersion({ projectId, sequenceId, versionId: target.id })
+                if (!response.data || !sameContent(response.data.content, submitted)) throw new Error('保存结果与本次导出内容不一致，未提交导出；请核对后重试。')
+                return response.data
+              }} />}
+            {selected && content && <SceneDeliveryPanel feedbackHost={feedbackHost} key={`delivery:${selected.id}`} projectId={projectId} chapterId={chapterId} sequenceId={sequenceId} versionId={selected.id}
+              hasItems={!!content.timeline.items.length} disabled={readonly || !!busy || deliveryBusy || exportBusy || handingOff || !!recovery || leaving || !!pendingSave.current || loadState !== 'ready'} onBusy={setDeliveryBusy}
+              onSave={async () => {
+                const original = latest.current
+                const target = original.selected
+                const submitted = original.content
+                if (!target || !submitted || !ownership.canEdit() || !(await save())) return undefined
+                const response = await StudioDirectingService.directingSceneVersion({ projectId, sequenceId, versionId: target.id })
+                if (!response.data || !sameContent(response.data.content, submitted)) throw new Error('保存结果与本次交付内容不一致，未更新章节；请重新核对后明确交付。')
+                return response.data
+              }} />}
+          </div>
+        </CanvasToolbarMenu>
+      </div>
     </header>
+    <nav className="canvas-history-controls" aria-label="编辑历史">
+      <Button aria-label="撤销" title="撤销" type="text" icon={<UndoOutlined />} onClick={() => stepHistory('undo')} disabled={handingOff || !selected || !histories.current.get(selected.id)?.undo.length || readonly || leaving || busy === 'create'} />
+      <Button aria-label="重做" title="重做" type="text" icon={<RedoOutlined />} onClick={() => stepHistory('redo')} disabled={handingOff || !selected || !histories.current.get(selected.id)?.redo.length || readonly || leaving || busy === 'create'} />
+    </nav>
+    {selected && content && <SceneDesignSuggestions triggerHost={canvas === 'director' ? primaryHost : moreHost} key={`design:${selected.id}`} projectId={projectId} sequenceId={sequenceId} version={selected} content={content}
+      disabled={readonly || handingOff || !!recovery || busy === 'create' || leaving} open={currentEditor === 'ai'}
+      onOpenChange={open => open ? openEditor('ai') : setEditor(undefined)} onChange={editContent}
+      onLocateUnit={locateUnitReference} />}
+    {historyTaskId && <Modal rootClassName="canvas-workbench-dialog" title="任务固定记录 · 只读" open={!transition} width={900} styles={{ body: { maxHeight: '60vh', overflowY: 'auto' } }} onCancel={closeTaskHistory} footer={<Space><Button onClick={closeTaskHistory}>返回当前工作</Button><Button loading={historyNavigating} disabled={readonly || !!busy || !!recovery || handingOff || leaving} onClick={() => void openTaskOrigin()}>打开所属版本继续编辑</Button></Space>}>
+      {historyNavigationError && <Alert type="warning" message={historyNavigationError} />}
+      {historyVersionId && historyTaskKind === 'design' ? <OverviewDesignHistory key={`${historyVersionId}:${historyTaskId}`} projectId={projectId} sequenceId={sequenceId} versionId={historyVersionId} focusTaskId={historyTaskId} /> :
+        historyVersionId && historyUnitId && (historyTaskKind === 'instructions' || historyTaskKind === 'checks' || historyTaskKind === 'videos') ? <OverviewUnitHistory key={`${historyVersionId}:${historyUnitId}:${historyTaskId}`} projectId={projectId} sequenceId={sequenceId} versionId={historyVersionId} unitId={historyUnitId} focusTaskId={historyTaskId} taskKind={historyTaskKind} /> :
+          <Alert type="warning" message="任务原始归属不完整，无法核实固定记录。" />}
+    </Modal>}
+    {exportHistory && <SceneExportPanel key={`history-export:${exportHistory.id}`} projectId={projectId} sequenceId={sequenceId} versionId={exportHistory.id}
+      content={exportHistory.content} dirty={false} historical={sequence?.is_current === false} historyOnly
+      currentClipIds={[]} onLocate={() => {}} onSave={async () => undefined} onClose={closeExportHistory}
+      focusTaskId={params.get('exportTask') || undefined} onBusy={setHistoryExportBusy}
+      disabled={(readonly && sequence?.is_current !== false) || !!busy || deliveryBusy || currentExportBusy || handingOff || !!recovery || leaving || !!pendingSave.current || loadState !== 'ready'} />}
+    {loadState === 'ready' && params.get('exportTask') && exportVersionId !== selectedId && !exportHistory && <Modal rootClassName="canvas-workbench-dialog" title="整场导出记录" open onCancel={closeExportHistory} footer={<Button onClick={closeExportHistory}>返回画布</Button>}>
+      <Alert type="warning" message="导出所属版本不可用，未切换或替换当前编辑。" />
+    </Modal>}
     <div className="scene-video-request-list">
       {directVideos.storageError && <Alert type="warning" message={directVideos.storageError} />}
       {directVideos.pending.map(row => <Alert key={row.request.request_id} type={row.error ? 'warning' : 'info'}
@@ -892,6 +930,8 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
         action={<Button disabled={!ownership.editable || loadState !== 'ready' || !!row.submitting} onClick={() => void directVideos.retry(row)}>核实原视频请求</Button>} />)}
     </div>
     <div ref={notices} className="canvas-workbench-alerts">
+      <div className="canvas-operation-feedback" ref={setFeedbackHost} />
+      {copyError && !copyLocked && <Alert type="warning" message={copyError} closable onClose={() => setCopyError('')} />}
     {Object.entries(videoFeedback).map(([key, feedback]) => <Alert key={key} className="canvas-workbench-notice" type="info" message={feedback.message} description={feedback.error} closable
       action={<Button onClick={() => void locateVideoUnit(feedback).then(() => setVideoFeedback(previous => previous[key] ? { ...previous, [key]: { ...previous[key], error: undefined } } : previous)).catch(cause => setVideoFeedback(previous => previous[key] ? { ...previous, [key]: { ...previous[key], error: directingError(cause) } } : previous))}>{feedback.executionId ? '返回原视频执行' : '返回视频单元'}</Button>}
       onClose={() => setVideoFeedback(previous => Object.fromEntries(Object.entries(previous).filter(([id]) => id !== key)))} />)}
@@ -947,14 +987,14 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       setEditor(undefined); setCanvas('units')
     }} dirty={dirty} key={selected.id} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} content={content} revision={selected.revision}
       disabled={readonly || handingOff || !!recovery || busy === 'create' || leaving} onChange={editContent} />}
-    {loadState === 'ready' && canvas === 'instructions' && selected && content && <SceneInstructionCanvas onPrepare={(unitId, issue) => { setEditor(undefined); setCanvas('units'); setUnitFocus({ versionId: selected.id, unitId, nodeId: issue.nodeId || '单元设置', fieldId: issue.fieldId, serial: Date.now() }) }} focusRequest={instructionFocus} onVideoFocused={() => setVideoFocus(undefined)} videoFocus={videoFocus?.versionId === selected.id && videoFocus.unitId === unitSelections[selected.id] ? videoFocus : undefined} key={selected.id} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} revision={selected.revision} content={content} onTask={trackInstruction} dirty={dirty} videoBusy={!!currentDirectVideo || !!pendingSave.current?.video && pendingSave.current.versionId === selected.id && pendingSave.current.video.unitId === unitSelections[selected.id]} savePending={!!busy || !!pendingSave.current}
+    {loadState === 'ready' && canvas === 'instructions' && selected && content && <SceneInstructionCanvas primaryHost={primaryHost} onPrepare={(unitId, issue) => { setEditor(undefined); setCanvas('units'); setUnitFocus({ versionId: selected.id, unitId, nodeId: issue.nodeId || '单元设置', fieldId: issue.fieldId, serial: Date.now() }) }} focusRequest={instructionFocus} onVideoFocused={() => setVideoFocus(undefined)} videoFocus={videoFocus?.versionId === selected.id && videoFocus.unitId === unitSelections[selected.id] ? videoFocus : undefined} key={selected.id} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} revision={selected.revision} content={content} onTask={trackInstruction} dirty={dirty} videoBusy={!!currentDirectVideo || !!pendingSave.current?.video && pendingSave.current.versionId === selected.id && pendingSave.current.video.unitId === unitSelections[selected.id]} savePending={!!busy || !!pendingSave.current}
       onVerifyVideo={!busy && pendingSave.current?.versionId === selected.id && pendingSave.current?.video?.unitId === unitSelections[selected.id]
         ? () => { void save() } : currentDirectVideo && !currentDirectVideo.submitting ? () => { void directVideos.retry(currentDirectVideo) } : undefined}
       videoRefresh={videoRefresh} onGenerateVideo={generateVideo} onRetryVideo={retryVideo}
       taskId={instructionSelection?.versionId === selected.id && instructionSelection.unitId === unitSelections[selected.id] ? instructionSelection.taskId : undefined}
       shotId={currentShotId} unitId={unitSelections[selected.id]} disabled={readonly || handingOff || !!recovery || busy === 'create' || leaving}
       onSelectUnit={selectUnit} onChange={editContent} />}
-    {loadState === 'ready' && canvas === 'units' && selected && content && <SceneUnitCanvas key={selected.id} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} revision={selected.revision} content={content} focusRequest={unitFocus}
+    {loadState === 'ready' && canvas === 'units' && selected && content && <SceneUnitCanvas primaryHost={primaryHost} key={selected.id} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} revision={selected.revision} content={content} focusRequest={unitFocus}
       onOpenEdit={clipId => { setMediaFocus(undefined); setEditClipFocus({ versionId: selected.id, clipId }); setEditor(undefined); setCanvas('edit') }}
       onInstructionTask={trackInstruction}
       onOpenInstruction={taskId => { setInstructionSelection({ versionId: selected.id, unitId: unitSelections[selected.id], taskId }); setCanvas('instructions') }}
@@ -972,16 +1012,16 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
         {selected && content ? <SceneSourceBasis key={selected.id} projectId={projectId} chapterId={chapterId} basis={content.basis}
           open={currentEditor === 'source'} onOpenChange={open => open ? openEditor('source') : setEditor(undefined)}
           disabled={readonly || handingOff || !!recovery || busy === 'create'} onChange={basis => editContent({ ...content, basis })} /> :
-          <><h2>原文依据</h2><p>{sequence?.source_text || '原文尚未填写'}</p></>}
+          <CanvasTextPreview text={sequence?.source_text || '原文尚未填写'} label="原文" />}
         {!selected && !selectedId && <p>尚无场次版本，明确新建后开始设计。</p>}
       </section>
       {selected && content && <section className="canvas-workbench-card" aria-label="全场共享设计">
-        <h2>全场共享</h2><p>导演设计 · {content.design.direction.shots.length ? `${content.design.direction.shots.length} 个镜头` : '当前不存在镜头'}</p>
-        <SceneDesignPanel key={selected.id} projectId={projectId} value={content.design} units={content.units || []} onLocateUnit={locateUnitReference} disabled={handingOff || !!recovery || readonly || busy === 'create'}
+        <p>导演设计 · {content.design.direction.shots.length ? `${content.design.direction.shots.length} 个镜头` : '当前不存在镜头'}</p>
+        <SceneDesignPanel navigationOpen={currentNavigation === 'designNavigation'} onNavigationOpenChange={open => open ? openNavigation('designNavigation') : setNavigation(undefined)} key={selected.id} projectId={projectId} value={content.design} units={content.units || []} onLocateUnit={locateUnitReference} disabled={handingOff || !!recovery || readonly || busy === 'create'}
           open={currentEditor === 'design'} onOpenChange={open => open ? openEditor('design') : setEditor(undefined)}
           focusRequest={designFocus?.versionId === selected.id ? designFocus : undefined} onSelectShot={selectShot} onFocusHandled={() => setDesignFocus(undefined)}
           onChange={design => editContent({ ...content, design })} />
-        <p>{content.design.direction.viewpoint.text || '叙事视点尚未填写'}</p>
+        <CanvasTextPreview text={content.design.direction.viewpoint.text || '叙事视点尚未填写'} label="叙事视点" />
         <Button onClick={() => openEditor('viewpoint')}>编辑叙事视点</Button>
         {currentEditor === 'viewpoint' && <CanvasQuickEditor title="叙事视点编辑" onClose={() => setEditor(undefined)}>
           <label htmlFor="scene-viewpoint">叙事视点</label>
@@ -999,7 +1039,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
         disabled={handingOff || !!recovery || readonly || busy === 'create'}
         onChange={direction => editContent({ ...content, design: { ...content.design, direction } })} />}
     </DirectorCanvasSurface>}
-    {loadState === 'ready' && selected && content && <SceneRelationsNavigation projectId={projectId} sequenceId={sequenceId} versionId={selected.id} key={`relations:${selected.id}`} content={content} shotId={currentShotId} unitId={unitSelections[selected.id]} canvas={canvas} onNavigate={navigateRelation} />}
+    {loadState === 'ready' && selected && content && <SceneRelationsNavigation triggerHost={navigationHost} open={currentNavigation === 'relations'} onOpenChange={open => open ? openNavigation('relations') : setNavigation(undefined)} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} key={`relations:${selected.id}`} content={content} shotId={currentShotId} unitId={unitSelections[selected.id]} canvas={canvas} onNavigate={navigateRelation} />}
     <Modal rootClassName="canvas-workbench-dialog" title="有未保存的修改" open={!!transition} maskClosable={false} closable={!leaving} onCancel={cancelTransition}
       footer={<Space>
         <Button disabled={leaving} onClick={cancelTransition}>取消，继续编辑</Button>
@@ -1029,7 +1069,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       {recovery?.message && <Alert type="warning" message={recovery.message} />}
     </Modal>
   </section>
-    <Modal title={copyBusy ? '正在另存为新版本' : '另存结果待核实'} open={copyLocked} closable={false} maskClosable={false} keyboard={false} getContainer={() => document.body}
+    <Modal rootClassName="canvas-workbench-dialog" title={copyBusy ? '正在另存为新版本' : '另存结果待核实'} open={copyLocked} closable={false} maskClosable={false} keyboard={false} getContainer={() => document.body}
       footer={copyBusy ? null : <Button disabled={!!copyInitial.error || readonly || loadState !== 'ready'} onClick={() => void copyVersion()}>核实原另存请求</Button>}>
       {copyBusy && <Spin />}<p>正在保护点击时的完整编辑，核实完成前请勿离开。不会为另存额外保存原版本，也不会重新执行生成任务。</p>
       {copyError && <Alert type="warning" message={copyError} />}

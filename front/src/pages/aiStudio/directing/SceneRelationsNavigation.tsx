@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Alert, Button } from 'antd'
+import { ApartmentOutlined, CloseOutlined } from '@ant-design/icons'
 import { StudioDirectingService } from '../../../services/generated'
 import { SceneWorkbenchOverview } from './SceneWorkbenchOverview'
 import { SceneRelationDetails } from './SceneRelationDetails'
@@ -11,12 +13,13 @@ export type SceneMediaNavigationTarget = { kind: 'take'; takeKind: SceneTakeLibr
 export type SceneNavigationTarget = SceneMediaNavigationTarget | { kind: 'shot'; shotId: string } | { kind: 'unit' | 'instruction'; shotId: string; unitId: string }
 
 /** 关系树使用当前版本对象身份；展开仅改变导航展示，名称才定位业务对象。 */
-export function SceneRelationsNavigation({ projectId, sequenceId, versionId, content, shotId, unitId, canvas, onNavigate }: {
+export function SceneRelationsNavigation({ triggerHost, open, onOpenChange: setOpen, projectId, sequenceId, versionId, content, shotId, unitId, canvas, onNavigate }: {
+  triggerHost: HTMLElement | null
+  open: boolean; onOpenChange: (open: boolean) => void
   projectId: string; sequenceId: string; versionId: string
   content: SceneVersionContent_Output; shotId?: string; unitId?: string; canvas: string
   onNavigate: (target: SceneNavigationTarget) => void
 }) {
-  const [open, setOpen] = useState(() => window.innerWidth >= 760)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [overview, setOverview] = useState(false)
   const [inspection, setInspection] = useState<SceneInspectionTarget>()
@@ -40,8 +43,8 @@ export function SceneRelationsNavigation({ projectId, sequenceId, versionId, con
     if (window.innerWidth < 760) setOpen(false)
   }
   const toggle = (key: string) => setExpanded(previous => ({ ...previous, [key]: !previous[key] }))
-  return <><nav className="scene-relations-tree" aria-label="场次关系树">
-    <Button aria-expanded={open} onClick={() => setOpen(value => !value)}>{open ? '收起关系树' : '展开关系树'}</Button>
+  return <>{triggerHost && createPortal(<nav className="scene-relations-tree" data-open={open} aria-label="场次关系树" onKeyDown={event => { if (event.key === 'Escape' && open) { event.stopPropagation(); setOpen(false) } }}>
+    <Button aria-expanded={open} className="scene-relations-toggle" aria-label={open ? '收起关系树' : '展开关系树'} title={open ? '收起关系树' : '展开关系树'} icon={open ? <CloseOutlined /> : <ApartmentOutlined />} onClick={() => setOpen(!open)} />
     {open && <div className="scene-relations-tree-content"><h2>场次关系</h2>
       <Button onClick={() => setOverview(true)}>展开全图</Button>
       <ul aria-label="全场共享对象">
@@ -101,7 +104,7 @@ export function SceneRelationsNavigation({ projectId, sequenceId, versionId, con
         </li>)}
       </ul>}
     </div>}
-  </nav>
+  </nav>, triggerHost)}
     {overview && <SceneWorkbenchOverview projectId={projectId} sequenceId={sequenceId} versionId={versionId} content={content} unitId={unitId} shotId={shotId} onNavigate={navigate} onClose={() => setOverview(false)} />}
     {inspection && <SceneRelationDetails key={JSON.stringify(inspection)} projectId={projectId} content={content} target={inspection} onClose={() => setInspection(undefined)} />}
   </>

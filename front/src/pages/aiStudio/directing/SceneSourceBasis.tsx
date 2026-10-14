@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Modal, Space, Spin, Tag } from 'antd'
+import { CanvasTextPreview } from './CanvasTextPreview'
 import { StudioDirectingService } from '../../../services/generated'
 import type { ChapterSequences, SceneVersionSource_Output, SourceSpan } from '../../../services/generated'
 import { directingError } from './common'
@@ -45,7 +46,7 @@ export function SceneSourceBasis({ projectId, chapterId, basis, disabled, onChan
     {end ? chars.slice(-end).join('') : ''}
   </p>
   return <>
-    <h2>原文依据</h2><p>{basis.text}</p>
+    <CanvasTextPreview text={basis.text} label="原文" />
     {loading && <p><Spin size="small" /> 正在核对最新原文</p>}
     {error && <Alert type="warning" message="原文差异读取失败，当前依据保留" description={error} action={<Button onClick={() => void read()}>重试原文读取</Button>} />}
     {changed && !continued && <Alert type="warning" message="内容有修改" description="章节原文已有修订。本版本仍使用上述原文，不表示有未保存编辑。" />}

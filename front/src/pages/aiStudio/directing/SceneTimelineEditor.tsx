@@ -79,7 +79,6 @@ export function SceneTimelineEditor({ take, takes, content, disabled, onChange, 
   }
   let cursor = 0
   return <section className="canvas-workbench-card" aria-label="场次时间线">
-    <h2>时间线</h2>
     <Select aria-label="场次输出画幅" style={{ width: '100%' }} disabled={disabled} value={content.output_aspect_ratio}
       options={[{ value: '16:9', label: '16:9 横屏' }, { value: '9:16', label: '9:16 竖屏' }, { value: '1:1', label: '1:1 方形' }]}
       onChange={output_aspect_ratio => onChange({ ...content, output_aspect_ratio })} />
