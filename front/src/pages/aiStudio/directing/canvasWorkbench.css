@@ -352,6 +352,7 @@
 .design-object-issues { font-weight: 500; }
 .design-object-summary strong { color: var(--wb-text); }
 .director-layout-surface .director-compact-card .director-canvas-object-content { height: calc(100% - 32px) !important; max-height: none; overflow: hidden; }
+.director-layout-surface .director-compact-card .director-node-summary { height: 100%; }
 .director-layout-surface .director-compact-card .canvas-workbench-card { height: 100%; }
 .design-compact-summary { display: flex; flex-direction: column; height: 100%; min-width: 0; }
 .director-layout-surface [data-canvas-node="全场共享"] .design-compact-summary { height: 155px; }

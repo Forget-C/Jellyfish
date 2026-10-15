@@ -87,6 +87,12 @@ try {
     return result
   }
   await page.locator('[data-layout-group="criterion"]').waitFor()
+  const sharedCardGap = await node('全场共享').evaluate(element => {
+    const content = element.querySelector('.director-canvas-object-content').getBoundingClientRect()
+    const card = element.querySelector('.canvas-workbench-card').getBoundingClientRect()
+    return Math.round(content.bottom - card.bottom)
+  })
+  assert.ok(Math.abs(sharedCardGap) <= 2, `shared card leaves ${sharedCardGap}px inside its focus outline`)
   assert.equal(await scale(), 100)
   assert.equal(await page.locator('[data-canvas-node^="criterion:"]').count(), 5)
   assert.equal(await node('camera:shot1').count(), 1)
