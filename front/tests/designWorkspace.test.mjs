@@ -9,48 +9,72 @@ const source = await readFile(new URL('../src/pages/aiStudio/directing/designWor
 const valueSource = await readFile(new URL('../src/pages/aiStudio/directing/designValue.ts', import.meta.url), 'utf8')
 const compile = source => ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ES2020 } }).outputText
 const data = source => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`
-const { sceneOverview, shotRelationPath, shotGraph, sceneDesignGraph, sharedDesignSubgraph, designObjects, designObjectLayoutId, sharedDesignGroup, projectSharedGraph, shotIssues, scopeShots, scopeGraph, reorderScopeShots, relationBinding, relationOwner, changeRelation } = await import(data(compile(source).replaceAll("'./designValue'", JSON.stringify(data(compile(valueSource))))))
+const { directorDesignGraph, designDomain, designCoreContent, sceneOverview, shotRelationPath, shotGraph, sceneDesignGraph, designObjects, designObjectLayoutId, shotIssues, scopeShots, scopeGraph, reorderScopeShots, relationBinding, relationOwner, changeRelation } = await import(data(compile(source).replaceAll("'./designValue'", JSON.stringify(data(compile(valueSource))))))
 
-test('shared design group keeps the five fixed cards and counts only explicit core content', () => {
+test('director graph gives seven design domains and keeps shared objects editable outside', () => {
   const value = makeWorkspace().designs[0].content
-  const group = sharedDesignGroup(value)
-  assert.deepEqual(group.members.map(node => node.key), ['overview', 'performance', 'staging', 'sound', 'prompt', 'blocking:state1', 'situation:0', 'performance:0', 'activity:0', 'camera:0', 'continuity:continuity1', 'dialogue:dialogue1'])
-  assert.equal(group.filled, 1)
-  assert.equal(group.members.length, 12)
+  const outside = directorDesignGraph(value, { scope: 'all' })
+  assert.deepEqual(outside.groups.map(group => group.domain), ['direction', 'performance', 'staging', 'cinematography', 'continuity', 'sound', 'prompt'])
+  assert.equal(outside.nodes.filter(node => node.kind === 'summary').length, 7)
+  for (const key of ['participant:person1', 'event:event1', 'criterion:criterion1', 'location']) assert.ok(outside.nodes.some(node => node.key === key && node.kind !== 'reference'))
+  assert.equal(designDomain('blocking:state1'), 'direction')
+  const direction = directorDesignGraph(value, { scope: 'all', domain: 'direction' })
+  assert.ok(direction.nodes.some(node => node.key === 'space' && node.kind === 'direction'))
+  assert.ok(direction.nodes.some(node => node.key === 'shot:shot1' && node.kind !== 'reference'))
+  assert.ok(direction.nodes.some(node => node.key === 'criterion:criterion1' && node.kind === 'reference'))
+  assert.ok(!outside.nodes.some(node => node.key === 'shot:shot1'))
+})
+
+test('current-shot domains follow explicit beat and event references without collecting every shared person consumer', () => {
+  const value = makeWorkspace().designs[0].content
+  value.direction.shots[0].participant_ids = []
+  value.staging.activities.push({ ...structuredClone(value.staging.activities[0]), trigger_event_id: null })
+  value.continuity.push({ ...structuredClone(value.continuity[0]), id: 'unlinked', event_id: null })
+  value.performance.beats.push({ ...structuredClone(value.performance.beats[0]), beat_id: 'another-beat' })
+  const staging = directorDesignGraph(value, { scope: 'shot', shotId: 'shot1', domain: 'staging' })
+  assert.ok(staging.nodes.some(node => node.key === 'staging'))
+  assert.ok(staging.nodes.some(node => node.key === 'activity:0' && node.kind !== 'reference'))
+  assert.ok(!staging.nodes.some(node => node.key === 'activity:1'))
+  const performance = directorDesignGraph(value, { scope: 'shot', shotId: 'shot1', domain: 'performance' })
+  assert.ok(performance.nodes.some(node => node.key === 'situation:0'))
+  assert.ok(performance.nodes.some(node => node.key === 'performance:0'))
+  assert.ok(!performance.nodes.some(node => node.key === 'performance:1'))
+  const continuity = directorDesignGraph(value, { scope: 'shot', shotId: 'shot1', domain: 'continuity' })
+  assert.ok(!continuity.nodes.some(node => node.key === 'continuity:unlinked'))
+  assert.deepEqual(value.direction.shots[0].participant_ids, [])
+  assert.ok(directorDesignGraph(value, { scope: 'all', domain: 'staging' }).nodes.some(node => node.key === 'activity:1'))
+})
+
+test('an explicit temporary target is visible in its home without expanding current-shot membership', () => {
+  const value = makeWorkspace().designs[0].content
+  value.staging.activities.push({ ...structuredClone(value.staging.activities[0]), trigger_event_id: null })
+  const view = { scope: 'shot', shotId: 'shot1', domain: 'staging' }
+  const temporary = directorDesignGraph(value, { ...view, temporaryKey: 'activity:1' })
+  assert.ok(temporary.nodes.some(node => node.key === 'activity:1' && node.kind !== 'reference'))
+  assert.equal(temporary.relatedKeys.has('activity:1'), false)
+  assert.ok(!directorDesignGraph(value, view).nodes.some(node => node.key === 'activity:1'))
+  assert.ok(!directorDesignGraph(value, { ...view, temporaryKey: 'camera:0' }).nodes.some(node => node.key === 'camera:0' && node.kind !== 'reference'))
+})
+
+test('domain summaries count explicit core content without treating empty shapes as filled', () => {
+  const value = makeWorkspace().designs[0].content
+  const node = key => directorDesignGraph(value, { scope: 'all' }).groups.flatMap(group => group.members).find(row => row.key === key)
+  assert.equal(designCoreContent(value, node('sound')), '')
   value.sound.sources = { state: 'none' }
+  assert.equal(designCoreContent(value, node('sound')), '明确没有')
   value.performance.beats[0].physical_action = { state: 'proposal', text: '展开旧信' }
-  assert.equal(sharedDesignGroup(value).filled, 3)
-  assert.equal(sharedDesignGroup(value).snippets[0], '展开旧信')
-  value.performance.beats.push({ ...structuredClone(value.performance.beats[0]), physical_action: { state: 'proposal', text: '收起旧信' } })
-  value.staging.activities[0].ongoing_task = { state: 'proposal', text: '窗外行人经过' }
-  assert.deepEqual(sharedDesignGroup(value).snippets, ['展开旧信', '窗外行人经过'])
+  assert.equal(designCoreContent(value, node('performance:0')), '展开旧信')
 })
 
-test('current shot relations project to the shared card without inventing reverse constraints', () => {
+test('domain projection keeps direction and original fields of cross-domain relations', () => {
   const value = makeWorkspace().designs[0].content
-  const group = sharedDesignGroup(value)
-  const original = shotGraph(value, 'shot1')
-  const projected = projectSharedGraph(original, group.members)
-  assert.ok(projected.nodes.some(node => node.key === 'shared:design'))
-  assert.ok(!projected.nodes.some(node => node.key === 'performance:0'))
-  const edge = projected.edges.find(row => row.from === 'beat:beat1' && row.to === 'shared:design')
-  assert.equal(edge.label, '节拍表演')
-  assert.deepEqual(edge.sources.map(row => [row.from, row.to]), [['beat:beat1', 'performance:0']])
-  assert.ok(!projected.edges.some(row => row.from === 'shared:design' && row.to === 'shot:shot1'))
-})
-
-test('whole-scene references keep unassigned members and one boundary per external design object', () => {
-  const value = makeWorkspace().designs[0].content
-  value.staging.activities.push({ ...structuredClone(value.staging.activities[0]), participant_id: 'missing-person' })
-  const group = sharedDesignGroup(value)
-  const graph = sceneDesignGraph(value)
-  const subgraph = sharedDesignSubgraph(graph, group.members)
-  assert.ok(group.members.some(node => node.key === 'activity:1'))
-  assert.ok(graph.edges.some(edge => edge.from === 'activity:1' && edge.to === 'participant:missing-person' && edge.field === 'participant_id'))
-  assert.equal(subgraph.nodes.filter(node => node.key === 'participant:person1').length, 1)
-  assert.equal(subgraph.nodes.find(node => node.key === 'participant:missing-person').kind, 'missing')
-  assert.ok(subgraph.edges.some(edge => edge.from === 'situation:0' && edge.to === 'participant:person1'))
-  assert.ok(subgraph.nodes.some(node => node.key === 'shot:shot1'))
+  const graph = directorDesignGraph(value, { scope: 'all' })
+  const edge = graph.edges.find(row => row.from === 'domain:performance' && row.to === 'domain:direction' && row.label === '所属节拍')
+  assert.deepEqual(edge.sources.map(row => [row.from, row.to, row.field]), [['performance:0', 'beat:beat1', 'beat_id']])
+  assert.ok(!graph.edges.some(row => row.from === row.to))
+  const staging = directorDesignGraph(value, { scope: 'all', domain: 'staging' })
+  assert.equal(staging.nodes.filter(node => node.key === 'participant:person1').length, 1)
+  assert.equal(staging.nodes.find(node => node.key === 'participant:person1').kind, 'reference')
 })
 
 test('whole-scene graph retains each step of a derived field path', () => {
@@ -60,9 +84,8 @@ test('whole-scene graph retains each step of a derived field path', () => {
   assert.deepEqual(derived?.path.map(edge => [edge.from, edge.to, edge.field]), [
     ['shot:shot1', 'blocking:state1', 'blocking_state_ids'], ['blocking:state1', 'participant:person1', 'participant_id'],
   ])
-  const group = sharedDesignGroup(value)
-  const projected = projectSharedGraph(graph, group.members)
-  assert.ok(projected.edges.some(edge => edge.indirect && edge.from === 'shot:shot1' && edge.to === 'participant:person1' && edge.sources.length === 2))
+  const projected = directorDesignGraph(value, { scope: 'all' })
+  assert.ok(projected.edges.some(edge => edge.indirect && edge.from === 'domain:direction' && edge.to === 'participant:person1' && edge.sources.length === 2))
   assert.ok(graph.edges.some(edge => edge.indirect && edge.from === 'camera:0' && edge.to === 'participant:person1' && edge.path?.length === 3))
 })
 
@@ -75,6 +98,17 @@ test('unidentified work cards retain layout only while their content is unambigu
   assert.deepEqual(after, before.reverse())
   value.performance.situations.push(structuredClone(value.performance.situations[0]))
   assert.match(designObjectLayoutId(value, designObjects(value).find(node => node.key === 'situation:0')), /:ambiguous:/)
+})
+
+test('camera and performance layout follow their unique business keys across reordering', () => {
+  const value = makeWorkspace().designs[0].content
+  value.cinematography.push({ ...structuredClone(value.cinematography[0]), shot_id: 'shot2' })
+  const cameras = () => designObjects(value).filter(node => node.key.startsWith('camera:')).map(node => designObjectLayoutId(value, node))
+  assert.deepEqual(cameras(), ['camera:shot1', 'camera:shot2'])
+  value.cinematography.reverse()
+  assert.deepEqual(cameras(), ['camera:shot2', 'camera:shot1'])
+  value.cinematography.push(structuredClone(value.cinematography[0]))
+  assert.match(cameras()[0], /:ambiguous:/)
 })
 
 test('shot participant relations are explicit, editable and independent of background evidence', () => {
@@ -255,6 +289,7 @@ test('design cards share one performance across shots and retain the real beat p
   assert.equal(designCard(next, object, value).dirty, true)
   assert.match(designCard(next, object).text, /缓慢握紧旧信/)
   assert.equal(next.performance.beats.length, value.performance.beats.length)
+  value.staging.activities[0].trigger_event_id = null
   assert.equal(designCard(value, designObjects(value).find(row => row.key.startsWith('activity:'))).shots.length, 0, 'same participant does not manufacture shot membership')
 })
 
@@ -286,4 +321,17 @@ test('shared cards project only their fields and saved comparisons follow object
   value.cinematography.reverse()
   const camera = designObjects(value).find(row => row.key === 'camera:0')
   assert.equal(designCard(value, camera, baseline).dirty, false)
+})
+
+test('card association explains activity and continuity selected through a covered beat event', () => {
+  const value = makeWorkspace().designs[0].content
+  value.direction.shots[0].event_ids = []
+  value.direction.beats[0].event_ids = ['event1']
+  value.staging.activities[0].trigger_event_id = 'event1'
+  value.continuity[0].event_id = 'event1'
+  for (const key of ['activity:0', `continuity:${value.continuity[0].id}`]) {
+    const card = designCard(value, designObjects(value).find(row => row.key === key))
+    assert.equal(card.scope, '关联 1 个镜头')
+    assert.match(card.shots[0].via, /事件/)
+  }
 })

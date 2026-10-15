@@ -9,9 +9,11 @@ const assetDrag = 'application/x-jellyfish-project-asset'
 const names = { character: '角色', scene: '场所', prop: '道具' }
 
 /** 只关联项目已有资产；点击和拖入使用同一关联入口，不修改或删除共享资产。 */
-export function SceneAssetLinks({ projectId, value, disabled, onChange, assetKind, shotId }: {
+export function SceneAssetLinks({ projectId, value, disabled, onChange, assetKind, shotId, participantId, createOnly = false }: {
   assetKind?: AssetSummary['kind']
   shotId?: string
+  participantId?: string
+  createOnly?: boolean
   projectId: string
   value: EditableSceneDesign_Output
   disabled: boolean
@@ -72,26 +74,26 @@ export function SceneAssetLinks({ projectId, value, disabled, onChange, assetKin
         value={shot.participant_ids || []} options={value.participants.map(person => ({ value: person.id, label: person.name }))}
         onChange={ids => onChange({ ...value, direction: { ...value.direction, shots: value.direction.shots.map(item => item.id === shot.id ? { ...item, participant_ids: ids } : item) } })} />
     </div>}
-    {(!assetKind || assetKind === 'scene') && selector('scene', value.direction.location_asset_id, '本场场所资产')}
-    {assetKind !== 'scene' && value.participants.map(person => <section key={person.id}>
+    {!createOnly && !participantId && (!assetKind || assetKind === 'scene') && selector('scene', value.direction.location_asset_id, '本场场所资产')}
+    {!createOnly && assetKind !== 'scene' && value.participants.filter(person => !participantId || person.id === participantId).map(person => <section key={person.id}>
       <h4>{person.name}</h4>
       {(!assetKind || assetKind === 'character') && selector('character', person.character_id, `${person.name}角色关联`, person.id)}
       {(!assetKind || assetKind === 'prop') && selector('prop', person.prop_id, `${person.name}道具关联`, person.id)}
     </section>)}
     {!loading && !error && assets?.length === 0 && <p>当前项目尚无可关联资产。</p>}
-    <h4>项目已有资产</h4>
+    {!participantId && <><h4>项目已有资产</h4>
     <div className="canvas-asset-drop" aria-label="拖入资产加入本场" onDragOver={event => { if (!locked) event.preventDefault() }}
       onDrop={event => {
         event.preventDefault()
         const asset = assets?.find(item => `${item.kind}:${item.id}` === event.dataTransfer.getData(assetDrag))
-        if (asset && (!assetKind || asset.kind === assetKind)) { if (asset.kind === 'scene') associate('scene', asset.id); else addParticipant(asset) }
-      }}>点击下方资产或拖到此处加入本场；场所会替换本场场所关联。</div>
-    <Space wrap>{assets?.filter(asset => !assetKind || asset.kind === assetKind).map(asset => <div key={`${asset.kind}:${asset.id}`} draggable={!locked}
+        if (asset && (!createOnly || asset.kind !== 'scene') && (!assetKind || asset.kind === assetKind)) { if (asset.kind === 'scene') associate('scene', asset.id); else addParticipant(asset) }
+      }}>点击下方资产或拖到此处加入本场{!createOnly && '；场所会替换本场场所关联'}。</div>
+    <Space wrap>{assets?.filter(asset => (!createOnly || asset.kind !== 'scene') && (!assetKind || asset.kind === assetKind)).map(asset => <div key={`${asset.kind}:${asset.id}`} draggable={!locked}
       onDragStart={event => { event.dataTransfer.setData(assetDrag, `${asset.kind}:${asset.id}`); event.dataTransfer.effectAllowed = 'link' }}>
       <Button aria-label={`${asset.kind === 'scene' ? '用作本场场所' : '加入本场'}：${asset.name}`} disabled={locked || asset.kind !== 'scene' && value.participants.some(person => person[asset.kind === 'character' ? 'character_id' : 'prop_id'] === asset.id)}
         onClick={() => asset.kind === 'scene' ? associate('scene', asset.id) : addParticipant(asset)}>
         {names[asset.kind]} · {asset.name}
       </Button>
-    </div>)}</Space>
+    </div>)}</Space></>}
   </section>
 }

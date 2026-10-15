@@ -3,14 +3,14 @@ import { WorkbenchButton, WorkbenchIconButton } from './ui/WorkbenchButton'
 import { SourceProvider } from './Sources'
 import { SceneSourceRevision } from './SceneSourceRevision'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Alert, Button, Dropdown, Input, Modal, Select, Space, Spin, Switch } from 'antd'
+import { Alert, Button, Modal, Select, Space, Spin, Switch } from 'antd'
 import { ArrowLeftOutlined, DownOutlined, MoreOutlined, RedoOutlined, SaveOutlined, UndoOutlined } from '@ant-design/icons'
 import { CanvasToolbarMenu } from './CanvasToolbarMenu'
 import { CanvasTextPreview } from './CanvasTextPreview'
 import { Link, useBeforeUnload, useBlocker, useParams, useSearchParams } from 'react-router-dom'
 import { ApiError, StudioDirectingService } from '../../../services/generated'
 import type { SceneVersionContent_Output, SceneVersionCopy, SceneVersionCreate, SceneVersionRead, SceneVideoSaveResult, SequenceRead } from '../../../services/generated'
-import { directingError, humanNote } from './common'
+import { directingError } from './common'
 import { clearSceneRecovery, readSceneRecovery, writeSceneRecovery } from './sceneRecovery'
 import type { SaveOperation, SceneRecovery } from './sceneRecovery'
 import { useSceneEditOwnership } from './useSceneEditOwnership'
@@ -30,21 +30,11 @@ import type { VideoActivityTarget } from './SceneVideoActivity'
 import { SceneInstructionActivity } from './SceneInstructionActivity'
 import type { InstructionActivityTarget } from './SceneInstructionActivity'
 import { SceneSourceBasis } from './SceneSourceBasis'
-import { ManualSceneShots } from './ManualSceneShots'
-import { SceneDesignPanel, targetFor } from './SceneDesignPanel'
-import type { DesignFocusRequest } from './SceneDesignPanel'
 import { SceneDesignSuggestions } from './SceneDesignSuggestions'
 import type { UnitReferenceConflict } from './sceneUnitReferences'
 import { DirectorCanvasSurface } from './DirectorCanvasSurface'
-import type { DirectorCanvasRelation } from './DirectorCanvasSurface'
-import { designObjectLayoutId, designObjects, projectSharedGraph, sceneDesignGraph, sharedDesignGroup, sharedDesignSubgraph, shotGraph, shotRelationPath } from './designWorkspace'
-import type { DesignObject } from './designWorkspace'
-import { DesignObjectSummary } from './DesignObjectSummary'
-import { designCard } from './designCard'
-import { DirectorLocationSummary } from './DirectorLocationSummary'
-import { designAt } from './designValue'
+import { DirectorDesignCanvas } from './DirectorDesignCanvas'
 import { TaskCenter } from '../components/TaskCenter'
-import { CanvasQuickEditor } from './CanvasQuickEditor'
 import './canvasWorkbench.css'
 
 type CopyIntent = { versionId: string; body: SceneVersionCopy; base: SceneVersionRead; undo: SceneVersionContent_Output[] }
@@ -101,16 +91,10 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
   const [editClipFocus, setEditClipFocus] = useState<{ versionId: string; clipId: string }>()
   const [instructionFocus, setInstructionFocus] = useState<{ unitId: string; serial: number }>()
   const [directorFocus, setDirectorFocus] = useState<{ versionId: string; nodeId: string; fieldId: string; serial: number }>()
-  const [unavailableDesignTarget, setUnavailableDesignTarget] = useState(false)
   const [unitFocus, setUnitFocus] = useState<{ versionId: string; unitId: string; nodeId: string; fieldId: string; serial: number }>()
   const [shotSelections, setShotSelections] = useState<Record<string, string>>({})
-  const [showDesignEvidence, setShowDesignEvidence] = useState(false)
-  const [showAllDesign, setShowAllDesign] = useState(false)
-  const [summaryOpen, setSummaryOpen] = useState(false)
-  const [summaryOuterView, setSummaryOuterView] = useState<'shot' | 'all'>('shot')
-  const [designFocus, setDesignFocus] = useState<DesignFocusRequest & { versionId: string }>()
-  const [editor, setEditor] = useState<{ versionId: string; kind: 'viewpoint' | 'shot' | 'design' | 'source' | 'ai' }>()
-  const [navigation, setNavigation] = useState<{ versionId: string; kind: 'relations' | 'designNavigation' }>()
+  const [editor, setEditor] = useState<{ versionId: string; kind: 'source' | 'ai' }>()
+  const [navigation, setNavigation] = useState<{ versionId: string; kind: 'relations' }>()
   const [primaryHost, setPrimaryHost] = useState<HTMLDivElement | null>(null)
   const [navigationHost, setNavigationHost] = useState<HTMLDivElement | null>(null)
   const [feedbackHost, setFeedbackHost] = useState<HTMLDivElement | null>(null)
@@ -162,6 +146,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
   const [handingOff, setHandingOff] = useState(false)
   const transitionActive = useRef(false)
   const lastEditing = useRef<{ element: HTMLTextAreaElement; start: number; end: number; scrollTop: number }>()
+  const restoreEditingPending = useRef(false)
   const histories = useRef(sessionHistories)
   const live = useRef(true)
   const selectedId = params.get('version') || defaultVersion(versions)?.id
@@ -221,145 +206,18 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
     onRejected: (target, error) => setVideoFeedback(previous => ({ ...previous, [`${target.versionId}:${target.unitId}`]: { message: `${target.versionTitle} · ${target.unitLabel}：视频未提交：${error}`, versionId: target.versionId, unitId: target.unitId, executionId: target.executionId } })),
   })
   const currentDirectVideo = directVideos.pending.find(row => row.versionId === selectedId && row.unitId === unitSelections[selectedId || ''])
-  const directorStorageKey = `jellyfish:director-layout:local-user:${projectId}:${sequenceId}:${selected?.id || 'empty'}`
-  const [directorPreferenceKey, setDirectorPreferenceKey] = useState('')
-  useLayoutEffect(() => {
-    if (!selected || !content || directorPreferenceKey === directorStorageKey) return
-    let stored: { shotId?: string; overview?: boolean; evidence?: boolean; summary?: boolean; outer?: 'shot' | 'all' } = {}
-    try { stored = JSON.parse(localStorage.getItem(`${directorStorageKey}:selection`) || '{}') || {} } catch { /* 使用默认镜头。 */ }
-    if (typeof stored.shotId === 'string' && stored.shotId.length > 0) setShotSelections(previous => ({ ...previous, [selected.id]: stored.shotId! }))
-    setShowAllDesign(stored.overview === true)
-    setSummaryOpen(stored.summary === true)
-    setSummaryOuterView(stored.outer === 'all' ? 'all' : stored.overview ? 'all' : 'shot')
-    setShowDesignEvidence(stored.evidence === true)
-    setDirectorPreferenceKey(directorStorageKey)
-    if (!params.has('directorView') && (stored.summary || stored.overview)) {
-      const next = new URLSearchParams(params)
-      next.set('directorView', stored.summary ? 'summary' : 'all')
-      setParams(next, { replace: true })
-    }
-  }, [selected?.id, !!content, directorStorageKey])
-  useEffect(() => {
-    if (directorPreferenceKey !== directorStorageKey) return
-    const view = params.get('directorView')
-    setSummaryOpen(view === 'summary')
-    if (view !== 'summary') setShowAllDesign(view === 'all')
-  }, [directorPreferenceKey, directorStorageKey, params.get('directorView')])
-  const selectDirectorView = (view: 'shot' | 'all' | 'summary') => {
-    if (view === (summaryOpen ? 'summary' : showAllDesign ? 'all' : 'shot')) return
-    if (view === 'summary') setSummaryOuterView(showAllDesign ? 'all' : 'shot')
-    setSummaryOpen(view === 'summary')
-    if (view !== 'summary') setShowAllDesign(view === 'all')
-    const next = new URLSearchParams(params)
-    if (view === 'shot') next.delete('directorView')
-    else next.set('directorView', view)
-    setParams(next)
-  }
   const currentShotId = selected ? shotSelections[selected.id] ?? content?.design.direction.shots[0]?.id : undefined
   const currentEditor = editor?.versionId === selected?.id ? editor?.kind : undefined
-  const openEditor = (kind: 'viewpoint' | 'shot' | 'design' | 'source' | 'ai') => {
+  const openEditor = (kind: 'source' | 'ai') => {
     if (!selected) return
-    if (kind === 'viewpoint' || kind === 'shot') setNavigation(undefined)
     setEditor({ versionId: selected.id, kind })
   }
   const currentNavigation = navigation?.versionId === selected?.id ? navigation?.kind : undefined
-  const openNavigation = (kind: 'relations' | 'designNavigation') => {
+  const openNavigation = (kind: 'relations') => {
     if (!selected) return
-    setEditor(previous => previous?.kind === 'viewpoint' || previous?.kind === 'shot' ? undefined : previous)
     setNavigation({ versionId: selected.id, kind })
   }
-  useEffect(() => {
-    if (directorPreferenceKey !== directorStorageKey) return
-    try { localStorage.setItem(`${directorStorageKey}:selection`, JSON.stringify({ shotId: currentShotId, overview: showAllDesign, evidence: showDesignEvidence, summary: summaryOpen, outer: summaryOuterView })) } catch { /* 偏好不可写不影响业务编辑。 */ }
-  }, [directorPreferenceKey, directorStorageKey, currentShotId, showAllDesign, showDesignEvidence, summaryOpen, summaryOuterView])
-  const hasDirectorShot = !!content?.design.direction.shots.some(shot => shot.id === currentShotId)
-  const directorAnchor = hasDirectorShot ? `shot:${currentShotId}` : '全场共享'
-  const group = content && sharedDesignGroup(content.design)
-  const groupCards = group?.members.map(node => designCard(content!.design, node, selected?.content.design)) || []
-  const groupIssues = groupCards.reduce((count, card) => count + card.issues.length, 0)
-  const groupDirty = groupCards.some(card => card.dirty)
-  const graph = content ? showAllDesign || summaryOpen ? sceneDesignGraph(content.design) : currentShotId ? shotGraph(content.design, currentShotId) : { nodes: [], edges: [] } : { nodes: [], edges: [] }
-  const projected = group && !summaryOpen ? projectSharedGraph(graph, group.members) : graph
-  const subgraph = group && summaryOpen ? sharedDesignSubgraph(graph, group.members) : undefined
-  const graphIdentity = (key: string) => {
-    if (key === `shot:${currentShotId}`) return directorAnchor
-    const node = graph.nodes.find(item => item.key === key) || (content && designObjects(content.design).find(item => item.key === key))
-    const row = node && content ? designAt(content.design, node.path) : undefined
-    if (node && content && /^(situation|activity):/.test(key)) return designObjectLayoutId(content.design, node)
-    if (key.startsWith('camera:')) return `camera:${row?.shot_id}`
-    if (key.startsWith('performance:')) return `performance:${row?.beat_id}:${row?.participant_id}`
-    return key
-  }
-  const evidence = (key: string) => /^(participant|beat|event|anchor):/.test(key)
-  const visibleObjects = subgraph ? [...subgraph.nodes] : projected.nodes.filter(node => node.key !== 'shared:design' && node.key !== `shot:${currentShotId}` && (showDesignEvidence || !evidence(node.key) || node.kind === 'missing'))
-  if (content && showAllDesign && !summaryOpen) designObjects(content.design).filter(node => node.key !== 'overview' && node.key !== `shot:${currentShotId}` && !group?.members.some(member => member.key === node.key) && !visibleObjects.some(item => item.key === node.key)).forEach(node => visibleObjects.push(node))
-  const objectOrder = (key: string) => ({ camera: 0, performance: 1, blocking: 2, continuity: 3, dialogue: 4, criterion: 5 }[key.split(':')[0]] ?? 6)
-  visibleObjects.sort((a, b) => objectOrder(a.key) - objectOrder(b.key))
-  const cardTitle = (node: DesignObject) => {
-    if (!content || node.kind === 'missing') return node.label
-    const row = designAt(content.design, node.path)
-    const person = row?.participant_id && content.design.participants.find(item => item.id === row.participant_id)?.name
-    if (node.key.startsWith('performance:')) {
-      const index = content.design.direction.beats.findIndex(item => item.id === row.beat_id)
-      return `${person || '人物引用缺失'} · ${index < 0 ? '节拍引用缺失' : `节拍 ${String(index + 1).padStart(2, '0')}`}`
-    }
-    if (/^(blocking|situation|activity|dialogue):/.test(node.key)) return person || '人物引用缺失'
-    if (node.key.startsWith('continuity:')) return `${({ hands_props: '手部与道具', space: '空间', appearance: '造型', environment: '环境', camera: '摄影', dialogue_sound: '对白与声音' } as Record<string, string>)[row.domain] || row.domain || '未填写领域'} · ${person || (row.event_id ? '关联事件' : '未指定对象')}`
-    if (node.key.startsWith('camera:')) {
-      const index = content.design.direction.shots.findIndex(shot => shot.id === row.shot_id)
-      return index < 0 ? '镜头引用缺失' : `镜头 ${String(index + 1).padStart(2, '0')}`
-    }
-    if (node.key.startsWith('participant:')) return row.name || node.label
-    return node.label
-  }
-  const graphObjects = visibleObjects.map(node => ({
-    id: graphIdentity(node.key), label: node.label, title: cardTitle(node),
-    onInspect: node.kind === 'missing' || node.kind === 'boundary' ? undefined : (trigger: HTMLElement) => {
-      if (selected && content) setDesignFocus({ versionId: selected.id, target: { ...targetFor(content.design, node.path), object: true }, trigger, serial: Date.now() })
-    },
-    content: <section className="canvas-workbench-card">
-      {node.kind === 'boundary' && <WorkbenchButton variant="quiet" onClick={() => {
-        if (!selected) return
-        selectDirectorView('all')
-        setDirectorFocus({ versionId: selected.id, nodeId: graphIdentity(node.key), fieldId: '', serial: Date.now() })
-      }}>在外层定位</WorkbenchButton>}
-      {node.kind === 'missing' && summaryOpen && <WorkbenchButton variant="quiet" onClick={() => {
-        const owner = subgraph?.edges.find(edge => edge.to === node.key)?.from
-        if (selected && owner) setDirectorFocus({ versionId: selected.id, nodeId: graphIdentity(owner), fieldId: '', serial: Date.now() })
-      }}>定位引用者</WorkbenchButton>}
-      {summaryOpen && group?.members.some(member => member.key === node.key) && <WorkbenchButton variant="secondary" disabled={readonly || handingOff || !!recovery || busy === 'create'} onClick={event => {
-        if (selected && content) setDesignFocus({ versionId: selected.id, target: { ...targetFor(content.design, node.path), object: true }, trigger: event.currentTarget, serial: Date.now(), side: true })
-      }}>编辑此卡</WorkbenchButton>}
-      {node.kind !== 'missing' && node.kind !== 'boundary' && !/^(camera|criterion|performance|blocking|situation|activity|continuity|dialogue|participant|beat|event|anchor):/.test(node.key) && !/^(performance|staging|sound|prompt)$/.test(node.key) && <Button aria-label={`查看关系对象：${node.label}`} onClick={event => {
-        if (selected && content) setDesignFocus({ versionId: selected.id, target: { ...targetFor(content.design, node.path), object: true }, trigger: event.currentTarget, serial: Date.now() })
-      }}>查看或编辑</Button>}
-      <DesignObjectSummary value={content!.design} saved={selected?.content.design} object={node} compact onSelectShot={id => { if (!selected) return; selectShot(id); if (summaryOpen) return; selectDirectorView('shot'); setDirectorFocus({ versionId: selected.id, nodeId: graphIdentity(node.key), fieldId: '', serial: Date.now() }) }} /></section>,
-  }))
-  const graphRelations: DirectorCanvasRelation[] = (subgraph ? subgraph.edges : projected.edges)
-    .filter(edge => summaryOpen || showAllDesign || showDesignEvidence || !evidence(edge.from) && !evidence(edge.to))
-    .map(edge => ({ ...edge, from: edge.from === 'shared:design' ? '全场共享' : graphIdentity(edge.from), to: edge.to === 'shared:design' ? '全场共享' : graphIdentity(edge.to),
-      sources: ('sources' in edge && Array.isArray(edge.sources) ? edge.sources : edge.path || [edge]).map(source => ({ ...source,
-        fromLabel: graph.nodes.find(node => node.key === source.from)?.label,
-        toLabel: graph.nodes.find(node => node.key === source.to)?.label })) }))
-  if (!summaryOpen && !showDesignEvidence && !showAllDesign && currentShotId) visibleObjects.forEach(node => {
-    const path = shotRelationPath(graph, currentShotId, node.key)
-    if (path.length > 1 && path.some(edge => evidence(edge.from) || evidence(edge.to))) graphRelations.push({ from: directorAnchor, to: graphIdentity(node.key), label: path.map(edge => edge.label).join(' → '), indirect: true })
-  })
-  if (!summaryOpen && !showDesignEvidence && !showAllDesign && currentShotId) group?.members.forEach(node => {
-    const path = shotRelationPath(graph, currentShotId, node.key)
-    if (path.length > 1 && path.some(edge => evidence(edge.from) || evidence(edge.to))) graphRelations.push({ from: directorAnchor, to: '全场共享', label: path.map(edge => edge.label).join(' → '), indirect: true,
-      sources: path.map(edge => ({ ...edge, fromLabel: graph.nodes.find(node => node.key === edge.from)?.label, toLabel: graph.nodes.find(node => node.key === edge.to)?.label })) })
-  })
-  const openAssetTool = (assetKind: 'character' | 'scene', trigger: HTMLElement) => {
-    if (selected) setDesignFocus({ versionId: selected.id, target: { path: ['assets'], assetKind, shotId: currentShotId }, trigger, serial: Date.now() })
-  }
-  if (!summaryOpen && content?.design.direction.shots.some(shot => shot.id === currentShotId)) {
-    const id = `location:${content.design.direction.location_asset_id || 'unlinked'}`
-    graphObjects.push({ id, label: '本场场所', title: '本场场所', onInspect: trigger => openAssetTool('scene', trigger),
-      content: <section className="canvas-workbench-card"><DirectorLocationSummary projectId={projectId} assetId={content.design.direction.location_asset_id} /></section> })
-    if (content.design.direction.location_asset_id) graphRelations.push({ from: directorAnchor, to: id, label: '共享场所' })
-  }
-  const selectShot = (id: string) => {
+  const selectShot = (id: string, writeBrowseState = true) => {
     const { selected, content } = latest.current
     if (!selected || !content?.design.direction.shots.some(row => row.id === id)) return
     const remembered = shotUnitSelections.current[selected.id]?.[id]
@@ -368,11 +226,16 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
     const unitId = remembered || (units.length === 1 ? units[0].id : '')
     setShotSelections(previous => ({ ...previous, [selected.id]: id }))
     setUnitSelections(previous => ({ ...previous, [selected.id]: unitId }))
+    if (writeBrowseState && params.get('directorShot') !== id) {
+      const next = new URLSearchParams(params)
+      next.set('directorShot', id); next.delete('directorTarget'); next.delete('directorTemporary')
+      setParams(next, { replace: true })
+    }
   }
   const selectUnit = (id: string, targetShotId = currentShotId) => {
     const current = latest.current
     if (!current.selected || !targetShotId || !current.content?.units.some(unit => unit.id === id && unit.coverage.some(item => item.shot_id === targetShotId))) return
-    setShotSelections(previous => ({ ...previous, [current.selected!.id]: targetShotId }))
+    selectShot(targetShotId)
     rememberUnit(current.selected.id, targetShotId, id)
   }
   const navigateRelation = (target: SceneNavigationTarget) => {
@@ -404,12 +267,18 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
   latest.current = { selected, content }
   const hasChanges = () => !!latest.current.selected && !sameContent(latest.current.content, latest.current.selected.content)
   const restoreEditing = () => {
+    restoreEditingPending.current = true
+  }
+  // 保存失败后先解除输入禁用，再恢复原编辑焦点和选区。
+  useLayoutEffect(() => {
+    if (!restoreEditingPending.current || leaving || busy) return
+    restoreEditingPending.current = false
     const editing = lastEditing.current
     if (!editing?.element.isConnected) return
     editing.element.focus({ preventScroll: true })
     editing.element.setSelectionRange(editing.start, editing.end)
     editing.element.scrollTop = editing.scrollTop
-  }
+  }, [leaving, busy])
   const persistEditing = () => {
     const { selected, content } = latest.current
     if (!selected || !content || recovery || !ownership.canEdit()) return
@@ -559,6 +428,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
     const next = new URLSearchParams(params)
     next.set('version', id)
     next.delete('directorView')
+    next.delete('directorScope'); next.delete('directorTarget'); next.delete('directorTemporary'); next.delete('directorShot')
     setParams(next)
     setFailure(undefined)
   }
@@ -842,12 +712,20 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
   const blocker = useBlocker(({ currentLocation, nextLocation }) => {
     if (recoveryNavigation.current) { recoveryNavigation.current = false; return false }
     const changesContext = currentLocation.pathname !== nextLocation.pathname ||
-      new URLSearchParams(currentLocation.search).get('version') !== new URLSearchParams(nextLocation.search).get('version')
+      (new URLSearchParams(currentLocation.search).get('version') || latest.current.selected?.id) !==
+      (new URLSearchParams(nextLocation.search).get('version') || latest.current.selected?.id)
     return changesContext && (copyLock.current || hasChanges() || !!inFlight.current || !!pendingSave.current || busy === 'create' || !!recovery || handingOff)
   })
   useEffect(() => {
     if (blocker.state === 'blocked') void requestTransition({ action: blocker.proceed, cancel: blocker.reset })
   }, [blocker])
+  useEffect(() => {
+    if (!params.has('version') && selectedId && loadState === 'ready' && !busy && blocker.state === 'unblocked') {
+      const next = new URLSearchParams(params)
+      next.set('version', selectedId)
+      setParams(next, { replace: true })
+    }
+  }, [params.get('version'), selectedId, loadState, busy, blocker.state])
   useBeforeUnload(event => {
     if (copyLock.current || hasChanges() || inFlight.current || pendingSave.current || busy === 'create') {
       event.preventDefault()
@@ -904,6 +782,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
         for (const key of ['sceneTask', 'taskVersion', 'taskKind', 'taskUnit']) next.delete(key)
         next.set('version', historyVersionId)
         next.delete('directorView')
+    next.delete('directorScope'); next.delete('directorTarget'); next.delete('directorTemporary'); next.delete('directorShot')
         setParams(next)
         setEditor(undefined); setCanvas(historyTaskKind === 'design' ? 'director' : 'instructions')
         if (shotId && historyUnitId) {
@@ -923,10 +802,6 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
     return () => window.clearTimeout(timer)
   }, [autoSave, dirty, draft, busy, deliveryBusy, exportBusy, copyLocked, copyError, failure, readonly, transition, leaving, recovery, handingOff])
 
-  const designPanel = () => selected && content && <SceneDesignPanel navigationOpen={currentNavigation === 'designNavigation'} onNavigationOpenChange={open => open ? openNavigation('designNavigation') : setNavigation(undefined)} key={`${selected.id}:${summaryOpen ? 'summary' : 'outer'}`} projectId={projectId} value={content.design} saved={selected.content.design} units={content.units || []} onLocateUnit={locateUnitReference} disabled={handingOff || !!recovery || readonly || busy === 'create'} hideTriggers={summaryOpen}
-    open={currentEditor === 'design'} onOpenChange={open => open ? openEditor('design') : setEditor(undefined)}
-    focusRequest={designFocus?.versionId === selected.id ? designFocus : undefined} onSelectShot={selectShot} onFocusHandled={() => setDesignFocus(undefined)}
-    onChange={design => editContent({ ...content, design })} />
   return <SourceProvider projectId={projectId} sequenceId={sequenceId} renderRevision={source => <SceneSourceRevision key={`${source.revision_id}:${source.source.version}`} projectId={projectId} sequenceId={sequenceId} source={source} />}><WorkbenchTheme><section ref={node => { if (node) node.inert = copyLocked }} className="canvas-workbench" data-canvas={canvas} aria-label="场次画布工作台" onBlurCapture={event => {
     if (event.target instanceof HTMLTextAreaElement) {
       const element = event.target
@@ -1043,7 +918,6 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
     </div>
     <div ref={notices} className="canvas-workbench-alerts">
       <div className="canvas-operation-feedback" ref={setFeedbackHost} />
-      {unavailableDesignTarget && <Alert type="warning" closable onClose={() => setUnavailableDesignTarget(false)} message="原对象不可用，请重新选择" />}
       {copyError && !copyLocked && <Alert type="warning" message={copyError} closable onClose={() => setCopyError('')} />}
     {Object.entries(videoFeedback).map(([key, feedback]) => <Alert key={key} className="canvas-workbench-notice" type="info" message={feedback.message} description={feedback.error} closable
       action={<Button onClick={() => void locateVideoUnit(feedback).then(() => setVideoFeedback(previous => previous[key] ? { ...previous, [key]: { ...previous[key], error: undefined } } : previous)).catch(cause => setVideoFeedback(previous => previous[key] ? { ...previous, [key]: { ...previous[key], error: directingError(cause) } } : previous))}>{feedback.executionId ? '返回原视频执行' : '返回视频单元'}</Button>}
@@ -1114,71 +988,24 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       shotId={currentShotId} unitId={unitSelections[selected.id]} disabled={readonly || handingOff || !!recovery || busy === 'create' || leaving}
       onSelectShot={selectShot}
       onSelectUnit={selectUnit} onChange={editContent} />}
-    {loadState === 'ready' && canvas === 'director' && <DirectorCanvasSurface layoutScope={content && directorPreferenceKey === directorStorageKey ? {
-      storageKey: directorStorageKey, viewId: summaryOpen ? 'summary' : showAllDesign ? 'all' : hasDirectorShot ? `shot:${currentShotId}` : 'empty', anchorId: summaryOpen ? 'overview' : directorAnchor,
-      validIds: [...new Set(['原文依据', '全场共享', '镜头设计', ...designObjects(content.design).filter(node => node.key !== 'overview').map(node => graphIdentity(node.key)), ...sceneDesignGraph(content.design).nodes.map(node => graphIdentity(node.key)), `location:${content.design.direction.location_asset_id || 'unlinked'}`])].filter(id => !id.includes(':ambiguous:')),
-      onInvalidTarget: () => setUnavailableDesignTarget(true),
-    } : undefined} focusTarget={directorFocus?.versionId === selected?.id ? directorFocus : undefined} key={selectedId || sequenceId} contextKey={`${sequenceId}:${selectedId || 'empty'}`} objects={graphObjects} relations={graphRelations} anchorTitle={hasDirectorShot ? `镜头 ${String(content!.design.direction.shots.findIndex(shot => shot.id === currentShotId) + 1).padStart(2, '0')}` : undefined}
-      toolbar={selected && content && <>
-        {summaryOpen && <WorkbenchButton variant="secondary" onClick={() => selectDirectorView(summaryOuterView)}>返回导演画布</WorkbenchButton>}
-        {summaryOpen && <WorkbenchButton variant="quiet" disabled={readonly || handingOff || !!recovery || busy === 'create'} onClick={() => openEditor('design')}>新增设计工作单</WorkbenchButton>}
-        <Dropdown trigger={['click']} menu={{ items: content.design.direction.shots.map((shot, index) => ({ key: shot.id, label: `镜头 ${String(index + 1).padStart(2, '0')} · ${shot.visible_result.text || '未填写可见结果'}`, onClick: () => selectShot(shot.id) })) }}>
-          <WorkbenchButton variant="secondary" aria-label="选择镜头">{hasDirectorShot ? `镜头 ${String(content.design.direction.shots.findIndex(shot => shot.id === currentShotId) + 1).padStart(2, '0')}` : currentShotId ? '原镜头不可用' : '选择镜头'} <DownOutlined /></WorkbenchButton>
-        </Dropdown>
-        <WorkbenchButton variant="quiet" disabled={readonly || handingOff || !!recovery || busy === 'create' || leaving} onClick={() => {
-          const id = crypto.randomUUID()
-          editContent({ ...content, design: { ...content.design, direction: { ...content.design.direction, shots: [...content.design.direction.shots, { id, beat_ids: [], event_ids: [], blocking_state_ids: [], participant_ids: null, criterion_ids: [], narrative_function: { state: 'unset' }, visible_result: { state: 'unset' }, estimated_duration_ms: null }] } } })
-          setShotSelections(previous => ({ ...previous, [selected.id]: id }))
-          openEditor('shot')
-        }}>手动添加镜头</WorkbenchButton>
-        <WorkbenchButton variant="quiet" disabled={!hasDirectorShot} onClick={() => openEditor('shot')}>编辑当前镜头</WorkbenchButton>
-        <Dropdown trigger={['click']} menu={{ items: [
-          { key: 'overview', label: showAllDesign ? '收起全场设计总览' : '展开全场设计总览', onClick: () => selectDirectorView(showAllDesign ? 'shot' : 'all') },
-          { key: 'evidence', label: showDesignEvidence ? '收起关联依据' : '查看关联依据', onClick: () => setShowDesignEvidence(value => !value) },
-          ...(summaryOpen ? [{ key: 'global-editor', label: '编辑六岗设计', onClick: () => openEditor('design') },
-            { key: 'design-navigation', label: '关系导航', onClick: () => openNavigation('designNavigation') }] : []),
-        ] }}><WorkbenchButton variant="quiet" aria-label="导演画布展示范围">展示范围 <DownOutlined /></WorkbenchButton></Dropdown>
-      </>}
-      tools={selected ? [{ label: '角色工具', onClick: trigger => openAssetTool('character', trigger) }, { label: '场所工具', onClick: trigger => openAssetTool('scene', trigger) }] : []}
-      inspectors={{
-        原文依据: selected ? () => openEditor('source') : undefined,
-        全场共享: selected ? trigger => setDesignFocus({ versionId: selected.id, target: { path: ['direction'] }, trigger, serial: Date.now() }) : undefined,
-        镜头设计: content?.design.direction.shots.some(shot => shot.id === currentShotId) ? trigger => { if (selected) setDesignFocus({ versionId: selected.id, target: { ...targetFor(content.design, ['direction', 'shots', content.design.direction.shots.findIndex(shot => shot.id === currentShotId)]), object: true }, trigger, serial: Date.now() }) } : undefined,
-      }}>
-      {!summaryOpen && <section className="canvas-workbench-card" aria-label="原文依据">
-        {selected && content ? <SceneSourceBasis key={selected.id} projectId={projectId} chapterId={chapterId} basis={content.basis} compact dirty={JSON.stringify(content.basis) !== JSON.stringify(selected.content.basis)}
-          open={currentEditor === 'source'} onOpenChange={open => open ? openEditor('source') : setEditor(undefined)}
-          disabled={readonly || handingOff || !!recovery || busy === 'create'} onChange={basis => editContent({ ...content, basis })} /> :
-          <CanvasTextPreview text={sequence?.source_text || '原文尚未填写'} label="原文" />}
-        {!selected && !selectedId && <p>尚无场次版本，明确新建后开始设计。</p>}
-      </section>}
-      {!summaryOpen && selected && content && <section className="canvas-workbench-card director-summary-card" aria-label="全场概览">
-        <p>{group?.core || '全场核心信息未填写'}</p>
-        {group?.snippets.map((snippet, index) => <p key={index}>{snippet}</p>)}
-        <p>成员 {group?.members.length || 0} · 已填写 {group?.filled || 0}</p>
-        <p>全场适用{groupIssues ? ` · 待处理 ${groupIssues} 项` : ''}{groupDirty ? ' · 有未保存修改' : ''}</p>
-        <WorkbenchButton variant="secondary" onClick={() => selectDirectorView('summary')}>进入全场概览子图</WorkbenchButton>
-        {designPanel()}
-        <Button onClick={() => openEditor('viewpoint')}>编辑叙事视点</Button>
-        {!content.design.direction.shots.length && <WorkbenchButton onClick={() => openEditor('ai')}>前往 AI 设计</WorkbenchButton>}
-        {currentEditor === 'viewpoint' && <CanvasQuickEditor title="叙事视点编辑" onClose={() => setEditor(undefined)}>
-          <label htmlFor="scene-viewpoint">叙事视点</label>
-          <Input.TextArea id="scene-viewpoint" aria-label="叙事视点" rows={6} value={content.design.direction.viewpoint.text || ''} disabled={handingOff || !!recovery || readonly || busy === 'create'}
-          onChange={event => {
-            const updated = { ...content, design: { ...content.design,
-              direction: { ...content.design.direction, viewpoint: humanNote(event.target.value) } } }
-            editContent(updated)
-          }} />
-        </CanvasQuickEditor>}
-      </section>}
-      {!summaryOpen && selected && content && <ManualSceneShots key={selected.id} value={content.design.direction}
-        summary={(() => { const object = designObjects(content.design).find(node => node.key === `shot:${currentShotId}`); return object && <DesignObjectSummary value={content.design} saved={selected.content.design} object={object} compact /> })()}
-        selectedId={currentShotId} onSelect={selectShot} compact
-        editing={currentEditor === 'shot'} onEdit={() => openEditor('shot')} onClose={() => setEditor(undefined)}
-        disabled={handingOff || !!recovery || readonly || busy === 'create'}
-        onChange={direction => editContent({ ...content, design: { ...content.design, direction } })} />}
+    {loadState === 'ready' && canvas === 'director' && selected && content && params.get('version') === selected.id && <DirectorDesignCanvas
+      key={selected.id} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} content={content} saved={selected.content}
+      shotId={currentShotId} onSelectShot={id => selectShot(id, false)} onChange={editContent}
+      onRestoreShot={id => setShotSelections(previous => ({ ...previous, [selected.id]: id }))}
+      disabled={handingOff || !!recovery || readonly || busy === 'create' || leaving}
+      onLocateUnit={locateUnitReference}
+      externalFocus={directorFocus?.versionId === selected.id ? directorFocus : undefined}
+      onExternalFocusHandled={() => setDirectorFocus(undefined)}
+      externalOverlay={currentEditor || currentNavigation}
+      noticeHost={feedbackHost}
+      source={<SceneSourceBasis key={selected.id} projectId={projectId} chapterId={chapterId} basis={content.basis} compact dirty={JSON.stringify(content.basis) !== JSON.stringify(selected.content.basis)}
+        open={currentEditor === 'source'} onOpenChange={open => open ? openEditor('source') : setEditor(undefined)}
+        disabled={handingOff || !!recovery || readonly || busy === 'create'} onChange={basis => editContent({ ...content, basis })} />} />}
+    {loadState === 'ready' && canvas === 'director' && !selected && <DirectorCanvasSurface contextKey={`${sequenceId}:empty`} labels={['原文依据']}>
+      <section className="canvas-workbench-card"><CanvasTextPreview text={sequence?.source_text || '原文尚未填写'} label="原文" />
+        {!selectedId && <p>尚无场次版本，明确新建后开始设计。</p>}
+      </section>
     </DirectorCanvasSurface>}
-    {summaryOpen && designPanel()}
     {loadState === 'ready' && selected && content && <SceneRelationsNavigation triggerHost={navigationHost} open={currentNavigation === 'relations'} onOpenChange={open => open ? openNavigation('relations') : setNavigation(undefined)} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} key={`relations:${selected.id}`} content={content} shotId={currentShotId} unitId={unitSelections[selected.id]} canvas={canvas} onNavigate={navigateRelation} />}
     <Modal rootClassName="canvas-workbench-dialog" title="有未保存的修改" open={!!transition} maskClosable={false} closable={!leaving} onCancel={cancelTransition}
       footer={<Space>

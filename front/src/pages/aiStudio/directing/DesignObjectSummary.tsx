@@ -8,7 +8,7 @@ import { designAt } from './designValue'
 import { noteText } from './designValue'
 import { ExclamationCircleOutlined, EditOutlined } from '@ant-design/icons'
 
-const compactKind = (key: string) => key === 'overview' || objectEvidence(key) || /^(performance|staging|sound|prompt)$/.test(key) || /^(shot|camera|criterion|performance|blocking|situation|activity|continuity|dialogue):/.test(key)
+const compactKind = (key: string) => key === 'overview' || key === 'space' || objectEvidence(key) || /^(performance|staging|sound|prompt)$/.test(key) || /^(shot|camera|criterion|performance|blocking|situation|activity|continuity|dialogue):/.test(key)
 const objectEvidence = (key: string) => /^(participant|beat|event|anchor|missing):/.test(key)
 
 function CompactDesignSummary({ value, object, card }: { value: SceneDesign_Input; object: DesignObject; card: ReturnType<typeof designCard> }) {
@@ -48,6 +48,7 @@ function CompactDesignSummary({ value, object, card }: { value: SceneDesign_Inpu
   else if (object.key.startsWith('anchor:')) fields = [{ label: '锚点说明', text: note(row.description) }]
   else if (object.key === 'overview') fields = [{ label: '观察视点', text: note(row.viewpoint) },
     { label: '本场信息变化', text: note(row.information_change) }, { label: '关键转折', text: note(row.turning_point) }]
+  else if (object.key === 'space') fields = [{ label: '空间依据', text: note(row.spatial_basis) }, { label: '可拍摄区域', text: note(row.shootable_area) }, { label: '轴线与尺度', text: `${note(row.axis)} · ${note(row.scale)}` }]
   else if (object.key === 'performance') fields = [{ label: '适用说明', text: note(row.applicability) }]
   else if (object.key === 'staging') fields = [{ label: '环境活动', text: note(row.environment) }, { label: '留白理由', text: note(row.intentional_absence) }]
   else if (object.key === 'sound') fields = [{ label: '声音执行方式', text: ({ postproduction: '待后期', generated: '同期生成', unknown: '待确定' } as Record<string, string>)[row.execution] || '待确定' },
@@ -62,7 +63,7 @@ function CompactDesignSummary({ value, object, card }: { value: SceneDesign_Inpu
   </div>
 }
 
-/** 卡片与编辑弹窗共用真实范围和问题，正文始终来自当前已应用的设计。 */
+/** 卡片与编辑区共用真实范围和问题，正文始终来自当前已应用的设计。 */
 export function DesignObjectSummary({ value, saved, object, onSelectShot, showText = true, editing = false, compact = false }: {
   value: SceneDesign_Input; saved?: SceneDesign_Input; object: DesignObject; onSelectShot?: (id: string) => void; showText?: boolean; editing?: boolean; compact?: boolean
 }) {

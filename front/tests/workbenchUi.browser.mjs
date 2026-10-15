@@ -54,6 +54,7 @@ try {
     const bounds = await action.boundingBox()
     assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width && bounds.y + bounds.height <= 960)
     await page.screenshot({ path: join(output, `components-${width}.png`), animations: 'disabled' })
+    await action.focus()
     await page.keyboard.press('Escape')
     await dialog.waitFor({ state: 'hidden' })
   }

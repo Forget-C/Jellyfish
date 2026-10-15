@@ -17,11 +17,11 @@ const scrollPositions = new Map<string, Record<string, number>>()
 const locatedRequests = new Map<string, number>()
 const defaultLabels = ['原文依据', '全场共享', '镜头设计']
 const toolDrag = 'application/x-jellyfish-director-tool'
-export type DirectorCanvasObject = { id: string; label: string; title?: string; content: ReactNode; onInspect?: (trigger: HTMLElement) => void }
+export type DirectorCanvasObject = { id: string; label: string; title?: string; content: ReactNode; related?: boolean; group?: string; size?: { width: number; height: number }; onInspect?: (trigger: HTMLElement) => void }
 export type DirectorCanvasRelation = { from: string; to: string; label: string; indirect?: boolean; field?: string; fromLabel?: string; toLabel?: string; sources?: { from: string; to: string; label: string; field?: string; fromLabel?: string; toLabel?: string }[] }
 
 /** 画布只维护视口与节点位置；内容及排序始终由业务编辑入口维护。 */
-export function DirectorCanvasSurface({ contextKey, children, objects = [], relations = [], inspectors = {}, tools = [], toolbar, anchorTitle, labels = defaultLabels, ariaLabel = '导演画布视口', initialPositions = {}, focusTarget, layoutScope }: { layoutScope?: DirectorLayoutScope; focusTarget?: { nodeId: string; fieldId: string; serial: number }; initialPositions?: Record<string, CanvasPoint>; labels?: string[]; ariaLabel?: string; tools?: { label: string; onClick: (trigger: HTMLElement) => void }[]; toolbar?: ReactNode; anchorTitle?: string; contextKey: string; children: ReactNode; objects?: DirectorCanvasObject[]; relations?: DirectorCanvasRelation[]; inspectors?: Record<string, ((trigger: HTMLElement) => void) | undefined> }) {
+export function DirectorCanvasSurface({ contextKey, children, objects = [], relations = [], inspectors = {}, tools = [], toolbar, anchorTitle, labels = defaultLabels, ariaLabel = '导演画布视口', initialPositions = {}, focusTarget, layoutScope }: { layoutScope?: DirectorLayoutScope; focusTarget?: { nodeId: string; fieldId: string; serial: number; restore?: boolean }; initialPositions?: Record<string, CanvasPoint>; labels?: string[]; ariaLabel?: string; tools?: { label: string; onClick: (trigger: HTMLElement) => void }[]; toolbar?: ReactNode; anchorTitle?: string; contextKey: string; children: ReactNode; objects?: DirectorCanvasObject[]; relations?: DirectorCanvasRelation[]; inspectors?: Record<string, ((trigger: HTMLElement) => void) | undefined> }) {
   const [classicView, setClassicView] = useState<ViewState>(() => views.get(contextKey) || {
     transform: { x: 120, y: 30, scale: Math.max(.3, Math.min(1, (window.innerWidth - 180) / 1160)) }, positions: {},
   })
@@ -33,7 +33,9 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
   const [minimapOpen, setMinimapOpen] = useState(() => window.innerWidth > 700)
   const wasNarrow = useRef(window.innerWidth <= 700)
   const minimapDrag = useRef<{ x: number; y: number }>()
-  const layout = useDirectorLayout(layoutScope, nodes, sizes, surfaceWidth)
+  const toolbarElement = useRef<HTMLElement>(null)
+  const [contentTop, setContentTop] = useState(64)
+  const layout = useDirectorLayout(layoutScope && { ...layoutScope, initialTop: contentTop }, nodes, sizes, surfaceWidth)
   const view = layoutScope ? layout.view : classicView
   const setView = (update: (previous: ViewState) => ViewState) => layoutScope ? layout.setView(previous => ({ ...previous, ...update(previous) })) : setClassicView(update)
   const viewKey = layoutScope ? `${contextKey}:${layoutScope.viewId}` : contextKey
@@ -59,6 +61,14 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
   useEffect(() => { if (!layoutScope) views.set(contextKey, view) }, [contextKey, view, layoutScope])
   const viewport = useCanvasViewport(viewKey, view.transform, next => setView(previous => ({ ...previous,
     transform: typeof next === 'function' ? next(previous.transform) : next })), { x: 1120, y: 700 })
+  useLayoutEffect(() => {
+    const element = toolbarElement.current, surface = viewport.surface.current
+    if (!element || !surface) return
+    const measure = () => setContentTop(Math.max(64, element.getBoundingClientRect().bottom - surface.getBoundingClientRect().top + 16))
+    const observer = new ResizeObserver(measure)
+    observer.observe(element); measure()
+    return () => observer.disconnect()
+  }, [viewKey])
   useEffect(() => {
     const surface = viewport.surface.current
     if (!surface) return
@@ -98,7 +108,7 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
     return index < 0 ? undefined : { ...position(id), width: sizes[id]?.width || 360, height: sizes[id]?.height || 200 }
   }
   const groupRegions = layoutScope ? Object.entries(directorGroups).flatMap(([group, label]) => {
-    const members = objects.filter(node => directorGroup(node.id) === group)
+    const members = objects.filter(node => (node.group || directorGroup(node.id)) === group)
     const boxes = members.map(node => box(node.id)!).filter(Boolean)
     if (!boxes.length) return []
     const x = Math.min(...boxes.map(item => item.x)), y = Math.min(...boxes.map(item => item.y))
@@ -109,9 +119,9 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
   const activeNode = focused || hovered
   const activeRelation = edgeHover ?? edgeFocus
   const mapBoxes = nodes.map(node => box(node.id)!).filter(Boolean)
-  const mapLeft = Math.min(...mapBoxes.map(item => item.x)), mapTop = Math.min(...mapBoxes.map(item => item.y))
-  const mapWidth = Math.max(1, Math.max(...mapBoxes.map(item => item.x + item.width)) - mapLeft)
-  const mapHeight = Math.max(1, Math.max(...mapBoxes.map(item => item.y + item.height)) - mapTop)
+  const mapLeft = mapBoxes.length ? Math.min(...mapBoxes.map(item => item.x)) : 0, mapTop = mapBoxes.length ? Math.min(...mapBoxes.map(item => item.y)) : 0
+  const mapWidth = Math.max(1, ...mapBoxes.map(item => item.x + item.width - mapLeft))
+  const mapHeight = Math.max(1, ...mapBoxes.map(item => item.y + item.height - mapTop))
   const mapScale = Math.min(180 / mapWidth, 112 / mapHeight)
   const mapX = (x: number) => 10 + (x - mapLeft) * mapScale
   const mapY = (y: number) => 10 + (y - mapTop) * mapScale
@@ -121,7 +131,7 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
     transform: { ...previous.transform, x: -(worldX - offset.x) * previous.transform.scale, y: -(worldY - offset.y) * previous.transform.scale } }))
   const fit = () => {
     const surface = viewport.surface.current
-    if (!surface) return
+    if (!surface || !nodes.length) return
     const boxes = nodes.map((_, i) => {
       const point = position(nodes[i].id), card = cards.current.get(nodes[i].id)
       return { ...point, width: card?.offsetWidth || 360, height: card?.offsetHeight || 600 }
@@ -145,9 +155,10 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
     requestAnimationFrame(() => cards.current.get(id)?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true }))
   }
   useEffect(() => {
-    if (!focusTarget || layoutScope && !layout.ready || locatedRequests.get(contextKey) === focusTarget.serial || !nodes.some(node => node.id === targetId(focusTarget.nodeId))) return
+    if (!focusTarget || layoutScope && (!layout.ready || !view.positions[targetId(focusTarget.nodeId)] || !sizes[targetId(focusTarget.nodeId)]) || locatedRequests.get(contextKey) === focusTarget.serial || !nodes.some(node => node.id === targetId(focusTarget.nodeId))) return
     locatedRequests.set(contextKey, focusTarget.serial)
-    locate(focusTarget.nodeId)
+    if (focusTarget.restore) cards.current.get(targetId(focusTarget.nodeId))?.focus({ preventScroll: true })
+    else locate(focusTarget.nodeId)
     requestAnimationFrame(() => {
       const field = document.getElementById(focusTarget.fieldId)
       field?.focus({ preventScroll: true })
@@ -158,7 +169,7 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
       const scale = bounds.width / content.offsetWidth
       if (target.top < bounds.top || target.bottom > bounds.bottom) content.scrollTop += (target.top - bounds.top) / scale - 16
     })
-  }, [focusTarget?.serial, viewKey, layout.ready])
+  }, [focusTarget?.serial, viewKey, layout.ready, focusTarget && view.positions[targetId(focusTarget.nodeId)]?.x, focusTarget && view.positions[targetId(focusTarget.nodeId)]?.y, focusTarget && sizes[targetId(focusTarget.nodeId)]])
   return <>
     <div className={`director-canvas-surface${layoutScope ? ' director-layout-surface' : ''}`} data-layout-view={layoutScope?.viewId} ref={viewport.surface} {...viewport.surfaceProps} aria-label={ariaLabel}
       onDragOver={event => { if (event.dataTransfer.types.includes(toolDrag)) event.preventDefault() }}
@@ -212,14 +223,14 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
             if (trigger) node.onInspect?.(trigger)
           } }] }
           const highlighted = layoutScope && (activeRelation !== undefined && [relations[activeRelation]?.from, relations[activeRelation]?.to].includes(id) || !!activeNode && (id === activeNode || relations.some(relation => relation.from === activeNode && relation.to === id || relation.to === activeNode && relation.from === id)))
-          return <Dropdown key={id} menu={menu} trigger={['contextMenu']}><div data-canvas-node={id} className={`director-canvas-object${layoutScope && fixedDirectorSize(id) ? ' director-compact-card' : ''}${highlighted ? ' director-relation-endpoint' : ''}`} tabIndex={-1}
+          return <Dropdown key={id} menu={menu} trigger={['contextMenu']}><div data-canvas-node={id} data-shot-related={node.related || undefined} className={`director-canvas-object${layoutScope && (node.size || fixedDirectorSize(id)) ? ' director-compact-card' : ''}${highlighted ? ' director-relation-endpoint' : ''}`} tabIndex={-1}
             onMouseEnter={event => { if (layoutScope && event.currentTarget.contains(event.target as Node)) setHovered(id) }} onMouseLeave={event => { if (layoutScope && event.currentTarget.contains(event.target as Node)) setHovered(undefined) }}
             onMouseMove={event => { if (layoutScope && event.currentTarget.contains(event.target as Node) && (event.movementX || event.movementY)) { setHovered(id); setFocused(undefined); setEdgeFocus(undefined); setEdgeHover(undefined) } }}
             onKeyDownCapture={event => { if (layoutScope && event.currentTarget.contains(event.target as Node)) { setFocused(id); setEdgeFocus(undefined); setEdgeHover(undefined) } }}
             onFocus={event => { if (layoutScope && event.currentTarget.contains(event.target as Node)) { setFocused(id); setHovered(undefined); setEdgeFocus(undefined); setEdgeHover(undefined) } }} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setFocused(undefined) }}
             onContextMenu={event => { menuTrigger.current = event.currentTarget }} ref={element => {
             if (element) cards.current.set(id, element); else cards.current.delete(id)
-          }} style={{ left: point.x, top: point.y, height: layoutScope ? fixedDirectorSize(id)?.height : undefined }}>
+          }} style={{ left: point.x, top: point.y, height: layoutScope ? (node.size || fixedDirectorSize(id))?.height : undefined }}>
             <div className="director-canvas-title"><CanvasDragHandle contextKey={viewKey} label={label} offset={point}
               scale={view.transform.scale} onMove={next => setView(previous => ({ ...previous, positions: { ...previous.positions, [id]: next } }))} />
               <h2>{layoutScope && id === '全场共享' ? '全场概览' : node.title || label}</h2><Dropdown menu={menu} trigger={['click']}>
@@ -237,7 +248,7 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
         })}
       </div>
     </div>
-    {toolbar && <nav className="director-canvas-toolbar" aria-label="导演画布选择">{toolbar}</nav>}
+    {toolbar && <nav ref={toolbarElement} className="director-canvas-toolbar" aria-label="导演画布选择">{toolbar}</nav>}
     {inspectedRelation !== undefined && relations[inspectedRelation] && <aside className="director-relation-detail" aria-label="关系来源">
       <header><strong>{relations[inspectedRelation].label}</strong><WorkbenchButton variant="quiet" aria-label="关闭详情" onClick={() => setInspectedRelation(undefined)}>关闭关系来源</WorkbenchButton></header>
       <ul>{(relations[inspectedRelation].sources || [relations[inspectedRelation]]).map((source, index) =>
@@ -260,7 +271,7 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
         panMap(mapLeft + (event.clientX - bounds.left - 10) / mapScale, mapTop + (event.clientY - bounds.top - 10) / mapScale, minimapDrag.current)
       }} onPointerUp={() => { minimapDrag.current = undefined }} onPointerCancel={() => { minimapDrag.current = undefined }}>
         {groupRegions.map(group => {
-          const members = objects.filter(node => directorGroup(node.id) === group.group).map(node => box(node.id)!).filter(Boolean)
+          const members = objects.filter(node => (node.group || directorGroup(node.id)) === group.group).map(node => box(node.id)!).filter(Boolean)
           const left = Math.min(...members.map(item => item.x)), top = Math.min(...members.map(item => item.y))
           return <rect key={group.group} data-minimap-group={group.group} x={mapX(left) - 2} y={mapY(top) - 2}
             width={(Math.max(...members.map(item => item.x + item.width)) - left) * mapScale + 4} height={(Math.max(...members.map(item => item.y + item.height)) - top) * mapScale + 4} />

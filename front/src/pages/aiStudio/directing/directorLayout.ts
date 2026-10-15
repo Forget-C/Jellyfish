@@ -2,12 +2,12 @@ import type { CanvasPoint, CanvasTransform } from '../../../components/canvas/ge
 
 export type DirectorSize = { width: number; height: number }
 export type DirectorBox = CanvasPoint & DirectorSize
-export type DirectorLayoutNode = { id: string; group?: string }
+export type DirectorLayoutNode = { id: string; group?: string; size?: DirectorSize }
 export type DirectorView = { transform: CanvasTransform; positions: Record<string, CanvasPoint>; sizes: Record<string, DirectorSize> }
-export const directorGroups: Record<string, string> = { camera: '摄影', performance: '表演', situation: '角色情境', blocking: '调度', activity: '镜内活动', continuity: '连续性', dialogue: '声音与对白', criterion: '验收要求', shot: '其他镜头', shared: '全场共享工作单', evidence: '关联依据', other: '其他设计' }
+export const directorGroups: Record<string, string> = { domains: '设计职责', participants: '场景要素与资产', event: '触发事件', camera: '摄影', performance: '表演', situation: '角色情境', blocking: '调度', activity: '镜内活动', continuity: '连续性', continuity_space: '连续性 · 空间', continuity_appearance: '连续性 · 造型', continuity_hands_props: '连续性 · 手部与道具', continuity_environment: '连续性 · 环境', continuity_camera: '连续性 · 摄影', continuity_dialogue_sound: '连续性 · 对白与声音', dialogue: '声音与对白', criterion: '验收要求', shot: '计划镜头', shared: '全场规则', evidence: '关联依据', references: '跨域引用', other: '其他设计' }
 export const directorGroup = (id: string) => {
   const kind = id.split(':')[0]
-  return /^(participant|beat|event|anchor|location)$/.test(kind) ? 'evidence' : directorGroups[kind] ? kind : !id.includes(':') ? 'shared' : 'other'
+  return kind === 'domain' ? 'domains' : /^(participant|location)$/.test(kind) ? 'participants' : /^(beat|anchor)$/.test(kind) ? 'evidence' : directorGroups[kind] ? kind : !id.includes(':') ? 'shared' : 'other'
 }
 const width = 360, gap = 64, sectionGap = 96
 export const fixedDirectorSize = (id: string): DirectorSize | undefined => /^(shot|camera|performance|blocking|situation|activity|continuity):/.test(id) ? { width, height: 276 }
@@ -77,6 +77,8 @@ export function readDirectorView(raw: string | null): DirectorView | undefined {
   } catch { return }
 }
 
-export function pruneDirectorView(view: DirectorView, valid: Set<string>): DirectorView {
-  return { ...view, positions: Object.fromEntries(Object.entries(view.positions).filter(([id]) => valid.has(id))), sizes: Object.fromEntries(Object.entries(view.sizes).filter(([id]) => valid.has(id))) }
+export function pruneDirectorView(view: DirectorView, valid: Set<string>, aliases: Record<string, string> = {}): DirectorView {
+  const retain = <T,>(items: Record<string, T>) => Object.fromEntries(Object.entries(items)
+    .map(([id, value]) => [aliases[id] || id, value] as const).filter(([id]) => valid.has(id)))
+  return { ...view, positions: retain(view.positions), sizes: retain(view.sizes) }
 }

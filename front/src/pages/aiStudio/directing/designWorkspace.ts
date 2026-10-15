@@ -8,6 +8,88 @@ export type DesignGraph = { nodes: DesignObject[]; edges: DesignEdge[] }
 export type RelationBinding = { path: DesignPath; prefix: string; target: string; many: boolean; required: boolean }
 export const departmentNames: Record<string, string> = { direction: '总导演', performance: '表演指导', staging: '镜内执行', cinematography: '摄影指导', continuity: '场记与连续性', sound: '对白与声音', prompt: '提示词指导' }
 
+export const designDomains = ['direction', 'performance', 'staging', 'cinematography', 'continuity', 'sound', 'prompt'] as const
+export type DesignDomain = typeof designDomains[number]
+export type DirectorDesignView = { domain?: DesignDomain; scope: 'all' | 'shot'; shotId?: string; temporaryKey?: string }
+
+/** 正式归属来自业务职责；共享对象的引用次数不改变归属。 */
+export function designDomain(key: string): DesignDomain | undefined {
+  const kind = key.split(':')[0]
+  if (['overview', 'space', 'shot', 'beat', 'anchor', 'blocking'].includes(kind)) return 'direction'
+  if (kind === 'situation' || kind === 'performance') return 'performance'
+  if (kind === 'activity' || kind === 'staging') return 'staging'
+  if (kind === 'camera') return 'cinematography'
+  if (kind === 'continuity' || kind === 'sound' || kind === 'prompt') return kind
+  if (kind === 'dialogue') return 'sound'
+  return undefined
+}
+
+const globalDesignKeys = ['overview', 'space', 'performance', 'staging', 'sound', 'prompt', 'location']
+
+/** 逐镜浏览按契约引用选取；共享人物和验收不会反向吸入其他工作单。 */
+function directorShotKeys(value: SceneDesign_Input, graph: DesignGraph, shotId?: string): Set<string> {
+  const keys = new Set(globalDesignKeys)
+  const shot = value.direction.shots.find(row => row.id === shotId)
+  if (!shot) return keys
+  const add = (prefix: string, ids: string[]) => ids.forEach(id => keys.add(`${prefix}:${id}`))
+  keys.add(`shot:${shot.id}`)
+  add('beat', shot.beat_ids); add('blocking', shot.blocking_state_ids)
+  const events = new Set(shot.event_ids), people = new Set(shot.participant_ids || [])
+  value.direction.beats.filter(row => shot.beat_ids.includes(row.id)).forEach(row => row.event_ids.forEach(id => events.add(id)))
+  value.direction.blocking_states.filter(row => shot.blocking_state_ids.includes(row.id)).forEach(row => {
+    add('anchor', row.anchor_ids)
+    if (row.event_id) events.add(row.event_id)
+  })
+  value.performance.beats.forEach((row, index) => {
+    if (!shot.beat_ids.includes(row.beat_id)) return
+    keys.add(`performance:${index}`); people.add(row.participant_id)
+    row.received_event_ids.forEach(id => events.add(id)); add('dialogue', row.dialogue_ids)
+  })
+  value.performance.situations.forEach((row, index) => { if (people.has(row.participant_id)) keys.add(`situation:${index}`) })
+  value.cinematography.forEach((row, index) => { if (row.shot_id === shot.id) keys.add(`camera:${index}`) })
+  value.staging.activities.forEach((row, index) => { if (row.trigger_event_id && events.has(row.trigger_event_id)) keys.add(`activity:${index}`) })
+  value.continuity.forEach(row => { if (row.event_id && events.has(row.event_id)) keys.add(`continuity:${row.id}`) })
+  add('event', [...events]); add('participant', shot.participant_ids || [])
+  // 只补齐选中工作单的共享引用，不继续展开共享对象的其他引用者。
+  graph.edges.filter(edge => !edge.indirect && keys.has(edge.from) && !designDomain(edge.to)).forEach(edge => keys.add(edge.to))
+  return keys
+}
+
+/** 七域共享同一关系来源；外层压缩正式成员，子图以紧凑引用承接跨域关系。 */
+export function directorDesignGraph(value: SceneDesign_Input, view: DirectorDesignView) {
+  const graph = sceneDesignGraph(value)
+  const allObjects = graph.nodes.map(node => node.key === 'overview' ? { ...node, label: '全场叙事与约束',
+    fields: ['viewpoint', 'information_change', 'relationship_change', 'turning_point', 'immutable_facts', 'open_questions', 'control_level'] } : node)
+  allObjects.push({ key: 'space', label: '空间规则', kind: 'direction', path: ['direction'], fields: ['spatial_basis', 'shootable_area', 'axis', 'scale'] },
+    { key: 'location', label: '本场场所', kind: 'location', path: ['direction'], fields: ['location_asset_id'] })
+  const relatedKeys = directorShotKeys(value, graph, view.shotId)
+  const temporaryKey = view.temporaryKey && designDomain(view.temporaryKey) === view.domain ? view.temporaryKey : undefined
+  const objects = allObjects.filter(node => view.scope === 'all' || relatedKeys.has(node.key) || node.key === temporaryKey)
+  const visibleEdges = graph.edges.filter(edge => view.scope === 'all' || edge.from === temporaryKey && !edge.indirect || relatedKeys.has(edge.from) &&
+    (!edge.indirect || relatedKeys.has(edge.to) && edge.path?.every(step => relatedKeys.has(step.from) && relatedKeys.has(step.to))))
+  const groups = designDomains.map(domain => ({ domain, members: objects.filter(node => node.kind !== 'missing' && designDomain(node.key) === domain) }))
+  if (view.domain) {
+    const members = groups.find(group => group.domain === view.domain)!.members
+    const keys = new Set(members.map(node => node.key))
+    const edges = visibleEdges.filter(edge => keys.has(edge.from) || keys.has(edge.to))
+    const references = new Set(edges.flatMap(edge => [edge.from, edge.to]).filter(key => !keys.has(key)))
+    return { nodes: [...members, ...allObjects.filter(node => references.has(node.key)).map(node => node.kind === 'missing' ? node : { ...node, kind: 'reference' })], edges, groups, relatedKeys }
+  }
+  const nodes = objects.filter(node => node.kind === 'missing' || !designDomain(node.key))
+  groups.forEach(group => nodes.push({ key: `domain:${group.domain}`, label: departmentNames[group.domain], kind: 'summary', path: [] }))
+  const edges = new Map<string, ProjectedDesignEdge>()
+  const projectedKey = (key: string) => allObjects.find(node => node.key === key)?.kind === 'missing' ? key : designDomain(key) ? `domain:${designDomain(key)}` : key
+  visibleEdges.forEach(edge => {
+    const from = projectedKey(edge.from), to = projectedKey(edge.to)
+    if (from === to) return
+    const key = JSON.stringify([from, to, edge.label, !!edge.indirect])
+    const existing = edges.get(key)
+    if (existing) existing.sources.push(...(edge.path || [edge]))
+    else edges.set(key, { ...edge, from, to, sources: edge.path || [edge] })
+  })
+  return { nodes, edges: [...edges.values()], groups, relatedKeys }
+}
+
 export type DesignScope = 'all' | 'unassigned' | `beat:${string}`
 
 /** 范围仅筛选原镜头；跨节拍镜头保持同一身份，全场统计不会重复。 */
@@ -18,7 +100,7 @@ export function scopeShots(value: SceneDesign_Input, scope: DesignScope) {
 }
 
 /** 仅重排筛选集合占用的槽位，隐藏镜头的相对顺序和全部对象内容保持不变。 */
-export function reorderScopeShots(value: SceneDesign_Input, visibleIds: string[], fromId: string, toId: string): SceneDesign_Input {
+export function reorderScopeShots<T extends SceneDesign_Input>(value: T, visibleIds: string[], fromId: string, toId: string): T {
   const ids = new Set(visibleIds)
   const visible = value.direction.shots.filter(shot => ids.has(shot.id))
   const from = visible.findIndex(shot => shot.id === fromId), to = visible.findIndex(shot => shot.id === toId)
@@ -106,9 +188,16 @@ export function designObjects(value: SceneDesign_Input): DesignObject[] {
   return objects
 }
 
-/** 无持久 ID 的数组项只按唯一内容快照恢复布局；重复项标记为不可持久定位。 */
+/** 无 ID 工作单按唯一自然键或内容快照恢复布局；重复项不持久定位。 */
 export function designObjectLayoutId(value: SceneDesign_Input, node: DesignObject): string {
   const kind = node.key.split(':')[0]
+  if (node.kind === 'missing') return node.key
+  if (kind === 'camera' || kind === 'performance' && node.key.includes(':')) {
+    const row = designAt(value, node.path), rows = designAt(value, node.path.slice(0, -1)) as Record<string, unknown>[]
+    const fields = kind === 'camera' ? ['shot_id'] : ['beat_id', 'participant_id']
+    if (fields.some(field => !row?.[field]) || rows.filter(item => fields.every(field => item[field] === row[field])).length !== 1) return `${kind}:ambiguous:${node.path[node.path.length - 1]}`
+    return `${kind}:${fields.map(field => encodeURIComponent(row[field])).join(':')}`
+  }
   if (kind !== 'situation' && kind !== 'activity') return node.key
   const row = designAt(value, node.path)
   const rows = designAt(value, node.path.slice(0, -1)) as unknown[]
@@ -117,15 +206,14 @@ export function designObjectLayoutId(value: SceneDesign_Input, node: DesignObjec
   return `${kind}:${encodeURIComponent(identity)}`
 }
 
-const sharedKeys = new Set(['overview', 'performance', 'staging', 'sound', 'prompt'])
-const sharedPrefixes = /^(blocking|situation|performance|activity|camera|continuity|dialogue):/
 const coreFields: Record<string, string[]> = {
-  overview: ['viewpoint', 'information_change', 'turning_point'], performance: ['applicability'],
+  overview: ['viewpoint', 'information_change', 'turning_point'], space: ['spatial_basis', 'shootable_area', 'axis', 'scale'],
+  shot: ['visible_result', 'narrative_function'], beat: ['objective', 'expected_change'], anchor: ['description'], performance: ['applicability'],
   staging: ['environment', 'intentional_absence'], sound: ['sources', 'ambience_actions', 'music_constraints'],
   prompt: ['priorities', 'binding_requirements', 'sound_strategy', 'prohibitions'],
   blocking: ['position', 'orientation', 'path'], situation: ['situation', 'relationship'],
   camera: ['composition', 'movement_path', 'end_frame'], continuity: ['before', 'after', 'following_constraint'],
-  activity: ['ongoing_task', 'depth'], dialogue: ['content'],
+  activity: ['ongoing_task', 'depth'], dialogue: ['content'], criterion: ['requirement'], participant: ['name'],
 }
 const coreText = (item: unknown): string => {
   if (typeof item === 'string') return item.trim()
@@ -137,46 +225,15 @@ const coreText = (item: unknown): string => {
   return (note.text || note.reason || '').trim()
 }
 
-/** 汇总仅依业务类型和核心字段；引用 ID、默认枚举和空结构不代表已填写。 */
-export function sharedDesignGroup(value: SceneDesign_Input) {
-  const members = designObjects(value).filter(node => sharedKeys.has(node.key) || sharedPrefixes.test(node.key))
-  const contents = members.map(node => {
-    const row = designAt(value, node.path)
-    const kind = node.key.split(':')[0]
-    const fields = kind === 'performance' && node.key.includes(':') ? ['physical_action', 'objective'] : coreFields[kind] || []
-    return fields.map(field => coreText(row?.[field])).find(Boolean) || ''
-  })
-  const domains = new Set<string>()
-  const snippets = members.slice(5).flatMap((node, index) => {
-    const domain = node.key.split(':')[0], text = contents[index + 5]
-    if (!text || domains.has(domain) || domains.size >= 2) return []
-    domains.add(domain)
-    return [text]
-  })
-  return { members, core: contents[0], filled: contents.filter(Boolean).length,
-    snippets }
+/** 摘要只计算明确核心内容；ID、默认枚举和空结构不计为已填写。 */
+export function designCoreContent(value: SceneDesign_Input, node: DesignObject): string {
+  const row = designAt(value, node.path)
+  const kind = node.key.split(':')[0]
+  const fields = kind === 'performance' && node.key.includes(':') ? ['physical_action', 'objective'] : coreFields[kind] || []
+  return fields.map(field => coreText(row?.[field])).find(Boolean) || ''
 }
 
 export type ProjectedDesignEdge = DesignEdge & { sources: DesignEdge[] }
-
-/** 外层只压缩已有关系；原边留给关系核对，不把组内关系投到自身。 */
-export function projectSharedGraph(graph: DesignGraph, members: DesignObject[]): { nodes: DesignObject[]; edges: ProjectedDesignEdge[] } {
-  const grouped = new Set(members.map(node => node.key))
-  const summary: DesignObject = { key: 'shared:design', label: '全场概览', kind: 'summary', path: [] }
-  const nodes = graph.nodes.filter(node => !grouped.has(node.key))
-  nodes.push(summary)
-  const edges = new Map<string, ProjectedDesignEdge>()
-  graph.edges.forEach(edge => {
-    const from = grouped.has(edge.from) ? summary.key : edge.from
-    const to = grouped.has(edge.to) ? summary.key : edge.to
-    if (from === to) return
-    const key = JSON.stringify([from, to, edge.label, !!edge.indirect])
-    const existing = edges.get(key)
-    if (existing) existing.sources.push(...(edge.path || [edge]))
-    else edges.set(key, { ...edge, from, to, sources: edge.path || [edge] })
-  })
-  return { nodes, edges: [...edges.values()] }
-}
 
 const designReferences: Record<string, [string, string, string][]> = {
   shot: [['participant_ids', 'participant', '参与对象'], ['beat_ids', 'beat', '覆盖节拍'], ['event_ids', 'event', '关联事件'], ['criterion_ids', 'criterion', '验收依据'], ['blocking_state_ids', 'blocking', '调度依据']],
@@ -220,14 +277,6 @@ export function sceneDesignGraph(value: SceneDesign_Input): DesignGraph {
   }
   registry.forEach(node => follow(node.key, node.key, [], new Set([node.key])))
   return { nodes: [...nodes.values()], edges }
-}
-
-/** 子图仅纳入语义成员；跨组字段引用以原对象的只读边界节点闭合。 */
-export function sharedDesignSubgraph(graph: DesignGraph, members: DesignObject[]): DesignGraph {
-  const grouped = new Set(members.map(node => node.key))
-  const edges = graph.edges.filter(edge => grouped.has(edge.from) || grouped.has(edge.to))
-  const boundary = new Set(edges.flatMap(edge => [edge.from, edge.to]).filter(key => !grouped.has(key)))
-  return { nodes: [...members, ...graph.nodes.filter(node => boundary.has(node.key)).map(node => node.kind === 'missing' ? node : { ...node, kind: 'boundary' })], edges }
 }
 
 /** 图边逐项来自契约引用，表演/声音等间接关联保留经由节拍的路径。 */

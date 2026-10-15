@@ -1,6 +1,6 @@
 import type { SceneDesign_Input } from '../../../services/generated'
 import type { DesignObject } from './designWorkspace'
-import { designObjects, shotGraph, shotIssues, shotRelationPath } from './designWorkspace'
+import { designObjects, directorDesignGraph, shotGraph, shotIssues, shotRelationPath } from './designWorkspace'
 import { designAt } from './designValue'
 import { designLabels } from './designLabels'
 
@@ -43,9 +43,16 @@ export function designCard(value: SceneDesign_Input, object: DesignObject, saved
   visit(project(row), [])
   if (object.key.startsWith('shot:')) issues.push(...shotIssues(value, object.key.slice(5)))
   const shots = value.direction.shots.flatMap((shot, index) => {
+    const related = directorDesignGraph(value, { scope: 'shot', shotId: shot.id }).relatedKeys
+    if (!related.has(object.key) || !object.key.includes(':')) return []
     const graph = shotGraph(value, shot.id)
     const path = shotRelationPath(graph, shot.id, object.key)
-    return path.length || object.key === `shot:${shot.id}` ? [{ id: shot.id, label: `镜头 ${String(index + 1).padStart(2, '0')}`, via: path.map(edge => edge.label).join(' → ') }] : []
+    const eventId = row?.trigger_event_id || row?.event_id
+    const event = eventId && registry.find(node => node.key === `event:${eventId}`)
+    const person = row?.participant_id && value.participants.find(person => person.id === row.participant_id)
+    const via = path.map(edge => edge.label).join(' → ') || (eventId ? `事件依据 → ${row.trigger_event_id ? '触发事件' : '变化事件'}：${event?.label || eventId}`
+      : object.key.startsWith('situation:') ? `相关人物情境：${person?.name || row.participant_id}` : '相关设计工作单引用')
+    return [{ id: shot.id, label: `镜头 ${String(index + 1).padStart(2, '0')}`, via: object.key === `shot:${shot.id}` ? '' : via }]
   })
   const shared = !object.key.includes(':')
   const scope = shared ? '全场适用' : shots.length ? `关联 ${shots.length} 个镜头` : '未建立镜头关联'
