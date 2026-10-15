@@ -1,7 +1,7 @@
 import { Children, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button, Dropdown, Space, Tooltip } from 'antd'
-import { AimOutlined, EnvironmentOutlined, MinusOutlined, PlusOutlined, ToolOutlined, UserOutlined } from '@ant-design/icons'
+import { AimOutlined, CloseOutlined, CompassOutlined, EnvironmentOutlined, MinusOutlined, PlusOutlined, ToolOutlined, UserOutlined } from '@ant-design/icons'
 import { CanvasDragHandle, CanvasEdge, useCanvasViewport } from '../../../components/canvas/Canvas'
 import { canvasConnection } from '../../../components/canvas/geometry'
 import type { CanvasPoint, CanvasTransform } from '../../../components/canvas/geometry'
@@ -9,7 +9,7 @@ import { directorGroup, directorGroups, fixedDirectorSize } from './directorLayo
 import { directorRelationCategory } from './directorRelations'
 import { useDirectorLayout } from './useDirectorLayout'
 import type { DirectorLayoutScope } from './useDirectorLayout'
-import { WorkbenchButton } from './ui/WorkbenchButton'
+import { WorkbenchButton, WorkbenchIconButton } from './ui/WorkbenchButton'
 
 type ViewState = { transform: CanvasTransform; positions: Record<string, CanvasPoint> }
 const views = new Map<string, ViewState>()
@@ -30,7 +30,6 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
   const [surfaceWidth, setSurfaceWidth] = useState(window.innerWidth)
   const [surfaceHeight, setSurfaceHeight] = useState(window.innerHeight)
   const [minimapOpen, setMinimapOpen] = useState(() => window.innerWidth > 700)
-  const [legendOpen, setLegendOpen] = useState(() => window.innerWidth > 700)
   const wasNarrow = useRef(window.innerWidth <= 700)
   const minimapDrag = useRef<{ x: number; y: number }>()
   const layout = useDirectorLayout(layoutScope, nodes, sizes, surfaceWidth)
@@ -63,7 +62,7 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
   }, [])
   useEffect(() => {
     const narrow = surfaceWidth <= 700
-    if (narrow !== wasNarrow.current) { wasNarrow.current = narrow; setMinimapOpen(!narrow); setLegendOpen(!narrow) }
+    if (narrow !== wasNarrow.current) { wasNarrow.current = narrow; setMinimapOpen(!narrow) }
   }, [surfaceWidth])
   // 默认布局围绕当前镜头；测量摘要高度避免长内容重叠，手动位置始终优先。
   const height = (id: string) => sizes[id]?.height || 260
@@ -100,6 +99,7 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
     return [{ group, label, count: members.length, first: members[0].id, x, y: y - 40,
       width: Math.max(...boxes.map(item => item.x + item.width)) - x, height: Math.max(...boxes.map(item => item.y + item.height)) - y }]
   }) : []
+  const visibleRegions = groupRegions.filter(group => group.count > 1)
   const activeNode = focused || hovered
   const activeRelation = edgeHover ?? edgeFocus
   const mapBoxes = nodes.map(node => box(node.id)!).filter(Boolean)
@@ -161,8 +161,8 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
         if (trigger) tool.onClick(trigger)
       }}>
       <div className="director-canvas-content" style={{ visibility: layoutScope && !layout.ready ? 'hidden' : undefined, transform: `translate(${view.transform.x}px, ${view.transform.y}px) scale(${view.transform.scale})` }}>
-        {groupRegions.map(group => <div key={group.group} className="director-layout-region" style={{ left: group.x - 12, top: group.y + 28, width: group.width + 24, height: group.height + 24 }} />)}
-        {groupRegions.map(group => <div key={group.group} className="director-layout-group" data-layout-group={group.group} style={{ left: group.x, top: group.y }}>{group.label} · {group.count}</div>)}
+        {visibleRegions.map(group => <div key={group.group} className="director-layout-region" style={{ left: group.x - 12, top: group.y + 28, width: group.width + 24, height: group.height + 24 }} />)}
+        {visibleRegions.map(group => <div key={group.group} className="director-layout-group" data-layout-group={group.group} style={{ left: group.x, top: group.y }}>{group.label} · {group.count}</div>)}
         <svg className="director-canvas-relations" aria-label="当前镜头关系">
           {relations.map((relation, index) => {
             const from = box(relation.from), to = box(relation.to)
@@ -219,15 +219,10 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
       </div>
     </div>
     {toolbar && <nav className="director-canvas-toolbar" aria-label="导演画布选择">{toolbar}</nav>}
-    {layoutScope && <WorkbenchButton className={`director-relation-legend-toggle${minimapOpen ? ' director-legend-toggle-above-map' : ''}`} variant="quiet" aria-label={legendOpen ? '收起关系图例' : '展开关系图例'} aria-expanded={legendOpen} onClick={() => setLegendOpen(value => !value)}>关系图例</WorkbenchButton>}
-    {layoutScope && legendOpen && <div className={`director-relation-legend${minimapOpen ? ' director-legend-above-map' : ''}`} aria-label="导演画布关系图例">
-      <span data-category="design">设计关联</span><span data-category="evidence">对象与依据</span>
-      <span data-category="criterion">验收要求</span><span data-category="constraint">全场约束</span>
-      <small>实线直接 · 虚线间接</small>
-    </div>}
-    {layoutScope && <div className="director-minimap">
-      <WorkbenchButton variant="quiet" aria-label={minimapOpen ? '收起小地图' : '展开小地图'} aria-expanded={minimapOpen} onClick={() => setMinimapOpen(value => !value)}>小地图</WorkbenchButton>
-      {minimapOpen && <svg width="200" height="132" viewBox="0 0 200 132" aria-label="小地图导航" onPointerDown={event => {
+    {layoutScope && <WorkbenchIconButton className={`director-minimap-toggle${minimapOpen ? ' director-minimap-toggle-open' : ''}`} variant="quiet"
+      label={minimapOpen ? '收起小地图' : '展开小地图'} icon={minimapOpen ? <CloseOutlined /> : <CompassOutlined />}
+      aria-expanded={minimapOpen} onClick={() => setMinimapOpen(value => !value)} />}
+    {layoutScope && minimapOpen && <svg className="director-minimap" width="200" height="132" viewBox="0 0 200 132" aria-label="小地图导航" onPointerDown={event => {
         const bounds = event.currentTarget.getBoundingClientRect()
         const worldX = mapLeft + (event.clientX - bounds.left - 10) / mapScale
         const worldY = mapTop + (event.clientY - bounds.top - 10) / mapScale
@@ -249,7 +244,6 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
         {mapBoxes.map((item, index) => <rect key={nodes[index]?.id || index} data-minimap-node={nodes[index]?.id} x={mapX(item.x)} y={mapY(item.y)} width={item.width * mapScale} height={item.height * mapScale} />)}
         <rect className="director-minimap-viewport" data-minimap-viewport x={mapX(visibleWorld.x)} y={mapY(visibleWorld.y)} width={visibleWorld.width * mapScale} height={visibleWorld.height * mapScale} />
       </svg>}
-    </div>}
     <nav className="director-canvas-tools" aria-label="导演画布工具">{tools.map(tool => <Tooltip key={tool.label} title={tool.label} placement="right"><Button type="text" aria-label={tool.label} icon={tool.label === '角色工具' ? <UserOutlined /> : tool.label === '场所工具' ? <EnvironmentOutlined /> : <ToolOutlined />} key={tool.label} data-director-tool={tool.label} draggable onDragStart={event => { event.dataTransfer.setData(toolDrag, tool.label); event.dataTransfer.effectAllowed = 'link' }} onClick={event => tool.onClick(event.currentTarget)} /></Tooltip>)}</nav>
     <div className="director-canvas-bottom">
       <Dropdown trigger={['click']} menu={{ style: { maxHeight: '60dvh', overflowY: 'auto', maxWidth: 'calc(100vw - 32px)' }, items: [...groupRegions.map(group => ({ key: `group:${group.group}`, label: `${group.label}分区 · ${group.count}`, onClick: () => locate(group.first) })), ...nodes.map(node => ({ key: node.id, label: node.label, onClick: () => locate(node.id) }))] }}>
