@@ -13,12 +13,10 @@ export async function checkWorkbenchStyleDetails(page, output) {
   const assets = dialog.getByRole('button', { name: '项目资产关联', exact: true })
   assert.equal(await assets.getAttribute('aria-pressed'), 'true')
   assert.equal(await background(assets), 'rgb(56, 56, 56)')
-  await dialog.evaluate(async node => { await new Promise(requestAnimationFrame); await Promise.all(node.getAnimations({ subtree: true }).map(animation => animation.finished.catch(() => {}))) })
+  const assetElement = await assets.elementHandle()
+  await page.waitForFunction(node => { const modal = node.closest('.ant-modal'); return modal && !/ant-zoom-(appear|enter)/.test(modal.className) && getComputedStyle(modal).transform === 'none' }, assetElement)
   await assets.hover()
-  await page.waitForFunction(() => {
-    const node = document.querySelector('.canvas-workbench-dialog .canvas-choice[aria-pressed="true"]:hover')
-    return node && getComputedStyle(node).backgroundColor === 'rgb(64, 64, 64)'
-  }, undefined, { polling: 50 })
+  await page.waitForFunction(node => node.matches(':hover') && getComputedStyle(node).backgroundColor === 'rgb(64, 64, 64)', assetElement)
   assert.equal(await background(assets), 'rgb(64, 64, 64)')
   await capture('details-role-selected')
   await dialog.getByRole('button', { name: '完成编辑', exact: true }).click()

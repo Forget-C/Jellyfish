@@ -168,3 +168,56 @@ test('missing indirect participants remain issues with a real path to their owne
   assert.equal(path.at(-1).from, 'performance:0')
   assert.equal(path.at(-1).indirect, true)
 })
+
+const cardSource = await readFile(new URL('../src/pages/aiStudio/directing/designCard.ts', import.meta.url), 'utf8')
+const labelSource = await readFile(new URL('../src/pages/aiStudio/directing/designLabels.ts', import.meta.url), 'utf8')
+const workspaceModule = data(compile(source).replaceAll("'./designValue'", JSON.stringify(data(compile(valueSource)))))
+const { designCard } = await import(data(compile(cardSource)
+  .replaceAll("'./designValue'", JSON.stringify(data(compile(valueSource))))
+  .replaceAll("'./designWorkspace'", JSON.stringify(workspaceModule))
+  .replaceAll("'./designLabels'", JSON.stringify(data(compile(labelSource))))))
+
+test('design cards share one performance across shots and retain the real beat path', () => {
+  const value = makeWorkspace().designs[0].content
+  value.direction.shots.push({ ...structuredClone(value.direction.shots[0]), id: 'shot2' })
+  const object = designObjects(value).find(row => row.key === 'performance:0')
+  const card = designCard(value, object, structuredClone(value))
+  assert.deepEqual(card.shots.map(shot => shot.id), ['shot1', 'shot2'])
+  assert.ok(card.shots.every(shot => shot.via === '覆盖节拍 → 节拍表演'))
+  assert.equal(card.dirty, false)
+  const next = patchDesign(value, [...object.path, 'physical_action'], { state: 'proposal', text: '缓慢握紧旧信', sources: [] })
+  assert.equal(designCard(next, object, value).dirty, true)
+  assert.match(designCard(next, object).text, /缓慢握紧旧信/)
+  assert.equal(next.performance.beats.length, value.performance.beats.length)
+  assert.equal(designCard(value, designObjects(value).find(row => row.key.startsWith('activity:'))).shots.length, 0, 'same participant does not manufacture shot membership')
+})
+
+test('card issues distinguish unknown, missing references and intentional absence', () => {
+  const value = makeWorkspace().designs[0].content
+  value.cinematography[0].composition = { state: 'unknown' }
+  value.cinematography[0].depth_layers = { state: 'not_applicable', reason: '纯平面画面' }
+  value.cinematography[0].shot_id = 'missing'
+  const card = designCard(value, designObjects(value).find(row => row.key === 'camera:0'))
+  assert.ok(card.issues.includes('构图重心 · 待确定'))
+  assert.ok(card.issues.includes('所属镜头 · 关联缺失'))
+  assert.ok(!card.issues.some(issue => issue.startsWith('空间层次')))
+  assert.match(card.text, /纯平面画面/)
+  const missing = designCard(value, { key: 'participant:missing', kind: 'missing', path: [], label: '缺失' })
+  assert.deepEqual(missing.issues, ['关联对象缺失'])
+  assert.ok(!missing.text.includes(value.direction.information_change.text))
+})
+
+test('shared cards project only their fields and saved comparisons follow object identity', () => {
+  const value = makeWorkspace().designs[0].content
+  const saved = structuredClone(value)
+  value.direction.shots[0].visible_result.text = '仅修改镜头'
+  const overview = designCard(value, designObjects(value).find(row => row.key === 'overview'), saved)
+  assert.equal(overview.shared, true)
+  assert.equal(overview.dirty, false)
+  assert.ok(!overview.text.includes('仅修改镜头'))
+  value.cinematography.push({ ...structuredClone(value.cinematography[0]), shot_id: 'shot2' })
+  const baseline = structuredClone(value)
+  value.cinematography.reverse()
+  const camera = designObjects(value).find(row => row.key === 'camera:0')
+  assert.equal(designCard(value, camera, baseline).dirty, false)
+})

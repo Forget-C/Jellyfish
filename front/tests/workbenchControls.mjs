@@ -6,7 +6,8 @@ export async function workbenchControl(page, menu, role, name) {
 }
 
 export async function workbenchShot(page, name) {
-  const picker = page.locator('.canvas-shot-picker')
-  if (await picker.getAttribute('open') === null) await picker.locator('summary').click()
-  return page.getByRole('button', { name, exact: true })
+  const match = /^镜头 (\d+)：(.*)$/.exec(name)
+  const target = page.getByRole('menuitem', { name: match ? `镜头 ${match[1].padStart(2, '0')} · ${match[2]}` : name, exact: true })
+  await page.getByRole('button', { name: '选择镜头', exact: true }).click()
+  return target
 }

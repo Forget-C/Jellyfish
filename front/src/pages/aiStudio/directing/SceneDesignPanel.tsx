@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Alert, Button, Modal, Select, Space } from 'antd'
+import { Alert, Button, Select, Space } from 'antd'
+import { WorkbenchModal } from './ui/WorkbenchModal'
+import { DesignObjectSummary } from './DesignObjectSummary'
 import type { EditableSceneDesign_Output, EditableGenerationUnit_Output } from '../../../services/generated'
 import { DesignFields, designAt, patchDesign } from './DesignFields'
 import type { DesignPath } from './DesignFields'
 import { designLabels } from './designLabels'
-import { departmentNames } from './designWorkspace'
+import { departmentNames, designObjects } from './designWorkspace'
 import { SceneAssetLinks } from './SceneAssetLinks'
 import { sceneUnitReferenceConflicts } from './sceneUnitReferences'
 import type { UnitReferenceConflict } from './sceneUnitReferences'
@@ -22,15 +24,30 @@ const mandatory: Record<string, string[]> = {
   cinematography: ['shot_id'], 'sound.dialogues': ['participant_id'],
 }
 const pathLabel = (path: DesignPath) => path.map(key => typeof key === 'number' ? String(key + 1) : designLabels[key] || key).join(' / ')
-export type DesignTarget = { assetKind?: 'character' | 'scene' | 'prop'; shotId?: string; path: DesignPath; identity?: Record<string, unknown> }
+// 保存响应会补齐 Note 的空来源和 nullable 字段；这些序列化差异不改变工作单身份。
+const objectSnapshot = (value: unknown) => JSON.stringify(value, (_key, item) => {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return item
+  return Object.fromEntries(Object.keys(item).sort().filter(key => item[key] != null &&
+    !(key === 'sources' && Array.isArray(item[key]) && !item[key].length)).map(key => [key, item[key]]))
+})
+export type DesignTarget = { assetKind?: 'character' | 'scene' | 'prop'; shotId?: string; object?: boolean; path: DesignPath; identity?: Record<string, unknown>; snapshot?: string }
 export type DesignFocusRequest = { target: DesignTarget; trigger: HTMLElement; serial: number }
 export function targetFor(value: EditableSceneDesign_Output, path: DesignPath): DesignTarget {
   const row = designAt(value, path)
   if (typeof path[path.length - 1] !== 'number') return { path }
   const keys = row?.id ? ['id'] : ['shot_id', 'participant_id', 'beat_id'].filter(key => row?.[key] != null)
+  const rows = designAt(value, path.slice(0, -1)) as Record<string, unknown>[]
+  // 同一人物可以有多项镜内活动，人物身份不能冒充工作单唯一身份。
+  if (!keys.length || rows.filter(item => keys.every(key => item[key] === row[key])).length !== 1) return { path, snapshot: objectSnapshot(row) }
   return { path, identity: Object.fromEntries(keys.map(key => [key, row[key]])) }
 }
 export function resolveTarget(value: EditableSceneDesign_Output, target: DesignTarget): DesignPath | undefined {
+  if (target.snapshot) {
+    const rows = designAt(value, target.path.slice(0, -1)) as unknown[] | undefined
+    if (objectSnapshot(designAt(value, target.path)) === target.snapshot) return target.path
+    const matches = rows?.flatMap((row, index) => objectSnapshot(row) === target.snapshot ? [index] : []) || []
+    return matches.length === 1 ? [...target.path.slice(0, -1), matches[0]] : undefined
+  }
   if (!target.identity) return target.path
   const identity = Object.entries(target.identity)
   if (!identity.length) return undefined
@@ -41,11 +58,12 @@ export function resolveTarget(value: EditableSceneDesign_Output, target: DesignT
 }
 
 /** 单个编辑区复用六岗字段；创建关系须明确选对象，删除先定位真实引用。 */
-export function SceneDesignPanel({ navigationOpen, onNavigationOpenChange: setNavigationOpen, projectId, value, units, disabled, onChange, focusRequest, onSelectShot, onFocusHandled, open, onOpenChange: setOpen, onLocateUnit }: {
+export function SceneDesignPanel({ navigationOpen, onNavigationOpenChange: setNavigationOpen, projectId, value, saved, units, disabled, onChange, focusRequest, onSelectShot, onFocusHandled, open, onOpenChange: setOpen, onLocateUnit }: {
   navigationOpen: boolean
   onNavigationOpenChange: (open: boolean) => void
   projectId: string
   value: EditableSceneDesign_Output
+  saved?: EditableSceneDesign_Output
   units: EditableGenerationUnit_Output[]
   onLocateUnit: (conflict: UnitReferenceConflict) => void
   disabled: boolean
@@ -59,6 +77,7 @@ export function SceneDesignPanel({ navigationOpen, onNavigationOpenChange: setNa
   const [target, setTarget] = useState<DesignTarget>({ path: ['direction'] })
   const resolved = resolveTarget(value, target)
   const path = resolved || target.path
+  const object = target.object && resolved ? designObjects(value).find(row => JSON.stringify(row.path) === JSON.stringify(resolved)) : undefined
   const navigationTrigger = useRef<HTMLButtonElement>(null)
   const editorTrigger = useRef<HTMLElement>()
   const [pending, setPending] = useState<{ path: DesignPath; row: Record<string, unknown>; required: string[] }>()
@@ -146,7 +165,7 @@ export function SceneDesignPanel({ navigationOpen, onNavigationOpenChange: setNa
   ]
   const closeNavigation = () => { setNavigationOpen(false); navigationTrigger.current?.focus({ preventScroll: true }) }
   return <>
-    <Button onClick={event => openEditor(event.currentTarget)}>编辑六岗设计</Button>
+    <Button onClick={event => openEditor(event.currentTarget, ['direction'])}>编辑六岗设计</Button>
     <Button ref={navigationTrigger} aria-expanded={navigationOpen} onClick={() => setNavigationOpen(!navigationOpen)}>关系导航</Button>
     {navigationOpen && createPortal(<aside className="director-relations-navigation" aria-label="场次关系导航" onKeyDown={event => {
       if (event.key === 'Escape') { event.stopPropagation(); closeNavigation() }
@@ -163,13 +182,14 @@ export function SceneDesignPanel({ navigationOpen, onNavigationOpenChange: setNa
         </Button>)}
       </details>)}
     </aside>, document.querySelector('.canvas-workbench') || document.body)}
-    <Modal rootClassName="canvas-workbench-dialog" width={880} title="全场六岗设计" open={open}
+    <WorkbenchModal width={880} title={object?.label || '全场六岗设计'} open={open}
       afterClose={() => (editorTrigger.current?.isConnected ? editorTrigger.current : navigationTrigger.current)?.focus({ preventScroll: true })}
       onCancel={() => { setOpen(false); setPending(undefined) }} footer={<Button onClick={() => { setOpen(false); setPending(undefined) }}>完成编辑</Button>}>
-      <Space wrap>{roles.map(role => <Button key={role} onClick={() => navigate([role])} className="canvas-choice" aria-pressed={path[0] === role}>
+      {!object && <Space wrap>{roles.map(role => <Button key={role} onClick={() => navigate([role])} className="canvas-choice" aria-pressed={path[0] === role}>
         {departmentNames[role] || designLabels[role]}
-      </Button>)}</Space>
-      <Button onClick={() => navigate(['assets'])} className="canvas-choice" aria-pressed={path[0] === 'assets'}>项目资产关联</Button>
+      </Button>)}</Space>}
+      {!object && <Button onClick={() => navigate(['assets'])} className="canvas-choice" aria-pressed={path[0] === 'assets'}>项目资产关联</Button>}
+      {object && <DesignObjectSummary value={value} saved={saved} object={object} showText={false} editing onSelectShot={id => { onSelectShot?.(id); setOpen(false) }} />}
       <h3>{path[0] === 'assets' ? '项目资产关联' : pathLabel(pending?.path || path)}</h3>
       {error && <Alert type="warning" message={error} description={<Space wrap>{references.map((reference, i) =>
         <Button key={i} onClick={() => navigate(reference)}>定位：{pathLabel(reference.path)}</Button>)}
@@ -185,9 +205,9 @@ export function SceneDesignPanel({ navigationOpen, onNavigationOpenChange: setNa
         </div>)}
         <Space><Button onClick={() => { setPending(undefined); setError('') }}>返回编辑</Button>
           <Button disabled={disabled || pending.required.some(key => !pending.row[key])} onClick={confirmAdd}>建立工作单</Button></Space>
-      </div> : <DesignFields value={value} path={path} disabled={disabled} onChange={next => {
-        setTarget(targetFor(next, path)); onChange(next)
+      </div> : <DesignFields value={value} path={path} fields={object?.fields} allowStructure={!object} disabled={disabled} onChange={next => {
+        setTarget({ ...targetFor(next, path), object: target.object }); onChange(next)
       }} onAdd={add} onRemove={remove} />}
-    </Modal>
+    </WorkbenchModal>
   </>
 }

@@ -7,10 +7,10 @@ import { directingError } from './common'
 import { sourceSlice, textareaSpan } from './sourceSelection'
 
 /** 明确选择真实段落后才改变当前版本依据；比较读取失败不妨碍继续使用旧依据。 */
-export function SceneSourceBasis({ projectId, chapterId, basis, disabled, onChange, open, onOpenChange: setOpen }: {
+export function SceneSourceBasis({ projectId, chapterId, basis, disabled, onChange, open, onOpenChange: setOpen, compact = false, dirty = false }: {
   projectId: string; chapterId: string; basis: SceneVersionSource_Output; disabled: boolean
   onChange: (value: SceneVersionSource_Output) => void
-  open: boolean; onOpenChange: (open: boolean) => void
+  open: boolean; onOpenChange: (open: boolean) => void; compact?: boolean; dirty?: boolean
 }) {
   const [chapter, setChapter] = useState<ChapterSequences>()
   const [error, setError] = useState('')
@@ -46,10 +46,14 @@ export function SceneSourceBasis({ projectId, chapterId, basis, disabled, onChan
     {end ? chars.slice(-end).join('') : ''}
   </p>
   return <>
-    <CanvasTextPreview text={basis.text} label="原文" />
+    {compact ? <div className="director-source-summary">
+      <p title={basis.text}>{basis.text || '原文尚未填写'}</p>
+      <div className="design-compact-status"><span>采用版本 {basis.source.version}</span>{dirty && <span title="有未保存修改" aria-label="有未保存修改" tabIndex={0}>✎</span>}</div>
+    </div> : <CanvasTextPreview text={basis.text} label="原文" />}
     {loading && <p><Spin size="small" /> 正在核对最新原文</p>}
-    {error && <Alert type="warning" message="原文差异读取失败，当前依据保留" description={error} action={<Button onClick={() => void read()}>重试原文读取</Button>} />}
-    {changed && !continued && <Alert type="warning" message="内容有修改" description="章节原文已有修订。本版本仍使用上述原文，不表示有未保存编辑。" />}
+    {error && (compact ? <p className="director-source-state">原文差异读取失败，当前依据保留 <Button onClick={() => void read()}>重试原文读取</Button></p>
+      : <Alert type="warning" message="原文差异读取失败，当前依据保留" description={error} action={<Button onClick={() => void read()}>重试原文读取</Button>} />)}
+    {changed && !continued && (compact ? <p className="director-source-state">章节原文有更新 · 当前仍使用旧依据</p> : <Alert type="warning" message="内容有修改" description="章节原文已有修订。本版本仍使用上述原文，不表示有未保存编辑。" />)}
     {changed && continued && <Tag color="warning">继续使用旧原文</Tag>}
     <Space wrap style={{ marginTop: 12 }}>
       <Button onClick={() => setOpen(true)}>查看原文差异</Button>

@@ -1,0 +1,265 @@
+import assert from 'node:assert/strict'
+import { spawn } from 'node:child_process'
+import { mkdtemp } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { setTimeout as delay } from 'node:timers/promises'
+import { createServer } from 'vite'
+import { chromium } from 'playwright'
+import { makeWorkspace } from './directing-fixtures.mjs'
+
+const root = fileURLToPath(new URL('..', import.meta.url))
+const output = await mkdtemp(join(tmpdir(), 'jellyfish-director-layout-'))
+const api = 'http://127.0.0.1:8198'
+const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.directing.scene_version_browser_server'], {
+  cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', SCENE_BROWSER_TEST_DATABASE: join(output, 'browser.sqlite'), SCENE_BROWSER_TEST_PORT: '8198' }, stdio: ['ignore', 'pipe', 'pipe'],
+})
+let logs = '', server, browser, page
+backend.stdout.on('data', data => { logs += data })
+backend.stderr.on('data', data => { logs += data })
+const errors = []
+async function screenshot(name) {
+  await page.evaluate(async () => { await new Promise(requestAnimationFrame); await Promise.all(document.getAnimations().filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity).map(animation => animation.finished.catch(() => {}))) })
+  await page.screenshot({ path: join(output, name), animations: 'disabled' })
+}
+async function request(url, body, method = 'POST') {
+  const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  const result = await response.json()
+  assert.equal(response.status, 200, JSON.stringify(result))
+  return result.data
+}
+try {
+  let chapter
+  for (let i = 0; i < 100; i++) {
+    if (backend.exitCode !== null) throw new Error(logs)
+    try { const response = await fetch(`${api}/api/v1/studio/projects/canvas-project/directing/chapters/canvas-chapter`); if (response.ok) { chapter = (await response.json()).data; break } } catch {}
+    await delay(250)
+  }
+  assert.ok(chapter, logs)
+  const sequence = chapter.sequences[0].id
+  const versions = `${api}/api/v1/studio/projects/canvas-project/directing/sequences/${sequence}/versions`
+  let version = await request(versions, { request_id: crypto.randomUUID(), title: '设计卡片验收' })
+  const design = makeWorkspace().designs[0].content
+  const note = text => ({ state: 'proposal', text, sources: [{ kind: 'human', reference: 'browser', version: '1' }] })
+  design.direction.information_change = note('读到旧信')
+  design.participants[0].name = '读信者'
+  design.direction.shots[0].visible_result = note('打开旧信')
+  design.direction.shots.push({ ...structuredClone(design.direction.shots[0]), id: 'shot2', visible_result: note('望向门口') })
+  design.criteria = Array.from({ length: 5 }, (_, i) => ({ id: `criterion${i + 1}`, requirement: note(`验收要求 ${i + 1}：保持动作与画面关系清楚`) }))
+  design.direction.shots.forEach(shot => { shot.criterion_ids = design.criteria.map(row => row.id) })
+  design.performance.beats[0].physical_action = note('缓慢展开信纸')
+  design.cinematography[0].composition = note('让信纸位于画面中央')
+  design.staging.activities[0].ongoing_task = note('窗外行人经过')
+  design.staging.activities.push({ ...structuredClone(design.staging.activities[0]), ongoing_task: note('整理桌上的物件') })
+  version = await request(`${versions}/${version.id}`, { request_id: crypto.randomUUID(), expected_revision: version.revision, content: { ...version.content, design } }, 'PUT')
+  server = await createServer({ root, server: { host: '127.0.0.1', port: 4198, strictPort: true, open: false, proxy: { '/api': api } } })
+  await server.listen()
+  browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
+  page = await browser.newPage({ viewport: { width: 1440, height: 960 } })
+  page.on('pageerror', error => errors.push(error.message))
+  await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin }; localStorage.setItem('jellyfish:scene-autosave:local-user', 'off') })
+  await page.goto(`http://127.0.0.1:4198/projects/canvas-project/chapters/canvas-chapter/sequences/${sequence}?version=${version.id}`)
+  const surface = page.getByLabel('导演画布视口', { exact: true })
+  const node = id => page.locator(`[data-canvas-node="${id}"]`)
+  const locate = async label => { await page.getByRole('button', { name: '定位画布节点', exact: true }).click(); await page.getByRole('menuitem', { name: label, exact: true }).click() }
+  const layoutAction = async label => { await page.getByRole('button', { name: '布局', exact: true }).click(); await page.getByRole('menuitem', { name: label, exact: true }).click() }
+  const scopeAction = async label => { await page.getByRole('button', { name: '导演画布展示范围', exact: true }).click(); await page.getByRole('menuitem', { name: label, exact: true }).click() }
+  const snapshot = () => page.evaluate(() => ({ transform: document.querySelector('.director-canvas-content').style.transform,
+    positions: Object.fromEntries([...document.querySelectorAll('.director-canvas-object')].map(card => [card.dataset.canvasNode, { x: card.offsetLeft, y: card.offsetTop }])) }))
+  const scale = async () => Number((await page.locator('.director-canvas-controls').getByText(/^\d+%$/).innerText()).replace('%', ''))
+  const selectShot = async number => {
+    await page.getByRole('button', { name: '选择镜头', exact: true }).click()
+    await page.getByRole('menuitem', { name: new RegExp(`^镜头 ${String(number).padStart(2, '0')} ·`) }).click()
+    await page.locator(`[data-layout-view="shot:shot${number}"]`).waitFor()
+  }
+  const assertGeometry = async () => {
+    const result = await page.evaluate(() => {
+      const cards = [...document.querySelectorAll('.director-canvas-object')].map(card => ({ id: card.dataset.canvasNode, x: card.offsetLeft, y: card.offsetTop, w: card.offsetWidth, h: card.offsetHeight }))
+      const overlaps = cards.flatMap((a, i) => cards.slice(i + 1).filter(b => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y).map(b => [a.id, b.id]))
+      const criteria = cards.filter(card => card.id.startsWith('criterion:'))
+      const paths = [...document.querySelectorAll('.director-canvas-relations .canvas-edge-line')]
+      return { overlaps, curves: paths.every(path => path.getAttribute('d').includes(' C')), columns: new Set(criteria.map(card => card.x)).size, rows: new Set(criteria.map(card => card.y)).size, lines: paths.length }
+    })
+    assert.deepEqual(result.overlaps, [])
+    assert.equal(result.curves, true)
+    assert.ok(result.lines >= 5)
+    return result
+  }
+  await page.locator('[data-layout-group="criterion"]').waitFor()
+  assert.equal(await scale(), 100)
+  assert.equal(await page.locator('[data-canvas-node^="criterion:"]').count(), 5)
+  assert.equal((await assertGeometry()).columns, 3)
+  assert.equal(await page.getByRole('button', { name: '收起小地图', exact: true }).count(), 1)
+  const beforeMap = await snapshot(), beforeMapScale = await scale()
+  await page.getByLabel('小地图导航').click({ position: { x: 190, y: 120 } })
+  assert.notEqual((await snapshot()).transform, beforeMap.transform)
+  assert.deepEqual((await snapshot()).positions, beforeMap.positions)
+  assert.equal(await scale(), beforeMapScale)
+  const mapBounds = await page.getByLabel('小地图导航').boundingBox()
+  const beforeMapDrag = await snapshot()
+  await page.mouse.move(mapBounds.x + 190, mapBounds.y + 120)
+  await page.mouse.down()
+  await page.mouse.move(mapBounds.x + 170, mapBounds.y + 105, { steps: 4 })
+  await page.mouse.up()
+  assert.notEqual((await snapshot()).transform, beforeMapDrag.transform)
+  assert.deepEqual((await snapshot()).positions, beforeMapDrag.positions)
+  assert.equal(await scale(), beforeMapScale)
+  await locate('验收要求分区 · 5')
+  await screenshot('criteria-desktop.png')
+  const moved = node('criterion:criterion1')
+  const label = await moved.locator('h2').innerText()
+  const beforeMove = await snapshot()
+  await moved.getByRole('button', { name: `移动布局：${label}`, exact: true }).press('ArrowRight')
+  assert.equal((await snapshot()).positions['criterion:criterion1'].x, beforeMove.positions['criterion:criterion1'].x + 20)
+  assert.equal(await page.getByRole('button', { name: '保存', exact: true }).isDisabled(), true)
+  await page.getByRole('button', { name: '缩小画布', exact: true }).click()
+  const beforeResize = await snapshot()
+  await page.setViewportSize({ width: 1100, height: 960 })
+  assert.deepEqual((await snapshot()).positions, beforeResize.positions)
+  await layoutAction('重新整理布局')
+  assert.equal((await assertGeometry()).columns, 2)
+  assert.equal(await scale(), 90)
+  await layoutAction('撤销本次整理')
+  assert.deepEqual(await snapshot(), beforeResize)
+  await page.setViewportSize({ width: 1440, height: 960 })
+  await locate('镜头设计')
+  await surface.focus(); await surface.press('ArrowLeft')
+  const firstView = await snapshot()
+  await selectShot(2)
+  const sharedSecond = (await snapshot()).positions['criterion:criterion1']
+  assert.notDeepEqual(sharedSecond, firstView.positions['criterion:criterion1'], 'shared data has independent layout per shot')
+  await locate('镜头设计')
+  await page.getByRole('button', { name: '缩小画布', exact: true }).click()
+  const secondView = await snapshot()
+  await selectShot(1)
+  assert.deepEqual(await snapshot(), firstView)
+  await selectShot(2)
+  assert.deepEqual(await snapshot(), secondView)
+  await page.reload()
+  await page.locator('[data-layout-view="shot:shot2"]').waitFor()
+  await page.locator('[data-layout-group="criterion"]').waitFor()
+  assert.deepEqual(await snapshot(), secondView)
+  await locate('全场共享')
+  const beforeOverview = await snapshot()
+  await scopeAction('展开全场设计总览')
+  await page.locator('[data-layout-view="all"]').waitFor()
+  assert.equal(await node('performance:beat1:person1').count(), 1)
+  assert.equal(await node('shot:shot1').count(), 1)
+  assert.equal(await node('shot:shot2').count(), 1)
+  await assertGeometry()
+  await locate('全场共享')
+  await page.getByRole('button', { name: '缩小画布', exact: true }).click()
+  const overview = await snapshot()
+  await scopeAction('收起全场设计总览')
+  assert.deepEqual(await snapshot(), beforeOverview)
+  await scopeAction('展开全场设计总览')
+  assert.deepEqual(await snapshot(), overview)
+  await page.reload()
+  await page.locator('[data-layout-view="all"]').waitFor()
+  await page.locator('[data-layout-group="criterion"]').waitFor()
+  assert.deepEqual(await snapshot(), overview)
+  await scopeAction('收起全场设计总览')
+  await locate('表演 01 · 缓慢展开信纸')
+  await selectShot(1)
+  await page.locator('[data-layout-view="shot:shot1"]').waitFor()
+  await locate('表演 01 · 缓慢展开信纸')
+  const sharedBounds = await node('performance:beat1:person1').boundingBox()
+  assert.ok(sharedBounds.x >= 0 && sharedBounds.x < 100 && sharedBounds.y >= 0 && sharedBounds.y < 500)
+  await locate('验收要求分区 · 5')
+  await node('criterion:criterion2').getByRole('button', { name: /查看节点/ }).hover()
+  await page.locator('[data-relation-to="criterion:criterion2"] .canvas-edge[data-selected="true"]').waitFor()
+  await surface.focus()
+  await node('criterion:criterion1').getByRole('button', { name: /^移动布局/ }).focus()
+  await page.locator('[data-relation-to="criterion:criterion1"] .canvas-edge[data-selected="true"]').waitFor()
+  await page.getByRole('button', { name: '适应全部', exact: true }).click()
+  await page.getByRole('button', { name: /查看关系：验收依据，直接展示/ }).first().focus()
+  assert.ok(await page.locator('.canvas-edge[data-selected="true"] text').count())
+  await screenshot('relations-overview.png')
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.getByRole('button', { name: '展开小地图', exact: true }).waitFor()
+  await page.getByRole('button', { name: '展开小地图', exact: true }).click()
+  assert.equal(await page.getByLabel('小地图导航').count(), 1)
+  await page.getByRole('button', { name: '收起小地图', exact: true }).click()
+  await layoutAction('重新整理布局')
+  assert.equal((await assertGeometry()).columns, 1)
+  await locate('验收要求分区 · 5')
+  await screenshot('criteria-narrow.png')
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
+  const beforeModal = await snapshot()
+  await moved.getByRole('button', { name: /查看节点/ }).click()
+  await page.getByRole('dialog').getByRole('textbox', { name: '验收要求', exact: true }).waitFor()
+  await screenshot('criterion-modal-narrow.png')
+  await page.getByRole('dialog').getByRole('button', { name: '完成编辑', exact: true }).click()
+  assert.deepEqual(await snapshot(), beforeModal)
+  // 外部内容更新：刷新恢复现有坐标，新对象补位，删除对象从所有已存视图清理。
+  const saved = (await (await fetch(`${versions}/${version.id}`)).json()).data
+  assert.deepEqual(saved.content, version.content, 'all layout actions leave business content unchanged')
+  const changed = structuredClone(saved.content)
+  changed.design.criteria = changed.design.criteria.filter(row => row.id !== 'criterion5')
+  changed.design.criteria.push({ id: 'criterion6', requirement: note('新增的第六条要求') })
+  changed.design.direction.shots.forEach(shot => { shot.criterion_ids = changed.design.criteria.map(row => row.id) })
+  await request(`${versions}/${version.id}`, { request_id: crypto.randomUUID(), expected_revision: saved.revision, content: changed }, 'PUT')
+  const retained = (await snapshot()).positions['criterion:criterion1']
+  await page.reload()
+  await node('criterion:criterion6').waitFor()
+  await page.locator('[data-layout-group="criterion"]').waitFor()
+  assert.deepEqual((await snapshot()).positions['criterion:criterion1'], retained)
+  assert.equal(await node('criterion:criterion5').count(), 0)
+  assert.equal(await page.evaluate(() => Object.entries(localStorage).filter(([key]) => key.includes('director-layout:') && key.includes(':view:')).some(([, value]) => JSON.parse(value).positions['criterion:criterion5'])), false)
+  await assertGeometry()
+  const fresh = await request(versions, { request_id: crypto.randomUUID(), title: '新的布局版本' })
+  await request(`${versions}/${fresh.id}`, { request_id: crypto.randomUUID(), expected_revision: fresh.revision, content: changed }, 'PUT')
+  await page.setViewportSize({ width: 1440, height: 960 })
+  await page.goto(`http://127.0.0.1:4198/projects/canvas-project/chapters/canvas-chapter/sequences/${sequence}?version=${fresh.id}`)
+  await page.locator('[data-layout-group="criterion"]').waitFor()
+  assert.equal((await assertGeometry()).columns, 3)
+  assert.equal(await scale(), 100)
+  const freshSaved = (await (await fetch(`${versions}/${fresh.id}`)).json()).data
+  const dense = structuredClone(freshSaved.content)
+  for (let i = 7; i <= 31; i++) dense.design.criteria.push({ id: `criterion${i}`, requirement: note(`密集布局验收要求 ${i}`) })
+  dense.design.direction.shots.forEach(shot => { shot.criterion_ids = dense.design.criteria.map(row => row.id) })
+  const beforeDense = await snapshot()
+  await request(`${versions}/${fresh.id}`, { request_id: crypto.randomUUID(), expected_revision: freshSaved.revision, content: dense }, 'PUT')
+  await page.reload()
+  await page.waitForFunction(() => document.querySelectorAll('.canvas-edge-line').length >= 30)
+  assert.equal(await page.locator('[data-canvas-node^="criterion:"]').count(), 30)
+  assert.deepEqual((await snapshot()).positions['criterion:criterion1'], beforeDense.positions['criterion:criterion1'])
+  await assertGeometry()
+  await locate(await node('criterion:criterion31').locator('h2').innerText())
+  await node('criterion:criterion31').getByRole('button', { name: /查看节点/ }).click()
+  assert.match(await page.getByRole('dialog').innerText(), /密集布局验收要求 31/)
+  await page.getByRole('dialog').getByRole('button', { name: '完成编辑', exact: true }).click()
+  await screenshot('dense-last-criterion.png')
+  await selectShot(2)
+  await page.locator('[data-layout-view="shot:shot2"]').waitFor()
+  const beforeCopyId = new URL(page.url()).searchParams.get('version')
+  await page.getByRole('button', { name: '版本管理', exact: true }).click()
+  await page.getByRole('button', { name: '另存为新版本', exact: true }).click()
+  await page.waitForURL(url => url.searchParams.get('version') !== beforeCopyId)
+  await page.locator('[data-layout-view="shot:shot1"] [data-layout-group="criterion"]').waitFor()
+  const newAnchor = await node('shot:shot1').boundingBox()
+  assert.ok(newAnchor.x >= 0 && newAnchor.x < 120 && newAnchor.y > 0 && newAnchor.y < 200, 'a new version does not replay the previous version’s shared-object navigation')
+  const copiedId = new URL(page.url()).searchParams.get('version')
+  const copied = (await (await fetch(`${versions}/${copiedId}`)).json()).data
+  const deletedShot = structuredClone(copied.content)
+  deletedShot.design.direction.shots = deletedShot.design.direction.shots.filter(shot => shot.id !== 'shot1')
+  deletedShot.design.cinematography = deletedShot.design.cinematography.filter(row => row.shot_id !== 'shot1')
+  await request(`${versions}/${copiedId}`, { request_id: crypto.randomUUID(), expected_revision: copied.revision, content: deletedShot }, 'PUT')
+  await page.reload()
+  await page.locator('[data-layout-view="empty"]').waitFor()
+  await page.getByText('原对象不可用，请重新选择镜头', { exact: true }).waitFor()
+  assert.equal(await node('shot:shot2').count(), 0, 'a deleted selected shot is not silently replaced')
+  assert.equal(await page.evaluate(id => Object.keys(localStorage).some(key => key.includes(id) && key.endsWith(':view:shot:shot1')), copiedId), false)
+  await layoutAction('重新整理布局')
+  const sharedAnchor = await node('全场共享').boundingBox()
+  assert.ok(sharedAnchor.x >= 0 && sharedAnchor.x < 120 && sharedAnchor.y > 0 && sharedAnchor.y < 200)
+  assert.deepEqual(errors, [])
+  console.log(`PASS multi-column regions, curved relations, per-shot/overview memory, reload, cleanup, rearrange/undo and 390px editing; evidence: ${output}`)
+} catch (error) {
+  await page?.screenshot({ path: join(output, 'failure.png'), animations: 'disabled' }).catch(() => {})
+  console.error(`Browser evidence: ${output}`)
+  throw error
+} finally {
+  await browser?.close(); await server?.close(); backend.kill('SIGTERM')
+}

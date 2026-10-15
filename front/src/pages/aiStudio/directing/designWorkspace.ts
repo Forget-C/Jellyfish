@@ -87,7 +87,7 @@ export function designObjects(value: SceneDesign_Input): DesignObject[] {
   ]
   const add = (rows: unknown[], path: DesignPath, prefix: string, label: string, kind: string) => rows.forEach((raw, index) => {
     const row = raw as Record<string, unknown>
-    const text = typeof row.name === 'string' ? row.name : noteText(row.visible_result || row.objective || row.description || row.requirement || row.content || row.physical_action || row.ongoing_task || row.position || row.after || row.situation)
+    const text = typeof row.name === 'string' ? row.name : [row.visible_result, row.objective, row.description, row.requirement, row.content, row.physical_action, row.ongoing_task, row.position, row.after, row.situation].map(noteText).find(Boolean)
     objects.push({ key: `${prefix}:${row.id || index}`, label: `${label} ${String(index + 1).padStart(2, '0')}${text ? ` · ${text}` : ''}`, kind, path: [...path, index] })
   })
   add(value.direction.shots, ['direction', 'shots'], 'shot', '镜头', 'direction')
