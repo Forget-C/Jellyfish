@@ -9,7 +9,60 @@ const source = await readFile(new URL('../src/pages/aiStudio/directing/designWor
 const valueSource = await readFile(new URL('../src/pages/aiStudio/directing/designValue.ts', import.meta.url), 'utf8')
 const compile = source => ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ES2020 } }).outputText
 const data = source => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`
-const { sceneOverview, shotRelationPath, shotGraph, designObjects, shotIssues, scopeShots, scopeGraph, reorderScopeShots, relationBinding, relationOwner, changeRelation } = await import(data(compile(source).replaceAll("'./designValue'", JSON.stringify(data(compile(valueSource))))))
+const { sceneOverview, shotRelationPath, shotGraph, sceneDesignGraph, sharedDesignSubgraph, designObjects, designObjectLayoutId, sharedDesignGroup, projectSharedGraph, shotIssues, scopeShots, scopeGraph, reorderScopeShots, relationBinding, relationOwner, changeRelation } = await import(data(compile(source).replaceAll("'./designValue'", JSON.stringify(data(compile(valueSource))))))
+
+test('shared design group keeps the five fixed cards and counts only explicit core content', () => {
+  const value = makeWorkspace().designs[0].content
+  const group = sharedDesignGroup(value)
+  assert.deepEqual(group.members.map(node => node.key), ['overview', 'performance', 'staging', 'sound', 'prompt', 'blocking:state1', 'situation:0', 'performance:0', 'activity:0', 'camera:0', 'continuity:continuity1', 'dialogue:dialogue1'])
+  assert.equal(group.filled, 1)
+  assert.equal(group.members.length, 12)
+  value.sound.sources = { state: 'none' }
+  value.performance.beats[0].physical_action = { state: 'proposal', text: '展开旧信' }
+  assert.equal(sharedDesignGroup(value).filled, 3)
+  assert.equal(sharedDesignGroup(value).snippets[0], '展开旧信')
+  value.performance.beats.push({ ...structuredClone(value.performance.beats[0]), physical_action: { state: 'proposal', text: '收起旧信' } })
+  value.staging.activities[0].ongoing_task = { state: 'proposal', text: '窗外行人经过' }
+  assert.deepEqual(sharedDesignGroup(value).snippets, ['展开旧信', '窗外行人经过'])
+})
+
+test('current shot relations project to the shared card without inventing reverse constraints', () => {
+  const value = makeWorkspace().designs[0].content
+  const group = sharedDesignGroup(value)
+  const original = shotGraph(value, 'shot1')
+  const projected = projectSharedGraph(original, group.members)
+  assert.ok(projected.nodes.some(node => node.key === 'shared:design'))
+  assert.ok(!projected.nodes.some(node => node.key === 'performance:0'))
+  const edge = projected.edges.find(row => row.from === 'beat:beat1' && row.to === 'shared:design')
+  assert.equal(edge.label, '节拍表演')
+  assert.deepEqual(edge.sources.map(row => [row.from, row.to]), [['beat:beat1', 'performance:0']])
+  assert.ok(!projected.edges.some(row => row.from === 'shared:design' && row.to === 'shot:shot1'))
+})
+
+test('whole-scene references keep unassigned members and one boundary per external design object', () => {
+  const value = makeWorkspace().designs[0].content
+  value.staging.activities.push({ ...structuredClone(value.staging.activities[0]), participant_id: 'missing-person' })
+  const group = sharedDesignGroup(value)
+  const graph = sceneDesignGraph(value)
+  const subgraph = sharedDesignSubgraph(graph, group.members)
+  assert.ok(group.members.some(node => node.key === 'activity:1'))
+  assert.ok(graph.edges.some(edge => edge.from === 'activity:1' && edge.to === 'participant:missing-person' && edge.field === 'participant_id'))
+  assert.equal(subgraph.nodes.filter(node => node.key === 'participant:person1').length, 1)
+  assert.equal(subgraph.nodes.find(node => node.key === 'participant:missing-person').kind, 'missing')
+  assert.ok(subgraph.edges.some(edge => edge.from === 'situation:0' && edge.to === 'participant:person1'))
+  assert.ok(subgraph.nodes.some(node => node.key === 'shot:shot1'))
+})
+
+test('unidentified work cards retain layout only while their content is unambiguous', () => {
+  const value = makeWorkspace().designs[0].content
+  value.performance.situations.push({ ...structuredClone(value.performance.situations[0]), situation: { state: 'proposal', text: '独自等待' } })
+  const before = designObjects(value).filter(node => node.key.startsWith('situation:')).map(node => designObjectLayoutId(value, node))
+  value.performance.situations.reverse()
+  const after = designObjects(value).filter(node => node.key.startsWith('situation:')).map(node => designObjectLayoutId(value, node))
+  assert.deepEqual(after, before.reverse())
+  value.performance.situations.push(structuredClone(value.performance.situations[0]))
+  assert.match(designObjectLayoutId(value, designObjects(value).find(node => node.key === 'situation:0')), /:ambiguous:/)
+})
 
 test('shot participant relations are explicit, editable and independent of background evidence', () => {
   const value = makeWorkspace().designs[0].content

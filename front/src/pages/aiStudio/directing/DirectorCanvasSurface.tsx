@@ -18,7 +18,7 @@ const locatedRequests = new Map<string, number>()
 const defaultLabels = ['原文依据', '全场共享', '镜头设计']
 const toolDrag = 'application/x-jellyfish-director-tool'
 export type DirectorCanvasObject = { id: string; label: string; title?: string; content: ReactNode; onInspect?: (trigger: HTMLElement) => void }
-export type DirectorCanvasRelation = { from: string; to: string; label: string; indirect?: boolean }
+export type DirectorCanvasRelation = { from: string; to: string; label: string; indirect?: boolean; field?: string; sources?: { from: string; to: string; label: string; field?: string }[] }
 
 /** 画布只维护视口与节点位置；内容及排序始终由业务编辑入口维护。 */
 export function DirectorCanvasSurface({ contextKey, children, objects = [], relations = [], inspectors = {}, tools = [], toolbar, anchorTitle, labels = defaultLabels, ariaLabel = '导演画布视口', initialPositions = {}, focusTarget, layoutScope }: { layoutScope?: DirectorLayoutScope; focusTarget?: { nodeId: string; fieldId: string; serial: number }; initialPositions?: Record<string, CanvasPoint>; labels?: string[]; ariaLabel?: string; tools?: { label: string; onClick: (trigger: HTMLElement) => void }[]; toolbar?: ReactNode; anchorTitle?: string; contextKey: string; children: ReactNode; objects?: DirectorCanvasObject[]; relations?: DirectorCanvasRelation[]; inspectors?: Record<string, ((trigger: HTMLElement) => void) | undefined> }) {
@@ -40,6 +40,8 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
   const [focused, setFocused] = useState<string>()
   const [edgeFocus, setEdgeFocus] = useState<number>()
   const [edgeHover, setEdgeHover] = useState<number>()
+  const [inspectedRelation, setInspectedRelation] = useState<number>()
+  useEffect(() => setInspectedRelation(undefined), [viewKey])
   const cards = useRef(new Map<string, HTMLDivElement>())
   useLayoutEffect(() => {
     const stored = scrollPositions.get(viewKey)
@@ -132,7 +134,10 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
     const point = position(id)
     // 明确定位保留其它节点位置；窄屏也能直接找回当前对象。
     const scale = Math.min(1, ((viewport.surface.current?.clientWidth || window.innerWidth) - 32) / 360)
-    setView(previous => ({ ...previous, transform: { scale, x: 16 - point.x * scale, y: (layoutScope ? 56 : 20) - point.y * scale } }))
+    const surfaceTop = viewport.surface.current?.getBoundingClientRect().top || 0
+    const toolbarBottom = document.querySelector<HTMLElement>('.director-canvas-toolbar')?.getBoundingClientRect().bottom || surfaceTop
+    const top = layoutScope ? Math.max(56, toolbarBottom - surfaceTop + 16) : 20
+    setView(previous => ({ ...previous, transform: { scale, x: 16 - point.x * scale, y: top - point.y * scale } }))
     requestAnimationFrame(() => cards.current.get(id)?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true }))
   }
   useEffect(() => {
@@ -174,13 +179,23 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
               const middle = (start.y + end.y) / 2
               line = { start, end, d: `M${start.x},${start.y} C${start.x},${middle} ${end.x},${middle} ${end.x},${end.y}`, x: (start.x + end.x) / 2, y: middle - 8 }
             }
+            const siblings = relations.filter(item => item.from === relation.from && item.to === relation.to)
+            if (siblings.length > 1) {
+              const rank = relations.slice(0, index).filter(item => item.from === relation.from && item.to === relation.to).length
+              const offset = (rank - (siblings.length - 1) / 2) * 22
+              const dx = line.end.x - line.start.x, dy = line.end.y - line.start.y
+              const length = Math.hypot(dx, dy) || 1
+              const ox = -dy / length * offset, oy = dx / length * offset
+              line = { ...line, d: `M${line.start.x},${line.start.y} C${line.start.x + dx / 3 + ox},${line.start.y + dy / 3 + oy} ${line.start.x + dx * 2 / 3 + ox},${line.start.y + dy * 2 / 3 + oy} ${line.end.x},${line.end.y}`,
+                x: (line.start.x + line.end.x) / 2 + ox * .75, y: (line.start.y + line.end.y) / 2 + oy * .75 }
+            }
             const active = activeRelation !== undefined ? activeRelation === index : !!activeNode && (relation.from === activeNode || relation.to === activeNode)
             const category = directorRelationCategory(relation.label)
             const caption = !layoutScope || active ? { x: line.x, y: line.y, text: relation.label } : undefined
             return <g key={`${relation.from}:${relation.to}:${index}`} data-relation-from={relation.from} data-relation-to={relation.to} data-relation-category={category}
               onMouseEnter={() => setEdgeHover(index)} onMouseLeave={() => setEdgeHover(undefined)} onFocus={() => { setEdgeFocus(index); setEdgeHover(undefined) }} onBlur={() => setEdgeFocus(undefined)}>
               <title>{relation.label}{relation.indirect ? ' · 间接' : ''}</title>
-              <CanvasEdge d={line.d} label={`查看关系：${relation.label}${relation.indirect ? '，间接展示' : '，直接展示'}`} onInspect={() => setEdgeFocus(index)} indirect={relation.indirect} selected={!!layoutScope && active} muted={!!layoutScope && !active} caption={caption} />
+              <CanvasEdge d={line.d} label={`查看关系：${relation.label}${relation.indirect ? '，间接展示' : '，直接展示'}`} onInspect={() => { setEdgeFocus(index); setInspectedRelation(index) }} indirect={relation.indirect} selected={!!layoutScope && active} muted={!!layoutScope && !active} caption={caption} />
               <circle cx={line.start.x} cy={line.start.y} r={4} className="director-relation-port" />
               <circle cx={line.end.x} cy={line.end.y} r={4} className="director-relation-port" />
             </g>
@@ -219,6 +234,11 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
       </div>
     </div>
     {toolbar && <nav className="director-canvas-toolbar" aria-label="导演画布选择">{toolbar}</nav>}
+    {inspectedRelation !== undefined && relations[inspectedRelation] && <aside className="director-relation-detail" aria-label="关系来源">
+      <header><strong>{relations[inspectedRelation].label}</strong><Button onClick={() => setInspectedRelation(undefined)}>关闭关系来源</Button></header>
+      <ul>{(relations[inspectedRelation].sources || [relations[inspectedRelation]]).map((source, index) =>
+        <li key={index}>{source.from} → {source.to} · {source.label}{source.field ? ` · ${source.field}` : ''}</li>)}</ul>
+    </aside>}
     {layoutScope && <WorkbenchIconButton className={`director-minimap-toggle${minimapOpen ? ' director-minimap-toggle-open' : ''}`} variant="quiet"
       label={minimapOpen ? '收起小地图' : '展开小地图'} icon={minimapOpen ? <CloseOutlined /> : <CompassOutlined />}
       aria-expanded={minimapOpen} onClick={() => setMinimapOpen(value => !value)} />}

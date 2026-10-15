@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Alert, Button, Select, Space } from 'antd'
 import { WorkbenchModal } from './ui/WorkbenchModal'
+import { CanvasQuickEditor } from './CanvasQuickEditor'
 import { DesignObjectSummary } from './DesignObjectSummary'
 import type { EditableSceneDesign_Output, EditableGenerationUnit_Output } from '../../../services/generated'
 import { DesignFields, designAt, patchDesign } from './DesignFields'
@@ -31,7 +32,7 @@ const objectSnapshot = (value: unknown) => JSON.stringify(value, (_key, item) =>
     !(key === 'sources' && Array.isArray(item[key]) && !item[key].length)).map(key => [key, item[key]]))
 })
 export type DesignTarget = { assetKind?: 'character' | 'scene' | 'prop'; shotId?: string; object?: boolean; path: DesignPath; identity?: Record<string, unknown>; snapshot?: string }
-export type DesignFocusRequest = { target: DesignTarget; trigger: HTMLElement; serial: number }
+export type DesignFocusRequest = { target: DesignTarget; trigger: HTMLElement; serial: number; side?: boolean }
 export function targetFor(value: EditableSceneDesign_Output, path: DesignPath): DesignTarget {
   const row = designAt(value, path)
   if (typeof path[path.length - 1] !== 'number') return { path }
@@ -44,7 +45,6 @@ export function targetFor(value: EditableSceneDesign_Output, path: DesignPath): 
 export function resolveTarget(value: EditableSceneDesign_Output, target: DesignTarget): DesignPath | undefined {
   if (target.snapshot) {
     const rows = designAt(value, target.path.slice(0, -1)) as unknown[] | undefined
-    if (objectSnapshot(designAt(value, target.path)) === target.snapshot) return target.path
     const matches = rows?.flatMap((row, index) => objectSnapshot(row) === target.snapshot ? [index] : []) || []
     return matches.length === 1 ? [...target.path.slice(0, -1), matches[0]] : undefined
   }
@@ -58,7 +58,7 @@ export function resolveTarget(value: EditableSceneDesign_Output, target: DesignT
 }
 
 /** 单个编辑区复用六岗字段；创建关系须明确选对象，删除先定位真实引用。 */
-export function SceneDesignPanel({ navigationOpen, onNavigationOpenChange: setNavigationOpen, projectId, value, saved, units, disabled, onChange, focusRequest, onSelectShot, onFocusHandled, open, onOpenChange: setOpen, onLocateUnit }: {
+export function SceneDesignPanel({ navigationOpen, onNavigationOpenChange: setNavigationOpen, projectId, value, saved, units, disabled, onChange, focusRequest, onSelectShot, onFocusHandled, open, onOpenChange: setOpen, onLocateUnit, hideTriggers = false }: {
   navigationOpen: boolean
   onNavigationOpenChange: (open: boolean) => void
   projectId: string
@@ -73,8 +73,10 @@ export function SceneDesignPanel({ navigationOpen, onNavigationOpenChange: setNa
   onFocusHandled?: () => void
   open: boolean
   onOpenChange: (open: boolean) => void
+  hideTriggers?: boolean
 }) {
   const [target, setTarget] = useState<DesignTarget>({ path: ['direction'] })
+  const [sideOpen, setSideOpen] = useState(false)
   const resolved = resolveTarget(value, target)
   const path = resolved || target.path
   const object = target.object && resolved ? designObjects(value).find(row => JSON.stringify(row.path) === JSON.stringify(resolved)) : undefined
@@ -151,7 +153,11 @@ export function SceneDesignPanel({ navigationOpen, onNavigationOpenChange: setNa
   }
   useEffect(() => {
     if (focusRequest) {
-      openEditor(focusRequest.trigger, focusRequest.target)
+      if (focusRequest.side) {
+        editorTrigger.current = focusRequest.trigger
+        navigate(focusRequest.target)
+        setOpen(false); setSideOpen(true)
+      } else openEditor(focusRequest.trigger, focusRequest.target)
       onFocusHandled?.()
     }
   }, [focusRequest])
@@ -164,32 +170,12 @@ export function SceneDesignPanel({ navigationOpen, onNavigationOpenChange: setNa
     { label: '验收要求', path: ['criteria'], rows: value.criteria.map(row => ({ id: row.id, name: row.requirement.text })) },
   ]
   const closeNavigation = () => { setNavigationOpen(false); navigationTrigger.current?.focus({ preventScroll: true }) }
-  return <>
-    <Button onClick={event => openEditor(event.currentTarget, ['direction'])}>编辑六岗设计</Button>
-    <Button ref={navigationTrigger} aria-expanded={navigationOpen} onClick={() => setNavigationOpen(!navigationOpen)}>关系导航</Button>
-    {navigationOpen && createPortal(<aside className="director-relations-navigation" aria-label="场次关系导航" onKeyDown={event => {
-      if (event.key === 'Escape') { event.stopPropagation(); closeNavigation() }
-    }}>
-      <header><h2>场次关系</h2><Button onClick={closeNavigation}>关闭关系导航</Button></header>
-      <Button onClick={event => openEditor(event.currentTarget, ['direction'])}>全场共享设计</Button>
-      <Button onClick={event => openEditor(event.currentTarget, ['assets'])}>查看项目资产关联</Button>
-      {groups.map(group => <details key={group.label} open>
-        <summary>{group.label} · {group.rows.length}</summary>
-        {!group.rows.length && <p>当前不存在{group.label}</p>}
-        {group.rows.map((row, index) => <Button key={row.id} aria-label={`定位${group.label}：${row.name || `${group.label} ${index + 1}`}`}
-          onClick={event => openEditor(event.currentTarget, { path: [...group.path, index], identity: { id: row.id } })}>
-          {index + 1} · {row.name || '未填写'}
-        </Button>)}
-      </details>)}
-    </aside>, document.querySelector('.canvas-workbench') || document.body)}
-    <WorkbenchModal width={880} title={object?.label || '全场六岗设计'} open={open}
-      afterClose={() => (editorTrigger.current?.isConnected ? editorTrigger.current : navigationTrigger.current)?.focus({ preventScroll: true })}
-      onCancel={() => { setOpen(false); setPending(undefined) }} footer={<Button onClick={() => { setOpen(false); setPending(undefined) }}>完成编辑</Button>}>
+  const editorBody = () => <>
       {!object && <Space wrap>{roles.map(role => <Button key={role} onClick={() => navigate([role])} className="canvas-choice" aria-pressed={path[0] === role}>
         {departmentNames[role] || designLabels[role]}
       </Button>)}</Space>}
       {!object && <Button onClick={() => navigate(['assets'])} className="canvas-choice" aria-pressed={path[0] === 'assets'}>项目资产关联</Button>}
-      {object && <DesignObjectSummary value={value} saved={saved} object={object} showText={false} editing onSelectShot={id => { onSelectShot?.(id); setOpen(false) }} />}
+      {object && <DesignObjectSummary value={value} saved={saved} object={object} showText={false} editing onSelectShot={id => { onSelectShot?.(id); setOpen(false); setSideOpen(false) }} />}
       <h3>{path[0] === 'assets' ? '项目资产关联' : pathLabel(pending?.path || path)}</h3>
       {error && <Alert type="warning" message={error} description={<Space wrap>{references.map((reference, i) =>
         <Button key={i} onClick={() => navigate(reference)}>定位：{pathLabel(reference.path)}</Button>)}
@@ -208,6 +194,32 @@ export function SceneDesignPanel({ navigationOpen, onNavigationOpenChange: setNa
       </div> : <DesignFields value={value} path={path} fields={object?.fields} allowStructure={!object} disabled={disabled} onChange={next => {
         setTarget({ ...targetFor(next, path), object: target.object }); onChange(next)
       }} onAdd={add} onRemove={remove} />}
+  </>
+  return <>
+    {!hideTriggers && <Button onClick={event => openEditor(event.currentTarget, ['direction'])}>编辑六岗设计</Button>}
+    {!hideTriggers && <Button ref={navigationTrigger} aria-expanded={navigationOpen} onClick={() => setNavigationOpen(!navigationOpen)}>关系导航</Button>}
+    {navigationOpen && createPortal(<aside className="director-relations-navigation" aria-label="场次关系导航" onKeyDown={event => {
+      if (event.key === 'Escape') { event.stopPropagation(); closeNavigation() }
+    }}>
+      <header><h2>场次关系</h2><Button onClick={closeNavigation}>关闭关系导航</Button></header>
+      <Button onClick={event => openEditor(event.currentTarget, ['direction'])}>全场共享设计</Button>
+      <Button onClick={event => openEditor(event.currentTarget, ['assets'])}>查看项目资产关联</Button>
+      {groups.map(group => <details key={group.label} open>
+        <summary>{group.label} · {group.rows.length}</summary>
+        {!group.rows.length && <p>当前不存在{group.label}</p>}
+        {group.rows.map((row, index) => <Button key={row.id} aria-label={`定位${group.label}：${row.name || `${group.label} ${index + 1}`}`}
+          onClick={event => openEditor(event.currentTarget, { path: [...group.path, index], identity: { id: row.id } })}>
+          {index + 1} · {row.name || '未填写'}
+        </Button>)}
+      </details>)}
+    </aside>, document.querySelector('.canvas-workbench') || document.body)}
+    <WorkbenchModal width={880} title={object?.label || '全场六岗设计'} open={open}
+      afterClose={() => (editorTrigger.current?.isConnected ? editorTrigger.current : navigationTrigger.current)?.focus({ preventScroll: true })}
+      onCancel={() => { setOpen(false); setPending(undefined) }} footer={<Button onClick={() => { setOpen(false); setPending(undefined) }}>完成编辑</Button>}>
+      {editorBody()}
     </WorkbenchModal>
+    {sideOpen && <CanvasQuickEditor title={object?.label || '设计卡片'} onClose={() => { setSideOpen(false); setPending(undefined) }}>
+      {editorBody()}
+    </CanvasQuickEditor>}
   </>
 }

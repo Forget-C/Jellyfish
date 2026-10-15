@@ -3,7 +3,7 @@ import { designAt, noteText, patchDesign } from './designValue'
 import type { DesignPath } from './designValue'
 
 export type DesignObject = { key: string; label: string; kind: string; path: DesignPath; fields?: string[] }
-export type DesignEdge = { from: string; to: string; label: string; indirect?: boolean }
+export type DesignEdge = { from: string; to: string; label: string; indirect?: boolean; field?: string }
 export type DesignGraph = { nodes: DesignObject[]; edges: DesignEdge[] }
 export type RelationBinding = { path: DesignPath; prefix: string; target: string; many: boolean; required: boolean }
 export const departmentNames: Record<string, string> = { direction: '总导演', performance: '表演指导', staging: '镜内执行', cinematography: '摄影指导', continuity: '场记与连续性', sound: '对白与声音', prompt: '提示词指导' }
@@ -104,6 +104,124 @@ export function designObjects(value: SceneDesign_Input): DesignObject[] {
   add(value.continuity, ['continuity'], 'continuity', '连续性', 'continuity')
   add(value.sound.dialogues, ['sound', 'dialogues'], 'dialogue', '对白', 'sound')
   return objects
+}
+
+/** 无持久 ID 的数组项只按唯一内容快照恢复布局；重复项标记为不可持久定位。 */
+export function designObjectLayoutId(value: SceneDesign_Input, node: DesignObject): string {
+  const kind = node.key.split(':')[0]
+  if (kind !== 'situation' && kind !== 'activity') return node.key
+  const row = designAt(value, node.path)
+  const rows = designAt(value, node.path.slice(0, -1)) as unknown[]
+  const snapshot = (item: unknown) => JSON.stringify(item, (_key, child) => {
+    if (!child || typeof child !== 'object' || Array.isArray(child)) return child
+    return Object.fromEntries(Object.keys(child).sort().filter(key => (child as Record<string, unknown>)[key] != null &&
+      !(key === 'sources' && Array.isArray((child as Record<string, unknown>)[key]) && !(child as Record<string, unknown[]>)[key].length))
+      .map(key => [key, (child as Record<string, unknown>)[key]]))
+  })
+  const identity = snapshot(row)
+  if (rows.filter(item => snapshot(item) === identity).length !== 1) return `${kind}:ambiguous:${node.path[node.path.length - 1]}`
+  return `${kind}:${encodeURIComponent(identity)}`
+}
+
+const sharedKeys = new Set(['overview', 'performance', 'staging', 'sound', 'prompt'])
+const sharedPrefixes = /^(blocking|situation|performance|activity|camera|continuity|dialogue):/
+const coreFields: Record<string, string[]> = {
+  overview: ['viewpoint', 'information_change', 'turning_point'], performance: ['applicability'],
+  staging: ['environment', 'intentional_absence'], sound: ['sources', 'ambience_actions', 'music_constraints'],
+  prompt: ['priorities', 'binding_requirements', 'sound_strategy', 'prohibitions'],
+  blocking: ['position', 'orientation', 'path'], situation: ['situation', 'relationship'],
+  camera: ['composition', 'movement_path', 'end_frame'], continuity: ['before', 'after', 'following_constraint'],
+  activity: ['ongoing_task', 'depth'], dialogue: ['content'],
+}
+const coreText = (item: unknown): string => {
+  if (typeof item === 'string') return item.trim()
+  if (!item || typeof item !== 'object') return ''
+  const note = item as { state?: string; text?: string; reason?: string }
+  if (note.state === 'none') return '明确没有'
+  if (note.state === 'not_applicable') return '不适用'
+  if (note.state === 'unset' || note.state === 'unknown') return ''
+  return (note.text || note.reason || '').trim()
+}
+
+/** 汇总仅依业务类型和核心字段；引用 ID、默认枚举和空结构不代表已填写。 */
+export function sharedDesignGroup(value: SceneDesign_Input) {
+  const members = designObjects(value).filter(node => sharedKeys.has(node.key) || sharedPrefixes.test(node.key))
+  const contents = members.map(node => {
+    const row = designAt(value, node.path)
+    const kind = node.key.split(':')[0]
+    const fields = kind === 'performance' && node.key.includes(':') ? ['physical_action', 'objective'] : coreFields[kind] || []
+    return fields.map(field => coreText(row?.[field])).find(Boolean) || ''
+  })
+  const domains = new Set<string>()
+  const snippets = members.slice(5).flatMap((node, index) => {
+    const domain = node.key.split(':')[0], text = contents[index + 5]
+    if (!text || domains.has(domain) || domains.size >= 2) return []
+    domains.add(domain)
+    return [text]
+  })
+  return { members, core: contents[0], filled: contents.filter(Boolean).length,
+    snippets }
+}
+
+export type ProjectedDesignEdge = DesignEdge & { sources: DesignEdge[] }
+
+/** 外层只压缩已有关系；原边留给关系核对，不把组内关系投到自身。 */
+export function projectSharedGraph(graph: DesignGraph, members: DesignObject[]): { nodes: DesignObject[]; edges: ProjectedDesignEdge[] } {
+  const grouped = new Set(members.map(node => node.key))
+  const summary: DesignObject = { key: 'shared:design', label: '全场概览', kind: 'summary', path: [] }
+  const nodes = graph.nodes.filter(node => !grouped.has(node.key))
+  nodes.push(summary)
+  const edges = new Map<string, ProjectedDesignEdge>()
+  graph.edges.forEach(edge => {
+    const from = grouped.has(edge.from) ? summary.key : edge.from
+    const to = grouped.has(edge.to) ? summary.key : edge.to
+    if (from === to) return
+    const key = JSON.stringify([from, to, edge.label, !!edge.indirect])
+    const existing = edges.get(key)
+    if (existing) existing.sources.push(edge)
+    else edges.set(key, { ...edge, from, to, sources: [edge] })
+  })
+  return { nodes, edges: [...edges.values()] }
+}
+
+const designReferences: Record<string, [string, string, string][]> = {
+  shot: [['participant_ids', 'participant', '参与对象'], ['beat_ids', 'beat', '覆盖节拍'], ['event_ids', 'event', '关联事件'], ['criterion_ids', 'criterion', '验收依据'], ['blocking_state_ids', 'blocking', '调度依据']],
+  beat: [['event_ids', 'event', '关联事件']],
+  blocking: [['participant_id', 'participant', '调度人物'], ['anchor_ids', 'anchor', '位置锚点'], ['event_id', 'event', '变化事件']],
+  situation: [['participant_id', 'participant', '情境人物']],
+  performance: [['beat_id', 'beat', '所属节拍'], ['participant_id', 'participant', '表演人物'], ['received_event_ids', 'event', '接收事件'], ['dialogue_ids', 'dialogue', '对白依据'], ['criterion_ids', 'criterion', '验收依据']],
+  activity: [['participant_id', 'participant', '活动人物'], ['anchor_id', 'anchor', '空间锚点'], ['trigger_event_id', 'event', '触发事件']],
+  camera: [['shot_id', 'shot', '所属镜头'], ['criterion_ids', 'criterion', '验收依据']],
+  continuity: [['participant_id', 'participant', '连续性对象'], ['event_id', 'event', '变化事件']],
+  dialogue: [['participant_id', 'participant', '说话对象']],
+}
+
+/** 整场图直接读取当前设计对象的字段引用，与当前镜头是否选择无关。 */
+export function sceneDesignGraph(value: SceneDesign_Input): DesignGraph {
+  const registry = new Map(designObjects(value).map(node => [node.key, node]))
+  const nodes = new Map(registry), edges: DesignEdge[] = []
+  registry.forEach(node => {
+    const row = designAt(value, node.path)
+    const kind = node.key.split(':')[0]
+    for (const [field, prefix, label] of designReferences[kind] || []) {
+      const raw = row?.[field]
+      for (const id of raw == null ? [] : Array.isArray(raw) ? raw : [raw]) {
+        if (typeof id !== 'string' || !id) continue
+        const target = `${prefix}:${id}`
+        if (!nodes.has(target)) nodes.set(target, { key: target, label: `缺失引用 · ${id}`, kind: 'missing', path: [] })
+        edges.push({ from: node.key, to: target, label, field })
+      }
+    }
+  })
+  return { nodes: [...nodes.values()], edges }
+}
+
+/** 子图仅纳入语义成员；跨组字段引用以原对象的只读边界节点闭合。 */
+export function sharedDesignSubgraph(graph: DesignGraph, members: DesignObject[]): DesignGraph {
+  const grouped = new Set(members.map(node => node.key))
+  const edges = graph.edges.filter(edge => grouped.has(edge.from) || grouped.has(edge.to))
+  const boundary = new Set(edges.flatMap(edge => [edge.from, edge.to]).filter(key => !grouped.has(key)))
+  return { nodes: [...members, ...graph.nodes.filter(node => boundary.has(node.key)).map(node => node.kind === 'missing' ? node : { ...node, kind: 'boundary' })], edges }
 }
 
 /** 图边逐项来自契约引用，表演/声音等间接关联保留经由节拍的路径。 */

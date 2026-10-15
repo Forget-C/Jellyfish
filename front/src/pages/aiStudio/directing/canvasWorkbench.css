@@ -94,6 +94,9 @@
 .director-canvas-object-content { max-height: min(650px, calc(100dvh - 220px)); overflow: auto; border-radius: 12px; }
 .director-canvas-object .canvas-workbench-card { width: 100%; box-sizing: border-box; padding: 20px; }
 .director-canvas-controls { font-size: 12px; color: var(--wb-muted); }
+.director-relation-detail { position: fixed; z-index: 30; right: 16px; bottom: 140px; width: min(420px, calc(100vw - 32px)); max-height: 45dvh; overflow: auto; padding: 16px; color: var(--wb-text); background: var(--wb-surface); border: 1px solid #383838; border-radius: 12px; box-shadow: 0 12px 32px #0008; }
+.director-relation-detail header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.director-relation-detail ul { margin: 12px 0 0; padding-left: 20px; overflow-wrap: anywhere; }
 .director-relations-navigation { position: fixed; z-index: 100; top: var(--workbench-content-top, 86px); right: 16px; bottom: 68px; width: min(344px, calc(100vw - 32px)); padding: 16px; overflow: auto; color: var(--wb-text); background: var(--wb-surface); border: 1px solid #383838; border-radius: 12px; box-shadow: 0 12px 32px #0008; }
 .director-relations-navigation header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .director-relations-navigation h2 { font-size: 16px; margin: 0; }
@@ -354,6 +357,9 @@
 .director-layout-surface .director-compact-card .director-canvas-object-content { height: calc(100% - 32px) !important; max-height: none; overflow: hidden; }
 .director-layout-surface .director-compact-card .director-node-summary { height: 100%; }
 .director-layout-surface .director-compact-card .canvas-workbench-card { height: 100%; }
+.director-summary-card { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 6px 8px; }
+.director-summary-card p { flex: 0 0 100%; margin: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; }
+.director-summary-card p:first-child { -webkit-line-clamp: 2; }
 .design-compact-summary { display: flex; flex-direction: column; height: 100%; min-width: 0; }
 .director-layout-surface [data-canvas-node="全场共享"] .design-compact-summary { height: 155px; }
 .design-compact-fields { flex: 1; min-height: 0; overflow: hidden; }
