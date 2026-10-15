@@ -3,7 +3,7 @@ import { arrangeDirector, fixedDirectorSize, pruneDirectorView, readDirectorView
 import type { DirectorLayoutNode, DirectorSize, DirectorView } from './directorLayout'
 import type { CanvasPoint } from '../../../components/canvas/geometry'
 
-export type DirectorLayoutScope = { storageKey: string; viewId: string; anchorId: string; validIds: string[] }
+export type DirectorLayoutScope = { storageKey: string; viewId: string; anchorId: string; validIds: string[]; onInvalidTarget?: () => void }
 type LayoutState = { key: string; anchor: string; view: DirectorView; ready: boolean; anchorScreen?: CanvasPoint; undo?: DirectorView }
 const memory = new Map<string, DirectorView>()
 const undoMemory = new Map<string, DirectorView>()
@@ -33,6 +33,7 @@ export function useDirectorLayout(scope: DirectorLayoutScope | undefined, nodes:
   const identity = nodes.map(node => node.id).join('|'), validIdentity = scope?.validIds.join('|')
   useLayoutEffect(() => {
     if (!scope || state.key !== key || !nodes.length || nodes.some(node => !measured[node.id])) return
+    if (Object.keys(state.view.positions).some(id => /^(situation|activity):/.test(id) && !scope.validIds.includes(id))) scope.onInvalidTarget?.()
     setState(previous => {
       const valid = new Set(scope.validIds)
       const cleaned = pruneDirectorView(previous.view, valid)
@@ -63,6 +64,7 @@ export function useDirectorLayout(scope: DirectorLayoutScope | undefined, nodes:
     const prefix = `${scope.storageKey}:view:`, valid = new Set(scope.validIds)
     const keys = new Set([...memory.keys()].filter(item => item.startsWith(prefix)))
     try { Object.keys(localStorage).filter(item => item.startsWith(prefix)).forEach(item => keys.add(item)) } catch { /* 使用会话缓存。 */ }
+    let lostTarget = false
     keys.forEach(item => {
       const viewId = item.slice(prefix.length)
       if (viewId.startsWith('shot:') && !valid.has(viewId)) {
@@ -71,9 +73,13 @@ export function useDirectorLayout(scope: DirectorLayoutScope | undefined, nodes:
         try { localStorage.removeItem(item) } catch { /* 使用会话缓存。 */ }
       } else {
         const view = storedView(item)
-        if (view) storeView(item, pruneDirectorView(view, valid))
+        if (view) {
+          if (Object.keys(view.positions).some(id => /^(situation|activity):/.test(id) && !valid.has(id))) lostTarget = true
+          storeView(item, pruneDirectorView(view, valid))
+        }
       }
     })
+    if (lostTarget) scope.onInvalidTarget?.()
   }, [scope?.storageKey, validIdentity])
   useEffect(() => {
     const save = () => { const current = latest.current; if (current.key && current.ready) storeView(current.key, current.view) }

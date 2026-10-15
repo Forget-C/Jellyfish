@@ -18,7 +18,7 @@ const locatedRequests = new Map<string, number>()
 const defaultLabels = ['原文依据', '全场共享', '镜头设计']
 const toolDrag = 'application/x-jellyfish-director-tool'
 export type DirectorCanvasObject = { id: string; label: string; title?: string; content: ReactNode; onInspect?: (trigger: HTMLElement) => void }
-export type DirectorCanvasRelation = { from: string; to: string; label: string; indirect?: boolean; field?: string; sources?: { from: string; to: string; label: string; field?: string }[] }
+export type DirectorCanvasRelation = { from: string; to: string; label: string; indirect?: boolean; field?: string; fromLabel?: string; toLabel?: string; sources?: { from: string; to: string; label: string; field?: string; fromLabel?: string; toLabel?: string }[] }
 
 /** 画布只维护视口与节点位置；内容及排序始终由业务编辑入口维护。 */
 export function DirectorCanvasSurface({ contextKey, children, objects = [], relations = [], inspectors = {}, tools = [], toolbar, anchorTitle, labels = defaultLabels, ariaLabel = '导演画布视口', initialPositions = {}, focusTarget, layoutScope }: { layoutScope?: DirectorLayoutScope; focusTarget?: { nodeId: string; fieldId: string; serial: number }; initialPositions?: Record<string, CanvasPoint>; labels?: string[]; ariaLabel?: string; tools?: { label: string; onClick: (trigger: HTMLElement) => void }[]; toolbar?: ReactNode; anchorTitle?: string; contextKey: string; children: ReactNode; objects?: DirectorCanvasObject[]; relations?: DirectorCanvasRelation[]; inspectors?: Record<string, ((trigger: HTMLElement) => void) | undefined> }) {
@@ -26,6 +26,7 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
     transform: { x: 120, y: 30, scale: Math.max(.3, Math.min(1, (window.innerWidth - 180) / 1160)) }, positions: {},
   })
   const nodes: DirectorCanvasObject[] = [...Children.toArray(children).map((content, index) => ({ id: layoutScope && index === 2 && layoutScope.anchorId !== '全场共享' ? layoutScope.anchorId : labels[index], label: labels[index], title: index === 2 ? anchorTitle : undefined, content, onInspect: inspectors[labels[index]] })), ...objects]
+  const relationName = (id: string) => nodes.find(node => node.id === id)?.title || nodes.find(node => node.id === id)?.label || id
   const [sizes, setSizes] = useState<Record<string, { width: number; height: number }>>({})
   const [surfaceWidth, setSurfaceWidth] = useState(window.innerWidth)
   const [surfaceHeight, setSurfaceHeight] = useState(window.innerHeight)
@@ -42,6 +43,9 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
   const [edgeHover, setEdgeHover] = useState<number>()
   const [inspectedRelation, setInspectedRelation] = useState<number>()
   useEffect(() => setInspectedRelation(undefined), [viewKey])
+  useEffect(() => {
+    if (focusTarget && /^(situation|activity):/.test(focusTarget.nodeId) && layoutScope && !layoutScope.validIds.includes(focusTarget.nodeId)) layoutScope.onInvalidTarget?.()
+  }, [focusTarget?.serial, layoutScope?.validIds.join('|')])
   const cards = useRef(new Map<string, HTMLDivElement>())
   useLayoutEffect(() => {
     const stored = scrollPositions.get(viewKey)
@@ -235,9 +239,9 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
     </div>
     {toolbar && <nav className="director-canvas-toolbar" aria-label="导演画布选择">{toolbar}</nav>}
     {inspectedRelation !== undefined && relations[inspectedRelation] && <aside className="director-relation-detail" aria-label="关系来源">
-      <header><strong>{relations[inspectedRelation].label}</strong><Button onClick={() => setInspectedRelation(undefined)}>关闭关系来源</Button></header>
+      <header><strong>{relations[inspectedRelation].label}</strong><WorkbenchButton variant="quiet" aria-label="关闭详情" onClick={() => setInspectedRelation(undefined)}>关闭关系来源</WorkbenchButton></header>
       <ul>{(relations[inspectedRelation].sources || [relations[inspectedRelation]]).map((source, index) =>
-        <li key={index}>{source.from} → {source.to} · {source.label}{source.field ? ` · ${source.field}` : ''}</li>)}</ul>
+        <li key={index}>{source.fromLabel || relationName(source.from)} → {source.toLabel || relationName(source.to)} · {source.label}{source.field ? ` · ${source.field}` : ''}</li>)}</ul>
     </aside>}
     {layoutScope && <WorkbenchIconButton className={`director-minimap-toggle${minimapOpen ? ' director-minimap-toggle-open' : ''}`} variant="quiet"
       label={minimapOpen ? '收起小地图' : '展开小地图'} icon={minimapOpen ? <CloseOutlined /> : <CompassOutlined />}

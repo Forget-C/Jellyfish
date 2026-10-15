@@ -1,9 +1,9 @@
 import type { SceneDesign_Input } from '../../../services/generated'
-import { designAt, noteText, patchDesign } from './designValue'
+import { designAt, designObjectSnapshot, noteText, patchDesign } from './designValue'
 import type { DesignPath } from './designValue'
 
 export type DesignObject = { key: string; label: string; kind: string; path: DesignPath; fields?: string[] }
-export type DesignEdge = { from: string; to: string; label: string; indirect?: boolean; field?: string }
+export type DesignEdge = { from: string; to: string; label: string; indirect?: boolean; field?: string; path?: DesignEdge[] }
 export type DesignGraph = { nodes: DesignObject[]; edges: DesignEdge[] }
 export type RelationBinding = { path: DesignPath; prefix: string; target: string; many: boolean; required: boolean }
 export const departmentNames: Record<string, string> = { direction: '总导演', performance: '表演指导', staging: '镜内执行', cinematography: '摄影指导', continuity: '场记与连续性', sound: '对白与声音', prompt: '提示词指导' }
@@ -112,14 +112,8 @@ export function designObjectLayoutId(value: SceneDesign_Input, node: DesignObjec
   if (kind !== 'situation' && kind !== 'activity') return node.key
   const row = designAt(value, node.path)
   const rows = designAt(value, node.path.slice(0, -1)) as unknown[]
-  const snapshot = (item: unknown) => JSON.stringify(item, (_key, child) => {
-    if (!child || typeof child !== 'object' || Array.isArray(child)) return child
-    return Object.fromEntries(Object.keys(child).sort().filter(key => (child as Record<string, unknown>)[key] != null &&
-      !(key === 'sources' && Array.isArray((child as Record<string, unknown>)[key]) && !(child as Record<string, unknown[]>)[key].length))
-      .map(key => [key, (child as Record<string, unknown>)[key]]))
-  })
-  const identity = snapshot(row)
-  if (rows.filter(item => snapshot(item) === identity).length !== 1) return `${kind}:ambiguous:${node.path[node.path.length - 1]}`
+  const identity = designObjectSnapshot(row)
+  if (rows.filter(item => designObjectSnapshot(item) === identity).length !== 1) return `${kind}:ambiguous:${node.path[node.path.length - 1]}`
   return `${kind}:${encodeURIComponent(identity)}`
 }
 
@@ -178,8 +172,8 @@ export function projectSharedGraph(graph: DesignGraph, members: DesignObject[]):
     if (from === to) return
     const key = JSON.stringify([from, to, edge.label, !!edge.indirect])
     const existing = edges.get(key)
-    if (existing) existing.sources.push(edge)
-    else edges.set(key, { ...edge, from, to, sources: [edge] })
+    if (existing) existing.sources.push(...(edge.path || [edge]))
+    else edges.set(key, { ...edge, from, to, sources: edge.path || [edge] })
   })
   return { nodes, edges: [...edges.values()] }
 }
@@ -213,6 +207,18 @@ export function sceneDesignGraph(value: SceneDesign_Input): DesignGraph {
       }
     }
   })
+  const outgoing = new Map<string, DesignEdge[]>()
+  edges.forEach(edge => outgoing.set(edge.from, [...outgoing.get(edge.from) || [], edge]))
+  // 只沿真实字段引用遍历无环路径；每条虚线保留完整来源链。
+  const follow = (source: string, current: string, path: DesignEdge[], visited: Set<string>) => {
+    for (const edge of outgoing.get(current) || []) {
+      if (!registry.has(edge.to) || visited.has(edge.to)) continue
+      const next = [...path, edge]
+      if (next.length > 1) edges.push({ from: source, to: edge.to, label: next.map(item => item.label).join(' → '), indirect: true, path: next })
+      follow(source, edge.to, next, new Set([...visited, edge.to]))
+    }
+  }
+  registry.forEach(node => follow(node.key, node.key, [], new Set([node.key])))
   return { nodes: [...nodes.values()], edges }
 }
 

@@ -16,3 +16,11 @@ export function noteText(value: unknown): string {
   const note = value as Note_Input
   return note.text || note.reason || ''
 }
+/** 保存响应补齐空来源和 nullable 字段时，仍以同一内容识别无 ID 工作单。 */
+export function designObjectSnapshot(value: unknown): string {
+  return JSON.stringify(value, (_key, item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return item
+    return Object.fromEntries(Object.keys(item).sort().filter(key => item[key] != null &&
+      !(key === 'sources' && Array.isArray(item[key]) && !item[key].length)).map(key => [key, item[key]]))
+  })
+}

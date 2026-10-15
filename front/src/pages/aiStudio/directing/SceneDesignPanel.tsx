@@ -8,6 +8,7 @@ import type { EditableSceneDesign_Output, EditableGenerationUnit_Output } from '
 import { DesignFields, designAt, patchDesign } from './DesignFields'
 import type { DesignPath } from './DesignFields'
 import { designLabels } from './designLabels'
+import { designObjectSnapshot } from './designValue'
 import { departmentNames, designObjects } from './designWorkspace'
 import { SceneAssetLinks } from './SceneAssetLinks'
 import { sceneUnitReferenceConflicts } from './sceneUnitReferences'
@@ -25,12 +26,6 @@ const mandatory: Record<string, string[]> = {
   cinematography: ['shot_id'], 'sound.dialogues': ['participant_id'],
 }
 const pathLabel = (path: DesignPath) => path.map(key => typeof key === 'number' ? String(key + 1) : designLabels[key] || key).join(' / ')
-// 保存响应会补齐 Note 的空来源和 nullable 字段；这些序列化差异不改变工作单身份。
-const objectSnapshot = (value: unknown) => JSON.stringify(value, (_key, item) => {
-  if (!item || typeof item !== 'object' || Array.isArray(item)) return item
-  return Object.fromEntries(Object.keys(item).sort().filter(key => item[key] != null &&
-    !(key === 'sources' && Array.isArray(item[key]) && !item[key].length)).map(key => [key, item[key]]))
-})
 export type DesignTarget = { assetKind?: 'character' | 'scene' | 'prop'; shotId?: string; object?: boolean; path: DesignPath; identity?: Record<string, unknown>; snapshot?: string }
 export type DesignFocusRequest = { target: DesignTarget; trigger: HTMLElement; serial: number; side?: boolean }
 export function targetFor(value: EditableSceneDesign_Output, path: DesignPath): DesignTarget {
@@ -39,13 +34,13 @@ export function targetFor(value: EditableSceneDesign_Output, path: DesignPath): 
   const keys = row?.id ? ['id'] : ['shot_id', 'participant_id', 'beat_id'].filter(key => row?.[key] != null)
   const rows = designAt(value, path.slice(0, -1)) as Record<string, unknown>[]
   // 同一人物可以有多项镜内活动，人物身份不能冒充工作单唯一身份。
-  if (!keys.length || rows.filter(item => keys.every(key => item[key] === row[key])).length !== 1) return { path, snapshot: objectSnapshot(row) }
+  if (!keys.length || rows.filter(item => keys.every(key => item[key] === row[key])).length !== 1) return { path, snapshot: designObjectSnapshot(row) }
   return { path, identity: Object.fromEntries(keys.map(key => [key, row[key]])) }
 }
 export function resolveTarget(value: EditableSceneDesign_Output, target: DesignTarget): DesignPath | undefined {
   if (target.snapshot) {
     const rows = designAt(value, target.path.slice(0, -1)) as unknown[] | undefined
-    const matches = rows?.flatMap((row, index) => objectSnapshot(row) === target.snapshot ? [index] : []) || []
+    const matches = rows?.flatMap((row, index) => designObjectSnapshot(row) === target.snapshot ? [index] : []) || []
     return matches.length === 1 ? [...target.path.slice(0, -1), matches[0]] : undefined
   }
   if (!target.identity) return target.path

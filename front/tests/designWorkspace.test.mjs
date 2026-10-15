@@ -53,6 +53,19 @@ test('whole-scene references keep unassigned members and one boundary per extern
   assert.ok(subgraph.nodes.some(node => node.key === 'shot:shot1'))
 })
 
+test('whole-scene graph retains each step of a derived field path', () => {
+  const value = makeWorkspace().designs[0].content
+  const graph = sceneDesignGraph(value)
+  const derived = graph.edges.find(edge => edge.from === 'shot:shot1' && edge.to === 'participant:person1' && edge.indirect && edge.path?.some(step => step.to === 'blocking:state1'))
+  assert.deepEqual(derived?.path.map(edge => [edge.from, edge.to, edge.field]), [
+    ['shot:shot1', 'blocking:state1', 'blocking_state_ids'], ['blocking:state1', 'participant:person1', 'participant_id'],
+  ])
+  const group = sharedDesignGroup(value)
+  const projected = projectSharedGraph(graph, group.members)
+  assert.ok(projected.edges.some(edge => edge.indirect && edge.from === 'shot:shot1' && edge.to === 'participant:person1' && edge.sources.length === 2))
+  assert.ok(graph.edges.some(edge => edge.indirect && edge.from === 'camera:0' && edge.to === 'participant:person1' && edge.path?.length === 3))
+})
+
 test('unidentified work cards retain layout only while their content is unambiguous', () => {
   const value = makeWorkspace().designs[0].content
   value.performance.situations.push({ ...structuredClone(value.performance.situations[0]), situation: { state: 'proposal', text: '独自等待' } })
