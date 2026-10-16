@@ -60,7 +60,13 @@ try {
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
   page = await browser.newPage({ viewport: { width: 1440, height: 960 } })
   page.on('pageerror', error => errors.push(error.message))
-  await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin }; localStorage.setItem('jellyfish:scene-autosave:local-user', 'off') })
+  await page.addInitScript(({ sequence, version }) => {
+    window.__ENV = { BACKEND_URL: window.location.origin }
+    localStorage.setItem('jellyfish:scene-autosave:local-user', 'off')
+    localStorage.setItem(`jellyfish:director-shots:local-user:canvas-project:${sequence}:${version}:view:overview`, JSON.stringify({ schema: 1,
+      transform: { x: 96, y: 180, scale: 1 }, positions: { '原文依据': { x: 0, y: 0 }, 'shot:shot1': { x: 424, y: 0 }, 'shot:shot2': { x: 848, y: 0 } },
+      sizes: { '原文依据': { width: 360, height: 240 }, 'shot:shot1': { width: 360, height: 276 }, 'shot:shot2': { width: 360, height: 276 } } }))
+  }, { sequence, version: version.id })
   await page.goto(`http://127.0.0.1:4198/projects/canvas-project/chapters/canvas-chapter/sequences/${sequence}?version=${version.id}`)
   const surface = page.getByLabel('导演画布视口', { exact: true })
   const node = id => page.locator(`[data-canvas-node="${id}"]`)
@@ -101,6 +107,10 @@ try {
   const overviewPositions = (await snapshot()).positions
   assert.ok(overviewPositions['shot:shot1'].x > overviewPositions['原文依据'].x)
   assert.ok(overviewPositions['shot:shot2'].y > overviewPositions['原文依据'].y)
+  await page.waitForFunction(({ sequence, version }) => {
+    const saved = JSON.parse(localStorage.getItem(`jellyfish:director-shots:local-user:canvas-project:${sequence}:${version}:view:overview`) || 'null')
+    return saved?.layoutVersion === 2 && saved.positions['shot:shot2'].y > saved.positions['原文依据'].y
+  }, { sequence, version: version.id })
   assert.equal(await page.locator('[data-canvas-node^="domain:"]').count(), 0)
   assert.equal(await node('beat:beat1').count(), 1, 'shared beat has one original in overview')
   assert.ok(await node('shot:shot1').locator('.director-subgraph-preview rect').count() > 1)

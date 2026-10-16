@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { arrangeDirector, fixedDirectorSize, pruneDirectorView, readDirectorView } from './directorLayout'
+import { arrangeDirector, fixedDirectorSize, migrateLegacyOverviewPositions, pruneDirectorView, readDirectorView } from './directorLayout'
 import type { DirectorLayoutNode, DirectorSize, DirectorView } from './directorLayout'
 import type { CanvasPoint } from '../../../components/canvas/geometry'
 
@@ -44,14 +44,16 @@ export function useDirectorLayout(scope: DirectorLayoutScope | undefined, nodes:
       const cleaned = pruneDirectorView(previous.view, valid, scope.identityAliases)
       const sizes = { ...cleaned.sizes }
       nodes.forEach(node => { sizes[node.id] = node.size || fixedDirectorSize(node.id) || sizes[node.id] || measured[node.id] })
-      const positions = arrangeDirector(nodes, sizes, viewportWidth, scope.anchorId, cleaned.positions, cleaned.sizes)
+      const retained = scope.viewId === 'overview' && cleaned.layoutVersion !== 2
+        ? migrateLegacyOverviewPositions(nodes, sizes, cleaned.positions) : cleaned.positions
+      const positions = arrangeDirector(nodes, sizes, viewportWidth, scope.anchorId, retained, cleaned.sizes)
       let transform = cleaned.transform
       if (!previous.ready) {
         const anchor = positions[scope.anchorId] || positions['全场共享'] || { x: 0, y: 0 }
         const screen = previous.anchorScreen || { x: viewportWidth > 700 ? 96 : 16, y: scope.initialTop || 64 }
         transform = { ...transform, x: screen.x - anchor.x * transform.scale, y: screen.y - anchor.y * transform.scale }
       }
-      const view = { transform, positions, sizes }
+      const view = { transform, positions, sizes, layoutVersion: scope.viewId === 'overview' ? 2 : cleaned.layoutVersion }
       if (previous.ready && previous.anchor === scope.anchorId && JSON.stringify(view) === JSON.stringify(previous.view)) return previous
       return { ...previous, anchor: scope.anchorId, ready: true, view }
     })
@@ -100,7 +102,7 @@ export function useDirectorLayout(scope: DirectorLayoutScope | undefined, nodes:
       const positions = arrangeDirector(nodes, sizes, viewportWidth, scope.anchorId)
       const anchor = positions[scope.anchorId] || positions['全场共享'] || { x: 0, y: 0 }
       const transform = { ...previous.view.transform, x: (viewportWidth > 700 ? 96 : 16) - anchor.x * previous.view.transform.scale, y: (scope.initialTop || 64) - anchor.y * previous.view.transform.scale }
-      return { ...previous, undo: previous.view, view: { sizes, positions, transform }, ready: true }
+      return { ...previous, undo: previous.view, view: { sizes, positions, transform, layoutVersion: scope.viewId === 'overview' ? 2 : previous.view.layoutVersion }, ready: true }
     })
   }
   const undo = () => setState(previous => previous.undo ? { ...previous, view: pruneDirectorView(previous.undo, new Set(scope?.validIds), scope?.identityAliases), undo: undefined } : previous)

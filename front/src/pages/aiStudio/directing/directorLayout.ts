@@ -4,7 +4,7 @@ import type { DesignObject } from './designWorkspace'
 export type DirectorSize = { width: number; height: number }
 export type DirectorBox = CanvasPoint & DirectorSize
 export type DirectorLayoutNode = { id: string; group?: string; size?: DirectorSize }
-export type DirectorView = { transform: CanvasTransform; positions: Record<string, CanvasPoint>; sizes: Record<string, DirectorSize> }
+export type DirectorView = { transform: CanvasTransform; positions: Record<string, CanvasPoint>; sizes: Record<string, DirectorSize>; layoutVersion?: number }
 export const directorGroups: Record<string, string> = { domains: '设计职责', participants: '场景要素与资产', event: '触发事件', camera: '摄影', performance: '表演', situation: '角色情境', blocking: '调度', activity: '镜内活动', continuity: '连续性', continuity_space: '连续性 · 空间', continuity_appearance: '连续性 · 造型', continuity_hands_props: '连续性 · 手部与道具', continuity_environment: '连续性 · 环境', continuity_camera: '连续性 · 摄影', continuity_dialogue_sound: '连续性 · 对白与声音', dialogue: '声音与对白', criterion: '验收要求', shot: '计划镜头', shared: '全场规则', evidence: '关联依据', references: '跨域引用', other: '其他设计', 'scene-global': '全场内容', 'scene-shared': '跨镜共享', 'scene-unlinked': '未关联设计', 'shot-evidence': '节拍、调度与空间', 'shot-left': '场景要素与依据', 'shot-work': '岗位设计', 'shot-shared': '共享引用' }
 export const directorGroup = (id: string) => {
   const kind = id.split(':')[0]
@@ -30,6 +30,46 @@ const evidenceDirectorSize = (id: string): DirectorSize | undefined => /^(partic
   : id === '原文依据' ? { width, height: 240 }
     : /^(event|anchor|missing):/.test(id) || id.startsWith('location:') ? { width, height: 184 } : undefined
 export const intersects = (a: DirectorBox, b: DirectorBox, margin = 0) => a.x < b.x + b.width + margin && a.x + a.width + margin > b.x && a.y < b.y + b.height + margin && a.y + a.height + margin > b.y
+
+/** 只移除旧总览自动生成的镜头坐标；不符合旧网格的手动位置原样保留。 */
+export function migrateLegacyOverviewPositions(nodes: DirectorLayoutNode[], sizes: Record<string, DirectorSize>, positions: Record<string, CanvasPoint>) {
+  let matched: string[] = []
+  const height = (id: string) => sizes[id]?.height || 300
+  for (let columns = 1; columns <= 3; columns++) {
+    const old: Record<string, CanvasPoint> = { '原文依据': { x: 0, y: 0 } }
+    const place = (group: string, x: number, startY: number) => {
+      const members = nodes.filter(node => (node.group === 'scene-entry' ? 'scene-shots' : node.group) === group)
+      const count = Math.min(columns, members.length)
+      let y = startY
+      for (let index = 0; index < members.length; index += count) {
+        const row = members.slice(index, index + count)
+        row.forEach((node, column) => { old[node.id] = { x: x + column * (width + gap), y } })
+        y += Math.max(...row.map(node => height(node.id))) + gap
+      }
+    }
+    if (columns === 1) {
+      let y = height('原文依据') + sectionGap
+      for (const group of ['scene-global', 'scene-shared', 'scene-shots', 'scene-unlinked']) {
+        const members = nodes.filter(node => (node.group === 'scene-entry' ? 'scene-shots' : node.group) === group)
+        members.forEach(node => { old[node.id] = { x: 0, y }; y += height(node.id) + gap })
+        if (members.length) y += sectionGap - gap
+      }
+    } else {
+      const globalRows = Math.ceil(nodes.filter(node => node.group === 'scene-global').length / columns)
+      place('scene-global', 0, -globalRows * 340 - sectionGap)
+      const sharedCount = Math.min(columns, nodes.filter(node => node.group === 'scene-shared').length)
+      place('scene-shared', -sharedCount * (width + gap), 0)
+      place('scene-shots', width + gap, 0)
+      const bottom = Math.max(0, ...Object.entries(old).map(([id, point]) => point.y + height(id)))
+      place('scene-unlinked', 0, bottom + sectionGap)
+    }
+    const candidate = Object.keys(old).filter(id => id !== '原文依据' && positions[id]?.x === old[id].x && positions[id]?.y === old[id].y)
+    if (candidate.length > matched.length) matched = candidate
+  }
+  const result = { ...positions }
+  matched.forEach(id => { delete result[id] })
+  return result
+}
 
 /** 只排浏览坐标：分区按真实类型，组内逐行排列；已有坐标保留，新增对象寻找空位。 */
 export function arrangeDirector(nodes: DirectorLayoutNode[], sizes: Record<string, DirectorSize>, viewportWidth: number, anchor: string, retained: Record<string, CanvasPoint> = {}, previousSizes: Record<string, DirectorSize> = {}) {
@@ -157,7 +197,7 @@ export function readDirectorView(raw: string | null): DirectorView | undefined {
     if (!value.positions || typeof value.positions !== 'object' || Array.isArray(value.positions) || !value.sizes || typeof value.sizes !== 'object' || Array.isArray(value.sizes)) return
     if (!Object.values(value.positions).every((point: any) => point && Number.isFinite(point.x) && Number.isFinite(point.y))) return
     if (!Object.values(value.sizes).every((size: any) => size && size.width === width && Number.isFinite(size.height) && size.height >= 32 && size.height <= 2000)) return
-    return { transform: value.transform, positions: value.positions, sizes: value.sizes }
+    return { transform: value.transform, positions: value.positions, sizes: value.sizes, layoutVersion: value.layoutVersion === 2 ? 2 : undefined }
   } catch { return }
 }
 

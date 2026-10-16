@@ -5,7 +5,7 @@ import ts from 'typescript'
 const compile = async name => ts.transpileModule(await readFile(new URL(`../src/pages/aiStudio/directing/${name}.ts`, import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ES2020 } }).outputText
 const data = source => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`
 const layoutUrl = data(await compile('directorLayout'))
-const { arrangeDirector, intersects, readDirectorView, pruneDirectorView } = await import(layoutUrl)
+const { arrangeDirector, intersects, migrateLegacyOverviewPositions, readDirectorView, pruneDirectorView } = await import(layoutUrl)
 const { directorRelationCategory } = await import(data(await compile('directorRelations')))
 const nodes = ['原文依据', '全场共享', 'shot:one', 'camera:one', 'performance:one', ...Array.from({ length: 5 }, (_, i) => `criterion:${i}`)].map(id => ({ id }))
 const sizes = Object.fromEntries(nodes.map((node, i) => [node.id, { width: 360, height: 200 + i % 3 * 60 }]))
@@ -50,6 +50,24 @@ test('shot entries surround the source without a group, while outer zones and re
   const retained = { ...placed, 'shot:a': { x: 2400, y: 800 } }
   const withManual = arrangeDirector(grouped, dimensions, 1440, '原文依据', retained)
   assert.deepEqual(withManual['shot:a'], retained['shot:a'])
+})
+test('legacy saved auto placement migrates to the source ring while manual shot positions remain', () => {
+  const grouped = [{ id: '原文依据' }, ...'abcdefgh'.split('').map(id => ({ id: `shot:${id}`, group: 'scene-entry' })),
+    { id: 'beat:x', group: 'scene-shared' }, { id: 'space', group: 'scene-global' }]
+  const dimensions = Object.fromEntries(grouped.map(node => [node.id, { width: 360, height: node.id === '原文依据' ? 240 : 276 }]))
+  const old = { '原文依据': { x: 0, y: 0 }, 'shot:a': { x: 424, y: 0 }, 'shot:b': { x: 848, y: 0 },
+    'shot:c': { x: 2400, y: 800 }, 'shot:d': { x: 424, y: 340 }, 'shot:e': { x: 848, y: 340 }, 'shot:f': { x: 1272, y: 340 },
+    'shot:g': { x: 424, y: 680 }, 'shot:h': { x: 848, y: 680 }, 'beat:x': { x: -424, y: 0 }, space: { x: 0, y: -436 } }
+  const migrated = migrateLegacyOverviewPositions(grouped, dimensions, old)
+  assert.deepEqual(migrated['shot:c'], old['shot:c'])
+  assert.equal(migrated['shot:b'], undefined)
+  assert.equal(migrated['beat:x'], undefined)
+  assert.equal(migrated.space, undefined)
+  const placed = arrangeDirector(grouped, dimensions, 1440, '原文依据', migrated)
+  assert.ok(placed['shot:b'].y > placed['原文依据'].y)
+  assert.ok(placed['beat:x'].x < old['beat:x'].x)
+  assert.ok(placed.space.y < old.space.y)
+  assert.deepEqual(placed['shot:c'], old['shot:c'])
 })
 test('new cards fill free slots without moving retained cards, even after manual movement', () => {
   const original = arrangeDirector(nodes.slice(0, -1), sizes, 1100, 'shot:one')
