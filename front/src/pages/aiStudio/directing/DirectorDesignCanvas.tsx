@@ -219,7 +219,7 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
     const shotNumber = isEntry ? content.design.direction.shots.findIndex(row => row.id === node.key.slice(5)) + 1 : 0
     return { id: identity(node), label: node.label, entry: isEntry, title: isEntry ? `聚合子图 · 镜头 ${String(shotNumber).padStart(2, '0')}` : isReference(node) ? `共享引用 · ${node.label}` : node.label,
       group: scope === 'shot' ? shotDesignGroup(node.key, node.kind, activeShotId!)
-        : home === 'global' ? 'scene-global' : home === 'shared' ? 'scene-shared' : home === 'unlinked' ? 'scene-unlinked' : 'scene-shots',
+        : home === 'global' ? 'scene-global' : home === 'shared' ? 'scene-shared' : home === 'unlinked' ? 'scene-unlinked' : 'scene-entry',
       size: isEntry ? { width: 360, height: 276 } : directorDesignNodeSize(node),
       related: home === 'shared', onInspect: node.kind === 'missing' ? undefined : open,
       content: isEntry ? <DirectorShotEntry value={content.design} saved={saved.design} shotId={node.key.slice(5)} storageKey={storageKey} graph={projection.view(node.key.slice(5))} />

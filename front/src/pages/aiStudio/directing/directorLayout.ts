@@ -5,7 +5,7 @@ export type DirectorSize = { width: number; height: number }
 export type DirectorBox = CanvasPoint & DirectorSize
 export type DirectorLayoutNode = { id: string; group?: string; size?: DirectorSize }
 export type DirectorView = { transform: CanvasTransform; positions: Record<string, CanvasPoint>; sizes: Record<string, DirectorSize> }
-export const directorGroups: Record<string, string> = { domains: '设计职责', participants: '场景要素与资产', event: '触发事件', camera: '摄影', performance: '表演', situation: '角色情境', blocking: '调度', activity: '镜内活动', continuity: '连续性', continuity_space: '连续性 · 空间', continuity_appearance: '连续性 · 造型', continuity_hands_props: '连续性 · 手部与道具', continuity_environment: '连续性 · 环境', continuity_camera: '连续性 · 摄影', continuity_dialogue_sound: '连续性 · 对白与声音', dialogue: '声音与对白', criterion: '验收要求', shot: '计划镜头', shared: '全场规则', evidence: '关联依据', references: '跨域引用', other: '其他设计', 'scene-global': '全场内容', 'scene-shared': '跨镜共享', 'scene-shots': '镜头设计', 'scene-unlinked': '未关联设计', 'shot-evidence': '节拍、调度与空间', 'shot-left': '场景要素与依据', 'shot-work': '岗位设计', 'shot-shared': '共享引用' }
+export const directorGroups: Record<string, string> = { domains: '设计职责', participants: '场景要素与资产', event: '触发事件', camera: '摄影', performance: '表演', situation: '角色情境', blocking: '调度', activity: '镜内活动', continuity: '连续性', continuity_space: '连续性 · 空间', continuity_appearance: '连续性 · 造型', continuity_hands_props: '连续性 · 手部与道具', continuity_environment: '连续性 · 环境', continuity_camera: '连续性 · 摄影', continuity_dialogue_sound: '连续性 · 对白与声音', dialogue: '声音与对白', criterion: '验收要求', shot: '计划镜头', shared: '全场规则', evidence: '关联依据', references: '跨域引用', other: '其他设计', 'scene-global': '全场内容', 'scene-shared': '跨镜共享', 'scene-unlinked': '未关联设计', 'shot-evidence': '节拍、调度与空间', 'shot-left': '场景要素与依据', 'shot-work': '岗位设计', 'shot-shared': '共享引用' }
 export const directorGroup = (id: string) => {
   const kind = id.split(':')[0]
   return kind === 'domain' ? 'domains' : /^(participant|location)$/.test(kind) ? 'participants' : /^(beat|anchor)$/.test(kind) ? 'evidence' : directorGroups[kind] ? kind : !id.includes(':') ? 'shared' : 'other'
@@ -68,7 +68,7 @@ export function arrangeDirector(nodes: DirectorLayoutNode[], sizes: Record<strin
     if (columns === 1) {
       let nextY = center ? height(center.id) + sectionGap : 0
       const order = anchor === '原文依据'
-        ? ['scene-global', 'scene-shared', 'scene-shots', 'scene-unlinked']
+        ? ['scene-global', 'scene-entry', 'scene-shared', 'scene-unlinked']
         : ['shot-evidence', 'shot-left', 'shot-work', 'shot-shared']
       order.forEach(group => {
         const members = nodes.filter(node => node.group === group)
@@ -79,10 +79,27 @@ export function arrangeDirector(nodes: DirectorLayoutNode[], sizes: Record<strin
         if (members.length) nextY += sectionGap - gap
       })
     } else if (anchor === '原文依据') {
-      const topRows = Math.ceil(nodes.filter(node => node.group === 'scene-global').length / columns)
-      place('scene-global', 0, -topRows * 340 - sectionGap)
-      place('scene-shared', -(Math.min(columns, nodes.filter(node => node.group === 'scene-shared').length) * (width + gap)), 0)
-      place('scene-shots', width + gap, 0)
+      const entries = nodes.filter(node => node.group === 'scene-entry')
+      const rowHeight = Math.max(height(anchor), ...entries.map(node => height(node.id))) + gap
+      let ring = 1, index = 0
+      while (index < entries.length) {
+        const cells: CanvasPoint[] = []
+        for (let y = 0; y <= ring; y++) cells.push({ x: ring, y })
+        for (let x = ring - 1; x >= -ring; x--) cells.push({ x, y: ring })
+        for (let y = ring - 1; y >= -ring; y--) cells.push({ x: -ring, y })
+        for (let x = -ring + 1; x <= ring; x++) cells.push({ x, y: -ring })
+        for (let y = -ring + 1; y < 0; y++) cells.push({ x: ring, y })
+        cells.forEach(cell => { if (entries[index]) positions[entries[index++].id] = { x: cell.x * (width + gap), y: cell.y * rowHeight } })
+        ring++
+      }
+      const placed = Object.entries(positions).map(([id, point]) => ({ ...point, ...sizes[id] }))
+      const top = Math.min(...placed.map(box => box.y)), left = Math.min(...placed.map(box => box.x))
+      const global = nodes.filter(node => node.group === 'scene-global')
+      const globalRows = Math.ceil(global.length / columns)
+      const globalHeight = globalRows * (Math.max(0, ...global.map(node => height(node.id))) + gap)
+      place('scene-global', 0, top - globalHeight - sectionGap)
+      const shared = nodes.filter(node => node.group === 'scene-shared')
+      place('scene-shared', left - Math.min(columns, shared.length) * (width + gap), 0)
       place('scene-unlinked', 0, bottom() + sectionGap)
     } else {
       place('shot-evidence', 0, -Math.ceil(nodes.filter(node => node.group === 'shot-evidence').length / columns) * 340 - sectionGap)

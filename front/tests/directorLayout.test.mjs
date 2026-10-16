@@ -22,24 +22,34 @@ test('five criteria use 3+2 / 2+2+1 / one column without overlapping variable-he
     assert.ok(positions['全场共享'].y < positions['shot:one'].y)
   }
 })
-test('shot grouped layout places the center, shared cards and shot entries in distinct zones', () => {
-  const grouped = [{ id: '原文依据' }, { id: 'shot:a', group: 'scene-shots' }, { id: 'shot:b', group: 'scene-shots' },
+test('shot entries surround the source without a group, while outer zones and retained positions stay clear', () => {
+  const grouped = [{ id: '原文依据' }, ...'abcdefgh'.split('').map(id => ({ id: `shot:${id}`, group: 'scene-entry' })),
     { id: 'beat:x', group: 'scene-shared' }, { id: 'space', group: 'scene-global' }, { id: 'event:e', group: 'scene-unlinked' }]
   const dimensions = Object.fromEntries(grouped.map(node => [node.id, { width: 360, height: 240 }]))
   const placed = arrangeDirector(grouped, dimensions, 1440, '原文依据')
   assert.ok(placed.space.y < placed['原文依据'].y)
   assert.ok(placed['beat:x'].x < placed['原文依据'].x)
   assert.ok(placed['shot:a'].x > placed['原文依据'].x)
+  assert.ok(placed['shot:c'].y > placed['原文依据'].y)
+  assert.ok(placed['shot:e'].x < placed['原文依据'].x)
+  assert.ok(placed['shot:g'].y < placed['原文依据'].y)
+  assert.ok(placed.space.y + dimensions.space.height < placed['shot:g'].y)
+  assert.ok(placed['beat:x'].x + dimensions['beat:x'].width < placed['shot:e'].x)
   assert.ok(placed['event:e'].y > placed['原文依据'].y)
   grouped.forEach((a, i) => grouped.slice(i + 1).forEach(b => assert.ok(!intersects({ ...placed[a.id], ...dimensions[a.id] }, { ...placed[b.id], ...dimensions[b.id] }), `${a.id} overlaps ${b.id}`)))
   const narrow = arrangeDirector(grouped, dimensions, 390, '原文依据')
   assert.deepEqual(new Set(Object.values(narrow).map(point => point.x)), new Set([0]))
   assert.equal(Math.min(...Object.values(narrow).map(point => point.y)), narrow['原文依据'].y)
-  const dense = [...grouped, ...Array.from({ length: 8 }, (_, index) => ({ id: `shot:extra-${index}`, group: 'scene-shots' })),
+  assert.ok(narrow.space.y < narrow['shot:a'].y && narrow['shot:h'].y < narrow['beat:x'].y && narrow['beat:x'].y < narrow['event:e'].y)
+  const dense = [...grouped, ...Array.from({ length: 8 }, (_, index) => ({ id: `shot:extra-${index}`, group: 'scene-entry' })),
     ...Array.from({ length: 5 }, (_, index) => ({ id: `event:extra-${index}`, group: 'scene-unlinked' }))]
   const denseSizes = Object.fromEntries(dense.map(node => [node.id, { width: 360, height: 240 }]))
   const densePositions = arrangeDirector(dense, denseSizes, 1440, '原文依据')
   dense.forEach((a, i) => dense.slice(i + 1).forEach(b => assert.ok(!intersects({ ...densePositions[a.id], ...denseSizes[a.id] }, { ...densePositions[b.id], ...denseSizes[b.id] }), `${a.id} overlaps ${b.id}`)))
+  assert.ok(densePositions['shot:extra-0'].x > placed['shot:a'].x)
+  const retained = { ...placed, 'shot:a': { x: 2400, y: 800 } }
+  const withManual = arrangeDirector(grouped, dimensions, 1440, '原文依据', retained)
+  assert.deepEqual(withManual['shot:a'], retained['shot:a'])
 })
 test('new cards fill free slots without moving retained cards, even after manual movement', () => {
   const original = arrangeDirector(nodes.slice(0, -1), sizes, 1100, 'shot:one')

@@ -97,6 +97,10 @@ try {
   await noOverlaps()
   await screenshot('overview-1440.png')
   await node('shot:shot1').waitFor()
+  assert.equal(await page.locator('[data-layout-group="scene-shots"]').count(), 0)
+  const overviewPositions = (await snapshot()).positions
+  assert.ok(overviewPositions['shot:shot1'].x > overviewPositions['原文依据'].x)
+  assert.ok(overviewPositions['shot:shot2'].y > overviewPositions['原文依据'].y)
   assert.equal(await page.locator('[data-canvas-node^="domain:"]').count(), 0)
   assert.equal(await node('beat:beat1').count(), 1, 'shared beat has one original in overview')
   assert.ok(await node('shot:shot1').locator('.director-subgraph-preview rect').count() > 1)
