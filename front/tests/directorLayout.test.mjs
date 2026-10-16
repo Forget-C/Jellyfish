@@ -5,7 +5,7 @@ import ts from 'typescript'
 const compile = async name => ts.transpileModule(await readFile(new URL(`../src/pages/aiStudio/directing/${name}.ts`, import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ES2020 } }).outputText
 const data = source => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`
 const layoutUrl = data(await compile('directorLayout'))
-const { arrangeDirector, intersects, migrateLegacyOverviewPositions, readDirectorView, pruneDirectorView } = await import(layoutUrl)
+const { arrangeDirector, intersects, migrateLegacyOverviewPositions, upgradeOverviewPositions, readDirectorView, pruneDirectorView } = await import(layoutUrl)
 const { directorRelationCategory } = await import(data(await compile('directorRelations')))
 const nodes = ['原文依据', '全场共享', 'shot:one', 'camera:one', 'performance:one', ...Array.from({ length: 5 }, (_, i) => `criterion:${i}`)].map(id => ({ id }))
 const sizes = Object.fromEntries(nodes.map((node, i) => [node.id, { width: 360, height: 200 + i % 3 * 60 }]))
@@ -68,6 +68,17 @@ test('legacy saved auto placement migrates to the source ring while manual shot 
   assert.ok(placed['beat:x'].x < old['beat:x'].x)
   assert.ok(placed.space.y < old.space.y)
   assert.deepEqual(placed['shot:c'], old['shot:c'])
+})
+test('a saved vertical overview is rebuilt once and only recorded manual positions survive', () => {
+  const grouped = [{ id: '原文依据' }, { id: 'shot:a', group: 'scene-entry' }, { id: 'shot:b', group: 'scene-entry' }]
+  const dimensions = Object.fromEntries(grouped.map(node => [node.id, { width: 360, height: 276 }]))
+  const view = { layoutVersion: 2, transform: { x: 0, y: 0, scale: 1 }, sizes: dimensions,
+    positions: { '原文依据': { x: 0, y: 336 }, 'shot:a': { x: 0, y: 1604 }, 'shot:b': { x: 2400, y: 800 } }, manuallyPlaced: ['shot:b'] }
+  assert.deepEqual(upgradeOverviewPositions(view, grouped, dimensions), { 'shot:b': view.positions['shot:b'] })
+  const placed = arrangeDirector(grouped, dimensions, 1440, '原文依据', upgradeOverviewPositions(view, grouped, dimensions))
+  assert.deepEqual(placed['原文依据'], { x: 0, y: 0 })
+  assert.ok(placed['shot:a'].x > placed['原文依据'].x)
+  assert.deepEqual(placed['shot:b'], view.positions['shot:b'])
 })
 test('new cards fill free slots without moving retained cards, even after manual movement', () => {
   const original = arrangeDirector(nodes.slice(0, -1), sizes, 1100, 'shot:one')

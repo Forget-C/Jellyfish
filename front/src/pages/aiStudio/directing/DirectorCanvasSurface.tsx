@@ -243,7 +243,7 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
             if (element) cards.current.set(id, element); else cards.current.delete(id)
           }} style={{ left: point.x, top: point.y, height: layoutScope ? (node.size || fixedDirectorSize(id))?.height : undefined }}>
             <div className="director-canvas-title"><CanvasDragHandle contextKey={viewKey} label={label} offset={point}
-              scale={view.transform.scale} onMove={next => setView(previous => ({ ...previous, positions: { ...previous.positions, [id]: next } }))} />
+              scale={view.transform.scale} onMove={next => layoutScope ? layout.move(id, next) : setView(previous => ({ ...previous, positions: { ...previous.positions, [id]: next } }))} />
               {node.entry && <ApartmentOutlined aria-hidden="true" />}<h2>{layoutScope && id === '全场共享' ? '全场概览' : node.title || label}</h2><Dropdown menu={menu} trigger={['click']}>
                 <Button className="director-node-menu" aria-label={`更多操作：${label}`} disabled={!node.onInspect}
                   onClick={event => { menuTrigger.current = event.currentTarget }}>⋯</Button>

@@ -63,8 +63,8 @@ try {
   await page.addInitScript(({ sequence, version }) => {
     window.__ENV = { BACKEND_URL: window.location.origin }
     localStorage.setItem('jellyfish:scene-autosave:local-user', 'off')
-    localStorage.setItem(`jellyfish:director-shots:local-user:canvas-project:${sequence}:${version}:view:overview`, JSON.stringify({ schema: 1,
-      transform: { x: 96, y: 180, scale: 1 }, positions: { '原文依据': { x: 0, y: 0 }, 'shot:shot1': { x: 424, y: 0 }, 'shot:shot2': { x: 848, y: 0 } },
+    localStorage.setItem(`jellyfish:director-shots:local-user:canvas-project:${sequence}:${version}:view:overview`, JSON.stringify({ schema: 1, layoutVersion: 2,
+      transform: { x: 566, y: -72, scale: .4 }, positions: { '原文依据': { x: 0, y: 336 }, 'shot:shot1': { x: 0, y: 1604 }, 'shot:shot2': { x: 424, y: 1604 } },
       sizes: { '原文依据': { width: 360, height: 240 }, 'shot:shot1': { width: 360, height: 276 }, 'shot:shot2': { width: 360, height: 276 } } }))
   }, { sequence, version: version.id })
   await page.goto(`http://127.0.0.1:4198/projects/canvas-project/chapters/canvas-chapter/sequences/${sequence}?version=${version.id}`)
@@ -107,15 +107,18 @@ try {
   const overviewPositions = (await snapshot()).positions
   assert.ok(overviewPositions['shot:shot1'].x > overviewPositions['原文依据'].x)
   assert.ok(overviewPositions['shot:shot2'].y > overviewPositions['原文依据'].y)
+  assert.equal(overviewPositions['原文依据'].y, 0)
   await page.waitForFunction(({ sequence, version }) => {
     const saved = JSON.parse(localStorage.getItem(`jellyfish:director-shots:local-user:canvas-project:${sequence}:${version}:view:overview`) || 'null')
-    return saved?.layoutVersion === 2 && saved.positions['shot:shot2'].y > saved.positions['原文依据'].y
+    return saved?.layoutVersion === 4 && saved.positions['shot:shot2'].y > saved.positions['原文依据'].y && saved.transform.y >= 64
   }, { sequence, version: version.id })
   assert.equal(await page.locator('[data-canvas-node^="domain:"]').count(), 0)
   assert.equal(await node('beat:beat1').count(), 1, 'shared beat has one original in overview')
+  assert.equal(await page.locator('[data-canvas-node^="camera:"]').count(), 0, 'single-shot work belongs in its shot subgraph')
   assert.ok(await node('shot:shot1').locator('.director-subgraph-preview rect').count() > 1)
   await node('shot:shot1').getByRole('button', { name: /进入子图/ }).click()
   await page.locator('[data-layout-view="shot:shot1"]').waitFor()
+  assert.ok(await page.locator('[data-canvas-node^="camera:"]').count() > 0)
   await noOverlaps()
   await screenshot('shot-1440.png')
   assert.equal(await node('beat:beat1').count(), 1)

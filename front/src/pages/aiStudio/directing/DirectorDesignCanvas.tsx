@@ -67,7 +67,7 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
   if (lastLocation.current !== location.key) { lastLocation.current = location.key; focusSerial.current = ++directorFocusSerial }
   const projection = useMemo(() => shotCanvasProjection(content.design), [content.design])
   const overviewGraph = useMemo(() => projection.view(), [projection])
-  const allObjects = [...overviewGraph.nodes, ...overviewGraph.unlinked]
+  const allObjects = projection.objects
   const identity = (node: DesignObject, design = content.design) => designObjectLayoutId(design, node)
   const target = (id?: string) => allObjects.find(node => identity(node) === id)
   const graph = useMemo(() => scope === 'shot' ? projection.view(activeShotId) : overviewGraph,

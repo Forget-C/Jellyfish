@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { arrangeDirector, fixedDirectorSize, migrateLegacyOverviewPositions, pruneDirectorView, readDirectorView } from './directorLayout'
+import { arrangeDirector, fixedDirectorSize, pruneDirectorView, readDirectorView, upgradeOverviewPositions } from './directorLayout'
 import type { DirectorLayoutNode, DirectorSize, DirectorView } from './directorLayout'
 import type { CanvasPoint } from '../../../components/canvas/geometry'
 
@@ -44,18 +44,21 @@ export function useDirectorLayout(scope: DirectorLayoutScope | undefined, nodes:
       const cleaned = pruneDirectorView(previous.view, valid, scope.identityAliases)
       const sizes = { ...cleaned.sizes }
       nodes.forEach(node => { sizes[node.id] = node.size || fixedDirectorSize(node.id) || sizes[node.id] || measured[node.id] })
-      const retained = scope.viewId === 'overview' && cleaned.layoutVersion !== 2
-        ? migrateLegacyOverviewPositions(nodes, sizes, cleaned.positions) : cleaned.positions
+      const upgrading = scope.viewId === 'overview' && cleaned.layoutVersion !== 4
+      const retained = upgrading ? upgradeOverviewPositions(cleaned, nodes, sizes) : cleaned.positions
       const positions = arrangeDirector(nodes, sizes, viewportWidth, scope.anchorId, retained, cleaned.sizes)
       let transform = cleaned.transform
-      if (!previous.ready) {
+      if (!previous.ready || upgrading) {
         const anchor = positions[scope.anchorId] || positions['全场共享'] || { x: 0, y: 0 }
-        const screen = previous.anchorScreen || { x: viewportWidth > 700 ? 96 : 16, y: scope.initialTop || 64 }
+        const screen = !upgrading && previous.anchorScreen || { x: viewportWidth > 700 ? 96 : 16, y: scope.initialTop || 64 }
         transform = { ...transform, x: screen.x - anchor.x * transform.scale, y: screen.y - anchor.y * transform.scale }
       }
-      const view = { transform, positions, sizes, layoutVersion: scope.viewId === 'overview' ? 2 : cleaned.layoutVersion }
+      const view = { transform, positions, sizes, layoutVersion: scope.viewId === 'overview' ? 4 : cleaned.layoutVersion,
+        manuallyPlaced: upgrading && cleaned.layoutVersion !== 3 ? Object.keys(retained) : cleaned.manuallyPlaced }
       if (previous.ready && previous.anchor === scope.anchorId && JSON.stringify(view) === JSON.stringify(previous.view)) return previous
-      return { ...previous, anchor: scope.anchorId, ready: true, view }
+      const undo = upgrading && cleaned.layoutVersion !== 3 && Object.keys(cleaned.positions).length
+        ? { ...cleaned, layoutVersion: 4, manuallyPlaced: Object.keys(cleaned.positions) } : previous.undo
+      return { ...previous, anchor: scope.anchorId, ready: true, view, undo }
     })
   }, [key, identity, validIdentity, aliasIdentity, measured, scope?.anchorId, scope?.initialTop, state.view.positions])
   useEffect(() => {
@@ -95,6 +98,8 @@ export function useDirectorLayout(scope: DirectorLayoutScope | undefined, nodes:
     return () => { save(); window.removeEventListener('pagehide', save) }
   }, [])
   const setView = (update: (previous: DirectorView) => DirectorView) => setState(previous => ({ ...previous, view: update(previous.view) }))
+  const move = (id: string, point: CanvasPoint) => setState(previous => ({ ...previous, view: { ...previous.view,
+    positions: { ...previous.view.positions, [id]: point }, manuallyPlaced: [...new Set([...(previous.view.manuallyPlaced || []), id])] } }))
   const rearrange = () => {
     if (!scope || nodes.some(node => !measured[node.id])) return
     setState(previous => {
@@ -102,9 +107,10 @@ export function useDirectorLayout(scope: DirectorLayoutScope | undefined, nodes:
       const positions = arrangeDirector(nodes, sizes, viewportWidth, scope.anchorId)
       const anchor = positions[scope.anchorId] || positions['全场共享'] || { x: 0, y: 0 }
       const transform = { ...previous.view.transform, x: (viewportWidth > 700 ? 96 : 16) - anchor.x * previous.view.transform.scale, y: (scope.initialTop || 64) - anchor.y * previous.view.transform.scale }
-      return { ...previous, undo: previous.view, view: { sizes, positions, transform, layoutVersion: scope.viewId === 'overview' ? 2 : previous.view.layoutVersion }, ready: true }
+      return { ...previous, undo: previous.view, view: { sizes, positions, transform, layoutVersion: scope.viewId === 'overview' ? 4 : previous.view.layoutVersion,
+        manuallyPlaced: [] }, ready: true }
     })
   }
   const undo = () => setState(previous => previous.undo ? { ...previous, view: pruneDirectorView(previous.undo, new Set(scope?.validIds), scope?.identityAliases), undo: undefined } : previous)
-  return { view: state.view, ready: state.ready && state.key === key, setView, rearrange, undo, canUndo: !!state.undo }
+  return { view: state.view, ready: state.ready && state.key === key, setView, move, rearrange, undo, canUndo: !!state.undo }
 }

@@ -4,7 +4,7 @@ import type { DesignObject } from './designWorkspace'
 export type DirectorSize = { width: number; height: number }
 export type DirectorBox = CanvasPoint & DirectorSize
 export type DirectorLayoutNode = { id: string; group?: string; size?: DirectorSize }
-export type DirectorView = { transform: CanvasTransform; positions: Record<string, CanvasPoint>; sizes: Record<string, DirectorSize>; layoutVersion?: number }
+export type DirectorView = { transform: CanvasTransform; positions: Record<string, CanvasPoint>; sizes: Record<string, DirectorSize>; layoutVersion?: number; manuallyPlaced?: string[] }
 export const directorGroups: Record<string, string> = { domains: '设计职责', participants: '场景要素与资产', event: '触发事件', camera: '摄影', performance: '表演', situation: '角色情境', blocking: '调度', activity: '镜内活动', continuity: '连续性', continuity_space: '连续性 · 空间', continuity_appearance: '连续性 · 造型', continuity_hands_props: '连续性 · 手部与道具', continuity_environment: '连续性 · 环境', continuity_camera: '连续性 · 摄影', continuity_dialogue_sound: '连续性 · 对白与声音', dialogue: '声音与对白', criterion: '验收要求', shot: '计划镜头', shared: '全场规则', evidence: '关联依据', references: '跨域引用', other: '其他设计', 'scene-global': '全场内容', 'scene-shared': '跨镜共享', 'scene-unlinked': '未关联设计', 'shot-evidence': '节拍、调度与空间', 'shot-left': '场景要素与依据', 'shot-work': '岗位设计', 'shot-shared': '共享引用' }
 export const directorGroup = (id: string) => {
   const kind = id.split(':')[0]
@@ -69,6 +69,13 @@ export function migrateLegacyOverviewPositions(nodes: DirectorLayoutNode[], size
   const result = { ...positions }
   matched.forEach(id => { delete result[id] })
   return result
+}
+
+/** 旧网格尽量识别手动位置；已误标为新版的纵列只保留明确记录的拖动位置。 */
+export function upgradeOverviewPositions(view: DirectorView, nodes: DirectorLayoutNode[], sizes: Record<string, DirectorSize>) {
+  if (view.layoutVersion === 3 || view.layoutVersion === 4) return view.positions
+  if (view.layoutVersion === 2) return Object.fromEntries((view.manuallyPlaced || []).filter(id => view.positions[id]).map(id => [id, view.positions[id]]))
+  return migrateLegacyOverviewPositions(nodes, sizes, view.positions)
 }
 
 /** 只排浏览坐标：分区按真实类型，组内逐行排列；已有坐标保留，新增对象寻找空位。 */
@@ -197,12 +204,14 @@ export function readDirectorView(raw: string | null): DirectorView | undefined {
     if (!value.positions || typeof value.positions !== 'object' || Array.isArray(value.positions) || !value.sizes || typeof value.sizes !== 'object' || Array.isArray(value.sizes)) return
     if (!Object.values(value.positions).every((point: any) => point && Number.isFinite(point.x) && Number.isFinite(point.y))) return
     if (!Object.values(value.sizes).every((size: any) => size && size.width === width && Number.isFinite(size.height) && size.height >= 32 && size.height <= 2000)) return
-    return { transform: value.transform, positions: value.positions, sizes: value.sizes, layoutVersion: value.layoutVersion === 2 ? 2 : undefined }
+    return { transform: value.transform, positions: value.positions, sizes: value.sizes,
+      layoutVersion: [2, 3, 4].includes(value.layoutVersion) ? value.layoutVersion : undefined,
+      manuallyPlaced: Array.isArray(value.manuallyPlaced) ? value.manuallyPlaced.filter((id: unknown) => typeof id === 'string') : [] }
   } catch { return }
 }
 
 export function pruneDirectorView(view: DirectorView, valid: Set<string>, aliases: Record<string, string> = {}): DirectorView {
   const retain = <T,>(items: Record<string, T>) => Object.fromEntries(Object.entries(items)
     .map(([id, value]) => [aliases[id] || id, value] as const).filter(([id]) => valid.has(id)))
-  return { ...view, positions: retain(view.positions), sizes: retain(view.sizes) }
+  return { ...view, positions: retain(view.positions), sizes: retain(view.sizes), manuallyPlaced: view.manuallyPlaced?.map(id => aliases[id] || id).filter(id => valid.has(id)) }
 }

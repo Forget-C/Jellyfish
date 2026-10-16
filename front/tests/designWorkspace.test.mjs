@@ -52,6 +52,8 @@ test('shot grouping follows zero, one and multiple shot relations without changi
   value.direction.shots.push(second)
   const beat = `beat:${value.direction.beats[0].id}`
   assert.equal(shotCanvasGraph(value).location(beat), 'shot1')
+  assert.ok(!shotCanvasGraph(value).nodes.some(node => node.key === beat))
+  assert.ok(shotCanvasGraph(value, 'shot1').nodes.some(node => node.key === beat))
   second.beat_ids = [value.direction.beats[0].id]
   assert.equal(shotCanvasGraph(value).location(beat), 'shared')
   assert.equal(shotCanvasGraph(value, 'shot1').nodes.find(node => node.key === beat)?.kind, 'reference')

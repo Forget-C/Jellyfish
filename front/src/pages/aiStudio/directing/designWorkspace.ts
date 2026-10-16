@@ -145,7 +145,7 @@ export function shotCanvasProjection(value: SceneDesign_Input) {
   }
   const view = (shotId?: string) => {
     if (!shotId) {
-      const visible = nodes.filter(node => location(node.key) !== 'unlinked')
+      const visible = nodes.filter(node => ['global', 'shared'].includes(location(node.key)) || node.key.startsWith('shot:'))
       const keys = new Set(nodes.map(node => node.key))
       const edges: ProjectedDesignEdge[] = direct.filter(edge => keys.has(edge.from) && keys.has(edge.to) &&
         (location(edge.from) === 'global' || location(edge.from) === 'shared' || location(edge.from) === 'unlinked') &&
@@ -173,7 +173,7 @@ export function shotCanvasProjection(value: SceneDesign_Input) {
       unlinked: [], edges: direct.filter(edge => visible.has(edge.from) && visible.has(edge.to)).map(edge => ({ ...edge, sources: [edge] })),
       memberships, location }
   }
-  return { view, location, memberships }
+  return { view, location, memberships, objects: nodes }
 }
 
 /** 依据确定的逐镜引用归位；同一对象在整场只有一张可编辑原卡。 */
