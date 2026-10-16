@@ -51,7 +51,18 @@ function directorShotKeys(value: SceneDesign_Input, graph: DesignGraph, shotId?:
   value.continuity.forEach(row => { if (row.event_id && events.has(row.event_id)) keys.add(`continuity:${row.id}`) })
   add('event', [...events]); add('participant', shot.participant_ids || [])
   // 只补齐选中工作单的共享引用，不继续展开共享对象的其他引用者。
-  graph.edges.filter(edge => !edge.indirect && keys.has(edge.from) && !designDomain(edge.to)).forEach(edge => keys.add(edge.to))
+  // 只沿已选对象的字段方向补依赖；活动引用的空间锚点也属于本镜关联集合。
+  const outgoing = new Map<string, DesignEdge[]>()
+  graph.edges.filter(edge => !edge.indirect).forEach(edge => outgoing.set(edge.from, [...outgoing.get(edge.from) || [], edge]))
+  const pending = [...keys].filter(key => !globalDesignKeys.includes(key))
+  while (pending.length) {
+    const from = pending.pop()!
+    outgoing.get(from)?.forEach(edge => {
+      if (keys.has(edge.to)) return
+      keys.add(edge.to)
+      if (!globalDesignKeys.includes(edge.to)) pending.push(edge.to)
+    })
+  }
   return keys
 }
 
@@ -88,6 +99,86 @@ export function directorDesignGraph(value: SceneDesign_Input, view: DirectorDesi
     else edges.set(key, { ...edge, from, to, sources: edge.path || [edge] })
   })
   return { nodes, edges: [...edges.values()], groups, relatedKeys }
+}
+
+export type ShotCanvasLocation = 'global' | 'shared' | 'unlinked' | string
+
+/** 一次建立整场关系和逐镜集合，再投影总览与每个镜头。 */
+export function shotCanvasProjection(value: SceneDesign_Input) {
+  const graph = sceneDesignGraph(value, false)
+  const nodes = graph.nodes.map(node => node.key === 'overview' ? { ...node, label: '全场叙事与约束',
+    fields: ['viewpoint', 'information_change', 'relationship_change', 'turning_point', 'immutable_facts', 'open_questions', 'control_level'] } : node)
+  nodes.push({ key: 'space', label: '空间规则', kind: 'direction', path: ['direction'], fields: ['spatial_basis', 'shootable_area', 'axis', 'scale'] },
+    { key: 'location', label: '本场场所', kind: 'location', path: ['direction'], fields: ['location_asset_id'] })
+  const memberships = new Map<string, string[]>()
+  const shotKeys = new Map<string, Set<string>>()
+  value.direction.shots.forEach(shot => {
+    const related = directorShotKeys(value, graph, shot.id)
+    shotKeys.set(shot.id, related)
+    related.forEach(key => {
+      if (globalDesignKeys.includes(key)) return
+      memberships.set(key, [...memberships.get(key) || [], shot.id])
+    })
+  })
+  const location = (key: string): ShotCanvasLocation => globalDesignKeys.includes(key) ? 'global'
+    : key.startsWith('shot:') ? key.slice(5)
+      : (memberships.get(key)?.length || 0) > 1 ? 'shared'
+        : memberships.get(key)?.[0] || 'unlinked'
+  const direct = graph.edges.filter(edge => !edge.indirect)
+  const relationPath = (shotId: string, target: string, related: Set<string>) => {
+    const start = `shot:${shotId}`
+    const search = (allowReverse: boolean): DesignEdge[] => {
+      const pending = [{ key: start, path: [] as DesignEdge[] }], visited = new Set([start])
+      while (pending.length) {
+        const current = pending.shift()!
+        if (current.key === target) return current.path
+        direct.forEach(edge => {
+          const next = edge.from === current.key ? edge.to : allowReverse && edge.to === current.key ? edge.from : undefined
+          if (!next || !related.has(next) || visited.has(next)) return
+          visited.add(next); pending.push({ key: next, path: [...current.path, edge] })
+        })
+      }
+      return []
+    }
+    const forward = search(false)
+    return forward.length ? forward : search(true)
+  }
+  const view = (shotId?: string) => {
+    if (!shotId) {
+      const visible = nodes.filter(node => location(node.key) !== 'unlinked')
+      const keys = new Set(nodes.map(node => node.key))
+      const edges: ProjectedDesignEdge[] = direct.filter(edge => keys.has(edge.from) && keys.has(edge.to) &&
+        (location(edge.from) === 'global' || location(edge.from) === 'shared' || location(edge.from) === 'unlinked') &&
+        (location(edge.to) === 'global' || location(edge.to) === 'shared' || location(edge.to) === 'unlinked')).map(edge => ({ ...edge, sources: [edge] }))
+      memberships.forEach((ids, key) => {
+        if (location(key) !== 'shared') return
+        ids.forEach(id => {
+          const related = shotKeys.get(id) || new Set<string>()
+          const path = relationPath(id, key, related)
+          const sources = [...path, ...direct.filter(edge => (edge.to === key || edge.from === key) &&
+            related.has(edge.from) && related.has(edge.to) && !path.includes(edge))]
+          edges.push({ from: `shot:${id}`, to: key, label: '镜头关联', sources })
+        })
+      })
+      return { nodes: visible, unlinked: nodes.filter(node => location(node.key) === 'unlinked'), edges, memberships, location }
+    }
+    const owned = nodes.filter(node => location(node.key) === shotId)
+    const ownedKeys = new Set(owned.map(node => node.key))
+    const related = shotKeys.get(shotId) || new Set<string>()
+    const referenceKeys = new Set(direct.filter(edge =>
+      (ownedKeys.has(edge.from) && location(edge.to) === 'shared' || ownedKeys.has(edge.to) && location(edge.from) === 'shared') &&
+      related.has(edge.from) && related.has(edge.to)).flatMap(edge => [edge.from, edge.to]).filter(key => location(key) === 'shared'))
+    const visible = new Set([...ownedKeys, ...referenceKeys])
+    return { nodes: [...owned, ...nodes.filter(node => referenceKeys.has(node.key)).map(node => ({ ...node, kind: 'reference' }))],
+      unlinked: [], edges: direct.filter(edge => visible.has(edge.from) && visible.has(edge.to)).map(edge => ({ ...edge, sources: [edge] })),
+      memberships, location }
+  }
+  return { view, location, memberships }
+}
+
+/** 依据确定的逐镜引用归位；同一对象在整场只有一张可编辑原卡。 */
+export function shotCanvasGraph(value: SceneDesign_Input, shotId?: string) {
+  return shotCanvasProjection(value).view(shotId)
 }
 
 export type DesignScope = 'all' | 'unassigned' | `beat:${string}`
@@ -248,7 +339,7 @@ const designReferences: Record<string, [string, string, string][]> = {
 }
 
 /** 整场图直接读取当前设计对象的字段引用，与当前镜头是否选择无关。 */
-export function sceneDesignGraph(value: SceneDesign_Input): DesignGraph {
+export function sceneDesignGraph(value: SceneDesign_Input, includeIndirect = true): DesignGraph {
   const registry = new Map(designObjects(value).map(node => [node.key, node]))
   const nodes = new Map(registry), edges: DesignEdge[] = []
   registry.forEach(node => {
@@ -275,7 +366,7 @@ export function sceneDesignGraph(value: SceneDesign_Input): DesignGraph {
       follow(source, edge.to, next, new Set([...visited, edge.to]))
     }
   }
-  registry.forEach(node => follow(node.key, node.key, [], new Set([node.key])))
+  if (includeIndirect) registry.forEach(node => follow(node.key, node.key, [], new Set([node.key])))
   return { nodes: [...nodes.values()], edges }
 }
 

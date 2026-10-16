@@ -10,7 +10,7 @@ export async function checkWorkbenchStyleDetails(page, output) {
   await page.getByRole('navigation', { name: '画布切换', exact: true }).getByRole('button', { name: '导演画布', exact: true }).click()
   await checkAdditionalControls(page, output)
   await directorSelect(page, '设计域', '导演画布')
-  const domain = page.getByRole('combobox', { name: '设计域', exact: true })
+  const domain = page.getByRole('combobox', { name: '设计视图', exact: true })
   await domain.focus(); await domain.press('ArrowDown')
   const selected = page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option-selected')
   await page.waitForFunction(() => {

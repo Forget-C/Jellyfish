@@ -8,6 +8,9 @@ export async function workbenchControl(page, menu, role, name) {
 export async function workbenchShot(page, name) {
   const match = /^镜头 (\d+)：(.*)$/.exec(name)
   const combo = page.getByRole('combobox', { name: '选择镜头', exact: true })
+  if (!await combo.count() && !await page.getByRole('button', { name: '选择镜头', exact: true }).count() && match && await page.getByRole('combobox', { name: '设计视图', exact: true }).count()) {
+    await directorSelect(page, '设计视图', `镜头 ${match[1].padStart(2, '0')} · 设计`)
+  }
   await combo.or(page.getByRole('button', { name: '选择镜头', exact: true })).first().waitFor()
   if (await combo.count()) {
     await combo.locator('xpath=ancestor::div[contains(@class,"ant-select-selector")][1]').click()
@@ -20,6 +23,16 @@ export async function workbenchShot(page, name) {
 }
 
 export async function directorSelect(page, name, label, search) {
+  if (name === '设计域') {
+    const view = page.getByRole('combobox', { name: '设计视图', exact: true })
+    if (label === '导演画布' || label === '总导演') { await directorSelect(page, '设计视图', '场次总览'); return }
+    const shot = page.getByRole('combobox', { name: '选择镜头', exact: true })
+    if (await shot.count()) {
+      const current = await shot.locator('xpath=ancestor::div[contains(@class,"ant-select")][1]').locator('.ant-select-selection-item').innerText()
+      await directorSelect(page, '设计视图', /^镜头 \d+/.exec(current)?.[0] || current)
+    } else if (await view.count()) await directorSelect(page, '设计视图', '场次总览')
+    return
+  }
   const combo = page.getByRole('combobox', { name, exact: true })
   await combo.locator('xpath=ancestor::div[contains(@class,"ant-select-selector")][1]').click()
   if (search) await combo.fill(search)
@@ -40,7 +53,7 @@ export async function directorObject(page, label, search = typeof label === 'str
 export async function directorCreate(page, domain, label) {
   const close = page.getByRole('button', { name: '关闭编辑区', exact: true })
   if (await close.isVisible()) await close.click()
-  await directorSelect(page, '设计域', domain)
+  if (domain === '总导演') await directorSelect(page, '设计视图', '场次总览')
   await page.getByRole('button', { name: '新增工作单', exact: true }).click()
   await page.getByRole('menuitem', { name: `新增${label}`, exact: true }).click()
   return page.locator('.canvas-quick-editor')

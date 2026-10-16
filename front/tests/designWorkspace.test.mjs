@@ -9,7 +9,58 @@ const source = await readFile(new URL('../src/pages/aiStudio/directing/designWor
 const valueSource = await readFile(new URL('../src/pages/aiStudio/directing/designValue.ts', import.meta.url), 'utf8')
 const compile = source => ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ES2020 } }).outputText
 const data = source => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`
-const { directorDesignGraph, designDomain, designCoreContent, sceneOverview, shotRelationPath, shotGraph, sceneDesignGraph, designObjects, designObjectLayoutId, shotIssues, scopeShots, scopeGraph, reorderScopeShots, relationBinding, relationOwner, changeRelation } = await import(data(compile(source).replaceAll("'./designValue'", JSON.stringify(data(compile(valueSource))))))
+const { directorDesignGraph, shotCanvasGraph, designDomain, designCoreContent, sceneOverview, shotRelationPath, shotGraph, sceneDesignGraph, designObjects, designObjectLayoutId, shotIssues, scopeShots, scopeGraph, reorderScopeShots, relationBinding, relationOwner, changeRelation } = await import(data(compile(source).replaceAll("'./designValue'", JSON.stringify(data(compile(valueSource))))))
+
+test('shot grouping counts a shared anchor reached through blocking and activity in different shots', () => {
+  const value = makeWorkspace().designs[0].content
+  const second = structuredClone(value.direction.shots[0])
+  second.id = 'shot2'; second.beat_ids = []; second.blocking_state_ids = []; second.event_ids = ['event2']; second.participant_ids = []
+  value.direction.shots.push(second)
+  value.staging.activities.push({ ...structuredClone(value.staging.activities[0]), trigger_event_id: 'event2', anchor_ids: [value.direction.anchors[0].id] })
+  const anchor = `anchor:${value.direction.anchors[0].id}`
+  const overview = shotCanvasGraph(value)
+  assert.deepEqual(overview.memberships.get(anchor), ['shot1', 'shot2'])
+  assert.equal(overview.location(anchor), 'shared')
+  assert.equal(overview.nodes.filter(node => node.key === anchor).length, 1)
+  assert.equal(shotCanvasGraph(value, 'shot2').nodes.find(node => node.key === anchor)?.kind, 'reference')
+})
+
+test('shot grouping keeps one editable original and only direct shared references', () => {
+  const value = makeWorkspace().designs[0].content
+  const second = structuredClone(value.direction.shots[0])
+  second.id = 'shot2'; second.participant_ids = []
+  value.direction.shots.push(second)
+  const overview = shotCanvasGraph(value)
+  assert.equal(overview.location('beat:beat1'), 'shared')
+  assert.equal(overview.location('shot:shot1'), 'shot1')
+  assert.equal(overview.location('space'), 'global')
+  assert.equal(overview.nodes.filter(node => node.key === 'beat:beat1').length, 1)
+  assert.equal(overview.edges.filter(edge => edge.from === 'shot:shot1' && edge.to === 'beat:beat1').length, 1)
+  const detail = shotCanvasGraph(value, 'shot1')
+  assert.equal(detail.nodes.find(node => node.key === 'beat:beat1')?.kind, 'reference')
+  assert.ok(!detail.edges.some(edge => edge.indirect))
+  assert.ok(!detail.nodes.some(node => node.key === 'space'))
+  const anchor = overview.edges.find(edge => edge.from === 'shot:shot1' && edge.to === 'anchor:anchor1' && edge.label === '镜头关联')
+  assert.ok(anchor?.sources.some(edge => edge.from === 'shot:shot1' && edge.to === 'blocking:state1'))
+  assert.ok(anchor?.sources.some(edge => edge.from === 'blocking:state1' && edge.to === 'anchor:anchor1'))
+})
+
+test('shot grouping follows zero, one and multiple shot relations without changing object identity', () => {
+  const value = makeWorkspace().designs[0].content
+  const second = structuredClone(value.direction.shots[0])
+  second.id = 'shot2'; second.beat_ids = []; second.event_ids = []; second.blocking_state_ids = []; second.participant_ids = []
+  value.direction.shots.push(second)
+  const beat = `beat:${value.direction.beats[0].id}`
+  assert.equal(shotCanvasGraph(value).location(beat), 'shot1')
+  second.beat_ids = [value.direction.beats[0].id]
+  assert.equal(shotCanvasGraph(value).location(beat), 'shared')
+  assert.equal(shotCanvasGraph(value, 'shot1').nodes.find(node => node.key === beat)?.kind, 'reference')
+  value.direction.shots[0].beat_ids = []
+  assert.equal(shotCanvasGraph(value).location(beat), 'shot2')
+  assert.equal(shotCanvasGraph(value, 'shot2').nodes.find(node => node.key === beat)?.kind, 'direction')
+  second.beat_ids = []
+  assert.equal(shotCanvasGraph(value).location(beat), 'unlinked')
+})
 
 test('director graph gives seven design domains and keeps shared objects editable outside', () => {
   const value = makeWorkspace().designs[0].content
