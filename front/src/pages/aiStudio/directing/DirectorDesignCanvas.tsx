@@ -80,11 +80,11 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
     }
     return result
   }
-  const go = (next: BrowseState, sourceId?: string, replace = false, exitEntry?: string) => {
+  const go = (next: BrowseState, sourceId?: string, replace = false) => {
     if (params.get('version') !== versionId) return
     if (!replace) { setEditorContext(value => value + 1); setAssetTarget(undefined) }
     if (sourceId && !replace) setParams(nextParams({ ...state, focus: sourceId, shotId }), { replace: true, state: location.state })
-    setParams(nextParams({ ...next, shotId }), { replace, state: replace ? location.state : { directorBack: true, directorEntry: sourceId && next.domain ? { from: `${versionId}:domains:${viewId}`, id: sourceId } : undefined, directorExit: exitEntry } })
+    setParams(nextParams({ ...next, shotId }), { replace, state: replace ? location.state : { directorBack: true } })
   }
   useLayoutEffect(() => {
     if (!params.has('directorView') && params.get('version') === versionId) {
@@ -242,7 +242,7 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
       {unavailable && <Alert type="warning" message="原对象不可用，请重新选择" closable onClose={() => setUnavailable(false)} />}
       {shotId && !hasShot && <Alert type="warning" message="原镜头不可用，请重新选择镜头" />}
     </>, noticeHost)}
-    <DirectorCanvasSurface contextKey={`${versionId}:domains`} navigation={{ key: location.key, index: window.history.state?.idx || 0, type: navigationType, entry: location.state?.directorEntry, exit: location.state?.directorExit }} labels={[]} objects={objects} relations={relations}
+    <DirectorCanvasSurface contextKey={`${versionId}:domains`} labels={[]} objects={objects} relations={relations}
       layoutScope={{ storageKey, viewId, anchorId: state.domain ? anchor ? identity(anchor) : '' : '原文依据',
         identityAliases,
         validIds: ['原文依据', 'current-shot', ...designDomains.map(domain => `domain:${domain}`), ...allObjects.map(node => identity(node))].filter(id => !id.includes(':ambiguous:')),
@@ -250,7 +250,7 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
       focusTarget={state.focus ? { nodeId: state.focus, fieldId: '', serial: focusSerial.current, restore } : undefined}
       toolbar={<Space wrap>
         <WorkbenchButton variant="quiet" disabled={!location.state?.directorBack} onClick={() => navigate(-1)}>返回上一处</WorkbenchButton>
-        {state.domain && <WorkbenchButton onClick={() => go({ scope }, undefined, false, `domain:${state.domain}`)}>导演画布</WorkbenchButton>}
+        {state.domain && <WorkbenchButton onClick={() => go({ scope })}>导演画布</WorkbenchButton>}
         <Select aria-label="设计域" value={state.domain || 'outer'} options={[{ value: 'outer', label: '导演画布' }, ...designDomains.map(domain => ({ value: domain, label: departmentNames[domain] }))]}
           onChange={domain => go({ domain: domain === 'outer' ? undefined : domain as DesignDomain, scope })} />
         <Select aria-label="查看范围" value={scope} options={[{ value: 'all', label: '整场' }, { value: 'shot', label: '当前镜头', disabled: !hasShot }]}

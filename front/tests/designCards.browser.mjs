@@ -103,44 +103,28 @@ try {
   await locate('表演指导')
   await screenshot('subgraph-entry-desktop.png')
   const initialPreviewBoxes = await node('domain:performance').locator('.director-subgraph-preview rect').evaluateAll(rects => rects.map(rect => ['x', 'y', 'width', 'height'].map(name => Number(rect.getAttribute(name))).join(',')).sort())
-  const observeMotion = () => page.evaluate(() => new Promise(resolve => {
-    const transforms = [], started = performance.now()
-    const sample = () => {
-      const content = document.querySelector('.director-canvas-content')
-      if (content) transforms.push({ view: content.parentElement.dataset.layoutView, transform: getComputedStyle(content).transform })
-      if (performance.now() - started < 750) requestAnimationFrame(sample)
-      else resolve(transforms)
-    }
-    requestAnimationFrame(sample)
-  }))
-  const motion = observeMotion()
+  const assertNoCanvasMotion = async () => {
+    assert.equal(await page.locator('.director-canvas-content').evaluate(content => content.getAnimations().length), 0, '子图导航不播放相机或淡入动画')
+    assert.equal(await page.locator('.director-snapshot-content').count(), 0, '子图导航不创建穿越视觉副本')
+  }
   await node('domain:performance').getByRole('heading', { name: '聚合子图 · 表演指导', exact: true }).click()
-  await page.screenshot({ path: join(output, 'subgraph-focus-motion.png'), animations: 'allow' })
-  await page.waitForFunction(() => {
-    const element = document.querySelector('[data-layout-view="performance:all"] .director-canvas-content')
-    return element?.getAnimations().some(animation => {
-      const timing = animation.effect.getComputedTiming()
-      return timing.progress > .1 && timing.progress < .85 && animation.effect.getKeyframes().some(frame => frame.transform)
-    })
-  }, undefined, { timeout: 5000 })
-  await page.screenshot({ path: join(output, 'subgraph-expand-motion.png'), animations: 'allow' })
-  const enteredFrames = await motion
-  assert.ok(new Set(enteredFrames.map(frame => frame.transform)).size >= 4, '下钻应呈现连续的中间相机位置，不能直接替换视图')
-  assert.ok(new Set(enteredFrames.filter(frame => frame.view === 'outer:all').map(frame => frame.transform)).size >= 3, '切换目标前应先连续聚焦源卡')
+  await assertNoCanvasMotion()
   await page.locator('[data-layout-view="performance:all"]').waitFor()
   assert.deepEqual(await page.locator('.director-canvas-object').evaluateAll(cards => cards.map(card => [card.offsetLeft, card.offsetTop, card.offsetWidth, card.offsetHeight].join(',')).sort()), initialPreviewBoxes, '首次进入的实际布局与入口预览一致')
-  const returning = observeMotion()
   await page.getByRole('button', { name: '返回上一处', exact: true }).click()
-  assert.ok(new Set((await returning).map(frame => frame.transform)).size >= 4, '返回应反向穿出并恢复源视角')
   await page.locator('[data-layout-view="outer:all"]').waitFor()
-  const historyForward = observeMotion()
+  await assertNoCanvasMotion()
   await page.goForward()
-  assert.ok(new Set((await historyForward).map(frame => frame.transform)).size >= 4, '浏览器前进应沿原入口连续下钻')
-  const historyBack = observeMotion()
+  await page.locator('[data-layout-view="performance:all"]').waitFor()
+  await assertNoCanvasMotion()
   await page.goBack()
-  assert.ok(new Set((await historyBack).map(frame => frame.transform)).size >= 4, '浏览器后退应反向穿出')
-  await node('domain:performance').getByRole('button', { name: '进入子图：表演指导', exact: true }).click()
-  await page.waitForFunction(() => { const surface = document.querySelector('[data-layout-view="performance:all"]'); return surface && surface.getAttribute('aria-busy') !== 'true' })
+  await page.locator('[data-layout-view="outer:all"]').waitFor()
+  await assertNoCanvasMotion()
+  await node('domain:performance').getByRole('button', { name: '进入子图：表演指导', exact: true }).focus()
+  await page.keyboard.press('Enter')
+  await page.locator('[data-layout-view="performance:all"]').waitFor()
+  await assertNoCanvasMotion()
+  await page.waitForFunction(() => document.activeElement?.closest('[data-canvas-node]')?.closest('[data-layout-view]')?.getAttribute('data-layout-view') === 'performance:all', undefined, { timeout: 5000 })
   await locate('表演 01 · 确认落款')
   assert.match(await node('performance:beat1:person1').innerText(), /缓慢展开信纸/)
   const criterion = node('criterion:criterion1')
@@ -226,81 +210,26 @@ try {
   }
   await choose('设计域', '导演画布')
   await waitView('outer:shot:shot2')
-  await page.evaluate(() => {
-    document.querySelector('[data-canvas-node="domain:direction"] .director-node-open').click()
-    requestAnimationFrame(() => document.querySelector('[data-canvas-node="domain:sound"] .director-node-open').click())
-  })
+  await node('domain:sound').getByRole('button', { name: '进入子图：对白与声音', exact: true }).click()
   await waitView('sound:shot:shot2')
-  assert.equal(new URL(page.url()).searchParams.get('directorView'), 'sound', '快速连续操作以最后一次导航为准')
+  await assertNoCanvasMotion()
+  assert.equal(new URL(page.url()).searchParams.get('directorView'), 'sound', '入口直接到达目标子图')
   assert.equal(await page.locator('.director-snapshot-content').count(), 0, '完成后没有残留视觉副本')
   await page.goBack()
   await waitView('outer:shot:shot2')
-  assert.equal(new URL(page.url()).searchParams.get('directorView'), 'outer', '取消的首次入口不留下额外子图浏览记录')
+  assert.equal(new URL(page.url()).searchParams.get('directorView'), 'outer', '返回恢复来源浏览记录')
   await choose('查看范围', '整场')
   await choose('设计域', '总导演')
   await waitView('direction:all')
-  const searchTransition = page.evaluate(() => new Promise(resolve => {
-    let transitioned = false
-    const start = performance.now()
-    const sample = () => {
-      transitioned ||= document.querySelector('[data-layout-view="direction:all"]')?.getAttribute('aria-busy') === 'true'
-      if (performance.now() - start < 1000) requestAnimationFrame(sample)
-      else resolve(transitioned)
-    }
-    requestAnimationFrame(sample)
-  }))
   await choose('定位设计对象', '镜头 02 · 望向门口')
-  assert.equal(await searchTransition, true, '同一子图搜索定位也使用短过渡')
   await waitView('direction:all')
-  await choose('设计域', '导演画布')
-  await waitView('outer:all')
-  await locate('表演指导')
-  await node('domain:performance').getByRole('button', { name: '进入子图：表演指导', exact: true }).click()
-  await page.waitForFunction(() => document.querySelector('[data-layout-view="performance:all"] .director-canvas-content')?.getAnimations().some(animation => {
-    const progress = animation.effect.getComputedTiming().progress
-    return progress > .1 && progress < .85
-  }))
-  const interruption = await page.evaluate(() => {
-    const content = document.querySelector('.director-canvas-content')
-    const before = getComputedStyle(content)
-    const transform = before.transform, opacity = before.opacity
-    document.querySelector('[data-canvas-node="dialogue:dialogue1"] .director-node-open').click()
-    const preserved = [...document.querySelectorAll('.director-snapshot-content')].some(layer => {
-      const style = getComputedStyle(layer)
-      return style.transform === transform && style.opacity === opacity
-    })
-    return { preserved, opacity: Number(opacity) }
-  })
-  assert.ok(interruption.opacity > 0 && interruption.opacity < 1, '中断发生在展开中间帧')
-  assert.equal(interruption.preserved, true, '再次进入子图保留中断前的可见相机与透明度')
-  await page.screenshot({ path: join(output, 'subgraph-interrupted-expand.png'), animations: 'allow' })
-  await waitView('sound:all')
-  await choose('设计域', '导演画布')
-  await waitView('outer:all')
-  await locate('表演指导')
-  await page.getByRole('combobox', { name: '设计域', exact: true }).locator('xpath=ancestor::div[contains(@class,"ant-select")][1]').click()
-  const focusInterruption = await page.evaluate(() => new Promise(resolve => {
-    document.querySelector('[data-canvas-node="domain:performance"] .director-node-open').click()
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      const before = new DOMMatrix(getComputedStyle(document.querySelector('.director-canvas-content')).transform)
-      const option = [...document.querySelectorAll('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option')].find(option => option.textContent.trim() === '镜内执行')
-      option.click()
-      requestAnimationFrame(() => resolve([...document.querySelectorAll('.director-snapshot-content')].some(layer => {
-        const after = new DOMMatrix(getComputedStyle(layer).transform)
-        return Math.abs(before.e - after.e) < 2 && Math.abs(before.f - after.f) < 2 && Math.abs(before.a - after.a) < .02
-      })))
-    }))
-  }))
-  assert.equal(focusInterruption, true, '聚焦途中工具栏导航保留中断相机，不跳回稳定视角')
-  await waitView('staging:all')
-  await page.screenshot({ path: join(output, 'subgraph-focus-interruption-settled.png'), animations: 'allow' })
+  await assertNoCanvasMotion()
   await choose('设计域', '导演画布')
   await choose('查看范围', '当前镜头')
   await waitView('outer:shot:shot2')
   await page.emulateMedia({ reducedMotion: 'reduce' })
-  const reducedFrames = observeMotion()
   await node('domain:sound').getByRole('button', { name: '进入子图：对白与声音', exact: true }).click()
-  assert.ok(new Set((await reducedFrames).map(frame => frame.transform)).size <= 3, '减少动态效果时不执行连续相机缩放')
+  await assertNoCanvasMotion()
   await waitView('sound:shot:shot2')
   await page.reload()
   await waitView('sound:shot:shot2')

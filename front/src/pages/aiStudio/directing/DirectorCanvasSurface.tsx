@@ -8,8 +8,6 @@ import type { CanvasPoint, CanvasTransform } from '../../../components/canvas/ge
 import { directorGroup, directorGroups, fixedDirectorSize } from './directorLayout'
 import { directorRelationCategory } from './directorRelations'
 import { useDirectorLayout } from './useDirectorLayout'
-import { useDirectorTransition } from './useDirectorTransition'
-import type { DirectorNavigation } from './useDirectorTransition'
 import type { DirectorLayoutScope } from './useDirectorLayout'
 import { WorkbenchButton, WorkbenchIconButton } from './ui/WorkbenchButton'
 
@@ -23,7 +21,7 @@ export type DirectorCanvasObject = { id: string; label: string; title?: string; 
 export type DirectorCanvasRelation = { from: string; to: string; label: string; indirect?: boolean; field?: string; fromLabel?: string; toLabel?: string; sources?: { from: string; to: string; label: string; field?: string; fromLabel?: string; toLabel?: string }[] }
 
 /** 画布只维护视口与节点位置；内容及排序始终由业务编辑入口维护。 */
-export function DirectorCanvasSurface({ contextKey, children, objects = [], relations = [], inspectors = {}, tools = [], toolbar, anchorTitle, labels = defaultLabels, ariaLabel = '导演画布视口', initialPositions = {}, focusTarget, layoutScope, navigation }: { navigation?: DirectorNavigation; layoutScope?: DirectorLayoutScope; focusTarget?: { nodeId: string; fieldId: string; serial: number; restore?: boolean }; initialPositions?: Record<string, CanvasPoint>; labels?: string[]; ariaLabel?: string; tools?: { label: string; onClick: (trigger: HTMLElement) => void }[]; toolbar?: ReactNode; anchorTitle?: string; contextKey: string; children: ReactNode; objects?: DirectorCanvasObject[]; relations?: DirectorCanvasRelation[]; inspectors?: Record<string, ((trigger: HTMLElement) => void) | undefined> }) {
+export function DirectorCanvasSurface({ contextKey, children, objects = [], relations = [], inspectors = {}, tools = [], toolbar, anchorTitle, labels = defaultLabels, ariaLabel = '导演画布视口', initialPositions = {}, focusTarget, layoutScope }: { layoutScope?: DirectorLayoutScope; focusTarget?: { nodeId: string; fieldId: string; serial: number; restore?: boolean }; initialPositions?: Record<string, CanvasPoint>; labels?: string[]; ariaLabel?: string; tools?: { label: string; onClick: (trigger: HTMLElement) => void }[]; toolbar?: ReactNode; anchorTitle?: string; contextKey: string; children: ReactNode; objects?: DirectorCanvasObject[]; relations?: DirectorCanvasRelation[]; inspectors?: Record<string, ((trigger: HTMLElement) => void) | undefined> }) {
   const [classicView, setClassicView] = useState<ViewState>(() => views.get(contextKey) || {
     transform: { x: 120, y: 30, scale: Math.max(.3, Math.min(1, (window.innerWidth - 180) / 1160)) }, positions: {},
   })
@@ -172,16 +170,18 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
       if (target.top < bounds.top || target.bottom > bounds.bottom) content.scrollTop += (target.top - bounds.top) / scale - 16
     })
   }, [focusTarget?.serial, viewKey, layout.ready, focusTarget && view.positions[targetId(focusTarget.nodeId)]?.x, focusTarget && view.positions[targetId(focusTarget.nodeId)]?.y, focusTarget && sizes[targetId(focusTarget.nodeId)]])
-  const transition = useDirectorTransition({ surface: viewport.surface, viewKey, navigation,
-    enabled: !!layoutScope, ready: (!layoutScope || !nodes.length || layout.ready) && nodes.every(node => !!sizes[node.id]), transform: view.transform,
-    contentRevision: objects, focusId: focusTarget?.nodeId || layoutScope?.anchorId })
-  const inspect = (node: DirectorCanvasObject, trigger: HTMLElement) => {
-    const card = cards.current.get(node.id)
-    if (node.entry && card) void transition.enter(card, () => node.onInspect?.(trigger))
-    else node.onInspect?.(trigger)
-  }
+  const focusedView = useRef(viewKey)
+  useEffect(() => {
+    if (!layoutScope || focusedView.current === viewKey || nodes.length && !layout.ready) return
+    focusedView.current = viewKey
+    // 来源卡已卸载时交接键盘焦点；工具栏等仍在操作的控件保留焦点。
+    if (document.activeElement !== document.body) return
+    const card = cards.current.get(focusTarget ? targetId(focusTarget.nodeId) : layoutScope.anchorId)
+    const target = card || toolbarElement.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')
+    target?.focus({ preventScroll: true })
+  }, [viewKey, layout.ready, layoutScope?.anchorId])
   return <>
-    <div className={`director-canvas-surface${layoutScope ? ' director-layout-surface' : ''}`} data-layout-view={layoutScope?.viewId} aria-busy={transition.busy || undefined} ref={viewport.surface} {...viewport.surfaceProps} aria-label={ariaLabel}
+    <div className={`director-canvas-surface${layoutScope ? ' director-layout-surface' : ''}`} data-layout-view={layoutScope?.viewId} ref={viewport.surface} {...viewport.surfaceProps} aria-label={ariaLabel}
       onDragOver={event => { if (event.dataTransfer.types.includes(toolDrag)) event.preventDefault() }}
       onDrop={event => {
         const tool = tools.find(item => item.label === event.dataTransfer.getData(toolDrag))
@@ -230,11 +230,11 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
           const { id, label } = node, point = position(id)
           const menu = { items: [{ key: 'inspect', label: node.entry ? '进入子图' : '查看或编辑', disabled: !node.onInspect, onClick: () => {
             const trigger = menuTrigger.current || cards.current.get(id)
-            if (trigger) inspect(node, trigger)
+            if (trigger) node.onInspect?.(trigger)
           } }] }
           const highlighted = layoutScope && (activeRelation !== undefined && [relations[activeRelation]?.from, relations[activeRelation]?.to].includes(id) || !!activeNode && (id === activeNode || relations.some(relation => relation.from === activeNode && relation.to === id || relation.to === activeNode && relation.from === id)))
           return <Dropdown key={id} menu={menu} trigger={['contextMenu']}><div data-canvas-node={id} data-shot-related={node.related || undefined} className={`director-canvas-object${node.entry ? ' director-subgraph-entry' : ''}${layoutScope && (node.size || fixedDirectorSize(id)) ? ' director-compact-card' : ''}${highlighted ? ' director-relation-endpoint' : ''}`} tabIndex={-1}
-            onClick={event => { if (node.entry && event.currentTarget.contains(event.target as Node) && !(event.target as Element).closest('button')) inspect(node, event.currentTarget) }}
+            onClick={event => { if (node.entry && event.currentTarget.contains(event.target as Node) && !(event.target as Element).closest('button')) node.onInspect?.(event.currentTarget) }}
             onMouseEnter={event => { if (layoutScope && event.currentTarget.contains(event.target as Node)) setHovered(id) }} onMouseLeave={event => { if (layoutScope && event.currentTarget.contains(event.target as Node)) setHovered(undefined) }}
             onMouseMove={event => { if (layoutScope && event.currentTarget.contains(event.target as Node) && (event.movementX || event.movementY)) { setHovered(id); setFocused(undefined); setEdgeFocus(undefined); setEdgeHover(undefined) } }}
             onKeyDownCapture={event => { if (layoutScope && event.currentTarget.contains(event.target as Node)) { setFocused(id); setEdgeFocus(undefined); setEdgeHover(undefined) } }}
@@ -252,7 +252,7 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
               scrollPositions.set(viewKey, { ...scrollPositions.get(viewKey), [id]: event.currentTarget.scrollTop })
             }}>
               <button type="button" className="director-node-open" aria-label={`${node.entry ? '进入子图' : '查看节点'}：${label}`} disabled={!node.onInspect}
-                onClick={event => inspect(node, event.currentTarget)} />
+                onClick={event => node.onInspect?.(event.currentTarget)} />
               <div className="director-node-summary">{node.content}</div>
             </div>
           </div></Dropdown>
