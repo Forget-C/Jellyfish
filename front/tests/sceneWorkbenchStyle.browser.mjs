@@ -155,7 +155,7 @@ try {
   assert.equal(await page.getByRole('button', { name: '展开叙事视点', exact: true }).count(), 0)
   assert.match(await page.locator('[data-canvas-node="overview"]').innerText(), /从她的视点观察旧信/)
   assert.equal((await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.revision, 2, '阅读摘要不保存业务内容')
-  const transform = () => page.locator('.director-canvas-content').getAttribute('style')
+  const transform = () => page.locator('.director-canvas-content').evaluate(content => content.style.transform)
   const originalTransform = await transform()
   await directorObject(page, '全场叙事与约束')
   await page.getByRole('textbox', { name: '观察视点', exact: true }).fill('浮层切换保留未保存的观察视点')

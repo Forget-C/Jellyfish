@@ -59,6 +59,8 @@
 .canvas-workbench-notice { position: relative; z-index: 1; margin-top: 120px; }
 .director-canvas-surface { position: absolute; inset: var(--workbench-content-top, 100px) 0 0; overflow: hidden; touch-action: none; }
 .director-canvas-content { position: absolute; transform-origin: 0 0; }
+.director-snapshot-content { position: absolute; transform-origin: 0 0; z-index: 10; pointer-events: none; }
+.director-snapshot-object { position: absolute; width: 360px; }
 .director-canvas-relations { position: absolute; overflow: visible; width: 1px; height: 1px; pointer-events: none; }
 .director-canvas-relations text { fill: var(--wb-muted); }
 .director-relation-port { fill: var(--wb-canvas); stroke: #969696; stroke-width: 1.5; }
@@ -92,7 +94,7 @@
 .canvas-workbench .ant-dropdown-menu { background: var(--wb-surface) !important; }
 .canvas-workbench .ant-dropdown-menu-item { color: var(--wb-text) !important; }
 .director-canvas-object-content { max-height: min(650px, calc(100dvh - 220px)); overflow: auto; border-radius: 12px; }
-.director-canvas-object .canvas-workbench-card { width: 100%; box-sizing: border-box; padding: 20px; }
+.director-canvas-object .canvas-workbench-card, .director-snapshot-object .canvas-workbench-card { width: 100%; box-sizing: border-box; padding: 20px; }
 .director-canvas-controls { font-size: 12px; color: var(--wb-muted); }
 .director-relation-detail { position: fixed; z-index: 30; right: 16px; bottom: 140px; width: min(420px, calc(100vw - 32px)); max-height: 45dvh; overflow: auto; padding: 16px; color: var(--wb-text); background: var(--wb-surface); border: 1px solid #383838; border-radius: 12px; box-shadow: 0 12px 32px #0008; }
 .director-relation-detail header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -360,13 +362,23 @@
 .director-summary-card { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 6px 8px; }
 .director-summary-card p { flex: 0 0 100%; margin: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; }
 .director-summary-card p:first-child { -webkit-line-clamp: 2; }
+.director-subgraph-entry { isolation: isolate; }
+.director-subgraph-entry::before, .director-subgraph-entry::after { content: ''; position: absolute; inset: 32px -4px 4px 4px; z-index: -1; border: 1px solid var(--wb-border); border-radius: 12px; background: var(--wb-inset); pointer-events: none; }
+.director-subgraph-entry::after { inset: 32px -8px 8px 8px; z-index: -2; }
+.director-subgraph-card { display: flex; flex-direction: column; gap: 8px; }
+.director-subgraph-card p { margin: 0; }
+.director-subgraph-purpose { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.director-subgraph-purpose span, .director-subgraph-status { color: var(--wb-muted); font-size: 12px; }
+.director-subgraph-preview { flex: 1; min-height: 64px; width: 100%; background: var(--wb-inset); border-radius: 8px; filter: blur(1px); pointer-events: none; }
+.director-subgraph-preview rect { fill: var(--wb-secondary); stroke: var(--wb-muted); stroke-width: 8px; }
+.director-subgraph-preview path { fill: none; stroke: var(--wb-muted); stroke-width: 8px; }
 .director-reference-card { border-style: dashed; }
 .director-reference-card p { margin: 0 0 8px; }
 .director-design-card { display: flex; flex-direction: column; gap: 8px; }
 .director-design-card > .design-compact-summary { flex: 1; height: auto; min-height: 0; }
 .director-design-card > button { align-self: flex-start; flex-shrink: 0; }
 .director-design-card > .ant-space { flex-shrink: 0; }
-.director-canvas-object[data-shot-related] .canvas-workbench-card { outline: 1px solid var(--wb-muted); outline-offset: -1px; }
+.director-canvas-object[data-shot-related] .canvas-workbench-card, .director-snapshot-object[data-shot-related] .canvas-workbench-card { outline: 1px solid var(--wb-muted); outline-offset: -1px; }
 .director-domain-empty { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 16px; background: var(--wb-surface); border-radius: 8px; }
 .director-canvas-toolbar > .ant-space { max-width: 100%; }
 .director-canvas-toolbar .ant-select { min-width: 96px; max-width: min(300px, calc(100vw - 64px)); }

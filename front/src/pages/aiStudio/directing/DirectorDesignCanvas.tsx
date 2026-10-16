@@ -13,9 +13,9 @@ import { SceneDesignPanel, resolveTarget, targetFor } from './SceneDesignPanel'
 import type { DesignFocusRequest, DesignTarget } from './SceneDesignPanel'
 import { SceneAssetLinks } from './SceneAssetLinks'
 import { DirectorLocationSummary } from './DirectorLocationSummary'
-import { designCard } from './designCard'
+import { DirectorSubgraphEntry, directorDesignNodeGroup, directorDesignNodeSize } from './DirectorSubgraphEntry'
 import { designAt } from './designValue'
-import { departmentNames, designCoreContent, designDomain, designDomains, designObjectLayoutId, directorDesignGraph, reorderScopeShots } from './designWorkspace'
+import { departmentNames, designDomain, designDomains, designObjectLayoutId, directorDesignGraph, reorderScopeShots } from './designWorkspace'
 import type { DesignDomain, DesignObject } from './designWorkspace'
 import type { UnitReferenceConflict } from './sceneUnitReferences'
 import type { DesignPath } from './designValue'
@@ -55,6 +55,7 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
   const state = readState()
   const hasShot = content.design.direction.shots.some(row => row.id === shotId)
   const scope = state.scope === 'shot' && hasShot ? 'shot' : 'all'
+  const viewId = `${state.domain || 'outer'}:${scope === 'shot' ? `shot:${shotId}` : 'all'}`
   const [focusRequest, setFocusRequest] = useState<DesignFocusRequest>()
   const [editingTarget, setEditingTarget] = useState<DesignTarget>()
   const [identityAliases, setIdentityAliases] = useState<Record<string, string>>({})
@@ -79,11 +80,11 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
     }
     return result
   }
-  const go = (next: BrowseState, sourceId?: string, replace = false) => {
+  const go = (next: BrowseState, sourceId?: string, replace = false, exitEntry?: string) => {
     if (params.get('version') !== versionId) return
     if (!replace) { setEditorContext(value => value + 1); setAssetTarget(undefined) }
     if (sourceId && !replace) setParams(nextParams({ ...state, focus: sourceId, shotId }), { replace: true, state: location.state })
-    setParams(nextParams({ ...next, shotId }), { replace, state: replace ? location.state : { directorBack: true } })
+    setParams(nextParams({ ...next, shotId }), { replace, state: replace ? location.state : { directorBack: true, directorEntry: sourceId && next.domain ? { from: `${versionId}:domains:${viewId}`, id: sourceId } : undefined, directorExit: exitEntry } })
   }
   useLayoutEffect(() => {
     if (!params.has('directorView') && params.get('version') === versionId) {
@@ -183,30 +184,22 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
   const objects: DirectorCanvasObject[] = graph.nodes.map(node => {
     const domain = node.kind === 'summary' ? node.key.slice(7) as DesignDomain : undefined
     const group = graph.groups.find(row => row.domain === domain)
-    const cards = group?.members.map(member => designCard(content.design, member, saved.design)) || []
-    const issues = cards.reduce((count, card) => count + card.issues.length, 0)
-    const contents = group?.members.map(member => designCoreContent(content.design, member)) || []
-    const snippet = contents.find(Boolean)
+    const entryDomain = domain || (isReference(node) ? designDomain(node.key) : undefined)
     const open = (trigger: HTMLElement) => {
       if (domain) go({ domain, scope }, node.key)
       else if (isReference(node)) jump(node, identity(node))
       else if (node.key === 'location') setAssetTarget('location')
       else if (node.kind !== 'missing') edit(node, trigger)
     }
-    return { id: identity(node), label: node.label, title: node.key === 'overview' ? '全场叙事与约束' : node.label,
-      group: isReference(node) ? 'references' : node.key.startsWith('continuity:') ? `continuity_${designAt(content.design, node.path)?.domain}` : undefined,
-      size: isReference(node) ? { width: 360, height: 152 } : domain ? { width: 360, height: 232 }
-        : globalKeys.has(node.key) || node.key.startsWith('participant:') ? { width: 360, height: 276 }
-          : /^(dialogue|criterion):/.test(node.key) ? { width: 360, height: 232 } : undefined,
+    return { id: identity(node), label: node.label, entry: !!entryDomain, title: entryDomain ? `聚合子图 · ${departmentNames[entryDomain]}` : node.key === 'overview' ? '全场叙事与约束' : node.label,
+      group: directorDesignNodeGroup(content.design, node), size: directorDesignNodeSize(node),
       related: scope === 'all' && !globalKeys.has(node.key) && (domain ? group?.members.some(member => !globalKeys.has(member.key) && graph.relatedKeys.has(member.key)) : graph.relatedKeys.has(node.key)),
       onInspect: node.kind === 'missing' ? undefined : open,
-      content: <section className={`canvas-workbench-card${domain ? ' director-summary-card' : isReference(node) ? ' director-reference-card' : ' director-design-card'}`}>
+      content: entryDomain ? <DirectorSubgraphEntry value={content.design} saved={saved.design} domain={entryDomain} scope={scope} shotId={shotId} storageKey={storageKey}
+        purpose={domain ? undefined : `查看${node.label}`} temporaryKey={scope === 'shot' && !graph.relatedKeys.has(node.key) ? node.key : undefined} />
+        : <section className={`canvas-workbench-card${isReference(node) ? ' director-reference-card' : ' director-design-card'}`}>
         {node.key === 'location' && <p>全场适用</p>}
-        {domain ? <>
-          <p>{snippet?.slice(0, 150) || '尚无设计正文'}</p>
-          <p>成员 {group?.members.length || 0} · 已填写 {contents.filter(Boolean).length}{issues ? ` · 待处理 ${issues} 项` : ''}{cards.some(card => card.dirty) ? ' · 有未保存修改' : ''}</p>
-          <WorkbenchButton onClick={() => go({ domain, scope }, node.key)}>进入{departmentNames[domain]}</WorkbenchButton>
-        </> : isReference(node) ? <>
+        {isReference(node) ? <>
           <p>{designDomain(node.key) ? `来自${departmentNames[designDomain(node.key)!]}` : '来自外层'} · 只读引用</p>
           <WorkbenchButton onClick={() => jump(node, identity(node))}>前往正式归属</WorkbenchButton>
         </> : node.key === 'location' ? <>
@@ -233,17 +226,14 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
   })
   if (!state.domain) objects.unshift({ id: '原文依据', label: '原文依据', title: '原文依据', onInspect: undefined, related: false, content: <section className="canvas-workbench-card">{source}</section> })
   const currentShot = allObjects.find(node => node.key === `shot:${shotId}`)
-  if (!state.domain && currentShot) objects.push({ id: 'current-shot', label: '当前镜头摘要', title: '当前镜头 · 摘要引用', size: { width: 360, height: 276 }, group: 'shared',
-    onInspect: () => jump(currentShot, 'current-shot'), content: <section className="canvas-workbench-card director-design-card">
-      <DesignObjectSummary value={content.design} saved={saved.design} object={currentShot} compact />
-      <WorkbenchButton onClick={() => jump(currentShot, 'current-shot')}>前往总导演编辑镜头</WorkbenchButton>
-    </section> })
+  if (!state.domain && currentShot) objects.push({ id: 'current-shot', label: '当前镜头摘要', title: '聚合子图 · 摘要引用', entry: true, size: { width: 360, height: 276 }, group: 'shared',
+    onInspect: () => jump(currentShot, 'current-shot'), content: <DirectorSubgraphEntry value={content.design} saved={saved.design} domain="direction" scope={scope} shotId={shotId} storageKey={storageKey}
+      purpose={`编辑当前镜头 ${String(content.design.direction.shots.findIndex(shot => shot.id === shotId) + 1).padStart(2, '0')}`} /> })
   const relations = graph.edges.map(edge => ({ ...edge,
     from: identity(allObjects.find(node => node.key === edge.from) || { key: edge.from, path: [], kind: '', label: '' }),
     to: identity(allObjects.find(node => node.key === edge.to) || { key: edge.to, path: [], kind: '', label: '' }),
     sources: ('sources' in edge && Array.isArray(edge.sources) ? edge.sources : edge.path || [edge]).map(row => ({ ...row,
       fromLabel: allObjects.find(node => node.key === row.from)?.label, toLabel: allObjects.find(node => node.key === row.to)?.label })) }))
-  const viewId = `${state.domain || 'outer'}:${scope === 'shot' ? `shot:${shotId}` : 'all'}`
   let restore = false
   try { restore = navigationType === 'POP' && !!localStorage.getItem(`${storageKey}:view:${viewId}`) } catch { /* 使用会话布局。 */ }
   const anchor = state.domain && graph.groups.find(group => group.domain === state.domain)?.members[0]
@@ -252,7 +242,7 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
       {unavailable && <Alert type="warning" message="原对象不可用，请重新选择" closable onClose={() => setUnavailable(false)} />}
       {shotId && !hasShot && <Alert type="warning" message="原镜头不可用，请重新选择镜头" />}
     </>, noticeHost)}
-    <DirectorCanvasSurface contextKey={`${versionId}:domains`} labels={[]} objects={objects} relations={relations}
+    <DirectorCanvasSurface contextKey={`${versionId}:domains`} navigation={{ key: location.key, index: window.history.state?.idx || 0, type: navigationType, entry: location.state?.directorEntry, exit: location.state?.directorExit }} labels={[]} objects={objects} relations={relations}
       layoutScope={{ storageKey, viewId, anchorId: state.domain ? anchor ? identity(anchor) : '' : '原文依据',
         identityAliases,
         validIds: ['原文依据', 'current-shot', ...designDomains.map(domain => `domain:${domain}`), ...allObjects.map(node => identity(node))].filter(id => !id.includes(':ambiguous:')),
@@ -260,7 +250,7 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
       focusTarget={state.focus ? { nodeId: state.focus, fieldId: '', serial: focusSerial.current, restore } : undefined}
       toolbar={<Space wrap>
         <WorkbenchButton variant="quiet" disabled={!location.state?.directorBack} onClick={() => navigate(-1)}>返回上一处</WorkbenchButton>
-        {state.domain && <WorkbenchButton onClick={() => go({ scope })}>导演画布</WorkbenchButton>}
+        {state.domain && <WorkbenchButton onClick={() => go({ scope }, undefined, false, `domain:${state.domain}`)}>导演画布</WorkbenchButton>}
         <Select aria-label="设计域" value={state.domain || 'outer'} options={[{ value: 'outer', label: '导演画布' }, ...designDomains.map(domain => ({ value: domain, label: departmentNames[domain] }))]}
           onChange={domain => go({ domain: domain === 'outer' ? undefined : domain as DesignDomain, scope })} />
         <Select aria-label="查看范围" value={scope} options={[{ value: 'all', label: '整场' }, { value: 'shot', label: '当前镜头', disabled: !hasShot }]}

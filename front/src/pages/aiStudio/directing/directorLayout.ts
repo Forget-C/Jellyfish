@@ -20,7 +20,20 @@ const evidenceDirectorSize = (id: string): DirectorSize | undefined => /^(partic
 export const intersects = (a: DirectorBox, b: DirectorBox, margin = 0) => a.x < b.x + b.width + margin && a.x + a.width + margin > b.x && a.y < b.y + b.height + margin && a.y + a.height + margin > b.y
 
 /** 只排浏览坐标：分区按真实类型，组内逐行排列；已有坐标保留，新增对象寻找空位。 */
-export function arrangeDirector(nodes: DirectorLayoutNode[], sizes: Record<string, DirectorSize>, viewportWidth: number, anchor: string, retained: Record<string, CanvasPoint> = {}) {
+export function arrangeDirector(nodes: DirectorLayoutNode[], sizes: Record<string, DirectorSize>, viewportWidth: number, anchor: string, retained: Record<string, CanvasPoint> = {}, previousSizes: Record<string, DirectorSize> = {}) {
+  // 入口尺寸升级只迁移新产生碰撞的卡；既有手动坐标与原本重叠的布局保持不变。
+  const migrated = { ...retained }
+  for (const node of nodes) {
+    const point = retained[node.id], before = previousSizes[node.id], after = sizes[node.id]
+    if (!point || !before || !after || after.height <= before.height) continue
+    if (nodes.some(other => {
+      const otherPoint = retained[other.id], otherSize = sizes[other.id]
+      return other.id !== node.id && otherPoint && otherSize
+        && intersects({ ...point, ...after }, { ...otherPoint, ...otherSize })
+        && !intersects({ ...point, ...before }, { ...otherPoint, ...(previousSizes[other.id] || otherSize) })
+    })) delete migrated[node.id]
+  }
+  retained = migrated
   const columns = Math.max(1, Math.min(3, Math.floor((viewportWidth - 32 + gap) / (width + gap))))
   const available = columns * (width + gap) - gap
   const height = (id: string) => sizes[id]?.height || 300

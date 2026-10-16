@@ -66,8 +66,12 @@ try {
   const node = id => page.locator(`[data-canvas-node="${id}"]`)
   const locate = async label => { await page.getByRole('button', { name: '定位画布节点', exact: true }).click(); await page.getByRole('menuitem', { name: label, exact: true }).click() }
   const layoutAction = async label => { await page.getByRole('button', { name: '布局', exact: true }).click(); await page.getByRole('menuitem', { name: label, exact: true }).click() }
-  const snapshot = () => page.evaluate(() => ({ transform: document.querySelector('.director-canvas-content').style.transform,
-    positions: Object.fromEntries([...document.querySelectorAll('.director-canvas-object')].map(card => [card.dataset.canvasNode, { x: card.offsetLeft, y: card.offsetTop }])) }))
+  const settled = () => page.waitForFunction(() => document.querySelector('[data-layout-view]')?.getAttribute('aria-busy') !== 'true')
+  const snapshot = async () => {
+    await settled()
+    return page.evaluate(() => ({ transform: document.querySelector('.director-canvas-content').style.transform,
+      positions: Object.fromEntries([...document.querySelectorAll('.director-canvas-object')].map(card => [card.dataset.canvasNode, { x: card.offsetLeft, y: card.offsetTop }])) }))
+  }
   const assertGeometry = async () => {
     const result = await page.evaluate(() => {
       const cards = [...document.querySelectorAll('.director-canvas-object')].map(card => ({ id: card.dataset.canvasNode, x: card.offsetLeft, y: card.offsetTop, w: card.offsetWidth, h: card.offsetHeight }))
@@ -100,13 +104,44 @@ try {
   assert.deepEqual(await snapshot(), moved)
   await locate('表演指导')
   const beforeDomain = await snapshot()
-  await node('domain:performance').getByRole('button', { name: '进入表演指导' }).click()
+  await node('domain:performance').getByRole('button', { name: '进入子图：表演指导', exact: true }).click()
   await page.locator('[data-layout-view="performance:all"]').waitFor()
   await node('performance:beat1:person1').waitFor()
+  await settled()
+  const performanceHandle = node('performance:beat1:person1').getByRole('button', { name: /^移动布局：/ })
+  await performanceHandle.focus(); await performanceHandle.press('ArrowRight')
+  const domainBoxes = await page.locator('.director-canvas-object').evaluateAll(cards => cards.map(card => [card.offsetLeft, card.offsetTop, card.offsetWidth, card.offsetHeight].join(',')).sort())
   assert.equal(await node('criterion:criterion1').getByRole('button', { name: '编辑此卡' }).count(), 0)
   await page.getByRole('button', { name: '返回上一处' }).click()
   await page.locator('[data-layout-view="outer:all"]').waitFor()
   assert.deepEqual(await snapshot(), beforeDomain)
+  assert.deepEqual(await node('domain:performance').locator('.director-subgraph-preview rect').evaluateAll(rects => rects.map(rect => ['x', 'y', 'width', 'height'].map(name => Number(rect.getAttribute(name))).join(',')).sort()), domainBoxes, '入口预览对应用户刚调整的真实子图布局')
+  const retainedPerformance = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find(key => key.endsWith(':view:performance:all'))
+    const view = JSON.parse(localStorage.getItem(key))
+    assertFixture(view)
+    function assertFixture(value) { if (!value.positions['dialogue:dialogue1'] || !value.positions['criterion:criterion1']) throw new Error('缺少缓存迁移的真实引用卡') }
+    view.positions['dialogue:dialogue1'] = { x: 2000, y: 0 }
+    view.sizes['dialogue:dialogue1'] = { width: 360, height: 152 }
+    view.positions['criterion:criterion1'] = { x: 2000, y: 216 }
+    localStorage.setItem(key, JSON.stringify(view))
+    return view.positions['performance:beat1:person1']
+  })
+  await page.reload()
+  await page.locator('[data-layout-view="outer:all"]').waitFor()
+  const previewOverlaps = await node('domain:performance').locator('.director-subgraph-preview rect').evaluateAll(rects => {
+    const boxes = rects.map(rect => Object.fromEntries(['x', 'y', 'width', 'height'].map(name => [name, Number(rect.getAttribute(name))])))
+    return boxes.some((a, i) => boxes.slice(i + 1).some(b => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y))
+  })
+  assert.equal(previewOverlaps, false, '旧紧凑引用卡变高后，入口预览不重叠')
+  await node('domain:performance').getByRole('button', { name: '进入子图：表演指导', exact: true }).click()
+  await page.locator('[data-layout-view="performance:all"]').waitFor()
+  await settled()
+  await assertGeometry()
+  assert.deepEqual((await snapshot()).positions['performance:beat1:person1'], retainedPerformance, '迁移不移动未受影响的用户坐标')
+  await page.getByRole('button', { name: '返回上一处' }).click()
+  await page.locator('[data-layout-view="outer:all"]').waitFor()
+  await settled()
   const projected = page.locator('[data-relation-from="domain:performance"][data-relation-to="participant:person1"]')
   assert.ok(await projected.count() > 0)
   const parallel = page.locator('[data-relation-from="domain:direction"][data-relation-to="participant:person1"]')

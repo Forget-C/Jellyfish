@@ -7,7 +7,8 @@ export type DirectorLayoutScope = { storageKey: string; viewId: string; anchorId
 type LayoutState = { key: string; anchor: string; view: DirectorView; ready: boolean; anchorScreen?: CanvasPoint; undo?: DirectorView }
 const memory = new Map<string, DirectorView>()
 const undoMemory = new Map<string, DirectorView>()
-const storedView = (key: string) => {
+/** 读取已访问视图；预览调用不创建缓存或改变浏览位置。 */
+export const readStoredDirectorView = (key: string) => {
   try { return memory.get(key) || readDirectorView(localStorage.getItem(key)) } catch { return memory.get(key) }
 }
 const storeView = (key: string, view: DirectorView) => {
@@ -19,7 +20,7 @@ const storeView = (key: string, view: DirectorView) => {
 export function useDirectorLayout(scope: DirectorLayoutScope | undefined, nodes: DirectorLayoutNode[], measured: Record<string, DirectorSize>, viewportWidth: number) {
   const key = scope ? `${scope.storageKey}:view:${scope.viewId}` : ''
   const initial = (previous?: LayoutState): LayoutState => {
-    const saved = key ? storedView(key) : undefined
+    const saved = key ? readStoredDirectorView(key) : undefined
     const anchor = scope?.anchorId || '全场共享'
     const point = previous?.view.positions[previous.anchor]
     const transform = previous?.view.transform || { x: 16, y: scope?.initialTop || 64, scale: Math.min(1, Math.max(.15, (viewportWidth - 32) / 360)) }
@@ -43,7 +44,7 @@ export function useDirectorLayout(scope: DirectorLayoutScope | undefined, nodes:
       const cleaned = pruneDirectorView(previous.view, valid, scope.identityAliases)
       const sizes = { ...cleaned.sizes }
       nodes.forEach(node => { sizes[node.id] = node.size || fixedDirectorSize(node.id) || sizes[node.id] || measured[node.id] })
-      const positions = arrangeDirector(nodes, sizes, viewportWidth, scope.anchorId, cleaned.positions)
+      const positions = arrangeDirector(nodes, sizes, viewportWidth, scope.anchorId, cleaned.positions, cleaned.sizes)
       let transform = cleaned.transform
       if (!previous.ready) {
         const anchor = positions[scope.anchorId] || positions['全场共享'] || { x: 0, y: 0 }
@@ -76,7 +77,7 @@ export function useDirectorLayout(scope: DirectorLayoutScope | undefined, nodes:
         undoMemory.delete(item)
         try { localStorage.removeItem(item) } catch { /* 使用会话缓存。 */ }
       } else {
-        const view = storedView(item)
+        const view = readStoredDirectorView(item)
         if (view) {
           if (Object.keys(view.positions).some(id => /^(situation|activity):/.test(id) && !id.includes(':ambiguous:') && !valid.has(scope.identityAliases?.[id] || id))) lostTarget = true
           storeView(item, pruneDirectorView(view, valid, scope.identityAliases))
