@@ -113,7 +113,7 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
     onExternalFocusHandled()
   }, [externalFocus?.serial])
   useEffect(() => {
-    if ((state.focus && !state.focus.startsWith('domain:') && !['原文依据', 'current-shot'].includes(state.focus) && !target(state.focus)) || state.temporary && !temporary) {
+    if ((state.focus && !state.focus.startsWith('domain:') && state.focus !== '原文依据' && !target(state.focus)) || state.temporary && !temporary) {
       setUnavailable(true)
       go({ ...state, focus: undefined, temporary: undefined }, undefined, true)
     }
@@ -181,6 +181,7 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
     narrative_function: { state: 'unset' }, visible_result: { state: 'unset' }, estimated_duration_ms: null,
   }] } })
   const isReference = (node: DesignObject) => node.kind === 'reference'
+  const currentShot = allObjects.find(node => node.key === `shot:${shotId}`)
   const objects: DirectorCanvasObject[] = graph.nodes.map(node => {
     const domain = node.kind === 'summary' ? node.key.slice(7) as DesignDomain : undefined
     const group = graph.groups.find(row => row.domain === domain)
@@ -196,7 +197,10 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
       related: scope === 'all' && !globalKeys.has(node.key) && (domain ? group?.members.some(member => !globalKeys.has(member.key) && graph.relatedKeys.has(member.key)) : graph.relatedKeys.has(node.key)),
       onInspect: node.kind === 'missing' ? undefined : open,
       content: entryDomain ? <DirectorSubgraphEntry value={content.design} saved={saved.design} domain={entryDomain} scope={scope} shotId={shotId} storageKey={storageKey}
-        purpose={domain ? undefined : `查看${node.label}`} temporaryKey={scope === 'shot' && !graph.relatedKeys.has(node.key) ? node.key : undefined} />
+        purpose={domain ? undefined : `查看${node.label}`} temporaryKey={scope === 'shot' && !graph.relatedKeys.has(node.key) ? node.key : undefined}>
+        {domain === 'direction' && <WorkbenchButton disabled={!currentShot} title={currentShot?.label}
+          onClick={() => { if (currentShot) jump(currentShot, node.key) }}>定位当前镜头</WorkbenchButton>}
+      </DirectorSubgraphEntry>
         : <section className={`canvas-workbench-card${isReference(node) ? ' director-reference-card' : ' director-design-card'}`}>
         {node.key === 'location' && <p>全场适用</p>}
         {isReference(node) ? <>
@@ -225,10 +229,6 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
       </section> }
   })
   if (!state.domain) objects.unshift({ id: '原文依据', label: '原文依据', title: '原文依据', onInspect: undefined, related: false, content: <section className="canvas-workbench-card">{source}</section> })
-  const currentShot = allObjects.find(node => node.key === `shot:${shotId}`)
-  if (!state.domain && currentShot) objects.push({ id: 'current-shot', label: '当前镜头摘要', title: '聚合子图 · 摘要引用', entry: true, size: { width: 360, height: 276 }, group: 'shared',
-    onInspect: () => jump(currentShot, 'current-shot'), content: <DirectorSubgraphEntry value={content.design} saved={saved.design} domain="direction" scope={scope} shotId={shotId} storageKey={storageKey}
-      purpose={`编辑当前镜头 ${String(content.design.direction.shots.findIndex(shot => shot.id === shotId) + 1).padStart(2, '0')}`} /> })
   const relations = graph.edges.map(edge => ({ ...edge,
     from: identity(allObjects.find(node => node.key === edge.from) || { key: edge.from, path: [], kind: '', label: '' }),
     to: identity(allObjects.find(node => node.key === edge.to) || { key: edge.to, path: [], kind: '', label: '' }),
@@ -245,7 +245,7 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
     <DirectorCanvasSurface contextKey={`${versionId}:domains`} labels={[]} objects={objects} relations={relations}
       layoutScope={{ storageKey, viewId, anchorId: state.domain ? anchor ? identity(anchor) : '' : '原文依据',
         identityAliases,
-        validIds: ['原文依据', 'current-shot', ...designDomains.map(domain => `domain:${domain}`), ...allObjects.map(node => identity(node))].filter(id => !id.includes(':ambiguous:')),
+        validIds: ['原文依据', ...designDomains.map(domain => `domain:${domain}`), ...allObjects.map(node => identity(node))].filter(id => !id.includes(':ambiguous:')),
         onInvalidTarget: () => setUnavailable(true) }}
       focusTarget={state.focus ? { nodeId: state.focus, fieldId: '', serial: focusSerial.current, restore } : undefined}
       toolbar={<Space wrap>

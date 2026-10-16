@@ -293,9 +293,9 @@ try {
   await directorSelect(page, '设计域', '导演画布')
   assert.equal(await page.locator('[data-canvas-node^="domain:"]').count(), 7)
   assert.equal(await page.locator('[data-canvas-node="原文依据"]').count(), 1)
-  assert.equal(await page.locator('[data-canvas-node="current-shot"]').count(), 1)
+  assert.equal(await page.locator('[data-canvas-node="current-shot"]').count(), 0)
   const layoutBefore = (await (await fetch(`${versionsUrl}/${first[0].id}`)).json()).data
-  const layoutHandle = page.getByRole('button', { name: '移动布局：当前镜头摘要', exact: true })
+  const layoutHandle = page.getByRole('button', { name: '移动布局：总导演', exact: true })
   await layoutHandle.focus({ timeout: 5000 })
   const positionBefore = await layoutHandle.boundingBox()
   await layoutHandle.press('ArrowRight')

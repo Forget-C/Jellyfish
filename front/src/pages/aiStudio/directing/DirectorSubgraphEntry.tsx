@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import type { SceneDesign_Input } from '../../../services/generated'
 import { canvasConnection } from '../../../components/canvas/geometry'
 import { designCard } from './designCard'
@@ -24,10 +25,10 @@ export function directorDesignNodeSize(node: DesignObject) {
 export const directorDesignNodeGroup = (value: SceneDesign_Input, node: DesignObject) => node.kind === 'reference' ? 'references'
   : node.key.startsWith('continuity:') ? `continuity_${designAt(value, node.path)?.domain}` : undefined
 
-/** 入口只展示真实目标的用途、状态与模糊布局；进入动作由整卡承担。 */
-export function DirectorSubgraphEntry({ value, saved, domain, scope, shotId, storageKey, purpose, temporaryKey }: {
+/** 入口只展示真实目标的用途、状态与模糊布局；整卡进入与明确的快捷操作分别处理。 */
+export function DirectorSubgraphEntry({ value, saved, domain, scope, shotId, storageKey, purpose, temporaryKey, children }: {
   value: SceneDesign_Input; saved: SceneDesign_Input; domain: DesignDomain; scope: 'all' | 'shot'; shotId?: string
-  storageKey: string; purpose?: string; temporaryKey?: string
+  storageKey: string; purpose?: string; temporaryKey?: string; children?: ReactNode
 }) {
   const [width, setWidth] = useState(window.innerWidth)
   useEffect(() => {
@@ -55,6 +56,7 @@ export function DirectorSubgraphEntry({ value, saved, domain, scope, shotId, sto
   return <section className="canvas-workbench-card director-subgraph-card">
     <p className="director-subgraph-purpose">{purpose || descriptions[domain]}{purpose && <span> · 归属：{departmentNames[domain]}</span>}</p>
     <p className="director-subgraph-status">{scope === 'shot' ? '当前镜头' : '整场'} · 子图成员 {members.length} · 待处理 {issues}{cards.some(card => card.dirty) && ' · 有未保存修改'}</p>
+    {children}
     {!members.length && <p>尚无工作单</p>}
     <svg className="director-subgraph-preview" aria-hidden="true" focusable="false" viewBox={`${left - 24} ${top - 24} ${right - left + 48} ${bottom - top + 48}`} preserveAspectRatio="xMidYMid meet">
       {graph.edges.map((edge, index) => {

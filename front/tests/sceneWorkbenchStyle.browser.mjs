@@ -192,7 +192,7 @@ try {
       if (key === 'instructions') await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).waitFor()
       if (key === 'edit') await page.getByRole('button', { name: '选择素材 1', exact: true }).waitFor()
       if (key === 'instructions') await page.waitForFunction(() => !document.querySelector('.canvas-toolbar-primary')?.textContent.includes('正在核对'))
-      if (width === 390) await locate({ director: '当前镜头摘要', units: '单元设置', instructions: '当前指令', edit: '当前素材' }[key])
+      if (width === 390) await locate({ director: '总导演', units: '单元设置', instructions: '当前指令', edit: '当前素材' }[key])
       await checkChrome(`${key}-${width}`)
       await screenshot(`${key}-${width}`)
       const before = await transform()
