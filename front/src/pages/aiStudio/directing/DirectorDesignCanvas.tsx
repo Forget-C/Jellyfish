@@ -266,6 +266,8 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
         action={<WorkbenchButton variant="quiet" onClick={() => jump(editingNode)}>定位对象</WorkbenchButton>} />}
     </>, noticeHost)}
     <DirectorCanvasSurface contextKey={`${versionId}:shots`} labels={[]} objects={objects} relations={relations}
+      guides={scope === 'all' ? [...objects.filter(node => node.entry).map(node => ({ from: '原文依据', to: node.id })),
+        { from: '原文依据', group: 'scene-global' }] : []}
       layoutScope={{ storageKey, viewId, anchorId: scope === 'shot' ? currentShot ? identity(currentShot) : '' : '原文依据',
         identityAliases,
         validIds: ['原文依据', ...allObjects.map(node => identity(node))].filter(id => !id.includes(':ambiguous:')),
@@ -273,6 +275,7 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
       focusTarget={visibleFocus ? { nodeId: visibleFocus, fieldId: '', serial: focusSerial.current, restore } : undefined}
       toolbar={<Space wrap>
         <WorkbenchButton variant="quiet" disabled={!location.state?.directorBack} onClick={() => navigate(-1)}>返回上一处</WorkbenchButton>
+        {scope === 'all' && <span className="director-guide-legend" aria-label="结构引导线不表示业务关系"><i aria-hidden="true" />结构引导</span>}
         {scope === 'shot' && <WorkbenchButton onClick={() => go({ scope: 'all', shotId: activeShotId })}>场次总览</WorkbenchButton>}
         <Select aria-label="设计视图" value={scope === 'shot' ? activeShotId : 'overview'} options={[{ value: 'overview', label: '场次总览' }, ...content.design.direction.shots.map((shot, index) => ({ value: shot.id, label: `镜头 ${String(index + 1).padStart(2, '0')} · 设计` }))]}
           onChange={id => go(id === 'overview' ? { scope: 'all', shotId: activeShotId } : { scope: 'shot', shotId: id })} />

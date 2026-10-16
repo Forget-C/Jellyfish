@@ -61,6 +61,8 @@
 .director-canvas-content { position: absolute; transform-origin: 0 0; }
 .director-canvas-relations { position: absolute; overflow: visible; width: 1px; height: 1px; pointer-events: none; }
 .director-canvas-relations text { fill: var(--wb-muted); }
+.director-structure-guide { fill: none; stroke: #898989; stroke-width: 1.25; opacity: .48; vector-effect: non-scaling-stroke; pointer-events: none; }
+.director-structure-guide[data-active="true"] { stroke-width: 2; opacity: .9; }
 .director-relation-port { fill: var(--wb-canvas); stroke: #969696; stroke-width: 1.5; }
 .director-canvas-object { position: absolute; width: 360px; }
 .director-layout-group { position: absolute; color: var(--wb-text); font-size: 14px; font-weight: 500; white-space: nowrap; pointer-events: none; }
@@ -219,6 +221,8 @@
 .canvas-history-controls { position: absolute; right: 16px; bottom: 16px; z-index: 20; display: flex; padding: 4px; background: var(--wb-surface); border: 1px solid #2d2d2d; border-radius: 10px; }
 .director-canvas-bottom { position: absolute; z-index: 20; bottom: 16px; left: 16px; display: flex; align-items: center; gap: 8px; padding: 4px; border: 1px solid #2d2d2d; border-radius: 10px; background: var(--wb-surface); }
 .director-canvas-toolbar { position: absolute; z-index: 30; top: calc(var(--workbench-content-top, 100px) + 12px); right: 16px; display: flex; align-items: center; gap: 8px; max-width: calc(100vw - 32px); flex-wrap: wrap; padding: 6px; border: 1px solid #2d2d2d; border-radius: 10px; background: var(--wb-surface); }
+.director-guide-legend { display: inline-flex; align-items: center; gap: 6px; color: var(--wb-muted); font-size: 12px; white-space: nowrap; }
+.director-guide-legend i { display: block; width: 18px; border-top: 1px solid #898989; }
 @media (min-width: 701px) { body:has(.canvas-quick-editor, .director-relations-navigation) .director-canvas-toolbar { left: 16px; right: auto; } }
 .director-canvas-bottom > .ant-btn { border-right: 1px solid #383838; border-radius: 0; }
 .director-canvas-relations .canvas-edge { --canvas-edge-color: #484848; }

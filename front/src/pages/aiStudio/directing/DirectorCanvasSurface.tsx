@@ -19,9 +19,11 @@ const defaultLabels = ['原文依据', '全场共享', '镜头设计']
 const toolDrag = 'application/x-jellyfish-director-tool'
 export type DirectorCanvasObject = { id: string; label: string; title?: string; content: ReactNode; entry?: boolean; related?: boolean; group?: string; size?: { width: number; height: number }; onInspect?: (trigger: HTMLElement) => void }
 export type DirectorCanvasRelation = { from: string; to: string; label: string; indirect?: boolean; field?: string; fromLabel?: string; toLabel?: string; sources?: { from: string; to: string; label: string; field?: string; fromLabel?: string; toLabel?: string }[] }
+/** 只连接浏览结构，不进入可检查来源的业务关系。 */
+export type DirectorCanvasGuide = { from: string; to?: string; group?: string }
 
 /** 画布只维护视口与节点位置；内容及排序始终由业务编辑入口维护。 */
-export function DirectorCanvasSurface({ contextKey, children, objects = [], relations = [], inspectors = {}, tools = [], toolbar, anchorTitle, labels = defaultLabels, ariaLabel = '导演画布视口', initialPositions = {}, focusTarget, layoutScope }: { layoutScope?: DirectorLayoutScope; focusTarget?: { nodeId: string; fieldId: string; serial: number; restore?: boolean }; initialPositions?: Record<string, CanvasPoint>; labels?: string[]; ariaLabel?: string; tools?: { label: string; onClick: (trigger: HTMLElement) => void }[]; toolbar?: ReactNode; anchorTitle?: string; contextKey: string; children: ReactNode; objects?: DirectorCanvasObject[]; relations?: DirectorCanvasRelation[]; inspectors?: Record<string, ((trigger: HTMLElement) => void) | undefined> }) {
+export function DirectorCanvasSurface({ contextKey, children, objects = [], relations = [], guides = [], inspectors = {}, tools = [], toolbar, anchorTitle, labels = defaultLabels, ariaLabel = '导演画布视口', initialPositions = {}, focusTarget, layoutScope }: { layoutScope?: DirectorLayoutScope; focusTarget?: { nodeId: string; fieldId: string; serial: number; restore?: boolean }; initialPositions?: Record<string, CanvasPoint>; labels?: string[]; ariaLabel?: string; tools?: { label: string; onClick: (trigger: HTMLElement) => void }[]; toolbar?: ReactNode; anchorTitle?: string; contextKey: string; children: ReactNode; objects?: DirectorCanvasObject[]; relations?: DirectorCanvasRelation[]; guides?: DirectorCanvasGuide[]; inspectors?: Record<string, ((trigger: HTMLElement) => void) | undefined> }) {
   const [classicView, setClassicView] = useState<ViewState>(() => views.get(contextKey) || {
     transform: { x: 120, y: 30, scale: Math.max(.3, Math.min(1, (window.innerWidth - 180) / 1160)) }, positions: {},
   })
@@ -115,8 +117,8 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
     return [{ group, label, count: members.length, first: members[0].id, x, y: y - 40,
       width: Math.max(...boxes.map(item => item.x + item.width)) - x, height: Math.max(...boxes.map(item => item.y + item.height)) - y }]
   }) : []
-  const visibleRegions = groupRegions.filter(group => group.count > 1)
-  const activeNode = focused || hovered
+  const visibleRegions = groupRegions.filter(group => group.count > 1 || guides.some(guide => guide.group === group.group))
+  const activeNode = hovered || focused
   const activeRelation = edgeHover ?? edgeFocus
   const mapBoxes = nodes.map(node => box(node.id)!).filter(Boolean)
   const mapLeft = mapBoxes.length ? Math.min(...mapBoxes.map(item => item.x)) : 0, mapTop = mapBoxes.length ? Math.min(...mapBoxes.map(item => item.y)) : 0
@@ -193,7 +195,24 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
       <div className="director-canvas-content" style={{ visibility: layoutScope && nodes.length && !layout.ready ? 'hidden' : undefined, transform: `translate(${view.transform.x}px, ${view.transform.y}px) scale(${view.transform.scale})` }}>
         {visibleRegions.map(group => <div key={group.group} className="director-layout-region" style={{ left: group.x - 12, top: group.y + 28, width: group.width + 24, height: group.height + 24 }} />)}
         {visibleRegions.map(group => <div key={group.group} className="director-layout-group" data-layout-group={group.group} style={{ left: group.x, top: group.y }}>{group.label} · {group.count}</div>)}
-        <svg className="director-canvas-relations" aria-label="当前镜头关系">
+        <svg className="director-canvas-relations" aria-label={guides.length ? '总览关系与结构引导' : '当前镜头关系'}>
+          {guides.map((guide, index) => {
+            const from = box(guide.from)
+            const region = groupRegions.find(group => group.group === guide.group)
+            const to = guide.to ? box(guide.to) : region && { x: region.x - 12, y: region.y + 28, width: region.width + 24, height: region.height + 24 }
+            if (!from || !to) return null
+            const dx = to.x + to.width / 2 - from.x - from.width / 2
+            const dy = to.y + to.height / 2 - from.y - from.height / 2
+            const horizontal = Math.abs(dx) > Math.abs(dy)
+            const start = horizontal ? { x: dx > 0 ? from.x + from.width : from.x, y: from.y + from.height / 2 }
+              : { x: from.x + from.width / 2, y: dy > 0 ? from.y + from.height : from.y }
+            const end = horizontal ? { x: dx > 0 ? to.x : to.x + to.width, y: to.y + to.height / 2 }
+              : { x: to.x + to.width / 2, y: dy > 0 ? to.y : to.y + to.height }
+            const d = horizontal ? `M${start.x},${start.y} C${(start.x + end.x) / 2},${start.y} ${(start.x + end.x) / 2},${end.y} ${end.x},${end.y}`
+              : `M${start.x},${start.y} C${start.x},${(start.y + end.y) / 2} ${end.x},${(start.y + end.y) / 2} ${end.x},${end.y}`
+            return <path key={index} className="director-structure-guide" data-guide-from={guide.from} data-guide-to={guide.to} data-guide-group={guide.group}
+              data-active={activeNode === guide.to || activeNode === guide.from} d={d} aria-hidden="true" />
+          })}
           {relations.map((relation, index) => {
             const from = box(relation.from), to = box(relation.to)
             if (!from || !to) return null
