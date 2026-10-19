@@ -1,10 +1,14 @@
 """当前单元检查的固定正文、依据与任务隔离，经真实 HTTP 验证。"""
 from copy import deepcopy
+import json
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 
 from app.models.llm import Model, Provider
+from app.models.task import Task
+from app.services.directing.ai import generate_directing_result
 from app.services.task_service import TaskService
 from tests.directing.test_api import client_for
 from tests.directing.test_scene_versions import sequence_path
@@ -51,6 +55,14 @@ async def test_check_freezes_confirmed_inputs_and_does_not_apply_results(tmp_pat
                   'destinations': [{'owner': 'coverage:coverage', 'field': 'action_scope', 'coverage_item_ids': ['coverage'],
                                     'destination': 'instruction', 'instruction_excerpt': '递出信封', 'reference_id': None,
                                     'rationale': '正文直接表达'}]}
+        async with sessions.begin() as db:
+            frozen = (await db.get(Task, task_id)).input_snapshot['run_args']
+            assert frozen['inputs']['design']['direction']['shots']
+            def invoke(messages):
+                sent = json.loads(messages[1].content)
+                assert 'design' not in sent['inputs'] and sent['inputs']['scope']['execution']
+                return SimpleNamespace(content=json.dumps(result))
+            generate_directing_result('directing_instruction_check', SimpleNamespace(invoke=invoke), frozen)
         async with sessions.begin() as db:
             service = TaskService(db)
             assert await service.claim(task_id, worker_id='check-fixture')

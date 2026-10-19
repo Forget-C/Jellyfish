@@ -53,9 +53,15 @@ def generate_directing_result(kind: str, llm, args: dict):
         instruction += '\n这是预先限定范围的局部修订。只能替换 design_scope 中列出的完整 Note，必须保留其余字段、来源、对象身份、顺序与关联，返回完整工作单；不得补齐范围外的未完成字段。'
     if args.get('instruction_scope'):
         instruction += '\n这是预先限定的正文局部修订。instruction_scope 的 start/end 是原 unit.instruction 的 Unicode 字符半开范围，只修改此范围，范围外逐字保留；仍返回完整正文 text，不只返回替换片段。'
+    model_args = args
+    if kind == 'directing_instruction':
+        model_args = {key: value for key, value in args.items() if key != 'design'}
+    elif kind == 'directing_instruction_check':
+        model_args = {**args, 'inputs': {key: value for key, value in args['inputs'].items()
+                                         if key != 'design'}}
     messages = [
         SystemMessage(content=instruction + '\nNote 的 fact/proposal 必须有 text 和 sources；其余状态不得带 text，none/not_applicable 必须有 reason。Source.version 必须是字符串，例如 "1"。所有关联 ID 必须存在于本工作单对应列表。\n仅返回符合以下 JSON Schema 的 JSON 对象，不添加 Markdown：\n' + json.dumps(contract.model_json_schema(), ensure_ascii=False)),
-        HumanMessage(content=json.dumps(args, ensure_ascii=False)),
+        HumanMessage(content=json.dumps(model_args, ensure_ascii=False)),
     ]
     for attempt in range(2):
         response = llm.invoke(messages)

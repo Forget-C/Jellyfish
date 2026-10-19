@@ -323,6 +323,8 @@ async def test_design_applicability_saves_explicit_scope_and_rejects_invalid_tar
                    and use['purpose'] == 'background' for use in uses)
         assert any(use['owner'] == 'space' and use['field'] == 'axis'
                    and use['scope'] == 'occurrences' for use in uses)
+        assert '按字段用途查看规则' in next(node for node in saved['relationship_graph']['nodes']
+                                        if node['key'] == 'space')['reason']
         assert any(use['owner'] == 'fact:rule1' and use['purpose'] == 'constraint'
                    and use['scope'] == 'scene_rule' for use in uses)
         assert next(node for node in saved['relationship_graph']['nodes'] if node['key'] == 'beat:beat1')['shot_ids'] == ['shot1']

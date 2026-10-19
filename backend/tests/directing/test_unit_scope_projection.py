@@ -25,6 +25,7 @@ async def test_unit_basis_separates_selected_actions_constraints_and_consumed_ba
             'sources': [{'kind': 'human', 'reference': 'scope-test', 'version': '1'}]}
         design['participants'] = [{'id': 'person', 'name': '读信者'}]
         design['direction']['viewpoint'] = note('从读信者视点看旧信')
+        design['direction']['spatial_basis'] = note('桌旁保持读信者可见')
         design['direction']['axis'] = note('保持人物在桌左侧')
         design['direction']['shots'] = [{'id': 'shot', 'beat_ids': ['beat'], 'event_ids': [],
             'blocking_state_ids': [], 'participant_ids': ['person'], 'criterion_ids': [],
@@ -59,6 +60,9 @@ async def test_unit_basis_separates_selected_actions_constraints_and_consumed_ba
             {'subject': {'kind': 'direction', 'field': 'axis'}, 'purpose': 'constraint',
              'scope': 'occurrences', 'phase': 'video',
              'occurrences': [{'unit_id': 'unit-person', 'coverage_item_id': 'cover-person'}]},
+            {'subject': {'kind': 'direction', 'field': 'spatial_basis'}, 'purpose': 'constraint',
+             'scope': 'occurrences', 'phase': 'video',
+             'occurrences': [{'unit_id': 'unit-person', 'coverage_item_id': 'cover-person'}]},
             {'subject': {'kind': 'prompt', 'field': 'prohibitions'}, 'purpose': 'constraint',
              'scope': 'scene_rule', 'phase': 'video'},
             {'subject': {'kind': 'sound', 'field': 'music_constraints'}, 'purpose': 'constraint',
@@ -84,8 +88,12 @@ async def test_unit_basis_separates_selected_actions_constraints_and_consumed_ba
                        and row['phase'] == 'video' for row in scope['constraints'])
             assert any(row['owner'] == 'sound' and row['field'] == 'music_constraints'
                        and row['phase'] == 'sound' for row in scope['constraints'])
+            assert any(row['owner'] == 'space' and row['field'] == 'spatial_basis'
+                       for row in scope['constraints']) == (unit_id == 'unit-person')
+            assert any(row['owner'] == 'space' and row['field'] == 'spatial_basis'
+                       and row['sources'] for row in scope['background']) == (unit_id == 'unit-background')
             assert any(row['owner'] == 'overview' and row['field'] == 'viewpoint'
-                       and row['sources'] for row in scope['background'])
+                       for row in scope['background'])
             assert any(row['owner'] == 'situation:situation' and row['field'] == 'situation'
                        for row in scope['background'])
             local = [row for row in scope['constraints'] if row['owner'] == 'space' and row['field'] == 'axis']

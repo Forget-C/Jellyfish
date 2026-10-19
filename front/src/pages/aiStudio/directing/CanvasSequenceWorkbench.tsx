@@ -1,6 +1,6 @@
 import { WorkbenchTheme } from './ui/WorkbenchTheme'
 import { WorkbenchButton, WorkbenchIconButton } from './ui/WorkbenchButton'
-import { WorkbenchModal } from './ui/WorkbenchModal'
+import { WorkbenchDialogActions, WorkbenchModal } from './ui/WorkbenchModal'
 import { SourceProvider } from './Sources'
 import { SceneSourceRevision } from './SceneSourceRevision'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
@@ -1042,8 +1042,8 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
     </DirectorCanvasSurface>}
     {loadState === 'ready' && selected && content && <SceneRelationsNavigation triggerHost={navigationHost} open={currentNavigation === 'relations'} onOpenChange={open => open ? openNavigation('relations') : setNavigation(undefined)} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} key={`relations:${selected.id}`} content={content} shotId={currentShotId} unitId={unitSelections[selected.id]} canvas={canvas} onNavigate={navigateRelation} />}
     <WorkbenchModal title="保存冲突 · 比较本地与服务器" open={!!currentConflict} closable={false} maskClosable={false} keyboard={false}
-      footer={<Space wrap><WorkbenchButton variant="quiet" onClick={() => resolveConflict(false)}>放弃本地编辑并载入服务器</WorkbenchButton>
-        <WorkbenchButton variant="primary" onClick={() => resolveConflict(true)}>以服务器修订为基线保留本地编辑</WorkbenchButton></Space>}>
+      footer={<WorkbenchDialogActions secondary={<WorkbenchButton variant="quiet" onClick={() => resolveConflict(false)}>放弃本地编辑并载入服务器</WorkbenchButton>}>
+        <WorkbenchButton variant="primary" onClick={() => resolveConflict(true)}>以服务器修订为基线保留本地编辑</WorkbenchButton></WorkbenchDialogActions>}>
       <p>服务器已是 revision {currentConflict?.revision}。本地编辑已保留；选择新基线后才会继续保存。保留本地编辑并再次保存可能覆盖服务器同期修改。</p>
       {currentConflict && content && <section aria-label="保存冲突差异" className="revision-differences">
         {revisionDifferences(currentConflict.content, content).map((change, index) => <section key={index}>

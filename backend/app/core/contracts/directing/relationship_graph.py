@@ -214,7 +214,8 @@ def scene_relationship_graph(version_id: str, revision: int, content) -> SceneRe
             node.shot_ids = [node.key[5:]]
         elif node.key in background_keys or node.kind in background_kinds:
             node.placement = 'scene_background'
-            node.reason = '场次背景无需逐镜关联；单元是否消费另行判断'
+            node.reason = ('工作单含明确适用的约束，按字段用途查看规则；背景不自动执行'
+                           if node.key in scoped else '场次背景无需逐镜关联；单元是否消费另行判断')
         elif scopes := scoped.get(node.key):
             if any(item.scope == 'scene_rule' for item in scopes):
                 node.placement = 'scene_rule'

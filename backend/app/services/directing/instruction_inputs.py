@@ -57,11 +57,15 @@ def unit_scope(design: EditableSceneDesign, unit: EditableGenerationUnit,
             beat = beats[key]
             add(execution, f'beat:{key}', 'must_show', beat.must_show, '单元出现项明确选择节拍',
                 coverage_ids=[item.id], phase='video', include_empty=True)
+            if beat.must_show.text is None and f'已选节拍 {key} 尚无可拍内容' not in unresolved:
+                unresolved.append(f'已选节拍 {key} 尚无可拍内容')
             for field in ('objective', 'obstacle', 'expected_change'):
                 add(background, f'beat:{key}', field, getattr(beat, field), '已选节拍的解释依据')
         for key in item.event_ids:
             add(execution, f'event:{key}', 'description', events[key].description,
                 '单元出现项明确选择事件', coverage_ids=[item.id], phase='video', include_empty=True)
+            if events[key].description.text is None and f'已选事件 {key} 尚无可拍内容' not in unresolved:
+                unresolved.append(f'已选事件 {key} 尚无可拍内容')
         for key in item.performance_action_ids:
             row = actions[key]
             for field in ('physical_action', 'gaze', 'breath', 'weight', 'hands', 'voice',
@@ -136,8 +140,7 @@ def unit_scope(design: EditableSceneDesign, unit: EditableGenerationUnit,
         add(constraints, owner, subject.field, value, reason,
             coverage_ids=coverage_ids, phase=scope.phase, condition=scope.condition)
 
-    constrained_direction = {scope.subject.field for scope in design.applicability
-                             if scope.subject.kind == 'direction' and scope.purpose == 'constraint'}
+    constrained_direction = {use.field for use in constraints if use.owner in {'overview', 'space'}}
     for field in ('viewpoint', 'information_change', 'relationship_change', 'turning_point'):
         if field not in constrained_direction:
             add(background, 'overview', field, getattr(design.direction, field), '场次级叙事依据')

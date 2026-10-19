@@ -1,10 +1,14 @@
 """当前单元指令建议通过真实 HTTP 和任务事务验证。"""
 from copy import deepcopy
+import json
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 
 from app.models.llm import Model, Provider
+from app.models.task import Task
+from app.services.directing.ai import generate_directing_result
 from app.services.task_service import TaskService
 from tests.directing.test_api import client_for
 from tests.directing.test_scene_versions import sequence_path
@@ -59,6 +63,14 @@ async def test_instruction_preview_is_unit_scoped_and_rechecks_manual_input(tmp_
         assert (await client.post(url, json=body)).json()['data']['task_id'] == task_id
         assert (await client.post(url, json={**body, 'requirements': '另一要求'})).status_code == 409
         assert (await client.post(url, json={**body, 'request_id': str(uuid4())})).status_code == 409
+        async with sessions.begin() as db:
+            frozen = (await db.get(Task, task_id)).input_snapshot['run_args']
+            assert frozen['design']['direction']['shots']
+            def invoke(messages):
+                sent = json.loads(messages[1].content)
+                assert 'design' not in sent and sent['scope']['execution']
+                return SimpleNamespace(content=json.dumps({'unit_id': 'unit-one', 'text': '递出信封。'}))
+            generate_directing_result('directing_instruction', SimpleNamespace(invoke=invoke), frozen)
         async with sessions.begin() as db:
             service = TaskService(db)
             assert await service.claim(task_id, worker_id='instruction-fixture')
