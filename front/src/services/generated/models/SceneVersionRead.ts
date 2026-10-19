@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { SceneRelationshipGraph } from './SceneRelationshipGraph';
 import type { SceneVersionContent_Output } from './SceneVersionContent_Output';
 import type { SceneVersionSource_Output } from './SceneVersionSource_Output';
 /**
@@ -16,8 +17,10 @@ export type SceneVersionRead = {
     revision: number;
     source: SceneVersionSource_Output;
     content: SceneVersionContent_Output;
+    relationship_graph: SceneRelationshipGraph;
     copied_from_version_id: (string | null);
     last_save_request_id: (string | null);
     created_at: string;
     updated_at: string;
 };
+

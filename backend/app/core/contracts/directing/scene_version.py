@@ -7,6 +7,7 @@ from pydantic import ConfigDict, Field, model_validator
 
 from app.core.contracts.directing.common import Contract, Identity, Note, Source, references, unique
 from app.core.contracts.directing.design_applicability import DesignApplicability, validate_design_applicability
+from app.core.contracts.directing.relationship_graph import SceneRelationshipGraph
 from app.core.contracts.directing.production import GenerationUnit, ModelCapability, ReferenceBinding
 from app.core.contracts.directing.scene_take import SceneTakeJudgment
 from app.core.contracts.directing.scene_timeline import SceneTimeline
@@ -230,6 +231,7 @@ class SceneVersionRead(Contract):
     revision: int = Field(gt=0)
     source: SceneVersionSource
     content: SceneVersionContent
+    relationship_graph: SceneRelationshipGraph
     copied_from_version_id: Identity | None
     last_save_request_id: Identity | None
     created_at: datetime

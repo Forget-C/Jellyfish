@@ -17,6 +17,7 @@ from app.core.contracts.directing.workspace import MediaRead
 from app.core.contracts.directing.scene_video import SceneVideoPreparation, SceneVideoRead, SceneTakeRead
 from app.core.contracts.directing.feedback import CutReview, RepairItem, KnowledgeCandidate
 from app.core.contracts.directing.revisions import ReviewPacketRevision, RevisionSnapshot, TakeSnapshot
+from app.core.contracts.directing.relationship_graph import scene_relationship_graph
 from app.core.contracts.directing.style import ProjectStyleProfile, ProjectStyleRevision, StyleWrite
 from app.core.contracts.directing.scene_version import (
     EditableSceneDesign, SceneVersionContent, SceneVersionCreate, SceneVersionRead,
@@ -238,6 +239,7 @@ class DirectingStore:
         return SceneVersionRead(copied_from_version_id=origin.source_version_id if origin else None, id=row.id, project_id=self.project_id, chapter_id=sequence.chapter_id,
             sequence_id=sequence.id, title=row.title, revision=row.revision,
             source=content.basis, content=content,
+            relationship_graph=scene_relationship_graph(row.id, row.revision, content.design),
             last_save_request_id=row.last_save_request_id,
             created_at=row.created_at, updated_at=row.updated_at)
 

@@ -45,13 +45,23 @@ async def test_manual_shot_can_save_before_beat_assignment_but_cannot_leave_dang
         assert saved['content']['design']['direction']['beats'] == []
         assert saved['content']['design']['direction']['shots'][0]['beat_ids'] == []
         content['design']['direction']['beats'] = [{
-            'id': 'beat', 'event_ids': [], 'objective': {}, 'obstacle': {},
+            'id': 'beat', 'event_ids': ['event'], 'objective': {}, 'obstacle': {},
             'expected_change': {}, 'must_show': {},
         }]
+        content['design']['events'] = [{'id': 'event', 'description': {}}]
         content['design']['direction']['shots'][0]['beat_ids'] = ['beat']
         response = await client.put(detail, json={
             'request_id': str(uuid4()), 'expected_revision': 2, 'content': content})
         assert response.status_code == 200, response.text
+        graph = response.json()['data']['relationship_graph']
+        assert graph['revision'] == 3
+        assert {'owner': 'shot:manual-shot', 'field': 'beat_ids',
+                'target': 'beat:beat', 'target_id': 'beat'} in graph['edges']
+        assert not any(edge['target'] == 'missing:beat' for edge in graph['edges'])
+        assert any(path['source'] == 'shot:manual-shot' and path['target'] == 'event:event'
+                   and [(step['owner'], step['field']) for step in path['steps']] == [
+                       ('shot:manual-shot', 'beat_ids'), ('beat:beat', 'event_ids')]
+                   for path in graph['paths'])
         content['design']['direction']['beats'] = []
         response = await client.put(detail, json={
             'request_id': str(uuid4()), 'expected_revision': 3, 'content': content})
@@ -345,6 +355,8 @@ async def test_explicit_scene_version_can_save_incomplete_design_and_reload(tmp_
         })
         assert response.status_code == 200, response.text
         created = response.json()['data']
+        assert created['relationship_graph']['version_id'] == created['id']
+        assert created['relationship_graph']['revision'] == created['revision']
         assert created['source']['text'] == '兄弟在店'
         assert created['content']['design']['direction']['shots'] == []
         content = created['content']
@@ -360,6 +372,8 @@ async def test_explicit_scene_version_can_save_incomplete_design_and_reload(tmp_
         fresh = (await client.get(path + '/versions/' + created['id'])).json()['data']
         assert fresh['id'] == created['id']
         assert fresh['revision'] == 2
+        assert saved.json()['data']['relationship_graph'] == fresh['relationship_graph']
+        assert fresh['relationship_graph']['revision'] == 2
         assert fresh['content']['design']['direction']['viewpoint']['text'] == '从弟弟的视点展开'
         assert fresh['content']['design']['direction']['shots'] == []
         assert len((await client.get(path + '/versions')).json()['data']) == 1

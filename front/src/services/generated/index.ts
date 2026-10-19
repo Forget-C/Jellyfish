@@ -350,6 +350,9 @@ export type { ProviderUpdate } from './models/ProviderUpdate';
 export type { ReferenceBinding_Input } from './models/ReferenceBinding_Input';
 export type { ReferenceBinding_Output } from './models/ReferenceBinding_Output';
 export type { RegroupRequest } from './models/RegroupRequest';
+export type { RelationshipEdge } from './models/RelationshipEdge';
+export type { RelationshipNode } from './models/RelationshipNode';
+export type { RelationshipPath } from './models/RelationshipPath';
 export type { RenderedPromptSnapshot } from './models/RenderedPromptSnapshot';
 export type { RepairDocument } from './models/RepairDocument';
 export type { RepairItem_Input } from './models/RepairItem_Input';
@@ -420,6 +423,7 @@ export type { SceneInstructionSuggestionRead } from './models/SceneInstructionSu
 export type { SceneMediaCutItem_Input } from './models/SceneMediaCutItem_Input';
 export type { SceneMediaCutItem_Output } from './models/SceneMediaCutItem_Output';
 export type { ScenePlannedCutItem } from './models/ScenePlannedCutItem';
+export type { SceneRelationshipGraph } from './models/SceneRelationshipGraph';
 export type { SceneSeamReviewCreate } from './models/SceneSeamReviewCreate';
 export type { SceneSeamReviewDecision } from './models/SceneSeamReviewDecision';
 export type { SceneSeamReviewRead } from './models/SceneSeamReviewRead';
