@@ -41,8 +41,10 @@ class InstructionCheckService(InstructionBasisService):
             raise RevisionConflict('请先按当前依据更新并明确确认指令，检查不能解除依据已变')
         unit = self._instruction_unit(body.content, unit_id)
         await self.require_scene_dependencies(sequence_id, version_id, unit, body.content)
-        await self._prepared(sequence_id, unit)
         inputs, files = await self._inputs(sequence, version_id, unit_id, body.content)
+        if inputs.scope and inputs.scope.unresolved:
+            raise ValueError('单元适用范围待核对：' + '；'.join(inputs.scope.unresolved))
+        await self._prepared(sequence_id, unit)
         model = await get_model_by_category(self.db, ModelCategoryKey.text, model_or_id=body.model_id)
         provider = await self.db.get(Provider, model.provider_id)
         config = resolve_provider_config_from_provider(provider=provider, category=ModelCategoryKey.text)
@@ -79,7 +81,7 @@ class InstructionCheckService(InstructionBasisService):
         state = await self.basis_status(sequence_id, version_id, unit_id, content)
         args = task.input_snapshot['run_args']
         unit = self._instruction_unit(content, unit_id)
-        matches = unit.instruction == args['instruction'] and state.current == InstructionInputs.model_validate(args['inputs'])
+        matches = unit.instruction == args['instruction'] and state.current.same_consumption(InstructionInputs.model_validate(args['inputs']))
         confirmed = False
         if unit.instruction_check_task_id == task.id and matches and state.status == 'current':
             await self.confirmable_instruction_check(sequence_id, version_id, unit_id, task_id)

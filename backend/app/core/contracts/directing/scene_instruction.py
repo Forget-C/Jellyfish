@@ -2,6 +2,7 @@
 from pydantic import Field
 
 from app.core.contracts.directing.common import Contract, Identity, Source, Text
+from app.core.contracts.directing.instruction_basis import UnitScopeProjection
 from app.core.contracts.directing.scene_version import EditableGenerationUnit, EditableSceneDesign, SceneVersionContent, SceneVersionSource
 from app.core.contracts.directing.style import StyleRule
 
@@ -49,6 +50,7 @@ class SceneInstructionSuggestionRead(Contract):
     error: str | None
     requirements: str
     scope: SceneInstructionScope | None = None
+    unit_scope: UnitScopeProjection | None = None
     basis: SceneVersionSource
     design: EditableSceneDesign
     unit: EditableGenerationUnit

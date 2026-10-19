@@ -5,6 +5,7 @@ import type { InstructionBasisConfirm, InstructionBasisRead, InstructionInputs_O
 import { DesignFields } from './DesignFields'
 import { SourceLinks } from './Sources'
 import { directingError } from './common'
+import { UnitScopeSummary } from './UnitScopeSummary'
 
 /** 旧依据和当前依据都来自服务端实际输入投影，查看不修改当前内容。 */
 export function BasisInputs({ title, value }: { title: string; value: InstructionInputs }) {
@@ -15,7 +16,8 @@ export function BasisInputs({ title, value }: { title: string; value: Instructio
     <p>参数：{Object.entries(value.unit.parameters).map(([name, parameter]) => `${name}=${String(parameter)}`).join('；') || '默认参数'}</p>
     <p>参考：{value.unit.references.map(item => `${item.asset_origin?.name || item.file_id}（${item.input_role || '未记录输入角色'}）`).join('；') || '无'}</p>
     <p>风格：{value.style_rules.map(rule => rule.requirement).join('；') || '无适用规则'}</p>
-    <details><summary>查看相关设计与来源</summary><DesignFields value={value.design} path={[]} disabled onChange={() => {}} /></details>
+    {value.scope && <UnitScopeSummary value={value.scope} />}
+    <details><summary>查看来源工作单{value.scope ? '（含未消费设计）' : ''}</summary><DesignFields value={value.design} path={[]} disabled onChange={() => {}} /></details>
     <details><summary>查看固定关联身份</summary>
       {value.unit.coverage.map(item => <p key={item.id}>镜头：{item.shot_id}；节拍：{item.beat_ids.join('、') || '无'}；事件：{item.event_ids.join('、') || '无'}</p>)}
       {value.unit.references.map(item => <p key={item.id}>文件：{item.file_id}；用途：{item.purpose}；绑定对象：{item.participant_ids.join('、') || '无'}</p>)}

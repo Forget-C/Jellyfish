@@ -21,6 +21,11 @@ let backendOutput = ''
 backend.stdout.on('data', data => { backendOutput += data })
 backend.stderr.on('data', data => { backendOutput += data })
 let server, browser, page
+async function openUnitShot() {
+  await page.getByRole('button', { name: '单元画布', exact: true }).click()
+  await page.getByRole('combobox', { name: '单元所属镜头', exact: true }).click()
+  await page.getByText('镜头 1：读信反应', { exact: true }).last().click()
+}
 try {
   let chapter
   for (let attempt = 0; attempt < 80; attempt++) {
@@ -57,8 +62,7 @@ try {
   const saved = await fetch(`${versionsUrl}/${version.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: version.revision, content }) })
   assert.equal(saved.status, 200, await saved.text())
   await page.goto(`http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
-  await page.getByRole('button', { name: '镜头 1：读信反应', exact: true }).click()
-  await page.getByRole('button', { name: '单元画布', exact: true }).click()
+  await openUnitShot()
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('ArrowDown')
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('Enter')
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
@@ -79,8 +83,7 @@ try {
   assert.equal(await body.inputValue(), '递出信封。')
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   await page.reload()
-  await page.getByRole('button', { name: '镜头 1：读信反应', exact: true }).click()
-  await page.getByRole('button', { name: '单元画布', exact: true }).click()
+  await openUnitShot()
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('ArrowDown')
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('Enter')
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
@@ -88,6 +91,11 @@ try {
   await page.getByText('查看新旧依据', { exact: true }).click()
   await page.getByRole('region', { name: '原确认依据', exact: true }).getByText('动作：拆开信封；', { exact: true }).waitFor()
   await page.getByRole('region', { name: '当前依据', exact: true }).getByText('动作：收下信封；', { exact: true }).waitFor()
+  const currentScope = page.getByRole('region', { name: '当前依据', exact: true })
+  assert.match(await currentScope.getByRole('region', { name: '本次执行项' }).innerText(), /收下信封/)
+  const background = await currentScope.getByRole('region', { name: '解释背景' }).innerText()
+  assert.match(background, /目标 1/)
+  assert.doesNotMatch(background, /目标 2/)
   await body.fill('收下信封，低头看一眼。')
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   await page.getByRole('button', { name: '确认已按当前依据核对正文', exact: true }).click()
@@ -116,8 +124,7 @@ try {
   await page.waitForFunction(key => !!localStorage.getItem(key), `jellyfish:instruction-basis:canvas-project:${sequenceId}:${version.id}:unit-one`)
   await page.unroute('**/instruction-basis/confirm')
   await page.reload()
-  await page.getByRole('button', { name: '镜头 1：读信反应', exact: true }).click()
-  await page.getByRole('button', { name: '单元画布', exact: true }).click()
+  await openUnitShot()
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('ArrowDown')
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('Enter')
   await page.getByRole('button', { name: '指令画布', exact: true }).click()

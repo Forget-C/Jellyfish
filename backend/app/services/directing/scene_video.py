@@ -31,6 +31,9 @@ class SceneVideoService(InstructionCheckService):
             raise RevisionConflict('保存修订已变化，请重新核对当前内容后生成')
         unit = self._instruction_unit(version.content, unit_id)
         await self.require_scene_dependencies(sequence_id, version_id, unit, version.content)
+        inputs, _ = await self._inputs(sequence, version_id, unit_id, version.content)
+        if inputs.scope and inputs.scope.unresolved:
+            raise ValueError('单元适用范围待核对：' + '；'.join(inputs.scope.unresolved))
         if not unit.instruction_check_task_id:
             raise RevisionConflict('请先完成并明确核对当前指令检查结果')
         compared = await self.compare_check(sequence_id, version_id, unit_id, unit.instruction_check_task_id, version.content)
@@ -38,7 +41,6 @@ class SceneVideoService(InstructionCheckService):
             raise RevisionConflict('当前正文或依据与已确认检查不一致，请更新并重新检查')
         if len(''.join(unit.instruction.split())) > 5000:
             raise ValueError('指令超过 5000 非空白字符，请明确简化后重新检查')
-        inputs, _ = await self._inputs(sequence, version_id, unit_id, version.content)
         media = await self._prepared(sequence_id, unit, text=unit.instruction)
         request = GenerationSubmitRequest(model_id=unit.model_id, execution_prompt=unit.instruction, media=media,
             operation_input=VideoGenerationOperationInput(ratio=unit.ratio, seconds=unit.duration_ms // 1000, seed=unit.parameters.get('seed')))
@@ -58,9 +60,13 @@ class SceneVideoService(InstructionCheckService):
         if await self.active_scene_video(version_id, unit_id):
             raise RevisionConflict('本单元已有视频任务，请先核实或等待取消完成')
         preparation = await self.prepare_video(sequence_id, version_id, unit_id, body)
-        if body.expected_preparation is not None and (
-                body.expected_preparation.model_dump(exclude={'revision'}) != preparation.model_dump(exclude={'revision'})):
-            raise RevisionConflict('本单元输入或检查已变化，请重新预检后明确提交')
+        if body.expected_preparation is not None:
+            expected = body.expected_preparation
+            same_identity = ((expected.version_id, expected.unit_id, expected.check_task_id)
+                             == (preparation.version_id, preparation.unit_id, preparation.check_task_id))
+            if not (same_identity and expected.request == preparation.request
+                    and expected.inputs.same_consumption(preparation.inputs)):
+                raise RevisionConflict('本单元输入或检查已变化，请重新预检后明确提交')
         return await self._submit_video_execution(sequence_id, preparation, body.request_id, request_hash)
 
     async def _submit_video_execution(self, sequence_id, preparation, request_id, request_hash, *, retry_of_task_id=None):
@@ -140,13 +146,13 @@ class SceneVideoService(InstructionCheckService):
         check = await self.confirmable_instruction_check(sequence_id, version_id, unit_id, preparation.check_task_id)
         checked = check.input_snapshot['run_args']
         if (checked['instruction'] != preparation.request.execution_prompt
-                or InstructionInputs.model_validate(checked['inputs']) != preparation.inputs):
+                or not InstructionInputs.model_validate(checked['inputs']).same_consumption(preparation.inputs)):
             raise RevisionConflict('原视频输入与检查依据不一致，不能按原记录重试')
         unit = EditableGenerationUnit(**preparation.inputs.unit.model_dump(), instruction=preparation.request.execution_prompt)
         content = SceneVersionContent(basis=preparation.inputs.basis, design=preparation.inputs.design, units=[unit])
         inputs, _ = await self._inputs(sequence, version_id, unit_id, content)
         media = await self._prepared(sequence_id, unit, text=unit.instruction)
         model = await get_model_by_category(self.db, ModelCategoryKey.video, model_or_id=unit.model_id)
-        if inputs != preparation.inputs or media != preparation.request.media or model.provider_id != source_task.provider_id:
+        if not inputs.same_consumption(preparation.inputs) or media != preparation.request.media or model.provider_id != source_task.provider_id:
             raise RevisionConflict('原参考、模型或执行依据已不可用，不能改用当前替代输入')
         return await self._submit_video_execution(sequence_id, preparation, body.request_id, request_hash, retry_of_task_id=source_task.id)

@@ -108,6 +108,8 @@ async def test_instruction_preview_is_unit_scoped_and_rechecks_manual_input(tmp_
         assert rows[0]['generation_model_id'] == 'text-model'
         assert rows[0]['video_model_name'] == 'test-video-model'
         assert [rule['requirement'] for rule in rows[0]['style_rules']] == ['固定机位，保持空间关系']
+        assert any(use['owner'] == 'style:steady' and use['text'] == '固定机位，保持空间关系'
+                   and use['phase'] == 'video' for use in rows[0]['unit_scope']['constraints'])
         assert rows[0]['style_rules'][0]['sources'] == [{**source, 'file_id': None, 'media_range': None}]
         assert rows[0]['design']['direction']['viewpoint']['text'] == '当次观察视点'
 

@@ -170,6 +170,9 @@ async def test_same_shot_units_select_distinct_execution_items_and_reject_invali
             assert task.status_code == 200, task.text
             records = (await client.get(url)).json()['data']
             assert records[0]['unit']['coverage'][0]['performance_action_ids'] == selected
+            owners = {row['owner'] for row in records[0]['unit_scope']['execution']}
+            assert ('performance:action' in owners) == (unit_id == 'unit-action')
+            assert ('activity:activity' in owners) == (unit_id == 'unit-insert')
             activity_scopes = [row for row in records[0]['design']['applicability']
                                if row['subject']['kind'] == 'staging_activity']
             assert len(activity_scopes) == (0 if unit_id == 'unit-action' else 1)

@@ -3,6 +3,7 @@ import { DesignFields } from './DesignFields'
 import { SourceLinks } from './Sources'
 import { designLabels } from './designLabels'
 import { referencePurposes } from './referenceInput'
+import { UnitScopeSummary } from './UnitScopeSummary'
 
 /** 展示原任务保存的输入，不查询当前配置或应用建议。 */
 export function SceneInstructionSnapshot({ selected }: { selected: SceneInstructionSuggestionRead }) {
@@ -10,6 +11,7 @@ export function SceneInstructionSnapshot({ selected }: { selected: SceneInstruct
         <SourceLinks sources={[selected.basis.source]} />
         <p>指令生成模型：{selected.generation_model_name || '当次名称未记录'}</p>
         <p>视频模型：{selected.video_model_name || '当次名称未记录'}</p>
+        {selected.unit_scope && <UnitScopeSummary value={selected.unit_scope} />}
         <details><summary>当次六岗设计</summary>
           <p>以下为提交时的只读设计，查看不会覆盖当前工作。</p>
           <SourceLinks sources={selected.design.sources} />

@@ -5,7 +5,7 @@ from app.core.contracts.directing.scene_instruction import SceneInstructionApply
 from app.core.contracts.directing.scene_version import EditableUnitPreparation
 from app.models.task import Task
 from app.models.llm import ModelCategoryKey
-from app.services.directing.instruction_inputs import instruction_design
+from app.services.directing.instruction_inputs import instruction_design, unit_scope
 from app.services.directing.scene_instruction import SceneInstructionService
 from app.services.directing.store import RevisionConflict
 from app.services.llm.resolver import get_model_by_category
@@ -24,7 +24,9 @@ class InstructionBasisService(SceneInstructionService):
             name = model.name
         rules = await self.applicable_style(design.style_revision_id, sequence.id, name)
         preparation = EditableUnitPreparation.model_validate(unit.model_dump(exclude={'instruction', 'instruction_source', 'instruction_basis_id', 'instruction_check_task_id'}))
-        return InstructionInputs(basis=content.basis, design=design, unit=preparation, video_model_name=name, style_rules=rules), files
+        return InstructionInputs(basis=content.basis, design=design, unit=preparation,
+                                 video_model_name=name, style_rules=rules,
+                                 scope=unit_scope(content.design, unit, rules)), files
 
     async def basis_status(self, sequence_id, version_id, unit_id, content):
         """比较实际相关输入；普通保存和其他单元的编辑不会重写原依据。"""
@@ -36,7 +38,7 @@ class InstructionBasisService(SceneInstructionService):
         if unit.instruction_basis_id:
             row = await self.instruction_basis(version_id, unit_id, unit.instruction_basis_id)
             previous = InstructionInputs.model_validate(row.inputs)
-        status = 'empty' if not unit.instruction.strip() else 'unbound' if previous is None else 'current' if previous == current else 'changed'
+        status = 'empty' if not unit.instruction.strip() else 'unbound' if previous is None else 'current' if previous.same_consumption(current) else 'changed'
         return InstructionBasisRead(basis_id=unit.instruction_basis_id, status=status, previous=previous, current=current)
 
     async def confirm_basis(self, sequence_id, version_id, unit_id, body):

@@ -7,10 +7,11 @@ from sqlalchemy import select
 from app.core.contracts.directing.common import Source
 from app.core.contracts.directing.scene_instruction import SceneInstructionPreview, SceneInstructionRequest, SceneInstructionResult, SceneInstructionSuggestionRead
 from app.core.contracts.directing.scene_version import EditableSceneDesign
+from app.core.contracts.directing.style import StyleRule
 from app.models.llm import ModelCategoryKey, Provider
 from app.models.task import Task
 from app.services.directing.production import ProductionService
-from app.services.directing.instruction_inputs import instruction_design
+from app.services.directing.instruction_inputs import instruction_design, unit_scope
 from app.services.directing.scene_design import SceneDesignService
 from app.services.directing.store import RevisionConflict
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
@@ -71,6 +72,7 @@ class SceneInstructionService(SceneDesignService):
         rules = await self.applicable_style(body.content.design.style_revision_id, sequence_id, video_model.name)
         args = {'task_identity': uuid4().hex, 'basis': body.content.basis.model_dump(mode='json'),
             'design': design.model_dump(mode='json'), 'design_scope_version': 1, 'unit': unit.model_dump(mode='json'),
+            'scope': unit_scope(body.content.design, unit, rules).model_dump(mode='json'),
             'requirements': body.requirements, 'instruction_scope': body.scope.model_dump() if body.scope else None,
             'video_model_name': video_model.name,
             'style_rules': [rule.model_dump(mode='json') for rule in rules]}
@@ -90,7 +92,8 @@ class SceneInstructionService(SceneDesignService):
             result = SceneInstructionResult.model_validate(task.result) if task.status == 'succeeded' else None
             args = task.input_snapshot['run_args']
             rows.append(SceneInstructionSuggestionRead(task_id=task.id, request_id=request.request_id, status=task.status,
-                error=task.error_message, requirements=request.requirements, scope=request.scope, basis=request.content.basis,
+                error=task.error_message, requirements=request.requirements, scope=request.scope,
+                unit_scope=args.get('scope'), basis=request.content.basis,
                 generation_model_id=task.input_snapshot.get('model_id'), generation_model_name=task.input_snapshot.get('model_name'),
                 video_model_name=args.get('video_model_name'), style_rules=args.get('style_rules'),
                 design=EditableSceneDesign.model_validate(args['design']), unit=self._instruction_unit(request.content, unit_id), text=result.text if result else None))
@@ -107,7 +110,10 @@ class SceneInstructionService(SceneDesignService):
         args = task.input_snapshot['run_args']
         # 历史任务确实收到整场设计时，仍按当时范围核对，不能追溯缩小其输入。
         design = instruction_design(content.design, unit) if args.get('design_scope_version') == 1 else content.design
-        if (content.basis != request.content.basis or design != EditableSceneDesign.model_validate(args['design'])
+        design_changed = (unit_scope(content.design, unit,
+                          [StyleRule.model_validate(row) for row in args.get('style_rules') or []]).model_dump(mode='json') != args['scope']
+                          if args.get('scope') else design != EditableSceneDesign.model_validate(args['design']))
+        if (content.basis != request.content.basis or design_changed
                 or unit != self._instruction_unit(request.content, unit_id)):
             raise RevisionConflict('本单元正文或生成依据已变化，请核对差异后重新生成建议')
         await self._validate_content(sequence, version_id, content.model_copy(update={'units': [unit], 'design': design, 'take_judgments': [], 'timeline': SceneTimeline()}))

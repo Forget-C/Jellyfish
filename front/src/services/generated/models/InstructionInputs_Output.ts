@@ -6,6 +6,7 @@ import type { EditableSceneDesign_Output } from './EditableSceneDesign_Output';
 import type { EditableUnitPreparation_Output } from './EditableUnitPreparation_Output';
 import type { SceneVersionSource_Output } from './SceneVersionSource_Output';
 import type { StyleRule_Output } from './StyleRule_Output';
+import type { UnitScopeProjection_Output } from './UnitScopeProjection_Output';
 /**
  * 只包含相关依据，正文和来源单独记录，其他单元与输出画幅不参与比较。
  */
@@ -15,4 +16,5 @@ export type InstructionInputs_Output = {
     unit: EditableUnitPreparation_Output;
     video_model_name: (string | null);
     style_rules: Array<StyleRule_Output>;
+    scope?: (UnitScopeProjection_Output | null);
 };
