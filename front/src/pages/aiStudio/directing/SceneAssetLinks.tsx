@@ -42,10 +42,13 @@ export function SceneAssetLinks({ projectId, value, disabled, onChange, assetKin
       participants: value.participants.map(person => person.id === participantId ? { ...person, [kind + '_id']: id } : person) })
   }
   const addParticipant = (asset: AssetSummary) => {
-    if (locked || asset.kind === 'scene' || value.participants.some(person => person[asset.kind === 'character' ? 'character_id' : 'prop_id'] === asset.id)) return
-    const id = crypto.randomUUID()
-    onChange({ ...value, direction: shot ? { ...value.direction, shots: value.direction.shots.map(item => item.id === shot.id ? { ...item, participant_ids: [...(item.participant_ids || []), id] } : item) } : value.direction, participants: [...value.participants, { id, name: asset.name,
-      character_id: asset.kind === 'character' ? asset.id : null, prop_id: asset.kind === 'prop' ? asset.id : null }] })
+    if (locked || asset.kind === 'scene') return
+    const existing = value.participants.find(person => person[asset.kind === 'character' ? 'character_id' : 'prop_id'] === asset.id)
+    if (existing && (!shot || (shot.participant_ids || []).includes(existing.id))) return
+    const id = existing?.id || crypto.randomUUID()
+    onChange({ ...value, direction: shot ? { ...value.direction, shots: value.direction.shots.map(item => item.id === shot.id ? { ...item, participant_ids: [...(item.participant_ids || []), id] } : item) } : value.direction,
+      participants: existing ? value.participants : [...value.participants, { id, name: asset.name,
+        character_id: asset.kind === 'character' ? asset.id : null, prop_id: asset.kind === 'prop' ? asset.id : null }] })
   }
   const drop = (event: React.DragEvent, kind: AssetSummary['kind'], participantId?: string) => {
     event.preventDefault()
@@ -90,7 +93,7 @@ export function SceneAssetLinks({ projectId, value, disabled, onChange, assetKin
       }}>点击下方资产或拖到此处加入本场{!createOnly && '；场所会替换本场场所关联'}。</div>
     <Space wrap>{assets?.filter(asset => (!createOnly || asset.kind !== 'scene') && (!assetKind || asset.kind === assetKind)).map(asset => <div key={`${asset.kind}:${asset.id}`} draggable={!locked}
       onDragStart={event => { event.dataTransfer.setData(assetDrag, `${asset.kind}:${asset.id}`); event.dataTransfer.effectAllowed = 'link' }}>
-      <Button aria-label={`${asset.kind === 'scene' ? '用作本场场所' : '加入本场'}：${asset.name}`} disabled={locked || asset.kind !== 'scene' && value.participants.some(person => person[asset.kind === 'character' ? 'character_id' : 'prop_id'] === asset.id)}
+      <Button aria-label={`${asset.kind === 'scene' ? '用作本场场所' : shot ? '关联当前镜头' : '加入本场'}：${asset.name}`} disabled={locked || asset.kind !== 'scene' && value.participants.some(person => person[asset.kind === 'character' ? 'character_id' : 'prop_id'] === asset.id && (!shot || (shot.participant_ids || []).includes(person.id)))}
         onClick={() => asset.kind === 'scene' ? associate('scene', asset.id) : addParticipant(asset)}>
         {names[asset.kind]} · {asset.name}
       </Button>

@@ -1,7 +1,7 @@
 import { Children, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button, Dropdown, Space, Tooltip } from 'antd'
-import { AimOutlined, ApartmentOutlined, CloseOutlined, CompassOutlined, EnvironmentOutlined, MinusOutlined, PlusOutlined, ToolOutlined, UserOutlined } from '@ant-design/icons'
+import { AimOutlined, ApartmentOutlined, CloseOutlined, CompassOutlined, EnvironmentOutlined, FolderAddOutlined, MinusOutlined, PlusOutlined, ToolOutlined, UserOutlined } from '@ant-design/icons'
 import { CanvasDragHandle, CanvasEdge, useCanvasViewport } from '../../../components/canvas/Canvas'
 import { canvasConnection } from '../../../components/canvas/geometry'
 import type { CanvasPoint, CanvasTransform } from '../../../components/canvas/geometry'
@@ -23,21 +23,18 @@ export type DirectorCanvasRelation = { from: string; to: string; label: string; 
 export type DirectorCanvasGuide = { from: string; to?: string; group?: string }
 
 /** 画布只维护视口与节点位置；内容及排序始终由业务编辑入口维护。 */
-export function DirectorCanvasSurface({ contextKey, children, objects = [], relations = [], guides = [], inspectors = {}, tools = [], toolbar, anchorTitle, labels = defaultLabels, ariaLabel = '导演画布视口', initialPositions = {}, focusTarget, layoutScope }: { layoutScope?: DirectorLayoutScope; focusTarget?: { nodeId: string; fieldId: string; serial: number; restore?: boolean }; initialPositions?: Record<string, CanvasPoint>; labels?: string[]; ariaLabel?: string; tools?: { label: string; onClick: (trigger: HTMLElement) => void }[]; toolbar?: ReactNode; anchorTitle?: string; contextKey: string; children: ReactNode; objects?: DirectorCanvasObject[]; relations?: DirectorCanvasRelation[]; guides?: DirectorCanvasGuide[]; inspectors?: Record<string, ((trigger: HTMLElement) => void) | undefined> }) {
+export function DirectorCanvasSurface({ contextKey, children, objects = [], relations = [], guides = [], inspectors = {}, tools = [], anchorTitle, labels = defaultLabels, ariaLabel = '导演画布视口', initialPositions = {}, focusTarget, layoutScope, onInspectRelation }: { layoutScope?: DirectorLayoutScope; focusTarget?: { nodeId: string; fieldId: string; serial: number; restore?: boolean }; initialPositions?: Record<string, CanvasPoint>; labels?: string[]; ariaLabel?: string; tools?: { label: string; onClick: (trigger: HTMLElement) => void }[]; anchorTitle?: string; contextKey: string; children: ReactNode; objects?: DirectorCanvasObject[]; relations?: DirectorCanvasRelation[]; guides?: DirectorCanvasGuide[]; inspectors?: Record<string, ((trigger: HTMLElement) => void) | undefined>; onInspectRelation?: (relation: DirectorCanvasRelation) => void }) {
   const [classicView, setClassicView] = useState<ViewState>(() => views.get(contextKey) || {
     transform: { x: 120, y: 30, scale: Math.max(.3, Math.min(1, (window.innerWidth - 180) / 1160)) }, positions: {},
   })
   const nodes: DirectorCanvasObject[] = [...Children.toArray(children).map((content, index) => ({ id: layoutScope && index === 2 && layoutScope.anchorId !== '全场共享' ? layoutScope.anchorId : labels[index], label: labels[index], title: index === 2 ? anchorTitle : undefined, content, onInspect: inspectors[labels[index]] })), ...objects]
-  const relationName = (id: string) => nodes.find(node => node.id === id)?.title || nodes.find(node => node.id === id)?.label || id
   const [sizes, setSizes] = useState<Record<string, { width: number; height: number }>>({})
   const [surfaceWidth, setSurfaceWidth] = useState(window.innerWidth)
   const [surfaceHeight, setSurfaceHeight] = useState(window.innerHeight)
   const [minimapOpen, setMinimapOpen] = useState(() => window.innerWidth > 700)
   const wasNarrow = useRef(window.innerWidth <= 700)
   const minimapDrag = useRef<{ x: number; y: number }>()
-  const toolbarElement = useRef<HTMLElement>(null)
-  const [contentTop, setContentTop] = useState(64)
-  const layout = useDirectorLayout(layoutScope && { ...layoutScope, initialTop: contentTop }, nodes, sizes, surfaceWidth)
+  const layout = useDirectorLayout(layoutScope && { ...layoutScope, initialTop: 64 }, nodes, sizes, surfaceWidth)
   const view = layoutScope ? layout.view : classicView
   const setView = (update: (previous: ViewState) => ViewState) => layoutScope ? layout.setView(previous => ({ ...previous, ...update(previous) })) : setClassicView(update)
   const viewKey = layoutScope ? `${contextKey}:${layoutScope.viewId}` : contextKey
@@ -45,8 +42,6 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
   const [focused, setFocused] = useState<string>()
   const [edgeFocus, setEdgeFocus] = useState<number>()
   const [edgeHover, setEdgeHover] = useState<number>()
-  const [inspectedRelation, setInspectedRelation] = useState<number>()
-  useEffect(() => setInspectedRelation(undefined), [viewKey])
   useEffect(() => {
     if (focusTarget && /^(situation|activity):/.test(focusTarget.nodeId) && layoutScope && !layoutScope.validIds.includes(focusTarget.nodeId)) layoutScope.onInvalidTarget?.()
   }, [focusTarget?.serial, layoutScope?.validIds.join('|')])
@@ -63,14 +58,6 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
   useEffect(() => { if (!layoutScope) views.set(contextKey, view) }, [contextKey, view, layoutScope])
   const viewport = useCanvasViewport(viewKey, view.transform, next => setView(previous => ({ ...previous,
     transform: typeof next === 'function' ? next(previous.transform) : next })), { x: 1120, y: 700 })
-  useLayoutEffect(() => {
-    const element = toolbarElement.current, surface = viewport.surface.current
-    if (!element || !surface) return
-    const measure = () => setContentTop(Math.max(64, element.getBoundingClientRect().bottom - surface.getBoundingClientRect().top + 16))
-    const observer = new ResizeObserver(measure)
-    observer.observe(element); measure()
-    return () => observer.disconnect()
-  }, [viewKey])
   useEffect(() => {
     const surface = viewport.surface.current
     if (!surface) return
@@ -150,9 +137,7 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
     const point = position(id)
     // 明确定位保留其它节点位置；窄屏也能直接找回当前对象。
     const scale = Math.min(1, ((viewport.surface.current?.clientWidth || window.innerWidth) - 32) / 360)
-    const surfaceTop = viewport.surface.current?.getBoundingClientRect().top || 0
-    const toolbarBottom = document.querySelector<HTMLElement>('.director-canvas-toolbar')?.getBoundingClientRect().bottom || surfaceTop
-    const top = layoutScope ? Math.max(56, toolbarBottom - surfaceTop + 16) : 20
+    const top = layoutScope ? 56 : 20
     setView(previous => ({ ...previous, transform: { scale, x: 16 - point.x * scale, y: top - point.y * scale } }))
     requestAnimationFrame(() => cards.current.get(id)?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true }))
   }
@@ -179,7 +164,7 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
     // 来源卡已卸载时交接键盘焦点；工具栏等仍在操作的控件保留焦点。
     if (document.activeElement !== document.body) return
     const card = cards.current.get(focusTarget ? targetId(focusTarget.nodeId) : layoutScope.anchorId)
-    const target = card || toolbarElement.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')
+    const target = card || document.querySelector<HTMLButtonElement>('.canvas-director-browse button:not(:disabled)')
     target?.focus({ preventScroll: true })
   }, [viewKey, layout.ready, layoutScope?.anchorId])
   return <>
@@ -239,7 +224,7 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
             return <g key={`${relation.from}:${relation.to}:${index}`} data-relation-from={relation.from} data-relation-to={relation.to} data-relation-category={category}
               onMouseEnter={() => setEdgeHover(index)} onMouseLeave={() => setEdgeHover(undefined)} onFocus={() => { setEdgeFocus(index); setEdgeHover(undefined) }} onBlur={() => setEdgeFocus(undefined)}>
               <title>{relation.label}{relation.indirect ? ' · 间接' : ''}</title>
-              <CanvasEdge d={line.d} label={`查看关系：${relation.label}${relation.indirect ? '，间接展示' : '，直接展示'}`} onInspect={() => { setEdgeFocus(index); setInspectedRelation(index) }} indirect={relation.indirect} selected={!!layoutScope && active} muted={!!layoutScope && !active} caption={caption} />
+              <CanvasEdge d={line.d} label={`查看关系：${relation.label}${relation.indirect ? '，间接展示' : '，直接展示'}`} onInspect={() => { setEdgeFocus(index); onInspectRelation?.(relation) }} indirect={relation.indirect} selected={!!layoutScope && active} muted={!!layoutScope && !active} caption={caption} />
               <circle cx={line.start.x} cy={line.start.y} r={4} className="director-relation-port" />
               <circle cx={line.end.x} cy={line.end.y} r={4} className="director-relation-port" />
             </g>
@@ -278,12 +263,6 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
         })}
       </div>
     </div>
-    {toolbar && <nav ref={toolbarElement} className="director-canvas-toolbar" aria-label="导演画布选择">{toolbar}</nav>}
-    {inspectedRelation !== undefined && relations[inspectedRelation] && <aside className="director-relation-detail" aria-label="关系来源">
-      <header><strong>{relations[inspectedRelation].label}</strong><WorkbenchButton variant="quiet" aria-label="关闭详情" onClick={() => setInspectedRelation(undefined)}>关闭关系来源</WorkbenchButton></header>
-      <ul>{(relations[inspectedRelation].sources || [relations[inspectedRelation]]).map((source, index) =>
-        <li key={index}>{source.fromLabel || relationName(source.from)} → {source.toLabel || relationName(source.to)} · {source.label}{source.field ? ` · ${source.field}` : ''}</li>)}</ul>
-    </aside>}
     {layoutScope && <WorkbenchIconButton className={`director-minimap-toggle${minimapOpen ? ' director-minimap-toggle-open' : ''}`} variant="quiet"
       label={minimapOpen ? '收起小地图' : '展开小地图'} icon={minimapOpen ? <CloseOutlined /> : <CompassOutlined />}
       aria-expanded={minimapOpen} onClick={() => setMinimapOpen(value => !value)} />}
@@ -309,7 +288,7 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
         {mapBoxes.map((item, index) => <rect key={nodes[index]?.id || index} data-minimap-node={nodes[index]?.id} x={mapX(item.x)} y={mapY(item.y)} width={item.width * mapScale} height={item.height * mapScale} />)}
         <rect className="director-minimap-viewport" data-minimap-viewport x={mapX(visibleWorld.x)} y={mapY(visibleWorld.y)} width={visibleWorld.width * mapScale} height={visibleWorld.height * mapScale} />
       </svg>}
-    <nav className="director-canvas-tools" aria-label="导演画布工具">{tools.map(tool => <Tooltip key={tool.label} title={tool.label} placement="right"><Button type="text" aria-label={tool.label} icon={tool.label === '角色工具' ? <UserOutlined /> : tool.label === '场所工具' ? <EnvironmentOutlined /> : <ToolOutlined />} key={tool.label} data-director-tool={tool.label} draggable onDragStart={event => { event.dataTransfer.setData(toolDrag, tool.label); event.dataTransfer.effectAllowed = 'link' }} onClick={event => tool.onClick(event.currentTarget)} /></Tooltip>)}</nav>
+    <nav className="director-canvas-tools" aria-label="导演画布工具">{tools.map(tool => <Tooltip key={tool.label} title={tool.label} placement="right"><Button type="text" aria-label={tool.label} icon={tool.label === '角色工具' ? <UserOutlined /> : tool.label === '场所工具' ? <EnvironmentOutlined /> : tool.label === '关联项目资产' ? <FolderAddOutlined /> : <ToolOutlined />} key={tool.label} data-director-tool={tool.label} draggable onDragStart={event => { event.dataTransfer.setData(toolDrag, tool.label); event.dataTransfer.effectAllowed = 'link' }} onClick={event => tool.onClick(event.currentTarget)} /></Tooltip>)}</nav>
     <div className="director-canvas-bottom">
       <Dropdown trigger={['click']} menu={{ style: { maxHeight: '60dvh', overflowY: 'auto', maxWidth: 'calc(100vw - 32px)' }, items: [...groupRegions.map(group => ({ key: `group:${group.group}`, label: `${group.label}分区 · ${group.count}`, onClick: () => locate(group.first) })), ...nodes.map(node => ({ key: node.id, label: node.label, onClick: () => locate(node.id) }))] }}>
         <Button type="text" aria-label="定位画布节点" title="定位画布节点" icon={<AimOutlined />} />

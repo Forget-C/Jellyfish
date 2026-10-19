@@ -6,33 +6,36 @@ export async function workbenchControl(page, menu, role, name) {
 }
 
 export async function workbenchShot(page, name) {
-  const match = /^镜头 (\d+)：(.*)$/.exec(name)
-  const combo = page.getByRole('combobox', { name: '选择镜头', exact: true })
-  if (!await combo.count() && !await page.getByRole('button', { name: '选择镜头', exact: true }).count() && match && await page.getByRole('combobox', { name: '设计视图', exact: true }).count()) {
-    await directorSelect(page, '设计视图', `镜头 ${match[1].padStart(2, '0')} · 设计`)
+  const match = /^镜头 (\d+)：/.exec(name)
+  if (!match) throw new Error(`无法识别镜头编号：${name}`)
+  await directorOverview(page)
+  const panel = await directorInfo(page)
+  return panel.getByRole('button', { name: new RegExp(`^镜头 ${match[1].padStart(2, '0')} ·`) })
+}
+
+async function directorOverview(page) {
+  const overview = page.getByRole('button', { name: '总览', exact: true })
+  if (await overview.isEnabled()) await overview.click()
+}
+
+async function directorInfo(page) {
+  const panel = page.getByRole('complementary', { name: '附加信息' })
+  if (!await panel.isVisible()) {
+    if (await page.getByRole('group', { name: '版本管理选项' }).isVisible()) await page.getByRole('button', { name: '版本管理', exact: true }).click()
+    await page.getByRole('button', { name: '附加信息', exact: true }).click()
   }
-  await combo.or(page.getByRole('button', { name: '选择镜头', exact: true })).first().waitFor()
-  if (await combo.count()) {
-    await combo.locator('xpath=ancestor::div[contains(@class,"ant-select-selector")][1]').click()
-    await combo.fill(match ? match[2] : name)
-    return page.locator(`[id="${await combo.getAttribute('aria-controls')}"]`).locator('xpath=ancestor::div[contains(@class,"ant-select-dropdown")][1]').locator('.ant-select-item-option').filter({ hasText: match ? `镜头 ${match[1].padStart(2, '0')} · ${match[2]}` : name })
-  }
-  const target = page.getByRole('menuitem', { name: match ? `镜头 ${match[1].padStart(2, '0')} · ${match[2]}` : name, exact: true })
-  await page.getByRole('button', { name: '选择镜头', exact: true }).click()
-  return target
+  await panel.waitFor()
+  return panel
 }
 
 export async function directorSelect(page, name, label, search) {
-  if (name === '设计域') {
-    const view = page.getByRole('combobox', { name: '设计视图', exact: true })
-    if (label === '导演画布' || label === '总导演') { await directorSelect(page, '设计视图', '场次总览'); return }
-    const shot = page.getByRole('combobox', { name: '选择镜头', exact: true })
-    if (await shot.count()) {
-      const current = await shot.locator('xpath=ancestor::div[contains(@class,"ant-select")][1]').locator('.ant-select-selection-item').innerText()
-      await directorSelect(page, '设计视图', /^镜头 \d+/.exec(current)?.[0] || current)
-    } else if (await view.count()) await directorSelect(page, '设计视图', '场次总览')
-    return
+  if (name === '设计域' || name === '设计视图') {
+    if (label === '导演画布' || label === '总导演' || label === '场次总览') { await directorOverview(page); return }
+    const match = /^镜头 (\d+)/.exec(label)
+    if (match) { await (await workbenchShot(page, `镜头 ${match[1]}：`)).click(); return }
+    throw new Error(`设计域入口已移除：${label}`)
   }
+  if (name === '定位设计对象') await directorInfo(page)
   const combo = page.getByRole('combobox', { name, exact: true })
   await combo.locator('xpath=ancestor::div[contains(@class,"ant-select-selector")][1]').click()
   if (search) await combo.fill(search)
@@ -40,30 +43,17 @@ export async function directorSelect(page, name, label, search) {
 }
 
 export async function directorObject(page, label, search = typeof label === 'string' ? label : '') {
-  const close = page.getByRole('button', { name: '关闭编辑区', exact: true })
-  if (await close.isVisible()) await close.click()
+  const dialog = page.locator('.wb-modal [role="dialog"]:visible').last()
+  if (await dialog.count()) { await dialog.locator('.ant-modal-close').click({ force: true }); await dialog.waitFor({ state: 'hidden' }) }
+  const object = page.locator('.director-canvas-object').filter({ has: page.getByRole('heading', { name: label, exact: typeof label === 'string' }) })
+  if (!await object.count()) await directorOverview(page)
+  if (!await object.count() && await page.getByRole('switch', { name: '显示未关联设计' }).count()) {
+    const unlinked = page.getByRole('switch', { name: '显示未关联设计' })
+    if (!await unlinked.isChecked()) await unlinked.click()
+  }
   await directorSelect(page, '定位设计对象', label, search)
-  const object = page.locator('.director-canvas-object').filter({ has: page.getByRole('heading', { name: label, exact: true }) })
   const edit = object.getByRole('button', { name: '编辑此卡', exact: true })
   if (await edit.isDisabled()) await object.getByRole('button', { name: /^查看节点：/ }).click()
   else await edit.click()
-  return page.locator('.canvas-quick-editor')
-}
-
-export async function directorCreate(page, domain, label) {
-  const close = page.getByRole('button', { name: '关闭编辑区', exact: true })
-  if (await close.isVisible()) await close.click()
-  if (domain === '总导演') await directorSelect(page, '设计视图', '场次总览')
-  await page.getByRole('button', { name: '新增工作单', exact: true }).click()
-  await page.getByRole('menuitem', { name: `新增${label}`, exact: true }).click()
-  return page.locator('.canvas-quick-editor')
-}
-
-export async function directorShared(page, label) {
-  const close = page.getByRole('button', { name: '关闭编辑区', exact: true })
-  if (await close.isVisible()) await close.click()
-  await directorSelect(page, '设计域', '导演画布')
-  await page.getByRole('button', { name: '新增共享对象', exact: true }).click()
-  await page.getByRole('menuitem', { name: label, exact: true }).click()
-  return page.locator('.canvas-quick-editor')
+  return page.locator('.wb-modal [role="dialog"]:visible').last()
 }

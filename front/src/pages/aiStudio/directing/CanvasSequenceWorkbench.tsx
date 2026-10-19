@@ -97,6 +97,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
   const [navigation, setNavigation] = useState<{ versionId: string; kind: 'relations' }>()
   const [primaryHost, setPrimaryHost] = useState<HTMLDivElement | null>(null)
   const [navigationHost, setNavigationHost] = useState<HTMLDivElement | null>(null)
+  const [directorNavigationHost, setDirectorNavigationHost] = useState<HTMLDivElement | null>(null)
   const [feedbackHost, setFeedbackHost] = useState<HTMLDivElement | null>(null)
   const [moreHost, setMoreHost] = useState<HTMLDivElement | null>(null)
   const toolbar = useRef<HTMLElement>(null)
@@ -887,6 +888,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
           </div>
         </CanvasToolbarMenu>
       </div>
+      {canvas === 'director' && selected && <div ref={setDirectorNavigationHost} className="canvas-director-navigation-host" />}
     </header>
     <nav className="canvas-history-controls" aria-label="编辑历史">
       <WorkbenchIconButton label="撤销" variant="quiet" icon={<UndoOutlined />} onClick={() => stepHistory('undo')} disabled={handingOff || !selected || !histories.current.get(selected.id)?.undo.length || readonly || leaving || busy === 'create'} />
@@ -998,6 +1000,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       onExternalFocusHandled={() => setDirectorFocus(undefined)}
       externalOverlay={currentEditor || currentNavigation}
       noticeHost={feedbackHost}
+      navigationHost={directorNavigationHost} saveStatus={status}
       source={<SceneSourceBasis key={selected.id} projectId={projectId} chapterId={chapterId} basis={content.basis} compact dirty={JSON.stringify(content.basis) !== JSON.stringify(selected.content.basis)}
         open={currentEditor === 'source'} onOpenChange={open => open ? openEditor('source') : setEditor(undefined)}
         disabled={handingOff || !!recovery || readonly || busy === 'create'} onChange={basis => editContent({ ...content, basis })} />} />}

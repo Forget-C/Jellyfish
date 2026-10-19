@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Alert, Button, Select, Space } from 'antd'
-import { CanvasQuickEditor } from './CanvasQuickEditor'
+import { WorkbenchModal } from './ui/WorkbenchModal'
 import { WorkbenchButton } from './ui/WorkbenchButton'
 import { DesignObjectSummary } from './DesignObjectSummary'
 import type { EditableSceneDesign_Output, EditableGenerationUnit_Output } from '../../../services/generated'
@@ -60,7 +60,7 @@ export function resolveTarget(value: EditableSceneDesign_Output, target: DesignT
 }
 
 /** 单个编辑区复用六岗字段；创建关系须明确选对象，删除先定位真实引用。 */
-export function SceneDesignPanel({ value, saved, units, disabled, onChange, focusRequest, onFocusHandled, onLocateUnit, onSideClose, sideContext, onNavigateTarget }: {
+export function SceneDesignPanel({ value, saved, units, disabled, onChange, focusRequest, onFocusHandled, onLocateUnit, onSideClose, sideContext, onNavigateTarget, saveStatus }: {
   value: EditableSceneDesign_Output
   saved?: EditableSceneDesign_Output
   units: EditableGenerationUnit_Output[]
@@ -71,6 +71,7 @@ export function SceneDesignPanel({ value, saved, units, disabled, onChange, focu
   onLocateUnit: (conflict: UnitReferenceConflict) => void
   onSideClose?: () => void
   sideContext?: string
+  saveStatus: string
   onNavigateTarget: (target: DesignTarget, trigger: HTMLElement) => void
 }) {
   const [target, setTarget] = useState<DesignTarget>({ path: ['direction'] })
@@ -172,8 +173,9 @@ export function SceneDesignPanel({ value, saved, units, disabled, onChange, focu
       {object && typeof path[path.length - 1] === 'number' && <WorkbenchButton variant="danger" disabled={disabled} onClick={() => remove(path.slice(0, -1), path[path.length - 1] as number)}>删除此卡</WorkbenchButton>}
   </>
   return <>
-    {sideOpen && <CanvasQuickEditor title={object?.label || '设计卡片'} onClose={() => { setSideOpen(false); setPending(undefined); onSideClose?.() }}>
+    <WorkbenchModal title={<span className="director-modal-title">{object?.label || '设计卡片'}<small role="status">{saveStatus}</small></span>}
+      open={sideOpen} footer={null} maskClosable={false} onCancel={() => { setSideOpen(false); setPending(undefined); onSideClose?.() }}>
       {editorBody()}
-    </CanvasQuickEditor>}
+    </WorkbenchModal>
   </>
 }
