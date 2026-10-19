@@ -21,7 +21,7 @@ from app.core.contracts.directing.relationship_graph import scene_relationship_g
 from app.core.contracts.directing.style import ProjectStyleProfile, ProjectStyleRevision, StyleWrite
 from app.core.contracts.directing.scene_version import (
     EditableSceneDesign, SceneVersionContent, SceneVersionCreate, SceneVersionRead,
-    SceneVersionSave, SceneVersionSource,
+    SceneVersionSave, SceneVersionSource, validate_new_design_row_ids,
 )
 from app.models.directing import SceneVersionRecord, InstructionBasisRecord, SceneVideoExecution, SceneTakeRecord, SceneTakeReviewRecord, SceneEndFrameRecord, SceneCopyOrigin
 from app.models.directing import ActiveCut, CutFrame, ProjectStyleRecord, Sequence, DirectingRevision, RevisionDependency, Take, CutTakeReference
@@ -527,17 +527,7 @@ class DirectingStore:
         # model_copy 不触发 Pydantic 校验，候选设计替换后须重新核对单元关联。
         content = SceneVersionContent.model_validate(content.model_dump(mode='json'))
         if previous is not None:
-            # 历史无 ID 行原样保留；本次新增的独立行必须取得稳定身份。
-            for label, current_rows, old_rows in (
-                ('不可改事实', content.design.direction.immutable_facts, previous.design.direction.immutable_facts),
-                ('待确定问题', content.design.direction.open_questions, previous.design.direction.open_questions),
-                ('角色情境', content.design.performance.situations, previous.design.performance.situations),
-                ('节拍表演', content.design.performance.beats, previous.design.performance.beats),
-                ('镜内活动', content.design.staging.activities, previous.design.staging.activities),
-                ('摄影工作单', content.design.cinematography, previous.design.cinematography),
-            ):
-                if sum(row.id is None for row in current_rows) > sum(row.id is None for row in old_rows):
-                    raise ValueError(f'新增{label}缺少稳定身份')
+            validate_new_design_row_ids(content.design, previous.design)
         _, files, _ = await self._validate(sequence, content.design)
         await self._validate_asset_origins(content, previous, design=content.design)
         for unit in content.units:

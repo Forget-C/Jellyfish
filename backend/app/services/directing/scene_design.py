@@ -78,6 +78,7 @@ class SceneDesignService(DirectingAIService):
             'design_scope': body.scope, 'instruction': body.instruction, 'script_text': body.content.basis.text,
             'source': body.content.basis.source.model_dump(mode='json'),
             'previous_design': body.content.design.model_dump(mode='json'),
+            'scene_version_content': body.content.model_dump(mode='json'),
             'style_revision_id': style_id, 'style_rules': [rule.model_dump(mode='json') for rule in rules],
             'existing_assets': [asset.model_dump(mode='json') for asset in await self.assets()]}
         return await TaskService(self.db).submit(kind='directing_design', title='AI 局部修订' if body.scope else 'AI 提取设计 · 整场',

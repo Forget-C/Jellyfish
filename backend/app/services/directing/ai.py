@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from app.core.contracts.directing.common import Source
 from app.core.contracts.directing.design import SceneDesign
-from app.core.contracts.directing.scene_version import EditableSceneDesign
+from app.core.contracts.directing.scene_version import EditableSceneDesign, SceneVersionContent, validate_new_design_row_ids
 from app.core.contracts.directing.production import ReviewPacket
 from app.core.contracts.directing.instruction_check import InstructionCheckResult
 from app.core.contracts.directing.scene_instruction import SceneInstructionResult, SceneInstructionScope
@@ -43,6 +43,11 @@ def generate_directing_result(kind: str, llm, args: dict):
         "directing_design": "根据场次原文、已有资产与人工意见，设计可拍摄的六部门工作单。已有资产只有适用于本场时才引用其 ID，不得凭空编造资产 ID，不得让资产设定改变原文事实。镜头与节拍使用稳定 ID。保留剧情事实。所有角色、对白、背景行为和摄影必须有因果。未知技术值标 unknown，不适用给理由。不得自称用户确认。每镜必须有摄影行，并明确 participant_ids，引用本工作单的参与对象 ID；包括实际参与的静态车辆与手持物件。明确无对象用空列表，不得省略或使用 null，不因同一节拍或全场名单就把其他镜头对象加入。所有有内容的 Note 必须带 model 来源，reference 使用所提供的 task_identity，version 使用 1。",
         "directing_review": "以六部门分别审查本轮每个镜头出现项。严格保留提供的 roles 和 occurrences，不得减少、更换、合并。同一镜头不同单元分别检查。每行给出 pass 或 revise、具体理由及可执行修改建议。检查共同空间、先后反应、参考绑定、摄影、声音和相邻衔接。模型不能授权用户执行。",
     }[kind]
+    if kind == 'directing_design' and args.get('scene_version_design'):
+        instruction += ('\n场次版本建议使用原工作单的 ID 与字段引用，并在 applicability 中逐字段声明实际镜头、单元出现项或全场约束。'
+                        '叙事、人物情境和环境说明保留在原背景字段；动作和可见结果保留在原设计行；约束须声明 video、sound 或 postproduction 阶段。'
+                        '共享人物、事件或锚点不能代替适用范围；不能确定镜头的独立设计项可合法暂不声明适用性，供人工审阅。'
+                        '不得添加任意背景标签、采用状态或不存在的关联 ID。')
     if args.get('design_scope'):
         instruction += '\n这是预先限定范围的局部修订。只能替换 design_scope 中列出的完整 Note，必须保留其余字段、来源、对象身份、顺序与关联，返回完整工作单；不得补齐范围外的未完成字段。'
     if args.get('instruction_scope'):
@@ -65,9 +70,26 @@ def generate_directing_result(kind: str, llm, args: dict):
                 original = EditableSceneDesign.model_validate(args['previous_design'])
                 result = record_chapter_generation_source(original, result, args['task_identity'], args.get('source'))
                 validate_model_sources(original, result, args['task_identity'])
+                validate_new_design_row_ids(result, original)
+                if args.get('existing_assets') is not None:
+                    assets = {(row['kind'], row['id']) for row in args['existing_assets']}
+                    for participant in result.participants:
+                        if participant.character_id and ('character', participant.character_id) not in assets:
+                            raise ValueError('人物引用了当前项目不存在的角色资产')
+                        if participant.prop_id and ('prop', participant.prop_id) not in assets:
+                            raise ValueError('参与对象引用了当前项目不存在的道具资产')
+                    if result.direction.location_asset_id and ('scene', result.direction.location_asset_id) not in assets:
+                        raise ValueError('场所引用了当前项目不存在的场所资产')
+                if args.get('design_scope'):
+                    from app.services.directing.scene_design_scope import validate_design_scope  # pylint: disable=import-outside-toplevel
+                    validate_design_scope(args['design_scope'], original.model_dump(mode='json'), result.model_dump(mode='json'))
+                else:
+                    result.style_revision_id = args.get('style_revision_id')
+                if args.get('scene_version_content'):
+                    SceneVersionContent.model_validate({**args['scene_version_content'], 'design': result.model_dump(mode='json')})
             break
-        except (ValidationError, DesignSourceError) as error:
-            errors = error.errors(include_url=False, include_input=False, include_context=False) if isinstance(error, ValidationError) else [{'loc': ['sources'], 'msg': str(error)}]
+        except (ValidationError, ValueError) as error:
+            errors = error.errors(include_url=False, include_input=False, include_context=False) if isinstance(error, ValidationError) else [{'loc': ['sources' if isinstance(error, DesignSourceError) else 'design'], 'msg': str(error)}]
             if attempt == 1:
                 if isinstance(error, DesignSourceError):
                     raise DirectingOutputError(str(error)) from None
@@ -97,7 +119,7 @@ def generate_directing_result(kind: str, llm, args: dict):
     if kind == "directing_review_revision":
         from app.services.directing.review_revision import validate_candidate  # pylint: disable=import-outside-toplevel
         result, _, _ = validate_candidate(args["revision_context"], result)
-    if kind == "directing_design":
+    if kind == "directing_design" and not args.get('scene_version_design'):
         # 风格身份来自用户冻结输入，不采信模型生成的其他版本 ID。
         if args.get('design_scope'):
             from app.services.directing.scene_design_scope import validate_design_scope  # pylint: disable=import-outside-toplevel

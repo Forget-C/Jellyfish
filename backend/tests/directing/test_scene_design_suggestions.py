@@ -88,6 +88,72 @@ async def test_whole_design_preview_preserves_version_and_rejects_new_manual_edi
 
 
 @pytest.mark.asyncio
+async def test_design_suggestion_applies_real_scope_and_keeps_unlinked_row(tmp_path):
+    """真实任务只产建议；明确采用后同一版本保存真实关系与合法未关联项。"""
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        async with sessions.begin() as db:
+            db.add(Provider(id='relation-provider', name='openai', base_url='https://api.openai.com/v1', api_key='fixture'))
+            await db.flush()
+            db.add(Model(id='relation-model', name='gpt-test', category='text', provider_id='relation-provider', params={}))
+        path = await sequence_path(client)
+        created = (await client.post(path + '/versions', json={'request_id': str(uuid4()), 'title': '关联提取'})).json()['data']
+        detail = path + '/versions/' + created['id']
+        base = deepcopy(created['content'])
+        base['design']['direction']['shots'] = [{
+            'id': shot_id, 'beat_ids': [], 'event_ids': [], 'blocking_state_ids': [],
+            'participant_ids': [], 'criterion_ids': [], 'narrative_function': {}, 'visible_result': {},
+        } for shot_id in ('shot1', 'shot2')]
+        seeded = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 1, 'content': base})
+        assert seeded.status_code == 200, seeded.text
+        frozen = seeded.json()['data']
+        submitted = await client.post(detail + '/design-suggestions', json={
+            'request_id': str(uuid4()), 'expected_revision': frozen['revision'],
+            'content': frozen['content'], 'model_id': 'relation-model',
+        })
+        assert submitted.status_code == 200, submitted.text
+        task_id = submitted.json()['data']['task_id']
+        async with sessions.begin() as db:
+            task = await db.get(Task, task_id)
+            proposed = deepcopy(frozen['content']['design'])
+            proposed['direction']['beats'] = [{
+                'id': 'beat1', 'event_ids': [], 'objective': {}, 'obstacle': {},
+                'expected_change': {}, 'must_show': {},
+            }]
+            proposed['direction']['shots'][0]['beat_ids'] = ['beat1']
+            proposed['criteria'] = [{'id': 'undecided-criterion', 'requirement': {}}]
+            proposed['applicability'] = [
+                {'subject': {'kind': 'beat', 'id': 'beat1', 'field': 'must_show'},
+                 'purpose': 'design', 'scope': 'shots', 'shot_ids': ['shot1']},
+                {'subject': {'kind': 'direction', 'field': 'axis'}, 'purpose': 'constraint',
+                 'scope': 'scene_rule', 'phase': 'video', 'condition': '角色出现时'},
+            ]
+            generated = generate_directing_result('directing_design',
+                SimpleNamespace(invoke=lambda _: SimpleNamespace(content=json.dumps(proposed))),
+                task.input_snapshot['run_args'])
+            service = TaskService(db)
+            assert await service.claim(task_id, worker_id='relation-worker')
+            await service.finish(task_id, result=generated.model_dump(mode='json'))
+        preview = await client.post(detail + '/design-suggestions/' + task_id + '/preview',
+                                    json={'content': frozen['content']})
+        assert preview.status_code == 200, preview.text
+        assert (await client.get(detail)).json()['data'] == frozen
+        applied = deepcopy(frozen['content'])
+        applied['design'] = preview.json()['data']['design']
+        saved = await client.put(detail, json={'request_id': str(uuid4()),
+            'expected_revision': frozen['revision'], 'content': applied})
+        assert saved.status_code == 200, saved.text
+        reread = (await client.get(detail)).json()['data']
+        assert reread['id'] == created['id']
+        assert reread['relationship_graph'] == saved.json()['data']['relationship_graph']
+        nodes = {node['key']: node for node in reread['relationship_graph']['nodes']}
+        assert nodes['beat:beat1']['shot_ids'] == ['shot1']
+        assert nodes['criterion:undecided-criterion']['placement'] == 'unlinked'
+        assert any(use['owner'] == 'space' and use['field'] == 'axis' and use['phase'] == 'video'
+                   and use['scope'] == 'scene_rule' for use in reread['relationship_graph']['uses'])
+        assert len((await client.get(path + '/versions')).json()['data']) == 1
+
+
+@pytest.mark.asyncio
 async def test_scoped_design_changes_only_second_of_six_shots_and_rejects_outside_edits(tmp_path):
     """范围在请求时固定；整份模型结果越界时拒绝，不能挑出合法部分应用。"""
     async with database(tmp_path) as sessions, client_for(sessions) as client:
@@ -235,3 +301,58 @@ def test_generation_records_task_provenance_for_chapter_facts(scope):
     args['source'] = {**source, 'version': 'other-version'}
     with pytest.raises(DirectingOutputError, match='来源'):
         generate_directing_result('directing_design', SimpleNamespace(invoke=invoke), args)
+
+
+def test_generation_retries_invalid_occurrence_scope_against_frozen_version():
+    """设计结构本身合法但引用了不存在的单元时，在 Worker 完成前纠错一次。"""
+    from app.core.contracts.directing.scene_version import EditableSceneDesign, SceneVersionContent
+
+    source = {'kind': 'chapter', 'reference': 'chapter', 'version': '1'}
+    original = EditableSceneDesign(sources=[source]).model_dump(mode='json')
+    frozen = SceneVersionContent.model_validate({'basis': {'source': source, 'text': '读信'},
+                                                  'design': original}).model_dump(mode='json')
+    invalid = deepcopy(original)
+    invalid['applicability'] = [{'subject': {'kind': 'direction', 'field': 'axis'},
+        'purpose': 'constraint', 'scope': 'occurrences', 'phase': 'video',
+        'occurrences': [{'unit_id': 'missing-unit', 'coverage_item_id': 'missing-cover'}]}]
+    corrected = deepcopy(invalid)
+    corrected['applicability'][0].update(scope='scene_rule', occurrences=[])
+    args = {'scene_version_design': True, 'task_identity': 'current-task',
+            'previous_design': original, 'scene_version_content': frozen}
+    calls = []
+
+    def invoke(messages):
+        calls.append(messages)
+        return SimpleNamespace(content=json.dumps(invalid if len(calls) == 1 else corrected))
+
+    result = generate_directing_result('directing_design', SimpleNamespace(invoke=invoke), args)
+    assert len(calls) == 2
+    assert result.applicability[0].scope == 'scene_rule'
+    assert '不存在的单元出现项' in calls[1][-1].content
+    with pytest.raises(DirectingOutputError, match='不存在的单元出现项'):
+        generate_directing_result('directing_design', SimpleNamespace(invoke=lambda _: SimpleNamespace(content=json.dumps(invalid))), args)
+
+
+def test_generation_retries_foreign_asset_before_finishing_task():
+    """模型凭空编造的项目资产 ID 经过一次纠错，仍错则任务失败。"""
+    from app.core.contracts.directing.scene_version import EditableSceneDesign
+
+    original = EditableSceneDesign(sources=[{'kind': 'chapter', 'reference': 'chapter', 'version': '1'}]).model_dump(mode='json')
+    invalid = deepcopy(original)
+    invalid['participants'] = [{'id': 'person1', 'name': '读信者', 'character_id': 'foreign-character'}]
+    corrected = deepcopy(invalid)
+    corrected['participants'][0]['character_id'] = None
+    args = {'scene_version_design': True, 'task_identity': 'current-task',
+            'previous_design': original, 'existing_assets': []}
+    calls = []
+
+    def invoke(messages):
+        calls.append(messages)
+        return SimpleNamespace(content=json.dumps(invalid if len(calls) == 1 else corrected))
+
+    result = generate_directing_result('directing_design', SimpleNamespace(invoke=invoke), args)
+    assert len(calls) == 2
+    assert result.participants[0].character_id is None
+    assert '不存在的角色资产' in calls[1][-1].content
+    with pytest.raises(DirectingOutputError, match='不存在的角色资产'):
+        generate_directing_result('directing_design', SimpleNamespace(invoke=lambda _: SimpleNamespace(content=json.dumps(invalid))), args)

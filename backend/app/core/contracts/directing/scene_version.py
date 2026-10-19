@@ -77,6 +77,20 @@ class EditableSceneDesign(SceneDesign):
         return self
 
 
+def validate_new_design_row_ids(current: EditableSceneDesign, previous: EditableSceneDesign) -> None:
+    """历史无 ID 行可保留；本次新增的独立行必须有稳定身份。"""
+    for label, current_rows, old_rows in (
+        ('不可改事实', current.direction.immutable_facts, previous.direction.immutable_facts),
+        ('待确定问题', current.direction.open_questions, previous.direction.open_questions),
+        ('角色情境', current.performance.situations, previous.performance.situations),
+        ('节拍表演', current.performance.beats, previous.performance.beats),
+        ('镜内活动', current.staging.activities, previous.staging.activities),
+        ('摄影工作单', current.cinematography, previous.cinematography),
+    ):
+        if sum(row.id is None for row in current_rows) > sum(row.id is None for row in old_rows):
+            raise ValueError(f'新增{label}缺少稳定身份')
+
+
 class SceneVersionSource(Contract):
     """版本明确采用的原文及原始位置，章节更新不改写该依据。"""
 

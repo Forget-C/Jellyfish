@@ -122,7 +122,7 @@ async def get_object_fixture(key: str):
 
 
 @app.post('/browser-test/design-tasks/{task_id}/complete')
-async def complete_design_fixture(task_id: str, remove_shot_id: str | None = None):
+async def complete_design_fixture(task_id: str, remove_shot_id: str | None = None, relations: bool = False):
     """仅测试服务提供工作器结果夹具；验证 UI 消费真实任务，不测试外部模型质量。"""
     async with sessions.begin() as db:
         task = await db.get(Task, task_id)
@@ -135,6 +135,16 @@ async def complete_design_fixture(task_id: str, remove_shot_id: str | None = Non
             target = target[int(part)] if isinstance(target, list) else target[part]
         target[parts[-1]] = {'state': 'proposal', 'text': '从她停顿的目光展开整场',
             'sources': [{'kind': 'model', 'reference': args['task_identity'], 'version': '1'}]}
+        if relations:
+            shot_id = result['direction']['shots'][0]['id']
+            camera_id = result['cinematography'][0]['id']
+            result['applicability'].append({'subject': {'kind': 'camera', 'id': camera_id, 'field': 'composition'},
+                'purpose': 'design', 'scope': 'shots', 'shot_ids': [shot_id]})
+            result['applicability'].append({'subject': {'kind': 'prompt', 'field': 'prohibitions'},
+                'purpose': 'constraint', 'scope': 'scene_rule', 'phase': 'video'})
+            result['criteria'].append({'id': 'ai-orphan-criterion', 'requirement':
+                {'state': 'proposal', 'text': '观察手指是否迟疑',
+                 'sources': [{'kind': 'model', 'reference': args['task_identity'], 'version': '1'}]}})
         if remove_shot_id is not None:
             result['direction']['shots'] = [shot for shot in result['direction']['shots'] if shot['id'] != remove_shot_id]
         service = TaskService(db)
