@@ -341,7 +341,7 @@ try {
   const beforeLinked = (await (await fetch(`${versionsUrl}/${first[0].id}`)).json()).data
   const sample = makeWorkspace().designs[0].content
   beforeLinked.content.design.participants.push({ ...sample.participants[0], id: 'test-reader', name: '读信者' })
-  beforeLinked.content.design.performance.situations.push({ ...sample.performance.situations[0], participant_id: 'test-reader', situation: { state: 'proposal', text: '终于找到失散的信', sources: [{ kind: 'human', reference: 'browser', version: '1' }] } })
+  beforeLinked.content.design.performance.situations.push({ ...sample.performance.situations[0], id: 'test-reader-situation', participant_id: 'test-reader', situation: { state: 'proposal', text: '终于找到失散的信', sources: [{ kind: 'human', reference: 'browser', version: '1' }] } })
   const seededLinked = await fetch(`${versionsUrl}/${first[0].id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: beforeLinked.revision, content: beforeLinked.content }) })
   assert.equal(seededLinked.status, 200, await seededLinked.text())
@@ -458,6 +458,7 @@ try {
   await page.getByRole('button', { name: '保存', exact: true }).click()
   await savingStarted
   await (await viewpoint(page)).fill('请求期间继续编辑的内容')
+  await page.getByText(`关系图来自已保存 revision ${afterDiscard[1].revision}；关系更新中`).waitFor()
   await page.getByRole('dialog', { name: /全场叙事与约束/ }).locator('.ant-modal-close').click()
   await page.getByRole('dialog', { name: /全场叙事与约束/ }).waitFor({ state: 'hidden' })
   // 子图切换也占用浏览历史；此处明确回到创建第二版本之前，验证跨版本保护。
@@ -723,6 +724,46 @@ try {
   await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   assert.equal((await (await fetch(`${versionsUrl}/${first[0].id}`)).json()).data.source.text, beforeSourceChange.source.text)
   assert.equal((await (await fetch(`${versionsUrl}/${currentVersionId}`)).json()).data.source.text, newRaw)
+  const beforeConflict = (await (await fetch(`${versionsUrl}/${first[0].id}`)).json()).data
+  const externalContent = structuredClone(beforeConflict.content)
+  externalContent.design.direction.viewpoint.text = '服务器同期修改的视点'
+  const externalSave = await fetch(`${versionsUrl}/${first[0].id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: beforeConflict.revision, content: externalContent }) })
+  assert.equal(externalSave.status, 200, await externalSave.text())
+  await (await viewpoint(page)).fill('本地冲突后保留的视点')
+  await closeDesign(page)
+  await page.getByRole('button', { name: '保存', exact: true }).click()
+  const conflictDialog = page.getByRole('dialog', { name: '保存冲突 · 比较本地与服务器' })
+  await conflictDialog.getByRole('region', { name: '保存冲突差异' }).getByText('服务器同期修改的视点').waitFor()
+  assert.match(await conflictDialog.getByRole('region', { name: '保存冲突差异' }).innerText(), /本地冲突后保留的视点/)
+  await conflictDialog.getByRole('button', { name: '以服务器修订为基线保留本地编辑' }).click()
+  await conflictDialog.waitFor({ state: 'hidden' })
+  await page.getByRole('status').filter({ hasText: '未保存' }).first().waitFor()
+  await page.getByRole('button', { name: '保存', exact: true }).click()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
+  assert.equal((await (await fetch(`${versionsUrl}/${first[0].id}`)).json()).data.content.design.direction.viewpoint.text, '本地冲突后保留的视点')
+  await (await viewpoint(page)).fill('响应图修订异常时保留的输入')
+  await closeDesign(page)
+  await page.route('**/versions/*', async route => {
+    if (route.request().method() !== 'PUT') { await route.continue(); return }
+    const response = await route.fetch()
+    const body = await response.json()
+    body.data.relationship_graph.revision -= 1
+    await route.fulfill({ response, body: JSON.stringify(body), headers: { ...response.headers(), 'content-type': 'application/json' } })
+  })
+  const beforeMalformed = (await (await fetch(`${versionsUrl}/${first[0].id}`)).json()).data.revision
+  await page.getByRole('button', { name: '保存', exact: true }).click()
+  await page.getByRole('status').filter({ hasText: '保存失败' }).first().waitFor()
+  assert.equal((await (await fetch(`${versionsUrl}/${first[0].id}`)).json()).data.revision, beforeMalformed + 1)
+  await page.unroute('**/versions/*')
+  await page.getByRole('button', { name: '保存', exact: true }).click()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
+  assert.equal((await (await fetch(`${versionsUrl}/${first[0].id}`)).json()).data.revision, beforeMalformed + 1)
+  assert.equal(await (await viewpoint(page)).inputValue(), '响应图修订异常时保留的输入')
+  await (await viewpoint(page)).fill('按旧原文继续设计')
+  await closeDesign(page)
+  await page.getByRole('button', { name: '保存', exact: true }).click()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   const chapterUrl = `${api}/api/v1/studio/projects/canvas-project/directing/chapters/canvas-chapter`
   const latestChapter = (await (await fetch(chapterUrl)).json()).data
   const division = { source_version: latestChapter.source_version,

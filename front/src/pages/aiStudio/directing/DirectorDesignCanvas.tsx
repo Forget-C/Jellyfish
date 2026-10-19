@@ -68,15 +68,16 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
   const focusSerial = useRef(0), lastLocation = useRef('')
   if (lastLocation.current !== location.key) { lastLocation.current = location.key; focusSerial.current = ++directorFocusSerial }
   const graphPending = JSON.stringify(content.design) !== JSON.stringify(saved.design)
-  const projection = useMemo(() => authoritativeShotCanvasProjection(saved.design, relationshipGraph), [saved.design, relationshipGraph])
+  const projection = useMemo(() => authoritativeShotCanvasProjection(content.design, relationshipGraph), [content.design, relationshipGraph])
   const overviewGraph = useMemo(() => projection.view(), [projection])
   const allObjects = projection.objects
-  const identity = (node: DesignObject, design = saved.design) => designObjectLayoutId(design, node)
+  const identity = (node: DesignObject, design = content.design) => designObjectLayoutId(design, node)
   const target = (id?: string) => allObjects.find(node => identity(node) === id)
   const graph = useMemo(() => scope === 'shot' ? projection.view(activeShotId) : overviewGraph,
     [scope, activeShotId, overviewGraph, projection])
   const pendingCount = relationshipGraph.nodes.filter(node => node.placement === 'pending_shot').length
   const unlinkedCount = relationshipGraph.nodes.filter(node => node.placement === 'unlinked').length
+  const draftOnlyCount = projection.objects.filter(node => !relationshipGraph.nodes.some(savedNode => savedNode.key === node.key)).length
   const historyIndex = () => typeof window.history.state?.idx === 'number' ? window.history.state.idx as number : undefined
   const [trail, setTrail] = useState<BrowseTrail>(() => {
     const current = { key: location.key, index: historyIndex() }
@@ -257,7 +258,7 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
   const objects: DirectorCanvasObject[] = visibleNodes.map(node => {
     const home = graph.location(node.key)
     const nodeUses = relationshipGraph.uses.filter(use => use.owner === node.key)
-    const isEntry = scope === 'all' && node.key.startsWith('shot:')
+    const isEntry = scope === 'all' && node.key.startsWith('shot:') && relationshipGraph.nodes.some(savedNode => savedNode.key === node.key)
     const open = (trigger: HTMLElement) => {
       if (isEntry) { onSelectShot(node.key.slice(5)); go({ scope: 'shot', shotId: node.key.slice(5) }, identity(node)) }
       else if (isReference(node)) jump(node, identity(node))
@@ -275,8 +276,8 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
         {home === 'global' && <p>{nodeUses.some(use => use.purpose === 'background')
           ? nodeUses.some(use => use.purpose === 'constraint') ? '场次背景与规则 · 逐项查看用途' : '场次背景 · 无需逐镜关联 · 不自动执行'
           : '全场规则'}</p>}
-        {home === 'unlinked' && <p>{relationshipGraph.nodes.find(item => item.key === node.key)?.placement === 'pending_shot' ? '待归镜头' : '未关联'}
-          {' · '}{relationshipGraph.nodes.find(item => item.key === node.key)?.reason}</p>}
+        {home === 'unlinked' && <p>{!relationshipGraph.nodes.some(item => item.key === node.key) ? '未保存新增 · 保存后更新关系图' :
+          `${relationshipGraph.nodes.find(item => item.key === node.key)?.placement === 'pending_shot' ? '待归镜头' : '未关联'} · ${relationshipGraph.nodes.find(item => item.key === node.key)?.reason}`}</p>}
         {isReference(node) ? <>
           <p>共享引用 · 只读定位</p>
           <WorkbenchButton onClick={() => jump(node, identity(node))}>定位共享原卡</WorkbenchButton>
@@ -344,7 +345,7 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
       {null}
     </DirectorCanvasSurface>
     {scope === 'all' && <aside className="director-unlinked-bubble" aria-label="未关联设计显示">
-      <span>待归镜头 · {pendingCount}　未关联设计 · {unlinkedCount}</span>
+      <span>待归镜头 · {pendingCount}　未关联设计 · {unlinkedCount}{draftOnlyCount ? `　未保存新增 · ${draftOnlyCount}` : ''}</span>
       <Switch aria-label="显示未关联设计" checked={unlinkedOpen} disabled={!graph.unlinked.length}
         onChange={setUnlinkedOpen} />
     </aside>}

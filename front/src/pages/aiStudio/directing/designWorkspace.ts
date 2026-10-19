@@ -105,6 +105,7 @@ export type ShotCanvasLocation = 'global' | 'shared' | 'unlinked' | string
 
 /** 保存修订已决定归位与引用；此投影只压缩总览并筛选逐镜可见对象。 */
 export function authoritativeShotCanvasProjection(value: SceneDesign_Input, authority: SceneRelationshipGraph) {
+  const authorityKeys = new Set(authority.nodes.map(node => node.key))
   const objects = designObjects(value).map(node => node.key === 'overview' ? { ...node, label: '全场叙事与约束',
     fields: ['viewpoint', 'information_change', 'relationship_change', 'turning_point', 'open_questions', 'control_level'] } : node)
   objects.push({ key: 'space', label: '空间规则', kind: 'direction', path: ['direction'], fields: ['spatial_basis', 'shootable_area', 'axis', 'scale'] },
@@ -125,7 +126,7 @@ export function authoritativeShotCanvasProjection(value: SceneDesign_Input, auth
     label: edge.field, field: edge.field }))
   const view = (shotId?: string) => {
     if (!shotId) {
-      const nodes = objects.filter(node => ['global', 'shared'].includes(location(node.key)) || node.key.startsWith('shot:'))
+      const nodes = objects.filter(node => ['global', 'shared'].includes(location(node.key)) || node.key.startsWith('shot:') && authorityKeys.has(node.key))
       const keys = new Set(nodes.map(node => node.key))
       return { nodes, unlinked: objects.filter(node => location(node.key) === 'unlinked'),
         edges: direct.filter(edge => keys.has(edge.from) && keys.has(edge.to)).map(edge => ({ ...edge, sources: [edge] })), memberships, location }

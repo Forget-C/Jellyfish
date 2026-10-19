@@ -1,5 +1,6 @@
 import { WorkbenchTheme } from './ui/WorkbenchTheme'
 import { WorkbenchButton, WorkbenchIconButton } from './ui/WorkbenchButton'
+import { WorkbenchModal } from './ui/WorkbenchModal'
 import { SourceProvider } from './Sources'
 import { SceneSourceRevision } from './SceneSourceRevision'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
@@ -34,6 +35,7 @@ import { SceneDesignSuggestions } from './SceneDesignSuggestions'
 import type { UnitReferenceConflict } from './sceneUnitReferences'
 import { DirectorCanvasSurface } from './DirectorCanvasSurface'
 import { DirectorDesignCanvas } from './DirectorDesignCanvas'
+import { revisionDifferences } from './revisionDiff'
 import { TaskCenter } from '../components/TaskCenter'
 import './canvasWorkbench.css'
 
@@ -51,6 +53,16 @@ const contentKey = (value: unknown) => JSON.stringify(value, (_key, item) => {
     .map(key => [key, item[key]]))
 })
 const sameContent = (a: unknown, b: unknown) => contentKey(a) === contentKey(b)
+const verifiedSave = (operation: SaveOperation, saved: SceneVersionRead) => {
+  const revision = operation.body.expected_revision + (operation.videoOnly ? 0 : 1)
+  if (saved.id !== operation.versionId || saved.revision !== revision ||
+    !operation.videoOnly && saved.last_save_request_id !== operation.body.request_id ||
+    !sameContent(saved.content, operation.body.content) ||
+    saved.relationship_graph.version_id !== saved.id || saved.relationship_graph.revision !== saved.revision) {
+    throw new Error('保存响应与本次请求、内容或关系图修订不一致，请核实原请求')
+  }
+  return saved
+}
 const defaultVersion = (rows: SceneVersionRead[]) => rows.filter(row => row.last_save_request_id || row.copied_from_version_id)
   .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at) || a.id.localeCompare(b.id))[0] || rows[0]
 // 当前工作台使用本地用户；浏览器存储天然隔离设备，偏好不写入场次内容。
@@ -139,7 +151,9 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
   const [videoFocus, setVideoFocus] = useState<{ versionId: string; unitId: string; executionId: string; serial: number }>()
   const [videoFeedback, setVideoFeedback] = useState<Record<string, { message: string; versionId: string; unitId: string; executionId?: string; error?: string }>>({})
   const [failure, setFailure] = useState<{ versionId?: string; message: string }>()
+  const [saveConflict, setSaveConflict] = useState<SceneVersionRead>()
   const pendingSave = useRef<SaveOperation>()
+  const firstDirtyAt = useRef<number>()
   const pendingCreate = useRef<SceneVersionCreate>()
   const inFlight = useRef<Promise<boolean>>()
   const [transition, setTransition] = useState<Transition>()
@@ -308,7 +322,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
         // 已提交但响应丢失：优先核对读取结果，否则复用原请求核实，绝不另起保存。
         if (operation.video || server.last_save_request_id !== operation.body.request_id) server = await executeSaveOperation(operation)
         if (!live.current) return
-        if (server.revision !== operation.body.expected_revision + (operation.videoOnly ? 0 : 1) || !sameContent(server.content, operation.body.content)) {
+        try { verifiedSave(operation, server) } catch {
           setRecovery({ data, stage: 'conflict', message: '服务器内容与原保存结果不一致，不能直接恢复覆盖。' })
           return
         }
@@ -353,6 +367,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
   const editContent = (updated: SceneVersionContent_Output, record = true) => {
     const { selected, content } = latest.current
     if (!selected || !content || copyLock.current || recovery || handingOff || !ownership.canEdit() || sameContent(content, updated)) return
+    if (!hasChanges()) firstDirtyAt.current = Date.now()
     if (record) {
       const history = histories.current.get(selected.id) || { undo: [], redo: [] }
       history.undo.push(content)
@@ -509,7 +524,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
   }
   const saveOnce = async (): Promise<boolean> => {
     const { selected, content } = latest.current
-    if (!selected || !content || readonly || recovery || !ownership.canEdit() || loadState !== 'ready') return false
+    if (!selected || !content || readonly || recovery || saveConflict?.id === selected.id || !ownership.canEdit() || loadState !== 'ready') return false
     const operation = pendingSave.current || { versionId: selected.id, body: {
       request_id: crypto.randomUUID(), expected_revision: selected.revision, content,
     }, operationCount: recoveryUndo.current.length }
@@ -518,22 +533,27 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
     setBusy('save')
     setFailure(undefined)
     try {
-      const saved = await executeSaveOperation(operation)
+      const saved = verifiedSave(operation, await executeSaveOperation(operation))
       if (!live.current) return false
       if (latest.current.selected?.id === saved.id) {
         latest.current.selected = saved
-        if (sameContent(latest.current.content, operation.body.content)) latest.current.content = saved.content
       }
       setVersions(rows => rows.map(row => row.id === saved.id ? saved : row))
-      // 成功响应只清理本次发送的内容；请求期间继续编辑的输入仍为未保存。
-      setDraft(previous => previous?.versionId === saved.id && sameContent(previous.content, operation.body.content) ? undefined : previous)
+      // 响应只推进已确认基线；编辑暂存始终保持原对象和值。
       pendingSave.current = undefined
       recoveryUndo.current = recoveryUndo.current.slice(operation.operationCount)
+      if (sameContent(latest.current.content, saved.content)) firstDirtyAt.current = undefined
       persistEditing()
       return true
     } catch (error) {
       if (!live.current) return false
       if (error instanceof ApiError && [400, 409, 422].includes(error.status)) pendingSave.current = undefined
+      if (error instanceof ApiError && error.status === 409) {
+        try {
+          const current = await StudioDirectingService.directingSceneVersion({ projectId, sequenceId, versionId: operation.versionId })
+          if (live.current && current.data?.id === operation.versionId && latest.current.selected?.id === operation.versionId) setSaveConflict(current.data)
+        } catch { /* 原输入保留；读取失败时仍显示保存错误。 */ }
+      }
       persistEditing()
       setFailure({ versionId: operation.versionId, message: directingError(error) })
       return false
@@ -796,10 +816,21 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
   }
   const videoUnverified = !!pendingSave.current?.video
   const saveLabel = videoUnverified ? '核实原视频请求' : '保存'
-  const status = recovery ? '有待核实的本地编辑' : busy === 'save' ? (videoUnverified ? (pendingSave.current?.videoOnly ? '正在核实视频请求' : '正在保存并核实视频请求') : '保存中') : videoUnverified ? '视频提交待核实' : failure?.versionId === selected?.id && failure?.versionId ? '保存失败' : dirty ? '未保存' : currentDirectVideo ? (currentDirectVideo.submitting ? '正在核实视频请求' : '视频提交待核实') : '已保存'
+  const currentConflict = saveConflict?.id === selected?.id ? saveConflict : undefined
+  const resolveConflict = (keepLocal: boolean) => {
+    if (!currentConflict || latest.current.selected?.id !== currentConflict.id) return
+    latest.current.selected = currentConflict
+    if (keepLocal) setDraft({ versionId: currentConflict.id, content: latest.current.content! })
+    else { latest.current.content = currentConflict.content; setDraft(undefined) }
+    setVersions(rows => rows.map(row => row.id === currentConflict.id ? currentConflict : row))
+    setSaveConflict(undefined); setFailure(undefined)
+    persistEditing()
+  }
+  const status = recovery ? '有待核实的本地编辑' : currentConflict ? '保存冲突' : busy === 'save' ? (videoUnverified ? (pendingSave.current?.videoOnly ? '正在核实视频请求' : '正在保存并核实视频请求') : '保存中') : videoUnverified ? '视频提交待核实' : failure?.versionId === selected?.id && failure?.versionId ? '保存失败' : dirty ? '未保存' : currentDirectVideo ? (currentDirectVideo.submitting ? '正在核实视频请求' : '视频提交待核实') : '已保存'
   useEffect(() => {
     if (copyLock.current || copyError || !autoSave || !dirty || busy || deliveryBusy || exportBusy || failure || readonly || transition || leaving || recovery || handingOff) return
-    const timer = window.setTimeout(() => { void save() }, 500)
+    firstDirtyAt.current ??= Date.now()
+    const timer = window.setTimeout(() => { void save() }, Math.min(1000, Math.max(0, 5000 - (Date.now() - firstDirtyAt.current))))
     return () => window.clearTimeout(timer)
   }, [autoSave, dirty, draft, busy, deliveryBusy, exportBusy, copyLocked, copyError, failure, readonly, transition, leaving, recovery, handingOff])
 
@@ -834,7 +865,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
             try { localStorage.setItem(autoSavePreference, value ? 'on' : 'off') } catch { /* 存储不可用时仍可在本页选择。 */ }
           }} /></label>
         </CanvasToolbarMenu>
-        {selected && <WorkbenchIconButton label={saveLabel} variant={dirty || videoUnverified ? "primary" : "quiet"} icon={<SaveOutlined />} onClick={() => void save()} disabled={handingOff || !!recovery || (!dirty && !pendingSave.current) || !!busy || deliveryBusy || exportBusy || readonly || loadState !== 'ready'} loading={busy === 'save'} />}
+        {selected && <WorkbenchIconButton label={saveLabel} variant={dirty || videoUnverified ? "primary" : "quiet"} icon={<SaveOutlined />} onClick={() => void save()} disabled={handingOff || !!recovery || !!currentConflict || (!dirty && !pendingSave.current) || !!busy || deliveryBusy || exportBusy || readonly || loadState !== 'ready'} loading={busy === 'save'} />}
       </div>
       <nav className="canvas-toolbar-views" aria-label="画布切换">
         <WorkbenchButton onClick={() => { setEditor(undefined); setCanvas('director') }} variant="quiet" aria-pressed={canvas === 'director'}>导演画布</WorkbenchButton>
@@ -1010,6 +1041,18 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       </section>
     </DirectorCanvasSurface>}
     {loadState === 'ready' && selected && content && <SceneRelationsNavigation triggerHost={navigationHost} open={currentNavigation === 'relations'} onOpenChange={open => open ? openNavigation('relations') : setNavigation(undefined)} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} key={`relations:${selected.id}`} content={content} shotId={currentShotId} unitId={unitSelections[selected.id]} canvas={canvas} onNavigate={navigateRelation} />}
+    <WorkbenchModal title="保存冲突 · 比较本地与服务器" open={!!currentConflict} closable={false} maskClosable={false} keyboard={false}
+      footer={<Space wrap><WorkbenchButton variant="quiet" onClick={() => resolveConflict(false)}>放弃本地编辑并载入服务器</WorkbenchButton>
+        <WorkbenchButton variant="primary" onClick={() => resolveConflict(true)}>以服务器修订为基线保留本地编辑</WorkbenchButton></Space>}>
+      <p>服务器已是 revision {currentConflict?.revision}。本地编辑已保留；选择新基线后才会继续保存。保留本地编辑并再次保存可能覆盖服务器同期修改。</p>
+      {currentConflict && content && <section aria-label="保存冲突差异" className="revision-differences">
+        {revisionDifferences(currentConflict.content, content).map((change, index) => <section key={index}>
+          <h3>{change.path || '场次内容'} · {change.kind === 'added' ? '本地新增' : change.kind === 'removed' ? '本地移除' : '内容不同'}</h3>
+          <div><pre aria-label="服务器值">{JSON.stringify(change.before, null, 2) ?? '无'}</pre>
+            <pre aria-label="本地值">{JSON.stringify(change.after, null, 2) ?? '无'}</pre></div>
+        </section>)}
+      </section>}
+    </WorkbenchModal>
     <Modal rootClassName="canvas-workbench-dialog" title="有未保存的修改" open={!!transition} maskClosable={false} closable={!leaving} onCancel={cancelTransition}
       footer={<Space>
         <Button disabled={leaving} onClick={cancelTransition}>取消，继续编辑</Button>
