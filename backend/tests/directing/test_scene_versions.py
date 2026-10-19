@@ -7,6 +7,7 @@ import pytest
 
 from app.models.studio import Chapter, FileUsage
 from app.models.directing import Sequence
+from app.models.llm import Model, Provider
 from tests.directing.test_api import client_for
 from tests.directing.test_store import database
 
@@ -73,6 +74,105 @@ async def test_manual_shot_can_save_before_beat_assignment_but_cannot_leave_dang
         response = await client.put(detail, json={
             'request_id': str(uuid4()), 'expected_revision': 3, 'content': content})
         assert response.status_code == 200, response.text
+
+
+@pytest.mark.asyncio
+async def test_same_shot_units_select_distinct_execution_items_and_reject_invalid_scope(tmp_path):
+    """镜头关系只提供候选；两次拍摄各自保存所选行动，非法身份或范围整次拒绝。"""
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        async with sessions.begin() as db:
+            db.add(Provider(id='selection-provider', name='openai', base_url='https://api.openai.com/v1', api_key='fixture'))
+            await db.flush()
+            db.add_all([Model(id='selection-text-model', name='text-test', category='text', provider_id='selection-provider', params={}),
+                        Model(id='selection-video-model', name='video-test', category='video', provider_id='selection-provider', params={})])
+        path = await sequence_path(client)
+        version = (await client.post(path + '/versions', json={
+            'request_id': str(uuid4()), 'title': '分开拍摄',
+        })).json()['data']
+        detail = path + '/versions/' + version['id']
+        content = deepcopy(version['content'])
+        design = content['design']
+        design['participants'] = [{'id': 'person', 'name': '读信者'}]
+        design['events'] = [{'id': 'event', 'description': {}}]
+        design['direction']['beats'] = [{'id': 'beat', 'event_ids': [], 'objective': {},
+            'obstacle': {}, 'expected_change': {}, 'must_show': {}}]
+        design['direction']['shots'] = [{'id': 'shot', 'beat_ids': ['beat'], 'event_ids': ['event'],
+            'blocking_state_ids': [], 'participant_ids': ['person'], 'criterion_ids': [],
+            'narrative_function': {}, 'visible_result': {}}]
+        design['direction']['shots'].append({'id': 'other-shot', 'beat_ids': [], 'event_ids': [],
+            'blocking_state_ids': [], 'participant_ids': [], 'criterion_ids': [],
+            'narrative_function': {}, 'visible_result': {}})
+        design['performance']['beats'] = [{'id': 'action', 'beat_id': 'beat', 'participant_id': 'person',
+            'received_event_ids': [], 'objective': {}, 'obstacle': {}, 'subtext': {}, 'attention': {},
+            'internal_adjustment': {}, 'physical_action': {}, 'dialogue_ids': [], 'delivery': {},
+            'reaction_order': {}, 'exit_state': {}, 'avoid': {}, 'criterion_ids': []}]
+        design['staging']['activities'] = [{'id': 'activity', 'participant_id': 'person',
+            'depth': {}, 'ongoing_task': {}, 'path': {}, 'attention': {}, 'reaction_delay': {},
+            'intensity': {}, 'entrances_exits': {}, 'narrative_support': {}, 'end_state': {}}]
+        design['continuity'] = [{'id': 'change', 'domain': 'hands_props', 'before': {},
+            'change': {}, 'after': {}, 'following_constraint': {}}]
+        design['applicability'] = [
+            {'subject': {'kind': 'staging_activity', 'id': 'activity', 'field': 'ongoing_task'},
+             'purpose': 'design', 'scope': 'shots', 'shot_ids': ['shot']},
+            {'subject': {'kind': 'continuity', 'id': 'change', 'field': 'change'},
+             'purpose': 'design', 'scope': 'shots', 'shot_ids': ['shot']},
+        ]
+        base = {'shot_id': 'shot', 'action_scope': '本次所拍', 'beat_ids': [], 'event_ids': [],
+                'staging_activity_ids': [], 'performance_action_ids': [], 'continuity_change_ids': []}
+        content['units'] = [
+            {'id': 'unit-action', 'ratio': '16:9', 'model_id': 'selection-video-model', 'duration_ms': 5000,
+             'coverage': [dict(base, id='cover-action',
+                beat_ids=['beat'], performance_action_ids=['action'])]},
+            {'id': 'unit-insert', 'ratio': '16:9', 'model_id': 'selection-video-model', 'duration_ms': 5000,
+             'coverage': [dict(base, id='cover-insert',
+                event_ids=['event'], staging_activity_ids=['activity'], continuity_change_ids=['change'])]},
+        ]
+        saved = await client.put(detail, json={'request_id': str(uuid4()),
+            'expected_revision': 1, 'content': content})
+        assert saved.status_code == 200, saved.text
+        reread = (await client.get(detail)).json()['data']
+        first, second = reread['content']['units']
+        assert first['coverage'][0]['performance_action_ids'] == ['action']
+        assert first['coverage'][0]['staging_activity_ids'] == []
+        assert second['coverage'][0]['performance_action_ids'] == []
+        assert second['coverage'][0]['staging_activity_ids'] == ['activity']
+        assert second['coverage'][0]['continuity_change_ids'] == ['change']
+        for field, value in (('performance_action_ids', 'missing'),
+                             ('staging_activity_ids', 'missing'),
+                             ('continuity_change_ids', 'missing')):
+            invalid = deepcopy(reread['content'])
+            invalid['units'][0]['coverage'][0][field] = [value]
+            rejected = await client.put(detail, json={'request_id': str(uuid4()),
+                'expected_revision': 2, 'content': invalid})
+            assert rejected.status_code == 422, rejected.text
+        invalid = deepcopy(reread['content'])
+        invalid['design']['applicability'][0]['shot_ids'] = ['other-shot']
+        rejected = await client.put(detail, json={'request_id': str(uuid4()),
+            'expected_revision': 2, 'content': invalid})
+        assert rejected.status_code == 422, rejected.text
+        assert (await client.get(detail)).json()['data']['revision'] == 2
+        scoped = deepcopy(reread['content'])
+        scoped['design']['applicability'][0].update(scope='occurrences', shot_ids=[],
+            occurrences=[{'unit_id': 'unit-insert', 'coverage_item_id': 'cover-insert'}])
+        saved = await client.put(detail, json={'request_id': str(uuid4()),
+            'expected_revision': 2, 'content': scoped})
+        assert saved.status_code == 200, saved.text
+        invalid = deepcopy(saved.json()['data']['content'])
+        invalid['units'][0]['coverage'][0]['staging_activity_ids'] = ['activity']
+        rejected = await client.put(detail, json={'request_id': str(uuid4()),
+            'expected_revision': 3, 'content': invalid})
+        assert rejected.status_code == 422, rejected.text
+        assert (await client.get(detail)).json()['data']['revision'] == 3
+        for unit_id, selected in [('unit-action', ['action']), ('unit-insert', [])]:
+            url = detail + f'/units/{unit_id}/instruction-suggestions'
+            task = await client.post(url, json={'request_id': str(uuid4()), 'expected_revision': 3,
+                'content': saved.json()['data']['content'], 'model_id': 'selection-text-model'})
+            assert task.status_code == 200, task.text
+            records = (await client.get(url)).json()['data']
+            assert records[0]['unit']['coverage'][0]['performance_action_ids'] == selected
+            activity_scopes = [row for row in records[0]['design']['applicability']
+                               if row['subject']['kind'] == 'staging_activity']
+            assert len(activity_scopes) == (0 if unit_id == 'unit-action' else 1)
 
 
 @pytest.mark.asyncio

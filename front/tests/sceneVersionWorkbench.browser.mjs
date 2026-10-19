@@ -215,6 +215,8 @@ try {
   await page.getByRole('textbox', { name: '单元画幅', exact: true }).fill('9:16')
   await page.getByRole('button', { name: '为当前镜头增加补拍单元', exact: true }).click()
   assert.equal(await page.getByRole('textbox', { name: '单元画幅', exact: true }).inputValue(), '16:9')
+  assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '')
+  await page.getByRole('textbox', { name: '单元动作范围', exact: true }).fill('补拍信件日期特写')
   await page.getByRole('button', { name: '保存', exact: true }).click()
   await page.getByText('已保存', { exact: true }).waitFor()
   const savedUnits = (await (await fetch(`${versionsUrl}/${first[0].id}`)).json()).data.content.units

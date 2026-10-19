@@ -10,12 +10,15 @@ from app.core.contracts.directing.common import (
 
 
 class CoverageItem(Contract):
-    """单元内的一次镜头出现项，动作部分用事件 ID 明确表达。"""
+    """单元内一次镜头出现项的明确执行选择，不从镜头关系自动推定。"""
 
     id: Identity
     shot_id: Identity
-    beat_ids: list[Identity] = Field(min_length=1)
+    beat_ids: list[Identity]
     event_ids: list[Identity]
+    staging_activity_ids: list[Identity] = Field(default_factory=list)
+    performance_action_ids: list[Identity] = Field(default_factory=list)
+    continuity_change_ids: list[Identity] = Field(default_factory=list)
     action_scope: Text
 
 

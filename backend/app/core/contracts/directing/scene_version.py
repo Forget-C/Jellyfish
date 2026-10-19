@@ -111,7 +111,7 @@ class SceneVersionSource(Contract):
 
 
 class EditableCoverageItem(Contract):
-    """单元的镜头出现项允许尚未填写动作范围；已有节拍与事件须属于该镜头。"""
+    """单元出现项明确选择本次执行内容；镜头关系只提供候选。"""
 
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
 
@@ -119,6 +119,9 @@ class EditableCoverageItem(Contract):
     shot_id: Identity
     beat_ids: list[Identity] = Field(default_factory=list)
     event_ids: list[Identity] = Field(default_factory=list)
+    staging_activity_ids: list[Identity] = Field(default_factory=list)
+    performance_action_ids: list[Identity] = Field(default_factory=list)
+    continuity_change_ids: list[Identity] = Field(default_factory=list)
     action_scope: str = ''
 
 
@@ -193,6 +196,8 @@ class SceneVersionContent(Contract):
                 item = occurrences.get(key)
                 if item is None:
                     raise ValueError(f'设计适用性引用不存在的单元出现项：{key}')
+                if item.shot_id not in shots:
+                    raise ValueError(f'设计适用性引用不存在的出现项镜头：{item.shot_id}')
                 subject = applicability.subject
                 if subject.kind == 'shot' and subject.id != item.shot_id:
                     raise ValueError('镜头设计适用性与出现项镜头不一致')
@@ -203,9 +208,9 @@ class SceneVersionContent(Contract):
                 if subject.kind in ('beat', 'performance_beat'):
                     beat_id = subject.id if subject.kind == 'beat' else next(
                         row.beat_id for row in self.design.performance.beats if row.id == subject.id)
-                    if beat_id not in item.beat_ids:
+                    if beat_id not in shots[item.shot_id].beat_ids:
                         raise ValueError('节拍设计适用性与出现项节拍不一致')
-                if subject.kind == 'event' and subject.id not in item.event_ids:
+                if subject.kind == 'event' and subject.id not in shots[item.shot_id].event_ids:
                     raise ValueError('事件设计适用性与出现项事件不一致')
         for unit in self.units:
             for item in unit.coverage:
@@ -213,6 +218,33 @@ class SceneVersionContent(Contract):
                     raise ValueError(f'单元 {unit.id} 的覆盖 {item.id} 引用镜头 {item.shot_id}，请先处理该引用')
                 references(item.beat_ids, shots[item.shot_id].beat_ids, f'单元 {unit.id} 镜头节拍')
                 references(item.event_ids, shots[item.shot_id].event_ids, f'单元 {unit.id} 镜头事件')
+                for field, rows, kind, subject_fields in (
+                    ('staging_activity_ids', self.design.staging.activities, 'staging_activity',
+                     {'ongoing_task', 'path', 'entrances_exits', 'end_state'}),
+                    ('performance_action_ids', self.design.performance.beats, 'performance_beat',
+                     {'physical_action', 'gaze', 'breath', 'weight', 'hands', 'voice', 'delivery', 'reaction_order'}),
+                    ('continuity_change_ids', self.design.continuity, 'continuity', {'change'}),
+                ):
+                    selected = getattr(item, field)
+                    unique(selected, f'单元 {unit.id} {field}')
+                    choices = {row.id: row for row in rows if row.id}
+                    references(selected, choices, f'单元 {unit.id} {field}')
+                    for row_id in selected:
+                        row = choices[row_id]
+                        if kind == 'performance_beat' and row.beat_id not in shots[item.shot_id].beat_ids:
+                            raise ValueError(f'单元 {unit.id} 的表演行动不适用于镜头 {item.shot_id}')
+                        scopes = [scope for scope in self.design.applicability
+                                  if scope.subject.kind == kind and scope.subject.id == row_id
+                                  and scope.subject.field in subject_fields and scope.purpose == 'design']
+                        if kind != 'performance_beat' and not scopes:
+                            raise ValueError(f'单元 {unit.id} 的{kind}尚未声明适用范围')
+                        if scopes and not any(
+                            item.shot_id in scope.shot_ids if scope.scope == 'shots' else
+                            any(target.unit_id == unit.id and target.coverage_item_id == item.id
+                                for target in scope.occurrences) if scope.scope == 'occurrences' else False
+                            for scope in scopes
+                        ):
+                            raise ValueError(f'单元 {unit.id} 的{kind}不适用于本次出现项')
             for binding in unit.references:
                 references(binding.participant_ids, [row.id for row in self.design.participants],
                            f'单元 {unit.id} 参考 {binding.id} 参与对象')

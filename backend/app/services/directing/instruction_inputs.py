@@ -21,7 +21,31 @@ def instruction_design(design: EditableSceneDesign, unit: EditableGenerationUnit
     performance = design.performance.model_copy(update={
         'beats': [row for row in design.performance.beats if row.beat_id in beat_ids],
     })
+    occurrence_ids = {(unit.id, item.id) for item in unit.coverage}
+    retained = {
+        'shot': {row.id for row in shots},
+        'beat': {row.id for row in direction.beats},
+        'performance_beat': {row.id for row in performance.beats},
+        'camera': {row.id for row in design.cinematography if row.shot_id in shot_ids},
+    }
+    applicability = []
+    for scope in design.applicability:
+        subject = scope.subject
+        if subject.kind in retained and subject.id not in retained[subject.kind]:
+            continue
+        if scope.scope == 'shots':
+            relevant = [shot_id for shot_id in scope.shot_ids if shot_id in shot_ids]
+            if relevant:
+                applicability.append(scope.model_copy(update={'shot_ids': relevant}))
+        elif scope.scope == 'occurrences':
+            relevant = [target for target in scope.occurrences
+                        if (target.unit_id, target.coverage_item_id) in occurrence_ids]
+            if relevant:
+                applicability.append(scope.model_copy(update={'occurrences': relevant}))
+        else:
+            applicability.append(scope)
     return design.model_copy(update={
         'direction': direction, 'performance': performance,
         'cinematography': [row for row in design.cinematography if row.shot_id in shot_ids],
+        'applicability': applicability,
     })

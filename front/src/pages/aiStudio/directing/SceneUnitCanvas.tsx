@@ -78,7 +78,7 @@ export function SceneUnitCanvas({ primaryHost, projectId, sequenceId, versionId,
     if (!shot || disabled) return
     const id = crypto.randomUUID()
     onChange({ ...content, units: [...allUnits, { id,
-      coverage: [{ id: crypto.randomUUID(), shot_id: shot.id, beat_ids: [...shot.beat_ids], event_ids: [...shot.event_ids], action_scope: shot.visible_result.text || '' }],
+      coverage: [{ id: crypto.randomUUID(), shot_id: shot.id, beat_ids: [], event_ids: [], staging_activity_ids: [], performance_action_ids: [], continuity_change_ids: [], action_scope: '' }],
       references: [], model_id: null, duration_ms: null, ratio: content.output_aspect_ratio,
       parameters: {}, capability: { multi_shot: 'unknown' }, dependencies: [], scene_dependencies: [], instruction: '', instruction_source: null, instruction_basis_id: null, instruction_check_task_id: null,
     }] })
@@ -117,6 +117,12 @@ export function SceneUnitCanvas({ primaryHost, projectId, sequenceId, versionId,
           {unit.coverage.map((item, index) => {
             const sourceShot = content.design.direction.shots.find(row => row.id === item.shot_id)
             const update = (changes: Partial<typeof item>) => patch({ coverage: unit.coverage.map(row => row.id === item.id ? { ...row, ...changes } : row) })
+            const scopedToOccurrence = (kind: string, id: string, fields: string[]) => content.design.applicability.filter(row =>
+              row.subject.kind === kind && row.subject.id === id && fields.includes(row.subject.field) && row.purpose === 'design')
+              .some(row => row.scope === 'shots' ? (row.shot_ids || []).includes(item.shot_id) :
+                row.scope === 'occurrences' && (row.occurrences || []).some(target => target.unit_id === unit.id && target.coverage_item_id === item.id))
+            const activityFields = ['ongoing_task', 'path', 'entrances_exits', 'end_state']
+            const performanceFields = ['physical_action', 'gaze', 'breath', 'weight', 'hands', 'voice', 'delivery', 'reaction_order']
             return <section key={item.id} aria-label={`覆盖 ${index + 1}`}>
               <h3>覆盖 {index + 1} · {sourceShot ? `镜头 ${content.design.direction.shots.indexOf(sourceShot) + 1}` : '原镜头不可用'}</h3>
               <p>{sourceShot?.visible_result.text || '镜头可见结果尚未填写'}</p>
@@ -125,7 +131,8 @@ export function SceneUnitCanvas({ primaryHost, projectId, sequenceId, versionId,
                 onChange={shot_id => {
                   const next = content.design.direction.shots.find(row => row.id === shot_id)
                   if (!next) return
-                  update({ shot_id, beat_ids: item.beat_ids.filter(id => next.beat_ids.includes(id)), event_ids: item.event_ids.filter(id => next.event_ids.includes(id)) })
+                  update({ shot_id, beat_ids: item.beat_ids.filter(id => next.beat_ids.includes(id)), event_ids: item.event_ids.filter(id => next.event_ids.includes(id)),
+                    staging_activity_ids: [], performance_action_ids: [], continuity_change_ids: [] })
                   onSelectUnit(unit.id, shot_id)
                 }} /></label>
               <p>修改来源镜头会清除不属于新镜头的节拍和事件关联；动作范围保留，请重新核对。</p>
@@ -137,6 +144,20 @@ export function SceneUnitCanvas({ primaryHost, projectId, sequenceId, versionId,
               <label>覆盖事件<Select aria-label={`覆盖 ${index + 1} 事件`} mode="multiple" disabled={disabled || !sourceShot} value={item.event_ids} style={{ width: '100%' }}
                 options={content.design.events.flatMap((event, i) => sourceShot?.event_ids.includes(event.id) ? [{ value: event.id, label: `事件 ${i + 1}：${event.description.text || '未填写事件'}` }] : [])}
                 onChange={event_ids => update({ event_ids })} /></label>
+              <p>镜头关联只提供候选；下列项目由本单元明确选择，不自动加入拍摄要求。</p>
+              <label>镜内活动<Select aria-label={`覆盖 ${index + 1} 镜内活动`} mode="multiple" disabled={disabled || !sourceShot} value={item.staging_activity_ids} style={{ width: '100%' }}
+                options={content.design.staging.activities.flatMap((activity, i) => activity.id && scopedToOccurrence('staging_activity', activity.id, activityFields)
+                  ? [{ value: activity.id, label: `活动 ${i + 1}：${activity.ongoing_task.text || activity.path.text || '未填写动作'}` }] : [])}
+                onChange={staging_activity_ids => update({ staging_activity_ids })} /></label>
+              <label>表演行动<Select aria-label={`覆盖 ${index + 1} 表演行动`} mode="multiple" disabled={disabled || !sourceShot} value={item.performance_action_ids} style={{ width: '100%' }}
+                options={content.design.performance.beats.flatMap((action, i) => action.id && sourceShot?.beat_ids.includes(action.beat_id) &&
+                  (!content.design.applicability.some(row => row.subject.kind === 'performance_beat' && row.subject.id === action.id && performanceFields.includes(row.subject.field)) || scopedToOccurrence('performance_beat', action.id, performanceFields))
+                  ? [{ value: action.id, label: `行动 ${i + 1}：${action.physical_action.text || '未填写动作'}` }] : [])}
+                onChange={performance_action_ids => update({ performance_action_ids })} /></label>
+              <label>可见连续性变化<Select aria-label={`覆盖 ${index + 1} 可见连续性变化`} mode="multiple" disabled={disabled || !sourceShot} value={item.continuity_change_ids} style={{ width: '100%' }}
+                options={content.design.continuity.flatMap((change, i) => scopedToOccurrence('continuity', change.id, ['change'])
+                  ? [{ value: change.id, label: `变化 ${i + 1}：${change.change.text || '未填写变化'}` }] : [])}
+                onChange={continuity_change_ids => update({ continuity_change_ids })} /></label>
               <p>参与对象：{sourceShot?.participant_ids == null ? '范围待核对' : sourceShot.participant_ids.length ? sourceShot.participant_ids.map(id => content.design.participants.find(row => row.id === id)?.name || '原对象不可用').join('、') : '明确无对象'}</p>
               <details><summary>查看镜头依据与身份</summary>
                 <p>镜头身份：{item.shot_id}</p><p>覆盖身份：{item.id}</p><p>单元身份：{unit.id}</p>
