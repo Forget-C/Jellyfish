@@ -184,6 +184,8 @@ export type { CutReviewDocument } from './models/CutReviewDocument';
 export type { CutWrite } from './models/CutWrite';
 export type { DeliveredArtifact } from './models/DeliveredArtifact';
 export type { DeliveredArtifactPublishState } from './models/DeliveredArtifactPublishState';
+export type { DesignNote_Input } from './models/DesignNote_Input';
+export type { DesignNote_Output } from './models/DesignNote_Output';
 export type { DesignWrite } from './models/DesignWrite';
 export type { Dialogue_Input } from './models/Dialogue_Input';
 export type { Dialogue_Output } from './models/Dialogue_Output';

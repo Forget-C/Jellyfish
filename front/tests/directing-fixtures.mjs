@@ -17,6 +17,11 @@ export function clip(id, takeId, start, end, timeline = 0) {
 }
 export function makeWorkspace() {
   const design = emptyDesign()
+  // Existing fixture models a historical design saved before independent rows had IDs.
+  delete design.performance.situations[0].id
+  delete design.performance.beats[0].id
+  delete design.staging.activities[0].id
+  delete design.cinematography[0].id
   design.direction.information_change = { state: 'fact', text: '递出旧信，认出对方', sources: [] }
   const plan = { design_revision_id: 'd1', units: [{ id: 'u1', coverage: [{ id: 'cover1', shot_id: 'shot1', beat_ids: ['beat1'], event_ids: ['event1'], action_scope: '递出旧信' }], references: [], dependencies: [], model_id: 'model1', duration_ms: 6000, ratio: '16:9', parameters: {}, capability: { multi_shot: 'unknown' } }] }
   const takes = ['t1', 't2', 't3'].map((id, index) => ({ id, display_number: index + 1, project_id: 'p1', chapter_id: 'ch1', sequence_id: 's1', plan_revision_id: 'p-old', unit_id: 'u1', prompt_revision_id: 'prompt1', task_id: `task${index}`, output_ordinal: 0, file_id: `file${index}`, version: 1, annotation: { review_status: index === 2 ? 'unreviewed' : 'reviewed', verdict: index === 2 ? null : index === 0 ? 'retain' : 'pass', rationale: { state: 'unset' }, coverage: [], retained_ranges: [] } }))

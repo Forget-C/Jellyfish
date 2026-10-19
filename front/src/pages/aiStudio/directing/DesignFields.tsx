@@ -31,8 +31,10 @@ export function DesignFields<T extends SceneDesign_Input>({ value, path, onChang
     }
     if (current && typeof current === 'object' && !Array.isArray(current) && 'state' in current) {
       const note = current as Note_Input
-      return <div className="design-field"><div className="design-field-label"><label>{label}</label><Select aria-label={`${label}状态`} size="small" value={note.state || 'unset'} options={states} disabled={disabled} onChange={state => change(target, ['none', 'not_applicable'].includes(state) ? { state, reason: note.reason || '', sources: note.sources } : ['unset', 'unknown'].includes(state) ? { state } : { ...humanNote(note.text || ''), state })} /></div>
-        <Input.TextArea aria-label={label} disabled={disabled} value={note.text || note.reason || ''} autoSize={{ minRows: 1, maxRows: 8 }} onChange={event => change(target, ['none', 'not_applicable'].includes(note.state || '') ? { ...note, reason: event.target.value } : { ...humanNote(event.target.value), state: note.state === 'fact' ? 'fact' : 'proposal' })} />
+      const id = (note as Note_Input & { id?: string }).id
+      const keepId = (next: Note_Input) => id ? { ...next, id } : next
+      return <div className="design-field"><div className="design-field-label"><label>{label}</label><Select aria-label={`${label}状态`} size="small" value={note.state || 'unset'} options={states} disabled={disabled} onChange={state => change(target, keepId(['none', 'not_applicable'].includes(state) ? { state, reason: note.reason || '', sources: note.sources } : ['unset', 'unknown'].includes(state) ? { state } : { ...humanNote(note.text || ''), state }))} /></div>
+        <Input.TextArea aria-label={label} disabled={disabled} value={note.text || note.reason || ''} autoSize={{ minRows: 1, maxRows: 8 }} onChange={event => change(target, keepId(['none', 'not_applicable'].includes(note.state || '') ? { ...note, reason: event.target.value } : { ...humanNote(event.target.value), state: note.state === 'fact' ? 'fact' : 'proposal' }))} />
         {!!note.sources?.length && <SourceLinks sources={note.sources} />}
       </div>
     }
@@ -41,8 +43,8 @@ export function DesignFields<T extends SceneDesign_Input>({ value, path, onChang
         const choices = options(key)
         return <Select mode="multiple" aria-label={label} disabled={disabled} value={current} options={[...choices, ...current.filter(id => !choices.some(c => c.value === id)).map(id => ({ value: id, label: `缺失引用 · ${id}` }))]} onChange={next => change(target, next)} style={{ width: '100%' }} />
       }
-      return <div className="design-field-array">{current.map((row, index) => <section key={index}><div className="design-field-label"><strong>{label} {index + 1}</strong>{!disabled && allowStructure && <Button size="small" danger aria-label={`移除${label} ${index + 1}`} onClick={() => onRemove ? onRemove(target, index) : change(target, current.filter((_, i) => i !== index))}>移除</Button>}</div>{render(row, [...target, index], Array.isArray(template) ? template[0] : undefined)}</section>)}
-        {!disabled && allowStructure && <Button onClick={() => { const next = structuredClone((Array.isArray(template) ? template[0] : undefined) || current[0] || { state: 'unset' }); if (onAdd) { onAdd(target, next); return }; if (next && typeof next === 'object' && 'id' in next) next.id = 'item-' + crypto.randomUUID().slice(0, 8); change(target, [...current, next]) }}>添加{label}</Button>}</div>
+      return <div className="design-field-array">{current.map((row, index) => <section key={row && typeof row === 'object' && 'id' in row && row.id || index}><div className="design-field-label"><strong>{label} {index + 1}</strong>{!disabled && allowStructure && <Button size="small" danger aria-label={`移除${label} ${index + 1}`} onClick={() => onRemove ? onRemove(target, index) : change(target, current.filter((_, i) => i !== index))}>移除</Button>}</div>{render(row, [...target, index], Array.isArray(template) ? template[0] : undefined)}</section>)}
+        {!disabled && allowStructure && <Button onClick={() => { const next = structuredClone((Array.isArray(template) ? template[0] : undefined) || current[0] || { state: 'unset' }); if (onAdd) { onAdd(target, next); return }; if (next && typeof next === 'object' && ('id' in next || target[0] === 'direction' && ['immutable_facts', 'open_questions'].includes(key))) next.id = 'item-' + crypto.randomUUID().slice(0, 8); change(target, [...current, next]) }}>添加{label}</Button>}</div>
     }
     if (current && typeof current === 'object') {
       // 历史镜头可以缺少可选字段，仍须显示核对入口；只投影，不修改历史快照。

@@ -7,6 +7,7 @@ import type { Note_Input } from './Note_Input';
  * 摄影意图、可见效果和技术要求，不等同于供应商参数。
  */
 export type CameraShot_Input = {
+    id?: (string | null);
     shot_id: string;
     composition: Note_Input;
     depth_layers: Note_Input;

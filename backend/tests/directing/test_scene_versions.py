@@ -64,6 +64,88 @@ async def test_manual_shot_can_save_before_beat_assignment_but_cannot_leave_dang
 
 
 @pytest.mark.asyncio
+async def test_design_row_ids_survive_edit_reorder_and_reject_duplicates(tmp_path):
+    """独立表演与镜内活动经版本接口回读仍保留身份；重复身份不部分写入。"""
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        path = await sequence_path(client)
+        version = (await client.post(path + '/versions', json={
+            'request_id': str(uuid4()), 'title': '稳定设计行',
+        })).json()['data']
+        detail = path + '/versions/' + version['id']
+        content = deepcopy(version['content'])
+        content['design']['participants'] = [{'id': 'person1', 'name': '妹妹'},
+                                             {'id': 'person2', 'name': '哥哥'}]
+        unidentified = deepcopy(content)
+        unidentified['design']['staging']['activities'] = [{
+            'participant_id': 'person1', 'depth': {}, 'ongoing_task': {},
+            'path': {}, 'attention': {}, 'reaction_delay': {}, 'intensity': {},
+            'entrances_exits': {}, 'narrative_support': {}, 'end_state': {},
+        }]
+        response = await client.put(detail, json={
+            'request_id': str(uuid4()), 'expected_revision': 1, 'content': unidentified})
+        assert response.status_code == 422
+        assert (await client.get(detail)).json()['data']['revision'] == 1
+        content['design']['direction']['beats'] = [{
+            'id': beat_id, 'event_ids': [], 'objective': {}, 'obstacle': {},
+            'expected_change': {}, 'must_show': {},
+        } for beat_id in ('beat1', 'beat2')]
+        action = {'beat_id': 'beat1', 'participant_id': 'person1', 'received_event_ids': [],
+                  'objective': {}, 'obstacle': {}, 'subtext': {}, 'attention': {},
+                  'internal_adjustment': {}, 'physical_action': {}, 'dialogue_ids': [],
+                  'delivery': {}, 'reaction_order': {}, 'exit_state': {}, 'avoid': {},
+                  'criterion_ids': []}
+        activity = {'participant_id': 'person1', 'depth': {}, 'ongoing_task': {},
+                    'path': {}, 'attention': {}, 'reaction_delay': {}, 'intensity': {},
+                    'entrances_exits': {}, 'narrative_support': {}, 'end_state': {}}
+        content['design']['performance']['beats'] = [dict(action, id='action-a'),
+                                                     dict(action, id='action-b', beat_id='beat2')]
+        content['design']['staging']['activities'] = [dict(activity, id='activity-a'),
+                                                     dict(activity, id='activity-b')]
+        content['design']['direction']['immutable_facts'] = [
+            {'id': 'rule-1', 'state': 'proposal', 'text': '门保持关闭',
+             'sources': [{'kind': 'human', 'reference': 'local-user', 'version': 'manual-1'}]},
+        ]
+        response = await client.put(detail, json={
+            'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})
+        assert response.status_code == 200, response.text
+        saved = response.json()['data']['content']
+        saved['design']['performance']['beats'].reverse()
+        saved['design']['staging']['activities'].reverse()
+        saved['design']['performance']['beats'][0]['participant_id'] = 'person2'
+        saved['design']['staging']['activities'][0]['ongoing_task'] = {
+            'state': 'proposal', 'text': '守住门口',
+            'sources': [{'kind': 'human', 'reference': 'local-user', 'version': 'manual-1'}],
+        }
+        response = await client.put(detail, json={
+            'request_id': str(uuid4()), 'expected_revision': 2, 'content': saved})
+        assert response.status_code == 200, response.text
+        reread = (await client.get(detail)).json()['data']
+        assert [row['id'] for row in reread['content']['design']['performance']['beats']] == ['action-b', 'action-a']
+        assert reread['content']['design']['performance']['beats'][0]['participant_id'] == 'person2'
+        assert [row['id'] for row in reread['content']['design']['staging']['activities']] == ['activity-b', 'activity-a']
+        assert reread['content']['design']['staging']['activities'][0]['ongoing_task']['text'] == '守住门口'
+        assert reread['content']['design']['direction']['immutable_facts'][0]['id'] == 'rule-1'
+        duplicate = deepcopy(reread['content'])
+        duplicate['design']['staging']['activities'][1]['id'] = 'activity-b'
+        response = await client.put(detail, json={
+            'request_id': str(uuid4()), 'expected_revision': 3, 'content': duplicate})
+        assert response.status_code == 422
+        assert (await client.get(detail)).json()['data']['revision'] == 3
+        duplicate = deepcopy(reread['content'])
+        duplicate['design']['direction']['immutable_facts'] = [
+            {'id': 'rule-1'}, {'id': 'rule-1'},
+        ]
+        response = await client.put(detail, json={
+            'request_id': str(uuid4()), 'expected_revision': 3, 'content': duplicate})
+        assert response.status_code == 422
+        duplicate['design']['direction']['immutable_facts'][1]['id'] = 'invalid rule'
+        response = await client.put(detail, json={
+            'request_id': str(uuid4()), 'expected_revision': 3, 'content': duplicate})
+        assert response.status_code == 422
+        assert (await client.get(detail)).json()['data']['revision'] == 3
+
+
+@pytest.mark.asyncio
 async def test_scene_versions_choose_source_independently_and_can_undo_basis_change(tmp_path):
     """更新 B 的明确原文不改 A；原依据可随会话撤销恢复，旧字段来源不被伪造重绑。"""
     async with database(tmp_path) as sessions, client_for(sessions) as client:

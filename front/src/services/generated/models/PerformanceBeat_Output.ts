@@ -7,6 +7,7 @@ import type { Note_Output } from './Note_Output';
  * 节拍与人物共同确定一行表演，保留刺激到可见行动的因果。
  */
 export type PerformanceBeat_Output = {
+    id?: (string | null);
     beat_id: string;
     participant_id: string;
     received_event_ids: Array<string>;

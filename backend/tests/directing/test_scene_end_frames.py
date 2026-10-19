@@ -3,7 +3,7 @@ from uuid import uuid4
 
 import pytest
 
-from tests.directing.samples import design_sample
+from tests.directing.samples import editable_design_sample
 from tests.directing.test_api import client_for
 from tests.directing.test_scene_versions import sequence_path
 from tests.directing.test_store import database
@@ -22,7 +22,7 @@ async def test_scene_end_frame_rejects_empty_planned_and_stale_sources(tmp_path)
         request = {'request_id': str(uuid4()), 'expected_revision': version['revision'], 'clip_id': 'planned'}
         assert (await client.post(frames, json=request)).status_code == 422
         content = version['content']
-        content['design'] = design_sample()
+        content['design'] = editable_design_sample()
         content['timeline']['items'] = [{'kind': 'planned', 'id': 'planned', 'shot_id': 's1', 'timeline_start_ms': 0, 'estimated_duration_ms': 1000}]
         saved = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': version['revision'], 'content': content})
         assert saved.status_code == 200, saved.text

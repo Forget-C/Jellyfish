@@ -42,12 +42,12 @@ function directorShotKeys(value: SceneDesign_Input, graph: DesignGraph, shotId?:
   })
   value.performance.beats.forEach((row, index) => {
     if (!shot.beat_ids.includes(row.beat_id)) return
-    keys.add(`performance:${index}`); people.add(row.participant_id)
+    keys.add(`performance:${row.id || index}`); people.add(row.participant_id)
     row.received_event_ids.forEach(id => events.add(id)); add('dialogue', row.dialogue_ids)
   })
-  value.performance.situations.forEach((row, index) => { if (people.has(row.participant_id)) keys.add(`situation:${index}`) })
-  value.cinematography.forEach((row, index) => { if (row.shot_id === shot.id) keys.add(`camera:${index}`) })
-  value.staging.activities.forEach((row, index) => { if (row.trigger_event_id && events.has(row.trigger_event_id)) keys.add(`activity:${index}`) })
+  value.performance.situations.forEach((row, index) => { if (people.has(row.participant_id)) keys.add(`situation:${row.id || index}`) })
+  value.cinematography.forEach((row, index) => { if (row.shot_id === shot.id) keys.add(`camera:${row.id || index}`) })
+  value.staging.activities.forEach((row, index) => { if (row.trigger_event_id && events.has(row.trigger_event_id)) keys.add(`activity:${row.id || index}`) })
   value.continuity.forEach(row => { if (row.event_id && events.has(row.event_id)) keys.add(`continuity:${row.id}`) })
   add('event', [...events]); add('participant', shot.participant_ids || [])
   // 只补齐选中工作单的共享引用，不继续展开共享对象的其他引用者。
@@ -279,10 +279,11 @@ export function designObjects(value: SceneDesign_Input): DesignObject[] {
   return objects
 }
 
-/** 无 ID 工作单按唯一自然键或内容快照恢复布局；重复项不持久定位。 */
+/** 有 ID 的工作单按身份定位；历史无 ID 行沿用自然键或快照布局。 */
 export function designObjectLayoutId(value: SceneDesign_Input, node: DesignObject): string {
   const kind = node.key.split(':')[0]
   if (node.kind === 'missing') return node.key
+  if (['camera', 'performance', 'situation', 'activity'].includes(kind) && designAt(value, node.path)?.id) return node.key
   if (kind === 'camera' || kind === 'performance' && node.key.includes(':')) {
     const row = designAt(value, node.path), rows = designAt(value, node.path.slice(0, -1)) as Record<string, unknown>[]
     const fields = kind === 'camera' ? ['shot_id'] : ['beat_id', 'participant_id']
@@ -398,12 +399,12 @@ export function shotGraph(value: SceneDesign_Input, shotId: string): DesignGraph
     blocking.anchor_ids.forEach(anchor => link(from, `anchor:${anchor}`, '位置锚点'))
     if (blocking.event_id) link(from, `event:${blocking.event_id}`, '变化事件')
   })
-  value.cinematography.forEach((row, index) => { if (row.shot_id === shotId) link(center, `camera:${index}`, '摄影设计') })
+  value.cinematography.forEach((row, index) => { if (row.shot_id === shotId) link(center, `camera:${row.id || index}`, '摄影设计') })
   value.performance.beats.forEach((row, index) => {
     if (!shot.beat_ids.includes(row.beat_id)) return
-    link(`beat:${row.beat_id}`, `performance:${index}`, '节拍表演', true)
-    link(`performance:${index}`, `participant:${row.participant_id}`, '表演人物', true)
-    row.dialogue_ids.forEach(id => link(`performance:${index}`, `dialogue:${id}`, '对白依据', true))
+    link(`beat:${row.beat_id}`, `performance:${row.id || index}`, '节拍表演', true)
+    link(`performance:${row.id || index}`, `participant:${row.participant_id}`, '表演人物', true)
+    row.dialogue_ids.forEach(id => link(`performance:${row.id || index}`, `dialogue:${id}`, '对白依据', true))
   })
   value.continuity.forEach(row => { if (row.event_id && shot.event_ids.includes(row.event_id)) link(`event:${row.event_id}`, `continuity:${row.id}`, '连续性变化', true) })
   return { nodes: [...nodes.values()], edges }

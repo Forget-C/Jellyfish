@@ -92,6 +92,7 @@ export function SceneDesignPanel({ value, saved, units, disabled, onChange, focu
   const add = (target: DesignPath, template: unknown, defaults = addDefaults) => {
     if (disabled) return
     const row = structuredClone(template) as Record<string, unknown>
+    if (target[0] === 'direction' && ['immutable_facts', 'open_questions'].includes(String(target[1]))) row.id = crypto.randomUUID()
     const required = mandatory[target.join('.')] || []
     // 模板只提供字段形状，不继承模板中的人物、节拍等虚构关联。
     for (const key of Object.keys(row)) {

@@ -28,6 +28,12 @@ class Criterion(Contract):
     requirement: Note
 
 
+class DesignNote(Note):
+    """独立规则或问题的身份；历史快照没有 ID 时仍可原样读取。"""
+
+    id: Identity | None = None
+
+
 class Beat(Contract):
     """叙事节拍保留目标、阻碍和变化，独立于镜头拆分。"""
 
@@ -99,6 +105,7 @@ class Direction(Contract):
 class CharacterSituation(Contract):
     """表演前提按人物共享，不在每镜复制。"""
 
+    id: Identity | None = None
     participant_id: Identity
     situation: Note
     relationship: Note
@@ -107,6 +114,7 @@ class CharacterSituation(Contract):
 class PerformanceBeat(Contract):
     """节拍与人物共同确定一行表演，保留刺激到可见行动的因果。"""
 
+    id: Identity | None = None
     beat_id: Identity
     participant_id: Identity
     received_event_ids: list[Identity]
@@ -140,6 +148,7 @@ class Performance(Contract):
 class StagingActivity(Contract):
     """镜内参与者的独立任务、触发与出入画。"""
 
+    id: Identity | None = None
     participant_id: Identity
     anchor_id: Identity | None = None
     trigger_event_id: Identity | None = None
@@ -166,6 +175,7 @@ class Staging(Contract):
 class CameraShot(Contract):
     """摄影意图、可见效果和技术要求，不等同于供应商参数。"""
 
+    id: Identity | None = None
     shot_id: Identity
     composition: Note
     depth_layers: Note
@@ -268,6 +278,13 @@ class SceneDesign(Contract):
         ids = {name: [row.id for row in rows] for name, rows in groups.items()}
         for name, values in ids.items():
             check(unique, values, name)
+        for name, rows in (("immutable fact", self.direction.immutable_facts),
+                           ("open question", self.direction.open_questions),
+                           ("situation", self.performance.situations),
+                           ("performance row", self.performance.beats),
+                           ("staging activity", self.staging.activities),
+                           ("camera shot", self.cinematography)):
+            check(unique, [row.id for row in rows if getattr(row, 'id', None) is not None], name)
         for beat in self.direction.beats:
             check(references, beat.event_ids, ids["event"], "event")
         for row in self.direction.blocking_states:

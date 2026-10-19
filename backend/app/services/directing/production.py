@@ -273,7 +273,7 @@ class ProductionService(DirectingAIService):
         def emit(value, path, label):
             """逐项保留文本来源路径，忽略溯源元数据但不丢失已知创作内容。"""
             if isinstance(value, dict) and "state" in value and "sources" in value:
-                note = Note.model_validate(value)
+                note = Note.model_validate({key: item for key, item in value.items() if key != 'id'})
                 if note.state in ("fact", "proposal"):
                     line = f"{label}：{note.text}"
                 elif note.state in ("none", "not_applicable"):

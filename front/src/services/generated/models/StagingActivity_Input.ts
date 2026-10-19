@@ -7,6 +7,7 @@ import type { Note_Input } from './Note_Input';
  * 镜内参与者的独立任务、触发与出入画。
  */
 export type StagingActivity_Input = {
+    id?: (string | null);
     participant_id: string;
     anchor_id?: (string | null);
     trigger_event_id?: (string | null);

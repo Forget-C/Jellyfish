@@ -164,6 +164,22 @@ test('camera and performance layout follow their unique business keys across reo
   assert.match(cameras()[0], /:ambiguous:/)
 })
 
+test('identified design rows keep canvas identity after text edits and reordering', () => {
+  const value = makeWorkspace().designs[0].content
+  const original = value.staging.activities[0]
+  original.id = 'activity-stable'
+  const second = { ...structuredClone(original), id: 'activity-other' }
+  value.staging.activities.push(second)
+  const before = designObjects(value).find(node => node.key === 'activity:activity-stable')
+  assert.equal(designObjectLayoutId(value, before), 'activity:activity-stable')
+  original.ongoing_task = { state: 'proposal', text: '重新巡视' }
+  value.staging.activities.reverse()
+  const after = designObjects(value).find(node => node.key === 'activity:activity-stable')
+  assert.deepEqual(after.path, ['staging', 'activities', 1])
+  assert.equal(designObjectLayoutId(value, after), 'activity:activity-stable')
+  assert.ok(sceneDesignGraph(value).edges.some(edge => edge.from === 'activity:activity-stable' && edge.to === `participant:${original.participant_id}`))
+})
+
 test('shot participant relations are explicit, editable and independent of background evidence', () => {
   const value = makeWorkspace().designs[0].content
   value.participants.push({ id: 'van', name: '白色面包车' })

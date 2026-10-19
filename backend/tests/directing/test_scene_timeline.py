@@ -5,7 +5,7 @@ from uuid import uuid4
 import pytest
 
 from app.services.directing.store import DirectingStore
-from tests.directing.samples import SOURCE, design_sample, plan_sample
+from tests.directing.samples import SOURCE, design_sample, editable_design_sample, plan_sample
 from tests.directing.test_api import client_for
 from tests.directing.test_scene_versions import sequence_path
 from tests.directing.test_store import database, frozen, output
@@ -30,7 +30,7 @@ async def test_scene_timeline_preserves_clip_identity_positions_and_real_ranges(
         assert version['content']['timeline'] == {'items': []}
         detail = path + '/versions/' + version['id']
         content = deepcopy(version['content'])
-        content['design'] = design_sample()
+        content['design'] = editable_design_sample()
         content['timeline']['items'] = [
             {'kind': 'media', 'id': 'clip-a', 'take_kind': 'production_plan', 'take_id': take_id, 'file_id': 'video1',
                 'media_range': {'source_in_ms': 0, 'source_out_ms': 1000}, 'timeline_start_ms': 1000},

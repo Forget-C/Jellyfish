@@ -10,7 +10,7 @@ from app.core.contracts.directing.production import GenerationUnit, ModelCapabil
 from app.core.contracts.directing.scene_take import SceneTakeJudgment
 from app.core.contracts.directing.scene_timeline import SceneTimeline
 from app.core.contracts.directing.design import (
-    Beat, BlockingState, CameraShot, ContinuityState, Criterion, Direction, Event,
+    Beat, BlockingState, CameraShot, ContinuityState, Criterion, DesignNote, Direction, Event,
     Participant, Performance, PromptDirection, SceneDesign, ShotCoverage,
     SoundDesign, SpatialAnchor, Staging,
 )
@@ -33,12 +33,12 @@ class EditableDirection(Direction):
     information_change: Note = Field(default_factory=Note)
     relationship_change: Note = Field(default_factory=Note)
     turning_point: Note = Field(default_factory=Note)
-    immutable_facts: list[Note] = Field(default_factory=list)
+    immutable_facts: list[DesignNote] = Field(default_factory=list)
     spatial_basis: Note = Field(default_factory=Note)
     shootable_area: Note = Field(default_factory=Note)
     axis: Note = Field(default_factory=Note)
     scale: Note = Field(default_factory=Note)
-    open_questions: list[Note] = Field(default_factory=list)
+    open_questions: list[DesignNote] = Field(default_factory=list)
     control_level: Note = Field(default_factory=Note)
     beats: list[Beat] = Field(default_factory=list)
     anchors: list[SpatialAnchor] = Field(default_factory=list)

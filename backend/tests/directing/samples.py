@@ -66,6 +66,22 @@ def design_sample(story="dialogue"):
     return deepcopy(data)
 
 
+def editable_design_sample(story="dialogue"):
+    """新场次版本中的独立设计行带 ID；旧固定设计样例保持原样。"""
+    data = design_sample(story)
+    for index, row in enumerate(data['direction']['immutable_facts']):
+        row['id'] = f'fact-{index + 1}'
+    for index, row in enumerate(data['direction']['open_questions']):
+        row['id'] = f'question-{index + 1}'
+    for name, rows in (('situation', data['performance']['situations']),
+                       ('performance', data['performance']['beats']),
+                       ('activity', data['staging']['activities']),
+                       ('camera', data['cinematography'])):
+        for index, row in enumerate(rows):
+            row['id'] = f'{name}-{index + 1}'
+    return data
+
+
 def plan_sample(design_revision_id="design1"):
     """同一计划同时包含多镜单元和仅覆盖反应的补拍单元。"""
     return {"design_revision_id": design_revision_id, "units": [

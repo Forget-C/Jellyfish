@@ -50,6 +50,7 @@ try {
   design.direction.shots[0].visible_result = note('打开旧信')
   design.direction.shots.push({ ...structuredClone(design.direction.shots[0]), id: 'shot2', event_ids: [], blocking_state_ids: [], participant_ids: [], visible_result: note('望向门口') })
   design.performance.beats[0].physical_action = note('缓慢展开信纸')
+  design.performance.beats[0].id = 'performance-stable'
   design.performance.beats[0].objective = note('确认落款')
   design.performance.beats[0].dialogue_ids = ['dialogue1']
   design.performance.situations[0].situation = note('刚收到旧信')
@@ -84,7 +85,7 @@ try {
   await page.goto(`http://127.0.0.1:4197/projects/canvas-project/chapters/canvas-chapter/sequences/${sequence}?version=${version.id}`)
   const node = id => page.locator(`[data-canvas-node="${id}"]`)
   await page.locator('[data-layout-view="overview"]').waitFor()
-  const performance = node('performance:beat1:person1')
+  const performance = node('performance:performance-stable')
   assert.equal(await performance.count(), 1, 'shared performance has one original')
   await page.getByRole('button', { name: '定位画布节点', exact: true }).click()
   await page.getByRole('menuitem', { name: await performance.locator('h2').innerText(), exact: true }).click()
@@ -108,6 +109,7 @@ try {
   await page.getByRole('button', { name: '保存', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   const persisted = (await (await fetch(`${versions}/${version.id}`)).json()).data
+  assert.equal(persisted.content.design.performance.beats[0].id, 'performance-stable')
   assert.equal(persisted.content.design.performance.beats[0].physical_action.text, '轻轻展开信纸')
   await page.reload()
   await page.locator('[data-layout-view="overview"]').waitFor()

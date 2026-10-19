@@ -51,14 +51,14 @@ export function generationInstructionGraph(workspace: WorkspaceRead, promptId: s
     design.content.direction.blocking_states.forEach(state => {
       if (shot?.blocking_state_ids.includes(state.id) && (!state.event_id || coverage.event_ids.includes(state.event_id))) keys.add(`blocking:${state.id}`)
     })
-    design.content.cinematography.forEach((camera, index) => { if (camera.shot_id === coverage.shot_id) keys.add(`camera:${index}`) })
+    design.content.cinematography.forEach((camera, index) => { if (camera.shot_id === coverage.shot_id) keys.add(`camera:${camera.id || index}`) })
     design.content.performance.beats.forEach((performance, index) => {
       if (!coverage.beat_ids.includes(performance.beat_id)) return
-      keys.add(`performance:${index}`); performance.dialogue_ids.forEach(id => keys.add(`dialogue:${id}`))
+      keys.add(`performance:${performance.id || index}`); performance.dialogue_ids.forEach(id => keys.add(`dialogue:${id}`))
     })
     design.content.continuity.forEach(state => { if (state.event_id && coverage.event_ids.includes(state.event_id)) keys.add(`continuity:${state.id}`) })
     design.content.staging.activities.forEach((activity, index) => {
-      if (activity.trigger_event_id && coverage.event_ids.includes(activity.trigger_event_id)) keys.add(`activity:${index}`)
+      if (activity.trigger_event_id && coverage.event_ids.includes(activity.trigger_event_id)) keys.add(`activity:${activity.id || index}`)
     })
     coverageKeys.set(coverage.id, keys)
   }
