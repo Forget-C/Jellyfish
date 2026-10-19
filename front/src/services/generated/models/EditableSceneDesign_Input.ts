@@ -5,6 +5,7 @@
 import type { CameraShot_Input } from './CameraShot_Input';
 import type { ContinuityState_Input } from './ContinuityState_Input';
 import type { Criterion_Input } from './Criterion_Input';
+import type { DesignApplicability } from './DesignApplicability';
 import type { EditableDirection_Input } from './EditableDirection_Input';
 import type { Event_Input } from './Event_Input';
 import type { Participant } from './Participant';
@@ -29,4 +30,5 @@ export type EditableSceneDesign_Input = {
     continuity?: Array<ContinuityState_Input>;
     sound?: SoundDesign_Input;
     prompt?: PromptDirection_Input;
+    applicability?: Array<DesignApplicability>;
 };

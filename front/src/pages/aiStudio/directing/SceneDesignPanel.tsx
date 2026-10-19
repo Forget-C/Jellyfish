@@ -3,6 +3,7 @@ import { Alert, Button, Select, Space } from 'antd'
 import { WorkbenchModal } from './ui/WorkbenchModal'
 import { WorkbenchButton } from './ui/WorkbenchButton'
 import { DesignObjectSummary } from './DesignObjectSummary'
+import { DesignApplicabilityEditor } from './DesignApplicabilityEditor'
 import type { EditableSceneDesign_Output, EditableGenerationUnit_Output } from '../../../services/generated'
 import { DesignFields, designAt, patchDesign } from './DesignFields'
 import type { DesignPath } from './DesignFields'
@@ -17,6 +18,12 @@ const referenceKeys: Record<string, string[]> = {
   participants: ['participant_id', 'participant_ids'], events: ['event_id', 'event_ids', 'trigger_event_id', 'received_event_ids'],
   criteria: ['criterion_ids'], 'direction.beats': ['beat_id', 'beat_ids'], 'direction.anchors': ['anchor_id', 'anchor_ids'],
   'direction.blocking_states': ['blocking_state_ids'], 'direction.shots': ['shot_id'], 'sound.dialogues': ['dialogue_ids'],
+}
+const applicabilityKinds: Record<string, string> = {
+  'direction.immutable_facts': 'immutable_fact', 'direction.beats': 'beat',
+  'direction.shots': 'shot', events: 'event', criteria: 'criterion',
+  'performance.beats': 'performance_beat', 'staging.activities': 'staging_activity',
+  cinematography: 'camera', continuity: 'continuity',
 }
 const mandatory: Record<string, string[]> = {
   'direction.blocking_states': ['participant_id'], 'performance.situations': ['participant_id'],
@@ -120,6 +127,10 @@ export function SceneDesignPanel({ value, saved, units, disabled, onChange, focu
     setUnitReferences([])
     const rows = designAt(value, target) as Record<string, unknown>[]
     const row = rows[index]
+    if (row?.id && value.applicability?.some(item => item.subject.kind === applicabilityKinds[target.join('.')] && item.subject.id === row.id)) {
+      setError('对象仍被设计适用性引用，请先在此卡解除适用性后再删除。')
+      return
+    }
     const keys = referenceKeys[target.join('.')] || []
     const found: DesignPath[] = []
     const visit = (item: unknown, at: DesignPath) => {
@@ -171,6 +182,7 @@ export function SceneDesignPanel({ value, saved, units, disabled, onChange, focu
       </div> : <DesignFields value={value} path={path} fields={target.fields || object?.fields} allowStructure disabled={disabled} onChange={next => {
         setTarget({ ...targetFor(next, path, true), object: target.object, fields: target.fields, label: target.label }); onChange(next)
       }} onAdd={add} onRemove={remove} />}
+      {object && !pending && <DesignApplicabilityEditor value={value} units={units} object={object} disabled={disabled} onChange={onChange} />}
       {object && typeof path[path.length - 1] === 'number' && <WorkbenchButton variant="danger" disabled={disabled} onClick={() => remove(path.slice(0, -1), path[path.length - 1] as number)}>删除此卡</WorkbenchButton>}
   </>
   return <>

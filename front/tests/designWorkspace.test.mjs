@@ -280,6 +280,19 @@ test('relation editing changes only legal direct references and distinguishes un
   assert.equal(relationBinding(value, shotGraph(value, 'shot1').edges.find(e => e.indirect)), undefined)
 })
 
+test('identified work cards edit their original direct references', () => {
+  const value = makeWorkspace().designs[0].content
+  value.performance.beats[0].id = 'performance-stable'
+  value.cinematography[0].id = 'camera-stable'
+  value.direction.beats.push({ ...structuredClone(value.direction.beats[0]), id: 'beat2' })
+  const edge = sceneDesignGraph(value).edges.find(row => row.from === 'performance:performance-stable' && row.field === 'beat_id')
+  const binding = relationBinding(value, edge)
+  assert.deepEqual(binding.path, ['performance', 'beats', 0, 'beat_id'])
+  assert.equal(changeRelation(value, binding, 'beat2').performance.beats[0].beat_id, 'beat2')
+  const camera = shotGraph(value, 'shot1').edges.find(row => row.to === 'camera:camera-stable')
+  assert.deepEqual(relationBinding(value, camera).path, ['cinematography', 0, 'shot_id'])
+})
+
 
 test('relation identities retain colon segments and stale edges cannot add references', () => {
   const value = makeWorkspace().designs[0].content

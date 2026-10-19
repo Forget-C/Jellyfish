@@ -222,11 +222,20 @@ export function relationBinding(value: SceneDesign_Input, edge: DesignEdge): Rel
   if (edge.indirect) return undefined
   const fromKind = edge.from.slice(0, edge.from.indexOf(':')), fromId = edge.from.slice(edge.from.indexOf(':') + 1)
   const toKind = edge.to.slice(0, edge.to.indexOf(':')), toId = edge.to.slice(edge.to.indexOf(':') + 1)
+  const owner = designObjects(value).find(node => node.key === edge.from)
+  if (owner && edge.field) {
+    const current = designAt(value, [...owner.path, edge.field])
+    if (current === toId || Array.isArray(current) && current.includes(toId)) return {
+      path: [...owner.path, edge.field], prefix: toKind, target: toId,
+      many: Array.isArray(current), required: ['participant_id', 'beat_id', 'shot_id'].includes(edge.field),
+    }
+  }
   if (fromKind === 'shot') {
     const index = value.direction.shots.findIndex(shot => shot.id === fromId)
     const field = { beat: 'beat_ids', event: 'event_ids', criterion: 'criterion_ids', blocking: 'blocking_state_ids', participant: 'participant_ids' }[toKind]
     if (index >= 0 && field) return { path: ['direction', 'shots', index, field], prefix: toKind, target: toId, many: true, required: false }
-    if (toKind === 'camera' && value.cinematography[Number(toId)]?.shot_id === fromId) return { path: ['cinematography', Number(toId), 'shot_id'], prefix: 'shot', target: fromId, many: false, required: true }
+    const cameraIndex = value.cinematography.findIndex((row, index) => (row.id || String(index)) === toId)
+    if (toKind === 'camera' && cameraIndex >= 0 && value.cinematography[cameraIndex].shot_id === fromId) return { path: ['cinematography', cameraIndex, 'shot_id'], prefix: 'shot', target: fromId, many: false, required: true }
   }
   if (fromKind === 'blocking') {
     const index = value.direction.blocking_states.findIndex(row => row.id === fromId)

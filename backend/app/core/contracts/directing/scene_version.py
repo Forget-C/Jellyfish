@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import ConfigDict, Field, model_validator
 
 from app.core.contracts.directing.common import Contract, Identity, Note, Source, references, unique
+from app.core.contracts.directing.design_applicability import DesignApplicability, validate_design_applicability
 from app.core.contracts.directing.production import GenerationUnit, ModelCapability, ReferenceBinding
 from app.core.contracts.directing.scene_take import SceneTakeJudgment
 from app.core.contracts.directing.scene_timeline import SceneTimeline
@@ -66,6 +67,13 @@ class EditableSceneDesign(SceneDesign):
         execution='unknown'))
     prompt: PromptDirection = Field(default_factory=lambda: PromptDirection(
         priorities=Note(), binding_requirements=Note(), sound_strategy=Note(), prohibitions=Note()))
+    applicability: list[DesignApplicability] = Field(default_factory=list)
+
+    @model_validator(mode='after')
+    def valid_applicability(self):
+        """适用性只能指向当前工作单中仍存在的字段和镜头。"""
+        validate_design_applicability(self)
+        return self
 
 
 class SceneVersionSource(Contract):
@@ -163,6 +171,27 @@ class SceneVersionContent(Contract):
         unique([unit.id for unit in self.units], 'unit')
         unique([(item.take_kind, item.take_id) for item in self.take_judgments], '素材判断')
         shots = {shot.id: shot for shot in self.design.direction.shots}
+        occurrences = {(unit.id, item.id): item for unit in self.units for item in unit.coverage}
+        for applicability in self.design.applicability:
+            for target in applicability.occurrences:
+                key = (target.unit_id, target.coverage_item_id)
+                item = occurrences.get(key)
+                if item is None:
+                    raise ValueError(f'设计适用性引用不存在的单元出现项：{key}')
+                subject = applicability.subject
+                if subject.kind == 'shot' and subject.id != item.shot_id:
+                    raise ValueError('镜头设计适用性与出现项镜头不一致')
+                if subject.kind == 'camera' and next(
+                    row.shot_id for row in self.design.cinematography if row.id == subject.id
+                ) != item.shot_id:
+                    raise ValueError('摄影设计适用性与出现项镜头不一致')
+                if subject.kind in ('beat', 'performance_beat'):
+                    beat_id = subject.id if subject.kind == 'beat' else next(
+                        row.beat_id for row in self.design.performance.beats if row.id == subject.id)
+                    if beat_id not in item.beat_ids:
+                        raise ValueError('节拍设计适用性与出现项节拍不一致')
+                if subject.kind == 'event' and subject.id not in item.event_ids:
+                    raise ValueError('事件设计适用性与出现项事件不一致')
         for unit in self.units:
             for item in unit.coverage:
                 if item.shot_id not in shots:

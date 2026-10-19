@@ -51,6 +51,7 @@ try {
   design.direction.shots.push({ ...structuredClone(design.direction.shots[0]), id: 'shot2', event_ids: [], blocking_state_ids: [], participant_ids: [], visible_result: note('望向门口') })
   design.performance.beats[0].physical_action = note('缓慢展开信纸')
   design.performance.beats[0].id = 'performance-stable'
+  design.performance.situations[0].id = 'situation-stable'
   design.performance.beats[0].objective = note('确认落款')
   design.performance.beats[0].dialogue_ids = ['dialogue1']
   design.performance.situations[0].situation = note('刚收到旧信')
@@ -59,11 +60,13 @@ try {
   design.direction.blocking_states[0].orientation = note('面向窗户')
   design.direction.blocking_states[0].path = note('走向门口')
   design.cinematography[0].composition = note('让信纸位于画面中央')
+  design.cinematography[0].id = 'camera-stable'
   design.cinematography[0].movement_path = note('缓慢推近')
   design.cinematography[0].end_frame = note('停在落款')
   design.staging.activities[0].ongoing_task = note('窗外行人经过')
+  design.staging.activities[0].id = 'activity-stable'
   design.staging.activities[0].depth = note('前景书桌，背景行人')
-  design.staging.activities.push({ ...structuredClone(design.staging.activities[0]), trigger_event_id: null, ongoing_task: note('整理桌上的物件') })
+  design.staging.activities.push({ ...structuredClone(design.staging.activities[0]), id: 'activity-other', trigger_event_id: null, ongoing_task: note('整理桌上的物件') })
   design.continuity[0].before = note('信件封好')
   design.continuity[0].after = note('信件打开')
   design.continuity[0].following_constraint = note('信件保持展开')
@@ -92,6 +95,13 @@ try {
   await performance.getByRole('button', { name: '编辑此卡' }).click()
   const editor = page.getByRole('dialog').last()
   await editor.getByRole('textbox', { name: '可见身体动作', exact: true }).fill('轻轻展开信纸')
+  await editor.getByRole('combobox', { name: '选择适用字段' }).click()
+  await page.getByText('可见身体动作', { exact: true }).last().click()
+  await editor.getByRole('combobox', { name: '适用镜头' }).click()
+  await page.getByText('镜头 1', { exact: true }).last().click()
+  await editor.getByRole('button', { name: '应用适用性' }).click()
+  await editor.getByRole('button', { name: '删除此卡' }).click()
+  assert.match(await editor.innerText(), /对象仍被设计适用性引用/)
   assert.equal(await editor.getByRole('status').innerText(), '未保存')
   await editor.locator('.ant-modal-close').click()
   await page.getByRole('button', { name: '定位画布节点', exact: true }).click()
@@ -110,6 +120,7 @@ try {
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   const persisted = (await (await fetch(`${versions}/${version.id}`)).json()).data
   assert.equal(persisted.content.design.performance.beats[0].id, 'performance-stable')
+  assert.deepEqual(persisted.content.design.applicability[0].shot_ids, ['shot1'])
   assert.equal(persisted.content.design.performance.beats[0].physical_action.text, '轻轻展开信纸')
   await page.reload()
   await page.locator('[data-layout-view="overview"]').waitFor()

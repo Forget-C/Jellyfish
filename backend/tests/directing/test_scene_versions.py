@@ -146,6 +146,91 @@ async def test_design_row_ids_survive_edit_reorder_and_reject_duplicates(tmp_pat
 
 
 @pytest.mark.asyncio
+async def test_design_applicability_saves_explicit_scope_and_rejects_invalid_targets(tmp_path):
+    """适用性与真实字段引用同版保存；非法目标及冲突范围不部分写入。"""
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        path = await sequence_path(client)
+        version = (await client.post(path + '/versions', json={
+            'request_id': str(uuid4()), 'title': '关联范围',
+        })).json()['data']
+        detail = path + '/versions/' + version['id']
+        content = deepcopy(version['content'])
+        content['design']['participants'] = [{'id': 'person1', 'name': '妹妹'}]
+        content['design']['direction']['beats'] = [{
+            'id': 'beat1', 'event_ids': [], 'objective': {}, 'obstacle': {},
+            'expected_change': {}, 'must_show': {},
+        }]
+        content['design']['direction']['shots'] = [{
+            'id': 'shot1', 'beat_ids': ['beat1'], 'event_ids': [], 'blocking_state_ids': [],
+            'participant_ids': ['person1'], 'criterion_ids': [],
+            'narrative_function': {}, 'visible_result': {},
+        }, {
+            'id': 'shot2', 'beat_ids': [], 'event_ids': [], 'blocking_state_ids': [],
+            'participant_ids': [], 'criterion_ids': [],
+            'narrative_function': {}, 'visible_result': {},
+        }]
+        content['design']['staging']['activities'] = [{
+            'id': 'activity1', 'participant_id': 'person1', 'depth': {}, 'ongoing_task': {},
+            'path': {}, 'attention': {}, 'reaction_delay': {}, 'intensity': {},
+            'entrances_exits': {}, 'narrative_support': {}, 'end_state': {},
+        }]
+        content['design']['direction']['immutable_facts'] = [{
+            'id': 'rule1', 'state': 'proposal', 'text': '角色出现时服装保持一致',
+            'sources': [{'kind': 'human', 'reference': 'local-user', 'version': 'manual-1'}],
+        }]
+        content['units'] = [{
+            'id': 'unit1', 'ratio': '16:9',
+            'coverage': [{'id': 'cover1', 'shot_id': 'shot1', 'beat_ids': ['beat1'],
+                          'event_ids': [], 'action_scope': '人物动作'}],
+        }]
+        content['design']['applicability'] = [
+            {'subject': {'kind': 'staging_activity', 'id': 'activity1', 'field': 'ongoing_task'},
+             'purpose': 'design', 'scope': 'shots', 'shot_ids': ['shot1']},
+            {'subject': {'kind': 'immutable_fact', 'id': 'rule1', 'field': 'text'},
+             'purpose': 'constraint', 'scope': 'scene_rule', 'phase': 'video',
+             'condition': '角色出现时'},
+            {'subject': {'kind': 'direction', 'field': 'axis'}, 'purpose': 'constraint',
+             'scope': 'occurrences', 'phase': 'video',
+             'occurrences': [{'unit_id': 'unit1', 'coverage_item_id': 'cover1'}]},
+        ]
+        response = await client.put(detail, json={
+            'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})
+        assert response.status_code == 200, response.text
+        saved = (await client.get(detail)).json()['data']
+        assert saved['content']['design']['applicability'] == response.json()['data']['content']['design']['applicability']
+        assert saved['content']['design']['staging']['activities'][0]['participant_id'] == 'person1'
+        for mutate in (
+            lambda body: body['design']['applicability'][0].update(shot_ids=['foreign-shot']),
+            lambda body: body['design']['applicability'][0]['subject'].update(id='foreign-activity'),
+            lambda body: body['design']['applicability'][1].update(shot_ids=['shot1']),
+            lambda body: body['design']['applicability'][1].update(phase=None),
+            lambda body: body['design']['applicability'][2]['occurrences'][0].update(coverage_item_id='foreign-cover'),
+            lambda body: body['design']['applicability'].append(deepcopy(body['design']['applicability'][0])),
+            lambda body: body['design']['applicability'].append({
+                'subject': {'kind': 'beat', 'id': 'beat1', 'field': 'must_show'},
+                'purpose': 'design', 'scope': 'shots', 'shot_ids': ['shot2']}),
+            lambda body: body['design']['staging'].update(activities=[]),
+        ):
+            invalid = deepcopy(saved['content'])
+            mutate(invalid)
+            response = await client.put(detail, json={
+                'request_id': str(uuid4()), 'expected_revision': 2, 'content': invalid})
+            assert response.status_code == 422, response.text
+        assert (await client.get(detail)).json()['data'] == saved
+        rebound = deepcopy(saved['content'])
+        rebound['design']['applicability'][0]['shot_ids'] = ['shot2']
+        response = await client.put(detail, json={
+            'request_id': str(uuid4()), 'expected_revision': 2, 'content': rebound})
+        assert response.status_code == 200, response.text
+        assert (await client.get(detail)).json()['data']['content']['design']['applicability'][0]['shot_ids'] == ['shot2']
+        rebound['design']['applicability'] = rebound['design']['applicability'][1:]
+        response = await client.put(detail, json={
+            'request_id': str(uuid4()), 'expected_revision': 3, 'content': rebound})
+        assert response.status_code == 200, response.text
+        assert len((await client.get(detail)).json()['data']['content']['design']['applicability']) == 2
+
+
+@pytest.mark.asyncio
 async def test_scene_versions_choose_source_independently_and_can_undo_basis_change(tmp_path):
     """更新 B 的明确原文不改 A；原依据可随会话撤销恢复，旧字段来源不被伪造重绑。"""
     async with database(tmp_path) as sessions, client_for(sessions) as client:
