@@ -1,0 +1,33 @@
+{
+  "repo": "mattpocock/skills",
+  "ref": "b0618bc436ad893b3c5e84e55fba86586d34a404",
+  "paths": [
+    "skills/engineering/ask-matt",
+    "skills/engineering/code-review",
+    "skills/engineering/codebase-design",
+    "skills/engineering/diagnosing-bugs",
+    "skills/engineering/domain-modeling",
+    "skills/engineering/grill-with-docs",
+    "skills/engineering/implement",
+    "skills/engineering/implement-spec",
+    "skills/engineering/improve-codebase-architecture",
+    "skills/engineering/pr",
+    "skills/engineering/prototype",
+    "skills/engineering/research",
+    "skills/engineering/retro",
+    "skills/engineering/setup-matt-pocock-skills",
+    "skills/engineering/tdd",
+    "skills/engineering/to-spec",
+    "skills/engineering/to-tickets",
+    "skills/engineering/triage",
+    "skills/engineering/wayfinder",
+    "skills/engineering/wizard",
+    "skills/productivity/grill-me",
+    "skills/productivity/grilling",
+    "skills/productivity/handoff",
+    "skills/productivity/teach",
+    "skills/productivity/to-questionnaire",
+    "skills/productivity/wait-what",
+    "skills/productivity/writing-for-agents"
+  ]
+}

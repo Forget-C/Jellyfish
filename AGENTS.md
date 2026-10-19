@@ -6,6 +6,20 @@
 - 本文件是项目规则的唯一维护来源；`.cursor/rules` 仅提供按任务定位的入口，不另设完成标准。
 - 文档和 skill 按当前问题读取相关章节；已有足够依据时停止扩展读取，当前上下文已有的内容直接复用。
 
+## Agent skills
+
+### Issue tracker
+
+使用任务跟踪、发布规格或读取票据时，按 `site/content/docs/guide/agents/issue-tracker.md` 操作本地 `.scratch/<feature>/` 文件。
+
+### Triage labels
+
+分诊票据时，使用 `site/content/docs/guide/agents/triage-labels.md` 中的五个默认状态。
+
+### Domain docs
+
+讨论领域术语或架构决策时，按 `site/content/docs/guide/agents/domain.md` 使用单上下文术语表与 ADR；文档按需创建。
+
 ## 代码规范
 
 修改场次工作台的控件、布局、主题或交互状态时，先按 `site/content/docs/guide/workbench-design.md` 复用共享组件并执行对应验收；例外在变更说明中记录原因与范围。
