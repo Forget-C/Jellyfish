@@ -50,7 +50,7 @@ def reference_storage(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('with_reference', [False, True, 'replacement'])
-async def test_video_submission_freezes_original_unit_and_registers_only_candidate(tmp_path, with_reference, reference_storage):
+async def test_video_submission_freezes_original_unit_and_registers_only_candidate(tmp_path, with_reference, reference_storage, monkeypatch):
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             db.add(Provider(id='check-provider', name='openai', base_url='https://api.openai.com/v1', api_key='fixture'))
@@ -88,7 +88,10 @@ async def test_video_submission_freezes_original_unit_and_registers_only_candida
         rows = (await client.get(url)).json()['data']
         assert len(rows) == 1 and rows[0]['instruction'] == '递出信封。'
         assert rows[0]['result'] is None and rows[0]['status'] == 'queued'
-        result = {'unit_id': 'unit', 'rows': [{'role': role, 'occurrence_id': 'coverage', 'verdict': 'pass', 'rationale': '明确表达递信动作', 'findings': []} for role in ['direction', 'performance', 'staging', 'cinematography', 'continuity', 'prompt']]}
+        result = {'unit_id': 'unit', 'rows': [{'role': role, 'occurrence_id': 'coverage', 'verdict': 'pass', 'rationale': '明确表达递信动作', 'findings': []} for role in ['direction', 'performance', 'staging', 'cinematography', 'continuity', 'prompt']],
+                  'destinations': [{'owner': 'coverage:coverage', 'field': 'action_scope', 'coverage_item_ids': ['coverage'],
+                                    'destination': 'instruction', 'instruction_excerpt': '递出信封', 'reference_id': None,
+                                    'rationale': '正文直接表达'}]}
         async with sessions.begin() as db:
             service = TaskService(db)
             assert await service.claim(task_id, worker_id='check-fixture')
@@ -212,7 +215,7 @@ async def test_video_submission_freezes_original_unit_and_registers_only_candida
         assert workflow_task and accepted.json()['data']['error'] is None
         assert accepted.json()['data']['version']['revision'] == 5
         newer = deepcopy(bound)
-        newer['units'][0]['instruction'] = '后来继续编辑。'
+        newer['units'][0]['instruction'] = '递出信封。后来继续编辑。'
         newer['units'][0].update(model_id='current-video', parameters={'seed': 91}, ratio='9:16', duration_ms=8000)
         if with_reference:
             newer['units'][0]['references'] = []
@@ -222,7 +225,7 @@ async def test_video_submission_freezes_original_unit_and_registers_only_candida
                     'source': {'kind': 'file', 'reference': 'current-image', 'file_id': 'current-image', 'version': '1'}}]
         assert (await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 5, 'content': newer})).status_code == 200
         assert (await client.post(workflow_url, json=workflow)).json()['data']['task_id'] == workflow_task
-        assert (await client.get(detail)).json()['data']['content']['units'][0]['instruction'] == '后来继续编辑。'
+        assert (await client.get(detail)).json()['data']['content']['units'][0]['instruction'] == '递出信封。后来继续编辑。'
         altered = deepcopy(workflow)
         altered['save']['content'] = newer
         assert (await client.post(workflow_url, json=altered)).status_code == 409
@@ -259,7 +262,7 @@ async def test_video_submission_freezes_original_unit_and_registers_only_candida
         assert changed_model.status_code == 409, changed_model.text
         assert len((await client.get(video_url)).json()['data']) == 2
         assert (await client.get(detail)).json()['data']['revision'] == 6
-        assert (await client.get(detail)).json()['data']['content']['units'][0]['instruction'] == '后来继续编辑。'
+        assert (await client.get(detail)).json()['data']['content']['units'][0]['instruction'] == '递出信封。后来继续编辑。'
         async with sessions.begin() as db:
             (await db.get(Model, 'check-video')).name = 'test-video-model'
         async with sessions.begin() as db:
@@ -283,7 +286,7 @@ async def test_video_submission_freezes_original_unit_and_registers_only_candida
                 assert len((await client.get(video_url)).json()['data']) == 2
                 current = (await client.get(detail)).json()['data']
                 assert current['revision'] == 6
-                assert current['content']['units'][0]['instruction'] == '后来继续编辑。'
+                assert current['content']['units'][0]['instruction'] == '递出信封。后来继续编辑。'
                 assert [(item['id'], item['file_id']) for item in current['content']['units'][0]['references']] == ([('current-frame', 'current-image')] if with_reference == 'replacement' else [])
                 async with sessions.begin() as db:
                     setattr(await db.get(FileItem, 'image1'), unavailable_field, None)
@@ -298,7 +301,12 @@ async def test_video_submission_freezes_original_unit_and_registers_only_candida
                 assert len((await client.get(video_url)).json()['data']) == 2
                 assert (await client.get(detail)).json()['data']['revision'] == 6
             reference_storage['/scene-test/files/space.png'] = b'original-reference'
-        retry = await client.post(retry_url, json=retry_request)
+        from app.services.directing.scene_video import SceneVideoService  # pylint: disable=import-outside-toplevel
+        async def changed_projection(*_args):
+            raise AssertionError('历史重试不应重新投影固定输入')
+        with monkeypatch.context() as patch:
+            patch.setattr(SceneVideoService, '_inputs', changed_projection)
+            retry = await client.post(retry_url, json=retry_request)
         assert retry.status_code == 200, retry.text
         retry_task = retry.json()['data']['task_id']
         assert retry_task != workflow_task
@@ -310,7 +318,7 @@ async def test_video_submission_freezes_original_unit_and_registers_only_candida
         assert next(row for row in (await client.get(video_url)).json()['data'] if row['task_id'] == workflow_task)['status'] == original_status
         unchanged = (await client.get(detail)).json()['data']
         assert unchanged['revision'] == 6
-        assert unchanged['content']['units'][0]['instruction'] == '后来继续编辑。'
+        assert unchanged['content']['units'][0]['instruction'] == '递出信封。后来继续编辑。'
         assert unchanged['content']['units'][0]['model_id'] == 'current-video'
         assert unchanged['content']['units'][0]['parameters'] == {'seed': 91}
         assert unchanged['content']['units'][0]['ratio'] == '9:16'
@@ -365,7 +373,8 @@ async def test_video_submission_freezes_original_unit_and_registers_only_candida
         assert current_execution['preparation']['revision'] == 8
         assert current_request['expected_preparation']['revision'] == 7
         actual = current_execution['preparation']['request']
-        assert actual['execution_prompt'] == '后来继续编辑。'
+        assert actual['execution_prompt'] == '递出信封。后来继续编辑。'
+
         assert actual['model_id'] == 'current-video'
         assert actual['operation_input']['seed'] == 91
         assert actual['operation_input']['ratio'] == '9:16'
@@ -401,3 +410,60 @@ async def test_video_submission_freezes_original_unit_and_registers_only_candida
         assert len((await client.get(video_url)).json()['data']) == 4
         assert (await client.post(retry_url, json=retry_request)).json()['data']['task_id'] == retry_task
         assert (await client.post(retry_url, json={'request_id': str(uuid4())})).status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_identity_requirement_can_use_bound_reference_for_video(tmp_path, reference_storage):
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        async with sessions.begin() as db:
+            db.add(Provider(id='identity-provider', name='openai', base_url='https://api.openai.com/v1', api_key='fixture'))
+            await db.flush()
+            db.add_all([Model(id='identity-text', name='identity-text', category='text', provider_id='identity-provider', params={}),
+                        Model(id='identity-video', name='identity-video', category='video', provider_id='identity-provider', params={})])
+        path = await sequence_path(client)
+        version = (await client.post(path + '/versions', json={
+            'request_id': str(uuid4()), 'title': '人物身份参考'})).json()['data']
+        content = deepcopy(version['content'])
+        content['design']['participants'] = [{'id': 'reader', 'name': '读信者'}]
+        content['design']['direction']['shots'] = [{'id': 'shot', 'beat_ids': [], 'event_ids': [],
+            'blocking_state_ids': [], 'participant_ids': ['reader'], 'criterion_ids': [],
+            'narrative_function': {}, 'visible_result': {}}]
+        content['units'] = [{'id': 'unit', 'model_id': 'identity-video', 'duration_ms': 5000,
+            'ratio': '16:9', 'instruction': '递出信封。', 'coverage': [{'id': 'coverage',
+                'shot_id': 'shot', 'action_scope': '递出信封'}],
+            'references': [{'id': 'portrait', 'file_id': 'image1', 'media_kind': 'image',
+                'purpose': 'identity', 'participant_ids': ['reader'], 'ordinal': 0, 'input_role': 'first_frame',
+                'source': {'kind': 'file', 'reference': 'image1', 'file_id': 'image1', 'version': '1'}}]}]
+        detail = path + '/versions/' + version['id']
+        unit_url = detail + '/units/unit'
+        basis = await client.post(unit_url + '/instruction-basis/confirm', json={
+            'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})
+        assert basis.status_code == 200, basis.text
+        content['units'][0]['instruction_basis_id'] = basis.json()['data']['basis_id']
+        checks_url = unit_url + '/instruction-checks'
+        submitted = await client.post(checks_url, json={'request_id': str(uuid4()),
+            'expected_revision': 1, 'content': content, 'model_id': 'identity-text'})
+        assert submitted.status_code == 200, submitted.text
+        task_id = submitted.json()['data']['task_id']
+        result = {'unit_id': 'unit', 'rows': [{'role': role, 'occurrence_id': 'coverage',
+            'verdict': 'pass', 'rationale': '身份来自已绑定参考', 'findings': []} for role in
+            ['direction', 'performance', 'staging', 'cinematography', 'continuity', 'prompt']],
+            'destinations': [
+                {'owner': 'coverage:coverage', 'field': 'action_scope', 'coverage_item_ids': ['coverage'],
+                 'destination': 'instruction', 'instruction_excerpt': '递出信封', 'rationale': '正文表达动作'},
+                {'owner': 'participant:reader', 'field': 'identity', 'coverage_item_ids': ['coverage'],
+                 'destination': 'reference', 'reference_id': 'portrait', 'rationale': '实际绑定读信者参考'},
+            ]}
+        async with sessions.begin() as db:
+            service = TaskService(db)
+            assert await service.claim(task_id, worker_id='identity-check')
+            await service.finish(task_id, result=result)
+        confirmed = await client.post(checks_url + '/' + task_id + '/confirm', json={'content': content})
+        assert confirmed.status_code == 200, confirmed.text
+        content['units'][0]['instruction_check_task_id'] = task_id
+        saved = await client.put(detail, json={'request_id': str(uuid4()),
+            'expected_revision': 1, 'content': content})
+        assert saved.status_code == 200, saved.text
+        prepared = await client.post(unit_url + '/video/prepare', json={'expected_revision': 2})
+        assert prepared.status_code == 200, prepared.text
+        assert prepared.json()['data']['inputs']['unit']['references'][0]['id'] == 'portrait'

@@ -13,7 +13,7 @@ from app.models.studio_prompts_files_timeline import FileItem
 from app.models.llm import ModelCategoryKey
 from app.services.llm.resolver import get_model_by_category
 from app.core.contracts.directing.instruction_basis import InstructionInputs
-from app.core.contracts.directing.scene_version import SceneVersionContent, EditableGenerationUnit
+from app.core.contracts.directing.scene_version import EditableGenerationUnit
 from app.services.generation.gate import GenerationEntityGate
 from app.services.generation.media_execution import load_media_context
 from app.services.generation.submission.submitter import GenerationSubmitter
@@ -122,7 +122,7 @@ class SceneVideoService(InstructionCheckService):
             if existing.request_hash != request_hash:
                 raise RevisionConflict('重试请求身份已用于另一份授权')
             return await self.db.get(Task, existing.task_id)
-        sequence, version = await self._version(sequence_id, version_id)
+        _, version = await self._version(sequence_id, version_id)
         if not any(unit.id == unit_id for unit in version.content.units):
             raise RevisionConflict('原单元已不可用，不能重试或选择替代单元')
         source_task = await self.db.get(Task, original.task_id)
@@ -149,10 +149,9 @@ class SceneVideoService(InstructionCheckService):
                 or not InstructionInputs.model_validate(checked['inputs']).same_consumption(preparation.inputs)):
             raise RevisionConflict('原视频输入与检查依据不一致，不能按原记录重试')
         unit = EditableGenerationUnit(**preparation.inputs.unit.model_dump(), instruction=preparation.request.execution_prompt)
-        content = SceneVersionContent(basis=preparation.inputs.basis, design=preparation.inputs.design, units=[unit])
-        inputs, _ = await self._inputs(sequence, version_id, unit_id, content)
         media = await self._prepared(sequence_id, unit, text=unit.instruction)
         model = await get_model_by_category(self.db, ModelCategoryKey.video, model_or_id=unit.model_id)
-        if not inputs.same_consumption(preparation.inputs) or media != preparation.request.media or model.provider_id != source_task.provider_id:
+        if (media != preparation.request.media or model.provider_id != source_task.provider_id
+                or model.name != preparation.inputs.video_model_name):
             raise RevisionConflict('原参考、模型或执行依据已不可用，不能改用当前替代输入')
         return await self._submit_video_execution(sequence_id, preparation, body.request_id, request_hash, retry_of_task_id=source_task.id)

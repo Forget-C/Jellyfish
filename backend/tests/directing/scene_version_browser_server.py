@@ -173,8 +173,15 @@ async def complete_check_fixture(task_id: str, outcome: str = 'pass'):
         task = await db.get(Task, task_id)
         assert task and task.project_id == 'canvas-project' and task.kind == 'directing_instruction_check'
         unit = task.input_snapshot['run_args']['inputs']['unit']
+        args = task.input_snapshot['run_args']
+        scope = args['inputs'].get('scope') or {}
         result = {'unit_id': unit['id'], 'rows': [{'role': role, 'occurrence_id': item['id'], 'verdict': 'pass', 'rationale': '检查夹具：动作表达一致', 'findings': []}
-            for role in ['direction', 'performance', 'staging', 'cinematography', 'continuity', 'prompt'] for item in unit['coverage']]}
+            for role in ['direction', 'performance', 'staging', 'cinematography', 'continuity', 'prompt'] for item in unit['coverage']],
+            'destinations': [{'owner': use['owner'], 'field': use['field'],
+                'coverage_item_ids': use['coverage_item_ids'], 'destination': 'instruction',
+                'instruction_excerpt': args['instruction'], 'rationale': '检查夹具：本次正文覆盖'}
+                for use in [*scope.get('execution', []), *scope.get('constraints', [])]
+                if use['phase'] == 'video' and use['text'].strip()]}
         service = TaskService(db)
         assert await service.claim(task_id, worker_id='browser-check-fixture')
         assert outcome in {'pass', 'revise', 'failed', 'cancelled'}

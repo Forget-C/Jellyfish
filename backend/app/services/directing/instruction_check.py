@@ -53,7 +53,8 @@ class InstructionCheckService(InstructionBasisService):
             inputs=[('check-source', index, file_id) for index, file_id in enumerate(sorted(files))],
             snapshot={'instruction_check': {'version_id': version_id, 'unit_id': unit_id, 'request': body.model_dump(mode='json')},
                 'model_id': model.id, 'model_name': model.name, 'provider_key': config.provider_key,
-                'run_args': {'inputs': inputs.model_dump(mode='json'), 'instruction': unit.instruction}})
+                'run_args': {'inputs': inputs.model_dump(mode='json'), 'instruction': unit.instruction,
+                             'destination_contract_version': 1}})
 
     async def list_checks(self, sequence_id, version_id, unit_id):
         """历史读取不依赖当前编辑的完整性，不修改或采纳任何结论。"""
@@ -68,7 +69,10 @@ class InstructionCheckService(InstructionBasisService):
         for task in tasks:
             args = task.input_snapshot['run_args']
             inputs = InstructionInputs.model_validate(args['inputs'])
-            result = InstructionCheckResult.model_validate(task.result).validate_scope(unit_id, [item.id for item in inputs.unit.coverage]) if task.status == 'succeeded' else None
+            result = InstructionCheckResult.model_validate(task.result).validate_scope(
+                unit_id, [item.id for item in inputs.unit.coverage], scope=inputs.scope,
+                instruction=args['instruction'], references=inputs.unit.references,
+                require_destinations=args.get('destination_contract_version') == 1) if task.status == 'succeeded' else None
             rows.append(InstructionCheckRead(task_id=task.id, origin_version_id=task.input_snapshot['instruction_check']['version_id'], request_id=task.input_snapshot['instruction_check']['request']['request_id'],
                 status=task.status, error=task.error_message, instruction=args['instruction'], inputs=inputs,
                 model_name=task.input_snapshot['model_name'], result=result))

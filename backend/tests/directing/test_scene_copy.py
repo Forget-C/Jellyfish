@@ -79,7 +79,9 @@ async def test_copy_rechecks_tasks_after_readiness_and_accepts_failed_terminal(t
                 await service.request_cancel(task_id, reason='用户取消检查')
         assert not (await client.get(detail + '/copy-readiness')).json()['data']['ready']
         assert (await client.post(detail + '/copy', json=request)).status_code == 409
-        result = {'unit_id': 'unit', 'rows': [{'role': role, 'occurrence_id': 'coverage', 'verdict': 'pass', 'rationale': '动作明确', 'findings': []} for role in ['direction', 'performance', 'staging', 'cinematography', 'continuity', 'prompt']]}
+        result = {'unit_id': 'unit', 'rows': [{'role': role, 'occurrence_id': 'coverage', 'verdict': 'pass', 'rationale': '动作明确', 'findings': []} for role in ['direction', 'performance', 'staging', 'cinematography', 'continuity', 'prompt']],
+                  'destinations': [{'owner': 'coverage:coverage', 'field': 'action_scope', 'coverage_item_ids': ['coverage'],
+                                    'destination': 'instruction', 'instruction_excerpt': '转身', 'rationale': '正文直接表达'}]}
         async with sessions.begin() as db:
             await TaskService(db).finish(task_id, error='外部检查失败' if terminal == 'failed' else None,
                 cancelled=terminal == 'cancelled', result=result if terminal == 'succeeded' else None)

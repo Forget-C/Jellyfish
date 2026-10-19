@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.contracts.directing import SceneDesign, ProductionPlan, Prompt, ReviewPacket, SequenceCut, TakeAnnotation
 from app.core.contracts.directing.common import Identity, Source, references
 from app.core.contracts.directing.instruction_check import InstructionCheckResult
+from app.core.contracts.directing.instruction_basis import InstructionInputs
 from app.core.contracts.directing.workspace import MediaRead
 from app.core.contracts.directing.scene_video import SceneVideoPreparation, SceneVideoRead, SceneTakeRead
 from app.core.contracts.directing.feedback import CutReview, RepairItem, KnowledgeCandidate
@@ -369,10 +370,19 @@ class DirectingStore:
         task = await self.scene_instruction_check_task(sequence_id, version_id, unit_id, task_id)
         if task.status != 'succeeded':
             raise ValueError('检查记录尚未成功完成')
-        unit = task.input_snapshot['run_args']['inputs']['unit']
-        result = InstructionCheckResult.model_validate(task.result).validate_scope(unit_id, [item['id'] for item in unit['coverage']])
+        args = task.input_snapshot['run_args']
+        inputs = InstructionInputs.model_validate(args['inputs'])
+        unit = inputs.unit
+        result = InstructionCheckResult.model_validate(task.result).validate_scope(
+            unit_id, [item.id for item in unit.coverage], scope=inputs.scope,
+            instruction=args['instruction'], references=unit.references,
+            require_destinations=args.get('destination_contract_version') == 1)
         if any(row.verdict != 'pass' for row in result.rows):
             raise ValueError('检查仍有待处理问题，不能确认为通过')
+        unresolved = [f'{row.owner}.{row.field}' for row in result.destinations or []
+                      if row.destination == 'unresolved']
+        if unresolved:
+            raise ValueError('视频要求仍有未解决去向，不能确认为通过：' + '、'.join(unresolved))
         return task
 
     async def scene_video_execution(self, execution_id):

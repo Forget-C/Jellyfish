@@ -267,6 +267,7 @@ export type { InstructionCheckConfirmation } from './models/InstructionCheckConf
 export type { InstructionCheckRead } from './models/InstructionCheckRead';
 export type { InstructionCheckRequest } from './models/InstructionCheckRequest';
 export type { InstructionCheckResult } from './models/InstructionCheckResult';
+export type { InstructionDestination } from './models/InstructionDestination';
 export type { InstructionInputs_Input } from './models/InstructionInputs_Input';
 export type { InstructionInputs_Output } from './models/InstructionInputs_Output';
 export type { JsonValue } from './models/JsonValue';

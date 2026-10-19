@@ -47,7 +47,10 @@ async def test_check_freezes_confirmed_inputs_and_does_not_apply_results(tmp_pat
         rows = (await client.get(url)).json()['data']
         assert len(rows) == 1 and rows[0]['instruction'] == '递出信封。'
         assert rows[0]['result'] is None and rows[0]['status'] == 'queued'
-        result = {'unit_id': 'unit', 'rows': [{'role': role, 'occurrence_id': 'coverage', 'verdict': 'pass', 'rationale': '明确表达递信动作', 'findings': []} for role in ['direction', 'performance', 'staging', 'cinematography', 'continuity', 'prompt']]}
+        result = {'unit_id': 'unit', 'rows': [{'role': role, 'occurrence_id': 'coverage', 'verdict': 'pass', 'rationale': '明确表达递信动作', 'findings': []} for role in ['direction', 'performance', 'staging', 'cinematography', 'continuity', 'prompt']],
+                  'destinations': [{'owner': 'coverage:coverage', 'field': 'action_scope', 'coverage_item_ids': ['coverage'],
+                                    'destination': 'instruction', 'instruction_excerpt': '递出信封', 'reference_id': None,
+                                    'rationale': '正文直接表达'}]}
         async with sessions.begin() as db:
             service = TaskService(db)
             assert await service.claim(task_id, worker_id='check-fixture')

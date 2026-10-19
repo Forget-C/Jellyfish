@@ -21,6 +21,7 @@ def unit_scope(design: EditableSceneDesign, unit: EditableGenerationUnit,
     actions = {row.id: row for row in design.performance.beats if row.id}
     activities = {row.id: row for row in design.staging.activities if row.id}
     continuity = {row.id: row for row in design.continuity}
+    participants_by_id = {row.id: row for row in design.participants}
     shot_ids = {item.shot_id for item in unit.coverage}
     occurrence_ids = {(unit.id, item.id) for item in unit.coverage}
 
@@ -159,6 +160,11 @@ def unit_scope(design: EditableSceneDesign, unit: EditableGenerationUnit,
                 unresolved.append(f'镜头 {shot_id} 的参与对象范围待核对')
         else:
             participants.update(shot.participant_ids)
+            for participant_id in shot.participant_ids:
+                add(constraints, f'participant:{participant_id}', 'identity',
+                    participants_by_id[participant_id].name, '当前镜头明确参与对象身份',
+                    coverage_ids=[item.id for item in unit.coverage if item.shot_id == shot_id],
+                    phase='video')
     for row in design.performance.situations:
         if row.participant_id in participants:
             for field in ('situation', 'relationship'):
