@@ -11,5 +11,8 @@ export type RelationshipNode = {
     path: Array<(string | number)>;
     stable?: boolean;
     missing?: boolean;
+    placement?: 'scene_background' | 'scene_rule' | 'shots' | 'occurrences' | 'pending_shot' | 'unlinked';
+    shot_ids?: Array<string>;
+    reason?: string;
 };
 

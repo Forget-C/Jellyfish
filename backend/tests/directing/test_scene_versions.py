@@ -58,6 +58,8 @@ async def test_manual_shot_can_save_before_beat_assignment_but_cannot_leave_dang
         assert {'owner': 'shot:manual-shot', 'field': 'beat_ids',
                 'target': 'beat:beat', 'target_id': 'beat'} in graph['edges']
         assert not any(edge['target'] == 'missing:beat' for edge in graph['edges'])
+        assert next(node for node in graph['nodes'] if node['key'] == 'beat:beat')['shot_ids'] == ['manual-shot']
+        assert next(node for node in graph['nodes'] if node['key'] == 'overview')['placement'] == 'scene_background'
         assert any(path['source'] == 'shot:manual-shot' and path['target'] == 'event:event'
                    and [(step['owner'], step['field']) for step in path['steps']] == [
                        ('shot:manual-shot', 'beat_ids'), ('beat:beat', 'event_ids')]
@@ -202,6 +204,9 @@ async def test_design_applicability_saves_explicit_scope_and_rejects_invalid_tar
             {'subject': {'kind': 'direction', 'field': 'axis'}, 'purpose': 'constraint',
              'scope': 'occurrences', 'phase': 'video',
              'occurrences': [{'unit_id': 'unit1', 'coverage_item_id': 'cover1'}]},
+            {'subject': {'kind': 'beat', 'id': 'beat1', 'field': 'must_show'},
+             'purpose': 'design', 'scope': 'occurrences',
+             'occurrences': [{'unit_id': 'unit1', 'coverage_item_id': 'cover1'}]},
         ]
         response = await client.put(detail, json={
             'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})
@@ -209,6 +214,16 @@ async def test_design_applicability_saves_explicit_scope_and_rejects_invalid_tar
         saved = (await client.get(detail)).json()['data']
         assert saved['content']['design']['applicability'] == response.json()['data']['content']['design']['applicability']
         assert saved['content']['design']['staging']['activities'][0]['participant_id'] == 'person1'
+        assert next(node for node in saved['relationship_graph']['nodes'] if node['key'] == 'activity:activity1')['shot_ids'] == ['shot1']
+        uses = saved['relationship_graph']['uses']
+        assert any(use['owner'] == 'overview' and use['field'] == 'information_change'
+                   and use['purpose'] == 'background' for use in uses)
+        assert any(use['owner'] == 'space' and use['field'] == 'axis'
+                   and use['scope'] == 'occurrences' for use in uses)
+        assert any(use['owner'] == 'fact:rule1' and use['purpose'] == 'constraint'
+                   and use['scope'] == 'scene_rule' for use in uses)
+        assert next(node for node in saved['relationship_graph']['nodes'] if node['key'] == 'beat:beat1')['shot_ids'] == ['shot1']
+        assert next(node for node in saved['relationship_graph']['nodes'] if node['key'] == 'beat:beat1')['placement'] == 'occurrences'
         for mutate in (
             lambda body: body['design']['applicability'][0].update(shot_ids=['foreign-shot']),
             lambda body: body['design']['applicability'][0]['subject'].update(id='foreign-activity'),
@@ -232,12 +247,16 @@ async def test_design_applicability_saves_explicit_scope_and_rejects_invalid_tar
         response = await client.put(detail, json={
             'request_id': str(uuid4()), 'expected_revision': 2, 'content': rebound})
         assert response.status_code == 200, response.text
-        assert (await client.get(detail)).json()['data']['content']['design']['applicability'][0]['shot_ids'] == ['shot2']
+        rebound_read = (await client.get(detail)).json()['data']
+        assert rebound_read['content']['design']['applicability'][0]['shot_ids'] == ['shot2']
+        assert next(node for node in rebound_read['relationship_graph']['nodes'] if node['key'] == 'activity:activity1')['shot_ids'] == ['shot2']
+        assert saved['relationship_graph']['revision'] == 2
+        assert rebound_read['relationship_graph']['revision'] == 3
         rebound['design']['applicability'] = rebound['design']['applicability'][1:]
         response = await client.put(detail, json={
             'request_id': str(uuid4()), 'expected_revision': 3, 'content': rebound})
         assert response.status_code == 200, response.text
-        assert len((await client.get(detail)).json()['data']['content']['design']['applicability']) == 2
+        assert len((await client.get(detail)).json()['data']['content']['design']['applicability']) == 3
 
 
 @pytest.mark.asyncio

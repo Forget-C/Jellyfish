@@ -353,6 +353,7 @@ export type { RegroupRequest } from './models/RegroupRequest';
 export type { RelationshipEdge } from './models/RelationshipEdge';
 export type { RelationshipNode } from './models/RelationshipNode';
 export type { RelationshipPath } from './models/RelationshipPath';
+export type { RelationshipUse } from './models/RelationshipUse';
 export type { RenderedPromptSnapshot } from './models/RenderedPromptSnapshot';
 export type { RepairDocument } from './models/RepairDocument';
 export type { RepairItem_Input } from './models/RepairItem_Input';

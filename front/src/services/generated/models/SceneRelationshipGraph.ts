@@ -6,6 +6,7 @@ import type { DesignApplicability } from './DesignApplicability';
 import type { RelationshipEdge } from './RelationshipEdge';
 import type { RelationshipNode } from './RelationshipNode';
 import type { RelationshipPath } from './RelationshipPath';
+import type { RelationshipUse } from './RelationshipUse';
 /**
  * 与读取的版本修订一同生成的只读关系投影。
  */
@@ -15,6 +16,7 @@ export type SceneRelationshipGraph = {
     nodes: Array<RelationshipNode>;
     edges: Array<RelationshipEdge>;
     paths: Array<RelationshipPath>;
+    uses: Array<RelationshipUse>;
     applicability: Array<DesignApplicability>;
 };
 

@@ -1,9 +1,11 @@
-"""从单个已保存场次修订投影设计对象和字段引用。"""
+"""从单个已保存场次修订投影设计对象、引用与展示归位。"""
+
+from typing import Literal
 
 from pydantic import Field
 
 from app.core.contracts.directing.common import Contract, Identity
-from app.core.contracts.directing.design_applicability import DesignApplicability
+from app.core.contracts.directing.design_applicability import DesignApplicability, DesignOccurrence
 
 
 class RelationshipNode(Contract):
@@ -14,6 +16,10 @@ class RelationshipNode(Contract):
     path: list[str | int]
     stable: bool = True
     missing: bool = False
+    placement: Literal['scene_background', 'scene_rule', 'shots', 'occurrences',
+                       'pending_shot', 'unlinked'] = 'unlinked'
+    shot_ids: list[Identity] = Field(default_factory=list)
+    reason: str = ''
 
 
 class RelationshipEdge(Contract):
@@ -33,6 +39,20 @@ class RelationshipPath(Contract):
     steps: list[RelationshipEdge] = Field(min_length=2)
 
 
+class RelationshipUse(Contract):
+    """原字段或独立条目的内容用途；背景不自动变成执行要求。"""
+
+    owner: str
+    field: str
+    purpose: Literal['background', 'design', 'constraint']
+    scope: Literal['scene_rule', 'shots', 'occurrences'] | None = None
+    shot_ids: list[Identity] = Field(default_factory=list)
+    occurrences: list[DesignOccurrence] = Field(default_factory=list)
+    phase: Literal['video', 'sound', 'postproduction'] | None = None
+    condition: str | None = None
+    reason: str
+
+
 class SceneRelationshipGraph(Contract):
     """与读取的版本修订一同生成的只读关系投影。"""
 
@@ -41,11 +61,13 @@ class SceneRelationshipGraph(Contract):
     nodes: list[RelationshipNode]
     edges: list[RelationshipEdge]
     paths: list[RelationshipPath]
+    uses: list[RelationshipUse]
     applicability: list[DesignApplicability]
 
 
-def scene_relationship_graph(version_id: str, revision: int, design) -> SceneRelationshipGraph:
+def scene_relationship_graph(version_id: str, revision: int, content) -> SceneRelationshipGraph:
     """只沿显式 ID 字段建立直接边，绝不从名称或共享参与者推断关系。"""
+    design = content.design
     nodes: list[RelationshipNode] = []
     edges: list[RelationshipEdge] = []
     known: set[str] = set()
@@ -65,6 +87,7 @@ def scene_relationship_graph(version_id: str, revision: int, design) -> SceneRel
     add('participant', design.participants, ['participants'])
     add('event', design.events, ['events'])
     add('criterion', design.criteria, ['criteria'])
+    add('fact', design.direction.immutable_facts, ['direction', 'immutable_facts'])
     for kind, rows, path in (
         ('beat', design.direction.beats, ['direction', 'beats']),
         ('anchor', design.direction.anchors, ['direction', 'anchors']),
@@ -129,9 +152,91 @@ def scene_relationship_graph(version_id: str, revision: int, design) -> SceneRel
     outgoing: dict[str, list[RelationshipEdge]] = {}
     for edge in edges:
         outgoing.setdefault(edge.owner, []).append(edge)
-    paths = [RelationshipPath(source=first.owner, target=second.target, steps=[first, second])
-             for first in edges for second in outgoing.get(first.target, [])
-             if second.target != first.owner]
+    paths = []
+    for first in edges:
+        for second in outgoing.get(first.target, []):
+            if second.target == first.owner:
+                continue
+            paths.append(RelationshipPath(source=first.owner, target=second.target, steps=[first, second]))
+            for third in outgoing.get(second.target, []):
+                if third.target not in {first.owner, first.target}:
+                    paths.append(RelationshipPath(source=first.owner, target=third.target,
+                                                  steps=[first, second, third]))
+    direct_shots: dict[str, set[str]] = {}
+    for edge in edges:
+        if edge.owner.startswith('shot:'):
+            direct_shots.setdefault(edge.target, set()).add(edge.owner[5:])
+    scoped: dict[str, list[DesignApplicability]] = {}
+    subject_kinds = {'performance_beat': 'performance', 'staging_activity': 'activity',
+                     'immutable_fact': 'fact'}
+    for item in design.applicability:
+        subject = item.subject
+        key = subject_kinds.get(subject.kind, subject.kind)
+        if key == 'direction':
+            key = 'space' if subject.field in {'spatial_basis', 'shootable_area', 'axis', 'scale'} else 'overview'
+        key = f'{key}:{subject.id}' if subject.id else key
+        scoped.setdefault(key, []).append(item)
+    occurrence_shots = {(unit.id, item.id): item.shot_id
+                        for unit in content.units for item in unit.coverage}
+    uses = [RelationshipUse(owner=key, field=item.subject.field, purpose=item.purpose,
+                            scope=item.scope, shot_ids=item.shot_ids, occurrences=item.occurrences,
+                            phase=item.phase, condition=item.condition,
+                            reason='原字段明确声明的内容用途与适用范围')
+            for key, items in scoped.items() for item in items]
+    explicit_fields = {(use.owner, use.field) for use in uses}
+    background_fields = {
+        'overview': ('viewpoint', 'information_change', 'relationship_change', 'turning_point', 'open_questions'),
+        'space': ('spatial_basis', 'shootable_area', 'axis', 'scale'),
+        'location': ('location_asset_id',), 'performance': ('applicability',),
+        'staging': ('environment', 'intentional_absence'),
+        'sound': ('sources', 'ambience_actions'), 'prompt': ('priorities',),
+    }
+    for node in nodes:
+        fields = background_fields.get(node.key, ())
+        if node.kind == 'participant':
+            fields = ('name',)
+        elif node.kind == 'situation':
+            fields = ('situation', 'relationship')
+        elif node.kind == 'anchor':
+            fields = ('description',)
+        for field in fields:
+            if (node.key, field) not in explicit_fields:
+                uses.append(RelationshipUse(owner=node.key, field=field, purpose='background',
+                                            reason='解释场次上下文；无需逐镜关联且不自动执行'))
+    background_keys = {'overview', 'space', 'location', 'performance', 'staging', 'sound', 'prompt'}
+    background_kinds = {'participant', 'situation', 'anchor'}
+    for node in nodes:
+        if node.missing:
+            node.placement = 'pending_shot'
+            node.reason = '引用目标在当前保存修订中不存在'
+        elif node.kind == 'shot':
+            node.placement = 'shots'
+            node.shot_ids = [node.key[5:]]
+        elif node.key in background_keys or node.kind in background_kinds:
+            node.placement = 'scene_background'
+            node.reason = '场次背景无需逐镜关联；单元是否消费另行判断'
+        elif scopes := scoped.get(node.key):
+            if any(item.scope == 'scene_rule' for item in scopes):
+                node.placement = 'scene_rule'
+                node.reason = '原字段明确声明全场规则'
+            elif any(item.scope == 'occurrences' for item in scopes):
+                node.placement = 'occurrences'
+                node.shot_ids = sorted({occurrence_shots[(target.unit_id, target.coverage_item_id)]
+                                        for item in scopes for target in item.occurrences})
+                node.reason = '原字段明确指定单元出现项'
+            else:
+                node.placement = 'shots'
+                node.shot_ids = sorted({shot_id for item in scopes for shot_id in item.shot_ids})
+                node.reason = '原字段明确指定镜头'
+        elif node.kind in {'beat', 'event', 'blocking', 'criterion'} and node.key in direct_shots:
+            node.placement = 'shots'
+            node.shot_ids = sorted(direct_shots[node.key])
+            node.reason = '镜头覆盖字段直接引用此对象'
+        elif any(edge.owner == node.key or edge.target == node.key for edge in edges):
+            node.placement = 'pending_shot'
+            node.reason = '存在真实引用，但未明确适用于哪个镜头'
+        else:
+            node.reason = '尚无真实引用或明确适用范围'
     return SceneRelationshipGraph(version_id=version_id, revision=revision,
-                                  nodes=nodes, edges=edges, paths=paths,
+                                  nodes=nodes, edges=edges, paths=paths, uses=uses,
                                   applicability=design.applicability)

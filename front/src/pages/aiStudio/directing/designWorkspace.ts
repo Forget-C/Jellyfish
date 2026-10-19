@@ -1,4 +1,4 @@
-import type { SceneDesign_Input } from '../../../services/generated'
+import type { SceneDesign_Input, SceneRelationshipGraph } from '../../../services/generated'
 import { designAt, designObjectSnapshot, noteText, patchDesign } from './designValue'
 import type { DesignPath } from './designValue'
 
@@ -102,6 +102,45 @@ export function directorDesignGraph(value: SceneDesign_Input, view: DirectorDesi
 }
 
 export type ShotCanvasLocation = 'global' | 'shared' | 'unlinked' | string
+
+/** 保存修订已决定归位与引用；此投影只压缩总览并筛选逐镜可见对象。 */
+export function authoritativeShotCanvasProjection(value: SceneDesign_Input, authority: SceneRelationshipGraph) {
+  const objects = designObjects(value).map(node => node.key === 'overview' ? { ...node, label: '全场叙事与约束',
+    fields: ['viewpoint', 'information_change', 'relationship_change', 'turning_point', 'open_questions', 'control_level'] } : node)
+  objects.push({ key: 'space', label: '空间规则', kind: 'direction', path: ['direction'], fields: ['spatial_basis', 'shootable_area', 'axis', 'scale'] },
+    { key: 'location', label: '本场场所', kind: 'location', path: ['direction'], fields: ['location_asset_id'] })
+  const objectKeys = new Set(objects.map(node => node.key))
+  authority.nodes.filter(node => node.missing && !objectKeys.has(node.key)).forEach(node =>
+    objects.push({ key: node.key, label: `缺失引用 · ${node.key}`, kind: 'missing', path: [] }))
+  const byKey = new Map(authority.nodes.map(node => [node.key, node]))
+  const memberships = new Map(authority.nodes.map(node => [node.key, node.shot_ids || []] as const))
+  const location = (key: string): ShotCanvasLocation => {
+    const node = byKey.get(key)
+    if (!node || node.placement === 'unlinked' || node.placement === 'pending_shot') return 'unlinked'
+    if (node.placement === 'scene_background' || node.placement === 'scene_rule') return 'global'
+    if ((node.shot_ids?.length || 0) > 1) return 'shared'
+    return node.shot_ids?.[0] || 'unlinked'
+  }
+  const direct: DesignEdge[] = authority.edges.map(edge => ({ from: edge.owner, to: edge.target,
+    label: edge.field, field: edge.field }))
+  const view = (shotId?: string) => {
+    if (!shotId) {
+      const nodes = objects.filter(node => ['global', 'shared'].includes(location(node.key)) || node.key.startsWith('shot:'))
+      const keys = new Set(nodes.map(node => node.key))
+      return { nodes, unlinked: objects.filter(node => location(node.key) === 'unlinked'),
+        edges: direct.filter(edge => keys.has(edge.from) && keys.has(edge.to)).map(edge => ({ ...edge, sources: [edge] })), memberships, location }
+    }
+    const owned = objects.filter(node => location(node.key) === shotId)
+    const ownedKeys = new Set(owned.map(node => node.key))
+    const referenceKeys = new Set(direct.filter(edge => ownedKeys.has(edge.from) && location(edge.to) === 'shared' ||
+      ownedKeys.has(edge.to) && location(edge.from) === 'shared').flatMap(edge => [edge.from, edge.to])
+      .filter(key => location(key) === 'shared'))
+    const visible = new Set([...ownedKeys, ...referenceKeys])
+    return { nodes: [...owned, ...objects.filter(node => referenceKeys.has(node.key)).map(node => ({ ...node, kind: 'reference' }))],
+      unlinked: [], edges: direct.filter(edge => visible.has(edge.from) && visible.has(edge.to)).map(edge => ({ ...edge, sources: [edge] })), memberships, location }
+  }
+  return { view, objects, memberships, location, direct }
+}
 
 /** 一次建立整场关系和逐镜集合，再投影总览与每个镜头。 */
 export function shotCanvasProjection(value: SceneDesign_Input) {
@@ -275,6 +314,7 @@ export function designObjects(value: SceneDesign_Input): DesignObject[] {
   add(value.direction.shots, ['direction', 'shots'], 'shot', '镜头', 'direction')
   add(value.direction.beats, ['direction', 'beats'], 'beat', '节拍', 'direction')
   add(value.direction.anchors, ['direction', 'anchors'], 'anchor', '锚点', 'direction')
+  add(value.direction.immutable_facts, ['direction', 'immutable_facts'], 'fact', '不变事实', 'direction')
   add(value.direction.blocking_states, ['direction', 'blocking_states'], 'blocking', '调度', 'direction')
   add(value.participants, ['participants'], 'participant', '人物 / 物件', 'participants')
   add(value.events, ['events'], 'event', '事件', 'direction')

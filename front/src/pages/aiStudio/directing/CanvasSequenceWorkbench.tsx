@@ -991,7 +991,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       onSelectShot={selectShot}
       onSelectUnit={selectUnit} onChange={editContent} />}
     {loadState === 'ready' && canvas === 'director' && selected && content && params.get('version') === selected.id && <DirectorDesignCanvas
-      key={selected.id} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} content={content} saved={selected.content}
+      key={selected.id} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} content={content} saved={selected.content} relationshipGraph={selected.relationship_graph}
       shotId={currentShotId} onSelectShot={id => selectShot(id, false)} onChange={editContent}
       onRestoreShot={id => setShotSelections(previous => ({ ...previous, [selected.id]: id }))}
       disabled={handingOff || !!recovery || readonly || busy === 'create' || leaving}
