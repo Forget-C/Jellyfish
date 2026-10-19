@@ -47,7 +47,7 @@ const sessionHistories = new Map<string, EditHistory>()
 const contentKey = (value: unknown) => JSON.stringify(value, (_key, item) => {
   if (!item || typeof item !== 'object' || Array.isArray(item)) return item
   return Object.fromEntries(Object.keys(item).sort()
-    .filter(key => item[key] != null && !(Array.isArray(item[key]) && item[key].length === 0))
+    .filter(key => item[key] != null && !(Array.isArray(item[key]) && item[key].length === 0 && key !== 'participant_ids'))
     .map(key => [key, item[key]]))
 })
 const sameContent = (a: unknown, b: unknown) => contentKey(a) === contentKey(b)

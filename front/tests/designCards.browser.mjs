@@ -169,7 +169,17 @@ try {
   await page.getByRole('dialog').last().locator('.ant-modal-close').click()
   await page.getByRole('button', { name: '保存', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
-  assert.equal((await (await fetch(`${versions}/${empty.id}`)).json()).data.content.design.direction.shots.length, 1)
+  const emptySaved = (await (await fetch(`${versions}/${empty.id}`)).json()).data
+  assert.equal(emptySaved.content.design.direction.shots.length, 1)
+  assert.equal(emptySaved.content.design.direction.shots[0].participant_ids, null)
+  await node(`shot:${emptySaved.content.design.direction.shots[0].id}`).getByRole('button', { name: /进入子图/ }).click()
+  await node(`shot:${emptySaved.content.design.direction.shots[0].id}`).getByRole('button', { name: '编辑此卡' }).click()
+  await page.getByRole('dialog').last().getByRole('button', { name: '明确无对象' }).click()
+  assert.equal(await page.getByRole('dialog').last().getByRole('status').innerText(), '未保存')
+  await page.getByRole('dialog').last().locator('.ant-modal-close').click()
+  await page.getByRole('button', { name: '保存', exact: true }).click()
+  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  assert.deepEqual((await (await fetch(`${versions}/${empty.id}`)).json()).data.content.design.direction.shots[0].participant_ids, [])
   assert.deepEqual(errors, [])
   console.log(`PASS modal editing, shared reference, scoped assets, empty first shot and narrow cards; evidence: ${output}`)
 } catch (error) {
