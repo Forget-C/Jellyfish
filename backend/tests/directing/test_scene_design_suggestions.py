@@ -56,7 +56,7 @@ async def test_whole_design_preview_preserves_version_and_rejects_new_manual_edi
             invalid['direction']['viewpoint']['sources'] = [version['content']['basis']['source']]
             responses = iter([invalid, result])
             generated = generate_directing_result('directing_design', SimpleNamespace(invoke=lambda _: SimpleNamespace(content=json.dumps(next(responses)))), task.input_snapshot['run_args'])
-            assert [source.kind for source in generated.direction.viewpoint.sources] == ['chapter', 'model']
+            assert [source.kind for source in generated.design.direction.viewpoint.sources] == ['chapter', 'model']
             await service.finish(task_id, result=generated.model_dump(mode='json'))
         preview = await client.post(detail + '/design-suggestions/' + task_id + '/preview', json={'content': version['content']})
         assert preview.status_code == 200, preview.text

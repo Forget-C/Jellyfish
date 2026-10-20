@@ -3,14 +3,16 @@
 import json
 from uuid import uuid4
 
+from httpx import HTTPError
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from openai import APIError
 from pydantic import ValidationError
 from sqlalchemy import select
 
-from app.core.contracts.directing.common import Source
+from app.core.contracts.directing.common import Note, Source
 from app.core.contracts.directing.design import SceneDesign
 from app.core.contracts.directing.scene_version import EditableSceneDesign, SceneVersionContent, validate_new_design_row_ids
-from app.core.contracts.directing.scene_design import SceneDesignDiagnostics
+from app.core.contracts.directing.scene_design import SceneDesignCandidate, SceneDesignDiagnostics, parse_scene_design_candidate
 from app.core.contracts.directing.design_scope import design_scope_issues, resolved_design_fields
 from app.core.contracts.directing.production import ReviewPacket
 from app.core.contracts.directing.instruction_check import InstructionCheckResult
@@ -45,6 +47,7 @@ def generate_directing_result(kind: str, llm, args: dict):
     """在 Worker 有界线程执行，返回严格结构，绝不由模型直接批准或覆盖工作单。"""
     contract = EditableSceneDesign if kind == 'directing_design' and args.get('scene_version_design') else RESULT_CONTRACTS[kind]
     require_complete = args.get('design_scope_version') == 1 and not args.get('design_scope')
+    accept_candidate = require_complete and args.get('design_candidate_version') == 1
     instruction = {
         "directing_instruction_check": "检查 instruction 是否准确表达 inputs 的当前原文、inputs.scope 中本次已选执行项及 video 阶段适用约束，并按已消费背景理解语义；sound/postproduction 规则保留阶段，不误要求视频模型执行。对每项非空 video 执行项和约束按 scope 原顺序输出 destinations，原样复制 owner、field、coverage_item_ids；正文去向给出 instruction 中实际存在的 instruction_excerpt，执行项必须由正文表达；只有身份、空间、构图或连续性约束可引用 inputs.unit.references 中实际绑定且用途相符的 reference_id。无法证明去向或发现正文、规则、参考之间冲突时标为 unresolved，并在相关六岗行标 revise、给出字段路径与修正建议。背景字段若含命令式要求，定位字段并标 revise，提示移入规则或改写背景，不自动升级。项目风格的条件和例外依其原文核对；自然语言冲突交由用户解决。inputs.design 是来源工作单，可能包含本单元未消费内容，不能据此补选动作。unit_id 必须保持 inputs.unit.id，每个 coverage.id 必须有 direction、performance、staging、cinematography、continuity、prompt 六行，occurrence_id 使用 coverage.id。逐行给出 pass 或 revise、具体理由和可执行问题建议，不得漏行、合并或返回 pending。不能更改正文、凭空补充素材或授权生成；检查通过也不保证模型实际遵从。",
         "directing_instruction": "仅依据给定原文、当前单元、明确参考与 scope 编写可直接执行的拍摄指令。scope.execution 是本次明确选择的可拍内容；scope.constraints 中仅 video 阶段适用视频正文，sound/postproduction 阶段不得误写成视频模型要求；scope.background 仅作解释，不自动变成动作或约束。design 是来源工作单，仅用于理解已纳入范围，不能从同镜关系或共用对象补选执行项。只返回原 unit.id 和完整正文 text，不修改设计、单元身份或参考，不声称检查通过或已生成视频。保留动作因果、人物与摄影约束，不编造未提供素材。requirements 是用户本次编写要求。",
@@ -54,29 +57,25 @@ def generate_directing_result(kind: str, llm, args: dict):
         "directing_review": "以六部门分别审查本轮每个镜头出现项。严格保留提供的 roles 和 occurrences，不得减少、更换、合并。同一镜头不同单元分别检查。每行给出 pass 或 revise、具体理由及可执行修改建议。检查共同空间、先后反应、参考绑定、摄影、声音和相邻衔接。模型不能授权用户执行。",
     }[kind]
     if kind == 'directing_design' and args.get('scene_version_design'):
-        instruction += ('\n场次版本建议使用原工作单的 ID 与字段引用，并在 applicability 中逐字段声明实际镜头、单元出现项或全场约束。'
+        instruction += ('\n场次版本沿用原工作单的稳定身份，按 design_protocol 为需要显式范围的字段声明 applicability。'
                         '叙事、人物情境和环境说明保留在原背景字段；动作和可见结果保留在原设计行；约束须声明 video、sound 或 postproduction 阶段。'
                         '共享人物、事件或锚点不能代替适用范围。'
                         '不得添加任意背景标签、采用状态或不存在的关联 ID。')
-        instruction += ('\n输入 design_protocol 是生成规则，不是输出字段。subjects 列出每种 subject 的字段、原工作单路径和 ID 要求；'
-                        'background/constraint 只能使用对应字段清单。purpose 为 design 或 background 时 phase、condition 必须为空；'
-                        '只有 constraint 必须声明制作阶段，并可填写条件。不能为保留 phase 而把动作改标 constraint。'
-                        'scene/scene_rule 还须满足 global_scope_kinds，并清空 shot_ids 和 occurrences；'
-                        'shots 须有非空 shot_ids 且 occurrences 为空，occurrences 则相反；不得重复声明同一来源字段。'
-                        '整张工作单 subject.id 为空，独立行 subject.id 引用对应 path 中行的 id。'
+        instruction += ('\n输入 design_protocol 是生成规则，不是输出字段。subjects 给出字段、对象路径和 ID 要求，'
+                        'purposes 与 global_scope_kinds 限定用途、阶段、条件和范围；不能为保留阶段而把动作改标约束。'
+                        '每个来源字段最多声明一次。独立行 subject.id 引用对应 path 中行的 id。'
                         '新增不可改事实、待确定问题、角色情境、表演、镜内活动、摄影行都必须有稳定 id。'
                         'camera 引用 cinematography 行的 id，不能用 shot_id 代替；其范围只能属于该行 shot_id。'
-                        'must_show 属于 beat，physical_action 属于 performance_beat，immutable_fact 引用单条事实 id 和 text；'
-                        'direction.immutable_facts 与 location_asset_id 不作为适用性字段。'
                         'beat/performance_beat 的镜头范围须与镜头 beat_ids 一致；单元出现项须存在于冻结版本。'
-                        '已由字段职责、镜头覆盖或摄影 shot_id 明确范围的字段可继承，不必重复声明。')
+                        '已由字段职责、镜头覆盖或摄影 shot_id 明确范围的字段可继承，不必重复声明。'
+                        '独立行应有明确设计用途，没有设计需求时不必新增整行占位；'
+                        '已有行的未知或不适用字段按 Note 状态及理由保留，不能仅因 text 为空删除记录。')
         if not require_complete:
             instruction += '旧局部修订保留范围外原有缺项，不扩展本次字段修改范围。'
     if args.get('design_scope'):
         instruction += '\n这是预先限定范围的局部修订。只能替换 design_scope 中列出的完整 Note，必须保留其余字段、来源、对象身份、顺序与关联，返回完整工作单；不得补齐范围外的未完成字段。'
     if require_complete:
-        instruction += ('\n整场设计完成后每项保留内容必须有范围。按具体字段职责确定全场背景或全场规则，'
-                        '摄影继承 shot_id，节拍／事件／调度／验收要求可复用镜头明确覆盖；'
+        instruction += ('\n整场设计完成后每项保留内容必须有范围。按具体字段职责确定全场背景或全场规则；'
                         '表演、镜内活动、连续性变化和对白的有内容字段分别声明镜头或出现项范围，'
                         '不能仅凭共用人物、节拍、触发事件或锚点推断。背景用途不能掩盖动作或约束；'
                         '恰好适用于全部现有镜头仍用 shots，不改为全场。未知可选技术值不必编造。'
@@ -97,10 +96,29 @@ def generate_directing_result(kind: str, llm, args: dict):
         HumanMessage(content=json.dumps(model_args, ensure_ascii=False)),
     ]
     retained_fields = set()
+    retained_reasons = set()
+    candidate = None
+    if accept_candidate:
+        original = EditableSceneDesign.model_validate(args['previous_design'])
+        original_fields = resolved_design_fields(original)
+        retained_fields = {(row.owner, row.field) for row in original_fields if row.has_content}
+        retained_reasons = {(row.owner, row.field) for row in original_fields
+            if isinstance(row.value, Note) and row.value.reason}
     for attempt in range(2):
-        response = llm.invoke(messages)
+        scope_issues = []
+        try:
+            response = llm.invoke(messages)
+        except (HTTPError, APIError) as error:
+            if candidate is None:
+                raise
+            candidate.diagnostics = SceneDesignDiagnostics(output='',
+                issues=[f'自动纠错调用失败（{type(error).__name__}），已保留上一合法候选'])
+            return candidate
         content = response.content
         if not isinstance(content, str):
+            if candidate is not None:
+                candidate.diagnostics = SceneDesignDiagnostics(output='', issues=['导演模型未返回文本 JSON'])
+                return candidate
             raise DirectingOutputError("导演模型未返回文本 JSON")
         text = content.strip()
         if text.startswith("```") and "\n" in text:
@@ -131,21 +149,35 @@ def generate_directing_result(kind: str, llm, args: dict):
                 if require_complete:
                     fields = resolved_design_fields(result)
                     present = {(row.owner, row.field) for row in fields if row.has_content}
-                    removed = retained_fields - present
+                    reasons = {(row.owner, row.field) for row in fields
+                        if isinstance(row.value, Note) and row.value.reason}
+                    # 原有理由与正文分别保留；none 的理由不能替代已生成正文。
+                    removed = (retained_fields - present) | (retained_reasons - (present | reasons))
                     if removed:
                         raise ValueError('修正不能删除已有有效内容：' + '、'.join(f'{owner}.{name}' for owner, name in sorted(removed)))
                     retained_fields.update(present)
                     issues = design_scope_issues(result, fields)
+                    scope_issues = issues
+                    if accept_candidate:
+                        candidate = SceneDesignCandidate(design=result, issues=issues, attempt=attempt + 1)
+                        if not issues or attempt == 1:
+                            return candidate
                     if issues:
                         raise ValueError('设计未完整：' + '；'.join(
                             f'{issue.owner}.{issue.field}：{issue.reason}' for issue in issues))
             break
         except (ValidationError, ValueError) as error:
             errors = error.errors(include_url=False, include_input=False, include_context=False) if isinstance(error, ValidationError) else [{'loc': ['sources' if isinstance(error, DesignSourceError) else 'design'], 'msg': str(error)}]
+            if accept_candidate and scope_issues:
+                errors = [{'loc': issue.path[:-1] if issue.code == 'empty_row_scope' else issue.path,
+                    'msg': issue.reason, 'type': issue.code} for issue in scope_issues]
             if attempt == 1:
                 diagnostics = (SceneDesignDiagnostics(output=content,
                     issues=[('.'.join(map(str, item['loc'])) or '工作单') + '：' + item['msg'] for item in errors])
                     if require_complete else None)
+                if candidate is not None:
+                    candidate.diagnostics = diagnostics
+                    return candidate
                 if isinstance(error, DesignSourceError):
                     raise DirectingOutputError(str(error), diagnostics) from None
                 paths = [(".".join(map(str, item["loc"])) or "工作单关联") + "：" + item["msg"] for item in errors[:8]]
@@ -155,10 +187,23 @@ def generate_directing_result(kind: str, llm, args: dict):
             repair_instruction = '只修正以下结构、关联或来源错误，保留原文事实和既有设计意图，返回完整 JSON：\n'
             if kind == 'directing_design' and args.get('scene_version_design'):
                 feedback = {'errors': errors, 'design_context': scene_design_repair_context(text)}
+                if candidate is not None:
+                    fields = resolved_design_fields(candidate.design)
+                    old_owners = {row.owner for row in resolved_design_fields(original)}
+                    feedback['design_issues'] = [{**issue.model_dump(mode='json'),
+                        'has_design_text': any(row.has_content for row in fields if row.owner == issue.owner),
+                        'missing_scope_fields': [row.field for row in fields if row.owner == issue.owner and row.scope is None],
+                        'existed_before': issue.owner in old_owners} for issue in candidate.issues]
                 repair_instruction = ('修正以下错误，并按 design_protocol 与 design_context 逐项核对整份 applicability；'
                     '结构错误可能遮住后续引用错误。field_kinds 是该字段的合法对象类别，subjects 提供本轮已有行 ID、'
                     '缺 ID 位置和镜头／节拍关系。选项不代表实际适用范围，不得自动扩大范围；'
-                    '补齐新增行 ID 并同步正确引用，保留原文事实、设计正文、有效来源及限定修改范围，返回完整 JSON：\n')
+                    '补齐新增行 ID 并同步正确引用，保留原文事实、设计正文、有效来源及限定修改范围。')
+                if candidate is not None:
+                    repair_instruction += (
+                        'design_issues 提供行级事实；empty_row_scope 表示整条记录无正文且部分范围未明，'
+                        '不是要求补该字段正文。结合原文与 reason 核对保留用途，只能在本次新增占位确实无设计需求时移除并同步关联；'
+                        '不得删除被需要的记录、猜测范围或编造内容，不能确定时保留待用户处理。')
+                repair_instruction += '返回完整 JSON：\n'
             messages.extend([AIMessage(content=content), HumanMessage(content=
                 repair_instruction + json.dumps(feedback, ensure_ascii=False))])
     if kind == "directing_instruction" and result.unit_id != args["unit"]["id"]:
@@ -287,7 +332,8 @@ class DirectingAIService(WorkspaceService):
         result = {}
         result_key = {"directing_instruction_check": "instruction_check", "directing_instruction": "scene_instruction", "directing_divide": "division", "directing_design": "design", "directing_review": "review", "directing_review_revision": "revision"}.get(task.kind)
         if task.status == "succeeded" and result_key and task.input_snapshot.get("scene_design"):
-            result["scene_design"] = EditableSceneDesign.model_validate(task.result)
+            candidate = parse_scene_design_candidate(task.result, task.input_snapshot.get('run_args', {}))
+            result["scene_design"] = candidate.design if candidate else EditableSceneDesign.model_validate(task.result)
         elif task.status == "succeeded" and result_key:
             result[result_key] = RESULT_CONTRACTS[task.kind].model_validate(task.result)
         if task.status == "succeeded" and task.target_type == "directing_image":

@@ -6,10 +6,11 @@ import { createPortal } from 'react-dom'
 import { AimOutlined, FileTextOutlined, HistoryOutlined, PlusOutlined, EditOutlined } from '@ant-design/icons'
 import { Alert, Input, Select, Spin, message } from 'antd'
 import { ApiError, FilmService, StudioDirectingService } from '../../../services/generated'
-import type { SceneDesignRequest, SceneDesignSuggestionRead, SceneVersionContent_Output, SceneVersionRead } from '../../../services/generated'
+import type { DesignScopeIssue, SceneDesignRequest, SceneDesignSuggestionRead, SceneVersionContent_Output, SceneVersionRead } from '../../../services/generated'
 import { directingError } from './common'
 import { revisionDifferences } from './revisionDiff'
 import { designLabels } from './designLabels'
+import { designObjects } from './designWorkspace'
 import { sceneUnitReferenceConflicts } from './sceneUnitReferences'
 import type { UnitReferenceConflict } from './sceneUnitReferences'
 
@@ -58,6 +59,14 @@ function designSummary(value: unknown): string {
   const row = value as Record<string, unknown>
   if ('state' in row) return typeof row.text === 'string' ? row.text : ''
   return Object.entries(row).filter(([key]) => key !== 'sources').map(([, child]) => designSummary(child)).find(Boolean) || ''
+}
+
+/** 缺项路径始终读取同一份固定候选；行级问题查看整行，不误导成补单字段正文。 */
+function issueRecord(issue: DesignScopeIssue, design: SceneDesignSuggestionRead['before']): unknown {
+  const path = issue.code === 'empty_row_scope' ? issue.path.slice(0, -1) : issue.path
+  let value: unknown = design
+  for (const key of path) value = value && typeof value === 'object' ? (value as Record<string, unknown>)[key] : undefined
+  return value
 }
 
 /** 建议与编辑内容分开；每次应用先核实固定依据，整份结果只进入一次编辑历史。 */
@@ -156,11 +165,12 @@ export function SceneDesignSuggestions({ triggerHost, projectId, sequenceId, ver
       if (!mounted.current) return
       if (live.current.disabled || live.current.content !== snapshot) throw new Error('核对期间内容发生变化，请重新查看差异后应用')
       onChange({ ...snapshot, design: result.data.design }); onOpenChange(false)
-      void messageApi.success(`设计已应用到「${version.title}」`)
+      void messageApi.success(`${result.data.issues?.length ? '待完善设计' : '设计'}已应用到「${version.title}」`)
     } catch (cause) { if (mounted.current) setError(directingError(cause)) }
     finally { if (mounted.current) setBusy(false) }
   }
   const differences = selected?.design ? revisionDifferences(selected.before, selected.design) : []
+  const candidateObjects = selected?.design ? designObjects(selected.design) : []
   const unitConflicts = selected?.design ? sceneUnitReferenceConflicts(content, selected.design) : []
   // 响应补齐的 nullable 和空列表默认值不属于用户改动。
   const empty = (value: unknown) => value == null || Array.isArray(value) && !value.length
@@ -169,9 +179,11 @@ export function SceneDesignSuggestions({ triggerHost, projectId, sequenceId, ver
   const hasDesign = hasDesignContent(content.design)
   const generating = selected && !terminal.includes(selected.status)
   const generateLabel = limited ? (hasDesign ? '生成调整方案' : '生成所选内容') : (hasDesign ? '重新生成整场' : '生成场次设计')
-  const recordStatus = (row: SceneDesignSuggestionRead) => row.design
-    ? !revisionDifferences(row.design, content.design).length ? '与当前设计一致' : !revisionDifferences(row.before, content.design).length ? '待应用' : '待核对'
-    : row.diagnostics ? '未完成 · 可查看结果' : statusNames[row.status] || row.status
+  const recordStatus = (row: SceneDesignSuggestionRead) => {
+    if (!row.design) return row.diagnostics ? '未完成 · 可查看结果' : statusNames[row.status] || row.status
+    const state = !revisionDifferences(row.design, content.design).length ? '与当前设计一致' : !revisionDifferences(row.before, content.design).length ? '待应用' : '待核对'
+    return row.issues?.length ? `待完善 · ${state}` : state
+  }
   const triggerLabel = 'AI 设计'
   const trigger = <Button size="large" className="scene-design-launch" aria-label={triggerLabel} title={running ? '查看当前执行进度' : '整场设计建议'} aria-haspopup="dialog" onClick={() => onOpenChange(true)}>
     <svg className="scene-design-launch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
@@ -186,7 +198,7 @@ export function SceneDesignSuggestions({ triggerHost, projectId, sequenceId, ver
     <Modal rootClassName="scene-ai-design-dialog" title="AI 设计" open={open} focusTriggerAfterClose={!locatingUnit}
       onCancel={() => onOpenChange(false)} footer={<WorkbenchDialogActions className="scene-ai-footer" secondary={<Button variant="quiet" onClick={() => onOpenChange(false)}>{selected?.design ? '暂不应用' : generating ? '稍后查看' : '取消'}</Button>}>
         {pending.current ? <Button variant="primary" disabled={busy || disabled} loading={busy} onClick={() => void submit()}>核实原设计请求</Button>
-          : selected?.design ? <><span className="scene-ai-apply-target" title={`写入「${version.title}」`}>写入「{version.title}」</span><Button variant="primary" disabled={disabled || busy || !!readError || !differences.length || !!unitConflicts.length} loading={busy} onClick={() => void apply()}>应用设计</Button></>
+          : selected?.design ? <><span className="scene-ai-apply-target" title={`写入「${version.title}」`}>写入「{version.title}」</span><Button variant="primary" disabled={disabled || busy || !!readError || !differences.length || !!unitConflicts.length} loading={busy} onClick={() => void apply()}>{selected.issues?.length ? '应用为待完善设计' : '应用设计'}</Button></>
           : generating ? <Button disabled={busy || disabled} onClick={async () => {
             setBusy(true)
             try { await FilmService.cancelTaskApiV1FilmTasksTaskIdCancelPost({ taskId: selected.task_id, requestBody: { reason: '用户取消设计建议' } }); setAttempt(value => value + 1) }
@@ -246,9 +258,19 @@ export function SceneDesignSuggestions({ triggerHost, projectId, sequenceId, ver
             <section aria-label="设计要求"><h4><EditOutlined aria-hidden="true" /> 设计要求 {!selected.instruction.trim() && <span className="scene-ai-empty-tag">未填写</span>}</h4>{!!selected.instruction.trim() && <p>{selected.instruction}</p>}</section>
           </div>
         </details>
-        {selected.error && <Alert type="error" message={selected.diagnostics ? '整场设计未完成，已保留本次结果' : selected.error} />}
-        {selected.diagnostics && <section aria-label="未完成设计结果">
-          <p>本次结果未通过完整性检查，已保留供核对。请处理缺项后重新发起设计。</p>
+        {selected.error && <Alert type="error" message={selected.diagnostics ? '本次设计未形成可应用候选，已保留诊断' : selected.error} />}
+        {!!selected.design && !!selected.issues?.length && <section aria-label="设计待完善问题">
+          <Alert type="warning" message="设计待完善" description="可先应用到当前版本继续编辑；相关内容用于拍摄前仍需处理。" />
+          <ul>{selected.issues.map((issue, index) => <li key={`${issue.owner}:${issue.field}:${index}`}>
+            <strong>{candidateObjects.find(row => row.key === issue.owner)?.label || designLabels[issue.path[0]] || '场次设计'} · {issue.code === 'empty_row_scope' ? '整条记录' : designLabels[issue.field] || issue.field}</strong>
+            <p>{issue.reason}</p>
+            {!!issue.missing_scope_fields?.length && <p>待明确范围：{issue.missing_scope_fields.map(field => designLabels[field] || field).join('、')}</p>}
+            <details><summary>查看相关设计</summary><pre>{display(issueRecord(issue, selected.design!))}</pre></details>
+          </li>)}</ul>
+        </section>}
+        {selected.diagnostics && <section aria-label={selected.design ? '纠错失败诊断' : '未完成设计结果'}>
+          <p>{selected.design ? `已保留第 ${selected.candidate_attempt} 次生成的合法候选；随后自动纠错失败，以下输出未被接收。`
+            : '本次输出未通过结果校验，仅供核对。可调整要求后重新生成。'}</p>
           <ul>{selected.diagnostics.issues.map((issue, index) => <li key={index}>{issue}</li>)}</ul>
           <details><summary>查看模型输出 · 只读</summary><pre>{selected.diagnostics.output}</pre></details>
         </section>}

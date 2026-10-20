@@ -69,19 +69,35 @@ try {
   await page.locator('.scene-ai-footer').getByRole('button', { name: '重新生成整场', exact: true }).click()
   await page.getByText('状态：等待执行', { exact: true }).waitFor()
   const tasks = (await (await fetch(`${versions}/${version.id}/design-suggestions`)).json()).data
-  await request(`${api}/browser-test/design-tasks/${tasks[0].task_id}/complete?incomplete=true`, {})
-  await page.getByText('状态：未完成 · 可查看结果', { exact: true }).waitFor()
-  const diagnostics = page.getByRole('region', { name: '未完成设计结果', exact: true })
-  await diagnostics.getByText('查看模型输出 · 只读', { exact: true }).click()
-  assert.match(await diagnostics.locator('pre').innerText(), /activity-incomplete/)
-  assert.equal(await page.getByRole('button', { name: '应用设计', exact: true }).count(), 0)
+  await request(`${api}/browser-test/design-tasks/${tasks[0].task_id}/complete?incomplete=true&empty_row=true`, {})
+  await page.getByText('状态：待完善 · 待应用', { exact: true }).waitFor()
+  const issues = page.getByRole('region', { name: '设计待完善问题', exact: true })
+  assert.match(await issues.locator('strong').innerText(), /整条记录/)
+  await issues.getByText(/^待明确范围：/).waitFor()
+  await issues.getByText('查看相关设计', { exact: true }).click()
+  assert.match(await issues.locator('pre').innerText(), /activity-incomplete/)
+  assert.equal(await page.getByRole('button', { name: '应用为待完善设计', exact: true }).isEnabled(), true)
   assert.deepEqual((await (await fetch(`${versions}/${version.id}`)).json()).data.content, version.content)
   await page.screenshot({ path: join(output, 'incomplete-result-desktop.png'), animations: 'disabled' })
   await page.setViewportSize({ width: 390, height: 844 })
+  await page.waitForFunction(() => {
+    const button = [...document.querySelectorAll('button')].find(node => node.textContent === '应用为待完善设计')
+    const bounds = button?.getBoundingClientRect()
+    return bounds && bounds.top >= 0 && bounds.bottom <= window.innerHeight
+  }, undefined, { timeout: 5000 })
   await page.screenshot({ path: join(output, 'incomplete-result-narrow.png'), animations: 'disabled' })
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true)
+  await page.getByRole('button', { name: '应用为待完善设计', exact: true }).click()
+  await page.getByRole('dialog', { name: 'AI 设计', exact: true }).waitFor({ state: 'hidden' })
+  await page.waitForFunction(async url => {
+    const data = (await (await fetch(url)).json()).data
+    return data.content.design.staging.activities.some(row => row.id === 'activity-incomplete') && !data.relationship_graph.complete
+  }, new URL(`${versions}/${version.id}`).pathname)
+  await page.getByRole('button', { name: '附加信息', exact: true }).click()
+  await page.getByRole('button', { name: /定位缺项/ }).first().click()
+  await page.screenshot({ path: join(output, 'incomplete-applied-narrow.png'), animations: 'disabled' })
   assert.deepEqual(errors, [])
-  console.log(`PASS scope ownership, global background, preparation gaps and read-only failed result; evidence: ${output}`)
+  console.log(`PASS incomplete candidate preview, explicit apply, persisted issues and issue location; evidence: ${output}`)
 } catch (error) {
   if (page) await page.screenshot({ path: join(output, 'failure.png'), animations: 'disabled' }).catch(() => {})
   console.error(`Evidence: ${output}`)

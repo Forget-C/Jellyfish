@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { DesignScopeIssue } from './DesignScopeIssue';
 import type { EditableSceneDesign_Output } from './EditableSceneDesign_Output';
 import type { SceneVersionSource_Output } from './SceneVersionSource_Output';
 /**
@@ -13,4 +14,5 @@ export type SceneDesignPreview = {
     basis: SceneVersionSource_Output;
     before: EditableSceneDesign_Output;
     design: EditableSceneDesign_Output;
+    issues?: Array<DesignScopeIssue>;
 };

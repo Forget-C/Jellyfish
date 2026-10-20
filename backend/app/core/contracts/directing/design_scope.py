@@ -1,6 +1,7 @@
 """按字段职责解析范围，供关系图、整场验收及单元投影共用。"""
 
 from dataclasses import dataclass, field as data_field
+from typing import Literal
 
 from pydantic import Field
 
@@ -16,6 +17,8 @@ class DesignScopeIssue(Contract):
     path: list[str | int]
     reason: str
     shot_ids: list[str] = Field(default_factory=list)
+    code: Literal['incomplete', 'empty_row_scope'] = 'incomplete'
+    missing_scope_fields: list[str] = Field(default_factory=list)
 
 
 @dataclass
@@ -152,7 +155,9 @@ def design_scope_issues(design, fields=None) -> list[DesignScopeIssue]:
                 and not any(other.owner == row.owner and other.has_content for other in fields)):
             empty_owners.add(row.owner)
             issues.append(DesignScopeIssue(owner=row.owner, field=row.field, path=row.path,
-                                          reason='保留的独立设计项尚无明确范围'))
+                                          reason='保留的独立设计项尚无明确范围；整条记录没有设计正文，请核对保留用途',
+                                          code='empty_row_scope', missing_scope_fields=[other.field for other in fields
+                                              if other.owner == row.owner and other.scope is None]))
     if not design.direction.shots:
         issues.append(DesignScopeIssue(owner='overview', field='shots', path=['direction', 'shots'],
                                       reason='尚未设计承接内容的镜头'))

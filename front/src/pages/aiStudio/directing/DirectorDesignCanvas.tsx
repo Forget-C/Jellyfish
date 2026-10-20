@@ -363,7 +363,8 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
       <p>关系来源：已保存 revision {relationshipGraph.revision}</p>
       {!!relationshipGraph.issues?.length && <details open><summary>设计缺项 · {relationshipGraph.issues.length}</summary><ul>{relationshipGraph.issues.map((issue, index) => <li key={index}>
         <WorkbenchButton variant="quiet" onClick={() => { const owner = allObjects.find(node => node.key === issue.owner); if (owner) jump(owner) }}>定位缺项 · {allObjects.find(node => node.key === issue.owner)?.label || '场次设计'}</WorkbenchButton>
-        {' · '}{designLabels[issue.field] || issue.field}：{issue.reason}
+        {' · '}{issue.code === 'empty_row_scope' ? '整条记录' : designLabels[issue.field] || issue.field}：{issue.reason}
+        {!!issue.missing_scope_fields?.length && <span> · 待明确范围：{issue.missing_scope_fields.map(field => designLabels[field] || field).join('、')}</span>}
       </li>)}</ul></details>}
       {!!relationshipGraph.preparation_issues?.length && <details><summary>拍摄分工待补 · {relationshipGraph.preparation_issues.length}</summary><ul>{relationshipGraph.preparation_issues.map((issue, index) => <li key={index}>
         <WorkbenchButton variant="quiet" onClick={() => { const owner = allObjects.find(node => node.key === issue.owner); if (owner) jump(owner) }}>定位拍摄分工 · {allObjects.find(node => node.key === issue.owner)?.label || '场次设计'}</WorkbenchButton>

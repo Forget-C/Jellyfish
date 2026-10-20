@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from sqlalchemy import select
 
-from app.core.contracts.directing.scene_design import SceneDesignDiagnostics, SceneDesignPreview, SceneDesignRequest, SceneDesignSuggestionRead
+from app.core.contracts.directing.scene_design import SceneDesignDiagnostics, SceneDesignPreview, SceneDesignRequest, SceneDesignSuggestionRead, parse_scene_design_candidate
 from app.core.contracts.directing.design_scope import design_scope_issues
 from app.core.contracts.directing.scene_version import EditableSceneDesign, SceneVersionContent
 from app.models.directing import SceneVersionRecord
@@ -77,6 +77,7 @@ class SceneDesignService(DirectingAIService):
         rules = await self.applicable_style(style_id, sequence_id, model.name)
         args = {'scene_version_design': True, 'task_identity': uuid4().hex,
             'design_scope_version': 1,
+            'design_candidate_version': 1,
             'design_scope': body.scope, 'instruction': body.instruction, 'script_text': body.content.basis.text,
             'source': body.content.basis.source.model_dump(mode='json'),
             'previous_design': body.content.design.model_dump(mode='json'),
@@ -99,11 +100,15 @@ class SceneDesignService(DirectingAIService):
         result = []
         for task in tasks:
             request = SceneDesignRequest.model_validate(task.input_snapshot['scene_design']['request'])
+            candidate = (parse_scene_design_candidate(task.result, task.input_snapshot.get('run_args', {}))
+                         if task.status == 'succeeded' else None)
             result.append(SceneDesignSuggestionRead(task_id=task.id, scope=request.scope, request_id=request.request_id,
                 created_at=task.created_at.replace(tzinfo=UTC), status=task.status, error=task.error_message, instruction=request.instruction,
                 basis=request.content.basis, before=request.content.design,
-                design=EditableSceneDesign.model_validate(task.result) if task.status == 'succeeded' else None,
-                diagnostics=(SceneDesignDiagnostics.model_validate(task.result['design_diagnostics'])
+                design=candidate.design if candidate else EditableSceneDesign.model_validate(task.result) if task.status == 'succeeded' else None,
+                issues=design_scope_issues(candidate.design) if candidate else [],
+                candidate_attempt=candidate.attempt if candidate else None,
+                diagnostics=candidate.diagnostics if candidate else (SceneDesignDiagnostics.model_validate(task.result['design_diagnostics'])
                     if task.status == 'failed' and task.result and 'design_diagnostics' in task.result else None)))
         return result
 
@@ -123,18 +128,20 @@ class SceneDesignService(DirectingAIService):
         if content.design != original.design:
             raise RevisionConflict('设计已变化，请核对新的人工编辑并重新生成建议')
         await self._validate_content(sequence, version_id, content)
-        proposed = EditableSceneDesign.model_validate(task.result)
+        candidate = parse_scene_design_candidate(task.result, task.input_snapshot.get('run_args', {}))
+        proposed = candidate.design if candidate else EditableSceneDesign.model_validate(task.result)
         validate_design_scope(request.scope, original.design.model_dump(mode='json'), proposed.model_dump(mode='json'))
         validate_model_sources(original.design, proposed, task.input_snapshot['run_args']['task_identity'])
         if proposed.style_revision_id != original.design.style_revision_id:
             raise ValueError('建议修改了本次范围外的项目风格依据')
         if request.scope is None and original.basis.source not in proposed.sources:
             proposed.sources.append(original.basis.source)
-        candidate = content.model_copy(update={'design': proposed})
-        await self._validate_content(sequence, version_id, candidate)
+        await self._validate_content(sequence, version_id, content.model_copy(update={'design': proposed}))
+        issues = []
         if request.scope is None and task.input_snapshot['run_args'].get('design_scope_version') == 1:
             issues = design_scope_issues(proposed)
-            if issues:
+            if issues and candidate is None:
                 raise ValueError('整场设计未完整，不能应用：' + '；'.join(
                     f'{issue.owner}.{issue.field}：{issue.reason}' for issue in issues))
-        return SceneDesignPreview(task_id=task.id, scope=request.scope, basis=original.basis, before=original.design, design=proposed)
+        return SceneDesignPreview(task_id=task.id, scope=request.scope, basis=original.basis,
+            before=original.design, design=proposed, issues=issues)

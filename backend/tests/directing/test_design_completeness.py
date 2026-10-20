@@ -79,8 +79,9 @@ async def test_scope_completeness_checks_each_field_and_keeps_global_facts(tmp_p
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('repair', [False, True, 'initial', 'delete', 'background', 'add-shot'])
-async def test_whole_generation_repairs_scope_once_and_preserves_failed_output(tmp_path, monkeypatch, repair):
-    """真实 Worker 校验生成范围；仍失败的结果可查看，但无法作为设计应用。"""
+@pytest.mark.parametrize('legacy', [False, True])
+async def test_whole_generation_repairs_scope_once_and_preserves_failed_output(tmp_path, monkeypatch, repair, legacy):
+    """新任务保留合法候选；历史冻结任务仍按原契约拒绝不完整结果。"""
     calls = []
 
     def invoke(messages):
@@ -147,6 +148,13 @@ async def test_whole_generation_repairs_scope_once_and_preserves_failed_output(t
             'content': original['content'], 'model_id': 'scope-model'})
         assert response.status_code == 200, response.text
         task_id = response.json()['data']['task_id']
+        if legacy:
+            async with sessions.begin() as db:
+                from app.models.task import Task
+                task = await db.get(Task, task_id)
+                snapshot = deepcopy(task.input_snapshot)
+                snapshot['run_args'].pop('design_candidate_version')
+                task.input_snapshot = snapshot
         worker = TaskWorker(sessions)
         try:
             await worker.tick()
@@ -161,6 +169,14 @@ async def test_whole_generation_repairs_scope_once_and_preserves_failed_output(t
             assert result['design']['applicability'][0]['shot_ids'] == (['added-shot'] if repair == 'add-shot' else ['s1'])
             if repair == 'add-shot':
                 assert any(row['shot_id'] == 'added-shot' for row in result['design']['cinematography'])
+            assert (await client.post(detail + '/design-suggestions/' + task_id + '/preview',
+                json={'content': original['content']})).status_code == 200
+        elif not legacy:
+            assert result['status'] == 'succeeded', result
+            assert result['candidate_attempt'] == (2 if repair is False else 1)
+            assert result['design']['staging']['activities'][0]['ongoing_task']['text'] == '收碗'
+            assert result['issues'][0]['owner'] == 'activity:activity-1'
+            assert bool(result['diagnostics']) == (repair is not False)
             assert (await client.post(detail + '/design-suggestions/' + task_id + '/preview',
                 json={'content': original['content']})).status_code == 200
         else:

@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { DesignScopeIssue } from './DesignScopeIssue';
 import type { EditableSceneDesign_Output } from './EditableSceneDesign_Output';
 import type { SceneDesignDiagnostics } from './SceneDesignDiagnostics';
 import type { SceneVersionSource_Output } from './SceneVersionSource_Output';
@@ -20,4 +21,6 @@ export type SceneDesignSuggestionRead = {
     before: EditableSceneDesign_Output;
     design: (EditableSceneDesign_Output | null);
     diagnostics?: (SceneDesignDiagnostics | null);
+    issues?: Array<DesignScopeIssue>;
+    candidate_attempt?: (number | null);
 };

@@ -11,4 +11,6 @@ export type DesignScopeIssue = {
     path: Array<(string | number)>;
     reason: string;
     shot_ids?: Array<string>;
+    code?: 'incomplete' | 'empty_row_scope';
+    missing_scope_fields?: Array<string>;
 };

@@ -1,0 +1,3658 @@
+{
+  "sources": [
+    {
+      "kind": "chapter",
+      "reference": "captured-chapter",
+      "version": "captured-chapter-v1",
+      "file_id": null,
+      "media_range": null
+    }
+  ],
+  "style_revision_id": null,
+  "participants": [
+    {
+      "id": "p_zhangsan",
+      "name": "张三",
+      "character_id": "captured-character_id-p_zhangsan",
+      "prop_id": null
+    },
+    {
+      "id": "p_van",
+      "name": "白色面包车",
+      "character_id": null,
+      "prop_id": null
+    },
+    {
+      "id": "p_baton",
+      "name": "警用甩棍",
+      "character_id": null,
+      "prop_id": null
+    }
+  ],
+  "events": [
+    {
+      "id": "e_wait",
+      "description": {
+        "state": "fact",
+        "text": "张三在风雨交加的夜晚站在白色面包车旁等待某人。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      }
+    }
+  ],
+  "criteria": [
+    {
+      "id": "c_rain",
+      "requirement": {
+        "state": "proposal",
+        "text": "画面必须呈现明显的风雨效果，包括可见的雨丝和被风吹动的环境元素。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      }
+    },
+    {
+      "id": "c_hood",
+      "requirement": {
+        "state": "proposal",
+        "text": "张三的连帽雨衣帽子必须戴在头上，且面部表情不可见。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      }
+    },
+    {
+      "id": "c_baton_hand",
+      "requirement": {
+        "state": "proposal",
+        "text": "警用甩棍必须在张三的右手中。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      }
+    },
+    {
+      "id": "c_stance",
+      "requirement": {
+        "state": "proposal",
+        "text": "张三双脚岔开站立，头部微低。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      }
+    }
+  ],
+  "direction": {
+    "viewpoint": {
+      "state": "proposal",
+      "text": "客观第三人称视角，营造悬疑与压迫感。",
+      "reason": null,
+      "sources": [
+        {
+          "kind": "model",
+          "reference": "captured-empty-task",
+          "version": "1"
+        }
+      ]
+    },
+    "information_change": {
+      "state": "fact",
+      "text": "无对白或信息交换，纯视觉建立场景张力。",
+      "reason": null,
+      "sources": [
+        {
+          "kind": "model",
+          "reference": "captured-empty-task",
+          "version": "1"
+        }
+      ]
+    },
+    "relationship_change": {
+      "state": "none",
+      "text": null,
+      "reason": "本场仅一人物出场，无关系变化。",
+      "sources": []
+    },
+    "turning_point": {
+      "state": "none",
+      "text": null,
+      "reason": "本场为静态等待情境，无剧情转折。",
+      "sources": []
+    },
+    "immutable_facts": [
+      {
+        "state": "fact",
+        "text": "时间是夜晚，天气为风雨交加。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ],
+        "id": "if_night_storm"
+      },
+      {
+        "state": "fact",
+        "text": "地点是胡同的小路处。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ],
+        "id": "if_alley"
+      },
+      {
+        "state": "fact",
+        "text": "一辆白色面包车停在路边。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ],
+        "id": "if_van_parked"
+      },
+      {
+        "state": "fact",
+        "text": "张三身穿连帽雨衣，帽子戴在头上，看不清面部表情。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ],
+        "id": "if_hood_up"
+      },
+      {
+        "state": "fact",
+        "text": "张三右手拿着一个警用甩棍。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ],
+        "id": "if_baton_right"
+      },
+      {
+        "state": "fact",
+        "text": "张三双脚岔开，头微低，好像在等什么人。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ],
+        "id": "if_stance_waiting"
+      }
+    ],
+    "location_asset_id": "captured-scene",
+    "spatial_basis": {
+      "state": "fact",
+      "text": "双车道胡同马路，有路灯，两侧低矮暗红色居民楼，人行道空荡。白色面包车停在路边。",
+      "reason": null,
+      "sources": [
+        {
+          "kind": "model",
+          "reference": "captured-empty-task",
+          "version": "1"
+        }
+      ]
+    },
+    "shootable_area": {
+      "state": "proposal",
+      "text": "以白色面包车及周围数米路面为核心拍摄区。",
+      "reason": null,
+      "sources": [
+        {
+          "kind": "model",
+          "reference": "captured-empty-task",
+          "version": "1"
+        }
+      ]
+    },
+    "axis": {
+      "state": "unknown",
+      "text": null,
+      "reason": "原文未指定摄影机轴线方向。",
+      "sources": []
+    },
+    "scale": {
+      "state": "proposal",
+      "text": "写实比例，人物与环境符合真实尺度。",
+      "reason": null,
+      "sources": [
+        {
+          "kind": "model",
+          "reference": "captured-empty-task",
+          "version": "1"
+        }
+      ]
+    },
+    "open_questions": [],
+    "control_level": {
+      "state": "proposal",
+      "text": "严格控制风雨视觉效果、道具位置及演员姿态。",
+      "reason": null,
+      "sources": [
+        {
+          "kind": "model",
+          "reference": "captured-empty-task",
+          "version": "1"
+        }
+      ]
+    },
+    "beats": [
+      {
+        "id": "beat_establish",
+        "event_ids": [
+          "e_wait"
+        ],
+        "objective": {
+          "state": "fact",
+          "text": "建立风雨交加的夜晚胡同环境及停放的白色面包车。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        },
+        "obstacle": {
+          "state": "none",
+          "text": null,
+          "reason": "纯环境建立镜头，无阻碍。",
+          "sources": []
+        },
+        "expected_change": {
+          "state": "fact",
+          "text": "观众获知时间、地点和天气氛围。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        },
+        "must_show": {
+          "state": "fact",
+          "text": "夜晚、风雨、胡同小路、路边白色面包车。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        }
+      },
+      {
+        "id": "beat_reveal",
+        "event_ids": [
+          "e_wait"
+        ],
+        "objective": {
+          "state": "fact",
+          "text": "揭示张三的装束、持械姿态及等待状态。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        },
+        "obstacle": {
+          "state": "fact",
+          "text": "雨衣帽子遮挡面部，无法通过表情传递情绪。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        },
+        "expected_change": {
+          "state": "fact",
+          "text": "观众意识到张三的危险性与目的性。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        },
+        "must_show": {
+          "state": "fact",
+          "text": "张三穿连帽雨衣、帽子戴上看不清脸、右手持警用甩棍、双脚岔开、头微低、站在面包车旁。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        }
+      }
+    ],
+    "anchors": [
+      {
+        "id": "a_van_pos",
+        "description": {
+          "state": "fact",
+          "text": "白色面包车停放的路边位置。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        }
+      },
+      {
+        "id": "a_streetlight",
+        "description": {
+          "state": "fact",
+          "text": "胡同马路上的路灯位置，为主要光源参考。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        }
+      }
+    ],
+    "blocking_states": [
+      {
+        "id": "bs_zhangsan_wait",
+        "participant_id": "p_zhangsan",
+        "anchor_ids": [
+          "a_van_pos"
+        ],
+        "event_id": "e_wait",
+        "position": {
+          "state": "fact",
+          "text": "站在一辆白色面包车旁边。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        },
+        "orientation": {
+          "state": "proposal",
+          "text": "面向胡同通道方向，便于观察来人。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        },
+        "initiative": {
+          "state": "fact",
+          "text": "静止等待。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        },
+        "path": {
+          "state": "none",
+          "text": null,
+          "reason": "原地等待，无位移路径。",
+          "sources": []
+        },
+        "transition_reason": {
+          "state": "none",
+          "text": null,
+          "reason": "全场保持同一等待姿态。",
+          "sources": []
+        }
+      }
+    ],
+    "shots": [
+      {
+        "id": "shot_1",
+        "beat_ids": [
+          "beat_establish"
+        ],
+        "event_ids": [
+          "e_wait"
+        ],
+        "blocking_state_ids": [],
+        "participant_ids": [
+          "p_van"
+        ],
+        "criterion_ids": [
+          "c_rain"
+        ],
+        "narrative_function": {
+          "state": "proposal",
+          "text": "建立故事发生的时间、地点与恶劣天气氛围，引出关键载具。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        },
+        "visible_result": {
+          "state": "proposal",
+          "text": "风雨交加的夜景中，胡同小路上停着一辆白色面包车，雨水打在车身和地面。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        },
+        "estimated_duration_ms": 4000
+      },
+      {
+        "id": "shot_2",
+        "beat_ids": [
+          "beat_reveal"
+        ],
+        "event_ids": [
+          "e_wait"
+        ],
+        "blocking_state_ids": [
+          "bs_zhangsan_wait"
+        ],
+        "participant_ids": [
+          "p_zhangsan",
+          "p_van",
+          "p_baton"
+        ],
+        "criterion_ids": [
+          "c_rain",
+          "c_hood",
+          "c_baton_hand",
+          "c_stance"
+        ],
+        "narrative_function": {
+          "state": "proposal",
+          "text": "揭示人物身份特征、武装状态及潜伏意图，制造悬念。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        },
+        "visible_result": {
+          "state": "proposal",
+          "text": "张三身穿连帽雨衣站在面包车旁，帽子遮脸，右手握警用甩棍，双脚岔开头微低，在风雨中静立等待。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        },
+        "estimated_duration_ms": 6000
+      }
+    ]
+  },
+  "performance": {
+    "situations": [
+      {
+        "id": "sit_zhangsan",
+        "participant_id": "p_zhangsan",
+        "situation": {
+          "state": "fact",
+          "text": "张三在一个风雨交加的夜晚，于胡同小路旁等待某人，手持武器处于戒备状态。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        },
+        "relationship": {
+          "state": "none",
+          "text": null,
+          "reason": "本场无其他角色出场，无可交互关系。",
+          "sources": []
+        }
+      }
+    ],
+    "beats": [
+      {
+        "id": "pb_zhangsan_establish",
+        "beat_id": "beat_establish",
+        "participant_id": "p_zhangsan",
+        "received_event_ids": [],
+        "objective": {
+          "state": "none",
+          "text": null,
+          "reason": "环境建立节拍，张三尚未入画。",
+          "sources": []
+        },
+        "obstacle": {
+          "state": "none",
+          "text": null,
+          "reason": "不适用。",
+          "sources": []
+        },
+        "subtext": {
+          "state": "none",
+          "text": null,
+          "reason": "不适用。",
+          "sources": []
+        },
+        "attention": {
+          "state": "none",
+          "text": null,
+          "reason": "不适用。",
+          "sources": []
+        },
+        "internal_adjustment": {
+          "state": "none",
+          "text": null,
+          "reason": "不适用。",
+          "sources": []
+        },
+        "physical_action": {
+          "state": "none",
+          "text": null,
+          "reason": "该镜头内张三不参与表演。",
+          "sources": []
+        },
+        "dialogue_ids": [],
+        "delivery": {
+          "state": "none",
+          "text": null,
+          "reason": "无对白。",
+          "sources": []
+        },
+        "reaction_order": {
+          "state": "none",
+          "text": null,
+          "reason": "不适用。",
+          "sources": []
+        },
+        "exit_state": {
+          "state": "none",
+          "text": null,
+          "reason": "不适用。",
+          "sources": []
+        },
+        "avoid": {
+          "state": "none",
+          "text": null,
+          "reason": "不适用。",
+          "sources": []
+        },
+        "criterion_ids": [],
+        "gaze": {
+          "state": "none",
+          "text": null,
+          "reason": "该镜头内张三不参与表演。",
+          "sources": []
+        },
+        "breath": {
+          "state": "none",
+          "text": null,
+          "reason": "该镜头内张三不参与表演。",
+          "sources": []
+        },
+        "weight": {
+          "state": "none",
+          "text": null,
+          "reason": "该镜头内张三不参与表演。",
+          "sources": []
+        },
+        "hands": {
+          "state": "none",
+          "text": null,
+          "reason": "该镜头内张三不参与表演。",
+          "sources": []
+        },
+        "voice": {
+          "state": "none",
+          "text": null,
+          "reason": "无对白。",
+          "sources": []
+        }
+      },
+      {
+        "id": "pb_zhangsan_reveal",
+        "beat_id": "beat_reveal",
+        "participant_id": "p_zhangsan",
+        "received_event_ids": [],
+        "objective": {
+          "state": "fact",
+          "text": "等待目标人物出现。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        },
+        "obstacle": {
+          "state": "fact",
+          "text": "风雨交加的恶劣环境影响视线与听觉。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        },
+        "subtext": {
+          "state": "proposal",
+          "text": "高度警惕，随时准备使用手中的甩棍。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        },
+        "attention": {
+          "state": "proposal",
+          "text": "注视胡同前方来路方向，监听风雨中的异常声响。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        },
+        "internal_adjustment": {
+          "state": "proposal",
+          "text": "身体紧绷但保持克制，适应风雨带来的寒冷与不适。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        },
+        "physical_action": {
+          "state": "fact",
+          "text": "身穿连帽雨衣站立，帽子戴在头上；右手拿警用甩棍；双脚岔开；头微低。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        },
+        "dialogue_ids": [],
+        "delivery": {
+          "state": "none",
+          "text": null,
+          "reason": "无对白。",
+          "sources": []
+        },
+        "reaction_order": {
+          "state": "none",
+          "text": null,
+          "reason": "单人场面。",
+          "sources": []
+        },
+        "exit_state": {
+          "state": "proposal",
+          "text": "维持等待姿态直至本场结束。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        },
+        "avoid": {
+          "state": "proposal",
+          "text": "避免抬头露出面部表情；避免随意走动破坏等待状态。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        },
+        "criterion_ids": [
+          "c_hood",
+          "c_baton_hand",
+          "c_stance"
+        ],
+        "gaze": {
+          "state": "proposal",
+          "text": "透过帽檐阴影注视胡同来路方向。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        },
+        "breath": {
+          "state": "proposal",
+          "text": "呼吸平稳克制，配合风雨声不易察觉。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        },
+        "weight": {
+          "state": "proposal",
+          "text": "重心下沉分布于岔开的双脚，保持稳定戒备姿态。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        },
+        "hands": {
+          "state": "fact",
+          "text": "右手紧握警用甩棍，左手自然下垂或藏于雨衣内。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        },
+        "voice": {
+          "state": "none",
+          "text": null,
+          "reason": "无对白。",
+          "sources": []
+        }
+      }
+    ],
+    "applicability": {
+      "state": "fact",
+      "text": "表演工作单覆盖全场两个镜头中张三的行为与状态。",
+      "reason": null,
+      "sources": [
+        {
+          "kind": "model",
+          "reference": "captured-empty-task",
+          "version": "1"
+        }
+      ]
+    }
+  },
+  "staging": {
+    "activities": [
+      {
+        "id": "sa_van_static",
+        "participant_id": "p_van",
+        "anchor_id": "a_van_pos",
+        "trigger_event_id": null,
+        "depth": {
+          "state": "proposal",
+          "text": "中景至背景层。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        },
+        "ongoing_task": {
+          "state": "fact",
+          "text": "静止停放在路边。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        },
+        "path": {
+          "state": "none",
+          "text": null,
+          "reason": "静态车辆，无移动。",
+          "sources": []
+        },
+        "attention": {
+          "state": "not_applicable",
+          "text": null,
+          "reason": "物件无注意力。",
+          "sources": []
+        },
+        "reaction_delay": {
+          "state": "not_applicable",
+          "text": null,
+          "reason": "物件无反应。",
+          "sources": []
+        },
+        "intensity": {
+          "state": "none",
+          "text": null,
+          "reason": "静态物件无强度变化。",
+          "sources": []
+        },
+        "entrances_exits": {
+          "state": "none",
+          "text": null,
+          "reason": "开场已在画内，全程不移动。",
+          "sources": []
+        },
+        "narrative_support": {
+          "state": "proposal",
+          "text": "作为张三的掩体或接应工具，强化犯罪或悬疑氛围。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        },
+        "end_state": {
+          "state": "fact",
+          "text": "持续停在原位。",
+          "reason": null,
+          "sources": [
+            {
+              "kind": "model",
+              "reference": "captured-empty-task",
+              "version": "1"
+            }
+          ]
+        }
+      }
+    ],
+    "environment": {
+      "state": "fact",
+      "text": "风雨交加的夜晚，胡同小路，双车道马路有路灯，人行道上空空荡荡没有行人，马路两侧是低矮的暗红色居民楼。",
+      "reason": null,
+      "sources": [
+        {
+          "kind": "model",
+          "reference": "captured-empty-task",
+          "version": "1"
+        }
+      ]
+    },
+    "intentional_absence": {
+      "state": "fact",
+      "text": "人行道上没有行人，突出张三孤身等待的异常感。",
+      "reason": null,
+      "sources": [
+        {
+          "kind": "model",
+          "reference": "captured-empty-task",
+          "version": "1"
+        }
+      ]
+    }
+  },
+  "cinematography": [
+    {
+      "id": "cam_shot_1",
+      "shot_id": "shot_1",
+      "composition": {
+        "state": "proposal",
+        "text": "全景构图，白色面包车位于画面三分之一处，展现胡同纵深与空旷街道。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "depth_layers": {
+        "state": "proposal",
+        "text": "前景为雨丝与湿滑路面，中景为白色面包车，背景为暗红色居民楼与黑暗胡同深处。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "viewpoint": {
+        "state": "proposal",
+        "text": "客观第三人称视点，略高于人眼。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "position": {
+        "state": "proposal",
+        "text": "摄影机位于胡同通道一侧，正对或侧对面包车。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "height_angle": {
+        "state": "proposal",
+        "text": "平视略俯，约1.8米高度。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "lens_effect": {
+        "state": "unknown",
+        "text": null,
+        "reason": "原文未指定镜头焦段或特效。",
+        "sources": []
+      },
+      "depth_focus": {
+        "state": "proposal",
+        "text": "焦点锁定在白色面包车上，背景略微虚化以突出环境纵深。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "support": {
+        "state": "unknown",
+        "text": null,
+        "reason": "原文未指定支撑设备。",
+        "sources": []
+      },
+      "movement_start": {
+        "state": "proposal",
+        "text": "起幅即对准胡同与面包车。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "movement_trigger": {
+        "state": "none",
+        "text": null,
+        "reason": "固定镜头或缓慢推进，无特定动作触发。",
+        "sources": []
+      },
+      "movement_path": {
+        "state": "proposal",
+        "text": "极缓慢向面包车方向推进，增加压迫感。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "movement_speed": {
+        "state": "proposal",
+        "text": "缓慢。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "end_frame": {
+        "state": "proposal",
+        "text": "落幅为面包车占据画面主要区域，准备衔接下一镜头。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "light_sources": {
+        "state": "fact",
+        "text": "路灯为主要光源，风雨夜晚环境光极暗。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "light_regions": {
+        "state": "proposal",
+        "text": "路灯照亮面包车顶部及周围雨丝，四周建筑陷入阴影。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "exposure_color": {
+        "state": "proposal",
+        "text": "低曝光，冷色调为主，强调夜晚与暴雨的阴冷感。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "optical_effects": {
+        "state": "proposal",
+        "text": "雨滴打在镜头上产生水渍折射效果。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "motion_texture": {
+        "state": "proposal",
+        "text": "风雨造成的自然动态纹理。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "technical_parameters": {
+        "state": "unknown",
+        "text": null,
+        "reason": "未提供具体技术参数。",
+        "sources": []
+      },
+      "adjacent_requirements": {
+        "state": "proposal",
+        "text": "需与 shot_2 在光影和风雨强度上保持连续。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "prohibitions": {
+        "state": "proposal",
+        "text": "不得出现不符合夜晚暴雨设定的明亮光线。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "criterion_ids": [
+        "c_rain"
+      ]
+    },
+    {
+      "id": "cam_shot_2",
+      "shot_id": "shot_2",
+      "composition": {
+        "state": "proposal",
+        "text": "中近景构图，将张三全身及身旁的白色面包车局部纳入画面。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "depth_layers": {
+        "state": "proposal",
+        "text": "前景为密集雨丝，中景为张三及其手中的甩棍，背景为白色面包车与暗色胡同。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "viewpoint": {
+        "state": "proposal",
+        "text": "客观第三人称视点，平视略低于张三视线，凸显其压迫感。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "position": {
+        "state": "proposal",
+        "text": "摄影机位于张三正前方或斜前方，捕捉其低头姿态与右手持棍细节。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "height_angle": {
+        "state": "proposal",
+        "text": "略仰拍或平视，约1.2至1.5米高度。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "lens_effect": {
+        "state": "unknown",
+        "text": null,
+        "reason": "原文未指定镜头焦段或特效。",
+        "sources": []
+      },
+      "depth_focus": {
+        "state": "proposal",
+        "text": "焦点在张三躯干与右手甩棍上，面部因帽子遮挡无需精确对焦。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "support": {
+        "state": "unknown",
+        "text": null,
+        "reason": "原文未指定支撑设备。",
+        "sources": []
+      },
+      "movement_start": {
+        "state": "proposal",
+        "text": "起幅已包含张三与面包车。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "movement_trigger": {
+        "state": "none",
+        "text": null,
+        "reason": "静态等待，无运动触发。",
+        "sources": []
+      },
+      "movement_path": {
+        "state": "proposal",
+        "text": "固定机位或极轻微呼吸感晃动。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "movement_speed": {
+        "state": "none",
+        "text": null,
+        "reason": "基本静止。",
+        "sources": []
+      },
+      "end_frame": {
+        "state": "proposal",
+        "text": "落幅维持张三低头等待的姿态，风雨持续。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "light_sources": {
+        "state": "fact",
+        "text": "路灯侧光照射张三与面包车，形成明暗对比。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "light_regions": {
+        "state": "proposal",
+        "text": "张三雨衣反光，甩棍金属部分偶有高光，面部隐藏在帽子阴影中。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "exposure_color": {
+        "state": "proposal",
+        "text": "低调曝光，冷色调，突出雨夜肃杀感。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "optical_effects": {
+        "state": "proposal",
+        "text": "雨水划过镜头的效果，增强临场感。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "motion_texture": {
+        "state": "proposal",
+        "text": "风雨动态与张三静止姿态形成对比。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "technical_parameters": {
+        "state": "unknown",
+        "text": null,
+        "reason": "未提供具体技术参数。",
+        "sources": []
+      },
+      "adjacent_requirements": {
+        "state": "proposal",
+        "text": "承接 shot_1 的环境光影，确保面包车位置与风雨状态一致。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "prohibitions": {
+        "state": "proposal",
+        "text": "不得让张三的面部在帽子下清晰可见；不得改变甩棍所在的手。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "criterion_ids": [
+        "c_rain",
+        "c_hood",
+        "c_baton_hand",
+        "c_stance"
+      ]
+    }
+  ],
+  "continuity": [
+    {
+      "id": "cont_weather",
+      "domain": "environment",
+      "participant_id": null,
+      "event_id": null,
+      "before": {
+        "state": "fact",
+        "text": "风雨交加的夜晚。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "change": {
+        "state": "none",
+        "text": null,
+        "reason": "全场天气状态不变。",
+        "sources": []
+      },
+      "after": {
+        "state": "fact",
+        "text": "维持风雨交加的夜晚。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "following_constraint": {
+        "state": "proposal",
+        "text": "后续镜头若在同一时间线，必须保持相同的降雨与风力视觉表现。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cont_zhangsan_appearance",
+      "domain": "appearance",
+      "participant_id": "p_zhangsan",
+      "event_id": null,
+      "before": {
+        "state": "fact",
+        "text": "身穿连帽雨衣，帽子戴在头上。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "change": {
+        "state": "none",
+        "text": null,
+        "reason": "本场无服装或外观变化。",
+        "sources": []
+      },
+      "after": {
+        "state": "fact",
+        "text": "保持连帽雨衣穿戴状态，面部不可见。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "following_constraint": {
+        "state": "proposal",
+        "text": "后续镜头张三出场时必须维持相同着装与遮挡状态。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cont_baton_prop",
+      "domain": "hands_props",
+      "participant_id": "p_zhangsan",
+      "event_id": null,
+      "before": {
+        "state": "fact",
+        "text": "右手拿着一个警用甩棍。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "change": {
+        "state": "none",
+        "text": null,
+        "reason": "本场无道具交接或放下动作。",
+        "sources": []
+      },
+      "after": {
+        "state": "fact",
+        "text": "警用甩棍仍在右手中。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      },
+      "following_constraint": {
+        "state": "proposal",
+        "text": "后续镜头若张三持棍，必须在右手。",
+        "reason": null,
+        "sources": [
+          {
+            "kind": "model",
+            "reference": "captured-empty-task",
+            "version": "1"
+          }
+        ]
+      }
+    }
+  ],
+  "sound": {
+    "dialogues": [],
+    "sources": {
+      "state": "fact",
+      "text": "风声、暴雨击打声（路面、车体、雨衣）、远处可能存在的雷声。",
+      "reason": null,
+      "sources": [
+        {
+          "kind": "model",
+          "reference": "captured-empty-task",
+          "version": "1"
+        }
+      ]
+    },
+    "ambience_actions": {
+      "state": "fact",
+      "text": "持续的风雨环境音贯穿全场。",
+      "reason": null,
+      "sources": [
+        {
+          "kind": "model",
+          "reference": "captured-empty-task",
+          "version": "1"
+        }
+      ]
+    },
+    "music_constraints": {
+      "state": "unknown",
+      "text": null,
+      "reason": "原文未提及配乐要求。",
+      "sources": []
+    },
+    "execution": "unknown"
+  },
+  "prompt": {
+    "priorities": {
+      "state": "proposal",
+      "text": "优先保证风雨交加的夜晚氛围、张三的完整装束与姿态描述准确无误。",
+      "reason": null,
+      "sources": [
+        {
+          "kind": "model",
+          "reference": "captured-empty-task",
+          "version": "1"
+        }
+      ]
+    },
+    "binding_requirements": {
+      "state": "proposal",
+      "text": "必须严格遵循：夜晚、风雨、胡同、白色面包车、连帽雨衣遮脸、右手持警用甩棍、双脚岔开、头微低。",
+      "reason": null,
+      "sources": [
+        {
+          "kind": "model",
+          "reference": "captured-empty-task",
+          "version": "1"
+        }
+      ]
+    },
+    "sound_strategy": {
+      "state": "proposal",
+      "text": "声音设计重点在于风雨环境音的真实感与压迫感，不使用对白。",
+      "reason": null,
+      "sources": [
+        {
+          "kind": "model",
+          "reference": "captured-empty-task",
+          "version": "1"
+        }
+      ]
+    },
+    "prohibitions": {
+      "state": "proposal",
+      "text": "禁止出现晴天或白天元素；禁止展示张三面部表情；禁止将甩棍置于左手或其他位置；禁止添加原文不存在的人物或动作。",
+      "reason": null,
+      "sources": [
+        {
+          "kind": "model",
+          "reference": "captured-empty-task",
+          "version": "1"
+        }
+      ]
+    }
+  },
+  "applicability": [
+    {
+      "subject": {
+        "kind": "direction",
+        "id": null,
+        "field": "viewpoint"
+      },
+      "purpose": "background",
+      "scope": "scene",
+      "shot_ids": [],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "direction",
+        "id": null,
+        "field": "information_change"
+      },
+      "purpose": "background",
+      "scope": "scene",
+      "shot_ids": [],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "direction",
+        "id": null,
+        "field": "relationship_change"
+      },
+      "purpose": "background",
+      "scope": "scene",
+      "shot_ids": [],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "direction",
+        "id": null,
+        "field": "turning_point"
+      },
+      "purpose": "background",
+      "scope": "scene",
+      "shot_ids": [],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "direction",
+        "id": null,
+        "field": "spatial_basis"
+      },
+      "purpose": "background",
+      "scope": "scene",
+      "shot_ids": [],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "direction",
+        "id": null,
+        "field": "shootable_area"
+      },
+      "purpose": "background",
+      "scope": "scene",
+      "shot_ids": [],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "direction",
+        "id": null,
+        "field": "axis"
+      },
+      "purpose": "constraint",
+      "scope": "scene_rule",
+      "shot_ids": [],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "direction",
+        "id": null,
+        "field": "scale"
+      },
+      "purpose": "constraint",
+      "scope": "scene_rule",
+      "shot_ids": [],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "direction",
+        "id": null,
+        "field": "control_level"
+      },
+      "purpose": "constraint",
+      "scope": "scene_rule",
+      "shot_ids": [],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "immutable_fact",
+        "id": "if_night_storm",
+        "field": "text"
+      },
+      "purpose": "constraint",
+      "scope": "scene_rule",
+      "shot_ids": [],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "immutable_fact",
+        "id": "if_alley",
+        "field": "text"
+      },
+      "purpose": "constraint",
+      "scope": "scene_rule",
+      "shot_ids": [],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "immutable_fact",
+        "id": "if_van_parked",
+        "field": "text"
+      },
+      "purpose": "constraint",
+      "scope": "scene_rule",
+      "shot_ids": [],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "immutable_fact",
+        "id": "if_hood_up",
+        "field": "text"
+      },
+      "purpose": "constraint",
+      "scope": "scene_rule",
+      "shot_ids": [],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "immutable_fact",
+        "id": "if_baton_right",
+        "field": "text"
+      },
+      "purpose": "constraint",
+      "scope": "scene_rule",
+      "shot_ids": [],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "immutable_fact",
+        "id": "if_stance_waiting",
+        "field": "text"
+      },
+      "purpose": "constraint",
+      "scope": "scene_rule",
+      "shot_ids": [],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "beat",
+        "id": "beat_establish",
+        "field": "objective"
+      },
+      "purpose": "background",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "beat",
+        "id": "beat_establish",
+        "field": "obstacle"
+      },
+      "purpose": "background",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "beat",
+        "id": "beat_establish",
+        "field": "expected_change"
+      },
+      "purpose": "background",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "beat",
+        "id": "beat_establish",
+        "field": "must_show"
+      },
+      "purpose": "design",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "beat",
+        "id": "beat_reveal",
+        "field": "objective"
+      },
+      "purpose": "background",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "beat",
+        "id": "beat_reveal",
+        "field": "obstacle"
+      },
+      "purpose": "background",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "beat",
+        "id": "beat_reveal",
+        "field": "expected_change"
+      },
+      "purpose": "background",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "beat",
+        "id": "beat_reveal",
+        "field": "must_show"
+      },
+      "purpose": "design",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "shot",
+        "id": "shot_1",
+        "field": "narrative_function"
+      },
+      "purpose": "background",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "shot",
+        "id": "shot_1",
+        "field": "visible_result"
+      },
+      "purpose": "design",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "shot",
+        "id": "shot_2",
+        "field": "narrative_function"
+      },
+      "purpose": "background",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "shot",
+        "id": "shot_2",
+        "field": "visible_result"
+      },
+      "purpose": "design",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "situation",
+        "id": "sit_zhangsan",
+        "field": "situation"
+      },
+      "purpose": "background",
+      "scope": "scene",
+      "shot_ids": [],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "situation",
+        "id": "sit_zhangsan",
+        "field": "relationship"
+      },
+      "purpose": "background",
+      "scope": "scene",
+      "shot_ids": [],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "performance_beat",
+        "id": "pb_zhangsan_establish",
+        "field": "objective"
+      },
+      "purpose": "background",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "performance_beat",
+        "id": "pb_zhangsan_establish",
+        "field": "obstacle"
+      },
+      "purpose": "background",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "performance_beat",
+        "id": "pb_zhangsan_establish",
+        "field": "subtext"
+      },
+      "purpose": "background",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "performance_beat",
+        "id": "pb_zhangsan_establish",
+        "field": "attention"
+      },
+      "purpose": "background",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "performance_beat",
+        "id": "pb_zhangsan_establish",
+        "field": "internal_adjustment"
+      },
+      "purpose": "background",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "performance_beat",
+        "id": "pb_zhangsan_establish",
+        "field": "physical_action"
+      },
+      "purpose": "design",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "performance_beat",
+        "id": "pb_zhangsan_establish",
+        "field": "avoid"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "performance_beat",
+        "id": "pb_zhangsan_establish",
+        "field": "breath"
+      },
+      "purpose": "design",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "performance_beat",
+        "id": "pb_zhangsan_establish",
+        "field": "gaze"
+      },
+      "purpose": "design",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "performance_beat",
+        "id": "pb_zhangsan_establish",
+        "field": "weight"
+      },
+      "purpose": "design",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "performance_beat",
+        "id": "pb_zhangsan_establish",
+        "field": "hands"
+      },
+      "purpose": "design",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "performance_beat",
+        "id": "pb_zhangsan_establish",
+        "field": "voice"
+      },
+      "purpose": "design",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "performance_beat",
+        "id": "pb_zhangsan_reveal",
+        "field": "objective"
+      },
+      "purpose": "background",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "performance_beat",
+        "id": "pb_zhangsan_reveal",
+        "field": "obstacle"
+      },
+      "purpose": "background",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "performance_beat",
+        "id": "pb_zhangsan_reveal",
+        "field": "subtext"
+      },
+      "purpose": "background",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "performance_beat",
+        "id": "pb_zhangsan_reveal",
+        "field": "attention"
+      },
+      "purpose": "background",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "performance_beat",
+        "id": "pb_zhangsan_reveal",
+        "field": "internal_adjustment"
+      },
+      "purpose": "background",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "performance_beat",
+        "id": "pb_zhangsan_reveal",
+        "field": "physical_action"
+      },
+      "purpose": "design",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "performance_beat",
+        "id": "pb_zhangsan_reveal",
+        "field": "exit_state"
+      },
+      "purpose": "design",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "performance_beat",
+        "id": "pb_zhangsan_reveal",
+        "field": "avoid"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "performance_beat",
+        "id": "pb_zhangsan_reveal",
+        "field": "gaze"
+      },
+      "purpose": "design",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "performance_beat",
+        "id": "pb_zhangsan_reveal",
+        "field": "breath"
+      },
+      "purpose": "design",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "performance_beat",
+        "id": "pb_zhangsan_reveal",
+        "field": "weight"
+      },
+      "purpose": "design",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "performance_beat",
+        "id": "pb_zhangsan_reveal",
+        "field": "hands"
+      },
+      "purpose": "design",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "performance_beat",
+        "id": "pb_zhangsan_reveal",
+        "field": "voice"
+      },
+      "purpose": "design",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "staging_activity",
+        "id": "sa_van_static",
+        "field": "depth"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1",
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "staging_activity",
+        "id": "sa_van_static",
+        "field": "ongoing_task"
+      },
+      "purpose": "design",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1",
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "staging_activity",
+        "id": "sa_van_static",
+        "field": "attention"
+      },
+      "purpose": "background",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1",
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "staging_activity",
+        "id": "sa_van_static",
+        "field": "narrative_support"
+      },
+      "purpose": "background",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1",
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "staging_activity",
+        "id": "sa_van_static",
+        "field": "intensity"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1",
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "staging_activity",
+        "id": "sa_van_static",
+        "field": "end_state"
+      },
+      "purpose": "design",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1",
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "staging",
+        "id": null,
+        "field": "environment"
+      },
+      "purpose": "background",
+      "scope": "scene",
+      "shot_ids": [],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "staging",
+        "id": null,
+        "field": "intentional_absence"
+      },
+      "purpose": "background",
+      "scope": "scene",
+      "shot_ids": [],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_1",
+        "field": "composition"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_1",
+        "field": "depth_layers"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_1",
+        "field": "viewpoint"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_1",
+        "field": "position"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_1",
+        "field": "height_angle"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_1",
+        "field": "lens_effect"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_1",
+        "field": "depth_focus"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_1",
+        "field": "support"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_1",
+        "field": "movement_start"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_1",
+        "field": "movement_trigger"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_1",
+        "field": "movement_path"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_1",
+        "field": "movement_speed"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_1",
+        "field": "end_frame"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_1",
+        "field": "light_sources"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_1",
+        "field": "light_regions"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_1",
+        "field": "exposure_color"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_1",
+        "field": "optical_effects"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_1",
+        "field": "motion_texture"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_1",
+        "field": "technical_parameters"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_1",
+        "field": "adjacent_requirements"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_1",
+        "field": "prohibitions"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_2",
+        "field": "composition"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_2",
+        "field": "depth_layers"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_2",
+        "field": "viewpoint"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_2",
+        "field": "position"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_2",
+        "field": "height_angle"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_2",
+        "field": "lens_effect"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_2",
+        "field": "depth_focus"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_2",
+        "field": "support"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_2",
+        "field": "movement_start"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_2",
+        "field": "movement_trigger"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_2",
+        "field": "movement_path"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_2",
+        "field": "movement_speed"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_2",
+        "field": "end_frame"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_2",
+        "field": "light_sources"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_2",
+        "field": "light_regions"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_2",
+        "field": "exposure_color"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_2",
+        "field": "optical_effects"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_2",
+        "field": "motion_texture"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_2",
+        "field": "technical_parameters"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_2",
+        "field": "adjacent_requirements"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "camera",
+        "id": "cam_shot_2",
+        "field": "prohibitions"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "continuity",
+        "id": "cont_weather",
+        "field": "before"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1",
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "continuity",
+        "id": "cont_weather",
+        "field": "change"
+      },
+      "purpose": "design",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1",
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "continuity",
+        "id": "cont_weather",
+        "field": "after"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1",
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "continuity",
+        "id": "cont_weather",
+        "field": "following_constraint"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1",
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "continuity",
+        "id": "cont_zhangsan_appearance",
+        "field": "before"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "continuity",
+        "id": "cont_zhangsan_appearance",
+        "field": "change"
+      },
+      "purpose": "design",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "continuity",
+        "id": "cont_zhangsan_appearance",
+        "field": "after"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "continuity",
+        "id": "cont_zhangsan_appearance",
+        "field": "following_constraint"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "continuity",
+        "id": "cont_baton_prop",
+        "field": "before"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "continuity",
+        "id": "cont_baton_prop",
+        "field": "change"
+      },
+      "purpose": "design",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "continuity",
+        "id": "cont_baton_prop",
+        "field": "after"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "continuity",
+        "id": "cont_baton_prop",
+        "field": "following_constraint"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "sound",
+        "id": null,
+        "field": "sources"
+      },
+      "purpose": "background",
+      "scope": "scene",
+      "shot_ids": [],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "sound",
+        "id": null,
+        "field": "ambience_actions"
+      },
+      "purpose": "background",
+      "scope": "scene",
+      "shot_ids": [],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "sound",
+        "id": null,
+        "field": "music_constraints"
+      },
+      "purpose": "constraint",
+      "scope": "scene_rule",
+      "shot_ids": [],
+      "occurrences": [],
+      "phase": "sound",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "prompt",
+        "id": null,
+        "field": "priorities"
+      },
+      "purpose": "background",
+      "scope": "scene",
+      "shot_ids": [],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "prompt",
+        "id": null,
+        "field": "binding_requirements"
+      },
+      "purpose": "constraint",
+      "scope": "scene_rule",
+      "shot_ids": [],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "prompt",
+        "id": null,
+        "field": "sound_strategy"
+      },
+      "purpose": "constraint",
+      "scope": "scene_rule",
+      "shot_ids": [],
+      "occurrences": [],
+      "phase": "sound",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "prompt",
+        "id": null,
+        "field": "prohibitions"
+      },
+      "purpose": "constraint",
+      "scope": "scene_rule",
+      "shot_ids": [],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "performance",
+        "id": null,
+        "field": "applicability"
+      },
+      "purpose": "background",
+      "scope": "scene",
+      "shot_ids": [],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "anchor",
+        "id": "a_van_pos",
+        "field": "description"
+      },
+      "purpose": "background",
+      "scope": "scene",
+      "shot_ids": [],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "anchor",
+        "id": "a_streetlight",
+        "field": "description"
+      },
+      "purpose": "background",
+      "scope": "scene",
+      "shot_ids": [],
+      "occurrences": [],
+      "phase": null,
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "blocking",
+        "id": "bs_zhangsan_wait",
+        "field": "position"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "blocking",
+        "id": "bs_zhangsan_wait",
+        "field": "orientation"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "blocking",
+        "id": "bs_zhangsan_wait",
+        "field": "initiative"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "blocking",
+        "id": "bs_zhangsan_wait",
+        "field": "path"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "criterion",
+        "id": "c_rain",
+        "field": "requirement"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_1",
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "criterion",
+        "id": "c_hood",
+        "field": "requirement"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "criterion",
+        "id": "c_baton_hand",
+        "field": "requirement"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    },
+    {
+      "subject": {
+        "kind": "criterion",
+        "id": "c_stance",
+        "field": "requirement"
+      },
+      "purpose": "constraint",
+      "scope": "shots",
+      "shot_ids": [
+        "shot_2"
+      ],
+      "occurrences": [],
+      "phase": "video",
+      "condition": null
+    }
+  ]
+}
