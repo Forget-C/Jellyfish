@@ -92,6 +92,19 @@ async def test_instruction_preview_is_unit_scoped_and_rechecks_manual_input(tmp_
         bound['units'][0].update(instruction=receipt['text'], instruction_source=receipt['source'], instruction_basis_id=receipt['basis_id'])
         basis_url = detail + '/units/unit-one/instruction-basis'
         assert (await client.post(basis_url, json={'content': bound})).json()['data']['status'] == 'current'
+        sound_bound = deepcopy(bound)
+        sound_bound['design']['sound']['music_constraints'] = {
+            'state': 'proposal', 'text': '后期加入环境声', 'sources': [source]}
+        sound_bound['design']['applicability'].append({
+            'subject': {'kind': 'sound', 'field': 'music_constraints'},
+            'purpose': 'constraint', 'scope': 'scene_rule', 'phase': 'sound'})
+        sound_status = await client.post(basis_url, json={'content': sound_bound})
+        assert sound_status.status_code == 200, sound_status.text
+        assert sound_status.json()['data']['status'] == 'current'
+        sound_content = deepcopy(sound_bound)
+        sound_content['units'][0] = deepcopy(content['units'][0])
+        sound_preview = await client.post(preview_url, json={'content': sound_content})
+        assert sound_preview.status_code == 200, sound_preview.text
         bound['units'][0]['coverage'][0]['action_scope'] = '收下信封'
         assert (await client.post(basis_url, json={'content': bound})).json()['data']['status'] == 'changed'
         assert (await client.post(apply_url, json={'content': bound})).status_code == 409

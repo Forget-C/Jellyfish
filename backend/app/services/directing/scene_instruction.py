@@ -5,6 +5,7 @@ from uuid import uuid4
 from sqlalchemy import select
 
 from app.core.contracts.directing.common import Source
+from app.core.contracts.directing.instruction_basis import UnitScopeProjection
 from app.core.contracts.directing.scene_instruction import SceneInstructionPreview, SceneInstructionRequest, SceneInstructionResult, SceneInstructionSuggestionRead
 from app.core.contracts.directing.scene_version import EditableSceneDesign
 from app.core.contracts.directing.style import StyleRule
@@ -110,8 +111,9 @@ class SceneInstructionService(SceneDesignService):
         args = task.input_snapshot['run_args']
         # 历史任务确实收到整场设计时，仍按当时范围核对，不能追溯缩小其输入。
         design = instruction_design(content.design, unit) if args.get('design_scope_version') == 1 else content.design
-        design_changed = (unit_scope(content.design, unit,
-                          [StyleRule.model_validate(row) for row in args.get('style_rules') or []]).model_dump(mode='json') != args['scope']
+        design_changed = (not unit_scope(content.design, unit,
+                          [StyleRule.model_validate(row) for row in args.get('style_rules') or []]).same_video_consumption(
+                              UnitScopeProjection.model_validate(args['scope']))
                           if args.get('scope') else design != EditableSceneDesign.model_validate(args['design']))
         if (content.basis != request.content.basis or design_changed
                 or unit != self._instruction_unit(request.content, unit_id)):

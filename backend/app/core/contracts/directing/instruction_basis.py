@@ -30,6 +30,13 @@ class UnitScopeProjection(Contract):
     background: list[UnitScopeUse]
     unresolved: list[str]
 
+    def same_video_consumption(self, other: 'UnitScopeProjection') -> bool:
+        """声音与后期约束保留在快照中，但不使视频正文依据失效。"""
+        return (self.version == other.version and self.execution == other.execution
+                and [row for row in self.constraints if row.phase == 'video']
+                == [row for row in other.constraints if row.phase == 'video']
+                and self.background == other.background and self.unresolved == other.unresolved)
+
 
 class InstructionInputs(Contract):
     """只包含相关依据，正文和来源单独记录，其他单元与输出画幅不参与比较。"""
@@ -47,7 +54,8 @@ class InstructionInputs(Contract):
             return self == other
         return (self.basis == other.basis and self.unit == other.unit
                 and self.video_model_name == other.video_model_name
-                and self.style_rules == other.style_rules and self.scope == other.scope)
+                and self.style_rules == other.style_rules
+                and self.scope.same_video_consumption(other.scope))
 
 
 class InstructionBasisConfirm(Contract):
