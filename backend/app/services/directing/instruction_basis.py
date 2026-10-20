@@ -38,6 +38,8 @@ class InstructionBasisService(SceneInstructionService):
         if unit.instruction_basis_id:
             row = await self.instruction_basis(version_id, unit_id, unit.instruction_basis_id)
             previous = InstructionInputs.model_validate(row.inputs)
+            if previous.scope is not None and previous.scope.version == 1:
+                current.scope = unit_scope(content.design, unit, current.style_rules, version=1)
         status = 'empty' if not unit.instruction.strip() else 'unbound' if previous is None else 'current' if previous.same_consumption(current) else 'changed'
         return InstructionBasisRead(basis_id=unit.instruction_basis_id, status=status, previous=previous, current=current)
 

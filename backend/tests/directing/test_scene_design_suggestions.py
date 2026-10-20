@@ -13,6 +13,7 @@ from app.services.directing.ai import DirectingOutputError, generate_directing_r
 from tests.directing.test_api import client_for
 from tests.directing.test_scene_versions import sequence_path
 from tests.directing.test_store import database
+from tests.directing.samples import editable_design_sample, minimal_scoped_design_sample, note
 
 
 @pytest.mark.asyncio
@@ -26,7 +27,11 @@ async def test_whole_design_preview_preserves_version_and_rejects_new_manual_edi
         path = await sequence_path(client)
         version = (await client.post(path + '/versions', json={'request_id': str(uuid4()), 'title': '方案'})).json()['data']
         detail = path + '/versions/' + version['id']
-        body = {'request_id': str(uuid4()), 'expected_revision': 1, 'content': version['content'],
+        content = deepcopy(version['content'])
+        content['design'] = minimal_scoped_design_sample()
+        version = (await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 1,
+                                                  'content': content})).json()['data']
+        body = {'request_id': str(uuid4()), 'expected_revision': version['revision'], 'content': version['content'],
                 'model_id': 'text-model', 'instruction': '明确观察视点'}
         response = await client.post(detail + '/design-suggestions', json=body)
         assert response.status_code == 200, response.text
@@ -88,8 +93,8 @@ async def test_whole_design_preview_preserves_version_and_rejects_new_manual_edi
 
 
 @pytest.mark.asyncio
-async def test_design_suggestion_applies_real_scope_and_keeps_unlinked_row(tmp_path):
-    """真实任务只产建议；明确采用后同一版本保存真实关系与合法未关联项。"""
+async def test_design_suggestion_applies_real_scope_for_every_retained_row(tmp_path):
+    """整场结果给保留的验收项明确归属，应用后仍是同一版本的真实关系。"""
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             db.add(Provider(id='relation-provider', name='openai', base_url='https://api.openai.com/v1', api_key='fixture'))
@@ -101,8 +106,11 @@ async def test_design_suggestion_applies_real_scope_and_keeps_unlinked_row(tmp_p
         base = deepcopy(created['content'])
         base['design']['direction']['shots'] = [{
             'id': shot_id, 'beat_ids': [], 'event_ids': [], 'blocking_state_ids': [],
-            'participant_ids': [], 'criterion_ids': [], 'narrative_function': {}, 'visible_result': {},
+            'participant_ids': [], 'criterion_ids': [], 'narrative_function': {}, 'visible_result': note('保留可见动作'),
         } for shot_id in ('shot1', 'shot2')]
+        base['design']['cinematography'] = editable_design_sample()['cinematography']
+        for index, camera in enumerate(base['design']['cinematography']):
+            camera.update(shot_id=f'shot{index + 1}', criterion_ids=[])
         seeded = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 1, 'content': base})
         assert seeded.status_code == 200, seeded.text
         frozen = seeded.json()['data']
@@ -120,7 +128,8 @@ async def test_design_suggestion_applies_real_scope_and_keeps_unlinked_row(tmp_p
                 'expected_change': {}, 'must_show': {},
             }]
             proposed['direction']['shots'][0]['beat_ids'] = ['beat1']
-            proposed['criteria'] = [{'id': 'undecided-criterion', 'requirement': {}}]
+            proposed['criteria'] = [{'id': 'criterion1', 'requirement': {}}]
+            proposed['direction']['shots'][0]['criterion_ids'] = ['criterion1']
             proposed['applicability'] = [
                 {'subject': {'kind': 'beat', 'id': 'beat1', 'field': 'must_show'},
                  'purpose': 'design', 'scope': 'shots', 'shot_ids': ['shot1']},
@@ -147,7 +156,8 @@ async def test_design_suggestion_applies_real_scope_and_keeps_unlinked_row(tmp_p
         assert reread['relationship_graph'] == saved.json()['data']['relationship_graph']
         nodes = {node['key']: node for node in reread['relationship_graph']['nodes']}
         assert nodes['beat:beat1']['shot_ids'] == ['shot1']
-        assert nodes['criterion:undecided-criterion']['placement'] == 'unlinked'
+        assert nodes['criterion:criterion1']['shot_ids'] == ['shot1']
+        assert reread['relationship_graph']['complete'] is True
         assert any(use['owner'] == 'space' and use['field'] == 'axis' and use['phase'] == 'video'
                    and use['scope'] == 'scene_rule' for use in reread['relationship_graph']['uses'])
         assert len((await client.get(path + '/versions')).json()['data']) == 1
@@ -222,7 +232,8 @@ async def test_design_preview_rejects_file_source_deleted_after_task_finishes(tm
         content = deepcopy(version['content'])
         content['design']['sources'].append({'kind': 'file', 'reference': 'image1', 'version': '1', 'file_id': 'image1'})
         response = await client.post(detail + '/design-suggestions', json={'request_id': str(uuid4()),
-            'expected_revision': 1, 'content': content, 'model_id': 'file-model'})
+            'expected_revision': 1, 'content': content, 'model_id': 'file-model',
+            'scope': ['/direction/viewpoint']})
         assert response.status_code == 200, response.text
         task_id = response.json()['data']['task_id']
         async with sessions.begin() as db:

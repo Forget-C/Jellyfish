@@ -5,7 +5,8 @@ from uuid import uuid4
 
 from sqlalchemy import select
 
-from app.core.contracts.directing.scene_design import SceneDesignPreview, SceneDesignRequest, SceneDesignSuggestionRead
+from app.core.contracts.directing.scene_design import SceneDesignDiagnostics, SceneDesignPreview, SceneDesignRequest, SceneDesignSuggestionRead
+from app.core.contracts.directing.design_scope import design_scope_issues
 from app.core.contracts.directing.scene_version import EditableSceneDesign, SceneVersionContent
 from app.models.directing import SceneVersionRecord
 from app.models.llm import ModelCategoryKey, Provider
@@ -75,6 +76,7 @@ class SceneDesignService(DirectingAIService):
         style_id = body.content.design.style_revision_id
         rules = await self.applicable_style(style_id, sequence_id, model.name)
         args = {'scene_version_design': True, 'task_identity': uuid4().hex,
+            'design_scope_version': 1,
             'design_scope': body.scope, 'instruction': body.instruction, 'script_text': body.content.basis.text,
             'source': body.content.basis.source.model_dump(mode='json'),
             'previous_design': body.content.design.model_dump(mode='json'),
@@ -100,7 +102,9 @@ class SceneDesignService(DirectingAIService):
             result.append(SceneDesignSuggestionRead(task_id=task.id, scope=request.scope, request_id=request.request_id,
                 created_at=task.created_at.replace(tzinfo=UTC), status=task.status, error=task.error_message, instruction=request.instruction,
                 basis=request.content.basis, before=request.content.design,
-                design=EditableSceneDesign.model_validate(task.result) if task.status == 'succeeded' else None))
+                design=EditableSceneDesign.model_validate(task.result) if task.status == 'succeeded' else None,
+                diagnostics=(SceneDesignDiagnostics.model_validate(task.result['design_diagnostics'])
+                    if task.status == 'failed' and task.result and 'design_diagnostics' in task.result else None)))
         return result
 
     async def preview_design(self, sequence_id: str, version_id: str, task_id: str, content: SceneVersionContent):
@@ -128,4 +132,9 @@ class SceneDesignService(DirectingAIService):
             proposed.sources.append(original.basis.source)
         candidate = content.model_copy(update={'design': proposed})
         await self._validate_content(sequence, version_id, candidate)
+        if request.scope is None and task.input_snapshot['run_args'].get('design_scope_version') == 1:
+            issues = design_scope_issues(proposed)
+            if issues:
+                raise ValueError('整场设计未完整，不能应用：' + '；'.join(
+                    f'{issue.owner}.{issue.field}：{issue.reason}' for issue in issues))
         return SceneDesignPreview(task_id=task.id, scope=request.scope, basis=original.basis, before=original.design, design=proposed)

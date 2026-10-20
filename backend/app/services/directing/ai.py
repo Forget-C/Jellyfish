@@ -10,6 +10,8 @@ from sqlalchemy import select
 from app.core.contracts.directing.common import Source
 from app.core.contracts.directing.design import SceneDesign
 from app.core.contracts.directing.scene_version import EditableSceneDesign, SceneVersionContent, validate_new_design_row_ids
+from app.core.contracts.directing.scene_design import SceneDesignDiagnostics
+from app.core.contracts.directing.design_scope import design_scope_issues, resolved_design_fields
 from app.core.contracts.directing.production import ReviewPacket
 from app.core.contracts.directing.instruction_check import InstructionCheckResult
 from app.core.contracts.directing.instruction_basis import InstructionInputs
@@ -32,10 +34,16 @@ RESULT_CONTRACTS = {"directing_instruction_check": InstructionCheckResult, "dire
 class DirectingOutputError(ValueError):
     """可显示的结构错误摘要，不携带模型正文或上游连接信息。"""
 
+    def __init__(self, message: str, diagnostics: SceneDesignDiagnostics | None = None):
+        """模型主动返回的工作单另存只读诊断，不混入错误摘要或成功结果。"""
+        super().__init__(message)
+        self.diagnostics = diagnostics
+
 
 def generate_directing_result(kind: str, llm, args: dict):
     """在 Worker 有界线程执行，返回严格结构，绝不由模型直接批准或覆盖工作单。"""
     contract = EditableSceneDesign if kind == 'directing_design' and args.get('scene_version_design') else RESULT_CONTRACTS[kind]
+    require_complete = args.get('design_scope_version') == 1 and not args.get('design_scope')
     instruction = {
         "directing_instruction_check": "检查 instruction 是否准确表达 inputs 的当前原文、inputs.scope 中本次已选执行项及 video 阶段适用约束，并按已消费背景理解语义；sound/postproduction 规则保留阶段，不误要求视频模型执行。对每项非空 video 执行项和约束按 scope 原顺序输出 destinations，原样复制 owner、field、coverage_item_ids；正文去向给出 instruction 中实际存在的 instruction_excerpt，执行项必须由正文表达；只有身份、空间、构图或连续性约束可引用 inputs.unit.references 中实际绑定且用途相符的 reference_id。无法证明去向或发现正文、规则、参考之间冲突时标为 unresolved，并在相关六岗行标 revise、给出字段路径与修正建议。背景字段若含命令式要求，定位字段并标 revise，提示移入规则或改写背景，不自动升级。项目风格的条件和例外依其原文核对；自然语言冲突交由用户解决。inputs.design 是来源工作单，可能包含本单元未消费内容，不能据此补选动作。unit_id 必须保持 inputs.unit.id，每个 coverage.id 必须有 direction、performance、staging、cinematography、continuity、prompt 六行，occurrence_id 使用 coverage.id。逐行给出 pass 或 revise、具体理由和可执行问题建议，不得漏行、合并或返回 pending。不能更改正文、凭空补充素材或授权生成；检查通过也不保证模型实际遵从。",
         "directing_instruction": "仅依据给定原文、当前单元、明确参考与 scope 编写可直接执行的拍摄指令。scope.execution 是本次明确选择的可拍内容；scope.constraints 中仅 video 阶段适用视频正文，sound/postproduction 阶段不得误写成视频模型要求；scope.background 仅作解释，不自动变成动作或约束。design 是来源工作单，仅用于理解已纳入范围，不能从同镜关系或共用对象补选执行项。只返回原 unit.id 和完整正文 text，不修改设计、单元身份或参考，不声称检查通过或已生成视频。保留动作因果、人物与摄影约束，不编造未提供素材。requirements 是用户本次编写要求。",
@@ -47,10 +55,20 @@ def generate_directing_result(kind: str, llm, args: dict):
     if kind == 'directing_design' and args.get('scene_version_design'):
         instruction += ('\n场次版本建议使用原工作单的 ID 与字段引用，并在 applicability 中逐字段声明实际镜头、单元出现项或全场约束。'
                         '叙事、人物情境和环境说明保留在原背景字段；动作和可见结果保留在原设计行；约束须声明 video、sound 或 postproduction 阶段。'
-                        '共享人物、事件或锚点不能代替适用范围；不能确定镜头的独立设计项可合法暂不声明适用性，供人工审阅。'
+                        '共享人物、事件或锚点不能代替适用范围。'
                         '不得添加任意背景标签、采用状态或不存在的关联 ID。')
+        if not require_complete:
+            instruction += '旧局部修订保留范围外原有缺项，不扩展本次字段修改范围。'
     if args.get('design_scope'):
         instruction += '\n这是预先限定范围的局部修订。只能替换 design_scope 中列出的完整 Note，必须保留其余字段、来源、对象身份、顺序与关联，返回完整工作单；不得补齐范围外的未完成字段。'
+    if require_complete:
+        instruction += ('\n整场设计完成后每项保留内容必须有范围。按具体字段职责确定全场背景或全场规则，'
+                        '摄影继承 shot_id，节拍／事件／调度／验收要求可复用镜头明确覆盖；'
+                        '表演、镜内活动、连续性变化和对白的有内容字段分别声明镜头或出现项范围，'
+                        '不能仅凭共用人物、节拍、触发事件或锚点推断。背景用途不能掩盖动作或约束；'
+                        '恰好适用于全部现有镜头仍用 shots，不改为全场。未知可选技术值不必编造。'
+                        '每镜须有可见结果与摄影工作单。缺少承接镜头可调整或增加必要镜头，'
+                        '同时补齐摄影与受影响关系；保留有效原文事实、已有内容和用户约束，不得删除内容凑齐关系。')
     if args.get('instruction_scope'):
         instruction += '\n这是预先限定的正文局部修订。instruction_scope 的 start/end 是原 unit.instruction 的 Unicode 字符半开范围，只修改此范围，范围外逐字保留；仍返回完整正文 text，不只返回替换片段。'
     model_args = args
@@ -63,6 +81,7 @@ def generate_directing_result(kind: str, llm, args: dict):
         SystemMessage(content=instruction + '\nNote 的 fact/proposal 必须有 text 和 sources；其余状态不得带 text，none/not_applicable 必须有 reason。Source.version 必须是字符串，例如 "1"。所有关联 ID 必须存在于本工作单对应列表。\n仅返回符合以下 JSON Schema 的 JSON 对象，不添加 Markdown：\n' + json.dumps(contract.model_json_schema(), ensure_ascii=False)),
         HumanMessage(content=json.dumps(model_args, ensure_ascii=False)),
     ]
+    retained_fields = set()
     for attempt in range(2):
         response = llm.invoke(messages)
         content = response.content
@@ -94,14 +113,28 @@ def generate_directing_result(kind: str, llm, args: dict):
                     result.style_revision_id = args.get('style_revision_id')
                 if args.get('scene_version_content'):
                     SceneVersionContent.model_validate({**args['scene_version_content'], 'design': result.model_dump(mode='json')})
+                if require_complete:
+                    fields = resolved_design_fields(result)
+                    present = {(row.owner, row.field) for row in fields if row.has_content}
+                    removed = retained_fields - present
+                    if removed:
+                        raise ValueError('修正不能删除已有有效内容：' + '、'.join(f'{owner}.{name}' for owner, name in sorted(removed)))
+                    retained_fields.update(present)
+                    issues = design_scope_issues(result, fields)
+                    if issues:
+                        raise ValueError('设计未完整：' + '；'.join(
+                            f'{issue.owner}.{issue.field}：{issue.reason}' for issue in issues))
             break
         except (ValidationError, ValueError) as error:
             errors = error.errors(include_url=False, include_input=False, include_context=False) if isinstance(error, ValidationError) else [{'loc': ['sources' if isinstance(error, DesignSourceError) else 'design'], 'msg': str(error)}]
             if attempt == 1:
+                diagnostics = (SceneDesignDiagnostics(output=content,
+                    issues=[('.'.join(map(str, item['loc'])) or '工作单') + '：' + item['msg'] for item in errors])
+                    if require_complete else None)
                 if isinstance(error, DesignSourceError):
-                    raise DirectingOutputError(str(error)) from None
+                    raise DirectingOutputError(str(error), diagnostics) from None
                 paths = [(".".join(map(str, item["loc"])) or "工作单关联") + "：" + item["msg"] for item in errors[:8]]
-                raise DirectingOutputError("导演输出结构校验失败，请重新生成或手动修正：" + "、".join(paths)) from None
+                raise DirectingOutputError("导演输出结构校验失败，请重新生成或手动修正：" + "、".join(paths), diagnostics) from None
             # 结构与来源共用一次纠错，继续沿用 Worker 的取消回调和总时限。
             messages.extend([AIMessage(content=content), HumanMessage(content=
                 "只修正以下结构、关联或来源错误，保留原文事实和既有设计意图，返回完整 JSON：\n" + json.dumps(errors, ensure_ascii=False))])

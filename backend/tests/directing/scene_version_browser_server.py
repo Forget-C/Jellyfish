@@ -122,7 +122,8 @@ async def get_object_fixture(key: str):
 
 
 @app.post('/browser-test/design-tasks/{task_id}/complete')
-async def complete_design_fixture(task_id: str, remove_shot_id: str | None = None, relations: bool = False):
+async def complete_design_fixture(task_id: str, remove_shot_id: str | None = None, relations: bool = False,
+                                  incomplete: bool = False):
     """仅测试服务提供工作器结果夹具；验证 UI 消费真实任务，不测试外部模型质量。"""
     async with sessions.begin() as db:
         task = await db.get(Task, task_id)
@@ -149,6 +150,26 @@ async def complete_design_fixture(task_id: str, remove_shot_id: str | None = Non
             result['direction']['shots'] = [shot for shot in result['direction']['shots'] if shot['id'] != remove_shot_id]
         service = TaskService(db)
         assert await service.claim(task_id, worker_id='browser-result-fixture')
+        if incomplete:
+            from types import SimpleNamespace
+            from app.services.directing.ai import DirectingOutputError, generate_directing_result
+            if not result['participants']:
+                result['participants'] = [{'id': 'participant-incomplete', 'name': '路人'}]
+            activity = {name: {} for name in ('depth', 'ongoing_task', 'path', 'attention', 'reaction_delay',
+                'intensity', 'entrances_exits', 'narrative_support', 'end_state')}
+            activity.update(id='activity-incomplete', participant_id=result['participants'][0]['id'],
+                ongoing_task={'state': 'proposal', 'text': '在门口等待', 'sources': [
+                    {'kind': 'model', 'reference': args['task_identity'], 'version': '1'}]})
+            result['staging']['activities'].append(activity)
+            try:
+                generate_directing_result('directing_design', SimpleNamespace(invoke=lambda _: SimpleNamespace(
+                    content=json.dumps(result, ensure_ascii=False))), args)
+            except DirectingOutputError as error:
+                assert error.diagnostics is not None
+                await service.finish(task_id, error=str(error), result={
+                    'design_diagnostics': error.diagnostics.model_dump(mode='json')})
+                return {'completed': True}
+            raise AssertionError('Incomplete fixture unexpectedly passed design scope validation')
         await service.finish(task_id, result=result)
     return {'completed': True}
 

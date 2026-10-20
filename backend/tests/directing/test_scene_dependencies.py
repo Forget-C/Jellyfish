@@ -7,6 +7,7 @@ import pytest
 from tests.directing.test_api import client_for
 from tests.directing.test_scene_versions import sequence_path
 from tests.directing.test_store import database
+from tests.directing.samples import complete_shot_scope_sample
 
 
 @pytest.mark.asyncio
@@ -18,6 +19,7 @@ async def test_unbound_scene_dependency_only_blocks_its_unit_and_rejects_forged_
         content = version['content']
         content['design']['direction']['shots'] = [{'id': 'shot', 'beat_ids': [], 'event_ids': [], 'blocking_state_ids': [], 'criterion_ids': [], 'narrative_function': {}, 'visible_result': {}}]
         content['units'] = [{'id': identity, 'ratio': '16:9', 'coverage': [{'id': 'coverage', 'shot_id': 'shot'}]} for identity in ['affected', 'independent']]
+        complete_shot_scope_sample(content, '固定画面')
         content['units'][0]['scene_dependencies'] = [{'version_id': version['id'], 'clip_id': 'removed-clip'}]
         response = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})
         assert response.status_code == 200, response.text

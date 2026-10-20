@@ -10,11 +10,12 @@ export type RelationshipUse = {
     owner: string;
     field: string;
     purpose: 'background' | 'design' | 'constraint';
-    scope?: ('scene_rule' | 'shots' | 'occurrences' | null);
+    scope?: ('scene' | 'scene_rule' | 'shots' | 'occurrences' | null);
     shot_ids?: Array<string>;
     occurrences?: Array<DesignOccurrence>;
     phase?: ('video' | 'sound' | 'postproduction' | null);
     condition?: (string | null);
     reason: string;
+    has_content?: boolean;
 };
 

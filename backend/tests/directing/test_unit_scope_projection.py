@@ -90,8 +90,8 @@ async def test_unit_basis_separates_selected_actions_constraints_and_consumed_ba
                        and row['phase'] == 'sound' for row in scope['constraints'])
             assert any(row['owner'] == 'space' and row['field'] == 'spatial_basis'
                        for row in scope['constraints']) == (unit_id == 'unit-person')
-            assert any(row['owner'] == 'space' and row['field'] == 'spatial_basis'
-                       and row['sources'] for row in scope['background']) == (unit_id == 'unit-background')
+            assert not any(row['owner'] == 'space' and row['field'] == 'spatial_basis'
+                           for row in scope['background'])
             assert any(row['owner'] == 'overview' and row['field'] == 'viewpoint'
                        for row in scope['background'])
             assert any(row['owner'] == 'situation:situation' and row['field'] == 'situation'
@@ -159,7 +159,8 @@ async def test_unknown_participant_scope_can_save_but_blocks_instruction_check(t
         url = detail + '/units/unit/instruction-basis'
         state = await client.post(url, json={'content': saved_content})
         assert state.status_code == 200, state.text
-        assert state.json()['data']['current']['scope']['unresolved'] == ['镜头 shot 的参与对象范围待核对']
+        assert any('参与对象范围待核对' in issue
+                   for issue in state.json()['data']['current']['scope']['unresolved'])
         receipt = await client.post(url + '/confirm', json={'request_id': str(uuid4()),
             'expected_revision': 2, 'content': saved_content})
         assert receipt.status_code == 200, receipt.text
@@ -173,3 +174,23 @@ async def test_unknown_participant_scope_can_save_but_blocks_instruction_check(t
             json={'expected_revision': 2})
         assert preparation.status_code == 422, preparation.text
         assert '参与对象范围待核对' in preparation.text
+
+
+def test_explicit_beat_background_does_not_leak_to_another_shot():
+    """共享节拍不能绕过字段明确限定的背景镜头范围。"""
+    from app.core.contracts.directing.scene_version import EditableSceneDesign, EditableGenerationUnit
+    from app.services.directing.instruction_inputs import unit_scope
+    from tests.directing.samples import editable_design_sample
+
+    raw = editable_design_sample()
+    raw['direction']['shots'][1]['beat_ids'] = ['b1']
+    raw['applicability'] = [{'subject': {'kind': 'beat', 'id': 'b1', 'field': 'objective'},
+        'purpose': 'background', 'scope': 'shots', 'shot_ids': ['s1']}]
+    design = EditableSceneDesign.model_validate(raw)
+    unit = EditableGenerationUnit.model_validate({'id': 'u', 'ratio': '16:9', 'coverage': [
+        {'id': 'c', 'shot_id': 's2', 'beat_ids': ['b1']}]})
+    assert not any(row.owner == 'beat:b1' and row.field == 'objective'
+                   for row in unit_scope(design, unit).background)
+    historical = unit_scope(design, unit, version=1)
+    assert any(row.owner == 'beat:b1' and row.field == 'objective' for row in historical.background)
+    assert historical.version == 1

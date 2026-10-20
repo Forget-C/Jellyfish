@@ -11,6 +11,7 @@ import { ReferencePicker } from './ReferencePicker'
 import { referencePurposes } from './referenceInput'
 import { directingError } from './common'
 import { SourceLinks } from './Sources'
+import { WorkbenchButton } from './ui/WorkbenchButton'
 import { SceneInstructionSuggestions } from './SceneInstructionSuggestions'
 
 /** 单元和设计共用一份可编辑方案；画布浏览不创建单元，也不选择替代对象。 */
@@ -39,7 +40,7 @@ export function SceneUnitCanvas({ primaryHost, projectId, sequenceId, versionId,
   const allUnits = content.units || []
   const units = allUnits.filter(row => row.coverage.some(item => item.shot_id === shotId))
   const unit = units.find(row => row.id === unitId)
-  const { capability, capabilityError, frameEvidence, missing } = useSceneUnitPreparation(projectId, sequenceId, versionId, revision, content, unit, attempt)
+  const { capability, capabilityError, frameEvidence, missing, designScopeError } = useSceneUnitPreparation(projectId, sequenceId, versionId, revision, content, unit, attempt)
   useEffect(() => {
     if (focusRequest?.versionId === versionId && focusRequest.unitId === unit?.id) {
       setFocusTarget(focusRequest)
@@ -113,7 +114,8 @@ export function SceneUnitCanvas({ primaryHost, projectId, sequenceId, versionId,
           {!unit ? <p>明确选择单元后编辑；浏览不创建数据。</p> : <>
           <p>单元 {allUnits.indexOf(unit) + 1} · 当前场次版本</p>
           {!missing.length && <p role="status">当前单元基础准备已齐备</p>}
-          {missing.length > 0 && <Alert type="warning" message="本单元待准备" description={<ul>{missing.map(item => <li key={item.message}><Button type="link" onClick={() => locateIssue(item)}>{item.message}</Button></li>)}</ul>} />}
+          {missing.length > 0 && <Alert type="warning" message="本单元待准备" description={<ul>{missing.map(item => <li key={item.message}><Button type="link" onClick={() => locateIssue(item)}>{item.message}</Button></li>)}</ul>}
+            action={designScopeError ? <WorkbenchButton variant="secondary" onClick={() => setAttempt(value => value + 1)}>重试设计范围</WorkbenchButton> : undefined} />}
           {unit.coverage.map((item, index) => {
             const sourceShot = content.design.direction.shots.find(row => row.id === item.shot_id)
             const update = (changes: Partial<typeof item>) => patch({ coverage: unit.coverage.map(row => row.id === item.id ? { ...row, ...changes } : row) })

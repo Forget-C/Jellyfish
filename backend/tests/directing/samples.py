@@ -82,6 +82,37 @@ def editable_design_sample(story="dialogue"):
     return data
 
 
+def minimal_scoped_design_sample():
+    """一镜完整设计，保留全场依据和摄影，不构造未归属的独立行。"""
+    data = editable_design_sample()
+    data['direction']['beats'] = data['direction']['beats'][:1]
+    data['direction']['shots'] = data['direction']['shots'][:1]
+    data['direction']['shots'][0]['blocking_state_ids'] = []
+    data['direction']['blocking_states'] = []
+    data['events'] = data['events'][:1]
+    data['cinematography'] = data['cinematography'][:1]
+    data['performance'] = {'applicability': {}, 'situations': [], 'beats': []}
+    data['staging'] = {'environment': {}, 'intentional_absence': {}, 'activities': []}
+    data['continuity'] = []
+    data['sound']['dialogues'] = []
+    return data
+
+
+def complete_shot_scope_sample(content, visible_result):
+    """为接口用例补齐镜头可见结果、参与范围与摄影身份；其他可选信息留空。"""
+    for shot in content['design']['direction']['shots']:
+        shot['visible_result'] = note(visible_result)
+        if shot.get('participant_ids') is None:
+            shot['participant_ids'] = []
+        if not any(row['shot_id'] == shot['id'] for row in content['design']['cinematography']):
+            camera = editable_design_sample()['cinematography'][0]
+            for name, value in camera.items():
+                if isinstance(value, dict):
+                    camera[name] = {}
+            camera.update(id='camera-' + shot['id'], shot_id=shot['id'], criterion_ids=[])
+            content['design']['cinematography'].append(camera)
+
+
 def plan_sample(design_revision_id="design1"):
     """同一计划同时包含多镜单元和仅覆盖反应的补拍单元。"""
     return {"design_revision_id": design_revision_id, "units": [

@@ -1,11 +1,12 @@
-import type { SceneDesign_Input } from '../../../services/generated'
+import type { SceneDesign_Input, SceneRelationshipGraph } from '../../../services/generated'
 import type { DesignObject } from './designWorkspace'
-import { departmentNames } from './designWorkspace'
+import { departmentNames, designScopeLabel } from './designWorkspace'
 import { designCard } from './designCard'
 import { CanvasTextPreview } from './CanvasTextPreview'
 import { WorkbenchButton } from './ui/WorkbenchButton'
 import { designAt } from './designValue'
 import { noteText } from './designValue'
+import { designLabels } from './designLabels'
 import { ExclamationCircleOutlined, EditOutlined } from '@ant-design/icons'
 
 const compactKind = (key: string) => key === 'overview' || key === 'space' || objectEvidence(key) || /^(performance|staging|sound|prompt)$/.test(key) || /^(shot|camera|criterion|performance|blocking|situation|activity|continuity|dialogue):/.test(key)
@@ -64,10 +65,13 @@ function CompactDesignSummary({ value, object, card }: { value: SceneDesign_Inpu
 }
 
 /** 卡片与编辑区共用真实范围和问题，正文始终来自当前已应用的设计。 */
-export function DesignObjectSummary({ value, saved, object, onSelectShot, showText = true, editing = false, compact = false }: {
-  value: SceneDesign_Input; saved?: SceneDesign_Input; object: DesignObject; onSelectShot?: (id: string) => void; showText?: boolean; editing?: boolean; compact?: boolean
+export function DesignObjectSummary({ value, saved, object, relationshipGraph, onSelectShot, showText = true, editing = false, compact = false }: {
+  value: SceneDesign_Input; saved?: SceneDesign_Input; object: DesignObject; relationshipGraph?: SceneRelationshipGraph; onSelectShot?: (id: string) => void; showText?: boolean; editing?: boolean; compact?: boolean
 }) {
   const card = designCard(value, object, saved)
+  card.scope = designScopeLabel(relationshipGraph, object.key) || card.scope
+  const scopeIssues = relationshipGraph?.issues?.filter(row => row.owner === object.key) || []
+  card.issues = [...card.issues, ...scopeIssues.map(row => `${designLabels[row.field] || row.field}：${row.reason}`)]
   if (compact && (compactKind(object.key) || object.kind === 'missing')) return <CompactDesignSummary value={value} object={object} card={card} />
   return <div className="design-object-summary">
     <p>{departmentNames[object.kind] || '关联依据'} · {card.scope}{card.dirty && <strong> · 有未保存修改</strong>}</p>

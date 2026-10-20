@@ -228,8 +228,9 @@ class TaskService:
         row.next_poll_at = None
         row.error_code = error_code
         row.error_message = error
-        if status == TaskStatus.succeeded:
+        if status == TaskStatus.succeeded or status == TaskStatus.failed and result is not None:
             row.result = deepcopy(result)
+        if status == TaskStatus.succeeded:
             row.progress = 100
         await self.db.flush()
         return row

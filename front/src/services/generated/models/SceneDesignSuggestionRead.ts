@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { EditableSceneDesign_Output } from './EditableSceneDesign_Output';
+import type { SceneDesignDiagnostics } from './SceneDesignDiagnostics';
 import type { SceneVersionSource_Output } from './SceneVersionSource_Output';
 /**
  * 建议任务的版本归属、固定输入与结果；运行中不伪装成空设计。
@@ -18,4 +19,5 @@ export type SceneDesignSuggestionRead = {
     basis: SceneVersionSource_Output;
     before: EditableSceneDesign_Output;
     design: (EditableSceneDesign_Output | null);
+    diagnostics?: (SceneDesignDiagnostics | null);
 };

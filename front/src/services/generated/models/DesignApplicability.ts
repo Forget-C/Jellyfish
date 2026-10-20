@@ -9,8 +9,8 @@ import type { DesignSubject } from './DesignSubject';
  */
 export type DesignApplicability = {
     subject: DesignSubject;
-    purpose: 'design' | 'constraint';
-    scope: 'scene_rule' | 'shots' | 'occurrences';
+    purpose: 'background' | 'design' | 'constraint';
+    scope: 'scene' | 'scene_rule' | 'shots' | 'occurrences';
     shot_ids?: Array<string>;
     occurrences?: Array<DesignOccurrence>;
     phase?: ('video' | 'sound' | 'postproduction' | null);

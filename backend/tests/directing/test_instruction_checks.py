@@ -13,6 +13,7 @@ from app.services.task_service import TaskService
 from tests.directing.test_api import client_for
 from tests.directing.test_scene_versions import sequence_path
 from tests.directing.test_store import database
+from tests.directing.samples import complete_shot_scope_sample
 
 
 @pytest.mark.asyncio
@@ -28,6 +29,7 @@ async def test_check_freezes_confirmed_inputs_and_does_not_apply_results(tmp_pat
         content = deepcopy(version['content'])
         content['design']['direction']['shots'] = [{'id': 'shot', 'beat_ids': [], 'event_ids': [], 'blocking_state_ids': [], 'participant_ids': [], 'criterion_ids': [], 'narrative_function': {}, 'visible_result': {}}]
         content['units'] = [{'id': 'unit', 'model_id': 'check-video', 'duration_ms': 5000, 'ratio': '16:9', 'instruction': '递出信封。', 'coverage': [{'id': 'coverage', 'shot_id': 'shot', 'action_scope': '递出信封'}]}]
+        complete_shot_scope_sample(content, '递出信封')
         detail = path + '/versions/' + version['id']
         unit_url = detail + '/units/unit'
         url = unit_url + '/instruction-checks'
@@ -54,7 +56,10 @@ async def test_check_freezes_confirmed_inputs_and_does_not_apply_results(tmp_pat
         result = {'unit_id': 'unit', 'rows': [{'role': role, 'occurrence_id': 'coverage', 'verdict': 'pass', 'rationale': '明确表达递信动作', 'findings': []} for role in ['direction', 'performance', 'staging', 'cinematography', 'continuity', 'prompt']],
                   'destinations': [{'owner': 'coverage:coverage', 'field': 'action_scope', 'coverage_item_ids': ['coverage'],
                                     'destination': 'instruction', 'instruction_excerpt': '递出信封', 'reference_id': None,
-                                    'rationale': '正文直接表达'}]}
+                                    'rationale': '正文直接表达'},
+                                   {'owner': 'shot:shot', 'field': 'visible_result', 'coverage_item_ids': ['coverage'],
+                                    'destination': 'instruction', 'instruction_excerpt': '递出信封',
+                                    'reference_id': None, 'rationale': '正文表达镜头可见结果'}]}
         async with sessions.begin() as db:
             frozen = (await db.get(Task, task_id)).input_snapshot['run_args']
             assert frozen['inputs']['design']['direction']['shots']

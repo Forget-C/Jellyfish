@@ -6,6 +6,9 @@ from pydantic import Field
 
 from app.core.contracts.directing.common import Contract, Identity
 from app.core.contracts.directing.design_applicability import DesignApplicability, DesignOccurrence
+from app.core.contracts.directing.design_scope import (
+    DesignScopeIssue, design_preparation_issues, design_scope_issues, resolved_design_fields,
+)
 
 
 class RelationshipNode(Contract):
@@ -45,12 +48,13 @@ class RelationshipUse(Contract):
     owner: str
     field: str
     purpose: Literal['background', 'design', 'constraint']
-    scope: Literal['scene_rule', 'shots', 'occurrences'] | None = None
+    scope: Literal['scene', 'scene_rule', 'shots', 'occurrences'] | None = None
     shot_ids: list[Identity] = Field(default_factory=list)
     occurrences: list[DesignOccurrence] = Field(default_factory=list)
     phase: Literal['video', 'sound', 'postproduction'] | None = None
     condition: str | None = None
     reason: str
+    has_content: bool = True
 
 
 class SceneRelationshipGraph(Contract):
@@ -63,6 +67,9 @@ class SceneRelationshipGraph(Contract):
     paths: list[RelationshipPath]
     uses: list[RelationshipUse]
     applicability: list[DesignApplicability]
+    complete: bool = False
+    issues: list[DesignScopeIssue] = Field(default_factory=list)
+    preparation_issues: list[DesignScopeIssue] = Field(default_factory=list)
 
 
 def scene_relationship_graph(version_id: str, revision: int, content) -> SceneRelationshipGraph:
@@ -102,7 +109,7 @@ def scene_relationship_graph(version_id: str, revision: int, content) -> SceneRe
     ):
         add(kind, rows, path)
     for kind, path in (('overview', ['direction']), ('space', ['direction']),
-                       ('location', ['direction']), ('staging', ['staging']),
+                       ('location', ['direction']), ('performance', ['performance']), ('staging', ['staging']),
                        ('sound', ['sound']), ('prompt', ['prompt'])):
         nodes.append(RelationshipNode(key=kind, kind=kind, path=path))
         known.add(kind)
@@ -178,44 +185,47 @@ def scene_relationship_graph(version_id: str, revision: int, content) -> SceneRe
         scoped.setdefault(key, []).append(item)
     occurrence_shots = {(unit.id, item.id): item.shot_id
                         for unit in content.units for item in unit.coverage}
-    uses = [RelationshipUse(owner=key, field=item.subject.field, purpose=item.purpose,
-                            scope=item.scope, shot_ids=item.shot_ids, occurrences=item.occurrences,
-                            phase=item.phase, condition=item.condition,
-                            reason='原字段明确声明的内容用途与适用范围')
-            for key, items in scoped.items() for item in items]
-    explicit_fields = {(use.owner, use.field) for use in uses}
-    background_fields = {
-        'overview': ('viewpoint', 'information_change', 'relationship_change', 'turning_point', 'open_questions'),
-        'space': ('spatial_basis', 'shootable_area', 'axis', 'scale'),
-        'location': ('location_asset_id',), 'performance': ('applicability',),
-        'staging': ('environment', 'intentional_absence'),
-        'sound': ('sources', 'ambience_actions'), 'prompt': ('priorities',),
-    }
+    fields = resolved_design_fields(design)
+    issues = design_scope_issues(design, fields)
+    uses = [RelationshipUse(owner=row.owner, field=row.field, purpose=row.purpose,
+                            scope=row.scope, shot_ids=row.shot_ids, occurrences=row.occurrences,
+                            phase=row.phase, condition=row.condition, reason=row.reason,
+                            has_content=row.has_content) for row in fields]
     for node in nodes:
-        fields = background_fields.get(node.key, ())
-        if node.kind == 'participant':
-            fields = ('name',)
-        elif node.kind == 'situation':
-            fields = ('situation', 'relationship')
-        elif node.kind == 'anchor':
-            fields = ('description',)
-        for field in fields:
-            if (node.key, field) not in explicit_fields:
-                uses.append(RelationshipUse(owner=node.key, field=field, purpose='background',
-                                            reason='解释场次上下文；无需逐镜关联且不自动执行'))
+        if node.kind == 'participant' or node.key == 'location':
+            uses.append(RelationshipUse(owner=node.key, field='name' if node.kind == 'participant' else 'location_asset_id',
+                purpose='background', scope='scene', reason='场内身份或场所依据，不表示每镜出场'))
     background_keys = {'overview', 'space', 'location', 'performance', 'staging', 'sound', 'prompt'}
     background_kinds = {'participant', 'situation', 'anchor'}
     for node in nodes:
+        active = [row for row in fields if row.owner == node.key and row.has_content]
+        globals_ = [row for row in active if row.scope in {'scene', 'scene_rule'}]
+        locals_ = [row for row in active if row.scope in {'shots', 'occurrences'}]
         if node.missing:
             node.placement = 'pending_shot'
             node.reason = '引用目标在当前保存修订中不存在'
         elif node.kind == 'shot':
             node.placement = 'shots'
             node.shot_ids = [node.key[5:]]
-        elif node.key in background_keys or node.kind in background_kinds:
-            node.placement = 'scene_background'
-            node.reason = ('工作单含明确适用的约束，按字段用途查看规则；背景不自动执行'
-                           if node.key in scoped else '场次背景无需逐镜关联；单元是否消费另行判断')
+        elif node.kind == 'camera':
+            node.placement = 'shots'
+            node.shot_ids = [design.cinematography[node.path[-1]].shot_id]
+            node.reason = '摄影工作单明确归属的镜头'
+        elif globals_ or not active and (node.key in background_keys or node.kind in background_kinds):
+            node.placement = ('scene_rule' if globals_ and not any(row.purpose == 'background' for row in globals_)
+                              else 'scene_background')
+            node.shot_ids = sorted({key for row in locals_ for key in row.shot_ids})
+            node.reason = ('工作单含不同用途或范围，按字段用途查看规则；背景不自动执行'
+                           if locals_ or node.key in scoped else '按字段职责服务于全场；无需逐镜关联')
+        elif locals_:
+            node.placement = 'occurrences' if any(row.scope == 'occurrences' for row in locals_) else 'shots'
+            node.shot_ids = sorted({key for row in locals_ for key in row.shot_ids} | {
+                occurrence_shots[(target.unit_id, target.coverage_item_id)]
+                for row in locals_ for target in row.occurrences})
+            node.reason = '按字段明确归属镜头或单元出现项'
+        elif any(row.scope is None for row in active):
+            node.placement = 'pending_shot' if any(edge.owner == node.key or edge.target == node.key for edge in edges) else 'unlinked'
+            node.reason = '设计未完整：部分内容尚未明确适用范围'
         elif scopes := scoped.get(node.key):
             if any(item.scope == 'scene_rule' for item in scopes):
                 node.placement = 'scene_rule'
@@ -240,4 +250,5 @@ def scene_relationship_graph(version_id: str, revision: int, content) -> SceneRe
             node.reason = '尚无真实引用或明确适用范围'
     return SceneRelationshipGraph(version_id=version_id, revision=revision,
                                   nodes=nodes, edges=edges, paths=paths, uses=uses,
-                                  applicability=design.applicability)
+                                  applicability=design.applicability, complete=not issues, issues=issues,
+                                  preparation_issues=design_preparation_issues(design, content.units, fields))

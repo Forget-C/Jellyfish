@@ -10,6 +10,7 @@ import type { DirectorCanvasObject, DirectorCanvasRelation } from './DirectorCan
 import { WorkbenchButton, WorkbenchIconButton } from './ui/WorkbenchButton'
 import { WorkbenchModal } from './ui/WorkbenchModal'
 import { DesignObjectSummary } from './DesignObjectSummary'
+import { designLabels } from './designLabels'
 import { SceneDesignPanel, resolveTarget, targetFor } from './SceneDesignPanel'
 import type { DesignFocusRequest, DesignTarget } from './SceneDesignPanel'
 import { SceneAssetLinks } from './SceneAssetLinks'
@@ -257,7 +258,7 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
   const visibleFocus = focusStillVisible ? state.focus : scope === 'shot' ? currentShot && identity(currentShot) : '原文依据'
   const objects: DirectorCanvasObject[] = visibleNodes.map(node => {
     const home = graph.location(node.key)
-    const nodeUses = relationshipGraph.uses.filter(use => use.owner === node.key)
+    const nodeUses = relationshipGraph.uses.filter(use => use.owner === node.key && use.has_content !== false)
     const isEntry = scope === 'all' && node.key.startsWith('shot:') && relationshipGraph.nodes.some(savedNode => savedNode.key === node.key)
     const open = (trigger: HTMLElement) => {
       if (isEntry) { onSelectShot(node.key.slice(5)); go({ scope: 'shot', shotId: node.key.slice(5) }, identity(node)) }
@@ -273,9 +274,9 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
       related: home === 'shared', onInspect: node.kind === 'missing' ? undefined : open,
       content: isEntry ? <DirectorShotEntry value={content.design} saved={saved.design} shotId={node.key.slice(5)} storageKey={storageKey} graph={projection.view(node.key.slice(5))} />
         : <section className={`canvas-workbench-card${isReference(node) ? ' director-reference-card' : ' director-design-card'}`}>
-        {home === 'global' && <p>{nodeUses.some(use => use.purpose === 'background')
-          ? nodeUses.some(use => use.purpose === 'constraint') ? '场次背景与规则 · 逐项查看用途' : '场次背景 · 无需逐镜关联 · 不自动执行'
-          : '全场规则'}</p>}
+        {home === 'global' && <p>{nodeUses.some(use => use.purpose === 'constraint')
+          ? nodeUses.some(use => use.purpose === 'background') ? '场次背景与规则 · 逐项查看用途' : '全场规则'
+          : '场次背景 · 无需逐镜关联 · 不自动执行'}</p>}
         {home === 'unlinked' && <p>{!relationshipGraph.nodes.some(item => item.key === node.key) ? '未保存新增 · 保存后更新关系图' :
           `${relationshipGraph.nodes.find(item => item.key === node.key)?.placement === 'pending_shot' ? '待归镜头' : '未关联'} · ${relationshipGraph.nodes.find(item => item.key === node.key)?.reason}`}</p>}
         {isReference(node) ? <>
@@ -285,7 +286,7 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
           <DirectorLocationSummary projectId={projectId} assetId={content.design.direction.location_asset_id} />
           <WorkbenchButton disabled={disabled} onClick={() => setAssetTarget('location')}>编辑场所资产绑定</WorkbenchButton>
         </> : <>
-          <DesignObjectSummary value={content.design} saved={saved.design} object={node} compact />
+          <DesignObjectSummary value={content.design} saved={saved.design} object={node} relationshipGraph={relationshipGraph} compact />
           {node.kind !== 'missing' && <Space wrap><WorkbenchButton disabled={disabled} onClick={event => edit(node, event.currentTarget)}>编辑此卡</WorkbenchButton>
             {node.key.startsWith('shot:') && ([-1, 1] as const).map(offset => {
               const index = content.design.direction.shots.findIndex(row => `shot:${row.id}` === node.key)
@@ -326,6 +327,9 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
     </nav>, navigationHost)}
     {noticeHost && createPortal(<>
       {graphPending && <Alert type="info" message={`关系图来自已保存 revision ${relationshipGraph.revision}；关系更新中`} />}
+      {!graphPending && !!relationshipGraph.issues?.length && <Alert type="warning" message={`设计未完整 · ${relationshipGraph.issues.length} 项缺项`}
+        action={<WorkbenchButton variant="quiet" onClick={() => setInfoOpen(true)}>查看设计缺项</WorkbenchButton>} />}
+      {!graphPending && relationshipGraph.complete && <span role="status">设计范围完整</span>}
       {unavailable && <Alert type="warning" message="原对象不可用，请重新选择" closable onClose={() => setUnavailable(false)} />}
       {!focusStillVisible && <Alert type="info" message="关联已变化，已定位到当前视图中心" />}
       {shotId && !hasShot && <Alert type="warning" message="原镜头不可用，请重新选择镜头" />}
@@ -357,14 +361,22 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
         <WorkbenchIconButton label="隐藏附加信息" variant="quiet" icon={<CloseOutlined />} onClick={() => setInfoOpen(false)} /></header>
       <p>{scope === 'all' ? `镜头 ${content.design.direction.shots.length} · 待归镜头 ${pendingCount} · 未关联设计 ${unlinkedCount}` : `当前子图 ${graph.nodes.length} 张卡片`}</p>
       <p>关系来源：已保存 revision {relationshipGraph.revision}</p>
+      {!!relationshipGraph.issues?.length && <details open><summary>设计缺项 · {relationshipGraph.issues.length}</summary><ul>{relationshipGraph.issues.map((issue, index) => <li key={index}>
+        <WorkbenchButton variant="quiet" onClick={() => { const owner = allObjects.find(node => node.key === issue.owner); if (owner) jump(owner) }}>定位缺项 · {allObjects.find(node => node.key === issue.owner)?.label || '场次设计'}</WorkbenchButton>
+        {' · '}{designLabels[issue.field] || issue.field}：{issue.reason}
+      </li>)}</ul></details>}
+      {!!relationshipGraph.preparation_issues?.length && <details><summary>拍摄分工待补 · {relationshipGraph.preparation_issues.length}</summary><ul>{relationshipGraph.preparation_issues.map((issue, index) => <li key={index}>
+        <WorkbenchButton variant="quiet" onClick={() => { const owner = allObjects.find(node => node.key === issue.owner); if (owner) jump(owner) }}>定位拍摄分工 · {allObjects.find(node => node.key === issue.owner)?.label || '场次设计'}</WorkbenchButton>
+        {' · '}{designLabels[issue.field] || issue.field}：{issue.reason} · 镜头 {issue.shot_ids?.map(id => String(content.design.direction.shots.findIndex(shot => shot.id === id) + 1).padStart(2, '0')).join('、')}
+      </li>)}</ul></details>}
       <details><summary>全部直接引用 · {relationshipGraph.edges.length}</summary><ul>{relationshipGraph.edges.map((edge, index) => <li key={`${edge.owner}:${edge.field}:${edge.target}:${index}`}>
         <WorkbenchButton variant="quiet" onClick={() => { const owner = allObjects.find(node => node.key === edge.owner); if (owner) jump(owner) }}>{edge.owner}</WorkbenchButton>
         {' · '}{edge.field}{' → '}{edge.target}
       </li>)}</ul></details>
       <details><summary>字段与条目用途 · {relationshipGraph.uses.length}</summary><ul>{relationshipGraph.uses.map((use, index) => <li key={`${use.owner}:${use.field}:${index}`}>
         <WorkbenchButton variant="quiet" onClick={() => { const owner = allObjects.find(node => node.key === use.owner); if (owner) jump(owner) }}>{use.owner}</WorkbenchButton>
-        {' · '}{use.field}{' · '}{use.purpose === 'background' ? '场次背景' : use.purpose === 'constraint' ? '约束' : '设计'}
-        {use.scope === 'scene_rule' ? ' · 全场规则' : use.scope === 'shots' ? ` · 镜头 ${use.shot_ids?.join('、')}` : use.scope === 'occurrences' ? ' · 指定单元出现项' : ''}
+        {' · '}{designLabels[use.field] || use.field}{' · '}{use.purpose === 'background' ? '场次背景' : use.purpose === 'constraint' ? '约束' : '设计'}
+        {use.scope === 'scene' ? ' · 全场背景' : use.scope === 'scene_rule' ? ' · 全场规则' : use.scope === 'shots' ? ` · 镜头 ${use.shot_ids?.join('、')}` : use.scope === 'occurrences' ? ' · 指定单元出现项' : ' · 范围待明确'}
         {use.phase ? ` · ${use.phase}` : ''}{use.condition ? ` · 条件：${use.condition}` : ''}
       </li>)}</ul></details>
       <label htmlFor="director-object-locator">定位当前视图对象</label>
@@ -381,7 +393,7 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
       </section>}
     </aside>}
     {noticeHost && scope === 'shot' && graph.nodes.length <= 1 && createPortal(<aside className="director-domain-empty" aria-label="镜头设计空状态"><p>当前镜头暂无明确关联的设计</p></aside>, noticeHost)}
-    <SceneDesignPanel value={content.design} saved={saved.design} units={content.units} disabled={disabled}
+    <SceneDesignPanel value={content.design} saved={saved.design} units={content.units} disabled={disabled} relationshipGraph={relationshipGraph}
       onChange={changeDesign} onNavigateTarget={(next, trigger) => {
         const path = resolveTarget(content.design, next)
         const node = path && allObjects.find(row => JSON.stringify(row.path) === JSON.stringify(path))

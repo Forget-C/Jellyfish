@@ -112,7 +112,8 @@ class SceneInstructionService(SceneDesignService):
         # 历史任务确实收到整场设计时，仍按当时范围核对，不能追溯缩小其输入。
         design = instruction_design(content.design, unit) if args.get('design_scope_version') == 1 else content.design
         design_changed = (not unit_scope(content.design, unit,
-                          [StyleRule.model_validate(row) for row in args.get('style_rules') or []]).same_video_consumption(
+                          [StyleRule.model_validate(row) for row in args.get('style_rules') or []],
+                          version=args['scope'].get('version', 1)).same_video_consumption(
                               UnitScopeProjection.model_validate(args['scope']))
                           if args.get('scope') else design != EditableSceneDesign.model_validate(args['design']))
         if (content.basis != request.content.basis or design_changed

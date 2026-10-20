@@ -9,6 +9,7 @@ from app.services.task_service import TaskService
 from tests.directing.test_api import client_for
 from tests.directing.test_scene_versions import sequence_path
 from tests.directing.test_store import database
+from tests.directing.samples import complete_shot_scope_sample
 
 
 @pytest.mark.asyncio
@@ -61,6 +62,7 @@ async def test_copy_rechecks_tasks_after_readiness_and_accepts_failed_terminal(t
         content = deepcopy(original['content'])
         content['design']['direction']['shots'] = [{'id': 'shot', 'beat_ids': [], 'event_ids': [], 'blocking_state_ids': [], 'criterion_ids': [], 'narrative_function': {}, 'visible_result': {}}]
         content['units'] = [{'id': 'unit', 'ratio': '16:9', 'model_id': 'copy-video', 'duration_ms': 5000, 'instruction': '转身', 'coverage': [{'id': 'coverage', 'shot_id': 'shot', 'action_scope': '转身'}]}]
+        complete_shot_scope_sample(content, '转身')
         basis = await client.post(detail + '/units/unit/instruction-basis/confirm', json={'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})
         assert basis.status_code == 200, basis.text
         content['units'][0]['instruction_basis_id'] = basis.json()['data']['basis_id']
@@ -81,7 +83,9 @@ async def test_copy_rechecks_tasks_after_readiness_and_accepts_failed_terminal(t
         assert (await client.post(detail + '/copy', json=request)).status_code == 409
         result = {'unit_id': 'unit', 'rows': [{'role': role, 'occurrence_id': 'coverage', 'verdict': 'pass', 'rationale': '动作明确', 'findings': []} for role in ['direction', 'performance', 'staging', 'cinematography', 'continuity', 'prompt']],
                   'destinations': [{'owner': 'coverage:coverage', 'field': 'action_scope', 'coverage_item_ids': ['coverage'],
-                                    'destination': 'instruction', 'instruction_excerpt': '转身', 'rationale': '正文直接表达'}]}
+                                    'destination': 'instruction', 'instruction_excerpt': '转身', 'rationale': '正文直接表达'},
+                                   {'owner': 'shot:shot', 'field': 'visible_result', 'coverage_item_ids': ['coverage'],
+                                    'destination': 'instruction', 'instruction_excerpt': '转身', 'rationale': '正文表达可见结果'}]}
         async with sessions.begin() as db:
             await TaskService(db).finish(task_id, error='外部检查失败' if terminal == 'failed' else None,
                 cancelled=terminal == 'cancelled', result=result if terminal == 'succeeded' else None)

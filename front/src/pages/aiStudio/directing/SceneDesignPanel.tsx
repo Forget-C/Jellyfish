@@ -67,8 +67,9 @@ export function resolveTarget(value: EditableSceneDesign_Output, target: DesignT
 }
 
 /** 单个编辑区复用六岗字段；创建关系须明确选对象，删除先定位真实引用。 */
-export function SceneDesignPanel({ value, saved, units, disabled, onChange, focusRequest, onFocusHandled, onLocateUnit, onSideClose, sideContext, onNavigateTarget, saveStatus }: {
+export function SceneDesignPanel({ value, saved, units, disabled, onChange, focusRequest, onFocusHandled, onLocateUnit, onSideClose, sideContext, onNavigateTarget, saveStatus, relationshipGraph }: {
   value: EditableSceneDesign_Output
+  relationshipGraph?: import('../../../services/generated').SceneRelationshipGraph
   saved?: EditableSceneDesign_Output
   units: EditableGenerationUnit_Output[]
   disabled: boolean
@@ -163,7 +164,7 @@ export function SceneDesignPanel({ value, saved, units, disabled, onChange, focu
     }
   }, [focusRequest])
   const editorBody = () => <>
-      {object && <DesignObjectSummary value={value} saved={saved} object={object} showText={false} editing onSelectShot={id => { const index = value.direction.shots.findIndex(row => row.id === id); if (index >= 0) onNavigateTarget(targetFor(value, ['direction', 'shots', index]), document.activeElement as HTMLElement); setSideOpen(false) }} />}
+      {object && <DesignObjectSummary value={value} saved={saved} object={object} relationshipGraph={relationshipGraph} showText={false} editing onSelectShot={id => { const index = value.direction.shots.findIndex(row => row.id === id); if (index >= 0) onNavigateTarget(targetFor(value, ['direction', 'shots', index]), document.activeElement as HTMLElement); setSideOpen(false) }} />}
       <h3>{pathLabel(pending?.path || path)}</h3>
       {error && <Alert type="warning" message={error} description={<Space wrap>{references.map((reference, i) =>
         <Button key={i} onClick={event => { onNavigateTarget(reference, event.currentTarget); setSideOpen(false) }}>定位：{pathLabel(reference.path)}</Button>)}

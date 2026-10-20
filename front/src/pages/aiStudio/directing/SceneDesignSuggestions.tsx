@@ -171,7 +171,7 @@ export function SceneDesignSuggestions({ triggerHost, projectId, sequenceId, ver
   const generateLabel = limited ? (hasDesign ? '生成调整方案' : '生成所选内容') : (hasDesign ? '重新生成整场' : '生成场次设计')
   const recordStatus = (row: SceneDesignSuggestionRead) => row.design
     ? !revisionDifferences(row.design, content.design).length ? '与当前设计一致' : !revisionDifferences(row.before, content.design).length ? '待应用' : '待核对'
-    : statusNames[row.status] || row.status
+    : row.diagnostics ? '未完成 · 可查看结果' : statusNames[row.status] || row.status
   const triggerLabel = 'AI 设计'
   const trigger = <Button size="large" className="scene-design-launch" aria-label={triggerLabel} title={running ? '查看当前执行进度' : '整场设计建议'} aria-haspopup="dialog" onClick={() => onOpenChange(true)}>
     <svg className="scene-design-launch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
@@ -246,7 +246,12 @@ export function SceneDesignSuggestions({ triggerHost, projectId, sequenceId, ver
             <section aria-label="设计要求"><h4><EditOutlined aria-hidden="true" /> 设计要求 {!selected.instruction.trim() && <span className="scene-ai-empty-tag">未填写</span>}</h4>{!!selected.instruction.trim() && <p>{selected.instruction}</p>}</section>
           </div>
         </details>
-        {selected.error && <Alert type="error" message={selected.error} />}
+        {selected.error && <Alert type="error" message={selected.diagnostics ? '整场设计未完成，已保留本次结果' : selected.error} />}
+        {selected.diagnostics && <section aria-label="未完成设计结果">
+          <p>本次结果未通过完整性检查，已保留供核对。请处理缺项后重新发起设计。</p>
+          <ul>{selected.diagnostics.issues.map((issue, index) => <li key={index}>{issue}</li>)}</ul>
+          <details><summary>查看模型输出 · 只读</summary><pre>{selected.diagnostics.output}</pre></details>
+        </section>}
         {selected.design && <div className="scene-ai-departments">{(['direction', 'performance', 'staging', 'cinematography', 'continuity', 'sound'] as const).map(role => <section key={role}>
           <h4>{designLabels[role]}</h4><p>{designSummary(selected.design![role]) || '暂无正文内容'}</p>
           <span>{differences.filter(change => change.path === role || change.path.startsWith(`${role}.`) || change.path.startsWith(`${role}[`)).length} 项变更</span>

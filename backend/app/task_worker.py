@@ -239,6 +239,9 @@ class TaskWorker:
             await self._fail(task_id, "execution_timeout", "任务执行超时")
         except ContinuityNotReady as error:
             await self._fail(task_id, "continuity_changed", str(error))
+        except DirectingOutputError as error:
+            await self._fail(task_id, 'directing_output_invalid', str(error),
+                result={'design_diagnostics': error.diagnostics.model_dump(mode='json')} if error.diagnostics else None)
         except Exception as error:
             await self._fail(task_id, "submission_failed", self._error_message(error))
 
@@ -375,10 +378,10 @@ class TaskWorker:
         finally:
             stopped.set()
 
-    async def _fail(self, task_id: str, code: str, message: str) -> None:
+    async def _fail(self, task_id: str, code: str, message: str, *, result: dict | None = None) -> None:
         """所有错误均经统一终态裁决，不覆盖已经提交的成功或取消。"""
         async with self.sessions() as db:
-            await TaskService(db).finish(task_id, error_code=code, error=message)
+            await TaskService(db).finish(task_id, error_code=code, error=message, result=result)
             await db.commit()
 
     @staticmethod

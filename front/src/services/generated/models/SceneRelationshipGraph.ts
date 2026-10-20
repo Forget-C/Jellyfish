@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { DesignApplicability } from './DesignApplicability';
+import type { DesignScopeIssue } from './DesignScopeIssue';
 import type { RelationshipEdge } from './RelationshipEdge';
 import type { RelationshipNode } from './RelationshipNode';
 import type { RelationshipPath } from './RelationshipPath';
@@ -18,5 +19,8 @@ export type SceneRelationshipGraph = {
     paths: Array<RelationshipPath>;
     uses: Array<RelationshipUse>;
     applicability: Array<DesignApplicability>;
+    complete?: boolean;
+    issues?: Array<DesignScopeIssue>;
+    preparation_issues?: Array<DesignScopeIssue>;
 };
 

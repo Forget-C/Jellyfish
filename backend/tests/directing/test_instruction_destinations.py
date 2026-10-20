@@ -12,6 +12,7 @@ from app.services.task_service import TaskService
 from tests.directing.test_api import client_for
 from tests.directing.test_scene_versions import sequence_path
 from tests.directing.test_store import database
+from tests.directing.samples import complete_shot_scope_sample
 
 
 def test_instruction_destinations_reject_missing_or_unbound_evidence():
@@ -99,6 +100,7 @@ async def test_check_cannot_confirm_missing_or_unresolved_destination(tmp_path, 
             'narrative_function': {}, 'visible_result': {}}]
         content['units'] = [{'id': 'unit', 'model_id': 'video', 'duration_ms': 5000, 'ratio': '16:9',
             'instruction': '递出信封。', 'coverage': [{'id': 'coverage', 'shot_id': 'shot', 'action_scope': '递出信封'}]}]
+        complete_shot_scope_sample(content, '递出信封')
         unit_url = path + '/versions/' + version['id'] + '/units/unit'
         confirmed = await client.post(unit_url + '/instruction-basis/confirm', json={
             'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})

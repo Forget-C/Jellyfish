@@ -34,6 +34,13 @@ class SceneDesignPreview(Contract):
     design: EditableSceneDesign
 
 
+class SceneDesignDiagnostics(Contract):
+    """失败输出仅供核对，不属于可应用的类型化设计。"""
+
+    output: str
+    issues: list[str]
+
+
 class SceneDesignSuggestionRead(Contract):
     """建议任务的版本归属、固定输入与结果；运行中不伪装成空设计。"""
 
@@ -47,3 +54,4 @@ class SceneDesignSuggestionRead(Contract):
     basis: SceneVersionSource
     before: EditableSceneDesign
     design: EditableSceneDesign | None
+    diagnostics: SceneDesignDiagnostics | None = None

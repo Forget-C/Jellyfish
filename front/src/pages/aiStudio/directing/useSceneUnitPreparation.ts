@@ -12,7 +12,21 @@ export function useSceneUnitPreparation(projectId: string, sequenceId: string, v
   const [options, setOptions] = useState<VideoGenerationOptionsRead>()
   const [capability, setCapability] = useState<VideoReferenceCapabilities>()
   const [capabilityError, setCapabilityError] = useState('')
+  const [designScope, setDesignScope] = useState<{ content: SceneVersionContent_Output; unitId: string; unresolved: string[] }>()
+  const [designScopeError, setDesignScopeError] = useState<{ content: SceneVersionContent_Output; unitId: string; message: string }>()
   const frameEvidence = useSceneFrameEvidence(projectId, sequenceId, versionId, revision, unit)
+  useEffect(() => {
+    if (!unit) return
+    let active = true
+    const timer = setTimeout(() => {
+      void StudioDirectingService.directingInstructionBasis({ projectId, sequenceId, versionId, unitId: unit.id,
+        requestBody: { content } }).then(result => {
+        if (!result.data?.current.scope) throw new Error('设计范围尚未核实')
+        if (active) { setDesignScope({ content, unitId: unit.id, unresolved: result.data.current.scope.unresolved }); setDesignScopeError(undefined) }
+      }).catch(error => { if (active) setDesignScopeError({ content, unitId: unit.id, message: directingError(error) }) })
+    }, 250)
+    return () => { active = false; clearTimeout(timer) }
+  }, [projectId, sequenceId, versionId, content, unit?.id, attempt])
   useEffect(() => {
     let active = true
     setOptions(undefined); setCapability(undefined); setCapabilityError('')
@@ -27,6 +41,10 @@ export function useSceneUnitPreparation(projectId: string, sequenceId: string, v
   }, [projectId, unit?.model_id, attempt])
   const missing: ScenePreparationIssue[] = []
   if (unit) {
+    const scopeField = `scene-unit-action-${unit.coverage[0].id}`
+    if (designScopeError?.content === content && designScopeError.unitId === unit.id) missing.push({ message: `设计范围核实失败：${designScopeError.message}`, fieldId: scopeField })
+    else if (designScope?.content !== content || designScope.unitId !== unit.id) missing.push({ message: '核实本单元设计范围', fieldId: scopeField })
+    else designScope.unresolved.forEach(message => missing.push({ message, fieldId: scopeField }))
     if (!unit.model_id) missing.push({ message: '选择视频模型', fieldId: 'scene-unit-model' })
     if (!unit.duration_ms) missing.push({ message: '填写预计时长', fieldId: 'scene-unit-duration' })
     else if (unit.duration_ms % 1000) missing.push({ message: '当前执行器要求整秒时长，请修改预计时长', fieldId: 'scene-unit-duration' })
@@ -46,5 +64,6 @@ export function useSceneUnitPreparation(projectId: string, sequenceId: string, v
     }
     if (unit.dependencies.some(link => !link.frame_id || !link.reference_id)) missing.push({ message: '绑定前段实际落幅', fieldId: 'scene-unit-dependencies' })
   }
-  return { options, capability, capabilityError, frameEvidence, missing }
+  return { options, capability, capabilityError, frameEvidence, missing,
+    designScopeError: designScopeError?.content === content && designScopeError.unitId === unit?.id ? designScopeError.message : '' }
 }

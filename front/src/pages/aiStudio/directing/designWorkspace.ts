@@ -5,6 +5,23 @@ import type { DesignPath } from './designValue'
 export type DesignObject = { key: string; label: string; kind: string; path: DesignPath; fields?: string[] }
 export type DesignEdge = { from: string; to: string; label: string; indirect?: boolean; field?: string; path?: DesignEdge[] }
 export type DesignGraph = { nodes: DesignObject[]; edges: DesignEdge[] }
+
+/** 范围摘要只读取服务端字段用途，不用前端图连通性重判全场或镜头归属。 */
+export function designScopeLabel(graph: SceneRelationshipGraph | undefined, key: string): string | undefined {
+  const node = graph?.nodes.find(row => row.key === key)
+  if (!node) return undefined
+  const uses = graph?.uses.filter(row => row.owner === key && row.has_content !== false) || []
+  const global = uses.some(row => row.scope === 'scene' || row.scope === 'scene_rule')
+  const local = uses.some(row => row.scope === 'shots' || row.scope === 'occurrences')
+  const incomplete = graph?.issues?.some(row => row.owner === key)
+  if (incomplete) return '设计未完整 · 查看字段缺项'
+  if (global && local) return '全场与局部内容 · 逐项查看'
+  if (node.placement === 'scene_background') return '全场背景 · 无需逐镜关联'
+  if (node.placement === 'scene_rule') return '全场规则'
+  if (node.placement === 'occurrences') return '明确适用于单元出现项'
+  if (node.placement === 'shots') return `明确适用于 ${node.shot_ids?.length || 0} 个镜头`
+  return node.placement === 'pending_shot' ? '待归镜头 · 设计未完整' : '未关联 · 设计未完整'
+}
 export type RelationBinding = { path: DesignPath; prefix: string; target: string; many: boolean; required: boolean }
 export const departmentNames: Record<string, string> = { direction: '总导演', performance: '表演指导', staging: '镜内执行', cinematography: '摄影指导', continuity: '场记与连续性', sound: '对白与声音', prompt: '提示词指导' }
 

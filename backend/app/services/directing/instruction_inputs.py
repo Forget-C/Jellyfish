@@ -3,14 +3,20 @@
 from typing import Iterable
 
 from app.core.contracts.directing.common import Note
+from app.core.contracts.directing.design_scope import design_scope_issues, field_coverage_ids, field_selected, resolved_design_fields
 from app.core.contracts.directing.instruction_basis import UnitScopeProjection, UnitScopeUse
 from app.core.contracts.directing.scene_version import EditableGenerationUnit, EditableSceneDesign
 from app.core.contracts.directing.style import StyleRule
 
 
 def unit_scope(design: EditableSceneDesign, unit: EditableGenerationUnit,
-               style_rules: Iterable[StyleRule] = ()) -> UnitScopeProjection:
+               style_rules: Iterable[StyleRule] = (), *, version: int = 2) -> UnitScopeProjection:
     """只沿单元选择和显式适用性投影，保留可追溯的字段及纳入原因。"""
+    if version == 1:
+        from app.services.directing.instruction_inputs_v1 import unit_scope as historical_scope  # pylint: disable=import-outside-toplevel
+        return historical_scope(design, unit, style_rules)
+    fields = resolved_design_fields(design)
+    field_map = {(row.owner, row.field): row for row in fields}
     execution: list[UnitScopeUse] = []
     constraints: list[UnitScopeUse] = []
     background: list[UnitScopeUse] = []
@@ -23,10 +29,15 @@ def unit_scope(design: EditableSceneDesign, unit: EditableGenerationUnit,
     continuity = {row.id: row for row in design.continuity}
     participants_by_id = {row.id: row for row in design.participants}
     shot_ids = {item.shot_id for item in unit.coverage}
-    occurrence_ids = {(unit.id, item.id) for item in unit.coverage}
 
     def add(rows, owner, field, value, reason, *, coverage_ids=(), phase=None, condition=None,
             include_empty=False):
+        source = field_map.get((owner, field))
+        if rows is execution and source and source.scope is not None:
+            allowed = field_coverage_ids(source, unit)
+            coverage_ids = [identity for identity in coverage_ids if identity in allowed]
+            if not coverage_ids:
+                return
         if isinstance(value, Note):
             if value.text is None and not include_empty:
                 return
@@ -59,8 +70,6 @@ def unit_scope(design: EditableSceneDesign, unit: EditableGenerationUnit,
                 coverage_ids=[item.id], phase='video', include_empty=True)
             if beat.must_show.text is None and f'已选节拍 {key} 尚无可拍内容' not in unresolved:
                 unresolved.append(f'已选节拍 {key} 尚无可拍内容')
-            for field in ('objective', 'obstacle', 'expected_change'):
-                add(background, f'beat:{key}', field, getattr(beat, field), '已选节拍的解释依据')
         for key in item.event_ids:
             add(execution, f'event:{key}', 'description', events[key].description,
                 '单元出现项明确选择事件', coverage_ids=[item.id], phase='video', include_empty=True)
@@ -95,91 +104,62 @@ def unit_scope(design: EditableSceneDesign, unit: EditableGenerationUnit,
                 if f'已选连续性变化 {key} 尚无可拍内容' not in unresolved:
                     unresolved.append(f'已选连续性变化 {key} 尚无可拍内容')
 
-    direction_owners = {'viewpoint': 'overview', 'information_change': 'overview',
-                        'relationship_change': 'overview', 'turning_point': 'overview',
-                        'spatial_basis': 'space', 'shootable_area': 'space',
-                        'axis': 'space', 'scale': 'space', 'control_level': 'overview'}
-    grouped = {
-        'beat': (design.direction.beats, 'beat'),
-        'shot': (design.direction.shots, 'shot'),
-        'criterion': (design.criteria, 'criterion'),
-        'event': (design.events, 'event'),
-        'performance_beat': (design.performance.beats, 'performance'),
-        'staging_activity': (design.staging.activities, 'activity'),
-        'camera': (design.cinematography, 'camera'),
-        'continuity': (design.continuity, 'continuity'),
-        'immutable_fact': (design.direction.immutable_facts, 'fact'),
-    }
-    for scope in design.applicability:
-        if scope.purpose != 'constraint':
-            continue
-        if scope.scope == 'shots' and not shot_ids.intersection(scope.shot_ids):
-            continue
-        if scope.scope == 'occurrences' and not any(
-            (target.unit_id, target.coverage_item_id) in occurrence_ids for target in scope.occurrences
-        ):
-            continue
-        subject = scope.subject
-        if subject.kind == 'direction':
-            owner, source = direction_owners[subject.field], design.direction
-        elif subject.kind in ('prompt', 'sound'):
-            owner, source = subject.kind, getattr(design, subject.kind)
-        else:
-            rows, kind = grouped[subject.kind]
-            source = next(row for row in rows if row.id == subject.id)
-            owner = f'{kind}:{subject.id}'
-        value = source if subject.kind == 'immutable_fact' else getattr(source, subject.field)
-        reason = {'scene_rule': '字段明确声明全场生效', 'shots': '字段明确适用于本单元镜头',
-                  'occurrences': '字段明确适用于本单元出现项'}[scope.scope]
-        coverage_ids = ([item.id for item in unit.coverage] if scope.scope == 'scene_rule' else
-                        [item.id for item in unit.coverage if item.shot_id in scope.shot_ids]
-                        if scope.scope == 'shots' else
-                        [item.id for item in unit.coverage if any(
-                            target.unit_id == unit.id and target.coverage_item_id == item.id
-                            for target in scope.occurrences)])
-        add(constraints, owner, subject.field, value, reason,
-            coverage_ids=coverage_ids, phase=scope.phase, condition=scope.condition)
-
-    constrained_direction = {use.field for use in constraints if use.owner in {'overview', 'space'}}
-    for field in ('viewpoint', 'information_change', 'relationship_change', 'turning_point'):
-        if field not in constrained_direction:
-            add(background, 'overview', field, getattr(design.direction, field), '场次级叙事依据')
-    for field in ('spatial_basis', 'shootable_area'):
-        if field not in constrained_direction:
-            add(background, 'space', field, getattr(design.direction, field), '场次级空间依据')
-    for field in ('environment', 'intentional_absence'):
-        add(background, 'staging', field, getattr(design.staging, field), '场次级环境依据')
     participants = set()
-    for shot_id in shot_ids:
+    for shot_id in sorted(shot_ids):
         shot = shots[shot_id]
-        add(background, f'shot:{shot_id}', 'narrative_function', shot.narrative_function,
-            '当前镜头的叙事依据')
         if shot.participant_ids is None:
-            selected = [item for item in unit.coverage if item.shot_id == shot_id]
-            if (design.performance.situations or any(
-                    item.performance_action_ids or item.staging_activity_ids or any(
-                        continuity[key].participant_id for key in item.continuity_change_ids)
-                    for item in selected)):
+            if design.performance.situations or any(
+                    item.performance_action_ids or item.staging_activity_ids or item.continuity_change_ids
+                    for item in unit.coverage if item.shot_id == shot_id):
                 unresolved.append(f'镜头 {shot_id} 的参与对象范围待核对')
         else:
             participants.update(shot.participant_ids)
             for participant_id in shot.participant_ids:
                 add(constraints, f'participant:{participant_id}', 'identity',
                     participants_by_id[participant_id].name, '当前镜头明确参与对象身份',
-                    coverage_ids=[item.id for item in unit.coverage if item.shot_id == shot_id],
-                    phase='video')
-    for row in design.performance.situations:
-        if row.participant_id in participants:
-            for field in ('situation', 'relationship'):
-                add(background, f'situation:{row.id}', field, getattr(row, field),
-                    '当前镜头明确参与对象的情境')
+                    coverage_ids=[item.id for item in unit.coverage if item.shot_id == shot_id], phase='video')
+    anchor_ids = {key for shot_id in shot_ids for state in design.direction.blocking_states
+                  if state.id in shots[shot_id].blocking_state_ids for key in state.anchor_ids}
+    anchor_ids.update(row.anchor_id for row in design.staging.activities if any(
+        row.id in item.staging_activity_ids for item in unit.coverage) and row.anchor_id)
+    for row in fields:
+        if not row.has_content or row.purpose not in {'constraint', 'background'}:
+            continue
+        coverage_ids = field_coverage_ids(row, unit)
+        if not coverage_ids:
+            continue
+        if row.purpose == 'background':
+            if row.kind == 'beat':
+                coverage_ids = [item.id for item in unit.coverage
+                                if item.id in coverage_ids and field_selected(row, item)]
+                if not coverage_ids:
+                    continue
+            if row.kind == 'sound':
+                continue
+            if row.kind == 'situation':
+                situation = design.performance.situations[row.path[-2]]
+                if situation.participant_id not in participants:
+                    continue
+            if row.kind == 'anchor' and row.scope == 'scene' and row.owner[7:] not in anchor_ids:
+                continue
+        add(constraints if row.purpose == 'constraint' else background, row.owner, row.field,
+            row.value, row.reason, coverage_ids=coverage_ids, phase=row.phase, condition=row.condition)
+    consumed_owners = {f'shot:{item.shot_id}' for item in unit.coverage}
+    for item in unit.coverage:
+        for kind, ids in (('beat', item.beat_ids), ('event', item.event_ids),
+                          ('performance', item.performance_action_ids), ('activity', item.staging_activity_ids),
+                          ('continuity', item.continuity_change_ids)):
+            consumed_owners.update(f'{kind}:{identity}' for identity in ids)
+    for issue in design_scope_issues(design, fields):
+        if issue.owner in consumed_owners:
+            unresolved.append(f'{issue.owner}.{issue.field}：{issue.reason}')
     for rule in style_rules:
         constraints.append(UnitScopeUse(owner=f'style:{rule.id}', field='requirement',
             text=rule.requirement, sources=rule.sources, reason='当前场次与视频模型适用的已确认项目风格',
             coverage_item_ids=[item.id for item in unit.coverage],
             phase='sound' if rule.role == 'sound' else 'video',
             condition=rule.exceptions.text or rule.exceptions.reason))
-    return UnitScopeProjection(execution=execution, constraints=constraints,
+    return UnitScopeProjection(version=2, execution=execution, constraints=constraints,
                                background=background, unresolved=unresolved)
 
 

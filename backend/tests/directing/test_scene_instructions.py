@@ -79,6 +79,29 @@ async def test_instruction_preview_is_unit_scoped_and_rechecks_manual_input(tmp_
         preview = await client.post(preview_url, json={'content': content})
         assert preview.status_code == 200, preview.text
         assert preview.json()['data']['text'] == '中景，递出信封并等待对方接取。'
+        # 冻结为旧投影的成功建议仍按当时规则核对，不因升级而失效。
+        from app.core.contracts.directing.scene_version import SceneVersionContent
+        from app.services.directing.instruction_inputs import unit_scope
+        from app.core.contracts.directing.style import StyleRule
+        async with sessions.begin() as db:
+            task = await db.get(Task, task_id)
+            snapshot = deepcopy(task.input_snapshot)
+            typed = SceneVersionContent.model_validate(content)
+            snapshot['run_args']['scope'] = unit_scope(typed.design, typed.units[0],
+                [StyleRule.model_validate(row) for row in snapshot['run_args']['style_rules']],
+                version=1).model_dump(mode='json')
+            task.input_snapshot = snapshot
+        assert (await client.post(preview_url, json={'content': content})).status_code == 200
+        new_scope = deepcopy(content)
+        new_scope['design']['applicability'] = [{'subject': {'kind': 'performance', 'field': 'applicability'},
+            'purpose': 'constraint', 'scope': 'scene_rule', 'phase': 'video'}]
+        assert (await client.post(preview_url, json={'content': new_scope})).status_code == 409
+        async with sessions.begin() as db:
+            task = await db.get(Task, task_id)
+            snapshot = deepcopy(task.input_snapshot)
+            snapshot['run_args']['scope'] = frozen['scope']
+            task.input_snapshot = snapshot
+
         assert (await client.get(detail)).json()['data'] == version
         apply_url = url + '/' + task_id + '/apply'
         applied = await client.post(apply_url, json={'content': content})
