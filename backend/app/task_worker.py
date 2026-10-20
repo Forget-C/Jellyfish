@@ -19,6 +19,7 @@ from openai import APIStatusError, APITimeoutError
 from sqlalchemy import func, or_, select
 
 from app.core.db import async_session_maker, close_db
+from app.core.dev_runtime import process_identity
 from app.core.integrations.media_provider import MediaProvider, ProviderDataError
 from app.core.contracts.task import TaskStatus
 from app.models.llm import Model, ModelCategoryKey, Provider
@@ -406,7 +407,8 @@ async def main() -> None:
     for sig in (signal.SIGINT, signal.SIGTERM):
         asyncio.get_running_loop().add_signal_handler(sig, worker.stopping.set)
     try:
-        await worker.run()
+        with process_identity('worker', worker_id=worker.worker_id):
+            await worker.run()
     finally:
         await close_db()
 

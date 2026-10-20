@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from app.api.v1 import router as api_v1_router
 from app.bootstrap import bootstrap_all_registries
 from app.config import settings
+from app.core.dev_runtime import process_identity
 from app.schemas.common import ApiResponse
 
 
@@ -56,10 +57,9 @@ async def validation_exception_handler(request: Request, exc: Exception) -> JSON
 async def lifespan(app: FastAPI):
     """应用生命周期：启动时初始化，关闭时清理。"""
     # 启动时幂等注册供应商能力；任务由独立 Worker 执行。
-    bootstrap_all_registries()
-    yield
-    # 关闭时：清理资源
-    pass
+    with process_identity('api'):
+        bootstrap_all_registries()
+        yield
 
 
 app = FastAPI(

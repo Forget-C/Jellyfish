@@ -20,6 +20,7 @@ venv/
 .pytest_cache/
 .coverage
 htmlcov/
+backend/.dev-runtime/
 .jellyfish.db
 jellyfish.db
 .env
