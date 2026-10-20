@@ -244,6 +244,8 @@ class TaskWorker:
 
     async def _poll(self, task_id: str) -> None:
         """单次查询失败可延后再查；跟踪截止后最终查询仍未完成则结束本地任务。"""
+        # CancelledError must escape so shutdown can resume polling on restart.
+        # pylint: disable=try-except-raise
         try:
             async with asyncio.timeout(self.limits.execution_seconds):
                 task = await self._load(task_id)
@@ -273,6 +275,7 @@ class TaskWorker:
             raise
         except Exception as error:
             await self._fail(task_id, "result_failed", self._error_message(error))
+        # pylint: enable=try-except-raise
 
     async def _save(self, task: Task, outputs) -> None:
         """独立限制下载并发，逐个保存部分结果，全部完成后原子交付终态。"""
@@ -381,9 +384,7 @@ class TaskWorker:
     @staticmethod
     def _error_message(error: Exception) -> str:
         """保存稳定且不含上游正文、URL 或凭据的错误摘要。"""
-        if isinstance(error, ProviderDataError):
-            return str(error)
-        if isinstance(error, DirectingOutputError):
+        if isinstance(error, (ProviderDataError, DirectingOutputError)):
             return str(error)
         if isinstance(error, APIStatusError):
             if error.code == "AllocationQuota.FreeTierOnly":

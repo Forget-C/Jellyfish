@@ -29,7 +29,7 @@ from app.core.contracts.media import ImageMediaInput, VideoMediaInput
 from app.dependencies import get_db
 from app.models.experiment_sessions import ExperimentSession
 from app.schemas.common import ApiResponse, created_response
-from app.schemas.studio.experiment_sessions import ExperimentMessageRead, ExperimentTaskCreated
+from app.schemas.studio.experiment_sessions import ExperimentTaskCreated
 from app.services.generation.gate import GenerationEntityGate
 from app.services.generation.submission import GenerationSubmitter
 from app.services.studio.experiment_messages import (

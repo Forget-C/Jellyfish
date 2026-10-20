@@ -28,7 +28,7 @@ class StructuredAssetMixin:
         return "\n".join(parts)
 
     @description.expression
-    def description(cls):
+    def description(cls):  # pylint: disable=no-self-argument
         """提供可用于数据库搜索的同源描述表达式，避免维护另一份文本列。"""
         result = literal("")
         for field, label in cls.description_fields:

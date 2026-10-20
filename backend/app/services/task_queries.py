@@ -136,7 +136,8 @@ class TaskQueries:
                 if len(cursor) > 512:
                     raise ValueError("cursor too long")
                 date, task_id, ordinal = json.loads(urlsafe_b64decode(cursor.encode()).decode())
-                if not isinstance(task_id, str) or not 0 < len(task_id) <= 64 or type(ordinal) is not int or ordinal < 0:
+                if (not isinstance(task_id, str) or not 0 < len(task_id) <= 64
+                        or not isinstance(ordinal, int) or isinstance(ordinal, bool) or ordinal < 0):
                     raise ValueError("invalid output cursor")
                 date = _utc_naive(datetime.fromisoformat(date))
             except (ValueError, TypeError, UnicodeError) as error:
