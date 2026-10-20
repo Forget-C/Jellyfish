@@ -33,5 +33,8 @@ jobs:
       - name: Sync dependencies (dev)
         run: uv sync --group dev
 
+      - name: Check test environment
+        run: uv run python -m tests.preflight
+
       - name: Run tests
         run: uv run pytest -q

@@ -194,3 +194,59 @@ def test_explicit_beat_background_does_not_leak_to_another_shot():
     historical = unit_scope(design, unit, version=1)
     assert any(row.owner == 'beat:b1' and row.field == 'objective' for row in historical.background)
     assert historical.version == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind,field,default_phase,explicit_phase', [
+    ('camera', 'composition', 'video', 'video'),
+    ('direction', 'axis', 'video', 'video'),
+    ('sound', 'music_constraints', 'sound', 'postproduction'),
+])
+@pytest.mark.parametrize('purpose', ['design', 'constraint'])
+@pytest.mark.parametrize('scope', ['shots', 'occurrences'])
+async def test_fixed_constraints_keep_phase_and_only_reach_applicable_units(
+        tmp_path, kind, field, default_phase, explicit_phase, purpose, scope):
+    """固定职责、显式用途与两类局部范围组合均保留要求及阶段，不污染范围外单元。"""
+    from tests.directing.samples import complete_shot_scope_sample, note
+
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        path = await sequence_path(client)
+        version = (await client.post(path + '/versions', json={
+            'request_id': str(uuid4()), 'title': '字段消费组合'})).json()['data']
+        content = deepcopy(version['content'])
+        content['design']['direction']['shots'] = [
+            {'id': identity, 'beat_ids': [], 'event_ids': [], 'blocking_state_ids': [],
+             'participant_ids': [], 'criterion_ids': [], 'narrative_function': {}, 'visible_result': {}}
+            for identity in ('shot', 'other')]
+        complete_shot_scope_sample(content, '看见信封')
+        content['units'] = [{'id': identity, 'ratio': '16:9', 'coverage': [
+            {'id': 'coverage-' + identity, 'shot_id': identity, 'action_scope': '信封特写'}]}
+            for identity in ('shot', 'other')]
+        subject = {'kind': kind, 'field': field}
+        owner = {'camera': 'camera:camera-shot', 'direction': 'space', 'sound': 'sound'}[kind]
+        if kind == 'camera':
+            subject['id'] = 'camera-shot'
+            content['design']['cinematography'][0][field] = note('约束文字')
+        else:
+            content['design'][kind][field] = note('约束文字')
+        applicability = {'subject': subject, 'purpose': purpose, 'scope': scope}
+        if purpose == 'constraint':
+            applicability['phase'] = explicit_phase
+        if scope == 'shots':
+            applicability['shot_ids'] = ['shot']
+        else:
+            applicability['occurrences'] = [{'unit_id': 'shot', 'coverage_item_id': 'coverage-shot'}]
+        content['design']['applicability'] = [applicability]
+        for identity in ('shot', 'other'):
+            response = await client.post(path + '/versions/' + version['id']
+                + f'/units/{identity}/instruction-basis', json={'content': content})
+            assert response.status_code == 200, response.text
+            projected = response.json()['data']['current']['scope']
+            uses = [row for row in projected['constraints'] if (row['owner'], row['field']) == (owner, field)]
+            assert len(uses) == (1 if identity == 'shot' else 0)
+            if uses:
+                assert uses[0]['text'] == '约束文字'
+                assert uses[0]['phase'] == (explicit_phase if purpose == 'constraint' else default_phase)
+                assert uses[0]['coverage_item_ids'] == ['coverage-shot']
+            assert not any((row['owner'], row['field']) == (owner, field)
+                           for row in projected['execution'] + projected['background'])

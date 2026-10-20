@@ -86,14 +86,14 @@ description: "场次四画布的动作层级、文本与图标规则、共享组
 
 开发环境访问 `/dev/workbench-ui`：真实组件的默认、选中、危险、禁用、加载、焦点、长文及弹窗状态。此路由仅开发模式提供，不请求业务数据或执行付费任务。
 
-在项目根目录执行（Node.js 20 或更高，安装本机 Chrome）：
+在项目根目录执行（项目 Node 版本见 `front/.node-version`；安装本机 Chrome、后端测试依赖及 ffmpeg/ffprobe）：
 
 ```sh
 pnpm --dir front run typecheck
 PLAYWRIGHT_CHANNEL=chrome pnpm --dir front run test:workbench-ui
 ```
 
-若使用 Playwright 已安装的自带浏览器，可省略 `PLAYWRIGHT_CHANNEL`。脚本先检查组件示例，再执行现有四画布样式回归，输出临时截图目录。
+若使用 Playwright 已安装的自带浏览器，可省略 `PLAYWRIGHT_CHANNEL`。命令先预检依赖、本机监听及浏览器启动能力，再依次执行组件示例、四画布样式和设计完整性回归，输出临时截图目录。设计完整性可用 `pnpm --dir front run test:design-scope` 单独运行。相关 PR 与 merge queue 由 Frontend checks 工作流执行相同检查。
 
 验收清单：
 

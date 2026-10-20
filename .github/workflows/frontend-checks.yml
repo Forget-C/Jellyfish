@@ -1,0 +1,72 @@
+name: Frontend checks
+
+on:
+  pull_request:
+    paths:
+      - "front/**"
+      - "backend/**"
+      - ".github/workflows/frontend-checks.yml"
+  merge_group:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-checks-${{ github.workflow }}-${{ github.event.pull_request.number || github.event.merge_group.head_sha || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: front
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: front/.node-version
+      - name: Enable pnpm
+        run: npm install --global pnpm@9.15.9
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm run typecheck
+
+  workbench-browser:
+    needs: typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: front/.node-version
+      - name: Enable pnpm
+        run: npm install --global pnpm@9.15.9
+      - name: Install frontend dependencies
+        run: pnpm --dir front install --frozen-lockfile
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version-file: backend/.python-version
+      - name: Install backend test dependencies
+        working-directory: backend
+        run: uv sync --group dev
+      - name: Install browser and media tools
+        run: |
+          pnpm --dir front exec playwright install --with-deps chromium
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+      - name: Workbench browser regressions
+        run: pnpm --dir front run test:workbench-ui
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workbench-browser-evidence
+          if-no-files-found: ignore
+          path: |
+            /tmp/jellyfish-workbench-*/*.png
+            /tmp/jellyfish-workbench-*/*.json
+            /tmp/jellyfish-design-scope-*/*.png

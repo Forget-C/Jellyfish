@@ -6,6 +6,22 @@
 node --test front/tests/workspaceUsage.test.mjs front/tests/workspaceNavigation.test.mjs front/tests/workspaceContext.test.mjs front/tests/workspaceGuidance.test.mjs front/tests/workspaceTaskContext.test.mjs front/tests/workspacePreparation.test.mjs front/tests/workspaceProduction.test.mjs front/tests/workspaceCut.test.mjs
 ```
 
+## 工作台与设计范围验收入口
+
+项目内 Node 版本见 `front/.node-version`。先安装前端依赖并在 `backend` 执行 `uv sync --group dev`；浏览器回归还需 ffmpeg/ffprobe，以及 Playwright Chromium 或本机 Chrome。
+
+```bash
+pnpm --dir front run test:preflight
+pnpm --dir front run test:workbench-ui
+pnpm --dir front run test:design-scope
+```
+
+`test:workbench-ui` 先预检，再依次运行组件状态、四画布样式和设计完整性三组回归；`test:design-scope` 可单独验证设计完整性。使用本机 Chrome 时，为命令设置 `PLAYWRIGHT_CHANNEL=chrome`；CI 安装 Playwright Chromium，不设置该变量。脚本使用独立测试数据库，不调用真实模型。
+
+预检不安装软件，检查 Node 20+、Python 测试依赖、本机监听、媒体工具和浏览器启动能力。它与两组真实后端浏览器脚本使用相同的 `UV_CACHE_DIR`，未设置时采用临时缓存目录。出现权限错误时先解决执行环境的缓存／本机监听限制，再运行完整测试。
+
+`.github/workflows/frontend-checks.yml` 在相关 PR 与 merge queue 上运行 typecheck 和上述工作台回归，并上传截图证据。后端契约组合回归包含依据回执版本 × 检查版本，以及固定约束职责 × 显式用途 × 镜头／出现项范围，仍由既有后端 pytest CI 执行。
+
 浏览器回归需要 Node.js 20+、Playwright 及 Chromium；`workspaceUsage.browser.mjs` 与 `workspaceCut.browser.mjs` 还需 ffmpeg。可复用 Codex workspace runtime；如果 Playwright 不在项目模块路径，通过 `NODE_PATH` 指向提供该包的 `node_modules`，并使用该 runtime 的 Node.js。
 
 章节列表与编辑器使用 `node front/tests/chapterListEditor.browser.mjs`（默认 4205 端口），覆盖 105 章分页/搜索、表格滚动恢复、无跨章节汇总、未知数量、名称/精简/原文/对比/AI 优化后保存、影响确认、错误恢复、创建序号、归属校验和四尺寸截图。`node front/tests/chapterSequenceNavigation.browser.mjs`（默认 4201 端口）覆盖单层场次抽屉、默认详情、基本信息保存与手动选区、草稿保护、深链接、阶段往返、迟到响应及窄屏返回列表。两者拦截全部业务接口，不执行真实模型请求。验收记录见[章节列表与场次抽屉计划](../../site/content/docs/plans/chapter-list-and-sequence-drawer-plan.md)。

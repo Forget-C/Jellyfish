@@ -14,7 +14,9 @@
     "openapi:fetch": "curl -sSf http://127.0.0.1:8000/openapi.json -o ./openapi.json",
     "openapi:gen": "pnpm exec -- openapi --input ./openapi.json --output ./src/services/generated --client fetch --useOptions --useUnionTypes",
     "openapi:update": "pnpm run openapi:fetch && pnpm run openapi:gen",
-    "test:workbench-ui": "node tests/workbenchUi.browser.mjs && node tests/sceneWorkbenchStyle.browser.mjs"
+    "test:workbench-ui": "pnpm run test:preflight && node tests/workbenchUi.browser.mjs && node tests/sceneWorkbenchStyle.browser.mjs && node tests/designScopeCompleteness.browser.mjs",
+    "test:preflight": "node tests/preflight.mjs",
+    "test:design-scope": "pnpm run test:preflight && node tests/designScopeCompleteness.browser.mjs"
   },
   "dependencies": {
     "@ant-design/icons": "^5.2.6",
@@ -47,5 +49,8 @@
     "tailwindcss": "^3.3.6",
     "typescript": "^5.2.2",
     "vite": "^5.0.8"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

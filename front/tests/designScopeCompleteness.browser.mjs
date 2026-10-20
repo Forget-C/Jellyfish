@@ -13,7 +13,7 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await mkdtemp(join(tmpdir(), 'jellyfish-design-scope-'))
 const api = 'http://127.0.0.1:8198'
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.directing.scene_version_browser_server'], {
-  cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache',
+  cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: process.env.UV_CACHE_DIR || '/tmp/jellyfish-uv-cache',
     SCENE_BROWSER_TEST_DATABASE: join(output, 'browser.sqlite'), SCENE_BROWSER_TEST_PORT: '8198' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
 let logs = '', server, browser, page

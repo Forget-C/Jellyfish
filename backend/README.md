@@ -192,6 +192,7 @@ uv run pylint app
 
 ```bash
 cd backend
+uv run python -m tests.preflight
 uv run pytest -q
 ```
 
@@ -200,6 +201,8 @@ uv run pytest -q
 ```bash
 uv run pytest backend/tests -q
 ```
+
+预检检查 Python 测试依赖与 `127.0.0.1` 临时监听能力；失败时先解决依赖或执行环境权限，再启动全量测试。浏览器媒体回归在 `backend/` 使用 `uv run python -m tests.preflight --media`，另检查 ffmpeg/ffprobe。预检不安装依赖，不访问应用数据库。
 
 ### 常用定向测试
 
