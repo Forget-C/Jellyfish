@@ -32,6 +32,65 @@ def generation_args(output):
         'previous_design': EditableSceneDesign(sources=[source]).model_dump(mode='json')}
 
 
+@pytest.mark.parametrize('existing,state', [(True, 'unknown'), (True, 'none'), (True, 'proposal'), (False, 'proposal')])
+def test_repair_cannot_delete_existing_open_question(existing, state):
+    """范围解析未包含的待确定问题及其理由也必须保留。"""
+    original = minimal_scoped_design_sample()
+    question = {'id': 'q_keep', 'state': state}
+    if state == 'proposal':
+        question.update(text='必须由用户确认的创作取舍', sources=[{
+            'kind': 'human' if existing else 'model', 'reference': 'test-task', 'version': '1'}])
+    else:
+        question['reason'] = '必须由用户确认的创作取舍'
+    if existing:
+        original['direction']['open_questions'] = [question]
+    first = deepcopy(original)
+    first['direction']['open_questions'] = [question]
+    activity = {name: {} for name in ('depth', 'ongoing_task', 'path', 'attention', 'reaction_delay',
+        'intensity', 'entrances_exits', 'narrative_support', 'end_state')}
+    activity.update(id='pending-activity', participant_id='waiter')
+    first['staging']['activities'] = [activity]
+    second = deepcopy(first)
+    second['direction']['open_questions'] = []
+    responses = iter([first, second])
+    result = generate_directing_result('directing_design', SimpleNamespace(invoke=lambda _: SimpleNamespace(
+        content=json.dumps(next(responses)))), {'scene_version_design': True, 'design_scope_version': 1,
+        'design_candidate_version': 1, 'task_identity': 'test-task', 'previous_design': original})
+    assert result.attempt == 1
+    retained = result.design.direction.open_questions[0]
+    assert (retained.text if state == 'proposal' else retained.reason) == '必须由用户确认的创作取舍'
+    assert any('open_questions' in issue for issue in result.diagnostics.issues)
+
+
+def test_open_question_reordering_preserves_identity():
+    """完整内容按行身份核对，合法重排不触发删除保护。"""
+    original = minimal_scoped_design_sample()
+    original['direction']['open_questions'] = [
+        {'id': 'q1', 'state': 'unknown', 'reason': '先确认动作动机'},
+        {'id': 'q2', 'state': 'none', 'reason': '已明确没有对白问题'}]
+    output = deepcopy(original)
+    output['direction']['open_questions'].reverse()
+    result = generate_directing_result('directing_design', SimpleNamespace(invoke=lambda _: SimpleNamespace(
+        content=json.dumps(output))), {'scene_version_design': True, 'design_scope_version': 1,
+        'design_candidate_version': 1, 'task_identity': 'test-task', 'previous_design': original})
+    assert [question.id for question in result.design.direction.open_questions] == ['q2', 'q1']
+    assert result.issues == []
+
+
+def test_legacy_unidentified_question_cannot_be_hidden_by_numeric_row_id():
+    """历史无 ID 行与合法数字 ID 不能共用保留键，否则会漏掉删除。"""
+    original = minimal_scoped_design_sample()
+    original['direction']['open_questions'] = [
+        {'state': 'unknown', 'reason': '历史问题仍须确认'},
+        {'id': '0', 'state': 'unknown', 'reason': '另一条有身份的问题'}]
+    output = deepcopy(original)
+    output['direction']['open_questions'] = output['direction']['open_questions'][1:]
+    with pytest.raises(DirectingOutputError, match='open_questions'):
+        generate_directing_result('directing_design', SimpleNamespace(invoke=lambda _: SimpleNamespace(
+            content=json.dumps(output))), {'scene_version_design': True, 'design_scope_version': 1,
+            'design_candidate_version': 1, 'task_identity': 'test-task', 'previous_design': original})
+
+
 def test_real_empty_performance_is_retained_as_incomplete_candidate():
     """15:00 的真实全空表演行保留给用户判断，不靠补对白或删行通过。"""
     output = json.loads((Path(__file__).parent / 'fixtures' / 'whole_design_empty_performance.json').read_text())

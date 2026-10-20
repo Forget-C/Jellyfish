@@ -9,7 +9,7 @@ from openai import APIError
 from pydantic import ValidationError
 from sqlalchemy import select
 
-from app.core.contracts.directing.common import Note, Source
+from app.core.contracts.directing.common import Source
 from app.core.contracts.directing.design import SceneDesign
 from app.core.contracts.directing.scene_version import EditableSceneDesign, SceneVersionContent, validate_new_design_row_ids
 from app.core.contracts.directing.scene_design import SceneDesignCandidate, SceneDesignDiagnostics, parse_scene_design_candidate
@@ -25,7 +25,7 @@ from app.models.llm import ModelCategoryKey, Provider
 from app.models.task import Task, TaskOutput
 from app.models.studio import Chapter, Character, Scene, Prop, ProjectSceneLink, ProjectPropLink
 from app.services.directing.workspace import WorkspaceService
-from app.services.directing.scene_design_sources import DesignSourceError, record_chapter_generation_source, validate_model_sources
+from app.services.directing.scene_design_sources import DesignSourceError, design_note_fields, record_chapter_generation_source, validate_model_sources
 from app.services.directing.scene_design_protocol import scene_design_protocol, scene_design_repair_context
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.llm.resolver import get_model_by_category
@@ -100,10 +100,9 @@ def generate_directing_result(kind: str, llm, args: dict):
     candidate = None
     if accept_candidate:
         original = EditableSceneDesign.model_validate(args['previous_design'])
-        original_fields = resolved_design_fields(original)
-        retained_fields = {(row.owner, row.field) for row in original_fields if row.has_content}
-        retained_reasons = {(row.owner, row.field) for row in original_fields
-            if isinstance(row.value, Note) and row.value.reason}
+        original_notes = design_note_fields(original)
+        retained_fields = {path for path, note in original_notes.items() if note.text}
+        retained_reasons = {path for path, note in original_notes.items() if note.reason}
     for attempt in range(2):
         scope_issues = []
         try:
@@ -148,13 +147,17 @@ def generate_directing_result(kind: str, llm, args: dict):
                     SceneVersionContent.model_validate({**args['scene_version_content'], 'design': result.model_dump(mode='json')})
                 if require_complete:
                     fields = resolved_design_fields(result)
-                    present = {(row.owner, row.field) for row in fields if row.has_content}
-                    reasons = {(row.owner, row.field) for row in fields
-                        if isinstance(row.value, Note) and row.value.reason}
+                    if accept_candidate:
+                        notes = design_note_fields(result)
+                        present = {path for path, note in notes.items() if note.text}
+                        reasons = {path for path, note in notes.items() if note.reason}
+                    else:
+                        present = {(row.owner, row.field) for row in fields if row.has_content}
+                        reasons = set()
                     # 原有理由与正文分别保留；none 的理由不能替代已生成正文。
                     removed = (retained_fields - present) | (retained_reasons - (present | reasons))
                     if removed:
-                        raise ValueError('修正不能删除已有有效内容：' + '、'.join(f'{owner}.{name}' for owner, name in sorted(removed)))
+                        raise ValueError('修正不能删除已有有效内容：' + '、'.join('.'.join(path) for path in sorted(removed)))
                     retained_fields.update(present)
                     issues = design_scope_issues(result, fields)
                     scope_issues = issues
