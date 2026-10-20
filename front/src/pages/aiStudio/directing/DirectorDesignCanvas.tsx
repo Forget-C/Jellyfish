@@ -8,7 +8,7 @@ import type { EditableSceneDesign_Output, SceneRelationshipGraph, SceneVersionCo
 import { DirectorCanvasSurface } from './DirectorCanvasSurface'
 import type { DirectorCanvasObject, DirectorCanvasRelation } from './DirectorCanvasSurface'
 import { WorkbenchButton, WorkbenchIconButton } from './ui/WorkbenchButton'
-import { WorkbenchModal } from './ui/WorkbenchModal'
+import { WorkbenchDetails } from './ui/WorkbenchDetails'
 import { DesignObjectSummary } from './DesignObjectSummary'
 import { designLabels } from './designLabels'
 import { SceneDesignPanel, resolveTarget, targetFor } from './SceneDesignPanel'
@@ -27,14 +27,13 @@ type BrowseTrail = { entries: { key: string; index?: number }[]; cursor: number 
 let directorFocusSerial = 0
 
 /** 总览和逐镜子图共用当前场次版本；导航只记录版本内浏览现场。 */
-export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content, saved, relationshipGraph, shotId, onSelectShot, onRestoreShot, onChange, disabled, source, onPrepare, onLocateUnit, externalFocus, onExternalFocusHandled, externalOverlay, noticeHost, navigationHost, nextHost, saveStatus }: {
+export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content, saved, relationshipGraph, shotId, onSelectShot, onRestoreShot, onChange, disabled, source, onPrepare, onLocateUnit, externalFocus, onExternalFocusHandled, noticeHost, navigationHost, nextHost, saveStatus }: {
   projectId: string; sequenceId: string; versionId: string; content: SceneVersionContent_Output; saved: SceneVersionContent_Output
   relationshipGraph: SceneRelationshipGraph
   shotId?: string; onSelectShot: (id: string) => void; onRestoreShot: (id: string) => void; onChange: (value: SceneVersionContent_Output) => void; disabled: boolean
   source: ReactNode; onPrepare: (shotId?: string) => void; onLocateUnit: (conflict: UnitReferenceConflict) => void
   externalFocus?: { nodeId: string; fieldId: string; serial: number }
   onExternalFocusHandled: () => void
-  externalOverlay?: string
   noticeHost: HTMLElement | null
   navigationHost: HTMLElement | null
   nextHost: HTMLElement | null
@@ -361,7 +360,7 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
     {scope === 'all' && !content.design.direction.shots.length && <aside className="director-first-shot" aria-label="首镜头空状态">
       <p>当前还没有镜头</p><WorkbenchButton disabled={disabled} onClick={addShot}>添加首个镜头</WorkbenchButton>
     </aside>}
-    {infoOpen && <aside className="director-info-panel" aria-label="附加信息">
+    <WorkbenchDetails title="附加信息" open={infoOpen} onClose={() => setInfoOpen(false)}>
       <header><h2>{scope === 'all' ? '总览附加信息' : `镜头 ${String(activeShotNumber).padStart(2, '0')} 附加信息`}</h2>
         <WorkbenchIconButton label="隐藏附加信息" variant="quiet" icon={<CloseOutlined />} onClick={() => setInfoOpen(false)} /></header>
       <p>{scope === 'all' ? `镜头 ${content.design.direction.shots.length} · 待归镜头 ${pendingCount} · 未关联设计 ${unlinkedCount}` : `当前子图 ${graph.nodes.length} 张卡片`}</p>
@@ -397,7 +396,7 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
         {currentRelation && <ul>{(currentRelation.sources || [currentRelation]).map((item, index) => <li key={index}>
           {item.fromLabel || item.from} → {item.toLabel || item.to} · {item.label}{item.field ? ` · ${item.field}` : ''}</li>)}</ul>}
       </section>}
-    </aside>}
+    </WorkbenchDetails>
     {noticeHost && scope === 'shot' && graph.nodes.length <= 1 && createPortal(<aside className="director-domain-empty" aria-label="镜头设计空状态"><p>当前镜头暂无明确关联的设计</p></aside>, noticeHost)}
     <SceneDesignPanel value={content.design} saved={saved.design} units={content.units} disabled={disabled} relationshipGraph={relationshipGraph}
       onChange={changeDesign} onNavigateTarget={(next, trigger) => {
@@ -408,12 +407,12 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
         if (node) jump(node, source ? identity(source) : undefined)
         else { setUnavailable(true); trigger.focus({ preventScroll: true }) }
       }} onLocateUnit={onLocateUnit} focusRequest={focusRequest} onFocusHandled={() => setFocusRequest(undefined)}
-      onSideClose={() => setEditingTarget(undefined)} sideContext={`${versionId}:${editorContext}:${externalOverlay || ''}`} saveStatus={saveStatus} />
-    <WorkbenchModal title={<span className="director-modal-title">项目资产关联<small role="status">{saveStatus}</small></span>}
-      open={!!assetTarget} footer={null} maskClosable={false} onCancel={() => setAssetTarget(undefined)}>
+      onSideClose={() => setEditingTarget(undefined)} sideContext={`${versionId}:${editorContext}`} saveStatus={saveStatus} />
+    <WorkbenchDetails title="项目资产关联" status={saveStatus}
+      open={!!assetTarget} onClose={() => setAssetTarget(undefined)}>
       {assetTarget && <SceneAssetLinks projectId={projectId} value={content.design} disabled={disabled} onChange={changeDesign}
         shotId={assetTarget === 'create' && scope === 'shot' ? activeShotId : undefined}
         createOnly={assetTarget === 'create'} assetKind={assetTarget === 'location' ? 'scene' : undefined} participantId={assetTarget.startsWith('participant:') ? assetTarget.slice(12) : undefined} />}
-    </WorkbenchModal>
+    </WorkbenchDetails>
   </>
 }

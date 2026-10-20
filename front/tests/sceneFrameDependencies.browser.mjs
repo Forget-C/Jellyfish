@@ -1,3 +1,7 @@
+import { makeWorkspace } from './directing-fixtures.mjs'
+import { locateCanvasNode } from './workbenchControls.mjs'
+import { workbenchControl } from './workbenchControls.mjs'
+import { unitSettings } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -54,15 +58,16 @@ try {
   assert.equal(library[0].prompt.text, '旧生产计划的固定拍摄指令')
   const content = structuredClone(version.content)
   content.design.direction.shots = [{ id: 'framing-shot', beat_ids: [], event_ids: [], blocking_state_ids: [], participant_ids: [], criterion_ids: [], narrative_function: {}, visible_result: { state: 'proposal', text: '构图测试', sources: [{ kind: 'human', reference: 'author', version: '1' }] } }]
+  content.design.cinematography = content.design.direction.shots.map((shot, index) => ({ ...makeWorkspace().designs[0].content.cinematography[0], id: `camera-${index}`, shot_id: shot.id, criterion_ids: [] }))
   content.timeline.items = ['first', 'second'].map((id, index) => ({ kind: 'media', id, take_kind: library[0].take_kind, take_id: library[0].take_id, file_id: library[0].file_id, fit: 'contain', media_range: { source_in_ms: 0, source_out_ms: 1000 }, timeline_start_ms: index * 5000 }))
   content.units = ['affected', 'independent'].map(id => ({ id, ratio: '16:9', model_id: 'browser-video-model', duration_ms: 5000, instruction: '后段保持人物位置。', coverage: [{ id: 'coverage', shot_id: 'framing-shot', action_scope: '后段保持人物位置' }] }))
   const saved = await fetch(`${versionsUrl}/${version.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: version.revision, content }) })
   assert.equal(saved.status, 200, await saved.text())
   await page.goto(`http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
-  await page.getByRole('switch', { name: '自动保存', exact: true }).click()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
+  await (await workbenchControl(page, '保存设置', 'switch', '自动保存')).click()
   await page.getByRole('button', { name: '编辑画布', exact: true }).click()
-  await page.getByRole('button', { name: '时间线', exact: true }).click()
+  await locateCanvasNode(page, '时间线')
   const detailUrl = `${versionsUrl}/${version.id}`
   const read = async () => (await (await fetch(detailUrl)).json()).data
   await page.getByRole('button', { name: '提取片段 1 实际落幅', exact: true }).click()
@@ -72,14 +77,15 @@ try {
   await page.getByRole('combobox', { name: '单元所属镜头', exact: true }).press('Enter')
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('ArrowDown')
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('Enter')
+  await unitSettings(page)
   await page.getByRole('button', { name: '编辑前段依赖', exact: true }).click()
-  const dialog = page.getByRole('dialog', { name: '前段依赖', exact: true })
+  const dialog = page.getByRole('complementary', { name: '前段依赖', exact: true })
   await dialog.getByRole('button', { name: '依赖当前版本片段 1', exact: true }).click({ timeout: 5000 })
   await dialog.getByRole('button', { name: '依赖 1 绑定落幅 1', exact: true }).click()
   await dialog.getByText('依赖 1：实际落幅适用', { exact: true }).waitFor()
-  await dialog.getByRole('button', { name: '完成依赖编辑', exact: true }).click()
+  await dialog.getByRole('button', { name: '返回单元设置', exact: true }).click()
   await page.getByRole('button', { name: '保存', exact: true }).click()
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   let current = await read()
   const bound = current.content.units[0]
   assert.equal(bound.scene_dependencies.length, 1)
@@ -125,6 +131,7 @@ try {
   await page.getByRole('combobox', { name: '单元所属镜头', exact: true }).press('Enter')
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('ArrowDown')
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('Enter')
+  await unitSettings(page)
   await page.getByRole('button', { name: '编辑前段依赖', exact: true }).click()
   await dialog.getByText('依赖 1：实际落幅依据已变，请重新提取并明确换绑', { exact: true }).waitFor()
   assert.equal((await read()).content.units[0].references[0].file_id, bound.references[0].file_id)
@@ -136,7 +143,7 @@ try {
   await dialog.getByRole('button', { name: '依赖 1 绑定落幅 1', exact: true }).click()
   await dialog.getByRole('button', { name: '前往当前单元指令核对', exact: true }).click()
   await page.getByRole('button', { name: '保存', exact: true }).click()
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   current = await read()
   assert.notEqual(current.content.units[0].references[0].file_id, bound.references[0].file_id)
   const basis = await fetch(detailUrl + '/units/affected/instruction-basis', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: current.content }) })
@@ -156,6 +163,7 @@ try {
   assert.equal((await prepare('affected')).status, 200)
   assert.equal((await prepare('independent')).status, 200)
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
+  await unitSettings(page)
   await page.getByRole('button', { name: '编辑前段依赖', exact: true }).click()
   await page.route('**/end-frames', route => route.request().method() === 'GET' ? route.abort('failed') : route.continue())
   await dialog.getByRole('button', { name: '刷新场次落幅', exact: true }).click()

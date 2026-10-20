@@ -1,3 +1,5 @@
+import { directorObject } from './workbenchControls.mjs'
+import { makeWorkspace } from './directing-fixtures.mjs'
 import { workbenchControl } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -46,10 +48,11 @@ try {
   const version = (await create.json()).data
   const note = text => ({ state: 'proposal', text, sources: [{ kind: 'human', reference: 'coverage-browser', version: '1' }] })
   const content = version.content
-  content.design.direction.beats = ['beat-one', 'beat-two'].map((id, index) => ({ id, event_ids: [], objective: note(`目标 ${index + 1}`), obstacle: {}, expected_change: {}, must_show: {} }))
+  content.design.direction.beats = ['beat-one', 'beat-two'].map((id, index) => ({ id, event_ids: [], objective: note(`目标 ${index + 1}`), obstacle: {}, expected_change: {}, must_show: note(`可拍变化 ${index + 1}`) }))
   content.design.events = [{ id: 'event-one', description: note('拆开信封') }]
   content.design.participants = [{ id: 'reader', name: '读信者' }]
   content.design.direction.shots = [{ id: 'shot-one', beat_ids: ['beat-one', 'beat-two'], event_ids: ['event-one'], blocking_state_ids: [], participant_ids: ['reader'], criterion_ids: [], narrative_function: {}, visible_result: note('读信反应') }]
+  content.design.cinematography = content.design.direction.shots.map((shot, index) => ({ ...makeWorkspace().designs[0].content.cinematography[0], id: `camera-${index}`, shot_id: shot.id, criterion_ids: [] }))
   content.units = [{ id: 'unit-one', model_id: 'browser-video-model', duration_ms: 5000, ratio: '16:9', coverage: [
     { id: 'coverage-one', shot_id: 'shot-one', beat_ids: ['beat-one'], event_ids: [], action_scope: '拆开信封' },
     { id: 'coverage-two', shot_id: 'shot-one', beat_ids: [], event_ids: [], action_scope: '' },
@@ -101,33 +104,40 @@ try {
   assert.equal(createdB.status, 200)
   const versionB = (await createdB.json()).data
   await page.goto(`http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${versionB.id}`)
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   await (await workbenchControl(page, '保存设置', 'switch', '自动保存')).click()
   await page.getByRole('button', { name: '保存设置', exact: true }).click()
-  await page.getByRole('button', { name: '编辑叙事视点', exact: true }).click()
-  await page.getByRole('textbox', { name: '叙事视点', exact: true }).fill('B 尚未保存的观察视点')
+  await directorObject(page, '全场叙事与约束')
+  await page.getByRole('textbox', { name: '观察视点', exact: true }).fill('B 尚未保存的观察视点')
   await page.getByRole('button', { name: '任务中心', exact: true }).click()
   await page.getByRole('button', { name: /历\s*史/ }).click()
   await page.getByRole('row').filter({ hasText: '生成当前单元指令建议' }).getByRole('button', { name: /查\s*看/ }).click()
-  const history = page.getByRole('dialog', { name: '任务固定记录 · 只读', exact: true })
+  const history = page.getByRole('complementary', { name: '任务固定记录 · 只读', exact: true }).or(page.getByRole('dialog', { name: '任务固定记录 · 只读', exact: true }))
   await history.waitFor({ timeout: 5000 })
+  await page.waitForFunction(() => !document.querySelector('.wb-details:not([hidden])')?.inert)
   assert.equal(new URL(page.url()).searchParams.get('version'), versionB.id)
   await history.getByText('建议正文：固定中景，手指拆开信封，人物抬眼看向门口。', { exact: true }).waitFor()
   assert.ok((await history.textContent()).includes(version.id))
   assert.ok((await history.textContent()).includes('unit-one'))
   assert.equal(await history.getByRole('button', { name: '应用指令建议', exact: true }).count(), 0)
   await page.setViewportSize({ width: 390, height: 844 })
-  await history.getByText('查看本次固定输入', { exact: true }).click()
-  const returnButton = await history.getByRole('button', { name: '返回当前工作', exact: true }).boundingBox()
+  await page.getByRole('dialog', { name: '任务固定记录 · 只读', exact: true }).waitFor()
+  const fixedInput = history.getByText('查看本次固定输入', { exact: true })
+  await page.waitForFunction(() => !document.querySelector('.wb-details:not([hidden])')?.inert)
+  await fixedInput.focus()
+  await page.keyboard.press('Enter')
+  await page.keyboard.press('Tab')
+  assert.equal(await history.evaluate(node => node.contains(document.activeElement)), true, '原生折叠与后续控件保留在窄屏焦点范围')
+  const returnButton = await history.getByRole('button', { name: '关闭详情', exact: true }).boundingBox()
   assert.ok(returnButton && returnButton.y >= 0 && returnButton.y + returnButton.height <= 844)
-  assert.ok(await history.locator('.ant-modal-body').evaluate(node => node.scrollHeight > node.clientHeight))
+  assert.ok(await history.locator('.wb-details-body').evaluate(node => node.scrollHeight > node.clientHeight))
   await page.setViewportSize({ width: 1440, height: 960 })
 
   const historyUrl = `**/versions/${version.id}/units/unit-one/instruction-suggestions`
   await page.route(historyUrl, route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ detail: '原记录暂时不可读' }) }))
   await history.getByRole('button', { name: '重新读取任务与检查', exact: true }).click()
   await history.getByText('总览记录读取失败', { exact: true }).waitFor()
-  assert.equal(await history.getByText('建议正文：固定中景，手指拆开信封，人物抬眼看向门口。', { exact: true }).count(), 0)
+  assert.equal(await history.getByText('建议正文：固定中景，手指拆开信封，人物抬眼看向门口。', { exact: true }).count(), 1)
   await page.unroute(historyUrl)
   await history.getByRole('button', { name: '重新读取任务与检查', exact: true }).click()
   await history.getByText('建议正文：固定中景，手指拆开信封，人物抬眼看向门口。', { exact: true }).waitFor()
@@ -143,7 +153,7 @@ try {
   })
   await history.getByRole('button', { name: '打开所属版本继续编辑', exact: true }).click()
   await originStarted
-  await history.getByRole('button', { name: '返回当前工作', exact: true }).click()
+  await history.getByRole('button', { name: '关闭详情', exact: true }).click()
   const lateResponse = page.waitForResponse(response => response.url().endsWith(`/versions/${version.id}`))
   releaseOrigin()
   await (await lateResponse).finished()
@@ -157,8 +167,9 @@ try {
   await history.getByRole('button', { name: '打开所属版本继续编辑', exact: true }).click()
   await page.getByRole('button', { name: '取消，继续编辑', exact: true }).click()
   assert.equal(new URL(page.url()).searchParams.get('version'), versionB.id)
-  await history.getByRole('button', { name: '返回当前工作', exact: true }).click()
-  assert.equal(await page.getByRole('textbox', { name: '叙事视点', exact: true }).inputValue(), 'B 尚未保存的观察视点')
+  await history.getByRole('button', { name: '关闭详情', exact: true }).click()
+  await directorObject(page, '全场叙事与约束')
+  assert.equal(await page.getByRole('textbox', { name: '观察视点', exact: true }).inputValue(), 'B 尚未保存的观察视点')
   assert.deepEqual((await (await fetch(`${versionsUrl}/${versionB.id}`)).json()).data, versionB)
   assert.deepEqual((await (await fetch(`${versionsUrl}/${version.id}`)).json()).data, original)
   for (const [title, fixedText, id] of [['AI 提取设计 · 整场', '当时要求：历史设计要求', designTask], ['检查当前单元指令', '当时指令：检查时的固定正文', checkTask], ['视频生成', '当时指令：检查时的固定正文', videoTask]]) {
@@ -169,8 +180,9 @@ try {
     assert.ok((await history.textContent()).includes(id))
     if (id === checkTask) assert.equal(await history.getByText('检查夹具：动作表达一致', { exact: true }).count(), 6)
     assert.equal(new URL(page.url()).searchParams.get('version'), versionB.id)
-    await history.getByRole('button', { name: '返回当前工作', exact: true }).click()
-    assert.equal(await page.getByRole('textbox', { name: '叙事视点', exact: true }).inputValue(), 'B 尚未保存的观察视点')
+    await history.getByRole('button', { name: '关闭详情', exact: true }).click()
+    await directorObject(page, '全场叙事与约束')
+  assert.equal(await page.getByRole('textbox', { name: '观察视点', exact: true }).inputValue(), 'B 尚未保存的观察视点')
   }
 
   await page.getByRole('button', { name: '任务中心', exact: true }).click()
@@ -198,7 +210,7 @@ try {
   await history.getByRole('button', { name: '打开所属版本继续编辑', exact: true }).click()
   await page.getByRole('button', { name: '放弃修改并切换', exact: true }).click()
   await page.waitForURL(url => url.searchParams.get('version') === version.id)
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   assert.equal(new URL(page.url()).searchParams.has('sceneTask'), false)
   assert.deepEqual((await (await fetch(`${versionsUrl}/${versionB.id}`)).json()).data, versionB)
   console.log(`PASS instruction task history opens original fixed record without switching or saving current work; evidence: ${output}`)

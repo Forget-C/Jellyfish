@@ -1,3 +1,6 @@
+import { makeWorkspace } from './directing-fixtures.mjs'
+import { workbenchControl } from './workbenchControls.mjs'
+import { workbenchShot } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -45,10 +48,11 @@ try {
   const version = (await create.json()).data
   const note = text => ({ state: 'proposal', text, sources: [{ kind: 'human', reference: 'coverage-browser', version: '1' }] })
   const content = version.content
-  content.design.direction.beats = ['beat-one', 'beat-two'].map((id, index) => ({ id, event_ids: [], objective: note(`目标 ${index + 1}`), obstacle: {}, expected_change: {}, must_show: {} }))
+  content.design.direction.beats = ['beat-one', 'beat-two'].map((id, index) => ({ id, event_ids: [], objective: note(`目标 ${index + 1}`), obstacle: {}, expected_change: {}, must_show: note(`可拍变化 ${index + 1}`) }))
   content.design.events = [{ id: 'event-one', description: note('拆开信封') }]
   content.design.participants = [{ id: 'reader', name: '读信者' }]
   content.design.direction.shots = [{ id: 'shot-one', beat_ids: ['beat-one', 'beat-two'], event_ids: ['event-one'], blocking_state_ids: [], participant_ids: ['reader'], criterion_ids: [], narrative_function: {}, visible_result: note('读信反应') }]
+  content.design.cinematography = content.design.direction.shots.map((shot, index) => ({ ...makeWorkspace().designs[0].content.cinematography[0], id: `camera-${index}`, shot_id: shot.id, criterion_ids: [] }))
   content.units = [{ id: 'unit-one', model_id: 'browser-video-model', duration_ms: 5000, ratio: '16:9', coverage: [
     { id: 'coverage-one', shot_id: 'shot-one', beat_ids: ['beat-one'], event_ids: [], action_scope: '拆开信封' },
 
@@ -57,17 +61,17 @@ try {
   const saved = await fetch(`${versionsUrl}/${version.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: version.revision, content }) })
   assert.equal(saved.status, 200, await saved.text())
   await page.goto(`http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
-  await page.getByRole('button', { name: '镜头 1：读信反应', exact: true }).click()
+  await (await workbenchShot(page, '镜头 1：读信反应')).click()
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('ArrowDown')
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('Enter')
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
   const body = page.getByRole('textbox', { name: '当前单元指令正文', exact: true })
   await body.fill('历史场次的原指令。')
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   await page.getByRole('button', { name: '确认已按当前依据核对正文', exact: true }).click()
   await page.getByText('指令依据一致，尚不代表检查通过', { exact: true }).waitFor()
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   await page.getByRole('button', { name: '检查当前指令', exact: true }).click({ timeout: 5000 })
   await page.getByText('检查任务：等待执行', { exact: true }).waitFor()
   const checksUrl = `${versionsUrl}/${version.id}/units/unit-one/instruction-checks`
@@ -77,17 +81,18 @@ try {
   await page.getByRole('button', { name: '查看检查结果', exact: true }).click()
   await page.getByText('六岗检查均通过，尚待明确核对结果', { exact: true }).waitFor()
   assert.equal(await page.getByText('检查夹具：动作表达一致', { exact: true }).count(), 6)
-  await page.getByRole('switch', { name: '自动保存', exact: true }).click()
+  await (await workbenchControl(page, '保存设置', 'switch', '自动保存')).click()
   await page.getByRole('button', { name: '确认已核对检查结果', exact: true }).click()
   await page.getByText('当前指令检查结果已确认', { exact: true }).waitFor()
-  await page.getByRole('status').filter({ hasText: '未保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '未保存' }).first().waitFor()
   await page.getByRole('button', { name: '保存并生成视频', exact: true }).click()
   await page.getByText('视频任务：等待执行', { exact: true }).waitFor()
   const videoUrl = `${versionsUrl}/${version.id}/units/unit-one/video`
   const original = (await (await fetch(videoUrl)).json()).data[0]
   await page.getByRole('button', { name: '取消本次视频任务', exact: true }).click()
   await page.getByText('视频任务：已取消', { exact: true }).waitFor()
-  await page.getByRole('button', { name: '批量拍摄', exact: true }).click({ timeout: 5000 })
+  await page.reload()
+  await (await workbenchControl(page, '更多操作', 'button', '批量拍摄')).click({ timeout: 5000 })
   const dialog = page.getByRole('dialog', { name: '批量预检与拍摄', exact: true })
   await dialog.getByRole('checkbox', { name: '选择单元 1', exact: true }).check()
   await dialog.getByRole('checkbox', { name: '选择单元 2', exact: true }).check()
@@ -123,7 +128,9 @@ try {
   assert.equal(generated.find(row => row.task_id !== original.task_id).preparation.request.execution_prompt, '历史场次的原指令。')
   assert.equal((await (await fetch(videoUrl.replace('unit-one', 'unit-two'))).json()).data.length, 0)
   assert.equal(await dialog.getByRole('button', { name: '提交可执行 0 项', exact: true }).isDisabled(), true)
-  const batchTask = dialog.getByRole('region', { name: `批量视频任务 ${generated.find(row => row.task_id !== original.task_id).task_id}`, exact: true })
+  await dialog.getByRole('button', { name: '查看已提交拍摄记录', exact: true }).click()
+  const recordsPanel = page.getByRole('complementary', { name: '批量拍摄记录', exact: true })
+  const batchTask = recordsPanel.getByRole('region', { name: `批量视频任务 ${generated.find(row => row.task_id !== original.task_id).task_id}`, exact: true })
   await batchTask.getByText('任务状态：等待执行', { exact: true }).waitFor({ timeout: 5000 })
   await batchTask.getByRole('button', { name: '取消此项任务', exact: true }).click()
   await batchTask.getByText('任务状态：已取消', { exact: true }).waitFor()
@@ -131,11 +138,12 @@ try {
   assert.equal(await batchTask.getByRole('button', { name: '取消此项任务', exact: true }).count(), 0)
   await page.route('**/units/unit-one/video', route => route.abort('failed'))
   await page.reload()
-  await page.getByRole('button', { name: '批量拍摄', exact: true }).click()
+  await (await workbenchControl(page, '更多操作', 'button', '批量拍摄')).click()
   await dialog.getByText('单元 1 任务记录读取失败', { exact: true }).waitFor()
   assert.equal((await (await fetch(videoUrl)).json()).data.length, 2)
   await page.unroute('**/units/unit-one/video')
   await dialog.getByRole('button', { name: '重读批量任务', exact: true }).click()
+  await dialog.getByRole('button', { name: '查看已提交拍摄记录', exact: true }).click()
   await batchTask.getByText('任务状态：已取消', { exact: true }).waitFor({ timeout: 5000 })
   assert.equal((await (await fetch(videoUrl)).json()).data.length, 2)
   console.log(`PASS batch preflight partial submission; evidence: ${output}`)

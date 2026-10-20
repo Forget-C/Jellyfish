@@ -1,3 +1,5 @@
+import { WorkbenchDetails, useWorkbenchDetailsAvailable } from './ui/WorkbenchDetails'
+import { WorkbenchReadingContext } from './ui/WorkbenchReadingContext'
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Alert, Button, Image, Modal, Spin, Typography } from 'antd'
@@ -28,8 +30,8 @@ function useSource(source: Source) {
   const key = sourceKey(source), resolve = context?.resolve
   useEffect(() => {
     let active = true
-    setResult(undefined)
-    if (resolve) void resolve(source).then(row => { if (active) setResult({ key, row }) }, error => { if (active) setResult({ key, error: directingError(error) }) })
+    setResult(previous => previous?.key === key ? { ...previous, error: undefined } : undefined)
+    if (resolve) void resolve(source).then(row => { if (active) setResult({ key, row }) }, error => { if (active) setResult(previous => ({ key, row: previous?.key === key ? previous.row : undefined, error: directingError(error) })) })
     else setResult({ key, row: { source, status: source.kind === 'human' ? 'ready' : 'unavailable', label: labels[source.kind], description: source.kind === 'human' ? (source.reference === 'local-user' ? '由本机用户填写。' : '人工记录；未记录可核实的填写者和时间。') : '请进入此来源所属的场次工作区查看历史记录。原始来源身份仍可在技术详情中核对。' } })
     return () => { active = false }
   }, [key, resolve, attempt])
@@ -62,6 +64,8 @@ export function SourceLinks({ sources }: { sources: Source[] }) {
 }
 
 function SourceCard({ source }: { source: Source }) {
+  const withinReader = useContext(WorkbenchReadingContext)
+  const workbench = useWorkbenchDetailsAvailable()
   const context = useContext(SourceContext)
   const { row, error, retry } = useSource(source)
   const [task, setTask] = useState<DirectingTaskRead>()
@@ -82,13 +86,13 @@ function SourceCard({ source }: { source: Source }) {
   const range = source.media_range
   const media = useRef<HTMLMediaElement | null>(null)
   return <div className="source-card">
-    {error ? <Alert type="error" message="来源读取失败" description={error} action={<Button aria-label="重试" onClick={retry}>重试</Button>} /> : !row ? <Spin size="small" /> : <>
+    {error && <Alert type="error" message="来源读取失败" description={error} action={<Button aria-label="重试" onClick={retry}>重试</Button>} />}{!row ? !error && <Spin size="small" /> : <>
       <h3>{row.label}</h3><p>{row.description}</p>
       {row.model_name && <p>生成时模型：{row.model_name}</p>}
       {row.created_at && <p>生成记录时间：{row.created_at.replace('T', ' ')}</p>}
       {row.chapter_name && <p>章节：{row.chapter_name}</p>}
       {row.context_text && <details><summary>{source.kind === 'model' ? '查看生成时原文上下文' : '查看当时原文摘录'}</summary><blockquote>{row.context_text}</blockquote></details>}
-      {row.file_id && <><p>{row.file_name}{range && ` · ${(range.source_in_ms / 1000).toFixed(3)}–${(range.source_out_ms / 1000).toFixed(3)} 秒`}</p>{row.media_kind === 'image' ? <Image key={mediaAttempt} onError={() => setMediaError(true)} src={buildFileDownloadUrl(row.file_id)} alt={row.file_name || '来源图片'} /> : ['audio', 'video'].includes(row.media_kind || '') ? <>
+      {row.file_id && <><p>{row.file_name}{range && ` · ${(range.source_in_ms / 1000).toFixed(3)}–${(range.source_out_ms / 1000).toFixed(3)} 秒`}</p>{row.media_kind === 'image' ? <Image preview={!withinReader} key={mediaAttempt} onError={() => setMediaError(true)} src={buildFileDownloadUrl(row.file_id)} alt={row.file_name || '来源图片'} /> : ['audio', 'video'].includes(row.media_kind || '') ? <>
         {row.media_kind === 'video' ? <video key={mediaAttempt} onError={() => setMediaError(true)} ref={node => { media.current = node }} controls preload="metadata" src={buildFileDownloadUrl(row.file_id)} onLoadedMetadata={() => { if (media.current && range) media.current.currentTime = range.source_in_ms / 1000 }} onTimeUpdate={() => { if (media.current && range && media.current.currentTime >= range.source_out_ms / 1000) media.current.pause() }} /> : <audio key={mediaAttempt} onError={() => setMediaError(true)} ref={node => { media.current = node }} controls preload="metadata" src={buildFileDownloadUrl(row.file_id)} onLoadedMetadata={() => { if (media.current && range) media.current.currentTime = range.source_in_ms / 1000 }} onTimeUpdate={() => { if (media.current && range && media.current.currentTime >= range.source_out_ms / 1000) media.current.pause() }} />}
         {range && <Button onClick={() => { if (media.current) { media.current.currentTime = range.source_in_ms / 1000; void media.current.play().catch(() => {}) } }}>播放记录区间</Button>}
       </> : <a href={buildFileDownloadUrl(row.file_id)} target="_blank" rel="noreferrer">查看来源文件</a>}</>}
@@ -97,7 +101,7 @@ function SourceCard({ source }: { source: Source }) {
       {taskError && <Alert type="error" message={taskError} />}
       {task && <section aria-label="来源生成记录"><p>状态：{({ queued: '排队中', running: '运行中', succeeded: '已完成', failed: '失败', cancelled: '已取消' } as Record<string, string>)[task.status] || task.status}</p>{task.error && <p>{task.error}</p>}<p>此记录仅供追溯，当前编辑内容保持不变。</p></section>}
       {row.revision_id && <Button onClick={() => setHistory(value => !value)}>{history ? '收起历史版本' : '查看只读历史'}</Button>}
-      {history && <Modal open title="来源版本 · 只读" width={1200} footer={null} onCancel={() => setHistory(false)}>{context?.revision(row)}</Modal>}
+      {history && (withinReader ? <section aria-label="来源版本 · 只读"><Button onClick={() => setHistory(false)}>返回来源</Button>{context?.revision(row)}</section> : workbench ? <WorkbenchDetails open title="来源版本 · 只读" status="只读" onClose={() => setHistory(false)}>{context?.revision(row)}</WorkbenchDetails> : <Modal open title="来源版本 · 只读" width={1200} footer={null} onCancel={() => setHistory(false)}>{context?.revision(row)}</Modal>)}
     </>}
     <details className="source-technical"><summary>技术详情</summary><p>来源类型：{source.kind}</p><p>来源标识：<Typography.Text copyable>{source.reference}</Typography.Text></p><p>版本：<Typography.Text copyable>{source.version}</Typography.Text></p>{source.file_id && <p>文件标识：<Typography.Text copyable>{source.file_id}</Typography.Text></p>}</details>
   </div>

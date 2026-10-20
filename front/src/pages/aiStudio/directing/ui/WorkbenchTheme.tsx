@@ -20,6 +20,7 @@ export function WorkbenchTheme({ children }: { children: ReactNode }) {
     colorPrimaryBg: workbenchTokens.secondary, colorBorder: workbenchTokens.border,
     colorText: workbenchTokens.text, colorTextSecondary: workbenchTokens.muted, controlOutlineWidth: 1, borderRadius: 8,
   }, components: {
+    Button: { colorPrimary: workbenchTokens.primary, colorPrimaryHover: workbenchTokens.hover, colorPrimaryActive: workbenchTokens.selected },
     Segmented: { itemSelectedBg: workbenchTokens.selected, itemSelectedColor: workbenchTokens.text, itemHoverBg: workbenchTokens.secondary },
     Select: { optionSelectedBg: workbenchTokens.selected },
   } }} getPopupContainer={trigger => trigger?.closest<HTMLElement>('.canvas-workbench-dialog, .canvas-workbench, .workbench-ui') || document.body}>

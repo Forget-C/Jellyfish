@@ -1,5 +1,6 @@
+import { WorkbenchModal as Modal } from './ui/WorkbenchModal'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Alert, Button, InputNumber, Modal, Select, Space } from 'antd'
+import { Alert, Button, InputNumber, Select, Space } from 'antd'
 import type { SceneTakeLibraryRead, SceneTimeline_Output, SceneVersionContent_Output } from '../../../services/generated'
 import { SceneTimelinePreview } from './SceneTimelinePreview'
 import { invalidTakeRange } from './sceneTakeIssues'

@@ -1,3 +1,6 @@
+import { makeWorkspace } from './directing-fixtures.mjs'
+import { workbenchControl, workbenchShot, closeWorkbenchDetails } from './workbenchControls.mjs'
+import { unitSettings } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -45,7 +48,7 @@ try {
   const version = (await create.json()).data
   const note = text => ({ state: 'proposal', text, sources: [{ kind: 'human', reference: 'coverage-browser', version: '1' }] })
   const content = version.content
-  content.design.direction.beats = ['beat-one', 'beat-two'].map((id, index) => ({ id, event_ids: [], objective: note(`目标 ${index + 1}`), obstacle: {}, expected_change: {}, must_show: {} }))
+  content.design.direction.beats = ['beat-one', 'beat-two'].map((id, index) => ({ id, event_ids: [], objective: note(`目标 ${index + 1}`), obstacle: {}, expected_change: {}, must_show: note(`可拍变化 ${index + 1}`) }))
   content.design.events = [{ id: 'event-one', description: note('拆开信封') }]
   content.design.participants = [{ id: 'reader', name: '读信者' }]
   content.design.direction.shots = [{ id: 'shot-one', beat_ids: ['beat-one', 'beat-two'], event_ids: ['event-one'], blocking_state_ids: [], participant_ids: ['reader'], criterion_ids: [], narrative_function: {}, visible_result: note('读信反应') }]
@@ -65,10 +68,11 @@ try {
   assert.equal((await fetch(`${stylesUrl}/${fixedStyle.id}/confirm`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expected_version: fixedStyle.version }) })).status, 200)
   content.design.style_revision_id = fixedStyle.id
   content.design.direction.viewpoint = note('当次设计：从收信者观察')
+  content.design.cinematography = content.design.direction.shots.map((shot, index) => ({ ...structuredClone(makeWorkspace().designs[0].content.cinematography[0]), id: `camera-${index}`, shot_id: shot.id, criterion_ids: [] }))
   const saved = await fetch(`${versionsUrl}/${version.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: version.revision, content }) })
   assert.equal(saved.status, 200, await saved.text())
   await page.goto(`http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
-  await page.getByRole('button', { name: '镜头 1：读信反应', exact: true }).click()
+  await (await workbenchShot(page, '镜头 1：读信反应')).click()
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('ArrowDown')
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('Enter')
@@ -83,12 +87,13 @@ try {
   await page.getByText('查看本次固定输入', { exact: true }).click()
   await page.getByText('指令生成模型：test-design-model', { exact: true }).waitFor({ timeout: 5000 })
   await page.getByText('视频模型：test-video-model', { exact: true }).waitFor()
+  assert.equal(await page.locator('.wb-details:visible').count(), 0, '原生折叠阅读不激活所属卡片详情')
   await page.getByText('当次适用风格', { exact: true }).click()
-  await page.getByText('当次风格：镜头保持稳定', { exact: true }).waitFor()
+  await page.getByText('当次风格：镜头保持稳定', { exact: true }).last().waitFor()
   await page.screenshot({ path: join(output, 'instruction-fixed-inputs.png'), animations: 'disabled' })
   await page.getByText('当次六岗设计', { exact: true }).click()
-  assert.equal(await page.getByRole('textbox', { name: '观察视点', exact: true }).inputValue(), '当次设计：从收信者观察')
-  assert.equal(await page.getByRole('textbox', { name: '观察视点', exact: true }).isDisabled(), true)
+  assert.equal(await page.getByRole('textbox', { name: '观察视点', exact: true }).first().inputValue(), '当次设计：从收信者观察')
+  assert.equal(await page.getByRole('textbox', { name: '观察视点', exact: true }).first().isDisabled(), true)
   await page.getByText('当次六岗设计', { exact: true }).click()
   await page.getByText('查看本次固定输入', { exact: true }).click()
   await page.route('**/instruction-suggestions', async route => {
@@ -112,10 +117,10 @@ try {
   await page.getByText('本单元正文或生成依据已变化，请核对差异后重新生成建议', { exact: false }).waitFor()
   assert.equal(await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).inputValue(), '新人工正文不得被覆盖')
   await page.getByRole('button', { name: '撤销', exact: true }).click()
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   await page.getByRole('button', { name: '应用指令建议', exact: true }).click()
   await page.waitForFunction(() => document.querySelector('[aria-label="当前单元指令正文"]')?.value === '固定中景，手指拆开信封，人物抬眼看向门口。')
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   assert.equal(await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).inputValue(), '固定中景，手指拆开信封，人物抬眼看向门口。')
   const applied = (await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.content.units
   assert.equal(applied[0].instruction, '固定中景，手指拆开信封，人物抬眼看向门口。')
@@ -126,10 +131,10 @@ try {
   await page.getByText('指令依据一致，尚不代表检查通过', { exact: true }).waitFor()
   await page.getByRole('button', { name: '撤销', exact: true }).click()
   assert.equal(await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).inputValue(), '')
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   assert.equal((await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.content.units[0].instruction_basis_id, null)
   await page.screenshot({ path: join(output, 'instruction-suggestion.png'), animations: 'disabled' })
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   await page.getByRole('button', { name: '生成当前单元指令建议', exact: true }).click()
   await page.getByRole('button', { name: '取消本次指令任务', exact: true }).click()
   await page.getByText('指令任务：已取消', { exact: true }).waitFor()
@@ -194,7 +199,7 @@ try {
   await page.getByText('指令提交未核实，保留原请求：', { exact: false }).waitFor()
   await page.unroute('**/instruction-suggestions')
   await page.reload()
-  await page.getByRole('button', { name: '镜头 1：读信反应', exact: true }).click()
+  await (await workbenchShot(page, '镜头 1：读信反应')).click()
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('ArrowDown')
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('Enter')
@@ -226,7 +231,7 @@ try {
   await page.getByRole('button', { name: '取消本次指令任务', exact: true }).click()
   await page.getByText('指令任务：已取消', { exact: true }).waitFor()
   await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).fill('🙂开头旧文结尾')
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   await page.getByRole('combobox', { name: '指令修订范围', exact: true }).click()
   await page.getByText('限定选中文字', { exact: true }).click()
   const rangeText = page.getByRole('textbox', { name: '选择允许修订的正文', exact: true })
@@ -257,7 +262,7 @@ try {
   await page.waitForFunction(() => document.querySelector('[aria-label="当前单元指令正文"]')?.value === '🙂开头新的动作结尾')
   await page.getByRole('button', { name: '撤销', exact: true }).click()
   assert.equal(await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).inputValue(), '🙂开头旧文结尾')
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   await page.getByRole('button', { name: '生成当前单元指令建议', exact: true }).click()
   await page.getByText('指令任务：等待执行', { exact: true }).waitFor()
   const outsideTask = (await (await fetch(tasksUrl)).json()).data.find(row => row.status === 'queued')
@@ -277,10 +282,12 @@ try {
   await page.getByText('指令任务：等待执行', { exact: true }).waitFor()
   const secondUnitTasksUrl = tasksUrl.replace('/unit-one/', '/unit-two/')
   const editingTask = (await (await fetch(secondUnitTasksUrl)).json()).data[0]
+  await unitSettings(page)
   await page.getByRole('textbox', { name: '单元动作范围', exact: true }).fill('等待期间继续修改动作')
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   assert.equal((await fetch(`${api}/browser-test/instruction-tasks/${editingTask.task_id}/complete`, { method: 'POST' })).status, 200)
   await page.getByText('指令任务：已完成', { exact: true }).waitFor()
+  await unitSettings(page)
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '等待期间继续修改动作')
   assert.equal(await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).count(), 0)
   await page.getByRole('button', { name: '查看指令建议', exact: true }).click()
@@ -295,8 +302,10 @@ try {
   assert.equal((await fetch(`${api}/browser-test/instruction-tasks/${backgroundTask.task_id}/complete?${new URLSearchParams({ text: '第二单元后台结果，不覆盖第一单元。' })}`, { method: 'POST' })).status, 200)
   const backgroundNotice = page.getByRole('region', { name: '单元 2 指令任务通知', exact: true })
   await backgroundNotice.getByText('指令任务已完成', { exact: true }).waitFor({ timeout: 6000 })
+  await unitSettings(page)
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '拆开信封')
   assert.equal(await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).count(), 0)
+  await closeWorkbenchDetails(page)
   await backgroundNotice.getByRole('button', { name: '定位指令结果', exact: true }).click()
   await page.getByText('第二单元后台结果，不覆盖第一单元。', { exact: true }).waitFor()
   assert.equal(await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).inputValue(), '')
@@ -318,7 +327,7 @@ try {
   await page.getByRole('button', { name: '生成当前单元指令建议', exact: true }).click()
   await page.getByText('指令任务：等待执行', { exact: true }).waitFor()
   const removedTask = (await (await fetch(secondUnitTasksUrl)).json()).data.find(row => row.status === 'queued')
-  await page.getByRole('button', { name: '新建场次版本', exact: true }).click()
+  await (await workbenchControl(page, '版本管理', 'button', '新建场次版本')).click()
   await page.waitForURL(url => url.searchParams.get('version') !== version.id)
   const remainingUrl = page.url()
   const originalVersion = (await (await fetch(`${versionsUrl}/${version.id}`)).json()).data

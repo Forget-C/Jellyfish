@@ -1,3 +1,4 @@
+import { WorkbenchDetails, WorkbenchDetailsProvider } from './ui/WorkbenchDetails'
 import { WorkbenchTheme } from './ui/WorkbenchTheme'
 import { WorkbenchButton, WorkbenchIconButton } from './ui/WorkbenchButton'
 import { WorkbenchDialogActions, WorkbenchModal } from './ui/WorkbenchModal'
@@ -835,7 +836,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
     return () => window.clearTimeout(timer)
   }, [autoSave, dirty, draft, busy, deliveryBusy, exportBusy, copyLocked, copyError, failure, readonly, transition, leaving, recovery, handingOff])
 
-  return <SourceProvider projectId={projectId} sequenceId={sequenceId} renderRevision={source => <SceneSourceRevision key={`${source.revision_id}:${source.source.version}`} projectId={projectId} sequenceId={sequenceId} source={source} />}><WorkbenchTheme><section ref={node => { if (node) node.inert = copyLocked }} className="canvas-workbench" data-canvas={canvas} aria-label="场次画布工作台" onBlurCapture={event => {
+  return <WorkbenchDetailsProvider><SourceProvider projectId={projectId} sequenceId={sequenceId} renderRevision={source => <SceneSourceRevision key={`${source.revision_id}:${source.source.version}`} projectId={projectId} sequenceId={sequenceId} source={source} />}><WorkbenchTheme><section ref={node => { if (node) node.inert = copyLocked }} className="canvas-workbench" data-canvas={canvas} aria-label="场次画布工作台" onBlurCapture={event => {
     if (event.target instanceof HTMLTextAreaElement) {
       const element = event.target
       lastEditing.current = { element, start: element.selectionStart, end: element.selectionEnd, scrollTop: element.scrollTop }
@@ -930,20 +931,21 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       disabled={readonly || handingOff || !!recovery || busy === 'create' || leaving} open={currentEditor === 'ai'}
       onOpenChange={open => open ? openEditor('ai') : setEditor(undefined)} onChange={editContent}
       onLocateUnit={locateUnitReference} />}
-    {historyTaskId && <Modal rootClassName="canvas-workbench-dialog" title="任务固定记录 · 只读" open={!transition} width={900} styles={{ body: { maxHeight: '60vh', overflowY: 'auto' } }} onCancel={closeTaskHistory} footer={<Space><Button onClick={closeTaskHistory}>返回当前工作</Button><Button loading={historyNavigating} disabled={readonly || !!busy || !!recovery || handingOff || leaving} onClick={() => void openTaskOrigin()}>打开所属版本继续编辑</Button></Space>}>
+    {historyTaskId && <WorkbenchDetails title="任务固定记录 · 只读" status="只读" open={!transition} onClose={closeTaskHistory}>
+      <Space><Button onClick={closeTaskHistory}>返回当前工作</Button><Button loading={historyNavigating} disabled={readonly || !!busy || !!recovery || handingOff || leaving} onClick={() => void openTaskOrigin()}>打开所属版本继续编辑</Button></Space>
       {historyNavigationError && <Alert type="warning" message={historyNavigationError} />}
       {historyVersionId && historyTaskKind === 'design' ? <OverviewDesignHistory key={`${historyVersionId}:${historyTaskId}`} projectId={projectId} sequenceId={sequenceId} versionId={historyVersionId} focusTaskId={historyTaskId} /> :
         historyVersionId && historyUnitId && (historyTaskKind === 'instructions' || historyTaskKind === 'checks' || historyTaskKind === 'videos') ? <OverviewUnitHistory key={`${historyVersionId}:${historyUnitId}:${historyTaskId}`} projectId={projectId} sequenceId={sequenceId} versionId={historyVersionId} unitId={historyUnitId} focusTaskId={historyTaskId} taskKind={historyTaskKind} /> :
           <Alert type="warning" message="任务原始归属不完整，无法核实固定记录。" />}
-    </Modal>}
+    </WorkbenchDetails>}
     {exportHistory && <SceneExportPanel key={`history-export:${exportHistory.id}`} projectId={projectId} sequenceId={sequenceId} versionId={exportHistory.id}
       content={exportHistory.content} dirty={false} historical={sequence?.is_current === false} historyOnly
       currentClipIds={[]} onLocate={() => {}} onSave={async () => undefined} onClose={closeExportHistory}
       focusTaskId={params.get('exportTask') || undefined} onBusy={setHistoryExportBusy}
       disabled={(readonly && sequence?.is_current !== false) || !!busy || deliveryBusy || currentExportBusy || handingOff || !!recovery || leaving || !!pendingSave.current || loadState !== 'ready'} />}
-    {loadState === 'ready' && params.get('exportTask') && exportVersionId !== selectedId && !exportHistory && <Modal rootClassName="canvas-workbench-dialog" title="整场导出记录" open onCancel={closeExportHistory} footer={<Button onClick={closeExportHistory}>返回画布</Button>}>
+    {loadState === 'ready' && params.get('exportTask') && exportVersionId !== selectedId && !exportHistory && <WorkbenchDetails title="整场导出记录" status="只读" open onClose={closeExportHistory}>
       <Alert type="warning" message="导出所属版本不可用，未切换或替换当前编辑。" />
-    </Modal>}
+    </WorkbenchDetails>}
     <div className="scene-video-request-list">
       {directVideos.storageError && <Alert type="warning" message={directVideos.storageError} />}
       {directVideos.pending.map(row => <Alert key={row.request.request_id} type={row.error ? 'warning' : 'info'}
@@ -1015,7 +1017,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       taskId={instructionSelection?.versionId === selected.id && instructionSelection.unitId === unitSelections[selected.id] ? instructionSelection.taskId : undefined}
       shotId={currentShotId} unitId={unitSelections[selected.id]} disabled={readonly || handingOff || !!recovery || busy === 'create' || leaving}
       onSelectUnit={selectUnit} onChange={editContent} />}
-    {loadState === 'ready' && canvas === 'units' && selected && content && <SceneUnitCanvas primaryHost={primaryHost} key={selected.id} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} revision={selected.revision} content={content} focusRequest={unitFocus}
+    {loadState === 'ready' && canvas === 'units' && selected && content && <SceneUnitCanvas saveStatus={readonly ? '只读' : status} primaryHost={primaryHost} key={selected.id} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} revision={selected.revision} content={content} focusRequest={unitFocus}
       onOpenEdit={clipId => { setMediaFocus(undefined); setEditClipFocus({ versionId: selected.id, clipId }); setEditor(undefined); setCanvas('edit') }}
       onInstructionTask={trackInstruction}
       onOpenInstruction={taskId => { setInstructionSelection({ versionId: selected.id, unitId: unitSelections[selected.id], taskId }); setCanvas('instructions') }}
@@ -1031,9 +1033,8 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       onLocateUnit={locateUnitReference}
       externalFocus={directorFocus?.versionId === selected.id ? directorFocus : undefined}
       onExternalFocusHandled={() => setDirectorFocus(undefined)}
-      externalOverlay={currentEditor || currentNavigation}
       noticeHost={feedbackHost}
-      navigationHost={directorNavigationHost} nextHost={designNextHost} saveStatus={status}
+      navigationHost={directorNavigationHost} nextHost={designNextHost} saveStatus={readonly ? '只读' : status}
       source={<SceneSourceBasis key={selected.id} projectId={projectId} chapterId={chapterId} basis={content.basis} compact dirty={JSON.stringify(content.basis) !== JSON.stringify(selected.content.basis)}
         open={currentEditor === 'source'} onOpenChange={open => open ? openEditor('source') : setEditor(undefined)}
         disabled={handingOff || !!recovery || readonly || busy === 'create'} onChange={basis => editContent({ ...content, basis })} />} />}
@@ -1089,7 +1090,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       {copyBusy && <Spin />}<p>正在保护点击时的完整编辑，核实完成前请勿离开。不会为另存额外保存原版本，也不会重新执行生成任务。</p>
       {copyError && <Alert type="warning" message={copyError} />}
     </Modal>
-  </WorkbenchTheme></SourceProvider>
+  </WorkbenchTheme></SourceProvider></WorkbenchDetailsProvider>
 }
 
 /** 路由上下文改变时隔离在途响应；版本之间仍共用同一工作台。 */

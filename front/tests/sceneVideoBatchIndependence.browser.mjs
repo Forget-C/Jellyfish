@@ -1,3 +1,6 @@
+import { makeWorkspace } from './directing-fixtures.mjs'
+import { workbenchControl, directorObject, closeWorkbenchDetails } from './workbenchControls.mjs'
+import { workbenchShot } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -45,10 +48,11 @@ try {
   const version = (await create.json()).data
   const note = text => ({ state: 'proposal', text, sources: [{ kind: 'human', reference: 'coverage-browser', version: '1' }] })
   const content = version.content
-  content.design.direction.beats = ['beat-one', 'beat-two'].map((id, index) => ({ id, event_ids: [], objective: note(`目标 ${index + 1}`), obstacle: {}, expected_change: {}, must_show: {} }))
+  content.design.direction.beats = ['beat-one', 'beat-two'].map((id, index) => ({ id, event_ids: [], objective: note(`目标 ${index + 1}`), obstacle: {}, expected_change: {}, must_show: note(`可拍变化 ${index + 1}`) }))
   content.design.events = [{ id: 'event-one', description: note('拆开信封') }]
   content.design.participants = [{ id: 'reader', name: '读信者' }]
   content.design.direction.shots = [{ id: 'shot-one', beat_ids: ['beat-one', 'beat-two'], event_ids: ['event-one'], blocking_state_ids: [], participant_ids: ['reader'], criterion_ids: [], narrative_function: {}, visible_result: note('读信反应') }]
+  content.design.cinematography = content.design.direction.shots.map((shot, index) => ({ ...makeWorkspace().designs[0].content.cinematography[0], id: `camera-${index}`, shot_id: shot.id, criterion_ids: [] }))
   content.units = [{ id: 'unit-one', model_id: 'browser-video-model', duration_ms: 5000, ratio: '16:9', coverage: [
     { id: 'coverage-one', shot_id: 'shot-one', beat_ids: ['beat-one'], event_ids: [], action_scope: '拆开信封' },
 
@@ -75,18 +79,18 @@ try {
   const prepared = await fetch(`${versionsUrl}/${version.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: 2, content }) })
   assert.equal(prepared.status, 200, await prepared.text())
   await page.goto(`http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
-  await page.getByRole('switch', { name: '自动保存', exact: true }).click()
-  await page.getByRole('button', { name: '批量拍摄', exact: true }).click()
+  await (await workbenchControl(page, '保存设置', 'switch', '自动保存')).click()
+  await (await workbenchControl(page, '更多操作', 'button', '批量拍摄')).click()
   const dialog = page.getByRole('dialog', { name: '批量预检与拍摄', exact: true })
   for (const number of [1, 2, 3]) await dialog.getByRole('checkbox', { name: `选择单元 ${number}`, exact: true }).check()
   await dialog.getByRole('button', { name: '预检所选 3 项', exact: true }).click()
   await dialog.getByText('可提交 3 项 · 受阻 0 项', { exact: true }).waitFor()
   await dialog.getByRole('button', { name: 'Close', exact: true }).click()
-  await page.getByRole('button', { name: '镜头 2：无关镜头', exact: true }).click()
-  await page.getByRole('button', { name: '编辑当前镜头', exact: true }).click()
+  await (await workbenchShot(page, '镜头 2：无关镜头')).click()
+  await directorObject(page, /^镜头 02/, '镜头 02')
   await page.route('**/instruction-checks/*/compare', route => route.abort('failed'))
-  await page.getByRole('textbox', { name: '镜头可见结果', exact: true }).fill('无关镜头的新结果')
-  await page.getByRole('button', { name: '批量拍摄', exact: true }).click()
+  await page.getByRole('textbox', { name: '可见结果', exact: true }).fill('无关镜头的新结果')
+  await (await workbenchControl(page, '更多操作', 'button', '批量拍摄')).click()
   await dialog.getByText('预检适用性读取失败', { exact: true }).first().waitFor()
   assert.equal(await dialog.getByRole('button', { name: '提交可执行 0 项', exact: true }).isDisabled(), true)
   for (const id of ['unit-one', 'unit-two', 'unit-three']) {
@@ -113,7 +117,7 @@ try {
   await body.fill('B 的临时修改')
   await received
   await body.fill('单元 2 的原指令。')
-  await page.getByRole('button', { name: '批量拍摄', exact: true }).click()
+  await (await workbenchControl(page, '更多操作', 'button', '批量拍摄')).click()
   await dialog.getByText('可提交 3 项 · 受阻 0 项', { exact: true }).waitFor()
   releaseOld()
   await delay(200)
@@ -122,17 +126,24 @@ try {
   await dialog.getByText('可提交 3 项 · 受阻 0 项', { exact: true }).waitFor()
   await dialog.getByRole('button', { name: '定位单元 2', exact: true }).click()
   await body.fill('B 后来修改的指令，不得提交旧输入。')
-  await page.getByRole('button', { name: '批量拍摄', exact: true }).click()
+  await (await workbenchControl(page, '更多操作', 'button', '批量拍摄')).click()
   await dialog.getByText('可提交 2 项 · 受阻 1 项', { exact: true }).waitFor()
   await dialog.getByRole('region', { name: '批量单元 2', exact: true }).getByText('输入已变化，请保存并重新预检', { exact: true }).waitFor()
+  const firstSubmissions = Promise.all(['unit-one', 'unit-three'].map(id => page.waitForResponse(response => response.url().endsWith(`/units/${id}/video`) && response.request().method() === 'POST' && response.status() === 200)))
   await dialog.getByRole('button', { name: '提交可执行 2 项', exact: true }).click()
-  for (const number of [1, 3]) await dialog.getByRole('region', { name: `批量单元 ${number}`, exact: true }).getByText('任务状态：等待执行', { exact: true }).waitFor()
+  await firstSubmissions
   const records = async id => (await (await fetch(`${versionsUrl}/${version.id}/units/${id}/video`)).json()).data
+  await dialog.getByRole('button', { name: '查看已提交拍摄记录', exact: true }).click()
+  const recordsPanel = page.getByRole('complementary', { name: '批量拍摄记录', exact: true })
+  await recordsPanel.getByText('任务状态：等待执行', { exact: true }).first().waitFor()
+  for (const id of ['unit-one', 'unit-three']) await recordsPanel.getByRole('region', { name: `批量视频任务 ${(await records(id))[0].task_id}`, exact: true }).getByText('任务状态：等待执行', { exact: true }).waitFor()
   assert.equal((await records('unit-one')).length, 1)
   assert.equal((await records('unit-three')).length, 1)
   assert.equal((await records('unit-two')).length, 0)
   assert.equal((await records('unit-one'))[0].preparation.request.execution_prompt, '单元 1 的原指令。')
   assert.equal((await records('unit-three'))[0].preparation.request.execution_prompt, '单元 3 的原指令。')
+  await closeWorkbenchDetails(page)
+  await (await workbenchControl(page, '更多操作', 'button', '批量拍摄')).click()
   await dialog.getByRole('button', { name: '定位单元 2', exact: true }).click()
   assert.equal(await body.inputValue(), 'B 后来修改的指令，不得提交旧输入。')
   await page.getByRole('button', { name: '检查当前指令', exact: true }).click()
@@ -145,12 +156,17 @@ try {
   await page.getByText('六岗检查均通过，尚待明确核对结果', { exact: true }).waitFor()
   await page.getByRole('button', { name: '确认已核对检查结果', exact: true }).click()
   await page.getByRole('button', { name: '保存', exact: true }).click()
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
-  await page.getByRole('button', { name: '批量拍摄', exact: true }).click()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
+  await page.reload()
+  await (await workbenchControl(page, '更多操作', 'button', '批量拍摄')).click()
+  for (const number of [1, 2, 3]) await dialog.getByRole('checkbox', { name: `选择单元 ${number}`, exact: true }).check()
   await dialog.getByRole('button', { name: '预检所选 3 项', exact: true }).click()
   await dialog.getByText('可提交 1 项 · 受阻 2 项', { exact: true }).waitFor()
+  const secondSubmission = page.waitForResponse(response => response.url().endsWith('/units/unit-two/video') && response.request().method() === 'POST' && response.status() === 200)
   await dialog.getByRole('button', { name: '提交可执行 1 项', exact: true }).click()
-  await dialog.getByRole('region', { name: '批量单元 2', exact: true }).getByText('任务状态：等待执行', { exact: true }).waitFor()
+  await secondSubmission
+  await dialog.getByRole('button', { name: '查看已提交拍摄记录', exact: true }).click()
+  await recordsPanel.getByRole('region', { name: `批量视频任务 ${(await records('unit-two'))[0].task_id}`, exact: true }).getByText('任务状态：等待执行', { exact: true }).waitFor()
   assert.equal((await records('unit-two'))[0].preparation.request.execution_prompt, 'B 后来修改的指令，不得提交旧输入。')
   for (const id of ['unit-one', 'unit-two', 'unit-three']) assert.equal((await records(id)).length, 1)
   const beforeCompletion = (await (await fetch(`${versionsUrl}/${version.id}`)).json()).data
@@ -158,12 +174,12 @@ try {
   const taskC = (await records('unit-three'))[0].task_id
   assert.equal((await fetch(`${api}/browser-test/video-tasks/${taskA}/complete`, { method: 'POST' })).status, 200)
   assert.equal((await fetch(`${api}/browser-test/video-tasks/${taskC}/complete?outcome=failed`, { method: 'POST' })).status, 200)
-  const itemA = dialog.getByRole('region', { name: '批量单元 1', exact: true })
-  const itemC = dialog.getByRole('region', { name: '批量单元 3', exact: true })
+  const itemA = recordsPanel.getByRole('region', { name: `批量视频任务 ${taskA}`, exact: true })
+  const itemC = recordsPanel.getByRole('region', { name: `批量视频任务 ${taskC}`, exact: true })
   await itemA.getByText('已登记 1 份候选，尚未自动采用', { exact: true }).waitFor()
   await itemC.getByText('任务状态：失败', { exact: true }).waitFor()
   await itemC.getByText('视频供应商返回失败', { exact: true }).waitFor()
-  await dialog.getByRole('region', { name: '批量单元 2', exact: true }).getByText('任务状态：等待执行', { exact: true }).waitFor()
+  await recordsPanel.getByRole('region', { name: `批量视频任务 ${(await records('unit-two'))[0].task_id}`, exact: true }).getByText('任务状态：等待执行', { exact: true }).waitFor()
   for (const id of ['unit-one', 'unit-two', 'unit-three']) assert.equal((await records(id)).length, 1)
   assert.deepEqual((await (await fetch(`${versionsUrl}/${version.id}`)).json()).data, beforeCompletion)
   console.log(`PASS independent A/B/C preflight and submission; evidence: ${output}`)

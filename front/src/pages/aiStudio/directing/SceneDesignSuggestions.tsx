@@ -1,3 +1,6 @@
+import { WorkbenchDetails } from './ui/WorkbenchDetails'
+import { WorkbenchIconButton } from './ui/WorkbenchButton'
+import { OverviewDesignHistory } from './SceneWorkbenchOverview'
 import { WorkbenchButton as Button } from './ui/WorkbenchButton'
 import { WorkbenchModal as Modal, WorkbenchDialogActions } from './ui/WorkbenchModal'
 import { CanvasTextPreview } from './CanvasTextPreview'
@@ -78,6 +81,7 @@ export function SceneDesignSuggestions({ triggerHost, projectId, sequenceId, ver
   onLocateUnit: (conflict: UnitReferenceConflict) => void
 }) {
   const [messageApi, messageContext] = message.useMessage()
+  const [recordsOpen, setRecordsOpen] = useState(false)
   const [rows, setRows] = useState<SceneDesignSuggestionRead[]>()
   const [reading, setReading] = useState(true)
   const [readError, setReadError] = useState('')
@@ -185,16 +189,20 @@ export function SceneDesignSuggestions({ triggerHost, projectId, sequenceId, ver
     return row.issues?.length ? `待完善 · ${state}` : state
   }
   const triggerLabel = 'AI 设计'
-  const trigger = <Button size="large" className="scene-design-launch" aria-label={triggerLabel} title={running ? '查看当前执行进度' : '整场设计建议'} aria-haspopup="dialog" onClick={() => onOpenChange(true)}>
+  const trigger = <><Button size="large" className="scene-design-launch" aria-label={triggerLabel} title={running ? '查看当前执行进度' : '整场设计建议'} aria-haspopup="dialog" onClick={() => onOpenChange(true)}>
     <svg className="scene-design-launch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
       <path d="m4 20 11-11 3 3L7 23z" transform="translate(0 -2)" />
       <path d="m12 10 3 3M6 3v4M4 5h4M19 2v6M16 5h6M20 16v4M18 18h4" />
     </svg>
     <span>{triggerLabel}</span>
-  </Button>
+  </Button><WorkbenchIconButton label="AI 设计记录" icon={<HistoryOutlined />} onClick={() => { onOpenChange(false); setRecordsOpen(true) }} /></>
   return <>
     {messageContext}
     {triggerHost === undefined ? trigger : triggerHost && createPortal(trigger, triggerHost)}
+    <WorkbenchDetails open={recordsOpen} title="AI 设计记录" status="只读" initialExpanded onClose={() => setRecordsOpen(false)}>
+      {recordsOpen && <OverviewDesignHistory projectId={projectId} sequenceId={sequenceId} versionId={version.id} />}
+      <Button onClick={() => { setRecordsOpen(false); onOpenChange(true) }}>准备或审阅设计建议</Button>
+    </WorkbenchDetails>
     <Modal rootClassName="scene-ai-design-dialog" title="AI 设计" open={open} focusTriggerAfterClose={!locatingUnit}
       onCancel={() => onOpenChange(false)} footer={<WorkbenchDialogActions className="scene-ai-footer" secondary={<Button variant="quiet" onClick={() => onOpenChange(false)}>{selected?.design ? '暂不应用' : generating ? '稍后查看' : '取消'}</Button>}>
         {pending.current ? <Button variant="primary" disabled={busy || disabled} loading={busy} onClick={() => void submit()}>核实原设计请求</Button>

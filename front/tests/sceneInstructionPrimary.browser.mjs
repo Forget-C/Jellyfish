@@ -1,3 +1,6 @@
+import { makeWorkspace } from './directing-fixtures.mjs'
+import { workbenchControl, workbenchShot } from './workbenchControls.mjs'
+import { unitSettings } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -44,8 +47,9 @@ try {
   assert.equal(create.status, 200)
   const version = (await create.json()).data
   const content = version.content
-  content.design.direction.shots = [{ id: 'shot', beat_ids: [], event_ids: [], blocking_state_ids: [], criterion_ids: [], narrative_function: {}, visible_result: { state: 'proposal', text: '准备指令', sources: [{ kind: 'human', reference: 'fixture', version: '1' }] } }]
+  content.design.direction.shots = [{ id: 'shot', beat_ids: [], event_ids: [], blocking_state_ids: [], participant_ids: [], criterion_ids: [], narrative_function: {}, visible_result: { state: 'proposal', text: '准备指令', sources: [{ kind: 'human', reference: 'fixture', version: '1' }] } }]
   content.units = [{ id: 'unit', model_id: 'browser-video-model', duration_ms: 5000, ratio: '16:9', coverage: [{ id: 'coverage', shot_id: 'shot', action_scope: '拆开信封' }] }]
+  content.design.cinematography = content.design.direction.shots.map((shot, index) => ({ ...structuredClone(makeWorkspace().designs[0].content.cinematography[0]), id: `camera-${index}`, shot_id: shot.id, criterion_ids: [] }))
   const savedResponse = await fetch(`${versionsUrl}/${version.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: 1, content }) })
   assert.equal(savedResponse.status, 200, await savedResponse.clone().text())
   const saved = (await savedResponse.json()).data
@@ -55,8 +59,8 @@ try {
   const task = (await submitted.json()).data
   assert.equal((await fetch(`${api}/browser-test/instruction-tasks/${task.task_id}/complete`, { method: 'POST' })).status, 200)
   await page.goto(`http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
-  await page.getByRole('switch', { name: '自动保存', exact: true }).click()
-  await page.getByRole('button', { name: '镜头 1：准备指令', exact: true }).click()
+  await (await workbenchControl(page, '保存设置', 'switch', '自动保存')).click()
+  await (await workbenchShot(page, '镜头 1：准备指令')).click()
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
   const primary = page.getByRole('region', { name: '当前单元指令操作', exact: true })
   await primary.getByRole('button', { name: '查看指令建议', exact: true }).waitFor({ timeout: 5000 })
@@ -80,14 +84,15 @@ try {
 
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
   await primary.getByRole('button', { name: '查看指令任务', exact: true }).waitFor()
-  await page.getByRole('button', { name: '单元设置', exact: true }).click()
+  await unitSettings(page)
   await page.getByRole('spinbutton', { name: '单元预计时长', exact: true }).fill('')
   await primary.getByRole('button', { name: '查看指令任务', exact: true }).waitFor({ timeout: 5000 })
   assert.equal(await page.getByRole('button', { name: '补齐当前单元准备', exact: true }).count(), 0)
   assert.equal((await fetch(`${api}/browser-test/instruction-tasks/${nextTask.task_id}/complete`, { method: 'POST' })).status, 200)
   await page.getByRole('button', { name: '补齐当前单元准备', exact: true }).waitFor({ timeout: 6000 })
   assert.equal((await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.content.units[0].duration_ms, 5000)
-  await page.getByRole('spinbutton', { name: '单元预计时长', exact: true }).fill('5000')
+  await unitSettings(page)
+  await page.getByRole('spinbutton', { name: '单元预计时长', exact: true }).fill('5')
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
   await instructionPrimary.getByRole('button', { name: '查看指令建议', exact: true }).click({ timeout: 5000 })
   assert.equal(await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).inputValue(), '任务期间的人工正文')

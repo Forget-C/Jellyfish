@@ -1,3 +1,6 @@
+import { makeWorkspace } from './directing-fixtures.mjs'
+import { workbenchControl, workbenchShot, closeWorkbenchDetails } from './workbenchControls.mjs'
+import { unitSettings } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -45,7 +48,7 @@ try {
   const version = (await create.json()).data
   const note = text => ({ state: 'proposal', text, sources: [{ kind: 'human', reference: 'coverage-browser', version: '1' }] })
   const content = version.content
-  content.design.direction.beats = ['beat-one', 'beat-two'].map((id, index) => ({ id, event_ids: [], objective: note(`目标 ${index + 1}`), obstacle: {}, expected_change: {}, must_show: {} }))
+  content.design.direction.beats = ['beat-one', 'beat-two'].map((id, index) => ({ id, event_ids: [], objective: note(`目标 ${index + 1}`), obstacle: {}, expected_change: {}, must_show: note(`可拍变化 ${index + 1}`) }))
   content.design.events = [{ id: 'event-one', description: note('拆开信封') }]
   content.design.participants = [{ id: 'reader', name: '读信者' }]
   content.design.direction.shots = [{ id: 'shot-one', beat_ids: ['beat-one', 'beat-two'], event_ids: ['event-one'], blocking_state_ids: [], participant_ids: ['reader'], criterion_ids: [], narrative_function: {}, visible_result: note('读信反应') }]
@@ -54,20 +57,21 @@ try {
 
   ] }]
   content.units.push({ ...structuredClone(content.units[0]), id: 'unit-two' })
+  content.design.cinematography = content.design.direction.shots.map((shot, index) => ({ ...structuredClone(makeWorkspace().designs[0].content.cinematography[0]), id: `camera-${index}`, shot_id: shot.id, criterion_ids: [] }))
   const saved = await fetch(`${versionsUrl}/${version.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: version.revision, content }) })
   assert.equal(saved.status, 200, await saved.text())
   await page.goto(`http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
-  await page.getByRole('button', { name: '镜头 1：读信反应', exact: true }).click()
+  await (await workbenchShot(page, '镜头 1：读信反应')).click()
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('ArrowDown')
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('Enter')
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
   const body = page.getByRole('textbox', { name: '当前单元指令正文', exact: true })
   await body.fill('长'.repeat(5001))
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   await page.getByRole('button', { name: '确认已按当前依据核对正文', exact: true }).click()
   await page.getByText('指令依据一致，尚不代表检查通过', { exact: true }).waitFor()
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   await page.getByRole('button', { name: '检查当前指令', exact: true }).click({ timeout: 5000 })
   await page.getByText('检查任务：等待执行', { exact: true }).waitFor()
   const checksUrl = `${versionsUrl}/${version.id}/units/unit-one/instruction-checks`
@@ -77,10 +81,10 @@ try {
   await page.getByRole('button', { name: '查看检查结果', exact: true }).click()
   await page.getByText('六岗检查均通过，尚待明确核对结果', { exact: true }).waitFor()
   assert.equal(await page.getByText('检查夹具：动作表达一致', { exact: true }).count(), 6)
-  await page.getByRole('switch', { name: '自动保存', exact: true }).click()
+  await (await workbenchControl(page, '保存设置', 'switch', '自动保存')).click()
   await page.getByRole('button', { name: '确认已核对检查结果', exact: true }).click()
   await page.getByText('当前指令检查结果已确认', { exact: true }).waitFor()
-  await page.getByRole('status').filter({ hasText: '未保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '未保存' }).first().waitFor()
   let blockedReceived, releaseBlocked
   let loseBlockedResponse = true
   const blockedBodies = []
@@ -99,13 +103,16 @@ try {
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
   await page.getByRole('combobox', { name: '当前单元', exact: true }).click()
   await page.getByText('单元 2 · 拆开信封', { exact: true }).click()
+  await unitSettings(page)
   await page.getByRole('textbox', { name: '单元动作范围', exact: true }).fill('视频受阻期间继续编辑 B')
   releaseBlocked()
-  await page.getByRole('status').filter({ hasText: '视频提交待核实' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '视频提交待核实' }).first().waitFor()
+  await unitSettings(page)
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '视频受阻期间继续编辑 B')
   await page.getByRole('button', { name: '核实原视频请求', exact: true }).click()
   await page.getByText(/单元 1：已保存，视频未提交：指令超过 5000/).waitFor()
-  await page.getByRole('status').filter({ hasText: '未保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '未保存' }).first().waitFor()
+  await unitSettings(page)
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '视频受阻期间继续编辑 B')
   assert.equal(await page.getByText('保存失败，输入已保留', { exact: true }).count(), 0)
   const stored = (await (await fetch(`${versionsUrl}/${version.id}`)).json()).data
@@ -115,7 +122,8 @@ try {
   assert.equal(stored.content.units[0].instruction_check_task_id, tasks[0].task_id)
   assert.equal((await (await fetch(`${versionsUrl}/${version.id}/units/unit-one/video`)).json()).data.length, 0)
   await page.getByRole('button', { name: '保存', exact: true }).click()
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
+  await closeWorkbenchDetails(page)
   await page.getByRole('button', { name: '返回视频单元', exact: true }).click({ timeout: 5000 })
   assert.equal((await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).inputValue()).length, 5001)
   assert.equal((await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.content.units[1].coverage[0].action_scope, '视频受阻期间继续编辑 B')

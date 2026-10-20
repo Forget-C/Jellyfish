@@ -1,7 +1,9 @@
+import { ReferencePreview } from './ReferencePreview'
+import { WorkbenchDetails } from './ui/WorkbenchDetails'
 import { createPortal } from 'react-dom'
 import { useSceneUnitPreparation } from './useSceneUnitPreparation'
 import { useEffect, useState } from 'react'
-import { Alert, Button, Input, InputNumber, Modal, Select, Space, Spin } from 'antd'
+import { Alert, Button, Input, InputNumber, Select, Space, Spin } from 'antd'
 import { LlmService, StudioDirectingService } from '../../../services/generated'
 import type { AssetSummary, EditableGenerationUnit_Output, ModelRead, SceneVersionContent_Output, WorkspaceRead } from '../../../services/generated'
 import { DirectorCanvasSurface } from './DirectorCanvasSurface'
@@ -15,7 +17,8 @@ import { WorkbenchButton } from './ui/WorkbenchButton'
 import { SceneInstructionSuggestions } from './SceneInstructionSuggestions'
 
 /** 单元和设计共用一份可编辑方案；画布浏览不创建单元，也不选择替代对象。 */
-export function SceneUnitCanvas({ primaryHost, projectId, sequenceId, versionId, revision, content, shotId, unitId, disabled, onSelectShot, onSelectUnit, onChange, focusRequest, onOpenInstruction, onInstructionTask, onOpenEdit }: {
+export function SceneUnitCanvas({ primaryHost, projectId, sequenceId, versionId, revision, content, shotId, unitId, disabled, saveStatus, onSelectShot, onSelectUnit, onChange, focusRequest, onOpenInstruction, onInstructionTask, onOpenEdit }: {
+  saveStatus: string
   primaryHost: HTMLElement | null
   projectId: string; sequenceId: string; versionId: string; revision: number; content: SceneVersionContent_Output; shotId?: string; unitId?: string; disabled: boolean
   onOpenEdit: (clipId: string) => void
@@ -30,6 +33,8 @@ export function SceneUnitCanvas({ primaryHost, projectId, sequenceId, versionId,
   const [assets, setAssets] = useState<AssetSummary[]>()
   const [assetError, setAssetError] = useState('')
   const [attempt, setAttempt] = useState(0)
+  const [settingsUnitId, setSettingsUnitId] = useState<string>()
+  const [referenceUnitId, setReferenceUnitId] = useState<string>()
   const [picker, setPicker] = useState<string>()
   const [parametersUnitId, setParametersUnitId] = useState<string>()
   const [dependencyUnitId, setDependencyUnitId] = useState<string>()
@@ -46,6 +51,7 @@ export function SceneUnitCanvas({ primaryHost, projectId, sequenceId, versionId,
       setFocusTarget(focusRequest)
       if (focusRequest.fieldId === 'scene-unit-dependencies') setDependencyUnitId(unit.id)
       if (focusRequest.fieldId === 'scene-unit-parameters') setParametersUnitId(unit.id)
+      if (!['scene-unit-parameters', 'scene-unit-dependencies'].includes(focusRequest.fieldId)) setSettingsUnitId(unit.id)
     }
   }, [focusRequest, versionId, unit?.id])
   useEffect(() => {
@@ -84,33 +90,25 @@ export function SceneUnitCanvas({ primaryHost, projectId, sequenceId, versionId,
       parameters: {}, capability: { multi_shot: 'unknown' }, dependencies: [], scene_dependencies: [], instruction: '', instruction_source: null, instruction_basis_id: null, instruction_check_task_id: null,
     }] })
     onSelectUnit(id)
+    setSettingsUnitId(id)
   }
   const locateIssue = (issue: typeof missing[number]) => {
     if (issue.fieldId === 'scene-unit-dependencies' && unit) setDependencyUnitId(unit.id)
     else if (issue.fieldId === 'scene-unit-parameters' && unit) setParametersUnitId(unit.id)
-    else setFocusTarget({ nodeId: issue.nodeId || '单元设置', fieldId: issue.fieldId, serial: Date.now() })
+    else { if (unit) setSettingsUnitId(unit.id); setFocusTarget({ nodeId: issue.nodeId || '单元设置', fieldId: issue.fieldId, serial: Date.now() }) }
   }
-  return <section className="scene-unit-canvas">
-    {unit && primaryHost && createPortal(<nav className="scene-unit-primary" aria-label="当前单元主操作"><strong>当前单元 {allUnits.indexOf(unit) + 1}</strong>
-      {<SceneInstructionSuggestions onPrepare={missing.length ? () => locateIssue(missing[0]) : undefined} key={unit.id} compact projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision}
-        unitId={unit.id} content={content} disabled={disabled} onChange={onChange} onOpen={onOpenInstruction} onTask={onInstructionTask} />}
-    </nav>, primaryHost)}
-    <DirectorCanvasSurface key={`${versionId}:units:${unitId || 'empty'}`} focusTarget={focusTarget} initialPositions={{ 参考素材: { x: 800, y: 0 } }} contextKey={`${versionId}:units:${unitId || 'empty'}`} labels={['镜头依据', '单元设置', '参考素材']} ariaLabel="单元画布视口"
-      relations={unit ? [{ from: '镜头依据', to: '单元设置', label: '动作覆盖' }, { from: '参考素材', to: '单元设置', label: '明确输入' }] : []}>
-      <section className="canvas-workbench-card">
-          <Select aria-label="单元所属镜头" placeholder="明确选择镜头" value={shotId} style={{ width: '100%' }}
-          options={content.design.direction.shots.map((row, index) => ({ value: row.id, label: `镜头 ${index + 1}：${row.visible_result.text || '未填写'}` }))}
-          onChange={onSelectShot} />
-        {!shot && <p>{shotId ? '原镜头已不可用，请重新选择' : '先选择镜头，再建立或选择单元'}</p>}
-        {shot && <><p>{shot.visible_result.text || '可见结果尚未填写'}</p>
-          {!units.length && <p>当前镜头尚无单元</p>}
-          <Select aria-label="当前单元" placeholder={units.length > 1 ? '多个单元，请明确选择' : '选择单元'} value={unit?.id} style={{ width: '100%' }}
-            options={units.map(row => ({ value: row.id, label: `单元 ${allUnits.indexOf(row) + 1} · ${row.coverage.map(item => item.action_scope).join('；') || '动作待填写'}` }))} onChange={id => onSelectUnit(id)} />
-          <Button disabled={disabled} onClick={create}>{units.length ? '为当前镜头增加补拍单元' : '为当前镜头建立单元'}</Button>
-          {unitId && !unit && <p>原单元不属于当前镜头或已不可用，请重新选择</p>}
-        </>}
-      </section>
-      <section className="canvas-workbench-card">
+  useEffect(() => {
+    if (!unit || settingsUnitId !== unit.id) return
+    const fieldId = focusRequest?.fieldId || focusTarget?.fieldId
+    if (!fieldId) return
+    const frame = requestAnimationFrame(() => {
+      const field = document.getElementById(fieldId)
+      field?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+      field?.focus({ preventScroll: true })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [settingsUnitId, unit?.id, focusRequest, focusTarget])
+  const settings =       <>
           {!unit ? <p>明确选择单元后编辑；浏览不创建数据。</p> : <>
           <p>单元 {allUnits.indexOf(unit) + 1} · 当前场次版本</p>
           {!missing.length && <p role="status">当前单元基础准备已齐备</p>}
@@ -178,15 +176,47 @@ export function SceneUnitCanvas({ primaryHost, projectId, sequenceId, versionId,
           {capabilityError && <Alert type="error" message="模型能力读取失败" description={capabilityError} action={<Button onClick={() => setAttempt(value => value + 1)}>重试模型能力</Button>} />}
           <h3 id="scene-unit-dependencies" tabIndex={-1}>前段依赖</h3><Button onClick={() => setDependencyUnitId(unit.id)}>编辑前段依赖</Button>{!unit.dependencies.length && !(unit.scene_dependencies || []).length ? <p>当前无前段落幅依赖</p> : unit.dependencies.map((link, index) => <p key={`${link.plan_revision_id}:${link.unit_id}`}>前段依赖 {index + 1} · {link.frame_id ? '已绑定实际落幅' : '实际落幅待准备'}</p>)}
         </>}
+      </>
+  return <section className="scene-unit-canvas">
+    {unit && primaryHost && createPortal(<nav className="scene-unit-primary" aria-label="当前单元主操作"><strong>当前单元 {allUnits.indexOf(unit) + 1}</strong>
+      {<SceneInstructionSuggestions onPrepare={missing.length ? () => locateIssue(missing[0]) : undefined} key={unit.id} compact projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision}
+        unitId={unit.id} content={content} disabled={disabled} onChange={onChange} onOpen={onOpenInstruction} onTask={onInstructionTask} />}
+    </nav>, primaryHost)}
+    <DirectorCanvasSurface key={`${versionId}:units:${unitId || 'empty'}`} focusTarget={focusTarget} initialPositions={{ 参考素材: { x: 800, y: 0 } }} contextKey={`${versionId}:units:${unitId || 'empty'}`} labels={['镜头依据', '单元设置', '参考素材']} ariaLabel="单元画布视口"
+      inspectors={{ 单元设置: unit ? () => setSettingsUnitId(unit.id) : undefined, 参考素材: unit ? () => setReferenceUnitId(unit.id) : undefined }}
+      relations={unit ? [{ from: '镜头依据', to: '单元设置', label: '动作覆盖' }, { from: '参考素材', to: '单元设置', label: '明确输入' }] : []}>
+      <section className="canvas-workbench-card">
+          <Select aria-label="单元所属镜头" placeholder="明确选择镜头" value={shotId} style={{ width: '100%' }}
+          options={content.design.direction.shots.map((row, index) => ({ value: row.id, label: `镜头 ${index + 1}：${row.visible_result.text || '未填写'}` }))}
+          onChange={onSelectShot} />
+        {!shot && <p>{shotId ? '原镜头已不可用，请重新选择' : '先选择镜头，再建立或选择单元'}</p>}
+        {shot && <><p>{shot.visible_result.text || '可见结果尚未填写'}</p>
+          {!units.length && <p>当前镜头尚无单元</p>}
+          <Select aria-label="当前单元" placeholder={units.length > 1 ? '多个单元，请明确选择' : '选择单元'} value={unit?.id} style={{ width: '100%' }}
+            options={units.map(row => ({ value: row.id, label: `单元 ${allUnits.indexOf(row) + 1} · ${row.coverage.map(item => item.action_scope).join('；') || '动作待填写'}` }))} onChange={id => onSelectUnit(id)} />
+          <Button disabled={disabled} onClick={create}>{units.length ? '为当前镜头增加补拍单元' : '为当前镜头建立单元'}</Button>
+          {unitId && !unit && <p>原单元不属于当前镜头或已不可用，请重新选择</p>}
+        </>}
+      </section>
+      <section className="canvas-workbench-card">
+        {unit ? <><p className="canvas-card-summary">单元 {allUnits.indexOf(unit) + 1} · {unit.model_id || '模型待选择'}</p>
+          <p className="canvas-card-summary">{unit.coverage.map(item => item.action_scope || '动作范围待填写').join('；')}</p>
+          <p>{unit.ratio} · {unit.duration_ms == null ? '时长待填写' : `${unit.duration_ms / 1000} 秒`} · 待准备 {missing.length} 项</p>
+          <Button onClick={() => setSettingsUnitId(unit.id)}>查看单元设置</Button></> : <p>明确选择单元后编辑；浏览不创建数据。</p>}
       </section>
       <section className="canvas-workbench-card">
         {unit ? <><p>{unit.references.length} 项参考；项目资产不会自动成为输入。</p>
-          {unit.references.map(binding => <p key={binding.id}>{binding.asset_origin?.name || binding.file_id} · {referencePurposes[binding.purpose]}</p>)}
+          <p className="canvas-card-summary">{unit.references.slice(0, 2).map(binding => `${binding.asset_origin?.name || binding.file_id} · ${referencePurposes[binding.purpose]}`).join('；')}</p>
+          <Button onClick={() => setReferenceUnitId(unit.id)}>查看单元参考</Button>
           <Space><Button id="scene-unit-references" disabled={disabled} onClick={() => setPicker(unit.id)}>编辑本单元参考</Button></Space></> : <p>先选择单元</p>}
       </section>
     </DirectorCanvasSurface>
-    {unit && parametersUnitId === unit.id && <Modal rootClassName="canvas-workbench-dialog" title="当前单元模型参数" open
-      onCancel={() => setParametersUnitId(undefined)} footer={<Button onClick={() => setParametersUnitId(undefined)}>完成参数编辑</Button>}>
+    <WorkbenchDetails status={saveStatus} title="单元设置" open={!!unit && settingsUnitId === unit.id} onClose={() => setSettingsUnitId(undefined)}>{settings}</WorkbenchDetails>
+    <WorkbenchDetails title="单元参考 · 只读" status="只读" open={!!unit && referenceUnitId === unit.id} onClose={() => setReferenceUnitId(undefined)}>
+      {unit?.references.map(reference => <section key={reference.id}><p>{reference.asset_origin?.name || reference.file_id} · {referencePurposes[reference.purpose]}</p><ReferencePreview reference={reference} /><SourceLinks sources={[reference.source]} /></section>)}
+    </WorkbenchDetails>
+    {unit && parametersUnitId === unit.id && <WorkbenchDetails status={saveStatus} title="当前单元模型参数" open onClose={() => setParametersUnitId(undefined)}>
+      <Button onClick={() => { setParametersUnitId(undefined); if (unit) setSettingsUnitId(unit.id) }}>返回单元设置</Button>
       <p>当前执行器支持随机种子；留空使用模型的默认行为。参数随本单元保存，不修改其他单元。</p>
       <label>随机种子<InputNumber aria-label="单元随机种子" disabled={disabled} min={-1} max={4294967295} precision={0}
         value={typeof unit.parameters.seed === 'number' ? unit.parameters.seed : null}
@@ -195,15 +225,15 @@ export function SceneUnitCanvas({ primaryHost, projectId, sequenceId, versionId,
         action={<Button disabled={disabled} onClick={() => patch({ parameters: Object.fromEntries(Object.entries(unit.parameters).filter(([key]) => key !== 'seed')) })}>清除不可用随机种子</Button>} />}
       {Object.entries(unit.parameters).filter(([key]) => key !== 'seed').map(([key, value]) => <p key={key}>{key}：{String(value)} · 当前执行器不支持
         <Button disabled={disabled} onClick={() => patch({ parameters: Object.fromEntries(Object.entries(unit.parameters).filter(([name]) => name !== key)) })}>移除参数 {key}</Button></p>)}
-    </Modal>}
-    {unit && dependencyUnitId === unit.id && <Modal rootClassName="canvas-workbench-dialog" title="前段依赖" open width={760}
-      styles={{ body: { maxHeight: 'calc(100dvh - 240px)', overflowY: 'auto' } }}
-      onCancel={() => setDependencyUnitId(undefined)} footer={<Space><Button onClick={() => setDependencyUnitId(undefined)}>完成依赖编辑</Button><Button onClick={() => { setDependencyUnitId(undefined); onOpenInstruction() }}>前往当前单元指令核对</Button></Space>}>
+    </WorkbenchDetails>}
+    {unit && dependencyUnitId === unit.id && <WorkbenchDetails status={saveStatus} title="前段依赖" open onClose={() => setDependencyUnitId(undefined)}>
+      <Button onClick={() => { setDependencyUnitId(undefined); onOpenInstruction() }}>前往当前单元指令核对</Button>
+      <Button onClick={() => { setDependencyUnitId(undefined); if (unit) setSettingsUnitId(unit.id) }}>返回单元设置</Button>
       <SceneFrameDependencies onOpenEdit={onOpenEdit} unit={unit} content={content} versionId={versionId} evidence={frameEvidence} disabled={disabled} onChange={patch} />
       {!!unit.dependencies.length && workspaceLoading && <Spin />}
       {workspaceError && <Alert type="error" message="来源单元读取失败" description={workspaceError} action={<Button onClick={() => setAttempt(value => value + 1)}>重试来源单元</Button>} />}
-      {!!unit.dependencies.length && workspace && !workspaceLoading && !workspaceError && <DependencyEditor sceneVersion projectId={projectId} workspace={workspace} unit={unit} disabled={disabled} onChange={patch} />}
-    </Modal>}
+      {!!unit.dependencies.length && workspace && <DependencyEditor sceneVersion projectId={projectId} workspace={workspace} unit={unit} disabled={disabled} onChange={patch} />}
+    </WorkbenchDetails>}
     {unit && picker === unit.id && <ReferencePicker title={unit.references.length ? '本单元参考' : '添加参考'} rootClassName="canvas-workbench-dialog" key={`${versionId}:${unit.id}`} projectId={projectId} assets={assets} assetError={assetError}
       onReloadAssets={() => setAttempt(value => value + 1)} design={content.design} coverage={unit.coverage} references={unit.references}
       capability={capability} capabilityError={capabilityError} onRetryCapability={() => setAttempt(value => value + 1)} disabled={disabled}

@@ -1,3 +1,5 @@
+import { WorkbenchDetails } from './ui/WorkbenchDetails'
+import { ReferencePreview } from './ReferencePreview'
 import { createPortal } from 'react-dom'
 import { useSceneUnitPreparation } from './useSceneUnitPreparation'
 import type { ScenePreparationIssue } from './useSceneUnitPreparation'
@@ -25,6 +27,7 @@ export function SceneInstructionCanvas({ primaryHost, onPrepare, focusRequest, p
   taskId?: string
   onTask: (taskId: string, unitId: string) => void
 }) {
+  const [reading, setReading] = useState<'basis' | 'references'>()
   const [expandedUnit, setExpandedUnit] = useState<string>()
   const [suggestionPriority, setSuggestionPriority] = useState<{ versionId: string; unitId: string; priority: boolean }>()
   const [suggestionFocus, setSuggestionFocus] = useState<{ unitId: string; serial: number }>()
@@ -35,6 +38,7 @@ export function SceneInstructionCanvas({ primaryHost, onPrepare, focusRequest, p
   const unit = units.find(row => row.id === unitId)
   const { missing } = useSceneUnitPreparation(projectId, sequenceId, versionId, revision, content, unit)
   return <>{primaryHost && createPortal(<nav className="scene-unit-primary" aria-label="当前指令主操作"><strong>{unit ? `当前单元 ${allUnits.indexOf(unit) + 1} 的指令` : '请明确选择单元'}</strong><span ref={setActionHost} /></nav>, primaryHost)}<DirectorCanvasSurface key={`${versionId}:instructions:${unitId || 'empty'}`} focusTarget={suggestionFocus?.unitId === unit?.id && suggestionFocus && suggestionFocus.serial > (focusRequest?.serial || 0) ? { nodeId: '参考输入', fieldId: 'scene-instruction-suggestions', serial: suggestionFocus.serial } : focusRequest && focusRequest.unitId === unit?.id ? { nodeId: '当前指令', fieldId: 'scene-current-instruction', serial: focusRequest.serial } : undefined} contextKey={`${versionId}:instructions:${unitId || 'empty'}`} ariaLabel="指令画布视口"
+    inspectors={{ 单元依据: unit ? () => setReading('basis') : undefined, 参考输入: unit ? () => setReading('references') : undefined }}
     labels={['单元依据', '当前指令', '参考输入']} initialPositions={{ 参考输入: { x: 800, y: 0 } }}
     relations={unit ? [{ from: '单元依据', to: '当前指令', label: '编写依据' }, { from: '参考输入', to: '当前指令', label: '明确输入' }] : []}>
     <section className="canvas-workbench-card">
@@ -42,9 +46,9 @@ export function SceneInstructionCanvas({ primaryHost, onPrepare, focusRequest, p
         options={units.map(row => ({ value: row.id, label: `单元 ${allUnits.indexOf(row) + 1} · ${row.coverage.map(item => item.action_scope).join('；') || '动作待填写'}` }))}
         onChange={id => onSelectUnit(id)} />
       {!unit && <p>{unitId ? '原单元不可用或不属于当前镜头，请重新选择。' : '先在单元画布明确准备单元，再编辑对应指令。'}</p>}
-      {unit && <>{unit.coverage.map((item, index) => <p key={item.id}>覆盖 {index + 1}：{item.action_scope || '动作范围待填写'}</p>)}
+      {unit && <><p className="canvas-card-summary">{unit.coverage.map((item, index) => `覆盖 ${index + 1}：${item.action_scope || '动作范围待填写'}`).join('；')}</p>
         <p>画幅：{unit.ratio} · 预计时长：{unit.duration_ms == null ? '待填写' : `${unit.duration_ms / 1000} 秒`}</p>
-        <details><summary>查看单元身份</summary><p>{unit.id}</p></details></>}
+        <Button onClick={() => setReading('basis')}>查看完整单元依据</Button></>}
     </section>
     <section className="canvas-workbench-card">
       {unit ? <><p>单元 {allUnits.indexOf(unit) + 1} · 人工编辑按当前保存模式保存，可撤销。</p>
@@ -59,10 +63,14 @@ export function SceneInstructionCanvas({ primaryHost, onPrepare, focusRequest, p
         {unit.instruction_source && <details><summary>查看正文来源</summary><p>{({ human: '人工填写', model: 'AI 指令建议', chapter: '章节原文', file: '参考文件', revision: '历史版本' })[unit.instruction_source.kind]}</p><p>来源身份：{unit.instruction_source.reference}</p><p>来源版本：{unit.instruction_source.version}</p></details>}</> : <p>明确选择单元后查看和编辑其正文。</p>}
     </section>
     <section className="canvas-workbench-card">
-      {unit ? <>{unit.references.length ? unit.references.map(reference => <p key={reference.id}>{reference.asset_origin?.name || reference.file_id} · {referencePurposes[reference.purpose]}</p>) : <p>当前没有明确参考输入。</p>}
+      {unit ? <><p className="canvas-card-summary">{unit.references.length ? `${unit.references.length} 项参考 · ${unit.references.slice(0, 2).map(reference => reference.asset_origin?.name || reference.file_id).join('；')}` : '当前没有明确参考输入。'}</p><Button onClick={() => setReading('references')}>查看完整参考输入</Button>
         <p>在单元画布明确选择或修改参考；正文中的提及不会自动绑定素材。</p>
         <SceneInstructionSuggestions onPriority={setSuggestionPriority} onPrepare={missing.length ? () => onPrepare(unit.id, missing[0]) : undefined} onLocate={() => setSuggestionFocus({ unitId: unit.id, serial: Date.now() })} primaryHost={suggestionsHost} key={`${versionId}:${unit.id}`} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision}
           unitId={unit.id} content={content} disabled={disabled} onChange={onChange} initialTaskId={taskId} onTask={onTask} /></> : <p>先选择单元。</p>}
     </section>
-  </DirectorCanvasSurface></>
+  </DirectorCanvasSurface>
+    <WorkbenchDetails title={reading === 'basis' ? '单元依据 · 只读' : '参考输入 · 只读'} status="只读" open={!!reading && !!unit} onClose={() => setReading(undefined)}>
+      {unit && (reading === 'basis' ? <><p>单元身份：{unit.id}</p>{unit.coverage.map((item, index) => <section key={item.id}><h3>覆盖 {index + 1}</h3><p>{item.action_scope || '动作范围待填写'}</p><p>镜头身份：{item.shot_id}</p></section>)}<p>{unit.ratio} · {unit.duration_ms == null ? '时长待填写' : `${unit.duration_ms / 1000} 秒`}</p></> : !unit.references.length ? <p>当前没有明确参考输入。</p> : unit.references.map(reference => <section key={reference.id}><p>{reference.asset_origin?.name || reference.file_id} · {referencePurposes[reference.purpose]}</p><ReferencePreview reference={reference} /></section>))}
+    </WorkbenchDetails>
+  </>
 }

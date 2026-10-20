@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Select, Space } from 'antd'
-import { WorkbenchModal } from './ui/WorkbenchModal'
+import { WorkbenchDetails } from './ui/WorkbenchDetails'
 import { WorkbenchButton } from './ui/WorkbenchButton'
 import { DesignObjectSummary } from './DesignObjectSummary'
 import { DesignApplicabilityEditor } from './DesignApplicabilityEditor'
@@ -84,6 +84,7 @@ export function SceneDesignPanel({ value, saved, units, disabled, onChange, focu
 }) {
   const [target, setTarget] = useState<DesignTarget>({ path: ['direction'] })
   const [sideOpen, setSideOpen] = useState(false)
+  const trigger = useRef<HTMLElement>()
   const resolved = resolveTarget(value, target)
   const path = resolved || target.path
   const foundObject = target.object && resolved ? designObjects(value).find(row => JSON.stringify(row.path) === JSON.stringify(resolved)) : undefined
@@ -156,6 +157,7 @@ export function SceneDesignPanel({ value, saved, units, disabled, onChange, focu
   useEffect(() => { setSideOpen(false); onSideClose?.() }, [sideContext])
   useEffect(() => {
     if (focusRequest) {
+      trigger.current = focusRequest.trigger
       setAddDefaults(focusRequest.defaults || {})
       navigate(focusRequest.target)
       setSideOpen(true)
@@ -187,9 +189,9 @@ export function SceneDesignPanel({ value, saved, units, disabled, onChange, focu
       {object && typeof path[path.length - 1] === 'number' && <WorkbenchButton variant="danger" disabled={disabled} onClick={() => remove(path.slice(0, -1), path[path.length - 1] as number)}>删除此卡</WorkbenchButton>}
   </>
   return <>
-    <WorkbenchModal title={<span className="director-modal-title">{object?.label || '设计卡片'}<small role="status">{saveStatus}</small></span>}
-      open={sideOpen} footer={null} maskClosable={false} onCancel={() => { setSideOpen(false); setPending(undefined); onSideClose?.() }}>
+    <WorkbenchDetails title={object?.label || '设计卡片'} status={saveStatus} trigger={trigger.current}
+      open={sideOpen} onDeactivate={() => setSideOpen(false)} onClose={() => { setSideOpen(false); setPending(undefined); onSideClose?.() }}>
       {editorBody()}
-    </WorkbenchModal>
+    </WorkbenchDetails>
   </>
 }

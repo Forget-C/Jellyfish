@@ -1,3 +1,6 @@
+import { makeWorkspace } from './directing-fixtures.mjs'
+import { workbenchControl, workbenchShot, closeWorkbenchDetails } from './workbenchControls.mjs'
+import { unitSettings } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -45,7 +48,7 @@ try {
   const version = (await create.json()).data
   const note = text => ({ state: 'proposal', text, sources: [{ kind: 'human', reference: 'coverage-browser', version: '1' }] })
   const content = version.content
-  content.design.direction.beats = ['beat-one', 'beat-two'].map((id, index) => ({ id, event_ids: [], objective: note(`目标 ${index + 1}`), obstacle: {}, expected_change: {}, must_show: {} }))
+  content.design.direction.beats = ['beat-one', 'beat-two'].map((id, index) => ({ id, event_ids: [], objective: note(`目标 ${index + 1}`), obstacle: {}, expected_change: {}, must_show: note(`可拍变化 ${index + 1}`) }))
   content.design.events = [{ id: 'event-one', description: note('拆开信封') }]
   content.design.participants = [{ id: 'reader', name: '读信者' }]
   content.design.direction.shots = [{ id: 'shot-one', beat_ids: ['beat-one', 'beat-two'], event_ids: ['event-one'], blocking_state_ids: [], participant_ids: ['reader'], criterion_ids: [], narrative_function: {}, visible_result: note('读信反应') }]
@@ -54,20 +57,21 @@ try {
 
   ] }]
   content.units.push({ ...structuredClone(content.units[0]), id: 'unit-two' })
+  content.design.cinematography = content.design.direction.shots.map((shot, index) => ({ ...structuredClone(makeWorkspace().designs[0].content.cinematography[0]), id: `camera-${index}`, shot_id: shot.id, criterion_ids: [] }))
   const saved = await fetch(`${versionsUrl}/${version.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: version.revision, content }) })
   assert.equal(saved.status, 200, await saved.text())
   await page.goto(`http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
-  await page.getByRole('button', { name: '镜头 1：读信反应', exact: true }).click()
+  await (await workbenchShot(page, '镜头 1：读信反应')).click()
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('ArrowDown')
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('Enter')
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
   const body = page.getByRole('textbox', { name: '当前单元指令正文', exact: true })
   await body.fill('递出信封。')
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   await page.getByRole('button', { name: '确认已按当前依据核对正文', exact: true }).click()
   await page.getByText('指令依据一致，尚不代表检查通过', { exact: true }).waitFor()
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   await page.getByRole('button', { name: '检查当前指令', exact: true }).click({ timeout: 5000 })
   await page.getByText('检查任务：等待执行', { exact: true }).waitFor()
   const checksUrl = `${versionsUrl}/${version.id}/units/unit-one/instruction-checks`
@@ -77,10 +81,10 @@ try {
   await page.getByRole('button', { name: '查看检查结果', exact: true }).click()
   await page.getByText('六岗检查均通过，尚待明确核对结果', { exact: true }).waitFor()
   assert.equal(await page.getByText('检查夹具：动作表达一致', { exact: true }).count(), 6)
-  await page.getByRole('switch', { name: '自动保存', exact: true }).click()
+  await (await workbenchControl(page, '保存设置', 'switch', '自动保存')).click()
   await page.getByRole('button', { name: '确认已核对检查结果', exact: true }).click()
   await page.getByText('当前指令检查结果已确认', { exact: true }).waitFor()
-  await page.getByRole('status').filter({ hasText: '未保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '未保存' }).first().waitFor()
   let videoSubmissions = 0
   page.on('request', request => { if (request.method() === 'POST' && (request.url().endsWith('/video/save-and-submit') || request.url().endsWith('/video'))) videoSubmissions++ })
   await page.evaluate(() => {
@@ -111,10 +115,12 @@ try {
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
   await page.getByRole('combobox', { name: '当前单元', exact: true }).click()
   await page.getByText('单元 2 · 拆开信封', { exact: true }).click()
+  await unitSettings(page)
   await page.getByRole('textbox', { name: '单元动作范围', exact: true }).fill('保存未知期间 B 的编辑')
   await page.route('**/units/unit-one/video', route => route.abort('failed'))
   loseSaveResponse()
-  await page.getByRole('status').filter({ hasText: '视频提交待核实' }).waitFor({ timeout: 5000 })
+  await page.getByRole('status').filter({ hasText: '视频提交待核实' }).first().waitFor({ timeout: 5000 })
+  await unitSettings(page)
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '保存未知期间 B 的编辑')
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
   await page.getByRole('navigation', { name: '当前指令主操作', exact: true }).getByRole('button', { name: '生成当前单元指令建议', exact: true }).waitFor({ timeout: 5000 })
@@ -125,13 +131,14 @@ try {
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
   await page.getByRole('combobox', { name: '当前单元', exact: true }).click()
   await page.getByText('单元 2 · 保存未知期间 B 的编辑', { exact: true }).click()
-  await page.getByRole('status').filter({ hasText: '未保存' }).waitFor({ timeout: 5000 })
+  await page.getByRole('status').filter({ hasText: '未保存' }).first().waitFor({ timeout: 5000 })
+  await unitSettings(page)
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '保存未知期间 B 的编辑')
   assert.equal(videoSubmissions, 2)
   assert.deepEqual(saveRequests[1], saveRequests[0])
   await page.unroute('**/video/save-and-submit')
   await page.getByRole('button', { name: '撤销', exact: true }).click()
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   await page.getByRole('combobox', { name: '当前单元', exact: true }).click()
   await page.getByText('单元 1 · 拆开信封', { exact: true }).click()
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
@@ -165,7 +172,7 @@ try {
     }
   })
   await page.getByRole('button', { name: '按当前内容生成视频', exact: true }).click()
-  await page.getByText(/视频授权恢复记录未保存，尚未提交/).waitFor()
+  await page.waitForFunction(() => document.body.textContent.includes('视频授权恢复记录未保存，尚未提交'))
   assert.equal(videoSubmissions, submissionsBeforeStorageFailure)
   await page.evaluate(() => window.restoreVideoStorage())
   const beforeCleanGeneration = (await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.revision
@@ -175,13 +182,15 @@ try {
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
   await page.getByRole('combobox', { name: '当前单元', exact: true }).click()
   await page.getByText('单元 2 · 拆开信封', { exact: true }).click()
+  await unitSettings(page)
   await page.getByRole('textbox', { name: '单元动作范围', exact: true }).fill('另一单元独立新动作')
   releaseSubmission()
-  await page.getByRole('status').filter({ hasText: '未保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '未保存' }).first().waitFor()
+  await unitSettings(page)
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '另一单元独立新动作')
   assert.equal(await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).count(), 0)
   await page.getByRole('button', { name: '保存', exact: true }).click()
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   assert.equal((await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.content.units[1].coverage[0].action_scope, '另一单元独立新动作')
   const updatedVideos = (await (await fetch(videoUrl)).json()).data
   assert.equal(updatedVideos.length, 2)
@@ -192,16 +201,20 @@ try {
   await notification.getByText('视频任务等待执行', { exact: true }).waitFor({ timeout: 5000 })
   await page.route('**/units/unit-one/video', route => route.abort('failed'))
   await notification.getByText('视频任务状态读取失败', { exact: true }).waitFor({ timeout: 5000 })
+  await unitSettings(page)
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '另一单元独立新动作')
   await page.unroute('**/units/unit-one/video')
+  await closeWorkbenchDetails(page)
   await notification.getByRole('button', { name: '重试视频通知', exact: true }).click()
   await notification.getByText('视频任务等待执行', { exact: true }).waitFor({ timeout: 5000 })
   assert.equal((await fetch(`${api}/api/v1/film/tasks/${updatedVideos.find(row => row.status === 'queued').task_id}/cancel`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: '浏览器验收取消' }),
   })).status, 200)
   await notification.getByText('视频任务已取消', { exact: true }).waitFor({ timeout: 5000 })
+  await unitSettings(page)
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '另一单元独立新动作')
   assert.equal(await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).count(), 0)
+  await closeWorkbenchDetails(page)
   await notification.getByRole('button', { name: '返回视频任务', exact: true }).click()
   assert.equal(await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).inputValue(), '递出信封。')
   await page.getByRole('button', { name: '按当前内容生成视频', exact: true }).waitFor()
@@ -216,7 +229,7 @@ try {
   })
   await page.getByRole('button', { name: '按当前内容生成视频', exact: true }).click()
   await lostResponse
-  await page.getByRole('status').filter({ hasText: '视频提交待核实' }).waitFor({ timeout: 5000 })
+  await page.getByRole('status').filter({ hasText: '视频提交待核实' }).first().waitFor({ timeout: 5000 })
   await page.getByRole('navigation', { name: '当前指令主操作', exact: true }).getByRole('button', { name: '核实当前单元原视频请求', exact: true }).waitFor({ timeout: 5000 })
   assert.equal(await page.getByRole('button', { name: '按当前内容生成视频', exact: true }).isDisabled(), true)
   // A 的原响应仍不可读，B 独立编辑、保存、检查并提交视频。
@@ -228,7 +241,7 @@ try {
   await page.getByRole('button', { name: '确认已按当前依据核对正文', exact: true }).click()
   await page.getByText('指令依据一致，尚不代表检查通过', { exact: true }).waitFor()
   await page.getByRole('button', { name: '保存', exact: true }).click({ timeout: 5000 })
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor({ timeout: 5000 })
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor({ timeout: 5000 })
   await page.getByRole('button', { name: '检查当前指令', exact: true }).click()
   await page.getByText('检查任务：等待执行', { exact: true }).waitFor()
   const bChecksUrl = `${versionsUrl}/${version.id}/units/unit-two/instruction-checks`
@@ -240,7 +253,7 @@ try {
   await page.getByRole('button', { name: '确认已核对检查结果', exact: true }).click()
   await page.getByText('当前指令检查结果已确认', { exact: true }).waitFor()
   await page.getByRole('button', { name: '保存', exact: true }).click()
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   await page.getByRole('button', { name: '按当前内容生成视频', exact: true }).click()
   await page.getByText('视频任务：等待执行', { exact: true }).waitFor()
   const bVideos = (await (await fetch(`${versionsUrl}/${version.id}/units/unit-two/video`)).json()).data
@@ -261,7 +274,7 @@ try {
     await route.continue()
   })
   await page.getByRole('navigation', { name: '当前指令主操作', exact: true }).getByRole('button', { name: '核实当前单元原视频请求', exact: true }).click()
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   assert.deepEqual(retriedBody, lostBody)
   assert.equal((await (await fetch(videoUrl)).json()).data.length, 3)
   await page.unroute('**/units/unit-one/video{,/save-and-submit}')
@@ -274,7 +287,7 @@ try {
     await route.abort('failed')
   })
   await page.getByRole('button', { name: '按当前内容生成视频', exact: true }).click()
-  await page.getByRole('status').filter({ hasText: '视频提交待核实' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '视频提交待核实' }).first().waitFor()
   await page.unroute('**/units/unit-one/video{,/save-and-submit}')
   let restoredBody
   await page.route('**/units/unit-one/video{,/save-and-submit}', async route => {
@@ -284,23 +297,26 @@ try {
   })
   page.once('dialog', dialog => dialog.accept())
   await page.reload()
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   assert.deepEqual(restoredBody, refreshBody)
   assert.equal((await (await fetch(videoUrl)).json()).data.length, 4)
   assert.equal(await page.getByRole('button', { name: '恢复编辑', exact: true }).count(), 0)
   await page.unroute('**/units/unit-one/video{,/save-and-submit}')
   const restoredTask = (await (await fetch(videoUrl)).json()).data.find(row => row.status === 'queued')
-  await page.getByRole('button', { name: '镜头 1：读信反应', exact: true }).click()
+  await (await workbenchShot(page, '镜头 1：读信反应')).click()
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
   await page.getByRole('combobox', { name: '当前单元', exact: true }).click()
   await page.getByText('单元 2 · 另一单元独立新动作', { exact: true }).click()
+  await unitSettings(page)
   await page.getByRole('textbox', { name: '单元动作范围', exact: true }).fill('完成通知到达时继续编辑')
   const completed = await fetch(`${api}/browser-test/video-tasks/${restoredTask.task_id}/complete`, { method: 'POST' })
   assert.equal(completed.status, 200, await completed.text())
   const completionNotice = page.getByRole('region', { name: `单元 1 视频任务 ${restoredTask.task_id} 通知`, exact: true })
   await completionNotice.getByText('视频任务已完成', { exact: true }).waitFor({ timeout: 5000 })
+  await unitSettings(page)
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '完成通知到达时继续编辑')
-  await page.getByRole('status').filter({ hasText: '未保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '未保存' }).first().waitFor()
+  await closeWorkbenchDetails(page)
   await completionNotice.getByRole('button', { name: '返回视频任务', exact: true }).click()
   await page.getByText('候选素材 1 · 未审片 · 不自动采用', { exact: true }).waitFor()
   assert.equal(await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).inputValue(), '递出信封。')
@@ -338,6 +354,7 @@ try {
   await page.getByRole('button', { name: '撤销', exact: true }).click()
   await candidate.getByText('视频固定输入与当前内容一致，候选仍需审片', { exact: true }).waitFor({ timeout: 5000 })
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
+  await unitSettings(page)
   await page.getByRole('textbox', { name: '单元动作范围', exact: true }).fill('与旧视频不同的新动作')
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
   await candidate.getByText('旧依据候选：当前正文或相关依据已变化，请重新核对', { exact: true }).waitFor({ timeout: 5000 })
@@ -356,6 +373,7 @@ try {
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
   await page.getByRole('combobox', { name: '当前单元', exact: true }).click()
   await page.getByText('单元 2 · 完成通知到达时继续编辑', { exact: true }).click()
+  await unitSettings(page)
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '完成通知到达时继续编辑')
   await page.screenshot({ path: join(output, 'scene-video.png'), animations: 'disabled' })
   console.log(`PASS scene video workflow; evidence: ${output}`)

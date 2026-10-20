@@ -1,3 +1,5 @@
+import { makeWorkspace } from './directing-fixtures.mjs'
+import { workbenchControl, workbenchShot } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -58,6 +60,7 @@ try {
   content.design.direction.shots = [{ id: 'shot', beat_ids: [], event_ids: [], blocking_state_ids: [], participant_ids: ['reader'], criterion_ids: [], narrative_function: {}, visible_result: note('读信') }]
   content.units = ['A', 'B'].map(id => ({ id, model_id: 'browser-video-model', duration_ms: 5000, ratio: '16:9', instruction: `${id}正文`, coverage: [{ id: `${id}-coverage`, shot_id: 'shot', action_scope: `${id}动作` }] }))
   content.timeline.items = [0, 1].map(index => ({ id: crypto.randomUUID(), kind: 'media', take_kind: library[0].take_kind, take_id: library[0].take_id, file_id: library[0].file_id, media_range: { source_in_ms: index * 1000, source_out_ms: (index + 1) * 1000 }, timeline_start_ms: index * 3000, fit: 'contain' }))
+  content.design.cinematography = content.design.direction.shots.map((shot, index) => ({ ...structuredClone(makeWorkspace().designs[0].content.cinematography[0]), id: `camera-${index}`, shot_id: shot.id, criterion_ids: [] }))
   const saved = await fetch(`${versionsUrl}/${version.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: 1, content }) })
   assert.equal(saved.status, 200, await saved.clone().text())
   const baseline = (await saved.json()).data
@@ -73,15 +76,16 @@ try {
   assert.equal(submitted.status, 200, await submitted.clone().text())
   const checkTask = (await submitted.json()).data.task_id
   await page.goto(`http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
-  await page.getByRole('switch', { name: '自动保存', exact: true }).click()
-  await page.getByRole('button', { name: '镜头 1：读信', exact: true }).click()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
+  await (await workbenchControl(page, '保存设置', 'switch', '自动保存')).click()
+  await (await workbenchShot(page, '镜头 1：读信')).click()
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
   await page.getByRole('combobox', { name: '指令所属单元', exact: true }).click()
   await page.getByText('单元 2 · B动作', { exact: true }).last().click()
   await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).fill('B未保存正文')
+  if (await page.getByRole('button', { name: '展开关系树', exact: true }).count()) await page.getByRole('button', { name: '展开关系树', exact: true }).click()
   await page.getByRole('button', { name: '展开全图', exact: true }).click({ timeout: 5000 })
-  const overview = page.getByRole('dialog', { name: '全场关系总览', exact: true })
+  const overview = page.getByRole('complementary', { name: '全场关系总览', exact: true })
   await overview.getByRole('button', { name: '选择总览对象：素材 1', exact: true }).waitFor()
   assert.equal(await overview.getByRole('button', { name: '选择总览对象：素材 1', exact: true }).count(), 1)
   await overview.getByRole('button', { name: '选择总览对象：片段 2', exact: true }).click()
@@ -94,6 +98,7 @@ try {
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
   assert.equal(await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).inputValue(), 'B未保存正文')
   await page.route('**/take-library', route => route.abort('failed'))
+  if (await page.getByRole('button', { name: '展开关系树', exact: true }).count()) await page.getByRole('button', { name: '展开关系树', exact: true }).click()
   await page.getByRole('button', { name: '展开全图', exact: true }).click()
   await overview.getByText('总览素材读取失败', { exact: true }).waitFor()
   assert.equal(await overview.getByText('本场暂无素材', { exact: true }).count(), 0)
@@ -131,10 +136,10 @@ try {
   await designHistory.getByRole('button', { name: '重新读取设计任务', exact: true }).click()
   await designHistory.getByText(`任务 ${designTask} · 已完成`, { exact: true }).waitFor()
   assert.equal((await (await fetch(`${versionsUrl}/${version.id}/design-suggestions`)).json()).data.length, 1)
-  const returnBounds = await overview.getByRole('button', { name: '返回当前工作', exact: true }).boundingBox()
+  const returnBounds = await overview.getByRole('button', { name: '关闭详情', exact: true }).boundingBox()
   assert.ok(returnBounds && returnBounds.y >= 0 && returnBounds.y + returnBounds.height <= 960, '返回当前工作必须在视口内')
   await page.screenshot({ path: join(output, 'overview-history.png'), fullPage: true })
-  await overview.getByRole('button', { name: '返回当前工作', exact: true }).click()
+  await overview.getByRole('button', { name: '关闭详情', exact: true }).click()
   assert.equal(await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).inputValue(), 'B未保存正文')
   assert.deepEqual((await (await fetch(`${versionsUrl}/${version.id}`)).json()).data, baseline)
   console.log(`PASS whole-scene overview identities, targeted navigation and isolated read recovery; evidence: ${output}`)

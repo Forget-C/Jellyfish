@@ -1,5 +1,6 @@
+import { WorkbenchDetails } from './ui/WorkbenchDetails'
 import { useEffect, useState } from 'react'
-import { Alert, Button, Modal, Space } from 'antd'
+import { Alert, Button, Space } from 'antd'
 import { StudioDirectingService } from '../../../services/generated'
 import type { InstructionCheckRead, SceneDesignSuggestionRead, SceneInstructionSuggestionRead, SceneTakeLibraryRead, SceneVersionContent_Output, SceneVideoRead } from '../../../services/generated'
 import { designObjects, scopeGraph } from './designWorkspace'
@@ -104,7 +105,8 @@ export function SceneWorkbenchOverview({ projectId, sequenceId, versionId, conte
   const current = nodes.get(selected)
   const related = edges.filter(edge => edge.from === selected || edge.to === selected)
   const highlighted = new Set([selected, ...related.flatMap(edge => [edge.from, edge.to])])
-  return <><Modal open title="全场关系总览" width="calc(100vw - 32px)" rootClassName="canvas-workbench-dialog scene-overview-dialog" style={{ top: 16 }} onCancel={close} footer={<Button onClick={close}>返回当前工作</Button>}>
+  return <WorkbenchDetails open title="全场关系总览" initialExpanded onClose={close}>
+    <div hidden={!!inspection}>
     <p>选择对象查看直接关联；定位和查看不保存、不应用、不生成。声音制作：{{ postproduction: '待后期', generated: '同期生成', unknown: '待确定' }[content.design.sound.execution]}。</p>
     {loading && <p>正在核实总览素材</p>}
     {error && <Alert type="warning" message="总览素材读取失败" description={error} action={<Button loading={loading} onClick={() => setAttempt(value => value + 1)}>重试总览素材</Button>} />}
@@ -124,7 +126,7 @@ export function SceneWorkbenchOverview({ projectId, sequenceId, versionId, conte
       {current.id === 'design-history' && <OverviewDesignHistory projectId={projectId} sequenceId={sequenceId} versionId={versionId} />}
       {current.historyUnitId && <OverviewUnitHistory key={current.historyUnitId} projectId={projectId} sequenceId={sequenceId} versionId={versionId} unitId={current.historyUnitId} />}
     </> : <Alert type="warning" message="原总览对象已不可用，请重新选择" />}</section>
-  </Modal>{inspection && <SceneRelationDetails key={JSON.stringify(inspection)} projectId={projectId} content={content} target={inspection} onClose={() => setInspection(undefined)} />}</>
+    </div>{inspection && <SceneRelationDetails inline key={JSON.stringify(inspection)} projectId={projectId} content={content} target={inspection} onClose={() => setInspection(undefined)} />}</WorkbenchDetails>
 }
 
 /** 历史记录按需只读查询；刷新只重新读取，不提交、应用或确认。 */
@@ -155,7 +157,7 @@ export function OverviewUnitHistory(target: { projectId: string; sequenceId: str
     {(target.taskKind ? [target.taskKind] : ['instructions', 'checks', 'videos'] as const).map(kind => <section key={kind}><h4>{{ instructions: '指令建议记录', checks: '检查记录', videos: '视频执行记录' }[kind]}</h4>
       {errors[kind] ? <Alert type="warning" message="总览记录读取失败" description={errors[kind]} /> : !data[kind] ? <p>正在核实记录</p> : data[kind]?.length === 0 ? <p>尚无此类记录</p> : null}
       {!errors[kind] && data[kind] && target.focusTaskId && !data[kind]?.some(row => row.task_id === target.focusTaskId) && <Alert type="warning" message="指定任务不属于此版本或单元，未选择其他记录。" />}
-      {!errors[kind] && data[kind]?.filter(row => !target.focusTaskId || row.task_id === target.focusTaskId).map(row => <details key={row.task_id} open={target.focusTaskId === row.task_id}><summary>任务 {row.task_id} · {statuses[row.status] || row.status}</summary>
+      {data[kind]?.filter(row => !target.focusTaskId || row.task_id === target.focusTaskId).map(row => <details key={row.task_id} open={target.focusTaskId === row.task_id}><summary>任务 {row.task_id} · {statuses[row.status] || row.status}</summary>
         {row.error && <p>{row.error}</p>}
         {'text' in row ? <><p>当时原文：{row.basis.text}</p><p>当时动作：{row.unit.coverage.map(item => item.action_scope).join('；')}</p><p>建议正文：{row.text || '尚无成功结果'}</p><SceneInstructionSnapshot selected={row} /></> :
           'inputs' in row ? <><p>记录原所属版本：{row.origin_version_id}</p><p>当时指令：{row.instruction}</p><BasisInputs title="检查固定依据" value={row.inputs} /><p>检查模型：{row.model_name}</p><SceneInstructionCheckResult selected={row} /></> :
@@ -188,9 +190,10 @@ export function OverviewDesignHistory(target: { projectId: string; sequenceId: s
     <Button onClick={() => setAttempt(value => value + 1)}>重新读取设计任务</Button>
     {error ? <Alert type="warning" message="总览设计任务读取失败" description={error} /> : !rows ? <p>正在核实设计任务</p> : rows.length === 0 ? <p>本版本尚无设计任务</p> : null}
     {!error && rows && target.focusTaskId && !rows.some(row => row.task_id === target.focusTaskId) && <Alert type="warning" message="指定设计任务不属于此版本，未选择其他记录。" />}
-    {!error && rows?.filter(row => !target.focusTaskId || row.task_id === target.focusTaskId).map(row => <details key={row.task_id} open={target.focusTaskId === row.task_id}><summary>任务 {row.task_id} · {statuses[row.status] || row.status}</summary>
+    {rows?.filter(row => !target.focusTaskId || row.task_id === target.focusTaskId).map(row => <details key={row.task_id} open={target.focusTaskId === row.task_id}><summary>任务 {row.task_id} · {statuses[row.status] || row.status}</summary>
       {row.error && <p>{row.error}</p>}
       <p>当时原文：{row.basis.text}</p><p>当时要求：{row.instruction || '未补充要求'}</p>
+      {row.diagnostics && <section aria-label="设计诊断 · 只读"><ul>{row.diagnostics.issues.map((issue, index) => <li key={index}>{issue}</li>)}</ul><details><summary>查看模型输出 · 只读</summary><pre>{row.diagnostics.output}</pre></details></section>}
       <p>请求范围：{row.scope?.join('、') || '整场设计'}</p>
       <details><summary>当时设计</summary><DesignFields value={row.before} path={[]} disabled onChange={() => {}} /></details>
       {row.design ? <details><summary>设计建议结果 · 未自动应用</summary><DesignFields value={row.design} path={[]} disabled onChange={() => {}} /></details> : <p>尚无成功设计结果</p>}

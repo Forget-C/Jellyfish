@@ -1,5 +1,6 @@
+import { WorkbenchModal, WorkbenchDialogActions } from './ui/WorkbenchModal'
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Card, Modal, Image, Input, Pagination, Select, Space, Upload } from 'antd'
+import { Alert, Button, Card, Modal as AntModal, Image, Input, Pagination, Select, Space, Upload } from 'antd'
 import { StudioFilesService } from '../../../services/generated'
 import type { AssetSummary, FileRead, GenerationUnit_Input, ReferenceBinding_Input as Reference, SceneDesign_Input, VideoReferenceCapabilities } from '../../../services/generated'
 import { buildFileDownloadUrl } from '../assets/utils'
@@ -15,6 +16,15 @@ export function ReferencePicker({ rootClassName, projectId, assets, assetError, 
   initialParticipantIds?: string[]; initialAssetId?: string; initialRole?: Reference['input_role']; initialPurpose?: Reference['purpose']; title?: string; referenceIds?: string[]; location?: boolean; disabled?: boolean; capabilityError?: string; onRetryCapability?: () => void; dependencyReferenceIds?: string[];
   coverage?: GenerationUnit_Input['coverage']; references: Reference[]; capability?: VideoReferenceCapabilities; onApply: (references: Reference[]) => void; onEditAssets?: () => void; onInspectDesign?: (objectKey: string) => void; onClose: () => void;
 }) {
+  const Modal = rootClassName?.includes('canvas-workbench-dialog') ? WorkbenchModal : AntModal
+  const [readingFile, setReadingFile] = useState<string>()
+  const reading = useRef<HTMLElement>(null)
+  const readingTrigger = useRef<HTMLElement>()
+  const inspectFile = (id: string, trigger: HTMLElement) => { readingTrigger.current = trigger; setReadingFile(id) }
+  useEffect(() => {
+    if (readingFile) reading.current?.focus()
+    else if (readingTrigger.current?.isConnected) readingTrigger.current.focus({ preventScroll: true })
+  }, [readingFile])
   const [tab, setTab] = useState('assets')
   const [role, setRole] = useState<NonNullable<Reference['input_role']>>(initialRole || 'subject')
   const [participantIds, setParticipantIds] = useState(initialParticipantIds || [])
@@ -85,7 +95,10 @@ export function ReferencePicker({ rootClassName, projectId, assets, assetError, 
   }
   const selected = (id: string) => draft.some(ref => ref.id !== replaceId && ref.file_id === id)
   const visible = (ref: Reference) => !adding && scopeIds.has(ref.id) || !baseline.current.some(old => old.id === ref.id)
-  return <Modal rootClassName={rootClassName} title={title && title !== '添加参考' ? title : adding ? '添加参考' : '本单元参考'} zIndex={1050} open onCancel={close} width={640} styles={{ body: { maxHeight: 'min(70vh, calc(100dvh - 200px))', overflowY: 'auto' } }} footer={<Space><Button onClick={close}>{disabled ? '关闭' : '取消'}</Button>{!disabled && <Button type="primary" onClick={() => { if (JSON.stringify(references) !== JSON.stringify(baseline.current)) { setError('当前单元输入已变化，请取消并重新打开后编辑'); return }; active.current = false; onApply(latest.current); close() }}>应用到本单元</Button>}</Space>}>
+  const cancelAction = <Button onClick={close}>{disabled ? '关闭' : '取消'}</Button>
+  const applyAction = !disabled && <Button type="primary" onClick={() => { if (JSON.stringify(references) !== JSON.stringify(baseline.current)) { setError('当前单元输入已变化，请取消并重新打开后编辑'); return }; active.current = false; onApply(latest.current); close() }}>应用到本单元</Button>
+  return <Modal rootClassName={rootClassName} title={title && title !== '添加参考' ? title : adding ? '添加参考' : '本单元参考'} zIndex={1050} open onCancel={close} width={640} styles={{ body: { maxHeight: 'min(70vh, calc(100dvh - 200px))', overflowY: 'auto' } }} footer={Modal === WorkbenchModal ? <WorkbenchDialogActions secondary={cancelAction}>{applyAction}</WorkbenchDialogActions> : <Space>{cancelAction}{applyAction}</Space>}>
+    <div hidden={!!readingFile}>
     <Space direction="vertical" style={{ width: '100%' }}>
       {onEditAssets && <p>设计资产关联使用固定设计版本。<Button type="link" disabled={disabled || JSON.stringify(draft) !== JSON.stringify(baseline.current)} onClick={() => { close(); onEditAssets() }}>前往导演设计修改关联</Button></p>}
       {!!scopes.length && <details><summary>查看设计关联依据</summary><p>镜头设计范围不代表部分动作中的实际可见对象，也不代表已选入模型参考。</p>{scopes.map(row => <p key={row.coverage.id}>镜头 {design.direction.shots.findIndex(shot => shot.id === row.coverage.shot_id) + 1} · {row.known ? row.participants.map(person => design.participants.find(item => item.id === person.id)?.name || '对象引用不可用').join('、') || '明确无参与对象' : '范围待核对；现有调度与表演仅作关联依据'}{onInspectDesign && <Button type="link" disabled={disabled || JSON.stringify(draft) !== JSON.stringify(baseline.current)} onClick={() => { close(); onInspectDesign(`shot:${row.coverage.shot_id}`) }}>查看镜头设计关联</Button>}</p>)}
@@ -135,7 +148,7 @@ export function ReferencePicker({ rootClassName, projectId, assets, assetError, 
             {matching.map(asset => <section className="scene-asset-row" key={`${asset.kind}:${asset.id}`}><strong>{asset.name}</strong><span>已选 {(asset.image_file_ids || []).filter(selected).length} 张，可新增 {(asset.image_file_ids || []).filter(id => !selected(id)).length} 张</span>
               {!asset.image_file_ids?.length && <span>尚无可用图片，请在本场资产中准备。</span>}
               {!!asset.image_file_ids?.length && asset.image_file_ids.every(selected) && <p>暂无可新增素材；已选参考可在上方管理。</p>}
-              <Space wrap>{asset.image_file_ids?.map((fileId, index) => selected(fileId) ? null : <Space key={fileId} direction="vertical"><Image width={96} src={buildFileDownloadUrl(fileId)} />
+              <Space wrap>{asset.image_file_ids?.map((fileId, index) => selected(fileId) ? null : <Space key={fileId} direction="vertical"><Image width={96} preview={false} src={buildFileDownloadUrl(fileId)} /><Button onClick={event => inspectFile(fileId, event.currentTarget)}>查看参考图 {index + 1}</Button>
                 <Button disabled={!inputRole || inputRole === 'subject' && capability && !capability.subject_images} onClick={() => add(fileId, 'image', asset)}>选入 {asset.name} 图片 {index + 1}</Button>
               </Space>)}</Space>
             </section>)}
@@ -144,7 +157,7 @@ export function ReferencePicker({ rootClassName, projectId, assets, assetError, 
         {tab === 'files' && <Space direction="vertical" style={{ width: '100%' }}>
           <Input.Search placeholder="搜索素材" value={query} onChange={event => setQuery(event.target.value)} onSearch={() => void load()} loading={loading} />
           <Select value={global ? 'all' : 'project'} options={[{ value: 'project', label: '当前项目素材' }, { value: 'all', label: '全部已有素材' }]} onChange={value => { setGlobal(value === 'all'); void load(1, value === 'all') }} />
-          {files.filter(file => !selected(file.id)).map(file => <Space wrap key={file.id}>{file.type === 'image' ? <Image width={64} src={file.thumbnail || buildFileDownloadUrl(file.id)} /> : <span>视频</span>}<span>{file.name}</span>
+          {files.filter(file => !selected(file.id)).map(file => <Space wrap key={file.id}>{file.type === 'image' ? <><Image width={64} preview={false} src={file.thumbnail || buildFileDownloadUrl(file.id)} /><Button onClick={event => inspectFile(file.id, event.currentTarget)}>查看图片：{file.name}</Button></> : <span>视频</span>}<span>{file.name}</span>
             <Button disabled={!inputRole} onClick={() => add(file.id, file.type as Reference['media_kind'])}>选入</Button></Space>)}
           <Button onClick={() => void load(page)} loading={loading}>刷新素材</Button><Pagination size="small" current={page} total={total} pageSize={20} onChange={next => void load(next)} />
         </Space>}
@@ -156,5 +169,7 @@ export function ReferencePicker({ rootClassName, projectId, assets, assetError, 
         }}><Button disabled={!inputRole}>上传参考素材</Button></Upload></>}
       </Space></fieldset>}
     </Space>
+    </div>
+    {readingFile && <section ref={reading} tabIndex={-1} aria-label="参考图片 · 只读"><Button onClick={() => setReadingFile(undefined)}>返回参考选择</Button><img src={buildFileDownloadUrl(readingFile)} alt="参考图片" style={{ maxWidth: '100%' }} /></section>}
   </Modal>
 }

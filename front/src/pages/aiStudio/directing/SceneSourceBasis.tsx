@@ -1,5 +1,6 @@
+import { WorkbenchModal as Modal, WorkbenchDialogActions } from './ui/WorkbenchModal'
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Modal, Space, Spin, Tag } from 'antd'
+import { Alert, Button, Space, Spin, Tag } from 'antd'
 import { CanvasTextPreview } from './CanvasTextPreview'
 import { StudioDirectingService } from '../../../services/generated'
 import type { ChapterSequences, SceneVersionSource_Output, SourceSpan } from '../../../services/generated'
@@ -60,12 +61,12 @@ export function SceneSourceBasis({ projectId, chapterId, basis, disabled, onChan
       {changed && !continued && <Button onClick={() => setContinued(true)}>继续使用旧依据</Button>}
     </Space>
     <Modal rootClassName="canvas-workbench-dialog" title="核对当前版本原文依据" open={open} width={900} onCancel={() => setOpen(false)}
-      footer={<Space><Button onClick={() => setOpen(false)}>取消</Button>
+      footer={<WorkbenchDialogActions secondary={<Button onClick={() => setOpen(false)}>取消</Button>}>
         <Button type="primary" disabled={disabled || loading || !chapter || !span || !selected.trim()} onClick={() => {
           if (!chapter || !span || disabled) return
           onChange({ source: { kind: 'chapter', reference: chapterId, version: chapter.source_version }, ...span, text: selected })
           setOpen(false)
-        }}>更新当前版本原文依据</Button></Space>}>
+        }}>更新当前版本原文依据</Button></WorkbenchDialogActions>}>
       <p>在最新原文中选中属于本场的连续段落，再确认更新。仅修改当前版本，保留其他版本和已交付内容。</p>
       <p>更新后请核对已有设计、指令及素材判断；不会自动重写内容或生成下游数据。</p>
       {loading && <Spin />}

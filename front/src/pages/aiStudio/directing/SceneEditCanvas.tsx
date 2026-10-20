@@ -1,3 +1,5 @@
+import { CanvasCard } from '../../../components/canvas/Canvas'
+import { WorkbenchDetails } from './ui/WorkbenchDetails'
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Input, InputNumber, Select, Space } from 'antd'
 import { StudioDirectingService } from '../../../services/generated'
@@ -84,9 +86,18 @@ export function SceneEditCanvas({ projectId, sequenceId, versionId, revision, co
     onChange({ ...content, take_judgments: existing.some(row => identity(row) === selected)
       ? existing.map(row => identity(row) === selected ? judgment : row) : [...existing, judgment] })
   }
+  const [takeDetails, setTakeDetails] = useState(false)
   const stopLivePreview = () => { setPreview(false); setPreviewStop(value => value + 1); setSeamStop(value => value + 1) }
   const editDisabled = disabled || loading || !!error || !take?.available
-  return <DirectorCanvasSurface focusTarget={focusTarget} contextKey={`${versionId}:edit`} ariaLabel="编辑画布视口" labels={['同场次素材', '当前素材', '方案判断', '时间线']} initialPositions={{ 方案判断: { x: 800, y: 0 }, 时间线: { x: 0, y: 740 } }}>
+  const takeInformation = take && <>
+        <p>素材：{take.take_id}</p><p>文件：{take.file_id}</p><p>原所属{take.take_kind === 'scene_video' ? '场次版本' : '生产计划'}：{take.origin_id}</p>
+        {take.take_kind === 'scene_video' && <OpenTakeVersion key={selected} disabled={loading || !!error} onOpen={() => onOpenVersion({ versionId: take.origin_id, unitId: take.unit_id })} />}
+        <p>实际媒体时长：{take.duration_ms == null ? '尚未核实' : `${take.duration_ms / 1000} 秒`}</p>
+        <SceneTakeBasis key={selected} projectId={projectId} sequenceId={sequenceId} versionId={versionId} take={take} content={content} />
+        <details><summary>查看固定生产依据</summary><p>原单元：{take.unit_id}</p><p>原任务：{take.task_id}</p>
+          <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(take.video_preparation || { prompt: take.prompt, production_plan: take.production_plan }, null, 2)}</pre></details>
+  </>
+  return <><DirectorCanvasSurface focusTarget={focusTarget} contextKey={`${versionId}:edit`} inspectors={{ 当前素材: take ? () => setTakeDetails(true) : undefined }} ariaLabel="编辑画布视口" labels={['同场次素材', '当前素材', '方案判断', '时间线']} initialPositions={{ 方案判断: { x: 800, y: 0 }, 时间线: { x: 0, y: 740 } }}>
     <section className="canvas-workbench-card">
       <Button loading={loading} onClick={() => setAttempt(value => value + 1)}>刷新素材库</Button>
       {error && <Alert type="warning" message="素材库读取失败" description={error} />}
@@ -94,24 +105,21 @@ export function SceneEditCanvas({ projectId, sequenceId, versionId, revision, co
       {takes.map((row, index) => {
         const judgment = content.take_judgments.find(item => identity(item) === identity(row))
         const issues = !loading && !error && judgment ? sceneTakeIssues(judgment, row, content) : []
-        return <div key={identity(row)}><Button onClick={() => {
+        return <CanvasCard key={identity(row)} aria-label={`素材 ${index + 1}`} onActivate={() => { setSelected(identity(row)); setPreview(false); setPreviewError(''); setTakeDetails(true) }}><Button onClick={() => {
           setSelected(identity(row)); setPreview(false); setPreviewError('')
         }}>选择素材 {index + 1}</Button><p>{row.take_kind === 'scene_video' ? '场次版本素材' : '生产计划素材'} · {row.available ? '已登记' : '文件不可用'}</p>
           {issues.map(issue => <p key={issue.label}><Button danger onClick={() => {
             setSelected(identity(row)); setPreview(false); setPreviewError('')
             setFocusTarget(previous => ({ nodeId: '方案判断', fieldId: issue.fieldId, serial: (previous?.serial || 0) + 1 }))
           }}>定位素材 {index + 1}：{issue.label}</Button></p>)}
-        </div>
+        </CanvasCard>
       })}
     </section>
     <section className="canvas-workbench-card" id="scene-current-take" tabIndex={-1} aria-label="当前源素材">
       {!take ? <p>{selected ? loading || error ? '原素材仍待核实，请重试读取；未选择替代素材。' : '原素材已不可用，请重新选择；未选择替代素材。' : '明确选择素材后查看来源与预览。'}</p> : <>
-        <p>素材：{take.take_id}</p><p>文件：{take.file_id}</p><p>原所属{take.take_kind === 'scene_video' ? '场次版本' : '生产计划'}：{take.origin_id}</p>
-        {take.take_kind === 'scene_video' && <OpenTakeVersion key={selected} disabled={loading || !!error} onOpen={() => onOpenVersion({ versionId: take.origin_id, unitId: take.unit_id })} />}
+        <p className="canvas-card-summary">素材：{take.take_id} · {take.take_kind === 'scene_video' ? '场次版本素材' : '生产计划素材'}</p>
         <p>实际媒体时长：{take.duration_ms == null ? '尚未核实' : `${take.duration_ms / 1000} 秒`}</p>
-        <SceneTakeBasis key={selected} projectId={projectId} sequenceId={sequenceId} versionId={versionId} take={take} content={content} />
-        <details><summary>查看固定生产依据</summary><p>原单元：{take.unit_id}</p><p>原任务：{take.task_id}</p>
-          <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(take.video_preparation || { prompt: take.prompt, production_plan: take.production_plan }, null, 2)}</pre></details>
+        <Button onClick={() => setTakeDetails(true)}>查看素材固定依据</Button>
         <Button disabled={!take.available || !take.media_url || loading || !!error} onClick={() => {
           setPreviewStop(value => value + 1); setSeamStop(value => value + 1); setPreview(true); setPreviewError(''); setPreviewAttempt(value => value + 1)
         }}>{previewError ? '重试当前素材预览' : '预览当前素材'}</Button>
@@ -164,7 +172,7 @@ export function SceneEditCanvas({ projectId, sequenceId, versionId, revision, co
       <SceneCutReviews takes={takes} onHistoryPreviewStart={stopLivePreview} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content}
         dirty={dirty} disabled={disabled || loading || !!error} />
     </SceneTimelineEditor>
-  </DirectorCanvasSurface>
+  </DirectorCanvasSurface><WorkbenchDetails title="素材固定依据 · 只读" status="只读" open={takeDetails && !!take} onClose={() => setTakeDetails(false)}>{takeInformation}</WorkbenchDetails></>
 }
 
 /** 明确打开原版本才执行切换保护；读取错误只归属当前素材入口。 */

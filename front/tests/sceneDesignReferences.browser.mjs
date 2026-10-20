@@ -1,4 +1,6 @@
-import { workbenchControl } from './workbenchControls.mjs'
+import { makeWorkspace } from './directing-fixtures.mjs'
+import { unitSettings } from './workbenchControls.mjs'
+import { workbenchControl, workbenchShot, selectWorkbenchOption, directorObject } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -45,8 +47,9 @@ try {
   assert.equal(create.status, 200)
   const version = (await create.json()).data
   const content = version.content
-  content.design.direction.shots = ['shot-one', 'shot-two'].map(id => ({ id, beat_ids: [], event_ids: [], blocking_state_ids: [], participant_ids: null, criterion_ids: [], narrative_function: {}, visible_result: { state: 'proposal', text: '相同名称', sources: [{ kind: 'human', reference: 'local-user', version: '1' }] } }))
+  content.design.direction.shots = ['shot-one', 'shot-two'].map(id => ({ id, beat_ids: [], event_ids: [], blocking_state_ids: [], participant_ids: [], criterion_ids: [], narrative_function: {}, visible_result: { state: 'proposal', text: '相同名称', sources: [{ kind: 'human', reference: 'local-user', version: '1' }] } }))
   content.units = [{ id: 'unit-one', ratio: '16:9', coverage: [{ id: 'coverage-one', shot_id: 'shot-one', action_scope: '保留实际拍摄范围' }] }]
+  content.design.cinematography = [{ ...structuredClone(makeWorkspace().designs[0].content.cinematography[0]), id: 'camera-two', shot_id: 'shot-two', criterion_ids: [] }]
   const saved = await fetch(`${versionsUrl}/${version.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: version.revision, content }) })
   assert.equal(saved.status, 200, await saved.text())
   await page.goto(`http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
@@ -75,9 +78,9 @@ try {
 
   assert.equal((await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.content.design.direction.shots.length, 2)
   await page.getByRole('button', { name: '定位单元 1 · 覆盖 1', exact: true }).click()
-  await page.getByRole('combobox', { name: '覆盖 1 所属镜头', exact: true }).press('ArrowDown')
-  await page.getByText('镜头 2：相同名称', { exact: true }).click()
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await unitSettings(page)
+  await selectWorkbenchOption(page, '覆盖 1 所属镜头', '镜头 2：相同名称')
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   const repaired = (await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.content
   assert.equal(repaired.units[0].coverage[0].shot_id, 'shot-two')
   assert.equal(repaired.units[0].coverage[0].action_scope, '保留实际拍摄范围')
@@ -91,25 +94,31 @@ try {
 
   await page.getByRole('button', { name: '应用设计', exact: true }).click()
   await page.getByRole('dialog', { name: 'AI 设计', exact: true }).waitFor({ state: 'hidden' })
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   const applied = (await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.content
   assert.deepEqual(applied.design.direction.shots.map(row => row.id), ['shot-two'])
   assert.deepEqual(applied.units, repaired.units)
   await page.getByRole('button', { name: '撤销', exact: true }).click()
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   const undone = (await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.content
   assert.deepEqual(undone.design.direction.shots.map(row => row.id), ['shot-one', 'shot-two'])
   assert.deepEqual(undone.units, repaired.units)
   await page.screenshot({ path: join(output, 'design-reference-recovery.png'), animations: 'disabled' })
   await page.getByRole('button', { name: '导演画布', exact: true }).click()
-  await page.getByRole('button', { name: '编辑六岗设计', exact: true }).click()
-  await page.getByRole('button', { name: '总导演', exact: true }).click()
-  await page.getByRole('button', { name: '移除镜头覆盖 2', exact: true }).click()
+  await (await workbenchShot(page, '镜头 2：相同名称')).click()
+  await page.locator('[data-canvas-node="camera:camera-two"]').getByRole('button', { name: '编辑此卡', exact: true }).click()
+  await page.getByRole('button', { name: '删除此卡', exact: true }).click()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
+  const beforeGuard = (await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.content
+  await directorObject(page, /^镜头 02/, '镜头 02')
+  await page.getByRole('button', { name: '删除此卡', exact: true }).click()
   await page.getByText('对象仍被单元引用，请先处理下游引用。', { exact: true }).waitFor()
   await page.getByRole('button', { name: '定位单元 1 · 覆盖 1', exact: true }).click()
+  await unitSettings(page)
   await page.getByRole('textbox', { name: '单元动作范围', exact: true }).waitFor()
+  await unitSettings(page)
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '保留实际拍摄范围')
-  assert.deepEqual((await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.content, undone)
+  assert.deepEqual((await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.content, beforeGuard)
   console.log(`PASS design reference recovery; evidence: ${output}`)
 } catch (error) {
   if (page) await page.screenshot({ path: join(output, 'failure.png'), fullPage: true, animations: 'disabled' }).catch(() => {})

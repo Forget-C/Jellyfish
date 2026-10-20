@@ -1,5 +1,6 @@
+import { WorkbenchDetails } from './ui/WorkbenchDetails'
 import { useEffect, useState } from 'react'
-import { Alert, Button, Modal } from 'antd'
+import { Alert, Button } from 'antd'
 import { StudioDirectingService } from '../../../services/generated'
 import type { AssetSummary, SceneVersionContent_Output } from '../../../services/generated'
 import { buildFileDownloadUrl } from '../assets/utils'
@@ -13,8 +14,8 @@ import { directingError } from './common'
 export type SceneInspectionTarget = { kind: 'design'; target: DesignTarget; fields?: string[] } | { kind: 'basis' | 'shared' | 'location' } | { kind: 'participant'; id: string } | { kind: 'reference'; unitId: string; id: string }
 
 /** 就地查看当前版本的真实对象；不接受写入回调，也不切换底层编辑上下文。 */
-export function SceneRelationDetails({ projectId, content, target, onClose }: {
-  projectId: string; content: SceneVersionContent_Output; target: SceneInspectionTarget; onClose: () => void
+export function SceneRelationDetails({ projectId, content, target, onClose, inline = false }: {
+  projectId: string; content: SceneVersionContent_Output; target: SceneInspectionTarget; onClose: () => void; inline?: boolean
 }) {
   const [trigger] = useState(() => document.activeElement instanceof HTMLElement ? document.activeElement : undefined)
   const close = () => {
@@ -48,8 +49,7 @@ export function SceneRelationDetails({ projectId, content, target, onClose }: {
     return <section><p>资产身份：{id}</p>{row ? <><p>{kind === 'character' ? '角色' : kind === 'scene' ? '场所' : '道具'}资产：{row.name}</p><p>{row.description || '尚无资产说明'}</p>
       {(loading || error) && <p>上次读取的资产信息，当前状态待核实。</p>}</> : !loading && !error && assets && <p>原资产已不可用</p>}</section>
   }
-  return <Modal open title="关系对象 · 只读" rootClassName="canvas-workbench-dialog" width={720} onCancel={close}
-    footer={<Button onClick={close}>返回当前工作</Button>}>
+  const body = <>
     <p>查看当前版本的对象与关联，不修改设计、参考绑定或当前选择。</p>
     {target.kind === 'basis' && <><h3>版本原文依据</h3><p style={{ whiteSpace: 'pre-wrap' }}>{content.basis.text}</p><SourceLinks sources={[content.basis.source]} /></>}
     {target.kind === 'design' && (designPath ? <DesignFields value={content.design} path={designPath} fields={target.fields} disabled onChange={() => {}} /> : <Alert type="warning" message="原设计对象已不可用，请重新选择" />)}
@@ -69,5 +69,6 @@ export function SceneRelationDetails({ projectId, content, target, onClose }: {
       {mediaError && <Alert type="warning" message="参考媒体读取失败，原绑定已保留" action={<Button onClick={() => { setMediaError(false); setMediaAttempt(value => value + 1) }}>重试参考媒体</Button>} />}
       <SourceLinks sources={[reference.source]} />
     </> : <Alert type="warning" message="原参考已不可用，请重新选择" />)}
-  </Modal>
+  </>
+  return inline ? <section><Button onClick={close}>返回关系总览</Button>{body}</section> : <WorkbenchDetails open title="关系对象 · 只读" status="只读" onClose={close}>{body}</WorkbenchDetails>
 }

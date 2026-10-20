@@ -1,3 +1,6 @@
+import { makeWorkspace } from './directing-fixtures.mjs'
+import { workbenchControl, workbenchShot } from './workbenchControls.mjs'
+import { unitSettings } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -44,17 +47,19 @@ try {
   assert.equal(create.status, 200)
   const version = (await create.json()).data
   const content = version.content
-  content.design.direction.shots = [{ id: 'shot', beat_ids: [], event_ids: [], blocking_state_ids: [], criterion_ids: [], narrative_function: {}, visible_result: { state: 'proposal', text: '准备指令', sources: [{ kind: 'human', reference: 'fixture', version: '1' }] } }]
+  content.design.direction.shots = [{ id: 'shot', beat_ids: [], event_ids: [], blocking_state_ids: [], participant_ids: [], criterion_ids: [], narrative_function: {}, visible_result: { state: 'proposal', text: '准备指令', sources: [{ kind: 'human', reference: 'fixture', version: '1' }] } }]
   content.units = [{ id: 'unit', model_id: 'browser-video-model', duration_ms: 5000, ratio: '16:9', coverage: [{ id: 'coverage', shot_id: 'shot', action_scope: '拆开信封' }] }]
+  content.design.cinematography = content.design.direction.shots.map((shot, index) => ({ ...structuredClone(makeWorkspace().designs[0].content.cinematography[0]), id: `camera-${index}`, shot_id: shot.id, criterion_ids: [] }))
   const savedResponse = await fetch(`${versionsUrl}/${version.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: 1, content }) })
   assert.equal(savedResponse.status, 200, await savedResponse.clone().text())
   const saved = (await savedResponse.json()).data
 
   const tasksUrl = `${versionsUrl}/${version.id}/units/unit/instruction-suggestions`
   await page.goto(`http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
-  await page.getByRole('switch', { name: '自动保存', exact: true }).click()
-  await page.getByRole('button', { name: '镜头 1：准备指令', exact: true }).click()
+  await (await workbenchControl(page, '保存设置', 'switch', '自动保存')).click()
+  await (await workbenchShot(page, '镜头 1：准备指令')).click()
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
+  await unitSettings(page)
   await page.getByRole('spinbutton', { name: '单元预计时长', exact: true }).fill('')
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
   const primary = page.getByRole('navigation', { name: '当前指令主操作', exact: true })
@@ -64,7 +69,8 @@ try {
   await primary.getByRole('button', { name: '补齐当前单元准备', exact: true }).click()
   await page.waitForFunction(() => document.activeElement?.id === 'scene-unit-duration')
   assert.deepEqual((await (await fetch(tasksUrl)).json()).data, [])
-  await page.getByRole('spinbutton', { name: '单元预计时长', exact: true }).fill('5000')
+  await unitSettings(page)
+  await page.getByRole('spinbutton', { name: '单元预计时长', exact: true }).fill('5')
   await page.route('**/video-generation-options?*', route => route.abort('failed'))
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
   await primary.getByRole('button', { name: '补齐当前单元准备', exact: true }).click()

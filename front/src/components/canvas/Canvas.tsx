@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { forwardRef, useEffect, useId, useRef, useState } from 'react'
 import type { ButtonHTMLAttributes, HTMLAttributes } from 'react'
 import { canvasConnection, fitCanvas } from './geometry'
 import type { CanvasPoint, CanvasTransform } from './geometry'
@@ -84,6 +84,17 @@ const nodeClass = (state: NodeState, className = '') => `canvas-node ${className
 export function CanvasNodeFrame({ nodeId, nodeType, tone = 'neutral', selected, muted, missing, stale, className, ...props }: NodeState & HTMLAttributes<HTMLDivElement>) {
   return <div {...props} data-canvas-node={nodeId} data-canvas-type={nodeType} data-canvas-tone={tone} className={nodeClass({ nodeId, nodeType, selected, muted, missing, stale }, `canvas-node-frame ${className || ''}`)} />
 }
+
+/** 摘要、范围入口与引用共享激活机制；嵌套控件和标题拖动保持独立。 */
+export const CanvasCard = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement> & { onActivate?: (trigger: HTMLElement) => void }>(function CanvasCard({ onActivate, onClick, onKeyDown, ...props }, ref) {
+  return <div {...props} ref={ref} tabIndex={onActivate ? 0 : -1} onClick={event => {
+    onClick?.(event)
+    if (!event.defaultPrevented && event.currentTarget.contains(event.target as Node) && !(event.target as Element).closest('button, input, textarea, select, a, summary, label, [contenteditable="true"], [role="button"], [role="combobox"], audio, video')) onActivate?.(event.currentTarget)
+  }} onKeyDown={event => {
+    onKeyDown?.(event)
+    if (!event.defaultPrevented && event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onActivate?.(event.currentTarget) }
+  }} />
+})
 
 export function CanvasNodeButton({ nodeId, nodeType, tone = 'neutral', selected, muted, missing, stale, className, ...props }: NodeState & ButtonHTMLAttributes<HTMLButtonElement>) {
   return <button {...props} type="button" data-canvas-node={nodeId} data-canvas-type={nodeType} data-canvas-tone={tone} aria-pressed={!!selected} className={nodeClass({ nodeId, nodeType, selected, muted, missing, stale }, className)} />

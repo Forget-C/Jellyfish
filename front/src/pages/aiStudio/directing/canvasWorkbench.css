@@ -3,7 +3,7 @@
 .canvas-workbench-toolbar a { color: var(--wb-muted); }
 .canvas-workbench-toolbar .ant-select { min-width: 180px; }
 .canvas-workbench-toolbar .ant-btn { color: var(--wb-text); }
-.canvas-workbench-toolbar .ant-btn-primary:not(:disabled) { background: #1668dc; border-color: #3c89e8; }
+.canvas-workbench-toolbar .ant-btn-primary:not(.ant-btn-dangerous):not(:disabled) { background: var(--wb-primary); border-color: var(--wb-strongBorder); }
 .canvas-workbench-toolbar .ant-btn:disabled { color: #808080; background: #171717; border-color: #2d2d2d; }
 .canvas-workbench-toolbar .ant-select .ant-select-selector { color: var(--wb-text); background: #242424; border-color: #383838; }
 .canvas-workbench-toolbar .ant-select-arrow { color: var(--wb-muted); }
@@ -17,14 +17,14 @@
 .canvas-manual-shots nav { margin-top: 16px; }
 .canvas-asset-drop { border: 1px dashed #626262; padding: 16px; margin: 12px 0; color: var(--wb-muted); border-radius: 8px; }
 .canvas-manual-shots .ant-btn { white-space: normal; height: auto; color: var(--wb-text); background: #242424; border-color: #383838; }
-.canvas-manual-shots .ant-btn-primary:not(:disabled) { background: #1668dc; }
+.canvas-manual-shots .ant-btn-primary:not(.ant-btn-dangerous):not(:disabled) { background: var(--wb-primary); }
 .canvas-manual-shots .ant-btn:disabled { color: #737373; background: #171717; }
 .canvas-workbench-notice { padding: 36px; text-align: center; }
 .canvas-workbench .ant-alert-message, .canvas-workbench .ant-alert-description { color: var(--wb-text); }
 .canvas-workbench-dialog .ant-modal-content, .canvas-workbench-dialog .ant-modal-header { color: var(--wb-text); background: var(--wb-surface); }
 .canvas-workbench-dialog .ant-modal-title, .canvas-workbench-dialog .ant-modal-body, .canvas-workbench-dialog .ant-alert-message, .canvas-workbench-dialog .ant-alert-description { color: var(--wb-text); }
 .canvas-workbench-dialog .ant-btn:where(:not(.ant-btn-dangerous):not(.ant-btn-link):not(:disabled)) { color: var(--wb-text); background: #242424; border-color: #383838; }
-.canvas-workbench-dialog .ant-btn-primary { background: #1668dc; border-color: #3c89e8; }
+.canvas-workbench-dialog .ant-btn-primary:not(.ant-btn-dangerous) { background: var(--wb-primary); border-color: var(--wb-strongBorder); }
 .canvas-workbench-dialog .ant-btn:disabled { color: #737373; background: #171717; border-color: #2d2d2d; }
 .canvas-workbench-dialog .ant-modal-close { color: var(--wb-text); }
 .canvas-workbench-dialog a { color: #a8c9ff; }
@@ -169,7 +169,6 @@
 .scene-relations-tree .ant-btn-text { background: transparent; border-color: transparent; }
 .scene-relations-tree .ant-btn-text[aria-current="location"] { background: #383838; }
 
-.scene-overview-dialog .ant-modal-body { height: calc(100dvh - 160px); display: flex; flex-direction: column; overflow: auto; }
 .scene-overview-viewport { flex: 1; min-height: 120px; overflow: auto; border: 1px solid #383838; border-radius: 8px; background: var(--wb-canvas); }
 .scene-overview-graph { position: relative; }
 .scene-overview-graph h3 { position: absolute; top: 8px; margin: 0; font-size: 14px; }
@@ -219,14 +218,6 @@
 .director-unlinked-bubble { top: calc(var(--workbench-content-top, 100px) + 60px); left: 16px; display: flex; align-items: center; gap: 12px; }
 .director-first-shot { left: 50%; bottom: 72px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; white-space: nowrap; }
 .director-first-shot p { margin: 0; }
-.director-info-panel { position: fixed; z-index: 35; top: calc(var(--workbench-content-top, 100px) + 60px); right: 16px; bottom: 68px; width: min(360px, calc(100vw - 32px)); box-sizing: border-box; overflow: auto; padding: 16px; color: var(--wb-text); background: var(--wb-surface); border: 1px solid #383838; border-radius: 12px; box-shadow: 0 12px 32px #0008; }
-.director-info-panel header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.director-info-panel h2 { margin: 0; font-size: 16px; }
-.director-info-panel h3 { margin: 16px 0 8px; font-size: 14px; }
-.director-info-panel p, .director-info-panel label { color: var(--wb-muted); }
-.director-info-panel label { display: block; margin: 16px 0 8px; }
-.director-info-panel .ant-select { width: 100%; }
-.director-info-panel section > .ant-btn { display: block; width: 100%; height: auto; margin: 4px 0; text-align: left; white-space: normal; }
 .director-info-relation ul { margin: 0; padding-left: 20px; overflow-wrap: anywhere; }
 .director-modal-title { display: flex; align-items: center; gap: 16px; padding-right: 24px; }
 .director-modal-title small { color: var(--wb-muted); font-size: 12px; font-weight: 400; }
@@ -242,7 +233,7 @@
 .scene-relations-tree-content .ant-btn { max-width: 100%; }
 .canvas-operation-feedback { display: contents; }
 .canvas-workbench-dialog .ant-btn-text, .canvas-workbench-card .ant-btn-text { background: transparent; border-color: transparent; }
-.canvas-workbench :is(.ant-btn-primary:not(:disabled)) { background: #1668dc; border-color: #3c89e8; }
+.canvas-workbench :is(.ant-btn-primary:not(.ant-btn-dangerous):not(:disabled)) { background: var(--wb-primary); border-color: var(--wb-strongBorder); }
 @media (max-width: 1200px) {
   .canvas-workbench-toolbar { grid-template-columns: minmax(0, 1fr) auto; gap: 8px 16px; }
   .canvas-toolbar-identity { grid-column: 1; grid-row: 1; }
@@ -264,7 +255,6 @@
   .canvas-director-browse { width: 100%; justify-content: space-between; gap: 2px; }
   .director-unlinked-bubble { left: 12px; }
   .director-first-shot { bottom: 120px; }
-  .director-info-panel { right: 12px; width: calc(100vw - 24px); }
   .director-minimap { right: 12px; bottom: 68px; }
   .director-minimap-toggle { right: 12px; bottom: 68px; }
   .director-minimap-toggle-open { right: 16px; bottom: 164px; }
@@ -403,3 +393,6 @@
 
 .director-canvas-title h2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .director-canvas-title .director-node-menu { flex-shrink: 0; }
+
+/* 桌面详情保持非模态，顶部菜单可覆盖详情；窄屏仍由详情独占交互。 */
+@media (min-width: 1280px) { .canvas-workbench-toolbar { z-index: 995; } }

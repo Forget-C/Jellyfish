@@ -2,7 +2,7 @@ import { Children, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button, Dropdown, Space, Tooltip } from 'antd'
 import { AimOutlined, ApartmentOutlined, CloseOutlined, CompassOutlined, EnvironmentOutlined, FolderAddOutlined, MinusOutlined, PlusOutlined, ToolOutlined, UserOutlined } from '@ant-design/icons'
-import { CanvasDragHandle, CanvasEdge, useCanvasViewport } from '../../../components/canvas/Canvas'
+import { CanvasCard, CanvasDragHandle, CanvasEdge, useCanvasViewport } from '../../../components/canvas/Canvas'
 import { canvasConnection } from '../../../components/canvas/geometry'
 import type { CanvasPoint, CanvasTransform } from '../../../components/canvas/geometry'
 import { directorGroup, directorGroups, fixedDirectorSize } from './directorLayout'
@@ -237,8 +237,7 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
             if (trigger) node.onInspect?.(trigger)
           } }] }
           const highlighted = layoutScope && (activeRelation !== undefined && [relations[activeRelation]?.from, relations[activeRelation]?.to].includes(id) || !!activeNode && (id === activeNode || relations.some(relation => relation.from === activeNode && relation.to === id || relation.to === activeNode && relation.from === id)))
-          return <Dropdown key={id} menu={menu} trigger={['contextMenu']}><div data-canvas-node={id} data-shot-related={node.related || undefined} className={`director-canvas-object${node.entry ? ' director-subgraph-entry' : ''}${layoutScope && (node.size || fixedDirectorSize(id)) ? ' director-compact-card' : ''}${highlighted ? ' director-relation-endpoint' : ''}`} tabIndex={-1}
-            onClick={event => { if (node.entry && event.currentTarget.contains(event.target as Node) && !(event.target as Element).closest('button')) node.onInspect?.(event.currentTarget) }}
+          return <Dropdown key={id} menu={menu} trigger={['contextMenu']}><CanvasCard aria-label={label} role="group" data-canvas-node={id} data-shot-related={node.related || undefined} className={`director-canvas-object${node.entry ? ' director-subgraph-entry' : ''}${layoutScope && (node.size || fixedDirectorSize(id)) ? ' director-compact-card' : ''}${highlighted ? ' director-relation-endpoint' : ''}`} onActivate={node.onInspect}
             onMouseEnter={event => { if (layoutScope && event.currentTarget.contains(event.target as Node)) setHovered(id) }} onMouseLeave={event => { if (layoutScope && event.currentTarget.contains(event.target as Node)) setHovered(undefined) }}
             onMouseMove={event => { if (layoutScope && event.currentTarget.contains(event.target as Node) && (event.movementX || event.movementY)) { setHovered(id); setFocused(undefined); setEdgeFocus(undefined); setEdgeHover(undefined) } }}
             onKeyDownCapture={event => { if (layoutScope && event.currentTarget.contains(event.target as Node)) { setFocused(id); setEdgeFocus(undefined); setEdgeHover(undefined) } }}
@@ -259,7 +258,7 @@ export function DirectorCanvasSurface({ contextKey, children, objects = [], rela
                 onClick={event => node.onInspect?.(event.currentTarget)} />
               <div className="director-node-summary">{node.content}</div>
             </div>
-          </div></Dropdown>
+          </CanvasCard></Dropdown>
         })}
       </div>
     </div>

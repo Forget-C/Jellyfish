@@ -1,5 +1,7 @@
+import { WorkbenchDetails } from './ui/WorkbenchDetails'
+import { WorkbenchModal as Modal, WorkbenchDialogActions } from './ui/WorkbenchModal'
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Checkbox, Modal, Space } from 'antd'
+import { Alert, Button, Checkbox } from 'antd'
 import { StudioDirectingService } from '../../../services/generated'
 import type { SceneVersionContent_Output, SceneVersionRead, SceneVideoPreparation_Output } from '../../../services/generated'
 import { SceneVideoBatchTask } from './SceneVideoBatchTask'
@@ -29,6 +31,8 @@ export function SceneVideoBatch({ projectId, sequenceId, version, content, disab
     })
   }, [activities])
   const [open, setOpen] = useState(false)
+  const [recordsOpen, setRecordsOpen] = useState(false)
+  const readingRecords = open || recordsOpen
   const [selected, setSelected] = useState<string[]>([])
   const [checks, setChecks] = useState<Record<string, Checked>>({})
   const [comparisons, setComparisons] = useState<Record<string, { key: string; matches?: boolean; pending?: boolean; error?: string }>>({})
@@ -58,7 +62,7 @@ export function SceneVideoBatch({ projectId, sequenceId, version, content, disab
   const [readAttempt, setReadAttempt] = useState(0)
   const unitIds = JSON.stringify(content.units.map(unit => unit.id))
   useEffect(() => {
-    if (!open) return
+    if (!readingRecords) return
     let active = true
     setReading(true)
     void Promise.all(content.units.map(async (unit, index) => {
@@ -77,7 +81,7 @@ export function SceneVideoBatch({ projectId, sequenceId, version, content, disab
       setReading(false)
     })
     return () => { active = false }
-  }, [open, projectId, sequenceId, version.id, unitIds, readAttempt])
+  }, [readingRecords, projectId, sequenceId, version.id, unitIds, readAttempt])
   const mounted = useRef(true)
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   const applicable = (id: string) => !comparisons[id]?.pending && !comparisons[id]?.error &&
@@ -100,9 +104,29 @@ export function SceneVideoBatch({ projectId, sequenceId, version, content, disab
     }))
     if (mounted.current) { setChecks(previous => ({ ...previous, ...Object.fromEntries(results) })); setBusy(false) }
   }
+  const unitLabel = (id: string) => {
+    const index = content.units.findIndex(unit => unit.id === id)
+    return index < 0 ? `原单元 ${id}` : `单元 ${index + 1}`
+  }
   return <>
     <Button disabled={disabled} onClick={() => setOpen(true)}>批量拍摄</Button>
-    <Modal rootClassName="canvas-workbench-dialog" title="批量预检与拍摄" open={open} onCancel={() => setOpen(false)} footer={null} width={720}>
+    <Button onClick={() => { setOpen(false); setRecordsOpen(true) }}>拍摄记录</Button>
+    <WorkbenchDetails open={recordsOpen} title="批量拍摄记录" status="固定任务记录" initialExpanded onClose={() => setRecordsOpen(false)}>
+      {reading && <p role="status">正在读取各单元视频记录</p>}
+      {storageError && <Alert type="error" message={storageError} />}
+      {!tasks.length && !reading && <p>暂无拍摄任务记录</p>}
+      {Object.entries(readErrors).map(([id, error]) => <Alert key={id} type="error" message={`${unitLabel(id)}任务记录读取失败`} description={error} action={<Button onClick={() => setReadAttempt(value => value + 1)}>重读拍摄记录</Button>} />)}
+      {pending.map(request => <Alert key={request.unitId} type="warning" message={`${unitLabel(request.unitId)}：${request.submitting ? '正在核实视频请求' : '视频提交待核实'}`} description={request.error} action={<Button disabled={disabled || request.submitting} onClick={() => onVerify(request.unitId)}>核实{unitLabel(request.unitId)}原视频请求</Button>} />)}
+      {recordsOpen && tasks.map(target => <SceneVideoBatchTask key={target.taskId} target={target} disabled={disabled} />)}
+    </WorkbenchDetails>
+    <Modal rootClassName="canvas-workbench-dialog" title="批量预检与拍摄" open={open} onCancel={() => setOpen(false)} footer={<WorkbenchDialogActions secondary={<Button onClick={() => setOpen(false)}>返回画布</Button>}>
+        <Button disabled={disabled || busy || !selected.length} loading={busy} onClick={() => void preflight()}>预检所选 {selected.length} 项</Button>
+        <Button type="primary" disabled={disabled || busy || !eligible.length} onClick={() => {
+          const submitted = eligible.filter(id => onSubmit(checks[id].preparation!))
+          setChecks(previous => Object.fromEntries(Object.entries(previous).map(([id, value]) => [id, submitted.includes(id) ? { ...value, submitted: true } : value])))
+        }}>提交可执行 {eligible.length} 项</Button>
+      </WorkbenchDialogActions>} width={720}>
+      <Button onClick={() => { setOpen(false); setRecordsOpen(true) }}>查看已提交拍摄记录</Button>
       <p>选择单元的当前指令及已确认检查，先逐项预检，再明确提交。预检不自动保存或拍摄。</p>
       {error && <Alert type="error" message={error} />}
       {storageError && <Alert type="error" message={storageError} />}
@@ -123,18 +147,12 @@ export function SceneVideoBatch({ projectId, sequenceId, version, content, disab
           {request && <Alert type="warning" message={`单元 ${index + 1}：${request.submitting ? '正在核实视频请求' : '视频提交待核实'}`} description={request.error}
             action={<Button disabled={disabled || request.submitting} onClick={() => onVerify(unit.id)}>核实单元 {index + 1} 原视频请求</Button>} />}
           <p>{checked?.submitted ? '已交给逐项提交，请查看视频通知或核实原请求' : changed ? '输入已变化，请保存并重新预检' : checked?.error || (checked?.preparation ? '预检通过' : '尚未预检')}</p>
-          {open && tasks.filter(target => target.unitId === unit.id).map(target => <SceneVideoBatchTask key={target.taskId} target={target} disabled={disabled} />)}
+          <p>已有任务：{tasks.filter(target => target.unitId === unit.id).length} 项</p>
           <Button onClick={async () => { try { await onLocate(unit.id); setOpen(false) } catch (cause) { setError(directingError(cause)) } }}>定位单元 {index + 1}</Button>
         </section>
       })}
       <p>可提交 {eligible.length} 项 · 受阻 {selected.filter(id => checks[id] && !checks[id].submitted && !eligible.includes(id)).length} 项</p>
-      <Space>
-        <Button disabled={disabled || busy || !selected.length} loading={busy} onClick={() => void preflight()}>预检所选 {selected.length} 项</Button>
-        <Button type="primary" disabled={disabled || busy || !eligible.length} onClick={() => {
-          const submitted = eligible.filter(id => onSubmit(checks[id].preparation!))
-          setChecks(previous => Object.fromEntries(Object.entries(previous).map(([id, value]) => [id, submitted.includes(id) ? { ...value, submitted: true } : value])))
-        }}>提交可执行 {eligible.length} 项</Button>
-      </Space>
+
     </Modal>
   </>
 }

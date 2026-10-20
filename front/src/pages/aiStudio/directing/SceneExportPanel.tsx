@@ -1,6 +1,8 @@
+import { WorkbenchDetails } from './ui/WorkbenchDetails'
+import { WorkbenchModal as Modal, WorkbenchDialogActions } from './ui/WorkbenchModal'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Alert, Button, Modal, Popover, Select, Space } from 'antd'
+import { Alert, Button, Popover, Select, Space } from 'antd'
 import { ApiError, FilmService, StudioDirectingService } from '../../../services/generated'
 import type { SceneExportRead, SceneExportRequest, SceneVersionRead, SceneVersionContent_Output, SceneExportInspection } from '../../../services/generated'
 import { resolveAssetUrl } from '../assets/utils'
@@ -136,7 +138,9 @@ export function SceneExportPanel({ feedbackHost, triggerHost, projectId, sequenc
     {!historyOnly && (triggerHost ? createPortal(trigger, triggerHost) : trigger)}
     {!historyOnly && feedbackHost && (pending || storageError || error) && createPortal(<Alert type="warning" message={pending ? '导出提交待核实' : storageError || error}
       action={<Button onClick={() => setSettingsOpen(true)}>处理导出状态</Button>} />, feedbackHost)}
-    <Modal rootClassName="canvas-workbench-dialog" title="整场导出" open={!historyOnly && settingsOpen} onCancel={() => setSettingsOpen(false)} footer={<Button onClick={() => setSettingsOpen(false)}>返回画布</Button>}>
+    <Modal rootClassName="canvas-workbench-dialog" title="整场导出" open={!historyOnly && settingsOpen} onCancel={() => setSettingsOpen(false)} footer={<WorkbenchDialogActions secondary={<Button onClick={() => setSettingsOpen(false)}>返回画布</Button>}>{<Button type="primary" loading={busy} disabled={disabled || !!storageError || (!pending && (historical || !rows || !!readError || !!activeTask))} onClick={() => void submit()}>
+      {pending ? '核实原导出请求' : dirty ? '保存并导出整场视频' : '导出整场视频'}
+    </Button>}</WorkbenchDialogActions>}>
     {!historyOnly && <><Select aria-label="导出尺寸" value={size} disabled={busy || !!pending || historical} onChange={setSize} style={{ width: 190 }}
       options={([1080, 720] as const).map(tier => ({ value: tier, label: `${tier} 档 · ${dimensions(tier)}` }))} />
     {!measured && <span>正在核实导出媒体尺寸…</span>}
@@ -146,10 +150,8 @@ export function SceneExportPanel({ feedbackHost, triggerHost, projectId, sequenc
     </p>)}</div>}><Button>{scaled.length} 个片段将普通放大</Button></Popover>}
     {measured?.error && <Alert type="warning" message="导出媒体检查失败" description={measured.error} action={<Space><Button onClick={() => { setInspection(undefined); setInspectionAttempt(value => value + 1) }}>重查导出媒体</Button>{content.timeline.items.filter(clip => measured.error?.includes(clip.id)).map(clip => <Button key={clip.id} onClick={() => onLocate(clip.id)}>定位问题片段</Button>)}</Space>} />}
 
-    <Button loading={busy} disabled={disabled || !!storageError || (!pending && (historical || !rows || !!readError || !!activeTask))} onClick={() => void submit()}>
-      {pending ? '核实原导出请求' : dirty ? '保存并导出整场视频' : '导出整场视频'}
-    </Button>
-    <Button onClick={() => setOpen(true)}>导出记录</Button>
+
+    <Button onClick={() => { setSettingsOpen(false); setOpen(true) }}>导出记录</Button>
     {activeTask && <span role="status">整场导出：{activeTask.cancel_requested ? '取消处理中' : statuses[activeTask.status]}</span>}
     </>}
     {!historyOnly && error && <Alert type="warning" message={error} action={<Space wrap>
@@ -160,7 +162,8 @@ export function SceneExportPanel({ feedbackHost, triggerHost, projectId, sequenc
       try { setPending(readPending()); setStorageError('') } catch { setStorageError('本地导出凭据仍无法读取，请恢复后重读。') }
     }}>重读导出凭据</Button>} />}
     </Modal>
-    <Modal title="整场导出记录" open={open} destroyOnClose onCancel={close} closable={!historyOnly || (!busy && !pending && !storageError)} maskClosable={!historyOnly || (!busy && !pending && !storageError)} footer={<Button disabled={historyOnly && (busy || !!pending || !!storageError)} onClick={close}>返回画布</Button>} width={800} rootClassName="canvas-workbench-dialog">
+    <WorkbenchDetails title="整场导出记录" status="固定记录" open={open} initialExpanded onClose={close} closeDisabled={historyOnly && (busy || !!pending || !!storageError)}>
+      <Button disabled={historyOnly && (busy || !!pending || !!storageError)} onClick={close}>返回画布</Button>
       {historyOnly && <Alert type="info" message="正在只读查看其他版本的固定导出依据；按原记录重试归属该版本，不保存或替换当前编辑。" />}
       {historyOnly && storageError && <Alert type="warning" message={storageError} action={<Button onClick={() => {
         try { setPending(readPending()); setStorageError('') } catch { setStorageError('本地导出凭据仍无法读取，请恢复后重读。') }
@@ -194,7 +197,7 @@ export function SceneExportPanel({ feedbackHost, triggerHost, projectId, sequenc
         {selected.status === 'succeeded' && <p>下载中断时可重新下载同一文件，不会重新渲染或创建任务。</p>}
         {selected.status === 'succeeded' && !selected.download_url && <Alert type="warning" message={selected.file_status === 'unknown' ? '成果文件状态未能核实，请重读成果状态' : selected.file_deleted ? '成果文件已删除，成功记录仍保留' : '成果文件不可用，成功记录仍保留'} />}
       </section>}
-    </Modal>
+    </WorkbenchDetails>
     <Modal title="删除这份导出成果？" open={!!deleteTarget} rootClassName="canvas-workbench-dialog" confirmLoading={deleting}
       okText="删除成果文件" cancelText={deleteError ? '关闭并核实' : '保留文件'} okButtonProps={{ danger: true }} cancelButtonProps={{ disabled: deleting }} closable={!deleting} maskClosable={!deleting}
       onCancel={() => { if (!deleting) { setDeleteTarget(undefined); if (deleteError) setAttempt(value => value + 1) } }} onOk={async () => {
