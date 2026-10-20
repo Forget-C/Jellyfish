@@ -109,6 +109,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
   const [navigation, setNavigation] = useState<{ versionId: string; kind: 'relations' }>()
   const [primaryHost, setPrimaryHost] = useState<HTMLDivElement | null>(null)
   const [navigationHost, setNavigationHost] = useState<HTMLDivElement | null>(null)
+  const [designNextHost, setDesignNextHost] = useState<HTMLSpanElement | null>(null)
   const [directorNavigationHost, setDirectorNavigationHost] = useState<HTMLDivElement | null>(null)
   const [feedbackHost, setFeedbackHost] = useState<HTMLDivElement | null>(null)
   const [moreHost, setMoreHost] = useState<HTMLDivElement | null>(null)
@@ -874,7 +875,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
         <WorkbenchButton disabled={!selected} onClick={() => { setEditor(undefined); setCanvas('edit') }} variant="quiet" aria-pressed={canvas === 'edit'}>编辑画布</WorkbenchButton>
       </nav>
       <div className="canvas-toolbar-actions">
-        <div ref={setPrimaryHost} className="canvas-toolbar-primary" />
+        <div ref={setPrimaryHost} className="canvas-toolbar-primary">{canvas === 'director' && <span ref={setDesignNextHost} />}</div>
         <TaskCenter workbench />
         <div ref={setNavigationHost} className="canvas-toolbar-navigation" />
         <CanvasToolbarMenu label="更多操作" icon={<MoreOutlined />}>
@@ -919,8 +920,8 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
           </div>
         </CanvasToolbarMenu>
       </div>
-      {canvas === 'director' && selected && <div ref={setDirectorNavigationHost} className="canvas-director-navigation-host" />}
     </header>
+    {canvas === 'director' && selected && <div ref={setDirectorNavigationHost} className="canvas-director-navigation-host" />}
     <nav className="canvas-history-controls" aria-label="编辑历史">
       <WorkbenchIconButton label="撤销" variant="quiet" icon={<UndoOutlined />} onClick={() => stepHistory('undo')} disabled={handingOff || !selected || !histories.current.get(selected.id)?.undo.length || readonly || leaving || busy === 'create'} />
       <WorkbenchIconButton label="重做" variant="quiet" icon={<RedoOutlined />} onClick={() => stepHistory('redo')} disabled={handingOff || !selected || !histories.current.get(selected.id)?.redo.length || readonly || leaving || busy === 'create'} />
@@ -1032,7 +1033,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       onExternalFocusHandled={() => setDirectorFocus(undefined)}
       externalOverlay={currentEditor || currentNavigation}
       noticeHost={feedbackHost}
-      navigationHost={directorNavigationHost} saveStatus={status}
+      navigationHost={directorNavigationHost} nextHost={designNextHost} saveStatus={status}
       source={<SceneSourceBasis key={selected.id} projectId={projectId} chapterId={chapterId} basis={content.basis} compact dirty={JSON.stringify(content.basis) !== JSON.stringify(selected.content.basis)}
         open={currentEditor === 'source'} onOpenChange={open => open ? openEditor('source') : setEditor(undefined)}
         disabled={handingOff || !!recovery || readonly || busy === 'create'} onChange={basis => editContent({ ...content, basis })} />} />}
