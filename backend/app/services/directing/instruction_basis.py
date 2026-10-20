@@ -28,6 +28,14 @@ class InstructionBasisService(SceneInstructionService):
                                  video_model_name=name, style_rules=rules,
                                  scope=unit_scope(content.design, unit, rules)), files
 
+    @staticmethod
+    def _matches_input_snapshot(current, snapshot, design, unit):
+        """按快照的投影版本比较，不替换供当前准备与新任务使用的输入。"""
+        if snapshot.scope is not None and snapshot.scope.version == 1:
+            current = current.model_copy(update={
+                'scope': unit_scope(design, unit, current.style_rules, version=1)})
+        return current.same_consumption(snapshot)
+
     async def basis_status(self, sequence_id, version_id, unit_id, content):
         """比较实际相关输入；普通保存和其他单元的编辑不会重写原依据。"""
         await self.read_scene_version(sequence_id, version_id)
@@ -38,9 +46,7 @@ class InstructionBasisService(SceneInstructionService):
         if unit.instruction_basis_id:
             row = await self.instruction_basis(version_id, unit_id, unit.instruction_basis_id)
             previous = InstructionInputs.model_validate(row.inputs)
-            if previous.scope is not None and previous.scope.version == 1:
-                current.scope = unit_scope(content.design, unit, current.style_rules, version=1)
-        status = 'empty' if not unit.instruction.strip() else 'unbound' if previous is None else 'current' if previous.same_consumption(current) else 'changed'
+        status = 'empty' if not unit.instruction.strip() else 'unbound' if previous is None else 'current' if self._matches_input_snapshot(current, previous, content.design, unit) else 'changed'
         return InstructionBasisRead(basis_id=unit.instruction_basis_id, status=status, previous=previous, current=current)
 
     async def confirm_basis(self, sequence_id, version_id, unit_id, body):

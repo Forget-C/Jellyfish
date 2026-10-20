@@ -85,7 +85,8 @@ class InstructionCheckService(InstructionBasisService):
         state = await self.basis_status(sequence_id, version_id, unit_id, content)
         args = task.input_snapshot['run_args']
         unit = self._instruction_unit(content, unit_id)
-        matches = unit.instruction == args['instruction'] and state.current.same_consumption(InstructionInputs.model_validate(args['inputs']))
+        matches = unit.instruction == args['instruction'] and self._matches_input_snapshot(
+            state.current, InstructionInputs.model_validate(args['inputs']), content.design, unit)
         confirmed = False
         if unit.instruction_check_task_id == task.id and matches and state.status == 'current':
             await self.confirmable_instruction_check(sequence_id, version_id, unit_id, task_id)

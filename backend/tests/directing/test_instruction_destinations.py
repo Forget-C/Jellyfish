@@ -12,7 +12,7 @@ from app.services.task_service import TaskService
 from tests.directing.test_api import client_for
 from tests.directing.test_scene_versions import sequence_path
 from tests.directing.test_store import database
-from tests.directing.samples import complete_shot_scope_sample
+from tests.directing.samples import complete_shot_scope_sample, note
 
 
 def test_instruction_destinations_reject_missing_or_unbound_evidence():
@@ -83,8 +83,8 @@ def test_instruction_destinations_reject_missing_or_unbound_evidence():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('destination', [None, 'unresolved'])
-async def test_check_cannot_confirm_missing_or_unresolved_destination(tmp_path, destination):
+@pytest.mark.parametrize('destination', [None, 'unresolved', 'missing_camera', 'camera'])
+async def test_check_requires_complete_video_destinations(tmp_path, destination):
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             db.add(Provider(id='provider', name='openai', base_url='https://api.openai.com/v1', api_key='fixture'))
@@ -101,6 +101,13 @@ async def test_check_cannot_confirm_missing_or_unresolved_destination(tmp_path, 
         content['units'] = [{'id': 'unit', 'model_id': 'video', 'duration_ms': 5000, 'ratio': '16:9',
             'instruction': '递出信封。', 'coverage': [{'id': 'coverage', 'shot_id': 'shot', 'action_scope': '递出信封'}]}]
         complete_shot_scope_sample(content, '递出信封')
+        if destination in {'missing_camera', 'camera'}:
+            content['design']['cinematography'][0]['composition'] = note('信封始终在画内')
+            content['design']['applicability'] = [{
+                'subject': {'kind': 'camera', 'id': 'camera-shot', 'field': 'composition'},
+                'purpose': 'design', 'scope': 'shots', 'shot_ids': ['shot']}]
+            content['units'][0]['instruction'] += '信封始终在画内。'
+
         unit_url = path + '/versions/' + version['id'] + '/units/unit'
         confirmed = await client.post(unit_url + '/instruction-basis/confirm', json={
             'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})
@@ -117,10 +124,22 @@ async def test_check_cannot_confirm_missing_or_unresolved_destination(tmp_path, 
             'destinations': [] if destination is None else [{'owner': 'coverage:coverage',
                 'field': 'action_scope', 'coverage_item_ids': ['coverage'],
                 'destination': 'unresolved', 'rationale': '正文未表达'}]}
+        if destination in {'missing_camera', 'camera'}:
+            result['destinations'] = [
+                {'owner': owner, 'field': field, 'coverage_item_ids': ['coverage'],
+                 'destination': 'instruction', 'instruction_excerpt': '递出信封', 'rationale': '正文表达'}
+                for owner, field in [('coverage:coverage', 'action_scope'), ('shot:shot', 'visible_result')]]
+            if destination == 'camera':
+                result['destinations'].append({'owner': 'camera:camera-shot', 'field': 'composition',
+                    'coverage_item_ids': ['coverage'], 'destination': 'instruction',
+                    'instruction_excerpt': '信封始终在画内', 'rationale': '正文表达构图'})
         async with sessions.begin() as db:
             service = TaskService(db)
             assert await service.claim(task_id, worker_id='destination-test')
             await service.finish(task_id, result=result)
         response = await client.post(checks_url + '/' + task_id + '/confirm', json={'content': content})
-        assert response.status_code == 422, response.text
-        assert '去向' in response.json()['detail']
+        assert response.status_code == (200 if destination == 'camera' else 422), response.text
+        if destination != 'camera':
+            assert '去向' in response.json()['detail']
+        if destination == 'missing_camera':
+            assert 'camera:camera-shot.composition' in response.json()['detail']

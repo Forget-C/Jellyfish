@@ -98,10 +98,15 @@ def resolved_design_fields(design) -> list[ResolvedDesignField]:
                              else 'video')
             scope = explicit.get((kind, identity, name))
             if scope:
-                use.purpose, use.scope = scope.purpose, scope.scope
+                # 固定约束职责不能因普通设计标签退出单元要求，范围仍沿用明确声明。
+                keep_constraint = purpose == 'constraint' and scope.purpose == 'design'
+                use.purpose, use.scope = purpose if keep_constraint else scope.purpose, scope.scope
                 use.shot_ids, use.occurrences = scope.shot_ids, scope.occurrences
-                use.phase, use.condition = scope.phase, scope.condition
-                use.reason = '原字段明确声明的内容用途与适用范围'
+                if not keep_constraint:
+                    use.phase = scope.phase
+                use.condition = scope.condition
+                use.reason = ('按字段约束职责及明确适用范围' if keep_constraint
+                              else '原字段明确声明的内容用途与适用范围')
             elif purpose == 'background' and kind in FIXED_BACKGROUND:
                 use.scope, use.reason = 'scene', '按字段职责服务于全场的解释背景'
             elif name in FIXED_CONSTRAINTS.get(kind, set()):

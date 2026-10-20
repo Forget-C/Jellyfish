@@ -17,7 +17,8 @@ from tests.directing.samples import complete_shot_scope_sample
 
 
 @pytest.mark.asyncio
-async def test_check_freezes_confirmed_inputs_and_does_not_apply_results(tmp_path):
+@pytest.mark.parametrize("legacy_receipt,legacy_check", [(False, False), (True, False), (True, True)])
+async def test_check_freezes_confirmed_inputs_and_does_not_apply_results(tmp_path, legacy_receipt, legacy_check):
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             db.add(Provider(id='check-provider', name='openai', base_url='https://api.openai.com/v1', api_key='fixture'))
@@ -37,6 +38,18 @@ async def test_check_freezes_confirmed_inputs_and_does_not_apply_results(tmp_pat
         assert (await client.post(url, json=request)).status_code == 409
         confirmation = await client.post(unit_url + '/instruction-basis/confirm', json={'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})
         content['units'][0]['instruction_basis_id'] = confirmation.json()['data']['basis_id']
+        if legacy_receipt:
+            # 旧回执作为历史输入种子；所有断言仍走真实业务接口。
+            from app.models.directing import InstructionBasisRecord
+            from app.core.contracts.directing.scene_version import SceneVersionContent
+            from app.services.directing.instruction_inputs import unit_scope
+            typed = SceneVersionContent.model_validate(content)
+            async with sessions.begin() as db:
+                receipt = await db.get(InstructionBasisRecord, content['units'][0]['instruction_basis_id'])
+                frozen_inputs = deepcopy(receipt.inputs)
+                frozen_inputs['scope'] = unit_scope(typed.design, typed.units[0], version=1).model_dump(mode='json')
+                receipt.inputs = frozen_inputs
+
         submitted = await client.post(url, json=request)
         assert submitted.status_code == 200, submitted.text
         task_id = submitted.json()['data']['task_id']
@@ -68,6 +81,13 @@ async def test_check_freezes_confirmed_inputs_and_does_not_apply_results(tmp_pat
                 assert 'design' not in sent['inputs'] and sent['inputs']['scope']['execution']
                 return SimpleNamespace(content=json.dumps(result))
             generate_directing_result('directing_instruction_check', SimpleNamespace(invoke=invoke), frozen)
+        if legacy_check:
+            async with sessions.begin() as db:
+                task = await db.get(Task, task_id)
+                snapshot = deepcopy(task.input_snapshot)
+                snapshot['run_args']['inputs']['scope'] = unit_scope(
+                    typed.design, typed.units[0], version=1).model_dump(mode='json')
+                task.input_snapshot = snapshot
         async with sessions.begin() as db:
             service = TaskService(db)
             assert await service.claim(task_id, worker_id='check-fixture')

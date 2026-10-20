@@ -45,7 +45,8 @@ async def test_basis_receipt_is_explicit_immutable_and_unit_owned(tmp_path):
             receipt.inputs = legacy_inputs
         legacy_state = (await client.post(url, json={'content': bound})).json()['data']
         assert legacy_state['status'] == 'current'
-        assert legacy_state['current']['scope']['version'] == 1
+        assert legacy_state['previous']['scope']['version'] == 1
+        assert legacy_state['current']['scope']['version'] == 2
         new_scope = deepcopy(bound)
         new_scope['design']['applicability'] = [{'subject': {'kind': 'performance', 'field': 'applicability'},
             'purpose': 'constraint', 'scope': 'scene_rule', 'phase': 'video'}]
