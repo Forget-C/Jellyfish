@@ -24,6 +24,7 @@ from app.models.task import Task, TaskOutput
 from app.models.studio import Chapter, Character, Scene, Prop, ProjectSceneLink, ProjectPropLink
 from app.services.directing.workspace import WorkspaceService
 from app.services.directing.scene_design_sources import DesignSourceError, record_chapter_generation_source, validate_model_sources
+from app.services.directing.scene_design_protocol import scene_design_protocol, scene_design_repair_context
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.llm.resolver import get_model_by_category
 from app.services.task_service import TaskService
@@ -57,6 +58,18 @@ def generate_directing_result(kind: str, llm, args: dict):
                         '叙事、人物情境和环境说明保留在原背景字段；动作和可见结果保留在原设计行；约束须声明 video、sound 或 postproduction 阶段。'
                         '共享人物、事件或锚点不能代替适用范围。'
                         '不得添加任意背景标签、采用状态或不存在的关联 ID。')
+        instruction += ('\n输入 design_protocol 是生成规则，不是输出字段。subjects 列出每种 subject 的字段、原工作单路径和 ID 要求；'
+                        'background/constraint 只能使用对应字段清单。purpose 为 design 或 background 时 phase、condition 必须为空；'
+                        '只有 constraint 必须声明制作阶段，并可填写条件。不能为保留 phase 而把动作改标 constraint。'
+                        'scene/scene_rule 还须满足 global_scope_kinds，并清空 shot_ids 和 occurrences；'
+                        'shots 须有非空 shot_ids 且 occurrences 为空，occurrences 则相反；不得重复声明同一来源字段。'
+                        '整张工作单 subject.id 为空，独立行 subject.id 引用对应 path 中行的 id。'
+                        '新增不可改事实、待确定问题、角色情境、表演、镜内活动、摄影行都必须有稳定 id。'
+                        'camera 引用 cinematography 行的 id，不能用 shot_id 代替；其范围只能属于该行 shot_id。'
+                        'must_show 属于 beat，physical_action 属于 performance_beat，immutable_fact 引用单条事实 id 和 text；'
+                        'direction.immutable_facts 与 location_asset_id 不作为适用性字段。'
+                        'beat/performance_beat 的镜头范围须与镜头 beat_ids 一致；单元出现项须存在于冻结版本。'
+                        '已由字段职责、镜头覆盖或摄影 shot_id 明确范围的字段可继承，不必重复声明。')
         if not require_complete:
             instruction += '旧局部修订保留范围外原有缺项，不扩展本次字段修改范围。'
     if args.get('design_scope'):
@@ -72,7 +85,9 @@ def generate_directing_result(kind: str, llm, args: dict):
     if args.get('instruction_scope'):
         instruction += '\n这是预先限定的正文局部修订。instruction_scope 的 start/end 是原 unit.instruction 的 Unicode 字符半开范围，只修改此范围，范围外逐字保留；仍返回完整正文 text，不只返回替换片段。'
     model_args = args
-    if kind == 'directing_instruction':
+    if kind == 'directing_design' and args.get('scene_version_design'):
+        model_args = {**args, 'design_protocol': scene_design_protocol()}
+    elif kind == 'directing_instruction':
         model_args = {key: value for key, value in args.items() if key != 'design'}
     elif kind == 'directing_instruction_check':
         model_args = {**args, 'inputs': {key: value for key, value in args['inputs'].items()
@@ -136,8 +151,16 @@ def generate_directing_result(kind: str, llm, args: dict):
                 paths = [(".".join(map(str, item["loc"])) or "工作单关联") + "：" + item["msg"] for item in errors[:8]]
                 raise DirectingOutputError("导演输出结构校验失败，请重新生成或手动修正：" + "、".join(paths), diagnostics) from None
             # 结构与来源共用一次纠错，继续沿用 Worker 的取消回调和总时限。
+            feedback = errors
+            repair_instruction = '只修正以下结构、关联或来源错误，保留原文事实和既有设计意图，返回完整 JSON：\n'
+            if kind == 'directing_design' and args.get('scene_version_design'):
+                feedback = {'errors': errors, 'design_context': scene_design_repair_context(text)}
+                repair_instruction = ('修正以下错误，并按 design_protocol 与 design_context 逐项核对整份 applicability；'
+                    '结构错误可能遮住后续引用错误。field_kinds 是该字段的合法对象类别，subjects 提供本轮已有行 ID、'
+                    '缺 ID 位置和镜头／节拍关系。选项不代表实际适用范围，不得自动扩大范围；'
+                    '补齐新增行 ID 并同步正确引用，保留原文事实、设计正文、有效来源及限定修改范围，返回完整 JSON：\n')
             messages.extend([AIMessage(content=content), HumanMessage(content=
-                "只修正以下结构、关联或来源错误，保留原文事实和既有设计意图，返回完整 JSON：\n" + json.dumps(errors, ensure_ascii=False))])
+                repair_instruction + json.dumps(feedback, ensure_ascii=False))])
     if kind == "directing_instruction" and result.unit_id != args["unit"]["id"]:
         raise ValueError("模型更改了当前单元身份")
     if kind == "directing_instruction" and args.get('instruction_scope'):
