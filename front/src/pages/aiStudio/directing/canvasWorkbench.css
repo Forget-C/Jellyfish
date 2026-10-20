@@ -188,7 +188,12 @@
 .canvas-workbench { font-size: 14px; }
 .canvas-toolbar-identity, .canvas-toolbar-actions { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .canvas-toolbar-actions { justify-content: flex-end; }
-.canvas-director-navigation-host { grid-column: 1 / -1; min-width: 0; }
+.canvas-director-navigation-host { grid-column: 1 / -1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.director-next-step { display: flex; flex: 1 1 440px; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.director-next-step > div { flex: 1 1 240px; min-width: 0; }
+.director-next-step strong { color: var(--wb-text); font-size: 13px; }
+.director-next-step p { margin: 2px 0 0; color: var(--wb-muted); font-size: 12px; }
+.director-next-step > .ant-btn { flex-shrink: 0; }
 .canvas-director-browse { display: flex; align-items: center; gap: 8px; width: fit-content; max-width: 100%; min-height: 36px; padding: 2px 6px; border: 1px solid #2d2d2d; border-radius: 10px; background: var(--wb-surface); }
 .canvas-director-location { display: inline-flex; align-items: center; min-width: 0; white-space: nowrap; color: var(--wb-text); }
 .canvas-director-location .ant-btn { padding-inline: 8px; }

@@ -1026,6 +1026,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       shotId={currentShotId} onSelectShot={id => selectShot(id, false)} onChange={editContent}
       onRestoreShot={id => setShotSelections(previous => ({ ...previous, [selected.id]: id }))}
       disabled={handingOff || !!recovery || readonly || busy === 'create' || leaving}
+      onPrepare={id => { if (id) selectShot(id, false); setEditor(undefined); setCanvas('units') }}
       onLocateUnit={locateUnitReference}
       externalFocus={directorFocus?.versionId === selected.id ? directorFocus : undefined}
       onExternalFocusHandled={() => setDirectorFocus(undefined)}

@@ -8,6 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { createServer } from 'vite'
 import { chromium } from 'playwright'
 import { makeWorkspace } from './directing-fixtures.mjs'
+import { workbenchShot } from './workbenchControls.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await mkdtemp(join(tmpdir(), 'jellyfish-design-scope-'))
@@ -43,6 +44,8 @@ try {
   design.direction.shots = [{ ...shape.direction.shots[0], id: 'shot1', beat_ids: [], event_ids: [],
     criterion_ids: [], participant_ids: [], blocking_state_ids: [], visible_result: note('看见空旷的门口') }]
   design.cinematography = [{ ...shape.cinematography[0], id: 'camera1', shot_id: 'shot1', criterion_ids: [] }]
+  design.direction.shots.push({ ...structuredClone(design.direction.shots[0]), id: 'shot2', visible_result: note('看见窗边的树影') })
+  design.cinematography.push({ ...structuredClone(design.cinematography[0]), id: 'camera2', shot_id: 'shot2' })
   design.direction.anchors = [{ id: 'anchor1', description: note('门口的固定位置') }]
   version = await request(`${versions}/${version.id}`, { request_id: crypto.randomUUID(), expected_revision: version.revision,
     content: { ...version.content, design } }, 'PUT')
@@ -57,12 +60,26 @@ try {
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   await page.goto(`http://127.0.0.1:4198/projects/canvas-project/chapters/canvas-chapter/sequences/${sequence}?version=${version.id}`)
   await page.getByRole('status').filter({ hasText: '设计范围完整' }).waitFor()
+  const nextStep = page.getByRole('region', { name: '设计后续步骤', exact: true })
+  await nextStep.getByText('下一步：准备拍摄单元', { exact: true }).waitFor({ timeout: 5000 })
+  await nextStep.getByRole('button', { name: '前往单元画布', exact: true }).click()
+  await page.getByRole('button', { name: '为当前镜头建立单元', exact: true }).waitFor()
+  assert.deepEqual((await (await fetch(`${versions}/${version.id}`)).json()).data, version, '下一步只导航，不创建单元或保存设计')
+  await page.getByRole('button', { name: '导演画布', exact: true }).click()
+  await (await workbenchShot(page, '镜头 2：看见窗边的树影')).click()
+  await nextStep.getByText(/^为镜头 2建立或选择单元/).waitFor()
+  await nextStep.getByRole('button', { name: '前往单元画布', exact: true }).click()
+  await page.locator('.scene-unit-canvas').getByText('看见窗边的树影', { exact: true }).waitFor()
+  assert.deepEqual((await (await fetch(`${versions}/${version.id}`)).json()).data, version)
+  await page.getByRole('button', { name: '导演画布', exact: true }).click()
+  await page.getByRole('button', { name: '总览', exact: true }).click()
+  await page.getByRole('button', { name: '隐藏附加信息', exact: true }).click()
   const anchor = page.locator('[data-canvas-node="anchor:anchor1"]')
   assert.match(await anchor.innerText(), /全场背景/)
   assert.doesNotMatch(await anchor.innerText(), /未建立镜头关联/)
   await page.getByRole('button', { name: '附加信息', exact: true }).click()
   await page.getByText(/拍摄分工待补 · /).click()
-  await page.getByText('应拍内容尚未分配负责的生产单元', { exact: false }).waitFor()
+  await page.getByText('应拍内容尚未分配负责的生产单元', { exact: false }).first().waitFor()
   await page.screenshot({ path: join(output, 'scope-desktop.png'), animations: 'disabled' })
   await page.getByRole('button', { name: '隐藏附加信息', exact: true }).click()
   await page.getByRole('button', { name: 'AI 设计', exact: true }).click()
@@ -93,11 +110,21 @@ try {
     const data = (await (await fetch(url)).json()).data
     return data.content.design.staging.activities.some(row => row.id === 'activity-incomplete') && !data.relationship_graph.complete
   }, new URL(`${versions}/${version.id}`).pathname)
+  const incomplete = (await (await fetch(`${versions}/${version.id}`)).json()).data
+  const prepare = nextStep.getByRole('button', { name: '前往单元画布', exact: true })
+  await prepare.waitFor()
+  const bounds = await prepare.boundingBox()
+  assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= 390 && bounds.y >= 0 && bounds.y + bounds.height <= 844)
+  await page.screenshot({ path: join(output, 'next-step-narrow.png'), animations: 'disabled' })
+  await prepare.click()
+  await page.getByRole('button', { name: '为当前镜头建立单元', exact: true }).waitFor()
+  assert.deepEqual((await (await fetch(`${versions}/${version.id}`)).json()).data, incomplete, '缺项不阻断准备入口，导航保留设计缺项')
+  await page.getByRole('button', { name: '导演画布', exact: true }).click()
   await page.getByRole('button', { name: '附加信息', exact: true }).click()
   await page.getByRole('button', { name: /定位缺项/ }).first().click()
   await page.screenshot({ path: join(output, 'incomplete-applied-narrow.png'), animations: 'disabled' })
   assert.deepEqual(errors, [])
-  console.log(`PASS incomplete candidate preview, explicit apply, persisted issues and issue location; evidence: ${output}`)
+  console.log(`PASS design-to-unit guidance, shot navigation without writes, incomplete candidate preview, explicit apply, persisted issues and issue location; evidence: ${output}`)
 } catch (error) {
   if (page) await page.screenshot({ path: join(output, 'failure.png'), animations: 'disabled' }).catch(() => {})
   console.error(`Evidence: ${output}`)

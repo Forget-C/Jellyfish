@@ -27,11 +27,11 @@ type BrowseTrail = { entries: { key: string; index?: number }[]; cursor: number 
 let directorFocusSerial = 0
 
 /** 总览和逐镜子图共用当前场次版本；导航只记录版本内浏览现场。 */
-export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content, saved, relationshipGraph, shotId, onSelectShot, onRestoreShot, onChange, disabled, source, onLocateUnit, externalFocus, onExternalFocusHandled, externalOverlay, noticeHost, navigationHost, saveStatus }: {
+export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content, saved, relationshipGraph, shotId, onSelectShot, onRestoreShot, onChange, disabled, source, onPrepare, onLocateUnit, externalFocus, onExternalFocusHandled, externalOverlay, noticeHost, navigationHost, saveStatus }: {
   projectId: string; sequenceId: string; versionId: string; content: SceneVersionContent_Output; saved: SceneVersionContent_Output
   relationshipGraph: SceneRelationshipGraph
   shotId?: string; onSelectShot: (id: string) => void; onRestoreShot: (id: string) => void; onChange: (value: SceneVersionContent_Output) => void; disabled: boolean
-  source: ReactNode; onLocateUnit: (conflict: UnitReferenceConflict) => void
+  source: ReactNode; onPrepare: (shotId?: string) => void; onLocateUnit: (conflict: UnitReferenceConflict) => void
   externalFocus?: { nodeId: string; fieldId: string; serial: number }
   onExternalFocusHandled: () => void
   externalOverlay?: string
@@ -316,7 +316,7 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
   let restore = false
   try { restore = navigationType === 'POP' && !!localStorage.getItem(`${storageKey}:view:${viewId}`) } catch { /* 使用会话布局。 */ }
   return <>
-    {navigationHost && createPortal(<nav className="canvas-director-browse" aria-label="导演画布位置">
+    {navigationHost && createPortal(<><nav className="canvas-director-browse" aria-label="导演画布位置">
       <WorkbenchIconButton label="后退" variant="quiet" icon={<ArrowLeftOutlined />} disabled={!canBrowse(-1)} onClick={() => navigate(-1)} />
       <WorkbenchIconButton label="前进" variant="quiet" icon={<ArrowRightOutlined />} disabled={!canBrowse(1)} onClick={() => navigate(1)} />
       <span className="canvas-director-location"><WorkbenchButton variant="quiet" aria-current={scope === 'all' ? 'page' : undefined}
@@ -324,7 +324,14 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
         {scope === 'shot' && <span aria-current="page">› 镜头 {String(activeShotNumber).padStart(2, '0')} 子图</span>}</span>
       <WorkbenchIconButton label="附加信息" variant="quiet" icon={<InfoCircleOutlined />} aria-pressed={infoOpen}
         onClick={() => setInfoOpen(!infoOpen)} />
-    </nav>, navigationHost)}
+    </nav>
+      {!!content.design.direction.shots.length && <section className="director-next-step" aria-label="设计后续步骤">
+        <div><strong>下一步：准备拍摄单元</strong>
+          <p>{scope === 'shot' ? `为镜头 ${activeShotNumber}` : '为镜头'}建立或选择单元，明确动作、模型、时长和参考，再生成指令并检查。</p>
+        </div>
+        <WorkbenchButton variant="primary" onClick={() => onPrepare(hasShot ? activeShotId : undefined)}>前往单元画布</WorkbenchButton>
+      </section>}
+    </>, navigationHost)}
     {noticeHost && createPortal(<>
       {graphPending && <Alert type="info" message={`关系图来自已保存 revision ${relationshipGraph.revision}；关系更新中`} />}
       {!graphPending && !!relationshipGraph.issues?.length && <Alert type="warning" message={`设计未完整 · ${relationshipGraph.issues.length} 项缺项`}
