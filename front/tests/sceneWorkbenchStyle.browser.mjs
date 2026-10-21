@@ -43,7 +43,7 @@ async function checkChrome(name) {
   const measured = await page.evaluate(() => {
     const root = document.querySelector('.canvas-workbench')
     const toolbar = root.querySelector('.canvas-workbench-toolbar')
-    const viewport = root.querySelector('.director-canvas-surface')
+    const viewport = [...root.querySelectorAll('.director-canvas-surface')].find(element => element.getClientRects().length)
     const rect = element => { const r = element.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height } }
     return { width: innerWidth, height: innerHeight, background: getComputedStyle(root).backgroundColor,
       toolbar: rect(toolbar), viewport: rect(viewport),
@@ -158,7 +158,7 @@ try {
   assert.equal(await page.getByRole('button', { name: '展开叙事视点', exact: true }).count(), 0)
   assert.match(await page.locator('[data-canvas-node="overview"]').innerText(), /从她的视点观察旧信/)
   assert.equal((await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.revision, 2, '阅读摘要不保存业务内容')
-  const transform = () => page.locator('.director-canvas-content').evaluate(content => content.style.transform)
+  const transform = () => page.locator('.director-canvas-surface:visible .director-canvas-content').evaluate(content => content.style.transform)
   const originalTransform = await transform()
   await directorObject(page, '全场叙事与约束')
   await page.getByRole('textbox', { name: '观察视点', exact: true }).fill('浮层切换保留未保存的观察视点')
@@ -237,6 +237,12 @@ try {
     for (const [key, name] of [['director', '导演画布'], ['units', '单元画布'], ['instructions', '指令画布'], ['edit', '编辑画布']]) {
       await page.getByRole('navigation', { name: '画布切换', exact: true }).getByRole('button', { name, exact: true }).click()
       if (key === 'director') { await closeWorkbenchDetails(page); await directorSelect(page, '设计域', '导演画布'); await closeWorkbenchDetails(page) }
+      if (key === 'edit' && await page.getByRole('button', { name: '打开剪辑工作区', exact: true }).count()) {
+        await page.getByLabel('整场剪辑画布视口', { exact: true }).waitFor()
+        await checkChrome(`edit-graph-${width}`)
+        await screenshot(`edit-graph-${width}`)
+        await page.getByRole('button', { name: '打开剪辑工作区', exact: true }).click()
+      }
       await page.getByLabel(`${name}视口`, { exact: true }).waitFor()
       if (key === 'instructions') await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).waitFor()
       if (key === 'edit') await page.getByRole('button', { name: '选择素材 1', exact: true }).waitFor()

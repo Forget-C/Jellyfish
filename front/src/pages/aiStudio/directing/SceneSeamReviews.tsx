@@ -91,9 +91,13 @@ export function SceneSeamReviews({ projectId, sequenceId, versionId, revision, c
     if (storageBlocked) return
     try { persist(next); setStorageError('') } catch { setStorageError('接缝输入未能保存在本地，当前输入保留；请恢复存储。') }
   }
+  const navigationState = useRef({ navigation, change })
+  navigationState.current = { navigation, change }
+  const navigationSerial = navigation?.serial
   useEffect(() => {
-    if (navigation) change({ ...cache.current, selected: [navigation.leftClipId, navigation.rightClipId] })
-  }, [navigation?.serial])
+    const { navigation: target, change: update } = navigationState.current
+    if (target) update({ ...cache.current, selected: [target.leftClipId, target.rightClipId] })
+  }, [navigationSerial])
   const currentPairs = pairs(content)
   const selected = currentPairs.find(row => row.left.id === state.selected?.[0] && row.right.id === state.selected?.[1])
   const selectedKey = state.selected?.join('|') || ''

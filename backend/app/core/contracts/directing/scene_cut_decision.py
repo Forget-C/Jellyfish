@@ -37,5 +37,3 @@ class SceneCutReviewDecision(Contract):
         if self.sound_status != 'pending_postproduction' and not self.sound_notes.strip():
             raise ValueError('声音审查或不适用须填写依据')
         return self
-
-

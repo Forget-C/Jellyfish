@@ -60,7 +60,9 @@ export function SceneInstructionSuggestions({ onEvidenceChanged, onPriority, pri
   const target = { projectId, sequenceId, versionId, unitId }
   const [rows, setRows] = useState<SceneInstructionSuggestionRead[]>()
   const [selectedId, setSelectedId] = useState<string | undefined>(initialTaskId)
-  useEffect(() => { if (recordFocus) { setSelectedId(recordFocus.taskId); setAttempt(value => value + 1) } }, [recordFocus?.taskId, recordFocus?.serial])
+  const focusedTaskId = recordFocus?.taskId
+  const focusedSerial = recordFocus?.serial
+  useEffect(() => { if (focusedTaskId) { setSelectedId(focusedTaskId); setAttempt(value => value + 1) } }, [focusedTaskId, focusedSerial])
   const [requirements, setRequirements] = useState('')
   const [limited, setLimited] = useState(false)
   const [selection, setSelection] = useState<{ scope: SceneInstructionScope; before: string }>()

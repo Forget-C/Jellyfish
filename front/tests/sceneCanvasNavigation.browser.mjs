@@ -1,6 +1,6 @@
 import { closeWorkbenchDetails } from './workbenchControls.mjs'
 import { unitSettings } from './workbenchControls.mjs'
-import { workbenchControl, workbenchShot } from './workbenchControls.mjs'
+import { workbenchControl, workbenchShot, selectWorkbenchOption } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -62,8 +62,7 @@ try {
   }
   await shot(1, 'A')
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
-  await page.getByRole('combobox', { name: '当前单元', exact: true }).press('ArrowDown')
-  await page.locator('.ant-select-dropdown:visible').getByText('单元 2 · A2动作', { exact: true }).click()
+  await selectWorkbenchOption(page, '当前单元', '单元 2')
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
   assert.equal(await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).inputValue(), 'A2正文')
   await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).fill('A2未保存正文')
@@ -97,19 +96,19 @@ try {
   assert.equal(await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).inputValue(), 'A2未保存正文')
   await shot(2, 'B')
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
-  await page.getByText('原单元不属于当前镜头或已不可用，请重新选择', { exact: true }).waitFor()
-  assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).count(), 0)
+  await unitSettings(page)
+  assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), 'B2动作', '单元子图按明确身份保留已移动的B2，不按B镜头改选B1')
+  await closeWorkbenchDetails(page)
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
-  assert.equal(await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).count(), 0)
-  await page.getByText('原单元不可用或不属于当前镜头，请重新选择。', { exact: true }).waitFor()
+  assert.equal(await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).inputValue(), 'B2正文')
   const relations = page.getByRole('navigation', { name: '场次关系树', exact: true })
   await relations.getByRole('button', { name: '展开关系树', exact: true }).click()
   await relations.getByRole('button', { name: '展开镜头 1', exact: true }).click({ timeout: 5000 })
-  assert.equal(await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).count(), 0)
+  assert.equal(await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).inputValue(), 'B2正文')
   await relations.getByRole('button', { name: '展开单元 2', exact: true }).click()
   await relations.getByRole('button', { name: '定位单元 2 的指令', exact: true }).click()
   assert.equal(await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).inputValue(), 'A2未保存正文')
-  await relations.getByRole('button', { name: '定位单元 1：A1动作', exact: true }).click()
+  await relations.getByRole('button', { name: '定位单元 1：镜头 1 — 单元 1', exact: true }).click()
   await unitSettings(page)
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), 'A1动作')
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
@@ -128,7 +127,7 @@ try {
   await relations.getByRole('button', { name: '展开关系树', exact: true }).waitFor({ timeout: 5000 })
   await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).fill(longInstruction)
   await relations.getByRole('button', { name: '展开关系树', exact: true }).click()
-  await relations.getByRole('button', { name: '定位单元 1：A1动作', exact: true }).click()
+  await relations.getByRole('button', { name: '定位单元 1：镜头 1 — 单元 1', exact: true }).click()
   await unitSettings(page)
   await page.getByRole('textbox', { name: '单元动作范围', exact: true }).fill('窄屏 A1 动作')
   await closeWorkbenchDetails(page)

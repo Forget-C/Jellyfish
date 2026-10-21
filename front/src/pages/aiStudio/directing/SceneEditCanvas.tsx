@@ -66,10 +66,10 @@ export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectI
   const [previewAttempt, setPreviewAttempt] = useState(0)
   useEffect(() => {
     let active = true
-    setLoading(true); setError('')
+    setLoading(true)
     void StudioDirectingService.directingSceneTakeLibrary({ projectId, sequenceId, versionId }).then(response => {
       if (!response.data) throw new Error('素材列表尚未核实')
-      if (active) setTakes(response.data)
+      if (active) { setTakes(response.data); setError('') }
     }).catch(cause => { if (active) setError(directingError(cause)) }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [projectId, sequenceId, versionId, attempt, graph])
@@ -95,12 +95,14 @@ export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectI
     }
   }, [navigation?.serial])
   const navigationClipId = navigation?.target.kind === 'clip' ? navigation.target.clipId : undefined
+  // 后台证据刷新不阻断已核实素材的本地编辑；保存仍由服务端复核真实输入。
+  const libraryBlocked = loading && takes.length === 0 || !!error
   const take = takes.find(row => identity(row) === selected)
   const annotation = content.take_judgments?.find(row => identity(row) === selected)?.annotation || {
     coverage: [], review_status: 'unreviewed', rationale: {}, retained_ranges: [],
   } satisfies SceneTakeAnnotation_Output
   const change = (next: SceneTakeAnnotation_Output) => {
-    if (disabled || !take || loading || error) return
+    if (disabled || !take || libraryBlocked) return
     const judgment = { take_kind: take.take_kind, take_id: take.take_id, file_id: take.file_id, annotation: next }
     const existing = content.take_judgments || []
     onChange({ ...content, take_judgments: existing.some(row => identity(row) === selected)
@@ -108,7 +110,7 @@ export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectI
   }
   const [takeDetails, setTakeDetails] = useState(false)
   const stopLivePreview = () => { setPreview(false); setPreviewStop(value => value + 1); setSeamStop(value => value + 1) }
-  const editDisabled = disabled || loading || !!error || !take?.available
+  const editDisabled = disabled || libraryBlocked || !take?.available
   const takeInformation = take && <>
         <p>素材：{take.take_id}</p><p>文件：{take.file_id}</p><p>原所属{take.take_kind === 'scene_video' ? '场次版本' : '生产计划'}：{take.origin_id}</p>
         {take.take_kind === 'scene_video' && <OpenTakeVersion key={selected} disabled={loading || !!error} onOpen={() => onOpenVersion({ versionId: take.origin_id, unitId: take.unit_id })} />}
@@ -122,6 +124,7 @@ export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectI
     <WorkbenchButton variant="secondary" onClick={() => { setWorkspace(true); setFocusTarget({ nodeId: '同场次素材', fieldId: '', serial: Date.now() }) }}>浏览同场次素材</WorkbenchButton>
     <WorkbenchButton variant="secondary" onClick={() => { setLibrary(!(library && !workspace)); setWorkspace(false) }}>{library && !workspace ? '返回整场剪辑图' : '浏览同场素材图'}</WorkbenchButton>
     <WorkbenchButton variant="secondary" onClick={onRefreshGraph}>刷新图证据</WorkbenchButton>
+    {loading && takes.length > 0 && <span role="status">正在刷新素材证据；已核实素材及当前输入保留。</span>}
     {dirty && <span aria-label="剪辑图同步状态">图待同步：总览展示已保存内容，工作区保留当前输入。</span>}
     {evidenceError && <p role="alert">图证据读取失败，保留旧摘要：{evidenceError}。请刷新图证据重试。</p>}
     {unavailableCoverage && <p role="alert">原覆盖目标在当前编辑中已不可用，请明确核对；未选择替代对象。</p>}
@@ -232,7 +235,7 @@ export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectI
         <SceneTakeReviews key={selected} evidence={graph} onEvidenceChanged={onRefreshGraph} focusRecordId={reviewFocus} focusSerial={focusTarget?.serial} dirty={dirty} disabled={editDisabled} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} take={take} content={content} />
       </>}
     </section>
-    <SceneTimelineEditor contextKey={contextKey} selectionKey={selected} navigationSerial={graphNavigation || navigation?.serial} previewStop={previewStop} onPreviewStart={() => { setPreview(false); setSeamStop(value => value + 1) }} take={take} takes={takes} content={content} disabled={disabled || loading || !!error} onChange={onChange}>
+    <SceneTimelineEditor contextKey={contextKey} selectionKey={selected} navigationSerial={graphNavigation || navigation?.serial} previewStop={previewStop} onPreviewStart={() => { setPreview(false); setSeamStop(value => value + 1) }} take={take} takes={takes} content={content} disabled={disabled || libraryBlocked} onChange={onChange}>
       {navigationClipId && !content.timeline.items.some(item => item.id === navigationClipId) && <Alert type="warning" message="原片段已不可用，请重新选择；未选择其他片段。" />}
       {focusClipId && !content.timeline.items.some(item => item.id === focusClipId) && <Alert type="warning" message={`原采用 ${focusClipId} 已不存在，请核对原依赖；未选择其他片段。`} />}
       <SceneEndFrames evidence={graph} navigation={frameNavigation} onRecorded={onRefreshGraph} onOpenUnit={onOpenUnit} key={versionId} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content}

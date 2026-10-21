@@ -26,4 +26,3 @@ def scene_frame_basis(clip):
     if clip is None or clip.kind != 'media':
         return None
     return clip.model_dump(mode='json', exclude={'timeline_start_ms', 'fit'})
-

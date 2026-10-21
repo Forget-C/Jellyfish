@@ -947,20 +947,6 @@
       "count": 1
     },
     {
-      "file": "src/pages/aiStudio/directing/SceneInstructionCanvas.tsx",
-      "rule": "eqeqeq",
-      "severity": 2,
-      "fingerprint": "55199953de129bee6f0d934f6e96127504bd837239efcf823ac1d478970c17ee",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/directing/SceneInstructionCanvas.tsx",
-      "rule": "eqeqeq",
-      "severity": 2,
-      "fingerprint": "e2176623e93a9b6e24e8230eb581e49e5318bfe73a0a340d3a4ebeb9959fbc1b",
-      "count": 1
-    },
-    {
       "file": "src/pages/aiStudio/directing/SceneInstructionChecks.tsx",
       "rule": "react-hooks/exhaustive-deps",
       "severity": 1,
@@ -1308,13 +1294,6 @@
       "rule": "react-hooks/exhaustive-deps",
       "severity": 1,
       "fingerprint": "41992ecc4b8b91b74bf99180fdef2f16003f8c7ba987ca1105e1500ade69b0aa",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/directing/SceneWorkbenchOverview.tsx",
-      "rule": "eqeqeq",
-      "severity": 2,
-      "fingerprint": "ca072f731af9ffdbf80622b02ee3afe1658b65574153c371d88eca2fd3ac37d7",
       "count": 1
     },
     {

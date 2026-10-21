@@ -27,7 +27,7 @@ export function EditGraphCanvas({ graph, versionId, revision, contextKey, viewId
 }) {
   const valid = !!graph && graph.kind === 'edit' && graph.version_id === versionId && graph.revision === revision &&
     Array.isArray(graph.nodes) && Array.isArray(graph.edges) && Array.isArray(graph.views)
-  const view = valid ? graph.views.find(row => viewId ? row.id === viewId : row.parent_id == null) : undefined
+  const view = valid ? graph.views.find(row => viewId ? row.id === viewId : row.parent_id === null) : undefined
   if (!view) return <p className="scene-edit-empty" role="alert">剪辑图与当前版本不一致。<WorkbenchButton variant="secondary" onClick={onRetry}>重新读取版本</WorkbenchButton></p>
   return <>
     {!view.members.length && view.id === graph.library_view_id && <p className="scene-edit-empty">本场暂无已登记素材。</p>}

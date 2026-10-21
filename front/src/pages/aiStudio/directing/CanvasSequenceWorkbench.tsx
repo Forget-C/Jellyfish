@@ -292,11 +292,11 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       setMediaFocus({ versionId: current.selected.id, target, serial: Date.now() })
       return
     }
-    if (!current.selected || !current.content?.design.direction.shots.some(shot => shot.id === target.shotId)) return
-    if (target.kind !== 'shot' && !current.content.units.some(unit => unit.id === target.unitId && unit.coverage.some(item => item.shot_id === target.shotId))) return
+    if (!current.selected || !current.content || (target.shotId && !current.content.design.direction.shots.some(shot => shot.id === target.shotId))) return
+    if (target.kind !== 'shot' && !current.content.units.some(unit => unit.id === target.unitId && (!target.shotId || unit.coverage.some(item => item.shot_id === target.shotId)))) return
     setEditor(undefined)
     if (target.kind === 'shot') {
-      selectShot(target.shotId); setCanvas('director')
+      selectShot(target.shotId!); setCanvas('director')
       setDirectorFocus({ versionId: current.selected.id, nodeId: '镜头设计', fieldId: '', serial: Date.now() })
     } else {
       selectUnit(target.unitId, target.shotId)
@@ -1162,7 +1162,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
         {!selectedId && <p>尚无场次版本，明确新建后开始设计。</p>}
       </section>
     </DirectorCanvasSurface>}
-    {loadState === 'ready' && selected && content && <SceneRelationsNavigation triggerHost={navigationHost} open={currentNavigation === 'relations'} onOpenChange={open => open ? openNavigation('relations') : setNavigation(undefined)} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} key={`relations:${selected.id}`} content={content} shotId={currentShotId} unitId={unitSelections[selected.id]} canvas={canvas} onNavigate={navigateRelation} />}
+    {loadState === 'ready' && selected && content && <SceneRelationsNavigation triggerHost={navigationHost} open={currentNavigation === 'relations'} onOpenChange={open => open ? openNavigation('relations') : setNavigation(undefined)} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} key={`relations:${selected.id}`} snapshot={selected} evidenceError={evidenceError} onRefreshGraph={() => void refreshEvidence(selected.id)} content={content} shotId={currentShotId} unitId={unitSelections[selected.id]} canvas={canvas} onNavigate={navigateRelation} />}
     <WorkbenchModal title="保存冲突 · 比较本地与服务器" open={!!currentConflict} closable={false} maskClosable={false} keyboard={false}
       footer={<WorkbenchDialogActions secondary={<WorkbenchButton variant="quiet" onClick={() => resolveConflict(false)}>放弃本地编辑并载入服务器</WorkbenchButton>}>
         <WorkbenchButton variant="primary" onClick={() => resolveConflict(true)}>以服务器修订为基线保留本地编辑</WorkbenchButton></WorkbenchDialogActions>}>

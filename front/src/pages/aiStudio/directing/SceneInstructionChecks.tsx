@@ -32,7 +32,9 @@ export function SceneInstructionChecks({ focusTask, onEvidenceChanged, suggestio
   const evidenceKey = useRef('')
   const [rows, setRows] = useState<InstructionCheckRead[]>()
   const [selectedId, setSelectedId] = useState<string>()
-  useEffect(() => { if (focusTask) { setSelectedId(focusTask.taskId); setAttempt(value => value + 1) } }, [focusTask?.taskId, focusTask?.serial])
+  const focusedTaskId = focusTask?.taskId
+  const focusedSerial = focusTask?.serial
+  useEffect(() => { if (focusedTaskId) { setSelectedId(focusedTaskId); setAttempt(value => value + 1) } }, [focusedTaskId, focusedSerial])
   const [viewedId, setViewedId] = useState<string>()
   const [pending, setPending] = useState<InstructionCheckRequest>()
   const [readError, setReadError] = useState('')
