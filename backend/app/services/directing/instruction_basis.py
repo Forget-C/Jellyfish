@@ -1,6 +1,6 @@
 """单元正文依据的独立确认、输入快照及状态核对。"""
 from app.core.contracts.directing.scene_timeline import SceneTimeline
-from app.core.contracts.directing.instruction_basis import InstructionBasisConfirm, InstructionBasisRead, InstructionInputs
+from app.core.contracts.directing.instruction_basis import InstructionBasisConfirm, InstructionBasisRead, InstructionInputs, UnitScopeProjection
 from app.core.contracts.directing.scene_instruction import SceneInstructionApply, SceneInstructionRequest
 from app.core.contracts.directing.scene_version import EditableUnitPreparation
 from app.models.task import Task
@@ -31,9 +31,9 @@ class InstructionBasisService(SceneInstructionService):
     @staticmethod
     def _matches_input_snapshot(current, snapshot, design, unit):
         """按快照的投影版本比较，不替换供当前准备与新任务使用的输入。"""
-        if snapshot.scope is not None and snapshot.scope.version == 1:
+        if snapshot.scope is not None and snapshot.scope.version != current.scope.version:
             current = current.model_copy(update={
-                'scope': unit_scope(design, unit, current.style_rules, version=1)})
+                'scope': unit_scope(design, unit, current.style_rules, version=snapshot.scope.version)})
         return current.same_consumption(snapshot)
 
     async def basis_status(self, sequence_id, version_id, unit_id, content):
@@ -74,6 +74,9 @@ class InstructionBasisService(SceneInstructionService):
         if (args.get('video_model_name') != inputs.video_model_name
                 or args.get('style_rules') != [rule.model_dump(mode='json') for rule in inputs.style_rules]):
             raise RevisionConflict('模型或适用风格与原建议依据不一致，请重新生成建议或人工核对正文')
+        # 采用历史建议仍记录模型当时实际消费的投影，不能伪写为当前算法输入。
+        if args.get('scope') is not None:
+            inputs = inputs.model_copy(update={'scope': UnitScopeProjection.model_validate(args['scope'])})
         request = SceneInstructionRequest.model_validate(task.input_snapshot['scene_instruction']['request'])
         # 幂等身份取自原任务，正文取自已核实结果；不把无关单元的新编辑写进原回执请求。
         original = request.content

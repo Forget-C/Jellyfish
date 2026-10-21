@@ -93,9 +93,7 @@ async def test_video_submission_freezes_original_unit_and_registers_only_candida
         result = {'unit_id': 'unit', 'rows': [{'role': role, 'occurrence_id': 'coverage', 'verdict': 'pass', 'rationale': '明确表达递信动作', 'findings': []} for role in ['direction', 'performance', 'staging', 'cinematography', 'continuity', 'prompt']],
                   'destinations': [{'owner': 'coverage:coverage', 'field': 'action_scope', 'coverage_item_ids': ['coverage'],
                                     'destination': 'instruction', 'instruction_excerpt': '递出信封', 'reference_id': None,
-                                    'rationale': '正文直接表达'},
-                                   {'owner': 'shot:shot', 'field': 'visible_result', 'coverage_item_ids': ['coverage'],
-                                    'destination': 'instruction', 'instruction_excerpt': '递出信封', 'reference_id': None, 'rationale': '正文表达可见结果'}]}
+                                    'rationale': '正文直接表达'}]}
         async with sessions.begin() as db:
             service = TaskService(db)
             assert await service.claim(task_id, worker_id='check-fixture')
@@ -456,8 +454,6 @@ async def test_identity_requirement_can_use_bound_reference_for_video(tmp_path, 
             'destinations': [
                 {'owner': 'coverage:coverage', 'field': 'action_scope', 'coverage_item_ids': ['coverage'],
                  'destination': 'instruction', 'instruction_excerpt': '递出信封', 'rationale': '正文表达动作'},
-                {'owner': 'shot:shot', 'field': 'visible_result', 'coverage_item_ids': ['coverage'],
-                 'destination': 'instruction', 'instruction_excerpt': '递出信封', 'rationale': '正文表达可见结果'},
                 {'owner': 'participant:reader', 'field': 'identity', 'coverage_item_ids': ['coverage'],
                  'destination': 'reference', 'reference_id': 'portrait', 'rationale': '实际绑定读信者参考'},
             ]}

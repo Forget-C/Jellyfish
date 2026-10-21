@@ -80,6 +80,10 @@ async def test_unit_basis_separates_selected_actions_constraints_and_consumed_ba
                 json={'content': saved.json()['data']['content']})
             assert response.status_code == 200, response.text
             scope = response.json()['data']['current']['scope']
+            assert not any(row['owner'] == 'shot:shot' and row['field'] == 'visible_result'
+                           for row in scope['execution'])
+            assert any(row['owner'] == 'shot:shot' and row['text'] == '打开信封'
+                       for row in scope['background'])
             assert any(row['owner'] == action for row in scope['execution'])
             assert not any(row['owner'] == absent for row in scope['execution'])
             assert next(row for row in scope['execution'] if row['owner'] == action)['coverage_item_ids'] == [

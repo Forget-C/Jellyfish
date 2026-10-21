@@ -10,7 +10,7 @@ from app.core.contracts.directing.style import StyleRule
 
 
 def unit_scope(design: EditableSceneDesign, unit: EditableGenerationUnit,
-               style_rules: Iterable[StyleRule] = (), *, version: int = 2) -> UnitScopeProjection:
+               style_rules: Iterable[StyleRule] = (), *, version: int = 3) -> UnitScopeProjection:
     """只沿单元选择和显式适用性投影，保留可追溯的字段及纳入原因。"""
     if version == 1:
         from app.services.directing.instruction_inputs_v1 import unit_scope as historical_scope  # pylint: disable=import-outside-toplevel
@@ -62,7 +62,10 @@ def unit_scope(design: EditableSceneDesign, unit: EditableGenerationUnit,
         shot = shots[item.shot_id]
         add(execution, f'coverage:{item.id}', 'action_scope', item.action_scope, '单元出现项明确填写',
             coverage_ids=[item.id], phase='video')
-        add(execution, f'shot:{shot.id}', 'visible_result', shot.visible_result, '单元明确选择此镜头',
+        # 镜头结果解释完整设计；本次必须拍摄的内容由动作范围和显式选择决定。
+        # 旧快照仍按原投影核对，避免升级重算已确认的历史依据。
+        add(execution if version == 2 else background, f'shot:{shot.id}', 'visible_result',
+            shot.visible_result, '单元明确选择此镜头' if version == 2 else '所属镜头完整结果，仅解释背景',
             coverage_ids=[item.id], phase='video', include_empty=True)
         for key in item.beat_ids:
             beat = beats[key]
@@ -159,7 +162,7 @@ def unit_scope(design: EditableSceneDesign, unit: EditableGenerationUnit,
             coverage_item_ids=[item.id for item in unit.coverage],
             phase='sound' if rule.role == 'sound' else 'video',
             condition=rule.exceptions.text or rule.exceptions.reason))
-    return UnitScopeProjection(version=2, execution=execution, constraints=constraints,
+    return UnitScopeProjection(version=version, execution=execution, constraints=constraints,
                                background=background, unresolved=unresolved)
 
 

@@ -128,7 +128,7 @@ async def test_check_requires_complete_video_destinations(tmp_path, destination)
             result['destinations'] = [
                 {'owner': owner, 'field': field, 'coverage_item_ids': ['coverage'],
                  'destination': 'instruction', 'instruction_excerpt': '递出信封', 'rationale': '正文表达'}
-                for owner, field in [('coverage:coverage', 'action_scope'), ('shot:shot', 'visible_result')]]
+                for owner, field in [('coverage:coverage', 'action_scope')]]
             if destination == 'camera':
                 result['destinations'].append({'owner': 'camera:camera-shot', 'field': 'composition',
                     'coverage_item_ids': ['coverage'], 'destination': 'instruction',

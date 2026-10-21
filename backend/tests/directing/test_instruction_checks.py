@@ -18,7 +18,7 @@ from tests.directing.samples import complete_shot_scope_sample
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("legacy_receipt", [False, True])
-@pytest.mark.parametrize("legacy_check", [False, True])
+@pytest.mark.parametrize("legacy_check", [None, 1, 2])
 async def test_check_freezes_confirmed_inputs_and_does_not_apply_results(tmp_path, legacy_receipt, legacy_check):
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
@@ -70,10 +70,7 @@ async def test_check_freezes_confirmed_inputs_and_does_not_apply_results(tmp_pat
         result = {'unit_id': 'unit', 'rows': [{'role': role, 'occurrence_id': 'coverage', 'verdict': 'pass', 'rationale': '明确表达递信动作', 'findings': []} for role in ['direction', 'performance', 'staging', 'cinematography', 'continuity', 'prompt']],
                   'destinations': [{'owner': 'coverage:coverage', 'field': 'action_scope', 'coverage_item_ids': ['coverage'],
                                     'destination': 'instruction', 'instruction_excerpt': '递出信封', 'reference_id': None,
-                                    'rationale': '正文直接表达'},
-                                   {'owner': 'shot:shot', 'field': 'visible_result', 'coverage_item_ids': ['coverage'],
-                                    'destination': 'instruction', 'instruction_excerpt': '递出信封',
-                                    'reference_id': None, 'rationale': '正文表达镜头可见结果'}]}
+                                    'rationale': '正文直接表达'}]}
         async with sessions.begin() as db:
             frozen = (await db.get(Task, task_id)).input_snapshot['run_args']
             assert frozen['inputs']['design']['direction']['shots']
@@ -87,8 +84,12 @@ async def test_check_freezes_confirmed_inputs_and_does_not_apply_results(tmp_pat
                 task = await db.get(Task, task_id)
                 snapshot = deepcopy(task.input_snapshot)
                 snapshot['run_args']['inputs']['scope'] = unit_scope(
-                    typed.design, typed.units[0], version=1).model_dump(mode='json')
+                    typed.design, typed.units[0], version=legacy_check).model_dump(mode='json')
                 task.input_snapshot = snapshot
+        if legacy_check:
+            result['destinations'].append({'owner': 'shot:shot', 'field': 'visible_result',
+                'coverage_item_ids': ['coverage'], 'destination': 'instruction',
+                'instruction_excerpt': '递出信封', 'reference_id': None, 'rationale': '历史完整镜头要求'})
         async with sessions.begin() as db:
             service = TaskService(db)
             assert await service.claim(task_id, worker_id='check-fixture')

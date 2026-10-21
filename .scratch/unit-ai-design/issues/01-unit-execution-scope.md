@@ -2,7 +2,7 @@
 
 Status: ready-for-agent
 Blocked by: None
-Resolution: pending
+Resolution: completed
 
 **What to build:** 用户在现有单元编辑中只选择已有动作“抬头”，保存后生成并审查指令时，本次执行不再被完整镜头“拆信、读信、抬头”重新扩大。
 
@@ -22,10 +22,10 @@ Resolution: pending
 
 ## 验收标准
 
-- [ ] 通过现有浏览器流程建立同镜头的两个局部单元，选择不同动作并保存刷新，各自指令依据互不扩大。
-- [ ] 真实 HTTP/任务流程验证“只拍抬头”的编译输入与审查不重新要求拆信、读信；共享身份、空间与连续性约束仍存在。
-- [ ] 覆盖完整镜头执行、相关依据变更与历史任务读取，证明没有把所有镜头结果直接删除后留下新的语义缺口。
-- [ ] 检查依据变化只影响当前适用性，不自动确认新依据、不改写旧指令来源或任务快照。
+- [x] 通过现有浏览器流程建立同镜头的两个局部单元，选择不同动作并保存刷新，各自指令依据互不扩大。
+- [x] 真实 HTTP/任务流程验证“只拍抬头”的编译输入与审查不重新要求拆信、读信；共享身份、空间与连续性约束仍存在。
+- [x] 覆盖完整镜头执行、相关依据变更与历史任务读取，证明没有把所有镜头结果直接删除后留下新的语义缺口。
+- [x] 检查依据变化只影响当前适用性，不自动确认新依据、不改写旧指令来源或任务快照。
 
 ## 验证与完成要求
 
@@ -44,3 +44,16 @@ Resolution: pending
 
 - 2026-10-21：用户调用 implement-spec，按已提出的六张任务及依赖进入实施。
 
+
+### 票据 01 实施与验证
+
+- 2026-10-21：单元投影升级为第三版。所属镜头的完整可见结果保留在解释背景，实际执行只消费动作范围及真实选择条目；仍保留适用人物、空间、连续性及共享规则。编译与审查明确区分完整镜头上下文和当次执行。
+- 历史第一、二版依据、建议及检查按原投影比较；历史建议采用后的回执保留模型当时消费的冻结投影，当前依据及新任务使用第三版。没有改写已有任务输入、来源或回执。
+- 前端继续复用已有单元编辑和依据展示。新增浏览器验收实际建立同镜头两个单元、分别选节拍、保存刷新，并通过真实依据接口验证各自执行互不扩大。
+- TDD：先在真实依据接口复现完整镜头错误进入执行项；再修复并通过。另先复现历史建议采用后的回执被错误记录为第三版，再保留原投影并通过。
+- 通过：`pytest tests/directing/test_instruction_basis.py tests/directing/test_instruction_checks.py tests/directing/test_scene_instructions.py tests/directing/test_instruction_destinations.py tests/directing/test_scene_video.py tests/directing/test_scene_copy.py tests/directing/test_unit_scope_projection.py -q`（40 项；随后增加的历史采用断言由 `pytest tests/directing/test_scene_instructions.py -q` 再次验证，3 项通过）。
+- 通过：`PLAYWRIGHT_CHANNEL=chrome node front/tests/sceneUnitExecutionScope.browser.mjs`；真实浏览器与隔离数据库，证据目录 `/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-scene-version-ffdOfE`。
+- 通过：`pnpm --dir front run typecheck`；`uv run --no-sync pylint app`（10.00/10）。复用主工作区已安装依赖，未联网安装。
+- 外部模型响应使用确定性替身；不调用真实供应商，不验证供应商实际视频遵从性。现有浏览器提示 Browserslist 数据较旧、Tailwind content 配置及 Node util 弃用，不影响本票验收。
+- 最终全范围复核通过：`uv run --no-sync pytest tests/directing -q`：438 项通过、15 项按现有环境条件跳过，耗时 117.51 秒。历史采用修复后再次运行全应用 Pylint，仍为 10.00/10。
+- 报告前执行 `git merge codex-unit-ai-design`，结果为 Already up to date。

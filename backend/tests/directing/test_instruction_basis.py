@@ -11,7 +11,8 @@ from tests.directing.test_store import database
 
 
 @pytest.mark.asyncio
-async def test_basis_receipt_is_explicit_immutable_and_unit_owned(tmp_path):
+@pytest.mark.parametrize("historical_version", [1, 2])
+async def test_basis_receipt_is_explicit_immutable_and_unit_owned(tmp_path, historical_version):
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         path = await sequence_path(client)
         version = (await client.post(path + '/versions', json={'request_id': str(uuid4()), 'title': '依据确认'})).json()['data']
@@ -32,7 +33,7 @@ async def test_basis_receipt_is_explicit_immutable_and_unit_owned(tmp_path):
         bound = deepcopy(content)
         bound['units'][0]['instruction_basis_id'] = basis_id
         assert (await client.post(url, json={'content': bound})).json()['data']['status'] == 'current'
-        # 历史回执使用冻结的版本 1 投影核对，当前算法升级不使未改输入失效。
+        # 历史回执使用冻结的版本 1/2 投影核对，当前算法升级不使未改输入失效。
         from app.models.directing import InstructionBasisRecord
         from app.core.contracts.directing.scene_version import SceneVersionContent
         from app.services.directing.instruction_inputs import unit_scope
@@ -41,18 +42,18 @@ async def test_basis_receipt_is_explicit_immutable_and_unit_owned(tmp_path):
             original_inputs = deepcopy(receipt.inputs)
             legacy_inputs = deepcopy(receipt.inputs)
             typed = SceneVersionContent.model_validate(content)
-            legacy_inputs['scope'] = unit_scope(typed.design, typed.units[0], version=1).model_dump(mode='json')
+            legacy_inputs['scope'] = unit_scope(typed.design, typed.units[0], version=historical_version).model_dump(mode='json')
             receipt.inputs = legacy_inputs
         legacy_state = (await client.post(url, json={'content': bound})).json()['data']
         assert legacy_state['status'] == 'current'
-        assert legacy_state['previous']['scope']['version'] == 1
-        assert legacy_state['current']['scope']['version'] == 2
+        assert legacy_state['previous']['scope']['version'] == historical_version
+        assert legacy_state['current']['scope']['version'] == 3
         new_scope = deepcopy(bound)
         new_scope['design']['applicability'] = [{'subject': {'kind': 'performance', 'field': 'applicability'},
             'purpose': 'constraint', 'scope': 'scene_rule', 'phase': 'video'}]
         changed_scope = await client.post(url, json={'content': new_scope})
         assert changed_scope.status_code == 200, changed_scope.text
-        assert changed_scope.json()['data']['status'] == 'changed'
+        assert changed_scope.json()['data']['status'] == ('changed' if historical_version == 1 else 'current')
         async with sessions.begin() as db:
             (await db.get(InstructionBasisRecord, basis_id)).inputs = original_inputs
 
