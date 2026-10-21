@@ -8,12 +8,13 @@ import type { EditableCoverageItem_Output } from './EditableCoverageItem_Output'
  */
 export type SceneUnitDesignProposal = {
     id: string;
+    operation?: ('retain' | 'modify' | 'create' | null);
     coverage: Array<EditableCoverageItem_Output>;
     duration_ms?: (number | null);
     ratio: string;
     reason: string;
-    entry_state?: string;
-    exit_state?: string;
-    reference_requirements?: Array<string>;
+    entry_state?: (string | null);
+    exit_state?: (string | null);
+    reference_requirements?: (Array<string> | null);
     missing?: Array<string>;
 };

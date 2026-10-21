@@ -122,7 +122,7 @@ async def get_object_fixture(key: str):
 
 
 @app.post('/browser-test/unit-design-tasks/{task_id}/complete')
-async def complete_unit_design_fixture(task_id: str, multiple: bool = False):
+async def complete_unit_design_fixture(task_id: str, multiple: bool = False, revise: bool = False):
     """仅替代外部组织模型，仍经实际结构校验和任务生命周期。"""
     from types import SimpleNamespace
     from app.services.directing.ai import generate_directing_result
@@ -138,6 +138,14 @@ async def complete_unit_design_fixture(task_id: str, multiple: bool = False):
                 'ratio': '16:9', 'reason': '已有动作的执行组织', 'entry_state': '', 'exit_state': '',
                 'reference_requirements': ['人物身份参考'], 'missing': []} for index in range(2 if multiple else 1)],
             'missing': []}
+        if revise:
+            result['organization'] = '局部调整明确目标，其余单元保留'
+            result['units'] = [{'id': unit['id'], 'coverage': deepcopy(unit['coverage']),
+                'duration_ms': unit['duration_ms'], 'ratio': unit['ratio'], 'reason': '保留原样'}
+                for unit in args['organization_inputs']['units']]
+            target = next(unit for unit in result['units'] if unit['id'] == args['source_unit_id'])
+            target['coverage'][0]['action_scope'] = text.split('；')[-1]
+            target['reason'] = '局部执行既有动作'
         service = TaskService(db)
         assert await service.claim(task_id, worker_id='browser-unit-design')
         generated = generate_directing_result('directing_unit_design', SimpleNamespace(
