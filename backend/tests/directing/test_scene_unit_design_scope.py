@@ -190,7 +190,7 @@ async def test_partial_scope_repairs_once_without_expanding_execution(tmp_path, 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('scenario', ['structure-then-scope', 'scope-then-structure',
-    'scope-then-expanded', 'scope-then-renamed', 'empty-shot'])
+    'scope-then-expanded', 'scope-then-renamed', 'scope-then-extra-unit', 'empty-shot'])
 async def test_unit_scope_repair_budget_and_partial_target_are_preserved(tmp_path, scenario):
     async with scope_case(tmp_path, '' if scenario == 'empty-shot' else '拆信；读信；抬头') as (sessions, client, detail, version, body):
         url = detail + '/unit-design-suggestions'
@@ -208,6 +208,12 @@ async def test_unit_scope_repair_budget_and_partial_target_are_preserved(tmp_pat
         elif scenario.startswith('scope-then-'):
             if scenario == 'scope-then-expanded':
                 responses[1]['units'][0]['coverage'][0]['action_scope'] = '拆信；读信；抬头'
+            elif scenario == 'scope-then-extra-unit':
+                responses[1]['units'][0]['coverage'][0]['event_ids'] = []
+                extra = proposal('拆信；读信；抬头', event_ids=['event'])['units'][0]
+                extra['id'] = 'extra'
+                extra['coverage'][0]['id'] = 'extra-coverage'
+                responses[1]['units'].append(extra)
             else:
                 responses[1]['units'][0]['id'] = 'replacement'
                 responses[1]['units'][0]['coverage'][0]['event_ids'] = []
@@ -228,3 +234,46 @@ async def test_unit_scope_repair_budget_and_partial_target_are_preserved(tmp_pat
         assert len(calls) == 2
         assert (await client.get(detail)).json()['data'] == version
         assert (await client.post(f'{url}/{task_id}/apply', json={'content': body['content']})).status_code == 422
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('expand_sibling', [False, True])
+async def test_multi_unit_repair_preserves_each_partial_scope(tmp_path, expand_sibling):
+    async with scope_case(tmp_path, '拆信；读信；抬头') as (sessions, client, detail, version, body):
+        url = detail + '/unit-design-suggestions'
+        submitted = await client.post(url, json={**body, 'instruction': '两次都只拍抬头'})
+        assert submitted.status_code == 200, submitted.text
+        task_id = submitted.json()['data']['task_id']
+        bad = proposal('抬头', event_ids=['event'])
+        sibling = deepcopy(bad['units'][0])
+        sibling['id'] = 'sibling'
+        sibling['coverage'][0]['id'] = 'sibling-coverage'
+        bad['units'].append(sibling)
+        corrected = deepcopy(bad)
+        for unit in corrected['units']:
+            unit['coverage'][0]['event_ids'] = []
+        if expand_sibling:
+            corrected['units'][1]['coverage'][0].update(action_scope='拆信；读信；抬头', event_ids=['event'])
+        calls = []
+
+        def invoke(messages):
+            calls.append(deepcopy(messages))
+            return SimpleNamespace(content=json.dumps(bad if len(calls) == 1 else corrected))
+
+        async with sessions.begin() as db:
+            task = await db.get(Task, task_id)
+            service = TaskService(db)
+            assert await service.claim(task_id, worker_id='fixture')
+            if expand_sibling:
+                with pytest.raises(DirectingOutputError, match='sibling.*纠错不能改变局部执行目标') as invalid:
+                    generate_directing_result('directing_unit_design', SimpleNamespace(invoke=invoke), task.input_snapshot['run_args'])
+                await service.finish(task_id, error=str(invalid.value), error_code='directing_output_invalid')
+            else:
+                result = generate_directing_result('directing_unit_design', SimpleNamespace(invoke=invoke), task.input_snapshot['run_args'])
+                await service.finish(task_id, result=result.model_dump(mode='json'))
+        assert len(calls) == 2
+        applied = await client.post(f'{url}/{task_id}/apply', json={'content': body['content']})
+        assert applied.status_code == (422 if expand_sibling else 200), applied.text
+        if not expand_sibling:
+            assert [unit['coverage'][0]['action_scope'] for unit in applied.json()['data']['units']] == ['抬头', '抬头']
+        assert (await client.get(detail)).json()['data'] == version

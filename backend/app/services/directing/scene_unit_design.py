@@ -25,21 +25,28 @@ from app.services.task_service import TaskService
 
 
 class UnitDesignScopeError(ValueError):
-    """选择超出合法局部摘录；有限纠错必须保留该出现项的身份与执行目标。"""
+    """选择超出合法局部摘录；有限纠错保留整份方案中已合法的局部执行目标。"""
 
-    def __init__(self, unit_id, item, field):
-        self.unit_id = unit_id
-        self.coverage_item_id = item.id
-        self.action_scope = item.action_scope
+    def __init__(self, unit_id, item, field, *, local_scopes, result):
+        self.local_scopes = local_scopes
+        self.coverage_identities = {(unit.id, coverage.id) for unit in result.units for coverage in unit.coverage}
         super().__init__(f"单元 {unit_id} / 覆盖项 {item.id} 的 {field['owner']}.{field['field']}："
                          '已选设计项与动作范围不一致；局部执行不能同时选择范围外的完整动作')
 
     def validate_repair(self, result):
         """纠错可修正设计选择，不能通过扩大范围、删除或换身份消除原错误。"""
-        item = next((item for unit in result.units if unit.id == self.unit_id
-                     for item in unit.coverage if item.id == self.coverage_item_id), None)
-        if item is None or item.action_scope != self.action_scope:
-            raise ValueError(f'单元 {self.unit_id} / 覆盖项 {self.coverage_item_id}：纠错不能改变局部执行目标')
+        repaired = {(unit.id, item.id): item.action_scope for unit in result.units for item in unit.coverage}
+        if set(repaired) != self.coverage_identities:
+            raise ValueError('纠错不能改变局部执行目标：须保持原单元与覆盖项身份，不得增删或替换')
+        for (unit_id, coverage_item_id), scope in self.local_scopes.items():
+            if repaired.get((unit_id, coverage_item_id)) != scope:
+                raise ValueError(f'单元 {unit_id} / 覆盖项 {coverage_item_id}：纠错不能改变局部执行目标')
+
+
+def _is_design_excerpt(scope, texts):
+    """每段可执行正文均须来自适用设计，空白或新增创作不构成合法范围。"""
+    segments = [part.strip() for part in re.split(r'[；;\n]+', scope) if part.strip()]
+    return bool(segments) and all(any(segment in text for text in texts) for segment in segments)
 
 
 def unit_design_inputs(content, shot_id):
@@ -102,6 +109,10 @@ def validate_unit_design(args, result):
     if any(unit.id in protected_ids for unit in result.units):
         raise ValueError('单元方案使用了其他镜头或跨镜头单元身份')
     texts = [row['text'] for row in fields if row['purpose'] == 'design' and row['text']]
+    # 首个冲突会中断校验，因此提前固定所有来源合法的局部范围，避免纠错扩大后续单元。
+    local_scopes = {(unit.id, item.id): item.action_scope for unit in result.units for item in unit.coverage
+                    if item.shot_id == args['shot_id'] and not (shot_text and shot_text in item.action_scope)
+                    and _is_design_excerpt(item.action_scope, texts)}
     old_ids = {unit['id'] for unit in original_units}
     retired_ids = set(args.get('retired_unit_ids', [])) - old_ids
     if any(unit.id in retired_ids for unit in result.units):
@@ -129,8 +140,7 @@ def validate_unit_design(args, result):
             if item.shot_id != args['shot_id'] or not item.action_scope.strip():
                 raise ValueError('单元覆盖必须限定当前镜头并明确执行范围')
             # 可执行自由文本只接受既有设计的摘录；创作变化回导演画布处理。
-            segments = [part.strip() for part in re.split(r'[；;\n]+', item.action_scope) if part.strip()]
-            if not segments or not all(any(segment in text for text in texts) for segment in segments):
+            if not _is_design_excerpt(item.action_scope, texts):
                 raise ValueError('执行范围必须摘录已有适用设计；新增创作请先修改导演设计')
             # 只有动作范围明确包含完整镜头结果，才允许完整选择同镜适用设计。
             # 关联设计可用不同措辞；局部摘录仍不能夹带范围外的完整动作。
@@ -152,7 +162,7 @@ def validate_unit_design(args, result):
                                 and row['field'] == main_field and row['text']
                                 and row['text'] not in item.action_scope), None)
                 if not complete_shot and outside:
-                    raise UnitDesignScopeError(unit.id, item, outside)
+                    raise UnitDesignScopeError(unit.id, item, outside, local_scopes=local_scopes, result=result)
         inherited_duration = (existing is None and supplement_source is not None
                               and unit.duration_ms in (None, supplement_source.duration_ms))
         if inherited_duration:
