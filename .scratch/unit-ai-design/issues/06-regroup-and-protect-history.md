@@ -57,3 +57,5 @@ Resolution: completed
 - 验证：`pnpm --dir front run typecheck` 通过；`UV_CACHE_DIR=/tmp/jellyfish-uv-cache PYLINTHOME=/tmp/jellyfish-pylint-cache uv run --directory backend pylint app`：10.00/10。
 - 浏览器：`PATH=/Users/extreme/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH PLAYWRIGHT_CHANNEL=chrome node front/tests/sceneUnitRegroup.browser.mjs` 通过。真实隔离 HTTP／SQLite／TaskService，模型响应受控，验证三变二、拆分、合并一次确认保存刷新、两类引用及可执行导航、解除关联后过期、预览临时网络失败只重核实原结果、当前选择变化不改写旧任务冻结来源。桌面 1440×960、窄屏 390×844，截图已目视；最终证据目录 `/private/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-unit-regroup-9rvfox`。专用 8246／4246 服务随脚本结束关闭。
 - 契约同步：从本工作树 `app.openapi()` 导出 schema 并运行 `pnpm --dir front run openapi:gen`；正式主工作树 `openapi:update` 与全套 workbench-ui 按集成约定由根代理统一执行。本票未声明 MySQL 验证。
+
+- 2026-10-21：本票已合入 `codex-unit-ai-design`；正式 OpenAPI 同步、最终集成回归和两轴审查修复记录统一见[集成验收](../validation.md)。此前委托主集成执行的检查以该记录为准。

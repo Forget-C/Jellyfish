@@ -64,3 +64,5 @@ Resolution: completed
 - OpenAPI 从本工作树 `app.main.app.openapi()` 导出，精确相等核对通过；执行 `pnpm --dir front run openapi:gen`，仅保留实际契约差异及原有序列化风格。统一正式 `openapi:update` 和主 8000 服务来源核实由最终集成执行。
 - 复用 WorkbenchModal、WorkbenchButton 与原工作台保存／详情组件，无共享样式或布局例外。全套工作台 UI 检查按集成安排于票 06 后统一执行，复用票 03 现有共享组件验收。
 - 限制：仅外部模型响应使用确定性替身；不调用真实付费模型。浏览器现有 Browserslist、Tailwind、Node 弃用提示不影响通过结果。依赖软链接不提交；未改父规格或用户 Hugo 内容，无 PR。完成前已合并最新 `codex-unit-ai-design`（已是最新）。
+
+- 2026-10-21：本票已合入 `codex-unit-ai-design`；正式 OpenAPI 同步、最终集成回归和两轴审查修复记录统一见[集成验收](../validation.md)。此前委托主集成执行的检查以该记录为准。

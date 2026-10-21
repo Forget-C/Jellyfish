@@ -62,3 +62,5 @@ Resolution: completed
 - 通过：`PLAYWRIGHT_CHANNEL=chrome pnpm --dir front run test:workbench-ui`（组件、四画布样式、设计完整性三项浏览器流程）。使用既有 WorkbenchModal／WorkbenchDetails／WorkbenchButton，无共享组件例外。
 - OpenAPI 由本工作树 `app.main.app.openapi()` 导出并与 schema 精确比较，通过 `pnpm --dir front run openapi:gen` 生成客户端；仅保留实际契约差异，清除生成器尾部空行噪音。最终主 8000 服务一致性核对及正式 `openapi:update` 由集成工作区统一执行，未停止用户服务。
 - 限制：外部模型响应使用确定性替身，不调用真实供应商。15 项 MySQL 环境用例按原条件跳过；浏览器现有 Browserslist、Tailwind 与 Node 弃用提示不影响通过结果。
+
+- 2026-10-21：本票已合入 `codex-unit-ai-design`；正式 OpenAPI 同步、最终集成回归和两轴审查修复记录统一见[集成验收](../validation.md)。此前委托主集成执行的检查以该记录为准。

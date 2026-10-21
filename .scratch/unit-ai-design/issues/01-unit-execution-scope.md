@@ -57,3 +57,5 @@ Resolution: completed
 - 外部模型响应使用确定性替身；不调用真实供应商，不验证供应商实际视频遵从性。现有浏览器提示 Browserslist 数据较旧、Tailwind content 配置及 Node util 弃用，不影响本票验收。
 - 最终全范围复核通过：`uv run --no-sync pytest tests/directing -q`：438 项通过、15 项按现有环境条件跳过，耗时 117.51 秒。历史采用修复后再次运行全应用 Pylint，仍为 10.00/10。
 - 报告前执行 `git merge codex-unit-ai-design`，结果为 Already up to date。
+
+- 2026-10-21：本票已合入 `codex-unit-ai-design`；正式 OpenAPI 同步、最终集成回归和两轴审查修复记录统一见[集成验收](../validation.md)。此前委托主集成执行的检查以该记录为准。

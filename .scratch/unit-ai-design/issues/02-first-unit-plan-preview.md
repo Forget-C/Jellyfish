@@ -74,3 +74,5 @@ Resolution: completed
 - 通过：`PLAYWRIGHT_CHANNEL=chrome node front/tests/sceneUnitDesign.browser.mjs`，包含独立历史、详情打开时真实缩放画布、任务中心与 URL 回跳、桌面及 390px 窄屏、准备及自动／手动保存应用和在途编辑保护。证据：`/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-scene-version-HwJjyD`；已目视检查桌面与窄屏截图，标题和关闭入口可达，无横向溢出。8247／4247 独占服务已停止。
 - 契约 schema 未变化；同步修正 architecture 对参考诊断与历史容器的描述，不改父规格。完成前 `git merge codex-unit-ai-design` 返回 Already up to date（4a7180e）；集成后的全 directing 检查由集成分支统一执行。
 - 浏览器仅出现既有 Browserslist／Tailwind content／Node util 弃用提示。首次复用 venv 时 uv 仅重装本项目 editable 包，无依赖版本变化；后续均使用 `--no-sync`，依赖软链不提交。
+
+- 2026-10-21：本票已合入 `codex-unit-ai-design`；正式 OpenAPI 同步、最终集成回归和两轴审查修复记录统一见[集成验收](../validation.md)。此前委托主集成执行的检查以该记录为准。

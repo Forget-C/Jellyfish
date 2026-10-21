@@ -63,3 +63,5 @@ Resolution: completed
 - 通过：`PLAYWRIGHT_CHANNEL=chrome node front/tests/sceneUnitSupplement.browser.mjs`，独占 8245/4245；真实多单元来源 B、来源模型预选、A/B 保留、新身份补拍、继承 B 的 seed／正文、保存回读刷新，以及当前切到 A 后查看旧任务仍显示 B。桌面／390px 截图已目视检查，窄屏布局稳定等待后无横向溢出且确认按钮在视口内。最终证据 `/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-scene-version-dAH1IQ`。
 - 公共 OpenAPI 与 generated client 随票 04 一并同步；本票无额外契约变更。主 8000 正式 `openapi:update` 和全套 workbench UI 验收按根集成安排执行，不停止用户服务。复用 WorkbenchModal、WorkbenchButton、CanvasTextPreview，无共享样式或组件例外。
 - 完成前已合并最新 `codex-unit-ai-design`（f7ec86a），保留票 04 最终验收记录与浏览器窄屏断言。仅外部模型／存储边界使用确定性替身，不调用付费模型；现有 Browserslist、Tailwind、Node 提示不影响结果。未修改父规格／Hugo，未建 PR。
+
+- 2026-10-21：本票已合入 `codex-unit-ai-design`；正式 OpenAPI 同步、最终集成回归和两轴审查修复记录统一见[集成验收](../validation.md)。此前委托主集成执行的检查以该记录为准。
