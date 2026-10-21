@@ -4,9 +4,9 @@ import { ApiError, StudioDirectingService } from '../../../services/generated'
 import type { SceneTakeLibraryRead, SceneTakeReviewRead, SceneVersionContent_Output } from '../../../services/generated'
 import { directingError } from './common'
 
-// 对象字段顺序不代表依据变化；数组顺序仍保留其业务含义。
+// 沿用工作台保存比较：省略 nullable／空列表默认值不代表依据变化，数组顺序仍保留。
 const comparable = (value: unknown) => JSON.stringify(value, (_, item) => item && typeof item === 'object' && !Array.isArray(item)
-  ? Object.fromEntries(Object.entries(item).sort(([left], [right]) => left.localeCompare(right))) : item)
+  ? Object.fromEntries(Object.entries(item).filter(([key, value]) => value != null && !(Array.isArray(value) && value.length === 0 && key !== 'participant_ids')).sort(([left], [right]) => left.localeCompare(right))) : item)
 
 /** 固定记录只读，适用性同时核对当前未保存编辑，不把读取失败显示为已通过。 */
 export function SceneTakeReviews({ projectId, sequenceId, versionId, revision, take, content, dirty, disabled, evidence, onEvidenceChanged, focusRecordId, focusSerial }: {

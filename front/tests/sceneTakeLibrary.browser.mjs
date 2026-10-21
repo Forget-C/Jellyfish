@@ -1,5 +1,5 @@
 import { makeWorkspace } from './directing-fixtures.mjs'
-import { locateCanvasNode, workbenchShot, workbenchControl } from './workbenchControls.mjs'
+import { locateCanvasNode, workbenchShot, workbenchControl, closeWorkbenchDetails } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -97,7 +97,9 @@ try {
   await page.getByRole('button', { name: '编辑画布', exact: true }).click({ timeout: 5000 })
   await page.getByRole('button', { name: '浏览同场次素材', exact: true }).click()
   await page.getByRole('button', { name: '选择素材 1', exact: true }).click()
+  await page.getByRole('button', { name: '查看素材固定依据', exact: true }).click()
   await page.getByText('素材生成输入与当前单元一致，仍需人工审片', { exact: true }).waitFor({ timeout: 5000 })
+  await closeWorkbenchDetails(page)
   assert.equal(await page.locator('video').count(), 0)
   await page.getByRole('button', { name: '预览当前素材', exact: true }).click()
   const video = page.getByLabel('当前素材视频', { exact: true })
@@ -106,7 +108,7 @@ try {
   assert.equal(await video.evaluate(node => node.paused), true)
   assert.equal(await video.evaluate(node => node.duration), 2)
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.getByRole('button', { name: '收起关系树', exact: true }).click()
+  if (await page.getByRole('button', { name: '收起关系树', exact: true }).isVisible()) await page.getByRole('button', { name: '收起关系树', exact: true }).click()
   const completionNotice = page.getByRole('button', { name: '关闭通知', exact: true })
   const noticeBounds = await completionNotice.boundingBox()
   assert.ok(noticeBounds.x >= 0 && noticeBounds.x + noticeBounds.width <= 390, '窄屏通知关闭入口必须完整可见')
@@ -151,6 +153,7 @@ try {
   await page.getByRole('button', { name: '记录实际覆盖', exact: true }).click()
   await page.getByRole('button', { name: '保存', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByLabel('固定素材审片记录', { exact: true }).scrollIntoViewIfNeeded()
   await page.getByText('当前判断与固定审片依据一致', { exact: true }).waitFor({ timeout: 5000 })
   await page.screenshot({ path: join(output, 'narrow-review.png'), fullPage: true })
   await page.setViewportSize({ width: 1440, height: 960 })
@@ -174,6 +177,7 @@ try {
   await page.getByRole('button', { name: '编辑画布', exact: true }).click()
   if (await page.getByRole('button', { name: '打开剪辑工作区', exact: true }).isVisible()) await page.getByRole('button', { name: '打开剪辑工作区', exact: true }).click()
   await page.getByRole('button', { name: '选择素材 1', exact: true }).click()
+  await page.getByRole('button', { name: '查看素材固定依据', exact: true }).click()
   await page.getByText('旧依据候选：当前正文或相关生成依据已变化', { exact: true }).waitFor()
   assert.equal(await page.getByRole('textbox', { name: '素材审查说明', exact: true }).inputValue(), 'A 方案保留开头')
   await page.route('**/instruction-basis', route => route.abort())
@@ -183,6 +187,7 @@ try {
   await page.unroute('**/instruction-basis')
   await page.getByRole('button', { name: '重试素材依据核对', exact: true }).click()
   await page.getByText('素材生成输入与当前单元一致，仍需人工审片', { exact: true }).waitFor()
+  await closeWorkbenchDetails(page)
   for (const invalid of ['range', 'target', 'source']) {
     const rejectedContent = structuredClone(a.content)
     const item = rejectedContent.take_judgments[0].annotation.coverage[0]
@@ -237,7 +242,9 @@ try {
   await page.getByRole('button', { name: '选择素材 1', exact: true }).click()
   await page.getByRole('combobox', { name: '当前方案素材审查', exact: true }).click()
   await page.getByText('需修复', { exact: true }).click()
+  await page.getByRole('button', { name: '查看素材固定依据', exact: true }).click()
   await page.getByText('原生成单元不在当前方案，作为旧依据候选人工核对', { exact: true }).waitFor()
+  await closeWorkbenchDetails(page)
   await page.getByRole('textbox', { name: '素材审查说明', exact: true }).fill('B 方案需要修复')
   await page.getByRole('button', { name: '新增可用区间', exact: true }).click()
   await page.getByRole('spinbutton', { name: '可用区间 1 入点毫秒', exact: true }).fill('1000')

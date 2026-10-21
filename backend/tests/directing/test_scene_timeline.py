@@ -134,3 +134,15 @@ async def test_scene_timeline_preserves_clip_identity_positions_and_real_ranges(
         source = next(node for node in reread['edit_graph']['nodes'] if node['kind'] == 'edit_take')
         assert source['take_id'] == take_id and source['available'] is False
         assert source['issues'][0]['code'] == 'take-unavailable'
+
+        # 已保存取材在源登记被外部移除后仍能读取其原身份，不伪装成空图。
+        from app.models.directing import Take
+        async with sessions.begin() as db:
+            await db.delete(await db.get(Take, take_id))
+        missing_response = await client.get(detail)
+        assert missing_response.status_code == 200, missing_response.text
+        missing = missing_response.json()['data']
+        source = next(node for node in missing['edit_graph']['nodes'] if node['kind'] == 'edit_take')
+        assert source['take_id'] == take_id and source['file_id'] == 'video1'
+        assert source['available'] is False and source['origin_id'] is None
+        assert missing['content'] == reread['content'] and missing['revision'] == reread['revision']

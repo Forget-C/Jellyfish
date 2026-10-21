@@ -36,6 +36,9 @@ async def edit_graph(context: CanvasReadContext, db: AsyncSession, sequence_id: 
             SceneVersionRecord, SceneVersionRecord.id == SceneVideoExecution.version_id).where(
             SceneVersionRecord.sequence_id == sequence_id).order_by(SceneTakeRecord.created_at, SceneTakeRecord.id))
     sources.update({('scene_video', row.id): row for row in rows})
+    # 当前保存的判断／采用仍保留已消失源的复合身份，不能让图读取形成悬空引用。
+    for item in [*context.content.take_judgments, *(row for row in items if row.kind == 'media')]:
+        sources.setdefault((item.take_kind, item.take_id), (item.take_id, item.file_id, None, None, None))
     file_ids = {row[1] for row in sources.values()}
     files = {file.id: file for file in await db.scalars(select(FileItem).where(
         FileItem.id.in_(file_ids)))} if file_ids else {}
@@ -53,7 +56,7 @@ async def edit_graph(context: CanvasReadContext, db: AsyncSession, sequence_id: 
         source_id = f'edit:take:{take_kind}:{take_id}'
         source_object = obj('take', f'{take_kind}:{take_id}', [])
         source_target = CanvasTarget(node_id=source_id, object=source_object)
-        file = files.get(row[1])
+        file = files.get(row[1]) if row[2] is not None else None
         available = bool(file and file.type == 'video' and file.deleted_at is None and file.delete_requested_at is None)
         issues = [] if available else [CanvasIssue(code='take-unavailable', message='原素材文件不可用或待核实',
             severity='warning', target=source_target)]
@@ -64,7 +67,7 @@ async def edit_graph(context: CanvasReadContext, db: AsyncSession, sequence_id: 
             home_view_id='edit:library', take_kind=take_kind, take_id=take_id, file_id=row[1],
             origin_id=row[2], unit_id=row[3], task_id=row[4], available=available,
             duration_ms=file.duration_ms if file else None, issues=issues, annotation=annotation, reviews=summaries,
-            summary=[field('origin', '固定来源', row[2]),
+            summary=[field('origin', '固定来源', row[2] or '来源不可用'),
                 field('judgment', '当前方案判断',
                     f"{ {'pass': '通过', 'retain': '保留', 'repair': '需修复', 'discard': '弃用'}.get(annotation.verdict, '未审查') if annotation else '未审查'}；"
                     f"可用区间 {len(annotation.retained_ranges) if annotation else 0}；"
