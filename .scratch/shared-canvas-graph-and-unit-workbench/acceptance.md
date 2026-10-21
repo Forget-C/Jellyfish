@@ -1,10 +1,10 @@
 # 共享 graph 与单元画布验收记录
 
-状态：既有功能与回归证据已汇总；首次两轴审查发现四项需修正，见 review.md。以下通过结果仅描述已执行证据，不代表审查已通过或最终结项。母规格保持原文；以下沿用 A01–A20，不缩减范围。详细红绿过程及早期证据见 implementation.md。
+状态：实现与验收完成。A01–A20 均通过，两轴最终复查无剩余发现；首次四项与复查发现的历史重复行 P1 已修复并验证，见 review.md。母规格保持原文，详细红绿过程见 implementation.md。
 
 ## 当前验证范围
 
-- 后端全仓：785 passed、19 skipped；随后新增导演计数契约，全部 directing 消费者 500 passed、15 skipped；新增历史无 ID HTTP 用例单独通过。非 directing 模块没有进一步改动。
+- 最终后端全仓：788 passed、19 skipped、142.17s；19 项依赖未显式配置的隔离 MySQL 或真实对象存储。新增 graph 契约及两投影器测试均执行通过；全部 directing 为 503 passed、15 skipped。
 - 全应用 Pylint：10.00，退出成功。前端 typecheck、diff --check 通过。
 - 前端纯逻辑全集：182 passed、0 failed、0 skipped。其后 UI 变化通过下列真实浏览器验证，纯逻辑模块没有再次修改。
 - OpenAPI 从已核实加载当前工作区的 8000 后端生成，generated client 同步；清理无关生成换行差异。
@@ -29,7 +29,7 @@
 | A13 | 周期保存验证网络失败保留提示／输入并原样重试 request_id、expected_revision、内容；B 不并入旧请求。完整版本与视频浏览器覆盖未知请求重开及原授权重放。通过。 |
 | A14 | 周期保存验证 422 等修正、409 显式冲突且不盲目重试；版本浏览器验证服务端已推进时不直接覆盖。后端并发／幂等用例通过。通过。 |
 | A15 | 完整版本浏览器验证关闭／重开、原请求成功／未到达、追加输入、另一恢复记录、存储失败及服务端变更；graph 浏览器新增单元明确 422 后实际关闭页面、同浏览器重新打开并恢复。通过。 |
-| A16 | graph 浏览器验证未保存新增单元失败后关闭详情再进入、实际关闭恢复、无前端假节点／无强制保存；恢复后保存，再撤销移除该单元，旧图参考入口明确不可用，不选其他单元，重做恢复原输入。通过。 |
+| A16 | graph 浏览器验证新增导演首镜头关闭／首次失败后重进、未保存新增单元绑定真实参考后关闭／恢复、无前端假节点／无强制保存；独立 legacy 浏览器验证重复无 ID 旧行不会错绑，当前入口分别继续编辑两行；恢复后保存，再撤销移除该单元，旧图参考入口明确不可用，不选其他单元，重做恢复原输入。通过。 |
 | A17 | 共同布局缓存与导演布局浏览器验证稳定节点位置；graph／周期保存浏览器验证最新输入和服务端基线分离、两图更新及四画布切换；完整版本浏览器验证保存后撤销／重做仍保留。通过。 |
 | A18 | graph 浏览器验证初次缺失 unit_graph 明确错误、不拼图；周期保存分别损坏 director_graph／unit_graph revision，保留输入并核验原请求；版本浏览器覆盖损坏关系图、只读和存储不可用。通过。 |
 | A19 | sceneVideo 完整旅程验证保存并生成响应丢失、原授权重放、其他单元继续编辑、刷新核验及无重复生成；存储保护失败时没有提交新生成意图。通过。 |
@@ -39,15 +39,16 @@
 
 以下路径均位于 `/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/`：
 
-- 最新 graph、跨镜头 AI 门禁、异常图、关闭恢复及撤销旧图入口：`jellyfish-canvas-graph-YdEns3`。
+- 最新 graph、不透明根／子图地址、跨镜头 AI 门禁、异常图、首镜头重进、未保存单元参考、关闭恢复及撤销旧图入口：`jellyfish-canvas-graph-sJF6Ni`。
+- 无 ID 重复历史行编辑隔离与失败后重进：`jellyfish-legacy-graph-yk4uSV`。
 - 配置／上传参考到视频候选的完整闭环及未知生成授权：`jellyfish-scene-version-dcS5E7`。
 - 最新 AI 单元设计完整生命周期：`jellyfish-scene-version-UNRwnS`。
 - 完整版本、保存、恢复、冲突、存储与多页面交接：`jellyfish-scene-version-iyd28F`。
 - 两类 graph 异常响应、A/B、周期／手动保存和冲突：`jellyfish-periodic-save-kIfdBr`。
 - 工作台组件／键盘／弹窗：`jellyfish-workbench-ui-0DfBRA`；真实页面四画布／窄屏／媒体／时间线：`jellyfish-workbench-style-XLt2sv`。
-- 设计完整性、正常／指定镜头进入及恢复筛选：`jellyfish-design-scope-nMg8Ob`。
+- 设计完整性、后端全场锚点详情归属、正常／指定镜头进入及恢复筛选：`jellyfish-design-scope-gYn88w`。
 - 真实场次落幅依赖及独立单元门禁：`jellyfish-scene-version-JNSHBc`。
-- 导演布局、缓存和导航：`jellyfish-director-layout-gJXxq5`。
+- 导演布局、缓存和导航：`jellyfish-director-layout-ILmQjo`。
 
 ## 复用与边界审计
 
@@ -59,4 +60,4 @@
 
 ## 最终审查
 
-首次固定基线的 Standards／Spec 两轴审查已完成：规范 2 项、规格 2 项，待修复与复查。根视图不透明地址、未保存导演对象重进和新单元首次保存前参考绑定仍需补验，见 review.md。票据勾选与计划结项应在审查完成后进行。
+固定基线 d264de4738484306d5b1b17ad588803546d31ac6，最终代码审查 HEAD 为 42d87d1c777a321650effa6e782a5312e0efea82。Standards 0 项、Spec 0 项，无剩余发现；两个独立审查者只读检查，测试由主任务执行。审查原报告及修复链见 review.md。所有必要检查句柄均已终态，无未完成实现；外部付费生成使用受控夹具，未配置的真实 MySQL／对象存储集成用例不宣称通过。
