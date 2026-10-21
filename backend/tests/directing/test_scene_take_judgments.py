@@ -50,7 +50,12 @@ async def test_versions_keep_independent_judgments_on_existing_take(tmp_path):
             detail = path + '/versions/' + version['id']
             saved = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})
             assert saved.status_code == 200, saved.text
-            versions.append((detail, saved.json()['data']))
+            saved_data = saved.json()['data']
+            node = next(row for row in saved_data['edit_graph']['nodes'] if row['kind'] == 'edit_take')
+            assert node['annotation'] == saved_data['content']['take_judgments'][0]['annotation']
+            assert node['reviews'][0]['matches_current'] is True
+            assert node['reviews'][0]['version_id'] == version['id']
+            versions.append((detail, saved_data))
         for detail, saved in versions:
             assert (await client.get(detail)).json()['data'] == saved
         # 审查改变固定新记录；只改当前设计不会改写既有审片依据。
@@ -79,10 +84,22 @@ async def test_versions_keep_independent_judgments_on_existing_take(tmp_path):
         assert confirmed.json()['data']['content']['take_judgments'] == first_review['content']['take_judgments']
         repeated = await client.post(a_path + '/take-reviews', json=confirmation)
         assert repeated.json()['data'] == confirmed.json()['data']
-        assert (await client.get(a_path)).json()['data'] == changed_response.json()['data']
+        refreshed = (await client.get(a_path)).json()['data']
+        assert refreshed['content'] == changed_response.json()['data']['content']
+        assert refreshed['revision'] == changed_response.json()['data']['revision']
+        assert next(row for row in refreshed['edit_graph']['nodes'] if row['kind'] == 'edit_take')['reviews'][0]['id'] == confirmed.json()['data']['id']
         assert len((await client.get(a_path + '/take-reviews')).json()['data']) == 2
         rejected = await client.post(a_path + '/take-reviews', json={**confirmation, 'expected_revision': 1})
         assert rejected.status_code == 409, rejected.text
+        restored = deepcopy(a_saved['content'])
+        restored_response = await client.put(a_path, json={'request_id': str(uuid4()), 'expected_revision': confirmation['expected_revision'], 'content': restored})
+        assert restored_response.status_code == 200, restored_response.text
+        restored_node = next(row for row in restored_response.json()['data']['edit_graph']['nodes'] if row['kind'] == 'edit_take')
+        assert [row['matches_current'] for row in restored_node['reviews']] == [False, True]
+        assert restored_node['reviews'][1]['id'] == first_review['id']
+        back = await client.put(a_path, json={'request_id': str(uuid4()), 'expected_revision': restored_response.json()['data']['revision'], 'content': changed})
+        assert back.status_code == 200, back.text
+        changed_response = back
         changed['take_judgments'][0]['annotation']['verdict'] = 'repair'
         request = {'request_id': str(uuid4()), 'expected_revision': changed_response.json()['data']['revision'], 'content': changed}
         reviewed = await client.put(a_path, json=request)

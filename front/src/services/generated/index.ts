@@ -246,8 +246,10 @@ export type { EditableUnitPreparation_Input } from './models/EditableUnitPrepara
 export type { EditableUnitPreparation_Output } from './models/EditableUnitPreparation_Output';
 export type { EditCanvasGraph } from './models/EditCanvasGraph';
 export type { EditClipCanvasNode } from './models/EditClipCanvasNode';
+export type { EditCoverageCanvasNode } from './models/EditCoverageCanvasNode';
 export type { EditPlannedCanvasNode } from './models/EditPlannedCanvasNode';
 export type { EditTakeCanvasNode } from './models/EditTakeCanvasNode';
+export type { EditTakeReviewSummary } from './models/EditTakeReviewSummary';
 export type { EntityNameExistenceCheckRequest } from './models/EntityNameExistenceCheckRequest';
 export type { EntityNameExistenceCheckResponse } from './models/EntityNameExistenceCheckResponse';
 export type { EntityNameExistenceItem } from './models/EntityNameExistenceItem';

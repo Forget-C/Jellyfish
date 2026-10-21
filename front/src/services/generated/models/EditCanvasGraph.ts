@@ -6,6 +6,7 @@ import type { CanvasEdge } from './CanvasEdge';
 import type { CanvasIssue } from './CanvasIssue';
 import type { CanvasView } from './CanvasView';
 import type { EditClipCanvasNode } from './EditClipCanvasNode';
+import type { EditCoverageCanvasNode } from './EditCoverageCanvasNode';
 import type { EditPlannedCanvasNode } from './EditPlannedCanvasNode';
 import type { EditTakeCanvasNode } from './EditTakeCanvasNode';
 /**
@@ -15,11 +16,12 @@ export type EditCanvasGraph = {
     kind: 'edit';
     version_id: string;
     revision: number;
-    nodes: Array<(EditTakeCanvasNode | EditClipCanvasNode | EditPlannedCanvasNode)>;
+    nodes: Array<(EditTakeCanvasNode | EditClipCanvasNode | EditPlannedCanvasNode | EditCoverageCanvasNode)>;
     edges: Array<CanvasEdge>;
     /**
      * 含一个 parent_id 为空的根视图；视图 ID 为后端提供的不透明地址
      */
     views: Array<CanvasView>;
     issues: Array<CanvasIssue>;
+    library_view_id: (string | null);
 };

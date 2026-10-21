@@ -10,11 +10,12 @@
     "legacy-graph": { "file": "sceneLegacyGraph.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 },
     "instruction-evidence": { "file": "sceneInstructionEvidence.browser.mjs", "ports": [4252, 8252], "timeoutMs": 180000 },
     "edit-graph": { "file": "sceneEditGraph.browser.mjs", "ports": [4243, 8243], "timeoutMs": 180000 },
+    "take-library-graph": { "file": "sceneTakeLibraryGraph.browser.mjs", "ports": [4244, 8244], "timeoutMs": 180000 },
     "timeline": { "file": "sceneTimeline.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 },
     "periodic-save": { "file": "scenePeriodicSave.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 }
   },
   "suites": {
     "workbench": ["workbench-ui", "workbench-style", "design-scope"],
-    "graph": ["director-layout", "canvas-graph", "graph-summary", "legacy-graph", "periodic-save", "instruction-evidence", "edit-graph", "timeline"]
+    "graph": ["director-layout", "canvas-graph", "graph-summary", "legacy-graph", "periodic-save", "instruction-evidence", "edit-graph", "timeline", "take-library-graph"]
   }
 }

@@ -96,6 +96,24 @@ def object_path(key: str) -> Path:
     return path
 
 
+@app.post('/browser-test/legacy-takes/{take_id}/candidate')
+async def add_take_candidate_fixture(take_id: str):
+    """外部生成完成边界：同文件的新独立输出经正式登记，不修改场次revision。"""
+    from uuid import uuid4
+    from app.models.directing import Take
+    async with sessions.begin() as db:
+        source = await db.get(Take, take_id)
+        task_id = uuid4().hex
+        db.add(Task(id=task_id, kind='video', project_id='canvas-project', status='succeeded',
+            input_snapshot={'prompt_revision_id': source.prompt_revision_id}))
+        await db.flush()
+        db.add(TaskOutput(task_id=task_id, ordinal=0, file_id=source.file_id))
+        await db.flush()
+        candidate = await DirectingStore(db, 'canvas-project').register_take(
+            prompt_revision_id=source.prompt_revision_id, task_id=task_id, output_ordinal=0)
+        return {'take_id': candidate.id}
+
+
 @app.post('/browser-test/scene-versions/{version_id}/duplicate-legacy-activities')
 async def duplicate_legacy_activities_fixture(version_id: str):
     """仅在隔离数据库构造旧无 ID 重复行，后续编辑与保存走正式 API。"""

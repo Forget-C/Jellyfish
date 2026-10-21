@@ -1,3 +1,4 @@
+import { workbenchControl, closeWorkbenchDetails } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -54,11 +55,15 @@ try {
   assert.equal(library[0].prompt.text, '旧生产计划的固定拍摄指令')
   await page.goto(`http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
-  await page.getByRole('switch', { name: '自动保存', exact: true }).click()
+  await (await workbenchControl(page, '保存设置', 'switch', '自动保存')).click()
+  await page.getByRole('button', { name: '保存设置', exact: true }).click()
   await page.getByRole('button', { name: '编辑画布', exact: true }).click()
+  await page.getByRole('button', { name: '浏览同场次素材', exact: true }).click()
   await page.getByRole('button', { name: '选择素材 1', exact: true }).click()
+  await page.getByRole('button', { name: '查看素材固定依据', exact: true }).click()
   await page.getByText('旧生产计划素材：请按当前方案人工核对适用性', { exact: true }).waitFor()
   await page.getByText(`原所属生产计划：${library[0].origin_id}`, { exact: true }).waitFor()
+  await closeWorkbenchDetails(page)
   assert.equal(await page.locator('video').count(), 0)
   await page.getByRole('button', { name: '预览当前素材', exact: true }).click()
   const video = page.getByLabel('当前素材视频', { exact: true })
@@ -82,6 +87,7 @@ try {
   const b = (await second.json()).data
   await page.goto(`http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${b.id}`)
   await page.getByRole('button', { name: '编辑画布', exact: true }).click()
+  if (await page.getByRole('button', { name: '打开剪辑工作区', exact: true }).isVisible()) await page.getByRole('button', { name: '打开剪辑工作区', exact: true }).click()
   await page.getByRole('button', { name: '选择素材 1', exact: true }).click()
   assert.equal(await page.getByRole('textbox', { name: '素材审查说明', exact: true }).inputValue(), '')
   await page.getByRole('combobox', { name: '当前方案素材审查', exact: true }).click()
@@ -93,6 +99,7 @@ try {
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   await page.reload()
   await page.getByRole('button', { name: '编辑画布', exact: true }).click()
+  if (await page.getByRole('button', { name: '打开剪辑工作区', exact: true }).isVisible()) await page.getByRole('button', { name: '打开剪辑工作区', exact: true }).click()
   await page.getByRole('button', { name: '选择素材 1', exact: true }).click()
   assert.equal(await page.getByRole('textbox', { name: '素材审查说明', exact: true }).inputValue(), 'B 方案需要修复')
   const savedB = (await (await fetch(`${versionsUrl}/${b.id}`)).json()).data

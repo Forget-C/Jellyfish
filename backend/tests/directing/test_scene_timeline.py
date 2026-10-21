@@ -32,7 +32,12 @@ async def test_scene_timeline_preserves_clip_identity_positions_and_real_ranges(
         version = created.json()['data']
         assert version['content']['timeline'] == {'items': []}
         assert version['edit_graph']['kind'] == 'edit'
-        assert version['edit_graph']['nodes'] == []
+        library_graph = version['edit_graph']
+        source = next(node for node in library_graph['nodes'] if node['kind'] == 'edit_take')
+        library_view = next(view for view in library_graph['views'] if view['title'] == '同场次素材')
+        assert [member['node_id'] for member in library_view['members']] == [source['id']]
+        assert source['take_id'] == take_id
+        assert next(view for view in library_graph['views'] if view['parent_id'] is None)['members'] == []
         detail = path + '/versions/' + version['id']
         content = deepcopy(version['content'])
         content['design'] = editable_design_sample()
@@ -117,13 +122,15 @@ async def test_scene_timeline_preserves_clip_identity_positions_and_real_ranges(
         assert response.status_code == 200, response.text
         assert response.json()['data']['content']['timeline']['items'] == content['timeline']['items'][1:]
         assert (await client.get(path)).json()['data']['takes'] == original
+        last_saved = response.json()['data']
         from datetime import UTC, datetime
         from app.models.studio import FileItem
         async with sessions.begin() as db:
             file = await db.get(FileItem, 'video1')
             file.delete_requested_at = datetime.now(UTC).replace(tzinfo=None)
         reread = (await client.get(detail)).json()['data']
-        assert reread['revision'] == saved['revision'] + 1
+        assert reread['revision'] == last_saved['revision']
+        assert reread['content'] == last_saved['content']
         source = next(node for node in reread['edit_graph']['nodes'] if node['kind'] == 'edit_take')
         assert source['take_id'] == take_id and source['available'] is False
         assert source['issues'][0]['code'] == 'take-unavailable'

@@ -5,11 +5,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.directing.canvas_graph import (
     CanvasEdge, CanvasGroup, CanvasIssue, CanvasMember, CanvasObject, CanvasSummaryField,
-    CanvasTarget, CanvasView, EditCanvasGraph, EditClipCanvasNode, EditPlannedCanvasNode, EditTakeCanvasNode,
+    CanvasTarget, CanvasView, EditCoverageCanvasNode, EditTakeReviewSummary, EditCanvasGraph, EditClipCanvasNode, EditPlannedCanvasNode, EditTakeCanvasNode,
 )
 from app.models.directing import Take, SceneTakeRecord, SceneVideoExecution, SceneVersionRecord
 from app.models.studio import FileItem
 from app.services.directing.canvas_graph import CanvasReadContext, GraphAssembler
+from app.services.directing.scene_take_evidence import latest_take_reviews
 
 
 async def edit_graph(context: CanvasReadContext, db: AsyncSession, sequence_id: str) -> EditCanvasGraph:
@@ -19,22 +20,21 @@ async def edit_graph(context: CanvasReadContext, db: AsyncSession, sequence_id: 
     adopted = {(item.take_kind, item.take_id) for item in items if item.kind == 'media'}
     sources = {}
     # 仅查询轻量身份列；不加载 SceneVideoPreparation 等完整固定输入。
-    legacy_ids = [key for kind, key in adopted if kind == 'production_plan']
-    if legacy_ids:
-        rows = await db.execute(select(Take.id, Take.file_id, Take.plan_revision_id, Take.unit_id, Take.task_id).where(
-            Take.sequence_id == sequence_id, Take.id.in_(legacy_ids)))
-        sources.update({('production_plan', row.id): row for row in rows})
-    current_ids = [key for kind, key in adopted if kind == 'scene_video']
-    if current_ids:
-        rows = await db.execute(select(SceneTakeRecord.id, SceneTakeRecord.file_id,
-            SceneVideoExecution.version_id, SceneVideoExecution.unit_id, SceneTakeRecord.task_id).join(
-                SceneVideoExecution, SceneVideoExecution.id == SceneTakeRecord.execution_id).join(
-                SceneVersionRecord, SceneVersionRecord.id == SceneVideoExecution.version_id).where(
-                SceneVersionRecord.sequence_id == sequence_id, SceneTakeRecord.id.in_(current_ids)))
-        sources.update({('scene_video', row.id): row for row in rows})
+    rows = await db.execute(select(Take.id, Take.file_id, Take.plan_revision_id, Take.unit_id, Take.task_id).where(
+        Take.sequence_id == sequence_id).order_by(Take.created_at, Take.id))
+    sources.update({('production_plan', row.id): row for row in rows})
+    rows = await db.execute(select(SceneTakeRecord.id, SceneTakeRecord.file_id,
+        SceneVideoExecution.version_id, SceneVideoExecution.unit_id, SceneTakeRecord.task_id).join(
+            SceneVideoExecution, SceneVideoExecution.id == SceneTakeRecord.execution_id).join(
+            SceneVersionRecord, SceneVersionRecord.id == SceneVideoExecution.version_id).where(
+            SceneVersionRecord.sequence_id == sequence_id).order_by(SceneTakeRecord.created_at, SceneTakeRecord.id))
+    sources.update({('scene_video', row.id): row for row in rows})
     file_ids = {row[1] for row in sources.values()}
     files = {file.id: file for file in await db.scalars(select(FileItem).where(
         FileItem.id.in_(file_ids)))} if file_ids else {}
+    reviews = await latest_take_reviews(db, context.version_id, context.content)
+    judgments = {(item.take_kind, item.take_id): item.annotation for item in context.content.take_judgments}
+    judgment_indexes = {(item.take_kind, item.take_id): index for index, item in enumerate(context.content.take_judgments)}
     members = []
     item_indexes = {item.id: index for index, item in enumerate(context.content.timeline.items)}
     shots = {shot.id: shot for shot in context.content.design.direction.shots}
@@ -42,6 +42,37 @@ async def edit_graph(context: CanvasReadContext, db: AsyncSession, sequence_id: 
         return CanvasObject(version_id=context.version_id, revision=context.revision, kind=kind, id=key, path=path)
     def field(key, label, text):
         return CanvasSummaryField(field=key, label=label, text=str(text))
+    for (take_kind, take_id), row in sources.items():
+        source_id = f'edit:take:{take_kind}:{take_id}'
+        source_object = obj('take', f'{take_kind}:{take_id}', [])
+        source_target = CanvasTarget(node_id=source_id, object=source_object)
+        file = files.get(row[1])
+        available = bool(file and file.type == 'video' and file.deleted_at is None and file.delete_requested_at is None)
+        issues = [] if available else [CanvasIssue(code='take-unavailable', message='原素材文件不可用或待核实',
+            severity='warning', target=source_target)]
+        annotation = judgments.get((take_kind, take_id))
+        summaries = [EditTakeReviewSummary(id=record.id, version_id=record.version_id, revision=record.revision,
+            matches_current=matches) for record, matches in reviews.get((take_kind, take_id), [])]
+        graph.add_node(EditTakeCanvasNode(id=source_id, title='源 Take', object=source_object,
+            home_view_id='edit:library', take_kind=take_kind, take_id=take_id, file_id=row[1],
+            origin_id=row[2], unit_id=row[3], task_id=row[4], available=available,
+            duration_ms=file.duration_ms if file else None, issues=issues, annotation=annotation, reviews=summaries,
+            summary=[field('origin', '固定来源', row[2]),
+                field('judgment', '当前方案判断',
+                    f"{ {'pass': '通过', 'retain': '保留', 'repair': '需修复', 'discard': '弃用'}.get(annotation.verdict, '未审查') if annotation else '未审查'}；"
+                    f"可用区间 {len(annotation.retained_ranges) if annotation else 0}；"
+                    f"实际覆盖登记 {len(annotation.coverage) if annotation else 0}；"
+                    f"剪辑采用 {sum(item.kind == 'media' and (item.take_kind, item.take_id) == (take_kind, take_id) for item in items)}")]))
+        for coverage_index, coverage in enumerate(annotation.coverage if annotation else []):
+            coverage_id = f'{source_id}:coverage:{coverage.id}'
+            identity = obj('coverage', f'{take_kind}:{take_id}:{coverage.id}',
+                ['take_judgments', judgment_indexes[(take_kind, take_id)], 'annotation', 'coverage', coverage_index])
+            graph.add_node(EditCoverageCanvasNode(id=coverage_id, title='实际覆盖', object=identity,
+                home_view_id='edit:library', take_kind=take_kind, take_id=take_id, coverage=coverage,
+                sources=[source_target], summary=[field('observation', '观察', coverage.observation),
+                    field('target', '当前目标／真实源区间', f'{coverage.unit_id} / {coverage.coverage_item_id}；{coverage.media_range.source_in_ms}–{coverage.media_range.source_out_ms} 毫秒')]))
+            graph.add_edge(CanvasEdge(id=f'{coverage_id}:source', source=source_id, target=coverage_id,
+                kind='business', label='人工登记覆盖', sources=[source_target]))
     for index, item in enumerate(items):
         node_id = f'edit:clip:{item.id}'
         identity = obj('clip' if item.kind == 'media' else 'planned', item.id, ['timeline', 'items',
@@ -58,22 +89,9 @@ async def edit_graph(context: CanvasReadContext, db: AsyncSession, sequence_id: 
                     field('expected', '预期内容', expected or '动作待填写'),
                     field('position', '预计位置／时长', f'{item.timeline_start_ms} / {item.estimated_duration_ms} 毫秒')]))
         else:
-            source_key = (item.take_kind, item.take_id)
             source_id = f'edit:take:{item.take_kind}:{item.take_id}'
             source_object = obj('take', f'{item.take_kind}:{item.take_id}', [])
             source_target = CanvasTarget(node_id=source_id, object=source_object)
-            if source_id not in graph.nodes:
-                row = sources.get(source_key)
-                file = files.get(row[1]) if row else None
-                available = bool(file and file.type == 'video' and file.deleted_at is None and file.delete_requested_at is None)
-                issues = [] if available else [CanvasIssue(code='take-unavailable', message='原素材文件不可用或待核实',
-                    severity='warning', target=source_target)]
-                graph.add_node(EditTakeCanvasNode(id=source_id, title='源 Take', object=source_object,
-                    home_view_id='edit:scene', take_kind=item.take_kind, take_id=item.take_id, file_id=item.file_id,
-                    origin_id=row[2] if row else None, unit_id=row[3] if row else None,
-                    task_id=row[4] if row else None, available=available,
-                    duration_ms=file.duration_ms if file else None, issues=issues,
-                    summary=[field('take', '原素材', item.take_id), field('origin', '固定来源', row[2] if row else '来源不可用')]))
             graph.add_node(EditClipCanvasNode(**shared, take_kind=item.take_kind, take_id=item.take_id,
                 file_id=item.file_id, media_range=item.media_range, fit=item.fit, sources=[source_target], summary=[
                     field('position', '时间位置', f'{item.timeline_start_ms} 毫秒'),
@@ -82,7 +100,12 @@ async def edit_graph(context: CanvasReadContext, db: AsyncSession, sequence_id: 
                 kind='business', label='真实取材', sources=[target]))
         members.append(CanvasMember(node_id=node_id, group='timeline'))
     members.extend(CanvasMember(node_id=node.id, group='sources', presentation='reference')
-        for node in graph.nodes.values() if node.kind == 'edit_take')
+        for node in graph.nodes.values() if node.kind == 'edit_take' and (node.take_kind, node.take_id) in adopted)
     graph.add_view(CanvasView(id='edit:scene', title='整场剪辑', members=members,
-        edge_ids=list(graph.edges), groups=[CanvasGroup(id='timeline', label='时间顺序'), CanvasGroup(id='sources', label='源 Take')]))
-    return EditCanvasGraph.model_validate(graph.finish().model_dump())
+        edge_ids=[edge.id for edge in graph.edges.values() if edge.label == '真实取材'], groups=[CanvasGroup(id='timeline', label='时间顺序'), CanvasGroup(id='sources', label='源 Take')]))
+    graph.add_view(CanvasView(id='edit:library', title='同场次素材', parent_id='edit:scene',
+        members=[CanvasMember(node_id=node.id, group='takes' if node.kind == 'edit_take' else 'coverage')
+            for node in graph.nodes.values() if node.kind in ('edit_take', 'edit_coverage')],
+        edge_ids=[edge.id for edge in graph.edges.values() if edge.label == '人工登记覆盖'],
+        groups=[CanvasGroup(id='takes', label='全部同场候选'), CanvasGroup(id='coverage', label='人工实际覆盖')]))
+    return EditCanvasGraph.model_validate({**graph.finish().model_dump(), 'library_view_id': 'edit:library'})

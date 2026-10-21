@@ -22,17 +22,19 @@ import { DirectorCanvasSurface } from './DirectorCanvasSurface'
 
 const identity = (take: { take_kind: string; take_id: string }) => `${take.take_kind}:${take.take_id}`
 
-const editingSessions = new Map<string, { selected: string; navigationSerial?: number; focusClipId?: string; workspace?: boolean; graphNavigation?: number }>()
+const editingSessions = new Map<string, { selected: string; navigationSerial?: number; focusClipId?: string; workspace?: boolean; graphNavigation?: number; library?: boolean }>()
 
 /** 素材来源只读；人工判断属于当前版本，统一交给工作台保存与撤销。 */
 export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectId, sequenceId, versionId, revision, content, disabled, dirty, onChange, onOpenUnit, onOpenVersion, focusClipId, navigation }: {
   graph: EditCanvasGraph; evidenceError: string; onRefreshGraph: () => void
   navigation?: { target: SceneMediaNavigationTarget; serial: number }
   onOpenVersion: (target: { versionId: string; unitId: string }) => Promise<void>
-  onOpenUnit: (unitId: string) => void; focusClipId?: string
+  onOpenUnit: (unitId: string, coverageId?: string) => void; focusClipId?: string
   projectId: string; sequenceId: string; versionId: string; revision: number; content: SceneVersionContent_Output; disabled: boolean; dirty: boolean
   onChange: (content: SceneVersionContent_Output) => void
 }) {
+  const [unavailableCoverage, setUnavailableCoverage] = useState(false)
+  const [previewUrl, setPreviewUrl] = useState('')
   const [unavailableClip, setUnavailableClip] = useState('')
   const [takes, setTakes] = useState<SceneTakeLibraryRead[]>([])
   const contextKey = `${projectId}:${sequenceId}:${versionId}`
@@ -43,6 +45,9 @@ export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectI
   })
   const [graphNavigation, setGraphNavigation] = useState<number | undefined>(session.graphNavigation)
   useEffect(() => { session.graphNavigation = graphNavigation }, [session, graphNavigation])
+  const [library, setLibrary] = useState(session.library || false)
+  useEffect(() => { session.library = library }, [library, session])
+  const [reviewFocus, setReviewFocus] = useState<string>()
   const [workspace, setWorkspace] = useState(session.workspace || false)
   useEffect(() => { session.workspace = workspace }, [workspace, session])
   const [selected, setSelected] = useState(session.selected)
@@ -64,7 +69,7 @@ export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectI
       if (active) setTakes(response.data)
     }).catch(cause => { if (active) setError(directingError(cause)) }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [projectId, sequenceId, versionId, attempt])
+  }, [projectId, sequenceId, versionId, attempt, graph])
   useEffect(() => {
     if (!focusClipId || session.focusClipId === focusClipId) return
     setWorkspace(true)
@@ -112,14 +117,28 @@ export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectI
   return <><div className="scene-edit-navigation" aria-label="剪辑浏览">
     <WorkbenchButton variant="secondary" onClick={() => setWorkspace(value => !value)}>{workspace ? '浏览整场剪辑' : '打开剪辑工作区'}</WorkbenchButton>
     <WorkbenchButton variant="secondary" onClick={() => { setWorkspace(true); setFocusTarget({ nodeId: '同场次素材', fieldId: '', serial: Date.now() }) }}>浏览同场次素材</WorkbenchButton>
+    <WorkbenchButton variant="secondary" onClick={() => { setLibrary(!(library && !workspace)); setWorkspace(false) }}>{library && !workspace ? '返回整场剪辑图' : '浏览同场素材图'}</WorkbenchButton>
     <WorkbenchButton variant="secondary" onClick={onRefreshGraph}>刷新图证据</WorkbenchButton>
     {dirty && <span aria-label="剪辑图同步状态">图待同步：总览展示已保存内容，工作区保留当前输入。</span>}
     {evidenceError && <p role="alert">图证据读取失败，保留旧摘要：{evidenceError}。请刷新图证据重试。</p>}
+    {unavailableCoverage && <p role="alert">原覆盖目标在当前编辑中已不可用，请明确核对；未选择替代对象。</p>}
     {unavailableClip && <p role="alert">原片段 {unavailableClip} 在当前编辑中已不可用，请保存后重新核对。</p>}
-  </div><div className="scene-edit-overview" hidden={workspace}><EditGraphCanvas graph={graph} versionId={versionId} revision={revision} contextKey={contextKey} onRetry={onRefreshGraph} onLocate={node => {
+  </div><div className="scene-edit-overview" hidden={workspace}><EditGraphCanvas graph={graph} versionId={versionId} revision={revision} contextKey={contextKey} viewId={library ? graph.library_view_id || undefined : undefined} onRetry={onRefreshGraph} onLocateCoverage={node => {
+    const unit = content.units.find(row => row.id === node.coverage.unit_id)
+    if (!unit?.coverage.some(row => row.id === node.coverage.coverage_item_id)) { setUnavailableCoverage(true); return }
+    setUnavailableCoverage(false); onOpenUnit(unit.id, node.coverage.coverage_item_id)
+  }} onLocate={(node, recordId) => {
+    if (node.kind === 'edit_coverage') {
+      const judgment = content.take_judgments.find(row => identity(row) === identity(node))
+      if (!judgment?.annotation.coverage.some(row => row.id === node.coverage.id)) { setUnavailableCoverage(true); return }
+      setReviewFocus(undefined); setUnavailableCoverage(false); if (selected !== identity(node)) setPreview(false)
+      setSelected(identity(node)); setWorkspace(true)
+      setFocusTarget({ nodeId: '方案判断', fieldId: `scene-actual-coverage-${node.coverage.id}`, serial: Date.now() }); return
+    }
     if (node.kind === 'edit_take') {
-      setSelected(`${node.take_kind}:${node.take_id}`); setWorkspace(true)
-      setFocusTarget({ nodeId: '当前素材', fieldId: 'scene-current-take', serial: Date.now() }); return
+      if (selected !== identity(node)) setPreview(false)
+      setSelected(`${node.take_kind}:${node.take_id}`); setWorkspace(true); setReviewFocus(recordId)
+      setFocusTarget({ nodeId: recordId ? '方案判断' : '当前素材', fieldId: recordId ? `scene-take-review-${recordId}` : 'scene-current-take', serial: Date.now() }); return
     }
     const clip = content.timeline.items.find(item => item.id === node.clip_id)
     if (!clip) { setUnavailableClip(node.clip_id); return }
@@ -151,12 +170,12 @@ export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectI
         <p>实际媒体时长：{take.duration_ms == null ? '尚未核实' : `${take.duration_ms / 1000} 秒`}</p>
         <Button onClick={() => setTakeDetails(true)}>查看素材固定依据</Button>
         <Button disabled={!take.available || !take.media_url || loading || !!error} onClick={() => {
-          setPreviewStop(value => value + 1); setSeamStop(value => value + 1); setPreview(true); setPreviewError(''); setPreviewAttempt(value => value + 1)
+          setPreviewStop(value => value + 1); setSeamStop(value => value + 1); setPreview(true); setPreviewUrl(resolveAssetUrl(take.media_url || '') || ''); setPreviewError(''); setPreviewAttempt(value => value + 1)
         }}>{previewError ? '重试当前素材预览' : '预览当前素材'}</Button>
         {!take.available && <Alert type="warning" message="原素材文件不可用，请恢复后刷新素材库" />}
         {previewError && <Alert type="warning" message={previewError} />}
         {preview && take.media_url && <video key={`${selected}:${previewAttempt}`} aria-label="当前素材视频" controls preload="metadata"
-          src={resolveAssetUrl(take.media_url)} style={{ width: '100%', maxHeight: 320 }}
+          src={previewUrl} style={{ width: '100%', maxHeight: 320 }}
           onError={() => setPreviewError('原素材无法读取或解码，请重试；素材身份和当前判断保留。')} />}
         <p>预览不自动播放，也不代表剪辑采用。旧版本素材需人工核对当前适用性。</p>
       </>}
@@ -189,7 +208,7 @@ export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectI
         <Button disabled={editDisabled || !take.duration_ms} onClick={() => { if (take.duration_ms) change({ ...annotation, retained_ranges: [...annotation.retained_ranges, { source_in_ms: 0, source_out_ms: take.duration_ms }] }) }}>新增可用区间</Button>
         {take.duration_ms == null && <p>真实时长尚未核实，暂不能新增可用区间。</p>}
         <p>可用区间不等于实际覆盖或时间线采用。</p>
-        <SceneTakeReviews key={selected} dirty={dirty} disabled={editDisabled} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} take={take} content={content} />
+        <SceneTakeReviews key={selected} evidence={graph} onEvidenceChanged={onRefreshGraph} focusRecordId={reviewFocus} focusSerial={focusTarget?.serial} dirty={dirty} disabled={editDisabled} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} take={take} content={content} />
       </>}
     </section>
     <SceneTimelineEditor contextKey={contextKey} selectionKey={selected} navigationSerial={graphNavigation || navigation?.serial} previewStop={previewStop} onPreviewStart={() => { setPreview(false); setSeamStop(value => value + 1) }} take={take} takes={takes} content={content} disabled={disabled || loading || !!error} onChange={onChange}>

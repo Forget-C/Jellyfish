@@ -209,6 +209,12 @@ async def test_video_submission_freezes_original_unit_and_registers_only_candida
         assert rows[0]['takes'][0]['annotation']['review_status'] == 'unreviewed'
         assert rows[0]['takes'][0]['annotation']['coverage'] == []
         take_id = rows[0]['takes'][0]['id']
+        graph_version = (await client.get(detail)).json()['data']
+        candidate = next(node for node in graph_version['edit_graph']['nodes'] if node['kind'] == 'edit_take' and node['take_id'] == take_id)
+        assert candidate['take_kind'] == 'scene_video'
+        assert candidate['origin_id'] == version['id']
+        assert candidate['unit_id'] == 'unit'
+        assert candidate['annotation'] is None
         media_path = unit_url + f'/takes/{take_id}/media'
         media = await client.get(media_path)
         assert media.status_code == 200, media.text

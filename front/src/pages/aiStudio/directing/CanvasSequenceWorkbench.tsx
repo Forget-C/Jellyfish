@@ -1077,11 +1077,11 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
         if (latest.current.selected?.id === target.versionId) action()
         else await requestTransition({ action })
       }} />)}</div>
-    {loadState === 'ready' && canvas === 'edit' && selected && content && <SceneEditCanvas graph={selected.edit_graph} evidenceError={evidenceError} onRefreshGraph={() => void refreshEvidence(selected.id)} onOpenVersion={locateVideoUnit} navigation={mediaFocus?.versionId === selected.id ? mediaFocus : undefined} focusClipId={editClipFocus?.versionId === selected.id ? editClipFocus.clipId : undefined} onOpenUnit={unitId => {
+    {loadState === 'ready' && canvas === 'edit' && selected && content && <SceneEditCanvas graph={selected.edit_graph} evidenceError={evidenceError} onRefreshGraph={() => void refreshEvidence(selected.id)} onOpenVersion={locateVideoUnit} navigation={mediaFocus?.versionId === selected.id ? mediaFocus : undefined} focusClipId={editClipFocus?.versionId === selected.id ? editClipFocus.clipId : undefined} onOpenUnit={(unitId, coverageId) => {
       const unit = content.units.find(row => row.id === unitId)
       if (!unit) return
       rememberUnit(selected.id, undefined, unitId)
-      setUnitFocus({ versionId: selected.id, unitId, nodeId: '单元设置', fieldId: 'scene-unit-dependencies', serial: Date.now() })
+      setUnitFocus({ versionId: selected.id, unitId, nodeId: '单元设置', fieldId: coverageId ? `scene-unit-action-${coverageId}` : 'scene-unit-dependencies', serial: Date.now() })
       setEditor(undefined); setCanvas('units')
     }} dirty={dirty} key={selected.id} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} content={content} revision={selected.revision}
       disabled={readonly || handingOff || !!recovery || busy === 'create' || leaving} onChange={editContent} />}

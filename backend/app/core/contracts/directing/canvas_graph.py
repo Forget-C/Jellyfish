@@ -7,6 +7,7 @@ from pydantic import ConfigDict, Field, model_validator
 from app.core.contracts.directing.common import Contract, Identity, Source, Text, unique
 from app.core.contracts.directing.production import ReferenceBinding, MediaRange
 from app.core.contracts.directing.unit_scope import UnitScopeProjection
+from app.core.contracts.directing.scene_take import SceneTakeAnnotation, SceneActualCoverage
 from app.core.contracts.video_generation import VideoReferenceCapabilities
 
 
@@ -248,6 +249,24 @@ class InstructionCanvasNode(CanvasNode):
     records: list[InstructionCanvasRecord] = Field(default_factory=list)
 
 
+class EditTakeReviewSummary(Contract):
+    """当前相关固定复核的身份与适用性，完整输入沿原记录入口按需读取。"""
+
+    id: Identity
+    version_id: Identity
+    revision: int
+    matches_current: bool
+
+
+class EditCoverageCanvasNode(CanvasNode):
+    """人工观察与当前方案目标；不从生成计划推测实际覆盖。"""
+
+    kind: Literal['edit_coverage'] = Field(default='edit_coverage', json_schema_extra={'enum': ['edit_coverage']})
+    take_kind: Literal['production_plan', 'scene_video']
+    take_id: Identity
+    coverage: SceneActualCoverage
+
+
 class EditTakeCanvasNode(CanvasNode):
     """共享素材的轻量固定来源；不展开完整生成输入或历史正文。"""
 
@@ -260,6 +279,8 @@ class EditTakeCanvasNode(CanvasNode):
     task_id: Identity | None
     available: bool
     duration_ms: int | None = None
+    annotation: SceneTakeAnnotation | None = None
+    reviews: list[EditTakeReviewSummary] = Field(default_factory=list)
 
 
 class EditClipCanvasNode(CanvasNode):
@@ -289,7 +310,7 @@ class EditPlannedCanvasNode(CanvasNode):
 CanvasGraphNode = Annotated[SourceCanvasNode | DesignCanvasNode | MissingCanvasNode |
                             ShotBasisCanvasNode | UnitCanvasNode | UnitConfigCanvasNode |
                             UnitReferencesCanvasNode | UnitBasisCanvasNode | InstructionCanvasNode |
-                            EditTakeCanvasNode | EditClipCanvasNode | EditPlannedCanvasNode,
+                            EditTakeCanvasNode | EditClipCanvasNode | EditPlannedCanvasNode | EditCoverageCanvasNode,
                             Field(discriminator='kind')]
 
 
@@ -511,17 +532,31 @@ class EditCanvasGraph(CanvasGraph):
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
 
     kind: Literal['edit'] = Field(default='edit', json_schema_extra={'enum': ['edit']})
-    nodes: list[Annotated[EditTakeCanvasNode | EditClipCanvasNode | EditPlannedCanvasNode,
+    library_view_id: str | None = None
+    nodes: list[Annotated[EditTakeCanvasNode | EditClipCanvasNode | EditPlannedCanvasNode | EditCoverageCanvasNode,
                           Field(discriminator='kind')]]
 
     @model_validator(mode='after')
     def adoption_sources(self):
         """采用只能编辑自己的时间线对象；取材边须保留同一素材和文件身份。"""
         nodes = {node.id: node for node in self.nodes}
+        if self.library_view_id is not None and self.library_view_id not in {view.id for view in self.views}:
+            raise ValueError('invalid canvas take library view')
         for node in self.nodes:
             if isinstance(node, EditTakeCanvasNode):
                 if node.edit_target or node.object.kind != 'take' or node.object.id != f'{node.take_kind}:{node.take_id}':
                     raise ValueError('invalid canvas take identity or edit target')
+                continue
+            if isinstance(node, EditCoverageCanvasNode):
+                if node.edit_target or node.object.kind != 'coverage' or node.object.id != f'{node.take_kind}:{node.take_id}:{node.coverage.id}':
+                    raise ValueError('invalid canvas actual coverage identity')
+                sources = [nodes.get(target.node_id) for target in node.sources if not target.external]
+                matches = [source for source in sources if isinstance(source, EditTakeCanvasNode)
+                    and (source.take_kind, source.take_id, source.file_id) == (node.take_kind, node.take_id, node.coverage.source.file_id)
+                    and source.annotation and node.coverage in source.annotation.coverage]
+                if len(matches) != 1 or not any(edge.kind == 'business' and edge.source == matches[0].id
+                        and edge.target == node.id for edge in self.edges):
+                    raise ValueError('invalid canvas actual coverage source')
                 continue
             expected = 'clip' if isinstance(node, EditClipCanvasNode) else 'planned'
             if node.object.kind != expected or node.object.id != node.clip_id:

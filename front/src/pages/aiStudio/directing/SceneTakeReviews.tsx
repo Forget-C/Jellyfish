@@ -9,7 +9,8 @@ const comparable = (value: unknown) => JSON.stringify(value, (_, item) => item &
   ? Object.fromEntries(Object.entries(item).sort(([left], [right]) => left.localeCompare(right))) : item)
 
 /** 固定记录只读，适用性同时核对当前未保存编辑，不把读取失败显示为已通过。 */
-export function SceneTakeReviews({ projectId, sequenceId, versionId, revision, take, content, dirty, disabled }: {
+export function SceneTakeReviews({ projectId, sequenceId, versionId, revision, take, content, dirty, disabled, evidence, onEvidenceChanged, focusRecordId, focusSerial }: {
+  evidence?: unknown; onEvidenceChanged?: () => void; focusRecordId?: string; focusSerial?: number
   projectId: string; sequenceId: string; versionId: string; revision: number; take: SceneTakeLibraryRead; content: SceneVersionContent_Output; dirty: boolean; disabled: boolean
 }) {
   const [records, setRecords] = useState<SceneTakeReviewRead[]>([])
@@ -28,7 +29,7 @@ export function SceneTakeReviews({ projectId, sequenceId, versionId, revision, t
       const response = await StudioDirectingService.directingConfirmSceneTakeReview({ projectId, sequenceId, versionId,
         requestBody: { expected_revision: expectedRevision, take_kind: take.take_kind, take_id: take.take_id } })
       if (!response.data) throw new Error('复核记录尚未核实')
-      if (mounted.current) { setPendingRevision(undefined); setAttempt(value => value + 1) }
+      if (mounted.current) { setPendingRevision(undefined); setAttempt(value => value + 1); onEvidenceChanged?.() }
     } catch (cause) {
       if (mounted.current) {
         setConfirmationError(directingError(cause))
@@ -44,7 +45,14 @@ export function SceneTakeReviews({ projectId, sequenceId, versionId, revision, t
       if (active) setRecords(response.data || [])
     }).catch(cause => { if (active) setError(directingError(cause)) }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [projectId, sequenceId, versionId, revision, attempt])
+  }, [projectId, sequenceId, versionId, revision, attempt, evidence])
+  const focusedRecord = useRef('')
+  useEffect(() => {
+    const request = `${focusRecordId}:${focusSerial}`
+    if (!focusRecordId || focusedRecord.current === request) return
+    const details = document.getElementById(`scene-take-review-${focusRecordId}`)
+    if (details instanceof HTMLDetailsElement) { focusedRecord.current = request; details.open = true; details.querySelector('summary')?.focus() }
+  }, [focusRecordId, focusSerial, records])
   const selected = records.filter(row => row.take_kind === take.take_kind && row.take_id === take.take_id)
   const current = { ...content, timeline: { items: [] }, take_judgments: content.take_judgments.filter(row => row.take_kind === take.take_kind && row.take_id === take.take_id) }
   const matching = [...selected].reverse().find(row => comparable({ ...row.content, timeline: { items: [] } }) === comparable(current))
@@ -64,7 +72,7 @@ export function SceneTakeReviews({ projectId, sequenceId, versionId, revision, t
       action={pendingRevision != null && <Button disabled={disabled || confirming} onClick={() => void confirm(pendingRevision)}>核实原复核记录</Button>} />}
     {selected.map((row, index) => {
       const judgment = row.content.take_judgments[0]
-      return <details key={row.id}><summary>查看审片记录 {index + 1}</summary>
+      return <details key={row.id} id={`scene-take-review-${row.id}`}><summary tabIndex={-1}>查看审片记录 {index + 1}</summary>
         <p>实际审查版本：{row.version_id}{row.version_id !== versionId ? '（另存时保留的历史依据）' : ''}</p>
         <p>形成时间：{new Date(row.created_at).toLocaleString()}</p>
         <p>当时结论：{judgment.annotation.verdict ? ({ pass: '通过', retain: '保留', repair: '需修复', discard: '弃用' })[judgment.annotation.verdict] : '未填写'}</p>

@@ -529,6 +529,20 @@ async def test_regroup_removes_omitted_units_and_rechecks_removal_on_save(tmp_pa
         saved = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})
         assert saved.status_code == 200, saved.text
         content = saved.json()['data']['content']
+        if blocked == 'coverage':
+            graph = saved.json()['data']['edit_graph']
+            observed = next(node for node in graph['nodes'] if node['kind'] == 'edit_coverage')
+            assert observed['coverage'] == content['take_judgments'][0]['annotation']['coverage'][0]
+            assert observed['coverage']['unit_id'] == 'second'
+            assert observed['coverage']['coverage_item_id'] == 'second-coverage'
+            source = next(node for node in graph['nodes'] if node['kind'] == 'edit_take')
+            assert any(edge['source'] == source['id'] and edge['target'] == observed['id'] for edge in graph['edges'])
+            from pydantic import ValidationError
+            from app.core.contracts.directing.canvas_graph import EditCanvasGraph
+            malformed = deepcopy(graph)
+            next(node for node in malformed['nodes'] if node['kind'] == 'edit_coverage')['take_id'] = 'other-take'
+            with pytest.raises(ValidationError):
+                EditCanvasGraph.model_validate(malformed)
         url = detail + '/unit-design-suggestions'
         response = await client.post(url, json={'request_id': str(uuid4()), 'expected_revision': 2, 'content': content,
             'shot_id': 'shot', 'source_unit_id': 'first', 'target_model_id': 'video', 'model_id': 'text'})

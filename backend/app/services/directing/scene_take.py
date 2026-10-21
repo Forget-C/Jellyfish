@@ -5,13 +5,13 @@ from sqlalchemy import or_, select
 
 from app.core.contracts.directing.scene_take_review import SceneTakeReviewRead
 from app.core.contracts.directing.scene_version import SceneVersionContent
-from app.core.contracts.directing.scene_timeline import SceneTimeline
 from app.core.contracts.directing.production import ProductionPlan, Prompt
 from app.core.contracts.directing.scene_video import SceneVideoPreparation
 from app.core.contracts.directing.scene_take_library import SceneTakeLibraryRead
 from app.models.directing import Take, SceneTakeRecord, SceneVideoExecution, SceneVersionRecord, SceneTakeReviewRecord
 from app.models.studio import Chapter, FileItem
 from app.services.directing.store import DirectingStore, RevisionConflict
+from app.services.directing.scene_take_evidence import take_review_matches
 
 
 class SceneTakeService(DirectingStore):
@@ -53,11 +53,9 @@ class SceneTakeService(DirectingStore):
         result = []
         for row in rows:
             content = SceneVersionContent.model_validate(row.content)
-            current = version.content.model_copy(update={'take_judgments': [item for item in version.content.take_judgments
-                if (item.take_kind, item.take_id) == (row.take_kind, row.take_id)]})
             result.append(SceneTakeReviewRead(id=row.id, version_id=row.version_id, revision=row.revision,
                 take_kind=row.take_kind, take_id=row.take_id, content=content, created_at=row.created_at.replace(tzinfo=UTC) if row.created_at.tzinfo is None else row.created_at,
-                matches_current=content.model_copy(update={'timeline': SceneTimeline()}) == current.model_copy(update={'timeline': SceneTimeline()})))
+                matches_current=take_review_matches(content, version.content, row.take_kind, row.take_id)))
         return result
 
     async def confirm_take_review(self, sequence_id, version_id, body):
