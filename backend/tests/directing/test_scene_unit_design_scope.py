@@ -105,6 +105,47 @@ async def test_complete_shot_scope_accepts_related_design_without_verbatim_dupli
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('first_error', ['reference', 'ratio'])
+@pytest.mark.parametrize('expand_scope', [False, True])
+async def test_business_error_repair_preserves_valid_partial_scope(tmp_path, first_error, expand_scope):
+    async with scope_case(tmp_path, '拆信；读信；抬头') as (sessions, client, detail, version, body):
+        url = detail + '/unit-design-suggestions'
+        submitted = await client.post(url, json={**body, 'instruction': '只拍抬头'})
+        assert submitted.status_code == 200, submitted.text
+        task_id = submitted.json()['data']['task_id']
+        bad = proposal('抬头')
+        if first_error == 'reference':
+            bad['units'][0]['coverage'][0]['event_ids'] = ['missing']
+        else:
+            bad['units'][0]['ratio'] = 'invalid'
+        corrected = proposal('拆信；读信；抬头', event_ids=['event']) if expand_scope else proposal('抬头')
+        calls = []
+
+        def invoke(messages):
+            calls.append(deepcopy(messages))
+            return SimpleNamespace(content=json.dumps(bad if len(calls) == 1 else corrected))
+
+        async with sessions.begin() as db:
+            task = await db.get(Task, task_id)
+            service = TaskService(db)
+            assert await service.claim(task_id, worker_id='fixture')
+            if expand_scope:
+                with pytest.raises(DirectingOutputError, match='纠错不能改变局部执行目标') as invalid:
+                    generate_directing_result('directing_unit_design', SimpleNamespace(invoke=invoke), task.input_snapshot['run_args'])
+                await service.finish(task_id, error=str(invalid.value), error_code='directing_output_invalid')
+            else:
+                result = generate_directing_result('directing_unit_design', SimpleNamespace(invoke=invoke), task.input_snapshot['run_args'])
+                await service.finish(task_id, result=result.model_dump(mode='json'))
+        assert len(calls) == 2
+        applied = await client.post(f'{url}/{task_id}/apply', json={'content': body['content']})
+        assert applied.status_code == (422 if expand_scope else 200), applied.text
+        if not expand_scope:
+            assert applied.json()['data']['units'][0]['coverage'][0]['action_scope'] == '抬头'
+        assert (await client.get(detail)).json()['data'] == version
+
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('selection,owner,field', [
     ('beat_ids', 'beat', 'must_show'), ('event_ids', 'event', 'description'),
     ('performance_action_ids', 'performance', 'physical_action'),

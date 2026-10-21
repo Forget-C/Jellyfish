@@ -47,7 +47,7 @@ class DirectingOutputError(ValueError):
 
 def generate_directing_result(kind: str, llm, args: dict):
     """在 Worker 有界线程执行，返回严格结构，绝不由模型直接批准或覆盖工作单。"""
-    from app.services.directing.scene_unit_design import UnitDesignScopeError, validate_unit_design  # pylint: disable=import-outside-toplevel
+    from app.services.directing.scene_unit_design import UnitDesignRepairScope, validate_unit_design  # pylint: disable=import-outside-toplevel
 
     contract = EditableSceneDesign if kind == 'directing_design' and args.get('scene_version_design') else RESULT_CONTRACTS[kind]
     require_complete = args.get('design_scope_version') == 1 and not args.get('design_scope')
@@ -100,7 +100,7 @@ def generate_directing_result(kind: str, llm, args: dict):
         SystemMessage(content=instruction + '\nNote 的 fact/proposal 必须有 text 和 sources；其余状态不得带 text，none/not_applicable 必须有 reason。Source.version 必须是字符串，例如 "1"。所有关联 ID 必须存在于本工作单对应列表。\n仅返回符合以下 JSON Schema 的 JSON 对象，不添加 Markdown：\n' + json.dumps(contract.model_json_schema(), ensure_ascii=False)),
         HumanMessage(content=json.dumps(model_args, ensure_ascii=False)),
     ]
-    unit_scope_error = None
+    unit_repair_scope = None
     retained_fields = set()
     retained_reasons = set()
     candidate = None
@@ -131,8 +131,10 @@ def generate_directing_result(kind: str, llm, args: dict):
         try:
             result = contract.model_validate_json(text, context={"require_shot_participants": kind == "directing_design" and not args.get("design_scope")})
             if kind == 'directing_unit_design':
-                if unit_scope_error is not None:
-                    unit_scope_error.validate_repair(result)
+                if unit_repair_scope is None:
+                    unit_repair_scope = UnitDesignRepairScope(args, result)
+                else:
+                    unit_repair_scope.validate_repair(result)
                 result = validate_unit_design(args, result)
             if kind == 'directing_design' and args.get('scene_version_design'):
                 original = EditableSceneDesign.model_validate(args['previous_design'])
@@ -180,8 +182,6 @@ def generate_directing_result(kind: str, llm, args: dict):
                             f'{issue.owner}.{issue.field}：{issue.reason}' for issue in issues))
             break
         except (ValidationError, ValueError) as error:
-            if kind == 'directing_unit_design' and isinstance(error, UnitDesignScopeError):
-                unit_scope_error = error
             errors = error.errors(include_url=False, include_input=False, include_context=False) if isinstance(error, ValidationError) else [{'loc': ['sources' if isinstance(error, DesignSourceError) else 'design'], 'msg': str(error)}]
             if accept_candidate and scope_issues:
                 errors = [{'loc': issue.path[:-1] if issue.code == 'empty_row_scope' else issue.path,
