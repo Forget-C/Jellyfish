@@ -232,7 +232,7 @@ try {
   await page.getByText('指令任务：已取消', { exact: true }).waitFor()
   await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).fill('🙂开头旧文结尾')
   await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
-  await page.getByRole('combobox', { name: '指令修订范围', exact: true }).click()
+  await page.getByRole('combobox', { name: '指令修订范围', exact: true }).press('ArrowDown')
   await page.getByText('限定选中文字', { exact: true }).click()
   const rangeText = page.getByRole('textbox', { name: '选择允许修订的正文', exact: true })
   const selectionPoints = await rangeText.evaluate(field => {

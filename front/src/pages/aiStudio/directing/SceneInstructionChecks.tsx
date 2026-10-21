@@ -12,7 +12,9 @@ const terminal = ['succeeded', 'failed', 'cancelled']
 const statuses: Record<string, string> = { queued: '等待执行', running: '执行中', succeeded: '已完成', failed: '失败', cancelled: '已取消' }
 
 /** 检查任务和历史结果独立保存，查看不确认结果或授权视频生成。 */
-export function SceneInstructionChecks({ suggestionPriority, primaryHost, onEmptyPrimaryHost, projectId, sequenceId, versionId, unitId, revision, content, disabled, onChange, dirty, videoBusy, savePending, onVerifyVideo, videoRefresh, onGenerateVideo, onRetryVideo, videoFocus, onVideoFocused }: {
+export function SceneInstructionChecks({ focusTask, onEvidenceChanged, suggestionPriority, primaryHost, onEmptyPrimaryHost, projectId, sequenceId, versionId, unitId, revision, content, disabled, onChange, dirty, videoBusy, savePending, onVerifyVideo, videoRefresh, onGenerateVideo, onRetryVideo, videoFocus, onVideoFocused }: {
+  focusTask?: { taskId: string; serial: number }
+  onEvidenceChanged?: () => void
   suggestionPriority?: boolean
   onEmptyPrimaryHost?: (node: HTMLSpanElement | null) => void
   primaryHost?: HTMLElement | null
@@ -25,8 +27,12 @@ export function SceneInstructionChecks({ suggestionPriority, primaryHost, onEmpt
 }) {
   const target = { projectId, sequenceId, versionId, unitId }
   const key = `jellyfish:instruction-check:${projectId}:${sequenceId}:${versionId}:${unitId}`
+  const evidenceCallback = useRef(onEvidenceChanged)
+  evidenceCallback.current = onEvidenceChanged
+  const evidenceKey = useRef('')
   const [rows, setRows] = useState<InstructionCheckRead[]>()
   const [selectedId, setSelectedId] = useState<string>()
+  useEffect(() => { if (focusTask) { setSelectedId(focusTask.taskId); setAttempt(value => value + 1) } }, [focusTask?.taskId, focusTask?.serial])
   const [viewedId, setViewedId] = useState<string>()
   const [pending, setPending] = useState<InstructionCheckRequest>()
   const [readError, setReadError] = useState('')
@@ -59,6 +65,11 @@ export function SceneInstructionChecks({ suggestionPriority, primaryHost, onEmpt
         if (!result.data) throw new Error('检查记录尚未核实')
         if (!active) return
         setPending(request); setRows(result.data); setReadError('')
+        const evidence = JSON.stringify(result.data)
+        if (evidence !== evidenceKey.current) {
+          evidenceKey.current = evidence
+          evidenceCallback.current?.()
+        }
         const recovered = result.data.find(row => row.request_id === request?.request_id)
         if (recovered && request) { clearPending(request.request_id); setSelectedId(recovered.task_id) }
         if (result.data.some(row => !terminal.includes(row.status))) timer = setTimeout(() => void read(), 2000)

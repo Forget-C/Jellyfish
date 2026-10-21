@@ -233,6 +233,8 @@ async def test_unit_graph_filters_share_one_unit_and_keep_its_complete_subgraph(
         body = next(node for node in instruction['nodes'] if node['kind'] == 'instruction')
         assert body['unit_id'] == 'shared'
         assert body['text'] == ''
+        assert body['basis_status'] == 'empty'
+        assert body['records'] == []
         assert 'model-required' in {issue['code'] for issue in body['issues']}
         assert {node['kind'] for node in instruction['nodes']} == {'instruction', 'unit_basis', 'unit_references'}
         graph = saved['unit_graph']

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Space } from 'antd'
 import { StudioDirectingService } from '../../../services/generated'
 import type { SceneInstructionSuggestionRead } from '../../../services/generated'
@@ -10,10 +10,14 @@ export type InstructionActivityTarget = {
 }
 
 /** 在画布之外跟踪原任务；完成只通知，定位必须由用户明确发起。 */
-export function SceneInstructionActivity({ target, hidden, onLocate, onDismiss }: {
+export function SceneInstructionActivity({ target, hidden, onLocate, onDismiss, onEvidenceChanged }: {
+  onEvidenceChanged?: () => void
   target: InstructionActivityTarget; hidden: boolean
   onLocate: () => Promise<void>; onDismiss: () => void
 }) {
+  const evidenceCallback = useRef(onEvidenceChanged)
+  evidenceCallback.current = onEvidenceChanged
+  const evidenceKey = useRef('')
   const [record, setRecord] = useState<SceneInstructionSuggestionRead>()
   const [readError, setReadError] = useState('')
   const [locateError, setLocateError] = useState('')
@@ -32,6 +36,8 @@ export function SceneInstructionActivity({ target, hidden, onLocate, onDismiss }
         const row = result.data?.find(item => item.task_id === target.taskId)
         if (!row) throw new Error('原指令任务记录尚未核实')
         setRecord(row); setReadError('')
+        const evidence = JSON.stringify(row)
+        if (evidence !== evidenceKey.current) { evidenceKey.current = evidence; evidenceCallback.current?.() }
         if (!['succeeded', 'failed', 'cancelled'].includes(row.status)) timer = setTimeout(() => void read(), 2000)
       } catch (cause) { if (active) setReadError(directingError(cause)) }
     }

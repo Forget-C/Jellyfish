@@ -140,6 +140,11 @@ async def test_check_freezes_confirmed_inputs_and_does_not_apply_results(tmp_pat
         saved = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 1, 'content': bound})
         assert saved.status_code == 200, saved.text
         assert (await client.post(compare_url, json={'content': saved.json()['data']['content']})).json()['data']['confirmed'] is True
+        body = next(node for node in saved.json()['data']['instruction_graph']['nodes'] if node['kind'] == 'instruction')
+        assert body['basis_status'] == 'current'
+        assert body['records'][0]['task_id'] == task_id
+        assert body['records'][0]['matches_current'] is True
+        assert body['records'][0]['confirmed'] is True
         prepare_url = unit_url + '/video/prepare'
         prepared = await client.post(prepare_url, json={'expected_revision': 2})
         assert prepared.status_code == 200, prepared.text
@@ -153,6 +158,10 @@ async def test_check_freezes_confirmed_inputs_and_does_not_apply_results(tmp_pat
         assert (await client.post(compare_url, json={'content': bound})).json()['data']['confirmed'] is False
         changed_saved = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 2, 'content': bound})
         assert changed_saved.status_code == 200, changed_saved.text
+        changed_body = next(node for node in changed_saved.json()['data']['instruction_graph']['nodes'] if node['kind'] == 'instruction')
+        assert changed_body['records'][0]['matches_current'] is False
+        assert changed_body['records'][0]['confirmed'] is False
+        assert '正文或相关依据已变化' in changed_body['records'][0]['reason']
         assert (await client.post(prepare_url, json={'expected_revision': 3})).status_code == 409
         bound['units'][0]['instruction_check_task_id'] = 'missing-check'
         assert (await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 3, 'content': bound})).status_code == 422

@@ -220,6 +220,21 @@ class UnitBasisCanvasNode(CanvasNode):
     field_targets: list[CanvasBasisTarget]
 
 
+class InstructionCanvasRecord(Contract):
+    """当前相关原任务的轻量只读定位；不携带历史正文或执行授权。"""
+
+    task_id: Identity
+    version_id: Identity
+    unit_id: Identity
+    request_id: Identity
+    kind: Literal['suggestion', 'check']
+    status: str
+    bound: bool = False
+    matches_current: bool | None = None
+    confirmed: bool = False
+    reason: str | None = None
+
+
 class InstructionCanvasNode(CanvasNode):
     """完整自由文本的已保存投影；编辑目标始终指向明确生产单元。"""
 
@@ -227,6 +242,10 @@ class InstructionCanvasNode(CanvasNode):
     unit_id: Identity
     text: str
     source: Source | None = None
+    basis_id: Identity | None = None
+    basis_status: Literal['empty', 'unbound', 'current', 'changed', 'unverified'] = 'unverified'
+    evidence_issue: str | None = None
+    records: list[InstructionCanvasRecord] = Field(default_factory=list)
 
 
 CanvasGraphNode = Annotated[SourceCanvasNode | DesignCanvasNode | MissingCanvasNode |

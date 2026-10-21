@@ -309,6 +309,44 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
   }
   const latest = useRef({ selected, content })
   latest.current = { selected, content }
+  const evidenceRead = useRef(0)
+  const [evidenceError, setEvidenceError] = useState('')
+  useEffect(() => {
+    evidenceRead.current += 1
+    setEvidenceError('')
+    return () => { evidenceRead.current += 1 }
+  }, [projectId, sequenceId, selected?.id, selected?.revision, loadState])
+  // 证据可在相同 revision 更新；只替换固定基线的投影，不改草稿或重建工作区。
+  const refreshEvidence = async (versionId = latest.current.selected?.id) => {
+    const base = latest.current.selected
+    if (!base || base.id !== versionId || loadState !== 'ready') return
+    const serial = ++evidenceRead.current
+    const stillCurrent = () => live.current && serial === evidenceRead.current && latest.current.selected === base &&
+      latest.current.selected?.id === base.id && latest.current.selected.revision === base.revision &&
+      sameContent(latest.current.selected.content, base.content)
+    try {
+      const response = await StudioDirectingService.directingSceneVersion({ projectId, sequenceId, versionId: base.id })
+      if (!stillCurrent()) return
+      const saved = response.data
+      if (!saved || saved.id !== base.id) throw new Error('证据响应的场次版本不一致')
+      if (saved.revision !== base.revision || !sameContent(saved.content, base.content)) {
+        setSaveConflict(saved)
+        throw new Error('服务端内容已变化，请先核对版本冲突；保留当前输入与旧图')
+      }
+      if (saved.relationship_graph.version_id !== base.id || saved.relationship_graph.revision !== base.revision ||
+        !saved.director_graph || saved.director_graph.kind !== 'director' ||
+        !saved.unit_graph || saved.unit_graph.kind !== 'units' ||
+        !saved.instruction_graph || saved.instruction_graph.kind !== 'instructions' ||
+        [saved.director_graph, saved.unit_graph, saved.instruction_graph].some(graph => graph.version_id !== base.id || graph.revision !== base.revision)) {
+        throw new Error('证据图与已保存内容基线不一致')
+      }
+      latest.current.selected = saved
+      setVersions(previous => previous.map(row => row.id === saved.id ? saved : row))
+      setEvidenceError('')
+    } catch (cause) {
+      if (stillCurrent()) setEvidenceError(directingError(cause))
+    }
+  }
   const hasChanges = () => !!latest.current.selected && !sameContent(latest.current.content, latest.current.selected.content)
   const restoreEditing = () => {
     restoreEditingPending.current = true
@@ -1014,7 +1052,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       hidden={canvas === 'instructions' && selectedId === target.versionId && unitSelections[target.versionId] === target.unitId}
       onDismiss={() => setVideoActivities(previous => previous.filter(item => item.taskId !== target.taskId))}
       onLocate={() => locateVideoUnit(target)} />)}
-    {instructionActivities.map(target => <SceneInstructionActivity key={target.taskId} target={target}
+    {instructionActivities.map(target => <SceneInstructionActivity key={target.taskId} target={target} onEvidenceChanged={() => void refreshEvidence(target.versionId)}
       hidden={canvas === 'instructions' && selectedId === target.versionId && unitSelections[target.versionId] === target.unitId}
       onDismiss={() => setInstructionActivities(previous => previous.filter(item => item.taskId !== target.taskId))}
       onLocate={async () => {
@@ -1043,7 +1081,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       setEditor(undefined); setCanvas('units')
     }} dirty={dirty} key={selected.id} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} content={content} revision={selected.revision}
       disabled={readonly || handingOff || !!recovery || busy === 'create' || leaving} onChange={editContent} />}
-    {loadState === 'ready' && canvas === 'instructions' && selected && content && <SceneInstructionCanvas onRetryGraph={() => setAttempt(value => value + 1)} graph={selected.instruction_graph} onLocateSource={target => {
+    {loadState === 'ready' && canvas === 'instructions' && selected && content && <SceneInstructionCanvas evidenceError={evidenceError} onEvidenceChanged={() => void refreshEvidence(selected.id)} onRetryGraph={() => void refreshEvidence(selected.id)} graph={selected.instruction_graph} onLocateSource={target => {
       const source = selected.unit_graph.nodes.find(node => node.id === target.node_id)
       setEditor(undefined)
       if (source?.kind === 'unit_config') {

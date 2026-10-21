@@ -16,11 +16,11 @@ from app.services.task_service import TaskService
 class InstructionCheckService(InstructionBasisService):
     """检查不会更新依据绑定、修改正文或自动发起视频。"""
 
-    def _checks(self, sequence_id, version_id, unit_id):
+    def _checks(self, sequence_id, version_id, unit_id=None):
         return select(Task).where(Task.project_id == self.project_id, Task.target_id == sequence_id,
             Task.kind == 'directing_instruction_check',
             Task.input_snapshot['instruction_check']['version_id'].as_string() == version_id,
-            Task.input_snapshot['instruction_check']['unit_id'].as_string() == unit_id)
+            *([Task.input_snapshot['instruction_check']['unit_id'].as_string() == unit_id] if unit_id else []))
 
     async def submit_check(self, sequence_id, version_id, unit_id, body):
         """原请求核实优先于新提交检查；新任务要求依据已明确确认且准备齐备。"""

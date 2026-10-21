@@ -37,12 +37,12 @@ class SceneInstructionService(SceneDesignService):
             raise ValueError('当前单元准备未完成，请补齐模型、时长和动作范围')
         return await ProductionService(self.db, self.project_id).validate_prepared_unit(sequence_id, unit, text)
 
-    def _instruction_tasks(self, sequence_id, version_id, unit_id):
+    def _instruction_tasks(self, sequence_id, version_id, unit_id=None):
         """查询范围包含项目、场次、版本与单元，防止跨对象采用结果。"""
         return select(Task).where(Task.project_id == self.project_id, Task.target_id == sequence_id,
             Task.kind == 'directing_instruction',
             Task.input_snapshot['scene_instruction']['version_id'].as_string() == version_id,
-            Task.input_snapshot['scene_instruction']['unit_id'].as_string() == unit_id)
+            *([Task.input_snapshot['scene_instruction']['unit_id'].as_string() == unit_id] if unit_id else []))
 
     async def submit_instruction(self, sequence_id, version_id, unit_id, body):
         """按原请求核实未知结果；同单元有活动任务时拒绝另一提交。"""
@@ -100,6 +100,18 @@ class SceneInstructionService(SceneDesignService):
                 design=EditableSceneDesign.model_validate(args['design']), unit=self._instruction_unit(request.content, unit_id), text=result.text if result else None))
         return rows
 
+    @staticmethod
+    def _matches_instruction_snapshot(content, unit, request, args):
+        """沿原投影版本核对建议输入；图只读比较与明确预览使用相同规则。"""
+        design = instruction_design(content.design, unit) if args.get('design_scope_version') == 1 else content.design
+        design_changed = (not unit_scope(content.design, unit,
+                          [StyleRule.model_validate(row) for row in args.get('style_rules') or []],
+                          version=args['scope'].get('version', 1)).same_video_consumption(
+                              UnitScopeProjection.model_validate(args['scope']))
+                          if args.get('scope') else design != EditableSceneDesign.model_validate(args['design']))
+        return (content.basis == request.content.basis and not design_changed
+                and unit == SceneInstructionService._instruction_unit(request.content, unit.id))
+
     async def preview_instruction(self, sequence_id, version_id, unit_id, task_id, content):
         """仅本单元与设计依据一致时返回整份建议；别的单元编辑不阻止应用。"""
         sequence, _ = await self._version(sequence_id, version_id)
@@ -109,15 +121,8 @@ class SceneInstructionService(SceneDesignService):
         request = SceneInstructionRequest.model_validate(task.input_snapshot['scene_instruction']['request'])
         unit = self._instruction_unit(content, unit_id)
         args = task.input_snapshot['run_args']
-        # 历史任务确实收到整场设计时，仍按当时范围核对，不能追溯缩小其输入。
         design = instruction_design(content.design, unit) if args.get('design_scope_version') == 1 else content.design
-        design_changed = (not unit_scope(content.design, unit,
-                          [StyleRule.model_validate(row) for row in args.get('style_rules') or []],
-                          version=args['scope'].get('version', 1)).same_video_consumption(
-                              UnitScopeProjection.model_validate(args['scope']))
-                          if args.get('scope') else design != EditableSceneDesign.model_validate(args['design']))
-        if (content.basis != request.content.basis or design_changed
-                or unit != self._instruction_unit(request.content, unit_id)):
+        if not self._matches_instruction_snapshot(content, unit, request, args):
             raise RevisionConflict('本单元正文或生成依据已变化，请核对差异后重新生成建议')
         await self._validate_content(sequence, version_id, content.model_copy(update={'units': [unit], 'design': design, 'take_judgments': [], 'timeline': SceneTimeline()}))
         await self._prepared(sequence_id, unit)

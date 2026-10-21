@@ -1,4 +1,4 @@
-import { unitSettings } from './workbenchControls.mjs'
+import { unitSettings, workbenchShot } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -23,9 +23,8 @@ backend.stdout.on('data', data => { backendOutput += data })
 backend.stderr.on('data', data => { backendOutput += data })
 let server, browser, page
 async function openUnitShot() {
+  await (await workbenchShot(page, '镜头 1：读信反应')).click()
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
-  await page.getByRole('combobox', { name: '单元所属镜头', exact: true }).click()
-  await page.getByText('镜头 1：读信反应', { exact: true }).last().click()
 }
 try {
   let chapter
@@ -116,13 +115,16 @@ try {
   await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
   await page.getByText('指令依据已变', { exact: true }).waitFor()
-  let originalRequest, originalReceipt
+  let originalRequest, originalReceipt, confirmationLost
+  const lostResponse = new Promise(resolve => { confirmationLost = resolve })
   await page.route('**/instruction-basis/confirm', async route => {
     originalRequest = route.request().postDataJSON()
     originalReceipt = (await (await route.fetch()).json()).data.basis_id
     await route.abort('failed')
+    confirmationLost()
   })
   await page.getByRole('button', { name: '确认已按当前依据核对正文', exact: true }).click()
+  await lostResponse
   await page.getByRole('button', { name: '核实原依据确认', exact: true }).waitFor()
   await page.waitForFunction(key => !!localStorage.getItem(key), `jellyfish:instruction-basis:canvas-project:${sequenceId}:${version.id}:unit-one`)
   await page.unroute('**/instruction-basis/confirm')
