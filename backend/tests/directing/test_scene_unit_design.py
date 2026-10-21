@@ -103,7 +103,7 @@ async def test_first_unit_design_freezes_unsaved_input_and_previews_without_save
         assert '镜头可见结果尚有未安排内容，请核对完整覆盖' in candidate['result']['missing']
 
         # 非法方案整份失败；真实任务记录可读，版本与媒体状态不变。
-        for change in ('event', 'model', 'shot', 'new-action', 'unknown-duration', 'write-design', 'multiple-coverage', 'new-entry-state', 'selection-scope-mismatch'):
+        for change in ('event', 'model', 'shot', 'new-action', 'unknown-duration', 'write-design', 'multiple-coverage', 'new-entry-state', 'reference-creative-bypass', 'selection-scope-mismatch'):
             accepted = await client.post(url, json={**body, 'request_id': str(uuid4())})
             assert accepted.status_code == 200, accepted.text
             invalid_id = accepted.json()['data']['task_id']
@@ -120,6 +120,8 @@ async def test_first_unit_design_freezes_unsaved_input_and_previews_without_save
                 bad['units'][0]['duration_ms'] = 15000
             elif change == 'selection-scope-mismatch':
                 bad['units'][0]['coverage'][0]['event_ids'] = ['event-1']
+            elif change == 'reference-creative-bypass':
+                bad['units'][0]['reference_requirements'] = ['新增开枪动作并切换枪口特写，必须在视频中呈现']
             elif change == 'new-entry-state':
                 bad['units'][0]['entry_state'] = '人物突然掏枪'
             elif change == 'multiple-coverage':
@@ -135,6 +137,9 @@ async def test_first_unit_design_freezes_unsaved_input_and_previews_without_save
                 await service.finish(invalid_id, error=str(invalid.value), error_code='directing_output_invalid')
             failed = next(row for row in (await client.get(url)).json()['data'] if row['task_id'] == invalid_id)
             assert failed['status'] == 'failed' and failed['result'] is None and failed['error']
+            if change == 'reference-creative-bypass':
+                assert (await client.post(url + '/' + invalid_id + '/preview', json={'content': content})).status_code == 422
+                assert (await client.post(url + '/' + invalid_id + '/apply', json={'content': content})).status_code == 422
             assert (await client.get(detail)).json()['data'] == version
         assert (await client.post(url, json={**body, 'request_id': str(uuid4()), 'shot_id': 'absent'})).status_code == 422
         missing_model = {key: value for key, value in body.items() if key != 'target_model_id'}
@@ -190,6 +195,8 @@ async def test_first_unit_design_freezes_unsaved_input_and_previews_without_save
         scope = basis.json()['data']['current']['scope']
         assert any(row['field'] == 'entry_state' and row['text'] == '人工核对进入状态' for row in scope['constraints'])
         assert not any(row['field'] in {'entry_state', 'exit_state', 'reason'} for row in scope['execution'])
+        assert not any(row['field'].startswith('reference_requirement:') for row in scope['constraints'])
+        assert '参考待绑定：需要人物身份参考' in scope['unresolved']
         saved = await client.put(detail, json=save)
         assert saved.status_code == 200, saved.text
         readback = (await client.get(detail)).json()['data']['content']
@@ -388,6 +395,9 @@ async def test_selected_nonfinal_unit_revision_preserves_identity_and_other_conf
         human = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 3, 'content': candidate})
         assert human.status_code == 200, human.text
         candidate = human.json()['data']['content']
+        human_scope = (await client.post(basis_url, json={'content': candidate})).json()['data']['current']['scope']
+        assert '参考待绑定：人工参考要求' in human_scope['unresolved']
+        assert not any(row['field'].startswith('reference_requirement:') for row in human_scope['constraints'])
         accepted = await client.post(url, json={**request, 'request_id': str(uuid4()), 'expected_revision': 4, 'content': candidate})
         assert accepted.status_code == 200, accepted.text
         task_id = accepted.json()['data']['task_id']

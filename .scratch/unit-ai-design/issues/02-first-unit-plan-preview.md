@@ -63,3 +63,14 @@ Resolution: completed
 - 验证边界：外部组织模型使用可控响应，不验证真实模型生成质量；本票保持只读，明确覆盖、身份合并与历史移除保护由后续票据03—06完成。
 
 - 最终集成核对：合入票据01所在集成分支后，单元AI组织、场次设计、指令与范围投影33条测试通过；新增“选择合法事件但动作范围不含其主要动作”的红灯并整体拒绝，另以已有凝视辅助表演确认不会误拒合法主要动作方案。仅核对主要动作字段，保留凝视、呼吸等已有辅助表演。
+
+
+### 最终审查修复（2026-10-21）
+
+- Spec P1 已复现：合法“抬头”范围配合自由参考需求“新增开枪动作并切换枪口特写，必须在视频中呈现”原先未被拒绝。真实 HTTP／任务回归先失败，再由服务端有限类别校验使整份输出失败；失败记录仍可读，预览和应用均拒绝，版本保持原样。
+- AI 新增或改写的参考需求仅接受已有主体图片／视频与首帧／尾帧／关键帧参考概念的待准备类别；不使用关键词黑名单或额外模型调用。原有人工参考文字、未改写值及省略继承保留，类别不保证模型已支持或已绑定。待准备参考文字只进入后续 scope.unresolved，不再成为 video constraints；合法参考需求仍生成和展示。
+- Standards P2：增加共享 WorkbenchDetails 的“单元设计记录”只读入口；任务回跳进入固定记录，桌面无模态遮罩，可同时缩放画布。记录中点击“比较并应用方案”进入原 WorkbenchModal，准备、差异与一次明确确认流程保持可用。
+- 通过：`UV_CACHE_DIR=/tmp/jellyfish-uv-cache uv run --no-sync pytest tests/directing/test_scene_unit_design.py tests/directing/test_unit_scope_projection.py tests/directing/test_instruction_basis.py tests/directing/test_scene_instructions.py -q`（27 项）；`UV_CACHE_DIR=/tmp/jellyfish-uv-cache PYLINTHOME=/tmp/jellyfish-pylint-cache uv run --no-sync pylint app`（10.00/10）；`pnpm --dir front run typecheck`。
+- 通过：`PLAYWRIGHT_CHANNEL=chrome node front/tests/sceneUnitDesign.browser.mjs`，包含独立历史、详情打开时真实缩放画布、任务中心与 URL 回跳、桌面及 390px 窄屏、准备及自动／手动保存应用和在途编辑保护。证据：`/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-scene-version-HwJjyD`；已目视检查桌面与窄屏截图，标题和关闭入口可达，无横向溢出。8247／4247 独占服务已停止。
+- 契约 schema 未变化；同步修正 architecture 对参考诊断与历史容器的描述，不改父规格。完成前 `git merge codex-unit-ai-design` 返回 Already up to date（4a7180e）；集成后的全 directing 检查由集成分支统一执行。
+- 浏览器仅出现既有 Browserslist／Tailwind content／Node util 弃用提示。首次复用 venv 时 uv 仅重装本项目 editable 包，无依赖版本变化；后续均使用 `--no-sync`，依赖软链不提交。

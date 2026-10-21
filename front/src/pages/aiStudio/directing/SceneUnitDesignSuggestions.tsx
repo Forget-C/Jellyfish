@@ -3,7 +3,9 @@ import { useEffect, useRef, useState } from 'react'
 import { Alert, Input, Select, Spin } from 'antd'
 import { ApiError, LlmService, StudioDirectingService } from '../../../services/generated'
 import type { ModelRead, SceneUnitDesignBlocker, SceneUnitDesignRequest_Input as SceneUnitDesignRequest, SceneUnitDesignSuggestionRead, SceneVersionContent_Output, VideoGenerationOptionsRead, VideoReferenceCapabilities } from '../../../services/generated'
-import { WorkbenchButton } from './ui/WorkbenchButton'
+import { HistoryOutlined } from '@ant-design/icons'
+import { WorkbenchDetails } from './ui/WorkbenchDetails'
+import { WorkbenchButton, WorkbenchIconButton } from './ui/WorkbenchButton'
 import { WorkbenchModal, WorkbenchDialogActions } from './ui/WorkbenchModal'
 import { CanvasTextPreview } from './CanvasTextPreview'
 import { directingError } from './common'
@@ -19,7 +21,8 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
   projectId: string; sequenceId: string; versionId: string; revision: number
   content: SceneVersionContent_Output; shotId?: string; unitId?: string; disabled: boolean; focusTaskId?: string; onFocused?: () => void
 }) {
-  const [open, setOpen] = useState(!!focusTaskId)
+  const [open, setOpen] = useState(false)
+  const [recordsOpen, setRecordsOpen] = useState(!!focusTaskId)
   const [models, setModels] = useState<ModelRead[]>()
   const [modelId, setModelId] = useState<string>()
   const [modelsError, setModelsError] = useState('')
@@ -90,7 +93,7 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
     return () => { active = false }
   }, [open, projectId, modelId, capabilityAttempt])
   useEffect(() => {
-    if (!open) return
+    if (!open && !recordsOpen) return
     let active = true, timer: ReturnType<typeof setTimeout> | undefined
     const read = async () => {
       try {
@@ -98,7 +101,7 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
         const response = await StudioDirectingService.directingSceneUnitDesignSuggestions({ projectId, sequenceId, versionId })
         if (!response.data) throw new Error('单元设计任务尚未核实')
         if (!active) return
-        setRows(response.data); setReadError('')
+        setRows(response.data); setReadError(''); setSelectedId(current => current || response.data?.[0]?.task_id)
         const matching = response.data.find(row => row.request_id === pending.current?.request_id)
         if (matching) { clearPending(matching.request_id); setSelectedId(matching.task_id); setPreparing(false) }
         if (response.data.some(row => !terminal.includes(row.status))) timer = setTimeout(() => void read(), 1500)
@@ -106,9 +109,9 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
     }
     void read()
     return () => { active = false; clearTimeout(timer) }
-  }, [open, projectId, sequenceId, versionId, attempt])
+  }, [open, recordsOpen, projectId, sequenceId, versionId, attempt])
   useEffect(() => {
-    if (focusTaskId) { setSelectedId(focusTaskId); setPreparing(false); setOpen(true); onFocused?.() }
+    if (focusTaskId) { setSelectedId(focusTaskId); setPreparing(false); setOpen(false); setRecordsOpen(true); onFocused?.() }
   }, [focusTaskId])
   const selected = preparing ? undefined : rows?.find(row => row.task_id === selectedId)
   useEffect(() => {
@@ -164,38 +167,7 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
   const fixedRequest = pending.current || selected?.request
   const displayShot = fixedRequest ? fixedRequest.content.design.direction?.shots?.find(row => row.id === fixedRequest.shot_id) : shot
   const displayUnitId = fixedRequest ? fixedRequest.source_unit_id : sourceUnit?.id
-  const trigger = <WorkbenchButton disabled={disabled || !shot} onClick={() => setOpen(true)}>AI设计</WorkbenchButton>
-  return <>
-    {triggerHost ? createPortal(trigger, triggerHost) : trigger}
-    <WorkbenchModal title="AI设计" open={open} onCancel={() => setOpen(false)} footer={<WorkbenchDialogActions
-      secondary={<WorkbenchButton variant="quiet" onClick={() => setOpen(false)}>{selected ? '关闭预览' : '取消'}</WorkbenchButton>}>
-      {pending.current ? <WorkbenchButton variant="primary" loading={busy} disabled={busy || disabled} onClick={() => void submit()}>核实原设计请求</WorkbenchButton>
-        : selected ? <><WorkbenchButton disabled={busy || disabled || running} onClick={() => { setPreparing(true); setError('') }}>重新设计</WorkbenchButton>{selected.result && <WorkbenchButton variant="primary" loading={busy} disabled={busy || disabled || !!previewError || !previewReady || !!blockers.length} onClick={() => void apply()}>确认应用方案</WorkbenchButton>}</>
-          : <WorkbenchButton variant="primary" loading={busy} disabled={disabled || busy || !shot || needsSource && !sourceUnit || !verified || !rows || !!readError || running} onClick={() => void submit()}>开始设计</WorkbenchButton>}
-    </WorkbenchDialogActions>}>
-      <p>当前镜头：{displayShot?.visible_result.text || (displayShot ? displayShot.id : '请先选择有效镜头')}</p>
-      {displayUnitId && <p>所选单元：{displayUnitId}</p>}
-      {!displayUnitId && needsSource && <Alert type="warning" message="请先在单元画布明确选择本次来源或目标单元" />}
-      <p>按既有六岗设计组织生产单元，生成结果供查看。创作内容变化请先到导演画布处理。</p>
-      {(error || readError) && <Alert type="error" message={error || readError} action={<WorkbenchButton variant="quiet" onClick={() => setAttempt(value => value + 1)}>重试读取</WorkbenchButton>} />}
-      {pending.current && <Alert type="info" message="原提交尚未核实，请先核实原请求，避免重复生成" />}
-      {!!rows?.length && <Select aria-label="单元设计记录" style={{ width: '100%' }} value={selected?.task_id} placeholder="查看本版本的设计记录"
-        options={rows.map(row => ({ value: row.task_id, label: `${row.request.shot_id} · ${statuses[row.status] || row.status}` }))}
-        onChange={id => { setSelectedId(id); setPreparing(false) }} />}
-      {!selected && <>
-        <label htmlFor="unit-design-video-model">目标视频模型</label>
-        <Select id="unit-design-video-model" aria-label="目标视频模型" style={{ width: '100%' }} loading={!models && !modelsError} value={modelId}
-          placeholder="请选择视频模型" options={models?.map(row => ({ value: row.id, label: row.name }))} disabled={busy || !!pending.current}
-          onChange={id => setModelId(id)} />
-        <p>此处选择拍摄视频模型；组织方案使用全局文本模型，本次选择不修改全局设置。</p>
-        {modelsError && <Alert type="error" message={modelsError} action={<WorkbenchButton onClick={() => setAttempt(value => value + 1)}>重试模型读取</WorkbenchButton>} />}
-        {capabilityError ? <Alert type="error" message={`模型能力核实失败：${capabilityError}`} action={<WorkbenchButton onClick={() => setCapabilityAttempt(value => value + 1)}>重试能力核实</WorkbenchButton>} />
-          : modelId && !verified ? <p role="status"><Spin size="small" /> 正在核实视频模型能力</p>
-            : verified ? <><p role="status">视频模型能力已核实</p><p>可用画幅：{options?.allowed_ratios?.join('、')}；参考范围：{capabilities?.frame_roles.join('、') || '无帧参考'}。未知时长或参考条件保留缺项。</p></> : <p>没有有效默认视频模型时，请明确选择。</p>}
-        <label htmlFor="unit-design-instruction">本次要求（可选）</label>
-        <Input.TextArea id="unit-design-instruction" autoSize={{ minRows: 3, maxRows: 6 }} value={instruction} disabled={busy || !!pending.current} onChange={event => setInstruction(event.target.value)} />
-      </>}
-      {selected && <section aria-label="单元设计建议预览">
+  const resultContent = selected && <section aria-label="单元设计建议预览">
         <p role="status">{statuses[selected.status] || selected.status}</p>
         <details><summary>固定依据与模型</summary>
           <p>视频模型：{selected.target_model_name}；组织文本模型：{selected.text_model_name}</p>
@@ -206,9 +178,9 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
         {selected.error && <Alert type="error" message={selected.error} />}
         {!terminal.includes(selected.status) && <p>任务在后台执行，可关闭后稍后查看。</p>}
         {selected.result && <>
-          {previewError && <Alert type="warning" message={previewError} description={previewRetryable ? '原结果保留，可重新核对预览，不会提交新的设计任务。' : '保留本次结果供查看，请按当前内容重新设计。'} />}
-          {previewError && previewRetryable && <WorkbenchButton onClick={() => setPreviewAttempt(value => value + 1)}>重新核对预览</WorkbenchButton>}
-          {!!blockers.length && <Alert type="warning" message="移除存在引用，处理前不能确认" description={<ul>{blockers.map(blocker => <li key={blocker.path}>
+          {open && previewError && <Alert type="warning" message={previewError} description={previewRetryable ? '原结果保留，可重新核对预览，不会提交新的设计任务。' : '保留本次结果供查看，请按当前内容重新设计。'} />}
+          {open && previewError && previewRetryable && <WorkbenchButton onClick={() => setPreviewAttempt(value => value + 1)}>重新核对预览</WorkbenchButton>}
+          {open && !!blockers.length && <Alert type="warning" message="移除存在引用，处理前不能确认" description={<ul>{blockers.map(blocker => <li key={blocker.path}>
             {blocker.unit_id} / {blocker.coverage_item_id} · {blocker.path}
             <WorkbenchButton onClick={() => { setOpen(false); onLocateBlocker(blocker) }}>定位并处理引用</WorkbenchButton>
           </li>)}</ul>} />}
@@ -247,9 +219,51 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
             {!!(unit.reference_requirements ?? inherited?.organization?.reference_requirements)?.length && <p>参考需求：{(unit.reference_requirements ?? inherited?.organization?.reference_requirements)?.join('；')}</p>}
             {!!unit.missing?.length && <ul>{unit.missing?.map((item, number) => <li key={number}>{item}</li>)}</ul>}
           </section>})}
-          <Alert type="info" message="尚未应用到当前编辑；确认后沿用当前保存模式。参考需求不代表已绑定真实素材，设计完成不代表拍摄准备通过。" />
+          <Alert type="info" message={open ? "尚未应用到当前编辑；确认后沿用当前保存模式。参考需求不代表已绑定真实素材，设计完成不代表拍摄准备通过。" : "以下为生成时的方案记录。参考需求不代表已绑定真实素材，设计完成不代表拍摄准备通过。"} />
         </>}
-      </section>}
+      </section>
+  const recordSelector = !!rows?.length && <Select aria-label="单元设计记录" style={{ width: '100%' }} value={selected?.task_id} placeholder="查看本版本的设计记录"
+    options={rows.map(row => ({ value: row.task_id, label: `${row.request.shot_id} · ${statuses[row.status] || row.status}` }))}
+    onChange={id => { setSelectedId(id); setPreparing(false) }} />
+  const trigger = <><WorkbenchButton disabled={disabled || !shot} onClick={() => setOpen(true)}>AI设计</WorkbenchButton>
+    <WorkbenchIconButton label="单元设计记录" icon={<HistoryOutlined />} onClick={() => { setOpen(false); setPreparing(false); setSelectedId(current => current || rows?.[0]?.task_id); setRecordsOpen(true) }} /></>
+  return <>
+    {triggerHost ? createPortal(trigger, triggerHost) : trigger}
+    <WorkbenchDetails open={recordsOpen} title="单元设计记录" status="只读" initialExpanded onClose={() => setRecordsOpen(false)}>
+      {readError && <Alert type="error" message={readError} action={<WorkbenchButton onClick={() => setAttempt(value => value + 1)}>重试读取</WorkbenchButton>} />}
+      {!rows && !readError && <p role="status"><Spin size="small" /> 正在读取单元设计记录</p>}
+      {rows?.length === 0 && <p>暂无单元设计记录</p>}
+      {recordSelector}
+      {resultContent}
+      {selected && <WorkbenchButton onClick={() => { setRecordsOpen(false); setOpen(true) }}>比较并应用方案</WorkbenchButton>}
+    </WorkbenchDetails>
+    <WorkbenchModal title="AI设计" open={open} onCancel={() => setOpen(false)} footer={<WorkbenchDialogActions
+      secondary={<WorkbenchButton variant="quiet" onClick={() => setOpen(false)}>{selected ? '关闭预览' : '取消'}</WorkbenchButton>}>
+      {pending.current ? <WorkbenchButton variant="primary" loading={busy} disabled={busy || disabled} onClick={() => void submit()}>核实原设计请求</WorkbenchButton>
+        : selected ? <><WorkbenchButton disabled={busy || disabled || running} onClick={() => { setPreparing(true); setError('') }}>重新设计</WorkbenchButton>{selected.result && <WorkbenchButton variant="primary" loading={busy} disabled={busy || disabled || !!previewError || !previewReady || !!blockers.length} onClick={() => void apply()}>确认应用方案</WorkbenchButton>}</>
+          : <WorkbenchButton variant="primary" loading={busy} disabled={disabled || busy || !shot || needsSource && !sourceUnit || !verified || !rows || !!readError || running} onClick={() => void submit()}>开始设计</WorkbenchButton>}
+    </WorkbenchDialogActions>}>
+      <p>当前镜头：{displayShot?.visible_result.text || (displayShot ? displayShot.id : '请先选择有效镜头')}</p>
+      {displayUnitId && <p>所选单元：{displayUnitId}</p>}
+      {!displayUnitId && needsSource && <Alert type="warning" message="请先在单元画布明确选择本次来源或目标单元" />}
+      <p>按既有六岗设计组织生产单元，生成结果供查看。创作内容变化请先到导演画布处理。</p>
+      {(error || readError) && <Alert type="error" message={error || readError} action={<WorkbenchButton variant="quiet" onClick={() => setAttempt(value => value + 1)}>重试读取</WorkbenchButton>} />}
+      {pending.current && <Alert type="info" message="原提交尚未核实，请先核实原请求，避免重复生成" />}
+      {recordSelector}
+      {!selected && <>
+        <label htmlFor="unit-design-video-model">目标视频模型</label>
+        <Select id="unit-design-video-model" aria-label="目标视频模型" style={{ width: '100%' }} loading={!models && !modelsError} value={modelId}
+          placeholder="请选择视频模型" options={models?.map(row => ({ value: row.id, label: row.name }))} disabled={busy || !!pending.current}
+          onChange={id => setModelId(id)} />
+        <p>此处选择拍摄视频模型；组织方案使用全局文本模型，本次选择不修改全局设置。</p>
+        {modelsError && <Alert type="error" message={modelsError} action={<WorkbenchButton onClick={() => setAttempt(value => value + 1)}>重试模型读取</WorkbenchButton>} />}
+        {capabilityError ? <Alert type="error" message={`模型能力核实失败：${capabilityError}`} action={<WorkbenchButton onClick={() => setCapabilityAttempt(value => value + 1)}>重试能力核实</WorkbenchButton>} />
+          : modelId && !verified ? <p role="status"><Spin size="small" /> 正在核实视频模型能力</p>
+            : verified ? <><p role="status">视频模型能力已核实</p><p>可用画幅：{options?.allowed_ratios?.join('、')}；参考范围：{capabilities?.frame_roles.join('、') || '无帧参考'}。未知时长或参考条件保留缺项。</p></> : <p>没有有效默认视频模型时，请明确选择。</p>}
+        <label htmlFor="unit-design-instruction">本次要求（可选）</label>
+        <Input.TextArea id="unit-design-instruction" autoSize={{ minRows: 3, maxRows: 6 }} value={instruction} disabled={busy || !!pending.current} onChange={event => setInstruction(event.target.value)} />
+      </>}
+      {resultContent}
     </WorkbenchModal>
   </>
 }

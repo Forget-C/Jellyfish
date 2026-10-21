@@ -16,10 +16,10 @@ import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await mkdtemp(join(tmpdir(), 'jellyfish-scene-version-'))
-const api = 'http://127.0.0.1:8197'
+const api = 'http://127.0.0.1:8247'
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.directing.scene_version_browser_server'], {
   cwd: join(root, '../backend'),
-  env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', SCENE_BROWSER_TEST_DATABASE: join(output, 'browser.sqlite'), SCENE_BROWSER_TEST_PORT: '8197' },
+  env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', SCENE_BROWSER_TEST_DATABASE: join(output, 'browser.sqlite'), SCENE_BROWSER_TEST_PORT: '8247' },
   stdio: ['ignore', 'pipe', 'pipe'],
 })
 let backendOutput = ''
@@ -39,7 +39,7 @@ try {
   assert.ok(chapter, `test backend did not become ready: ${backendOutput}`)
   const sequenceId = chapter.sequences[0].id
   const versionsUrl = `${api}/api/v1/studio/projects/canvas-project/directing/sequences/${sequenceId}/versions`
-  server = await createServer({ root, server: { host: '127.0.0.1', port: 4197, strictPort: true, open: false, proxy: { '/api': api } } })
+  server = await createServer({ root, server: { host: '127.0.0.1', port: 4247, strictPort: true, open: false, proxy: { '/api': api } } })
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
   const context = await browser.newContext({ viewport: { width: 1440, height: 960 } })
@@ -55,7 +55,7 @@ try {
   const saved = await fetch(detail, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: version.revision, content }) })
   assert.equal(saved.status, 200, await saved.text())
   const before = (await (await fetch(detail)).json()).data
-  await page.goto(`http://127.0.0.1:4197/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
+  await page.goto(`http://127.0.0.1:4247/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
   await (await workbenchShot(page, '镜头 1：抬头')).click()
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
   await page.getByRole('button', { name: 'AI设计', exact: true }).click()
@@ -92,6 +92,22 @@ try {
   assert.equal(await dialog.evaluate(node => node.scrollWidth <= node.clientWidth + 1), true)
   await dialog.getByRole('button', { name: '关闭预览', exact: true }).click()
   assert.deepEqual((await (await fetch(detail)).json()).data, before)
+  await page.setViewportSize({ width: 1440, height: 960 })
+  await page.getByRole('button', { name: '单元设计记录', exact: true }).click()
+  const records = page.getByRole('complementary', { name: '单元设计记录', exact: true })
+  await records.getByRole('heading', { name: '单元方案预览', exact: true }).waitFor()
+  assert.equal(await page.getByRole('button', { name: 'AI设计', exact: true }).isEnabled(), true)
+  assert.equal(await page.locator('.canvas-workbench').evaluate(node => node.inert), false)
+  await page.getByRole('button', { name: '放大画布', exact: true }).click()
+  await page.getByText('110%', { exact: true }).waitFor()
+  await records.getByRole('heading', { name: '单元方案预览', exact: true }).waitFor()
+  await page.screenshot({ path: join(output, 'unit-design-records-desktop.png'), animations: 'disabled' })
+  await page.setViewportSize({ width: 390, height: 844 })
+  const narrowRecords = page.getByRole('dialog', { name: '单元设计记录', exact: true })
+  await narrowRecords.waitFor()
+  assert.equal(await narrowRecords.evaluate(node => node.scrollWidth <= node.clientWidth + 1), true)
+  await page.screenshot({ path: join(output, 'unit-design-records-mobile.png'), animations: 'disabled' })
+  await narrowRecords.getByRole('button', { name: '关闭详情', exact: true }).click()
   const settingsBefore = (await (await fetch(`${api}/api/v1/llm/model-settings`)).json()).data
   assert.equal(settingsBefore.default_video_model_id, null, 'modal model selection must not modify global settings')
   const settingsChanged = await fetch(`${api}/api/v1/llm/model-settings`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ default_text_model_id: 'browser-text-model', default_video_model_id: 'browser-video-model' }) })
@@ -113,25 +129,26 @@ try {
   await dialog.getByRole('region', { name: '建议单元 2', exact: true }).waitFor({ timeout: 15000 })
   assert.deepEqual((await (await fetch(detail)).json()).data, before)
   await dialog.getByRole('button', { name: '关闭预览', exact: true }).click()
-  await page.goto(`http://127.0.0.1:4197/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}&view=units&directorShot=shot-one&unitDesignTask=${next.task_id}`)
-  await dialog.getByRole('region', { name: '建议单元 2', exact: true }).waitFor({ timeout: 15000 })
-  await dialog.getByText('多个独立执行段', { exact: true }).waitFor()
-  await dialog.getByRole('button', { name: '关闭预览', exact: true }).click()
+  await page.goto(`http://127.0.0.1:4247/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}&view=units&directorShot=shot-one&unitDesignTask=${next.task_id}`)
+  await records.getByRole('region', { name: '建议单元 2', exact: true }).waitFor({ timeout: 15000 })
+  await records.getByText('多个独立执行段', { exact: true }).waitFor()
+  await records.getByRole('button', { name: '关闭详情', exact: true }).click()
   await page.getByRole('button', { name: '任务中心', exact: true }).click()
   await page.getByRole('button', { name: /历\s*史/ }).click()
   await page.getByRole('row').filter({ hasText: 'AI 设计 · 单元方案' }).first().getByRole('button', { name: /查\s*看/ }).click()
-  await dialog.getByRole('region', { name: '建议单元 2', exact: true }).waitFor({ timeout: 5000 })
-  await dialog.getByRole('button', { name: '关闭预览', exact: true }).click()
+  await records.getByRole('region', { name: '建议单元 2', exact: true }).waitFor({ timeout: 5000 })
+  await records.getByRole('button', { name: '关闭详情', exact: true }).click()
   const invalidDefault = await fetch(`${api}/api/v1/llm/model-settings`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ default_video_model_id: 'browser-text-model' }) })
   assert.equal(invalidDefault.status, 200)
-  await page.goto(`http://127.0.0.1:4197/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
+  await page.goto(`http://127.0.0.1:4247/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
   await (await workbenchShot(page, '镜头 1：抬头')).click()
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
   await page.getByRole('button', { name: 'AI设计', exact: true }).click()
   await dialog.getByText('没有有效默认视频模型时，请明确选择。', { exact: true }).waitFor()
   assert.equal(await start.isDisabled(), true, 'invalid global video model must not select first model in list')
   await dialog.getByRole('button', { name: '取消', exact: true }).click()
-  await page.goto(`http://127.0.0.1:4197/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}&view=units&directorShot=shot-one&unitDesignTask=${next.task_id}`)
+  await page.goto(`http://127.0.0.1:4247/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}&view=units&directorShot=shot-one&unitDesignTask=${next.task_id}`)
+  await records.getByRole('button', { name: '比较并应用方案', exact: true }).click()
   await dialog.getByRole('button', { name: '确认应用方案', exact: true }).click()
   await dialog.waitFor({ state: 'hidden' })
   await page.getByText('已保存', { exact: true }).first().waitFor({ timeout: 10000 })
@@ -146,7 +163,7 @@ try {
   const manualContent = structuredClone(content)
   assert.equal((await fetch(manualDetail, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: 1, content: manualContent }) })).status, 200)
   await fetch(`${api}/api/v1/llm/model-settings`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ default_video_model_id: 'browser-video-model' }) })
-  await page.goto(`http://127.0.0.1:4197/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${manualVersion.id}&view=units&directorShot=shot-one`)
+  await page.goto(`http://127.0.0.1:4247/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${manualVersion.id}&view=units&directorShot=shot-one`)
   await (await workbenchControl(page, '保存设置', 'switch', '自动保存')).click()
   await page.getByRole('button', { name: '保存设置', exact: true }).click()
   await (await workbenchShot(page, '镜头 1：抬头')).click()
@@ -183,7 +200,8 @@ try {
   assert.equal((await fetch(raceDetail, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: 1, content }) })).status, 200)
   const raceTask = (await (await fetch(raceDetail + '/unit-design-suggestions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: 2, content, shot_id: 'shot-one', target_model_id: 'browser-video-model' }) })).json()).data.task_id
   assert.equal((await fetch(`${api}/browser-test/unit-design-tasks/${raceTask}/complete`, { method: 'POST' })).status, 200)
-  await page.goto(`http://127.0.0.1:4197/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${raceVersion.id}&directorShot=shot-one&unitDesignTask=${raceTask}`)
+  await page.goto(`http://127.0.0.1:4247/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${raceVersion.id}&directorShot=shot-one&unitDesignTask=${raceTask}`)
+  await records.getByRole('button', { name: '比较并应用方案', exact: true }).click()
   await dialog.getByRole('heading', { name: '单元方案预览', exact: true }).waitFor()
   let releaseResponse, markRequested
   const heldResponse = new Promise(resolve => { releaseResponse = resolve })
