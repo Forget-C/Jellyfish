@@ -51,3 +51,13 @@
 Standards／Spec 两轴审查完成；发现项均已修复并复核，无遗留确定问题。前端展示与交互迁移未改变后端接口，因此无需 OpenAPI 重新生成或后端应用检查。
 
 `site/hugo.yaml` 是实施前已有的用户修改，不纳入本次提交。没有未完成实施项。
+
+## 2026-10-21 审查修复：菜单 Escape 优先级
+
+修复桌面详情打开时，画布 portal 菜单的 Escape 穿透关闭详情的问题。可见菜单先处理 Escape，下一次 Escape 才关闭详情。
+
+- 先添加真实工作台回归，确认原实现因第一次 Escape 关闭详情而失败；修复后通过。
+- 回归覆盖菜单关闭、入口焦点恢复、详情保留、第二次 Escape 关闭详情，以及未保存输入和画布视口保持。
+- 验证通过：前端 typecheck、182 项纯行为测试、preflight，以及 workbenchUi、designScopeCompleteness、sceneWorkbenchStyle 三项浏览器回归。
+- Standards／Spec 两轴复核均为 0 项发现。无接口或后端变更。
+- 浏览器证据：`/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-workbench-style-I7VypQ`。

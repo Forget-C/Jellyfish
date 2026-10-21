@@ -65,8 +65,10 @@ export function WorkbenchDetails({ title, status, open, onClose, trigger, childr
     const keyboard = (event: KeyboardEvent) => {
       if (!node || node.inert || event.defaultPrevented) return
       if (event.key === 'Escape') {
-        // 选择器与菜单先消费 Escape，详情只处理没有内层浮层的按键。
-        if (node.querySelector('[role="combobox"][aria-expanded="true"], [aria-haspopup][aria-expanded="true"]')) return
+        // 画布菜单可能通过 portal 位于详情之外，先让菜单自己的监听器消费 Escape。
+        const menuOpen = [...document.querySelectorAll<HTMLElement>('[role="menu"]')]
+          .some(menu => menu.getClientRects().length && getComputedStyle(menu).visibility !== 'hidden')
+        if (menuOpen || node.querySelector('[role="combobox"][aria-expanded="true"], [aria-haspopup][aria-expanded="true"]')) return
         event.preventDefault(); event.stopPropagation(); close.current()
       }
       if (modal && event.key === 'Tab') {
