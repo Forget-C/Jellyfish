@@ -13,4 +13,5 @@ export type TaskSourceRead = {
     chapter_id?: (string | null);
     version_id?: (string | null);
     unit_id?: (string | null);
+    shot_id?: (string | null);
 };

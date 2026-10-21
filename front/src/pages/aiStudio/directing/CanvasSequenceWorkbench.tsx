@@ -224,6 +224,16 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
   })
   const currentDirectVideo = directVideos.pending.find(row => row.versionId === selectedId && row.unitId === unitSelections[selectedId || ''])
   const currentShotId = selected ? shotSelections[selected.id] ?? content?.design.direction.shots[0]?.id : undefined
+  const unitDesignNavigation = useRef<string>()
+  useEffect(() => {
+    const taskId = params.get('unitDesignTask')
+    if (!taskId) { unitDesignNavigation.current = undefined; return }
+    if (!selected || !content || params.get('version') !== selected.id || unitDesignNavigation.current === taskId) return
+    unitDesignNavigation.current = taskId
+    const shotId = params.get('directorShot')
+    if (shotId && content.design.direction.shots.some(row => row.id === shotId)) setShotSelections(previous => ({ ...previous, [selected.id]: shotId }))
+    setEditor(undefined); setCanvas('units')
+  }, [params.get('unitDesignTask'), params.get('version'), selected?.id, content])
   const currentEditor = editor?.versionId === selected?.id ? editor?.kind : undefined
   const openEditor = (kind: 'source' | 'ai') => {
     if (!selected) return
@@ -1017,7 +1027,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       taskId={instructionSelection?.versionId === selected.id && instructionSelection.unitId === unitSelections[selected.id] ? instructionSelection.taskId : undefined}
       shotId={currentShotId} unitId={unitSelections[selected.id]} disabled={readonly || handingOff || !!recovery || busy === 'create' || leaving}
       onSelectUnit={selectUnit} onChange={editContent} />}
-    {loadState === 'ready' && canvas === 'units' && selected && content && <SceneUnitCanvas saveStatus={readonly ? '只读' : status} primaryHost={primaryHost} key={selected.id} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} revision={selected.revision} content={content} focusRequest={unitFocus}
+    {loadState === 'ready' && canvas === 'units' && selected && content && <SceneUnitCanvas onUnitDesignFocused={() => { const next = new URLSearchParams(params); next.delete('unitDesignTask'); setParams(next, { replace: true }) }} unitDesignTaskId={params.get('version') === selected.id ? params.get('unitDesignTask') || undefined : undefined} saveStatus={readonly ? '只读' : status} primaryHost={primaryHost} key={selected.id} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} revision={selected.revision} content={content} focusRequest={unitFocus}
       onOpenEdit={clipId => { setMediaFocus(undefined); setEditClipFocus({ versionId: selected.id, clipId }); setEditor(undefined); setCanvas('edit') }}
       onInstructionTask={trackInstruction}
       onOpenInstruction={taskId => { setInstructionSelection({ versionId: selected.id, unitId: unitSelections[selected.id], taskId }); setCanvas('instructions') }}

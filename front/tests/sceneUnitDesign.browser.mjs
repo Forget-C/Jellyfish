@@ -1,0 +1,142 @@
+import { closeWorkbenchDetails } from './workbenchControls.mjs'
+import { makeWorkspace } from './directing-fixtures.mjs'
+import { workbenchControl } from './workbenchControls.mjs'
+import { workbenchShot } from './workbenchControls.mjs'
+import { unitSettings } from './workbenchControls.mjs'
+import assert from 'node:assert/strict'
+import { spawn } from 'node:child_process'
+import { createRequire } from 'node:module'
+import { mkdtemp } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { setTimeout as delay } from 'node:timers/promises'
+import { createServer } from 'vite'
+
+const { chromium } = createRequire(import.meta.url)('playwright')
+const root = fileURLToPath(new URL('..', import.meta.url))
+const output = await mkdtemp(join(tmpdir(), 'jellyfish-scene-version-'))
+const api = 'http://127.0.0.1:8197'
+const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.directing.scene_version_browser_server'], {
+  cwd: join(root, '../backend'),
+  env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', SCENE_BROWSER_TEST_DATABASE: join(output, 'browser.sqlite'), SCENE_BROWSER_TEST_PORT: '8197' },
+  stdio: ['ignore', 'pipe', 'pipe'],
+})
+let backendOutput = ''
+backend.stdout.on('data', data => { backendOutput += data })
+backend.stderr.on('data', data => { backendOutput += data })
+let server, browser, page
+try {
+  let chapter
+  for (let attempt = 0; attempt < 80; attempt++) {
+    if (backend.exitCode !== null) throw new Error(backendOutput)
+    try {
+      const response = await fetch(`${api}/api/v1/studio/projects/canvas-project/directing/chapters/canvas-chapter`)
+      if (response.ok) { chapter = (await response.json()).data; break }
+    } catch { /* The dedicated test server is still starting. */ }
+    await delay(250)
+  }
+  assert.ok(chapter, `test backend did not become ready: ${backendOutput}`)
+  const sequenceId = chapter.sequences[0].id
+  const versionsUrl = `${api}/api/v1/studio/projects/canvas-project/directing/sequences/${sequenceId}/versions`
+  server = await createServer({ root, server: { host: '127.0.0.1', port: 4197, strictPort: true, open: false, proxy: { '/api': api } } })
+  await server.listen()
+  browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
+  const context = await browser.newContext({ viewport: { width: 1440, height: 960 } })
+  page = await context.newPage()
+  await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
+  const create = await fetch(versionsUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), title: '覆盖编辑验收' }) })
+  assert.equal(create.status, 200)
+  const version = (await create.json()).data
+  const note = text => ({ state: 'proposal', text, sources: [{ kind: 'human', reference: 'coverage-browser', version: '1' }] })
+  const content = version.content
+  content.design.direction.shots = [{ id: 'shot-one', beat_ids: [], event_ids: [], blocking_state_ids: [], participant_ids: [], criterion_ids: [], narrative_function: {}, visible_result: note('抬头') }]
+  const detail = `${versionsUrl}/${version.id}`
+  const saved = await fetch(detail, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: version.revision, content }) })
+  assert.equal(saved.status, 200, await saved.text())
+  const before = (await (await fetch(detail)).json()).data
+  await page.goto(`http://127.0.0.1:4197/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
+  await (await workbenchShot(page, '镜头 1：抬头')).click()
+  await page.getByRole('button', { name: '单元画布', exact: true }).click()
+  await page.getByRole('button', { name: 'AI设计', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'AI设计', exact: true })
+  const start = dialog.getByRole('button', { name: '开始设计', exact: true })
+  await dialog.getByRole('combobox', { name: '目标视频模型', exact: true }).waitFor()
+  assert.equal(await start.isDisabled(), true, 'no global video default must require explicit selection')
+  await page.route('**/video-generation-options?*', route => route.abort('failed'))
+  await dialog.getByRole('combobox', { name: '目标视频模型', exact: true }).click()
+  await page.locator('.ant-select-dropdown:visible').getByText('test-video-model', { exact: true }).click()
+  await dialog.getByText(/模型能力核实失败/).waitFor()
+  assert.equal(await start.isDisabled(), true)
+  await page.unroute('**/video-generation-options?*')
+  await dialog.getByRole('button', { name: '重试能力核实', exact: true }).click()
+  await dialog.getByText('视频模型能力已核实', { exact: true }).waitFor()
+  await page.route('**/unit-design-suggestions', async route => {
+    if (route.request().method() === 'POST') { await route.fetch(); await route.abort('failed') } else await route.continue()
+  })
+  await start.click()
+  await dialog.getByText(/提交未核实，保留原请求/).waitFor()
+  await page.unroute('**/unit-design-suggestions')
+  await dialog.getByRole('button', { name: '核实原设计请求', exact: true }).click()
+  await dialog.getByText('等待执行', { exact: true }).waitFor()
+  const rows = (await (await fetch(detail + '/unit-design-suggestions')).json()).data
+  assert.equal(rows.length, 1)
+  const completed = await fetch(`${api}/browser-test/unit-design-tasks/${rows[0].task_id}/complete`, { method: 'POST' })
+  assert.equal(completed.status, 200, await completed.text())
+  await dialog.getByRole('heading', { name: '单元方案预览', exact: true }).waitFor({ timeout: 15000 })
+  await dialog.getByText('完整动作，单段拍摄', { exact: true }).waitFor()
+  assert.deepEqual((await (await fetch(detail)).json()).data, before)
+  await page.screenshot({ path: join(output, 'unit-ai-design-desktop.png'), animations: 'disabled' })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.screenshot({ path: join(output, 'unit-ai-design-mobile.png'), animations: 'disabled' })
+  assert.equal(await dialog.evaluate(node => node.scrollWidth <= node.clientWidth + 1), true)
+  await dialog.getByRole('button', { name: '关闭预览', exact: true }).click()
+  assert.deepEqual((await (await fetch(detail)).json()).data, before)
+  const settingsBefore = (await (await fetch(`${api}/api/v1/llm/model-settings`)).json()).data
+  assert.equal(settingsBefore.default_video_model_id, null, 'modal model selection must not modify global settings')
+  const settingsChanged = await fetch(`${api}/api/v1/llm/model-settings`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ default_text_model_id: 'browser-text-model', default_video_model_id: 'browser-video-model' }) })
+  assert.equal(settingsChanged.status, 200)
+  await page.setViewportSize({ width: 1440, height: 960 })
+  await page.reload()
+  await (await workbenchShot(page, '镜头 1：抬头')).click()
+  await page.getByRole('button', { name: '单元画布', exact: true }).click()
+  await page.getByRole('button', { name: 'AI设计', exact: true }).click()
+  await dialog.getByText('视频模型能力已核实', { exact: true }).waitFor()
+  assert.equal(await start.isDisabled(), false, 'valid global video model must be visibly preselected')
+  await start.click()
+  await dialog.getByText('等待执行', { exact: true }).waitFor()
+  const nextRows = (await (await fetch(detail + '/unit-design-suggestions')).json()).data
+  const next = nextRows.find(row => row.task_id !== rows[0].task_id)
+  assert.ok(next)
+  const multi = await fetch(`${api}/browser-test/unit-design-tasks/${next.task_id}/complete?multiple=true`, { method: 'POST' })
+  assert.equal(multi.status, 200, await multi.text())
+  await dialog.getByRole('region', { name: '建议单元 2', exact: true }).waitFor({ timeout: 15000 })
+  assert.deepEqual((await (await fetch(detail)).json()).data, before)
+  await dialog.getByRole('button', { name: '关闭预览', exact: true }).click()
+  await page.goto(`http://127.0.0.1:4197/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}&view=units&directorShot=shot-one&unitDesignTask=${next.task_id}`)
+  await dialog.getByRole('region', { name: '建议单元 2', exact: true }).waitFor({ timeout: 15000 })
+  await dialog.getByText('多个独立执行段', { exact: true }).waitFor()
+  await dialog.getByRole('button', { name: '关闭预览', exact: true }).click()
+  await page.getByRole('button', { name: '任务中心', exact: true }).click()
+  await page.getByRole('button', { name: /历\s*史/ }).click()
+  await page.getByRole('row').filter({ hasText: 'AI 设计 · 单元方案' }).first().getByRole('button', { name: /查\s*看/ }).click()
+  await dialog.getByRole('region', { name: '建议单元 2', exact: true }).waitFor({ timeout: 5000 })
+  await dialog.getByRole('button', { name: '关闭预览', exact: true }).click()
+  const invalidDefault = await fetch(`${api}/api/v1/llm/model-settings`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ default_video_model_id: 'browser-text-model' }) })
+  assert.equal(invalidDefault.status, 200)
+  await page.goto(`http://127.0.0.1:4197/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
+  await (await workbenchShot(page, '镜头 1：抬头')).click()
+  await page.getByRole('button', { name: '单元画布', exact: true }).click()
+  await page.getByRole('button', { name: 'AI设计', exact: true }).click()
+  await dialog.getByText('没有有效默认视频模型时，请明确选择。', { exact: true }).waitFor()
+  assert.equal(await start.isDisabled(), true, 'invalid global video model must not select first model in list')
+  console.log(`PASS unit AI design preview browser workflow; evidence: ${output}`)
+} catch (error) {
+  if (page) await page.screenshot({ path: join(output, 'failure.png'), fullPage: true, animations: 'disabled' }).catch(() => {})
+  console.error(`Browser evidence: ${output}`)
+  throw error
+} finally {
+  await browser?.close()
+  await server?.close()
+  backend.kill('SIGTERM')
+}

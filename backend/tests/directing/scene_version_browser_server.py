@@ -121,6 +121,31 @@ async def get_object_fixture(key: str):
     return Response(path.read_bytes(), headers=headers, media_type=headers.get('content-type') or mimetypes.guess_type(key)[0] or 'application/octet-stream')
 
 
+@app.post('/browser-test/unit-design-tasks/{task_id}/complete')
+async def complete_unit_design_fixture(task_id: str, multiple: bool = False):
+    """仅替代外部组织模型，仍经实际结构校验和任务生命周期。"""
+    from types import SimpleNamespace
+    from app.services.directing.ai import generate_directing_result
+    async with sessions.begin() as db:
+        task = await db.get(Task, task_id)
+        assert task and task.input_snapshot.get('scene_unit_design')
+        args = task.input_snapshot['run_args']
+        text = args['organization_inputs']['shot']['visible_result']['text']
+        result = {'shot_id': args['shot_id'], 'target_model_id': args['target_model_id'],
+            'organization': '完整动作，单段拍摄' if not multiple else '多个独立执行段',
+            'units': [{'id': f'ai-unit-{index}', 'coverage': [{'id': f'ai-coverage-{index}',
+                'shot_id': args['shot_id'], 'action_scope': text}], 'duration_ms': None,
+                'ratio': '16:9', 'reason': '已有动作的执行组织', 'entry_state': '', 'exit_state': '',
+                'reference_requirements': ['人物身份参考'], 'missing': []} for index in range(2 if multiple else 1)],
+            'missing': []}
+        service = TaskService(db)
+        assert await service.claim(task_id, worker_id='browser-unit-design')
+        generated = generate_directing_result('directing_unit_design', SimpleNamespace(
+            invoke=lambda _: SimpleNamespace(content=json.dumps(result))), args)
+        await service.finish(task_id, result=generated.model_dump(mode='json'))
+    return {'ok': True}
+
+
 @app.post('/browser-test/design-tasks/{task_id}/complete')
 async def complete_design_fixture(task_id: str, remove_shot_id: str | None = None, relations: bool = False,
                                   incomplete: bool = False, empty_row: bool = False):

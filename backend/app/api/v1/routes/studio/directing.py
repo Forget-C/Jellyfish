@@ -51,6 +51,8 @@ from app.services.directing.scene_export import SceneExportService
 from app.core.contracts.directing.scene_version import SceneVersionCreate, SceneVersionRead, SceneVersionSave
 from app.core.contracts.directing.scene_design import SceneDesignRequest, SceneDesignPreviewRequest, SceneDesignPreview, SceneDesignSuggestionRead
 from app.services.directing.scene_design import SceneDesignService
+from app.services.directing.scene_unit_design import SceneUnitDesignService
+from app.core.contracts.directing.scene_unit_design import SceneUnitDesignRequest, SceneUnitDesignPreviewRequest, SceneUnitDesignSuggestionRead, SceneUnitDesignPreview
 from app.services.directing.provenance import ProvenanceService
 from app.core.contracts.directing.provenance import SourceRead, SourceResolveRequest
 
@@ -273,6 +275,25 @@ async def analyze(project_id: str, chapter_id: str, body: AIRequest, db: AsyncSe
     """提交原文划场建议，结果通过通用任务查询。"""
     task = await _call(ProductionService(db, project_id).submit_ai(kind="directing_divide", body=body, chapter_id=chapter_id))
     return success_response(TaskAccepted(task_id=task.id))
+
+
+@router.get("/sequences/{sequence_id}/versions/{version_id}/unit-design-suggestions", response_model=ApiResponse[list[SceneUnitDesignSuggestionRead]], operation_id="directing_scene_unit_design_suggestions")
+async def scene_unit_design_suggestions(project_id: str, sequence_id: str, version_id: str, db: AsyncSession = Depends(get_db, scope="function")):
+    """读取本版本的单元组织任务和只读结果。"""
+    return success_response(await _call(SceneUnitDesignService(db, project_id).list_unit_design(sequence_id, version_id)))
+
+
+@router.post("/sequences/{sequence_id}/versions/{version_id}/unit-design-suggestions", response_model=ApiResponse[TaskAccepted], operation_id="directing_scene_unit_design_suggest")
+async def scene_unit_design_suggest(project_id: str, sequence_id: str, version_id: str, body: SceneUnitDesignRequest, db: AsyncSession = Depends(get_db, scope="function")):
+    """明确目标视频模型后冻结本次组织请求。"""
+    task = await _call(SceneUnitDesignService(db, project_id).submit_unit_design(sequence_id, version_id, body))
+    return success_response(TaskAccepted(task_id=task.id))
+
+
+@router.post("/sequences/{sequence_id}/versions/{version_id}/unit-design-suggestions/{task_id}/preview", response_model=ApiResponse[SceneUnitDesignPreview], operation_id="directing_scene_unit_design_preview")
+async def scene_unit_design_preview(project_id: str, sequence_id: str, version_id: str, task_id: str, body: SceneUnitDesignPreviewRequest, db: AsyncSession = Depends(get_db, scope="function")):
+    """整份核对建议；不保存或采用任何单元。"""
+    return success_response(await _call(SceneUnitDesignService(db, project_id).preview_unit_design(sequence_id, version_id, task_id, body.content)))
 
 
 @router.get("/sequences/{sequence_id}/versions/{version_id}/design-suggestions", response_model=ApiResponse[list[SceneDesignSuggestionRead]], operation_id="directing_scene_design_suggestions")

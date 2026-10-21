@@ -83,10 +83,11 @@ class TaskQueries:
         stmt = select(*_VIEW_COLUMNS, Task.input_snapshot["target_parent_id"].as_string().label("target_parent_id"),
             case(*[(Task.kind == kind, Task.input_snapshot[key]['version_id'].as_string())
                 for kind, key in [('directing_instruction', 'scene_instruction'),
-                    ('directing_instruction_check', 'instruction_check'), ('directing_design', 'scene_design')]]).label('scene_version_id'),
+                    ('directing_instruction_check', 'instruction_check'), ('directing_design', 'scene_design'), ('directing_unit_design', 'scene_unit_design')]]).label('scene_version_id'),
             case(*[(Task.kind == kind, Task.input_snapshot[key]['unit_id'].as_string())
                 for kind, key in [('directing_instruction', 'scene_instruction'),
-                    ('directing_instruction_check', 'instruction_check')]]).label('scene_unit_id'))
+                    ('directing_instruction_check', 'instruction_check')]]).label('scene_unit_id'),
+            Task.input_snapshot['scene_unit_design']['request']['shot_id'].as_string().label('scene_shot_id'))
         for column, value in ((Task.kind, task_kind), (Task.target_type, target_type),
                               (Task.target_id, target_id), (Task.project_id, project_id)):
             if value is not None:
