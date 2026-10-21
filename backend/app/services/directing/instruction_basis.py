@@ -1,6 +1,7 @@
 """单元正文依据的独立确认、输入快照及状态核对。"""
 from app.core.contracts.directing.scene_timeline import SceneTimeline
-from app.core.contracts.directing.instruction_basis import InstructionBasisConfirm, InstructionBasisRead, InstructionInputs, UnitScopeProjection
+from app.core.contracts.directing.instruction_basis import InstructionBasisConfirm, InstructionBasisRead, InstructionInputs
+from app.core.contracts.directing.unit_scope import UnitScopeProjection
 from app.core.contracts.directing.scene_instruction import SceneInstructionApply, SceneInstructionRequest
 from app.core.contracts.directing.scene_version import EditableUnitPreparation
 from app.models.task import Task

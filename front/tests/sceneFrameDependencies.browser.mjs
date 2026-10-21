@@ -1,7 +1,7 @@
 import { makeWorkspace } from './directing-fixtures.mjs'
 import { locateCanvasNode } from './workbenchControls.mjs'
 import { workbenchControl } from './workbenchControls.mjs'
-import { unitSettings } from './workbenchControls.mjs'
+import { selectWorkbenchOption, unitSettings } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -73,8 +73,7 @@ try {
   await page.getByRole('button', { name: '提取片段 1 实际落幅', exact: true }).click()
   await page.getByText('落幅 1：当前采用适用', { exact: true }).waitFor()
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
-  await page.getByRole('combobox', { name: '单元所属镜头', exact: true }).press('ArrowDown')
-  await page.getByRole('combobox', { name: '单元所属镜头', exact: true }).press('Enter')
+  await selectWorkbenchOption(page, '单元镜头筛选', '镜头 1')
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('ArrowDown')
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('Enter')
   await unitSettings(page)
@@ -89,6 +88,11 @@ try {
   let current = await read()
   const bound = current.content.units[0]
   assert.equal(bound.scene_dependencies.length, 1)
+  const dependencyEvidence = version => version.unit_graph.nodes.find(node => node.kind === 'unit_config' && node.unit_id === 'affected' && node.config_kind === 'dependencies').dependency_evidence[0]
+  assert.equal(dependencyEvidence(current).status, 'current')
+  assert.equal(dependencyEvidence(current).frame_id, bound.scene_dependencies[0].frame_id)
+  assert.equal(dependencyEvidence(current).frame_file_id, bound.references[0].file_id)
+  assert.deepEqual(dependencyEvidence(current).source, bound.references[0].source)
   assert.equal(bound.references[0].source.media_range.source_in_ms, 960)
   const check = async (unitId, outcome = 'pass') => {
     current = await read()
@@ -121,14 +125,15 @@ try {
   const changed = await fetch(detailUrl, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: current.revision, content: current.content }) })
   assert.equal(changed.status, 200, await changed.text())
   current = await read()
+  assert.equal(dependencyEvidence(current).status, 'needs_review')
+  assert.equal(dependencyEvidence(current).frame_file_id, bound.references[0].file_id)
   const blocked = await prepare('affected')
   assert.equal(blocked.status, 409)
   assert.match(await blocked.text(), /实际落幅依据已变/)
   assert.equal((await prepare('independent')).status, 200)
   await page.reload()
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
-  await page.getByRole('combobox', { name: '单元所属镜头', exact: true }).press('ArrowDown')
-  await page.getByRole('combobox', { name: '单元所属镜头', exact: true }).press('Enter')
+  await selectWorkbenchOption(page, '单元镜头筛选', '镜头 1')
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('ArrowDown')
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('Enter')
   await unitSettings(page)
@@ -146,6 +151,7 @@ try {
   await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   current = await read()
   assert.notEqual(current.content.units[0].references[0].file_id, bound.references[0].file_id)
+  assert.equal(dependencyEvidence(current).status, 'current')
   const basis = await fetch(detailUrl + '/units/affected/instruction-basis', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: current.content }) })
   assert.equal((await basis.json()).data.status, 'changed')
   const requiresCheck = await prepare('affected')

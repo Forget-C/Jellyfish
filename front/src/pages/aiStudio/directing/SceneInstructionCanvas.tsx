@@ -34,8 +34,8 @@ export function SceneInstructionCanvas({ primaryHost, onPrepare, focusRequest, p
   const [suggestionsHost, setSuggestionsHost] = useState<HTMLSpanElement | null>(null)
   const [actionHost, setActionHost] = useState<HTMLSpanElement | null>(null)
   const allUnits = content.units || []
-  const units = allUnits.filter(row => row.coverage.some(item => item.shot_id === shotId))
-  const unit = units.find(row => row.id === unitId)
+  const units = allUnits.filter(row => row.id === unitId || row.coverage.some(item => item.shot_id === shotId))
+  const unit = allUnits.find(row => row.id === unitId)
   const { missing } = useSceneUnitPreparation(projectId, sequenceId, versionId, revision, content, unit)
   return <>{primaryHost && createPortal(<nav className="scene-unit-primary" aria-label="当前指令主操作"><strong>{unit ? `当前单元 ${allUnits.indexOf(unit) + 1} 的指令` : '请明确选择单元'}</strong><span ref={setActionHost} /></nav>, primaryHost)}<DirectorCanvasSurface key={`${versionId}:instructions:${unitId || 'empty'}`} focusTarget={suggestionFocus?.unitId === unit?.id && suggestionFocus && suggestionFocus.serial > (focusRequest?.serial || 0) ? { nodeId: '参考输入', fieldId: 'scene-instruction-suggestions', serial: suggestionFocus.serial } : focusRequest && focusRequest.unitId === unit?.id ? { nodeId: '当前指令', fieldId: 'scene-current-instruction', serial: focusRequest.serial } : undefined} contextKey={`${versionId}:instructions:${unitId || 'empty'}`} ariaLabel="指令画布视口"
     inspectors={{ 单元依据: unit ? () => setReading('basis') : undefined, 参考输入: unit ? () => setReading('references') : undefined }}
@@ -45,7 +45,7 @@ export function SceneInstructionCanvas({ primaryHost, onPrepare, focusRequest, p
       <Select className="scene-instruction-select" aria-label="指令所属单元" placeholder="明确选择单元" value={unit?.id} style={{ width: '100%' }}
         options={units.map(row => ({ value: row.id, label: `单元 ${allUnits.indexOf(row) + 1} · ${row.coverage.map(item => item.action_scope).join('；') || '动作待填写'}` }))}
         onChange={id => onSelectUnit(id)} />
-      {!unit && <p>{unitId ? '原单元不可用或不属于当前镜头，请重新选择。' : '先在单元画布明确准备单元，再编辑对应指令。'}</p>}
+      {!unit && <p>{unitId ? '原单元不可用，请重新选择。' : '先在单元画布明确准备单元，再编辑对应指令。'}</p>}
       {unit && <><p className="canvas-card-summary">{unit.coverage.map((item, index) => `覆盖 ${index + 1}：${item.action_scope || '动作范围待填写'}`).join('；')}</p>
         <p>画幅：{unit.ratio} · 预计时长：{unit.duration_ms == null ? '待填写' : `${unit.duration_ms / 1000} 秒`}</p>
         <Button onClick={() => setReading('basis')}>查看完整单元依据</Button></>}

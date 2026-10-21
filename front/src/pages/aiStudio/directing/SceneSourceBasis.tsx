@@ -3,15 +3,16 @@ import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Space, Spin, Tag } from 'antd'
 import { CanvasTextPreview } from './CanvasTextPreview'
 import { StudioDirectingService } from '../../../services/generated'
-import type { ChapterSequences, SceneVersionSource_Output, SourceSpan } from '../../../services/generated'
+import type { ChapterSequences, SceneVersionSource_Output, SourceCanvasNode, SourceSpan } from '../../../services/generated'
 import { directingError } from './common'
 import { sourceSlice, textareaSpan } from './sourceSelection'
 
 /** 明确选择真实段落后才改变当前版本依据；比较读取失败不妨碍继续使用旧依据。 */
-export function SceneSourceBasis({ projectId, chapterId, basis, disabled, onChange, open, onOpenChange: setOpen, compact = false, dirty = false }: {
+export function SceneSourceBasis({ projectId, chapterId, basis, disabled, onChange, open, onOpenChange: setOpen, compact = false, dirty = false, summary }: {
   projectId: string; chapterId: string; basis: SceneVersionSource_Output; disabled: boolean
   onChange: (value: SceneVersionSource_Output) => void
   open: boolean; onOpenChange: (open: boolean) => void; compact?: boolean; dirty?: boolean
+  summary?: SourceCanvasNode
 }) {
   const [chapter, setChapter] = useState<ChapterSequences>()
   const [error, setError] = useState('')
@@ -36,6 +37,7 @@ export function SceneSourceBasis({ projectId, chapterId, basis, disabled, onChan
   useEffect(() => { setContinued(false) }, [basis.source.version])
   useEffect(() => { if (open) void read() }, [open])
   const changed = chapter && chapter.source_version !== basis.source.version
+  const display = summary || basis
   const selected = chapter && span ? sourceSlice(chapter.raw_text, span) : ''
   const before = Array.from(basis.text), after = Array.from(selected)
   let start = 0, end = 0
@@ -48,8 +50,8 @@ export function SceneSourceBasis({ projectId, chapterId, basis, disabled, onChan
   </p>
   return <>
     {compact ? <div className="director-source-summary">
-      <p title={basis.text}>{basis.text || '原文尚未填写'}</p>
-      <div className="design-compact-status"><span>采用版本 {basis.source.version}</span>{dirty && <span title="有未保存修改" aria-label="有未保存修改" tabIndex={0}>✎</span>}</div>
+      <p title={display.text}>{display.text || '原文尚未填写'}</p>
+      <div className="design-compact-status"><span>采用版本 {display.source.version}</span>{dirty && <span title="有未保存修改" aria-label="有未保存修改" tabIndex={0}>✎</span>}</div>
     </div> : <CanvasTextPreview text={basis.text} label="原文" />}
     {loading && <p><Spin size="small" /> 正在核对最新原文</p>}
     {error && (compact ? <p className="director-source-state">原文差异读取失败，当前依据保留 <Button onClick={() => void read()}>重试原文读取</Button></p>

@@ -12,22 +12,17 @@ from app.core.contracts.generation import (
     ImageGenerationOperationInput, GenerationCommand, GenerationDelivery, GenerationModality, GenerationOperation, GenerationSubmitRequest,
     GenerationTarget, GenerationTargetKind, VideoGenerationOperationInput,
 )
-from app.core.contracts.media import ImageMediaInput, MediaReference, VideoFrameMediaReferences, VideoMediaInput, VideoSubjectMediaReference
-from app.core.contracts.video_generation import VideoGenerationInput, VideoFrameReferences, VideoSubjectReference, VideoReferenceCapabilities
-from app.core.integrations.video_capabilities import validate_video_options, resolve_video_capability
-from app.core.integrations.openai.video_capabilities import validate_openai_video_options
-from app.core.integrations.vidu.video_capabilities import validate_vidu_video_options
-from app.core.integrations.kling.video_capabilities import validate_kling_video_options
-from app.core.integrations.volcengine.video_capabilities import validate_volcengine_video_options
+from app.core.contracts.media import ImageMediaInput, MediaReference
+from app.core.contracts.video_generation import VideoReferenceCapabilities
 from app.models.directing import DirectingAction, DirectingRevision, Sequence
-from app.models.llm import Model, ModelCategoryKey, Provider
+from app.models.llm import ModelCategoryKey
 from app.models.task import Task
-from app.models.studio import FileUsage, Project
+from app.models.studio import FileUsage
 from app.services.studio.files import require_available_file
 from app.services.directing.ai import DirectingAIService
+from app.services.directing.unit_video_inputs import read_video_unit_model, validated_video_media
 from app.services.generation.gate import GenerationEntityGate
 from app.services.generation.submission.submitter import GenerationSubmitter
-from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.llm.resolver import get_model_by_category
 
 
@@ -35,36 +30,8 @@ class ProductionService(DirectingAIService):
     """冻结输入后执行；不复用旧镜头槽位，不静默拆镜或丢失参考。"""
 
     async def reference_capabilities(self, model_id: str) -> VideoReferenceCapabilities:
-        """暴露已有供应商规则与适配器可传递范围；不声称未知模型已通过效果验证。"""
-        if not await self.db.get(Project, self.project_id):
-            raise ValueError("project not found")
-        selected = await self.db.get(Model, model_id)
-        if selected is None or selected.category != ModelCategoryKey.video:
-            raise ValueError("请选择有效的视频模型")
-        model = await get_model_by_category(self.db, ModelCategoryKey.video, model_or_id=model_id)
-        provider = await self.db.get(Provider, model.provider_id)
-        config = resolve_provider_config_from_provider(provider=provider, category=ModelCategoryKey.video)
-        cap = resolve_video_capability(provider=config.provider_key, model=model.name)
-        roles = ["first_frame", "last_frame", "key_frame"]
-        max_frames = 1 if config.provider_key == "openai" else None
-        if config.provider_key == "openai":
-            roles = ["first_frame"]
-        if config.provider_key == "kling":
-            name = model.name.strip().lower()
-            if name not in {"kling-3.0", "kling-3.0-turbo"}:
-                raise ValueError("当前可灵接入不支持此视频模型")
-            roles = ["first_frame", "last_frame"] if name == "kling-3.0" else []
-            max_frames = len(roles)
-        # 只有 Vidu 的现有请求适配器会传递命名主体，不能仅凭覆盖配置宣称可用。
-        subjects = config.provider_key == "vidu"
-        return VideoReferenceCapabilities(model_id=model.id, frame_roles=roles, max_frames=max_frames,
-            subject_images=subjects and cap.supports_subject_image_reference,
-            subject_videos=subjects and cap.supports_subject_video_reference,
-            combine_subjects_and_frames=False,
-            max_subjects=cap.max_subjects, max_images_per_subject=cap.max_images_per_subject,
-            max_videos_per_subject=cap.max_videos_per_subject, max_media_per_subject=cap.max_media_per_subject,
-            max_total_subject_videos=cap.max_total_subject_videos,
-            limits_status="partial" if max_frames is None else "known")
+        """画布、预检与执行共用同一份适配器参考范围。"""
+        return (await read_video_unit_model(self.db, self.project_id, model_id)).reference_capabilities
 
     async def regroup_units(self, sequence_id: str, body: RegroupRequest):
         """用户明确重组固定计划；保留其他单元和历史证据依赖，不改提示词、任务或剪辑。"""
@@ -160,55 +127,8 @@ class ProductionService(DirectingAIService):
         dependency_errors = await self.continuity_errors(sequence_id, unit)
         if dependency_errors:
             raise ValueError("；".join(dependency_errors))
-        if unit.duration_ms % 1000:
-            raise ValueError("当前模型时长按整秒提交，请调整单元预计时长")
-        unsupported = set(unit.parameters) - {"seed"}
-        if unsupported:
-            raise ValueError(f"当前执行器不支持参数：{', '.join(sorted(unsupported))}")
-        model = await get_model_by_category(self.db, ModelCategoryKey.video, model_or_id=unit.model_id)
-        provider = await self.db.get(Provider, model.provider_id)
-        config = resolve_provider_config_from_provider(provider=provider, category=ModelCategoryKey.video)
-        capability = await self.reference_capabilities(model.id)
-        frame_bindings = [binding for binding in unit.references if binding.input_role != "subject"]
-        if any(binding.input_role not in capability.frame_roles for binding in frame_bindings):
-            raise ValueError("当前模型接入不支持所选帧位置，请更换参考或模型")
-        if capability.max_frames is not None and len(frame_bindings) > capability.max_frames:
-            raise ValueError(f"当前模型最多发送 {capability.max_frames} 张帧参考，请明确选择")
-        if frame_bindings and any(binding.input_role == "subject" for binding in unit.references) and not capability.combine_subjects_and_frames:
-            raise ValueError("当前模型接入不支持主体参考与帧参考组合，请明确选择")
-        if any(binding.input_role == "subject" and binding.media_kind == "image" for binding in unit.references) and not capability.subject_images:
-            raise ValueError("当前模型接入不支持主体图片参考，请更换参考或模型")
-        if any(binding.input_role == "subject" and binding.media_kind == "video" for binding in unit.references) and not capability.subject_videos:
-            raise ValueError("当前模型接入不支持主体视频参考，请更换参考或模型")
-        frames, subjects = {}, {}
-        for binding in sorted(unit.references, key=lambda r: r.ordinal):
-            if binding.media_kind == "audio":
-                raise ValueError("当前执行器不支持声音参考，请保留声音设计并安排后期")
-            ref = MediaReference(file_id=binding.file_id, media_kind=binding.media_kind, ordinal=binding.ordinal)
-            if binding.input_role == "subject":
-                name = binding.subject_group_id or binding.id
-                if name in subjects:
-                    subjects[name].media.append(ref)
-                else:
-                    subjects[name] = VideoSubjectMediaReference(name=name, media=[ref])
-            elif binding.input_role == "key_frame":
-                frames.setdefault("keys", []).append(ref)
-            else:
-                key = "first" if binding.input_role == "first_frame" else "last"
-                if key in frames:
-                    raise ValueError("首帧或尾帧只能选择一份图片")
-                frames[key] = ref
-        frame_media = VideoFrameMediaReferences(**frames)
-        media = VideoMediaInput(frames=frame_media, subjects=list(subjects.values()))
-        options = VideoGenerationInput(prompt=text, model=model.name, ratio=unit.ratio,
-            seconds=unit.duration_ms // 1000, seed=unit.parameters.get("seed"),
-            frame_references=VideoFrameReferences(first_frame=frame_media.first, last_frame=frame_media.last, key_frames=frame_media.keys),
-            subject_references=[VideoSubjectReference(name=s.name, media=s.media) for s in subjects.values()])
-        validate_video_options(provider=config.provider_key, model=model.name, input_=options)
-        validators = {"openai": validate_openai_video_options, "vidu": validate_vidu_video_options,
-                      "kling": validate_kling_video_options, "volcengine": validate_volcengine_video_options}
-        validators[config.provider_key](options)
-        return media
+        model = await read_video_unit_model(self.db, self.project_id, unit.model_id)
+        return validated_video_media(unit, model, text)
 
     async def compile_unit(self, sequence_id: str, plan_id: str, unit_id: str, *, request_id: str | None = None):
         """同一编译请求返回原指令；请求身份不可跨场次、计划或单元复用。"""

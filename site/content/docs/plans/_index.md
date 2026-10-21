@@ -11,6 +11,7 @@ description: "记录当前正在推进的开发计划、改造方案与阶段性
 
 当前计划入口：
 
+- [共享 graph 契约与单元画布改造计划](/docs/plans/shared-canvas-graph-and-unit-workbench-plan/)：实施中；后端统一投影导演与单元画布，复用前后端图工具，完善四个画布共用的自动保存、重试与恢复。
 - [可复用画布框架与交互规范计划](/docs/plans/reusable-canvas-framework-plan/)：已完成；三类图复用公共画布，完整指令分层表达与受控局部优化已落地；C1–C7、G01–G20 逐项验收通过，含固定历史、范围隔离、异常恢复及组合旅程，快捷生成不纳入。
 - [单元试拍指令内容区与局部修改计划](/docs/plans/unit-instruction-content-workspace-plan/)：T1–T6 已完成；结构化正文、服务端局部范围、原位差异及局部关联图已落地，包含历史只读、多处定位、键盘和多尺寸回归，保留既有 Pylint 限制。
 - [场次工作台分层展示框架与布局统一计划](/docs/plans/sequence-workbench-layout-unification-plan/)：T1–T6 已完成；落实五层职责与公共分栏，统一试拍三步骤及窄屏辅助抽屉，保留设计／剪辑专属工作区；实际截图、129 项行为测试、12 组浏览器通过结果及两项既有失败已归档。

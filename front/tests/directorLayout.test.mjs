@@ -4,8 +4,10 @@ import { readFile } from 'node:fs/promises'
 import ts from 'typescript'
 const compile = async name => ts.transpileModule(await readFile(new URL(`../src/pages/aiStudio/directing/${name}.ts`, import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ES2020 } }).outputText
 const data = source => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`
-const layoutUrl = data(await compile('directorLayout'))
-const { arrangeDirector, intersects, migrateLegacyOverviewPositions, upgradeOverviewPositions, readDirectorView, pruneDirectorView } = await import(layoutUrl)
+const graphLayoutUrl = data(await compile('graphLayout'))
+const layoutUrl = data((await compile('directorLayout')).replaceAll("'./graphLayout'", JSON.stringify(graphLayoutUrl)))
+const { arrangeDirector, intersects, migrateLegacyOverviewPositions, upgradeOverviewPositions, readDirectorView } = await import(layoutUrl)
+const { pruneGraphView: pruneDirectorView } = await import(graphLayoutUrl)
 const { directorRelationCategory } = await import(data(await compile('directorRelations')))
 const nodes = ['原文依据', '全场共享', 'shot:one', 'camera:one', 'performance:one', ...Array.from({ length: 5 }, (_, i) => `criterion:${i}`)].map(id => ({ id }))
 const sizes = Object.fromEntries(nodes.map((node, i) => [node.id, { width: 360, height: 200 + i % 3 * 60 }]))

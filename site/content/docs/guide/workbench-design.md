@@ -29,6 +29,7 @@ description: "场次四画布的动作层级、文本与图标规则、共享组
 | `CanvasTextPreview` | 单份正文按真实溢出折叠，默认六行，可指定四行；短文无切换入口，宽度变化重新测量 |
 | `CanvasToolbarMenu` | 菜单持续挂载、Escape 收起与焦点恢复；菜单关闭不终止任务 |
 | `WorkbenchChrome` | 顶部身份／版本／保存／画布切换／主操作、当前位置与导航；各画布保留适用的中央工作区 |
+| `GraphCanvas` / `GraphSubgraphPreview` | 服务端 graph 的通用容器和聚合预览，布局状态使用 `useGraphLayout`，浏览历史使用 `useGraphBrowse`；接入方式见[共享 graph 指南](/docs/guide/canvas-graph/) |
 | `components/canvas/Canvas` | 通用视口、几何、标题拖动、卡片鼠标／键盘激活及事件隔离；导演布局、分组和关系留在业务适配 |
 
 使用 AntD 已有表单、选择、提示与语义标签，不重复实现基础控件。任务中心仅在工作台实例采用共享按钮，全站实例保持原主题。AI 设计的生成／检查／应用阶段属于业务组件，不放入通用弹窗。

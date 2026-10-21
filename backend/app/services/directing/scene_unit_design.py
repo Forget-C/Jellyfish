@@ -409,10 +409,13 @@ class SceneUnitDesignService(SceneDesignService):
         return organized_unit_content(content, preview.result, args).model_copy(update={'unit_design_task_id': task.id})
 
     async def validate_organized_save(self, sequence_id, version_id, content, previous):
-        """首次保存组织来源时重验真实任务与固定依据；已保存单元仍按普通编辑处理。"""
-        known = {(unit.id, unit.organization.source.reference) for unit in previous.units if unit.organization}
+        """人工要求明确记来源；AI 来源首次保存时仍重验真实任务和固定依据。"""
+        known = {(unit.id, unit.organization.source.model_dump_json()) for unit in previous.units if unit.organization}
         introduced = [unit for unit in content.units if unit.organization
-                      and (unit.id, unit.organization.source.reference) not in known]
+                      and (unit.id, unit.organization.source.model_dump_json()) not in known]
+        if any(unit.organization.source.kind not in {'human', 'model'} for unit in introduced):
+            raise ValueError('单元组织要求必须明确记录人工或真实 AI 任务来源')
+        introduced = [unit for unit in introduced if unit.organization.source.kind == 'model']
         new_application = content.unit_design_task_id and content.unit_design_task_id != previous.unit_design_task_id
         tasks = list(await self._tasks(sequence_id, version_id)) if introduced or new_application else []
         for reference in {unit.organization.source.reference for unit in introduced}:

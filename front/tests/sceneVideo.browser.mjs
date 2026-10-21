@@ -1,5 +1,5 @@
 import { makeWorkspace } from './directing-fixtures.mjs'
-import { workbenchControl, workbenchShot, closeWorkbenchDetails } from './workbenchControls.mjs'
+import { workbenchControl, workbenchShot, closeWorkbenchDetails, selectWorkbenchOption } from './workbenchControls.mjs'
 import { unitSettings } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -57,6 +57,8 @@ try {
 
   ] }]
   content.units.push({ ...structuredClone(content.units[0]), id: 'unit-two' })
+  content.units[0].model_id = null
+  content.units[0].duration_ms = null
   content.design.cinematography = content.design.direction.shots.map((shot, index) => ({ ...structuredClone(makeWorkspace().designs[0].content.cinematography[0]), id: `camera-${index}`, shot_id: shot.id, criterion_ids: [] }))
   const saved = await fetch(`${versionsUrl}/${version.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: version.revision, content }) })
   assert.equal(saved.status, 200, await saved.text())
@@ -65,6 +67,31 @@ try {
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('ArrowDown')
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('Enter')
+  await unitSettings(page)
+  await selectWorkbenchOption(page, '单元视频模型', 'test-video-model')
+  await page.getByRole('spinbutton', { name: '单元预计时长', exact: true }).fill('5')
+  await closeWorkbenchDetails(page)
+  await page.getByRole('button', { name: '定位画布节点', exact: true }).click()
+  await page.getByRole('menuitem', { name: '单元 1', exact: true }).click()
+  await page.locator('[data-canvas-node="unit:unit-one"]').getByRole('button', { name: /^进入子图：/ }).click()
+  await page.getByRole('button', { name: '定位画布节点', exact: true }).click()
+  await page.getByRole('menuitem', { name: '参考素材', exact: true }).click()
+  await page.getByRole('button', { name: '编辑本单元参考', exact: true }).click()
+  const referencePicker = page.getByRole('dialog', { name: '添加参考', exact: true })
+  await selectWorkbenchOption(page, '参考素材来源', '上传')
+  await referencePicker.locator('input[type=file]').setInputFiles({ name: 'space-reference.png', mimeType: 'image/png',
+    buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=', 'base64') })
+  await page.waitForFunction(() => { const image = document.querySelector('img[alt="参考图 1"]'); return image?.complete && image.naturalWidth === 1 })
+  await selectWorkbenchOption(page, '参考用途', '场所空间')
+  await referencePicker.getByRole('button', { name: '应用到本单元', exact: true }).click()
+  await referencePicker.waitFor({ state: 'hidden' })
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
+  const configured = (await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.content.units[0]
+  assert.equal(configured.model_id, 'browser-video-model')
+  assert.equal(configured.duration_ms, 5000)
+  assert.equal(configured.references.length, 1)
+  assert.equal(configured.references[0].purpose, 'space')
+
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
   const body = page.getByRole('textbox', { name: '当前单元指令正文', exact: true })
   await body.fill('递出信封。')
@@ -113,8 +140,7 @@ try {
   await page.getByRole('navigation', { name: '当前指令主操作', exact: true }).getByRole('button', { name: '保存并生成当前单元视频', exact: true }).click({ timeout: 5000 })
   await acceptedSave
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
-  await page.getByRole('combobox', { name: '当前单元', exact: true }).click()
-  await page.getByText('单元 2 · 拆开信封', { exact: true }).click()
+  await selectWorkbenchOption(page, '当前单元', '单元 2')
   await unitSettings(page)
   await page.getByRole('textbox', { name: '单元动作范围', exact: true }).fill('保存未知期间 B 的编辑')
   await page.route('**/units/unit-one/video', route => route.abort('failed'))
@@ -124,13 +150,11 @@ try {
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '保存未知期间 B 的编辑')
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
   await page.getByRole('navigation', { name: '当前指令主操作', exact: true }).getByRole('button', { name: '生成当前单元指令建议', exact: true }).waitFor({ timeout: 5000 })
-  await page.getByRole('combobox', { name: '指令所属单元', exact: true }).click()
-  await page.getByText('单元 1 · 拆开信封', { exact: true }).click()
+  await selectWorkbenchOption(page, '指令所属单元', '单元 1 · 拆开信封')
   await page.unroute('**/units/unit-one/video')
   await page.getByRole('navigation', { name: '当前指令主操作', exact: true }).getByRole('button', { name: '核实当前单元原视频请求', exact: true }).click()
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
-  await page.getByRole('combobox', { name: '当前单元', exact: true }).click()
-  await page.getByText('单元 2 · 保存未知期间 B 的编辑', { exact: true }).click()
+  await selectWorkbenchOption(page, '当前单元', '单元 2')
   await page.getByRole('status').filter({ hasText: '未保存' }).first().waitFor({ timeout: 5000 })
   await unitSettings(page)
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '保存未知期间 B 的编辑')
@@ -139,8 +163,7 @@ try {
   await page.unroute('**/video/save-and-submit')
   await page.getByRole('button', { name: '撤销', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
-  await page.getByRole('combobox', { name: '当前单元', exact: true }).click()
-  await page.getByText('单元 1 · 拆开信封', { exact: true }).click()
+  await selectWorkbenchOption(page, '当前单元', '单元 1')
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
   await page.getByText('视频任务：等待执行', { exact: true }).waitFor()
   await page.getByRole('navigation', { name: '当前指令主操作', exact: true }).getByRole('button', { name: '查看当前单元视频任务', exact: true }).waitFor()
@@ -180,8 +203,7 @@ try {
   await received
   assert.equal((await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.revision, beforeCleanGeneration)
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
-  await page.getByRole('combobox', { name: '当前单元', exact: true }).click()
-  await page.getByText('单元 2 · 拆开信封', { exact: true }).click()
+  await selectWorkbenchOption(page, '当前单元', '单元 2')
   await unitSettings(page)
   await page.getByRole('textbox', { name: '单元动作范围', exact: true }).fill('另一单元独立新动作')
   releaseSubmission()
@@ -234,8 +256,7 @@ try {
   assert.equal(await page.getByRole('button', { name: '按当前内容生成视频', exact: true }).isDisabled(), true)
   // A 的原响应仍不可读，B 独立编辑、保存、检查并提交视频。
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
-  await page.getByRole('combobox', { name: '当前单元', exact: true }).click()
-  await page.getByText('单元 2 · 另一单元独立新动作', { exact: true }).click()
+  await selectWorkbenchOption(page, '当前单元', '单元 2')
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
   await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).fill('独立单元 B 的指令。')
   await page.getByRole('button', { name: '确认已按当前依据核对正文', exact: true }).click()
@@ -263,8 +284,7 @@ try {
   assert.equal(bVideos[0].preparation.request.execution_prompt, '独立单元 B 的指令。')
   assert.equal((await (await fetch(videoUrl)).json()).data.length, 3)
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
-  await page.getByRole('combobox', { name: '当前单元', exact: true }).click()
-  await page.getByText('单元 1 · 拆开信封', { exact: true }).click()
+  await selectWorkbenchOption(page, '当前单元', '单元 1')
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
   await page.unroute('**/units/unit-one/video{,/save-and-submit}')
   let retriedBody
@@ -305,8 +325,7 @@ try {
   const restoredTask = (await (await fetch(videoUrl)).json()).data.find(row => row.status === 'queued')
   await (await workbenchShot(page, '镜头 1：读信反应')).click()
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
-  await page.getByRole('combobox', { name: '当前单元', exact: true }).click()
-  await page.getByText('单元 2 · 另一单元独立新动作', { exact: true }).click()
+  await selectWorkbenchOption(page, '当前单元', '单元 2')
   await unitSettings(page)
   await page.getByRole('textbox', { name: '单元动作范围', exact: true }).fill('完成通知到达时继续编辑')
   const completed = await fetch(`${api}/browser-test/video-tasks/${restoredTask.task_id}/complete`, { method: 'POST' })
@@ -371,8 +390,7 @@ try {
   await page.getByRole('button', { name: '重试检查适用性', exact: true }).click()
   await candidate.getByText('视频固定输入与当前内容一致，候选仍需审片', { exact: true }).waitFor()
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
-  await page.getByRole('combobox', { name: '当前单元', exact: true }).click()
-  await page.getByText('单元 2 · 完成通知到达时继续编辑', { exact: true }).click()
+  await selectWorkbenchOption(page, '当前单元', '单元 2')
   await unitSettings(page)
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '完成通知到达时继续编辑')
   await page.screenshot({ path: join(output, 'scene-video.png'), animations: 'disabled' })

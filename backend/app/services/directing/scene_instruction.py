@@ -5,7 +5,7 @@ from uuid import uuid4
 from sqlalchemy import select
 
 from app.core.contracts.directing.common import Source
-from app.core.contracts.directing.instruction_basis import UnitScopeProjection
+from app.core.contracts.directing.unit_scope import UnitScopeProjection
 from app.core.contracts.directing.scene_instruction import SceneInstructionPreview, SceneInstructionRequest, SceneInstructionResult, SceneInstructionSuggestionRead
 from app.core.contracts.directing.scene_version import EditableSceneDesign
 from app.core.contracts.directing.style import StyleRule

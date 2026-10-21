@@ -53,6 +53,10 @@ try {
   design.cinematography[0].composition = note('让信纸位于画面中央')
   design.staging.activities[0].ongoing_task = note('窗外行人经过')
   design.staging.activities.push({ ...structuredClone(design.staging.activities[0]), trigger_event_id: null, ongoing_task: note('整理桌上的物件') })
+  // This test creates new rows through the editable-version API, so each row needs a stable identity.
+  ;[design.performance.situations, design.performance.beats, design.staging.activities, design.cinematography].forEach((rows, group) => {
+    rows.forEach((row, index) => { row.id = `layout-${group}-${index}` })
+  })
   version = await request(`${versions}/${version.id}`, { request_id: crypto.randomUUID(), expected_revision: version.revision, content: { ...version.content, design } }, 'PUT')
   server = await createServer({ root, server: { host: '127.0.0.1', port: 4198, strictPort: true, open: false, proxy: { '/api': api } } })
   await server.listen()

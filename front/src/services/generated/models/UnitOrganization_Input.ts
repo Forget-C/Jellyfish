@@ -4,7 +4,7 @@
 /* eslint-disable */
 import type { Source } from './Source';
 /**
- * 当前可编辑组织要求；source 仅追溯原 AI 组织依据，不声明人工改写来自模型。
+ * 当前可编辑组织要求；source 记录人工建立或原 AI 依据，不声明人工改写来自模型。
  */
 export type UnitOrganization_Input = {
     reason: string;

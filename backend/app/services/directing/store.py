@@ -6,19 +6,21 @@ from hashlib import sha256
 from types import SimpleNamespace
 from uuid import uuid4
 
+from fastapi import HTTPException
 from pydantic import TypeAdapter
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.directing import SceneDesign, ProductionPlan, Prompt, ReviewPacket, SequenceCut, TakeAnnotation
 from app.core.contracts.directing.common import Identity, Source, references
+from app.core.contracts.directing.canvas_graph import CanvasDependencyEvidence, CanvasPlanDependency, CanvasSceneDependency
 from app.core.contracts.directing.instruction_check import InstructionCheckResult
 from app.core.contracts.directing.instruction_basis import InstructionInputs
 from app.core.contracts.directing.workspace import MediaRead
 from app.core.contracts.directing.scene_video import SceneVideoPreparation, SceneVideoRead, SceneTakeRead
 from app.core.contracts.directing.feedback import CutReview, RepairItem, KnowledgeCandidate
 from app.core.contracts.directing.revisions import ReviewPacketRevision, RevisionSnapshot, TakeSnapshot
-from app.core.contracts.directing.relationship_graph import scene_relationship_graph
+from app.services.directing.relationship_graph import scene_relationship_graph
 from app.core.contracts.directing.style import ProjectStyleProfile, ProjectStyleRevision, StyleWrite
 from app.core.contracts.directing.scene_version import (
     EditableSceneDesign, SceneVersionContent, SceneVersionCreate, SceneVersionRead,
@@ -32,6 +34,9 @@ from app.models.llm import Model
 from app.models.types import FileUsageKind
 from app.services.studio.files import require_available_file
 from app.services.studio.file_usages import upsert_file_usage
+from app.services.directing.canvas_graph import CanvasReadContext
+from app.services.directing.director_canvas import director_graph
+from app.services.directing.unit_canvas import unit_graph
 
 CONTRACTS = {"design": SceneDesign, "plan": ProductionPlan, "prompt": Prompt,
              "review": ReviewPacket, "cut": SequenceCut, "cut_review": CutReview,
@@ -229,18 +234,29 @@ class DirectingStore:
                 SceneVersionRecord.created_at, SceneVersionRecord.id))
         return [await self.read_scene_version(sequence_id, key) for key in ids]
 
-    async def read_scene_version(self, sequence_id: str, version_id: str) -> SceneVersionRead:
-        """读取重新校验强类型内容，并核对场次及项目归属。"""
-        sequence = await self.sequence(sequence_id)
+    async def _scene_version_snapshot(self, sequence: Sequence, version_id: str) -> tuple[SceneVersionRecord, SceneVersionContent]:
+        """从已鉴权场次读取强类型内容；证据校验不触发图投影或其他版本图读取。"""
         row = await self.db.get(SceneVersionRecord, version_id, populate_existing=True)
         if row is None or row.sequence_id != sequence.id:
             raise ValueError('scene version not found in sequence')
-        content = SceneVersionContent.model_validate(row.content)
+        return row, SceneVersionContent.model_validate(row.content)
+
+    async def read_scene_version(self, sequence_id: str, version_id: str) -> SceneVersionRead:
+        """读取重新校验强类型内容，并核对场次及项目归属。"""
+        sequence = await self.sequence(sequence_id)
+        row, content = await self._scene_version_snapshot(sequence, version_id)
         origin = await self.db.get(SceneCopyOrigin, row.id)
+        relationships = scene_relationship_graph(row.id, row.revision, content)
+        canvas = await CanvasReadContext.load(self.db, self.project_id, row.id, row.revision,
+            content, relationships, lambda name: self.applicable_style(
+                content.design.style_revision_id, sequence.id, name),
+            lambda: self.canvas_dependency_evidence(sequence.id, version_id, content))
+        director = director_graph(canvas)
         return SceneVersionRead(copied_from_version_id=origin.source_version_id if origin else None, id=row.id, project_id=self.project_id, chapter_id=sequence.chapter_id,
             sequence_id=sequence.id, title=row.title, revision=row.revision,
             source=content.basis, content=content,
-            relationship_graph=scene_relationship_graph(row.id, row.revision, content),
+            relationship_graph=relationships, director_graph=director,
+            unit_graph=unit_graph(canvas, director),
             last_save_request_id=row.last_save_request_id,
             created_at=row.created_at, updated_at=row.updated_at)
 
@@ -593,17 +609,67 @@ class DirectingStore:
             await require_available_file(self.db, file_id=file_id)
         return files
 
+    @staticmethod
+    def scene_frame_source(frame: SceneEndFrameRecord) -> Source:
+        """固定落幅的来源只取原采用和实际解码位置，不跟随当前时间线。"""
+        return Source(kind='file', reference=frame.clip['take_id'], version='1', file_id=frame.clip['file_id'],
+            media_range={'source_in_ms': frame.at_ms, 'source_out_ms': frame.at_ms + 1})
+
+    async def canvas_dependency_evidence(self, sequence_id: str, version_id: str,
+                                         content: SceneVersionContent) -> dict[str, list[CanvasDependencyEvidence]]:
+        """复用实际执行的依赖核验；失败只形成只读证据，不更改固定绑定。"""
+        result = {}
+        for unit in content.units:
+            evidence = []
+            for link in unit.scene_dependencies:
+                row = CanvasSceneDependency(version_id=link.version_id, clip_id=link.clip_id,
+                    frame_id=link.frame_id, reference_id=link.reference_id,
+                    status='unavailable' if link.frame_id else 'unbound',
+                    message='实际落幅及参考尚未核实' if link.frame_id else '尚未绑定实际落幅及参考')
+                if link.frame_id:
+                    try:
+                        frame = await self.validate_scene_frame_binding(sequence_id, unit, link)
+                        row.frame_file_id, row.at_ms = frame.file_id, frame.at_ms
+                        row.source = self.scene_frame_source(frame)
+                        await self.require_scene_dependencies(sequence_id, version_id,
+                            unit.model_copy(update={'scene_dependencies': [link]}), content)
+                        row.status, row.message = 'current', '实际落幅及参考与当前采用一致'
+                    except RevisionConflict as error:
+                        row.status, row.message = 'needs_review', str(error)
+                    except (ValueError, HTTPException) as error:
+                        row.status, row.message = 'unavailable', str(error.detail if isinstance(error, HTTPException) else error)
+                evidence.append(row)
+            for link in unit.dependencies:
+                row = CanvasPlanDependency(plan_revision_id=link.plan_revision_id, unit_id=link.unit_id,
+                    frame_id=link.frame_id, reference_id=link.reference_id,
+                    status='unavailable' if link.frame_id else 'unbound',
+                    message='实际落幅及参考尚未核实' if link.frame_id else '尚未绑定实际落幅及参考')
+                if link.frame_id:
+                    try:
+                        frame = await self.validate_frame_binding(sequence_id, unit, link)
+                        take = await self.take(frame.take_id, sequence_id=sequence_id)
+                        row.frame_file_id, row.at_ms = frame.file_id, frame.at_ms
+                        row.source = Source(kind='file', reference=take.id, version='1', file_id=take.file_id,
+                            media_range={'source_in_ms': frame.at_ms, 'source_out_ms': frame.at_ms + 1})
+                        errors = await self.continuity_errors(sequence_id, unit.model_copy(update={'dependencies': [link]}))
+                        row.status = 'needs_review' if errors else 'current'
+                        row.message = '；'.join(errors) if errors else '实际落幅及参考与当前采用一致'
+                    except (ValueError, HTTPException) as error:
+                        row.status, row.message = 'unavailable', str(error.detail if isinstance(error, HTTPException) else error)
+                evidence.append(row)
+            result[unit.id] = evidence
+        return result
+
     async def validate_scene_frame_binding(self, sequence_id, unit, link):
         """固定证据须属于明确来源版本和采用；保存不要求旧依据仍适用。"""
-        await self.read_scene_version(sequence_id, link.version_id)
+        await self._scene_version_snapshot(await self.sequence(sequence_id), link.version_id)
         if link.frame_id is None:
             return None
         frame = await self.db.get(SceneEndFrameRecord, link.frame_id)
         if frame is None or frame.version_id != link.version_id or frame.clip['id'] != link.clip_id:
             raise ValueError(f'单元 {unit.id} 的实际落幅不属于原版本与采用')
         reference = next((item for item in unit.references if item.id == link.reference_id), None)
-        source = Source(kind='file', reference=frame.clip['take_id'], version='1', file_id=frame.clip['file_id'],
-            media_range={'source_in_ms': frame.at_ms, 'source_out_ms': frame.at_ms + 1})
+        source = self.scene_frame_source(frame)
         if (reference is None or reference.file_id != frame.file_id or reference.media_kind != 'image'
                 or reference.purpose != 'continuity' or reference.source != source):
             raise ValueError(f'单元 {unit.id} 的实际落幅参考与固定来源不一致，请明确重新绑定')
@@ -616,7 +682,8 @@ class DirectingStore:
             frame = await self.validate_scene_frame_binding(sequence_id, unit, link)
             if frame is None:
                 raise RevisionConflict(f'单元 {unit.id} 的采用 {link.clip_id} 尚未绑定实际落幅，请到编辑画布提取，再在单元画布明确绑定')
-            source = content if link.version_id == version_id else (await self.read_scene_version(sequence_id, link.version_id)).content
+            source = content if link.version_id == version_id else (
+                await self._scene_version_snapshot(await self.sequence(sequence_id), link.version_id))[1]
             clip = next((item for item in source.timeline.items if item.id == link.clip_id), None)
             if (clip is None or clip.kind != 'media'
                     or clip.model_dump(mode='json', exclude={'timeline_start_ms', 'fit'})

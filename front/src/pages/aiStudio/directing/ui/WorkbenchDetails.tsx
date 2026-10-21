@@ -17,7 +17,8 @@ export function WorkbenchDetailsProvider({ children }: { children: ReactNode }) 
 }
 
 /** 非事务性详情外壳；保留同一编辑会话，保存和关闭保护由调用方负责。 */
-export function WorkbenchDetails({ title, status, open, onClose, trigger, children, initialExpanded = false, closeDisabled = false, onDeactivate }: {
+export function WorkbenchDetails({ title, status, open, onClose, trigger, children, initialExpanded = false, closeDisabled = false, onDeactivate, focusTarget }: {
+  focusTarget?: { fieldId: string; serial: number }
   title: string; status?: ReactNode; open: boolean; onClose: () => void; trigger?: HTMLElement; children: ReactNode; initialExpanded?: boolean; closeDisabled?: boolean; onDeactivate?: () => void;
 }) {
   const desktop = useWorkbenchDesktop()
@@ -92,6 +93,14 @@ export function WorkbenchDetails({ title, status, open, onClose, trigger, childr
       }
     }
   }, [visible, modal])
+  useEffect(() => {
+    if (!visible || !focusTarget?.fieldId) return
+    const field = document.getElementById(focusTarget.fieldId)
+    if (field && panel.current?.contains(field)) {
+      field.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+      field.focus({ preventScroll: true })
+    }
+  }, [visible, focusTarget?.fieldId, focusTarget?.serial])
   return createPortal(<section ref={panel} hidden={!visible} tabIndex={-1} role={modal ? 'dialog' : 'complementary'}
     aria-modal={modal ? true : undefined} aria-labelledby={titleId}
     className="canvas-workbench-dialog wb-details" data-expanded={expanded}>

@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import ConfigDict, Field, model_validator
 
 from app.core.contracts.directing.common import Contract, Identity, Note, Source, Text, references, unique
+from app.core.contracts.directing.canvas_graph import DirectorCanvasGraph, UnitCanvasGraph
 from app.core.contracts.directing.design_applicability import DesignApplicability, validate_design_applicability
 from app.core.contracts.directing.relationship_graph import SceneRelationshipGraph
 from app.core.contracts.directing.production import GenerationUnit, ModelCapability, ReferenceBinding
@@ -142,7 +143,7 @@ class SceneFrameDependency(Contract):
 
 
 class UnitOrganization(Contract):
-    """当前可编辑组织要求；source 仅追溯原 AI 组织依据，不声明人工改写来自模型。"""
+    """当前可编辑组织要求；source 记录人工建立或原 AI 依据，不声明人工改写来自模型。"""
 
     model_config = ConfigDict(json_schema_serialization_defaults_required=True)
 
@@ -294,6 +295,8 @@ class SceneVersionRead(Contract):
     source: SceneVersionSource
     content: SceneVersionContent
     relationship_graph: SceneRelationshipGraph
+    director_graph: DirectorCanvasGraph
+    unit_graph: UnitCanvasGraph
     copied_from_version_id: Identity | None
     last_save_request_id: Identity | None
     created_at: datetime

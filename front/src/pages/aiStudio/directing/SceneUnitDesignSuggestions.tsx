@@ -14,7 +14,7 @@ const terminal = ['succeeded', 'failed', 'cancelled']
 const statuses: Record<string, string> = { queued: '等待执行', running: '执行中', succeeded: '已生成', failed: '失败', cancelled: '已取消' }
 
 /** 组织建议与场次编辑分开；结果未明确应用前，不创建任何正式单元。 */
-export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, revision, content, shotId, unitId, disabled, focusTaskId, triggerHost, onFocused, onChange, onLocateBlocker }: {
+export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, revision, content, shotId: filteredShotId, unitId, disabled, focusTaskId, triggerHost, onFocused, onChange, onLocateBlocker }: {
   onLocateBlocker: (blocker: SceneUnitDesignBlocker) => void
   onChange: (content: SceneVersionContent_Output) => void
   triggerHost?: HTMLElement | null
@@ -22,6 +22,9 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
   content: SceneVersionContent_Output; shotId?: string; unitId?: string; disabled: boolean; focusTaskId?: string; onFocused?: () => void
 }) {
   const [open, setOpen] = useState(false)
+  const [targetShotId, setTargetShotId] = useState<string>()
+  const shotId = filteredShotId || targetShotId
+  useEffect(() => { setTargetShotId(undefined) }, [filteredShotId])
   const [recordsOpen, setRecordsOpen] = useState(!!focusTaskId)
   const [models, setModels] = useState<ModelRead[]>()
   const [modelId, setModelId] = useState<string>()
@@ -46,8 +49,10 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
   const pending = useRef<SceneUnitDesignRequest>()
   const storageKey = `jellyfish:scene-unit-design-request:${projectId}:${sequenceId}:${versionId}`
   const shot = content.design.direction.shots.find(row => row.id === shotId)
-  const sourceUnit = content.units.find(row => row.id === unitId && row.coverage.every(item => item.shot_id === shotId))
-  const needsSource = content.units.some(row => row.coverage.every(item => item.shot_id === shotId))
+  const sourceUnit = content.units.find(row => row.id === unitId)
+  const sourceSupported = !sourceUnit || sourceUnit.coverage.length === 1
+  const sourceMatchesShot = !sourceUnit || sourceUnit.coverage.every(item => item.shot_id === shotId)
+  const needsSource = content.units.some(row => row.coverage.some(item => item.shot_id === shotId))
   const live = useRef({ content, shotId, unitId, disabled, revision })
   live.current = { content, shotId, unitId, disabled, revision }
   const mounted = useRef(true)
@@ -133,7 +138,7 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
   const running = rows?.some(row => !terminal.includes(row.status))
   const verified = !!modelId && options?.model_id === modelId && capabilities?.model_id === modelId
   const submit = async () => {
-    if (busy || live.current.disabled || !pending.current && (!verified || !live.current.shotId)) return
+    if (busy || live.current.disabled || !pending.current && (!verified || !live.current.shotId || !sourceSupported || !sourceMatchesShot)) return
     const request = pending.current || { request_id: crypto.randomUUID(), expected_revision: live.current.revision,
       content: structuredClone(live.current.content), shot_id: live.current.shotId!, source_unit_id: sourceUnit?.id, target_model_id: modelId!, instruction }
     setBusy(true); setError('')
@@ -226,7 +231,7 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
   const recordSelector = !!rows?.length && <Select aria-label="单元设计记录" style={{ width: '100%' }} value={selected?.task_id} placeholder="查看本版本的设计记录"
     options={rows.map(row => ({ value: row.task_id, label: `${row.request.shot_id} · ${statuses[row.status] || row.status}` }))}
     onChange={id => { setSelectedId(id); setPreparing(false) }} />
-  const trigger = <><WorkbenchButton disabled={disabled || !shot} onClick={() => setOpen(true)}>AI设计</WorkbenchButton>
+  const trigger = <><WorkbenchButton disabled={disabled || !content.design.direction.shots.length} onClick={() => setOpen(true)}>AI设计</WorkbenchButton>
     <WorkbenchIconButton label="单元设计记录" icon={<HistoryOutlined />} onClick={() => { setOpen(false); setPreparing(false); setSelectedId(current => current || rows?.[0]?.task_id); setRecordsOpen(true) }} /></>
   return <>
     {triggerHost ? createPortal(trigger, triggerHost) : trigger}
@@ -242,8 +247,13 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
       secondary={<WorkbenchButton variant="quiet" onClick={() => setOpen(false)}>{selected ? '关闭预览' : '取消'}</WorkbenchButton>}>
       {pending.current ? <WorkbenchButton variant="primary" loading={busy} disabled={busy || disabled} onClick={() => void submit()}>核实原设计请求</WorkbenchButton>
         : selected ? <><WorkbenchButton disabled={busy || disabled || running} onClick={() => { setPreparing(true); setError('') }}>重新设计</WorkbenchButton>{selected.result && <WorkbenchButton variant="primary" loading={busy} disabled={busy || disabled || !!previewError || !previewReady || !!blockers.length} onClick={() => void apply()}>确认应用方案</WorkbenchButton>}</>
-          : <WorkbenchButton variant="primary" loading={busy} disabled={disabled || busy || !shot || needsSource && !sourceUnit || !verified || !rows || !!readError || running} onClick={() => void submit()}>开始设计</WorkbenchButton>}
+          : <WorkbenchButton variant="primary" loading={busy} disabled={disabled || busy || !shot || needsSource && !sourceUnit || !sourceSupported || !sourceMatchesShot || !verified || !rows || !!readError || running} onClick={() => void submit()}>开始设计</WorkbenchButton>}
     </WorkbenchDialogActions>}>
+      {!filteredShotId && <label>目标镜头<Select aria-label="AI 单元目标镜头" value={fixedRequest?.shot_id || targetShotId}
+        placeholder="选择一个目标镜头" disabled={busy || !!fixedRequest} style={{ width: '100%' }} onChange={setTargetShotId}
+        options={content.design.direction.shots.map((row, index) => ({ value: row.id, label: `镜头 ${index + 1}：${row.visible_result.text || '未填写'}` }))} /></label>}
+      {!sourceSupported && <Alert type="warning" message="当前 AI 组织仅支持一个覆盖出现项；此单元保留完整范围，不会自动拆分或改选" />}
+      {sourceSupported && sourceUnit && shot && !sourceMatchesShot && <Alert type="warning" message="当前所选单元不属于该目标镜头；请选择对应单元，不会自动改选" />}
       <p>当前镜头：{displayShot?.visible_result.text || (displayShot ? displayShot.id : '请先选择有效镜头')}</p>
       {displayUnitId && <p>所选单元：{displayUnitId}</p>}
       {!displayUnitId && needsSource && <Alert type="warning" message="请先在单元画布明确选择本次来源或目标单元" />}

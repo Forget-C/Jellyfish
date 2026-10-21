@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.core.contracts.directing.instruction_basis import UnitScopeProjection, UnitScopeUse
+from app.core.contracts.directing.unit_scope import UnitScopeProjection, UnitScopeUse
 from app.core.contracts.directing.instruction_check import InstructionCheckResult
 from app.core.contracts.directing.production import ReferenceBinding
 from app.models.llm import Model, Provider

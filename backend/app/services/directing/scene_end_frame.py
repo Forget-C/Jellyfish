@@ -9,7 +9,6 @@ from sqlalchemy import select
 from starlette.datastructures import Headers
 
 from app.core import storage
-from app.core.contracts.directing.common import Source
 from app.core.contracts.directing.scene_end_frame import SceneEndFrameCreate, SceneEndFrameRead
 from app.core.contracts.directing.scene_timeline import SceneMediaCutItem
 from app.models.directing import SceneEndFrameRecord
@@ -37,8 +36,7 @@ class SceneEndFrameService(DirectingStore):
         available = bool(file and file.type == 'image' and file.deleted_at is None and file.delete_requested_at is None)
         return SceneEndFrameRead(id=row.id, version_id=row.version_id, request_id=row.request_id,
             revision=request.expected_revision, clip=clip, file_id=row.file_id, at_ms=row.at_ms,
-            source=Source(kind='file', reference=clip.take_id, version='1', file_id=clip.file_id,
-                media_range={'source_in_ms': row.at_ms, 'source_out_ms': row.at_ms + 1}),
+            source=self.scene_frame_source(row),
             created_at=row.created_at.replace(tzinfo=UTC) if row.created_at.tzinfo is None else row.created_at,
             matches_current=scene_frame_basis(clip) == scene_frame_basis(current), available=available,
             image_url=f'/api/v1/studio/files/{row.file_id}/download' if available else None)

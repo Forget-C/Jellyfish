@@ -1,10 +1,12 @@
-import type { CanvasPoint, CanvasTransform } from '../../../components/canvas/geometry'
+import type { CanvasPoint } from '../../../components/canvas/geometry'
+import { readGraphView } from './graphLayout'
+import type { GraphLayoutNode, GraphSize, GraphView } from './graphLayout'
 import type { DesignObject } from './designWorkspace'
 
-export type DirectorSize = { width: number; height: number }
+export type DirectorSize = GraphSize
 export type DirectorBox = CanvasPoint & DirectorSize
-export type DirectorLayoutNode = { id: string; group?: string; size?: DirectorSize }
-export type DirectorView = { transform: CanvasTransform; positions: Record<string, CanvasPoint>; sizes: Record<string, DirectorSize>; layoutVersion?: number; manuallyPlaced?: string[] }
+export type DirectorLayoutNode = GraphLayoutNode
+export type DirectorView = GraphView
 export const directorGroups: Record<string, string> = { domains: '设计职责', participants: '场景要素与资产', event: '触发事件', camera: '摄影', performance: '表演', situation: '角色情境', blocking: '调度', activity: '镜内活动', continuity: '连续性', continuity_space: '连续性 · 空间', continuity_appearance: '连续性 · 造型', continuity_hands_props: '连续性 · 手部与道具', continuity_environment: '连续性 · 环境', continuity_camera: '连续性 · 摄影', continuity_dialogue_sound: '连续性 · 对白与声音', dialogue: '声音与对白', criterion: '验收要求', shot: '计划镜头', shared: '全场规则', evidence: '关联依据', references: '跨域引用', other: '其他设计', 'scene-global': '全场内容', 'scene-shared': '跨镜共享', 'scene-unlinked': '未关联设计', 'shot-evidence': '节拍、调度与空间', 'shot-left': '场景要素与依据', 'shot-work': '岗位设计', 'shot-shared': '共享引用' }
 export const directorGroup = (id: string) => {
   const kind = id.split(':')[0]
@@ -196,22 +198,9 @@ export function arrangeDirector(nodes: DirectorLayoutNode[], sizes: Record<strin
   return result
 }
 
-/** 浏览器偏好不可信；损坏数据回退到新布局，不影响设计内容或保存。 */
+/** 导演旧缓存沿用固定卡片尺寸和已知布局版本，公共解析不承载此业务规则。 */
 export function readDirectorView(raw: string | null): DirectorView | undefined {
-  try {
-    const value = JSON.parse(raw || 'null')
-    if (!value || value.schema !== 1 || !value.transform || ![value.transform.x, value.transform.y, value.transform.scale].every(Number.isFinite) || value.transform.scale < .15 || value.transform.scale > 2) return
-    if (!value.positions || typeof value.positions !== 'object' || Array.isArray(value.positions) || !value.sizes || typeof value.sizes !== 'object' || Array.isArray(value.sizes)) return
-    if (!Object.values(value.positions).every((point: any) => point && Number.isFinite(point.x) && Number.isFinite(point.y))) return
-    if (!Object.values(value.sizes).every((size: any) => size && size.width === width && Number.isFinite(size.height) && size.height >= 32 && size.height <= 2000)) return
-    return { transform: value.transform, positions: value.positions, sizes: value.sizes,
-      layoutVersion: [2, 3, 4].includes(value.layoutVersion) ? value.layoutVersion : undefined,
-      manuallyPlaced: Array.isArray(value.manuallyPlaced) ? value.manuallyPlaced.filter((id: unknown) => typeof id === 'string') : [] }
-  } catch { return }
-}
-
-export function pruneDirectorView(view: DirectorView, valid: Set<string>, aliases: Record<string, string> = {}): DirectorView {
-  const retain = <T,>(items: Record<string, T>) => Object.fromEntries(Object.entries(items)
-    .map(([id, value]) => [aliases[id] || id, value] as const).filter(([id]) => valid.has(id)))
-  return { ...view, positions: retain(view.positions), sizes: retain(view.sizes), manuallyPlaced: view.manuallyPlaced?.map(id => aliases[id] || id).filter(id => valid.has(id)) }
+  const view = readGraphView(raw)
+  if (!view || Object.values(view.sizes).some(size => size.width !== width || size.height > 2000)) return
+  return { ...view, layoutVersion: [2, 3, 4].includes(view.layoutVersion || 0) ? view.layoutVersion : undefined }
 }

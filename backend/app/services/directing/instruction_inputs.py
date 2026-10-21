@@ -4,7 +4,7 @@ from typing import Iterable
 
 from app.core.contracts.directing.common import Note
 from app.core.contracts.directing.design_scope import design_scope_issues, field_coverage_ids, field_selected, resolved_design_fields
-from app.core.contracts.directing.instruction_basis import UnitScopeProjection, UnitScopeUse
+from app.core.contracts.directing.unit_scope import UnitScopeProjection, UnitScopeUse
 from app.core.contracts.directing.scene_version import EditableGenerationUnit, EditableSceneDesign
 from app.core.contracts.directing.style import StyleRule
 

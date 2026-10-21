@@ -5,7 +5,7 @@ import type { SceneInstructionSuggestionRead } from '../../../services/generated
 import { directingError } from './common'
 
 export type InstructionActivityTarget = {
-  projectId: string; sequenceId: string; versionId: string; unitId: string; shotId: string
+  projectId: string; sequenceId: string; versionId: string; unitId: string
   taskId: string; unitLabel: string; versionTitle: string
 }
 

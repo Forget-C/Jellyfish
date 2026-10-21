@@ -86,6 +86,8 @@ export function SceneDesignPanel({ value, saved, units, disabled, onChange, focu
   const [sideOpen, setSideOpen] = useState(false)
   const [applicabilityFocus, setApplicabilityFocus] = useState<number>()
   const trigger = useRef<HTMLElement>()
+  const editorElement = useRef<HTMLDivElement>(null)
+  const [fieldFocus, setFieldFocus] = useState<{ field: string; serial: number }>()
   const resolved = resolveTarget(value, target)
   const path = resolved || target.path
   const foundObject = target.object && resolved ? designObjects(value).find(row => JSON.stringify(row.path) === JSON.stringify(resolved)) : undefined
@@ -160,6 +162,7 @@ export function SceneDesignPanel({ value, saved, units, disabled, onChange, focu
     if (focusRequest) {
       trigger.current = focusRequest.trigger
       setAddDefaults(focusRequest.defaults || {})
+      setFieldFocus(focusRequest.fieldId && focusRequest.fieldId !== 'applicability' ? { field: focusRequest.fieldId, serial: focusRequest.serial } : undefined)
       setApplicabilityFocus(focusRequest.fieldId === 'applicability' ? focusRequest.serial : undefined)
       navigate(focusRequest.target)
       setSideOpen(true)
@@ -167,6 +170,15 @@ export function SceneDesignPanel({ value, saved, units, disabled, onChange, focu
       if (focusRequest.createPath) add(focusRequest.createPath, designAt(emptyDesign(), focusRequest.createPath)[0], focusRequest.defaults || {})
     }
   }, [focusRequest])
+  useEffect(() => {
+    if (!sideOpen || !fieldFocus) return
+    const frame = requestAnimationFrame(() => {
+      const label = designLabels[fieldFocus.field] || fieldFocus.field
+      const field = editorElement.current?.querySelector<HTMLElement>(`[aria-label="${CSS.escape(label)}"]`)
+      field?.scrollIntoView({ block: 'nearest' }); field?.focus({ preventScroll: true })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [sideOpen, fieldFocus])
   const editorBody = () => <>
       {object && <DesignObjectSummary value={value} saved={saved} object={object} relationshipGraph={relationshipGraph} showText={false} editing onSelectShot={id => { const index = value.direction.shots.findIndex(row => row.id === id); if (index >= 0) onNavigateTarget(targetFor(value, ['direction', 'shots', index]), document.activeElement as HTMLElement); setSideOpen(false) }} />}
       <h3>{pathLabel(pending?.path || path)}</h3>
@@ -193,7 +205,7 @@ export function SceneDesignPanel({ value, saved, units, disabled, onChange, focu
   return <>
     <WorkbenchDetails title={object?.label || '设计卡片'} status={saveStatus} trigger={trigger.current}
       open={sideOpen} onDeactivate={() => setSideOpen(false)} onClose={() => { setSideOpen(false); setPending(undefined); onSideClose?.() }}>
-      {editorBody()}
+      <div ref={editorElement}>{editorBody()}</div>
     </WorkbenchDetails>
   </>
 }
