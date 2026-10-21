@@ -16,6 +16,7 @@ from app.models.llm import ModelCategoryKey, Provider
 from app.models.task import Task
 from app.services.directing.production import ProductionService
 from app.services.directing.scene_design import SceneDesignService
+from app.services.directing.scene_unit_supplement import copy_source_unit_preparation
 from app.services.directing.store import RevisionConflict
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.llm.resolver import get_model_by_category
@@ -75,6 +76,8 @@ def validate_unit_design(args, result):
                         if row['owner'].startswith(owner + ':') and row['purpose'] == 'design'}
                for owner in ('beat', 'event', 'performance', 'activity', 'continuity')}
     original_units = args['organization_inputs']['units']
+    supplement_source = next((EditableGenerationUnit.model_validate(row) for row in original_units
+                              if row['id'] == args.get('source_unit_id')), None)
     protected_ids = set(args.get('protected_unit_ids', []))
     if any(unit.id in protected_ids for unit in result.units):
         raise ValueError('单元方案使用了其他镜头或跨镜头单元身份')
@@ -118,13 +121,18 @@ def validate_unit_design(args, result):
             segments = [part.strip() for part in re.split(r'[；;\n]+', item.action_scope) if part.strip()]
             if not segments or not all(any(segment in text for text in texts) for segment in segments):
                 raise ValueError('执行范围必须摘录已有适用设计；新增创作请先修改导演设计')
+        inherited_duration = (existing is None and supplement_source is not None
+                              and unit.duration_ms in (None, supplement_source.duration_ms))
+        if inherited_duration:
+            unit.duration_ms = supplement_source.duration_ms
         if unit.duration_ms is not None:
-            if args['capabilities']['max_seconds'] is None:
+            if args['capabilities']['max_seconds'] is None and not inherited_duration:
                 raise ValueError('目标模型时长上限未核实，不能填写确定时长')
             if unit.duration_ms % 1000:
                 raise ValueError('单元预计时长必须使用整秒')
-            validate_video_options(provider=args['video_provider'], model=args['target_model_name'],
-                                   input_=VideoGenerationInput(prompt='单元组织参数校验', ratio=unit.ratio, seconds=unit.duration_ms // 1000))
+            if args['capabilities']['max_seconds'] is not None:
+                validate_video_options(provider=args['video_provider'], model=args['target_model_name'],
+                                       input_=VideoGenerationInput(prompt='单元组织参数校验', ratio=unit.ratio, seconds=unit.duration_ms // 1000))
         elif '预计时长待确定' not in unit.missing:
             unit.missing.append('预计时长待确定')
         if unit.ratio not in args['capabilities']['allowed_ratios']:
@@ -133,6 +141,10 @@ def validate_unit_design(args, result):
             missing = '参考待绑定：' + requirement
             if missing not in unit.missing:
                 unit.missing.append(missing)
+        if existing is None and supplement_source is not None:
+            inherited = copy_source_unit_preparation(supplement_source, unit, result.target_model_id,
+                Source(kind='model', reference=args['task_identity'], version='1'), args['capabilities'])
+            unit.missing = inherited.organization.missing
     shot_text = args['organization_inputs']['shot']['visible_result'].get('text') or ''
     scopes = [item.action_scope for unit in result.units for item in unit.coverage]
     if any(not any(part.strip() in scope for scope in scopes)
@@ -273,7 +285,9 @@ class SceneUnitDesignService(SceneDesignService):
             old = existing.get(proposal.id)
             if old and not unit_design_proposal_changed(old, proposal):
                 continue
-            unit = merge_unit_design_proposal(old, proposal, preview.result.target_model_id, source)
+            origin = existing.get(args.get('source_unit_id')) if old is None else None
+            unit = (copy_source_unit_preparation(origin, proposal, preview.result.target_model_id, source, args['capabilities'])
+                    if origin is not None else merge_unit_design_proposal(old, proposal, preview.result.target_model_id, source))
             if old:
                 updates[old.id] = unit
             else:
