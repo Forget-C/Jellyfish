@@ -2,7 +2,7 @@
 
 Status: ready-for-agent
 Blocked by: 03
-Resolution: pending
+Resolution: completed
 
 **What to build:** 用户明确选择原单元，通过统一“AI设计”生成“保留原单元＋新增局部补拍单元”，继承可用输入，确认后继续编译、审查和拍摄。
 
@@ -25,12 +25,12 @@ Resolution: pending
 
 ## 验收标准
 
-- [ ] 浏览器在多单元镜头中选择正确来源，预览原单元保留和新补拍，确认保存后两者身份不同且原单元未改写。
-- [ ] 真实 HTTP 验证继承的参考、参数和依赖保持归属；无效能力组合给出可定位缺项，不能通过空字段或伪造检查绕过。
-- [ ] 来源或参考在生成期间改变使结果失效；目标镜头完整方案中的单元变化按覆盖依据重新校验，其他独立镜头的无关变化不单独导致失效。
-- [ ] 覆盖“原镜头拆信、读信、抬头，只补拍抬头”，编译与检查不扩大范围。
-- [ ] 在具备必要真实准备的测试夹具中完成指令检查、提交拍摄与登记 Take；仅替换外部模型响应，确认没有自动实际覆盖或采用。
-- [ ] 旧任务和检查记录保留原身份；运行中的旧任务继续使用固定输入，不被新增补拍改绑。
+- [x] 浏览器在多单元镜头中选择正确来源，预览原单元保留和新补拍，确认保存后两者身份不同且原单元未改写。
+- [x] 真实 HTTP 验证继承的参考、参数和依赖保持归属；无效能力组合给出可定位缺项，不能通过空字段或伪造检查绕过。
+- [x] 来源或参考在生成期间改变使结果失效；目标镜头完整方案中的单元变化按覆盖依据重新校验，其他独立镜头的无关变化不单独导致失效。
+- [x] 覆盖“原镜头拆信、读信、抬头，只补拍抬头”，编译与检查不扩大范围。
+- [x] 在具备必要真实准备的测试夹具中完成指令检查、提交拍摄与登记 Take；仅替换外部模型响应，确认没有自动实际覆盖或采用。
+- [x] 旧任务和检查记录保留原身份；运行中的旧任务继续使用固定输入，不被新增补拍改绑。
 
 ## 验证与完成要求
 
@@ -49,3 +49,17 @@ Resolution: pending
 
 - 2026-10-21：用户调用 implement-spec，按已提出的六张任务及依赖进入实施。
 
+
+
+### 票据 05 实施与验证
+
+- 2026-10-21：明确 `source_unit_id` 冻结来源；统一 AI 设计保留项与新建项使用 `operation=retain/create`，保留项保持原模型、顺序和配置，新补拍使用本次目标模型与新身份，不增加独立 AI 按钮或模式选择。与票 04 共用 nullable 组织建议合并及完整预览／应用组合。
+- 新单元继承真实正文来源、参数、参考与历史依赖，重置 `instruction_basis_id` 和 `instruction_check_task_id`。预览显示固定来源、继承参数／真实参考／历史依赖／正文及缺项。来源已有 5 秒预计时长保留；模型上限未知显式显示待核实。参考位置／参数冲突保持原值并明确列出；缺实际落幅的历史依赖不会被 AI 状态替代。
+- 仅原出现项适用的设计选择对新身份整体拒绝，既有导演适用范围与原单元不修改。来源、参考或同镜其他单元变化拒绝旧结果；原单元不在列表末位也能完成新增和首次保存。
+- 真实 HTTP 闭环验证“拆信、读信、抬头”仅补拍抬头：编译与六岗检查只消费抬头执行范围，完整镜头仍作为背景；检查确认后真实提交视频任务并登记未审查候选 Take，无实际覆盖和自动采用。旧来源的运行中指令任务仍按原身份与固定范围完成，历史未迁移。
+- TDD：先确认 HTTP 不接受来源字段（422），实现公共来源契约后补拍应用与保存 green；历史依赖预览缺少“待绑定实际落幅与参考”先 red，再追加缺项 green。浏览器先确认所选来源模型未预选，再接入公共 UI green；预览缺明确继承来源先 red，再补只读继承输入展示 green。
+- 通过：backend 目录 `UV_CACHE_DIR=/tmp/jellyfish-uv-cache uv run pytest tests/directing/test_scene_unit_design.py tests/directing/test_scene_unit_supplement.py tests/directing/test_scene_instructions.py tests/directing/test_scene_video.py tests/directing/test_scene_units.py -q`，17 passed；随后补充运行中历史任务断言的 `test_scene_unit_supplement.py` 与 `test_scene_unit_design.py`，5 passed。
+- 通过：backend 目录 `UV_CACHE_DIR=/tmp/jellyfish-uv-cache PYLINTHOME=/tmp/jellyfish-pylint-cache uv run pylint app`，10.00/10；项目根 `pnpm --dir front run typecheck`（最终同步集成后亦通过）。同步集成未改变 Python 应用文件，复用通过结果。
+- 通过：`PLAYWRIGHT_CHANNEL=chrome node front/tests/sceneUnitSupplement.browser.mjs`，独占 8245/4245；真实多单元来源 B、来源模型预选、A/B 保留、新身份补拍、继承 B 的 seed／正文、保存回读刷新，以及当前切到 A 后查看旧任务仍显示 B。桌面／390px 截图已目视检查，窄屏布局稳定等待后无横向溢出且确认按钮在视口内。最终证据 `/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-scene-version-dAH1IQ`。
+- 公共 OpenAPI 与 generated client 随票 04 一并同步；本票无额外契约变更。主 8000 正式 `openapi:update` 和全套 workbench UI 验收按根集成安排执行，不停止用户服务。复用 WorkbenchModal、WorkbenchButton、CanvasTextPreview，无共享样式或组件例外。
+- 完成前已合并最新 `codex-unit-ai-design`（f7ec86a），保留票 04 最终验收记录与浏览器窄屏断言。仅外部模型／存储边界使用确定性替身，不调用付费模型；现有 Browserslist、Tailwind、Node 提示不影响结果。未修改父规格／Hugo，未建 PR。
