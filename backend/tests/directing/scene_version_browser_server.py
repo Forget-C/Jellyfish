@@ -96,6 +96,26 @@ def object_path(key: str) -> Path:
     return path
 
 
+@app.post('/browser-test/scene-versions/{version_id}/duplicate-legacy-activities')
+async def duplicate_legacy_activities_fixture(version_id: str):
+    """仅在隔离数据库构造旧无 ID 重复行，后续编辑与保存走正式 API。"""
+    from app.models.directing import SceneVersionRecord
+
+    async with sessions.begin() as db:
+        version = await db.get(SceneVersionRecord, version_id)
+        content = deepcopy(version.content)
+        content['design']['participants'] = [{'id': 'reader', 'name': '读信者'}]
+        activity = {'participant_id': 'reader', 'ongoing_task': {
+            'state': 'proposal', 'text': '手指停在旧信上',
+            'sources': [{'kind': 'human', 'reference': 'legacy', 'version': '1'}]}}
+        for field in ['depth', 'path', 'attention', 'reaction_delay', 'intensity',
+                      'entrances_exits', 'narrative_support', 'end_state']:
+            activity[field] = {'state': 'unset'}
+        content['design']['staging']['activities'] = [activity, deepcopy(activity)]
+        version.content = content
+    return {'ok': True}
+
+
 @app.put('/browser-test-storage/scene-test/{key:path}')
 async def put_object_fixture(key: str, request: Request):
     """真实上传接口仍经过 boto3 HTTP；只替代外部对象存储，不替代业务服务。"""

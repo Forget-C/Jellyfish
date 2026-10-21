@@ -86,8 +86,10 @@ function DirectorDesignCanvasBody({ projectId, sequenceId, versionId, content, s
   const overviewGraph = useMemo(() => projection.view(), [projection])
   const allObjects = projection.objects
   // 仅供当前编辑重进；这些对象不进入服务端 graph 的卡片或成员。
-  const pendingObjects = useMemo(() => designObjects(content.design).filter(node => !projection.byKey.has(node.key)),
-    [content.design, projection])
+  const pendingObjects = useMemo(() => designObjects(content.design).filter(node => {
+    const savedNode = projection.byKey.get(node.key)
+    return !savedNode || projection.unavailable.has(savedNode.id)
+  }), [content.design, projection])
   const sourceNode = directorGraph?.nodes.find(node => node.kind === 'source')
   const identity = (node: DesignObject, design = content.design) => projection.byKey.get(node.key)?.id || designObjectLayoutId(design, node)
   const target = (id?: string) => allObjects.find(node => identity(node) === id)
@@ -174,11 +176,15 @@ function DirectorDesignCanvasBody({ projectId, sequenceId, versionId, content, s
       go({ ...state, focus: undefined }, undefined, true)
     }
   }, [state.focus, content.design])
-  const edit = (node: DesignObject, trigger: HTMLElement, focusApplicability = false, fieldId?: string) => {
-    if (projection.unavailable.has(identity(node))) { setUnavailable(true); return }
+  // 当前选择器明确指定当前行，可重新编辑尚不能安全映射到旧图的历史对象。
+  const editCurrentObject = (node: DesignObject, trigger: HTMLElement, focusApplicability = false, fieldId?: string) => {
     const next = { ...targetFor(content.design, node.path, true), object: true, fields: node.fields, label: node.fields ? node.label : undefined }
     setEditingTarget(next)
     setFocusRequest({ target: next, trigger, serial: Date.now(), side: true, fieldId: focusApplicability ? 'applicability' : fieldId })
+  }
+  const edit = (node: DesignObject, trigger: HTMLElement, focusApplicability = false, fieldId?: string) => {
+    if (projection.unavailable.has(identity(node))) { setUnavailable(true); return }
+    editCurrentObject(node, trigger, focusApplicability, fieldId)
   }
   const changeDesign = (next: EditableSceneDesign_Output) => {
     const nextObjects = designObjects(next)
@@ -371,7 +377,7 @@ function DirectorDesignCanvasBody({ projectId, sequenceId, versionId, content, s
           options={pendingObjects.map(node => ({ value: node.key, label: node.label }))}
           onChange={key => {
             const node = pendingObjects.find(candidate => candidate.key === key)
-            if (node) { setInfoOpen(false); edit(node, document.activeElement instanceof HTMLElement ? document.activeElement : document.body) }
+            if (node) { setInfoOpen(false); editCurrentObject(node, document.activeElement instanceof HTMLElement ? document.activeElement : document.body) }
           }} />
       </section>}
       <label htmlFor="director-object-locator">定位当前视图对象</label>

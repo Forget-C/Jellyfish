@@ -31,12 +31,12 @@ description: "后端投影、共同校验、前端渲染与编辑保存的复用
 - 从 OpenAPI generated client 消费具体 graph 类型；业务节点、关系、摘要、计数、问题及视图成员由后端提供，前端不从业务数组重新拼图。先核对 graph 与版本快照，失败显示明确错误。
 - 复用 `GraphCanvas`、`GraphSubgraphPreview`、`graphLayout`、`useGraphLayout` 与 `useGraphBrowse`。前端负责几何、视口、缓存和浏览历史；业务布局尺寸与旧缓存迁移保留在对应适配器中。
 - 使用返回的视图和定位地址导航，不解析 ID 前缀或用第一 coverage 替代精确单元。镜头筛选只选择后端视图，不裁剪完整单元子图。
-- 摘要消费已保存 graph；详情按稳定业务 ID 编辑当前暂存内容。旧 graph 的对象若已在当前编辑中移除，提示不可用，不选替代对象。未保存新对象继续沿用当前编辑入口，保存后获得后端 graph。
+- 摘要消费已保存 graph；详情按稳定业务 ID 编辑当前暂存内容。旧 graph 的对象若已在当前编辑中移除，提示不可用，不选替代对象。未保存新对象继续沿用当前编辑入口，保存后获得后端 graph。无 ID 历史行若在保存基线中重复，不把编辑后剩余的唯一同内容行当作身份；旧卡暂不可编辑，使用“编辑待同步对象”明确选择当前行。
 - 复用 `WorkbenchDetails`、主题和现有详情。需要定位输入时传入 `focusTarget`，由详情在实际可见后聚焦字段，避免先对隐藏内容设置焦点。
 - 保存统一走 `CanvasSequenceWorkbench` 现有串行队列、5 秒周期及手动入口；不要为 graph、配置卡或新画布另建保存接口、草稿实体或自动提交链。
 
 ## 验证与接口同步
 
-共同契约测试应覆盖两个具体投影器和非法结构；版本 HTTP 用例核对读取／保存快照、实际来源与外部证据变化。真实浏览器验证导航、详情编辑、旧图与当前输入分离、失败恢复和精确回跳。当前回归入口包括 `test_canvas_graph.py`、`test_scene_dependencies.py`、`sceneCanvasGraph.browser.mjs` 和 `scenePeriodicSave.browser.mjs`。
+共同契约测试应覆盖两个具体投影器和非法结构；版本 HTTP 用例核对读取／保存快照、实际来源与外部证据变化。真实浏览器验证导航、详情编辑、旧图与当前输入分离、失败恢复和精确回跳。当前回归入口包括 `test_canvas_graph.py`、`test_scene_dependencies.py`、`sceneCanvasGraph.browser.mjs`、`sceneLegacyGraph.browser.mjs` 和 `scenePeriodicSave.browser.mjs`。
 
 对外 schema 变化后，先核实 8000 端口加载当前工作区后端，再从仓库根目录运行 `pnpm --dir front run openapi:update`。随后执行受影响测试、前端 typecheck 和后端 Pylint；工作台展示与键盘、窄屏检查遵循[工作台前端设计标准](/docs/guide/workbench-design/)。

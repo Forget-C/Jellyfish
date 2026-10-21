@@ -13,8 +13,12 @@ export function directorCanvasProjection(authority: DirectorCanvasGraph, current
     if (node.kind === 'missing') return [{ key: node.object.id, label: node.title, kind: 'missing', path: [] }]
     const path = node.object.path || []
     const binding = node.record_id ? { path, identity: { id: node.record_id } } : targetFor(saved, path)
-    let resolved = resolveTarget(current, binding)
     const row = typeof path[path.length - 1] === 'number'
+    const savedRows = row ? designAt(saved, path.slice(0, -1)) as unknown[] : []
+    const snapshot = designObjectSnapshot(designAt(saved, path))
+    // 旧快照原本重复时，另一行变成唯一匹配也不能建立身份。
+    const ambiguous = !node.object.stable && row && savedRows.filter(item => designObjectSnapshot(item) === snapshot).length > 1
+    let resolved = ambiguous ? undefined : resolveTarget(current, binding)
     // 同一修订且整个列表仍一致时，明确点击的历史出现项可按原位置编辑。
     if (!resolved && !node.object.stable && row && designObjectSnapshot(designAt(current, path.slice(0, -1))) ===
       designObjectSnapshot(designAt(saved, path.slice(0, -1)))) resolved = path
