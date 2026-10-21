@@ -165,4 +165,4 @@
 
 长摘要浏览器先红复现缺项与卡内按钮被裁切（7aJF4F）。使用已有紧凑字段样式与固定诊断／操作空间，AMb9Mv 验证桌面／390px 均完整显示两行内摘要和诊断；卡面预览 2 项，详情仍保留全部 5 个真实参考。完整 graph 回归 RMXkbB 通过。当前界面已人工查看窄屏截图，未改保存机制、schema 或业务范围。
 
-后端完整 789 passed、19 skipped（需显式外部 MySQL／对象存储环境）；Pylint 10.00，前端纯逻辑 182 passed、typecheck 和 diff --check 通过。接口未变，不重新生成 OpenAPI。修复提交与两轴复查待收尾。
+后端完整 789 passed、19 skipped（需显式外部 MySQL／对象存储环境）；Pylint 10.00，前端纯逻辑 182 passed、typecheck 和 diff --check 通过。接口未变，不重新生成 OpenAPI。修复提交 86c2e5d；规范／规格独立复查均通过、无新增发现，规格审查者另独立运行 graph 27 passed。最终长摘要／完整参考浏览器 yAklVb 通过。所有测试句柄已终态；最终记录另提交。
