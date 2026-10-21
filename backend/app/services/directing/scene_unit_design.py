@@ -9,7 +9,7 @@ from sqlalchemy import select
 from app.core.contracts.directing.common import Note, Source
 from app.core.contracts.directing.scene_version import EditableGenerationUnit, UnitOrganization, SceneVersionContent
 from app.core.contracts.directing.design_scope import resolved_design_fields
-from app.core.contracts.directing.scene_unit_design import SceneUnitDesignRequest, SceneUnitDesignResult, SceneUnitDesignSuggestionRead, SceneUnitDesignPreview, SceneUnitDesignBlocker
+from app.core.contracts.directing.scene_unit_design import UNIT_DESIGN_REFERENCE_REQUIREMENTS, SceneUnitDesignRequest, SceneUnitDesignResult, SceneUnitDesignSuggestionRead, SceneUnitDesignPreview, SceneUnitDesignBlocker
 from app.core.integrations.video_capabilities import resolve_video_capability, validate_video_options
 from app.core.contracts.video_generation import VideoGenerationInput
 from app.models.llm import ModelCategoryKey, Provider
@@ -141,6 +141,11 @@ def validate_unit_design(args, result):
             unit.missing.append('预计时长待确定')
         if unit.ratio not in args['capabilities']['allowed_ratios']:
             raise ValueError('单元画幅不在目标视频模型已核实能力内')
+        origin = existing or supplement_source
+        previous_requirements = origin.organization.reference_requirements if origin and origin.organization else []
+        if unit.reference_requirements is not None and unit.reference_requirements != previous_requirements:
+            if any(requirement not in UNIT_DESIGN_REFERENCE_REQUIREMENTS for requirement in unit.reference_requirements):
+                raise ValueError('参考需求只能选择主体或帧参考的待准备类别；新增创作请先修改导演设计')
         for requirement in unit.reference_requirements or []:
             missing = '参考待绑定：' + requirement
             if missing not in unit.missing:

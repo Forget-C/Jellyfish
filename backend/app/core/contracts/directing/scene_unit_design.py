@@ -9,6 +9,13 @@ from app.core.contracts.directing.design_applicability import DesignSubject
 from app.core.contracts.directing.scene_version import EditableCoverageItem, SceneVersionContent
 
 
+# 仅表达已有主体／帧参考槽位的待准备类别，不携带新的动作或镜头要求。
+UNIT_DESIGN_REFERENCE_REQUIREMENTS = (
+    '人物身份参考', '需要人物身份参考', '主体图片参考', '主体视频参考',
+    '首帧参考', '尾帧参考', '关键帧参考',
+)
+
+
 class SceneUnitDesignRequest(Contract):
     """冻结当前编辑、目标镜头及视频模型；model_id 单独指定组织文本模型。"""
 

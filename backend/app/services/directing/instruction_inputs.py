@@ -112,10 +112,11 @@ def unit_scope(design: EditableSceneDesign, unit: EditableGenerationUnit,
             add(constraints, f'unit:{unit.id}', field, getattr(unit.organization, field),
                 '当前可编辑组织状态要求（原 AI 依据单独追溯）',
                 coverage_ids=[item.id for item in unit.coverage], phase='video')
-        for index, requirement in enumerate(unit.organization.reference_requirements):
-            add(constraints, f'unit:{unit.id}', f'reference_requirement:{index}', requirement,
-                '待准备参考要求，不构成实际参考绑定',
-                coverage_ids=[item.id for item in unit.coverage], phase='video')
+        # 待准备文字是诊断，不能作为视频必须执行的动作或镜头约束。
+        for requirement in unit.organization.reference_requirements:
+            missing = '参考待绑定：' + requirement
+            if missing not in unresolved:
+                unresolved.append(missing)
 
     participants = set()
     for shot_id in sorted(shot_ids):
