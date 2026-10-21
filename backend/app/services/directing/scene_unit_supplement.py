@@ -12,6 +12,8 @@ def copy_source_unit_preparation(source, proposal, target_model_id, organization
         proposal = proposal.model_copy(update={'duration_ms': source.duration_ms})
     unit = merge_unit_design_proposal(inherited, proposal, target_model_id, organization_source)
     missing = list(unit.organization.missing)
+    if unit.duration_ms is not None and capabilities['max_seconds'] is None:
+        missing.append('继承来源预计时长；目标模型时长上限未核实')
     unsupported = set(unit.parameters) - {'seed'}
     if unsupported:
         missing.append('补拍参数与执行器冲突：' + ', '.join(sorted(unsupported)))
