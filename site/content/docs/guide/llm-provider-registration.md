@@ -20,7 +20,7 @@ description: "如何在代码中注册内置供应商能力，并与异步任务
 
 3. **出站 HTTP 适配层（`app/core/integrations/`）**  
    OpenAI / 火山等供应商的 URL、请求体、响应解析集中在 `app/core/integrations/openai/`与 `app/core/integrations/volcengine/`（图片、视频分文件）；`ImageGenerationTask` / `VideoGenerationTask` 只做生命周期与轮询节奏，**不**直接拼 httpx 细节。  
-   与任务输入输出共用的 Pydantic 模型放在 `app/core/tasks/image_generation_types.py`、`video_generation_types.py`，避免 `tasks` 与 `integrations` 循环导入。
+   与任务输入输出共用的 Pydantic 模型放在 `app/core/contracts/image_generation.py`、`video_generation.py`，避免 `tasks` 与 `integrations` 循环导入。
 
 应用启动时由 `app/bootstrap.py` 的 `bootstrap_all_registries()` **先** bootstrap供应商能力，**再** bootstrap 任务适配器，保证解析供应商 key 时注册表已就绪。
 
@@ -82,3 +82,22 @@ description: "如何在代码中注册内置供应商能力，并与异步任务
 ## 测试提示
 
 完整 `app.main` 会加载含 Celery 依赖的路由链。仅验证 LLM 路由行为时，可使用测试辅助模块 `backend/tests/support/llm_api_app.py` 构建只挂载 `/api/v1/llm` 的应用，避免轻量环境缺少可选依赖导致导入失败。
+
+## DreamAPI 图片/视频 BYOK
+
+DreamAPI 已作为内置供应商注册，能力范围是本仓库共享任务契约实际能表达的模型和输入模式；它不是文本模型供应商。实现细节与已覆盖模型见 [DreamAPI 生成适配器](/docs/architecture/dreamapi-provider/)。
+
+### 在产品中配置
+
+1. 打开 Jellyfish 的 **模型管理**（`/models`）→ **供应商** → **添加供应商**，选择 `DreamAPI`。
+2. 填写 API Key；通用 Base URL 使用 `https://api.newportai.com`。图片/视频 Base URL 留空即可继承通用 URL；需要覆盖时分别填写。
+3. 到 **模型** 新增模型记录，按上方架构页的模型名填写名称，并选择对应的 `image` 或 `video` 类别和 DreamAPI 供应商。
+4. 到 **设置**，按需选择默认图片/视频模型。
+
+管理页面的 API Key 输入会发到 Jellyfish 后端并保存在现有 Provider 配置中；Provider 读取响应不包含 `api_key` / `api_secret`。生成请求由 Jellyfish 服务端携带 Bearer Key 发出，输入凭据应通过受信任的 HTTPS 管理入口提交，不要放进代码、任务提示词、问题截图或日志。当前通用图片/视频任务创建流程会把 `api_key` 一并序列化进数据库任务 `payload.run_args`，供异步 worker 使用；这是现有任务执行架构的敏感数据静态存储边界，部署方需限制数据库、备份与任务载荷的访问权限。该字段未实现加密或自动脱敏，不应将其描述为“仅在 Provider 表中保存”。
+
+### 使用限制
+
+- Seedream、Flux、DreamImage、Nano Banana、GPT Image 与支持的图片编辑模式复用 `ImageGenerationInput`；本地 base64 参考图片会先由服务端上传到 DreamAPI Storage，再提交生成任务。HTTPS 图片 URL 直接传给 DreamAPI。
+- DreamVideo、Wan 2.1、Seedance 复用 `VideoGenerationInput`，仅映射文本、首帧和尾帧。当前输入契约没有分辨率字段，因此 Seedance/Wan 使用适配器固定的兼容档位；DreamVideo 不显式传分辨率。
+- 任务结果继续走现有素材持久化链路：图片进入素材资产，分镜视频进入生成视频素材。适配层和测试使用 MockTransport，不会对真实 DreamAPI 发起付费请求。

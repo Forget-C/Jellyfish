@@ -50,9 +50,18 @@ def test_validate_video_options_rejects_capability_mismatch() -> None:
         capability=VideoModelCapability(supports_seed=False),
     )
     try:
-        inp = VideoGenerationInput(prompt="test", model="seedream-video-v1", seed=7)
+        inp = VideoGenerationInput(prompt="test", model="seedream-video-v1", ratio="16:9", seed=7)
         with pytest.raises(ValueError) as exc_info:
             validate_video_options(provider="volcengine", model=inp.model, input_=inp)
         assert "seed is not supported" in str(exc_info.value)
     finally:
         clear_video_model_capability_overrides(provider="volcengine")
+
+
+def test_dreamvideo_capability_limits_match_dreamapi_contract() -> None:
+    capability = resolve_video_capability(provider="dreamapi", model="dreamvideo-3.0")
+
+    assert capability.allowed_ratios == {"16:9", "4:3", "1:1", "3:4", "9:16"}
+    assert capability.min_seconds == 3
+    assert capability.max_seconds == 15
+    assert capability.supports_watermark is False

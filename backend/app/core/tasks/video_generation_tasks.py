@@ -1,4 +1,4 @@
-"""视频生成任务（Task）：对接 OpenAI Videos API 与火山方舟内容生成。
+"""视频生成任务（Task）：对接 OpenAI、火山方舟与 DreamAPI 视频生成接口。
 
 HTTP 细节在 `app.core.integrations`；本模块保留轮询节奏与 BaseTask 契约。
 """
@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 from typing import Any, AsyncIterator
 
 from app.core.integrations.openai.video import OpenAIVideoApiAdapter
+from app.core.integrations.dreamapi.video import DreamAPIVideoApiAdapter
 from app.core.integrations.volcengine.video import VolcengineVideoApiAdapter
 from app.core.contracts.provider import ProviderConfig
 from app.core.tasks.registry import resolve_task_adapter
@@ -22,6 +23,7 @@ __all__ = [
     "AbstractVideoGenerationTask",
     "OpenAIVideoGenerationTask",
     "VolcengineVideoGenerationTask",
+    "DreamAPIVideoGenerationTask",
     "VideoGenerationTask",
 ]
 
@@ -206,8 +208,41 @@ class VolcengineVideoGenerationTask(AbstractVideoGenerationTask):
         )
 
 
+class DreamAPIVideoGenerationTask(AbstractVideoGenerationTask):
+    """DreamAPI video task; the adapter handles route mapping, submission and polling."""
+
+    def __init__(
+        self,
+        *,
+        adapter: DreamAPIVideoApiAdapter | None = None,
+        provider_config: ProviderConfig,
+        input_: VideoGenerationInput,
+        poll_interval_s: float = 2.0,
+        timeout_s: float = 120.0,
+    ) -> None:
+        super().__init__(
+            provider_config=provider_config,
+            input_=input_,
+            poll_interval_s=poll_interval_s,
+            timeout_s=timeout_s,
+        )
+        self._adapter = adapter or DreamAPIVideoApiAdapter()
+        self._deferred: VideoGenerationResult | None = None
+
+    async def _create_task(self) -> None:
+        self._deferred = await self._adapter.generate(
+            cfg=self._cfg,
+            input_=self._input,
+            timeout_s=self._timeout_s,
+        )
+
+    async def _poll_and_get_result(self) -> VideoGenerationResult:
+        assert self._deferred is not None
+        return self._deferred
+
+
 class VideoGenerationTask(BaseTask):
-    """按 provider 分派到 OpenAI / 火山实现；对外构造函数签名保持不变。"""
+    """按 provider 分派到 OpenAI / 火山 / DreamAPI 实现；保持原有构造接口。"""
 
     def __init__(
         self,
@@ -252,6 +287,21 @@ class VideoGenerationTask(BaseTask):
         timeout_s: float = 120.0,
     ) -> AbstractVideoGenerationTask:
         return VolcengineVideoGenerationTask(
+            provider_config=provider_config,
+            input_=input_,
+            poll_interval_s=poll_interval_s,
+            timeout_s=timeout_s,
+        )
+
+    @staticmethod
+    def _build_dreamapi_impl(
+        *,
+        provider_config: ProviderConfig,
+        input_: VideoGenerationInput,
+        poll_interval_s: float = 2.0,
+        timeout_s: float = 120.0,
+    ) -> AbstractVideoGenerationTask:
+        return DreamAPIVideoGenerationTask(
             provider_config=provider_config,
             input_=input_,
             poll_interval_s=poll_interval_s,

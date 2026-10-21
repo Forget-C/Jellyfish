@@ -26,6 +26,13 @@ def bootstrap_builtin_providers() -> None:
                 default_base_url="https://ark.cn-beijing.volces.com/api/v3",
             ),
             ProviderSpec(
+                key="dreamapi",
+                display_name="DreamAPI",
+                aliases=("dreamapi", "newportai"),
+                supported_categories=(ModelCategoryKey.image, ModelCategoryKey.video),
+                default_base_url="https://api.newportai.com",
+            ),
+            ProviderSpec(
                 key="aliyun_bailian",
                 display_name="阿里百炼",
                 aliases=("阿里百炼", "aliyun", "bailian", "dashscope"),

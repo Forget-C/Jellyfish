@@ -43,9 +43,9 @@ class ImageGenerationInput(BaseModel):
     prompt: str = Field(..., description="文本提示词")
     images: list[InputImageRef] = Field(
         default_factory=list,
-        description="参考图片列表：存在时 OpenAI 走 /images/edits，火山映射为 image[]",
+        description="参考图片列表：OpenAI 可用于图像编辑；DreamAPI 会将本地 data URL 上传后映射到上游参数",
     )
-    model: Optional[str] = Field(None, description="模型名称（如 gpt-image-1.5 / doubao-seedream-*）")
+    model: Optional[str] = Field(None, description="模型名称（如 gpt-image-2 / seedream-5.0-pro）")
     target_ratio: ImageTargetRatio | None = Field(
         None,
         description="目标画幅比例，用于视频参考帧等需要与视频构图对齐的场景",
@@ -70,7 +70,7 @@ class ImageGenerationInput(BaseModel):
     )
     seed: Optional[int] = Field(
         None,
-        description="随机种子；火山 ImageGenerations 支持该参数，OpenAI 目前忽略",
+        description="随机种子；是否支持取决于供应商和模型，DreamAPI Seedream/Flux 等图片模型支持",
     )
     watermark: Optional[bool] = Field(
         None,
@@ -78,7 +78,7 @@ class ImageGenerationInput(BaseModel):
     )
     response_format: ResponseFormat = Field(
         "url",
-        description="返回格式：url 或 b64_json（OpenAI 语义）；火山引擎可忽略或仅支持 url",
+        description="返回格式：url 或 b64_json（OpenAI 语义）；DreamAPI 适配器返回 URL",
     )
 
     @model_validator(mode="after")
@@ -110,7 +110,7 @@ class ImageGenerationResult(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     images: list[ImageItem] = Field(..., description="图片列表")
-    provider: ProviderKey = Field(..., description="供应商标识：openai | volcengine")
+    provider: ProviderKey = Field(..., description="供应商标识：openai | volcengine | dreamapi")
     provider_task_id: Optional[str] = Field(
         None,
         description="供应商内部任务 ID（若存在），用于调试/追踪",
