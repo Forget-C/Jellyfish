@@ -12,6 +12,7 @@ import { makeWorkspace } from './directing-fixtures.mjs'
 const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await mkdtemp(join(tmpdir(), 'jellyfish-director-layout-'))
 const api = 'http://127.0.0.1:8198'
+const sourceId = 'backend-source-node'
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.directing.scene_version_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', SCENE_BROWSER_TEST_DATABASE: join(output, 'browser.sqlite'), SCENE_BROWSER_TEST_PORT: '8198' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -66,10 +67,40 @@ try {
   await page.addInitScript(({ sequence, version }) => {
     window.__ENV = { BACKEND_URL: window.location.origin }
     localStorage.setItem('jellyfish:scene-autosave:local-user', 'off')
-    localStorage.setItem(`jellyfish:director-shots:local-user:canvas-project:${sequence}:${version}:view:overview`, JSON.stringify({ schema: 1, layoutVersion: 2,
+    const layoutKey = `jellyfish:director-shots:local-user:canvas-project:${sequence}:${version}:view:overview`
+    if (!localStorage.getItem(layoutKey)) localStorage.setItem(layoutKey, JSON.stringify({ schema: 1, layoutVersion: 2,
       transform: { x: 566, y: -72, scale: .4 }, positions: { '原文依据': { x: 0, y: 336 }, 'shot:shot1': { x: 0, y: 1604 }, 'shot:shot2': { x: 424, y: 1604 } },
       sizes: { '原文依据': { width: 360, height: 240 }, 'shot:shot1': { width: 360, height: 276 }, 'shot:shot2': { width: 360, height: 276 } } }))
   }, { sequence, version: version.id })
+  await page.route('**/api/v1/studio/projects/canvas-project/directing/sequences/**/versions**', async route => {
+    if (route.request().method() !== 'GET') return route.continue()
+    const response = await route.fetch()
+    const body = await response.json()
+    for (const row of Array.isArray(body.data) ? body.data : [body.data]) {
+      const graph = row?.director_graph
+      if (!graph) continue
+      const source = graph.nodes.find(node => node.kind === 'source')
+      const previousId = source.id
+      source.id = sourceId
+      const address = target => { if (target?.node_id === previousId) target.node_id = sourceId }
+      for (const node of graph.nodes) {
+        address(node.edit_target)
+        node.sources.forEach(address)
+        node.issues.forEach(issue => address(issue.target))
+      }
+      for (const edge of graph.edges) {
+        if (edge.source === previousId) edge.source = sourceId
+        if (edge.target === previousId) edge.target = sourceId
+        edge.sources.forEach(address)
+      }
+      for (const view of graph.views) {
+        if (view.anchor_id === previousId) view.anchor_id = sourceId
+        view.members.forEach(member => { if (member.node_id === previousId) member.node_id = sourceId })
+      }
+      graph.issues.forEach(issue => address(issue.target))
+    }
+    await route.fulfill({ response, json: body })
+  })
   await page.goto(`http://127.0.0.1:4198/projects/canvas-project/chapters/canvas-chapter/sequences/${sequence}?version=${version.id}`)
   const surface = page.getByLabel('导演画布视口', { exact: true })
   const node = id => page.locator(`[data-canvas-node="${id}"]`)
@@ -126,13 +157,13 @@ try {
   await node('shot:shot1').getByRole('button', { name: /进入子图/ }).focus()
   assert.equal(await page.locator('.director-structure-guide[data-guide-to="shot:shot1"]').getAttribute('data-active'), 'true')
   const overviewPositions = (await snapshot()).positions
-  assert.ok(overviewPositions['shot:shot1'].x > overviewPositions['原文依据'].x)
-  assert.ok(overviewPositions['shot:shot2'].y > overviewPositions['原文依据'].y)
-  assert.equal(overviewPositions['原文依据'].y, 0)
-  await page.waitForFunction(({ sequence, version }) => {
+  assert.ok(overviewPositions['shot:shot1'].x > overviewPositions[sourceId].x)
+  assert.ok(overviewPositions['shot:shot2'].y > overviewPositions[sourceId].y)
+  assert.equal(overviewPositions[sourceId].y, 0)
+  await page.waitForFunction(({ sequence, version, sourceId }) => {
     const saved = JSON.parse(localStorage.getItem(`jellyfish:director-shots:local-user:canvas-project:${sequence}:${version}:view:overview`) || 'null')
-    return saved?.layoutVersion === 4 && saved.positions['shot:shot2'].y > saved.positions['原文依据'].y && saved.transform.y >= 64
-  }, { sequence, version: version.id })
+    return saved?.layoutVersion === 4 && saved.positions['shot:shot2'].y > saved.positions[sourceId]?.y && saved.transform.y >= 64
+  }, { sequence, version: version.id, sourceId })
   assert.equal(await page.locator('[data-canvas-node^="domain:"]').count(), 0)
   assert.equal(await node('beat:beat1').count(), 1, 'shared beat has one original in overview')
   assert.equal(await page.locator('[data-canvas-node^="camera:"]').count(), 0, 'single-shot work belongs in its shot subgraph')
@@ -173,6 +204,19 @@ try {
   await page.goto(`http://127.0.0.1:4198/projects/canvas-project/chapters/canvas-chapter/sequences/${sequence}?version=${version.id}&directorView=shot&directorScope=shot&directorShot=shot1&directorTarget=beat:beat1`)
   await page.locator('[data-layout-view="overview"]').waitFor()
   assert.equal(new URL(page.url()).searchParams.get('directorTarget'), 'beat:beat1')
+  await locate('原文依据')
+  const beforeSourceMove = (await snapshot()).positions[sourceId]
+  await node(sourceId).locator('.director-canvas-title button').first().press('ArrowRight')
+  const movedSource = (await snapshot()).positions[sourceId]
+  assert.ok(movedSource.x > beforeSourceMove.x, 'opaque source node can be moved through the public drag handle')
+  await page.waitForFunction(({ sequence, version, sourceId, moved }) => {
+    const saved = JSON.parse(localStorage.getItem(`jellyfish:director-shots:local-user:canvas-project:${sequence}:${version}:view:overview`) || 'null')
+    return saved?.positions[sourceId]?.x === moved.x && saved?.positions[sourceId]?.y === moved.y
+  }, { sequence, version: version.id, sourceId, moved: movedSource })
+  await page.reload()
+  await page.locator('[data-layout-view="overview"]').waitFor()
+  await settled()
+  assert.deepEqual((await snapshot()).positions[sourceId], movedSource, 'opaque source identity preserves its manual position after reload')
   await page.setViewportSize({ width: 390, height: 844 })
   await layoutAction('重新整理布局')
   await noOverlaps()

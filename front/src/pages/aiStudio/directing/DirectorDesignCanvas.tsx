@@ -171,7 +171,7 @@ function DirectorDesignCanvasBody({ projectId, sequenceId, versionId, content, s
     onExternalFocusHandled()
   }, [externalFocus?.serial])
   useEffect(() => {
-    if (state.focus && state.focus !== '原文依据' && !target(state.focus)) {
+    if (state.focus && state.focus !== sourceNode?.id && !target(state.focus)) {
       setUnavailable(true)
       go({ ...state, focus: undefined }, undefined, true)
     }
@@ -241,8 +241,8 @@ function DirectorDesignCanvasBody({ projectId, sequenceId, versionId, content, s
   const editingAway = editingNode && editingHome !== undefined && (scope === 'all' ? editingHome !== 'global' && editingHome !== 'shared' && (editingHome !== 'unlinked' || !unlinkedOpen)
     : editingHome !== activeShotId)
   const visibleNodes = scope === 'all' && unlinkedOpen ? [...graph.nodes, ...graph.unlinked] : graph.nodes
-  const focusStillVisible = !state.focus || state.focus === '原文依据' || visibleNodes.some(node => identity(node) === state.focus)
-  const visibleFocus = focusStillVisible ? state.focus : scope === 'shot' ? currentShot && identity(currentShot) : '原文依据'
+  const focusStillVisible = !state.focus || state.focus === sourceNode?.id || visibleNodes.some(node => identity(node) === state.focus)
+  const visibleFocus = focusStillVisible ? state.focus : scope === 'shot' ? currentShot && identity(currentShot) : sourceNode?.id
   const objects: DirectorCanvasObject[] = visibleNodes.map(node => {
     const serverCard = projection.byKey.get(node.key)!
     const home = graph.location(node.key)
@@ -290,7 +290,7 @@ function DirectorDesignCanvasBody({ projectId, sequenceId, versionId, content, s
         </>}
       </section> }
   })
-  if (scope === 'all' && sourceNode) objects.unshift({ id: sourceNode.id, label: sourceNode.title, title: sourceNode.title, onInspect: undefined, related: false, content: <section className="canvas-workbench-card">{source}</section> })
+  if (scope === 'all' && sourceNode) objects.unshift({ id: sourceNode.id, label: sourceNode.title, title: sourceNode.title, group: overviewGraph.members.get(sourceNode.id)?.group, size: { width: 360, height: 240 }, onInspect: undefined, related: false, content: <section className="canvas-workbench-card">{source}</section> })
   const relations = graph.edges.filter(edge => visibleNodes.some(node => node.key === edge.from) && visibleNodes.some(node => node.key === edge.to)).map(edge => ({ ...edge,
     from: identity(allObjects.find(node => node.key === edge.from) || { key: edge.from, path: [], kind: '', label: '' }),
     to: identity(allObjects.find(node => node.key === edge.to) || { key: edge.to, path: [], kind: '', label: '' }),
@@ -331,10 +331,11 @@ function DirectorDesignCanvasBody({ projectId, sequenceId, versionId, content, s
       tools={[{ label: '关联项目资产', onClick: () => setAssetTarget('create') }]}
       onInspectRelation={relation => { setInspectedRelation(relation); setInfoOpen(true) }}
       guides={graph.guides}
-      layoutScope={{ storageKey, viewId, anchorId: scope === 'shot' ? currentShot ? identity(currentShot) : '' : '原文依据',
-        identityAliases,
+      layoutScope={{ storageKey, viewId, anchorId: graph.metadata?.anchor_id || '',
+        // 旧原文缓存键只在业务适配层迁移；绘制与有效身份使用后端地址。
+        identityAliases: { ...(sourceNode ? { '原文依据': sourceNode.id } : {}), ...identityAliases },
         validViewIds: directorGraph.views.map(view => view.parent_id == null ? 'overview' : view.id),
-        validIds: ['原文依据', ...allObjects.map(node => identity(node))].filter(id => !id.includes(':ambiguous:')),
+        validIds: directorGraph.nodes.map(node => node.id),
         onInvalidTarget: () => setUnavailable(true) }}
       focusTarget={visibleFocus ? { nodeId: visibleFocus, fieldId: '', serial: focusSerial.current, restore } : undefined}>
       {null}

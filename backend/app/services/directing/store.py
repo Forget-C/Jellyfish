@@ -245,20 +245,21 @@ class DirectingStore:
         """读取重新校验强类型内容，并核对场次及项目归属。"""
         sequence = await self.sequence(sequence_id)
         row, content = await self._scene_version_snapshot(sequence, version_id)
-        origin = await self.db.get(SceneCopyOrigin, row.id)
-        relationships = scene_relationship_graph(row.id, row.revision, content)
-        canvas = await CanvasReadContext.load(self.db, self.project_id, row.id, row.revision,
+        # 依赖核验可能刷新同一 ORM 行；响应元数据必须与本次读取的内容一起固定。
+        snapshot = dict(id=row.id, title=row.title, revision=row.revision,
+            last_save_request_id=row.last_save_request_id, created_at=row.created_at, updated_at=row.updated_at)
+        origin = await self.db.get(SceneCopyOrigin, snapshot['id'])
+        relationships = scene_relationship_graph(snapshot['id'], snapshot['revision'], content)
+        canvas = await CanvasReadContext.load(self.db, self.project_id, snapshot['id'], snapshot['revision'],
             content, relationships, lambda name: self.applicable_style(
                 content.design.style_revision_id, sequence.id, name),
             lambda: self.canvas_dependency_evidence(sequence.id, version_id, content))
         director = director_graph(canvas)
-        return SceneVersionRead(copied_from_version_id=origin.source_version_id if origin else None, id=row.id, project_id=self.project_id, chapter_id=sequence.chapter_id,
-            sequence_id=sequence.id, title=row.title, revision=row.revision,
+        return SceneVersionRead(**snapshot, copied_from_version_id=origin.source_version_id if origin else None,
+            project_id=self.project_id, chapter_id=sequence.chapter_id, sequence_id=sequence.id,
             source=content.basis, content=content,
             relationship_graph=relationships, director_graph=director,
-            unit_graph=unit_graph(canvas, director),
-            last_save_request_id=row.last_save_request_id,
-            created_at=row.created_at, updated_at=row.updated_at)
+            unit_graph=unit_graph(canvas, director))
 
     async def create_scene_version(self, sequence_id: str, body: SceneVersionCreate) -> SceneVersionRead:
         """明确创建空方案，原文依据来自已核实的当前场次，不复制历史方案。"""

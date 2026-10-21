@@ -99,7 +99,8 @@ export function arrangeDirector(nodes: DirectorLayoutNode[], sizes: Record<strin
   const available = columns * (width + gap) - gap
   const height = (id: string) => sizes[id]?.height || 300
   const positions: Record<string, CanvasPoint> = {}
-  const sceneGroups = nodes.some(node => node.group?.startsWith('scene-') || node.group?.startsWith('shot-'))
+  const overview = nodes.some(node => node.group === 'basis' || node.group?.startsWith('scene-'))
+  const sceneGroups = overview || nodes.some(node => node.group?.startsWith('shot-'))
   if (sceneGroups) {
     const center = nodes.find(node => node.id === anchor)
     if (center) positions[center.id] = { x: 0, y: 0 }
@@ -116,7 +117,7 @@ export function arrangeDirector(nodes: DirectorLayoutNode[], sizes: Record<strin
     const bottom = () => Math.max(0, ...Object.entries(positions).map(([id, point]) => point.y + height(id)))
     if (columns === 1) {
       let nextY = center ? height(center.id) + sectionGap : 0
-      const order = anchor === '原文依据'
+      const order = overview
         ? ['scene-global', 'scene-entry', 'scene-shared', 'scene-unlinked']
         : ['shot-evidence', 'shot-left', 'shot-work', 'shot-shared']
       order.forEach(group => {
@@ -127,7 +128,7 @@ export function arrangeDirector(nodes: DirectorLayoutNode[], sizes: Record<strin
         })
         if (members.length) nextY += sectionGap - gap
       })
-    } else if (anchor === '原文依据') {
+    } else if (overview) {
       const entries = nodes.filter(node => node.group === 'scene-entry')
       const rowHeight = Math.max(height(anchor), ...entries.map(node => height(node.id))) + gap
       let ring = 1, index = 0

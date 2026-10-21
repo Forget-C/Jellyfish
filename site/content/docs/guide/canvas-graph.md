@@ -14,7 +14,7 @@ description: "后端投影、共同校验、前端渲染与编辑保存的复用
 3. 在 service 层编写领域投影函数，参考 `director_canvas.py` 与 `unit_canvas.py`。使用 `GraphAssembler.add_node/add_edge/add_view/add_issue` 注册对象，最后调用 `finish` 并构造具体 graph 类型。构建器不做 I/O，领域投影器负责真实成员、摘要、分组、入口和问题。
 4. 每个显示节点使用唯一 ID，并通过 `object` 保留实际业务身份及内容路径；节点 ID、视图 ID 对消费者是不透明地址。配置字段只声明实际可编辑的内容。历史无稳定 ID 对象设为 `stable=false`，其身份限定在当前 revision，不在读取时补写 UUID。
 5. 成员复用节点，不复制业务单元；聚合入口提供 `entry_view_id`，节点提供 `home_view_id`，视图提供父级和锚点；每张图只有一个 parent_id 为空的根视图，消费者读取其返回 ID，不约定根地址字符串。所有边必须有真实来源，缺失业务引用明确返回问题或缺失节点。不要静默删边来伪装完整。
-6. 保持版本内容、两图和目标的 version/revision 一致。读取和保存均返回完整快照；API 只负责收参、鉴权入口和响应，不组装图。
+6. 保持版本内容、两图和目标的 version/revision 一致。读取内容时同时固定标题、revision、最近保存请求身份和时间等响应元数据；证据加载可能重新读取同一 ORM 行，不能在加载后再从已刷新的实例取响应元数据。读取和保存均返回完整快照；API 只负责收参、鉴权入口和响应，不组装图。
 
 共同校验会拒绝重复节点／边／视图、悬空端点或成员、无效入口与编辑目标、循环层级、快照不一致及不闭合的来源定位。视图数量和分组计数由构建器统一计算，具体业务诊断由投影器提供。
 
@@ -30,13 +30,14 @@ description: "后端投影、共同校验、前端渲染与编辑保存的复用
 
 - 从 OpenAPI generated client 消费具体 graph 类型；业务节点、关系、摘要、计数、问题及视图成员由后端提供，前端不从业务数组重新拼图。先核对 graph 与版本快照，失败显示明确错误。
 - 复用 `GraphCanvas`、`GraphSubgraphPreview`、`graphLayout`、`useGraphLayout` 与 `useGraphBrowse`。前端负责几何、视口、缓存和浏览历史；业务布局尺寸与旧缓存迁移保留在对应适配器中。
-- 使用返回的视图和定位地址导航，不解析 ID 前缀或用第一 coverage 替代精确单元。镜头筛选只选择后端视图，不裁剪完整单元子图。
+- 使用返回的视图和定位地址导航，不解析 ID 前缀或用第一 coverage 替代精确单元。锚点和有效布局节点集合使用后端地址；原文标题不能充当节点 ID，旧缓存键仅在业务适配层迁移。镜头筛选只选择后端视图，不裁剪完整单元子图。
+- 卡面复用两行字段摘要，为诊断数量、原因及操作保留空间；参考卡仅预览有限绑定，后端总数与详情中的完整集合保持不变。
 - 摘要消费已保存 graph；详情按稳定业务 ID 编辑当前暂存内容。旧 graph 的对象若已在当前编辑中移除，提示不可用，不选替代对象。未保存新对象继续沿用当前编辑入口，保存后获得后端 graph。无 ID 历史行若在保存基线中重复，不把编辑后剩余的唯一同内容行当作身份；旧卡暂不可编辑，使用“编辑待同步对象”明确选择当前行。
 - 复用 `WorkbenchDetails`、主题和现有详情。需要定位输入时传入 `focusTarget`，由详情在实际可见后聚焦字段，避免先对隐藏内容设置焦点。
 - 保存统一走 `CanvasSequenceWorkbench` 现有串行队列、5 秒周期及手动入口；不要为 graph、配置卡或新画布另建保存接口、草稿实体或自动提交链。
 
 ## 验证与接口同步
 
-共同契约测试应覆盖两个具体投影器和非法结构；版本 HTTP 用例核对读取／保存快照、实际来源与外部证据变化。真实浏览器验证导航、详情编辑、旧图与当前输入分离、失败恢复和精确回跳。当前回归入口包括 `test_canvas_graph.py`、`test_scene_dependencies.py`、`sceneCanvasGraph.browser.mjs`、`sceneLegacyGraph.browser.mjs` 和 `scenePeriodicSave.browser.mjs`。
+共同契约测试应覆盖两个具体投影器和非法结构；版本 HTTP 用例核对读取／保存快照、实际来源与外部证据变化。真实浏览器验证导航、详情编辑、旧图与当前输入分离、失败恢复和精确回跳。当前回归入口包括 `test_canvas_graph.py`、`test_scene_dependencies.py`、`sceneCanvasGraph.browser.mjs`、`sceneLegacyGraph.browser.mjs`、`directorLayout.browser.mjs`、`sceneGraphSummary.browser.mjs` 和 `scenePeriodicSave.browser.mjs`。
 
 对外 schema 变化后，先核实 8000 端口加载当前工作区后端，再从仓库根目录运行 `pnpm --dir front run openapi:update`。随后执行受影响测试、前端 typecheck 和后端 Pylint；工作台展示与键盘、窄屏检查遵循[工作台前端设计标准](/docs/guide/workbench-design/)。

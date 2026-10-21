@@ -594,3 +594,69 @@ async def test_legacy_rows_remain_readonly_identities_scoped_to_their_revision(t
         assert len(revised_ids) == 2 and original_ids.isdisjoint(revised_ids)
         assert all(node['object']['stable'] is False and node['object']['revision'] == 2 for node in revised)
         assert (await client.get(detail)).json()['data'] == saved
+
+
+@pytest.mark.asyncio
+async def test_graph_read_keeps_one_snapshot_when_dependency_refreshes_the_same_version(tmp_path):
+    """并发保存可推进下一次读取，不能使一次 HTTP 响应混用内容与图修订。"""
+    import json
+    import sqlite3
+    from sqlalchemy import event, update
+    from app.models.directing import SceneVersionRecord
+
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        path = await sequence_path(client)
+        created = (await client.post(path + '/versions', json={
+            'request_id': str(uuid4()), 'title': '读取时的版本',
+        })).json()['data']
+        detail = path + '/versions/' + created['id']
+        content = deepcopy(created['content'])
+        content['design']['direction']['shots'] = [{'id': 'shot', 'beat_ids': [],
+            'event_ids': [], 'blocking_state_ids': [], 'criterion_ids': [],
+            'visible_result': {}, 'narrative_function': {}}]
+        content['units'] = [{'id': 'unit', 'ratio': '16:9',
+            'coverage': [{'id': 'coverage', 'shot_id': 'shot'}],
+            'scene_dependencies': [{'version_id': created['id'], 'clip_id': 'old-clip',
+                'frame_id': 'unavailable-frame', 'reference_id': 'unavailable-reference'}]}]
+        # 保留历史失效依赖；正式读取必须仍返回可核对的固定身份。
+        async with sessions.begin() as db:
+            await db.execute(update(SceneVersionRecord).where(
+                SceneVersionRecord.id == created['id']).values(content=content))
+        newer = deepcopy(content)
+        newer['design']['direction']['viewpoint'] = {'state': 'proposal', 'text': '另一会话的新输入',
+            'sources': [{'kind': 'human', 'reference': 'concurrent-editor', 'version': '2'}]}
+        request_id = str(uuid4())
+        reads = 0
+
+        def concurrent_write(connection, cursor, statement, parameters, context, executemany):
+            """在数据库边界控制时序：依赖核验重读同版本前，另一连接提交新内容。"""
+            nonlocal reads
+            if 'FROM directing_scene_versions' not in statement:
+                return
+            reads += 1
+            if reads == 2:
+                with sqlite3.connect(tmp_path / 'directing.sqlite') as other:
+                    other.execute('UPDATE directing_scene_versions SET revision = 2, title = ?, '
+                        'last_save_request_id = ?, content = ? WHERE id = ?',
+                        ('另一会话保存的版本', request_id, json.dumps(newer), created['id']))
+
+        engine = sessions.kw['bind'].sync_engine
+        event.listen(engine, 'before_cursor_execute', concurrent_write)
+        try:
+            response = await client.get(detail)
+        finally:
+            event.remove(engine, 'before_cursor_execute', concurrent_write)
+        assert response.status_code == 200, response.text
+        snapshot = response.json()['data']
+        assert snapshot['revision'] == 1
+        assert snapshot['title'] == '读取时的版本'
+        assert snapshot['last_save_request_id'] is None
+        assert snapshot['content']['design']['direction']['viewpoint']['text'] is None
+        assert [snapshot[key]['revision'] for key in (
+            'relationship_graph', 'director_graph', 'unit_graph')] == [1, 1, 1]
+        reread = (await client.get(detail)).json()['data']
+        assert (reread['revision'], reread['title'], reread['last_save_request_id']) == (
+            2, '另一会话保存的版本', request_id)
+        assert reread['content']['design']['direction']['viewpoint']['text'] == '另一会话的新输入'
+        assert [reread[key]['revision'] for key in (
+            'relationship_graph', 'director_graph', 'unit_graph')] == [2, 2, 2]

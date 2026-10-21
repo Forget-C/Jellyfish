@@ -400,3 +400,14 @@
 
 /* 桌面详情保持非模态，顶部菜单可覆盖详情；窄屏仍由详情独占交互。 */
 @media (min-width: 1280px) { .canvas-workbench-toolbar { z-index: 995; } }
+
+.unit-graph-card { display: flex; flex-direction: column; gap: 8px; }
+.unit-graph-card > .design-compact-summary { flex: 1; height: auto; min-height: 0; }
+.unit-graph-actions { display: flex; flex-wrap: wrap; gap: 8px; flex-shrink: 0; }
+.unit-graph-issues { flex-shrink: 0; color: var(--wb-muted); font-size: 12px; }
+.unit-graph-issues p, .unit-graph-reference-previews p { margin: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.unit-graph-reference-previews { display: flex; gap: 8px; }
+.unit-graph-reference-previews > section { flex: 1; min-width: 0; }
+.unit-graph-reference-previews :is(img, video, audio) { max-height: 96px; max-width: 100%; object-fit: contain; }
+.unit-graph-card .design-compact-fields > p { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.unit-graph-card .design-compact-fields > p > :is(span, strong) { display: inline; }
