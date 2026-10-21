@@ -289,12 +289,27 @@ async def test_selected_nonfinal_unit_revision_preserves_identity_and_other_conf
             'instruction': '保留真实指令', 'instruction_source': {'kind': 'human', 'reference': 'user', 'version': '1'},
             'coverage': [{'id': identity + '-coverage', 'shot_id': shot, 'action_scope': '拆信；读信；抬头'}]}
             for identity, shot in (('target', 'shot'), ('retained', 'shot'), ('independent', 'other'))]
+        target = content['units'][0]
+        target['references'] = [{'id': 'frame', 'file_id': 'image1', 'media_kind': 'image', 'purpose': 'space',
+            'input_role': 'first_frame', 'participant_ids': [], 'ordinal': 0,
+            'source': {'kind': 'file', 'reference': 'image1', 'file_id': 'image1', 'version': '1'}}]
+        target['scene_dependencies'] = [{'version_id': version['id'], 'clip_id': 'removed-clip'}]
+        target['parameters'] = {'seed': 17}
+        basis_url = detail + '/units/target/instruction-basis'
+        receipt = await client.post(basis_url + '/confirm', json={'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})
+        assert receipt.status_code == 200, receipt.text
+        target['instruction_basis_id'] = receipt.json()['data']['basis_id']
         initial = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})
         assert initial.status_code == 200, initial.text
         content = initial.json()['data']['content']
+        original_basis = (await client.post(basis_url, json={'content': content})).json()['data']
+        assert original_basis['status'] == 'current'
         url = detail + '/unit-design-suggestions'
         request = {'request_id': str(uuid4()), 'expected_revision': 2, 'content': content,
                    'shot_id': 'shot', 'source_unit_id': 'target', 'target_model_id': 'video', 'model_id': 'text'}
+        for invalid_source in (None, 'missing-unit', 'independent'):
+            rejected = await client.post(url, json={**request, 'source_unit_id': invalid_source})
+            assert rejected.status_code == 422, rejected.text
         accepted = await client.post(url, json=request)
         assert accepted.status_code == 200, accepted.text
         task_id = accepted.json()['data']['task_id']
@@ -309,20 +324,86 @@ async def test_selected_nonfinal_unit_revision_preserves_identity_and_other_conf
             assert await service.claim(task_id, worker_id='fixture')
             result = generate_directing_result('directing_unit_design', SimpleNamespace(invoke=lambda _: SimpleNamespace(content=json.dumps(proposed))), task.input_snapshot['run_args'])
             await service.finish(task_id, result=result.model_dump(mode='json'))
-        applied = await client.post(url + '/' + task_id + '/apply', json={'content': content})
+        for mutation in ('new-action', 'unknown-selection', 'unselected-unit', 'false-retain', 'false-create'):
+            accepted = await client.post(url, json={**request, 'request_id': str(uuid4())})
+            assert accepted.status_code == 200, accepted.text
+            invalid_task_id = accepted.json()['data']['task_id']
+            bad = deepcopy(proposed)
+            if mutation == 'new-action':
+                bad['units'][0]['coverage'][0]['action_scope'] = '掏枪冲向门外'
+            elif mutation == 'unknown-selection':
+                bad['units'][0]['coverage'][0]['event_ids'] = ['unplanned-event']
+            elif mutation == 'unselected-unit':
+                bad['units'][1]['coverage'][0]['action_scope'] = '读信'
+            elif mutation == 'false-retain':
+                bad['units'][0]['operation'] = 'retain'
+            else:
+                bad['units'][0]['operation'] = 'create'
+            async with sessions.begin() as db:
+                task = await db.get(Task, invalid_task_id)
+                service = TaskService(db)
+                assert await service.claim(invalid_task_id, worker_id='fixture')
+                with pytest.raises(ValueError) as invalid:
+                    generate_directing_result('directing_unit_design', SimpleNamespace(invoke=lambda _: SimpleNamespace(content=json.dumps(bad))), task.input_snapshot['run_args'])
+                await service.finish(invalid_task_id, error=str(invalid.value), error_code='directing_output_invalid')
+            failed = next(row for row in (await client.get(url)).json()['data'] if row['task_id'] == invalid_task_id)
+            assert failed['status'] == 'failed' and failed['error']
+            assert (await client.get(detail)).json()['data'] == initial.json()['data']
+        for field in ('coverage', 'parameters', 'references', 'scene_dependencies'):
+            changed = deepcopy(content)
+            if field == 'coverage':
+                changed['units'][0]['coverage'][0]['action_scope'] = '读信'
+            elif field == 'parameters':
+                changed['units'][0]['parameters']['seed'] = 18
+            else:
+                changed['units'][0][field] = []
+            for boundary in ('preview', 'apply'):
+                rejected = await client.post(url + '/' + task_id + '/' + boundary, json={'content': changed})
+                assert rejected.status_code == 409, rejected.text
+        independent = deepcopy(content)
+        independent['units'][2]['instruction'] = '独立镜头的最新人工指令'
+        applied = await client.post(url + '/' + task_id + '/apply', json={'content': independent})
         assert applied.status_code == 200, applied.text
         candidate = applied.json()['data']
         assert [unit['id'] for unit in candidate['units']] == ['target', 'retained', 'independent']
-        assert candidate['units'][1:] == content['units'][1:]
+        assert candidate['units'][1:] == independent['units'][1:]
         target = candidate['units'][0]
         assert target['coverage'][0]['id'] == 'target-coverage'
         assert target['coverage'][0]['action_scope'] == '抬头'
         assert target['model_id'] == 'video'
         assert target['instruction'] == content['units'][0]['instruction']
         assert target['instruction_source'] == content['units'][0]['instruction_source']
+        for field in ('references', 'scene_dependencies', 'parameters', 'instruction_basis_id', 'instruction_check_task_id'):
+            assert target[field] == content['units'][0][field]
+        state = (await client.post(basis_url, json={'content': candidate})).json()['data']
+        assert state['status'] == 'changed'
+        assert state['previous'] == original_basis['previous']
+        assert [row['text'] for row in state['current']['scope']['execution'] if row['field'] == 'action_scope'] == ['抬头']
+        assert not any(row['text'] == '拆信；读信；抬头' for row in state['current']['scope']['execution'])
         saved = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 2, 'content': candidate})
         assert saved.status_code == 200, saved.text
         assert (await client.get(detail)).json()['data']['content'] == candidate
+        candidate['units'][0]['organization'].update(entry_state='人工进入要求', exit_state='人工结束要求',
+            reference_requirements=['人工参考要求'])
+        human = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 3, 'content': candidate})
+        assert human.status_code == 200, human.text
+        candidate = human.json()['data']['content']
+        accepted = await client.post(url, json={**request, 'request_id': str(uuid4()), 'expected_revision': 4, 'content': candidate})
+        assert accepted.status_code == 200, accepted.text
+        task_id = accepted.json()['data']['task_id']
+        proposed['units'][0]['coverage'][0]['action_scope'] = '读信'
+        async with sessions.begin() as db:
+            task = await db.get(Task, task_id)
+            service = TaskService(db)
+            assert await service.claim(task_id, worker_id='fixture')
+            result = generate_directing_result('directing_unit_design', SimpleNamespace(invoke=lambda _: SimpleNamespace(content=json.dumps(proposed))), task.input_snapshot['run_args'])
+            await service.finish(task_id, result=result.model_dump(mode='json'))
+        updated = await client.post(url + '/' + task_id + '/apply', json={'content': candidate})
+        assert updated.status_code == 200, updated.text
+        for field in ('entry_state', 'exit_state', 'reference_requirements'):
+            assert updated.json()['data']['units'][0]['organization'][field] == candidate['units'][0]['organization'][field]
+        persisted = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 4, 'content': updated.json()['data']})
+        assert persisted.status_code == 200, persisted.text
 
 
 @pytest.mark.asyncio
@@ -344,6 +425,8 @@ async def test_explicit_modify_can_change_only_model_while_retained_unit_keeps_m
         content['units'] = [{'id': identity, 'model_id': 'old-video', 'ratio': '16:9',
             'coverage': [{'id': identity + '-coverage', 'shot_id': 'shot', 'action_scope': '抬头'}]}
             for identity in ('target', 'retained')]
+        content['design']['applicability'] = [{'subject': {'kind': 'shot', 'id': 'shot', 'field': 'visible_result'},
+            'purpose': 'design', 'scope': 'occurrences', 'occurrences': [{'unit_id': 'target', 'coverage_item_id': 'target-coverage'}]}]
         saved = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})
         assert saved.status_code == 200, saved.text
         content = saved.json()['data']['content']
@@ -354,7 +437,7 @@ async def test_explicit_modify_can_change_only_model_while_retained_unit_keeps_m
         task_id = accepted.json()['data']['task_id']
         proposed = {'shot_id': 'shot', 'target_model_id': 'video', 'organization': '仅切换明确目标的模型', 'units': [
             {'id': unit['id'], 'operation': 'modify' if unit['id'] == 'target' else 'retain',
-             'coverage': unit['coverage'], 'duration_ms': unit['duration_ms'], 'ratio': unit['ratio'], 'reason': '模型调整'}
+             'coverage': deepcopy(unit['coverage']), 'duration_ms': unit['duration_ms'], 'ratio': unit['ratio'], 'reason': '模型调整'}
             for unit in content['units']]}
         async with sessions.begin() as db:
             task = await db.get(Task, task_id)
@@ -368,3 +451,18 @@ async def test_explicit_modify_can_change_only_model_while_retained_unit_keeps_m
         assert candidate['units'][0]['model_id'] == 'video'
         assert candidate['units'][0]['coverage'] == content['units'][0]['coverage']
         assert candidate['units'][1] == content['units'][1]
+        accepted = await client.post(url, json={'request_id': str(uuid4()), 'expected_revision': 2, 'content': content,
+            'shot_id': 'shot', 'source_unit_id': 'target', 'target_model_id': 'video', 'model_id': 'text'})
+        assert accepted.status_code == 200, accepted.text
+        protected_task_id = accepted.json()['data']['task_id']
+        proposed['units'][0]['coverage'][0]['id'] = 'replacement-coverage'
+        async with sessions.begin() as db:
+            task = await db.get(Task, protected_task_id)
+            service = TaskService(db)
+            assert await service.claim(protected_task_id, worker_id='fixture')
+            result = generate_directing_result('directing_unit_design', SimpleNamespace(invoke=lambda _: SimpleNamespace(content=json.dumps(proposed))), task.input_snapshot['run_args'])
+            await service.finish(protected_task_id, result=result.model_dump(mode='json'))
+        protected = await client.post(url + '/' + protected_task_id + '/preview', json={'content': content})
+        assert protected.status_code == 422, protected.text
+        assert 'target-coverage' in protected.text
+        assert (await client.get(detail)).json()['data'] == saved.json()['data']

@@ -181,6 +181,30 @@ def merge_unit_design_proposal(existing, proposal, target_model_id, source):
     })
 
 
+def organized_unit_content(content, result, args):
+    """预览与确认使用同一完整组合，当前引用或越界时整体拒绝且不落盘。"""
+    existing = {unit.id: unit for unit in content.units}
+    related = {unit.id for unit in content.units if all(item.shot_id == result.shot_id for item in unit.coverage)}
+    if not related <= {proposal.id for proposal in result.units}:
+        raise ValueError('本次局部修改必须保留既有单元；拆并或移除需要另行处理')
+    source = Source(kind='model', reference=args['task_identity'], version='1')
+    updates = {}
+    additions = []
+    for proposal in result.units:
+        old = existing.get(proposal.id)
+        if old and not unit_design_proposal_changed(old, proposal):
+            continue
+        origin = existing.get(args.get('source_unit_id')) if old is None else None
+        unit = (copy_source_unit_preparation(origin, proposal, result.target_model_id, source, args['capabilities'])
+                if origin is not None else merge_unit_design_proposal(old, proposal, result.target_model_id, source))
+        if old:
+            updates[old.id] = unit
+        else:
+            additions.append(unit)
+    return SceneVersionContent.model_validate({**content.model_dump(),
+        'units': [updates.get(unit.id, unit) for unit in content.units] + additions})
+
+
 class SceneUnitDesignService(SceneDesignService):
     """复用场次归属、内容校验和统一任务；只读结果与正式单元隔离。"""
 
@@ -271,36 +295,16 @@ class SceneUnitDesignService(SceneDesignService):
                 or video.name != task.input_snapshot['run_args']['target_model_name']
                 or capabilities != task.input_snapshot['run_args']['capabilities']):
             raise RevisionConflict('目标视频模型能力已变化，请重新 AI 设计')
-        return SceneUnitDesignPreview(task_id=task.id, result=validate_unit_design(task.input_snapshot['run_args'], SceneUnitDesignResult.model_validate(task.result)))
+        result = validate_unit_design(task.input_snapshot['run_args'], SceneUnitDesignResult.model_validate(task.result))
+        await self._validate_content(sequence, version_id, organized_unit_content(content, result, task.input_snapshot['run_args']))
+        return SceneUnitDesignPreview(task_id=task.id, result=result)
 
     async def apply_unit_design(self, sequence_id, version_id, task_id, content):
         """一次确认从当前编辑组合；只修改明确目标，保留原顺序、独立与跨镜头单元。"""
         preview = await self.preview_unit_design(sequence_id, version_id, task_id, content)
         task = next(row for row in await self._tasks(sequence_id, version_id) if row.id == task_id)
         args = task.input_snapshot['run_args']
-        existing = {unit.id: unit for unit in content.units}
-        related = {unit.id for unit in content.units if all(item.shot_id == preview.result.shot_id for item in unit.coverage)}
-        if not related <= {proposal.id for proposal in preview.result.units}:
-            raise ValueError('本次局部修改必须保留既有单元；拆并或移除需要另行处理')
-        source = Source(kind='model', reference=args['task_identity'], version='1')
-        updates = {}
-        additions = []
-        for proposal in preview.result.units:
-            old = existing.get(proposal.id)
-            if old and not unit_design_proposal_changed(old, proposal):
-                continue
-            origin = existing.get(args.get('source_unit_id')) if old is None else None
-            unit = (copy_source_unit_preparation(origin, proposal, preview.result.target_model_id, source, args['capabilities'])
-                    if origin is not None else merge_unit_design_proposal(old, proposal, preview.result.target_model_id, source))
-            if old:
-                updates[old.id] = unit
-            else:
-                additions.append(unit)
-        candidate = SceneVersionContent.model_validate({**content.model_dump(),
-            'units': [updates.get(unit.id, unit) for unit in content.units] + additions})
-        sequence, _ = await self._version(sequence_id, version_id)
-        await self._validate_content(sequence, version_id, candidate)
-        return candidate
+        return organized_unit_content(content, preview.result, args)
 
     async def validate_organized_save(self, sequence_id, version_id, content, previous):
         """首次保存组织来源时重验真实任务与固定依据；已保存单元仍按普通编辑处理。"""

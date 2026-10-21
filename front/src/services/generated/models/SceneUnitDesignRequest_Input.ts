@@ -11,6 +11,7 @@ export type SceneUnitDesignRequest_Input = {
     expected_revision: number;
     content: SceneVersionContent_Input;
     shot_id: string;
+    source_unit_id?: (string | null);
     target_model_id: string;
     model_id?: (string | null);
     instruction?: string;

@@ -12,11 +12,11 @@ const terminal = ['succeeded', 'failed', 'cancelled']
 const statuses: Record<string, string> = { queued: '等待执行', running: '执行中', succeeded: '已生成', failed: '失败', cancelled: '已取消' }
 
 /** 组织建议与场次编辑分开；结果未明确应用前，不创建任何正式单元。 */
-export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, revision, content, shotId, disabled, focusTaskId, triggerHost, onFocused, onChange }: {
+export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, revision, content, shotId, unitId, disabled, focusTaskId, triggerHost, onFocused, onChange }: {
   onChange: (content: SceneVersionContent_Output) => void
   triggerHost?: HTMLElement | null
   projectId: string; sequenceId: string; versionId: string; revision: number
-  content: SceneVersionContent_Output; shotId?: string; disabled: boolean; focusTaskId?: string; onFocused?: () => void
+  content: SceneVersionContent_Output; shotId?: string; unitId?: string; disabled: boolean; focusTaskId?: string; onFocused?: () => void
 }) {
   const [open, setOpen] = useState(!!focusTaskId)
   const [models, setModels] = useState<ModelRead[]>()
@@ -38,8 +38,10 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
   const pending = useRef<SceneUnitDesignRequest>()
   const storageKey = `jellyfish:scene-unit-design-request:${projectId}:${sequenceId}:${versionId}`
   const shot = content.design.direction.shots.find(row => row.id === shotId)
-  const live = useRef({ content, shotId, disabled, revision })
-  live.current = { content, shotId, disabled, revision }
+  const sourceUnit = content.units.find(row => row.id === unitId && row.coverage.every(item => item.shot_id === shotId))
+  const needsSource = content.units.some(row => row.coverage.every(item => item.shot_id === shotId))
+  const live = useRef({ content, shotId, unitId, disabled, revision })
+  live.current = { content, shotId, unitId, disabled, revision }
   const mounted = useRef(true)
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   const readPending = () => {
@@ -64,12 +66,12 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
       if (!list.data || !settings.data) throw new Error('视频模型与全局默认设置尚未核实')
       if (!active) return
       setModels(list.data.items)
-      const globalDefault = settings.data.default_video_model_id
+      const globalDefault = sourceUnit ? sourceUnit.model_id : settings.data.default_video_model_id
       setModelId(current => list.data!.items.some(row => row.id === current) ? current
         : list.data!.items.some(row => row.id === globalDefault) ? globalDefault || undefined : undefined)
     }).catch(cause => { if (active) setModelsError(directingError(cause)) })
     return () => { active = false }
-  }, [open, projectId, attempt])
+  }, [open, projectId, attempt, sourceUnit?.id])
   useEffect(() => {
     let active = true
     setOptions(undefined); setCapabilities(undefined); setCapabilityError('')
@@ -111,12 +113,18 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
       taskId: selected.task_id, requestBody: { content } }).catch(cause => { if (active) setPreviewError(directingError(cause)) })
     return () => { active = false }
   }, [open, projectId, sequenceId, versionId, selected?.task_id, selected?.status, content])
+  const context = useRef({ unitId, shotId })
+  useEffect(() => {
+    if (context.current.unitId !== unitId || context.current.shotId !== shotId) {
+      setModelId(undefined); setPreparing(true); context.current = { unitId, shotId }
+    }
+  }, [unitId, shotId])
   const running = rows?.some(row => !terminal.includes(row.status))
   const verified = !!modelId && options?.model_id === modelId && capabilities?.model_id === modelId
   const submit = async () => {
     if (busy || live.current.disabled || !pending.current && (!verified || !live.current.shotId)) return
     const request = pending.current || { request_id: crypto.randomUUID(), expected_revision: live.current.revision,
-      content: structuredClone(live.current.content), shot_id: live.current.shotId!, target_model_id: modelId!, instruction }
+      content: structuredClone(live.current.content), shot_id: live.current.shotId!, source_unit_id: sourceUnit?.id, target_model_id: modelId!, instruction }
     setBusy(true); setError('')
     try {
       localStorage.setItem(storageKey, JSON.stringify(request)); pending.current = request
@@ -147,6 +155,7 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
   }
   const fixedRequest = pending.current || selected?.request
   const displayShot = fixedRequest ? fixedRequest.content.design.direction?.shots?.find(row => row.id === fixedRequest.shot_id) : shot
+  const displayUnitId = fixedRequest ? fixedRequest.source_unit_id : sourceUnit?.id
   const trigger = <WorkbenchButton disabled={disabled || !shot} onClick={() => setOpen(true)}>AI设计</WorkbenchButton>
   return <>
     {triggerHost ? createPortal(trigger, triggerHost) : trigger}
@@ -154,10 +163,12 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
       secondary={<WorkbenchButton variant="quiet" onClick={() => setOpen(false)}>{selected ? '关闭预览' : '取消'}</WorkbenchButton>}>
       {pending.current ? <WorkbenchButton variant="primary" loading={busy} disabled={busy || disabled} onClick={() => void submit()}>核实原设计请求</WorkbenchButton>
         : selected ? <><WorkbenchButton disabled={busy || disabled || running} onClick={() => { setPreparing(true); setError('') }}>重新设计</WorkbenchButton>{selected.result && <WorkbenchButton variant="primary" loading={busy} disabled={busy || disabled || !!previewError} onClick={() => void apply()}>确认应用方案</WorkbenchButton>}</>
-          : <WorkbenchButton variant="primary" loading={busy} disabled={disabled || busy || !shot || !verified || !rows || !!readError || running} onClick={() => void submit()}>开始设计</WorkbenchButton>}
+          : <WorkbenchButton variant="primary" loading={busy} disabled={disabled || busy || !shot || needsSource && !sourceUnit || !verified || !rows || !!readError || running} onClick={() => void submit()}>开始设计</WorkbenchButton>}
     </WorkbenchDialogActions>}>
       <p>当前镜头：{displayShot?.visible_result.text || (displayShot ? displayShot.id : '请先选择有效镜头')}</p>
-      <p>按既有六岗设计组织生产单元，生成结果供查看。</p>
+      {displayUnitId && <p>所选单元：{displayUnitId}</p>}
+      {!displayUnitId && needsSource && <Alert type="warning" message="请先在单元画布明确选择本次来源或目标单元" />}
+      <p>按既有六岗设计组织生产单元，生成结果供查看。创作内容变化请先到导演画布处理。</p>
       {(error || readError) && <Alert type="error" message={error || readError} action={<WorkbenchButton variant="quiet" onClick={() => setAttempt(value => value + 1)}>重试读取</WorkbenchButton>} />}
       {pending.current && <Alert type="info" message="原提交尚未核实，请先核实原请求，避免重复生成" />}
       {!!rows?.length && <Select aria-label="单元设计记录" style={{ width: '100%' }} value={selected?.task_id} placeholder="查看本版本的设计记录"
@@ -190,15 +201,25 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
           {previewError && <Alert type="warning" message={previewError} description="保留本次结果供查看，请按当前内容重新设计。" />}
           <h3>单元方案预览</h3><p>{selected.result.organization}</p>
           {!!selected.result.missing?.length && <Alert type="warning" message="方案准备缺项" description={<ul>{selected.result.missing?.map((item, index) => <li key={index}>{item}</li>)}</ul>} />}
-          {selected.result.units.map((unit, index) => <section key={unit.id} aria-label={`建议单元 ${index + 1}`}>
-            <h4>单元 {index + 1} · {unit.id}</h4><p>{unit.reason}</p>
+          {selected.result.units.map((unit, index) => {
+            const previous = selected.request.content.units.find(row => row.id === unit.id)
+            const changed = previous && (unit.operation === 'modify' || JSON.stringify(previous.coverage) !== JSON.stringify(unit.coverage)
+              || previous.duration_ms !== unit.duration_ms || previous.ratio !== unit.ratio
+              || ['entry_state', 'exit_state', 'reference_requirements'].some(field => {
+                const key = field as 'entry_state' | 'exit_state' | 'reference_requirements'
+                return unit[key] != null && JSON.stringify(unit[key]) !== JSON.stringify(previous.organization?.[key] ?? (key === 'reference_requirements' ? [] : ''))
+              }))
+            return <section key={unit.id} aria-label={`建议单元 ${index + 1}`}>
+            <h4>{previous ? changed ? '修改' : '保留' : '新增'} · {unit.id}</h4><p>{unit.reason}</p>
+            {changed && <p>原执行范围：{previous.coverage.map(item => item.action_scope).join('；')}</p>}
+            <p>视频模型：{previous && !changed ? previous.model_id || '待选择' : selected.target_model_name}</p>
             {unit.coverage.map(item => <div key={item.id}><p>{item.action_scope}</p>
               <p>覆盖选择：{[...item.beat_ids, ...item.event_ids, ...item.performance_action_ids, ...item.staging_activity_ids, ...item.continuity_change_ids].join('、') || '镜头可见内容'}</p></div>)}
             <p>{unit.ratio} · {unit.duration_ms == null ? '预计时长待确定' : `${unit.duration_ms / 1000} 秒`}</p>
-            <p>进入：{unit.entry_state || '未填写'}；结束：{unit.exit_state || '未填写'}</p>
-            {!!unit.reference_requirements?.length && <p>参考需求：{unit.reference_requirements?.join('；')}</p>}
+            <p>进入：{(unit.entry_state ?? previous?.organization?.entry_state) || '未填写'}；结束：{(unit.exit_state ?? previous?.organization?.exit_state) || '未填写'}</p>
+            {!!(unit.reference_requirements ?? previous?.organization?.reference_requirements)?.length && <p>参考需求：{(unit.reference_requirements ?? previous?.organization?.reference_requirements)?.join('；')}</p>}
             {!!unit.missing?.length && <ul>{unit.missing?.map((item, number) => <li key={number}>{item}</li>)}</ul>}
-          </section>)}
+          </section>})}
           <Alert type="info" message="尚未应用到当前编辑；确认后沿用当前保存模式。参考需求不代表已绑定真实素材，设计完成不代表拍摄准备通过。" />
         </>}
       </section>}
