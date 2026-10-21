@@ -2,7 +2,7 @@
 
 Status: ready-for-agent
 Blocked by: None
-Resolution: pending
+Resolution: completed
 
 **What to build:** 当前镜头尚无单元时，用户点击“AI设计”，选择目标视频模型并开始，一次组织任务返回一个或多个单元的方案供查看；结果出现前后均不改写当前版本。
 
@@ -27,12 +27,12 @@ Resolution: pending
 
 ## 验收标准
 
-- [ ] 浏览器从无单元状态完成模型准备、提交和结果预览，分别得到一单元和多单元方案；当前编辑内容与保存内容完全未变。
-- [ ] 分别验证有效/失效/缺失默认模型、能力加载失败及恢复，不选择列表首项，不修改全局配置。
-- [ ] 真实 HTTP 与任务生命周期覆盖归属异常、未保存编辑输入、重复请求及未知响应复查。
-- [ ] 模型输出使用不存在或不适用的条目、擅换模型、增加未设计动作或改写其他镜头时整份拒绝，前端显示可理解的原因。
-- [ ] 只有参考需求、没有实际文件或落幅的方案保持缺项；任务成功不冒充真实准备完成。
-- [ ] 使用现有浏览器和后端测试设施，以可控外部模型响应驱动真实业务流程。
+- [x] 浏览器从无单元状态完成模型准备、提交和结果预览，分别得到一单元和多单元方案；当前编辑内容与保存内容完全未变。
+- [x] 分别验证有效/失效/缺失默认模型、能力加载失败及恢复，不选择列表首项，不修改全局配置。
+- [x] 真实 HTTP 与任务生命周期覆盖归属异常、未保存编辑输入、重复请求及未知响应复查。
+- [x] 模型输出使用不存在或不适用的条目、擅换模型、增加未设计动作或改写其他镜头时整份拒绝，前端显示可理解的原因。
+- [x] 只有参考需求、没有实际文件或落幅的方案保持缺项；任务成功不冒充真实准备完成。
+- [x] 使用现有浏览器和后端测试设施，以可控外部模型响应驱动真实业务流程。
 
 ## 验证与完成要求
 
@@ -51,3 +51,13 @@ Resolution: pending
 
 - 2026-10-21：用户调用 implement-spec，按已提出的六张任务及依赖进入实施。
 
+
+- 2026-10-21 实施：新增当前镜头单元组织任务、明确目标视频模型、适用六岗字段和关系投影、完整结构化只读预览；结果不包含真实参考绑定、指令检查或素材采用字段。任务固定 `task_identity`、用户未保存内容、组织文本模型和视频模型能力；请求身份幂等，未知提交核实原请求。
+- 执行范围与进入／结束状态以已有适用设计片段校验；跨多个既有片段可按分号或换行组织。非法设计身份、换模型、新创作、写设计字段、单单元多覆盖整份拒绝；未知时长保留空值和缺项，参考要求自动列为待绑定条件。跨镜头既有单元身份受保护。
+- 前端使用工作台共享弹窗与按钮，AI组件置于画布节点外（画布节点会复制渲染），入口投影至主操作区；1440px 与390px截图核验未溢出。任务中心来源增加已验证版本和镜头，回跳展开原方案记录，同一记录关闭后再次回跳亦可展开。
+- TDD红灯记录：首次HTTP为404；首次浏览器缺少“AI设计”；部分方案未提示镜头遗漏；参与对象上下文缺失；任务来源缺镜头；多覆盖输出未拒绝；进入状态夹带“突然掏枪”未拒绝；关闭后同一任务再次回跳未展开；模型来源 `task_identity` 缺失。逐项实现后均绿灯。
+- 后端验证：`UV_PROJECT_ENVIRONMENT=/Users/extreme/Projects/github.com/jellyfish/backend/.venv uv run --directory backend --no-sync pytest tests/directing tests/services/test_task_queries.py tests/services/test_task_worker.py tests/services/test_task_service.py -q`：454 passed、15 skipped（既有外部环境测试）。后续来源身份变动运行16条相关测试通过；`uv run pylint app`：10.00/10。
+- 前端验证：`pnpm --dir front run typecheck`通过；`PLAYWRIGHT_CHANNEL=chrome node front/tests/sceneUnitDesign.browser.mjs`通过，覆盖无／有效／失效默认模型、能力失败恢复、未知POST恢复不重复建任务、单／多单元方案、只读关闭与任务中心回跳。证据：`/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-scene-version-KcIBQy`。
+- 工作台验收：`PLAYWRIGHT_CHANNEL=chrome pnpm --dir front run test:workbench-ui`通过（共享组件、四画布样式、设计完整性三个浏览器流程）。使用现有共享组件，无设计标准例外。
+- 接口：在本worktree实际导入`app.main:app`导出OpenAPI，运行`pnpm --dir front run openapi:gen`同步generated client；主工作区8000为已有用户服务，合入后由集成方确认其reload到新源码再执行正式`openapi:update`，不终止用户服务。
+- 验证边界：外部组织模型使用可控响应，不验证真实模型生成质量；本票保持只读，明确覆盖、身份合并与历史移除保护由后续票据03—06完成。

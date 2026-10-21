@@ -21,6 +21,10 @@ function sourceMeta(source: TaskSourceRead | null | undefined, task: TaskUiItem)
     if (task.taskKind === 'scene_export' && source.version_id) {
       query.set('version', source.version_id); query.set('exportVersion', source.version_id); query.set('exportTask', task.taskId); query.set('view', 'cut')
     }
+    if (task.taskKind === 'directing_unit_design' && source.version_id) {
+      query.set('version', source.version_id); query.set('unitDesignTask', task.taskId); query.set('view', 'units')
+      if (source.shot_id) query.set('directorShot', source.shot_id)
+    }
     const historyKind = task.taskKind === 'directing_instruction' ? 'instructions' : task.taskKind === 'directing_instruction_check' ? 'checks' : task.taskKind === 'directing_design' ? 'design' : task.taskKind === 'video_generation' && source.unit_id ? 'videos' : undefined
     if (historyKind && source.version_id) {
       query.set('version', source.version_id)

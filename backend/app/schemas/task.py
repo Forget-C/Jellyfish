@@ -30,6 +30,7 @@ class TaskSourceRead(BaseModel):
     chapter_id: str | None = None
     version_id: str | None = None
     unit_id: str | None = None
+    shot_id: str | None = None
 
 
 class TaskListItemRead(TaskStatusRead):

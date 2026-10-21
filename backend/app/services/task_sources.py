@@ -80,5 +80,5 @@ async def resolve_task_sources(db, rows) -> dict[str, TaskSourceRead]:
             if versions.get(row.scene_version_id) != source.id or source.project_id != row.project_id:
                 result.pop(row.id, None)
                 continue
-            result[row.id] = source.model_copy(update={'version_id': row.scene_version_id, 'unit_id': row.scene_unit_id})
+            result[row.id] = source.model_copy(update={'version_id': row.scene_version_id, 'unit_id': row.scene_unit_id, 'shot_id': getattr(row, 'scene_shot_id', None)})
     return result

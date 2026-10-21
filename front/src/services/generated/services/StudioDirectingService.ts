@@ -39,6 +39,7 @@ import type { ApiResponse_list_SceneInstructionSuggestionRead__ } from '../model
 import type { ApiResponse_list_SceneSeamReviewRead__ } from '../models/ApiResponse_list_SceneSeamReviewRead__';
 import type { ApiResponse_list_SceneTakeLibraryRead__ } from '../models/ApiResponse_list_SceneTakeLibraryRead__';
 import type { ApiResponse_list_SceneTakeReviewRead__ } from '../models/ApiResponse_list_SceneTakeReviewRead__';
+import type { ApiResponse_list_SceneUnitDesignSuggestionRead__ } from '../models/ApiResponse_list_SceneUnitDesignSuggestionRead__';
 import type { ApiResponse_list_SceneVersionRead__ } from '../models/ApiResponse_list_SceneVersionRead__';
 import type { ApiResponse_list_SceneVideoRead__ } from '../models/ApiResponse_list_SceneVideoRead__';
 import type { ApiResponse_list_SequenceRead__ } from '../models/ApiResponse_list_SequenceRead__';
@@ -56,6 +57,7 @@ import type { ApiResponse_SceneInstructionApply_ } from '../models/ApiResponse_S
 import type { ApiResponse_SceneInstructionPreview_ } from '../models/ApiResponse_SceneInstructionPreview_';
 import type { ApiResponse_SceneSeamReviewRead_ } from '../models/ApiResponse_SceneSeamReviewRead_';
 import type { ApiResponse_SceneTakeReviewRead_ } from '../models/ApiResponse_SceneTakeReviewRead_';
+import type { ApiResponse_SceneUnitDesignPreview_ } from '../models/ApiResponse_SceneUnitDesignPreview_';
 import type { ApiResponse_SceneVersionRead_ } from '../models/ApiResponse_SceneVersionRead_';
 import type { ApiResponse_SceneVideoPreparation_ } from '../models/ApiResponse_SceneVideoPreparation_';
 import type { ApiResponse_SceneVideoSaveResult_ } from '../models/ApiResponse_SceneVideoSaveResult_';
@@ -93,6 +95,8 @@ import type { SceneExportRetry } from '../models/SceneExportRetry';
 import type { SceneInstructionRequest } from '../models/SceneInstructionRequest';
 import type { SceneSeamReviewCreate } from '../models/SceneSeamReviewCreate';
 import type { SceneTakeReviewConfirm } from '../models/SceneTakeReviewConfirm';
+import type { SceneUnitDesignPreviewRequest } from '../models/SceneUnitDesignPreviewRequest';
+import type { SceneUnitDesignRequest_Input } from '../models/SceneUnitDesignRequest_Input';
 import type { SceneVersionCopy } from '../models/SceneVersionCopy';
 import type { SceneVersionCreate } from '../models/SceneVersionCreate';
 import type { SceneVersionSave } from '../models/SceneVersionSave';
@@ -1056,6 +1060,101 @@ export class StudioDirectingService {
             path: {
                 'project_id': projectId,
                 'chapter_id': chapterId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Scene Unit Design Suggestions
+     * 读取本版本的单元组织任务和只读结果。
+     * @returns ApiResponse_list_SceneUnitDesignSuggestionRead__ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneUnitDesignSuggestions({
+        projectId,
+        sequenceId,
+        versionId,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+    }): CancelablePromise<ApiResponse_list_SceneUnitDesignSuggestionRead__> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/unit-design-suggestions',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Scene Unit Design Suggest
+     * 明确目标视频模型后冻结本次组织请求。
+     * @returns ApiResponse_TaskAccepted_ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneUnitDesignSuggest({
+        projectId,
+        sequenceId,
+        versionId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        requestBody: SceneUnitDesignRequest_Input,
+    }): CancelablePromise<ApiResponse_TaskAccepted_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/unit-design-suggestions',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Scene Unit Design Preview
+     * 整份核对建议；不保存或采用任何单元。
+     * @returns ApiResponse_SceneUnitDesignPreview_ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneUnitDesignPreview({
+        projectId,
+        sequenceId,
+        versionId,
+        taskId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        taskId: string,
+        requestBody: SceneUnitDesignPreviewRequest,
+    }): CancelablePromise<ApiResponse_SceneUnitDesignPreview_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/unit-design-suggestions/{task_id}/preview',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+                'task_id': taskId,
             },
             body: requestBody,
             mediaType: 'application/json',
