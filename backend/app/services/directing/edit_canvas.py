@@ -115,8 +115,9 @@ async def edit_graph(context: CanvasReadContext, db: AsyncSession, sequence_id: 
             except ValueError:
                 failures[pair] = '接缝审查依据读取失败，请从原记录核对并重试'
     for left_id, right_id in bases:
-        node_id = f'edit:seam:{left_id}:{right_id}'
-        identity = obj('seam', f'{left_id}:{right_id}', [])
+        pair_id = f'{len(left_id)}:{left_id}:{right_id}'
+        node_id = f'edit:seam:{pair_id}'
+        identity = obj('seam', pair_id, [])
         target = CanvasTarget(node_id=node_id, object=identity)
         review, applicable = reviews.get((left_id, right_id), (None, False))
         issue = failures.get((left_id, right_id))

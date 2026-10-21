@@ -123,3 +123,30 @@ async def test_seam_reviews_only_depend_on_the_original_adjacent_media_pair(tmp_
         assert (await client.post(review_path, json=changed_request)).status_code == 409
         assert (await client.post(review_path, json={**request, 'request_id': str(uuid4())})).status_code == 409
         assert (await client.get(path)).json()['data']['takes'] == original
+
+
+@pytest.mark.asyncio
+async def test_distinct_seams_keep_independent_addresses_when_clip_ids_contain_colons(tmp_path):
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        path = await sequence_path(client)
+        async with sessions.begin() as db:
+            store = DirectingStore(db, 'p1')
+            design = await frozen(store, path.rsplit('/', 1)[1], 'design', design_sample())
+            plan = await frozen(store, design.sequence_id, 'plan', plan_sample(design.id))
+            prompt = await frozen(store, design.sequence_id, 'prompt', {'plan_revision_id': plan.id, 'unit_id': 'u1',
+                'format_version': 'fixture', 'text': '独立片段身份', 'sources': [SOURCE], 'decisions': []})
+            await output(db, prompt.id)
+            take = await store.register_take(prompt_revision_id=prompt.id, task_id='task1', output_ordinal=0)
+            take_id = take.id
+        version = (await client.post(path + '/versions', json={'request_id': str(uuid4()), 'title': '接缝身份'})).json()['data']
+        content = deepcopy(version['content'])
+        content['timeline']['items'] = [{'kind': 'media', 'id': clip_id, 'take_kind': 'production_plan',
+            'take_id': take_id, 'file_id': 'video1', 'media_range': {'source_in_ms': 0, 'source_out_ms': 1000},
+            'timeline_start_ms': position} for clip_id, position in [('a:b', 0), ('c', 1000), ('a', 3000), ('b:c', 4000)]]
+        response = await client.put(path + '/versions/' + version['id'], json={
+            'request_id': str(uuid4()), 'expected_revision': version['revision'], 'content': content})
+        assert response.status_code == 200, response.text
+        seams = [node for node in response.json()['data']['edit_graph']['nodes'] if node['kind'] == 'edit_seam']
+        assert [(node['left_clip_id'], node['right_clip_id']) for node in seams] == [('a:b', 'c'), ('a', 'b:c')]
+        assert len({node['id'] for node in seams}) == 2
+        assert len({node['object']['id'] for node in seams}) == 2

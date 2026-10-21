@@ -547,7 +547,8 @@ class EditCanvasGraph(CanvasGraph):
                     raise ValueError('invalid canvas take identity or edit target')
                 continue
             if isinstance(node, EditSeamCanvasNode):
-                if node.edit_target or node.object.kind != 'seam':
+                if node.edit_target or node.object.kind != 'seam' or node.object.id != (
+                        f'{len(node.left_clip_id)}:{node.left_clip_id}:{node.right_clip_id}'):
                     raise ValueError('invalid canvas seam target')
                 pair = [nodes.get(target.node_id) for target in node.sources if not target.external]
                 if len(pair) != 2 or any(not isinstance(clip, EditClipCanvasNode) for clip in pair):
