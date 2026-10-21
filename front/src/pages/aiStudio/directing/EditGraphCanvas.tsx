@@ -41,7 +41,7 @@ export function EditGraphCanvas({ graph, versionId, revision, contextKey, onRetr
           {node.kind === 'edit_clip' && <p>片段适配：{node.fit === 'cover' ? '居中填满' : '完整显示'}</p>}
           {node.kind === 'edit_take' && <p>{node.take_kind === 'scene_video' ? '场次版本素材' : '生产计划素材'} · {node.available ? '文件已登记' : '文件不可用'}</p>}
           {node.issues.map(issue => <p key={issue.code}>{issue.message}</p>)}
-          <WorkbenchButton variant="secondary" onClick={() => onLocate(node)}>{node.kind === 'edit_take' ? '定位源素材' : '定位时间线片段'}</WorkbenchButton>
+          <WorkbenchButton variant="secondary" onClick={() => onLocate(node)}>{node.kind === 'edit_take' ? '定位源素材' : node.kind === 'edit_seam' ? '定位接缝审查' : '定位时间线片段'}</WorkbenchButton>
         </section>, onInspect: () => onLocate(node) }]
     })} relations={graph.edges.filter(edge => view.edge_ids.includes(edge.id) && edge.target).map(edge => ({
       from: edge.source, to: edge.target!, label: edge.label, category: edge.category,

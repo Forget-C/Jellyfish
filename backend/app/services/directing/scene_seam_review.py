@@ -2,25 +2,16 @@
 from datetime import UTC
 from uuid import uuid4
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 
 from app.core.contracts.directing.scene_seam_review import SceneSeamReviewCreate, SceneSeamReviewRead
 from app.core.contracts.directing.scene_version import SceneVersionContent
 from app.models.directing import SceneSeamReviewRecord
 from app.models.studio import Chapter
 from app.services.directing.store import DirectingStore, RevisionConflict
+from app.services.directing.seam_basis import scene_seam_basis, seam_review_query
 
 
-def scene_seam_basis(content, left_id, right_id):
-    """绝对位置移动不改变接缝画面；间隔、替换、区间或构图变化重新核对。"""
-    items = sorted(content.timeline.items, key=lambda item: (item.timeline_start_ms, item.id))
-    for left, right in zip(items, items[1:]):
-        if (left.id == left_id and right.id == right_id and left.kind == right.kind == 'media'
-                and left.timeline_start_ms + left.media_range.source_out_ms - left.media_range.source_in_ms == right.timeline_start_ms):
-            return {'output_aspect_ratio': content.output_aspect_ratio,
-                'left': left.model_dump(mode='json', exclude={'timeline_start_ms'}),
-                'right': right.model_dump(mode='json', exclude={'timeline_start_ms'})}
-    return None
 
 
 class SceneSeamReviewService(DirectingStore):
@@ -43,8 +34,7 @@ class SceneSeamReviewService(DirectingStore):
         """按目标版本读取全部历史接缝证据，失效记录仍可追溯。"""
         version = await self.read_scene_version(sequence_id, version_id)
         inherited = await self.inherited_scene_review_ids(version_id, 'seam')
-        rows = await self.db.scalars(select(SceneSeamReviewRecord).where(or_(
-            SceneSeamReviewRecord.version_id == version_id, SceneSeamReviewRecord.id.in_(inherited))).order_by(SceneSeamReviewRecord.created_at, SceneSeamReviewRecord.id))
+        rows = await self.db.scalars(seam_review_query(version_id, inherited))
         return [self._read(row, version.content) for row in rows]
 
     async def create_seam_review(self, sequence_id, version_id, body):

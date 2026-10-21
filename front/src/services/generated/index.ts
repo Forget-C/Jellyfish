@@ -247,6 +247,8 @@ export type { EditableUnitPreparation_Output } from './models/EditableUnitPrepar
 export type { EditCanvasGraph } from './models/EditCanvasGraph';
 export type { EditClipCanvasNode } from './models/EditClipCanvasNode';
 export type { EditPlannedCanvasNode } from './models/EditPlannedCanvasNode';
+export type { EditSeamCanvasNode } from './models/EditSeamCanvasNode';
+export type { EditSeamReviewSummary } from './models/EditSeamReviewSummary';
 export type { EditTakeCanvasNode } from './models/EditTakeCanvasNode';
 export type { EntityNameExistenceCheckRequest } from './models/EntityNameExistenceCheckRequest';
 export type { EntityNameExistenceCheckResponse } from './models/EntityNameExistenceCheckResponse';
