@@ -21,6 +21,10 @@ export type UnitCanvasNode = {
     kind: 'unit';
     unit_id: string;
     number: number;
+    /**
+     * 完整覆盖镜头与场次内单元编号组成的聚合预览标题，不随镜头筛选变化
+     */
+    preview_title: string;
     coverage_count: number;
     reference_count: number;
     /**

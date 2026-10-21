@@ -69,14 +69,16 @@ export function UnitGraphCanvas({ graph, versionId, revision, storageKey, naviga
   }
   const preview = (node: UnitNode, target: string) => {
     const child = graph.views.find(candidate => candidate.id === target)
-    if (!child) return <p>子图不可用</p>
+    if (!child || node.kind !== 'unit') return <p>子图不可用</p>
     const layoutNodes = child.members.map(member => ({ id: member.node_id, group: member.group, size: { width: 360, height: 320 } }))
     const sizes = Object.fromEntries(layoutNodes.map(item => [item.id, item.size]))
     const stored = readStoredGraphView(`${storageKey}:view:${child.id}`)
     const positions = arrangeUnitGraph(layoutNodes, sizes, 1440, child.anchor_id || '', stored?.positions)
     return <GraphSubgraphPreview nodes={layoutNodes} positions={positions}
-      edges={graph.edges.filter(edge => child.edge_ids.includes(edge.id))} purpose={node.summary.map(field => field.text).join(' · ')}
-      status={`${child.node_count} 张卡片 · ${child.issue_count} 项待核对`} />
+      edges={graph.edges.filter(edge => child.edge_ids.includes(edge.id))} purpose={node.preview_title}
+      status={<>{node.summary.filter(field => field.field === 'references').map(field =>
+        <span key={field.field}>{field.label}：{field.text}<br /></span>)}
+        {child.node_count} 张卡片 · {child.issue_count} 项待核对</>} />
   }
   const objects = view?.members.flatMap(member => {
     const node = byId.get(member.node_id)

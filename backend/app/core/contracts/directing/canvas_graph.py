@@ -109,6 +109,7 @@ class UnitCanvasNode(CanvasNode):
     kind: Literal['unit'] = Field(default='unit', json_schema_extra={'enum': ['unit']})
     unit_id: Identity
     number: int = Field(gt=0)
+    preview_title: Text = Field(description='完整覆盖镜头与场次内单元编号组成的聚合预览标题，不随镜头筛选变化')
     coverage_count: int = Field(gt=0)
     reference_count: int = Field(ge=0)
     execution_scope_supported: bool = Field(description='仅表示覆盖形态符合当前单 coverage 执行限制，不代表整体准备通过')

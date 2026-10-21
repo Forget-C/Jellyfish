@@ -17,7 +17,7 @@ export function GraphSubgraphPreview({ nodes, edges, positions, purpose, status 
   const bottom = boxes.length ? Math.max(...boxes.map(box => box.y + box.height)) : 152
   const byId = new Map(boxes.map(box => [box.id, box]))
   return <section className="canvas-workbench-card director-subgraph-card">
-    <p className="director-subgraph-purpose">{purpose}</p>
+    <p className="director-subgraph-purpose" title={typeof purpose === 'string' ? purpose : undefined}>{purpose}</p>
     <p className="director-subgraph-status">{status}</p>
     <svg className="director-subgraph-preview" aria-hidden="true" focusable="false"
       viewBox={`${left - 24} ${top - 24} ${right - left + 48} ${bottom - top + 48}`} preserveAspectRatio="xMidYMid meet">

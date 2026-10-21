@@ -257,6 +257,9 @@ async def test_unit_graph_filters_share_one_unit_and_keep_its_complete_subgraph(
             elif card['config_kind'] == 'organization':
                 assert {'reason', 'entry_state', 'exit_state', 'reference_requirements'} <= set(card['fields'])
         unit = nodes['unit:shared']
+        assert unit['title'] == '单元 1'
+        assert unit['preview_title'] == '镜头 1、镜头 2 — 单元 1'
+        assert unit['summary'][1] == {'field': 'references', 'label': '已绑定素材', 'text': '0 项'}
         assert unit['execution_scope_supported'] is False
         assert any(issue['code'] == 'single-coverage-required' for issue in unit['issues'])
         reference = next(node for node in graph['nodes'] if node['kind'] == 'unit_references')

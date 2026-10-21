@@ -9,7 +9,7 @@ export function DirectorGraphSummary({ node }: { node: DesignCanvasNode | Missin
     {node.kind === 'missing' && <p>{node.reason}</p>}
     <div className="design-compact-status"><span title={node.kind === 'design' ? node.scope_reason : node.reason}>{node.kind === 'design' ? node.scope_label : '缺失引用'}</span>
       {!!node.issues.length && <span title={node.issues.map(issue => issue.message).join('；')} aria-label={`待处理 ${node.issues.length} 项`} tabIndex={0}>
-        <ExclamationCircleOutlined /> {node.issues.length}
+        <ExclamationCircleOutlined aria-hidden /> 待处理 {node.issues.length} 项
       </span>}
     </div>
   </div>

@@ -108,13 +108,15 @@ def unit_graph(context: CanvasReadContext, director: DirectorCanvasGraph) -> Uni
     for index, unit in enumerate(content.units):
         unit_id, view_id = f'unit:{unit.id}', f'unit:{unit.id}'
         obj = identity('unit', unit.id, ['units', index])
+        coverage_label = '、'.join(dict.fromkeys(
+            f'镜头 {shot_numbers[item.shot_id]}' for item in unit.coverage))
         node = UnitCanvasNode(id=unit_id, title=f'单元 {index + 1}', object=obj,
             home_view_id=view_id, unit_id=unit.id, number=index + 1,
+            preview_title=f'{coverage_label} — 单元 {index + 1}',
             coverage_count=len(unit.coverage), reference_count=len(unit.references),
             execution_scope_supported=len(unit.coverage) == 1,
             edit_target=CanvasTarget(node_id=unit_id, object=obj), summary=[
-                field('coverage', '覆盖范围', '、'.join(dict.fromkeys(
-                    f'镜头 {shot_numbers[item.shot_id]}' for item in unit.coverage))),
+                field('coverage', '覆盖范围', coverage_label),
                 field('references', '已绑定素材', f'{len(unit.references)} 项'),
             ])
         if len(unit.coverage) != 1:

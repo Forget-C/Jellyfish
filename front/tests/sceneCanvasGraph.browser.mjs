@@ -146,8 +146,21 @@ try {
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
   await selectWorkbenchOption(page, '单元镜头筛选', '全部镜头')
   await page.locator('[data-layout-view="service-unit-root"]').waitFor({ timeout: 5000 })
+  const sharedPreview = page.locator('[data-canvas-node="unit:shared"]')
+  assert.equal(await sharedPreview.locator('.director-subgraph-purpose').innerText(), '镜头 1、镜头 2 — 单元 1')
+  assert.match(await sharedPreview.locator('.director-subgraph-status').innerText(), /已绑定素材：1 项/)
+  const singlePreview = page.locator('[data-canvas-node="unit:only-B"]')
+  assert.equal(await singlePreview.locator('.director-subgraph-purpose').innerText(), '镜头 2 — 单元 2')
+  assert.match(await singlePreview.locator('.director-subgraph-status').innerText(), /已绑定素材：0 项/)
+  await page.screenshot({ path: join(output, 'unit-labels-desktop.png'), animations: 'disabled' })
   await selectWorkbenchOption(page, '单元镜头筛选', '镜头 1')
   await page.locator('[data-layout-view="service-shot-view"]').waitFor()
+  assert.equal(await sharedPreview.locator('.director-subgraph-purpose').innerText(), '镜头 1、镜头 2 — 单元 1', '镜头筛选不裁掉单元完整范围或改变单元编号')
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.getByRole('button', { name: '定位画布节点', exact: true }).click()
+  await page.getByRole('menuitem', { name: '单元 1', exact: true }).click()
+  await page.screenshot({ path: join(output, 'unit-labels-mobile.png'), animations: 'disabled' })
+  await page.setViewportSize({ width: 1440, height: 960 })
   await page.locator('[data-canvas-node="unit:shared"]').getByRole('button', { name: /^进入子图：/ }).click()
   await page.locator('[data-layout-view="service-unit-view"]').waitFor()
   assert.equal(await page.getByRole('button', { name: '查看单元设置', exact: true }).count(), 1)
@@ -177,7 +190,7 @@ try {
       for (const group of shot.groups) group.node_count = shot.members.filter(member => member.group === group.id).length
       row.director_graph.nodes.find(node => node.kind === 'source').text = '后端返回的原文卡片正文'
       for (const node of row.unit_graph.nodes) if (node.kind === 'unit_references') for (const preview of node.previews) { preview.display_name = '后端素材名称'; preview.thumbnail_url += '?from=graph' }
-      row.unit_graph.nodes.find(node => node.kind === 'unit').summary[0].text = '服务端已经解析的单元范围'
+      row.unit_graph.nodes.find(node => node.kind === 'unit').preview_title = '服务端已经解析的单元范围'
       row.unit_graph.nodes.find(node => node.kind === 'unit_config' && node.coverage_item_id === 'second').summary[1].text = '服务端解析的第二覆盖摘要'
     }
     await route.fulfill({ response, json: body })
