@@ -1,5 +1,7 @@
 """当前单元检查的固定正文、依据与任务隔离，经真实 HTTP 验证。"""
 from copy import deepcopy
+import json
+from types import SimpleNamespace
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
@@ -10,6 +12,8 @@ import pytest
 from app.models.studio_prompts_files_timeline import FileItem
 from app.services.generation.media_execution import deliver_media
 from app.models.llm import Model, Provider
+from app.models.task import Task
+from app.services.directing.ai import generate_directing_result
 from app.services.task_service import TaskService
 from tests.directing.test_api import client_for
 from tests.directing.test_scene_versions import sequence_path
@@ -51,7 +55,8 @@ def reference_storage(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('with_reference', [False, True, 'replacement'])
-async def test_video_submission_freezes_original_unit_and_registers_only_candidate(tmp_path, with_reference, reference_storage, monkeypatch):
+@pytest.mark.parametrize('remove_running', [False, True])
+async def test_video_submission_freezes_original_unit_and_registers_only_candidate(tmp_path, with_reference, reference_storage, monkeypatch, remove_running):
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             db.add(Provider(id='check-provider', name='openai', base_url='https://api.openai.com/v1', api_key='fixture'))
@@ -161,11 +166,38 @@ async def test_video_submission_freezes_original_unit_and_registers_only_candida
         assert (await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 2, 'content': bound})).status_code == 200
         assert (await client.post(video_url, json=submit)).json()['data']['task_id'] == video_id
         assert (await client.post(video_url, json={'request_id': str(uuid4()), 'expected_revision': 3})).status_code == 409
+        if remove_running:
+            async with sessions.begin() as db:
+                assert await TaskService(db).claim(video_id, worker_id='running-before-removal')
+            current = (await client.get(detail)).json()['data']
+            suggestions = detail + '/unit-design-suggestions'
+            submitted_plan = await client.post(suggestions, json={'request_id': str(uuid4()), 'expected_revision': 3,
+                'content': current['content'], 'shot_id': 'shot', 'source_unit_id': 'unit',
+                'target_model_id': 'check-video', 'model_id': 'check-text'})
+            assert submitted_plan.status_code == 200, submitted_plan.text
+            plan_task = submitted_plan.json()['data']['task_id']
+            async with sessions.begin() as db:
+                service = TaskService(db)
+                task = await db.get(Task, plan_task)
+                result = {'shot_id': 'shot', 'target_model_id': 'check-video', 'organization': '重组为新工作', 'units': [
+                    {'id': 'replacement', 'operation': 'create', 'coverage': [{'id': 'replacement-coverage',
+                        'shot_id': 'shot', 'action_scope': '递出信封'}], 'ratio': '16:9', 'reason': '新单元身份'}]}
+                generated = generate_directing_result('directing_unit_design', SimpleNamespace(
+                    invoke=lambda _: SimpleNamespace(content=json.dumps(result))), task.input_snapshot['run_args'])
+                assert await service.claim(plan_task, worker_id='regroup-during-video')
+                await service.finish(plan_task, result=generated.model_dump(mode='json'))
+            candidate = await client.post(suggestions + '/' + plan_task + '/apply', json={'content': current['content']})
+            assert candidate.status_code == 200, candidate.text
+            removed = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 3, 'content': candidate.json()['data']})
+            assert removed.status_code == 200, removed.text
+            running = (await client.get(video_url)).json()['data'][0]
+            assert running['status'] == 'running' and running['preparation'] == rows[0]['preparation']
         async with sessions.begin() as db:
             db.add(FileItem(id='video-output', type='video', name='model-output.mp4', storage_key='fixtures/video-output.mp4', content_type='video/mp4', duration_ms=5000))
             await db.flush()
             service = TaskService(db)
-            assert await service.claim(video_id, worker_id='video-result-fixture')
+            if not remove_running:
+                assert await service.claim(video_id, worker_id='video-result-fixture')
             await service.add_output(video_id, ordinal=0, file_id='video-output')
             await service.finish(video_id, deliver=deliver_media)
             await service.finish(video_id, deliver=deliver_media)
@@ -183,6 +215,15 @@ async def test_video_submission_freezes_original_unit_and_registers_only_candida
         assert media.json()['data']['duration_ms'] == 5000
         assert media.json()['data']['url'] == '/api/v1/studio/files/video-output/download'
         assert (await client.get(media_path.replace('/units/unit/', '/units/other/'))).status_code == 422
+        if remove_running:
+            historical = (await client.get(detail)).json()['data']['content']
+            assert [unit['id'] for unit in historical['units']] == ['replacement']
+            assert historical['timeline'] == content['timeline']
+            assert historical['take_judgments'] == content['take_judgments']
+            library = (await client.get(detail + '/take-library')).json()['data']
+            assert any(row['take_id'] == take_id for row in library)
+            assert (await client.get(url)).json()['data'][0]['task_id'] == task_id
+            return
         consumer = (await client.post(path + '/versions', json={'request_id': str(uuid4()), 'title': '素材复用方案'})).json()['data']
         library = await client.get(path + '/versions/' + consumer['id'] + '/take-library')
         assert library.status_code == 200, library.text
@@ -326,6 +367,7 @@ async def test_video_submission_freezes_original_unit_and_registers_only_candida
         assert unchanged['content']['units'][0]['ratio'] == '9:16'
         assert unchanged['content']['units'][0]['duration_ms'] == 8000
         assert len(unchanged['content']['units']) == 1
+
         if with_reference:
             assert [(item['id'], item['file_id']) for item in unchanged['content']['units'][0]['references']] == ([('current-frame', 'current-image')] if with_reference == 'replacement' else [])
 
@@ -388,6 +430,30 @@ async def test_video_submission_freezes_original_unit_and_registers_only_candida
         assert len(after_current) == 2
         assert after_current[1]['instruction'] == '另一单元的新正文'
 
+        # 已证明失败任务可重试；移除后新的重试授权必须拒绝，历史身份与素材不变。
+        adopted_content = deepcopy((await client.get(detail)).json()['data']['content'])
+        media_range = {'source_in_ms': 0, 'source_out_ms': 1000}
+        adopted_content['timeline']['items'] = [{'kind': 'media', 'id': 'adopted-original', 'take_kind': 'scene_video',
+            'take_id': take_id, 'file_id': 'video-output', 'media_range': media_range, 'timeline_start_ms': 0}]
+        adopted_content['take_judgments'] = [{'take_kind': 'scene_video', 'take_id': take_id, 'file_id': 'video-output',
+            'annotation': {'coverage': [], 'review_status': 'reviewed', 'verdict': 'retain', 'rationale': {},
+                'retained_ranges': [media_range]}}]
+        adopted = await client.put(detail, json={'request_id': str(uuid4()),
+            'expected_revision': (await client.get(detail)).json()['data']['revision'], 'content': adopted_content})
+        assert adopted.status_code == 200, adopted.text
+        removed_content = deepcopy(adopted.json()['data']['content'])
+        removed_content['units'] = []
+        removed = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': (await client.get(detail)).json()['data']['revision'], 'content': removed_content})
+        assert removed.status_code == 200, removed.text
+        rejected = await client.post(retry_url, json={'request_id': str(uuid4())})
+        assert rejected.status_code == 409 and '原单元已不可用' in rejected.text
+        removed_state = (await client.get(detail)).json()['data']['content']
+        assert removed_state['timeline'] == adopted.json()['data']['content']['timeline']
+        assert removed_state['take_judgments'] == adopted.json()['data']['content']['take_judgments']
+        assert (await client.get(media_path)).status_code == 200
+        assert (await client.get(url)).json()['data'][0]['inputs']['unit']['coverage'][0]['action_scope'] == '递出信封'
+
+
         # 退出当前划分后只读核实旧授权，不得借核实创建新的执行。
         chapter_path = '/api/v1/studio/projects/p1/directing/chapters/ch1'
         chapter = (await client.get(chapter_path)).json()['data']
@@ -412,6 +478,7 @@ async def test_video_submission_freezes_original_unit_and_registers_only_candida
         assert len((await client.get(video_url)).json()['data']) == 4
         assert (await client.post(retry_url, json=retry_request)).json()['data']['task_id'] == retry_task
         assert (await client.post(retry_url, json={'request_id': str(uuid4())})).status_code == 409
+
 
 
 @pytest.mark.asyncio

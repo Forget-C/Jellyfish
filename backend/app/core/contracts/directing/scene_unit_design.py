@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import Field, model_validator
 
 from app.core.contracts.directing.common import Contract, Identity, Text, unique
+from app.core.contracts.directing.design_applicability import DesignSubject
 from app.core.contracts.directing.scene_version import EditableCoverageItem, SceneVersionContent
 
 
@@ -75,8 +76,21 @@ class SceneUnitDesignSuggestionRead(Contract):
     result: SceneUnitDesignResult | None
 
 
+class SceneUnitDesignBlocker(Contract):
+    """稳定身份用于导航，路径只解释当前预览中的准确引用位置。"""
+
+    kind: Literal['design', 'coverage']
+    unit_id: Identity
+    coverage_item_id: Identity
+    path: str
+    subject: DesignSubject | None = None
+    take_kind: Literal['scene_video', 'production_plan'] | None = None
+    take_id: Identity | None = None
+
+
 class SceneUnitDesignPreview(Contract):
     """校验后的只读方案；明确应用由独立用户动作完成。"""
 
     task_id: Identity
     result: SceneUnitDesignResult
+    blockers: list[SceneUnitDesignBlocker] = Field(default_factory=list)

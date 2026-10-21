@@ -68,7 +68,7 @@ export function SceneEditCanvas({ projectId, sequenceId, versionId, revision, co
     const target = navigation.target
     if (target.kind === 'take') {
       setSelected(`${target.takeKind}:${target.takeId}`)
-      setFocusTarget({ nodeId: '当前素材', fieldId: 'scene-current-take', serial: navigation.serial })
+      setFocusTarget({ nodeId: target.focusCoverage ? '方案判断' : '当前素材', fieldId: target.focusCoverage ? 'scene-take-coverage-editor' : 'scene-current-take', serial: navigation.serial })
     } else {
       setSelected('')
       setFocusTarget({ nodeId: '时间线', fieldId: `scene-clip-${target.clipId}`, serial: navigation.serial })

@@ -1027,7 +1027,18 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       taskId={instructionSelection?.versionId === selected.id && instructionSelection.unitId === unitSelections[selected.id] ? instructionSelection.taskId : undefined}
       shotId={currentShotId} unitId={unitSelections[selected.id]} disabled={readonly || handingOff || !!recovery || busy === 'create' || leaving}
       onSelectUnit={selectUnit} onChange={editContent} />}
-    {loadState === 'ready' && canvas === 'units' && selected && content && <SceneUnitCanvas onUnitDesignFocused={() => { const next = new URLSearchParams(params); next.delete('unitDesignTask'); setParams(next, { replace: true }) }} unitDesignTaskId={params.get('version') === selected.id ? params.get('unitDesignTask') || undefined : undefined} saveStatus={readonly ? '只读' : status} primaryHost={primaryHost} key={selected.id} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} revision={selected.revision} content={content} focusRequest={unitFocus}
+    {loadState === 'ready' && canvas === 'units' && selected && content && <SceneUnitCanvas onLocateBlocker={blocker => {
+      setEditor(undefined)
+      if (blocker.kind === 'coverage' && blocker.take_kind && blocker.take_id) {
+        navigateRelation({ kind: 'take', takeKind: blocker.take_kind, takeId: blocker.take_id, focusCoverage: true })
+      } else if (blocker.subject) {
+        const subject = blocker.subject
+        const prefix = subject.kind === 'performance_beat' ? 'performance' : subject.kind === 'staging_activity' ? 'activity' : subject.kind
+        const nodeId = subject.kind === 'direction' ? ['spatial_basis', 'shootable_area', 'axis', 'scale'].includes(subject.field) ? 'space' : 'overview'
+          : subject.kind === 'immutable_fact' ? 'overview' : subject.id ? `${prefix}:${subject.id}` : prefix
+        setCanvas('director'); setDirectorFocus({ versionId: selected.id, nodeId, fieldId: 'applicability', serial: Date.now() })
+      }
+    }} onUnitDesignFocused={() => { const next = new URLSearchParams(params); next.delete('unitDesignTask'); setParams(next, { replace: true }) }} unitDesignTaskId={params.get('version') === selected.id ? params.get('unitDesignTask') || undefined : undefined} saveStatus={readonly ? '只读' : status} primaryHost={primaryHost} key={selected.id} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} revision={selected.revision} content={content} focusRequest={unitFocus}
       onOpenEdit={clipId => { setMediaFocus(undefined); setEditClipFocus({ versionId: selected.id, clipId }); setEditor(undefined); setCanvas('edit') }}
       onInstructionTask={trackInstruction}
       onOpenInstruction={taskId => { setInstructionSelection({ versionId: selected.id, unitId: unitSelections[selected.id], taskId }); setCanvas('instructions') }}

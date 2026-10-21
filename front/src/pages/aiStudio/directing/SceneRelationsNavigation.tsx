@@ -9,7 +9,7 @@ import type { SceneInspectionTarget } from './SceneRelationDetails'
 import { directingError } from './common'
 import type { SceneTakeLibraryRead, SceneVersionContent_Output } from '../../../services/generated'
 
-export type SceneMediaNavigationTarget = { kind: 'take'; takeKind: SceneTakeLibraryRead['take_kind']; takeId: string } | { kind: 'clip'; clipId: string }
+export type SceneMediaNavigationTarget = { kind: 'take'; takeKind: SceneTakeLibraryRead['take_kind']; takeId: string; focusCoverage?: boolean } | { kind: 'clip'; clipId: string }
 export type SceneNavigationTarget = SceneMediaNavigationTarget | { kind: 'shot'; shotId: string } | { kind: 'unit' | 'instruction'; shotId: string; unitId: string }
 
 /** 关系树使用当前版本对象身份；展开仅改变导航展示，名称才定位业务对象。 */

@@ -444,6 +444,7 @@ export type { SceneTakeReviewConfirm } from './models/SceneTakeReviewConfirm';
 export type { SceneTakeReviewRead } from './models/SceneTakeReviewRead';
 export type { SceneTimeline_Input } from './models/SceneTimeline_Input';
 export type { SceneTimeline_Output } from './models/SceneTimeline_Output';
+export type { SceneUnitDesignBlocker } from './models/SceneUnitDesignBlocker';
 export type { SceneUnitDesignPreview } from './models/SceneUnitDesignPreview';
 export type { SceneUnitDesignPreviewRequest } from './models/SceneUnitDesignPreviewRequest';
 export type { SceneUnitDesignProposal } from './models/SceneUnitDesignProposal';

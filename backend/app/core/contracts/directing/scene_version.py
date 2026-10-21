@@ -194,6 +194,8 @@ class SceneVersionContent(Contract):
     design: EditableSceneDesign
     output_aspect_ratio: Literal['16:9', '9:16', '1:1'] = '16:9'
     units: list[EditableGenerationUnit] = Field(default_factory=list)
+    # 最近明确应用的单元设计任务来源；不是设计确认或运行状态。
+    unit_design_task_id: Identity | None = None
     take_judgments: list[SceneTakeJudgment] = Field(default_factory=list)
     timeline: SceneTimeline = Field(default_factory=SceneTimeline)
 

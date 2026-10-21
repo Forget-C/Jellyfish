@@ -463,6 +463,102 @@ async def test_explicit_modify_can_change_only_model_while_retained_unit_keeps_m
             result = generate_directing_result('directing_unit_design', SimpleNamespace(invoke=lambda _: SimpleNamespace(content=json.dumps(proposed))), task.input_snapshot['run_args'])
             await service.finish(protected_task_id, result=result.model_dump(mode='json'))
         protected = await client.post(url + '/' + protected_task_id + '/preview', json={'content': content})
-        assert protected.status_code == 422, protected.text
-        assert 'target-coverage' in protected.text
+        assert protected.status_code == 200, protected.text
+        assert protected.json()['data']['blockers'][0]['coverage_item_id'] == 'target-coverage'
         assert (await client.get(detail)).json()['data'] == saved.json()['data']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('blocked', [None, 'design', 'coverage'])
+async def test_regroup_removes_omitted_units_and_rechecks_removal_on_save(tmp_path, blocked):
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        async with sessions.begin() as db:
+            db.add(Provider(id='provider', name='openai', base_url='https://api.openai.com/v1', api_key='fixture'))
+            await db.flush()
+            db.add_all([Model(id='text', name='gpt-test', category='text', provider_id='provider', params={}),
+                        Model(id='video', name='sora-2', category='video', provider_id='provider', params={})])
+        path = await sequence_path(client)
+        version = (await client.post(path + '/versions', json={'request_id': str(uuid4()), 'title': '整份重组'})).json()['data']
+        detail = path + '/versions/' + version['id']
+        content = deepcopy(version['content'])
+        content['design']['direction']['shots'] = [{'id': identity, 'event_ids': [], 'blocking_state_ids': [], 'criterion_ids': [], 'narrative_function': {}, 'visible_result': {'state': 'proposal', 'text': '抬头',
+            'sources': [{'kind': 'human', 'reference': 'user', 'version': '1'}]}} for identity in ('shot', 'other')]
+        content['units'] = [{'id': identity, 'model_id': 'video', 'ratio': '16:9',
+            'coverage': [{'id': identity + '-coverage', 'shot_id': shot, 'action_scope': '抬头'}]}
+            for identity, shot in (('first', 'shot'), ('independent', 'other'), ('second', 'shot'), ('third', 'shot'))]
+        content['units'].append({'id': 'mixed', 'ratio': '16:9', 'coverage': [
+            {'id': 'mixed-target', 'shot_id': 'shot', 'action_scope': '抬头'},
+            {'id': 'mixed-other', 'shot_id': 'other', 'action_scope': '抬头'}]})
+        if blocked == 'design':
+            content['design']['applicability'] = [{'subject': {'kind': 'shot', 'id': 'shot', 'field': 'visible_result'},
+                'purpose': 'design', 'scope': 'occurrences',
+                'occurrences': [{'unit_id': 'second', 'coverage_item_id': 'second-coverage'}]}]
+        if blocked == 'coverage':
+            from app.services.directing.store import DirectingStore
+            from tests.directing.samples import SOURCE, design_sample, plan_sample
+            from tests.directing.test_store import frozen, output
+            async with sessions.begin() as db:
+                store = DirectingStore(db, 'p1')
+                design = await frozen(store, path.rsplit('/', 1)[1], 'design', design_sample('dialogue'))
+                plan = await frozen(store, path.rsplit('/', 1)[1], 'plan', plan_sample(design.id))
+                prompt = await frozen(store, path.rsplit('/', 1)[1], 'prompt', {'plan_revision_id': plan.id, 'unit_id': 'u1',
+                    'format_version': 'fixture', 'text': '原历史素材依据', 'sources': [SOURCE], 'decisions': []})
+                await output(db, prompt.id)
+                take = await store.register_take(prompt_revision_id=prompt.id, task_id='task1', output_ordinal=0)
+                take_id = take.id
+            media_range = {'source_in_ms': 0, 'source_out_ms': 1000}
+            content['take_judgments'] = [{'take_kind': 'production_plan', 'take_id': take_id, 'file_id': 'video1',
+                'annotation': {'review_status': 'reviewed', 'verdict': 'retain', 'rationale': {}, 'retained_ranges': [],
+                    'coverage': [{'id': 'actual', 'unit_id': 'second', 'coverage_item_id': 'second-coverage',
+                        'media_range': media_range, 'observation': '素材实际抬头', 'source': {'kind': 'file', 'reference': take_id,
+                            'version': 'video1', 'file_id': 'video1', 'media_range': media_range}}]}}]
+        saved = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})
+        assert saved.status_code == 200, saved.text
+        content = saved.json()['data']['content']
+        url = detail + '/unit-design-suggestions'
+        response = await client.post(url, json={'request_id': str(uuid4()), 'expected_revision': 2, 'content': content,
+            'shot_id': 'shot', 'source_unit_id': 'first', 'target_model_id': 'video', 'model_id': 'text'})
+        assert response.status_code == 200, response.text
+        task_id = response.json()['data']['task_id']
+        proposed = {'shot_id': 'shot', 'target_model_id': 'video', 'organization': '三个保留两个', 'units': [
+            {'id': row['id'], 'operation': 'retain', 'coverage': row['coverage'], 'duration_ms': row['duration_ms'],
+             'ratio': row['ratio'], 'reason': '保留原单元'} for row in content['units'] if row['id'] in ('first', 'third')]}
+        async with sessions.begin() as db:
+            task = await db.get(Task, task_id)
+            service = TaskService(db)
+            assert await service.claim(task_id, worker_id='fixture')
+            result = generate_directing_result('directing_unit_design', SimpleNamespace(invoke=lambda _: SimpleNamespace(content=json.dumps(proposed))), task.input_snapshot['run_args'])
+            await service.finish(task_id, result=result.model_dump(mode='json'))
+        if blocked:
+            preview = await client.post(url + '/' + task_id + '/preview', json={'content': content})
+            assert preview.status_code == 200, preview.text
+            blocker = preview.json()['data']['blockers'][0]
+            assert blocker['unit_id'] == 'second' and blocker['coverage_item_id'] == 'second-coverage'
+            if blocked == 'design':
+                assert blocker['subject'] == {'kind': 'shot', 'id': 'shot', 'field': 'visible_result'}
+                assert blocker['path'] == 'design.applicability[0].occurrences[0]'
+            else:
+                assert blocker['take_id'] == take_id and blocker['take_kind'] == 'production_plan'
+                assert blocker['path'] == 'take_judgments[0].annotation.coverage[0]'
+            assert (await client.post(url + '/' + task_id + '/apply', json={'content': content})).status_code == 422
+            content['design']['applicability'] = []
+            if blocked == 'coverage':
+                content['take_judgments'][0]['annotation']['coverage'] = []
+                content['units'][0]['instruction'] = '相关输入已改'
+            stale = await client.post(url + '/' + task_id + '/preview', json={'content': content})
+            assert stale.status_code == 409, stale.text
+            assert (await client.get(detail)).json()['data'] == saved.json()['data']
+            return
+        applied = await client.post(url + '/' + task_id + '/apply', json={'content': content})
+        assert applied.status_code == 200, applied.text
+        candidate = applied.json()['data']
+        assert [row['id'] for row in candidate['units']] == ['first', 'independent', 'third', 'mixed']
+        changed = deepcopy(candidate)
+        changed['units'][0]['coverage'][0]['action_scope'] = '相关单元被人工修改'
+        rejected = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 2, 'content': changed})
+        assert rejected.status_code == 409, rejected.text
+        assert (await client.get(detail)).json()['data'] == saved.json()['data']
+        candidate['units'][1]['instruction'] = '独立镜头新编辑'
+        persisted = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 2, 'content': candidate})
+        assert persisted.status_code == 200, persisted.text
+        assert persisted.json()['data']['content'] == candidate
