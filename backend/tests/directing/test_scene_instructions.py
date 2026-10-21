@@ -16,7 +16,8 @@ from tests.directing.test_store import database
 
 
 @pytest.mark.asyncio
-async def test_instruction_preview_is_unit_scoped_and_rechecks_manual_input(tmp_path):
+@pytest.mark.parametrize("historical_version", [1, 2])
+async def test_instruction_preview_is_unit_scoped_and_rechecks_manual_input(tmp_path, historical_version):
     """同请求不重复；别的单元编辑不影响本次建议，本单元改动阻止旧建议。"""
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
@@ -89,18 +90,13 @@ async def test_instruction_preview_is_unit_scoped_and_rechecks_manual_input(tmp_
             typed = SceneVersionContent.model_validate(content)
             snapshot['run_args']['scope'] = unit_scope(typed.design, typed.units[0],
                 [StyleRule.model_validate(row) for row in snapshot['run_args']['style_rules']],
-                version=1).model_dump(mode='json')
+                version=historical_version).model_dump(mode='json')
             task.input_snapshot = snapshot
         assert (await client.post(preview_url, json={'content': content})).status_code == 200
         new_scope = deepcopy(content)
         new_scope['design']['applicability'] = [{'subject': {'kind': 'performance', 'field': 'applicability'},
             'purpose': 'constraint', 'scope': 'scene_rule', 'phase': 'video'}]
-        assert (await client.post(preview_url, json={'content': new_scope})).status_code == 409
-        async with sessions.begin() as db:
-            task = await db.get(Task, task_id)
-            snapshot = deepcopy(task.input_snapshot)
-            snapshot['run_args']['scope'] = frozen['scope']
-            task.input_snapshot = snapshot
+        assert (await client.post(preview_url, json={'content': new_scope})).status_code == (409 if historical_version == 1 else 200)
 
         assert (await client.get(detail)).json()['data'] == version
         apply_url = url + '/' + task_id + '/apply'
@@ -114,7 +110,10 @@ async def test_instruction_preview_is_unit_scoped_and_rechecks_manual_input(tmp_
         bound = deepcopy(content)
         bound['units'][0].update(instruction=receipt['text'], instruction_source=receipt['source'], instruction_basis_id=receipt['basis_id'])
         basis_url = detail + '/units/unit-one/instruction-basis'
-        assert (await client.post(basis_url, json={'content': bound})).json()['data']['status'] == 'current'
+        basis = (await client.post(basis_url, json={'content': bound})).json()['data']
+        assert basis['status'] == 'current'
+        assert basis['previous']['scope']['version'] == historical_version
+        assert basis['current']['scope']['version'] == 3
         sound_bound = deepcopy(bound)
         sound_bound['design']['sound']['music_constraints'] = {
             'state': 'proposal', 'text': '后期加入环境声', 'sources': [source]}
@@ -237,3 +236,77 @@ async def test_instruction_preview_is_unit_scoped_and_rechecks_manual_input(tmp_
         assert old_record['design']['direction']['viewpoint']['text'] == '当次观察视点'
         assert old_record['style_rules'][0]['requirement'] == '固定机位，保持空间关系'
         assert (await client.get(detail)).json()['data']['content']['design']['direction']['viewpoint']['text'] == '保存后的新观察视点'
+
+
+@pytest.mark.asyncio
+async def test_partial_unit_compiles_and_checks_only_selected_execution(tmp_path):
+    """完整镜头作为解释背景；局部动作、实际选择和空间规则共同进入编译与审查。"""
+    from tests.directing.samples import complete_shot_scope_sample, note
+
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        async with sessions.begin() as db:
+            db.add(Provider(id='partial-provider', name='openai', base_url='https://api.openai.com/v1', api_key='fixture'))
+            await db.flush()
+            db.add_all([Model(id='partial-text', name='partial-text', category='text', provider_id='partial-provider', params={}),
+                        Model(id='partial-video', name='partial-video', category='video', provider_id='partial-provider', params={})])
+        path = await sequence_path(client)
+        version = (await client.post(path + '/versions', json={'request_id': str(uuid4()), 'title': '只拍抬头'})).json()['data']
+        content = deepcopy(version['content'])
+        content['design']['direction']['shots'] = [{'id': 'shot', 'beat_ids': ['beat'], 'event_ids': [],
+            'blocking_state_ids': [], 'participant_ids': [], 'criterion_ids': [], 'narrative_function': {}, 'visible_result': {}}]
+        complete_shot_scope_sample(content, '拆信、读信、抬头')
+        content['design']['direction']['beats'] = [{'id': 'beat', 'event_ids': [], 'objective': {},
+            'obstacle': {}, 'expected_change': {}, 'must_show': note('目光从信纸抬起')}]
+        content['design']['direction']['axis'] = note('保持桌面轴线')
+        content['design']['applicability'] = [{'subject': {'kind': 'direction', 'field': 'axis'},
+            'purpose': 'constraint', 'scope': 'scene_rule', 'phase': 'video'}]
+        content['units'] = [{'id': 'unit', 'model_id': 'partial-video', 'duration_ms': 5000, 'ratio': '16:9',
+            'coverage': [{'id': 'coverage', 'shot_id': 'shot', 'action_scope': '只拍抬头', 'beat_ids': ['beat']}]}]
+        detail = path + '/versions/' + version['id']
+        unit_url = detail + '/units/unit'
+        response = await client.post(unit_url + '/instruction-suggestions', json={
+            'request_id': str(uuid4()), 'expected_revision': 1, 'content': content, 'model_id': 'partial-text'})
+        assert response.status_code == 200, response.text
+        task_id = response.json()['data']['task_id']
+        async with sessions.begin() as db:
+            args = (await db.get(Task, task_id)).input_snapshot['run_args']
+            def invoke(messages):
+                scope = json.loads(messages[1].content)['scope']
+                assert [(row['owner'], row['text']) for row in scope['execution']] == [
+                    ('coverage:coverage', '只拍抬头'), ('beat:beat', '目光从信纸抬起')]
+                assert any(row['text'] == '拆信、读信、抬头' for row in scope['background'])
+                assert any(row['text'] == '保持桌面轴线' for row in scope['constraints'])
+                return SimpleNamespace(content=json.dumps({'unit_id': 'unit', 'text': '只拍抬头，目光从信纸抬起，保持桌面轴线。'}))
+            result = generate_directing_result('directing_instruction', SimpleNamespace(invoke=invoke), args)
+            service = TaskService(db)
+            assert await service.claim(task_id, worker_id='partial-instruction')
+            await service.finish(task_id, result=result.model_dump(mode='json'))
+        applied = await client.post(unit_url + '/instruction-suggestions/' + task_id + '/apply', json={'content': content})
+        assert applied.status_code == 200, applied.text
+        receipt = applied.json()['data']
+        content['units'][0].update(instruction=receipt['text'], instruction_source=receipt['source'], instruction_basis_id=receipt['basis_id'])
+        submitted = await client.post(unit_url + '/instruction-checks', json={
+            'request_id': str(uuid4()), 'expected_revision': 1, 'content': content, 'model_id': 'partial-text'})
+        assert submitted.status_code == 200, submitted.text
+        check_id = submitted.json()['data']['task_id']
+        async with sessions.begin() as db:
+            check_args = (await db.get(Task, check_id)).input_snapshot['run_args']
+            def check(messages):
+                scope = json.loads(messages[1].content)['inputs']['scope']
+                assert not any(row['owner'] == 'shot:shot' for row in scope['execution'])
+                return SimpleNamespace(content=json.dumps({'unit_id': 'unit', 'rows': [
+                    {'role': role, 'occurrence_id': 'coverage', 'verdict': 'pass', 'rationale': '只核验本次执行', 'findings': []}
+                    for role in ['direction', 'performance', 'staging', 'cinematography', 'continuity', 'prompt']],
+                    'destinations': [{'owner': owner, 'field': field, 'coverage_item_ids': ['coverage'],
+                        'destination': 'instruction', 'instruction_excerpt': excerpt, 'rationale': '正文表达'}
+                        for owner, field, excerpt in [('coverage:coverage', 'action_scope', '只拍抬头'),
+                            ('beat:beat', 'must_show', '目光从信纸抬起'), ('space', 'axis', '保持桌面轴线')]]}))
+            checked = generate_directing_result('directing_instruction_check', SimpleNamespace(invoke=check), check_args)
+            service = TaskService(db)
+            assert await service.claim(check_id, worker_id='partial-check')
+            await service.finish(check_id, result=checked.model_dump(mode='json'))
+        checked = await client.post(unit_url + '/instruction-checks/' + check_id + '/confirm', json={'content': content})
+        assert checked.status_code == 200, checked.text
+        history = (await client.get(unit_url + '/instruction-suggestions')).json()['data']
+        assert history[0]['unit_scope']['background'][0]['text'] == '拆信、读信、抬头'
+        assert (await client.get(detail)).json()['data'] == version
