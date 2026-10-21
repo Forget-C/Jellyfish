@@ -291,7 +291,7 @@ class CanvasGraph(Contract):
     revision: int = Field(gt=0)
     nodes: list[CanvasGraphNode]
     edges: list[CanvasEdge]
-    views: list[CanvasView]
+    views: list[CanvasView] = Field(description='含一个 parent_id 为空的根视图；视图 ID 为后端提供的不透明地址')
     issues: list[CanvasIssue]
 
     @model_validator(mode='after')
@@ -394,6 +394,8 @@ class CanvasGraph(Contract):
                     raise ValueError(f'cyclic or unknown canvas view parent: {view.id}')
                 ancestors.add(parent)
                 parent = views[parent].parent_id
+        if sum(view.parent_id is None for view in self.views) != 1:
+            raise ValueError('canvas requires exactly one root view')
         for issue in self.issues:
             target_exists(issue.target)
         return self

@@ -42,7 +42,7 @@ export function SceneUnitCanvas(props: SceneUnitCanvasProps) {
   const graph = props.graph
   if (!graph || graph.kind !== 'units' || graph.version_id !== props.versionId ||
     graph.revision !== props.revision || !Array.isArray(graph.nodes) || !Array.isArray(graph.views) ||
-    !graph.views.some(view => view.id === 'scene')) {
+    graph.views.filter(view => view.parent_id == null).length !== 1) {
     return <Alert type="error" message="单元图数据与当前版本不一致；当前编辑内容已保留" />
   }
   return <SceneUnitCanvasBody {...props} />
@@ -258,7 +258,8 @@ function SceneUnitCanvasBody({ primaryHost, navigationHost, graph, saved, projec
     <section className="scene-unit-editor-entry" aria-label="单元编辑入口">
       <Select aria-label="当前单元" placeholder="选择当前编辑单元" value={unit?.id} style={{ width: 320 }}
         options={allUnits.map((row, index) => ({ value: row.id, label: `单元 ${index + 1}` }))} onChange={id => onSelectUnit(id)} />
-      {unit && <Button onClick={() => openSettings(unit.id)}>查看单元设置</Button>}
+      {unit && <><WorkbenchButton variant="secondary" onClick={() => openSettings(unit.id)}>查看单元设置</WorkbenchButton>
+        <WorkbenchButton variant="secondary" disabled={disabled} onClick={() => setPicker(unit.id)}>编辑当前单元参考</WorkbenchButton></>}
       <WorkbenchButton disabled={disabled || !content.design.direction.shots.length} onClick={() => {
         if (browseShotId) create(browseShotId)
         else { setCreationShotId(undefined); setCreationOpen(true) }

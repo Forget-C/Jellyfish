@@ -22,13 +22,13 @@ export function directorCanvasProjection(authority: DirectorCanvasGraph, current
     return [{ key: node.object.id, label: node.title, kind: node.editor_kind, path: resolved || path, fields: row ? undefined : node.fields }]
   })
   const objectMap = new Map(objects.map(object => [object.key, object]))
-  const root = authority.views.find(view => view.id === 'scene')
+  const root = authority.views.find(view => view.parent_id == null)
   const rootMembers = new Map(root?.members.map(member => [member.node_id, member]))
   const location = (key: string): string => {
     const node = byKey.get(key)
     if (!node) return 'unlinked'
     const home = authority.views.find(view => view.id === node.home_view_id)
-    if (home?.id === 'scene') {
+    if (home?.id === root?.id) {
       const group = rootMembers.get(node.id)?.group
       return group === 'scene-global' ? 'global' : group === 'scene-shared' ? 'shared' : 'unlinked'
     }

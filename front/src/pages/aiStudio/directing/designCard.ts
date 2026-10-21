@@ -1,11 +1,11 @@
-import type { SceneDesign_Input } from '../../../services/generated'
+import type { SceneDesign_Input, SceneRelationshipGraph } from '../../../services/generated'
 import type { DesignObject } from './designWorkspace'
-import { designObjects, directorDesignGraph, shotGraph, shotIssues, shotRelationPath } from './designWorkspace'
+import { designObjects, designScopeLabel, directorDesignGraph, shotGraph, shotIssues, shotRelationPath } from './designWorkspace'
 import { designAt } from './designValue'
 import { designLabels } from './designLabels'
 
-/** 卡片只投影原字段；共享范围必须来自完整引用路径，不能由同名人物推断。 */
-export function designCard(value: SceneDesign_Input, object: DesignObject, saved?: SceneDesign_Input) {
+/** 正文读取当前编辑字段；已迁移详情的范围和镜头关系只消费后端快照。 */
+export function designCard(value: SceneDesign_Input, object: DesignObject, saved?: SceneDesign_Input, relationships?: SceneRelationshipGraph) {
   if (object.kind === 'missing') return { text: '关联对象已不存在，请在引用对象中核对关系。', references: [], subject: '', issues: ['关联对象缺失'], shots: [], scope: '缺失引用', shared: false, dirty: false }
   const row = designAt(value, object.path)
   const project = (item: any) => object.fields ? Object.fromEntries(object.fields.map(key => [key, item?.[key]])) : item
@@ -41,8 +41,16 @@ export function designCard(value: SceneDesign_Input, object: DesignObject, saved
     })
   }
   visit(project(row), [])
-  if (object.key.startsWith('shot:')) issues.push(...shotIssues(value, object.key.slice(5)))
-  const shots = value.direction.shots.flatMap((shot, index) => {
+  if (!relationships && object.key.startsWith('shot:')) issues.push(...shotIssues(value, object.key.slice(5)))
+  const authority = relationships?.nodes.find(node => node.key === object.key)
+  const shots = relationships ? (authority?.shot_ids || []).map(id => {
+    const index = value.direction.shots.findIndex(shot => shot.id === id)
+    const source = `shot:${id}`
+    const path = relationships.paths.find(row => row.source === source && row.target === object.key)?.steps
+    const direct = relationships.edges.find(row => row.owner === source && row.target === object.key)
+    const via = (path || (direct ? [direct] : [])).map(edge => designLabels[edge.field] || edge.field).join(' → ')
+    return { id, label: index < 0 ? `镜头引用已移除 · ${id}` : `镜头 ${String(index + 1).padStart(2, '0')}`, via: via || authority?.reason || '' }
+  }) : value.direction.shots.flatMap((shot, index) => {
     const related = directorDesignGraph(value, { scope: 'shot', shotId: shot.id }).relatedKeys
     if (!related.has(object.key) || !object.key.includes(':')) return []
     const graph = shotGraph(value, shot.id)
@@ -54,8 +62,8 @@ export function designCard(value: SceneDesign_Input, object: DesignObject, saved
       : object.key.startsWith('situation:') ? `相关人物情境：${person?.name || row.participant_id}` : '相关设计工作单引用')
     return [{ id: shot.id, label: `镜头 ${String(index + 1).padStart(2, '0')}`, via: object.key === `shot:${shot.id}` ? '' : via }]
   })
-  const shared = !object.key.includes(':')
-  const scope = shared ? '全场适用' : shots.length ? `关联 ${shots.length} 个镜头` : '未建立镜头关联'
+  const shared = relationships ? authority?.placement === 'scene_background' || authority?.placement === 'scene_rule' : !object.key.includes(':')
+  const scope = relationships ? designScopeLabel(relationships, object.key) || '关系待同步' : shared ? '全场适用' : shots.length ? `关联 ${shots.length} 个镜头` : '未建立镜头关联'
   const subject = [row?.participant_id && value.participants.find(person => person.id === row.participant_id)?.name,
     row?.beat_id && (value.direction.beats.some(beat => beat.id === row.beat_id) ? `节拍 ${value.direction.beats.findIndex(beat => beat.id === row.beat_id) + 1}` : '所属节拍缺失')].filter(Boolean).join(' · ')
   // 无 ID 的工作单以契约唯一键寻找保存基线，避免数组重排误报其它对象的修改。

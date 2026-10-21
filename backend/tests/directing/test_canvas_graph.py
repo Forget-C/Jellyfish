@@ -128,7 +128,7 @@ def test_graph_rejects_edit_target_for_an_undeclared_field():
     'duplicate_node', 'duplicate_view', 'missing_member', 'missing_anchor', 'missing_parent',
     'cyclic_parent', 'missing_entry', 'non_entry_target', 'missing_edge', 'dangling_endpoint',
     'business_edge_without_evidence', 'wrong_node_revision', 'wrong_target_revision',
-    'missing_issue_target',
+    'missing_issue_target', 'no_root_view', 'multiple_roots',
 ])
 def test_common_graph_contract_rejects_invalid_references(invalid):
     """两个投影器共同遵守的数据边界，非法图不能被当作可展示结果。"""
@@ -163,6 +163,10 @@ def test_common_graph_contract_rejects_invalid_references(invalid):
         node['object']['revision'] = 6
     elif invalid == 'wrong_target_revision':
         node['edit_target']['object']['revision'] = 6
+    elif invalid == 'no_root_view':
+        payload['views'] = []
+    elif invalid == 'multiple_roots':
+        payload['views'].append({**deepcopy(view), 'id': 'another-root'})
     elif invalid == 'missing_issue_target':
         target = deepcopy(node['edit_target'])
         target['node_id'] = 'gone'

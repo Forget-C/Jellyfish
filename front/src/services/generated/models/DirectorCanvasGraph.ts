@@ -17,6 +17,9 @@ export type DirectorCanvasGraph = {
     revision: number;
     nodes: Array<(SourceCanvasNode | DesignCanvasNode | MissingCanvasNode)>;
     edges: Array<CanvasEdge>;
+    /**
+     * 含一个 parent_id 为空的根视图；视图 ID 为后端提供的不透明地址
+     */
     views: Array<CanvasView>;
     issues: Array<CanvasIssue>;
     shot_count: number;

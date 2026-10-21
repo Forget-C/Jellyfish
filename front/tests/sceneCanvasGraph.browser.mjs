@@ -125,18 +125,31 @@ try {
     const body = await response.json()
     const rows = Array.isArray(body.data) ? body.data : [body.data]
     for (const row of rows) {
-      if (!row?.unit_graph) continue
-      const names = { 'shot:A': 'service-shot-view', 'unit:shared': 'service-unit-view' }
-      for (const view of row.unit_graph.views) {
-        view.id = names[view.id] || view.id
-        for (const member of view.members) member.entry_view_id = names[member.entry_view_id] || member.entry_view_id
+      for (const graphKey of ['director_graph', 'unit_graph']) {
+        const graph = row?.[graphKey]
+        if (!graph) continue
+        const names = graphKey === 'director_graph'
+          ? { scene: 'service-director-root', 'shot:A': 'service-director-shot-view' }
+          : { scene: 'service-unit-root', 'shot:A': 'service-shot-view', 'unit:shared': 'service-unit-view' }
+        for (const view of graph.views) {
+          view.id = names[view.id] || view.id
+          view.parent_id = names[view.parent_id] || view.parent_id
+          for (const member of view.members) member.entry_view_id = names[member.entry_view_id] || member.entry_view_id
+        }
+        for (const node of graph.nodes) node.home_view_id = names[node.home_view_id] || node.home_view_id
       }
-      for (const node of row.unit_graph.nodes) node.home_view_id = names[node.home_view_id] || node.home_view_id
     }
     await route.fulfill({ response, json: body })
   })
   await page.goto(`http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
+  await page.locator('[data-canvas-node="shot:A"]').getByRole('button', { name: /^进入子图：/ }).waitFor({ timeout: 5000 })
+  await page.locator('[data-canvas-node="shot:A"]').getByRole('button', { name: /^进入子图：/ }).click()
+  await page.locator('[data-layout-view="service-director-shot-view"]').waitFor({ timeout: 5000 })
+  await page.getByRole('button', { name: '总览', exact: true }).click()
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
+  await selectWorkbenchOption(page, '单元镜头筛选', '全部镜头')
+  await page.locator('[data-layout-view="service-unit-root"]').waitFor({ timeout: 5000 })
+  await selectWorkbenchOption(page, '单元镜头筛选', '镜头 1')
   await page.locator('[data-layout-view="service-shot-view"]').waitFor()
   await page.locator('[data-canvas-node="unit:shared"]').getByRole('button', { name: /^进入子图：/ }).click()
   await page.locator('[data-layout-view="service-unit-view"]').waitFor()
@@ -313,6 +326,16 @@ try {
   await createUnit.waitFor({ state: 'hidden' })
   await page.getByRole('textbox', { name: '单元动作范围', exact: true }).fill('未保存的新单元动作')
   await closeWorkbenchDetails(page)
+  await page.getByRole('button', { name: '编辑当前单元参考', exact: true }).waitFor({ timeout: 5000 })
+  await page.getByRole('button', { name: '编辑当前单元参考', exact: true }).click()
+  const unsavedReferences = page.getByRole('dialog', { name: '添加参考', exact: true })
+  await selectWorkbenchOption(page, '参考素材来源', '上传')
+  await unsavedReferences.locator('input[type=file]').setInputFiles({ name: 'unsaved-unit-reference.png', mimeType: 'image/png',
+    buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=', 'base64') })
+  await page.waitForFunction(() => { const image = document.querySelector('img[alt="参考图 1"]'); return image?.complete && image.naturalWidth === 1 })
+  await selectWorkbenchOption(page, '参考用途', '场所空间')
+  await unsavedReferences.getByRole('button', { name: '应用到本单元', exact: true }).click()
+  await unsavedReferences.waitFor({ state: 'hidden' })
   let failedSaveContent
   await page.route(`**/versions/${version.id}`, async route => {
     if (route.request().method() === 'PUT') { failedSaveContent = route.request().postDataJSON().content; await route.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ detail: '单元内容待修正' }) }) }
@@ -321,6 +344,7 @@ try {
   await page.getByRole('button', { name: '保存', exact: true }).click()
   await page.getByText('保存失败，输入已保留', { exact: true }).waitFor()
   assert.equal(failedSaveContent.units.at(-1).coverage[0].action_scope, '未保存的新单元动作', 'submitted content includes the new unit edit')
+  assert.equal(failedSaveContent.units.at(-1).references.length, 1, 'new units accept real references before their first successful save')
   await page.getByRole('button', { name: '查看单元设置', exact: true }).click()
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '未保存的新单元动作')
   await closeWorkbenchDetails(page)
@@ -357,8 +381,11 @@ try {
   await closeWorkbenchDetails(page)
   await page.getByRole('button', { name: '保存', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
-  await page.getByRole('button', { name: '撤销', exact: true }).click()
-  await page.getByRole('button', { name: '撤销', exact: true }).click()
+  let undoCount = 0
+  while (await page.getByRole('button', { name: '查看单元设置', exact: true }).isVisible() && undoCount < 10) {
+    await page.getByRole('button', { name: '撤销', exact: true }).click()
+    undoCount++
+  }
   assert.equal(await page.getByRole('button', { name: '查看单元设置', exact: true }).count(), 0, 'undo removes the unit only from current editing, while its saved graph remains')
   await page.getByRole('button', { name: '定位画布节点', exact: true }).click()
   await page.getByRole('menuitem', { name: '单元 3', exact: true }).click()
@@ -368,11 +395,35 @@ try {
   await page.getByRole('button', { name: '编辑本单元参考', exact: true }).click()
   await page.getByText('当前编辑中该来源已移除；保存后画布将同步，不会选择其他对象代替', { exact: true }).waitFor()
   assert.equal(await page.getByRole('dialog', { name: '添加参考', exact: true }).count(), 0, 'an obsolete reference entry cannot bind another unit')
-  await page.getByRole('button', { name: '重做', exact: true }).click()
-  await page.getByRole('button', { name: '重做', exact: true }).click()
+  for (let step = 0; step < undoCount; step++) await page.getByRole('button', { name: '重做', exact: true }).click()
   await page.getByRole('button', { name: '查看单元设置', exact: true }).click()
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '未保存的新单元动作')
 
+  await closeWorkbenchDetails(page)
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
+  const newDirectorResponse = await fetch(versionsUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ request_id: crypto.randomUUID(), title: '未保存导演对象重进' }) })
+  assert.equal(newDirectorResponse.status, 200)
+  const newDirector = (await newDirectorResponse.json()).data
+  await page.goto(`http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${newDirector.id}`)
+  await page.getByRole('button', { name: '添加首个镜头', exact: true }).click()
+  await page.getByRole('textbox', { name: '可见结果', exact: true }).fill('保存前的首个镜头')
+  await closeWorkbenchDetails(page)
+  await page.route(`**/versions/${newDirector.id}`, async route => {
+    if (route.request().method() === 'PUT') await route.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ detail: '镜头内容待修正' }) })
+    else await route.continue()
+  })
+  await page.getByRole('button', { name: '保存', exact: true }).click()
+  await page.getByText('保存失败，输入已保留', { exact: true }).waitFor()
+  await page.getByRole('button', { name: '附加信息', exact: true }).click()
+  await page.getByRole('combobox', { name: '编辑待同步对象', exact: true }).waitFor({ timeout: 5000 })
+  await selectWorkbenchOption(page, '编辑待同步对象', '镜头 01 · 保存前的首个镜头')
+  assert.equal(await page.getByRole('textbox', { name: '可见结果', exact: true }).inputValue(), '保存前的首个镜头', 'a new director object can be reopened after a failed first save')
+  assert.equal(await page.locator('[data-canvas-node^="shot:"]').count(), 0, 'editing a new director object does not create temporary graph nodes')
+  const unsavedDirector = (await (await fetch(`${versionsUrl}/${newDirector.id}`)).json()).data
+  assert.equal(unsavedDirector.content.design.direction.shots.length, 0)
+  assert.equal(unsavedDirector.director_graph.shot_count, 0)
+  await page.unroute(`**/versions/${newDirector.id}`)
   console.log(`PASS backend card titles, summaries, members, source, current editor and save graph; evidence: ${output}`)
 } catch (error) {
   if (page) await page.screenshot({ path: join(output, 'failure.png'), fullPage: true }).catch(() => {})

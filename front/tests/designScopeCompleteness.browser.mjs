@@ -47,6 +47,11 @@ try {
   design.direction.shots.push({ ...structuredClone(design.direction.shots[0]), id: 'shot2', visible_result: note('看见窗边的树影') })
   design.cinematography.push({ ...structuredClone(design.cinematography[0]), id: 'camera2', shot_id: 'shot2' })
   design.direction.anchors = [{ id: 'anchor1', description: note('门口的固定位置') }]
+  design.participants = structuredClone(shape.participants)
+  design.events = structuredClone(shape.events)
+  design.direction.blocking_states = structuredClone(shape.direction.blocking_states)
+  design.direction.shots[0].blocking_state_ids = ['state1']
+  design.direction.shots[0].event_ids = ['event1']
   version = await request(`${versions}/${version.id}`, { request_id: crypto.randomUUID(), expected_revision: version.revision,
     content: { ...version.content, design } }, 'PUT')
   assert.equal(version.relationship_graph.complete, true)
@@ -94,6 +99,13 @@ try {
   const anchor = page.locator('[data-canvas-node="anchor:anchor1"]')
   assert.match(await anchor.innerText(), /全场背景/)
   assert.doesNotMatch(await anchor.innerText(), /未建立镜头关联/)
+  await page.getByRole('button', { name: '定位画布节点', exact: true }).click()
+  await page.getByRole('menuitem', { name: /锚点/ }).click()
+  await anchor.getByRole('button', { name: '编辑此卡', exact: true }).click()
+  const anchorSummary = page.locator('.wb-details:not([hidden]) .design-object-summary')
+  assert.match(await anchorSummary.innerText(), /全场背景/)
+  assert.doesNotMatch(await anchorSummary.innerText(), /关联镜头与依据|修改将影响镜头/, '详情关系沿用后端全场归属，不以引用连通性重判')
+  await page.getByRole('button', { name: '关闭详情', exact: true }).click()
   await page.getByRole('button', { name: '附加信息', exact: true }).click()
   await page.getByText(/拍摄分工待补 · /).click()
   await page.getByText('应拍内容尚未分配负责的生产单元', { exact: false }).first().waitFor()

@@ -31,18 +31,19 @@ export function UnitGraphCanvas({ graph, versionId, revision, storageKey, naviga
   })
   const filter = params.has('unitShot') ? params.get('unitShot') || '' : remembered
   const shotView = (id: string) => graph?.nodes.find(node => node.kind === 'shot_basis' && node.shot_id === id)?.home_view_id
-  const filterView = filter ? shotView(filter) : 'scene'
+  const rootViewId = graph?.views.find(view => view.parent_id == null)?.id || ''
+  const filterView = filter ? shotView(filter) : rootViewId
   const [unavailableFocus, setUnavailableFocus] = useState(false)
   const focusView = graph?.nodes.find(node => node.kind === 'unit' && node.unit_id === focusUnitId)?.home_view_id
   const viewId = params.get('unitView') || filterView
   const view = unavailableFocus ? undefined : graph?.views.find(candidate => candidate.id === viewId)
   const byId = useMemo(() => new Map(graph?.nodes.map(node => [node.id, node])), [graph])
-  const valid = graph?.kind === 'units' && graph.version_id === versionId && graph.revision === revision
+  const valid = graph?.kind === 'units' && graph.version_id === versionId && graph.revision === revision && !!rootViewId
   const go = (nextView: string, nextFilter = filter, replace = false) => {
     setUnavailableFocus(false)
     const next = new URLSearchParams(params)
     next.set('unitShot', nextFilter)
-    if (nextView === 'scene' || graph?.nodes.some(node => node.kind === 'shot_basis' && node.home_view_id === nextView)) next.delete('unitView')
+    if (nextView === rootViewId || graph?.nodes.some(node => node.kind === 'shot_basis' && node.home_view_id === nextView)) next.delete('unitView')
     else next.set('unitView', nextView)
     setParams(next, { replace })
   }
@@ -61,7 +62,7 @@ export function UnitGraphCanvas({ graph, versionId, revision, storageKey, naviga
   }, [view?.anchor_id, location.key])
   if (!valid) return <Alert type="error" message="单元图数据与当前版本不一致；当前编辑内容已保留" />
   const select = (id: string) => {
-    const nextView = id ? shotView(id) : 'scene'
+    const nextView = id ? shotView(id) : rootViewId
     if (!nextView) return
     if (id) onSelectShot(id)
     go(nextView, id)
@@ -103,7 +104,7 @@ export function UnitGraphCanvas({ graph, versionId, revision, storageKey, naviga
   const navigation = <nav className="canvas-director-browse canvas-unit-browse" aria-label="单元画布位置" data-graph-navigation>
     <WorkbenchIconButton label="后退" variant="quiet" icon={<ArrowLeftOutlined />} disabled={!canBrowse(-1)} onClick={() => navigate(-1)} />
     <WorkbenchIconButton label="前进" variant="quiet" icon={<ArrowRightOutlined />} disabled={!canBrowse(1)} onClick={() => navigate(1)} />
-    <WorkbenchButton variant="quiet" onClick={() => go(filterView || 'scene', filterView ? filter : '')}>单元画布</WorkbenchButton>
+    <WorkbenchButton variant="quiet" onClick={() => go(filterView || rootViewId, filterView ? filter : '')}>单元画布</WorkbenchButton>
     {(!!params.get('unitView') || byId.get(view?.anchor_id || '')?.kind === 'unit') && <span className="canvas-director-location">› {view?.title || '单元不可用'}</span>}
     <Select aria-label="单元镜头筛选" value={filter} style={{ minWidth: 160 }} onChange={select}
       options={[{ value: '', label: '全部镜头' }, ...graph.nodes.flatMap(node => node.kind === 'shot_basis' ? [{ value: node.shot_id, label: node.title }] : [])]} />
@@ -111,7 +112,7 @@ export function UnitGraphCanvas({ graph, versionId, revision, storageKey, naviga
   </nav>
   return <>
     {navigationHost ? createPortal(navigation, navigationHost) : navigation}
-    {!view ? <Alert type="warning" message="原浏览目标已不可用" action={<WorkbenchButton onClick={() => go('scene', '')}>返回全部镜头</WorkbenchButton>} /> :
+    {!view ? <Alert type="warning" message="原浏览目标已不可用" action={<WorkbenchButton onClick={() => go(rootViewId, '')}>返回全部镜头</WorkbenchButton>} /> :
       <GraphCanvas contextKey={storageKey} ariaLabel="单元画布视口" objects={objects} relations={relations}
         groups={view.groups} layoutScope={{ storageKey, viewId: view.id, anchorId: view.anchor_id || '',
           validIds: graph.nodes.map(node => node.id), validViewIds: graph.views.map(candidate => candidate.id), arrange: arrangeUnitGraph, initialTop: window.innerWidth <= 700 ? 112 : 64 }} />}

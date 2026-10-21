@@ -1,6 +1,6 @@
 import type { SceneDesign_Input, SceneRelationshipGraph } from '../../../services/generated'
 import type { DesignObject } from './designWorkspace'
-import { departmentNames, designScopeLabel } from './designWorkspace'
+import { departmentNames } from './designWorkspace'
 import { designCard } from './designCard'
 import { CanvasTextPreview } from './CanvasTextPreview'
 import { WorkbenchButton } from './ui/WorkbenchButton'
@@ -68,8 +68,7 @@ function CompactDesignSummary({ value, object, card }: { value: SceneDesign_Inpu
 export function DesignObjectSummary({ value, saved, object, relationshipGraph, onSelectShot, showText = true, editing = false, compact = false }: {
   value: SceneDesign_Input; saved?: SceneDesign_Input; object: DesignObject; relationshipGraph?: SceneRelationshipGraph; onSelectShot?: (id: string) => void; showText?: boolean; editing?: boolean; compact?: boolean
 }) {
-  const card = designCard(value, object, saved)
-  card.scope = designScopeLabel(relationshipGraph, object.key) || card.scope
+  const card = designCard(value, object, saved, relationshipGraph)
   const scopeIssues = relationshipGraph?.issues?.filter(row => row.owner === object.key) || []
   card.issues = [...card.issues, ...scopeIssues.map(row => `${designLabels[row.field] || row.field}：${row.reason}`)]
   if (compact && (compactKind(object.key) || object.kind === 'missing')) return <CompactDesignSummary value={value} object={object} card={card} />
@@ -80,8 +79,8 @@ export function DesignObjectSummary({ value, saved, object, relationshipGraph, o
     {showText && <CanvasTextPreview text={card.text || '尚无设计正文'} label="设计正文" lines={4} />}
     {!!card.references.length && <details><summary>适用对象与引用</summary><ul>{card.references.map(reference => <li key={reference}>{reference}</li>)}</ul></details>}
     {!!card.shots.length && !object.key.startsWith('shot:') && <details open={card.shots.length <= 3}><summary>关联镜头与依据 · {card.shots.length}</summary>{card.shots.map(shot => <div key={shot.id}>
-      <WorkbenchButton variant="quiet" disabled={!onSelectShot} onClick={() => onSelectShot?.(shot.id)}>{shot.label}</WorkbenchButton><span>{shot.via || '镜头自身'}</span>
+      <WorkbenchButton variant="quiet" disabled={!onSelectShot || !value.direction.shots.some(row => row.id === shot.id)} onClick={() => onSelectShot?.(shot.id)}>{shot.label}</WorkbenchButton><span>{shot.via || '镜头自身'}</span>
     </div>)}</details>}
-    {editing && <p>{card.shared ? '修改将作用于全场。' : card.shots.length ? `修改将影响${card.shots.map(shot => shot.label).join('、')}。` : '此对象没有明确的镜头关联，请按原有适用范围编辑。'}关闭后保留草稿，通过场次统一保存。</p>}
+    {editing && <p>{card.shared ? '修改将作用于全场。' : card.shots.length ? `修改将影响${card.shots.map(shot => shot.label).join('、')}。` : '此对象没有明确的镜头关联，请按原有适用范围编辑。'}关闭后保留当前输入，通过场次统一保存。</p>}
   </div>
 }

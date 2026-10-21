@@ -117,3 +117,26 @@
 - 最新 graph 完整通过：`jellyfish-canvas-graph-YdEns3`（缺失图、跨镜头 AI 门禁、恢复、旧图移除、字段、配置、真实图片、导航等全旅程）。最新 AI 完整通过：`jellyfish-scene-version-UNRwnS`。
 - 视频浏览器先按新真实控件适配旧单元标签及选择弹层（保留全部业务断言），再增强起点为实际选择模型、填写时长、上传／绑定参考。最终完整通过：`jellyfish-scene-version-dcS5E7`；包含正文核对、六岗检查、未知保存并生成／重放、其他单元继续编辑、候选真实播放／失败重试及不自动采用。
 - A01–A20 与复用／范围审计汇总到 acceptance.md。当前剩余最终两轴审查、相关修复、票据／计划结项和当前分支提交，目标仍 active。本轮测试句柄待最终收齐后记录，不提前结项。
+
+## 首次提交与两轴审查
+
+- 作为固定审查点，已在当前 codex/0718 提交 `06f79c1b7ca6b38798d39401517d91bb82c4cb4a`（[feat] 共享 graph 契约与单元画布改造）。本地提交不代表最终验收完成；goal 仍 active。
+- 全仓最新后端验收结束：786 passed、19 skipped、140.79s，退出成功。这包括最终计数与 legacy 身份测试。此后仅修改前端入口和浏览器，后端代码未变。
+- 已按 code-review 技能显式授权的两轴并行审查执行，固定基线 d264de4738484306d5b1b17ad588803546d31ac6...HEAD（审查 HEAD 为06f79c1）。Standards 2 项（P2 根视图固定 scene、P3 当前单元按钮未共享），Spec 2 项（P1 未保存导演对象关闭后无法重进、P2 新单元首次保存前参考入口不可达）。两轴原报告分别保存在 review.md，没有合并或跨轴排序。
+- 已修 Standards P3 与 Spec P2：当前单元设置和参考入口使用 WorkbenchButton；参考直接打开同一 ReferencePicker，支持 graph 尚无该单元时实际上传、绑定。浏览器先红 vQZjKH，修复后完整通过 `/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-canvas-graph-LBdClK`；新绑定随首次失败内容保留、关闭恢复，保存后撤销移除的旧图参考入口仍明确不可用。撤销测试通过公开控件逐步回退到创建前，重做准确恢复，不依赖私有 history。
+- typecheck、diff --check 通过；已查看 LBdClK/unit-graph-mobile.png，390px 下当前单元选择／设置／参考／新增入口正常换行且不覆盖下方工具栏。
+- 本轮所有执行测试句柄与两个审查者均已终态。06f79c1 后工作区尚有前端入口修复、浏览器、acceptance.md 与新 review.md，未提交；票据和计划未结项。
+
+### 下轮明确接续
+
+1. 修 Standards P2：两类包装保护、directorCanvasProjection、UnitGraphCanvas 仍硬编码根视图 scene。应消费后端 `parent_id == null` 的真实根地址；扩充现有不透明 ID 浏览器为根视图和导演子图重命名（同时改 view.parent_id／entry_view_id／node.home_view_id），先红后绿。导演 geometry 的 legacy overview 可保留在适配中，但有效视图、子图布局与预览不能继续假设后端 shot:<id> ID；当前 DirectorDesignCanvas 的 viewId 在 projection 之前，可移到 graph.metadata 得到后按真实视图确定，保留旧 root overview 缓存映射。共同契约是否需显式唯一根约束按现有 parent_id 语义收敛，避免从多个根任意选一个。
+2. 修 Spec P1：新增导演对象不在已保存 projection.objects 中。提供只用于编辑选择的当前未同步对象入口，复用 designObjects(current)／targetFor／edit，不能加入临时 graph。建议在已有附加信息内列出当前对象中未出现在 projection.byKey 的项目，明确“编辑待同步对象”；关闭详情及首次保存失败后可重新打开。需浏览器创建空版本 → 添加首镜头 → 填写 → 关闭 → 422 保存失败 → 当前编辑选择入口重新打开，证明服务器仍无镜头、graph 无假节点。currentObjects 只用于编辑，业务 graph 仍由后端决定。
+3. 后续自审需核实相关详情消费者：DesignObjectSummary.tsx:71 调 designCard(value,object,saved)，只覆盖 card.scope；designCard.ts:45 后仍以 directorDesignGraph／shotGraph 从原内容计算 card.shots。母规格 02 要求“导演相关详情、来源和检查消费者完成迁移”，且后端负责关系。判断该当前编辑摘要是否仍有重复关系推断；如需调整，有 supplied relationshipGraph 时应使用其 node.shot_ids／edges／paths／placement，不在已迁移详情走旧前端连通性算法；其他未迁移旧消费者按范围保留。不要把当前字段文字格式化等编辑行为错误移出前端。此项为待核实边界，未作为两轴原报告中的第三项。
+4. 修复后运行受影响浏览器／类型（共享根契约若变则相关后端及 Pylint、必要 OpenAPI），固定修复提交，用同一基线对两轴复查。然后按 acceptance.md 和票据条件完成结项记录／计划状态及最终提交，再做完成审计。不要把初次矩阵“已执行通过”误当作审查通过。
+
+## 审查修复与详情范围核对
+
+- Standards P2 已修：两类画布按唯一 parent_id 为空的根视图定位；布局适配仅保留既有 overview 缓存键，真实子图地址来自 graph。公共契约拒绝多个根，OpenAPI 与客户端同步。根及导演／单元子图重命名的浏览器先红后绿。公开契约 26 passed，全部 directing 503 passed、15 skipped，Pylint 10.00。
+- Spec P1 已修：附加信息新增“编辑待同步对象”，只读取当前编辑对象登记表，不创建图节点／边。空版本新增首镜头、关闭详情、422 失败后重新进入，原输入完整；服务端和 graph 仍无镜头。完整 graph 浏览器 WxCIl6 通过，同时覆盖前轮未保存单元参考和关闭恢复。
+- 自审确认详情的 card.shots 仍调用旧连通性推断。真实锚点由调度引用时，后端全场背景却被详情宣称影响镜头；6JN77V 红例复现。已迁移详情改为消费 relationship_graph 的 shot_ids／placement／edges／paths／reason；当前字段及编辑校验保留，不把引用当作执行归属。详情文案改为“当前输入”，不引入草稿。设计范围完整浏览器 gYn88w 通过。
+- 最新 typecheck 与前端纯逻辑全集 182 passed；diff --check 通过。导演布局回归和后端最终全量正在执行，后续记录终态。

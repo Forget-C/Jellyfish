@@ -20,6 +20,9 @@ export type UnitCanvasGraph = {
     revision: number;
     nodes: Array<(ShotBasisCanvasNode | UnitCanvasNode | UnitConfigCanvasNode | UnitReferencesCanvasNode | UnitBasisCanvasNode | MissingCanvasNode)>;
     edges: Array<CanvasEdge>;
+    /**
+     * 含一个 parent_id 为空的根视图；视图 ID 为后端提供的不透明地址
+     */
     views: Array<CanvasView>;
     issues: Array<CanvasIssue>;
 };

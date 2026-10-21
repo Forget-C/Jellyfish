@@ -44,7 +44,7 @@ type DirectorDesignCanvasProps = {
 export function DirectorDesignCanvas(props: DirectorDesignCanvasProps) {
   const graph = props.directorGraph
   if (!graph || graph.kind !== 'director' || graph.version_id !== props.versionId ||
-    graph.revision !== props.relationshipGraph.revision || !graph.views.some(view => view.id === 'scene') ||
+    graph.revision !== props.relationshipGraph.revision || graph.views.filter(view => view.parent_id == null).length !== 1 ||
     !graph.nodes.some(node => node.kind === 'source')) {
     return <Alert type="error" message="画布图数据与当前版本不一致，请重新读取；当前编辑内容已保留" />
   }
@@ -67,7 +67,6 @@ function DirectorDesignCanvasBody({ projectId, sequenceId, versionId, content, s
   const activeShotId = state.shotId || shotId
   const hasShot = content.design.direction.shots.some(row => row.id === activeShotId)
   const scope = state.scope === 'shot' && hasShot ? 'shot' : 'all'
-  const viewId = scope === 'shot' ? `shot:${activeShotId}` : 'overview'
   const [focusRequest, setFocusRequest] = useState<DesignFocusRequest>()
   const [editingTarget, setEditingTarget] = useState<DesignTarget>()
   const [identityAliases, setIdentityAliases] = useState<Record<string, string>>({})
@@ -86,11 +85,16 @@ function DirectorDesignCanvasBody({ projectId, sequenceId, versionId, content, s
   const projection = useMemo(() => directorCanvasProjection(directorGraph, content.design, saved.design), [directorGraph, content.design, saved.design])
   const overviewGraph = useMemo(() => projection.view(), [projection])
   const allObjects = projection.objects
+  // 仅供当前编辑重进；这些对象不进入服务端 graph 的卡片或成员。
+  const pendingObjects = useMemo(() => designObjects(content.design).filter(node => !projection.byKey.has(node.key)),
+    [content.design, projection])
   const sourceNode = directorGraph?.nodes.find(node => node.kind === 'source')
   const identity = (node: DesignObject, design = content.design) => projection.byKey.get(node.key)?.id || designObjectLayoutId(design, node)
   const target = (id?: string) => allObjects.find(node => identity(node) === id)
   const graph = useMemo(() => scope === 'shot' ? projection.view(activeShotId) : overviewGraph,
     [scope, activeShotId, overviewGraph, projection])
+  // overview 仅保留既有根布局缓存键；实际子图地址来自后端。
+  const viewId = graph.metadata ? (graph.metadata.parent_id == null ? 'overview' : graph.metadata.id) : `pending:${activeShotId || 'view'}`
   const pendingCount = directorGraph.pending_count
   const unlinkedCount = directorGraph.unlinked_count
   const { canBrowse } = useGraphBrowse(storageKey)
@@ -323,7 +327,7 @@ function DirectorDesignCanvasBody({ projectId, sequenceId, versionId, content, s
       guides={graph.guides}
       layoutScope={{ storageKey, viewId, anchorId: scope === 'shot' ? currentShot ? identity(currentShot) : '' : '原文依据',
         identityAliases,
-        validViewIds: directorGraph.views.map(view => view.id === 'scene' ? 'overview' : view.id),
+        validViewIds: directorGraph.views.map(view => view.parent_id == null ? 'overview' : view.id),
         validIds: ['原文依据', ...allObjects.map(node => identity(node))].filter(id => !id.includes(':ambiguous:')),
         onInvalidTarget: () => setUnavailable(true) }}
       focusTarget={visibleFocus ? { nodeId: visibleFocus, fieldId: '', serial: focusSerial.current, restore } : undefined}>
@@ -361,6 +365,15 @@ function DirectorDesignCanvasBody({ projectId, sequenceId, versionId, content, s
         {use.scope === 'scene' ? ' · 全场背景' : use.scope === 'scene_rule' ? ' · 全场规则' : use.scope === 'shots' ? ` · 镜头 ${use.shot_ids?.join('、')}` : use.scope === 'occurrences' ? ' · 指定单元出现项' : ' · 范围待明确'}
         {use.phase ? ` · ${use.phase}` : ''}{use.condition ? ` · 条件：${use.condition}` : ''}
       </li>)}</ul></details>
+      {!!pendingObjects.length && <section aria-label="当前待同步对象编辑">
+        <label htmlFor="director-pending-editor">编辑待同步对象</label>
+        <Select id="director-pending-editor" aria-label="编辑待同步对象" showSearch optionFilterProp="label" placeholder="选择当前编辑对象" value={null} style={{ width: '100%' }}
+          options={pendingObjects.map(node => ({ value: node.key, label: node.label }))}
+          onChange={key => {
+            const node = pendingObjects.find(candidate => candidate.key === key)
+            if (node) { setInfoOpen(false); edit(node, document.activeElement instanceof HTMLElement ? document.activeElement : document.body) }
+          }} />
+      </section>}
       <label htmlFor="director-object-locator">定位当前视图对象</label>
       <Select id="director-object-locator" aria-label="定位设计对象" showSearch optionFilterProp="label" placeholder="选择设计对象" value={null}
         options={locationOptions.map(node => ({ value: identity(node), label: node.label }))}
