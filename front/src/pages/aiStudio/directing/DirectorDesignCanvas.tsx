@@ -184,8 +184,10 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
     if (!externalFocus || externalFocus.serial === consumedFocus.current) return
     consumedFocus.current = externalFocus.serial
     const node = allObjects.find(row => row.key === (externalFocus.nodeId === '镜头设计' ? `shot:${shotId}` : externalFocus.nodeId))
-    if (node) jump(node)
-    else setUnavailable(true)
+    if (node) {
+      jump(node)
+      if (externalFocus.fieldId === 'applicability') edit(node, document.activeElement instanceof HTMLElement ? document.activeElement : document.body)
+    } else setUnavailable(true)
     onExternalFocusHandled()
   }, [externalFocus?.serial])
   useEffect(() => {

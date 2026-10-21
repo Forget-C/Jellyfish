@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { SceneUnitDesignBlocker } from './SceneUnitDesignBlocker';
 import type { SceneUnitDesignResult } from './SceneUnitDesignResult';
 /**
  * 校验后的只读方案；明确应用由独立用户动作完成。
@@ -9,4 +10,6 @@ import type { SceneUnitDesignResult } from './SceneUnitDesignResult';
 export type SceneUnitDesignPreview = {
     task_id: string;
     result: SceneUnitDesignResult;
+    blockers?: Array<SceneUnitDesignBlocker>;
 };
+

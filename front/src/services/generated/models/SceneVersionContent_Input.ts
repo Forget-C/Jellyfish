@@ -15,6 +15,8 @@ export type SceneVersionContent_Input = {
     design: EditableSceneDesign_Input;
     output_aspect_ratio?: '16:9' | '9:16' | '1:1';
     units?: Array<EditableGenerationUnit_Input>;
+    unit_design_task_id?: (string | null);
     take_judgments?: Array<SceneTakeJudgment_Input>;
     timeline?: SceneTimeline_Input;
 };
+

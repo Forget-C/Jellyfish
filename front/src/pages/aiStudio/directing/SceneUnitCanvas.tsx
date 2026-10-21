@@ -5,7 +5,7 @@ import { useSceneUnitPreparation } from './useSceneUnitPreparation'
 import { useEffect, useState } from 'react'
 import { Alert, Button, Input, InputNumber, Select, Space, Spin } from 'antd'
 import { LlmService, StudioDirectingService } from '../../../services/generated'
-import type { AssetSummary, EditableGenerationUnit_Output, ModelRead, SceneVersionContent_Output, WorkspaceRead } from '../../../services/generated'
+import type { AssetSummary, SceneUnitDesignBlocker, EditableGenerationUnit_Output, ModelRead, SceneVersionContent_Output, WorkspaceRead } from '../../../services/generated'
 import { DirectorCanvasSurface } from './DirectorCanvasSurface'
 import { SceneFrameDependencies } from './SceneFrameDependencies'
 import { DependencyEditor } from './DependencyEditor'
@@ -18,7 +18,8 @@ import { SceneUnitDesignSuggestions } from './SceneUnitDesignSuggestions'
 import { SceneInstructionSuggestions } from './SceneInstructionSuggestions'
 
 /** 单元和设计共用一份可编辑方案；画布浏览不创建单元，也不选择替代对象。 */
-export function SceneUnitCanvas({ primaryHost, projectId, sequenceId, versionId, revision, content, shotId, unitId, disabled, saveStatus, onSelectShot, onSelectUnit, onChange, focusRequest, onOpenInstruction, onInstructionTask, onOpenEdit, unitDesignTaskId, onUnitDesignFocused }: {
+export function SceneUnitCanvas({ primaryHost, projectId, sequenceId, versionId, revision, content, shotId, unitId, disabled, saveStatus, onSelectShot, onSelectUnit, onChange, focusRequest, onOpenInstruction, onInstructionTask, onOpenEdit, unitDesignTaskId, onUnitDesignFocused, onLocateBlocker }: {
+  onLocateBlocker: (blocker: SceneUnitDesignBlocker) => void
   onUnitDesignFocused?: () => void
   unitDesignTaskId?: string
   saveStatus: string
@@ -192,7 +193,7 @@ export function SceneUnitCanvas({ primaryHost, projectId, sequenceId, versionId,
         </>}
       </>
   return <section className="scene-unit-canvas">
-    <SceneUnitDesignSuggestions onChange={onChange} onFocused={onUnitDesignFocused} triggerHost={primaryHost} focusTaskId={unitDesignTaskId} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content} shotId={shotId} unitId={unit?.id} disabled={disabled} />
+    <SceneUnitDesignSuggestions onLocateBlocker={onLocateBlocker} onChange={onChange} onFocused={onUnitDesignFocused} triggerHost={primaryHost} focusTaskId={unitDesignTaskId} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content} shotId={shotId} unitId={unit?.id} disabled={disabled} />
     {unit && primaryHost && createPortal(<nav className="scene-unit-primary" aria-label="当前单元主操作"><strong>当前单元 {allUnits.indexOf(unit) + 1}</strong>
       {<SceneInstructionSuggestions onPrepare={missing.length ? () => locateIssue(missing[0]) : undefined} key={unit.id} compact projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision}
         unitId={unit.id} content={content} disabled={disabled} onChange={onChange} onOpen={onOpenInstruction} onTask={onInstructionTask} />}

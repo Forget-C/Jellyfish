@@ -341,3 +341,30 @@ async def complete_unit_supplement_fixture(task_id: str):
         assert await service.claim(task_id, worker_id='browser-supplement')
         await service.finish(task_id, result=generated.model_dump(mode='json'))
     return {'ok': True}
+
+
+@app.post('/browser-test/unit-design-tasks/{task_id}/complete-regroup')
+async def complete_unit_regroup_fixture(task_id: str, mode: str = 'reduce'):
+    """仅控制外部模型响应；拆并移除均走真实任务、预览与保存。"""
+    from types import SimpleNamespace
+    from app.services.directing.ai import generate_directing_result
+    async with sessions.begin() as db:
+        task = await db.get(Task, task_id)
+        args = task.input_snapshot['run_args']
+        originals = [unit for unit in args['organization_inputs']['units']
+                     if all(item['shot_id'] == args['shot_id'] for item in unit['coverage'])]
+        retained = originals[:-1] if mode == 'reduce' else [unit for unit in originals if unit['id'] != args['source_unit_id']] if mode == 'split' else []
+        units = [{'id': unit['id'], 'operation': 'retain', 'coverage': unit['coverage'],
+                  'duration_ms': unit['duration_ms'], 'ratio': unit['ratio'], 'reason': '保留原单元'} for unit in retained]
+        text = args['organization_inputs']['shot']['visible_result']['text']
+        scopes = [text.split('；')[0], '；'.join(text.split('；')[1:])] if mode == 'split' else [text] if mode == 'merge' else []
+        units.extend({'id': f'{mode}-{task_id}-{index}', 'operation': 'create', 'coverage': [
+            {'id': f'coverage-{index}', 'shot_id': args['shot_id'], 'action_scope': scope}],
+            'ratio': '16:9', 'reason': '拆分新工作' if mode == 'split' else '合并新工作'} for index, scope in enumerate(scopes))
+        result = {'shot_id': args['shot_id'], 'target_model_id': args['target_model_id'], 'organization': '整份方案重组', 'units': units}
+        generated = generate_directing_result('directing_unit_design', SimpleNamespace(
+            invoke=lambda _: SimpleNamespace(content=json.dumps(result))), args)
+        service = TaskService(db)
+        assert await service.claim(task_id, worker_id='browser-unit-regroup')
+        await service.finish(task_id, result=generated.model_dump(mode='json'))
+    return {'ok': True}

@@ -2,7 +2,7 @@ import { createPortal } from 'react-dom'
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Input, Select, Spin } from 'antd'
 import { ApiError, LlmService, StudioDirectingService } from '../../../services/generated'
-import type { ModelRead, SceneUnitDesignRequest_Input as SceneUnitDesignRequest, SceneUnitDesignSuggestionRead, SceneVersionContent_Output, VideoGenerationOptionsRead, VideoReferenceCapabilities } from '../../../services/generated'
+import type { ModelRead, SceneUnitDesignBlocker, SceneUnitDesignRequest_Input as SceneUnitDesignRequest, SceneUnitDesignSuggestionRead, SceneVersionContent_Output, VideoGenerationOptionsRead, VideoReferenceCapabilities } from '../../../services/generated'
 import { WorkbenchButton } from './ui/WorkbenchButton'
 import { WorkbenchModal, WorkbenchDialogActions } from './ui/WorkbenchModal'
 import { CanvasTextPreview } from './CanvasTextPreview'
@@ -12,7 +12,8 @@ const terminal = ['succeeded', 'failed', 'cancelled']
 const statuses: Record<string, string> = { queued: '等待执行', running: '执行中', succeeded: '已生成', failed: '失败', cancelled: '已取消' }
 
 /** 组织建议与场次编辑分开；结果未明确应用前，不创建任何正式单元。 */
-export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, revision, content, shotId, unitId, disabled, focusTaskId, triggerHost, onFocused, onChange }: {
+export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, revision, content, shotId, unitId, disabled, focusTaskId, triggerHost, onFocused, onChange, onLocateBlocker }: {
+  onLocateBlocker: (blocker: SceneUnitDesignBlocker) => void
   onChange: (content: SceneVersionContent_Output) => void
   triggerHost?: HTMLElement | null
   projectId: string; sequenceId: string; versionId: string; revision: number
@@ -32,6 +33,9 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
   const [error, setError] = useState('')
   const [readError, setReadError] = useState('')
   const [previewError, setPreviewError] = useState('')
+  const [blockers, setBlockers] = useState<SceneUnitDesignBlocker[]>([])
+  const [previewReady, setPreviewReady] = useState(false)
+  const [previewAttempt, setPreviewAttempt] = useState(0)
   const [busy, setBusy] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const [capabilityAttempt, setCapabilityAttempt] = useState(0)
@@ -108,15 +112,18 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
   const selected = preparing ? undefined : rows?.find(row => row.task_id === selectedId)
   useEffect(() => {
     let active = true
-    setPreviewError('')
+    setPreviewError(''); setBlockers([]); setPreviewReady(false)
     if (open && selected?.result) void StudioDirectingService.directingSceneUnitDesignPreview({ projectId, sequenceId, versionId,
-      taskId: selected.task_id, requestBody: { content } }).catch(cause => { if (active) setPreviewError(directingError(cause)) })
+      taskId: selected.task_id, requestBody: { content } }).then(response => {
+        if (!response.data) throw new Error('预览尚未核实')
+        if (active) { setBlockers(response.data.blockers || []); setPreviewReady(true) }
+      }).catch(cause => { if (active) setPreviewError(directingError(cause)) })
     return () => { active = false }
-  }, [open, projectId, sequenceId, versionId, selected?.task_id, selected?.status, content])
+  }, [open, projectId, sequenceId, versionId, selected?.task_id, selected?.status, content, previewAttempt])
   const context = useRef({ unitId, shotId })
   useEffect(() => {
     if (context.current.unitId !== unitId || context.current.shotId !== shotId) {
-      setModelId(undefined); setPreparing(true); context.current = { unitId, shotId }
+      setModelId(undefined); context.current = { unitId, shotId }
     }
   }, [unitId, shotId])
   const running = rows?.some(row => !terminal.includes(row.status))
@@ -140,7 +147,7 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
     } finally { if (mounted.current) setBusy(false) }
   }
   const apply = async () => {
-    if (!selected?.result || busy || live.current.disabled || previewError) return
+    if (!selected?.result || busy || live.current.disabled || previewError || !previewReady || blockers.length) return
     const snapshot = live.current.content
     setBusy(true); setError('')
     try {
@@ -162,7 +169,7 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
     <WorkbenchModal title="AI设计" open={open} onCancel={() => setOpen(false)} footer={<WorkbenchDialogActions
       secondary={<WorkbenchButton variant="quiet" onClick={() => setOpen(false)}>{selected ? '关闭预览' : '取消'}</WorkbenchButton>}>
       {pending.current ? <WorkbenchButton variant="primary" loading={busy} disabled={busy || disabled} onClick={() => void submit()}>核实原设计请求</WorkbenchButton>
-        : selected ? <><WorkbenchButton disabled={busy || disabled || running} onClick={() => { setPreparing(true); setError('') }}>重新设计</WorkbenchButton>{selected.result && <WorkbenchButton variant="primary" loading={busy} disabled={busy || disabled || !!previewError} onClick={() => void apply()}>确认应用方案</WorkbenchButton>}</>
+        : selected ? <><WorkbenchButton disabled={busy || disabled || running} onClick={() => { setPreparing(true); setError('') }}>重新设计</WorkbenchButton>{selected.result && <WorkbenchButton variant="primary" loading={busy} disabled={busy || disabled || !!previewError || !previewReady || !!blockers.length} onClick={() => void apply()}>确认应用方案</WorkbenchButton>}</>
           : <WorkbenchButton variant="primary" loading={busy} disabled={disabled || busy || !shot || needsSource && !sourceUnit || !verified || !rows || !!readError || running} onClick={() => void submit()}>开始设计</WorkbenchButton>}
     </WorkbenchDialogActions>}>
       <p>当前镜头：{displayShot?.visible_result.text || (displayShot ? displayShot.id : '请先选择有效镜头')}</p>
@@ -199,6 +206,16 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
         {!terminal.includes(selected.status) && <p>任务在后台执行，可关闭后稍后查看。</p>}
         {selected.result && <>
           {previewError && <Alert type="warning" message={previewError} description="保留本次结果供查看，请按当前内容重新设计。" />}
+          {previewError && <WorkbenchButton onClick={() => setPreviewAttempt(value => value + 1)}>重新核对预览</WorkbenchButton>}
+          {!!blockers.length && <Alert type="warning" message="移除存在引用，处理前不能确认" description={<ul>{blockers.map(blocker => <li key={blocker.path}>
+            {blocker.unit_id} / {blocker.coverage_item_id} · {blocker.path}
+            <WorkbenchButton onClick={() => { setOpen(false); onLocateBlocker(blocker) }}>定位并处理引用</WorkbenchButton>
+          </li>)}</ul>} />}
+          {selected.request.content.units.filter(unit => unit.coverage.every(item => item.shot_id === selected.result!.shot_id)
+            && !selected.result!.units.some(row => row.id === unit.id)).map(unit => <section key={unit.id} aria-label={`移除单元 ${unit.id}`}>
+              <h4>移除 · {unit.id}</h4><p>原执行范围：{unit.coverage.map(item => item.action_scope).join('；')}</p>
+              <p>历史任务、检查和素材保留原依据；运行任务继续，完成后登记原任务候选。移除后不能按原依据发起新重试。</p>
+            </section>)}
           <h3>单元方案预览</h3><p>{selected.result.organization}</p>
           {!!selected.result.missing?.length && <Alert type="warning" message="方案准备缺项" description={<ul>{selected.result.missing?.map((item, index) => <li key={index}>{item}</li>)}</ul>} />}
           {selected.result.units.map((unit, index) => {

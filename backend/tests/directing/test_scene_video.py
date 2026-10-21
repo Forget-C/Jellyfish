@@ -51,7 +51,8 @@ def reference_storage(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('with_reference', [False, True, 'replacement'])
-async def test_video_submission_freezes_original_unit_and_registers_only_candidate(tmp_path, with_reference, reference_storage, monkeypatch):
+@pytest.mark.parametrize('remove_running', [False, True])
+async def test_video_submission_freezes_original_unit_and_registers_only_candidate(tmp_path, with_reference, reference_storage, monkeypatch, remove_running):
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             db.add(Provider(id='check-provider', name='openai', base_url='https://api.openai.com/v1', api_key='fixture'))
@@ -161,11 +162,21 @@ async def test_video_submission_freezes_original_unit_and_registers_only_candida
         assert (await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 2, 'content': bound})).status_code == 200
         assert (await client.post(video_url, json=submit)).json()['data']['task_id'] == video_id
         assert (await client.post(video_url, json={'request_id': str(uuid4()), 'expected_revision': 3})).status_code == 409
+        if remove_running:
+            async with sessions.begin() as db:
+                assert await TaskService(db).claim(video_id, worker_id='running-before-removal')
+            current = (await client.get(detail)).json()['data']
+            current['content']['units'] = []
+            removed = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 3, 'content': current['content']})
+            assert removed.status_code == 200, removed.text
+            running = (await client.get(video_url)).json()['data'][0]
+            assert running['status'] == 'running' and running['preparation'] == rows[0]['preparation']
         async with sessions.begin() as db:
             db.add(FileItem(id='video-output', type='video', name='model-output.mp4', storage_key='fixtures/video-output.mp4', content_type='video/mp4', duration_ms=5000))
             await db.flush()
             service = TaskService(db)
-            assert await service.claim(video_id, worker_id='video-result-fixture')
+            if not remove_running:
+                assert await service.claim(video_id, worker_id='video-result-fixture')
             await service.add_output(video_id, ordinal=0, file_id='video-output')
             await service.finish(video_id, deliver=deliver_media)
             await service.finish(video_id, deliver=deliver_media)
@@ -183,6 +194,14 @@ async def test_video_submission_freezes_original_unit_and_registers_only_candida
         assert media.json()['data']['duration_ms'] == 5000
         assert media.json()['data']['url'] == '/api/v1/studio/files/video-output/download'
         assert (await client.get(media_path.replace('/units/unit/', '/units/other/'))).status_code == 422
+        if remove_running:
+            historical = (await client.get(detail)).json()['data']['content']
+            assert historical['units'] == [] and historical['timeline'] == content['timeline']
+            assert historical['take_judgments'] == content['take_judgments']
+            library = (await client.get(detail + '/take-library')).json()['data']
+            assert any(row['take_id'] == take_id for row in library)
+            assert (await client.get(url)).json()['data'][0]['task_id'] == task_id
+            return
         consumer = (await client.post(path + '/versions', json={'request_id': str(uuid4()), 'title': '素材复用方案'})).json()['data']
         library = await client.get(path + '/versions/' + consumer['id'] + '/take-library')
         assert library.status_code == 200, library.text
@@ -326,6 +345,7 @@ async def test_video_submission_freezes_original_unit_and_registers_only_candida
         assert unchanged['content']['units'][0]['ratio'] == '9:16'
         assert unchanged['content']['units'][0]['duration_ms'] == 8000
         assert len(unchanged['content']['units']) == 1
+
         if with_reference:
             assert [(item['id'], item['file_id']) for item in unchanged['content']['units'][0]['references']] == ([('current-frame', 'current-image')] if with_reference == 'replacement' else [])
 
@@ -388,6 +408,17 @@ async def test_video_submission_freezes_original_unit_and_registers_only_candida
         assert len(after_current) == 2
         assert after_current[1]['instruction'] == '另一单元的新正文'
 
+        # 已证明失败任务可重试；移除后新的重试授权必须拒绝，历史身份与素材不变。
+        removed_content = deepcopy((await client.get(detail)).json()['data']['content'])
+        removed_content['units'] = []
+        removed = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': (await client.get(detail)).json()['data']['revision'], 'content': removed_content})
+        assert removed.status_code == 200, removed.text
+        rejected = await client.post(retry_url, json={'request_id': str(uuid4())})
+        assert rejected.status_code == 409 and '原单元已不可用' in rejected.text
+        assert (await client.get(media_path)).status_code == 200
+        assert (await client.get(url)).json()['data'][0]['inputs']['unit']['coverage'][0]['action_scope'] == '递出信封'
+
+
         # 退出当前划分后只读核实旧授权，不得借核实创建新的执行。
         chapter_path = '/api/v1/studio/projects/p1/directing/chapters/ch1'
         chapter = (await client.get(chapter_path)).json()['data']
@@ -412,6 +443,7 @@ async def test_video_submission_freezes_original_unit_and_registers_only_candida
         assert len((await client.get(video_url)).json()['data']) == 4
         assert (await client.post(retry_url, json=retry_request)).json()['data']['task_id'] == retry_task
         assert (await client.post(retry_url, json={'request_id': str(uuid4())})).status_code == 409
+
 
 
 @pytest.mark.asyncio

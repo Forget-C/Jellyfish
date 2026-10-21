@@ -9,7 +9,7 @@ from sqlalchemy import select
 from app.core.contracts.directing.common import Note, Source
 from app.core.contracts.directing.scene_version import EditableGenerationUnit, UnitOrganization, SceneVersionContent
 from app.core.contracts.directing.design_scope import resolved_design_fields
-from app.core.contracts.directing.scene_unit_design import SceneUnitDesignRequest, SceneUnitDesignResult, SceneUnitDesignSuggestionRead, SceneUnitDesignPreview
+from app.core.contracts.directing.scene_unit_design import SceneUnitDesignRequest, SceneUnitDesignResult, SceneUnitDesignSuggestionRead, SceneUnitDesignPreview, SceneUnitDesignBlocker
 from app.core.integrations.video_capabilities import resolve_video_capability, validate_video_options
 from app.core.contracts.video_generation import VideoGenerationInput
 from app.models.llm import ModelCategoryKey, Provider
@@ -181,12 +181,32 @@ def merge_unit_design_proposal(existing, proposal, target_model_id, source):
     })
 
 
+def unit_design_blockers(content, result):
+    """任何现有设计或实际覆盖引用均阻塞身份移除，不迁移历史事实。"""
+    related = {unit.id for unit in content.units if all(item.shot_id == result.shot_id for item in unit.coverage)}
+    surviving = {(unit.id, item.id) for unit in result.units for item in unit.coverage}
+    removed = {(unit.id, item.id) for unit in content.units if unit.id in related for item in unit.coverage} - surviving
+    blockers = []
+    for index, applicability in enumerate(content.design.applicability):
+        for occurrence_index, occurrence in enumerate(applicability.occurrences):
+            if (occurrence.unit_id, occurrence.coverage_item_id) in removed:
+                blockers.append(SceneUnitDesignBlocker(kind='design', unit_id=occurrence.unit_id,
+                    coverage_item_id=occurrence.coverage_item_id, subject=applicability.subject,
+                    path=f'design.applicability[{index}].occurrences[{occurrence_index}]'))
+    for index, judgment in enumerate(content.take_judgments):
+        for coverage_index, coverage in enumerate(judgment.annotation.coverage):
+            if (coverage.unit_id, coverage.coverage_item_id) in removed:
+                blockers.append(SceneUnitDesignBlocker(kind='coverage', unit_id=coverage.unit_id,
+                    coverage_item_id=coverage.coverage_item_id, take_kind=judgment.take_kind, take_id=judgment.take_id,
+                    path=f'take_judgments[{index}].annotation.coverage[{coverage_index}]'))
+    return blockers
+
+
 def organized_unit_content(content, result, args):
     """预览与确认使用同一完整组合，当前引用或越界时整体拒绝且不落盘。"""
     existing = {unit.id: unit for unit in content.units}
     related = {unit.id for unit in content.units if all(item.shot_id == result.shot_id for item in unit.coverage)}
-    if not related <= {proposal.id for proposal in result.units}:
-        raise ValueError('本次局部修改必须保留既有单元；拆并或移除需要另行处理')
+    removed = related - {proposal.id for proposal in result.units}
     source = Source(kind='model', reference=args['task_identity'], version='1')
     updates = {}
     additions = []
@@ -202,7 +222,7 @@ def organized_unit_content(content, result, args):
         else:
             additions.append(unit)
     return SceneVersionContent.model_validate({**content.model_dump(),
-        'units': [updates.get(unit.id, unit) for unit in content.units] + additions})
+        'units': [updates.get(unit.id, unit) for unit in content.units if unit.id not in removed] + additions})
 
 
 class SceneUnitDesignService(SceneDesignService):
@@ -296,22 +316,27 @@ class SceneUnitDesignService(SceneDesignService):
                 or capabilities != task.input_snapshot['run_args']['capabilities']):
             raise RevisionConflict('目标视频模型能力已变化，请重新 AI 设计')
         result = validate_unit_design(task.input_snapshot['run_args'], SceneUnitDesignResult.model_validate(task.result))
-        await self._validate_content(sequence, version_id, organized_unit_content(content, result, task.input_snapshot['run_args']))
-        return SceneUnitDesignPreview(task_id=task.id, result=result)
+        blockers = unit_design_blockers(content, result)
+        if not blockers:
+            await self._validate_content(sequence, version_id, organized_unit_content(content, result, task.input_snapshot['run_args']))
+        return SceneUnitDesignPreview(task_id=task.id, result=result, blockers=blockers)
 
     async def apply_unit_design(self, sequence_id, version_id, task_id, content):
         """一次确认从当前编辑组合；只修改明确目标，保留原顺序、独立与跨镜头单元。"""
         preview = await self.preview_unit_design(sequence_id, version_id, task_id, content)
+        if preview.blockers:
+            raise ValueError('请先处理单元移除的设计或实际覆盖引用：' + '；'.join(row.path for row in preview.blockers))
         task = next(row for row in await self._tasks(sequence_id, version_id) if row.id == task_id)
         args = task.input_snapshot['run_args']
-        return organized_unit_content(content, preview.result, args)
+        return organized_unit_content(content, preview.result, args).model_copy(update={'unit_design_task_id': task.id})
 
     async def validate_organized_save(self, sequence_id, version_id, content, previous):
         """首次保存组织来源时重验真实任务与固定依据；已保存单元仍按普通编辑处理。"""
         known = {(unit.id, unit.organization.source.reference) for unit in previous.units if unit.organization}
         introduced = [unit for unit in content.units if unit.organization
                       and (unit.id, unit.organization.source.reference) not in known]
-        tasks = list(await self._tasks(sequence_id, version_id)) if introduced else []
+        new_application = content.unit_design_task_id and content.unit_design_task_id != previous.unit_design_task_id
+        tasks = list(await self._tasks(sequence_id, version_id)) if introduced or new_application else []
         for reference in {unit.organization.source.reference for unit in introduced}:
             task = next((row for row in tasks if row.input_snapshot['run_args']['task_identity'] == reference), None)
             if task is None or task.status != 'succeeded':
@@ -332,4 +357,25 @@ class SceneUnitDesignService(SceneDesignService):
                 *[unit for unit in current.values() if any(item.shot_id == request.shot_id for item in unit.coverage)
                   and unit.id not in {row.id for row in original}],
             ]})
-            await self.preview_unit_design(sequence_id, version_id, task.id, restored)
+            checked = await self.preview_unit_design(sequence_id, version_id, task.id, restored)
+            if checked.blockers:
+                raise ValueError('请先处理单元移除的设计或实际覆盖引用')
+        if new_application:
+            application = next((row for row in tasks if row.id == content.unit_design_task_id), None)
+            if application is None or application.status != 'succeeded':
+                raise ValueError('单元方案应用来源不属于当前版本的成功任务')
+            request = SceneUnitDesignRequest.model_validate(application.input_snapshot['scene_unit_design']['request'])
+            proposals = SceneUnitDesignResult.model_validate(application.result)
+            original = {unit.id: unit for unit in request.content.units
+                        if any(item.shot_id == request.shot_id for item in unit.coverage)}
+            proposal_ids = {unit.id for unit in proposals.units}
+            unchanged = {unit.id for unit in proposals.units if unit.id in original
+                         and not unit_design_proposal_changed(original[unit.id], unit)}
+            current = {unit.id: unit for unit in content.units}
+            restored = content.model_copy(update={'units': [
+                *[unit for unit in content.units if unit.id not in proposal_ids and unit.id not in original],
+                *[current.get(unit.id, unit) if unit.id in unchanged else unit for unit in original.values()],
+            ]})
+            checked = await self.preview_unit_design(sequence_id, version_id, application.id, restored)
+            if checked.blockers:
+                raise ValueError('请先处理单元移除的设计或实际覆盖引用')
