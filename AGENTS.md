@@ -8,9 +8,15 @@
 
 ## Agent skills
 
+### Grilling
+
+`grill-me` / `grilling` 默认只在对话中澄清问题、收敛决策并确认共同理解。确认共识不等于授权写文件或开始实现；后续动作按用户已有的相应任务授权执行。
+
+`grill-with-docs` 额外按需维护术语表与 ADR，沿用下述 Domain docs 约定。
+
 ### Issue tracker
 
-使用任务跟踪、发布规格或读取票据时，按 `site/content/docs/guide/agents/issue-tracker.md` 操作本地 `.scratch/<feature>/` 文件。
+使用任务跟踪、发布规格（`to-spec`）、拆分票据（`to-tickets`）或读取票据时，按 `site/content/docs/guide/agents/issue-tracker.md` 操作本地 `.scratch/<feature>/` 文件。规格与票据属于任务系统，不自动另建站点计划。
 
 ### Triage labels
 
@@ -59,10 +65,10 @@
 ## 接口与文档同步
 
 1. 对外接口路径、参数、响应 schema 或接口语义变化时，同步受影响的后端实现、OpenAPI 和前端 generated client。从项目根目录运行 `pnpm --dir front run openapi:update`；先确认 `127.0.0.1:8000` 对应加载了当前工作区改动的后端，避免从旧进程生成接口。内部类型或局部状态调整未改变对外契约时，不要求重新生成。
-2. 当修改使现有文档不准确，或改变已记录的架构、契约、状态语义、页面职责时，同步修订对应文档；普通实现修复不要求新增架构文档。计划范围、优先级或执行路径变化时，更新对应计划。
-3. 文档按内容归属维护：
+2. 当修改使现有文档不准确，或改变已记录的架构、契约、状态语义、页面职责时，同步修订对应文档；普通实现修复不要求新增架构文档。本次工作改变已有计划的范围、优先级或执行路径时，更新该计划。
+3. 文档按内容归属维护；目录归属不构成创建文档的要求：
    - `site/content/docs/architecture`：当前真实生效的实现与边界，不混入未来方案。
-   - `site/content/docs/plans`：仍在推进的方案、任务拆解与阶段计划；稳定落地后将当前事实沉淀到 architecture，按发布需要编写 release note。
+   - `site/content/docs/plans`：项目正式维护的路线图与阶段计划，新增文档以用户的相应要求为准；稳定落地后将当前事实沉淀到 architecture，按发布需要编写 release note。
    - `site/content/docs/guide`：操作说明、开发流程与接入方式，回答“怎么做”。
    - `site/content/docs/reference`：稳定参考资料，回答“查什么”。
    - `site/content/blog`：release note；未被明确指定时不修改已固化版本。
