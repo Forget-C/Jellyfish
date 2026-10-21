@@ -572,3 +572,102 @@ async def test_regroup_removes_omitted_units_and_rechecks_removal_on_save(tmp_pa
         persisted = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 2, 'content': candidate})
         assert persisted.status_code == 200, persisted.text
         assert persisted.json()['data']['content'] == candidate
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('removal', ['manual', 'ai'])
+async def test_new_unit_cannot_reuse_removed_historical_identity(tmp_path, removal):
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        async with sessions.begin() as db:
+            db.add(Provider(id='provider', name='openai', base_url='https://api.openai.com/v1', api_key='fixture'))
+            await db.flush()
+            db.add_all([Model(id='text', name='gpt-test', category='text', provider_id='provider', params={}),
+                        Model(id='video', name='sora-2', category='video', provider_id='provider', params={})])
+        path = await sequence_path(client)
+        version = (await client.post(path + '/versions', json={'request_id': str(uuid4()), 'title': '历史身份'})).json()['data']
+        detail = path + '/versions/' + version['id']
+        content = version['content']
+        content['design']['direction']['shots'] = [{'id': 'shot', 'event_ids': [], 'blocking_state_ids': [],
+            'criterion_ids': [], 'narrative_function': {}, 'participant_ids': [], 'visible_result': {
+                'state': 'proposal', 'text': '抬头', 'sources': [{'kind': 'human', 'reference': 'user', 'version': '1'}]}}]
+        content['units'] = [{'id': identity, 'model_id': 'video', 'ratio': '16:9', 'duration_ms': 4000,
+            'coverage': [{'id': identity + '-coverage', 'shot_id': 'shot', 'action_scope': '抬头'}]}
+            for identity in ('old', 'keep')]
+        saved = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})
+        assert saved.status_code == 200, saved.text
+        content = saved.json()['data']['content']
+        history_url = detail + '/units/old/instruction-suggestions'
+        historical = await client.post(history_url, json={'request_id': str(uuid4()), 'expected_revision': 2,
+            'content': content, 'model_id': 'text'})
+        assert historical.status_code == 200, historical.text
+        historical_id = historical.json()['data']['task_id']
+        url = detail + '/unit-design-suggestions'
+
+        async def propose(units, revision):
+            submitted = await client.post(url, json={'request_id': str(uuid4()), 'expected_revision': revision,
+                'content': content, 'shot_id': 'shot', 'source_unit_id': 'keep', 'target_model_id': 'video', 'model_id': 'text'})
+            assert submitted.status_code == 200, submitted.text
+            task_id = submitted.json()['data']['task_id']
+            return task_id, {'shot_id': 'shot', 'target_model_id': 'video', 'organization': '重组', 'units': units}
+
+        def retained():
+            row = next(unit for unit in content['units'] if unit['id'] == 'keep')
+            return {'id': 'keep', 'operation': 'retain', 'coverage': row['coverage'],
+                'duration_ms': row['duration_ms'], 'ratio': row['ratio'], 'reason': '保留'}
+
+        if removal == 'ai':
+            task_id, proposed = await propose([retained()], 2)
+            async with sessions.begin() as db:
+                task = await db.get(Task, task_id)
+                result = generate_directing_result('directing_unit_design', SimpleNamespace(invoke=lambda _: SimpleNamespace(content=json.dumps(proposed))), task.input_snapshot['run_args'])
+                service = TaskService(db)
+                await service.claim(task_id, worker_id='fixture')
+                await service.finish(task_id, result=result.model_dump(mode='json'))
+            applied = await client.post(url + '/' + task_id + '/apply', json={'content': content})
+            assert applied.status_code == 200, applied.text
+            content = applied.json()['data']
+        else:
+            content['units'] = [unit for unit in content['units'] if unit['id'] == 'keep']
+        saved = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 2, 'content': content})
+        assert saved.status_code == 200, saved.text
+        content = saved.json()['data']['content']
+        before = deepcopy(content)
+        task_id, proposed = await propose([retained(), {'id': 'old', 'operation': 'create',
+            'coverage': [{'id': 'old-coverage', 'shot_id': 'shot', 'action_scope': '抬头'}],
+            'ratio': '16:9', 'reason': '新补拍'}], 3)
+        async with sessions.begin() as db:
+            task = await db.get(Task, task_id)
+            with pytest.raises(ValueError, match='历史.*身份'):
+                generate_directing_result('directing_unit_design', SimpleNamespace(invoke=lambda _: SimpleNamespace(content=json.dumps(proposed))), task.input_snapshot['run_args'])
+            # 已有成功记录也不能绕过读取时的校验。
+            service = TaskService(db)
+            await service.claim(task_id, worker_id='fixture')
+            await service.finish(task_id, result=proposed)
+        for action in ('preview', 'apply'):
+            rejected = await client.post(url + '/' + task_id + '/' + action, json={'content': content})
+            assert rejected.status_code == 422, rejected.text
+            assert '历史' in rejected.text
+        assert (await client.get(detail)).json()['data']['content'] == before
+        history = (await client.get(history_url)).json()['data']
+        assert [row['task_id'] for row in history] == [historical_id]
+        task_id, proposed = await propose([retained(), {'id': 'fresh', 'operation': 'create',
+            'coverage': [{'id': 'fresh-coverage', 'shot_id': 'shot', 'action_scope': '抬头'}],
+            'duration_ms': 4000, 'ratio': '16:9', 'reason': '新身份补拍'}], 3)
+        async with sessions.begin() as db:
+            task = await db.get(Task, task_id)
+            result = generate_directing_result('directing_unit_design', SimpleNamespace(invoke=lambda _: SimpleNamespace(content=json.dumps(proposed))), task.input_snapshot['run_args'])
+            service = TaskService(db)
+            await service.claim(task_id, worker_id='fixture')
+            await service.finish(task_id, result=result.model_dump(mode='json'))
+        applied = await client.post(url + '/' + task_id + '/apply', json={'content': content})
+        assert applied.status_code == 200, applied.text
+        candidate = applied.json()['data']
+        # 手动保存前可用当前编辑提交指令；这是同一新单元的历史，不是旧身份复用。
+        fresh_history_url = detail + '/units/fresh/instruction-suggestions'
+        fresh_history = await client.post(fresh_history_url, json={'request_id': str(uuid4()), 'expected_revision': 3,
+            'content': candidate, 'model_id': 'text'})
+        assert fresh_history.status_code == 200, fresh_history.text
+        persisted = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 3, 'content': candidate})
+        assert persisted.status_code == 200, persisted.text
+        assert [unit['id'] for unit in persisted.json()['data']['content']['units']] == ['keep', 'fresh']
+        assert [row['task_id'] for row in (await client.get(history_url)).json()['data']] == [historical_id]

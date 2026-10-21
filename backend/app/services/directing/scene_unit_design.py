@@ -13,6 +13,7 @@ from app.core.contracts.directing.scene_unit_design import UNIT_DESIGN_REFERENCE
 from app.core.integrations.video_capabilities import resolve_video_capability, validate_video_options
 from app.core.contracts.video_generation import VideoGenerationInput
 from app.models.llm import ModelCategoryKey, Provider
+from app.models.directing import InstructionBasisRecord, SceneVideoExecution
 from app.models.task import Task
 from app.services.directing.production import ProductionService
 from app.services.directing.scene_design import SceneDesignService
@@ -83,6 +84,9 @@ def validate_unit_design(args, result):
         raise ValueError('单元方案使用了其他镜头或跨镜头单元身份')
     texts = [row['text'] for row in fields if row['purpose'] == 'design' and row['text']]
     old_ids = {unit['id'] for unit in original_units}
+    retired_ids = set(args.get('retired_unit_ids', [])) - old_ids
+    if any(unit.id in retired_ids for unit in result.units):
+        raise ValueError('新单元不能复用当前版本的历史单元身份')
     for unit in result.units:
         existing = next((EditableGenerationUnit.model_validate(row) for row in original_units if row['id'] == unit.id), None)
         if (existing and unit.operation == 'create' or existing is None and unit.operation in {'retain', 'modify'}):
@@ -233,6 +237,34 @@ def organized_unit_content(content, result, args):
 class SceneUnitDesignService(SceneDesignService):
     """复用场次归属、内容校验和统一任务；只读结果与正式单元隔离。"""
 
+    async def _historical_unit_ids(self, sequence_id, version_id, *, organization_reference=None):
+        """固定输入和执行凭证中的单元不可复用；未应用的建议不占用正式身份。"""
+        def same_creation(unit):
+            # 应用后、手动保存前已生成的指令记录仍属于本次创建，不能误判为旧单元。
+            source = (unit.get('organization') or {}).get('source') or {}
+            return (organization_reference is not None and source.get('kind') == 'model'
+                    and source.get('version') == '1' and source.get('reference') == organization_reference)
+
+        identities = set()
+        snapshots = await self.db.scalars(select(Task.input_snapshot).where(Task.project_id == self.project_id,
+            Task.target_id == sequence_id))
+        for snapshot in snapshots:
+            for context in snapshot.values():
+                if not isinstance(context, dict) or context.get('version_id') != version_id:
+                    continue
+                units = context.get('request', {}).get('content', {}).get('units', [])
+                owned = {unit['id'] for unit in units if same_creation(unit)}
+                if context.get('unit_id') and context['unit_id'] not in owned:
+                    identities.add(context['unit_id'])
+                identities.update(unit['id'] for unit in units if unit['id'] not in owned)
+        for model, field in ((InstructionBasisRecord, InstructionBasisRecord.inputs),
+                             (SceneVideoExecution, SceneVideoExecution.preparation)):
+            records = await self.db.execute(select(model.unit_id, field).where(model.version_id == version_id))
+            for unit_id, payload in records:
+                if not same_creation(payload.get('inputs', payload).get('unit', {})):
+                    identities.add(unit_id)
+        return identities
+
     async def _video(self, model_id):
         """按明确模型读取供应商真实能力；不从列表或全局设置猜测模型。"""
         model = await get_model_by_category(self.db, ModelCategoryKey.video, model_or_id=model_id)
@@ -272,9 +304,12 @@ class SceneUnitDesignService(SceneDesignService):
         provider = await self.db.get(Provider, model.provider_id)
         config = resolve_provider_config_from_provider(provider=provider, category=ModelCategoryKey.text)
         rules = await self.applicable_style(body.content.design.style_revision_id, sequence_id, video.name)
+        used_ids = await self._historical_unit_ids(sequence_id, version_id)
+        used_ids.update(unit.id for unit in current.content.units)
         args = {'task_identity': uuid4().hex, 'style_rules': [rule.model_dump(mode='json') for rule in rules], 'shot_id': body.shot_id, 'target_model_id': video.id, 'target_model_name': video.name,
             'video_provider': video_provider, 'video_provider_id': video.provider_id, 'capabilities': capabilities,
             'organization_inputs': inputs, 'source_unit_id': body.source_unit_id, 'instruction': body.instruction,
+            'retired_unit_ids': sorted(used_ids - {unit.id for unit in body.content.units}),
             'protected_unit_ids': [unit.id for unit in body.content.units if any(item.shot_id != body.shot_id for item in unit.coverage)]}
         return await TaskService(self.db).submit(kind='directing_unit_design', title='AI 设计 · 单元方案',
             target_type='directing_sequence', target_id=sequence_id, project_id=self.project_id, provider_id=provider.id,
@@ -304,7 +339,7 @@ class SceneUnitDesignService(SceneDesignService):
 
     async def preview_unit_design(self, sequence_id, version_id, task_id, content):
         """预览核对固定输入和当前适用内容，不写入正式单元或媒体事实。"""
-        sequence, _ = await self._version(sequence_id, version_id)
+        sequence, current = await self._version(sequence_id, version_id)
         task = next((row for row in await self._tasks(sequence_id, version_id) if row.id == task_id), None)
         if task is None or task.status != 'succeeded':
             raise ValueError('建议不属于当前版本或尚未成功完成')
@@ -320,7 +355,11 @@ class SceneUnitDesignService(SceneDesignService):
                 or video.name != task.input_snapshot['run_args']['target_model_name']
                 or capabilities != task.input_snapshot['run_args']['capabilities']):
             raise RevisionConflict('目标视频模型能力已变化，请重新 AI 设计')
-        result = validate_unit_design(task.input_snapshot['run_args'], SceneUnitDesignResult.model_validate(task.result))
+        args = task.input_snapshot['run_args']
+        used_ids = await self._historical_unit_ids(sequence_id, version_id, organization_reference=args['task_identity'])
+        used_ids.update(args.get('retired_unit_ids', []))
+        used_ids.update(unit.id for unit in current.content.units)
+        result = validate_unit_design({**args, 'retired_unit_ids': sorted(used_ids)}, SceneUnitDesignResult.model_validate(task.result))
         blockers = unit_design_blockers(content, result)
         if not blockers:
             await self._validate_content(sequence, version_id, organized_unit_content(content, result, task.input_snapshot['run_args']))

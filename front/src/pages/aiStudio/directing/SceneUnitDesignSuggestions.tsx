@@ -172,7 +172,8 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
         <details><summary>固定依据与模型</summary>
           <p>视频模型：{selected.target_model_name}；组织文本模型：{selected.text_model_name}</p>
           <CanvasTextPreview text={selected.request.content.basis.text} label="固定原文依据" lines={4} />
-          <p>要求：{selected.request.instruction || '未填写'}</p>
+          <p>本次要求{!selected.request.instruction && '：未填写'}</p>
+          {selected.request.instruction && <CanvasTextPreview text={selected.request.instruction} label="本次要求" lines={4} />}
           <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(selected.capabilities, null, 2)}</pre>
         </details>
         {selected.error && <Alert type="error" message={selected.error} />}
