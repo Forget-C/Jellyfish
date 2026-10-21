@@ -313,13 +313,6 @@ async def run_export(task_id: str):
     return {'executed': True}
 
 
-if __name__ == '__main__':
-    asyncio.run(prepare())
-    app.dependency_overrides[get_db] = request_db
-    uvicorn.run(app, host='127.0.0.1', port=int(os.environ['SCENE_BROWSER_TEST_PORT']),
-                log_level='warning')
-
-
 @app.post('/browser-test/unit-design-tasks/{task_id}/complete-supplement')
 async def complete_unit_supplement_fixture(task_id: str):
     """补拍仅替代外部模型，保留真实来源、组织校验及任务生命周期。"""
@@ -341,3 +334,11 @@ async def complete_unit_supplement_fixture(task_id: str):
         assert await service.claim(task_id, worker_id='browser-supplement')
         await service.finish(task_id, result=generated.model_dump(mode='json'))
     return {'ok': True}
+
+
+if __name__ == '__main__':
+    asyncio.run(prepare())
+    app.dependency_overrides[get_db] = request_db
+    uvicorn.run(app, host='127.0.0.1', port=int(os.environ['SCENE_BROWSER_TEST_PORT']),
+                log_level='warning')
+
