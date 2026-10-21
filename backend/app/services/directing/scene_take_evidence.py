@@ -1,8 +1,8 @@
 """固定素材复核的共享比较与有界查询；调用方提供已鉴权快照。"""
 from sqlalchemy import func, or_, select, tuple_
+from app.services.directing.review_basis_key import review_basis_key
 
 from app.core.contracts.directing.scene_timeline import SceneTimeline
-from app.core.contracts.directing.scene_version import SceneVersionContent
 from app.models.directing import SceneCopyOrigin, SceneTakeReviewRecord
 
 
@@ -13,37 +13,34 @@ def take_review_matches(fixed, current, take_kind, take_id):
     return fixed.model_copy(update={'timeline': SceneTimeline()}) == current
 
 
+def take_review_basis_key(content, take_kind=None, take_id=None):
+    """固定内容仅有一个判断；当前内容按指定复合身份过滤，忽略剪辑。"""
+    judgments = content.take_judgments if take_kind is None else [item for item in content.take_judgments
+        if (item.take_kind, item.take_id) == (take_kind, take_id)]
+    return review_basis_key(content.model_copy(update={'timeline': SceneTimeline(), 'take_judgments': judgments}).model_dump(mode='json'))
+
+
 async def latest_take_reviews(db, version_id, current):
-    """数据库先选每个复合素材最新记录，再读取其固定正文；复制只消费显式继承身份。"""
+    """索引先选每个素材的最新及最近适用记录，至多展开两份固定正文。"""
     origin = await db.get(SceneCopyOrigin, version_id)
     inherited = origin.review_ids.get('take', []) if origin else []
-    ranked = select(SceneTakeReviewRecord.id, SceneTakeReviewRecord.take_kind, SceneTakeReviewRecord.take_id,
-        func.row_number().over(partition_by=(SceneTakeReviewRecord.take_kind, SceneTakeReviewRecord.take_id),
-        order_by=(SceneTakeReviewRecord.created_at.desc(), SceneTakeReviewRecord.id.desc())).label('position')).where(or_(
-            SceneTakeReviewRecord.version_id == version_id, SceneTakeReviewRecord.id.in_(inherited))).subquery()
+    scope = or_(SceneTakeReviewRecord.version_id == version_id, SceneTakeReviewRecord.id.in_(inherited))
+    identities = (await db.execute(select(SceneTakeReviewRecord.take_kind, SceneTakeReviewRecord.take_id).where(scope).distinct())).all()
+    if not identities:
+        return {}
+    keys = [(kind, take_id, take_review_basis_key(current, kind, take_id)) for kind, take_id in identities]
+    order = (SceneTakeReviewRecord.created_at.desc(), SceneTakeReviewRecord.id.desc())
+    latest = select(SceneTakeReviewRecord.id, func.row_number().over(
+        partition_by=(SceneTakeReviewRecord.take_kind, SceneTakeReviewRecord.take_id), order_by=order).label('rank')).where(scope).subquery()
+    matching = select(SceneTakeReviewRecord.id, func.row_number().over(
+        partition_by=(SceneTakeReviewRecord.take_kind, SceneTakeReviewRecord.take_id), order_by=order).label('rank')).where(scope,
+            tuple_(SceneTakeReviewRecord.take_kind, SceneTakeReviewRecord.take_id, SceneTakeReviewRecord.basis_key).in_(keys)).subquery()
+    rows = await db.scalars(select(SceneTakeReviewRecord).where(or_(
+        SceneTakeReviewRecord.id.in_(select(latest.c.id).where(latest.c.rank == 1)),
+        SceneTakeReviewRecord.id.in_(select(matching.c.id).where(matching.c.rank == 1)))).order_by(*order))
+    expected = {(kind, take_id): key for kind, take_id, key in keys}
     result = {}
-    unresolved = None
-    offset = 0
-    while unresolved is None or unresolved:
-        query = select(SceneTakeReviewRecord).join(ranked, ranked.c.id == SceneTakeReviewRecord.id).where(
-            ranked.c.position > offset, ranked.c.position <= offset + 32).order_by(ranked.c.position)
-        if unresolved is not None:
-            query = query.where(tuple_(ranked.c.take_kind, ranked.c.take_id).in_(unresolved))
-        rows = list(await db.scalars(query))
-        if not rows:
-            break
-        candidates = set()
-        for row in rows:
-            key = (row.take_kind, row.take_id)
-            candidates.add(key)
-            if key in result and any(match for _, match in result[key]):
-                continue
-            fixed = SceneVersionContent.model_validate(row.content)
-            matches = take_review_matches(fixed, current, *key)
-            if key not in result:
-                result[key] = [(row, matches)]
-            elif matches:
-                result[key].append((row, True))
-        unresolved = {key for key in candidates if not any(match for _, match in result[key])}
-        offset += 32
+    for row in rows:
+        key = (row.take_kind, row.take_id)
+        result.setdefault(key, []).append((row, row.basis_key == expected[key]))
     return result

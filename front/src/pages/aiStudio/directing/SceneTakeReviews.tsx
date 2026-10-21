@@ -1,12 +1,9 @@
+import { sceneContentKey as comparable } from './sceneContentKey'
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button } from 'antd'
 import { ApiError, StudioDirectingService } from '../../../services/generated'
 import type { SceneTakeLibraryRead, SceneTakeReviewRead, SceneVersionContent_Output } from '../../../services/generated'
 import { directingError } from './common'
-
-// 沿用工作台保存比较：省略 nullable／空列表默认值不代表依据变化，数组顺序仍保留。
-const comparable = (value: unknown) => JSON.stringify(value, (_, item) => item && typeof item === 'object' && !Array.isArray(item)
-  ? Object.fromEntries(Object.entries(item).filter(([key, value]) => value !== null && value !== undefined && !(Array.isArray(value) && value.length === 0 && key !== 'participant_ids')).sort(([left], [right]) => left.localeCompare(right))) : item)
 
 /** 固定记录只读，适用性同时核对当前未保存编辑，不把读取失败显示为已通过。 */
 export function SceneTakeReviews({ projectId, sequenceId, versionId, revision, take, content, dirty, disabled, evidence, onEvidenceChanged, focusRecordId, focusSerial }: {
@@ -72,7 +69,7 @@ export function SceneTakeReviews({ projectId, sequenceId, versionId, revision, t
       action={pendingRevision != null && <Button disabled={disabled || confirming} onClick={() => void confirm(pendingRevision)}>核实原复核记录</Button>} />}
     {selected.map((row, index) => {
       const judgment = row.content.take_judgments[0]
-      return <details key={row.id} id={`scene-take-review-${row.id}`}><summary tabIndex={-1}>查看审片记录 {index + 1}</summary>
+      return <details key={row.id} id={`scene-take-review-${row.id}`}><summary>查看审片记录 {index + 1}</summary>
         <p>实际审查版本：{row.version_id}{row.version_id !== versionId ? '（另存时保留的历史依据）' : ''}</p>
         <p>形成时间：{new Date(row.created_at).toLocaleString()}</p>
         <p>当时结论：{judgment.annotation.verdict ? ({ pass: '通过', retain: '保留', repair: '需修复', discard: '弃用' })[judgment.annotation.verdict] : '未填写'}</p>

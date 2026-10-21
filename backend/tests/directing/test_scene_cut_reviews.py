@@ -123,3 +123,41 @@ async def test_scene_cut_review_freezes_basis_and_rechecks_actual_composition(tm
         assert (await client.post(review_path, json=with_placeholder)).status_code == 200
         assert (await client.get(review_path)).json()['data'][0] == {**review, 'matches_current': False}
         assert (await client.get(path)).json()['data']['takes'] == original
+
+
+@pytest.mark.asyncio
+async def test_version_lists_restore_oldest_applicable_cut_summary_after_many_other_bases(tmp_path):
+    """版本和列表只有最新与最近适用摘要；历史量不会截断旧依据恢复。"""
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        path = await sequence_path(client)
+        created = (await client.post(path + '/versions', json={'request_id': str(uuid4()), 'title': '历史摘要'})).json()['data']
+        detail = path + '/versions/' + created['id']
+        content = deepcopy(created['content'])
+        content['design'] = editable_design_sample()
+        content['timeline']['items'] = [{'kind': 'planned', 'id': 'pending', 'shot_id': 's1', 'timeline_start_ms': 0, 'estimated_duration_ms': 1000}]
+        saved = (await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})).json()['data']
+        original = deepcopy(saved['content'])
+        first_id = None
+        for index in range(36):
+            if index:
+                content = deepcopy(original)
+                content['design']['direction']['viewpoint'] = {'state': 'proposal', 'text': f'固定历史依据 {index}', 'sources': [SOURCE]}
+                response = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': saved['revision'], 'content': content})
+                assert response.status_code == 200, response.text
+                saved = response.json()['data']
+            response = await client.post(detail + '/cut-reviews', json={'request_id': str(uuid4()), 'expected_revision': saved['revision'], 'decision': {
+                'verdict': 'revise', 'overall': f'固定结论 {index}', 'coverage_status': 'gaps', 'coverage_notes': '仍有占位', 'sound_status': 'pending_postproduction'}})
+            assert response.status_code == 200, response.text
+            first_id = first_id or response.json()['data']['id']
+        changed = deepcopy(original)
+        changed['output_aspect_ratio'] = '9:16'
+        saved = (await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': saved['revision'], 'content': changed})).json()['data']
+        nodes = [node for node in saved['edit_graph']['nodes'] if node['kind'] == 'edit_cut_review']
+        assert len(nodes) == 1 and nodes[0]['matches_current'] is False
+        restored = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': saved['revision'], 'content': original})
+        assert restored.status_code == 200, restored.text
+        for projected in [restored.json()['data'], (await client.get(detail)).json()['data'], (await client.get(path + '/versions')).json()['data'][0]]:
+            nodes = [node for node in projected['edit_graph']['nodes'] if node['kind'] == 'edit_cut_review']
+            assert len(nodes) == 2
+            assert [node['matches_current'] for node in nodes] == [False, True]
+            assert nodes[1]['record_id'] == first_id

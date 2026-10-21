@@ -64,3 +64,19 @@
 - 总览任务历史由“查看完整任务与检查历史”明确打开；只选业务对象只显示当前graph摘要，不自动加载全部历史正文。
 
 正式runner与最终桌面／390px截图已复制到 `/tmp/jellyfish-canvas-navigation-07-evidence-rsgnae0l`，避免ignored测试产物随实现worktree归档丢失。各results.json保留原目录并指向副本，run.log保持原始输出；graph第一段的失败及后续修复不删除。最终导航截图已实际查看（包括定位菜单关闭、无重复toolbar）。
+
+## 正式两轴审查修复
+
+修复分支基于 `f9092e2f010878e762df1cc5752a53d24d5be162`，父规格未改。Standards 的三项硬规则及重复比较建议、Spec 的两项历史读取边界均落实到代码。
+
+- 历史素材审片的原生 summary 恢复 Tab 顺序。素材图浏览器建立三份固定记录，当前 graph 不含中间旧记录；实际 Shift+Tab → Tab → Enter 仍能进入并打开第2条历史（`UZBnSy`），固定来源、媒体播放／暂停与未保存判断保留。
+- 指令卡和整场验收卡固定有限尺寸，字段最多两行。指令记录通过明确选择定位原建议／检查；整场问题保留全部片段身份的选择入口，完整长观察与所有验收条件从原整场验收阅读。`sceneInstructions`（`xsc8xv`）验证长正文保存、同一编辑器与选区、有限摘要及操作未被挤出、缺图恢复、390px；`sceneInstructionEvidence`（`9izqYq`）验证原记录、同 revision、迟到响应与应用在途。
+- 新图动作采用 WorkbenchButton；保存与素材复核共用最小 sceneContentKey 默认值归一化，原 participant_ids 语义与数组顺序保留。官方 lint 基线仅移除1条已修复旧项，不接纳新问题。
+- 隐藏剪辑工作区不加载完整 cut/seam/end-frame 历史；明确原记录、完整历史或审查动作才读取。graph/revision 更新不重新取全部历史，已打开表单保持挂载。新验收浏览器红灯观察默认三种历史各2次 GET；绿色验证默认三种均0次、原验收动作只读取 cut、graph 刷新无额外历史 GET 且 dirty 表单同 DOM，40条长问题仍有限、first/second 两个问题目标精确定位（`muiafd`）。
+- 普通版本和列表通过 basis_key 索引预选最新与最近适用记录，不再流式扫描历史完整正文。`b4e8f2a6c735` 在明确升级时分批回填旧数据后设 NOT NULL；普通读取无扫描回退。迁移测试覆盖72条旧无索引记录、多批回填、默认值与键序、1/1.0 等价、升级及安全降级。HTTP覆盖36份其他依据后的无匹配、恢复最早适用记录和版本列表；复制仍使用显式白名单。部署前必须先在 backend 执行 `uv run alembic upgrade head`，详见共享 graph 指南升级章节。
+
+最终后端 directing **509 passed / 15 skipped（160.60s）**，最终 Pylint **exit0 / 10.00**（根代理在同一冻结代码独立执行）；前端 typecheck、unit、lint:check 全通过，lint **294项已知 / 0项新增**。原整场／接缝／落幅浏览器按明确历史入口保留全部原断言，分别通过 `sloUdZ`、`WBv7yc`、`TRmYe0`。未改变对外 API schema，无须重生 OpenAPI。未运行生产数据库迁移、MySQL服务或付费生成，原15项跳过不计为通过。
+
+截图与日志在 `/tmp/canvas-fix-*.log`、各 `/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-scene-version-<证据ID>/`。Chrome 定位菜单 DOM 隐藏后的合成残影不作为视觉通过证据；最后另用新页面直接恢复布局和真实键盘平移查看有限卡，保留原失败日志，未改 DOM 或截图样式。
+
+最后视觉及完整增强流程 `SFkA2o` exit0，桌面与390截图已实际查看：40问题计数、目标选择与原验收按钮均完整可见，无菜单残影。窄屏通过原缩放按钮明确切到80%，用真实方向键平移后阅读整卡；未修改DOM、截图样式或业务布局。最终截图与日志副本在 `/tmp/jellyfish-canvas-review-fix-evidence/`。

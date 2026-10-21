@@ -69,7 +69,15 @@ try {
   const detail = `${versionsUrl}/${version.id}`
   const put = await fetch(detail, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: 1, content }) })
   assert.equal(put.status, 200, await put.clone().text())
-  const saved = (await put.json()).data
+  let saved = (await put.json()).data
+  // 中间旧记录不属于 graph 最新摘要，仍须能经 Tab 阅读。
+  for (const rationale of ['旧历史审查', '只保留起手']) {
+    const next = structuredClone(saved.content)
+    next.take_judgments[0].annotation.rationale = note(rationale)
+    const response = await fetch(detail, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: saved.revision, content: next }) })
+    assert.equal(response.status, 200, await response.clone().text())
+    saved = (await response.json()).data
+  }
   let signature = 0
   await page.route('**/take-library', async route => {
     const response = await route.fetch()
@@ -170,6 +178,13 @@ try {
   await graph.getByRole('button', { name: '查看原复核记录', exact: true }).click()
   await page.locator('details[id^="scene-take-review-"][open]').waitFor()
   await locateCanvasNode(page, '方案判断')
+  const oldRecord = page.getByText('查看审片记录 2', { exact: true })
+  await oldRecord.focus()
+  await page.keyboard.press('Shift+Tab')
+  await page.keyboard.press('Tab')
+  assert.equal(await oldRecord.evaluate(node => node === document.activeElement), true, '旧历史入口保留在Tab顺序')
+  await page.keyboard.press('Enter')
+  assert.equal(await oldRecord.evaluate(node => node.closest('details').open), true)
   await page.getByRole('button', { name: '删除覆盖 1', exact: true }).click()
   await page.getByRole('button', { name: '浏览同场素材图', exact: true }).click()
   await graph.getByRole('button', { name: '定位实际覆盖', exact: true }).click()

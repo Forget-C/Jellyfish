@@ -9,7 +9,7 @@ from app.core.contracts.directing.scene_version import SceneVersionContent
 from app.models.directing import SceneCutReviewRecord
 from app.models.studio import Chapter
 from app.services.directing.store import DirectingStore, RevisionConflict
-from app.services.directing.scene_cut_evidence import scene_cut_review_basis, cut_review_query
+from app.services.directing.scene_cut_evidence import scene_cut_review_basis, cut_review_query, cut_review_basis_key
 
 
 class SceneCutReviewService(DirectingStore):
@@ -55,7 +55,8 @@ class SceneCutReviewService(DirectingStore):
         if any(set(issue.clip_ids) - clip_ids for issue in body.decision.issues):
             raise ValueError('审片问题须定位当前时间线中的真实片段身份')
         row = SceneCutReviewRecord(id=uuid4().hex, version_id=version_id, request_id=body.request_id,
-            review=body.model_dump(mode='json'), content=version.content.model_dump(mode='json'))
+            review=body.model_dump(mode='json'), content=version.content.model_dump(mode='json'),
+            basis_key=cut_review_basis_key(version.content))
         self.db.add(row)
         await self.protect_scene_review_files(sequence, row.content, 'scene-cut-review:' + row.id)
         await self.db.flush()

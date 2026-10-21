@@ -238,11 +238,11 @@ export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectI
     <SceneTimelineEditor contextKey={contextKey} selectionKey={selected} navigationSerial={graphNavigation || navigation?.serial} previewStop={previewStop} onPreviewStart={() => { setPreview(false); setSeamStop(value => value + 1) }} take={take} takes={takes} content={content} disabled={disabled || libraryBlocked} onChange={onChange}>
       {navigationClipId && !content.timeline.items.some(item => item.id === navigationClipId) && <Alert type="warning" message="原片段已不可用，请重新选择；未选择其他片段。" />}
       {focusClipId && !content.timeline.items.some(item => item.id === focusClipId) && <Alert type="warning" message={`原采用 ${focusClipId} 已不存在，请核对原依赖；未选择其他片段。`} />}
-      <SceneEndFrames evidence={graph} navigation={frameNavigation} onRecorded={onRefreshGraph} onOpenUnit={onOpenUnit} key={versionId} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content}
+      <SceneEndFrames navigation={frameNavigation} onRecorded={onRefreshGraph} onOpenUnit={onOpenUnit} key={versionId} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content}
         dirty={dirty} disabled={disabled || loading || !!error} />
-      <SceneSeamReviews navigation={seamNavigation} evidence={graph} onRecorded={onRefreshGraph} onHistoryPreviewStart={stopLivePreview} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content} takes={takes}
+      <SceneSeamReviews navigation={seamNavigation} onRecorded={onRefreshGraph} onHistoryPreviewStart={stopLivePreview} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content} takes={takes}
         dirty={dirty} disabled={disabled || loading || !!error} previewStop={seamStop} onPreviewStart={() => { setPreview(false); setPreviewStop(value => value + 1) }} />
-      <SceneCutReviews evidence={graph} navigation={cutNavigation} onRecorded={onRefreshGraph} takes={takes} onHistoryPreviewStart={stopLivePreview} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content}
+      <SceneCutReviews navigation={cutNavigation} onRecorded={onRefreshGraph} takes={takes} onHistoryPreviewStart={stopLivePreview} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content}
         dirty={dirty} disabled={disabled || loading || !!error} />
     </SceneTimelineEditor>
   </DirectorCanvasSurface></div><WorkbenchDetails title="素材固定依据 · 只读" status="只读" open={takeDetails && !!take} onClose={() => setTakeDetails(false)}>{takeInformation}</WorkbenchDetails></>

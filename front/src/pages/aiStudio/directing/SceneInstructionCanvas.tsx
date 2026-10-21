@@ -17,6 +17,8 @@ import { SceneInstructionSuggestions } from './SceneInstructionSuggestions'
 import { SceneInstructionChecks } from './SceneInstructionChecks'
 import { SceneInstructionBasis } from './SceneInstructionBasis'
 
+const recordStatuses: Record<string, string> = { queued: '等待执行', running: '执行中', succeeded: '已完成', failed: '失败', cancelled: '已取消' }
+
 /** 正文摘要作为视口锚点，依据和参考在邻列排列；只决定几何位置。 */
 const arrangeInstruction: GraphArrange = (nodes, sizes, _width, anchor, retained = {}) => {
   const positions = { ...retained }
@@ -47,6 +49,7 @@ export function SceneInstructionCanvas({ graph, evidenceError, onEvidenceChanged
   taskId?: string
   onTask: (taskId: string, unitId: string) => void
 }) {
+  const [selectedRecord, setSelectedRecord] = useState<string>()
   const [unavailableSource, setUnavailableSource] = useState(false)
   const [recordFocus, setRecordFocus] = useState<{ unitId: string; kind: 'suggestion' | 'check'; taskId: string; serial: number }>()
   const [reading, setReading] = useState<'basis' | 'references'>()
@@ -65,7 +68,7 @@ export function SceneInstructionCanvas({ graph, evidenceError, onEvidenceChanged
   const references = nodes.find(node => node.kind === 'unit_references')
   const instruction = nodes.find(node => node.kind === 'instruction')
   const view = validGraph ? graph.views.find(row => row.anchor_id === instruction?.id) : undefined
-  const summary = (node: typeof graph.nodes[number]) => <><div className="design-compact-fields">{node.summary.map(field => <p key={field.field} title={`${field.label}：${field.text}`}><span>{field.label}：</span><strong>{field.text}</strong></p>)}</div>{node.issues.map(issue => <p key={issue.code + issue.message}>{issue.message}</p>)}</>
+  const summary = (node: typeof graph.nodes[number]) => <><div className="design-compact-fields">{node.summary.slice(0, 3).map(field => <p key={field.field} title={`${field.label}：${field.text}`}><span>{field.label}：</span><strong>{field.text}</strong></p>)}</div>{node.issues.length > 0 && <div className="design-compact-fields"><p><strong>{node.issues[0].message}</strong></p></div>}</>
   const editor = <section className="canvas-workbench-card">
       {unit ? <><p>单元 {allUnits.indexOf(unit) + 1} · 人工编辑按当前保存模式保存，可撤销。</p>
         <Input.TextArea id="scene-current-instruction" aria-label="当前单元指令正文" rows={expandedUnit === unit.id ? 16 : 4} onFocus={() => setExpandedUnit(unit.id)} disabled={disabled} value={unit.instruction || ''}
@@ -82,7 +85,7 @@ export function SceneInstructionCanvas({ graph, evidenceError, onEvidenceChanged
       <Select className="scene-instruction-select" aria-label="指令所属单元" placeholder="明确选择单元" value={unit?.id} style={{ width: '100%' }}
         options={units.map(row => ({ value: row.id, label: `单元 ${allUnits.indexOf(row) + 1} · ${row.coverage.map(item => item.action_scope).join('；') || '动作待填写'}` }))}
         onChange={id => onSelectUnit(id)} />
-      {!validGraph && <p role="alert">指令图与当前版本不一致。<Button onClick={onRetryGraph}>重新读取版本</Button></p>}
+      {!validGraph && <p role="alert">指令图与当前版本不一致。<WorkbenchButton variant="secondary" onClick={onRetryGraph}>重新读取版本</WorkbenchButton></p>}
       <WorkbenchButton variant="secondary" onClick={onRetryGraph}>刷新图证据</WorkbenchButton>
       {evidenceError && <p role="alert">图证据读取失败，保留旧摘要：{evidenceError}。请刷新图证据重试。</p>}
       {dirty && <p aria-label="指令图同步状态">图待同步：图展示已保存内容，正文编辑器保留当前输入。</p>}
@@ -96,22 +99,24 @@ export function SceneInstructionCanvas({ graph, evidenceError, onEvidenceChanged
       objects={(view?.members || []).flatMap(member => {
         const node = nodes.find(row => row.id === member.node_id)
         if (!node) return []
-        return [{ id: node.id, label: node.title, group: member.group,
+        const record = node.kind === 'instruction' ? node.records.find(row => row.task_id === selectedRecord) || node.records[0] : undefined
+        return [{ id: node.id, label: node.title, group: member.group, size: { width: 392, height: 560 },
           content: node.kind === 'instruction' ? <section className="canvas-workbench-card">{summary(node)}<section aria-label="已保存指令记录">
             <p>正文来源：{node.source?.kind || '未绑定'} · 依据：{({ empty: '正文为空', unbound: '依据未绑定', current: '依据一致', changed: '依据已变', unverified: '依据待核实' })[node.basis_status]}</p>
-            {node.basis_id && <p>依据回执：{node.basis_id}</p>}
-            {node.evidence_issue && <p>{node.evidence_issue}</p>}
-            {node.records.map(record => <section key={record.task_id}>
-              <p>{record.kind === 'suggestion' ? '建议' : '检查'} · {({ queued: '等待执行', running: '执行中', succeeded: '已完成', failed: '失败', cancelled: '已取消' } as Record<string, string>)[record.status] || '状态待核实'}</p>
-              <p>原版本：{record.version_id} · 原请求：{record.request_id}</p>
-              <p>{record.bound ? '当前绑定 · ' : ''}{record.kind === 'check' ? record.confirmed ? '检查已明确确认' : record.matches_current ? '检查适用于已保存输入，尚未确认' : '检查不适用于已保存输入' : '查看后明确应用'}</p>
-              {record.reason && <p>{record.reason}</p>}
-              <WorkbenchButton variant="secondary" onClick={() => { setRecordFocus({ unitId: record.unit_id, kind: record.kind, taskId: record.task_id, serial: Date.now() }); document.querySelector(`[aria-label="当前单元指令${record.kind === 'suggestion' ? '建议' : '检查'}"]`)?.scrollIntoView({ block: 'center' }) }}>查看原{record.kind === 'suggestion' ? '建议' : '检查'}记录</WorkbenchButton>
-            </section>)}
+            {node.evidence_issue && <div className="design-compact-fields"><p><strong>{node.evidence_issue}</strong></p></div>}
+            <p>相关建议／检查 {node.records.length} 条；在原工作区阅读完整记录与原因。</p>
+            {record && <><div className="design-compact-fields"><p><strong>{record.kind === 'suggestion' ? '建议' : '检查'} · {recordStatuses[record.status] || '状态待核实'}</strong></p>
+              <p><strong>{record.reason || (record.kind === 'check' ? record.confirmed ? '检查已明确确认' : record.matches_current ? '适用于已保存输入，尚未确认' : '不适用于已保存输入' : '查看后明确应用')}</strong></p></div>
+              <Select aria-label="指令记录定位" style={{ width: '100%' }} value={record.task_id}
+                options={node.records.map(row => ({ value: row.task_id, label: `${row.kind === 'suggestion' ? '建议' : '检查'} · ${row.bound ? '当前绑定 · ' : ''}${recordStatuses[row.status] || '状态待核实'} · ${row.task_id}` }))} onChange={setSelectedRecord} />
+              <WorkbenchButton variant="secondary" onClick={() => {
+                setRecordFocus({ unitId: record.unit_id, kind: record.kind, taskId: record.task_id, serial: Date.now() })
+                document.querySelector(`[aria-label="当前单元指令${record.kind === 'suggestion' ? '建议' : '检查'}"]`)?.scrollIntoView({ block: 'center' })
+              }}>查看原{record.kind === 'suggestion' ? '建议' : '检查'}记录</WorkbenchButton></>}
             {!node.records.length && <p>尚无已登记的建议或检查；待核实原请求仍在工作区核实。</p>}
-          </section><Button disabled={!unit} onClick={() => document.getElementById('scene-current-instruction')?.focus()}>编辑当前指令</Button></section> : <section className="canvas-workbench-card">{summary(node)}
-            {node.kind === 'unit_basis' ? <Button disabled={!unit} onClick={() => setReading('basis')}>查看完整单元依据</Button> : <>
-              <Button disabled={!unit} onClick={() => setReading('references')}>查看完整参考输入</Button>
+          </section><WorkbenchButton variant="secondary" disabled={!unit} onClick={() => document.getElementById('scene-current-instruction')?.focus()}>编辑当前指令</WorkbenchButton></section> : <section className="canvas-workbench-card">{summary(node)}
+            {node.kind === 'unit_basis' ? <WorkbenchButton variant="secondary" disabled={!unit} onClick={() => setReading('basis')}>查看完整单元依据</WorkbenchButton> : <>
+              <WorkbenchButton variant="secondary" disabled={!unit} onClick={() => setReading('references')}>查看完整参考输入</WorkbenchButton>
               <p>在单元画布明确选择或修改参考；正文中的提及不会自动绑定素材。</p>
             </>}
           </section>, onInspect: node.kind === 'instruction' ? () => document.getElementById('scene-current-instruction')?.focus() : () => { if (unit) setReading(node.kind === 'unit_basis' ? 'basis' : 'references') } }]

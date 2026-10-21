@@ -1,4 +1,4 @@
-import { workbenchControl } from './workbenchControls.mjs'
+import { workbenchControl, selectWorkbenchOption } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -82,6 +82,13 @@ try {
   assert.equal(posted.status, 200, await posted.clone().text())
   const record = (await posted.json()).data
   let posts = 0
+  const historyReads = { cut: 0, seam: 0, frame: 0 }
+  page.on('request', request => {
+    if (request.method() !== 'GET') return
+    if (request.url().endsWith('/cut-reviews')) historyReads.cut++
+    if (request.url().endsWith('/seam-reviews')) historyReads.seam++
+    if (request.url().endsWith('/end-frames')) historyReads.frame++
+  })
   await page.route('**/*', route => { if (route.request().method() === 'POST' && /\/(cut-reviews|end-frames|seam-reviews|take-reviews|exports)(\?|$)/.test(route.request().url())) posts++; return route.continue() })
   await page.route('**/versions*', async route => {
     if (route.request().method() !== 'GET') return route.continue()
@@ -94,32 +101,69 @@ try {
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   await page.getByRole('button', { name: '编辑画布', exact: true }).click()
   const graph = page.getByLabel('整场剪辑画布视口', { exact: true })
+  await graph.waitFor()
+  await delay(300)
+  assert.deepEqual(historyReads, { cut: 0, seam: 0, frame: 0 }, '默认总览不读取完整历史')
   const cut = graph.locator('[data-canvas-node]').filter({ hasText: '整场验收' }).filter({ has: page.getByRole('button', { name: '查看原整场验收', exact: true }) })
-  await cut.getByRole('button', { name: '定位问题片段 first', exact: true }).waitFor()
-  await cut.getByRole('button', { name: '定位问题片段 second', exact: true }).waitFor()
+  await cut.getByRole('combobox', { name: '问题片段定位', exact: true }).waitFor()
+  assert.ok(await cut.evaluate(node => node.getBoundingClientRect().height < 600), '大量问题不使卡片无限增长')
+  for (const id of ['first', 'second']) {
+    await selectWorkbenchOption(page, '问题片段定位', `定位问题片段 ${id}`)
+    await page.waitForFunction(id => document.activeElement?.id === `scene-clip-${id}`, id)
+    await page.getByRole('button', { name: '浏览整场剪辑', exact: true }).click()
+  }
+
   await cut.getByRole('button', { name: '查看原整场验收', exact: true }).focus()
   await page.keyboard.press('Enter')
   await page.locator(`[id="scene-cut-review-${record.id}"]`).waitFor({ state: 'visible' })
+  assert.ok(historyReads.cut > 0, '明确原记录动作才读取完整历史')
+  assert.equal(historyReads.seam, 0)
+  assert.equal(historyReads.frame, 0)
   await page.getByLabel('整场画面判断', { exact: true }).fill('保留中的未提交验收输入')
   const input = await page.getByLabel('整场画面判断', { exact: true }).elementHandle()
   const newerDecision = structuredClone(decision)
-  newerDecision.issues[0].observation = '同 revision 的新整场问题摘要'
+  newerDecision.overall = '同 revision 的新整场问题摘要'
+  newerDecision.issues = Array.from({ length: 40 }, (_, index) => ({ ...decision.issues[0], id: `issue-${index}`, observation: '长观察'.repeat(200), acceptance: '完整验收'.repeat(100) }))
   const newer = await fetch(detail + '/cut-reviews', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: baseline.revision, decision: newerDecision }) })
   assert.equal(newer.status, 200, await newer.clone().text())
+  const beforeRefresh = { ...historyReads }
   await page.getByRole('button', { name: '刷新图证据', exact: true }).click()
   await graph.getByText(/同 revision 的新整场问题摘要/).waitFor({ state: 'attached' })
+  await delay(300)
+  assert.deepEqual(historyReads, beforeRefresh, 'graph证据刷新不得重新获取完整历史')
   assert.equal(await page.getByLabel('整场画面判断', { exact: true }).inputValue(), '保留中的未提交验收输入')
   assert.equal(await page.getByLabel('整场画面判断', { exact: true }).evaluate((node, old) => node === old, input), true)
   await page.getByRole('button', { name: '浏览整场剪辑', exact: true }).click()
-  await page.getByRole('button', { name: '定位画布节点', exact: true }).click()
-  await page.getByRole('menuitem', { name: '整场验收', exact: true }).click()
-  await page.keyboard.press('Escape')
-  if (await page.getByRole('menuitem', { name: '整场验收', exact: true }).isVisible()) await page.getByRole('button', { name: '定位画布节点', exact: true }).click()
-  await page.getByRole('menuitem', { name: '整场验收', exact: true }).waitFor({ state: 'hidden' })
-  await delay(400) // Wait for the existing toolbar menu exit animation before visual evidence.
-  await page.screenshot({ path: join(output, 'cut-evidence-desktop.png'), fullPage: true })
+  assert.ok(await cut.evaluate(node => node.getBoundingClientRect().height < 600), '大量问题仍保持有限卡片尺寸')
+  assert.equal(await cut.evaluate(node => {
+    const card = node.getBoundingClientRect()
+    return [...node.querySelectorAll('button, [role="combobox"]')].every(control => {
+      const rect = control.getBoundingClientRect()
+      return rect.top >= card.top && rect.bottom <= card.bottom && rect.right <= card.right
+    })
+  }), true, '有限卡片保留全部明确操作，内容不靠卡内滚动才能操作')
+
+  // 新页面直接恢复图布局，避免 Chrome 在已隐藏菜单上保留旧合成层；不改 DOM 或截图样式。
+  await page.reload()
+  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('button', { name: '编辑画布', exact: true }).click()
+  const frameCard = async () => {
+    await graph.evaluate(node => node.focus({ preventScroll: true }))
+    const rect = await cut.boundingBox()
+    const viewport = await graph.boundingBox()
+    const dx = Math.round(((viewport.width - rect.width) / 2 - rect.x) / 30)
+    const dy = Math.round((viewport.y + 16 - rect.y) / 30)
+    for (let i = 0; i < Math.abs(dx); i++) await page.keyboard.press(dx > 0 ? 'ArrowLeft' : 'ArrowRight')
+    for (let i = 0; i < Math.abs(dy); i++) await page.keyboard.press(dy > 0 ? 'ArrowUp' : 'ArrowDown')
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+  }
+  await frameCard()
+  await page.screenshot({ path: join(output, 'cut-evidence-desktop.png'), animations: 'disabled' })
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.screenshot({ path: join(output, 'cut-evidence-narrow.png'), fullPage: true })
+  await page.getByRole('button', { name: '缩小画布', exact: true }).click()
+  await page.getByRole('button', { name: '缩小画布', exact: true }).click()
+  await frameCard()
+  await page.screenshot({ path: join(output, 'cut-evidence-narrow.png'), animations: 'disabled' })
   await cut.getByRole('button', { name: '查看原整场验收', exact: true }).focus()
   await page.keyboard.press('Enter')
   assert.equal(await page.getByLabel('整场画面判断', { exact: true }).inputValue(), '保留中的未提交验收输入')
@@ -136,7 +180,7 @@ try {
   assert.equal(posts, 0)
   console.log(`PASS cut/frame/downstream opaque targets, multi-clip issues, same-revision refresh and retained draft, keyboard/narrow; evidence: ${output}`)
 } catch (error) {
-  if (page) await page.screenshot({ path: join(output, 'failure.png'), fullPage: true }).catch(() => {})
+  if (page) await page.screenshot({ path: join(output, 'failure.png'), fullPage: false }).catch(() => {})
   console.error(`Browser evidence: ${output}`)
   throw error
 } finally {

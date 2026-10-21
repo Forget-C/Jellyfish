@@ -1,3 +1,4 @@
+import { sceneContentKey as contentKey } from './sceneContentKey'
 import { WorkbenchDetails, WorkbenchDetailsProvider } from './ui/WorkbenchDetails'
 import { WorkbenchTheme } from './ui/WorkbenchTheme'
 import { WorkbenchButton, WorkbenchIconButton } from './ui/WorkbenchButton'
@@ -46,13 +47,6 @@ type Transition = { action: () => void; cancel?: () => void }
 type EditHistory = { undo: SceneVersionContent_Output[]; redo: SceneVersionContent_Output[] }
 type RecoveryState = { data?: SceneRecovery; stage: 'checking' | 'available' | 'unknown' | 'conflict' | 'foreign' | 'invalid'; message?: string }
 const sessionHistories = new Map<string, EditHistory>()
-// 输入 DTO 可省略空列表及 nullable 默认值，响应会补齐；比较业务值而非 JSON 字段顺序。
-const contentKey = (value: unknown) => JSON.stringify(value, (_key, item) => {
-  if (!item || typeof item !== 'object' || Array.isArray(item)) return item
-  return Object.fromEntries(Object.keys(item).sort()
-    .filter(key => item[key] != null && !(Array.isArray(item[key]) && item[key].length === 0 && key !== 'participant_ids'))
-    .map(key => [key, item[key]]))
-})
 const sameContent = (a: unknown, b: unknown) => contentKey(a) === contentKey(b)
 const verifiedSave = (operation: SaveOperation, saved: SceneVersionRead) => {
   const revision = operation.body.expected_revision + (operation.videoOnly ? 0 : 1)

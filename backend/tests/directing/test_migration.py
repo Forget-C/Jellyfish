@@ -88,6 +88,9 @@ def test_foundation_migration_and_next_upgrade():
         unit_identities = revision_module('a3d7e1f5b624_add_scene_unit_identities.py')
         unit_identities.op = migration.op
         unit_identities.upgrade()
+        review_bases = revision_module('b4e8f2a6c735_index_scene_review_bases.py')
+        review_bases.op = migration.op
+        review_bases.upgrade()
         context = MigrationContext.configure(connection, opts={"compare_type": True})
         assert not compare_metadata(context, Base.metadata)
         connection.execute(sa.text("INSERT INTO projects (id,name,description,style,visual_style,seed,unify_style,progress,stats) VALUES ('p','p','','drama','live_action',0,1,0,'{}')"))
@@ -116,13 +119,13 @@ def test_foundation_migration_and_next_upgrade():
             scene_video.downgrade()
         assert connection.scalar(sa.text("SELECT COUNT(*) FROM directing_scene_video_executions")) == 1
         connection.execute(sa.text("DELETE FROM directing_scene_video_executions"))
-        connection.execute(sa.text("INSERT INTO directing_scene_take_reviews (id,version_id,revision,take_kind,take_id,content) VALUES ('review','v',1,'scene_video','take','{}')"))
+        connection.execute(sa.text("INSERT INTO directing_scene_take_reviews (id,version_id,revision,take_kind,take_id,content,basis_key) VALUES ('review','v',1,'scene_video','take','{}','fixture')"))
         with pytest.raises(RuntimeError, match='Scene take reviews exist'):
             take_reviews.downgrade()
         assert connection.scalar(sa.text("SELECT COUNT(*) FROM directing_scene_take_reviews")) == 1
         connection.execute(sa.text("DELETE FROM directing_scene_take_reviews"))
         take_reviews.downgrade()
-        connection.execute(sa.text("INSERT INTO directing_scene_cut_reviews (id,version_id,request_id,review,content) VALUES ('cut-review','v','request','{}','{}')"))
+        connection.execute(sa.text("INSERT INTO directing_scene_cut_reviews (id,version_id,request_id,review,content,basis_key) VALUES ('cut-review','v','request','{}','{}','fixture')"))
         with pytest.raises(RuntimeError, match='Scene cut reviews exist'):
             cut_reviews.downgrade()
         assert connection.scalar(sa.text("SELECT COUNT(*) FROM directing_scene_cut_reviews")) == 1

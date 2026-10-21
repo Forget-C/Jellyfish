@@ -200,21 +200,16 @@ async def edit_graph(context: CanvasReadContext, db: AsyncSession, sequence_id: 
 
 
 async def add_cut_evidence(graph, context, db, inherited, members, obj, field):
-    """有界流读取最新和最近适用结论；完整历史仅由原阅读入口加载。"""
+    """索引预选最新和最近适用结论；完整历史仅由原阅读入口加载。"""
     from app.core.contracts.directing.scene_cut_review import SceneCutReviewCreate
-    from app.core.contracts.directing.scene_version import SceneVersionContent
-    from app.services.directing.scene_cut_evidence import scene_cut_review_basis, cut_review_query
-    current = scene_cut_review_basis(context.content)
-    stream = await db.stream_scalars(cut_review_query(context.version_id, inherited).execution_options(yield_per=16))
-    selected = []
-    async for row in stream:
-        request = SceneCutReviewCreate.model_validate(row.review)
-        matches = scene_cut_review_basis(SceneVersionContent.model_validate(row.content)) == current
-        if not selected or matches:
-            selected.append((row, request, matches))
-        if matches:
-            break
-    await stream.close()
+    from app.services.directing.scene_cut_evidence import cut_review_basis_key, cut_review_query
+    from app.models.directing import SceneCutReviewRecord
+    current = cut_review_basis_key(context.content)
+    query = cut_review_query(context.version_id, inherited)
+    latest = query.with_only_columns(SceneCutReviewRecord.id).limit(1).scalar_subquery()
+    matching = query.where(SceneCutReviewRecord.basis_key == current).with_only_columns(SceneCutReviewRecord.id).limit(1).scalar_subquery()
+    rows = await db.scalars(query.where(or_(SceneCutReviewRecord.id == latest, SceneCutReviewRecord.id == matching)))
+    selected = [(row, SceneCutReviewCreate.model_validate(row.review), row.basis_key == current) for row in rows]
     for row, request, matches in selected:
         node_id = f'edit:cut-review:{row.id}'
         original_clips = {item['id'] for item in row.content['timeline']['items']}

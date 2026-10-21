@@ -255,13 +255,6 @@
     },
     {
       "file": "src/pages/aiStudio/directing/CanvasSequenceWorkbench.tsx",
-      "rule": "eqeqeq",
-      "severity": 2,
-      "fingerprint": "8ac339ec6457e5ac2a6b6d4bcabe6b99e577ff11d1f2e0b9817f1de1403cf428",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/directing/CanvasSequenceWorkbench.tsx",
       "rule": "react-hooks/exhaustive-deps",
       "severity": 1,
       "fingerprint": "17378ad6e6b48c4a16d90a04a262758e485b14e97f90c8692b8bdb199aaf98f1",

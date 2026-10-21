@@ -1,7 +1,8 @@
+import { WorkbenchButton } from './ui/WorkbenchButton'
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button } from 'antd'
 import { ApiError, StudioDirectingService } from '../../../services/generated'
-import type { EditCanvasGraph, SceneEndFrameCreate, SceneEndFrameRead, SceneMediaCutItem_Output, SceneVersionContent_Output } from '../../../services/generated'
+import type { SceneEndFrameCreate, SceneEndFrameRead, SceneMediaCutItem_Output, SceneVersionContent_Output } from '../../../services/generated'
 import { resolveAssetUrl } from '../assets/utils'
 import { sceneDependencyIssue } from './SceneFrameDependencies'
 import { directingError } from './common'
@@ -11,8 +12,8 @@ const sameSource = (left: SceneMediaCutItem_Output, right?: SceneVersionContent_
   && left.media_range.source_in_ms === right.media_range.source_in_ms && left.media_range.source_out_ms === right.media_range.source_out_ms
 
 /** 提帧固定原采用和请求；参考选择与依赖更新由用户另行执行。 */
-export function SceneEndFrames({ projectId, sequenceId, versionId, revision, content, dirty, disabled, onOpenUnit, evidence, navigation, onRecorded }: {
-  evidence?: EditCanvasGraph; navigation?: string; onRecorded?: () => void
+export function SceneEndFrames({ projectId, sequenceId, versionId, revision, content, dirty, disabled, onOpenUnit, navigation, onRecorded }: {
+  navigation?: string; onRecorded?: () => void
   onOpenUnit: (unitId: string) => void
   projectId: string; sequenceId: string; versionId: string; revision: number; content: SceneVersionContent_Output; dirty: boolean; disabled: boolean
 }) {
@@ -29,7 +30,9 @@ export function SceneEndFrames({ projectId, sequenceId, versionId, revision, con
   const [pending, setPending] = useState(initial.pending)
   const [storageError, setStorageError] = useState(initial.error)
   const [records, setRecords] = useState<SceneEndFrameRead[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
+  const [historyRequested, setHistoryRequested] = useState(false)
+  useEffect(() => { if (navigation) { setHistoryRequested(true); setAttempt(value => value + 1) } }, [navigation])
   const [readError, setReadError] = useState('')
   const [submitError, setSubmitError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -37,13 +40,14 @@ export function SceneEndFrames({ projectId, sequenceId, versionId, revision, con
   const mounted = useRef(true)
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   useEffect(() => {
+    if (!historyRequested) return
     let active = true
     setLoading(true); setReadError('')
     void StudioDirectingService.directingSceneEndFrames({ projectId, sequenceId, versionId }).then(response => {
       if (active) setRecords(response.data || [])
     }).catch(error => { if (active) setReadError(directingError(error)) }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [projectId, sequenceId, versionId, revision, attempt, evidence])
+  }, [projectId, sequenceId, versionId, attempt, historyRequested])
   const clearPending = (request: SceneEndFrameCreate) => {
     if (readStored()?.request_id !== request.request_id) return
     localStorage.removeItem(storageKey)
@@ -58,7 +62,7 @@ export function SceneEndFrames({ projectId, sequenceId, versionId, revision, con
       const response = await StudioDirectingService.directingCreateSceneEndFrame({ projectId, sequenceId, versionId, requestBody: request })
       if (!response.data) throw new Error('提帧结果尚未核实，请核实原请求')
       clearPending(request)
-      if (mounted.current) { setAttempt(value => value + 1); onRecorded?.() }
+      if (mounted.current) { setHistoryRequested(true); setAttempt(value => value + 1); onRecorded?.() }
     } catch (error) {
       if (error instanceof ApiError && [400, 409, 422].includes(error.status)) {
         try { clearPending(request) } catch { if (mounted.current) setStorageError('原请求已被拒绝，但本地凭据尚未清理，请重读后核实。') }
@@ -74,19 +78,20 @@ export function SceneEndFrames({ projectId, sequenceId, versionId, revision, con
     {storageError && <Alert type="warning" message={storageError} action={<Button onClick={() => {
       try { setPending(readStored()); setStorageError('') } catch { setStorageError('本地提帧凭据仍无法读取，请恢复后重读。') }
     }}>重读提帧凭据</Button>} />}
+    <WorkbenchButton variant="secondary" onClick={() => { setHistoryRequested(true); setAttempt(value => value + 1) }}>查看完整落幅记录历史</WorkbenchButton>
     {readError && <Alert type="warning" message="落幅记录读取失败，当前适用性尚未核实" description={readError} />}
-    <Button loading={loading} onClick={() => setAttempt(value => value + 1)}>重读落幅记录</Button>
+    {historyRequested && <WorkbenchButton variant="secondary" loading={loading} onClick={() => setAttempt(value => value + 1)}>重读落幅记录</WorkbenchButton>}
     {submitError && <Alert type="warning" message={submitError} />}
     {pending && <Alert type="warning" message="原提帧请求待核实；后续编辑不会改变该请求的采用区间。"
       action={<Button loading={busy} disabled={disabled || !!storageError} onClick={() => void submit(pending)}>核实原提帧请求</Button>} />}
     {items.map((clip, index) => clip.kind === 'media' && <Button id={`scene-end-frame-${clip.id}`} key={clip.id} disabled={disabled || dirty || busy || loading || !!readError || !!storageError || !!pending}
       onClick={() => void submit({ request_id: crypto.randomUUID(), expected_revision: revision, clip_id: clip.id })}>提取片段 {index + 1} 实际落幅</Button>)}
-    {!loading && !readError && content.units.flatMap((unit, unitIndex) => (unit.scene_dependencies || []).filter(link => link.version_id === versionId).map(link => {
+    {historyRequested && !loading && !readError && content.units.flatMap((unit, unitIndex) => (unit.scene_dependencies || []).filter(link => link.version_id === versionId).map(link => {
       const issue = sceneDependencyIssue(link, unit, records, content, versionId)
       return issue ? <Alert key={`${unit.id}:${link.clip_id}`} type="warning" message={`后段单元 ${unitIndex + 1}：${issue}`} description={`原采用：${link.clip_id}；原落幅：${link.frame_id || '尚未绑定'}`}
         action={<Button onClick={() => onOpenUnit(unit.id)}>定位后段单元 {unitIndex + 1}</Button>} /> : null
     }))}
-    {!loading && !readError && records.map((row, index) => <div key={row.id} id={`scene-end-frame-${row.id}`} tabIndex={-1} aria-current={navigation === row.id ? true : undefined}>
+    {historyRequested && !loading && !readError && records.map((row, index) => <div key={row.id} id={`scene-end-frame-${row.id}`} tabIndex={-1} aria-current={navigation === row.id ? true : undefined}>
       <p>落幅 {index + 1}：{sameSource(row.clip, items.find(item => item.id === row.clip.id)) ? '当前采用适用' : '依据已变，原图保留'}</p>
       <p>实际帧：{row.at_ms} 毫秒；原区间：{row.clip.media_range.source_in_ms}–{row.clip.media_range.source_out_ms} 毫秒</p>
       <p>原素材：{row.clip.take_id}；采用：{row.clip.id}</p>

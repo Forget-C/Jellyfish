@@ -360,9 +360,11 @@ class DirectingStore:
 
     async def create_scene_take_review(self, sequence, version_id, revision, content, judgment):
         """固定审片依据并独立保护文件；调用方核实当前修订与重复请求。"""
+        from app.services.directing.scene_take_evidence import take_review_basis_key
         snapshot = content.model_copy(update={'take_judgments': [judgment]}).model_dump(mode='json')
         row = SceneTakeReviewRecord(id=uuid4().hex, version_id=version_id,
-            revision=revision, take_kind=judgment.take_kind, take_id=judgment.take_id, content=snapshot)
+            revision=revision, take_kind=judgment.take_kind, take_id=judgment.take_id, content=snapshot,
+            basis_key=take_review_basis_key(SceneVersionContent.model_validate(snapshot)))
         self.db.add(row)
         await self.protect_scene_review_files(sequence, snapshot, 'scene-take-review:' + row.id)
         await self.db.flush()

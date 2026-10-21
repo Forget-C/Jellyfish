@@ -1,6 +1,7 @@
 """固定整场验收的共享比较与快照查询；不读取完整版本。"""
 from sqlalchemy import or_, select
 from app.models.directing import SceneCutReviewRecord
+from app.services.directing.review_basis_key import review_basis_key
 
 
 def scene_cut_review_basis(content):
@@ -13,6 +14,11 @@ def scene_cut_review_basis(content):
     basis['take_judgments'] = sorted([item for item in basis['take_judgments']
         if (item['take_kind'], item['take_id']) in adopted], key=lambda item: (item['take_kind'], item['take_id']))
     return basis
+
+
+def cut_review_basis_key(content):
+    """索引与原画面验收依据共用规范化入口。"""
+    return review_basis_key(scene_cut_review_basis(content))
 
 
 def cut_review_query(version_id, inherited):

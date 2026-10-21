@@ -65,6 +65,7 @@ try {
   await page.getByRole('button', { name: '保存设置', exact: true }).click()
   await page.getByRole('button', { name: '编辑画布', exact: true }).click()
   await page.getByRole('button', { name: '打开剪辑工作区', exact: true }).click()
+  await page.getByRole('button', { name: '查看完整落幅记录历史', exact: true }).click()
   await locateCanvasNode(page, '时间线')
   const framesUrl = `${versionsUrl}/${version.id}/end-frames`
   const detailUrl = `${versionsUrl}/${version.id}`
@@ -108,6 +109,7 @@ try {
   await page.reload()
   await page.getByRole('button', { name: '编辑画布', exact: true }).click()
   await page.getByRole('button', { name: '打开剪辑工作区', exact: true }).click()
+  await page.getByRole('button', { name: '查看完整落幅记录历史', exact: true }).click()
   await locateCanvasNode(page, '时间线')
   const replay = page.waitForRequest(request => request.url().endsWith('/end-frames') && request.method() === 'POST')
   await page.getByRole('button', { name: '核实原提帧请求', exact: true }).click()
