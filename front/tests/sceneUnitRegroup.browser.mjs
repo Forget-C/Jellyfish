@@ -1,8 +1,4 @@
-import { closeWorkbenchDetails } from './workbenchControls.mjs'
-import { makeWorkspace } from './directing-fixtures.mjs'
-import { workbenchControl } from './workbenchControls.mjs'
 import { workbenchShot } from './workbenchControls.mjs'
-import { unitSettings } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -19,7 +15,7 @@ const output = await mkdtemp(join(tmpdir(), 'jellyfish-unit-regroup-'))
 const api = 'http://127.0.0.1:8246'
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.directing.scene_version_browser_server'], {
   cwd: join(root, '../backend'),
-  env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', SCENE_BROWSER_TEST_DATABASE: join(output, 'browser.sqlite'), SCENE_BROWSER_TEST_PORT: '8246' },
+  env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', SCENE_BROWSER_TEST_DATABASE: join(output, 'browser.sqlite'), SCENE_BROWSER_TEST_PORT: '8246', SCENE_BROWSER_TEST_LEGACY_TAKE: '1' },
   stdio: ['ignore', 'pipe', 'pipe'],
 })
 let backendOutput = ''
@@ -81,12 +77,27 @@ try {
     await dialog.getByRole('button', { name: '开始设计', exact: true }).click()
     await dialog.getByText('等待执行', { exact: true }).waitFor()
     const rows = (await (await fetch(detail + '/unit-design-suggestions')).json()).data
+    if (mode === 'reduce') await page.route('**/unit-design-suggestions/*/preview', route => route.abort('failed'), { times: 1 })
     const complete = await fetch(`${api}/browser-test/unit-design-tasks/${rows[0].task_id}/complete-regroup?mode=${mode}`, { method: 'POST' })
     assert.equal(complete.status, 200, await complete.text())
     await dialog.getByRole('heading', { name: '单元方案预览', exact: true }).waitFor({ timeout: 15000 })
     assert.equal(await dialog.getByRole('heading', { name: /^移除 ·/ }).count(), mode === 'merge' ? 3 : 1)
     if (mode !== 'reduce') assert.equal(await dialog.getByRole('heading', { name: /^新增 ·/ }).count(), mode === 'split' ? 2 : 1)
+    if (mode === 'reduce') {
+      await dialog.getByRole('button', { name: '重新核对预览', exact: true }).waitFor()
+      assert.equal(await dialog.getByRole('button', { name: '确认应用方案', exact: true }).isDisabled(), true)
+      await dialog.getByRole('button', { name: '重新核对预览', exact: true }).click()
+      await dialog.getByRole('button', { name: '重新核对预览', exact: true }).waitFor({ state: 'hidden' })
+      assert.equal((await (await fetch(detail + '/unit-design-suggestions')).json()).data.length, 1)
+      await dialog.getByRole('button', { name: '关闭预览', exact: true }).click()
+      await page.getByRole('combobox', { name: '当前单元', exact: true }).click()
+      await page.locator('.ant-select-dropdown:visible').getByText('单元 2 · 拆信；读信；抬头', { exact: true }).click()
+      await page.getByRole('button', { name: 'AI设计', exact: true }).click()
+      await dialog.getByText('所选单元：target', { exact: true }).waitFor()
+      assert.equal(await dialog.getByText('所选单元：retained', { exact: true }).count(), 0)
+    }
     assert.deepEqual((await (await fetch(detail)).json()).data, previous)
+    await delay(350)
     await page.screenshot({ path: join(output, `unit-regroup-${mode}-desktop.png`), animations: 'disabled' })
     await page.setViewportSize({ width: 390, height: 844 })
     await delay(300)
@@ -108,7 +119,64 @@ try {
   }
   await page.reload()
   assert.equal((await (await fetch(detail)).json()).data.content.units.length, 1)
-  console.log(`PASS three-to-two, split and merge through real AI task, preview, single confirmation, save and reload; desktop/mobile evidence: ${output}`)
+  for (const kind of ['design', 'coverage']) {
+    const created = (await (await fetch(versionsUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), title: `${kind}引用阻塞` }) })).json()).data
+    const blockedContent = structuredClone(before.content)
+    if (kind === 'design') blockedContent.design.applicability = [{ subject: { kind: 'shot', id: 'shot-one', field: 'visible_result' }, purpose: 'design', scope: 'occurrences', occurrences: [{ unit_id: 'removed', coverage_item_id: 'removed-coverage' }] }]
+    else {
+      const take = (await (await fetch(`${versionsUrl}/${created.id}/take-library`)).json()).data[0]
+      assert.ok(take && take.duration_ms === 2000)
+      const range = { source_in_ms: 0, source_out_ms: 1000 }
+      blockedContent.take_judgments = [{ take_kind: take.take_kind, take_id: take.take_id, file_id: take.file_id, annotation: {
+        review_status: 'reviewed', verdict: 'retain', rationale: {}, retained_ranges: [], coverage: [{ id: 'actual-blocker', unit_id: 'removed', coverage_item_id: 'removed-coverage', media_range: range, observation: '确实抬头', source: { kind: 'file', reference: take.take_id, version: take.file_id, file_id: take.file_id, media_range: range } }] } }]
+    }
+    const blockedDetail = `${versionsUrl}/${created.id}`
+    const initial = await fetch(blockedDetail, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: 1, content: blockedContent }) })
+    assert.equal(initial.status, 200, await initial.text())
+    const baseline = (await (await fetch(blockedDetail)).json()).data
+    await page.goto(`http://127.0.0.1:4246/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${created.id}`)
+    await (await workbenchShot(page, '镜头 1：拆信；读信；抬头')).click()
+    await page.getByRole('button', { name: '单元画布', exact: true }).click()
+    await page.getByRole('combobox', { name: '当前单元', exact: true }).click()
+    await page.locator('.ant-select-dropdown:visible').getByText('单元 1 · 拆信；读信；抬头', { exact: true }).click()
+    await page.getByRole('button', { name: 'AI设计', exact: true }).click()
+    await dialog.getByText('视频模型能力已核实', { exact: true }).waitFor()
+    await dialog.getByRole('button', { name: '开始设计', exact: true }).click()
+    await dialog.getByText('等待执行', { exact: true }).waitFor()
+    const task = (await (await fetch(blockedDetail + '/unit-design-suggestions')).json()).data[0]
+    const response = await fetch(`${api}/browser-test/unit-design-tasks/${task.task_id}/complete-regroup`, { method: 'POST' })
+    assert.equal(response.status, 200, await response.text())
+    await dialog.getByText('移除存在引用，处理前不能确认', { exact: true }).waitFor({ timeout: 15000 })
+    assert.equal(await dialog.getByRole('button', { name: '确认应用方案', exact: true }).isDisabled(), true)
+    assert.deepEqual((await (await fetch(blockedDetail)).json()).data, baseline)
+    await page.screenshot({ path: join(output, `unit-regroup-${kind}-blocker.png`), animations: 'disabled' })
+    await dialog.getByRole('button', { name: '定位并处理引用', exact: true }).click()
+    if (kind === 'design') {
+      await page.getByRole('heading', { name: '适用范围', exact: true }).waitFor()
+      await page.getByText(/出现项 removed\/removed-coverage/).waitFor()
+      await delay(350)
+      const fieldBox = await page.locator('.design-applicability-editor').boundingBox()
+      assert.ok(fieldBox && fieldBox.y >= 0 && fieldBox.y + fieldBox.height <= 960, `reference navigation must show applicability editor in viewport: ${JSON.stringify(fieldBox)}`)
+      await page.screenshot({ path: join(output, 'unit-regroup-design-navigation.png'), animations: 'disabled' })
+      await page.getByRole('button', { name: '解除适用性', exact: true }).click()
+      await page.keyboard.press('Escape')
+      await page.getByRole('button', { name: '单元画布', exact: true }).click()
+      await page.getByRole('button', { name: 'AI设计', exact: true }).click()
+      await dialog.getByRole('combobox', { name: '单元设计记录', exact: true }).click()
+      await page.locator('.ant-select-dropdown:visible').getByText(/shot-one · 已生成/).click()
+      await dialog.getByText(/相关镜头、设计或单元输入已变化/).waitFor()
+      assert.equal(await dialog.getByRole('button', { name: '确认应用方案', exact: true }).isDisabled(), true)
+      await dialog.getByRole('button', { name: '关闭预览', exact: true }).click()
+      await page.getByText('已保存', { exact: true }).first().waitFor({ timeout: 10000 })
+    } else {
+      await page.getByRole('region', { name: '实际覆盖判断', exact: true }).waitFor()
+      await page.getByText('0–1000 毫秒：确实抬头', { exact: true }).waitFor()
+      assert.equal(await page.getByRole('button', { name: '删除覆盖 1', exact: true }).count(), 1)
+      await page.screenshot({ path: join(output, 'unit-regroup-coverage-navigation.png'), animations: 'disabled' })
+      assert.equal((await (await fetch(blockedDetail)).json()).data.content.timeline.items.length, 0)
+    }
+  }
+  console.log(`PASS three-to-two, split/merge, design and unadopted-Take blockers/navigation, stale after reference edit, real task/save/reload; desktop/mobile evidence: ${output}`)
 } catch (error) {
   if (page) await page.screenshot({ path: join(output, 'failure.png'), fullPage: true, animations: 'disabled' }).catch(() => {})
   console.error(`Browser evidence: ${output}`)

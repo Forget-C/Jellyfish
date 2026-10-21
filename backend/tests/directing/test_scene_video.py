@@ -1,5 +1,7 @@
 """当前单元检查的固定正文、依据与任务隔离，经真实 HTTP 验证。"""
 from copy import deepcopy
+import json
+from types import SimpleNamespace
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
@@ -10,6 +12,8 @@ import pytest
 from app.models.studio_prompts_files_timeline import FileItem
 from app.services.generation.media_execution import deliver_media
 from app.models.llm import Model, Provider
+from app.models.task import Task
+from app.services.directing.ai import generate_directing_result
 from app.services.task_service import TaskService
 from tests.directing.test_api import client_for
 from tests.directing.test_scene_versions import sequence_path
@@ -166,8 +170,25 @@ async def test_video_submission_freezes_original_unit_and_registers_only_candida
             async with sessions.begin() as db:
                 assert await TaskService(db).claim(video_id, worker_id='running-before-removal')
             current = (await client.get(detail)).json()['data']
-            current['content']['units'] = []
-            removed = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 3, 'content': current['content']})
+            suggestions = detail + '/unit-design-suggestions'
+            submitted_plan = await client.post(suggestions, json={'request_id': str(uuid4()), 'expected_revision': 3,
+                'content': current['content'], 'shot_id': 'shot', 'source_unit_id': 'unit',
+                'target_model_id': 'check-video', 'model_id': 'check-text'})
+            assert submitted_plan.status_code == 200, submitted_plan.text
+            plan_task = submitted_plan.json()['data']['task_id']
+            async with sessions.begin() as db:
+                service = TaskService(db)
+                task = await db.get(Task, plan_task)
+                result = {'shot_id': 'shot', 'target_model_id': 'check-video', 'organization': '重组为新工作', 'units': [
+                    {'id': 'replacement', 'operation': 'create', 'coverage': [{'id': 'replacement-coverage',
+                        'shot_id': 'shot', 'action_scope': '递出信封'}], 'ratio': '16:9', 'reason': '新单元身份'}]}
+                generated = generate_directing_result('directing_unit_design', SimpleNamespace(
+                    invoke=lambda _: SimpleNamespace(content=json.dumps(result))), task.input_snapshot['run_args'])
+                assert await service.claim(plan_task, worker_id='regroup-during-video')
+                await service.finish(plan_task, result=generated.model_dump(mode='json'))
+            candidate = await client.post(suggestions + '/' + plan_task + '/apply', json={'content': current['content']})
+            assert candidate.status_code == 200, candidate.text
+            removed = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 3, 'content': candidate.json()['data']})
             assert removed.status_code == 200, removed.text
             running = (await client.get(video_url)).json()['data'][0]
             assert running['status'] == 'running' and running['preparation'] == rows[0]['preparation']
@@ -196,7 +217,8 @@ async def test_video_submission_freezes_original_unit_and_registers_only_candida
         assert (await client.get(media_path.replace('/units/unit/', '/units/other/'))).status_code == 422
         if remove_running:
             historical = (await client.get(detail)).json()['data']['content']
-            assert historical['units'] == [] and historical['timeline'] == content['timeline']
+            assert [unit['id'] for unit in historical['units']] == ['replacement']
+            assert historical['timeline'] == content['timeline']
             assert historical['take_judgments'] == content['take_judgments']
             library = (await client.get(detail + '/take-library')).json()['data']
             assert any(row['take_id'] == take_id for row in library)
@@ -409,12 +431,25 @@ async def test_video_submission_freezes_original_unit_and_registers_only_candida
         assert after_current[1]['instruction'] == '另一单元的新正文'
 
         # 已证明失败任务可重试；移除后新的重试授权必须拒绝，历史身份与素材不变。
-        removed_content = deepcopy((await client.get(detail)).json()['data']['content'])
+        adopted_content = deepcopy((await client.get(detail)).json()['data']['content'])
+        media_range = {'source_in_ms': 0, 'source_out_ms': 1000}
+        adopted_content['timeline']['items'] = [{'kind': 'media', 'id': 'adopted-original', 'take_kind': 'scene_video',
+            'take_id': take_id, 'file_id': 'video-output', 'media_range': media_range, 'timeline_start_ms': 0}]
+        adopted_content['take_judgments'] = [{'take_kind': 'scene_video', 'take_id': take_id, 'file_id': 'video-output',
+            'annotation': {'coverage': [], 'review_status': 'reviewed', 'verdict': 'retain', 'rationale': {},
+                'retained_ranges': [media_range]}}]
+        adopted = await client.put(detail, json={'request_id': str(uuid4()),
+            'expected_revision': (await client.get(detail)).json()['data']['revision'], 'content': adopted_content})
+        assert adopted.status_code == 200, adopted.text
+        removed_content = deepcopy(adopted.json()['data']['content'])
         removed_content['units'] = []
         removed = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': (await client.get(detail)).json()['data']['revision'], 'content': removed_content})
         assert removed.status_code == 200, removed.text
         rejected = await client.post(retry_url, json={'request_id': str(uuid4())})
         assert rejected.status_code == 409 and '原单元已不可用' in rejected.text
+        removed_state = (await client.get(detail)).json()['data']['content']
+        assert removed_state['timeline'] == adopted.json()['data']['content']['timeline']
+        assert removed_state['take_judgments'] == adopted.json()['data']['content']['take_judgments']
         assert (await client.get(media_path)).status_code == 200
         assert (await client.get(url)).json()['data'][0]['inputs']['unit']['coverage'][0]['action_scope'] == '递出信封'
 

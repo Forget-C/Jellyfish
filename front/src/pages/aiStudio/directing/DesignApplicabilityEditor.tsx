@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Input, Select } from 'antd'
 import type { DesignApplicability, DesignSubject, EditableGenerationUnit_Output, EditableSceneDesign_Output } from '../../../services/generated'
 import { WorkbenchButton } from './ui/WorkbenchButton'
@@ -32,13 +32,32 @@ type Candidate = { subject: DesignSubject; label: string }
 const subjectKey = (subject: DesignSubject) => JSON.stringify([subject.kind, subject.id, subject.field])
 
 /** 在唯一原工作单上编辑字段适用性；未完成的选择只留在组件本地。 */
-export function DesignApplicabilityEditor({ value, units, object, disabled, onChange }: {
+export function DesignApplicabilityEditor({ value, units, object, disabled, onChange, focusSerial }: {
+  focusSerial?: number
   value: EditableSceneDesign_Output
   units: EditableGenerationUnit_Output[]
   object: DesignObject
   disabled: boolean
   onChange: (next: EditableSceneDesign_Output) => void
 }) {
+  const section = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (!focusSerial) return
+    const container = section.current?.closest('.wb-details')
+    if (!container) return
+    // 引用弹窗关闭及详情解除隐藏后，才滚动和聚焦真实编辑区。
+    const focus = () => {
+      const node = section.current
+      if (!node?.getClientRects().length || node.closest('[hidden], [inert]')) return
+      node.scrollIntoView({ block: 'center' })
+      node.focus({ preventScroll: true })
+      observer.disconnect()
+    }
+    const observer = new MutationObserver(focus)
+    observer.observe(container, { attributes: true, attributeFilter: ['hidden', 'inert'] })
+    focus()
+    return () => observer.disconnect()
+  }, [focusSerial])
   const [draft, setDraft] = useState<DesignApplicability>()
   const prefix = object.key.split(':')[0]
   const kind = object.key === 'performance' ? 'performance' : subjectKinds[prefix]
@@ -88,7 +107,7 @@ export function DesignApplicabilityEditor({ value, units, object, disabled, onCh
     setDraft(undefined)
   }
   if (!candidates.length) return null
-  return <section className="design-applicability-editor">
+  return <section ref={section} tabIndex={-1} className="design-applicability-editor">
     <h4>适用范围</h4><p>关联镜头只确定可用范围；生产单元仍需明确选择本次执行项。</p>
     {saved.map(item => <div key={subjectKey(item.subject)}><span>{candidates.find(candidate => subjectKey(candidate.subject) === subjectKey(item.subject))?.label} · {item.scope === 'scene' ? '全场背景' : item.scope === 'scene_rule' ? '全场规则' : item.scope === 'shots' ? `镜头 ${item.shot_ids?.join('、')}` : `出现项 ${item.occurrences?.map(row => `${row.unit_id}/${row.coverage_item_id}`).join('、')}`} · {item.purpose === 'constraint' ? `${item.phase} 约束` : item.purpose === 'background' ? '解释背景' : '设计'}</span>
       <WorkbenchButton variant="quiet" disabled={disabled} onClick={() => start(candidates.find(candidate => subjectKey(candidate.subject) === subjectKey(item.subject))!)}>修改</WorkbenchButton>

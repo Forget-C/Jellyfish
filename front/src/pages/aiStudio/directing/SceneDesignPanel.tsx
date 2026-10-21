@@ -32,7 +32,7 @@ const mandatory: Record<string, string[]> = {
 }
 const pathLabel = (path: DesignPath) => path.map(key => typeof key === 'number' ? String(key + 1) : designLabels[key] || key).join(' / ')
 export type DesignTarget = { assetKind?: 'character' | 'scene' | 'prop'; shotId?: string; object?: boolean; fields?: string[]; label?: string; path: DesignPath; identity?: Record<string, unknown>; snapshot?: string; sessionRow?: unknown }
-export type DesignFocusRequest = { target: DesignTarget; trigger: HTMLElement; serial: number; side?: boolean; defaults?: Record<string, string>; createPath?: DesignPath }
+export type DesignFocusRequest = { fieldId?: string; target: DesignTarget; trigger: HTMLElement; serial: number; side?: boolean; defaults?: Record<string, string>; createPath?: DesignPath }
 export function targetFor(value: EditableSceneDesign_Output, path: DesignPath, explicitlySelected = false): DesignTarget {
   const row = designAt(value, path)
   if (typeof path[path.length - 1] !== 'number') return { path }
@@ -84,6 +84,7 @@ export function SceneDesignPanel({ value, saved, units, disabled, onChange, focu
 }) {
   const [target, setTarget] = useState<DesignTarget>({ path: ['direction'] })
   const [sideOpen, setSideOpen] = useState(false)
+  const [applicabilityFocus, setApplicabilityFocus] = useState<number>()
   const trigger = useRef<HTMLElement>()
   const resolved = resolveTarget(value, target)
   const path = resolved || target.path
@@ -159,6 +160,7 @@ export function SceneDesignPanel({ value, saved, units, disabled, onChange, focu
     if (focusRequest) {
       trigger.current = focusRequest.trigger
       setAddDefaults(focusRequest.defaults || {})
+      setApplicabilityFocus(focusRequest.fieldId === 'applicability' ? focusRequest.serial : undefined)
       navigate(focusRequest.target)
       setSideOpen(true)
       onFocusHandled?.()
@@ -185,7 +187,7 @@ export function SceneDesignPanel({ value, saved, units, disabled, onChange, focu
       </div> : <DesignFields value={value} path={path} fields={target.fields || object?.fields} allowStructure disabled={disabled} onChange={next => {
         setTarget({ ...targetFor(next, path, true), object: target.object, fields: target.fields, label: target.label }); onChange(next)
       }} onAdd={add} onRemove={remove} />}
-      {object && !pending && <DesignApplicabilityEditor value={value} units={units} object={object} disabled={disabled} onChange={onChange} />}
+      {object && !pending && <DesignApplicabilityEditor focusSerial={applicabilityFocus} value={value} units={units} object={object} disabled={disabled} onChange={onChange} />}
       {object && typeof path[path.length - 1] === 'number' && <WorkbenchButton variant="danger" disabled={disabled} onClick={() => remove(path.slice(0, -1), path[path.length - 1] as number)}>删除此卡</WorkbenchButton>}
   </>
   return <>

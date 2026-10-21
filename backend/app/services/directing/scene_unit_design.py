@@ -369,12 +369,12 @@ class SceneUnitDesignService(SceneDesignService):
             original = {unit.id: unit for unit in request.content.units
                         if any(item.shot_id == request.shot_id for item in unit.coverage)}
             proposal_ids = {unit.id for unit in proposals.units}
-            unchanged = {unit.id for unit in proposals.units if unit.id in original
-                         and not unit_design_proposal_changed(original[unit.id], unit)}
+            modified = {unit.id for unit in proposals.units if unit.id in original
+                        and unit_design_proposal_changed(original[unit.id], unit)}
             current = {unit.id: unit for unit in content.units}
             restored = content.model_copy(update={'units': [
                 *[unit for unit in content.units if unit.id not in proposal_ids and unit.id not in original],
-                *[current.get(unit.id, unit) if unit.id in unchanged else unit for unit in original.values()],
+                *[unit if unit.id in modified else current.get(unit.id, unit) for unit in original.values()],
             ]})
             checked = await self.preview_unit_design(sequence_id, version_id, application.id, restored)
             if checked.blockers:

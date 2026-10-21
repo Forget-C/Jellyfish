@@ -35,6 +35,7 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
   const [previewError, setPreviewError] = useState('')
   const [blockers, setBlockers] = useState<SceneUnitDesignBlocker[]>([])
   const [previewReady, setPreviewReady] = useState(false)
+  const [previewRetryable, setPreviewRetryable] = useState(false)
   const [previewAttempt, setPreviewAttempt] = useState(0)
   const [busy, setBusy] = useState(false)
   const [attempt, setAttempt] = useState(0)
@@ -117,7 +118,7 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
       taskId: selected.task_id, requestBody: { content } }).then(response => {
         if (!response.data) throw new Error('预览尚未核实')
         if (active) { setBlockers(response.data.blockers || []); setPreviewReady(true) }
-      }).catch(cause => { if (active) setPreviewError(directingError(cause)) })
+      }).catch(cause => { if (active) { setPreviewError(directingError(cause)); setPreviewRetryable(!(cause instanceof ApiError) || cause.status >= 500 || cause.status === 408) } })
     return () => { active = false }
   }, [open, projectId, sequenceId, versionId, selected?.task_id, selected?.status, content, previewAttempt])
   const context = useRef({ unitId, shotId })
@@ -205,8 +206,8 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
         {selected.error && <Alert type="error" message={selected.error} />}
         {!terminal.includes(selected.status) && <p>任务在后台执行，可关闭后稍后查看。</p>}
         {selected.result && <>
-          {previewError && <Alert type="warning" message={previewError} description="保留本次结果供查看，请按当前内容重新设计。" />}
-          {previewError && <WorkbenchButton onClick={() => setPreviewAttempt(value => value + 1)}>重新核对预览</WorkbenchButton>}
+          {previewError && <Alert type="warning" message={previewError} description={previewRetryable ? '原结果保留，可重新核对预览，不会提交新的设计任务。' : '保留本次结果供查看，请按当前内容重新设计。'} />}
+          {previewError && previewRetryable && <WorkbenchButton onClick={() => setPreviewAttempt(value => value + 1)}>重新核对预览</WorkbenchButton>}
           {!!blockers.length && <Alert type="warning" message="移除存在引用，处理前不能确认" description={<ul>{blockers.map(blocker => <li key={blocker.path}>
             {blocker.unit_id} / {blocker.coverage_item_id} · {blocker.path}
             <WorkbenchButton onClick={() => { setOpen(false); onLocateBlocker(blocker) }}>定位并处理引用</WorkbenchButton>

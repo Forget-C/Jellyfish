@@ -186,7 +186,7 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
     const node = allObjects.find(row => row.key === (externalFocus.nodeId === '镜头设计' ? `shot:${shotId}` : externalFocus.nodeId))
     if (node) {
       jump(node)
-      if (externalFocus.fieldId === 'applicability') edit(node, document.activeElement instanceof HTMLElement ? document.activeElement : document.body)
+      if (externalFocus.fieldId === 'applicability') edit(node, document.activeElement instanceof HTMLElement ? document.activeElement : document.body, true)
     } else setUnavailable(true)
     onExternalFocusHandled()
   }, [externalFocus?.serial])
@@ -196,10 +196,10 @@ export function DirectorDesignCanvas({ projectId, sequenceId, versionId, content
       go({ ...state, focus: undefined }, undefined, true)
     }
   }, [state.focus, content.design])
-  const edit = (node: DesignObject, trigger: HTMLElement) => {
+  const edit = (node: DesignObject, trigger: HTMLElement, focusApplicability = false) => {
     const next = { ...targetFor(content.design, node.path, true), object: true, fields: node.fields, label: node.fields ? node.label : undefined }
     setEditingTarget(next)
-    setFocusRequest({ target: next, trigger, serial: Date.now(), side: true })
+    setFocusRequest({ target: next, trigger, serial: Date.now(), side: true, fieldId: focusApplicability ? 'applicability' : undefined })
   }
   const changeDesign = (next: EditableSceneDesign_Output) => {
     const nextObjects = designObjects(next)

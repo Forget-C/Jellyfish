@@ -486,6 +486,9 @@ async def test_regroup_removes_omitted_units_and_rechecks_removal_on_save(tmp_pa
         content['units'] = [{'id': identity, 'model_id': 'video', 'ratio': '16:9',
             'coverage': [{'id': identity + '-coverage', 'shot_id': shot, 'action_scope': '抬头'}]}
             for identity, shot in (('first', 'shot'), ('independent', 'other'), ('second', 'shot'), ('third', 'shot'))]
+        content['units'].append({'id': 'mixed', 'ratio': '16:9', 'coverage': [
+            {'id': 'mixed-target', 'shot_id': 'shot', 'action_scope': '抬头'},
+            {'id': 'mixed-other', 'shot_id': 'other', 'action_scope': '抬头'}]})
         if blocked == 'design':
             content['design']['applicability'] = [{'subject': {'kind': 'shot', 'id': 'shot', 'field': 'visible_result'},
                 'purpose': 'design', 'scope': 'occurrences',
@@ -549,7 +552,7 @@ async def test_regroup_removes_omitted_units_and_rechecks_removal_on_save(tmp_pa
         applied = await client.post(url + '/' + task_id + '/apply', json={'content': content})
         assert applied.status_code == 200, applied.text
         candidate = applied.json()['data']
-        assert [row['id'] for row in candidate['units']] == ['first', 'independent', 'third']
+        assert [row['id'] for row in candidate['units']] == ['first', 'independent', 'third', 'mixed']
         changed = deepcopy(candidate)
         changed['units'][0]['coverage'][0]['action_scope'] = '相关单元被人工修改'
         rejected = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 2, 'content': changed})
