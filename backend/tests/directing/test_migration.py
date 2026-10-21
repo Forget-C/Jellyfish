@@ -85,6 +85,9 @@ def test_foundation_migration_and_next_upgrade():
         copies = revision_module('f2c6d0e4a513_add_scene_copy_origins.py')
         copies.op = migration.op
         copies.upgrade()
+        unit_identities = revision_module('a3d7e1f5b624_add_scene_unit_identities.py')
+        unit_identities.op = migration.op
+        unit_identities.upgrade()
         context = MigrationContext.configure(connection, opts={"compare_type": True})
         assert not compare_metadata(context, Base.metadata)
         connection.execute(sa.text("INSERT INTO projects (id,name,description,style,visual_style,seed,unify_style,progress,stats) VALUES ('p','p','','drama','live_action',0,1,0,'{}')"))
@@ -282,3 +285,34 @@ def test_scene_copy_migration_has_no_json_literal_default():
     ddl = output.getvalue()
     assert 'review_ids JSON NOT NULL' in ddl
     assert "review_ids JSON NOT NULL DEFAULT" not in ddl, ddl
+
+
+def test_unit_identity_migration_preserves_current_and_removed_history():
+    """升级登记旧数据中的单元，并保留未采用建议不占用正式身份的边界。"""
+    from app.models.studio import Project, Chapter
+    from app.models.directing import Sequence, SceneVersionRecord, InstructionBasisRecord, SceneVideoExecution
+    from app.models.task import Task
+
+    engine = sa.create_engine('sqlite://')
+    with engine.begin() as connection:
+        Base.metadata.create_all(connection, tables=[table for table in Base.metadata.sorted_tables
+            if table.name != 'directing_scene_unit_identities'])
+        connection.execute(Project.__table__.insert().values(id='p', name='project', style='drama'))
+        connection.execute(Chapter.__table__.insert().values(id='ch', project_id='p', index=1, title='chapter'))
+        connection.execute(Sequence.__table__.insert().values(id='seq', chapter_id='ch', position=0, title='scene', source={}))
+        connection.execute(SceneVersionRecord.__table__.insert().values(id='version', sequence_id='seq', title='version',
+            source_bases=[], create_request_id='create', content={'units': [{'id': 'current'}]}))
+        connection.execute(Task.__table__.insert().values(id='task', kind='directing_unit_design',
+            status='succeeded', input_snapshot={'scene_unit_design': {'version_id': 'version',
+                'request': {'content': {'units': [{'id': 'removed'}]}}}}, result={'units': [{'id': 'unapplied'}]}))
+        connection.execute(InstructionBasisRecord.__table__.insert().values(id='basis', version_id='version',
+            unit_id='basis-only', request_id='basis-request', request_hash='basis-hash', inputs={}, instruction='old'))
+        connection.execute(SceneVideoExecution.__table__.insert().values(id='execution', version_id='version',
+            unit_id='video-only', request_id='video-request', request_hash='video-hash', preparation={}))
+        migration = revision_module('a3d7e1f5b624_add_scene_unit_identities.py')
+        migration.op = Operations(MigrationContext.configure(connection))
+        migration.upgrade()
+        assert set(connection.execute(sa.text('SELECT unit_id FROM directing_scene_unit_identities')).scalars()) == {
+            'current', 'removed', 'basis-only', 'video-only'}
+        with pytest.raises(RuntimeError, match='preserve'):
+            migration.downgrade()

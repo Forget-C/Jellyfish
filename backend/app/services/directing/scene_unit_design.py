@@ -13,7 +13,7 @@ from app.core.contracts.directing.scene_unit_design import UNIT_DESIGN_REFERENCE
 from app.core.integrations.video_capabilities import resolve_video_capability, validate_video_options
 from app.core.contracts.video_generation import VideoGenerationInput
 from app.models.llm import ModelCategoryKey, Provider
-from app.models.directing import InstructionBasisRecord, SceneVideoExecution
+from app.models.directing import InstructionBasisRecord, SceneVideoExecution, SceneUnitIdentityRecord
 from app.models.task import Task
 from app.services.directing.production import ProductionService
 from app.services.directing.scene_design import SceneDesignService
@@ -245,7 +245,8 @@ class SceneUnitDesignService(SceneDesignService):
             return (organization_reference is not None and source.get('kind') == 'model'
                     and source.get('version') == '1' and source.get('reference') == organization_reference)
 
-        identities = set()
+        identities = set(await self.db.scalars(select(SceneUnitIdentityRecord.unit_id).where(
+            SceneUnitIdentityRecord.version_id == version_id)))
         snapshots = await self.db.scalars(select(Task.input_snapshot).where(Task.project_id == self.project_id,
             Task.target_id == sequence_id))
         for snapshot in snapshots:

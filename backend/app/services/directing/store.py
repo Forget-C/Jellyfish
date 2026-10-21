@@ -24,7 +24,7 @@ from app.core.contracts.directing.scene_version import (
     EditableSceneDesign, SceneVersionContent, SceneVersionCreate, SceneVersionRead,
     SceneVersionSave, SceneVersionSource, validate_new_design_row_ids,
 )
-from app.models.directing import SceneVersionRecord, InstructionBasisRecord, SceneVideoExecution, SceneTakeRecord, SceneTakeReviewRecord, SceneEndFrameRecord, SceneCopyOrigin
+from app.models.directing import SceneVersionRecord, SceneUnitIdentityRecord, InstructionBasisRecord, SceneVideoExecution, SceneTakeRecord, SceneTakeReviewRecord, SceneEndFrameRecord, SceneCopyOrigin
 from app.models.directing import ActiveCut, CutFrame, ProjectStyleRecord, Sequence, DirectingRevision, RevisionDependency, Take, CutTakeReference
 from app.models.studio import Project, Chapter, Character, FileUsage, ProjectSceneLink, ProjectPropLink
 from app.models.task import Task, TaskOutput
@@ -279,6 +279,12 @@ class DirectingStore:
             return current
         if current.revision != body.expected_revision:
             raise RevisionConflict('场次版本已变化，未保存的输入已保留')
+        previous_ids = {unit.id for unit in current.content.units}
+        proposed_ids = {unit.id for unit in body.content.units}
+        registered_ids = set(await self.db.scalars(select(SceneUnitIdentityRecord.unit_id).where(
+            SceneUnitIdentityRecord.version_id == version_id)))
+        if (proposed_ids - previous_ids) & registered_ids:
+            raise ValueError('新单元不能复用当前版本的历史单元身份')
         from app.services.directing.scene_unit_design import SceneUnitDesignService  # pylint: disable=import-outside-toplevel
         await SceneUnitDesignService(self.db, self.project_id).validate_organized_save(
             sequence_id, version_id, body.content, current.content)
@@ -308,6 +314,9 @@ class DirectingStore:
                 revision=SceneVersionRecord.revision + 1, last_save_request_id=body.request_id))
             if result.rowcount != 1:
                 raise RevisionConflict('场次版本已变化，未保存的输入已保留')
+            self.db.add_all(SceneUnitIdentityRecord(version_id=version_id, unit_id=unit_id)
+                for unit_id in (previous_ids | proposed_ids) - registered_ids)
+            await self.db.flush()
             await self._record_scene_take_reviews(sequence, current, body.content)
             source_ref = 'scene-version:' + version_id
             await self.db.execute(delete(FileUsage).where(FileUsage.project_id == self.project_id,

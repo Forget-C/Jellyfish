@@ -671,3 +671,13 @@ async def test_new_unit_cannot_reuse_removed_historical_identity(tmp_path, remov
         assert persisted.status_code == 200, persisted.text
         assert [unit['id'] for unit in persisted.json()['data']['content']['units']] == ['keep', 'fresh']
         assert [row['task_id'] for row in (await client.get(history_url)).json()['data']] == [historical_id]
+        removed = deepcopy(persisted.json()['data']['content'])
+        removed['units'] = [unit for unit in removed['units'] if unit['id'] == 'keep']
+        saved_removal = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 4, 'content': removed})
+        assert saved_removal.status_code == 200, saved_removal.text
+        for action in ('preview', 'apply'):
+            replay = await client.post(url + '/' + task_id + '/' + action,
+                json={'content': saved_removal.json()['data']['content']})
+            assert replay.status_code == 422, replay.text
+            assert '历史' in replay.text
+        assert (await client.get(fresh_history_url)).json()['data'][0]['task_id'] == fresh_history.json()['data']['task_id']

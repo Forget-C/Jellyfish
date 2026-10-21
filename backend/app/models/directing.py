@@ -112,6 +112,15 @@ class SceneVersionRecord(Base, TimestampMixin):
     )
 
 
+class SceneUnitIdentityRecord(Base):
+    """版本内已保存过的单元身份；移除当前单元不释放身份。"""
+
+    __tablename__ = 'directing_scene_unit_identities'
+
+    version_id: Mapped[str] = mapped_column(ForeignKey('directing_scene_versions.id', ondelete='RESTRICT'), primary_key=True)
+    unit_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+
+
 class SceneTakeReviewRecord(Base):
     """仅新增的人工审片证据；后续方案保存不更新本记录。"""
 
