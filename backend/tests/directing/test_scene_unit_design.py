@@ -323,3 +323,48 @@ async def test_selected_nonfinal_unit_revision_preserves_identity_and_other_conf
         saved = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 2, 'content': candidate})
         assert saved.status_code == 200, saved.text
         assert (await client.get(detail)).json()['data']['content'] == candidate
+
+
+@pytest.mark.asyncio
+async def test_explicit_modify_can_change_only_model_while_retained_unit_keeps_model(tmp_path):
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        async with sessions.begin() as db:
+            db.add(Provider(id='provider', name='openai', base_url='https://api.openai.com/v1', api_key='fixture'))
+            await db.flush()
+            db.add_all([Model(id='text', name='gpt-test', category='text', provider_id='provider', params={}),
+                        Model(id='video', name='sora-2', category='video', provider_id='provider', params={}),
+                        Model(id='old-video', name='sora-2-pro', category='video', provider_id='provider', params={})])
+        path = await sequence_path(client)
+        version = (await client.post(path + '/versions', json={'request_id': str(uuid4()), 'title': '只改视频模型'})).json()['data']
+        detail = path + '/versions/' + version['id']
+        content = deepcopy(version['content'])
+        content['design']['direction']['shots'] = [{'id': 'shot', 'beat_ids': [], 'event_ids': [],
+            'blocking_state_ids': [], 'participant_ids': [], 'criterion_ids': [], 'narrative_function': {},
+            'visible_result': {'state': 'proposal', 'text': '抬头', 'sources': [{'kind': 'human', 'reference': 'user', 'version': '1'}]}}]
+        content['units'] = [{'id': identity, 'model_id': 'old-video', 'ratio': '16:9',
+            'coverage': [{'id': identity + '-coverage', 'shot_id': 'shot', 'action_scope': '抬头'}]}
+            for identity in ('target', 'retained')]
+        saved = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})
+        assert saved.status_code == 200, saved.text
+        content = saved.json()['data']['content']
+        url = detail + '/unit-design-suggestions'
+        accepted = await client.post(url, json={'request_id': str(uuid4()), 'expected_revision': 2, 'content': content,
+            'shot_id': 'shot', 'source_unit_id': 'target', 'target_model_id': 'video', 'model_id': 'text'})
+        assert accepted.status_code == 200, accepted.text
+        task_id = accepted.json()['data']['task_id']
+        proposed = {'shot_id': 'shot', 'target_model_id': 'video', 'organization': '仅切换明确目标的模型', 'units': [
+            {'id': unit['id'], 'operation': 'modify' if unit['id'] == 'target' else 'retain',
+             'coverage': unit['coverage'], 'duration_ms': unit['duration_ms'], 'ratio': unit['ratio'], 'reason': '模型调整'}
+            for unit in content['units']]}
+        async with sessions.begin() as db:
+            task = await db.get(Task, task_id)
+            service = TaskService(db)
+            assert await service.claim(task_id, worker_id='fixture')
+            result = generate_directing_result('directing_unit_design', SimpleNamespace(invoke=lambda _: SimpleNamespace(content=json.dumps(proposed))), task.input_snapshot['run_args'])
+            await service.finish(task_id, result=result.model_dump(mode='json'))
+        applied = await client.post(url + '/' + task_id + '/apply', json={'content': content})
+        assert applied.status_code == 200, applied.text
+        candidate = applied.json()['data']
+        assert candidate['units'][0]['model_id'] == 'video'
+        assert candidate['units'][0]['coverage'] == content['units'][0]['coverage']
+        assert candidate['units'][1] == content['units'][1]

@@ -1,5 +1,6 @@
 """单元组织任务只产生可审阅的执行方案，不包含指令确认或媒体采用。"""
 from datetime import datetime
+from typing import Literal
 
 from pydantic import Field, model_validator
 
@@ -24,6 +25,7 @@ class SceneUnitDesignProposal(Contract):
     """仅允许组织字段；参考要求与衔接描述均不构成真实文件或落幅绑定。"""
 
     id: Identity
+    operation: Literal['retain', 'modify', 'create'] | None = None
     coverage: list[EditableCoverageItem] = Field(min_length=1)
     duration_ms: int | None = Field(default=None, gt=0)
     ratio: str
