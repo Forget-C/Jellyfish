@@ -35,6 +35,7 @@ export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectI
 }) {
   const [unavailableCoverage, setUnavailableCoverage] = useState(false)
   const [previewUrl, setPreviewUrl] = useState('')
+  const [seamNavigation, setSeamNavigation] = useState<{ leftClipId: string; rightClipId: string; serial: number }>()
   const [unavailableClip, setUnavailableClip] = useState('')
   const [takes, setTakes] = useState<SceneTakeLibraryRead[]>([])
   const contextKey = `${projectId}:${sequenceId}:${versionId}`
@@ -140,6 +141,14 @@ export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectI
       setSelected(`${node.take_kind}:${node.take_id}`); setWorkspace(true); setReviewFocus(recordId)
       setFocusTarget({ nodeId: recordId ? '方案判断' : '当前素材', fieldId: recordId ? `scene-take-review-${recordId}` : 'scene-current-take', serial: Date.now() }); return
     }
+    if (node.kind === 'edit_seam') {
+      const missing = [node.left_clip_id, node.right_clip_id].find(id => !content.timeline.items.some(item => item.id === id && item.kind === 'media'))
+      if (missing) { setUnavailableClip(missing); return }
+      const serial = Date.now()
+      setUnavailableClip(''); setWorkspace(true)
+      setSeamNavigation({ leftClipId: node.left_clip_id, rightClipId: node.right_clip_id, serial })
+      setFocusTarget({ nodeId: '时间线', fieldId: 'scene-seam-review', serial }); return
+    }
     const clip = content.timeline.items.find(item => item.id === node.clip_id)
     if (!clip) { setUnavailableClip(node.clip_id); return }
     setUnavailableClip(''); setWorkspace(true)
@@ -216,7 +225,7 @@ export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectI
       {focusClipId && !content.timeline.items.some(item => item.id === focusClipId) && <Alert type="warning" message={`原采用 ${focusClipId} 已不存在，请核对原依赖；未选择其他片段。`} />}
       <SceneEndFrames onOpenUnit={onOpenUnit} key={versionId} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content}
         dirty={dirty} disabled={disabled || loading || !!error} />
-      <SceneSeamReviews onHistoryPreviewStart={stopLivePreview} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content} takes={takes}
+      <SceneSeamReviews navigation={seamNavigation} evidence={graph} onRecorded={onRefreshGraph} onHistoryPreviewStart={stopLivePreview} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content} takes={takes}
         dirty={dirty} disabled={disabled || loading || !!error} previewStop={seamStop} onPreviewStart={() => { setPreview(false); setPreviewStop(value => value + 1) }} />
       <SceneCutReviews takes={takes} onHistoryPreviewStart={stopLivePreview} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content}
         dirty={dirty} disabled={disabled || loading || !!error} />

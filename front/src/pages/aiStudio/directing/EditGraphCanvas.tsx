@@ -46,7 +46,7 @@ export function EditGraphCanvas({ graph, versionId, revision, contextKey, viewId
           {node.kind === 'edit_take' && node.reviews.map(record => <p key={record.id}>固定复核：{record.matches_current ? '依据一致' : '依据已变'}<WorkbenchButton variant="secondary" onClick={() => onLocate(node, record.id)}>查看原复核记录</WorkbenchButton></p>)}
           {node.kind === 'edit_coverage' && <WorkbenchButton variant="secondary" onClick={() => onLocateCoverage(node)}>定位当前覆盖目标</WorkbenchButton>}
           {node.issues.map(issue => <p key={issue.code}>{issue.message}</p>)}
-          <WorkbenchButton variant="secondary" onClick={() => onLocate(node)}>{node.kind === 'edit_take' ? '定位源素材' : node.kind === 'edit_coverage' ? '定位实际覆盖' : '定位时间线片段'}</WorkbenchButton>
+          <WorkbenchButton variant="secondary" onClick={() => onLocate(node)}>{node.kind === 'edit_take' ? '定位源素材' : node.kind === 'edit_coverage' ? '定位实际覆盖' : node.kind === 'edit_seam' ? '定位接缝审查' : '定位时间线片段'}</WorkbenchButton>
         </section>, onInspect: () => onLocate(node) }]
     })} relations={graph.edges.filter(edge => view.edge_ids.includes(edge.id) && edge.target).map(edge => ({
       from: edge.source, to: edge.target!, label: edge.label, category: edge.category,

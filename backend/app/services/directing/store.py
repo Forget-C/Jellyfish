@@ -263,7 +263,8 @@ class DirectingStore:
             source=content.basis, content=content,
             relationship_graph=relationships, director_graph=director,
             unit_graph=units, instruction_graph=await instruction_graph(canvas, units, self, sequence.id),
-            edit_graph=await edit_graph(canvas, self.db, sequence.id))
+            edit_graph=await edit_graph(canvas, self.db, sequence.id,
+                await self.inherited_scene_review_ids(snapshot['id'], 'seam')))
 
     async def create_scene_version(self, sequence_id: str, body: SceneVersionCreate) -> SceneVersionRead:
         """明确创建空方案，原文依据来自已核实的当前场次，不复制历史方案。"""

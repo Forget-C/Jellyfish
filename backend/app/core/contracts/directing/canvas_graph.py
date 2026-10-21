@@ -16,7 +16,7 @@ class CanvasObject(Contract):
 
     version_id: Identity
     revision: int = Field(gt=0)
-    kind: Literal['source', 'design', 'unit', 'coverage', 'reference', 'dependency', 'unit_config', 'unit_basis', 'instruction', 'clip', 'planned', 'take']
+    kind: Literal['source', 'design', 'unit', 'coverage', 'reference', 'dependency', 'unit_config', 'unit_basis', 'instruction', 'clip', 'planned', 'take', 'seam']
     id: Text
     stable: bool = True
     path: list[str | int] = Field(default_factory=list)
@@ -296,6 +296,29 @@ class EditClipCanvasNode(CanvasNode):
     fit: Literal['contain', 'cover']
 
 
+class EditSeamReviewSummary(Contract):
+    """当前相关固定审查身份和结论；完整历史由原记录入口读取。"""
+
+    id: Identity
+    version_id: Identity
+    revision: int
+    verdict: Literal['pass', 'revise']
+    observation: str
+    established: str
+    issues: str
+
+
+class EditSeamCanvasNode(CanvasNode):
+    """真实相接的独立采用对；来源引用保留两侧素材与真实区间。"""
+
+    kind: Literal['edit_seam'] = Field(default='edit_seam', json_schema_extra={'enum': ['edit_seam']})
+    left_clip_id: Identity
+    right_clip_id: Identity
+    review_status: Literal['applicable', 'needs_review', 'unreviewed', 'failed']
+    review: EditSeamReviewSummary | None = None
+    review_issue: str | None = None
+
+
 class EditPlannedCanvasNode(CanvasNode):
     """预期内容只有预计时长，不拥有真实媒体或源区间。"""
 
@@ -310,7 +333,7 @@ class EditPlannedCanvasNode(CanvasNode):
 CanvasGraphNode = Annotated[SourceCanvasNode | DesignCanvasNode | MissingCanvasNode |
                             ShotBasisCanvasNode | UnitCanvasNode | UnitConfigCanvasNode |
                             UnitReferencesCanvasNode | UnitBasisCanvasNode | InstructionCanvasNode |
-                            EditTakeCanvasNode | EditClipCanvasNode | EditPlannedCanvasNode | EditCoverageCanvasNode,
+                            EditTakeCanvasNode | EditClipCanvasNode | EditPlannedCanvasNode | EditCoverageCanvasNode | EditSeamCanvasNode,
                             Field(discriminator='kind')]
 
 
@@ -533,7 +556,7 @@ class EditCanvasGraph(CanvasGraph):
 
     kind: Literal['edit'] = Field(default='edit', json_schema_extra={'enum': ['edit']})
     library_view_id: str | None = None
-    nodes: list[Annotated[EditTakeCanvasNode | EditClipCanvasNode | EditPlannedCanvasNode | EditCoverageCanvasNode,
+    nodes: list[Annotated[EditTakeCanvasNode | EditClipCanvasNode | EditPlannedCanvasNode | EditCoverageCanvasNode | EditSeamCanvasNode,
                           Field(discriminator='kind')]]
 
     @model_validator(mode='after')
@@ -557,6 +580,19 @@ class EditCanvasGraph(CanvasGraph):
                 if len(matches) != 1 or not any(edge.kind == 'business' and edge.source == matches[0].id
                         and edge.target == node.id for edge in self.edges):
                     raise ValueError('invalid canvas actual coverage source')
+                continue
+            if isinstance(node, EditSeamCanvasNode):
+                if node.edit_target or node.object.kind != 'seam' or node.object.id != (
+                        f'{len(node.left_clip_id)}:{node.left_clip_id}:{node.right_clip_id}'):
+                    raise ValueError('invalid canvas seam target')
+                pair = [nodes.get(target.node_id) for target in node.sources if not target.external]
+                if len(pair) != 2 or any(not isinstance(clip, EditClipCanvasNode) for clip in pair):
+                    raise ValueError('invalid canvas seam sources')
+                left, right = pair
+                if (left.clip_id, right.clip_id) != (node.left_clip_id, node.right_clip_id) or (
+                        left.timeline_start_ms + left.media_range.source_out_ms - left.media_range.source_in_ms
+                        != right.timeline_start_ms):
+                    raise ValueError('invalid canvas seam pair')
                 continue
             expected = 'clip' if isinstance(node, EditClipCanvasNode) else 'planned'
             if node.object.kind != expected or node.object.id != node.clip_id:

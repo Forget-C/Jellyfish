@@ -1,19 +1,26 @@
 """已鉴权场次快照的整场采用投影；不调用高层版本读取或读取媒体字节。"""
 
-from sqlalchemy import select
+from types import SimpleNamespace
+
+from sqlalchemy import select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.directing.canvas_graph import (
     CanvasEdge, CanvasGroup, CanvasIssue, CanvasMember, CanvasObject, CanvasSummaryField,
     CanvasTarget, CanvasView, EditCoverageCanvasNode, EditTakeReviewSummary, EditCanvasGraph, EditClipCanvasNode, EditPlannedCanvasNode, EditTakeCanvasNode,
+    EditSeamCanvasNode, EditSeamReviewSummary,
 )
 from app.models.directing import Take, SceneTakeRecord, SceneVideoExecution, SceneVersionRecord
 from app.models.studio import FileItem
+from app.core.contracts.directing.scene_timeline import SceneTimeline
+from app.core.contracts.directing.scene_seam_review import SceneSeamReviewCreate
+from app.models.directing import SceneSeamReviewRecord
+from app.services.directing.seam_basis import scene_seam_bases, seam_review_query
 from app.services.directing.canvas_graph import CanvasReadContext, GraphAssembler
 from app.services.directing.scene_take_evidence import latest_take_reviews
 
 
-async def edit_graph(context: CanvasReadContext, db: AsyncSession, sequence_id: str) -> EditCanvasGraph:
+async def edit_graph(context: CanvasReadContext, db: AsyncSession, sequence_id: str, inherited_seams: list[str]) -> EditCanvasGraph:
     """按真实时间排序片段并关联固定源 Take；同源重复采用保持独立节点。"""
     graph = GraphAssembler('edit', context.version_id, context.revision)
     items = sorted(context.content.timeline.items, key=lambda item: (item.timeline_start_ms, item.id))
@@ -99,10 +106,59 @@ async def edit_graph(context: CanvasReadContext, db: AsyncSession, sequence_id: 
             graph.add_edge(CanvasEdge(id=f'edit:source:{item.id}', source=source_id, target=node_id,
                 kind='business', label='真实取材', sources=[target]))
         members.append(CanvasMember(node_id=node_id, group='timeline'))
+    bases = scene_seam_bases(context.content)
+    reviews, failures = {}, {}
+    if bases:
+        # 只取局部比较所需时间线和输出比例，完整历史正文留在原按需入口。
+        rows = await db.execute(seam_review_query(context.version_id, inherited_seams).with_only_columns(
+            SceneSeamReviewRecord.id, SceneSeamReviewRecord.version_id, SceneSeamReviewRecord.review,
+            SceneSeamReviewRecord.content['timeline'], SceneSeamReviewRecord.content['output_aspect_ratio']).where(
+                tuple_(SceneSeamReviewRecord.review['left_clip_id'].as_string(),
+                    SceneSeamReviewRecord.review['right_clip_id'].as_string()).in_(list(bases))))
+        for record_id, version_id, review, timeline, ratio in rows:
+            pair = (review.get('left_clip_id'), review.get('right_clip_id'))
+            if pair not in bases:
+                continue
+            try:
+                request = SceneSeamReviewCreate.model_validate(review)
+                original = scene_seam_bases(SimpleNamespace(timeline=SceneTimeline.model_validate(timeline),
+                    output_aspect_ratio=ratio)).get(pair)
+                if original is None:
+                    raise ValueError('固定接缝依据无效，请核对原记录')
+                summary = EditSeamReviewSummary(id=record_id, version_id=version_id,
+                    revision=request.expected_revision, **request.decision.model_dump())
+                applicable = original == bases[pair]
+                if pair not in reviews or applicable or not reviews[pair][1]:
+                    reviews[pair] = (summary, applicable)
+            except ValueError:
+                failures[pair] = '接缝审查依据读取失败，请从原记录核对并重试'
+    for left_id, right_id in bases:
+        pair_id = f'{len(left_id)}:{left_id}:{right_id}'
+        node_id = f'edit:seam:{pair_id}'
+        identity = obj('seam', pair_id, [])
+        target = CanvasTarget(node_id=node_id, object=identity)
+        review, applicable = reviews.get((left_id, right_id), (None, False))
+        issue = failures.get((left_id, right_id))
+        status = 'failed' if issue else 'applicable' if applicable else 'needs_review' if review else 'unreviewed'
+        message = issue or {'applicable': '当前适用', 'needs_review': '片段来源、区间或构图已变，请重新核对',
+            'unreviewed': '尚未审查'}[status]
+        sources = [CanvasTarget(node_id=f'edit:clip:{key}', object=graph.nodes[f'edit:clip:{key}'].object)
+            for key in (left_id, right_id)]
+        graph.add_node(EditSeamCanvasNode(id=node_id, title='真实接缝', object=identity,
+            home_view_id='edit:scene', left_clip_id=left_id, right_clip_id=right_id, sources=sources,
+            review_status=status, review=review, review_issue=issue,
+            issues=[CanvasIssue(code='seam-review-failed', message=issue, severity='warning', target=target)] if issue else [],
+            summary=[field('pair', '采用片段', f'{left_id} → {right_id}'), field('review', '接缝审查', message),
+                *([field('verdict', '原结论', '通过' if review.verdict == 'pass' else '需修改'),
+                    field('observation', '观察依据', review.observation)] if review else [])]))
+        members.append(CanvasMember(node_id=node_id, group='seams'))
+        for side, source in zip(('left', 'right'), sources):
+            graph.add_edge(CanvasEdge(id=f'{node_id}:{side}', source=source.node_id, target=node_id,
+                kind='business', label='前段落幅' if side == 'left' else '后段入幅', sources=[source]))
     members.extend(CanvasMember(node_id=node.id, group='sources', presentation='reference')
         for node in graph.nodes.values() if node.kind == 'edit_take' and (node.take_kind, node.take_id) in adopted)
     graph.add_view(CanvasView(id='edit:scene', title='整场剪辑', members=members,
-        edge_ids=[edge.id for edge in graph.edges.values() if edge.label == '真实取材'], groups=[CanvasGroup(id='timeline', label='时间顺序'), CanvasGroup(id='sources', label='源 Take')]))
+        edge_ids=[edge.id for edge in graph.edges.values() if edge.label != '人工登记覆盖'], groups=[CanvasGroup(id='timeline', label='时间顺序'), CanvasGroup(id='sources', label='源 Take'), CanvasGroup(id='seams', label='真实接缝')]))
     graph.add_view(CanvasView(id='edit:library', title='同场次素材', parent_id='edit:scene',
         members=[CanvasMember(node_id=node.id, group='takes' if node.kind == 'edit_take' else 'coverage')
             for node in graph.nodes.values() if node.kind in ('edit_take', 'edit_coverage')],

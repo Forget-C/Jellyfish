@@ -248,6 +248,8 @@ export type { EditCanvasGraph } from './models/EditCanvasGraph';
 export type { EditClipCanvasNode } from './models/EditClipCanvasNode';
 export type { EditCoverageCanvasNode } from './models/EditCoverageCanvasNode';
 export type { EditPlannedCanvasNode } from './models/EditPlannedCanvasNode';
+export type { EditSeamCanvasNode } from './models/EditSeamCanvasNode';
+export type { EditSeamReviewSummary } from './models/EditSeamReviewSummary';
 export type { EditTakeCanvasNode } from './models/EditTakeCanvasNode';
 export type { EditTakeReviewSummary } from './models/EditTakeReviewSummary';
 export type { EntityNameExistenceCheckRequest } from './models/EntityNameExistenceCheckRequest';
