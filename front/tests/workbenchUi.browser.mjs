@@ -1,15 +1,15 @@
+import { browserOutput, browserCleanup } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
-import { mkdtemp } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createServer } from 'vite'
 import { chromium } from 'playwright'
 
-const output = await mkdtemp(join(tmpdir(), 'jellyfish-workbench-ui-'))
+const output = await browserOutput('jellyfish-workbench-ui-')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const server = await createServer({ root, server: { host: '127.0.0.1', port: 4195, strictPort: true, open: false } })
 let browser
+const cleanup = browserCleanup(() => ({ browser, server }))
 try {
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
@@ -59,7 +59,4 @@ try {
     await dialog.waitFor({ state: 'hidden' })
   }
   console.log(`PASS workbench component states, accessible actions, long text and responsive modal; evidence: ${output}`)
-} finally {
-  await browser?.close()
-  await server.close()
-}
+} finally { await cleanup() }

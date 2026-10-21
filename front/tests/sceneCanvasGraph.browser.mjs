@@ -1,8 +1,8 @@
+import { remapCanvasGraph } from './canvas-graph-fixtures.mjs'
+import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
-import { mkdtemp } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -11,17 +11,19 @@ import { closeWorkbenchDetails, directorObject, selectWorkbenchOption } from './
 
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
-const output = await mkdtemp(join(tmpdir(), 'jellyfish-canvas-graph-'))
+const output = await browserOutput('jellyfish-canvas-graph-')
 const api = 'http://127.0.0.1:8193'
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.directing.scene_version_browser_server'], {
   cwd: join(root, '../backend'),
-  env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', SCENE_BROWSER_TEST_DATABASE: join(output, 'browser.sqlite'), SCENE_BROWSER_TEST_PORT: '8193' },
+  env: { ...process.env, UV_CACHE_DIR: process.env.UV_CACHE_DIR || '/tmp/jellyfish-uv-cache', SCENE_BROWSER_TEST_DATABASE: join(output, 'browser.sqlite'), SCENE_BROWSER_TEST_PORT: '8193' },
   stdio: ['ignore', 'pipe', 'pipe'],
 })
 let backendOutput = ''
 backend.stdout.on('data', data => { backendOutput += data })
 backend.stderr.on('data', data => { backendOutput += data })
 let server, browser, page
+const cleanup = browserCleanup(() => ({ browser, server, backend }))
+captureBackend(backend, output)
 try {
   let chapter
   for (let attempt = 0; attempt < 80; attempt++) {
@@ -131,12 +133,7 @@ try {
         const names = graphKey === 'director_graph'
           ? { scene: 'service-director-root', 'shot:A': 'service-director-shot-view' }
           : { scene: 'service-unit-root', 'shot:A': 'service-shot-view', 'unit:shared': 'service-unit-view' }
-        for (const view of graph.views) {
-          view.id = names[view.id] || view.id
-          view.parent_id = names[view.parent_id] || view.parent_id
-          for (const member of view.members) member.entry_view_id = names[member.entry_view_id] || member.entry_view_id
-        }
-        for (const node of graph.nodes) node.home_view_id = names[node.home_view_id] || node.home_view_id
+        remapCanvasGraph(graph, { views: names })
       }
     }
     await route.fulfill({ response, json: body })
@@ -429,8 +426,4 @@ try {
   if (page) await page.screenshot({ path: join(output, 'failure.png'), fullPage: true }).catch(() => {})
   console.error(`Evidence: ${output}\n${backendOutput}`)
   throw error
-} finally {
-  await browser?.close()
-  await server?.close()
-  backend.kill('SIGTERM')
-}
+} finally { await cleanup() }

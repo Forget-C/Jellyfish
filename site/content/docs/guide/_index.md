@@ -10,6 +10,7 @@ description: "聚焦怎么开发、怎么协作、怎么接入前后端能力的
 - [后端说明](/docs/guide/backend/)
 - [OpenAPI](/docs/guide/openapi/)
 - [接入共享画布 graph](/docs/guide/canvas-graph/)
+- [代码审查来源索引](/docs/guide/agents/review-sources/)
 - [AI 工作流](/docs/guide/ai-workflow/)
 - [从本场资产到单元试拍](/docs/guide/sequence-asset-to-shoot/)
 - [接入章节划分历史](/docs/guide/chapter-division-history-import/)

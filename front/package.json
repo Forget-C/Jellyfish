@@ -14,9 +14,14 @@
     "openapi:fetch": "curl -sSf http://127.0.0.1:8000/openapi.json -o ./openapi.json",
     "openapi:gen": "pnpm exec -- openapi --input ./openapi.json --output ./src/services/generated --client fetch --useOptions --useUnionTypes",
     "openapi:update": "pnpm run openapi:fetch && pnpm run openapi:gen",
-    "test:workbench-ui": "pnpm run test:preflight && node tests/workbenchUi.browser.mjs && node tests/sceneWorkbenchStyle.browser.mjs && node tests/designScopeCompleteness.browser.mjs",
+    "test:workbench-ui": "node tests/run-browser.mjs workbench",
     "test:preflight": "node tests/preflight.mjs",
-    "test:design-scope": "pnpm run test:preflight && node tests/designScopeCompleteness.browser.mjs"
+    "test:design-scope": "node tests/run-browser.mjs design-scope",
+    "lint:check": "node scripts/lint-baseline.mjs",
+    "lint:baseline": "node scripts/lint-baseline.mjs --prune",
+    "test:unit": "node --test --test-reporter=dot tests/*.test.mjs",
+    "test:browser": "node tests/run-browser.mjs",
+    "test:canvas-graph": "node tests/run-browser.mjs graph"
   },
   "dependencies": {
     "@ant-design/icons": "^5.2.6",

@@ -6,21 +6,36 @@
 node --test front/tests/workspaceUsage.test.mjs front/tests/workspaceNavigation.test.mjs front/tests/workspaceContext.test.mjs front/tests/workspaceGuidance.test.mjs front/tests/workspaceTaskContext.test.mjs front/tests/workspacePreparation.test.mjs front/tests/workspaceProduction.test.mjs front/tests/workspaceCut.test.mjs
 ```
 
-## 工作台与设计范围验收入口
+## 统一检查与浏览器入口
 
-项目内 Node 版本见 `front/.node-version`。先安装前端依赖并在 `backend` 执行 `uv sync --group dev`；浏览器回归还需 ffmpeg/ffprobe，以及 Playwright Chromium 或本机 Chrome。
+项目内 Node 版本见 `front/.node-version`。安装前端依赖并在 `backend` 执行 `uv sync --group dev`；浏览器回归还需 ffmpeg/ffprobe，以及 Playwright Chromium 或本机 Chrome。
 
 ```bash
-pnpm --dir front run test:preflight
-pnpm --dir front run test:workbench-ui
-pnpm --dir front run test:design-scope
+pnpm --dir front run lint:check
+pnpm --dir front run test:unit
+pnpm --dir front run typecheck
+pnpm --dir front run test:browser
 ```
 
-`test:workbench-ui` 先预检，再依次运行组件状态、四画布样式和设计完整性三组回归；`test:design-scope` 可单独验证设计完整性。使用本机 Chrome 时，为命令设置 `PLAYWRIGHT_CHANNEL=chrome`；CI 安装 Playwright Chromium，不设置该变量。脚本使用独立测试数据库，不调用真实模型。
+`lint` 保留未过滤的原始输出。`lint:check` 只允许 `front/eslint-baseline.json` 中已知的存量问题，新增问题、解析错误及工具错误均失败；修复旧问题后运行 `pnpm --dir front run lint:baseline` 收缩豁免。维护命令不能接纳新问题；源代码行发生变化后仍存在的诊断也需要解决，不靠行号维持旧豁免。首次基线包含 181 个错误、117 个警告，不表示这些问题已经修复。
 
-预检不安装软件，检查 Node 20+、Python 测试依赖、本机监听、媒体工具和浏览器启动能力。它与两组真实后端浏览器脚本使用相同的 `UV_CACHE_DIR`，未设置时采用临时缓存目录。出现权限错误时先解决执行环境的缓存／本机监听限制，再运行完整测试。
+`test:unit` 运行全部纯逻辑及公开 CLI 回归。`test:browser` 先调用现有 preflight，再运行清单中的八个用例；清单是文件、端口与超时的唯一登记处。所有用例串行执行，启动前检查声明端口，端口占用时停止且不终止占用者。端口检查不是系统级端口预留；请勿另外并行启动使用相同端口的脚本。
 
-`.github/workflows/frontend-checks.yml` 在相关 PR 与 merge queue 上运行 typecheck 和上述工作台回归，并上传截图证据。后端契约组合回归包含依据回执版本 × 检查版本，以及固定约束职责 × 显式用途 × 镜头／出现项范围，仍由既有后端 pytest CI 执行。
+```bash
+pnpm --dir front run test:workbench-ui
+pnpm --dir front run test:canvas-graph
+pnpm --dir front run test:design-scope
+pnpm --dir front run test:browser -- graph-summary
+pnpm --dir front run test:browser -- --list
+```
+
+使用本机 Chrome 时设置 `PLAYWRIGHT_CHANNEL=chrome`；CI 安装 Chromium。入口可从其他工作目录调用，内部统一使用前端目录。默认证据位于 `front/test-results/browser-*`；可传 `--output <新的空目录>`。每个用例保留 `run.log`、真实后端的 `backend.log` 和截图，根目录 `results.json` 记录通过／失败、时长与路径。成功只输出摘要；失败打印有限日志尾部并保留完整日志。超时和中断会请求清理浏览器／服务／后端，POSIX 环境还对自己创建的进程组执行兜底终止。
+
+`--manifest <文件>` 可使用同一 CLI 运行明确声明的本地清单；相对文件路径从清单目录解析，清单需包含 preflight、cases 和 suites。公开命令回归使用隔离清单验证成功、失败、超时、中断和端口占用，不启动真实模型。直接运行原 `.browser.mjs` 文件仍可用，但不会获得统一入口的预检／端口保护；没有指定统一证据目录时仍使用原有临时目录。
+
+新增或迁移用例时复用 `browser-runtime.mjs` 的证据目录、后端日志与幂等清理。graph 地址异常夹具复用 `canvas-graph-fixtures.mjs`：同时改名节点／边／视图和所有引用，保留 object、record、shot、unit 业务身份；跨画布来源只映射当前快照。长文本、多参考、历史重复行与并发读取继续由真实旅程／HTTP 回归验证。
+
+`.github/workflows/frontend-checks.yml` 在相关 PR 与 merge queue 运行 lint 基线、纯逻辑、typecheck 和上述八组浏览器回归，并上传截图／JSON／日志。后端既有 pytest、Pylint CI 继续独立执行。本地通过不等同于 GitHub runner 已执行。
 
 浏览器回归需要 Node.js 20+、Playwright 及 Chromium；`workspaceUsage.browser.mjs` 与 `workspaceCut.browser.mjs` 还需 ffmpeg。可复用 Codex workspace runtime；如果 Playwright 不在项目模块路径，通过 `NODE_PATH` 指向提供该包的 `node_modules`，并使用该 runtime 的 Node.js。
 

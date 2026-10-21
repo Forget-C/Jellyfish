@@ -1,0 +1,17 @@
+{
+  "preflight": "preflight.mjs",
+  "cases": {
+    "workbench-ui": { "file": "workbenchUi.browser.mjs", "ports": [4195], "timeoutMs": 180000 },
+    "workbench-style": { "file": "sceneWorkbenchStyle.browser.mjs", "ports": [4193, 8193], "timeoutMs": 300000 },
+    "design-scope": { "file": "designScopeCompleteness.browser.mjs", "ports": [4198, 8198], "timeoutMs": 180000 },
+    "director-layout": { "file": "directorLayout.browser.mjs", "ports": [4198, 8198], "timeoutMs": 180000 },
+    "canvas-graph": { "file": "sceneCanvasGraph.browser.mjs", "ports": [4193, 8193], "timeoutMs": 300000 },
+    "graph-summary": { "file": "sceneGraphSummary.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 },
+    "legacy-graph": { "file": "sceneLegacyGraph.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 },
+    "periodic-save": { "file": "scenePeriodicSave.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 }
+  },
+  "suites": {
+    "workbench": ["workbench-ui", "workbench-style", "design-scope"],
+    "graph": ["director-layout", "canvas-graph", "graph-summary", "legacy-graph", "periodic-save"]
+  }
+}

@@ -1,7 +1,6 @@
+import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { mkdtemp } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -11,13 +10,15 @@ import { makeWorkspace } from './directing-fixtures.mjs'
 import { workbenchShot } from './workbenchControls.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
-const output = await mkdtemp(join(tmpdir(), 'jellyfish-design-scope-'))
+const output = await browserOutput('jellyfish-design-scope-')
 const api = 'http://127.0.0.1:8198'
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.directing.scene_version_browser_server'], {
   cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: process.env.UV_CACHE_DIR || '/tmp/jellyfish-uv-cache',
     SCENE_BROWSER_TEST_DATABASE: join(output, 'browser.sqlite'), SCENE_BROWSER_TEST_PORT: '8198' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
 let logs = '', server, browser, page
+const cleanup = browserCleanup(() => ({ browser, server, backend }))
+captureBackend(backend, output)
 backend.stdout.on('data', data => { logs += data })
 backend.stderr.on('data', data => { logs += data })
 const errors = []
@@ -163,9 +164,4 @@ try {
   if (page) await page.screenshot({ path: join(output, 'failure.png'), animations: 'disabled' }).catch(() => {})
   console.error(`Evidence: ${output}`)
   throw error
-} finally {
-  if (browser) await browser.close()
-  if (server) await server.close()
-  backend.kill('SIGTERM')
-  await Promise.race([new Promise(resolve => backend.once('exit', resolve)), delay(5000)])
-}
+} finally { await cleanup() }

@@ -1,7 +1,7 @@
+import { remapCanvasGraph } from './canvas-graph-fixtures.mjs'
+import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { mkdtemp } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -10,13 +10,15 @@ import { chromium } from 'playwright'
 import { makeWorkspace } from './directing-fixtures.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
-const output = await mkdtemp(join(tmpdir(), 'jellyfish-director-layout-'))
+const output = await browserOutput('jellyfish-director-layout-')
 const api = 'http://127.0.0.1:8198'
 const sourceId = 'backend-source-node'
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.directing.scene_version_browser_server'], {
-  cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', SCENE_BROWSER_TEST_DATABASE: join(output, 'browser.sqlite'), SCENE_BROWSER_TEST_PORT: '8198' }, stdio: ['ignore', 'pipe', 'pipe'],
+  cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: process.env.UV_CACHE_DIR || '/tmp/jellyfish-uv-cache', SCENE_BROWSER_TEST_DATABASE: join(output, 'browser.sqlite'), SCENE_BROWSER_TEST_PORT: '8198' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
 let logs = '', server, browser, page
+const cleanup = browserCleanup(() => ({ browser, server, backend }))
+captureBackend(backend, output)
 backend.stdout.on('data', data => { logs += data })
 backend.stderr.on('data', data => { logs += data })
 const errors = []
@@ -80,24 +82,7 @@ try {
       const graph = row?.director_graph
       if (!graph) continue
       const source = graph.nodes.find(node => node.kind === 'source')
-      const previousId = source.id
-      source.id = sourceId
-      const address = target => { if (target?.node_id === previousId) target.node_id = sourceId }
-      for (const node of graph.nodes) {
-        address(node.edit_target)
-        node.sources.forEach(address)
-        node.issues.forEach(issue => address(issue.target))
-      }
-      for (const edge of graph.edges) {
-        if (edge.source === previousId) edge.source = sourceId
-        if (edge.target === previousId) edge.target = sourceId
-        edge.sources.forEach(address)
-      }
-      for (const view of graph.views) {
-        if (view.anchor_id === previousId) view.anchor_id = sourceId
-        view.members.forEach(member => { if (member.node_id === previousId) member.node_id = sourceId })
-      }
-      graph.issues.forEach(issue => address(issue.target))
+      remapCanvasGraph(graph, { nodes: { [source.id]: sourceId } })
     }
     await route.fulfill({ response, json: body })
   })
@@ -237,6 +222,4 @@ try {
   await page?.screenshot({ path: join(output, 'failure.png'), animations: 'disabled' }).catch(() => {})
   console.error(`Browser evidence: ${output}`)
   throw error
-} finally {
-  await browser?.close(); await server?.close(); backend.kill('SIGTERM')
-}
+} finally { await cleanup() }

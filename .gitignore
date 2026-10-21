@@ -24,3 +24,6 @@ backend/.dev-runtime/
 .jellyfish.db
 jellyfish.db
 .env
+
+# Local browser regression artifacts
+front/test-results/

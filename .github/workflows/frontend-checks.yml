@@ -30,6 +30,10 @@ jobs:
         run: npm install --global pnpm@9.15.9
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
+      - name: Lint regression guard
+        run: pnpm run lint:check
+      - name: Pure logic and command regressions
+        run: pnpm run test:unit
       - name: Typecheck
         run: pnpm run typecheck
 
@@ -58,8 +62,8 @@ jobs:
           pnpm --dir front exec playwright install --with-deps chromium
           sudo apt-get update
           sudo apt-get install -y ffmpeg
-      - name: Workbench browser regressions
-        run: pnpm --dir front run test:workbench-ui
+      - name: Workbench and graph browser regressions
+        run: pnpm --dir front run test:browser
       - name: Upload browser evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -67,6 +71,6 @@ jobs:
           name: workbench-browser-evidence
           if-no-files-found: ignore
           path: |
-            /tmp/jellyfish-workbench-*/*.png
-            /tmp/jellyfish-workbench-*/*.json
-            /tmp/jellyfish-design-scope-*/*.png
+            front/test-results/**/*.png
+            front/test-results/**/*.json
+            front/test-results/**/*.log

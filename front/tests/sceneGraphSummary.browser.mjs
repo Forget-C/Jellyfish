@@ -1,8 +1,8 @@
+import { opaqueCanvasAddresses, remapCanvasGraph } from './canvas-graph-fixtures.mjs'
+import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
-import { mkdtemp } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -11,17 +11,19 @@ import { closeWorkbenchDetails } from './workbenchControls.mjs'
 
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
-const output = await mkdtemp(join(tmpdir(), 'jellyfish-graph-summary-'))
+const output = await browserOutput('jellyfish-graph-summary-')
 const api = 'http://127.0.0.1:8193'
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.directing.scene_version_browser_server'], {
   cwd: join(root, '../backend'),
-  env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', SCENE_BROWSER_TEST_DATABASE: join(output, 'browser.sqlite'), SCENE_BROWSER_TEST_PORT: '8193' },
+  env: { ...process.env, UV_CACHE_DIR: process.env.UV_CACHE_DIR || '/tmp/jellyfish-uv-cache', SCENE_BROWSER_TEST_DATABASE: join(output, 'browser.sqlite'), SCENE_BROWSER_TEST_PORT: '8193' },
   stdio: ['ignore', 'pipe', 'pipe'],
 })
 let backendOutput = ''
 backend.stdout.on('data', data => { backendOutput += data })
 backend.stderr.on('data', data => { backendOutput += data })
 let server, browser, page
+const cleanup = browserCleanup(() => ({ browser, server, backend }))
+captureBackend(backend, output)
 try {
   let chapter
   for (let attempt = 0; attempt < 80; attempt++) {
@@ -63,10 +65,23 @@ try {
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  await page.goto(`http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}&unitView=unit:summary-unit`)
+  const addresses = opaqueCanvasAddresses(version.unit_graph)
+  await page.route('**/versions*', async route => {
+    if (route.request().method() !== 'GET') return route.continue()
+    const response = await route.fetch()
+    const body = await response.json()
+    for (const row of Array.isArray(body.data) ? body.data : [body.data]) {
+      if (!row?.director_graph || !row.unit_graph) continue
+      const director = opaqueCanvasAddresses(row.director_graph)
+      remapCanvasGraph(row.director_graph, director)
+      remapCanvasGraph(row.unit_graph, { ...opaqueCanvasAddresses(row.unit_graph), externalNodes: director.nodes })
+    }
+    await route.fulfill({ response, json: body })
+  })
+  await page.goto(`http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}&unitView=${addresses.views['unit:summary-unit']}`)
   await page.getByRole('button', { name: '定位画布节点', exact: true }).click()
   await page.getByRole('menuitem', { name: '生成配置', exact: true }).click()
-  const generation = page.locator('[data-canvas-node="unit:summary-unit:generation"]')
+  const generation = page.locator(`[data-canvas-node="${addresses.nodes['unit:summary-unit:generation']}"]`)
   const visibleDiagnostic = async () => generation.evaluate(node => {
     const parent = node.querySelector('.director-canvas-object-content').getBoundingClientRect()
     const diagnostic = [...node.querySelectorAll('[role="status"]')].find(row => row.textContent.includes('视频模型尚未选择'))?.getBoundingClientRect()
@@ -85,7 +100,7 @@ try {
   await closeWorkbenchDetails(page)
   await page.getByRole('button', { name: '定位画布节点', exact: true }).click()
   await page.getByRole('menuitem', { name: '参考素材', exact: true }).click()
-  const references = page.locator('[data-canvas-node="unit:summary-unit:references"]')
+  const references = page.locator(`[data-canvas-node="${addresses.nodes['unit:summary-unit:references']}"]`)
   assert.match(await references.innerText(), /已绑定素材[\s：]*5 项/)
   assert.equal(await references.locator('img').count(), 2, '卡面只预览有限参考，后端绑定总数不裁剪')
   await references.getByRole('button', { name: '查看详情', exact: true }).click()
@@ -98,14 +113,18 @@ try {
   await page.setViewportSize({ width: 390, height: 844 })
   assert.deepEqual(await visibleDiagnostic(), { summariesFit: true, diagnostic: true, action: true }, '窄屏仍保留诊断与卡内入口')
   await page.screenshot({ path: join(output, 'summary-mobile.png'), animations: 'disabled' })
+  await page.getByRole('button', { name: '导演画布', exact: true }).click()
+  const directorAddresses = opaqueCanvasAddresses(version.director_graph)
+  const sourceId = version.director_graph.nodes.find(node => node.kind === 'source').id
+  await page.locator(`[data-canvas-node="${directorAddresses.nodes[sourceId]}"]`).waitFor()
+  await page.locator(`[data-canvas-node="${directorAddresses.nodes['shot:shot']}"]`).getByRole('button', { name: /^进入子图：/ }).click()
+  await page.locator(`[data-layout-view="${directorAddresses.views['shot:shot']}"]`).waitFor()
+  await page.getByRole('button', { name: '总览', exact: true }).click()
+  await page.locator(`[data-canvas-node="${directorAddresses.nodes[sourceId]}"]`).waitFor()
   assert.deepEqual(errors, [])
   console.log(`PASS long graph summaries keep issues and details accessible; evidence: ${output}`)
 } catch (error) {
   if (page) await page.screenshot({ path: join(output, 'failure.png'), fullPage: true }).catch(() => {})
   console.error(`Evidence: ${output}\n${backendOutput}`)
   throw error
-} finally {
-  await browser?.close()
-  await server?.close()
-  backend.kill('SIGTERM')
-}
+} finally { await cleanup() }
