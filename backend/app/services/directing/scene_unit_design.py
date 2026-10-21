@@ -54,6 +54,17 @@ def unit_design_inputs(content, shot_id):
                   if any(item.shot_id == shot_id for item in unit.coverage)]}
 
 
+def unit_design_proposal_changed(existing, proposal):
+    """比较实际执行字段；保留项的解释文字不构成重新设计或模型迁移。"""
+    if (existing.coverage != proposal.coverage or existing.duration_ms != proposal.duration_ms
+            or existing.ratio != proposal.ratio):
+        return True
+    return any(getattr(proposal, field) is not None
+               and getattr(proposal, field) != (getattr(existing.organization, field) if existing.organization
+                   else [] if field == 'reference_requirements' else '')
+               for field in ('entry_state', 'exit_state', 'reference_requirements'))
+
+
 def validate_unit_design(args, result):
     """整体拒绝身份、选择、参数或自由执行文本越界；不裁剪模型输出。"""
     if result.shot_id != args['shot_id'] or result.target_model_id != args['target_model_id']:
@@ -69,6 +80,11 @@ def validate_unit_design(args, result):
     texts = [row['text'] for row in fields if row['purpose'] == 'design' and row['text']]
     old_ids = {unit['id'] for unit in original_units}
     for unit in result.units:
+        existing = next((EditableGenerationUnit.model_validate(row) for row in original_units if row['id'] == unit.id), None)
+        if existing and not unit_design_proposal_changed(existing, unit):
+            continue
+        if existing and existing.id != args.get('source_unit_id'):
+            raise ValueError('只能修改明确选择的目标单元，其他单元必须保留原样')
         if len(unit.coverage) != 1:
             raise ValueError('当前视频执行器仅支持每个单元一个覆盖项；请组织为多个独立单元')
         if unit.id in old_ids and any(item['shot_id'] != args['shot_id']
@@ -175,6 +191,11 @@ class SceneUnitDesignService(SceneDesignService):
             raise RevisionConflict('场次版本已变化，请重新核对')
         files = await self._validate_content(sequence, version_id, body.content)
         inputs = unit_design_inputs(body.content, body.shot_id)
+        selected = next((unit for unit in body.content.units if unit.id == body.source_unit_id), None)
+        if body.source_unit_id and (selected is None or any(item.shot_id != body.shot_id for item in selected.coverage)):
+            raise ValueError('请选择当前镜头的有效单元身份；跨镜头单元不能作为局部修改目标')
+        if not selected and any(all(item.shot_id == body.shot_id for item in unit.coverage) for unit in body.content.units):
+            raise ValueError('已有当前镜头单元，请明确选择本次来源或目标单元')
         video, video_provider, capabilities = await self._video(body.target_model_id)
         model = await get_model_by_category(self.db, ModelCategoryKey.text, model_or_id=body.model_id)
         provider = await self.db.get(Provider, model.provider_id)
@@ -182,7 +203,7 @@ class SceneUnitDesignService(SceneDesignService):
         rules = await self.applicable_style(body.content.design.style_revision_id, sequence_id, video.name)
         args = {'task_identity': uuid4().hex, 'style_rules': [rule.model_dump(mode='json') for rule in rules], 'shot_id': body.shot_id, 'target_model_id': video.id, 'target_model_name': video.name,
             'video_provider': video_provider, 'video_provider_id': video.provider_id, 'capabilities': capabilities,
-            'organization_inputs': inputs, 'instruction': body.instruction,
+            'organization_inputs': inputs, 'source_unit_id': body.source_unit_id, 'instruction': body.instruction,
             'protected_unit_ids': [unit.id for unit in body.content.units if any(item.shot_id != body.shot_id for item in unit.coverage)]}
         return await TaskService(self.db).submit(kind='directing_unit_design', title='AI 设计 · 单元方案',
             target_type='directing_sequence', target_id=sequence_id, project_id=self.project_id, provider_id=provider.id,
@@ -231,17 +252,28 @@ class SceneUnitDesignService(SceneDesignService):
         return SceneUnitDesignPreview(task_id=task.id, result=validate_unit_design(task.input_snapshot['run_args'], SceneUnitDesignResult.model_validate(task.result)))
 
     async def apply_unit_design(self, sequence_id, version_id, task_id, content):
-        """一次确认只组织首次单元；从当前编辑组合，保留独立与跨镜头单元。"""
+        """一次确认从当前编辑组合；只修改明确目标，保留原顺序、独立与跨镜头单元。"""
         preview = await self.preview_unit_design(sequence_id, version_id, task_id, content)
         task = next(row for row in await self._tasks(sequence_id, version_id) if row.id == task_id)
         args = task.input_snapshot['run_args']
-        if any(unit.coverage and all(item.shot_id == preview.result.shot_id for item in unit.coverage)
-               for unit in content.units):
-            raise ValueError('已有当前镜头单元，请使用既有单元修改流程')
+        existing = {unit.id: unit for unit in content.units}
+        related = {unit.id for unit in content.units if all(item.shot_id == preview.result.shot_id for item in unit.coverage)}
+        if not related <= {proposal.id for proposal in preview.result.units}:
+            raise ValueError('本次局部修改必须保留既有单元；拆并或移除需要另行处理')
         source = Source(kind='model', reference=args['task_identity'], version='1')
-        units = [merge_unit_design_proposal(None, proposal, preview.result.target_model_id, source)
-                 for proposal in preview.result.units]
-        candidate = SceneVersionContent.model_validate({**content.model_dump(), 'units': [*content.units, *units]})
+        updates = {}
+        additions = []
+        for proposal in preview.result.units:
+            old = existing.get(proposal.id)
+            if old and not unit_design_proposal_changed(old, proposal):
+                continue
+            unit = merge_unit_design_proposal(old, proposal, preview.result.target_model_id, source)
+            if old:
+                updates[old.id] = unit
+            else:
+                additions.append(unit)
+        candidate = SceneVersionContent.model_validate({**content.model_dump(),
+            'units': [updates.get(unit.id, unit) for unit in content.units] + additions})
         sequence, _ = await self._version(sequence_id, version_id)
         await self._validate_content(sequence, version_id, candidate)
         return candidate
@@ -263,9 +295,13 @@ class SceneUnitDesignService(SceneDesignService):
                    or unit.id not in {row.id for row in proposals.units}
                    or any(item.shot_id != request.shot_id for item in unit.coverage) for unit in related):
                 raise ValueError('单元组织身份、来源或镜头范围无效')
+            original = [unit for unit in request.content.units if any(item.shot_id == request.shot_id for item in unit.coverage)]
+            current = {unit.id: unit for unit in content.units if unit not in related}
+            # 固定输入包含相关单元的顺序；原位还原目标，不能把非末位目标追加到末尾。
             restored = content.model_copy(update={'units': [
-                *[unit for unit in content.units if unit not in related],
-                *[unit for unit in request.content.units if any(item.shot_id == request.shot_id for item in unit.coverage)
-                  and unit.id not in {row.id for row in content.units if row not in related}],
+                *[unit for unit in content.units if not any(item.shot_id == request.shot_id for item in unit.coverage)],
+                *[current.get(unit.id, unit) for unit in original],
+                *[unit for unit in current.values() if any(item.shot_id == request.shot_id for item in unit.coverage)
+                  and unit.id not in {row.id for row in original}],
             ]})
             await self.preview_unit_design(sequence_id, version_id, task.id, restored)
