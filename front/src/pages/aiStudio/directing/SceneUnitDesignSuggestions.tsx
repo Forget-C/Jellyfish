@@ -12,7 +12,8 @@ const terminal = ['succeeded', 'failed', 'cancelled']
 const statuses: Record<string, string> = { queued: '等待执行', running: '执行中', succeeded: '已生成', failed: '失败', cancelled: '已取消' }
 
 /** 组织建议与场次编辑分开；结果未明确应用前，不创建任何正式单元。 */
-export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, revision, content, shotId, disabled, focusTaskId, triggerHost, onFocused }: {
+export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, revision, content, shotId, disabled, focusTaskId, triggerHost, onFocused, onChange }: {
+  onChange: (content: SceneVersionContent_Output) => void
   triggerHost?: HTMLElement | null
   projectId: string; sequenceId: string; versionId: string; revision: number
   content: SceneVersionContent_Output; shotId?: string; disabled: boolean; focusTaskId?: string; onFocused?: () => void
@@ -130,6 +131,20 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
       setError(rejected ? directingError(cause) : `提交未核实，保留原请求：${directingError(cause)}`)
     } finally { if (mounted.current) setBusy(false) }
   }
+  const apply = async () => {
+    if (!selected?.result || busy || live.current.disabled || previewError) return
+    const snapshot = live.current.content
+    setBusy(true); setError('')
+    try {
+      const response = await StudioDirectingService.directingSceneUnitDesignApply({ projectId, sequenceId, versionId,
+        taskId: selected.task_id, requestBody: { content: snapshot } })
+      if (!response.data) throw new Error('应用结果尚未核实')
+      if (!mounted.current) return
+      if (live.current.disabled || live.current.content !== snapshot) throw new Error('确认期间编辑已变化，请重新核对并确认方案')
+      onChange(response.data); setOpen(false)
+    } catch (cause) { if (mounted.current) setError(directingError(cause)) }
+    finally { if (mounted.current) setBusy(false) }
+  }
   const fixedRequest = pending.current || selected?.request
   const displayShot = fixedRequest ? fixedRequest.content.design.direction?.shots?.find(row => row.id === fixedRequest.shot_id) : shot
   const trigger = <WorkbenchButton disabled={disabled || !shot} onClick={() => setOpen(true)}>AI设计</WorkbenchButton>
@@ -138,7 +153,7 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
     <WorkbenchModal title="AI设计" open={open} onCancel={() => setOpen(false)} footer={<WorkbenchDialogActions
       secondary={<WorkbenchButton variant="quiet" onClick={() => setOpen(false)}>{selected ? '关闭预览' : '取消'}</WorkbenchButton>}>
       {pending.current ? <WorkbenchButton variant="primary" loading={busy} disabled={busy || disabled} onClick={() => void submit()}>核实原设计请求</WorkbenchButton>
-        : selected ? <WorkbenchButton disabled={busy || disabled || running} onClick={() => { setPreparing(true); setError('') }}>重新设计</WorkbenchButton>
+        : selected ? <><WorkbenchButton disabled={busy || disabled || running} onClick={() => { setPreparing(true); setError('') }}>重新设计</WorkbenchButton>{selected.result && <WorkbenchButton variant="primary" loading={busy} disabled={busy || disabled || !!previewError} onClick={() => void apply()}>确认应用方案</WorkbenchButton>}</>
           : <WorkbenchButton variant="primary" loading={busy} disabled={disabled || busy || !shot || !verified || !rows || !!readError || running} onClick={() => void submit()}>开始设计</WorkbenchButton>}
     </WorkbenchDialogActions>}>
       <p>当前镜头：{displayShot?.visible_result.text || (displayShot ? displayShot.id : '请先选择有效镜头')}</p>
@@ -184,7 +199,7 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
             {!!unit.reference_requirements?.length && <p>参考需求：{unit.reference_requirements?.join('；')}</p>}
             {!!unit.missing?.length && <ul>{unit.missing?.map((item, number) => <li key={number}>{item}</li>)}</ul>}
           </section>)}
-          <Alert type="info" message="只读方案，尚未覆盖当前单元；参考需求不代表已绑定真实素材，设计完成不代表拍摄准备通过。" />
+          <Alert type="info" message="尚未应用到当前编辑；确认后沿用当前保存模式。参考需求不代表已绑定真实素材，设计完成不代表拍摄准备通过。" />
         </>}
       </section>}
     </WorkbenchModal>

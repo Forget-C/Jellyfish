@@ -2,7 +2,7 @@
 
 Status: ready-for-agent
 Blocked by: 01, 02
-Resolution: pending
+Resolution: completed
 
 **What to build:** 用户查看首次单元方案后，一次确认将其填入当前镜头，按现有保存模式持久化并继续准备拍摄；过期结果不能覆盖新编辑。
 
@@ -24,11 +24,11 @@ Resolution: pending
 
 ## 验收标准
 
-- [ ] 浏览器分别在自动保存和手动保存模式确认首次方案，保存回读与刷新一致，取消或未确认时内容未变。
-- [ ] 真实 HTTP 流程覆盖预览前、预览后和确认/保存期间发生的相关输入变更，旧结果均不能覆盖。
-- [ ] 仅修改独立其他镜头时方案仍适用，并且应用保存保留该镜头最新内容；真实保存冲突不能被绕过。
-- [ ] 无效身份、范围、版本或能力结果整份拒绝，当前内容不发生部分修改。
-- [ ] 应用出的局部单元继续编译指令时保持 01 确立的执行边界。
+- [x] 浏览器分别在自动保存和手动保存模式确认首次方案，保存回读与刷新一致，取消或未确认时内容未变。
+- [x] 真实 HTTP 流程覆盖预览前、预览后和确认/保存期间发生的相关输入变更，旧结果均不能覆盖。
+- [x] 仅修改独立其他镜头时方案仍适用，并且应用保存保留该镜头最新内容；真实保存冲突不能被绕过。
+- [x] 无效身份、范围、版本或能力结果整份拒绝，当前内容不发生部分修改。
+- [x] 应用出的局部单元继续编译指令时保持 01 确立的执行边界。
 
 ## 验证与完成要求
 
@@ -47,3 +47,18 @@ Resolution: pending
 
 - 2026-10-21：用户调用 implement-spec，按已提出的六张任务及依赖进入实施。
 
+
+
+### 票据 03 实施与验证
+
+- 2026-10-21：首次完整单元方案通过一次“确认应用方案”更新当前编辑；只组合当前内容，不回写任务提交快照。原自动／手动保存、保存回读、冲突与恢复机制继续生效。跨镜头混合单元及独立镜头保持原内容；本票不修改或移除既有目标单元。
+- 新增强类型可选 `EditableUnitPreparation.organization`，保留组织理由、进入／结束要求、待准备参考、设计时诊断和真实 `Source(model, task_identity, '1')`。来源明确表示原 AI 组织依据；当前组织要求可在原单元设置中人工修改，不将人工正文冒充 AI 原文。未知时长、真实参考、依据确认及检查状态仍独立表达。
+- 进入／结束及参考要求进入单元指令依据约束，组织理由与原始缺项不进入动作执行。历史内容缺省解析为 `organization=null`，不迁移或改写已有快照；第一／二版历史投影保持原消费逻辑。
+- 预览、确认及首次引入组织来源的保存均核对任务归属、相关固定输入、项目风格、模型名称、真实供应商身份及能力。相关 Note 的完整状态／来源也参与比较。首次保存用原任务来源核验，没有新建保存令牌、事务框架或草稿状态。已保存后的普通编辑不被旧任务锁死；确认后合法人工局部修改（包含显式改为另一有效视频模型）仍可保存。
+- TDD 先后复现并修复：应用端点 404；确认后模型变化仍错误保存 200；同模型更换真实供应商但能力相同仍错误应用 200；进入状态未消费；首次保存错误拒绝人工选择另一合法模型 422。真实 HTTP 另覆盖独立镜头已保存后的组合、混合单元保留、人工新建目标单元失效、来源／身份整份拒绝及真实 CAS 冲突。
+- 通过：`UV_CACHE_DIR=/tmp/jellyfish-uv-cache uv run pytest tests/directing -q`（backend 目录；440 passed、15 skipped，124.26 秒）。最后放行合法人工模型调整后，重跑受影响 `tests/directing/test_scene_unit_design.py tests/directing/test_scene_versions.py tests/directing/test_unit_scope_projection.py tests/directing/test_instruction_basis.py`，40 passed。
+- 通过：`UV_CACHE_DIR=/tmp/jellyfish-uv-cache PYLINTHOME=/tmp/jellyfish-pylint-cache uv run pylint app`（backend 目录；最终 10.00/10）；`pnpm --dir front run typecheck`。
+- 通过：`PLAYWRIGHT_CHANNEL=chrome node front/tests/sceneUnitDesign.browser.mjs`。真实 HTTP、隔离数据库及任务生命周期覆盖自动／手动保存、关闭不应用、多单元回读与刷新、应用后人工修改组织要求，以及确认 HTTP 在途时人工创建／编辑单元不被旧响应覆盖。证据 `/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-scene-version-HsrtRv`，包括桌面与窄屏预览及组织设置截图，已目视检查。
+- 通过：`PLAYWRIGHT_CHANNEL=chrome pnpm --dir front run test:workbench-ui`（组件、四画布样式、设计完整性三项浏览器流程）。使用既有 WorkbenchModal／WorkbenchDetails／WorkbenchButton，无共享组件例外。
+- OpenAPI 由本工作树 `app.main.app.openapi()` 导出并与 schema 精确比较，通过 `pnpm --dir front run openapi:gen` 生成客户端；仅保留实际契约差异，清除生成器尾部空行噪音。最终主 8000 服务一致性核对及正式 `openapi:update` 由集成工作区统一执行，未停止用户服务。
+- 限制：外部模型响应使用确定性替身，不调用真实供应商。15 项 MySQL 环境用例按原条件跳过；浏览器现有 Browserslist、Tailwind 与 Node 弃用提示不影响通过结果。
