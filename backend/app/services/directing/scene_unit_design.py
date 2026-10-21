@@ -48,6 +48,7 @@ def unit_design_inputs(content, shot_id):
         'context': context, 'style_revision_id': content.design.style_revision_id,
         'output_aspect_ratio': content.output_aspect_ratio,
         'fields': [{**{key: getattr(row, key) for key in ('owner', 'field', 'purpose', 'scope', 'phase', 'condition')},
+                    'occurrences': [target.model_dump(mode='json') for target in row.occurrences],
                     'text': row.value.text if isinstance(row.value, Note) else row.value,
                     'note': row.value.model_dump(mode='json') if isinstance(row.value, Note) else None} for row in fields],
         'units': [unit.model_dump(mode='json') for unit in content.units
@@ -103,6 +104,11 @@ def validate_unit_design(args, result):
                 if not set(getattr(item, key)) <= allowed[owner]:
                     raise ValueError('单元选择了不存在或不适用的设计项：' + key)
                 selected_owners = {f'{owner}:{identity}' for identity in getattr(item, key)}
+                if any(row['scope'] == 'occurrences' and not any(
+                        target['unit_id'] == unit.id and target['coverage_item_id'] == item.id
+                        for target in row.get('occurrences', [])) for row in fields
+                        if row['owner'] in selected_owners and row['purpose'] == 'design'):
+                    raise ValueError('单元选择仅适用于原出现项的设计：' + key)
                 main_field = {'beat': 'must_show', 'event': 'description', 'performance': 'physical_action',
                               'activity': 'ongoing_task', 'continuity': 'change'}[owner]
                 if any(row['text'] not in item.action_scope for row in fields
