@@ -76,3 +76,5 @@ Resolution: completed
 - 浏览器仅出现既有 Browserslist／Tailwind content／Node util 弃用提示。首次复用 venv 时 uv 仅重装本项目 editable 包，无依赖版本变化；后续均使用 `--no-sync`，依赖软链不提交。
 
 - 2026-10-21：本票已合入 `codex-unit-ai-design`；正式 OpenAPI 同步、最终集成回归和两轴审查修复记录统一见[集成验收](../validation.md)。此前委托主集成执行的检查以该记录为准。
+
+- 2026-10-21：后续审查 P2 已修复：长本次要求使用 CanvasTextPreview；真实浏览器红灯后通过折叠／展开及原有保存流程。 修复提交 `5a0f0c1`、`370d4fd`；验证与迁移要求见[集成验收](../validation.md)。

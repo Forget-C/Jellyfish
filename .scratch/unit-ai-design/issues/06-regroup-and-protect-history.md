@@ -59,3 +59,5 @@ Resolution: completed
 - 契约同步：从本工作树 `app.openapi()` 导出 schema 并运行 `pnpm --dir front run openapi:gen`；正式主工作树 `openapi:update` 与全套 workbench-ui 按集成约定由根代理统一执行。本票未声明 MySQL 验证。
 
 - 2026-10-21：本票已合入 `codex-unit-ai-design`；正式 OpenAPI 同步、最终集成回归和两轴审查修复记录统一见[集成验收](../validation.md)。此前委托主集成执行的检查以该记录为准。
+
+- 2026-10-21：后续审查 P1 已修复：服务端登记已保存身份，阻止旧 ID 新建及删除后重放旧方案；迁移回填历史，保持首次保存前同来源记录可用。 修复提交 `5a0f0c1`、`370d4fd`；验证与迁移要求见[集成验收](../validation.md)。
