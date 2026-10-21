@@ -50,7 +50,7 @@ export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectI
   useEffect(() => { session.graphNavigation = graphNavigation }, [session, graphNavigation])
   const [library, setLibrary] = useState(session.library || false)
   useEffect(() => { session.library = library }, [library, session])
-  const [reviewFocus, setReviewFocus] = useState<string>()
+  const [reviewFocus, setReviewFocus] = useState<{ recordId: string; serial: number }>()
   const [workspace, setWorkspace] = useState(session.workspace || false)
   useEffect(() => { session.workspace = workspace }, [workspace, session])
   const [selected, setSelected] = useState(session.selected)
@@ -85,6 +85,7 @@ export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectI
     setGraphNavigation(undefined)
     session.navigationSerial = navigation.serial
     setPreview(false); setPreviewError(''); setPreviewStop(value => value + 1); setSeamStop(value => value + 1)
+    setReviewFocus(undefined)
     const target = navigation.target
     if (target.kind === 'take') {
       setSelected(`${target.takeKind}:${target.takeId}`)
@@ -153,7 +154,7 @@ export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectI
     }
     if (node.kind === 'edit_take') {
       if (selected !== identity(node)) setPreview(false)
-      setSelected(`${node.take_kind}:${node.take_id}`); setWorkspace(true); setReviewFocus(recordId)
+      setSelected(`${node.take_kind}:${node.take_id}`); setWorkspace(true); setReviewFocus(recordId ? { recordId, serial: Date.now() } : undefined)
       setFocusTarget({ nodeId: recordId ? '方案判断' : '当前素材', fieldId: recordId ? `scene-take-review-${recordId}` : 'scene-current-take', serial: Date.now() }); return
     }
     if (node.kind === 'edit_seam') {
@@ -167,6 +168,7 @@ export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectI
     const clip = content.timeline.items.find(item => item.id === node.clip_id)
     if (!clip) { setUnavailableClip(node.clip_id); return }
     setUnavailableClip(''); setWorkspace(true)
+    setReviewFocus(undefined)
     if ('media_range' in clip) setSelected(`${clip.take_kind}:${clip.take_id}`)
     const serial = Date.now(); setGraphNavigation(serial)
     setFocusTarget({ nodeId: '时间线', fieldId: `scene-clip-${clip.id}`, serial })
@@ -178,11 +180,11 @@ export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectI
       {takes.map((row, index) => {
         const judgment = content.take_judgments.find(item => identity(item) === identity(row))
         const issues = !loading && !error && judgment ? sceneTakeIssues(judgment, row, content) : []
-        return <CanvasCard key={identity(row)} aria-label={`素材 ${index + 1}`} onActivate={() => { setSelected(identity(row)); setPreview(false); setPreviewError(''); setTakeDetails(true) }}><Button onClick={() => {
-          setSelected(identity(row)); setPreview(false); setPreviewError('')
+        return <CanvasCard key={identity(row)} aria-label={`素材 ${index + 1}`} onActivate={() => { setReviewFocus(undefined); setSelected(identity(row)); setPreview(false); setPreviewError(''); setTakeDetails(true) }}><Button onClick={() => {
+          setReviewFocus(undefined); setSelected(identity(row)); setPreview(false); setPreviewError('')
         }}>选择素材 {index + 1}</Button><p>{row.take_kind === 'scene_video' ? '场次版本素材' : '生产计划素材'} · {row.available ? '已登记' : '文件不可用'}</p>
           {issues.map(issue => <p key={issue.label}><Button danger onClick={() => {
-            setSelected(identity(row)); setPreview(false); setPreviewError('')
+            setReviewFocus(undefined); setSelected(identity(row)); setPreview(false); setPreviewError('')
             setFocusTarget(previous => ({ nodeId: '方案判断', fieldId: issue.fieldId, serial: (previous?.serial || 0) + 1 }))
           }}>定位素材 {index + 1}：{issue.label}</Button></p>)}
         </CanvasCard>
@@ -232,7 +234,7 @@ export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectI
         <Button disabled={editDisabled || !take.duration_ms} onClick={() => { if (take.duration_ms) change({ ...annotation, retained_ranges: [...annotation.retained_ranges, { source_in_ms: 0, source_out_ms: take.duration_ms }] }) }}>新增可用区间</Button>
         {take.duration_ms == null && <p>真实时长尚未核实，暂不能新增可用区间。</p>}
         <p>可用区间不等于实际覆盖或时间线采用。</p>
-        <SceneTakeReviews key={selected} evidence={graph} onEvidenceChanged={onRefreshGraph} focusRecordId={reviewFocus} focusSerial={focusTarget?.serial} dirty={dirty} disabled={editDisabled} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} take={take} content={content} />
+        <SceneTakeReviews key={selected} onEvidenceChanged={onRefreshGraph} focusRecordId={reviewFocus?.recordId} focusSerial={reviewFocus?.serial} dirty={dirty} disabled={editDisabled} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} take={take} content={content} />
       </>}
     </section>
     <SceneTimelineEditor contextKey={contextKey} selectionKey={selected} navigationSerial={graphNavigation || navigation?.serial} previewStop={previewStop} onPreviewStart={() => { setPreview(false); setSeamStop(value => value + 1) }} take={take} takes={takes} content={content} disabled={disabled || libraryBlocked} onChange={onChange}>

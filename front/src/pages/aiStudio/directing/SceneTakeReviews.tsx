@@ -1,3 +1,4 @@
+import { WorkbenchButton } from './ui/WorkbenchButton'
 import { sceneContentKey as comparable } from './sceneContentKey'
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button } from 'antd'
@@ -5,13 +6,15 @@ import { ApiError, StudioDirectingService } from '../../../services/generated'
 import type { SceneTakeLibraryRead, SceneTakeReviewRead, SceneVersionContent_Output } from '../../../services/generated'
 import { directingError } from './common'
 
-/** 固定记录只读，适用性同时核对当前未保存编辑，不把读取失败显示为已通过。 */
-export function SceneTakeReviews({ projectId, sequenceId, versionId, revision, take, content, dirty, disabled, evidence, onEvidenceChanged, focusRecordId, focusSerial }: {
-  evidence?: unknown; onEvidenceChanged?: () => void; focusRecordId?: string; focusSerial?: number
+/** 固定历史明确阅读才加载；复核返回记录独立更新，适用性同时核对当前未保存编辑。 */
+export function SceneTakeReviews({ projectId, sequenceId, versionId, revision, take, content, dirty, disabled, onEvidenceChanged, focusRecordId, focusSerial }: {
+  onEvidenceChanged?: () => void; focusRecordId?: string; focusSerial?: number
   projectId: string; sequenceId: string; versionId: string; revision: number; take: SceneTakeLibraryRead; content: SceneVersionContent_Output; dirty: boolean; disabled: boolean
 }) {
   const [records, setRecords] = useState<SceneTakeReviewRead[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
+  const [historyRequested, setHistoryRequested] = useState(false)
+  useEffect(() => { if (focusRecordId) { setHistoryRequested(true); setAttempt(value => value + 1) } }, [focusRecordId, focusSerial])
   const [error, setError] = useState('')
   const [attempt, setAttempt] = useState(0)
   const [confirming, setConfirming] = useState(false)
@@ -26,7 +29,11 @@ export function SceneTakeReviews({ projectId, sequenceId, versionId, revision, t
       const response = await StudioDirectingService.directingConfirmSceneTakeReview({ projectId, sequenceId, versionId,
         requestBody: { expected_revision: expectedRevision, take_kind: take.take_kind, take_id: take.take_id } })
       if (!response.data) throw new Error('复核记录尚未核实')
-      if (mounted.current) { setPendingRevision(undefined); setAttempt(value => value + 1); onEvidenceChanged?.() }
+      if (mounted.current) {
+        const record = response.data
+        setRecords(rows => [...rows.filter(row => row.id !== record.id), record])
+        setPendingRevision(undefined); onEvidenceChanged?.()
+      }
     } catch (cause) {
       if (mounted.current) {
         setConfirmationError(directingError(cause))
@@ -36,13 +43,15 @@ export function SceneTakeReviews({ projectId, sequenceId, versionId, revision, t
   }
 
   useEffect(() => {
+    if (!historyRequested) return
     let active = true
     setLoading(true); setError('')
     void StudioDirectingService.directingSceneTakeReviews({ projectId, sequenceId, versionId }).then(response => {
-      if (active) setRecords(response.data || [])
+      // 固定记录只增不删；迟到的历史响应不能移除刚核实成功的原记录。
+      if (active) setRecords(rows => [...(response.data || []), ...rows.filter(row => !response.data?.some(record => record.id === row.id))])
     }).catch(cause => { if (active) setError(directingError(cause)) }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [projectId, sequenceId, versionId, revision, attempt, evidence])
+  }, [projectId, sequenceId, versionId, attempt, historyRequested])
   const focusedRecord = useRef('')
   useEffect(() => {
     const request = `${focusRecordId}:${focusSerial}`
@@ -56,12 +65,14 @@ export function SceneTakeReviews({ projectId, sequenceId, versionId, revision, t
   const matches = !!matching
   return <section aria-label="固定素材审片记录">
     <h3>固定审片记录</h3>
+    <WorkbenchButton variant="secondary" onClick={() => { setHistoryRequested(true); setAttempt(value => value + 1) }}>查看完整素材审片历史</WorkbenchButton>
+    {!historyRequested && !records.length && <p>完整历史按需读取；当前适用摘要见素材图。</p>}
     {loading && <p>正在读取审片记录</p>}
-    {error && <Alert type="warning" message="审片记录读取失败" description={error} action={<Button onClick={() => setAttempt(value => value + 1)}>重读审片记录</Button>} />}
-    {!loading && !error && (selected.length
+    {error && <Alert type="warning" message="审片记录读取失败" description={error} action={<WorkbenchButton variant="secondary" onClick={() => { setHistoryRequested(true); setAttempt(value => value + 1) }}>重读审片记录</WorkbenchButton>} />}
+    {(historyRequested || records.length > 0) && !loading && !error && (selected.length
       ? <Alert type={matches ? 'success' : 'warning'} message={matches ? '当前判断与固定审片依据一致' : '审片依据已变，请重新核对当前判断'} />
       : <p>尚无固定审片记录；保存已审查的判断时记录当时依据。</p>)}
-    {!loading && !error && matching && matching.version_id !== versionId && <p>引用原版本素材审查：{matching.version_id}</p>}
+    {(historyRequested || records.length > 0) && !loading && !error && matching && matching.version_id !== versionId && <p>引用原版本素材审查：{matching.version_id}</p>}
     <Button loading={confirming} disabled={disabled || dirty || loading || !!error || confirming || pendingRevision != null || matches
       || current.take_judgments[0]?.annotation.review_status !== 'reviewed'} onClick={() => void confirm(revision)}>确认已按当前依据复核</Button>
     {dirty && <p>先保存当前内容，再明确复核这份依据；无需改写原结论。</p>}

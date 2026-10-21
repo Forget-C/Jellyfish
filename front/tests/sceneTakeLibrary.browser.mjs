@@ -41,6 +41,8 @@ try {
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
   const context = await browser.newContext({ viewport: { width: 1440, height: 960 } })
   page = await context.newPage()
+  let takeHistoryReads = 0
+  page.on('request', request => { if (request.method() === 'GET' && request.url().endsWith('/take-reviews')) takeHistoryReads++ })
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   const create = await fetch(versionsUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), title: '覆盖编辑验收' }) })
   assert.equal(create.status, 200)
@@ -154,6 +156,7 @@ try {
   await page.getByRole('button', { name: '保存', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   await page.getByLabel('固定素材审片记录', { exact: true }).scrollIntoViewIfNeeded()
+  await page.getByRole('button', { name: '查看完整素材审片历史', exact: true }).click()
   await page.getByText('当前判断与固定审片依据一致', { exact: true }).waitFor({ timeout: 5000 })
   await page.screenshot({ path: join(output, 'narrow-review.png'), fullPage: true })
   await page.setViewportSize({ width: 1440, height: 960 })
@@ -188,6 +191,9 @@ try {
   await page.getByRole('button', { name: '重试素材依据核对', exact: true }).click()
   await page.getByText('素材生成输入与当前单元一致，仍需人工审片', { exact: true }).waitFor()
   await closeWorkbenchDetails(page)
+  await locateCanvasNode(page, '方案判断')
+  await page.getByRole('button', { name: '查看完整素材审片历史', exact: true }).click()
+  await page.getByRole('button', { name: '适应画布', exact: true }).click()
   for (const invalid of ['range', 'target', 'source']) {
     const rejectedContent = structuredClone(a.content)
     const item = rejectedContent.take_judgments[0].annotation.coverage[0]
@@ -270,6 +276,8 @@ try {
   await page.getByRole('button', { name: '编辑画布', exact: true }).click()
   if (await page.getByRole('button', { name: '打开剪辑工作区', exact: true }).isVisible()) await page.getByRole('button', { name: '打开剪辑工作区', exact: true }).click()
   await page.getByRole('button', { name: '选择素材 1', exact: true }).click()
+  await locateCanvasNode(page, '方案判断')
+  await page.getByRole('button', { name: '查看完整素材审片历史', exact: true }).click()
   await page.getByText('审片依据已变，请重新核对当前判断', { exact: true }).waitFor()
   assert.deepEqual((await (await fetch(`${versionsUrl}/${b.id}/take-reviews`)).json()).data, [{ ...bReviews[0], matches_current: false }])
   const confirmReview = page.getByRole('button', { name: '确认已按当前依据复核', exact: true })
@@ -277,6 +285,7 @@ try {
   await page.getByRole('textbox', { name: '素材审查说明', exact: true }).fill('尚未保存的修改')
   assert.equal(await confirmReview.isDisabled(), true)
   await (await workbenchControl(page, '编辑历史', 'button', '撤销')).click()
+  const historyBeforeConfirmation = takeHistoryReads
   const confirmations = []
   await page.route('**/take-reviews', async route => {
     if (route.request().method() !== 'POST') return route.continue()
@@ -298,6 +307,7 @@ try {
   await page.getByText('审片依据已变，请重新核对当前判断', { exact: true }).waitFor()
   await (await workbenchControl(page, '编辑历史', 'button', '撤销')).click()
   await page.getByText('当前判断与固定审片依据一致', { exact: true }).waitFor()
+  assert.equal(takeHistoryReads, historyBeforeConfirmation, '成功复核直接显示返回记录，不借graph刷新再取全历史')
   assert.equal(confirmations.length, 2)
   assert.deepEqual(confirmations[1], confirmations[0])
   await page.unroute('**/take-reviews')
@@ -309,6 +319,8 @@ try {
   await page.getByRole('button', { name: '编辑画布', exact: true }).click()
   if (await page.getByRole('button', { name: '打开剪辑工作区', exact: true }).isVisible()) await page.getByRole('button', { name: '打开剪辑工作区', exact: true }).click()
   await page.getByRole('button', { name: '选择素材 1', exact: true }).click()
+  await locateCanvasNode(page, '方案判断')
+  await page.getByRole('button', { name: '查看完整素材审片历史', exact: true }).click()
   await page.getByText('当前判断与固定审片依据一致', { exact: true }).waitFor()
   const newReviews = (await (await fetch(`${versionsUrl}/${b.id}/take-reviews`)).json()).data
   assert.equal(newReviews.length, 2)

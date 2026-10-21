@@ -80,3 +80,15 @@
 截图与日志在 `/tmp/canvas-fix-*.log`、各 `/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-scene-version-<证据ID>/`。Chrome 定位菜单 DOM 隐藏后的合成残影不作为视觉通过证据；最后另用新页面直接恢复布局和真实键盘平移查看有限卡，保留原失败日志，未改 DOM 或截图样式。
 
 最后视觉及完整增强流程 `SFkA2o` exit0，桌面与390截图已实际查看：40问题计数、目标选择与原验收按钮均完整可见，无菜单残影。窄屏通过原缩放按钮明确切到80%，用真实方向键平移后阅读整卡；未修改DOM、截图样式或业务布局。最终截图与日志副本在 `/tmp/jellyfish-canvas-review-fix-evidence/`。
+
+### Spec 复核的素材历史漏项
+
+复核45f6948发现 SceneTakeReviews 尚订阅 graph/revision 并在 mount 读取全历史；现一并按明确历史／原记录动作启用，普通选Take、恢复记忆选择及 graph/revision 刷新均不读完整历史。精确记录请求使用独立 serial，普通素材、覆盖或片段定位不重复触发旧记录读取。复核成功直接合入 POST 返回的固定记录；晚到历史响应不能移除刚核实记录，不借 graph 更新再读全历史。
+
+- 红灯 `/tmp/canvas-take-history-red.log`：仅选Take即2次历史GET。
+- 增强 `sceneTakeLibraryGraph` **vhCXbz exit0**：首次选Take／跨画布记忆选择未明确历史0GET；明确原复核才GET；随后返回图刷新、跨导演画布恢复均0额外GET；dirty判断、active/paused视频同DOM、旧第2条summary的Tab／Enter保持可用。
+- 原 `sceneTakeLibrary` **DTDK3x exit0**：原素材预览、覆盖范围、独立版本判断、审片依据改变与撤销、未知响应及原请求核实断言全部保留；读历史前明确点击原入口，新增确认成功无全历史GET断言。跨画布后明确历史核对引入的视口变化由既有“适应画布”恢复，未修改产品布局。
+- 最终 typecheck、lint:check（294已知／0新增）、unit exit0。本补充仅前端与文档，后端509 passed／15 skipped与Pylint结果明确复用上一冻结代码；无API schema变化。
+- 检查其他历史消费者：剪辑四种审片／落幅历史全部采用明确动作；原 SceneFrameDependencies 的落幅候选读取服务于单元准备与换绑操作，不属于隐藏剪辑历史订阅，沿原业务边界保留。
+
+日志副本位于 `/tmp/jellyfish-canvas-review-fix-evidence/`；保留首次红灯与旧脚本失败日志，不将失败改写为通过。
