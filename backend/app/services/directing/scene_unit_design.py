@@ -58,7 +58,7 @@ def unit_design_inputs(content, shot_id):
 
 def unit_design_proposal_changed(existing, proposal):
     """比较实际执行字段；保留项的解释文字不构成重新设计或模型迁移。"""
-    if (existing.coverage != proposal.coverage or existing.duration_ms != proposal.duration_ms
+    if (proposal.operation == 'modify' or existing.coverage != proposal.coverage or existing.duration_ms != proposal.duration_ms
             or existing.ratio != proposal.ratio):
         return True
     return any(getattr(proposal, field) is not None
@@ -85,6 +85,10 @@ def validate_unit_design(args, result):
     old_ids = {unit['id'] for unit in original_units}
     for unit in result.units:
         existing = next((EditableGenerationUnit.model_validate(row) for row in original_units if row['id'] == unit.id), None)
+        if (existing and unit.operation == 'create' or existing is None and unit.operation in {'retain', 'modify'}):
+            raise ValueError('单元操作与稳定身份不一致：保留和修改必须使用原身份，新建必须使用新身份')
+        if existing and unit.operation == 'retain' and unit_design_proposal_changed(existing, unit):
+            raise ValueError('标记保留的单元必须保持原执行内容与组织要求')
         if existing and not unit_design_proposal_changed(existing, unit):
             continue
         if existing and existing.id != args.get('source_unit_id'):
@@ -167,7 +171,7 @@ def validate_unit_design(args, result):
 def merge_unit_design_proposal(existing, proposal, target_model_id, source):
     """仅替换组织字段；省略建议保留当前要求，指令、真实参考与固定依据保持原值。"""
     organization = existing.organization.model_dump() if existing and existing.organization else {}
-    organization.update(proposal.model_dump(exclude={'id', 'coverage', 'duration_ms', 'ratio'}, exclude_none=True))
+    organization.update(proposal.model_dump(exclude={'id', 'operation', 'coverage', 'duration_ms', 'ratio'}, exclude_none=True))
     organization['source'] = source
     return EditableGenerationUnit.model_validate({
         **(existing.model_dump() if existing else {}), 'id': proposal.id,
