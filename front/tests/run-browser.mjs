@@ -76,8 +76,8 @@ async function main() {
         process.once('SIGINT', abort); process.once('SIGTERM', abort)
         const finish = () => {
           clearTimeout(timer); clearTimeout(force)
-          // 父进程先退出时，仍清理同一进程组中关闭了输出管道的子进程。
-          if (stopping) stop(child, 'SIGKILL')
+          // 用例退出后兜底清理同组后代，包括崩溃后关闭了输出管道的子进程。
+          stop(child, 'SIGKILL')
           process.removeListener('SIGINT', abort); process.removeListener('SIGTERM', abort)
         }
         child.stdout.on('data', data => appendFileSync(log, data))

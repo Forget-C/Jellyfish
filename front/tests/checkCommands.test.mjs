@@ -94,9 +94,22 @@ test('lint command rejects new diagnostics and only permits baseline shrinkage',
 
 test('browser command stops after failure and preserves the failing log and result', async () => {
   const { dir, args } = await fixture({ broken: { file: 'broken.mjs', ports: [], timeoutMs: 5000 }, later: { file: 'later.mjs', ports: [], timeoutMs: 5000 } })
-  await writeFile(join(dir, 'broken.mjs'), "console.error('controlled failure'); process.exit(7)")
+  const probe = net.createServer()
+  await new Promise(resolve => probe.listen(0, '127.0.0.1', resolve))
+  const port = probe.address().port
+  await new Promise(resolve => probe.close(resolve))
+  const childSource = `const fs = require('node:fs'); const server = require('node:net').createServer(); server.listen(${port}, '127.0.0.1', () => fs.writeFileSync(${JSON.stringify(join(dir, 'child.pid'))}, String(process.pid))); setTimeout(() => server.close(), 10000);`
+  await writeFile(join(dir, 'broken.mjs'), `import { spawn } from 'node:child_process'; import { access } from 'node:fs/promises'; spawn(process.execPath, ['-e', ${JSON.stringify(childSource)}], {stdio:'ignore'}).unref(); for (;;) { try { await access(${JSON.stringify(join(dir, 'child.pid'))}); break } catch {} await new Promise(resolve => setTimeout(resolve, 10)) } console.error('controlled failure'); process.exit(7)`)
+
   await writeFile(join(dir, 'later.mjs'), "console.log('should not run')")
   const result = await execute(args)
+  const released = net.createServer()
+  try {
+    await new Promise((accept, reject) => { released.once('error', reject); released.listen(port, '127.0.0.1', accept) })
+  } catch (error) {
+    process.kill(Number(await readFile(join(dir, 'child.pid'), 'utf8')), 'SIGKILL')
+    throw error
+  } finally { if (released.listening) await new Promise(resolve => released.close(resolve)) }
   assert.equal(result.code, 1)
   assert.match(result.output, /controlled failure/)
   assert.match(await readFile(join(dir, 'output', 'broken', 'run.log'), 'utf8'), /controlled failure/)
