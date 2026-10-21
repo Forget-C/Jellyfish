@@ -16,6 +16,7 @@ from app.models.llm import ModelCategoryKey, Provider
 from app.models.task import Task
 from app.services.directing.production import ProductionService
 from app.services.directing.scene_design import SceneDesignService
+from app.services.directing.scene_unit_supplement import copy_source_unit_preparation
 from app.services.directing.store import RevisionConflict
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.llm.resolver import get_model_by_category
@@ -48,10 +49,22 @@ def unit_design_inputs(content, shot_id):
         'context': context, 'style_revision_id': content.design.style_revision_id,
         'output_aspect_ratio': content.output_aspect_ratio,
         'fields': [{**{key: getattr(row, key) for key in ('owner', 'field', 'purpose', 'scope', 'phase', 'condition')},
+                    'occurrences': [target.model_dump(mode='json') for target in row.occurrences],
                     'text': row.value.text if isinstance(row.value, Note) else row.value,
                     'note': row.value.model_dump(mode='json') if isinstance(row.value, Note) else None} for row in fields],
         'units': [unit.model_dump(mode='json') for unit in content.units
                   if any(item.shot_id == shot_id for item in unit.coverage)]}
+
+
+def unit_design_proposal_changed(existing, proposal):
+    """比较实际执行字段；保留项的解释文字不构成重新设计或模型迁移。"""
+    if (proposal.operation == 'modify' or existing.coverage != proposal.coverage or existing.duration_ms != proposal.duration_ms
+            or existing.ratio != proposal.ratio):
+        return True
+    return any(getattr(proposal, field) is not None
+               and getattr(proposal, field) != (getattr(existing.organization, field) if existing.organization
+                   else [] if field == 'reference_requirements' else '')
+               for field in ('entry_state', 'exit_state', 'reference_requirements'))
 
 
 def validate_unit_design(args, result):
@@ -63,19 +76,30 @@ def validate_unit_design(args, result):
                         if row['owner'].startswith(owner + ':') and row['purpose'] == 'design'}
                for owner in ('beat', 'event', 'performance', 'activity', 'continuity')}
     original_units = args['organization_inputs']['units']
+    supplement_source = next((EditableGenerationUnit.model_validate(row) for row in original_units
+                              if row['id'] == args.get('source_unit_id')), None)
     protected_ids = set(args.get('protected_unit_ids', []))
     if any(unit.id in protected_ids for unit in result.units):
         raise ValueError('单元方案使用了其他镜头或跨镜头单元身份')
     texts = [row['text'] for row in fields if row['purpose'] == 'design' and row['text']]
     old_ids = {unit['id'] for unit in original_units}
     for unit in result.units:
+        existing = next((EditableGenerationUnit.model_validate(row) for row in original_units if row['id'] == unit.id), None)
+        if (existing and unit.operation == 'create' or existing is None and unit.operation in {'retain', 'modify'}):
+            raise ValueError('单元操作与稳定身份不一致：保留和修改必须使用原身份，新建必须使用新身份')
+        if existing and unit.operation == 'retain' and unit_design_proposal_changed(existing, unit):
+            raise ValueError('标记保留的单元必须保持原执行内容与组织要求')
+        if existing and not unit_design_proposal_changed(existing, unit):
+            continue
+        if existing and existing.id != args.get('source_unit_id'):
+            raise ValueError('只能修改明确选择的目标单元，其他单元必须保留原样')
         if len(unit.coverage) != 1:
             raise ValueError('当前视频执行器仅支持每个单元一个覆盖项；请组织为多个独立单元')
         if unit.id in old_ids and any(item['shot_id'] != args['shot_id']
                                       for old in original_units if old['id'] == unit.id for item in old['coverage']):
             raise ValueError('不能重写跨镜头既有单元')
         for state in (unit.entry_state, unit.exit_state):
-            segments = [part.strip() for part in re.split(r'[；;\n]+', state) if part.strip()]
+            segments = [part.strip() for part in re.split(r'[；;\n]+', state or '') if part.strip()]
             if any(not any(segment in row['text'] for row in fields if row['text']) for segment in segments):
                 raise ValueError('进入与结束状态必须取自已有适用设计；未知状态请留空并列缺项')
         for item in unit.coverage:
@@ -87,6 +111,11 @@ def validate_unit_design(args, result):
                 if not set(getattr(item, key)) <= allowed[owner]:
                     raise ValueError('单元选择了不存在或不适用的设计项：' + key)
                 selected_owners = {f'{owner}:{identity}' for identity in getattr(item, key)}
+                if any(row['scope'] == 'occurrences' and not any(
+                        target['unit_id'] == unit.id and target['coverage_item_id'] == item.id
+                        for target in row.get('occurrences', [])) for row in fields
+                        if row['owner'] in selected_owners and row['purpose'] == 'design'):
+                    raise ValueError('单元选择仅适用于原出现项的设计：' + key)
                 main_field = {'beat': 'must_show', 'event': 'description', 'performance': 'physical_action',
                               'activity': 'ongoing_task', 'continuity': 'change'}[owner]
                 if any(row['text'] not in item.action_scope for row in fields
@@ -96,21 +125,30 @@ def validate_unit_design(args, result):
             segments = [part.strip() for part in re.split(r'[；;\n]+', item.action_scope) if part.strip()]
             if not segments or not all(any(segment in text for text in texts) for segment in segments):
                 raise ValueError('执行范围必须摘录已有适用设计；新增创作请先修改导演设计')
+        inherited_duration = (existing is None and supplement_source is not None
+                              and unit.duration_ms in (None, supplement_source.duration_ms))
+        if inherited_duration:
+            unit.duration_ms = supplement_source.duration_ms
         if unit.duration_ms is not None:
-            if args['capabilities']['max_seconds'] is None:
+            if args['capabilities']['max_seconds'] is None and not inherited_duration:
                 raise ValueError('目标模型时长上限未核实，不能填写确定时长')
             if unit.duration_ms % 1000:
                 raise ValueError('单元预计时长必须使用整秒')
-            validate_video_options(provider=args['video_provider'], model=args['target_model_name'],
-                                   input_=VideoGenerationInput(prompt='单元组织参数校验', ratio=unit.ratio, seconds=unit.duration_ms // 1000))
+            if args['capabilities']['max_seconds'] is not None:
+                validate_video_options(provider=args['video_provider'], model=args['target_model_name'],
+                                       input_=VideoGenerationInput(prompt='单元组织参数校验', ratio=unit.ratio, seconds=unit.duration_ms // 1000))
         elif '预计时长待确定' not in unit.missing:
             unit.missing.append('预计时长待确定')
         if unit.ratio not in args['capabilities']['allowed_ratios']:
             raise ValueError('单元画幅不在目标视频模型已核实能力内')
-        for requirement in unit.reference_requirements:
+        for requirement in unit.reference_requirements or []:
             missing = '参考待绑定：' + requirement
             if missing not in unit.missing:
                 unit.missing.append(missing)
+        if existing is None and supplement_source is not None:
+            inherited = copy_source_unit_preparation(supplement_source, unit, result.target_model_id,
+                Source(kind='model', reference=args['task_identity'], version='1'), args['capabilities'])
+            unit.missing = inherited.organization.missing
     shot_text = args['organization_inputs']['shot']['visible_result'].get('text') or ''
     scopes = [item.action_scope for unit in result.units for item in unit.coverage]
     if any(not any(part.strip() in scope for scope in scopes)
@@ -128,6 +166,43 @@ def validate_unit_design(args, result):
             if missing not in result.missing:
                 result.missing.append(missing)
     return result
+
+
+def merge_unit_design_proposal(existing, proposal, target_model_id, source):
+    """仅替换组织字段；省略建议保留当前要求，指令、真实参考与固定依据保持原值。"""
+    organization = existing.organization.model_dump() if existing and existing.organization else {}
+    organization.update(proposal.model_dump(exclude={'id', 'operation', 'coverage', 'duration_ms', 'ratio'}, exclude_none=True))
+    organization['source'] = source
+    return EditableGenerationUnit.model_validate({
+        **(existing.model_dump() if existing else {}), 'id': proposal.id,
+        'coverage': proposal.coverage, 'model_id': target_model_id,
+        'duration_ms': proposal.duration_ms, 'ratio': proposal.ratio,
+        'organization': UnitOrganization.model_validate(organization),
+    })
+
+
+def organized_unit_content(content, result, args):
+    """预览与确认使用同一完整组合，当前引用或越界时整体拒绝且不落盘。"""
+    existing = {unit.id: unit for unit in content.units}
+    related = {unit.id for unit in content.units if all(item.shot_id == result.shot_id for item in unit.coverage)}
+    if not related <= {proposal.id for proposal in result.units}:
+        raise ValueError('本次局部修改必须保留既有单元；拆并或移除需要另行处理')
+    source = Source(kind='model', reference=args['task_identity'], version='1')
+    updates = {}
+    additions = []
+    for proposal in result.units:
+        old = existing.get(proposal.id)
+        if old and not unit_design_proposal_changed(old, proposal):
+            continue
+        origin = existing.get(args.get('source_unit_id')) if old is None else None
+        unit = (copy_source_unit_preparation(origin, proposal, result.target_model_id, source, args['capabilities'])
+                if origin is not None else merge_unit_design_proposal(old, proposal, result.target_model_id, source))
+        if old:
+            updates[old.id] = unit
+        else:
+            additions.append(unit)
+    return SceneVersionContent.model_validate({**content.model_dump(),
+        'units': [updates.get(unit.id, unit) for unit in content.units] + additions})
 
 
 class SceneUnitDesignService(SceneDesignService):
@@ -162,6 +237,11 @@ class SceneUnitDesignService(SceneDesignService):
             raise RevisionConflict('场次版本已变化，请重新核对')
         files = await self._validate_content(sequence, version_id, body.content)
         inputs = unit_design_inputs(body.content, body.shot_id)
+        selected = next((unit for unit in body.content.units if unit.id == body.source_unit_id), None)
+        if body.source_unit_id and (selected is None or any(item.shot_id != body.shot_id for item in selected.coverage)):
+            raise ValueError('请选择当前镜头的有效单元身份；跨镜头单元不能作为局部修改目标')
+        if not selected and any(all(item.shot_id == body.shot_id for item in unit.coverage) for unit in body.content.units):
+            raise ValueError('已有当前镜头单元，请明确选择本次来源或目标单元')
         video, video_provider, capabilities = await self._video(body.target_model_id)
         model = await get_model_by_category(self.db, ModelCategoryKey.text, model_or_id=body.model_id)
         provider = await self.db.get(Provider, model.provider_id)
@@ -169,7 +249,7 @@ class SceneUnitDesignService(SceneDesignService):
         rules = await self.applicable_style(body.content.design.style_revision_id, sequence_id, video.name)
         args = {'task_identity': uuid4().hex, 'style_rules': [rule.model_dump(mode='json') for rule in rules], 'shot_id': body.shot_id, 'target_model_id': video.id, 'target_model_name': video.name,
             'video_provider': video_provider, 'video_provider_id': video.provider_id, 'capabilities': capabilities,
-            'organization_inputs': inputs, 'instruction': body.instruction,
+            'organization_inputs': inputs, 'source_unit_id': body.source_unit_id, 'instruction': body.instruction,
             'protected_unit_ids': [unit.id for unit in body.content.units if any(item.shot_id != body.shot_id for item in unit.coverage)]}
         return await TaskService(self.db).submit(kind='directing_unit_design', title='AI 设计 · 单元方案',
             target_type='directing_sequence', target_id=sequence_id, project_id=self.project_id, provider_id=provider.id,
@@ -215,26 +295,16 @@ class SceneUnitDesignService(SceneDesignService):
                 or video.name != task.input_snapshot['run_args']['target_model_name']
                 or capabilities != task.input_snapshot['run_args']['capabilities']):
             raise RevisionConflict('目标视频模型能力已变化，请重新 AI 设计')
-        return SceneUnitDesignPreview(task_id=task.id, result=validate_unit_design(task.input_snapshot['run_args'], SceneUnitDesignResult.model_validate(task.result)))
+        result = validate_unit_design(task.input_snapshot['run_args'], SceneUnitDesignResult.model_validate(task.result))
+        await self._validate_content(sequence, version_id, organized_unit_content(content, result, task.input_snapshot['run_args']))
+        return SceneUnitDesignPreview(task_id=task.id, result=result)
 
     async def apply_unit_design(self, sequence_id, version_id, task_id, content):
-        """一次确认只组织首次单元；从当前编辑组合，保留独立与跨镜头单元。"""
+        """一次确认从当前编辑组合；只修改明确目标，保留原顺序、独立与跨镜头单元。"""
         preview = await self.preview_unit_design(sequence_id, version_id, task_id, content)
         task = next(row for row in await self._tasks(sequence_id, version_id) if row.id == task_id)
         args = task.input_snapshot['run_args']
-        if any(unit.coverage and all(item.shot_id == preview.result.shot_id for item in unit.coverage)
-               for unit in content.units):
-            raise ValueError('已有当前镜头单元，请使用既有单元修改流程')
-        source = Source(kind='model', reference=args['task_identity'], version='1')
-        units = [EditableGenerationUnit(id=proposal.id, coverage=proposal.coverage,
-                    model_id=preview.result.target_model_id, duration_ms=proposal.duration_ms,
-                    ratio=proposal.ratio, organization=UnitOrganization(
-                        **proposal.model_dump(exclude={'id', 'coverage', 'duration_ms', 'ratio'}), source=source))
-                 for proposal in preview.result.units]
-        candidate = SceneVersionContent.model_validate({**content.model_dump(), 'units': [*content.units, *units]})
-        sequence, _ = await self._version(sequence_id, version_id)
-        await self._validate_content(sequence, version_id, candidate)
-        return candidate
+        return organized_unit_content(content, preview.result, args)
 
     async def validate_organized_save(self, sequence_id, version_id, content, previous):
         """首次保存组织来源时重验真实任务与固定依据；已保存单元仍按普通编辑处理。"""
@@ -253,9 +323,13 @@ class SceneUnitDesignService(SceneDesignService):
                    or unit.id not in {row.id for row in proposals.units}
                    or any(item.shot_id != request.shot_id for item in unit.coverage) for unit in related):
                 raise ValueError('单元组织身份、来源或镜头范围无效')
+            original = [unit for unit in request.content.units if any(item.shot_id == request.shot_id for item in unit.coverage)]
+            current = {unit.id: unit for unit in content.units if unit not in related}
+            # 固定输入包含相关单元的顺序；原位还原目标，不能把非末位目标追加到末尾。
             restored = content.model_copy(update={'units': [
-                *[unit for unit in content.units if unit not in related],
-                *[unit for unit in request.content.units if any(item.shot_id == request.shot_id for item in unit.coverage)
-                  and unit.id not in {row.id for row in content.units if row not in related}],
+                *[unit for unit in content.units if not any(item.shot_id == request.shot_id for item in unit.coverage)],
+                *[current.get(unit.id, unit) for unit in original],
+                *[unit for unit in current.values() if any(item.shot_id == request.shot_id for item in unit.coverage)
+                  and unit.id not in {row.id for row in original}],
             ]})
             await self.preview_unit_design(sequence_id, version_id, task.id, restored)
