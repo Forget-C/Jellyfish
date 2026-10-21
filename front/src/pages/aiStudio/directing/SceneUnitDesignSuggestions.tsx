@@ -203,6 +203,7 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
           {!!selected.result.missing?.length && <Alert type="warning" message="方案准备缺项" description={<ul>{selected.result.missing?.map((item, index) => <li key={index}>{item}</li>)}</ul>} />}
           {selected.result.units.map((unit, index) => {
             const previous = selected.request.content.units.find(row => row.id === unit.id)
+            const inherited = previous || selected.request.content.units.find(row => row.id === selected.request.source_unit_id)
             const changed = previous && (unit.operation === 'modify' || JSON.stringify(previous.coverage) !== JSON.stringify(unit.coverage)
               || previous.duration_ms !== unit.duration_ms || previous.ratio !== unit.ratio
               || ['entry_state', 'exit_state', 'reference_requirements'].some(field => {
@@ -216,8 +217,16 @@ export function SceneUnitDesignSuggestions({ projectId, sequenceId, versionId, r
             {unit.coverage.map(item => <div key={item.id}><p>{item.action_scope}</p>
               <p>覆盖选择：{[...item.beat_ids, ...item.event_ids, ...item.performance_action_ids, ...item.staging_activity_ids, ...item.continuity_change_ids].join('、') || '镜头可见内容'}</p></div>)}
             <p>{unit.ratio} · {unit.duration_ms == null ? '预计时长待确定' : `${unit.duration_ms / 1000} 秒`}</p>
-            <p>进入：{(unit.entry_state ?? previous?.organization?.entry_state) || '未填写'}；结束：{(unit.exit_state ?? previous?.organization?.exit_state) || '未填写'}</p>
-            {!!(unit.reference_requirements ?? previous?.organization?.reference_requirements)?.length && <p>参考需求：{(unit.reference_requirements ?? previous?.organization?.reference_requirements)?.join('；')}</p>}
+            {!previous && inherited && <><p>继承来源：{inherited.id}</p><details><summary>继承的准备输入</summary>
+              <p style={{ overflowWrap: 'anywhere' }}>参数：{JSON.stringify(inherited.parameters)}</p>
+              <p>真实参考：{inherited.references.map(reference => `${reference.file_id}（${reference.input_role}）`).join('；') || '尚未绑定'}</p>
+              <p>历史依赖：{[...inherited.dependencies.map(link => `${link.plan_revision_id} / ${link.unit_id}`),
+                ...inherited.scene_dependencies.map(link => `${link.version_id} / ${link.clip_id}`)].join('；') || '无'}</p>
+              <CanvasTextPreview text={inherited.instruction} label="来源指令正文" lines={4} />
+              <p>来源正文保留；指令依据与检查需要重新确认。</p>
+            </details></>}
+            <p>进入：{(unit.entry_state ?? inherited?.organization?.entry_state) || '未填写'}；结束：{(unit.exit_state ?? inherited?.organization?.exit_state) || '未填写'}</p>
+            {!!(unit.reference_requirements ?? inherited?.organization?.reference_requirements)?.length && <p>参考需求：{(unit.reference_requirements ?? inherited?.organization?.reference_requirements)?.join('；')}</p>}
             {!!unit.missing?.length && <ul>{unit.missing?.map((item, number) => <li key={number}>{item}</li>)}</ul>}
           </section>})}
           <Alert type="info" message="尚未应用到当前编辑；确认后沿用当前保存模式。参考需求不代表已绑定真实素材，设计完成不代表拍摄准备通过。" />

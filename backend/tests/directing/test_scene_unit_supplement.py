@@ -51,6 +51,12 @@ async def test_supplement_preserves_source_and_inherits_preparation(tmp_path, re
         saved = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})
         assert saved.status_code == 200, saved.text
         content = saved.json()['data']['content']
+        old_instruction = await client.post(detail + '/units/source/instruction-suggestions', json={
+            'request_id': str(uuid4()), 'expected_revision': 2, 'content': content, 'model_id': 'text'})
+        assert old_instruction.status_code == 200, old_instruction.text
+        old_id = old_instruction.json()['data']['task_id']
+        async with sessions.begin() as db:
+            assert await TaskService(db).claim(old_id, worker_id='old-source-running')
         url = detail + '/unit-design-suggestions'
         submitted = await client.post(url, json={'request_id': str(uuid4()), 'expected_revision': 2,
             'content': content, 'shot_id': 'shot', 'source_unit_id': 'source', 'target_model_id': 'target-video',
@@ -159,6 +165,16 @@ async def test_supplement_preserves_source_and_inherits_preparation(tmp_path, re
         assert readback['units'][0] == content['units'][0]
         assert readback['timeline'] == content['timeline']
         assert (await client.get(detail + '/units/source/video')).json()['data'] == []
+
+        async with sessions.begin() as db:
+            old_task = await db.get(Task, old_id)
+            old_result = generate_directing_result('directing_instruction', SimpleNamespace(
+                invoke=lambda _: SimpleNamespace(content=json.dumps({'unit_id': 'source', 'text': '拆信、读信、抬头。'}))),
+                old_task.input_snapshot['run_args'])
+            await TaskService(db).finish(old_id, result=old_result.model_dump(mode='json'))
+        old_history = (await client.get(detail + '/units/source/instruction-suggestions')).json()['data']
+        assert old_history[0]['task_id'] == old_id and old_history[0]['unit']['id'] == 'source'
+        assert [row['text'] for row in old_history[0]['unit_scope']['execution']] == ['拆信；读信；抬头']
 
         # 仅原出现项适用的动作不能通过新身份继承，也不能改导演适用范围绕过。
         scoped = deepcopy(readback)
