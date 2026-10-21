@@ -75,7 +75,7 @@ def validate_unit_design(args, result):
                                       for old in original_units if old['id'] == unit.id for item in old['coverage']):
             raise ValueError('不能重写跨镜头既有单元')
         for state in (unit.entry_state, unit.exit_state):
-            segments = [part.strip() for part in re.split(r'[；;\n]+', state) if part.strip()]
+            segments = [part.strip() for part in re.split(r'[；;\n]+', state or '') if part.strip()]
             if any(not any(segment in row['text'] for row in fields if row['text']) for segment in segments):
                 raise ValueError('进入与结束状态必须取自已有适用设计；未知状态请留空并列缺项')
         for item in unit.coverage:
@@ -107,7 +107,7 @@ def validate_unit_design(args, result):
             unit.missing.append('预计时长待确定')
         if unit.ratio not in args['capabilities']['allowed_ratios']:
             raise ValueError('单元画幅不在目标视频模型已核实能力内')
-        for requirement in unit.reference_requirements:
+        for requirement in unit.reference_requirements or []:
             missing = '参考待绑定：' + requirement
             if missing not in unit.missing:
                 unit.missing.append(missing)
@@ -128,6 +128,19 @@ def validate_unit_design(args, result):
             if missing not in result.missing:
                 result.missing.append(missing)
     return result
+
+
+def merge_unit_design_proposal(existing, proposal, target_model_id, source):
+    """仅替换组织字段；省略建议保留当前要求，指令、真实参考与固定依据保持原值。"""
+    organization = existing.organization.model_dump() if existing and existing.organization else {}
+    organization.update(proposal.model_dump(exclude={'id', 'coverage', 'duration_ms', 'ratio'}, exclude_none=True))
+    organization['source'] = source
+    return EditableGenerationUnit.model_validate({
+        **(existing.model_dump() if existing else {}), 'id': proposal.id,
+        'coverage': proposal.coverage, 'model_id': target_model_id,
+        'duration_ms': proposal.duration_ms, 'ratio': proposal.ratio,
+        'organization': UnitOrganization.model_validate(organization),
+    })
 
 
 class SceneUnitDesignService(SceneDesignService):
@@ -226,10 +239,7 @@ class SceneUnitDesignService(SceneDesignService):
                for unit in content.units):
             raise ValueError('已有当前镜头单元，请使用既有单元修改流程')
         source = Source(kind='model', reference=args['task_identity'], version='1')
-        units = [EditableGenerationUnit(id=proposal.id, coverage=proposal.coverage,
-                    model_id=preview.result.target_model_id, duration_ms=proposal.duration_ms,
-                    ratio=proposal.ratio, organization=UnitOrganization(
-                        **proposal.model_dump(exclude={'id', 'coverage', 'duration_ms', 'ratio'}), source=source))
+        units = [merge_unit_design_proposal(None, proposal, preview.result.target_model_id, source)
                  for proposal in preview.result.units]
         candidate = SceneVersionContent.model_validate({**content.model_dump(), 'units': [*content.units, *units]})
         sequence, _ = await self._version(sequence_id, version_id)
