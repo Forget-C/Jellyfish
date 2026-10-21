@@ -76,6 +76,15 @@ async def test_first_unit_design_freezes_unsaved_input_and_previews_without_save
         assert preview.status_code == 200, preview.text
         assert preview.json()['data']['result']['units'][0]['reference_requirements'] == ['需要人物身份参考']
         assert (await client.get(detail)).json()['data'] == version
+        applied = await client.post(url + '/' + task_id + '/apply', json={'content': content})
+        assert applied.status_code == 200, applied.text
+        organized = applied.json()['data']
+        assert organized['units'][0]['organization']['reference_requirements'] == ['需要人物身份参考']
+        assert organized['units'][0]['instruction_basis_id'] is None
+        assert (await client.get(detail)).json()['data'] == version
+        changed = deepcopy(content)
+        changed['design']['direction']['shots'][0]['visible_result']['text'] = '低头'
+        assert (await client.post(url + '/' + task_id + '/apply', json={'content': changed})).status_code == 409
 
         # 未安排的镜头动作必须成为缺项，不能把局部结果显示为完整准备。
         partial_content = deepcopy(content)
@@ -131,3 +140,129 @@ async def test_first_unit_design_freezes_unsaved_input_and_previews_without_save
         missing_model = {key: value for key, value in body.items() if key != 'target_model_id'}
         assert (await client.post(url, json=missing_model)).status_code == 422
         assert (await client.post(url.replace('/p1/', '/p2/'), json={**body, 'request_id': str(uuid4())})).status_code == 422
+
+        # 无效组织来源或身份整份拒绝，不能部分保存。
+        for field, value in (('source', {'kind': 'model', 'reference': 'absent-task', 'version': '1'}), ('id', 'invented-unit')):
+            invalid = deepcopy(organized)
+            if field == 'source':
+                invalid['units'][0]['organization']['source'] = value
+            else:
+                invalid['units'][0][field] = value
+            rejected = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 1, 'content': invalid})
+            assert rejected.status_code == 422, rejected.text
+            assert (await client.get(detail)).json()['data'] == version
+
+        # 确认后、手动保存前模型变化也必须拒绝。
+        async with sessions.begin() as db:
+            model = await db.get(Model, 'video')
+            model.name = 'sora-2-pro'
+        save = {'request_id': str(uuid4()), 'expected_revision': 1, 'content': organized}
+        rejected = await client.put(detail, json=save)
+        assert rejected.status_code == 409, rejected.text
+        assert (await client.get(detail)).json()['data'] == version
+        async with sessions.begin() as db:
+            model = await db.get(Model, 'video')
+            model.name = 'sora-2'
+        async with sessions.begin() as db:
+            db.add(Provider(id='another-provider', name='openai', base_url='https://api.openai.com/v1', api_key='fixture'))
+            await db.flush()
+            model = await db.get(Model, 'video')
+            model.provider_id = 'another-provider'
+        swapped = await client.post(url + '/' + task_id + '/apply', json={'content': content})
+        assert swapped.status_code == 409, swapped.text
+        async with sessions.begin() as db:
+            model = await db.get(Model, 'video')
+            model.provider_id = 'provider'
+        related_change = deepcopy(organized)
+        related_change['design']['performance']['beats'][0]['physical_action']['state'] = 'fact'
+        rejected = await client.put(detail, json={**save, 'request_id': str(uuid4()), 'content': related_change})
+        assert rejected.status_code == 409, rejected.text
+        unrelated = deepcopy(content['design']['direction']['shots'][0])
+        unrelated.update(id='independent', beat_ids=[], event_ids=[], participant_ids=[])
+        unrelated['visible_result']['text'] = '窗外雨滴'
+        organized['design']['direction']['shots'].append(unrelated)
+        async with sessions.begin() as db:
+            db.add(Model(id='manual-video', name='sora-2', category='video', provider_id='provider', params={}))
+        organized['units'][0]['model_id'] = 'manual-video'
+        organized['units'][0]['organization']['entry_state'] = '人工核对进入状态'
+        basis = await client.post(detail + '/units/unit-1/instruction-basis', json={'content': organized})
+        assert basis.status_code == 200, basis.text
+        scope = basis.json()['data']['current']['scope']
+        assert any(row['field'] == 'entry_state' and row['text'] == '人工核对进入状态' for row in scope['constraints'])
+        assert not any(row['field'] in {'entry_state', 'exit_state', 'reason'} for row in scope['execution'])
+        saved = await client.put(detail, json=save)
+        assert saved.status_code == 200, saved.text
+        readback = (await client.get(detail)).json()['data']['content']
+        assert readback == saved.json()['data']['content']
+        assert readback['design']['direction']['shots'][-1]['visible_result']['text'] == '窗外雨滴'
+        assert readback['units'][0]['organization'] == organized['units'][0]['organization']
+        conflict = await client.put(detail, json={**save, 'request_id': str(uuid4())})
+        assert conflict.status_code == 409
+
+        # 保存后普通局部编辑无需重新使用旧任务依据。
+        organized['units'][0]['organization']['exit_state'] = '人工修订结束要求'
+        async with sessions.begin() as db:
+            model = await db.get(Model, 'video')
+            model.name = 'sora-2-pro'
+        ordinary = await client.put(detail, json={**save, 'expected_revision': 2, 'request_id': str(uuid4())})
+        assert ordinary.status_code == 200, ordinary.text
+
+
+@pytest.mark.asyncio
+async def test_first_application_preserves_independent_and_mixed_units_and_rejects_manual_target(tmp_path):
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        async with sessions.begin() as db:
+            db.add(Provider(id='provider', name='openai', base_url='https://api.openai.com/v1', api_key='fixture'))
+            await db.flush()
+            db.add_all([Model(id='text', name='gpt-test', category='text', provider_id='provider', params={}),
+                        Model(id='video', name='sora-2', category='video', provider_id='provider', params={})])
+        path = await sequence_path(client)
+        version = (await client.post(path + '/versions', json={'request_id': str(uuid4()), 'title': '保留独立编辑'})).json()['data']
+        detail = path + '/versions/' + version['id']
+        content = deepcopy(version['content'])
+        note = {'state': 'proposal', 'text': '抬头', 'sources': [{'kind': 'human', 'reference': 'user', 'version': '1'}]}
+        content['design']['direction']['shots'] = [{'id': identity, 'beat_ids': [], 'event_ids': [],
+            'blocking_state_ids': [], 'participant_ids': [], 'criterion_ids': [], 'narrative_function': {},
+            'visible_result': deepcopy(note)} for identity in ('shot', 'other')]
+        content['units'] = [{'id': 'mixed', 'ratio': '16:9', 'coverage': [
+            {'id': 'target-part', 'shot_id': 'shot', 'action_scope': '抬头'},
+            {'id': 'other-part', 'shot_id': 'other', 'action_scope': '抬头'}]}]
+        initial = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})
+        assert initial.status_code == 200, initial.text
+        content = initial.json()['data']['content']
+        url = detail + '/unit-design-suggestions'
+        accepted = await client.post(url, json={'request_id': str(uuid4()), 'expected_revision': 2,
+            'content': content, 'shot_id': 'shot', 'target_model_id': 'video', 'model_id': 'text'})
+        assert accepted.status_code == 200, accepted.text
+        task_id = accepted.json()['data']['task_id']
+        async with sessions.begin() as db:
+            task = await db.get(Task, task_id)
+            result = generate_directing_result('directing_unit_design', SimpleNamespace(invoke=lambda _: SimpleNamespace(content=json.dumps({
+                'shot_id': 'shot', 'target_model_id': 'video', 'organization': '首次完整动作',
+                'units': [{'id': 'new', 'ratio': '16:9', 'reason': '抬头',
+                           'coverage': [{'id': 'new-coverage', 'shot_id': 'shot', 'action_scope': '抬头'}]}]}))), task.input_snapshot['run_args'])
+            service = TaskService(db)
+            assert await service.claim(task_id, worker_id='fixture')
+            await service.finish(task_id, result=result.model_dump(mode='json'))
+        # 生成期间独立其他镜头已保存；应用基于最新编辑，不回写提交快照。
+        content['design']['direction']['shots'][1]['visible_result']['text'] = '放下信'
+        content['units'].append({'id': 'independent', 'ratio': '16:9', 'coverage': [
+            {'id': 'other-coverage', 'shot_id': 'other', 'action_scope': '放下信'}]})
+        independent = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 2, 'content': content})
+        assert independent.status_code == 200, independent.text
+        content = independent.json()['data']['content']
+        preview = await client.post(url + '/' + task_id + '/preview', json={'content': content})
+        assert preview.status_code == 200, preview.text
+        manual = deepcopy(content)
+        manual['units'].append({'id': 'manual', 'ratio': '16:9', 'coverage': [
+            {'id': 'manual-coverage', 'shot_id': 'shot', 'action_scope': '抬头'}]})
+        for boundary in ('preview', 'apply'):
+            assert (await client.post(url + '/' + task_id + '/' + boundary, json={'content': manual})).status_code == 409
+        applied = await client.post(url + '/' + task_id + '/apply', json={'content': content})
+        assert applied.status_code == 200, applied.text
+        candidate = applied.json()['data']
+        assert candidate['units'][:2] == content['units']
+        save = {'request_id': str(uuid4()), 'expected_revision': 3, 'content': candidate}
+        saved = await client.put(detail, json=save)
+        assert saved.status_code == 200, saved.text
+        assert (await client.get(detail)).json()['data']['content'] == candidate

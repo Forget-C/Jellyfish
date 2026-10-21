@@ -107,6 +107,16 @@ def unit_scope(design: EditableSceneDesign, unit: EditableGenerationUnit,
                 if f'已选连续性变化 {key} 尚无可拍内容' not in unresolved:
                     unresolved.append(f'已选连续性变化 {key} 尚无可拍内容')
 
+    if version >= 3 and unit.organization:
+        for field in ('entry_state', 'exit_state'):
+            add(constraints, f'unit:{unit.id}', field, getattr(unit.organization, field),
+                '当前可编辑组织状态要求（原 AI 依据单独追溯）',
+                coverage_ids=[item.id for item in unit.coverage], phase='video')
+        for index, requirement in enumerate(unit.organization.reference_requirements):
+            add(constraints, f'unit:{unit.id}', f'reference_requirement:{index}', requirement,
+                '待准备参考要求，不构成实际参考绑定',
+                coverage_ids=[item.id for item in unit.coverage], phase='video')
+
     participants = set()
     for shot_id in sorted(shot_ids):
         shot = shots[shot_id]

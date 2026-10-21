@@ -279,6 +279,9 @@ class DirectingStore:
             return current
         if current.revision != body.expected_revision:
             raise RevisionConflict('场次版本已变化，未保存的输入已保留')
+        from app.services.directing.scene_unit_design import SceneUnitDesignService  # pylint: disable=import-outside-toplevel
+        await SceneUnitDesignService(self.db, self.project_id).validate_organized_save(
+            sequence_id, version_id, body.content, current.content)
         row = await self.db.get(SceneVersionRecord, version_id, populate_existing=True)
         source_bases = await self._scene_source_bases(sequence, row, body.content.basis)
         # 旧字段的真实引用仍指向旧原文；仅当前执行依据切换，不伪造来源重绑。

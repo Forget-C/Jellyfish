@@ -90,7 +90,7 @@ export function SceneUnitCanvas({ primaryHost, projectId, sequenceId, versionId,
     onChange({ ...content, units: [...allUnits, { id,
       coverage: [{ id: crypto.randomUUID(), shot_id: shot.id, beat_ids: [], event_ids: [], staging_activity_ids: [], performance_action_ids: [], continuity_change_ids: [], action_scope: '' }],
       references: [], model_id: null, duration_ms: null, ratio: content.output_aspect_ratio,
-      parameters: {}, capability: { multi_shot: 'unknown' }, dependencies: [], scene_dependencies: [], instruction: '', instruction_source: null, instruction_basis_id: null, instruction_check_task_id: null,
+      organization: null, parameters: {}, capability: { multi_shot: 'unknown' }, dependencies: [], scene_dependencies: [], instruction: '', instruction_source: null, instruction_basis_id: null, instruction_check_task_id: null,
     }] })
     onSelectUnit(id)
     setSettingsUnitId(id)
@@ -168,6 +168,17 @@ export function SceneUnitCanvas({ primaryHost, projectId, sequenceId, versionId,
               </details>
             </section>
           })}
+          {unit.organization && <section aria-label="单元组织要求">
+            <h3>组织要求</h3><p>{unit.organization.reason}</p>
+            <p>原 AI 组织依据（以下要求可人工修改）：</p><SourceLinks sources={[unit.organization.source]} />
+            <label>进入状态<Input.TextArea aria-label="组织进入状态" disabled={disabled} value={unit.organization.entry_state}
+              onChange={event => patch({ organization: { ...unit.organization!, entry_state: event.target.value } })} /></label>
+            <label>结束状态<Input.TextArea aria-label="组织结束状态" disabled={disabled} value={unit.organization.exit_state}
+              onChange={event => patch({ organization: { ...unit.organization!, exit_state: event.target.value } })} /></label>
+            <label>待准备参考（每行一项）<Input.TextArea aria-label="组织参考需求" disabled={disabled} value={unit.organization.reference_requirements.join('\n')}
+              onChange={event => patch({ organization: { ...unit.organization!, reference_requirements: event.target.value.split('\n').filter(Boolean) } })} /></label>
+            {!!unit.organization.missing.length && <details><summary>设计时诊断（不代表当前准备度）</summary><ul>{unit.organization.missing.map((item, index) => <li key={index}>{item}</li>)}</ul></details>}
+          </section>}
           <label>视频模型<Select id="scene-unit-model" aria-label="单元视频模型" allowClear disabled={disabled || !models || !!modelsError} value={unit.model_id || undefined}
             placeholder="选择视频模型" style={{ width: '100%' }} options={models?.map(model => ({ value: model.id, label: model.name }))} onChange={id => patch({ model_id: id || null })} /></label>
           {modelsError && <Alert type="error" message="模型读取失败" description={modelsError} action={<Button onClick={() => setAttempt(value => value + 1)}>重试模型</Button>} />}
@@ -181,7 +192,7 @@ export function SceneUnitCanvas({ primaryHost, projectId, sequenceId, versionId,
         </>}
       </>
   return <section className="scene-unit-canvas">
-    <SceneUnitDesignSuggestions onFocused={onUnitDesignFocused} triggerHost={primaryHost} focusTaskId={unitDesignTaskId} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content} shotId={shotId} disabled={disabled} />
+    <SceneUnitDesignSuggestions onChange={onChange} onFocused={onUnitDesignFocused} triggerHost={primaryHost} focusTaskId={unitDesignTaskId} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content} shotId={shotId} disabled={disabled} />
     {unit && primaryHost && createPortal(<nav className="scene-unit-primary" aria-label="当前单元主操作"><strong>当前单元 {allUnits.indexOf(unit) + 1}</strong>
       {<SceneInstructionSuggestions onPrepare={missing.length ? () => locateIssue(missing[0]) : undefined} key={unit.id} compact projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision}
         unitId={unit.id} content={content} disabled={disabled} onChange={onChange} onOpen={onOpenInstruction} onTask={onInstructionTask} />}

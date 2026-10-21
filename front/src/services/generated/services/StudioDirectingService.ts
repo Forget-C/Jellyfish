@@ -58,6 +58,7 @@ import type { ApiResponse_SceneInstructionPreview_ } from '../models/ApiResponse
 import type { ApiResponse_SceneSeamReviewRead_ } from '../models/ApiResponse_SceneSeamReviewRead_';
 import type { ApiResponse_SceneTakeReviewRead_ } from '../models/ApiResponse_SceneTakeReviewRead_';
 import type { ApiResponse_SceneUnitDesignPreview_ } from '../models/ApiResponse_SceneUnitDesignPreview_';
+import type { ApiResponse_SceneVersionContent_ } from '../models/ApiResponse_SceneVersionContent_';
 import type { ApiResponse_SceneVersionRead_ } from '../models/ApiResponse_SceneVersionRead_';
 import type { ApiResponse_SceneVideoPreparation_ } from '../models/ApiResponse_SceneVideoPreparation_';
 import type { ApiResponse_SceneVideoSaveResult_ } from '../models/ApiResponse_SceneVideoSaveResult_';
@@ -3106,6 +3107,41 @@ export class StudioDirectingService {
                 'version_id': versionId,
                 'task_id': taskId,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Scene Unit Design Apply
+     * 明确确认后返回当前编辑内容，持久化仍走原保存入口。
+     * @returns ApiResponse_SceneVersionContent_ Successful Response
+     * @throws ApiError
+     */
+    public static directingSceneUnitDesignApply({
+        projectId,
+        sequenceId,
+        versionId,
+        taskId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        taskId: string,
+        requestBody: SceneUnitDesignPreviewRequest,
+    }): CancelablePromise<ApiResponse_SceneVersionContent_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/unit-design-suggestions/{task_id}/apply',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+                'task_id': taskId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

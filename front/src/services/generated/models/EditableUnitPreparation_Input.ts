@@ -7,6 +7,7 @@ import type { ModelCapability_Input } from './ModelCapability_Input';
 import type { ReferenceBinding_Input } from './ReferenceBinding_Input';
 import type { SceneFrameDependency } from './SceneFrameDependency';
 import type { UnitDependency } from './UnitDependency';
+import type { UnitOrganization_Input } from './UnitOrganization_Input';
 /**
  * 准备中的单元可缺模型或时长，执行前另做准备度与模型能力检查。
  */
@@ -20,5 +21,6 @@ export type EditableUnitPreparation_Input = {
     parameters?: Record<string, (string | number | boolean | null)>;
     capability?: ModelCapability_Input;
     dependencies?: Array<UnitDependency>;
+    organization?: (UnitOrganization_Input | null);
     scene_dependencies?: Array<SceneFrameDependency>;
 };

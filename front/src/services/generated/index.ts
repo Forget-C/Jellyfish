@@ -109,6 +109,7 @@ export type { ApiResponse_SceneInstructionPreview_ } from './models/ApiResponse_
 export type { ApiResponse_SceneSeamReviewRead_ } from './models/ApiResponse_SceneSeamReviewRead_';
 export type { ApiResponse_SceneTakeReviewRead_ } from './models/ApiResponse_SceneTakeReviewRead_';
 export type { ApiResponse_SceneUnitDesignPreview_ } from './models/ApiResponse_SceneUnitDesignPreview_';
+export type { ApiResponse_SceneVersionContent_ } from './models/ApiResponse_SceneVersionContent_';
 export type { ApiResponse_SceneVersionRead_ } from './models/ApiResponse_SceneVersionRead_';
 export type { ApiResponse_SceneVideoPreparation_ } from './models/ApiResponse_SceneVideoPreparation_';
 export type { ApiResponse_SceneVideoSaveResult_ } from './models/ApiResponse_SceneVideoSaveResult_';
@@ -527,6 +528,8 @@ export type { TransitionWrite_Input } from './models/TransitionWrite_Input';
 export type { TransitionWrite_Output } from './models/TransitionWrite_Output';
 export type { UnitContinuityRead } from './models/UnitContinuityRead';
 export type { UnitDependency } from './models/UnitDependency';
+export type { UnitOrganization_Input } from './models/UnitOrganization_Input';
+export type { UnitOrganization_Output } from './models/UnitOrganization_Output';
 export type { UnitScopeProjection_Input } from './models/UnitScopeProjection_Input';
 export type { UnitScopeProjection_Output } from './models/UnitScopeProjection_Output';
 export type { UnitScopeUse_Input } from './models/UnitScopeUse_Input';

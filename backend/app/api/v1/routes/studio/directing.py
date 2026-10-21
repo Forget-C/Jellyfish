@@ -48,7 +48,7 @@ from app.core.contracts.directing.scene_copy import SceneVersionCopy, SceneCopyR
 from app.services.directing.scene_copy import SceneCopyService
 from app.core.contracts.directing.scene_export import SceneExportRequest, SceneExportRead, SceneExportRetry, SceneExportInspect, SceneExportInspection
 from app.services.directing.scene_export import SceneExportService
-from app.core.contracts.directing.scene_version import SceneVersionCreate, SceneVersionRead, SceneVersionSave
+from app.core.contracts.directing.scene_version import SceneVersionCreate, SceneVersionRead, SceneVersionSave, SceneVersionContent
 from app.core.contracts.directing.scene_design import SceneDesignRequest, SceneDesignPreviewRequest, SceneDesignPreview, SceneDesignSuggestionRead
 from app.services.directing.scene_design import SceneDesignService
 from app.services.directing.scene_unit_design import SceneUnitDesignService
@@ -729,3 +729,9 @@ async def inspect_scene_export(project_id: str, sequence_id: str, version_id: st
 async def delete_scene_export_file(project_id: str, sequence_id: str, version_id: str, task_id: str, db: AsyncSession = Depends(get_db, scope='function')):
     """明确删除单份导出成果，保留成功事实并复用业务引用保护。"""
     return success_response(await _call(SceneExportService(db, project_id).delete_export_file(sequence_id, version_id, task_id)))
+
+
+@router.post("/sequences/{sequence_id}/versions/{version_id}/unit-design-suggestions/{task_id}/apply", response_model=ApiResponse[SceneVersionContent], operation_id="directing_scene_unit_design_apply")
+async def scene_unit_design_apply(project_id: str, sequence_id: str, version_id: str, task_id: str, body: SceneUnitDesignPreviewRequest, db: AsyncSession = Depends(get_db, scope="function")):
+    """明确确认后返回当前编辑内容，持久化仍走原保存入口。"""
+    return success_response(await _call(SceneUnitDesignService(db, project_id).apply_unit_design(sequence_id, version_id, task_id, body.content)))

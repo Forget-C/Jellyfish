@@ -6,7 +6,8 @@ from uuid import uuid4
 
 from sqlalchemy import select
 
-from app.core.contracts.directing.common import Note
+from app.core.contracts.directing.common import Note, Source
+from app.core.contracts.directing.scene_version import EditableGenerationUnit, UnitOrganization, SceneVersionContent
 from app.core.contracts.directing.design_scope import resolved_design_fields
 from app.core.contracts.directing.scene_unit_design import SceneUnitDesignRequest, SceneUnitDesignResult, SceneUnitDesignSuggestionRead, SceneUnitDesignPreview
 from app.core.integrations.video_capabilities import resolve_video_capability, validate_video_options
@@ -47,7 +48,8 @@ def unit_design_inputs(content, shot_id):
         'context': context, 'style_revision_id': content.design.style_revision_id,
         'output_aspect_ratio': content.output_aspect_ratio,
         'fields': [{**{key: getattr(row, key) for key in ('owner', 'field', 'purpose', 'scope', 'phase', 'condition')},
-                    'text': row.value.text if isinstance(row.value, Note) else row.value} for row in fields],
+                    'text': row.value.text if isinstance(row.value, Note) else row.value,
+                    'note': row.value.model_dump(mode='json') if isinstance(row.value, Note) else None} for row in fields],
         'units': [unit.model_dump(mode='json') for unit in content.units
                   if any(item.shot_id == shot_id for item in unit.coverage)]}
 
@@ -166,7 +168,7 @@ class SceneUnitDesignService(SceneDesignService):
         config = resolve_provider_config_from_provider(provider=provider, category=ModelCategoryKey.text)
         rules = await self.applicable_style(body.content.design.style_revision_id, sequence_id, video.name)
         args = {'task_identity': uuid4().hex, 'style_rules': [rule.model_dump(mode='json') for rule in rules], 'shot_id': body.shot_id, 'target_model_id': video.id, 'target_model_name': video.name,
-            'video_provider': video_provider, 'capabilities': capabilities,
+            'video_provider': video_provider, 'video_provider_id': video.provider_id, 'capabilities': capabilities,
             'organization_inputs': inputs, 'instruction': body.instruction,
             'protected_unit_ids': [unit.id for unit in body.content.units if any(item.shot_id != body.shot_id for item in unit.coverage)]}
         return await TaskService(self.db).submit(kind='directing_unit_design', title='AI 设计 · 单元方案',
@@ -209,7 +211,51 @@ class SceneUnitDesignService(SceneDesignService):
         rules = await self.applicable_style(content.design.style_revision_id, sequence_id, video.name)
         if ([rule.model_dump(mode='json') for rule in rules] != task.input_snapshot['run_args']['style_rules']
                 or provider != task.input_snapshot['run_args']['video_provider']
+                or video.provider_id != task.input_snapshot['run_args'].get('video_provider_id')
                 or video.name != task.input_snapshot['run_args']['target_model_name']
                 or capabilities != task.input_snapshot['run_args']['capabilities']):
             raise RevisionConflict('目标视频模型能力已变化，请重新 AI 设计')
         return SceneUnitDesignPreview(task_id=task.id, result=validate_unit_design(task.input_snapshot['run_args'], SceneUnitDesignResult.model_validate(task.result)))
+
+    async def apply_unit_design(self, sequence_id, version_id, task_id, content):
+        """一次确认只组织首次单元；从当前编辑组合，保留独立与跨镜头单元。"""
+        preview = await self.preview_unit_design(sequence_id, version_id, task_id, content)
+        task = next(row for row in await self._tasks(sequence_id, version_id) if row.id == task_id)
+        args = task.input_snapshot['run_args']
+        if any(unit.coverage and all(item.shot_id == preview.result.shot_id for item in unit.coverage)
+               for unit in content.units):
+            raise ValueError('已有当前镜头单元，请使用既有单元修改流程')
+        source = Source(kind='model', reference=args['task_identity'], version='1')
+        units = [EditableGenerationUnit(id=proposal.id, coverage=proposal.coverage,
+                    model_id=preview.result.target_model_id, duration_ms=proposal.duration_ms,
+                    ratio=proposal.ratio, organization=UnitOrganization(
+                        **proposal.model_dump(exclude={'id', 'coverage', 'duration_ms', 'ratio'}), source=source))
+                 for proposal in preview.result.units]
+        candidate = SceneVersionContent.model_validate({**content.model_dump(), 'units': [*content.units, *units]})
+        sequence, _ = await self._version(sequence_id, version_id)
+        await self._validate_content(sequence, version_id, candidate)
+        return candidate
+
+    async def validate_organized_save(self, sequence_id, version_id, content, previous):
+        """首次保存组织来源时重验真实任务与固定依据；已保存单元仍按普通编辑处理。"""
+        known = {(unit.id, unit.organization.source.reference) for unit in previous.units if unit.organization}
+        introduced = [unit for unit in content.units if unit.organization
+                      and (unit.id, unit.organization.source.reference) not in known]
+        tasks = list(await self._tasks(sequence_id, version_id)) if introduced else []
+        for reference in {unit.organization.source.reference for unit in introduced}:
+            task = next((row for row in tasks if row.input_snapshot['run_args']['task_identity'] == reference), None)
+            if task is None or task.status != 'succeeded':
+                raise ValueError('单元组织来源不属于当前版本的成功任务')
+            request = SceneUnitDesignRequest.model_validate(task.input_snapshot['scene_unit_design']['request'])
+            proposals = validate_unit_design(task.input_snapshot['run_args'], SceneUnitDesignResult.model_validate(task.result))
+            related = [unit for unit in introduced if unit.organization.source.reference == reference]
+            if any(unit.organization.source.kind != 'model' or unit.organization.source.version != '1'
+                   or unit.id not in {row.id for row in proposals.units}
+                   or any(item.shot_id != request.shot_id for item in unit.coverage) for unit in related):
+                raise ValueError('单元组织身份、来源或镜头范围无效')
+            restored = content.model_copy(update={'units': [
+                *[unit for unit in content.units if unit not in related],
+                *[unit for unit in request.content.units if any(item.shot_id == request.shot_id for item in unit.coverage)
+                  and unit.id not in {row.id for row in content.units if row not in related}],
+            ]})
+            await self.preview_unit_design(sequence_id, version_id, task.id, restored)

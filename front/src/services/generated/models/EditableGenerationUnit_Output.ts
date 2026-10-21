@@ -8,6 +8,7 @@ import type { ReferenceBinding_Output } from './ReferenceBinding_Output';
 import type { SceneFrameDependency } from './SceneFrameDependency';
 import type { Source } from './Source';
 import type { UnitDependency } from './UnitDependency';
+import type { UnitOrganization_Output } from './UnitOrganization_Output';
 /**
  * 正文与依据确认分别保存，普通编辑不自动确认新依据。
  */
@@ -21,6 +22,7 @@ export type EditableGenerationUnit_Output = {
     parameters: Record<string, (string | number | boolean | null)>;
     capability: ModelCapability_Output;
     dependencies: Array<UnitDependency>;
+    organization: (UnitOrganization_Output | null);
     scene_dependencies: Array<SceneFrameDependency>;
     instruction_basis_id: (string | null);
     instruction_check_task_id: (string | null);
