@@ -15,20 +15,25 @@ import { SceneTakeBasis } from './SceneTakeBasis'
 import { SceneTakeReviews } from './SceneTakeReviews'
 import { SceneTakeCoverage } from './SceneTakeCoverage'
 import type { SceneMediaNavigationTarget } from './SceneRelationsNavigation'
+import { EditGraphCanvas } from './EditGraphCanvas'
+import type { EditCanvasGraph } from '../../../services/generated'
+import { WorkbenchButton } from './ui/WorkbenchButton'
 import { DirectorCanvasSurface } from './DirectorCanvasSurface'
 
 const identity = (take: { take_kind: string; take_id: string }) => `${take.take_kind}:${take.take_id}`
 
-const editingSessions = new Map<string, { selected: string; navigationSerial?: number; focusClipId?: string }>()
+const editingSessions = new Map<string, { selected: string; navigationSerial?: number; focusClipId?: string; workspace?: boolean; graphNavigation?: number }>()
 
 /** 素材来源只读；人工判断属于当前版本，统一交给工作台保存与撤销。 */
-export function SceneEditCanvas({ projectId, sequenceId, versionId, revision, content, disabled, dirty, onChange, onOpenUnit, onOpenVersion, focusClipId, navigation }: {
+export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectId, sequenceId, versionId, revision, content, disabled, dirty, onChange, onOpenUnit, onOpenVersion, focusClipId, navigation }: {
+  graph: EditCanvasGraph; evidenceError: string; onRefreshGraph: () => void
   navigation?: { target: SceneMediaNavigationTarget; serial: number }
   onOpenVersion: (target: { versionId: string; unitId: string }) => Promise<void>
   onOpenUnit: (unitId: string) => void; focusClipId?: string
   projectId: string; sequenceId: string; versionId: string; revision: number; content: SceneVersionContent_Output; disabled: boolean; dirty: boolean
   onChange: (content: SceneVersionContent_Output) => void
 }) {
+  const [unavailableClip, setUnavailableClip] = useState('')
   const [takes, setTakes] = useState<SceneTakeLibraryRead[]>([])
   const contextKey = `${projectId}:${sequenceId}:${versionId}`
   const [session] = useState(() => {
@@ -36,6 +41,10 @@ export function SceneEditCanvas({ projectId, sequenceId, versionId, revision, co
     editingSessions.set(contextKey, value)
     return value
   })
+  const [graphNavigation, setGraphNavigation] = useState<number | undefined>(session.graphNavigation)
+  useEffect(() => { session.graphNavigation = graphNavigation }, [session, graphNavigation])
+  const [workspace, setWorkspace] = useState(session.workspace || false)
+  useEffect(() => { session.workspace = workspace }, [workspace, session])
   const [selected, setSelected] = useState(session.selected)
   useEffect(() => { session.selected = selected }, [session, selected])
   const [focusTarget, setFocusTarget] = useState<{ nodeId: string; fieldId: string; serial: number }>()
@@ -58,11 +67,14 @@ export function SceneEditCanvas({ projectId, sequenceId, versionId, revision, co
   }, [projectId, sequenceId, versionId, attempt])
   useEffect(() => {
     if (!focusClipId || session.focusClipId === focusClipId) return
+    setWorkspace(true)
     session.focusClipId = focusClipId
     setFocusTarget({ nodeId: '时间线', fieldId: `scene-end-frame-${focusClipId}`, serial: Date.now() })
   }, [focusClipId])
   useEffect(() => {
     if (!navigation || session.navigationSerial === navigation.serial) return
+    setWorkspace(true)
+    setGraphNavigation(undefined)
     session.navigationSerial = navigation.serial
     setPreview(false); setPreviewError(''); setPreviewStop(value => value + 1); setSeamStop(value => value + 1)
     const target = navigation.target
@@ -97,7 +109,25 @@ export function SceneEditCanvas({ projectId, sequenceId, versionId, revision, co
         <details><summary>查看固定生产依据</summary><p>原单元：{take.unit_id}</p><p>原任务：{take.task_id}</p>
           <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(take.video_preparation || { prompt: take.prompt, production_plan: take.production_plan }, null, 2)}</pre></details>
   </>
-  return <><DirectorCanvasSurface focusTarget={focusTarget} contextKey={`${versionId}:edit`} inspectors={{ 当前素材: take ? () => setTakeDetails(true) : undefined }} ariaLabel="编辑画布视口" labels={['同场次素材', '当前素材', '方案判断', '时间线']} initialPositions={{ 方案判断: { x: 800, y: 0 }, 时间线: { x: 0, y: 740 } }}>
+  return <><div className="scene-edit-navigation" aria-label="剪辑浏览">
+    <WorkbenchButton variant="secondary" onClick={() => setWorkspace(value => !value)}>{workspace ? '浏览整场剪辑' : '打开剪辑工作区'}</WorkbenchButton>
+    <WorkbenchButton variant="secondary" onClick={() => { setWorkspace(true); setFocusTarget({ nodeId: '同场次素材', fieldId: '', serial: Date.now() }) }}>浏览同场次素材</WorkbenchButton>
+    <WorkbenchButton variant="secondary" onClick={onRefreshGraph}>刷新图证据</WorkbenchButton>
+    {dirty && <span aria-label="剪辑图同步状态">图待同步：总览展示已保存内容，工作区保留当前输入。</span>}
+    {evidenceError && <p role="alert">图证据读取失败，保留旧摘要：{evidenceError}。请刷新图证据重试。</p>}
+    {unavailableClip && <p role="alert">原片段 {unavailableClip} 在当前编辑中已不可用，请保存后重新核对。</p>}
+  </div><div className="scene-edit-overview" hidden={workspace}><EditGraphCanvas graph={graph} versionId={versionId} revision={revision} contextKey={contextKey} onRetry={onRefreshGraph} onLocate={node => {
+    if (node.kind === 'edit_take') {
+      setSelected(`${node.take_kind}:${node.take_id}`); setWorkspace(true)
+      setFocusTarget({ nodeId: '当前素材', fieldId: 'scene-current-take', serial: Date.now() }); return
+    }
+    const clip = content.timeline.items.find(item => item.id === node.clip_id)
+    if (!clip) { setUnavailableClip(node.clip_id); return }
+    setUnavailableClip(''); setWorkspace(true)
+    if ('media_range' in clip) setSelected(`${clip.take_kind}:${clip.take_id}`)
+    const serial = Date.now(); setGraphNavigation(serial)
+    setFocusTarget({ nodeId: '时间线', fieldId: `scene-clip-${clip.id}`, serial })
+  }} /></div><div hidden={!workspace}><DirectorCanvasSurface focusTarget={focusTarget} contextKey={`${versionId}:edit`} inspectors={{ 当前素材: take ? () => setTakeDetails(true) : undefined }} ariaLabel="编辑画布视口" labels={['同场次素材', '当前素材', '方案判断', '时间线']} initialPositions={{ 方案判断: { x: 800, y: 0 }, 时间线: { x: 0, y: 740 } }}>
     <section className="canvas-workbench-card">
       <Button loading={loading} onClick={() => setAttempt(value => value + 1)}>刷新素材库</Button>
       {error && <Alert type="warning" message="素材库读取失败" description={error} />}
@@ -162,7 +192,7 @@ export function SceneEditCanvas({ projectId, sequenceId, versionId, revision, co
         <SceneTakeReviews key={selected} dirty={dirty} disabled={editDisabled} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} take={take} content={content} />
       </>}
     </section>
-    <SceneTimelineEditor contextKey={contextKey} selectionKey={selected} navigationSerial={navigation?.serial} previewStop={previewStop} onPreviewStart={() => { setPreview(false); setSeamStop(value => value + 1) }} take={take} takes={takes} content={content} disabled={disabled || loading || !!error} onChange={onChange}>
+    <SceneTimelineEditor contextKey={contextKey} selectionKey={selected} navigationSerial={graphNavigation || navigation?.serial} previewStop={previewStop} onPreviewStart={() => { setPreview(false); setSeamStop(value => value + 1) }} take={take} takes={takes} content={content} disabled={disabled || loading || !!error} onChange={onChange}>
       {navigationClipId && !content.timeline.items.some(item => item.id === navigationClipId) && <Alert type="warning" message="原片段已不可用，请重新选择；未选择其他片段。" />}
       {focusClipId && !content.timeline.items.some(item => item.id === focusClipId) && <Alert type="warning" message={`原采用 ${focusClipId} 已不存在，请核对原依赖；未选择其他片段。`} />}
       <SceneEndFrames onOpenUnit={onOpenUnit} key={versionId} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content}
@@ -172,7 +202,7 @@ export function SceneEditCanvas({ projectId, sequenceId, versionId, revision, co
       <SceneCutReviews takes={takes} onHistoryPreviewStart={stopLivePreview} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content}
         dirty={dirty} disabled={disabled || loading || !!error} />
     </SceneTimelineEditor>
-  </DirectorCanvasSurface><WorkbenchDetails title="素材固定依据 · 只读" status="只读" open={takeDetails && !!take} onClose={() => setTakeDetails(false)}>{takeInformation}</WorkbenchDetails></>
+  </DirectorCanvasSurface></div><WorkbenchDetails title="素材固定依据 · 只读" status="只读" open={takeDetails && !!take} onClose={() => setTakeDetails(false)}>{takeInformation}</WorkbenchDetails></>
 }
 
 /** 明确打开原版本才执行切换保护；读取错误只归属当前素材入口。 */

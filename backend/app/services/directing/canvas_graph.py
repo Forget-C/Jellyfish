@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 class GraphAssembler:
     """注册真实图对象并统一验证；不查询数据，也不推断授权或执行范围。"""
 
-    def __init__(self, kind: Literal['director', 'units', 'instructions'], version_id: str, revision: int):
+    def __init__(self, kind: Literal['director', 'units', 'instructions', 'edit'], version_id: str, revision: int):
         self.kind = kind
         self.version_id = version_id
         self.revision = revision

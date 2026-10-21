@@ -38,6 +38,7 @@ from app.services.directing.canvas_graph import CanvasReadContext
 from app.services.directing.director_canvas import director_graph
 from app.services.directing.unit_canvas import unit_graph
 from app.services.directing.instruction_canvas import instruction_graph
+from app.services.directing.edit_canvas import edit_graph
 
 CONTRACTS = {"design": SceneDesign, "plan": ProductionPlan, "prompt": Prompt,
              "review": ReviewPacket, "cut": SequenceCut, "cut_review": CutReview,
@@ -261,7 +262,8 @@ class DirectingStore:
             project_id=self.project_id, chapter_id=sequence.chapter_id, sequence_id=sequence.id,
             source=content.basis, content=content,
             relationship_graph=relationships, director_graph=director,
-            unit_graph=units, instruction_graph=await instruction_graph(canvas, units, self, sequence.id))
+            unit_graph=units, instruction_graph=await instruction_graph(canvas, units, self, sequence.id),
+            edit_graph=await edit_graph(canvas, self.db, sequence.id))
 
     async def create_scene_version(self, sequence_id: str, body: SceneVersionCreate) -> SceneVersionRead:
         """明确创建空方案，原文依据来自已核实的当前场次，不复制历史方案。"""

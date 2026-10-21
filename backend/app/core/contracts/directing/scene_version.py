@@ -6,7 +6,7 @@ from typing import Literal
 from pydantic import ConfigDict, Field, model_validator
 
 from app.core.contracts.directing.common import Contract, Identity, Note, Source, Text, references, unique
-from app.core.contracts.directing.canvas_graph import DirectorCanvasGraph, UnitCanvasGraph, InstructionCanvasGraph
+from app.core.contracts.directing.canvas_graph import DirectorCanvasGraph, UnitCanvasGraph, InstructionCanvasGraph, EditCanvasGraph
 from app.core.contracts.directing.design_applicability import DesignApplicability, validate_design_applicability
 from app.core.contracts.directing.relationship_graph import SceneRelationshipGraph
 from app.core.contracts.directing.production import GenerationUnit, ModelCapability, ReferenceBinding
@@ -298,6 +298,7 @@ class SceneVersionRead(Contract):
     director_graph: DirectorCanvasGraph
     unit_graph: UnitCanvasGraph
     instruction_graph: InstructionCanvasGraph
+    edit_graph: EditCanvasGraph
     copied_from_version_id: Identity | None
     last_save_request_id: Identity | None
     created_at: datetime

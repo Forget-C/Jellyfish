@@ -417,3 +417,9 @@
 .scene-instruction-workspace { position: fixed; z-index: 20; right: 16px; top: calc(var(--workbench-content-top, 180px) + 60px); bottom: 68px; width: min(440px, calc(100vw - 32px)); overflow: auto; scrollbar-gutter: stable; background: var(--wb-surface); border: 1px solid var(--wb-border); border-radius: 12px; }
 .scene-instruction-workspace > .canvas-workbench-card { width: 100%; box-sizing: border-box; }
 @media (max-width: 700px) { .scene-instruction-workspace { top: auto; max-height: 50dvh; } }
+
+.scene-edit-navigation { position: fixed; top: var(--workbench-content-top, 180px); left: 0; right: 0; z-index: 30; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 16px; background: var(--wb-surface); }
+.scene-edit-navigation p { margin: 0; }
+.scene-edit-empty { position: absolute; top: calc(var(--workbench-content-top, 180px) + 96px); left: 24px; right: 24px; z-index: 1; max-width: 600px; }
+
+.scene-edit-overview .director-canvas-surface { top: calc(var(--workbench-content-top, 180px) + 96px); }

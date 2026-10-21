@@ -65,7 +65,9 @@ const verifiedSave = (operation: SaveOperation, saved: SceneVersionRead) => {
     !saved.unit_graph || saved.unit_graph.kind !== 'units' ||
     saved.unit_graph.version_id !== saved.id || saved.unit_graph.revision !== saved.revision ||
     !saved.instruction_graph || saved.instruction_graph.kind !== 'instructions' ||
-    saved.instruction_graph.version_id !== saved.id || saved.instruction_graph.revision !== saved.revision) {
+    saved.instruction_graph.version_id !== saved.id || saved.instruction_graph.revision !== saved.revision ||
+    !saved.edit_graph || saved.edit_graph.kind !== 'edit' ||
+    saved.edit_graph.version_id !== saved.id || saved.edit_graph.revision !== saved.revision) {
     throw new Error('保存响应与本次请求、内容或关系图修订不一致，请核实原请求')
   }
   return saved
@@ -337,7 +339,8 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
         !saved.director_graph || saved.director_graph.kind !== 'director' ||
         !saved.unit_graph || saved.unit_graph.kind !== 'units' ||
         !saved.instruction_graph || saved.instruction_graph.kind !== 'instructions' ||
-        [saved.director_graph, saved.unit_graph, saved.instruction_graph].some(graph => graph.version_id !== base.id || graph.revision !== base.revision)) {
+        !saved.edit_graph || saved.edit_graph.kind !== 'edit' ||
+        [saved.director_graph, saved.unit_graph, saved.instruction_graph, saved.edit_graph].some(graph => graph.version_id !== base.id || graph.revision !== base.revision)) {
         throw new Error('证据图与已保存内容基线不一致')
       }
       const refreshed = { ...saved, content: base.content }
@@ -1074,7 +1077,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
         if (latest.current.selected?.id === target.versionId) action()
         else await requestTransition({ action })
       }} />)}</div>
-    {loadState === 'ready' && canvas === 'edit' && selected && content && <SceneEditCanvas onOpenVersion={locateVideoUnit} navigation={mediaFocus?.versionId === selected.id ? mediaFocus : undefined} focusClipId={editClipFocus?.versionId === selected.id ? editClipFocus.clipId : undefined} onOpenUnit={unitId => {
+    {loadState === 'ready' && canvas === 'edit' && selected && content && <SceneEditCanvas graph={selected.edit_graph} evidenceError={evidenceError} onRefreshGraph={() => void refreshEvidence(selected.id)} onOpenVersion={locateVideoUnit} navigation={mediaFocus?.versionId === selected.id ? mediaFocus : undefined} focusClipId={editClipFocus?.versionId === selected.id ? editClipFocus.clipId : undefined} onOpenUnit={unitId => {
       const unit = content.units.find(row => row.id === unitId)
       if (!unit) return
       rememberUnit(selected.id, undefined, unitId)

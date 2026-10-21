@@ -666,13 +666,13 @@ async def test_graph_read_keeps_one_snapshot_when_dependency_refreshes_the_same_
         assert snapshot['last_save_request_id'] is None
         assert snapshot['content']['design']['direction']['viewpoint']['text'] is None
         assert [snapshot[key]['revision'] for key in (
-            'relationship_graph', 'director_graph', 'unit_graph', 'instruction_graph')] == [1, 1, 1, 1]
+            'relationship_graph', 'director_graph', 'unit_graph', 'instruction_graph', 'edit_graph')] == [1, 1, 1, 1, 1]
         reread = (await client.get(detail)).json()['data']
         assert (reread['revision'], reread['title'], reread['last_save_request_id']) == (
             2, '另一会话保存的版本', request_id)
         assert reread['content']['design']['direction']['viewpoint']['text'] == '另一会话的新输入'
         assert [reread[key]['revision'] for key in (
-            'relationship_graph', 'director_graph', 'unit_graph')] == [2, 2, 2]
+            'relationship_graph', 'director_graph', 'unit_graph', 'instruction_graph', 'edit_graph')] == [2, 2, 2, 2, 2]
 
 
 def test_instruction_graph_rejects_edit_target_outside_the_free_text_body():

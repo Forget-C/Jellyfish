@@ -3,6 +3,9 @@ from copy import deepcopy
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
+
+from app.core.contracts.directing.canvas_graph import EditCanvasGraph
 
 from app.services.directing.store import DirectingStore
 from tests.directing.samples import SOURCE, design_sample, editable_design_sample, plan_sample
@@ -28,6 +31,8 @@ async def test_scene_timeline_preserves_clip_identity_positions_and_real_ranges(
         created = await client.post(path + '/versions', json={'request_id': str(uuid4()), 'title': '独立采用'})
         version = created.json()['data']
         assert version['content']['timeline'] == {'items': []}
+        assert version['edit_graph']['kind'] == 'edit'
+        assert version['edit_graph']['nodes'] == []
         detail = path + '/versions/' + version['id']
         content = deepcopy(version['content'])
         content['design'] = editable_design_sample()
@@ -47,6 +52,31 @@ async def test_scene_timeline_preserves_clip_identity_positions_and_real_ranges(
             if item['kind'] == 'media':
                 item['fit'] = 'contain'
         assert saved['content']['timeline'] == content['timeline']
+        graph = saved['edit_graph']
+        assert graph['version_id'] == saved['id'] and graph['revision'] == saved['revision']
+        root = next(view for view in graph['views'] if view['parent_id'] is None)
+        nodes = {node['id']: node for node in graph['nodes']}
+        assert [nodes[member['node_id']]['clip_id'] for member in root['members']
+                if nodes[member['node_id']]['kind'] in ('edit_clip', 'edit_planned')] == ['clip-a', 'placeholder', 'clip-b']
+        clips = [node for node in graph['nodes'] if node['kind'] == 'edit_clip']
+        assert [node['media_range'] for node in clips] == [
+            {'source_in_ms': 0, 'source_out_ms': 1000}, {'source_in_ms': 1000, 'source_out_ms': 2000}]
+        source = next(node for node in graph['nodes'] if node['kind'] == 'edit_take')
+        assert (source['take_kind'], source['take_id'], source['origin_id']) == ('production_plan', take_id, plan.id)
+        assert source['available'] is True
+        assert len(graph['nodes']) == 4 and len(graph['edges']) == 2
+        assert all(edge['source'] == source['id'] and edge['sources'] for edge in graph['edges'])
+        for mutation in ('object', 'edit_field', 'source_identity'):
+            malformed = deepcopy(graph)
+            clip = next(node for node in malformed['nodes'] if node['kind'] == 'edit_clip')
+            if mutation == 'object':
+                clip['clip_id'] = 'different-adoption'
+            elif mutation == 'edit_field':
+                clip['edit_target']['field'] = 'instruction'
+            else:
+                clip['take_id'] = 'different-take'
+            with pytest.raises(ValidationError):
+                EditCanvasGraph.model_validate(malformed)
         assert (await client.get(detail)).json()['data'] == saved
         for bad in ['overlap', 'outside', 'file', 'identity', 'shot', 'fit']:
             invalid = deepcopy(saved['content'])
@@ -87,3 +117,13 @@ async def test_scene_timeline_preserves_clip_identity_positions_and_real_ranges(
         assert response.status_code == 200, response.text
         assert response.json()['data']['content']['timeline']['items'] == content['timeline']['items'][1:]
         assert (await client.get(path)).json()['data']['takes'] == original
+        from datetime import UTC, datetime
+        from app.models.studio import FileItem
+        async with sessions.begin() as db:
+            file = await db.get(FileItem, 'video1')
+            file.delete_requested_at = datetime.now(UTC).replace(tzinfo=None)
+        reread = (await client.get(detail)).json()['data']
+        assert reread['revision'] == saved['revision'] + 1
+        source = next(node for node in reread['edit_graph']['nodes'] if node['kind'] == 'edit_take')
+        assert source['take_id'] == take_id and source['available'] is False
+        assert source['issues'][0]['code'] == 'take-unavailable'
