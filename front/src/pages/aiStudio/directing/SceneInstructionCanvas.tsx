@@ -1,3 +1,4 @@
+import { WorkbenchButton } from './ui/WorkbenchButton'
 import { WorkbenchDetails } from './ui/WorkbenchDetails'
 import { ReferencePreview } from './ReferencePreview'
 import { createPortal } from 'react-dom'
@@ -82,7 +83,7 @@ export function SceneInstructionCanvas({ graph, evidenceError, onEvidenceChanged
         options={units.map(row => ({ value: row.id, label: `单元 ${allUnits.indexOf(row) + 1} · ${row.coverage.map(item => item.action_scope).join('；') || '动作待填写'}` }))}
         onChange={id => onSelectUnit(id)} />
       {!validGraph && <p role="alert">指令图与当前版本不一致。<Button onClick={onRetryGraph}>重新读取版本</Button></p>}
-      <Button onClick={onRetryGraph}>刷新图证据</Button>
+      <WorkbenchButton variant="secondary" onClick={onRetryGraph}>刷新图证据</WorkbenchButton>
       {evidenceError && <p role="alert">图证据读取失败，保留旧摘要：{evidenceError}。请刷新图证据重试。</p>}
       {dirty && <p aria-label="指令图同步状态">图待同步：图展示已保存内容，正文编辑器保留当前输入。</p>}
       {!unit && <p>{unitId ? '原单元不可用，请重新选择。' : '先在单元画布明确准备单元，再编辑对应指令。'}</p>}
@@ -105,7 +106,7 @@ export function SceneInstructionCanvas({ graph, evidenceError, onEvidenceChanged
               <p>原版本：{record.version_id} · 原请求：{record.request_id}</p>
               <p>{record.bound ? '当前绑定 · ' : ''}{record.kind === 'check' ? record.confirmed ? '检查已明确确认' : record.matches_current ? '检查适用于已保存输入，尚未确认' : '检查不适用于已保存输入' : '查看后明确应用'}</p>
               {record.reason && <p>{record.reason}</p>}
-              <Button onClick={() => { setRecordFocus({ unitId: record.unit_id, kind: record.kind, taskId: record.task_id, serial: Date.now() }); document.querySelector(`[aria-label="当前单元指令${record.kind === 'suggestion' ? '建议' : '检查'}"]`)?.scrollIntoView({ block: 'center' }) }}>查看原{record.kind === 'suggestion' ? '建议' : '检查'}记录</Button>
+              <WorkbenchButton variant="secondary" onClick={() => { setRecordFocus({ unitId: record.unit_id, kind: record.kind, taskId: record.task_id, serial: Date.now() }); document.querySelector(`[aria-label="当前单元指令${record.kind === 'suggestion' ? '建议' : '检查'}"]`)?.scrollIntoView({ block: 'center' }) }}>查看原{record.kind === 'suggestion' ? '建议' : '检查'}记录</WorkbenchButton>
             </section>)}
             {!node.records.length && <p>尚无已登记的建议或检查；待核实原请求仍在工作区核实。</p>}
           </section><Button disabled={!unit} onClick={() => document.getElementById('scene-current-instruction')?.focus()}>编辑当前指令</Button></section> : <section className="canvas-workbench-card">{summary(node)}

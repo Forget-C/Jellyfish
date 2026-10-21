@@ -340,8 +340,9 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
         [saved.director_graph, saved.unit_graph, saved.instruction_graph].some(graph => graph.version_id !== base.id || graph.revision !== base.revision)) {
         throw new Error('证据图与已保存内容基线不一致')
       }
-      latest.current.selected = saved
-      setVersions(previous => previous.map(row => row.id === saved.id ? saved : row))
+      const refreshed = { ...saved, content: base.content }
+      latest.current.selected = refreshed
+      setVersions(previous => previous.map(row => row.id === refreshed.id ? refreshed : row))
       setEvidenceError('')
     } catch (cause) {
       if (stillCurrent()) setEvidenceError(directingError(cause))
