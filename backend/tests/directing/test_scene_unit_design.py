@@ -104,7 +104,11 @@ async def test_first_unit_design_freezes_unsaved_input_and_previews_without_save
 
         # 非法方案整份失败；真实任务记录可读，版本与媒体状态不变。
         for change in ('event', 'model', 'shot', 'new-action', 'unknown-duration', 'write-design', 'multiple-coverage', 'new-entry-state', 'reference-creative-bypass', 'selection-scope-mismatch'):
-            accepted = await client.post(url, json={**body, 'request_id': str(uuid4())})
+            invalid_content = deepcopy(content)
+            if change == 'selection-scope-mismatch':
+                # 明确是局部抬头；完整镜头可显式选择其他同镜设计，不要求重复措辞。
+                invalid_content['design']['direction']['shots'][0]['visible_result']['text'] = '拆信；读信；抬头'
+            accepted = await client.post(url, json={**body, 'request_id': str(uuid4()), 'content': invalid_content})
             assert accepted.status_code == 200, accepted.text
             invalid_id = accepted.json()['data']['task_id']
             bad = deepcopy(proposed)

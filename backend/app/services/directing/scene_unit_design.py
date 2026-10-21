@@ -24,6 +24,24 @@ from app.services.llm.resolver import get_model_by_category
 from app.services.task_service import TaskService
 
 
+class UnitDesignScopeError(ValueError):
+    """选择超出合法局部摘录；有限纠错必须保留该出现项的身份与执行目标。"""
+
+    def __init__(self, unit_id, item, field):
+        self.unit_id = unit_id
+        self.coverage_item_id = item.id
+        self.action_scope = item.action_scope
+        super().__init__(f"单元 {unit_id} / 覆盖项 {item.id} 的 {field['owner']}.{field['field']}："
+                         '已选设计项与动作范围不一致；局部执行不能同时选择范围外的完整动作')
+
+    def validate_repair(self, result):
+        """纠错可修正设计选择，不能通过扩大范围、删除或换身份消除原错误。"""
+        item = next((item for unit in result.units if unit.id == self.unit_id
+                     for item in unit.coverage if item.id == self.coverage_item_id), None)
+        if item is None or item.action_scope != self.action_scope:
+            raise ValueError(f'单元 {self.unit_id} / 覆盖项 {self.coverage_item_id}：纠错不能改变局部执行目标')
+
+
 def unit_design_inputs(content, shot_id):
     """投影全部明确适用于目标镜头的候选与共享规则，不依赖已有单元选择。"""
     shot = next((row for row in content.design.direction.shots if row.id == shot_id), None)
@@ -73,6 +91,7 @@ def validate_unit_design(args, result):
     if result.shot_id != args['shot_id'] or result.target_model_id != args['target_model_id']:
         raise ValueError('单元方案更改了目标镜头或视频模型')
     fields = args['organization_inputs']['fields']
+    shot_text = (args['organization_inputs']['shot']['visible_result'].get('text') or '').strip()
     allowed = {owner: {row['owner'].split(':', 1)[1] for row in fields
                         if row['owner'].startswith(owner + ':') and row['purpose'] == 'design'}
                for owner in ('beat', 'event', 'performance', 'activity', 'continuity')}
@@ -109,6 +128,13 @@ def validate_unit_design(args, result):
         for item in unit.coverage:
             if item.shot_id != args['shot_id'] or not item.action_scope.strip():
                 raise ValueError('单元覆盖必须限定当前镜头并明确执行范围')
+            # 可执行自由文本只接受既有设计的摘录；创作变化回导演画布处理。
+            segments = [part.strip() for part in re.split(r'[；;\n]+', item.action_scope) if part.strip()]
+            if not segments or not all(any(segment in text for text in texts) for segment in segments):
+                raise ValueError('执行范围必须摘录已有适用设计；新增创作请先修改导演设计')
+            # 只有动作范围明确包含完整镜头结果，才允许完整选择同镜适用设计。
+            # 关联设计可用不同措辞；局部摘录仍不能夹带范围外的完整动作。
+            complete_shot = bool(shot_text) and shot_text in item.action_scope
             for key, owner in (('beat_ids', 'beat'), ('event_ids', 'event'),
                                ('performance_action_ids', 'performance'), ('staging_activity_ids', 'activity'),
                                ('continuity_change_ids', 'continuity')):
@@ -122,13 +148,11 @@ def validate_unit_design(args, result):
                     raise ValueError('单元选择仅适用于原出现项的设计：' + key)
                 main_field = {'beat': 'must_show', 'event': 'description', 'performance': 'physical_action',
                               'activity': 'ongoing_task', 'continuity': 'change'}[owner]
-                if any(row['text'] not in item.action_scope for row in fields
-                       if row['owner'] in selected_owners and row['field'] == main_field and row['text']):
-                    raise ValueError('已选设计项与动作范围不一致；局部执行不能同时选择范围外的完整动作')
-            # 可执行自由文本只接受既有设计的摘录；创作变化回导演画布处理。
-            segments = [part.strip() for part in re.split(r'[；;\n]+', item.action_scope) if part.strip()]
-            if not segments or not all(any(segment in text for text in texts) for segment in segments):
-                raise ValueError('执行范围必须摘录已有适用设计；新增创作请先修改导演设计')
+                outside = next((row for row in fields if row['owner'] in selected_owners
+                                and row['field'] == main_field and row['text']
+                                and row['text'] not in item.action_scope), None)
+                if not complete_shot and outside:
+                    raise UnitDesignScopeError(unit.id, item, outside)
         inherited_duration = (existing is None and supplement_source is not None
                               and unit.duration_ms in (None, supplement_source.duration_ms))
         if inherited_duration:
@@ -158,7 +182,6 @@ def validate_unit_design(args, result):
             inherited = copy_source_unit_preparation(supplement_source, unit, result.target_model_id,
                 Source(kind='model', reference=args['task_identity'], version='1'), args['capabilities'])
             unit.missing = inherited.organization.missing
-    shot_text = args['organization_inputs']['shot']['visible_result'].get('text') or ''
     scopes = [item.action_scope for unit in result.units for item in unit.coverage]
     if any(not any(part.strip() in scope for scope in scopes)
            for part in re.split(r'[；;\n]+', shot_text) if part.strip()):
