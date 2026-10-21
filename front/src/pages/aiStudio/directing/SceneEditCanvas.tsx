@@ -35,6 +35,8 @@ export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectI
 }) {
   const [unavailableCoverage, setUnavailableCoverage] = useState(false)
   const [previewUrl, setPreviewUrl] = useState('')
+  const [cutNavigation, setCutNavigation] = useState<string>()
+  const [frameNavigation, setFrameNavigation] = useState<string>()
   const [seamNavigation, setSeamNavigation] = useState<{ leftClipId: string; rightClipId: string; serial: number }>()
   const [unavailableClip, setUnavailableClip] = useState('')
   const [takes, setTakes] = useState<SceneTakeLibraryRead[]>([])
@@ -129,6 +131,16 @@ export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectI
     if (!unit?.coverage.some(row => row.id === node.coverage.coverage_item_id)) { setUnavailableCoverage(true); return }
     setUnavailableCoverage(false); onOpenUnit(unit.id, node.coverage.coverage_item_id)
   }} onLocate={(node, recordId) => {
+    if (node.kind === 'edit_downstream') {
+      if (!content.units.some(unit => unit.id === node.unit_id)) { setUnavailableCoverage(true); return }
+      setUnavailableCoverage(false); onOpenUnit(node.unit_id); return
+    }
+    if (node.kind === 'edit_cut_review' || node.kind === 'edit_end_frame') {
+      setWorkspace(true)
+      if (node.kind === 'edit_cut_review') setCutNavigation(node.record_id)
+      else setFrameNavigation(node.frame.id)
+      setFocusTarget({ nodeId: '时间线', fieldId: node.kind === 'edit_cut_review' ? `scene-cut-review-${node.record_id}` : `scene-end-frame-${node.frame.id}`, serial: Date.now() }); return
+    }
     if (node.kind === 'edit_coverage') {
       const judgment = content.take_judgments.find(row => identity(row) === identity(node))
       if (!judgment?.annotation.coverage.some(row => row.id === node.coverage.id)) { setUnavailableCoverage(true); return }
@@ -223,11 +235,11 @@ export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectI
     <SceneTimelineEditor contextKey={contextKey} selectionKey={selected} navigationSerial={graphNavigation || navigation?.serial} previewStop={previewStop} onPreviewStart={() => { setPreview(false); setSeamStop(value => value + 1) }} take={take} takes={takes} content={content} disabled={disabled || loading || !!error} onChange={onChange}>
       {navigationClipId && !content.timeline.items.some(item => item.id === navigationClipId) && <Alert type="warning" message="原片段已不可用，请重新选择；未选择其他片段。" />}
       {focusClipId && !content.timeline.items.some(item => item.id === focusClipId) && <Alert type="warning" message={`原采用 ${focusClipId} 已不存在，请核对原依赖；未选择其他片段。`} />}
-      <SceneEndFrames onOpenUnit={onOpenUnit} key={versionId} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content}
+      <SceneEndFrames evidence={graph} navigation={frameNavigation} onRecorded={onRefreshGraph} onOpenUnit={onOpenUnit} key={versionId} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content}
         dirty={dirty} disabled={disabled || loading || !!error} />
       <SceneSeamReviews navigation={seamNavigation} evidence={graph} onRecorded={onRefreshGraph} onHistoryPreviewStart={stopLivePreview} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content} takes={takes}
         dirty={dirty} disabled={disabled || loading || !!error} previewStop={seamStop} onPreviewStart={() => { setPreview(false); setPreviewStop(value => value + 1) }} />
-      <SceneCutReviews takes={takes} onHistoryPreviewStart={stopLivePreview} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content}
+      <SceneCutReviews evidence={graph} navigation={cutNavigation} onRecorded={onRefreshGraph} takes={takes} onHistoryPreviewStart={stopLivePreview} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content}
         dirty={dirty} disabled={disabled || loading || !!error} />
     </SceneTimelineEditor>
   </DirectorCanvasSurface></div><WorkbenchDetails title="素材固定依据 · 只读" status="只读" open={takeDetails && !!take} onClose={() => setTakeDetails(false)}>{takeInformation}</WorkbenchDetails></>

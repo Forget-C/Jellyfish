@@ -37,6 +37,17 @@ async def test_scene_cut_review_freezes_basis_and_rechecks_actual_composition(tm
         saved = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})
         assert saved.status_code == 200, saved.text
         saved = saved.json()['data']
+        from app.models.directing import SceneEndFrameRecord
+        async with sessions.begin() as db:
+            db.add(SceneEndFrameRecord(id='fixed-frame', version_id=version['id'], request_id='fixed-request',
+                request={'request_id': 'fixed-request', 'expected_revision': saved['revision'], 'clip_id': 'clip'},
+                clip=saved['content']['timeline']['items'][0], file_id='missing-frame-file', at_ms=960))
+        projected_frames = (await client.get(detail)).json()['data']['edit_graph']['nodes']
+        frame_node = next(node for node in projected_frames if node['kind'] == 'edit_end_frame')
+        assert frame_node['frame']['clip']['id'] == 'clip'
+        assert frame_node['frame']['at_ms'] == 960
+        assert frame_node['frame']['matches_current'] is True
+        assert frame_node['frame']['available'] is False
         review_path = detail + '/cut-reviews'
         request = {'request_id': str(uuid4()), 'expected_revision': saved['revision'], 'decision': {
             'verdict': 'pass', 'overall': '画面叙事成立', 'established': '动作与反应连贯', 'coverage_status': 'verified',
@@ -45,6 +56,13 @@ async def test_scene_cut_review_freezes_basis_and_rechecks_actual_composition(tm
         assert response.status_code == 200, response.text
         review = response.json()['data']
         assert review['matches_current'] is True
+        projected = (await client.get(detail)).json()['data']
+        assert projected['revision'] == saved['revision']
+        nodes = [node for node in projected['edit_graph']['nodes'] if node['kind'] == 'edit_cut_review']
+        assert len(nodes) == 1
+        assert nodes[0]['record_id'] == review['id']
+        assert nodes[0]['matches_current'] is True
+        assert nodes[0]['decision']['sound_status'] == 'pending_postproduction'
         assert review['content'] == saved['content']
         assert review['decision']['sound_status'] == 'pending_postproduction'
         assert (await client.post(review_path, json=request)).json()['data'] == review
@@ -79,12 +97,18 @@ async def test_scene_cut_review_freezes_basis_and_rechecks_actual_composition(tm
         unrelated_response = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': unrelated['revision'], 'content': unrelated_content})
         assert unrelated_response.status_code == 200, unrelated_response.text
         assert (await client.get(review_path)).json()['data'][0]['matches_current'] is True
+        unrelated_graph = unrelated_response.json()['data']['edit_graph']['nodes']
+        assert next(node for node in unrelated_graph if node['kind'] == 'edit_cut_review')['matches_current'] is True
+        assert next(node for node in unrelated_graph if node['kind'] == 'edit_end_frame')['frame']['matches_current'] is True
         current = unrelated_response.json()['data']
         interval = deepcopy(current['content'])
         interval['timeline']['items'][0]['media_range']['source_out_ms'] = 800
         interval_response = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': current['revision'], 'content': interval})
         assert interval_response.status_code == 200, interval_response.text
         assert (await client.get(review_path)).json()['data'][0]['matches_current'] is False
+        interval_nodes = interval_response.json()['data']['edit_graph']['nodes']
+        assert next(node for node in interval_nodes if node['kind'] == 'edit_cut_review')['matches_current'] is False
+        assert next(node for node in interval_nodes if node['kind'] == 'edit_end_frame')['frame']['matches_current'] is False
         current = interval_response.json()['data']
         planned = deepcopy(current['content'])
         planned['timeline']['items'].append({'kind': 'planned', 'id': 'placeholder', 'shot_id': 's1', 'estimated_duration_ms': 1000, 'timeline_start_ms': 2000})

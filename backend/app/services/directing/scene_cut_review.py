@@ -2,25 +2,14 @@
 from datetime import UTC
 from uuid import uuid4
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 
 from app.core.contracts.directing.scene_cut_review import SceneCutReviewCreate, SceneCutReviewRead
 from app.core.contracts.directing.scene_version import SceneVersionContent
 from app.models.directing import SceneCutReviewRecord
 from app.models.studio import Chapter
 from app.services.directing.store import DirectingStore, RevisionConflict
-
-
-def scene_cut_review_basis(content):
-    """核对画面、创作依据和覆盖；无关生成参数或指令正文不使画面结论失效。"""
-    basis = content.model_dump(mode='json')
-    basis['units'] = sorted([{'id': unit.id, 'coverage': [item.model_dump(mode='json') for item in unit.coverage]}
-        for unit in content.units], key=lambda unit: unit['id'])
-    basis['timeline']['items'].sort(key=lambda item: (item['timeline_start_ms'], item['id']))
-    adopted = {(item.take_kind, item.take_id) for item in content.timeline.items if item.kind == 'media'}
-    basis['take_judgments'] = sorted([item for item in basis['take_judgments']
-        if (item['take_kind'], item['take_id']) in adopted], key=lambda item: (item['take_kind'], item['take_id']))
-    return basis
+from app.services.directing.scene_cut_evidence import scene_cut_review_basis, cut_review_query
 
 
 class SceneCutReviewService(DirectingStore):
@@ -39,8 +28,7 @@ class SceneCutReviewService(DirectingStore):
         """保留所有历史依据，当前适用性按实际内容计算。"""
         version = await self.read_scene_version(sequence_id, version_id)
         inherited = await self.inherited_scene_review_ids(version_id, 'cut')
-        rows = await self.db.scalars(select(SceneCutReviewRecord).where(or_(
-            SceneCutReviewRecord.version_id == version_id, SceneCutReviewRecord.id.in_(inherited))).order_by(SceneCutReviewRecord.created_at, SceneCutReviewRecord.id))
+        rows = await self.db.scalars(cut_review_query(version_id, inherited).order_by(None).order_by(SceneCutReviewRecord.created_at, SceneCutReviewRecord.id))
         return [self._read(row, version.content) for row in rows]
 
     async def create_cut_review(self, sequence_id, version_id, body):

@@ -16,13 +16,7 @@ from app.models.studio import Chapter, FileItem
 from app.services.directing.media import extract_boundary_frame
 from app.services.directing.store import DirectingStore, RevisionConflict
 from app.services.studio.files import require_available_file, upload_file
-
-
-def scene_frame_basis(clip):
-    """原素材落幅不受时间线位置或输出构图影响，身份和源区间必须相同。"""
-    if clip is None or clip.kind != 'media':
-        return None
-    return clip.model_dump(mode='json', exclude={'timeline_start_ms', 'fit'})
+from app.services.directing.scene_cut_evidence import scene_frame_basis
 
 
 class SceneEndFrameService(DirectingStore):

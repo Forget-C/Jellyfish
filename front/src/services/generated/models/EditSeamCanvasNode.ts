@@ -26,4 +26,3 @@ export type EditSeamCanvasNode = {
     review: (EditSeamReviewSummary | null);
     review_issue: (string | null);
 };
-

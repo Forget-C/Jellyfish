@@ -14,4 +14,3 @@ export type EditSeamReviewSummary = {
     established: string;
     issues: string;
 };
-

@@ -33,6 +33,10 @@ async def test_unbound_scene_dependency_only_blocks_its_unit_and_rejects_forged_
         assert evidence['version_id'] == version['id'] and evidence['clip_id'] == 'removed-clip'
         assert evidence['status'] == 'unbound'
         assert evidence['frame_id'] is None and evidence['source'] is None
+        downstream = [node for node in saved['edit_graph']['nodes'] if node['kind'] == 'edit_downstream']
+        assert len(downstream) == 1
+        assert downstream[0]['unit_id'] == 'affected'
+        assert downstream[0]['dependency'] == evidence
         assert any(issue['code'] == 'dependency-unbound' for issue in card['issues'])
         malformed = deepcopy(saved['unit_graph'])
         malformed_card = next(node for node in malformed['nodes'] if node['id'] == card['id'])

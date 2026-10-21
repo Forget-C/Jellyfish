@@ -8,6 +8,8 @@ from app.core.contracts.directing.common import Contract, Identity, Source, Text
 from app.core.contracts.directing.production import ReferenceBinding, MediaRange
 from app.core.contracts.directing.unit_scope import UnitScopeProjection
 from app.core.contracts.directing.scene_take import SceneTakeAnnotation, SceneActualCoverage
+from app.core.contracts.directing.scene_cut_decision import SceneCutReviewDecision
+from app.core.contracts.directing.scene_end_frame import SceneEndFrameRead
 from app.core.contracts.video_generation import VideoReferenceCapabilities
 
 
@@ -16,7 +18,7 @@ class CanvasObject(Contract):
 
     version_id: Identity
     revision: int = Field(gt=0)
-    kind: Literal['source', 'design', 'unit', 'coverage', 'reference', 'dependency', 'unit_config', 'unit_basis', 'instruction', 'clip', 'planned', 'take', 'seam']
+    kind: Literal['source', 'design', 'unit', 'coverage', 'reference', 'dependency', 'unit_config', 'unit_basis', 'instruction', 'clip', 'planned', 'take', 'seam', 'cut_review', 'end_frame']
     id: Text
     stable: bool = True
     path: list[str | int] = Field(default_factory=list)
@@ -330,10 +332,32 @@ class EditPlannedCanvasNode(CanvasNode):
     timeline_start_ms: int = Field(ge=0)
 
 
+class EditCutReviewCanvasNode(CanvasNode):
+    """整场固定结论摘要；问题保留全部真实片段身份。"""
+    kind: Literal['edit_cut_review'] = Field(default='edit_cut_review', json_schema_extra={'enum': ['edit_cut_review']})
+    record_id: Identity
+    record_version_id: Identity
+    matches_current: bool
+    decision: SceneCutReviewDecision
+
+
+class EditEndFrameCanvasNode(CanvasNode):
+    """当前采用相关实际落幅及其不可改写的来源。"""
+    kind: Literal['edit_end_frame'] = Field(default='edit_end_frame', json_schema_extra={'enum': ['edit_end_frame']})
+    frame: SceneEndFrameRead
+
+
+class EditDownstreamCanvasNode(CanvasNode):
+    """明确后段绑定及现有依赖核验，不推断补拍计划。"""
+    kind: Literal['edit_downstream'] = Field(default='edit_downstream', json_schema_extra={'enum': ['edit_downstream']})
+    unit_id: Identity
+    dependency: CanvasDependencyEvidence
+
+
 CanvasGraphNode = Annotated[SourceCanvasNode | DesignCanvasNode | MissingCanvasNode |
                             ShotBasisCanvasNode | UnitCanvasNode | UnitConfigCanvasNode |
                             UnitReferencesCanvasNode | UnitBasisCanvasNode | InstructionCanvasNode |
-                            EditTakeCanvasNode | EditClipCanvasNode | EditPlannedCanvasNode | EditCoverageCanvasNode | EditSeamCanvasNode,
+                            EditTakeCanvasNode | EditClipCanvasNode | EditPlannedCanvasNode | EditCoverageCanvasNode | EditSeamCanvasNode | EditCutReviewCanvasNode | EditEndFrameCanvasNode | EditDownstreamCanvasNode,
                             Field(discriminator='kind')]
 
 
@@ -556,7 +580,7 @@ class EditCanvasGraph(CanvasGraph):
 
     kind: Literal['edit'] = Field(default='edit', json_schema_extra={'enum': ['edit']})
     library_view_id: str | None = None
-    nodes: list[Annotated[EditTakeCanvasNode | EditClipCanvasNode | EditPlannedCanvasNode | EditCoverageCanvasNode | EditSeamCanvasNode,
+    nodes: list[Annotated[EditTakeCanvasNode | EditClipCanvasNode | EditPlannedCanvasNode | EditCoverageCanvasNode | EditSeamCanvasNode | EditCutReviewCanvasNode | EditEndFrameCanvasNode | EditDownstreamCanvasNode,
                           Field(discriminator='kind')]]
 
     @model_validator(mode='after')
@@ -566,6 +590,12 @@ class EditCanvasGraph(CanvasGraph):
         if self.library_view_id is not None and self.library_view_id not in {view.id for view in self.views}:
             raise ValueError('invalid canvas take library view')
         for node in self.nodes:
+            if isinstance(node, (EditCutReviewCanvasNode, EditEndFrameCanvasNode, EditDownstreamCanvasNode)):
+                expected = ('cut_review', node.record_id) if isinstance(node, EditCutReviewCanvasNode) else (
+                    ('end_frame', node.frame.id) if isinstance(node, EditEndFrameCanvasNode) else ('dependency', node.object.id))
+                if node.edit_target or (node.object.kind, node.object.id) != expected:
+                    raise ValueError('invalid canvas review evidence identity')
+                continue
             if isinstance(node, EditTakeCanvasNode):
                 if node.edit_target or node.object.kind != 'take' or node.object.id != f'{node.take_kind}:{node.take_id}':
                     raise ValueError('invalid canvas take identity or edit target')

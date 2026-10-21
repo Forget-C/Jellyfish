@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button } from 'antd'
 import { ApiError, StudioDirectingService } from '../../../services/generated'
-import type { SceneEndFrameCreate, SceneEndFrameRead, SceneMediaCutItem_Output, SceneVersionContent_Output } from '../../../services/generated'
+import type { EditCanvasGraph, SceneEndFrameCreate, SceneEndFrameRead, SceneMediaCutItem_Output, SceneVersionContent_Output } from '../../../services/generated'
 import { resolveAssetUrl } from '../assets/utils'
 import { sceneDependencyIssue } from './SceneFrameDependencies'
 import { directingError } from './common'
@@ -11,7 +11,8 @@ const sameSource = (left: SceneMediaCutItem_Output, right?: SceneVersionContent_
   && left.media_range.source_in_ms === right.media_range.source_in_ms && left.media_range.source_out_ms === right.media_range.source_out_ms
 
 /** 提帧固定原采用和请求；参考选择与依赖更新由用户另行执行。 */
-export function SceneEndFrames({ projectId, sequenceId, versionId, revision, content, dirty, disabled, onOpenUnit }: {
+export function SceneEndFrames({ projectId, sequenceId, versionId, revision, content, dirty, disabled, onOpenUnit, evidence, navigation, onRecorded }: {
+  evidence?: EditCanvasGraph; navigation?: string; onRecorded?: () => void
   onOpenUnit: (unitId: string) => void
   projectId: string; sequenceId: string; versionId: string; revision: number; content: SceneVersionContent_Output; dirty: boolean; disabled: boolean
 }) {
@@ -42,7 +43,7 @@ export function SceneEndFrames({ projectId, sequenceId, versionId, revision, con
       if (active) setRecords(response.data || [])
     }).catch(error => { if (active) setReadError(directingError(error)) }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [projectId, sequenceId, versionId, revision, attempt])
+  }, [projectId, sequenceId, versionId, revision, attempt, evidence])
   const clearPending = (request: SceneEndFrameCreate) => {
     if (readStored()?.request_id !== request.request_id) return
     localStorage.removeItem(storageKey)
@@ -57,7 +58,7 @@ export function SceneEndFrames({ projectId, sequenceId, versionId, revision, con
       const response = await StudioDirectingService.directingCreateSceneEndFrame({ projectId, sequenceId, versionId, requestBody: request })
       if (!response.data) throw new Error('提帧结果尚未核实，请核实原请求')
       clearPending(request)
-      if (mounted.current) setAttempt(value => value + 1)
+      if (mounted.current) { setAttempt(value => value + 1); onRecorded?.() }
     } catch (error) {
       if (error instanceof ApiError && [400, 409, 422].includes(error.status)) {
         try { clearPending(request) } catch { if (mounted.current) setStorageError('原请求已被拒绝，但本地凭据尚未清理，请重读后核实。') }
@@ -85,7 +86,7 @@ export function SceneEndFrames({ projectId, sequenceId, versionId, revision, con
       return issue ? <Alert key={`${unit.id}:${link.clip_id}`} type="warning" message={`后段单元 ${unitIndex + 1}：${issue}`} description={`原采用：${link.clip_id}；原落幅：${link.frame_id || '尚未绑定'}`}
         action={<Button onClick={() => onOpenUnit(unit.id)}>定位后段单元 {unitIndex + 1}</Button>} /> : null
     }))}
-    {!loading && !readError && records.map((row, index) => <div key={row.id}>
+    {!loading && !readError && records.map((row, index) => <div key={row.id} id={`scene-end-frame-${row.id}`} tabIndex={-1} aria-current={navigation === row.id ? true : undefined}>
       <p>落幅 {index + 1}：{sameSource(row.clip, items.find(item => item.id === row.clip.id)) ? '当前采用适用' : '依据已变，原图保留'}</p>
       <p>实际帧：{row.at_ms} 毫秒；原区间：{row.clip.media_range.source_in_ms}–{row.clip.media_range.source_out_ms} 毫秒</p>
       <p>原素材：{row.clip.take_id}；采用：{row.clip.id}</p>

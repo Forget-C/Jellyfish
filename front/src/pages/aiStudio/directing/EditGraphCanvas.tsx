@@ -39,14 +39,18 @@ export function EditGraphCanvas({ graph, versionId, revision, contextKey, viewId
       const node = graph.nodes.find(row => row.id === member.node_id)
       if (!node) return []
       return [{ id: node.id, label: node.title, group: member.group,
-        size: node.kind === 'edit_take' ? { width: 360, height: 340 + node.reviews.length * 64 } : node.kind === 'edit_coverage' ? { width: 360, height: 320 } : undefined,
+        size: node.kind === 'edit_take' ? { width: 360, height: 340 + node.reviews.length * 64 } : node.kind === 'edit_coverage' ? { width: 360, height: 320 } : node.kind === 'edit_cut_review' ? { width: 420, height: 360 + (node.decision.issues || []).length * 100 } : undefined,
         content: <section className="canvas-workbench-card"><div className="design-compact-fields">{node.summary.map(field => <p key={field.field} title={`${field.label}：${field.text}`}><span>{field.label}：</span><strong>{field.text}</strong></p>)}</div>
           {node.kind === 'edit_clip' && <p>片段适配：{node.fit === 'cover' ? '居中填满' : '完整显示'}</p>}
           {node.kind === 'edit_take' && <p>{node.take_kind === 'scene_video' ? '场次版本素材' : '生产计划素材'} · {node.available ? '文件已登记' : '文件不可用'}</p>}
           {node.kind === 'edit_take' && node.reviews.map(record => <p key={record.id}>固定复核：{record.matches_current ? '依据一致' : '依据已变'}<WorkbenchButton variant="secondary" onClick={() => onLocate(node, record.id)}>查看原复核记录</WorkbenchButton></p>)}
           {node.kind === 'edit_coverage' && <WorkbenchButton variant="secondary" onClick={() => onLocateCoverage(node)}>定位当前覆盖目标</WorkbenchButton>}
+          {node.kind === 'edit_cut_review' && (node.decision.issues || []).map(issue => <p key={issue.id}>{issue.observation} · {issue.acceptance} · 原片段：{(issue.clip_ids || []).join('、') || '整场'}{(issue.clip_ids || []).map(id => {
+            const clip = graph.nodes.find(item => (item.kind === 'edit_clip' || item.kind === 'edit_planned') && item.clip_id === id)
+            return clip ? <WorkbenchButton key={id} variant="secondary" onClick={() => onLocate(clip)}>定位问题片段 {id}</WorkbenchButton> : <span key={id}>原片段 {id} 已不在当前剪辑</span>
+          })}</p>)}
           {node.issues.map(issue => <p key={issue.code}>{issue.message}</p>)}
-          <WorkbenchButton variant="secondary" onClick={() => onLocate(node)}>{node.kind === 'edit_take' ? '定位源素材' : node.kind === 'edit_coverage' ? '定位实际覆盖' : node.kind === 'edit_seam' ? '定位接缝审查' : '定位时间线片段'}</WorkbenchButton>
+          <WorkbenchButton variant="secondary" onClick={() => onLocate(node)}>{node.kind === 'edit_cut_review' ? '查看原整场验收' : node.kind === 'edit_end_frame' ? '查看原实际落幅' : node.kind === 'edit_downstream' ? '定位后段单元' : node.kind === 'edit_take' ? '定位源素材' : node.kind === 'edit_coverage' ? '定位实际覆盖' : node.kind === 'edit_seam' ? '定位接缝审查' : '定位时间线片段'}</WorkbenchButton>
         </section>, onInspect: () => onLocate(node) }]
     })} relations={graph.edges.filter(edge => view.edge_ids.includes(edge.id) && edge.target).map(edge => ({
       from: edge.source, to: edge.target!, label: edge.label, category: edge.category,

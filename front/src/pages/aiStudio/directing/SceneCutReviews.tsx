@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Input, Select } from 'antd'
 import { ApiError, StudioDirectingService } from '../../../services/generated'
-import type { SceneCutReviewCreate, SceneCutReviewDecision, SceneCutReviewRead, SceneVersionContent_Output, SceneTakeLibraryRead } from '../../../services/generated'
+import type { EditCanvasGraph, SceneCutReviewCreate, SceneCutReviewDecision, SceneCutReviewRead, SceneVersionContent_Output, SceneTakeLibraryRead } from '../../../services/generated'
 import { SceneReviewPreview } from './SceneReviewPreview'
 import { directingError } from './common'
 
@@ -17,7 +17,8 @@ const basis = (content: SceneVersionContent_Output) => {
 const soundLabel = { pending_postproduction: '待后期', reviewed: '已审查', not_applicable: '不适用' }
 
 /** 整场审片是独立固定记录；先持久化原请求，再提交，未知响应不改用后来输入。 */
-export function SceneCutReviews({ projectId, sequenceId, versionId, revision, content, dirty, disabled, takes, onHistoryPreviewStart }: {
+export function SceneCutReviews({ projectId, sequenceId, versionId, revision, content, dirty, disabled, takes, onHistoryPreviewStart, evidence, navigation, onRecorded }: {
+  evidence?: EditCanvasGraph; navigation?: string; onRecorded?: () => void
   takes: SceneTakeLibraryRead[]; onHistoryPreviewStart: () => void
   projectId: string; sequenceId: string; versionId: string; revision: number; content: SceneVersionContent_Output; dirty: boolean; disabled: boolean
 }) {
@@ -60,7 +61,7 @@ export function SceneCutReviews({ projectId, sequenceId, versionId, revision, co
       if (active) setRecords(response.data || [])
     }).catch(error => { if (active) setReadError(directingError(error)) }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [projectId, sequenceId, versionId, revision, attempt])
+  }, [projectId, sequenceId, versionId, revision, attempt, evidence])
   const submit = async (request: SceneCutReviewCreate) => {
     if (busy || storageBlocked) return
     try { persist(draft.current, request) } catch { setStorageError('无法保存核实凭据，本次未提交；请恢复本地存储后重试。'); return }
@@ -70,7 +71,7 @@ export function SceneCutReviews({ projectId, sequenceId, versionId, revision, co
       if (!response.data) throw new Error('整场验收结果尚未核实')
       const stored = readStored()
       if (stored.pending?.request_id === request.request_id) persist(stored.decision)
-      if (mounted.current) { setPending(undefined); setAttempt(value => value + 1) }
+      if (mounted.current) { setPending(undefined); setAttempt(value => value + 1); onRecorded?.() }
     } catch (error) {
       if (mounted.current) {
         setSubmitError(directingError(error))
@@ -137,7 +138,7 @@ export function SceneCutReviews({ projectId, sequenceId, versionId, revision, co
     {pending && <Alert type="warning" message="整场验收结果待核实" description={submitError || '将核实原保存修订与原结论，不覆盖当前输入。'}
       action={<Button disabled={busy} onClick={() => void submit(pending)}>核实原整场验收</Button>} />}
     {!pending && submitError && <Alert type="error" message="整场验收未完成" description={submitError} />}
-    {records.map((row, index) => <details key={row.id}><summary>查看整场验收记录 {index + 1}</summary>
+    {records.map((row, index) => <details key={row.id} id={`scene-cut-review-${row.id}`} tabIndex={-1} open={navigation === row.id || undefined}><summary>查看整场验收记录 {index + 1}</summary>
       <p>实际审片版本：{row.version_id}{row.version_id !== versionId ? '（另存时保留的历史依据）' : ''}</p>
       <p>{new Date(row.created_at).toLocaleString()} · 画面{row.decision.verdict === 'pass' ? '通过' : '需修改'} · 声音{soundLabel[row.decision.sound_status]}</p>
       <p>{row.decision.overall}</p><p>成立内容：{row.decision.established || '未填写'}</p><p>覆盖依据：{row.decision.coverage_notes || '待核实'}</p>
