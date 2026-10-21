@@ -94,3 +94,10 @@ def test_resolve_image_size_uses_volcengine_builtin_2k_3k_profiles() -> None:
     )
     assert size_2k == "1600x2848"
     assert size_3k == "4704x2016"
+
+
+def test_dreamapi_image_capability_does_not_fall_through_to_volcengine() -> None:
+    capability = resolve_image_capability(provider="dreamapi", model="seedream-5.0-pro")
+
+    assert capability.supports_watermark is False
+    assert capability.max_n == 1

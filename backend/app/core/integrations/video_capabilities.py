@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+import re
 from dataclasses import dataclass
 
 from app.core.contracts.provider import ProviderKey
@@ -16,6 +18,19 @@ DEFAULT_RATIO_TO_SIZE_MAPPING: dict[str, str] = {
     "9:16": "720x1280",
     "21:9": "1680x720",
 }
+
+
+def infer_ratio_from_size(value: str | None) -> str | None:
+    """Normalize a ratio or infer one from a positive ``WIDTHxHEIGHT`` value."""
+    text = (value or "").strip()
+    match = re.fullmatch(r"(\d+)\s*[:xX]\s*(\d+)", text)
+    if not match:
+        return None
+    width, height = (int(part) for part in match.groups())
+    if width <= 0 or height <= 0:
+        return None
+    divisor = math.gcd(width, height)
+    return f"{width // divisor}:{height // divisor}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +58,11 @@ def register_video_model_capability(
 
         register_openai_video_capability(model_prefix=model_prefix, capability=capability)
         return
+    if provider == "dreamapi":
+        from app.core.integrations.dreamapi.video_capabilities import register_dreamapi_video_capability
+
+        register_dreamapi_video_capability(model_prefix=model_prefix, capability=capability)
+        return
     from app.core.integrations.volcengine.video_capabilities import register_volcengine_video_capability
 
     register_volcengine_video_capability(model_prefix=model_prefix, capability=capability)
@@ -52,13 +72,18 @@ def clear_video_model_capability_overrides(*, provider: ProviderKey | None = Non
     """兼容入口：清空能力覆盖；供测试或重置场景使用。"""
     from app.core.integrations.openai.video_capabilities import clear_openai_video_capability_overrides
     from app.core.integrations.volcengine.video_capabilities import clear_volcengine_video_capability_overrides
+    from app.core.integrations.dreamapi.video_capabilities import clear_dreamapi_video_capability_overrides
 
     if provider is None:
         clear_openai_video_capability_overrides()
         clear_volcengine_video_capability_overrides()
+        clear_dreamapi_video_capability_overrides()
         return
     if provider == "openai":
         clear_openai_video_capability_overrides()
+        return
+    if provider == "dreamapi":
+        clear_dreamapi_video_capability_overrides()
         return
     clear_volcengine_video_capability_overrides()
 
@@ -68,6 +93,10 @@ def resolve_video_capability(*, provider: ProviderKey, model: str | None) -> Vid
         from app.core.integrations.openai.video_capabilities import resolve_openai_video_capability
 
         return resolve_openai_video_capability(model)
+    if provider == "dreamapi":
+        from app.core.integrations.dreamapi.video_capabilities import resolve_dreamapi_video_capability
+
+        return resolve_dreamapi_video_capability(model)
     from app.core.integrations.volcengine.video_capabilities import resolve_volcengine_video_capability
 
     return resolve_volcengine_video_capability(model)

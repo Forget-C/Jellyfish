@@ -3,7 +3,10 @@ from __future__ import annotations
 import pytest
 
 from app.core.task_manager.types import BaseTask
+from app.core.tasks.bootstrap import bootstrap_task_adapters
+from app.core.tasks.image_generation_tasks import ImageGenerationTask
 from app.core.tasks.registry import register_task_adapter, resolve_task_adapter
+from app.core.tasks.video_generation_tasks import VideoGenerationTask
 
 
 class _DummyTask(BaseTask):
@@ -61,3 +64,10 @@ def test_resolve_task_adapter_raises_for_unknown_key() -> None:
     with pytest.raises(ValueError) as exc_info:
         resolve_task_adapter("not_registered_kind", "not_registered_provider")
     assert "Unsupported provider/task adapter" in str(exc_info.value)
+
+
+def test_bootstrap_registers_dreamapi_image_and_video_tasks() -> None:
+    bootstrap_task_adapters()
+
+    assert resolve_task_adapter("image_generation", "dreamapi") is ImageGenerationTask._build_dreamapi_impl
+    assert resolve_task_adapter("video_generation", "dreamapi") is VideoGenerationTask._build_dreamapi_impl

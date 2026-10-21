@@ -30,6 +30,7 @@ from app.services.film.generated_video import (
 )
 from app.bootstrap import bootstrap_all_registries
 from app.services.llm import resolve_provider_key_from_name
+from app.services.llm.provider_registry import get_provider_spec
 from app.services.studio.generation.video.derive_preview import derive_video_preview
 from app.services.studio.generation.video.build_base import VideoBaseDraft
 from app.services.studio.generation.video.build_context import VideoGenerationContext
@@ -103,6 +104,17 @@ def test_resolve_provider_key_from_name_supports_known_aliases() -> None:
     assert resolve_provider_key_from_name("OpenAI") == "openai"
     assert resolve_provider_key_from_name("火山引擎") == "volcengine"
     assert resolve_provider_key_from_name("Doubao Video") == "volcengine"
+
+
+def test_dreamapi_provider_is_registered_for_image_and_video() -> None:
+    bootstrap_all_registries()
+
+    spec = get_provider_spec("dreamapi")
+
+    assert spec.display_name == "DreamAPI"
+    assert set(spec.supported_categories) == {ModelCategoryKey.image, ModelCategoryKey.video}
+    assert spec.default_base_url == "https://api.newportai.com"
+    assert resolve_provider_key_from_name("NewportAI") == "dreamapi"
 
 
 @pytest.mark.asyncio

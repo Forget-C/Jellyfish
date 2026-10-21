@@ -30,7 +30,7 @@ class VideoGenerationInput(BaseModel):
     last_frame_base64: Optional[str] = Field(None, description="尾帧图：纯 base64 或 data URL")
     key_frame_base64: Optional[str] = Field(None, description="关键帧图：纯 base64 或 data URL")
 
-    model: Optional[str] = Field(None, description="视频模型名称（可选，供应商透传）")
+    model: Optional[str] = Field(None, description="视频模型名称（如 sora-2 / dreamvideo-3.0 / seedance-2.5）")
     ratio: VideoRatio = Field(..., description="视频宽高比，业务层唯一主参数")
     seconds: Optional[int] = Field(None, description="时长（秒）（可选，供应商透传）")
     seed: Optional[int] = Field(
@@ -64,7 +64,7 @@ class VideoGenerationResult(BaseModel):
     url: Optional[str] = Field(None, description="生成视频可下载 URL")
     file_id: Optional[str] = Field(None, description="落库后的 FileItem.id（type=video）")
     provider_task_id: Optional[str] = Field(None, description="供应商侧任务/视频 ID（用于调试/追踪）")
-    provider: Optional[ProviderKey] = Field(None, description="供应商标识")
+    provider: Optional[ProviderKey] = Field(None, description="供应商标识：openai | volcengine | dreamapi")
     status: Optional[str] = Field(None, description="供应商任务状态")
 
     @model_validator(mode="after")

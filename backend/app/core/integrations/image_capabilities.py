@@ -45,6 +45,11 @@ def register_image_model_capability(
 
         register_openai_image_capability(model_prefix=model_prefix, capability=capability)
         return
+    if provider == "dreamapi":
+        from app.core.integrations.dreamapi.image_capabilities import register_dreamapi_image_capability
+
+        register_dreamapi_image_capability(model_prefix=model_prefix, capability=capability)
+        return
     from app.core.integrations.volcengine.image_capabilities import register_volcengine_image_capability
 
     register_volcengine_image_capability(model_prefix=model_prefix, capability=capability)
@@ -54,13 +59,18 @@ def clear_image_model_capability_overrides(*, provider: ProviderKey | None = Non
     """兼容入口：清空能力覆盖；供测试或重置场景使用。"""
     from app.core.integrations.openai.image_capabilities import clear_openai_image_capability_overrides
     from app.core.integrations.volcengine.image_capabilities import clear_volcengine_image_capability_overrides
+    from app.core.integrations.dreamapi.image_capabilities import clear_dreamapi_image_capability_overrides
 
     if provider is None:
         clear_openai_image_capability_overrides()
         clear_volcengine_image_capability_overrides()
+        clear_dreamapi_image_capability_overrides()
         return
     if provider == "openai":
         clear_openai_image_capability_overrides()
+        return
+    if provider == "dreamapi":
+        clear_dreamapi_image_capability_overrides()
         return
     clear_volcengine_image_capability_overrides()
 
@@ -70,6 +80,10 @@ def resolve_image_capability(*, provider: ProviderKey, model: str | None) -> Ima
         from app.core.integrations.openai.image_capabilities import resolve_openai_image_capability
 
         return resolve_openai_image_capability(model)
+    if provider == "dreamapi":
+        from app.core.integrations.dreamapi.image_capabilities import resolve_dreamapi_image_capability
+
+        return resolve_dreamapi_image_capability(model)
     from app.core.integrations.volcengine.image_capabilities import resolve_volcengine_image_capability
 
     return resolve_volcengine_image_capability(model)
