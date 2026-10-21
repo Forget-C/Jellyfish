@@ -30,8 +30,22 @@ async def test_first_unit_design_freezes_unsaved_input_and_previews_without_save
         content['design']['direction']['shots'] = [{'id': 'shot', 'beat_ids': [], 'event_ids': [],
             'blocking_state_ids': [], 'participant_ids': [], 'criterion_ids': [], 'narrative_function': {},
             'visible_result': {'state': 'proposal', 'text': '抬头', 'sources': [{'kind': 'human', 'reference': 'user', 'version': '1'}]}}]
+        content['design']['events'] = [{'id': 'event-1', 'description': {'state': 'proposal', 'text': '放下信', 'sources': [{'kind': 'human', 'reference': 'user', 'version': '1'}]}}]
+        content['design']['direction']['shots'][0]['event_ids'] = ['event-1']
         content['design']['participants'] = [{'id': 'reader', 'name': '读信者'}]
         content['design']['direction']['shots'][0]['participant_ids'] = ['reader']
+        content['design']['direction']['beats'] = [{'id': 'beat-1', 'event_ids': [],
+            'objective': {}, 'obstacle': {}, 'expected_change': {}, 'must_show': {}}]
+        content['design']['direction']['shots'][0]['beat_ids'] = ['beat-1']
+        action = {field: {} for field in ('objective', 'obstacle', 'subtext', 'attention',
+            'internal_adjustment', 'physical_action', 'delivery', 'reaction_order', 'exit_state', 'avoid')}
+        action.update(id='action-1', beat_id='beat-1', participant_id='reader',
+            received_event_ids=[], dialogue_ids=[], criterion_ids=[],
+            physical_action=deepcopy(content['design']['direction']['shots'][0]['visible_result']),
+            gaze={'state': 'proposal', 'text': '视线保持稳定', 'sources': [{'kind': 'human', 'reference': 'user', 'version': '1'}]})
+        content['design']['performance']['beats'] = [action]
+        content['design']['applicability'] = [{'subject': {'kind': 'performance_beat', 'id': 'action-1', 'field': field},
+            'purpose': 'design', 'scope': 'shots', 'shot_ids': ['shot']} for field in ('physical_action', 'gaze')]
         body = {'request_id': str(uuid4()), 'expected_revision': 1, 'content': content,
                 'shot_id': 'shot', 'target_model_id': 'video', 'model_id': 'text', 'instruction': '完整拍摄抬头'}
         url = detail + '/unit-design-suggestions'
@@ -48,7 +62,7 @@ async def test_first_unit_design_freezes_unsaved_input_and_previews_without_save
             assert task.input_snapshot['run_args']['task_identity']
             assert task.input_snapshot['run_args']['organization_inputs']['context']['participants'][0]['name'] == '读信者'
             proposed = {'shot_id': 'shot', 'target_model_id': 'video', 'organization': '动作完整，单段拍摄',
-                'units': [{'id': 'unit-1', 'coverage': [{'id': 'coverage-1', 'shot_id': 'shot', 'action_scope': '抬头'}],
+                'units': [{'id': 'unit-1', 'coverage': [{'id': 'coverage-1', 'shot_id': 'shot', 'action_scope': '抬头', 'performance_action_ids': ['action-1']}],
                     'duration_ms': None, 'ratio': '16:9', 'reason': '完整动作', 'entry_state': '', 'exit_state': '',
                     'reference_requirements': ['需要人物身份参考'], 'missing': ['尚未绑定真实参考']}],
                 'missing': []}
@@ -80,7 +94,7 @@ async def test_first_unit_design_freezes_unsaved_input_and_previews_without_save
         assert '镜头可见结果尚有未安排内容，请核对完整覆盖' in candidate['result']['missing']
 
         # 非法方案整份失败；真实任务记录可读，版本与媒体状态不变。
-        for change in ('event', 'model', 'shot', 'new-action', 'unknown-duration', 'write-design', 'multiple-coverage', 'new-entry-state'):
+        for change in ('event', 'model', 'shot', 'new-action', 'unknown-duration', 'write-design', 'multiple-coverage', 'new-entry-state', 'selection-scope-mismatch'):
             accepted = await client.post(url, json={**body, 'request_id': str(uuid4())})
             assert accepted.status_code == 200, accepted.text
             invalid_id = accepted.json()['data']['task_id']
@@ -95,6 +109,8 @@ async def test_first_unit_design_freezes_unsaved_input_and_previews_without_save
                 bad['units'][0]['coverage'][0]['action_scope'] = '转身离开'
             elif change == 'unknown-duration':
                 bad['units'][0]['duration_ms'] = 15000
+            elif change == 'selection-scope-mismatch':
+                bad['units'][0]['coverage'][0]['event_ids'] = ['event-1']
             elif change == 'new-entry-state':
                 bad['units'][0]['entry_state'] = '人物突然掏枪'
             elif change == 'multiple-coverage':

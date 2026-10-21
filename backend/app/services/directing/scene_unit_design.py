@@ -84,6 +84,12 @@ def validate_unit_design(args, result):
                                ('continuity_change_ids', 'continuity')):
                 if not set(getattr(item, key)) <= allowed[owner]:
                     raise ValueError('单元选择了不存在或不适用的设计项：' + key)
+                selected_owners = {f'{owner}:{identity}' for identity in getattr(item, key)}
+                main_field = {'beat': 'must_show', 'event': 'description', 'performance': 'physical_action',
+                              'activity': 'ongoing_task', 'continuity': 'change'}[owner]
+                if any(row['text'] not in item.action_scope for row in fields
+                       if row['owner'] in selected_owners and row['field'] == main_field and row['text']):
+                    raise ValueError('已选设计项与动作范围不一致；局部执行不能同时选择范围外的完整动作')
             # 可执行自由文本只接受既有设计的摘录；创作变化回导演画布处理。
             segments = [part.strip() for part in re.split(r'[；;\n]+', item.action_scope) if part.strip()]
             if not segments or not all(any(segment in text for text in texts) for segment in segments):

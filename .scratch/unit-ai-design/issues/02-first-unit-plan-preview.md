@@ -61,3 +61,5 @@ Resolution: completed
 - 工作台验收：`PLAYWRIGHT_CHANNEL=chrome pnpm --dir front run test:workbench-ui`通过（共享组件、四画布样式、设计完整性三个浏览器流程）。使用现有共享组件，无设计标准例外。
 - 接口：在本worktree实际导入`app.main:app`导出OpenAPI，运行`pnpm --dir front run openapi:gen`同步generated client；主工作区8000为已有用户服务，合入后由集成方确认其reload到新源码再执行正式`openapi:update`，不终止用户服务。
 - 验证边界：外部组织模型使用可控响应，不验证真实模型生成质量；本票保持只读，明确覆盖、身份合并与历史移除保护由后续票据03—06完成。
+
+- 最终集成核对：合入票据01所在集成分支后，单元AI组织、场次设计、指令与范围投影33条测试通过；新增“选择合法事件但动作范围不含其主要动作”的红灯并整体拒绝，另以已有凝视辅助表演确认不会误拒合法主要动作方案。仅核对主要动作字段，保留凝视、呼吸等已有辅助表演。
