@@ -37,6 +37,7 @@ from app.services.studio.file_usages import upsert_file_usage
 from app.services.directing.canvas_graph import CanvasReadContext
 from app.services.directing.director_canvas import director_graph
 from app.services.directing.unit_canvas import unit_graph
+from app.services.directing.instruction_canvas import instruction_graph
 
 CONTRACTS = {"design": SceneDesign, "plan": ProductionPlan, "prompt": Prompt,
              "review": ReviewPacket, "cut": SequenceCut, "cut_review": CutReview,
@@ -255,11 +256,12 @@ class DirectingStore:
                 content.design.style_revision_id, sequence.id, name),
             lambda: self.canvas_dependency_evidence(sequence.id, version_id, content))
         director = director_graph(canvas)
+        units = unit_graph(canvas, director)
         return SceneVersionRead(**snapshot, copied_from_version_id=origin.source_version_id if origin else None,
             project_id=self.project_id, chapter_id=sequence.chapter_id, sequence_id=sequence.id,
             source=content.basis, content=content,
             relationship_graph=relationships, director_graph=director,
-            unit_graph=unit_graph(canvas, director))
+            unit_graph=units, instruction_graph=instruction_graph(canvas, units))
 
     async def create_scene_version(self, sequence_id: str, body: SceneVersionCreate) -> SceneVersionRead:
         """明确创建空方案，原文依据来自已核实的当前场次，不复制历史方案。"""

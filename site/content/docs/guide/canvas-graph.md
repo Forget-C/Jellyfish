@@ -5,16 +5,16 @@ description: "后端投影、共同校验、前端渲染与编辑保存的复用
 
 # 接入共享画布 graph
 
-导演与单元画布使用版本接口返回的 `director_graph`、`unit_graph`。业务内容保存在原 `SceneVersionContent`；graph 是同一次读取的展示投影，不是另一份可保存的业务数据。当前指令与剪辑画布没有迁移到该协议。
+导演、单元与指令画布使用版本接口返回的 `director_graph`、`unit_graph`、`instruction_graph`。业务内容保存在原 `SceneVersionContent`；graph 是同一次读取的展示投影，不是另一份可保存的业务数据。指令图按明确单元展示已保存正文、实际消费依据与明确参考；完整正文在稳定挂载的独立工作区编辑，建议与检查继续沿用原业务入口。剪辑画布尚未迁移到该协议。
 
 ## 后端接入步骤
 
 1. 在 `app/core/contracts/directing/canvas_graph.py` 复用 `CanvasObject`、`CanvasTarget`、`CanvasNode`、`CanvasEdge`、`CanvasMember`、`CanvasView` 和 `CanvasIssue`。业务节点使用有判别字段的具体类型，新增载荷保持明确字段，不接入任意 JSON 表单。
 2. 由 `DirectingStore` 完成项目、场次及版本鉴权，读取强类型内容和 revision；使用 `CanvasReadContext.load` 为同一快照加载共同证据。模型、文件、固定风格及依赖有效性调用既有服务，不在投影器里重新实现鉴权或准备流程。
-3. 在 service 层编写领域投影函数，参考 `director_canvas.py` 与 `unit_canvas.py`。使用 `GraphAssembler.add_node/add_edge/add_view/add_issue` 注册对象，最后调用 `finish` 并构造具体 graph 类型。构建器不做 I/O，领域投影器负责真实成员、摘要、分组、入口和问题。
+3. 在 service 层编写领域投影函数，参考 `director_canvas.py`、`unit_canvas.py` 与 `instruction_canvas.py`。使用 `GraphAssembler.add_node/add_edge/add_view/add_issue` 注册对象，最后调用 `finish` 并构造具体 graph 类型。构建器不做 I/O，领域投影器负责真实成员、摘要、分组、入口和问题。
 4. 每个显示节点使用唯一 ID，并通过 `object` 保留实际业务身份及内容路径；节点 ID、视图 ID 对消费者是不透明地址。配置字段只声明实际可编辑的内容。历史无稳定 ID 对象设为 `stable=false`，其身份限定在当前 revision，不在读取时补写 UUID。
 5. 成员复用节点，不复制业务单元；聚合入口提供 `entry_view_id`，节点提供 `home_view_id`，视图提供父级和锚点；每张图只有一个 parent_id 为空的根视图，消费者读取其返回 ID，不约定根地址字符串。所有边必须有真实来源，缺失业务引用明确返回问题或缺失节点。不要静默删边来伪装完整。
-6. 保持版本内容、两图和目标的 version/revision 一致。读取内容时同时固定标题、revision、最近保存请求身份和时间等响应元数据；证据加载可能重新读取同一 ORM 行，不能在加载后再从已刷新的实例取响应元数据。读取和保存均返回完整快照；API 只负责收参、鉴权入口和响应，不组装图。
+6. 保持版本内容、各图和目标的 version/revision 一致。读取内容时同时固定标题、revision、最近保存请求身份和时间等响应元数据；证据加载可能重新读取同一 ORM 行，不能在加载后再从已刷新的实例取响应元数据。读取和保存均返回完整快照；API 只负责收参、鉴权入口和响应，不组装图。
 
 共同校验会拒绝重复节点／边／视图、悬空端点或成员、无效入口与编辑目标、循环层级、快照不一致及不闭合的来源定位。视图数量和分组计数由构建器统一计算，具体业务诊断由投影器提供。
 

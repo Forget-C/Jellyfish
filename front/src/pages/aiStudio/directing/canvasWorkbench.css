@@ -411,3 +411,9 @@
 .unit-graph-reference-previews :is(img, video, audio) { max-height: 96px; max-width: 100%; object-fit: contain; }
 .unit-graph-card .design-compact-fields > p { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .unit-graph-card .design-compact-fields > p > :is(span, strong) { display: inline; }
+
+.scene-instruction-selector { position: fixed; z-index: 30; left: 16px; top: var(--workbench-content-top, 180px); width: min(360px, calc(100vw - 32px)); padding: 8px; background: var(--wb-surface); border: 1px solid var(--wb-border); border-radius: 8px; }
+.scene-instruction-selector p { margin: 8px 0 0; color: var(--wb-muted); }
+.scene-instruction-workspace { position: fixed; z-index: 20; right: 16px; top: calc(var(--workbench-content-top, 180px) + 60px); bottom: 68px; width: min(440px, calc(100vw - 32px)); overflow: auto; scrollbar-gutter: stable; background: var(--wb-surface); border: 1px solid var(--wb-border); border-radius: 12px; }
+.scene-instruction-workspace > .canvas-workbench-card { width: 100%; box-sizing: border-box; }
+@media (max-width: 700px) { .scene-instruction-workspace { top: auto; max-height: 50dvh; } }

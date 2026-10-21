@@ -15,7 +15,7 @@ class CanvasObject(Contract):
 
     version_id: Identity
     revision: int = Field(gt=0)
-    kind: Literal['source', 'design', 'unit', 'coverage', 'reference', 'dependency', 'unit_config', 'unit_basis']
+    kind: Literal['source', 'design', 'unit', 'coverage', 'reference', 'dependency', 'unit_config', 'unit_basis', 'instruction']
     id: Text
     stable: bool = True
     path: list[str | int] = Field(default_factory=list)
@@ -220,9 +220,18 @@ class UnitBasisCanvasNode(CanvasNode):
     field_targets: list[CanvasBasisTarget]
 
 
+class InstructionCanvasNode(CanvasNode):
+    """完整自由文本的已保存投影；编辑目标始终指向明确生产单元。"""
+
+    kind: Literal['instruction'] = Field(default='instruction', json_schema_extra={'enum': ['instruction']})
+    unit_id: Identity
+    text: str
+    source: Source | None = None
+
+
 CanvasGraphNode = Annotated[SourceCanvasNode | DesignCanvasNode | MissingCanvasNode |
                             ShotBasisCanvasNode | UnitCanvasNode | UnitConfigCanvasNode |
-                            UnitReferencesCanvasNode | UnitBasisCanvasNode,
+                            UnitReferencesCanvasNode | UnitBasisCanvasNode | InstructionCanvasNode,
                             Field(discriminator='kind')]
 
 
@@ -287,7 +296,7 @@ class CanvasView(Contract):
 class CanvasGraph(Contract):
     """与业务内容属于同一快照的派生图；校验引用闭合，不进行领域推断。"""
 
-    kind: Literal['director', 'units']
+    kind: Literal['director', 'units', 'instructions']
     version_id: Identity
     revision: int = Field(gt=0)
     nodes: list[CanvasGraphNode]
@@ -326,6 +335,8 @@ class CanvasGraph(Contract):
                 target_exists(node.edit_target)
                 if node.edit_target.external or node.edit_target.object != node.object:
                     raise ValueError(f'canvas edit target does not identify its object: {node.id}')
+                if isinstance(node, InstructionCanvasNode) and node.edit_target.field not in (None, 'instruction'):
+                    raise ValueError(f'unknown canvas target field: {node.id}/{node.edit_target.field}')
                 if (isinstance(node, (DesignCanvasNode, UnitConfigCanvasNode)) and node.edit_target.field is not None
                         and node.edit_target.field not in node.fields):
                     raise ValueError(f'unknown canvas target field: {node.id}/{node.edit_target.field}')
@@ -423,4 +434,14 @@ class UnitCanvasGraph(CanvasGraph):
     kind: Literal['units'] = Field(default='units', json_schema_extra={'enum': ['units']})
     nodes: list[Annotated[ShotBasisCanvasNode | UnitCanvasNode | UnitConfigCanvasNode |
                           UnitReferencesCanvasNode | UnitBasisCanvasNode | MissingCanvasNode,
+                          Field(discriminator='kind')]]
+
+
+class InstructionCanvasGraph(CanvasGraph):
+    """按明确单元进入的指令图，不要求用户先浏览全场概览。"""
+
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
+    kind: Literal['instructions'] = Field(default='instructions', json_schema_extra={'enum': ['instructions']})
+    nodes: list[Annotated[InstructionCanvasNode | UnitReferencesCanvasNode | UnitBasisCanvasNode,
                           Field(discriminator='kind')]]

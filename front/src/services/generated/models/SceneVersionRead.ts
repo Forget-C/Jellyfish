@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { DirectorCanvasGraph } from './DirectorCanvasGraph';
+import type { InstructionCanvasGraph } from './InstructionCanvasGraph';
 import type { SceneRelationshipGraph } from './SceneRelationshipGraph';
 import type { SceneVersionContent_Output } from './SceneVersionContent_Output';
 import type { SceneVersionSource_Output } from './SceneVersionSource_Output';
@@ -22,6 +23,7 @@ export type SceneVersionRead = {
     relationship_graph: SceneRelationshipGraph;
     director_graph: DirectorCanvasGraph;
     unit_graph: UnitCanvasGraph;
+    instruction_graph: InstructionCanvasGraph;
     copied_from_version_id: (string | null);
     last_save_request_id: (string | null);
     created_at: string;

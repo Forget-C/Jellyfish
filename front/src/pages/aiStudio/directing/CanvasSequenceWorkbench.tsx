@@ -63,7 +63,9 @@ const verifiedSave = (operation: SaveOperation, saved: SceneVersionRead) => {
     !saved.director_graph || saved.director_graph.kind !== 'director' ||
     saved.director_graph.version_id !== saved.id || saved.director_graph.revision !== saved.revision ||
     !saved.unit_graph || saved.unit_graph.kind !== 'units' ||
-    saved.unit_graph.version_id !== saved.id || saved.unit_graph.revision !== saved.revision) {
+    saved.unit_graph.version_id !== saved.id || saved.unit_graph.revision !== saved.revision ||
+    !saved.instruction_graph || saved.instruction_graph.kind !== 'instructions' ||
+    saved.instruction_graph.version_id !== saved.id || saved.instruction_graph.revision !== saved.revision) {
     throw new Error('保存响应与本次请求、内容或关系图修订不一致，请核实原请求')
   }
   return saved
@@ -1041,7 +1043,20 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       setEditor(undefined); setCanvas('units')
     }} dirty={dirty} key={selected.id} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} content={content} revision={selected.revision}
       disabled={readonly || handingOff || !!recovery || busy === 'create' || leaving} onChange={editContent} />}
-    {loadState === 'ready' && canvas === 'instructions' && selected && content && <SceneInstructionCanvas primaryHost={primaryHost} onPrepare={(unitId, issue) => { setEditor(undefined); setCanvas('units'); setUnitFocus({ versionId: selected.id, unitId, nodeId: issue.nodeId || '单元设置', fieldId: issue.fieldId, serial: Date.now() }) }} focusRequest={instructionFocus} onVideoFocused={() => setVideoFocus(undefined)} videoFocus={videoFocus?.versionId === selected.id && videoFocus.unitId === unitSelections[selected.id] ? videoFocus : undefined} key={selected.id} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} revision={selected.revision} content={content} onTask={trackInstruction} dirty={dirty} videoBusy={!!currentDirectVideo || !!pendingSave.current?.video && pendingSave.current.versionId === selected.id && pendingSave.current.video.unitId === unitSelections[selected.id]} savePending={!!busy || !!pendingSave.current}
+    {loadState === 'ready' && canvas === 'instructions' && selected && content && <SceneInstructionCanvas onRetryGraph={() => setAttempt(value => value + 1)} graph={selected.instruction_graph} onLocateSource={target => {
+      const source = selected.unit_graph.nodes.find(node => node.id === target.node_id)
+      setEditor(undefined)
+      if (source?.kind === 'unit_config') {
+        const current = content.units.find(row => row.id === source.unit_id)
+        if (!current || source.config_kind === 'coverage' && !current.coverage.some(row => row.id === source.coverage_item_id) || source.config_kind === 'organization' && !current.organization) return false
+        selectUnit(source.unit_id); setCanvas('units')
+        setUnitFocus({ versionId: selected.id, unitId: source.unit_id, nodeId: source.id, fieldId: source.config_kind === 'coverage' ? `scene-unit-action-${source.coverage_item_id}` : source.config_kind === 'organization' ? `scene-unit-organization-${source.unit_id}-${target.field}` : target.field || '', serial: Date.now() })
+      } else {
+        leaveUnitSubgraph(); setCanvas('director')
+        setDirectorFocus({ versionId: selected.id, nodeId: target.node_id, fieldId: target.field || '', serial: Date.now() })
+      }
+      return true
+    }} primaryHost={primaryHost} onPrepare={(unitId, issue) => { setEditor(undefined); setCanvas('units'); setUnitFocus({ versionId: selected.id, unitId, nodeId: issue.nodeId || '单元设置', fieldId: issue.fieldId, serial: Date.now() }) }} focusRequest={instructionFocus} onVideoFocused={() => setVideoFocus(undefined)} videoFocus={videoFocus?.versionId === selected.id && videoFocus.unitId === unitSelections[selected.id] ? videoFocus : undefined} key={selected.id} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} revision={selected.revision} content={content} onTask={trackInstruction} dirty={dirty} videoBusy={!!currentDirectVideo || !!pendingSave.current?.video && pendingSave.current.versionId === selected.id && pendingSave.current.video.unitId === unitSelections[selected.id]} savePending={!!busy || !!pendingSave.current}
       onVerifyVideo={!busy && pendingSave.current?.versionId === selected.id && pendingSave.current?.video?.unitId === unitSelections[selected.id]
         ? () => { void save() } : currentDirectVideo && !currentDirectVideo.submitting ? () => { void directVideos.retry(currentDirectVideo) } : undefined}
       videoRefresh={videoRefresh} onGenerateVideo={generateVideo} onRetryVideo={retryVideo}

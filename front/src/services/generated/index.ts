@@ -280,6 +280,8 @@ export type { ImageGenerationOptionsRead } from './models/ImageGenerationOptions
 export type { ImageMediaInput } from './models/ImageMediaInput';
 export type { InstructionBasisConfirm } from './models/InstructionBasisConfirm';
 export type { InstructionBasisRead } from './models/InstructionBasisRead';
+export type { InstructionCanvasGraph } from './models/InstructionCanvasGraph';
+export type { InstructionCanvasNode } from './models/InstructionCanvasNode';
 export type { InstructionCheckComparison } from './models/InstructionCheckComparison';
 export type { InstructionCheckConfirmation } from './models/InstructionCheckConfirmation';
 export type { InstructionCheckRead } from './models/InstructionCheckRead';

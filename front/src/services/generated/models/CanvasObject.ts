@@ -8,7 +8,7 @@
 export type CanvasObject = {
     version_id: string;
     revision: number;
-    kind: 'source' | 'design' | 'unit' | 'coverage' | 'reference' | 'dependency' | 'unit_config' | 'unit_basis';
+    kind: 'source' | 'design' | 'unit' | 'coverage' | 'reference' | 'dependency' | 'unit_config' | 'unit_basis' | 'instruction';
     id: string;
     stable?: boolean;
     path?: Array<(string | number)>;

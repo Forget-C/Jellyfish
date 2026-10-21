@@ -227,6 +227,14 @@ async def test_unit_graph_filters_share_one_unit_and_keep_its_complete_subgraph(
         })
         assert response.status_code == 200, response.text
         saved = response.json()['data']
+        instruction = saved['instruction_graph']
+        assert instruction['kind'] == 'instructions'
+        assert instruction['revision'] == saved['revision']
+        body = next(node for node in instruction['nodes'] if node['kind'] == 'instruction')
+        assert body['unit_id'] == 'shared'
+        assert body['text'] == ''
+        assert 'model-required' in {issue['code'] for issue in body['issues']}
+        assert {node['kind'] for node in instruction['nodes']} == {'instruction', 'unit_basis', 'unit_references'}
         graph = saved['unit_graph']
         assert graph['kind'] == 'units'
         assert graph['revision'] == saved['director_graph']['revision'] == saved['revision']
@@ -656,10 +664,25 @@ async def test_graph_read_keeps_one_snapshot_when_dependency_refreshes_the_same_
         assert snapshot['last_save_request_id'] is None
         assert snapshot['content']['design']['direction']['viewpoint']['text'] is None
         assert [snapshot[key]['revision'] for key in (
-            'relationship_graph', 'director_graph', 'unit_graph')] == [1, 1, 1]
+            'relationship_graph', 'director_graph', 'unit_graph', 'instruction_graph')] == [1, 1, 1, 1]
         reread = (await client.get(detail)).json()['data']
         assert (reread['revision'], reread['title'], reread['last_save_request_id']) == (
             2, '另一会话保存的版本', request_id)
         assert reread['content']['design']['direction']['viewpoint']['text'] == '另一会话的新输入'
         assert [reread[key]['revision'] for key in (
             'relationship_graph', 'director_graph', 'unit_graph')] == [2, 2, 2]
+
+
+def test_instruction_graph_rejects_edit_target_outside_the_free_text_body():
+    """指令定位不能授权改写同一单元中的其他业务字段。"""
+    payload = editable_graph().model_dump()
+    old = payload['nodes'][0]
+    obj = {**old['object'], 'kind': 'instruction'}
+    payload['kind'] = 'instructions'
+    payload['nodes'] = [{
+        'id': old['id'], 'title': '当前指令', 'object': obj, 'kind': 'instruction',
+        'unit_id': 'unit', 'text': '保留自由文本',
+        'edit_target': {'node_id': old['id'], 'object': obj, 'field': 'model_id'},
+    }]
+    with pytest.raises(ValidationError, match='target field'):
+        CanvasGraph.model_validate(payload)
