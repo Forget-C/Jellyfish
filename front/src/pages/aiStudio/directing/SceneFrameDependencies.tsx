@@ -6,19 +6,21 @@ import { directingError } from './common'
 
 export function useSceneFrameEvidence(projectId: string, sequenceId: string, versionId: string, revision: number, unit?: EditableGenerationUnit_Output) {
   const versions = JSON.stringify([...new Set([versionId, ...(unit?.scene_dependencies || []).map(link => link.version_id)])].sort())
-  const [frames, setFrames] = useState<SceneEndFrameRead[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
   const [attempt, setAttempt] = useState(0)
+  const key = JSON.stringify([projectId, sequenceId, versions, revision, attempt])
+  const [result, setResult] = useState<{ key: string; frames: SceneEndFrameRead[] }>()
+  const [failure, setFailure] = useState<{ key: string; message: string }>()
   useEffect(() => {
     let active = true
-    setLoading(true); setError('')
     void Promise.all((JSON.parse(versions) as string[]).map(sourceVersion => StudioDirectingService.directingSceneEndFrames({ projectId, sequenceId, versionId: sourceVersion })))
-      .then(results => { if (active) setFrames(results.flatMap(result => result.data || [])) })
-      .catch(cause => { if (active) setError(directingError(cause)) }).finally(() => { if (active) setLoading(false) })
+      .then(results => {
+        if (results.some(row => !row.data)) throw new Error('前段实际落幅尚未核实')
+        if (active) { setResult({ key, frames: results.flatMap(row => row.data!) }); setFailure(undefined) }
+      }).catch(cause => { if (active) setFailure({ key, message: directingError(cause) }) })
     return () => { active = false }
-  }, [projectId, sequenceId, versions, revision, attempt])
-  return { frames, loading, error, reload: () => setAttempt(value => value + 1) }
+  }, [key, projectId, sequenceId, versions])
+  return { frames: result?.key === key ? result.frames : [], loading: result?.key !== key && failure?.key !== key,
+    error: failure?.key === key ? failure.message : '', reload: () => setAttempt(value => value + 1) }
 }
 
 export function sceneFrameCurrent(frame: SceneEndFrameRead, content: SceneVersionContent_Output, versionId: string) {

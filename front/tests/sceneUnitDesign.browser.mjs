@@ -2,7 +2,7 @@ import { closeWorkbenchDetails } from './workbenchControls.mjs'
 import { makeWorkspace } from './directing-fixtures.mjs'
 import { workbenchControl } from './workbenchControls.mjs'
 import { workbenchShot } from './workbenchControls.mjs'
-import { unitSettings } from './workbenchControls.mjs'
+import { unitCard, selectWorkbenchOption } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -58,6 +58,7 @@ try {
   await page.goto(`http://127.0.0.1:4247/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
   await (await workbenchShot(page, '镜头 1：抬头')).click()
   await page.getByRole('button', { name: '下一步：单元画布', exact: true }).click()
+  assert.equal(await page.getByRole('button', { name: /^(建立单元|为当前镜头建立单元)$/ }).count(), 0)
   await page.getByRole('button', { name: 'AI设计', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: 'AI设计', exact: true })
   const start = dialog.getByRole('button', { name: '开始设计', exact: true })
@@ -191,27 +192,43 @@ try {
   await dialog.waitFor({ state: 'hidden' })
   await page.locator('.canvas-toolbar-identity [role="status"]').filter({ hasText: '未保存' }).waitFor()
   assert.equal((await (await fetch(manualDetail)).json()).data.content.units.length, 0)
-  await page.getByRole('combobox', { name: '当前单元', exact: true }).click()
-  await page.locator('.ant-select-dropdown:visible').getByText('单元 1', { exact: true }).click()
-  const organizationSettings = await unitSettings(page)
+  await page.locator('[data-canvas-node^="unit:"]').first().waitFor()
+  assert.equal(await page.getByRole('button', { name: '查看单元设置', exact: true }).count(), 0)
+  await selectWorkbenchOption(page, '当前单元', '单元 1')
+  const organizationSettings = await unitCard(page, '组织要求')
   await organizationSettings.getByRole('textbox', { name: '组织进入状态', exact: true }).fill('人工核对进入状态')
+  await page.locator('[data-canvas-node$=":organization"]').filter({ hasText: '人工核对进入状态' }).waitFor()
+  assert.equal((await (await fetch(manualDetail)).json()).data.content.units.length, 0, 'AI 应用及卡片编辑不依赖保存')
   await page.screenshot({ path: join(output, 'unit-organization-desktop.png'), animations: 'disabled' })
   await page.setViewportSize({ width: 390, height: 844 })
   await delay(250)
   await page.screenshot({ path: join(output, 'unit-organization-mobile.png'), animations: 'disabled' })
   await closeWorkbenchDetails(page)
   await page.setViewportSize({ width: 1440, height: 960 })
+  await page.route(`**/versions/${manualVersion.id}`, route => route.request().method() === 'PUT'
+    ? route.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ detail: '测试保存失败' }) }) : route.continue(), { times: 1 })
+  await page.getByRole('button', { name: '保存', exact: true }).click()
+  await page.getByText('保存失败，输入已保留', { exact: true }).waitFor()
+  await page.locator('[data-canvas-node$=":organization"]').filter({ hasText: '人工核对进入状态' }).waitFor()
+  assert.equal((await (await fetch(manualDetail)).json()).data.content.units.length, 0)
+  page.once('dialog', dialog => dialog.accept())
+  await page.reload()
+  await page.getByRole('button', { name: '恢复编辑', exact: true }).click()
+  await page.locator('[data-canvas-node$=":organization"]').filter({ hasText: '人工核对进入状态' }).waitFor()
+  assert.equal((await (await fetch(manualDetail)).json()).data.content.units.length, 0, '恢复的单元在保存前已有完整卡片')
   await page.getByRole('button', { name: '保存', exact: true }).click()
   await page.locator('.canvas-toolbar-identity [role="status"]').filter({ hasText: '已保存' }).waitFor()
   assert.equal((await (await fetch(manualDetail)).json()).data.content.units[0].organization.entry_state, '人工核对进入状态')
   await page.reload()
   assert.equal((await (await fetch(manualDetail)).json()).data.content.units[0].organization.entry_state, '人工核对进入状态')
-  // 确认 HTTP 已发出后用户继续编辑：响应不能覆盖新建的人工单元。
+  // 确认 HTTP 已发出后用户继续编辑：响应不能覆盖卡片中的新输入。
   const raceVersion = (await (await fetch(versionsUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), title: '确认在途保护' }) })).json()).data
   const raceDetail = `${versionsUrl}/${raceVersion.id}`
-  assert.equal((await fetch(raceDetail, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: 1, content }) })).status, 200)
-  const raceTask = (await (await fetch(raceDetail + '/unit-design-suggestions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: 2, content, shot_id: 'shot-one', target_model_id: 'browser-video-model' }) })).json()).data.task_id
-  assert.equal((await fetch(`${api}/browser-test/unit-design-tasks/${raceTask}/complete`, { method: 'POST' })).status, 200)
+  const raceContent = structuredClone(content)
+  raceContent.units = [{ id: 'race-unit', ratio: '16:9', model_id: 'browser-video-model', coverage: [{ id: 'race-coverage', shot_id: 'shot-one', action_scope: '抬头' }] }]
+  assert.equal((await fetch(raceDetail, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: 1, content: raceContent }) })).status, 200)
+  const raceTask = (await (await fetch(raceDetail + '/unit-design-suggestions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: 2, content: raceContent, source_unit_id: 'race-unit', shot_id: 'shot-one', target_model_id: 'browser-video-model' }) })).json()).data.task_id
+  assert.equal((await fetch(`${api}/browser-test/unit-design-tasks/${raceTask}/complete?revise=true`, { method: 'POST' })).status, 200)
   await page.goto(`http://127.0.0.1:4247/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${raceVersion.id}&directorShot=shot-one&unitDesignTask=${raceTask}`)
   await records.getByRole('button', { name: '比较并应用方案', exact: true }).click()
   await dialog.getByRole('heading', { name: '单元方案预览', exact: true }).waitFor()
@@ -227,13 +244,13 @@ try {
   await dialog.getByRole('button', { name: '确认应用方案', exact: true }).click()
   await requested
   await dialog.getByRole('button', { name: '关闭预览', exact: true }).click()
-  await page.getByRole('button', { name: '为当前镜头建立单元', exact: true }).click()
-  const raceSettings = await unitSettings(page)
+  await selectWorkbenchOption(page, '当前单元', '单元 1')
+  const raceSettings = await unitCard(page)
   await raceSettings.getByRole('textbox', { name: '单元动作范围', exact: true }).fill('人工在途编辑')
   releaseResponse()
   await delay(300)
   assert.equal(await raceSettings.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '人工在途编辑')
-  assert.equal((await (await fetch(raceDetail)).json()).data.content.units.length, 0)
+  assert.equal((await (await fetch(raceDetail)).json()).data.content.units[0].coverage[0].action_scope, '抬头')
   await page.unroute('**/unit-design-suggestions/*/apply')
   console.log(`PASS unit AI design preview, auto/manual save and in-flight edit protection; evidence: ${output}`)
 } catch (error) {

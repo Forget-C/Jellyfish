@@ -1,3 +1,4 @@
+import { SceneUnitPreparationStatus } from './SceneUnitPreparationStatus'
 import { WorkbenchButton } from './ui/WorkbenchButton'
 import { WorkbenchDetails } from './ui/WorkbenchDetails'
 import { ReferencePreview } from './ReferencePreview'
@@ -10,7 +11,7 @@ import type { SceneVersionContent_Output } from '../../../services/generated'
 import { GraphCanvas } from './GraphCanvas'
 import type { GraphArrange } from './graphLayout'
 import { UnitScopeSummary } from './UnitScopeSummary'
-import type { CanvasTarget, InstructionCanvasGraph } from '../../../services/generated'
+import type { CanvasTarget, InstructionCanvasGraph, UnitCanvasGraph } from '../../../services/generated'
 import { referencePurposes } from './referenceInput'
 import { humanNote } from './common'
 import { SceneInstructionSuggestions } from './SceneInstructionSuggestions'
@@ -31,7 +32,9 @@ const arrangeInstruction: GraphArrange = (nodes, sizes, _width, anchor, retained
 }
 
 /** 指令正文属于明确选中的原单元；查看、编辑与执行分别授权。 */
-export function SceneInstructionCanvas({ graph, evidenceError, onEvidenceChanged, onRetryGraph, onLocateSource, primaryHost, onPrepare, focusRequest, projectId, sequenceId, versionId, revision, content, shotId, unitId, disabled, onSelectUnit, onChange, taskId, onTask, dirty, videoBusy, savePending, onVerifyVideo, videoRefresh, onGenerateVideo, onRetryVideo, videoFocus, onVideoFocused }: {
+export function SceneInstructionCanvas({ preparationHost, unitGraphState, graph, evidenceError, onEvidenceChanged, onRetryGraph, onLocateSource, primaryHost, onPrepare, focusRequest, projectId, sequenceId, versionId, revision, content, shotId, unitId, disabled, onSelectUnit, onChange, taskId, onTask, dirty, videoBusy, savePending, onVerifyVideo, videoRefresh, onGenerateVideo, onRetryVideo, videoFocus, onVideoFocused }: {
+  preparationHost: HTMLElement | null
+  unitGraphState: { graph?: UnitCanvasGraph; current: boolean; pending: boolean; error: string; retry: () => void }
   evidenceError: string
   onEvidenceChanged: () => void
   graph: InstructionCanvasGraph
@@ -61,7 +64,8 @@ export function SceneInstructionCanvas({ graph, evidenceError, onEvidenceChanged
   const allUnits = content.units || []
   const units = allUnits.filter(row => !shotId || row.id === unitId || row.coverage.some(item => item.shot_id === shotId))
   const unit = allUnits.find(row => row.id === unitId)
-  const { missing } = useSceneUnitPreparation(projectId, sequenceId, versionId, revision, content, unit)
+  const [preparationAttempt, setPreparationAttempt] = useState(0)
+  const { missing, checking, failed, frameEvidence } = useSceneUnitPreparation(projectId, sequenceId, versionId, revision, content, unit, preparationAttempt, unitGraphState)
   const validGraph = !!graph && graph.kind === 'instructions' && graph.version_id === versionId && graph.revision === revision && Array.isArray(graph.nodes) && Array.isArray(graph.edges) && Array.isArray(graph.views)
   const nodes = validGraph ? graph.nodes.filter(node => node.unit_id === unitId) : []
   const basis = nodes.find(node => node.kind === 'unit_basis')
@@ -81,7 +85,9 @@ export function SceneInstructionCanvas({ graph, evidenceError, onEvidenceChanged
         <SceneInstructionChecks focusTask={recordFocus?.unitId === unit?.id && recordFocus?.kind === 'check' ? recordFocus : undefined} onEvidenceChanged={onEvidenceChanged} suggestionPriority={suggestionPriority?.versionId === versionId && suggestionPriority.unitId === unit.id ? suggestionPriority.priority : true} onEmptyPrimaryHost={setSuggestionsHost} savePending={savePending} onVerifyVideo={onVerifyVideo} primaryHost={actionHost} onVideoFocused={onVideoFocused} videoFocus={videoFocus} dirty={dirty} videoBusy={videoBusy} videoRefresh={videoRefresh} onGenerateVideo={() => onGenerateVideo(unit.id)} onRetryVideo={executionId => onRetryVideo(unit.id, executionId)} key={`${versionId}:${unit.id}`} projectId={projectId} sequenceId={sequenceId} versionId={versionId} unitId={unit.id} revision={revision} content={content} disabled={disabled} onChange={onChange} />
         {unit.instruction_source && <details><summary>查看正文来源</summary><p>{({ human: '人工填写', model: 'AI 指令建议', chapter: '章节原文', file: '参考文件', revision: '历史版本' })[unit.instruction_source.kind]}</p><p>来源身份：{unit.instruction_source.reference}</p><p>来源版本：{unit.instruction_source.version}</p></details>}</> : <p>明确选择单元后查看和编辑其正文。</p>}
     </section>
-  return <div className="scene-instruction-canvas">{primaryHost && createPortal(<nav className="scene-unit-primary" aria-label="当前指令主操作"><strong>{unit ? `当前单元 ${allUnits.indexOf(unit) + 1} 的指令` : '请明确选择单元'}</strong><span ref={setActionHost} /></nav>, primaryHost)}<div className="scene-instruction-selector">
+  return <div className="scene-instruction-canvas">
+    {unit && <SceneUnitPreparationStatus host={preparationHost} missing={missing} checking={checking} failed={failed} onLocate={issue => onPrepare(unit.id, issue)} onRetry={() => { setPreparationAttempt(value => value + 1); unitGraphState.retry(); frameEvidence.reload() }} />}
+    {primaryHost && createPortal(<nav className="scene-unit-primary" aria-label="当前指令主操作"><strong>{unit ? `当前单元 ${allUnits.indexOf(unit) + 1} 的指令` : '请明确选择单元'}</strong><span ref={setActionHost} /></nav>, primaryHost)}<div className="scene-instruction-selector">
       <Select className="scene-instruction-select" aria-label="指令所属单元" placeholder="明确选择单元" value={unit?.id} style={{ width: '100%' }}
         options={units.map(row => ({ value: row.id, label: `单元 ${allUnits.indexOf(row) + 1} · ${row.coverage.map(item => item.action_scope).join('；') || '动作待填写'}` }))}
         onChange={id => onSelectUnit(id)} />
@@ -125,7 +131,7 @@ export function SceneInstructionCanvas({ graph, evidenceError, onEvidenceChanged
     <div className="scene-instruction-workspace" aria-label="指令编辑工作区">
       {unit && validGraph && !instruction && <p>此单元尚未保存，图待同步。继续编辑当前正文。</p>}
       {editor}
-      {unit && <SceneInstructionSuggestions onEvidenceChanged={onEvidenceChanged} onPriority={setSuggestionPriority} onPrepare={missing.length ? () => onPrepare(unit.id, missing[0]) : undefined} onLocate={() => setSuggestionFocus({ unitId: unit.id, serial: Date.now() })} primaryHost={suggestionsHost} key={`${versionId}:${unit.id}`} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision}
+      {unit && <SceneInstructionSuggestions onEvidenceChanged={onEvidenceChanged} onPriority={setSuggestionPriority} preparationBlocked={!!missing.length || checking || failed} onLocate={() => setSuggestionFocus({ unitId: unit.id, serial: Date.now() })} primaryHost={suggestionsHost} key={`${versionId}:${unit.id}`} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision}
           unitId={unit.id} content={content} disabled={disabled} onChange={onChange} initialTaskId={taskId} recordFocus={recordFocus?.unitId === unit?.id && recordFocus?.kind === 'suggestion' ? recordFocus : undefined} onTask={onTask} />}
     </div>
 

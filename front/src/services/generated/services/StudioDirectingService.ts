@@ -65,6 +65,7 @@ import type { ApiResponse_SceneVideoSaveResult_ } from '../models/ApiResponse_Sc
 import type { ApiResponse_SequenceRead_ } from '../models/ApiResponse_SequenceRead_';
 import type { ApiResponse_TaskAccepted_ } from '../models/ApiResponse_TaskAccepted_';
 import type { ApiResponse_Union_DivisionSaved__NoneType__ } from '../models/ApiResponse_Union_DivisionSaved__NoneType__';
+import type { ApiResponse_UnitCanvasGraph_ } from '../models/ApiResponse_UnitCanvasGraph_';
 import type { ApiResponse_VideoReferenceCapabilities_ } from '../models/ApiResponse_VideoReferenceCapabilities_';
 import type { ApiResponse_WorkspaceRead_ } from '../models/ApiResponse_WorkspaceRead_';
 import type { ApplyDesignRequest } from '../models/ApplyDesignRequest';
@@ -97,6 +98,7 @@ import type { SceneIdentityCleanup } from '../models/SceneIdentityCleanup';
 import type { SceneInstructionRequest } from '../models/SceneInstructionRequest';
 import type { SceneSeamReviewCreate } from '../models/SceneSeamReviewCreate';
 import type { SceneTakeReviewConfirm } from '../models/SceneTakeReviewConfirm';
+import type { SceneUnitCanvasPreview } from '../models/SceneUnitCanvasPreview';
 import type { SceneUnitDesignPreviewRequest } from '../models/SceneUnitDesignPreviewRequest';
 import type { SceneUnitDesignRequest_Input } from '../models/SceneUnitDesignRequest_Input';
 import type { SceneVersionCopy } from '../models/SceneVersionCopy';
@@ -640,6 +642,38 @@ export class StudioDirectingService {
         return __request(OpenAPI, {
             method: 'PUT',
             url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Preview Unit Canvas
+     * 只读投影当前编辑的单元卡片，不保存版本或创建任务。
+     * @returns ApiResponse_UnitCanvasGraph_ Successful Response
+     * @throws ApiError
+     */
+    public static directingPreviewUnitCanvas({
+        projectId,
+        sequenceId,
+        versionId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        requestBody: SceneUnitCanvasPreview,
+    }): CancelablePromise<ApiResponse_UnitCanvasGraph_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/unit-canvas/preview',
             path: {
                 'project_id': projectId,
                 'sequence_id': sequenceId,

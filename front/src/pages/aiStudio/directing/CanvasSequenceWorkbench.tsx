@@ -18,6 +18,7 @@ import { clearSceneRecovery, readSceneRecovery, writeSceneRecovery } from './sce
 import type { SaveOperation, SceneRecovery } from './sceneRecovery'
 import { useSceneEditOwnership } from './useSceneEditOwnership'
 import type { SceneEditOwnership } from './useSceneEditOwnership'
+import { useSceneUnitGraph } from './useSceneUnitGraph'
 import { SceneUnitCanvas } from './SceneUnitCanvas'
 import { SceneDeliveryPanel } from './SceneDeliveryPanel'
 import { OverviewDesignHistory, OverviewUnitHistory } from './SceneWorkbenchOverview'
@@ -123,6 +124,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
   const [navigationHost, setNavigationHost] = useState<HTMLDivElement | null>(null)
   const [designNextHost, setDesignNextHost] = useState<HTMLSpanElement | null>(null)
   const [directorNavigationHost, setDirectorNavigationHost] = useState<HTMLDivElement | null>(null)
+  const [preparationHost, setPreparationHost] = useState<HTMLDivElement | null>(null)
   const [feedbackHost, setFeedbackHost] = useState<HTMLDivElement | null>(null)
   const [moreHost, setMoreHost] = useState<HTMLDivElement | null>(null)
   const toolbar = useRef<HTMLElement>(null)
@@ -221,6 +223,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
     setParams(next, { replace: true })
   }
   const content = selected && (draft?.versionId === selected.id ? draft.content : selected.content)
+  const unitGraphState = useSceneUnitGraph(projectId, sequenceId, selected?.id, selected?.revision, content, selected?.content, selected?.unit_graph, canvas === 'units' || canvas === 'instructions')
   const trackInstruction = (taskId: string, unitId: string) => {
     if (!live.current || !selected || !content) return
     const index = content.units.findIndex(unit => unit.id === unitId)
@@ -965,6 +968,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
         <WorkbenchButton disabled={!selected} onClick={() => openCanvas('edit')} variant="quiet" aria-pressed={canvas === 'edit'}>编辑画布</WorkbenchButton>
       </nav>
       <div className="canvas-toolbar-actions">
+        <div ref={setPreparationHost} className="canvas-toolbar-preparation" />
         <div ref={setPrimaryHost} className="canvas-toolbar-primary">{canvas === 'director' && <span ref={setDesignNextHost} />}</div>
         <TaskCenter workbench />
         <div ref={setNavigationHost} className="canvas-toolbar-navigation" />
@@ -1097,7 +1101,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       setEditor(undefined); setCanvas('units')
     }} dirty={dirty} key={selected.id} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} content={content} revision={selected.revision}
       disabled={readonly || handingOff || !!recovery || busy === 'create' || leaving} onChange={editContent} />}
-    {loadState === 'ready' && canvas === 'instructions' && selected && content && <SceneInstructionCanvas evidenceError={evidenceError} onEvidenceChanged={() => void refreshEvidence(selected.id)} onRetryGraph={() => void refreshEvidence(selected.id)} graph={selected.instruction_graph} onLocateSource={target => {
+    {loadState === 'ready' && canvas === 'instructions' && selected && content && <SceneInstructionCanvas preparationHost={preparationHost} unitGraphState={unitGraphState} evidenceError={evidenceError} onEvidenceChanged={() => void refreshEvidence(selected.id)} onRetryGraph={() => void refreshEvidence(selected.id)} graph={selected.instruction_graph} onLocateSource={target => {
       const source = selected.unit_graph.nodes.find(node => node.id === target.node_id)
       setEditor(undefined)
       if (source?.kind === 'unit_config') {
@@ -1110,7 +1114,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
         setDirectorFocus({ versionId: selected.id, nodeId: target.node_id, fieldId: target.field || '', serial: Date.now() })
       }
       return true
-    }} primaryHost={primaryHost} onPrepare={(unitId, issue) => { setEditor(undefined); setCanvas('units'); setUnitFocus({ versionId: selected.id, unitId, nodeId: issue.nodeId || '单元设置', fieldId: issue.fieldId, serial: Date.now() }) }} focusRequest={instructionFocus} onVideoFocused={() => setVideoFocus(undefined)} videoFocus={videoFocus?.versionId === selected.id && videoFocus.unitId === unitSelections[selected.id] ? videoFocus : undefined} key={selected.id} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} revision={selected.revision} content={content} onTask={trackInstruction} dirty={dirty} videoBusy={!!currentDirectVideo || !!pendingSave.current?.video && pendingSave.current.versionId === selected.id && pendingSave.current.video.unitId === unitSelections[selected.id]} savePending={!!busy || !!pendingSave.current}
+    }} primaryHost={primaryHost} onPrepare={(unitId, issue) => { if (issue.target?.external) { leaveUnitSubgraph(); setEditor(undefined); setCanvas('director'); setDirectorFocus({ versionId: selected.id, nodeId: issue.target.node_id, fieldId: issue.target.field || '', serial: Date.now() }); return } setEditor(undefined); setCanvas('units'); setUnitFocus({ versionId: selected.id, unitId, nodeId: issue.target?.node_id || issue.nodeId || '单元依据', fieldId: issue.fieldId, serial: Date.now() }) }} focusRequest={instructionFocus} onVideoFocused={() => setVideoFocus(undefined)} videoFocus={videoFocus?.versionId === selected.id && videoFocus.unitId === unitSelections[selected.id] ? videoFocus : undefined} key={selected.id} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} revision={selected.revision} content={content} onTask={trackInstruction} dirty={dirty} videoBusy={!!currentDirectVideo || !!pendingSave.current?.video && pendingSave.current.versionId === selected.id && pendingSave.current.video.unitId === unitSelections[selected.id]} savePending={!!busy || !!pendingSave.current}
       onVerifyVideo={!busy && pendingSave.current?.versionId === selected.id && pendingSave.current?.video?.unitId === unitSelections[selected.id]
         ? () => { void save() } : currentDirectVideo && !currentDirectVideo.submitting ? () => { void directVideos.retry(currentDirectVideo) } : undefined}
       videoRefresh={videoRefresh} onGenerateVideo={generateVideo} onRetryVideo={retryVideo}
@@ -1121,7 +1125,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       leaveUnitSubgraph()
       setEditor(undefined); setCanvas('director')
       setDirectorFocus({ versionId: selected.id, nodeId: target.node_id, fieldId: target.field || '', serial: Date.now() })
-    }} navigationHost={directorNavigationHost} graph={selected.unit_graph} saved={selected.content} onLocateBlocker={blocker => {
+    }} navigationHost={directorNavigationHost} preparationHost={preparationHost} graphState={unitGraphState} graph={unitGraphState.graph || selected.unit_graph} saved={selected.content} onLocateBlocker={blocker => {
       setEditor(undefined)
       if (blocker.kind === 'coverage' && blocker.take_kind && blocker.take_id) {
         navigateRelation({ kind: 'take', takeKind: blocker.take_kind, takeId: blocker.take_id, focusCoverage: true })

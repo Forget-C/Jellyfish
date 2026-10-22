@@ -1,6 +1,6 @@
 import { makeWorkspace } from './directing-fixtures.mjs'
 import { workbenchControl, workbenchShot, closeWorkbenchDetails } from './workbenchControls.mjs'
-import { unitSettings } from './workbenchControls.mjs'
+import { unitCard } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -282,12 +282,12 @@ try {
   await page.getByText('指令任务：等待执行', { exact: true }).waitFor()
   const secondUnitTasksUrl = tasksUrl.replace('/unit-one/', '/unit-two/')
   const editingTask = (await (await fetch(secondUnitTasksUrl)).json()).data[0]
-  await unitSettings(page)
+  await unitCard(page)
   await page.getByRole('textbox', { name: '单元动作范围', exact: true }).fill('等待期间继续修改动作')
   await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   assert.equal((await fetch(`${api}/browser-test/instruction-tasks/${editingTask.task_id}/complete`, { method: 'POST' })).status, 200)
   await page.getByText('指令任务：已完成', { exact: true }).waitFor()
-  await unitSettings(page)
+  await unitCard(page)
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '等待期间继续修改动作')
   assert.equal(await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).count(), 0)
   await page.getByRole('button', { name: '查看指令建议', exact: true }).click()
@@ -302,7 +302,7 @@ try {
   assert.equal((await fetch(`${api}/browser-test/instruction-tasks/${backgroundTask.task_id}/complete?${new URLSearchParams({ text: '第二单元后台结果，不覆盖第一单元。' })}`, { method: 'POST' })).status, 200)
   const backgroundNotice = page.getByRole('region', { name: '单元 2 指令任务通知', exact: true })
   await backgroundNotice.getByText('指令任务已完成', { exact: true }).waitFor({ timeout: 6000 })
-  await unitSettings(page)
+  await unitCard(page)
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '拆开信封')
   assert.equal(await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).count(), 0)
   await closeWorkbenchDetails(page)

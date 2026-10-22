@@ -1,7 +1,9 @@
 import { WorkbenchDetails } from './ui/WorkbenchDetails'
 import { createPortal } from 'react-dom'
+import { SceneUnitPreparationStatus } from './SceneUnitPreparationStatus'
+import type { ScenePreparationIssue } from './useSceneUnitPreparation'
 import { useSceneUnitPreparation } from './useSceneUnitPreparation'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Input, InputNumber, Select, Spin } from 'antd'
 import { LlmService, StudioDirectingService } from '../../../services/generated'
 import type { AssetSummary, CanvasTarget, UnitCanvasGraph, SceneUnitDesignBlocker, EditableGenerationUnit_Output, ModelRead, SceneVersionContent_Output, WorkspaceRead } from '../../../services/generated'
@@ -23,6 +25,8 @@ type SceneUnitCanvasProps = {
   onUnitDesignFocused?: () => void
   unitDesignTaskId?: string
   saveStatus: string
+  preparationHost: HTMLElement | null
+  graphState: { current: boolean; pending: boolean; error: string; retry: () => void }
   primaryHost: HTMLElement | null
   navigationHost: HTMLElement | null
   graph: UnitCanvasGraph
@@ -47,7 +51,7 @@ export function SceneUnitCanvas(props: SceneUnitCanvasProps) {
 }
 
 /** 单元和设计共用一份可编辑方案；画布浏览不创建单元，也不选择替代对象。 */
-function SceneUnitCanvasBody({ primaryHost, navigationHost, graph, saved, projectId, sequenceId, versionId, revision, content, unitId, disabled, saveStatus, onSelectShot, onSelectUnit, onChange, focusRequest, onOpenInstruction, onInstructionTask, onOpenEdit, unitDesignTaskId, onUnitDesignFocused, onLocateBlocker, onLocateDesign }: SceneUnitCanvasProps) {
+function SceneUnitCanvasBody({ preparationHost, graphState, primaryHost, navigationHost, graph, saved, projectId, sequenceId, versionId, revision, content, unitId, disabled, saveStatus, onSelectShot, onSelectUnit, onChange, focusRequest, onOpenInstruction, onInstructionTask, onOpenEdit, unitDesignTaskId, onUnitDesignFocused, onLocateBlocker, onLocateDesign }: SceneUnitCanvasProps) {
   const [browseShotId, setBrowseShotId] = useState<string>()
   const [creationOpen, setCreationOpen] = useState(false)
   const [creationShotId, setCreationShotId] = useState<string>()
@@ -59,17 +63,16 @@ function SceneUnitCanvasBody({ primaryHost, navigationHost, graph, saved, projec
   const [assetError, setAssetError] = useState('')
   const [attempt, setAttempt] = useState(0)
   const [settingsUnitId, setSettingsUnitId] = useState<string>()
-  const [settingsSection, setSettingsSection] = useState<'all' | 'coverage' | 'generation' | 'organization'>('all')
+  const [settingsSection, setSettingsSection] = useState<'coverage' | 'generation' | 'organization'>('coverage')
   const [coverageSelection, setCoverageSelection] = useState<string>()
   const [organizationReason, setOrganizationReason] = useState('')
-  const openSettings = (id?: string, section: typeof settingsSection = 'all', coverageId?: string) => {
+  const openSettings = (id?: string, section: typeof settingsSection = 'coverage', coverageId?: string) => {
     if (id !== settingsUnitId) setOrganizationReason('')
     setSettingsUnitId(id); setSettingsSection(section); setCoverageSelection(coverageId)
   }
-  const showSettings = (section: typeof settingsSection) => settingsSection === 'all' || settingsSection === section
+  const showSettings = (section: typeof settingsSection) => settingsSection === section
   const [basisUnitId, setBasisUnitId] = useState<string>()
   const [picker, setPicker] = useState<string>()
-  const [parametersUnitId, setParametersUnitId] = useState<string>()
   const [dependencyUnitId, setDependencyUnitId] = useState<string>()
   const [workspace, setWorkspace] = useState<WorkspaceRead>()
   const [workspaceError, setWorkspaceError] = useState('')
@@ -77,13 +80,11 @@ function SceneUnitCanvasBody({ primaryHost, navigationHost, graph, saved, projec
   const allUnits = content.units || []
   const unit = allUnits.find(row => row.id === unitId)
   const basis = graph.nodes.find(node => node.kind === 'unit_basis' && node.unit_id === basisUnitId)
-  const { capability, capabilityError, frameEvidence, missing, designScopeError } = useSceneUnitPreparation(projectId, sequenceId, versionId, revision, content, unit, attempt)
+  const { capability, capabilityError, frameEvidence, missing, checking, failed } = useSceneUnitPreparation(projectId, sequenceId, versionId, revision, content, unit, attempt, { ...graphState, graph })
+  const preparationLocator = useRef<(issue: ScenePreparationIssue) => void>()
   useEffect(() => {
     if (focusRequest?.versionId === versionId && focusRequest.unitId === unit?.id) {
-      setFocusTarget(focusRequest)
-      if (focusRequest.fieldId === 'scene-unit-dependencies') setDependencyUnitId(unit.id)
-      if (focusRequest.fieldId === 'scene-unit-parameters') setParametersUnitId(unit.id)
-      if (!['scene-unit-parameters', 'scene-unit-dependencies'].includes(focusRequest.fieldId)) openSettings(unit.id)
+      preparationLocator.current?.({ message: '', fieldId: focusRequest.fieldId, nodeId: focusRequest.nodeId })
     }
   }, [focusRequest, versionId, unit?.id])
   useEffect(() => {
@@ -116,27 +117,41 @@ function SceneUnitCanvasBody({ primaryHost, navigationHost, graph, saved, projec
   const create = (targetShotId: string) => {
     const shot = content.design.direction.shots.find(row => row.id === targetShotId)
     if (!shot || disabled) return
-    const id = crypto.randomUUID()
+    const id = crypto.randomUUID(), coverageId = crypto.randomUUID()
     onChange({ ...content, units: [...allUnits, { id,
-      coverage: [{ id: crypto.randomUUID(), shot_id: shot.id, beat_ids: [], event_ids: [], staging_activity_ids: [], performance_action_ids: [], continuity_change_ids: [], action_scope: '' }],
+      coverage: [{ id: coverageId, shot_id: shot.id, beat_ids: [], event_ids: [], staging_activity_ids: [], performance_action_ids: [], continuity_change_ids: [], action_scope: '' }],
       references: [], model_id: null, duration_ms: null, ratio: content.output_aspect_ratio,
       organization: null, parameters: {}, capability: { multi_shot: 'unknown' }, dependencies: [], scene_dependencies: [], instruction: '', instruction_source: null, instruction_basis_id: null, instruction_check_task_id: null,
     }] })
     onSelectUnit(id, shot.id)
-    openSettings(id)
+    openSettings(id, 'coverage', coverageId)
     setCreationOpen(false)
   }
-  const locateIssue = (issue: typeof missing[number]) => {
-    if (issue.fieldId === 'scene-unit-dependencies' && unit) setDependencyUnitId(unit.id)
-    else if (issue.fieldId === 'scene-unit-parameters' && unit) setParametersUnitId(unit.id)
-    else { if (unit) openSettings(unit.id); setFocusTarget({ nodeId: issue.nodeId || '单元设置', fieldId: issue.fieldId, serial: Date.now() }) }
+  const locateIssue = (issue: ScenePreparationIssue) => {
+    if (!unit) return
+    if (issue.target?.external) { onLocateDesign(issue.target); return }
+    const node = graph.nodes.find(row => row.id === (issue.target?.node_id || issue.nodeId))
+    const fieldId = issue.fieldId
+    if (fieldId === 'scene-unit-references' || node?.kind === 'unit_references') setPicker(unit.id)
+    else if (fieldId === 'scene-unit-dependencies' || node?.kind === 'unit_config' && node.config_kind === 'dependencies') setDependencyUnitId(unit.id)
+    else if (node?.kind === 'unit_config' && node.config_kind !== 'dependencies') openSettings(unit.id, node.config_kind, node.coverage_item_id || undefined)
+    else {
+      const coverage = unit.coverage.find(item => fieldId === `scene-unit-action-${item.id}`)
+      if (coverage) openSettings(unit.id, 'coverage', coverage.id)
+      else if (fieldId.startsWith('scene-unit-organization-')) openSettings(unit.id, 'organization')
+      else if (fieldId === 'scene-unit-basis') setBasisUnitId(unit.id)
+      else openSettings(unit.id, 'generation')
+    }
+    const focusField = node?.kind === 'unit_config' && node.config_kind === 'organization' && !fieldId.startsWith('scene-unit-')
+      ? `scene-unit-organization-${unit.id}-${fieldId}` : fieldId
+    setFocusTarget({ nodeId: issue.target?.node_id || issue.nodeId || '', fieldId: focusField, serial: Date.now() })
   }
+  // 当前编辑变化不重复执行旧定位请求，避免输入期间抢回焦点。
+  preparationLocator.current = locateIssue
+  const retryPreparation = () => { setAttempt(value => value + 1); graphState.retry(); frameEvidence.reload() }
   const settings =       <>
           {!unit ? <p>明确选择单元后编辑；浏览不创建数据。</p> : <>
           <p>单元 {allUnits.indexOf(unit) + 1} · 当前场次版本</p>
-          {!missing.length && <p role="status">当前单元基础准备已齐备</p>}
-          {missing.length > 0 && <Alert type="warning" message="本单元待准备" description={<ul>{missing.map(item => <li key={item.message}><Button type="link" onClick={() => locateIssue(item)}>{item.message}</Button></li>)}</ul>}
-            action={designScopeError ? <WorkbenchButton variant="secondary" onClick={() => setAttempt(value => value + 1)}>重试设计范围</WorkbenchButton> : undefined} />}
           {showSettings('coverage') && unit.coverage.map((item, index) => {
             if (settingsSection === 'coverage' && item.id !== coverageSelection) return null
             const sourceShot = content.design.direction.shots.find(row => row.id === item.shot_id)
@@ -206,7 +221,7 @@ function SceneUnitCanvasBody({ primaryHost, navigationHost, graph, saved, projec
               onChange={event => patch({ organization: { ...unit.organization!, entry_state: event.target.value } })} /></label>
             <label>结束状态<Input.TextArea id={`scene-unit-organization-${unit.id}-exit_state`} aria-label="组织结束状态" disabled={disabled} value={unit.organization.exit_state}
               onChange={event => patch({ organization: { ...unit.organization!, exit_state: event.target.value } })} /></label>
-            <label>待准备参考（每行一项）<Input.TextArea aria-label="组织参考需求" disabled={disabled} value={unit.organization.reference_requirements.join('\n')}
+            <label>待准备参考（每行一项）<Input.TextArea id={`scene-unit-organization-${unit.id}-reference_requirements`} aria-label="组织参考需求" disabled={disabled} value={unit.organization.reference_requirements.join('\n')}
               onChange={event => patch({ organization: { ...unit.organization!, reference_requirements: event.target.value.split('\n').filter(Boolean) } })} /></label>
             {!!unit.organization.missing.length && <details><summary>设计时诊断（不代表当前准备度）</summary><ul>{unit.organization.missing.map((item, index) => <li key={index}>{item}</li>)}</ul></details>}
           </section>}
@@ -218,21 +233,27 @@ function SceneUnitCanvasBody({ primaryHost, navigationHost, graph, saved, projec
             onChange={seconds => patch({ duration_ms: seconds == null ? null : Math.round(seconds * 1000) })} /></label>
           <label>画幅<Input id="scene-unit-ratio" aria-label="单元画幅" disabled={disabled} value={unit.ratio} onChange={event => patch({ ratio: event.target.value })} /></label>
           <p>画幅继承创建时的场次设置；修改后仅影响本单元。</p>
-          <Button id="scene-unit-parameters" onClick={() => setParametersUnitId(unit.id)}>编辑模型参数</Button>
+      <p>当前执行器支持随机种子；留空使用模型的默认行为。参数随本单元保存，不修改其他单元。</p>
+      <label>随机种子<InputNumber id="scene-unit-parameters" aria-label="单元随机种子" disabled={disabled} min={-1} max={4294967295} precision={0}
+        value={typeof unit.parameters.seed === 'number' ? unit.parameters.seed : null}
+        onChange={seed => patch({ parameters: seed === null ? Object.fromEntries(Object.entries(unit.parameters).filter(([key]) => key !== 'seed')) : { ...unit.parameters, seed } })} /></label>
+      {unit.parameters.seed != null && typeof unit.parameters.seed !== 'number' && <Alert type="warning" message={`原随机种子不可用：${String(unit.parameters.seed)}`}
+        action={<Button disabled={disabled} onClick={() => patch({ parameters: Object.fromEntries(Object.entries(unit.parameters).filter(([key]) => key !== 'seed')) })}>清除不可用随机种子</Button>} />}
+      {Object.entries(unit.parameters).filter(([key]) => key !== 'seed').map(([key, value]) => <p key={key}>{key}：{String(value)} · 当前执行器不支持
+        <Button disabled={disabled} onClick={() => patch({ parameters: Object.fromEntries(Object.entries(unit.parameters).filter(([name]) => name !== key)) })}>移除参数 {key}</Button></p>)}
           {capabilityError && <Alert type="error" message="模型能力读取失败" description={capabilityError} action={<Button onClick={() => setAttempt(value => value + 1)}>重试模型能力</Button>} />}
-          </>}
-          {settingsSection === 'all' && <>
-          <h3 id="scene-unit-dependencies" tabIndex={-1}>前段依赖</h3><Button onClick={() => setDependencyUnitId(unit.id)}>编辑前段依赖</Button>{!unit.dependencies.length && !(unit.scene_dependencies || []).length ? <p>当前无前段落幅依赖</p> : unit.dependencies.map((link, index) => <p key={`${link.plan_revision_id}:${link.unit_id}`}>前段依赖 {index + 1} · {link.frame_id ? '已绑定实际落幅' : '实际落幅待准备'}</p>)}
           </>}
         </>}
       </>
   return <section className="scene-unit-canvas">
+    {unit && <SceneUnitPreparationStatus host={preparationHost} missing={missing} checking={checking} failed={failed} onLocate={locateIssue} onRetry={retryPreparation} />}
+    {graphState.error && <Alert type="error" message="单元卡片更新失败，当前编辑已保留" description={graphState.error} action={<WorkbenchButton onClick={graphState.retry}>重试单元卡片</WorkbenchButton>} />}
     <SceneUnitDesignSuggestions onLocateBlocker={onLocateBlocker} onChange={onChange} onFocused={onUnitDesignFocused} triggerHost={primaryHost} focusTaskId={unitDesignTaskId} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content} shotId={browseShotId} unitId={unit?.id} disabled={disabled} />
     {unit && primaryHost && createPortal(<nav className="scene-unit-primary" aria-label="当前单元主操作"><strong>当前单元 {allUnits.indexOf(unit) + 1}</strong>
-      {<SceneInstructionSuggestions onPrepare={missing.length ? () => locateIssue(missing[0]) : undefined} key={unit.id} compact projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision}
+      {<SceneInstructionSuggestions preparationBlocked={!!missing.length || checking || failed} key={unit.id} compact projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision}
         unitId={unit.id} content={content} disabled={disabled} onChange={onChange} onOpen={onOpenInstruction} onTask={onInstructionTask} />}
     </nav>, primaryHost)}
-    <UnitGraphCanvas graph={graph} versionId={versionId} revision={revision} navigationHost={navigationHost}
+    <UnitGraphCanvas graph={graph} updating={!graphState.current} versionId={versionId} revision={revision} navigationHost={navigationHost}
       storageKey={`jellyfish:unit-graph:local-user:${projectId}:${sequenceId}:${versionId}`}
       pending={JSON.stringify(content) !== JSON.stringify(saved)} focusUnitId={focusRequest?.unitId}
       onSelectUnit={onSelectUnit} onSelectShot={onSelectShot} onBrowseShotChange={setBrowseShotId}
@@ -250,19 +271,14 @@ function SceneUnitCanvasBody({ primaryHost, navigationHost, graph, saved, projec
         else if (node.kind === 'unit_references') setPicker(node.unit_id)
         else if (node.kind === 'unit_config' && node.config_kind === 'dependencies') setDependencyUnitId(node.unit_id)
         else if (node.kind === 'unit_config' && node.config_kind !== 'dependencies') openSettings(node.unit_id, node.config_kind, node.coverage_item_id || undefined)
-        else openSettings(node.unit_id)
+        else setBasisUnitId(node.unit_id)
       }} />
     <section className="scene-unit-editor-entry" aria-label="单元编辑入口">
       <Select aria-label="当前单元" placeholder="选择当前编辑单元" value={unit?.id} style={{ width: 320 }}
         options={allUnits.map((row, index) => ({ value: row.id, label: `单元 ${index + 1}` }))} onChange={id => onSelectUnit(id)} />
-      {unit && <><WorkbenchButton variant="secondary" onClick={() => openSettings(unit.id)}>查看单元设置</WorkbenchButton>
-        <WorkbenchButton variant="secondary" onClick={() => setPicker(unit.id)}>编辑参考素材</WorkbenchButton></>}
-      <WorkbenchButton disabled={disabled || !content.design.direction.shots.length} onClick={() => {
-        if (browseShotId) create(browseShotId)
-        else { setCreationShotId(undefined); setCreationOpen(true) }
-      }}>{browseShotId ? '为当前镜头建立单元' : '建立单元'}</WorkbenchButton>
     </section>
-    {unavailableTarget && <Alert type="warning" message="当前编辑中该来源已移除；保存后画布将同步，不会选择其他对象代替" />}
+    {unavailableTarget && <Alert type="warning" message="当前编辑中该来源已移除，请重新选择当前卡片" />}
+    {/* 保留手动创建能力；工作台创建入口目前仅提供 AI 方案应用。 */}
     <WorkbenchModal title="建立单元" open={creationOpen} onCancel={() => setCreationOpen(false)} footer={<WorkbenchDialogActions
       secondary={<WorkbenchButton variant="quiet" onClick={() => setCreationOpen(false)}>取消</WorkbenchButton>}>
       <WorkbenchButton variant="primary" disabled={disabled || !creationShotId} onClick={() => { if (creationShotId) create(creationShotId) }}>创建单元</WorkbenchButton>
@@ -271,9 +287,9 @@ function SceneUnitCanvasBody({ primaryHost, navigationHost, graph, saved, projec
       <Select aria-label="新增单元目标镜头" placeholder="选择目标镜头" value={creationShotId} style={{ width: '100%' }} onChange={setCreationShotId}
         options={content.design.direction.shots.map((row, index) => ({ value: row.id, label: `镜头 ${index + 1}：${row.visible_result.text || '未填写'}` }))} />
     </WorkbenchModal>
-    <WorkbenchDetails focusTarget={focusTarget || focusRequest} status={saveStatus} title={settingsSection === 'coverage' ? '动作覆盖' : settingsSection === 'generation' ? '生成配置' : settingsSection === 'organization' ? '组织要求' : '单元设置'} open={!!unit && settingsUnitId === unit.id} onClose={() => openSettings(undefined)}>{settings}</WorkbenchDetails>
-    <WorkbenchDetails title="本单元执行依据" status={`只读 · revision ${graph.revision}`} open={basis?.kind === 'unit_basis'} onClose={() => setBasisUnitId(undefined)}>
-      {basis?.kind === 'unit_basis' && <UnitScopeSummary value={basis.scope} fieldTargets={basis.field_targets} onLocate={target => {
+    <WorkbenchDetails focusTarget={focusTarget || focusRequest} status={saveStatus} title={settingsSection === 'coverage' ? '动作覆盖' : settingsSection === 'generation' ? '生成配置' : '组织要求'} open={!!unit && settingsUnitId === unit.id} onClose={() => openSettings(undefined)}>{settings}</WorkbenchDetails>
+    <WorkbenchDetails title="本单元执行依据" status={graphState.current ? '只读 · 当前编辑' : '当前依据核实中'} open={basis?.kind === 'unit_basis' && allUnits.some(row => row.id === basis.unit_id)} onClose={() => setBasisUnitId(undefined)}>
+      {graphState.current && basis?.kind === 'unit_basis' && <UnitScopeSummary value={basis.scope} fieldTargets={basis.field_targets} onLocate={target => {
         if (target.external) { onLocateDesign(target); return }
         const source = graph.nodes.find(node => node.id === target.node_id)
         if (source?.kind !== 'unit_config') { setUnavailableTarget(true); return }
@@ -290,24 +306,12 @@ function SceneUnitCanvasBody({ primaryHost, navigationHost, graph, saved, projec
         }
       }} />}
     </WorkbenchDetails>
-    {unit && parametersUnitId === unit.id && <WorkbenchDetails status={saveStatus} title="当前单元模型参数" open onClose={() => setParametersUnitId(undefined)}>
-      <Button onClick={() => { setParametersUnitId(undefined); if (unit) openSettings(unit.id) }}>返回单元设置</Button>
-      <p>当前执行器支持随机种子；留空使用模型的默认行为。参数随本单元保存，不修改其他单元。</p>
-      <label>随机种子<InputNumber aria-label="单元随机种子" disabled={disabled} min={-1} max={4294967295} precision={0}
-        value={typeof unit.parameters.seed === 'number' ? unit.parameters.seed : null}
-        onChange={seed => patch({ parameters: seed === null ? Object.fromEntries(Object.entries(unit.parameters).filter(([key]) => key !== 'seed')) : { ...unit.parameters, seed } })} /></label>
-      {unit.parameters.seed != null && typeof unit.parameters.seed !== 'number' && <Alert type="warning" message={`原随机种子不可用：${String(unit.parameters.seed)}`}
-        action={<Button disabled={disabled} onClick={() => patch({ parameters: Object.fromEntries(Object.entries(unit.parameters).filter(([key]) => key !== 'seed')) })}>清除不可用随机种子</Button>} />}
-      {Object.entries(unit.parameters).filter(([key]) => key !== 'seed').map(([key, value]) => <p key={key}>{key}：{String(value)} · 当前执行器不支持
-        <Button disabled={disabled} onClick={() => patch({ parameters: Object.fromEntries(Object.entries(unit.parameters).filter(([name]) => name !== key)) })}>移除参数 {key}</Button></p>)}
-    </WorkbenchDetails>}
     {unit && dependencyUnitId === unit.id && <WorkbenchDetails status={saveStatus} title="前段依赖" open onClose={() => setDependencyUnitId(undefined)}>
       <Button onClick={() => { setDependencyUnitId(undefined); onOpenInstruction() }}>前往当前单元指令核对</Button>
-      <Button onClick={() => { setDependencyUnitId(undefined); if (unit) openSettings(unit.id) }}>返回单元设置</Button>
-      <SceneFrameDependencies onOpenEdit={onOpenEdit} unit={unit} content={content} versionId={versionId} evidence={frameEvidence} disabled={disabled} onChange={patch} />
+      <section id="scene-unit-dependencies" tabIndex={-1}><SceneFrameDependencies onOpenEdit={onOpenEdit} unit={unit} content={content} versionId={versionId} evidence={frameEvidence} disabled={disabled} onChange={patch} />
       {!!unit.dependencies.length && workspaceLoading && <Spin />}
       {workspaceError && <Alert type="error" message="来源单元读取失败" description={workspaceError} action={<Button onClick={() => setAttempt(value => value + 1)}>重试来源单元</Button>} />}
-      {!!unit.dependencies.length && workspace && <DependencyEditor sceneVersion projectId={projectId} workspace={workspace} unit={unit} disabled={disabled} onChange={patch} />}
+      {!!unit.dependencies.length && workspace && <DependencyEditor sceneVersion projectId={projectId} workspace={workspace} unit={unit} disabled={disabled} onChange={patch} />}</section>
     </WorkbenchDetails>}
     {unit && picker === unit.id && <ReferencePicker title="编辑参考素材" rootClassName="canvas-workbench-dialog" key={`${versionId}:${unit.id}`} projectId={projectId} assets={assets} assetError={assetError}
       contextLabel={`单元 ${allUnits.findIndex(row => row.id === unit.id) + 1} · ${disabled ? '只读' : saveStatus}`} onReloadAssets={() => setAttempt(value => value + 1)} design={content.design} coverage={unit.coverage} references={unit.references}

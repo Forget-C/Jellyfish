@@ -57,12 +57,23 @@ export async function directorObject(page, label, search = typeof label === 'str
   return page.locator('.wb-details:visible').last()
 }
 
-/** 从真实摘要入口打开唯一单元编辑器；已打开时保留当前输入会话。 */
-export async function unitSettings(page) {
-  const panel = page.getByRole('complementary', { name: '单元设置', exact: true }).or(page.getByRole('dialog', { name: '单元设置', exact: true }))
-  if (!await panel.isVisible()) await page.getByRole('button', { name: '查看单元设置', exact: true }).click()
-  await panel.waitFor()
-  return panel
+/** 从当前单元子图打开某一类配置详情。 */
+export async function unitCard(page, title = '动作覆盖 1') {
+  await closeWorkbenchDetails(page)
+  const selected = await page.locator('.scene-unit-editor-entry .ant-select-selection-item').textContent()
+  const target = page.getByRole('button', { name: `查看节点：${title}`, exact: true })
+  if (!await page.getByRole('button', { name: `查看节点：${selected}`, exact: true }).count()) {
+    await page.getByRole('navigation', { name: '单元画布位置', exact: true }).getByRole('button', { name: '单元画布', exact: true }).click()
+    const entry = page.getByRole('button', { name: `进入子图：${selected}`, exact: true })
+    if (!await entry.count()) await selectWorkbenchOption(page, '单元镜头筛选', '全部镜头')
+    await locateCanvasNode(page, selected)
+    await entry.click()
+  }
+  await locateCanvasNode(page, title)
+  await target.click()
+  const details = title === '参考素材' ? page.getByRole('dialog', { name: '编辑参考素材', exact: true }) : page.locator('.wb-details:visible')
+  await details.waitFor()
+  return details
 }
 
 export async function closeWorkbenchDetails(page) {

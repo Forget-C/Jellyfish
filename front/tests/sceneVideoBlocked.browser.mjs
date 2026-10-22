@@ -1,6 +1,6 @@
 import { makeWorkspace } from './directing-fixtures.mjs'
 import { workbenchControl, workbenchShot, closeWorkbenchDetails } from './workbenchControls.mjs'
-import { unitSettings } from './workbenchControls.mjs'
+import { unitCard } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -103,16 +103,16 @@ try {
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
   await page.getByRole('combobox', { name: '当前单元', exact: true }).click()
   await page.getByText('单元 2 · 拆开信封', { exact: true }).click()
-  await unitSettings(page)
+  await unitCard(page)
   await page.getByRole('textbox', { name: '单元动作范围', exact: true }).fill('视频受阻期间继续编辑 B')
   releaseBlocked()
   await page.getByRole('status').filter({ hasText: '视频提交待核实' }).first().waitFor()
-  await unitSettings(page)
+  await unitCard(page)
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '视频受阻期间继续编辑 B')
   await page.getByRole('button', { name: '核实原视频请求', exact: true }).click()
   await page.getByText(/单元 1：已保存，视频未提交：指令超过 5000/).waitFor()
   await page.getByRole('status').filter({ hasText: '未保存' }).first().waitFor()
-  await unitSettings(page)
+  await unitCard(page)
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '视频受阻期间继续编辑 B')
   assert.equal(await page.getByText('保存失败，输入已保留', { exact: true }).count(), 0)
   const stored = (await (await fetch(`${versionsUrl}/${version.id}`)).json()).data

@@ -1,5 +1,5 @@
 import { makeWorkspace } from './directing-fixtures.mjs'
-import { unitSettings } from './workbenchControls.mjs'
+import { unitCard } from './workbenchControls.mjs'
 import { workbenchControl, workbenchShot, selectWorkbenchOption, directorObject } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -78,7 +78,7 @@ try {
 
   assert.equal((await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.content.design.direction.shots.length, 2)
   await page.getByRole('button', { name: '定位单元 1 · 覆盖 1', exact: true }).click()
-  await unitSettings(page)
+  await unitCard(page)
   await selectWorkbenchOption(page, '覆盖 1 所属镜头', '镜头 2：相同名称')
   await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   const repaired = (await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.content
@@ -114,9 +114,9 @@ try {
   await page.getByRole('button', { name: '删除此卡', exact: true }).click()
   await page.getByText('对象仍被单元引用，请先处理下游引用。', { exact: true }).waitFor()
   await page.getByRole('button', { name: '定位单元 1 · 覆盖 1', exact: true }).click()
-  await unitSettings(page)
+  await unitCard(page)
   await page.getByRole('textbox', { name: '单元动作范围', exact: true }).waitFor()
-  await unitSettings(page)
+  await unitCard(page)
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '保留实际拍摄范围')
   assert.deepEqual((await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.content, beforeGuard)
   console.log(`PASS design reference recovery; evidence: ${output}`)

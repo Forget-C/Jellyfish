@@ -1,6 +1,5 @@
 import { makeWorkspace } from './directing-fixtures.mjs'
 import { workbenchControl, workbenchShot, closeWorkbenchDetails } from './workbenchControls.mjs'
-import { unitSettings } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'

@@ -94,7 +94,6 @@ try {
   assert.deepEqual(await visibleDiagnostic(), { summariesFit: true, diagnostic: true, action: true }, '长摘要不能挤出实际缺项和详情入口')
   await generation.getByRole('button', { name: '查看详情', exact: true }).click()
   await page.getByRole('combobox', { name: '单元视频模型', exact: true }).waitFor()
-  await page.getByRole('button', { name: '编辑模型参数', exact: true }).click()
   await page.getByRole('button', { name: '移除参数 long_parameter', exact: true }).waitFor()
   assert.match(await page.locator('.wb-details:not([hidden])').innerText(), /长参数内容/)
   await closeWorkbenchDetails(page)

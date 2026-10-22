@@ -124,6 +124,7 @@ export type { ApiResponse_TaskResultRead_ } from './models/ApiResponse_TaskResul
 export type { ApiResponse_TaskStatusRead_ } from './models/ApiResponse_TaskStatusRead_';
 export type { ApiResponse_TextLabRunStatus_ } from './models/ApiResponse_TextLabRunStatus_';
 export type { ApiResponse_Union_DivisionSaved__NoneType__ } from './models/ApiResponse_Union_DivisionSaved__NoneType__';
+export type { ApiResponse_UnitCanvasGraph_ } from './models/ApiResponse_UnitCanvasGraph_';
 export type { ApiResponse_VideoGenerationOptionsRead_ } from './models/ApiResponse_VideoGenerationOptionsRead_';
 export type { ApiResponse_VideoReferenceCapabilities_ } from './models/ApiResponse_VideoReferenceCapabilities_';
 export type { ApiResponse_WorkspaceRead_ } from './models/ApiResponse_WorkspaceRead_';
@@ -474,6 +475,7 @@ export type { SceneTakeReviewConfirm } from './models/SceneTakeReviewConfirm';
 export type { SceneTakeReviewRead } from './models/SceneTakeReviewRead';
 export type { SceneTimeline_Input } from './models/SceneTimeline_Input';
 export type { SceneTimeline_Output } from './models/SceneTimeline_Output';
+export type { SceneUnitCanvasPreview } from './models/SceneUnitCanvasPreview';
 export type { SceneUnitDesignBlocker } from './models/SceneUnitDesignBlocker';
 export type { SceneUnitDesignPreview } from './models/SceneUnitDesignPreview';
 export type { SceneUnitDesignPreviewRequest } from './models/SceneUnitDesignPreviewRequest';

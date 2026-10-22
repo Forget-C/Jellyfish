@@ -7,6 +7,7 @@ from app.core.contracts.directing.canvas_graph import (
     CanvasReferencePreview, CanvasTarget, CanvasView, DirectorCanvasGraph, ShotBasisCanvasNode, UnitBasisCanvasNode, UnitCanvasGraph, UnitCanvasNode,
     UnitConfigCanvasNode, UnitReferencesCanvasNode,
 )
+from app.core.contracts.directing.design_scope import design_scope_issues
 from app.services.directing.canvas_graph import CanvasReadContext, GraphAssembler, note_summary
 from app.services.directing.instruction_inputs import unit_scope
 from app.services.directing.unit_video_inputs import UnitVideoInputError, validated_video_media
@@ -43,26 +44,47 @@ def _unit_basis(context, unit, index, graph, director):
     if style_issue := context.style_issues.get(unit.model_id or ''):
         scope.unresolved.append(style_issue)
     by_owner = {node.object.id: node for node in director.nodes}
+    def source_target(owner, field):
+        external = False
+        if owner.startswith('coverage:'):
+            source = graph.nodes.get(f'unit:{unit.id}:coverage:{owner.removeprefix("coverage:")}')
+        elif owner == f'unit:{unit.id}':
+            source = graph.nodes.get(f'unit:{unit.id}:organization')
+        else:
+            source = by_owner.get(owner)
+            external = True
+        if source is None:
+            return None
+        return CanvasTarget(node_id=source.id, object=source.object,
+            field='name' if owner.startswith('participant:') and field == 'identity' else field,
+            external=external)
+
     field_targets = []
     for section in ('execution', 'constraints', 'background'):
         for row_index, row in enumerate(getattr(scope, section)):
-            source = None
-            external = False
-            if row.owner.startswith('coverage:'):
-                source = graph.nodes.get(f'unit:{unit.id}:coverage:{row.owner.removeprefix("coverage:")}')
-            elif row.owner == f'unit:{unit.id}':
-                source = graph.nodes.get(f'unit:{unit.id}:organization')
-            else:
-                source = by_owner.get(row.owner)
-                external = True
-            field_name = 'name' if row.owner.startswith('participant:') and row.field == 'identity' else row.field
-            if source is not None:
-                field_targets.append(CanvasBasisTarget(section=section, index=row_index,
-                    target=CanvasTarget(node_id=source.id, object=source.object,
-                                        field=field_name, external=external)))
-            else:
-                field_targets.append(CanvasBasisTarget(section=section, index=row_index,
-                    unavailable_reason='固定来源不在当前画布；保留原字段、版本与来源供核对'))
+            source = source_target(row.owner, row.field)
+            field_targets.append(CanvasBasisTarget(section=section, index=row_index,
+                target=source, unavailable_reason=None if source else
+                '固定来源不在当前画布；保留原字段、版本与来源供核对'))
+    # 缺项沿真实设计字段或组织要求定位，不再把所有问题指向第一项动作范围。
+    unresolved_targets = {
+        f'{issue.owner}.{issue.field}：{issue.reason}': source_target(issue.owner, 'applicability')
+        for issue in design_scope_issues(context.content.design)
+    }
+    for item in unit.coverage:
+        for field, kind, owner, target_field in (
+            ('beat_ids', '节拍', 'beat', 'must_show'),
+            ('event_ids', '事件', 'event', 'description'),
+            ('performance_action_ids', '表演行动', 'performance', 'physical_action'),
+            ('staging_activity_ids', '镜内活动', 'activity', 'ongoing_task'),
+            ('continuity_change_ids', '连续性变化', 'continuity', 'change'),
+        ):
+            for identity in getattr(item, field):
+                unresolved_targets[f'已选{kind} {identity} 尚无可拍内容'] = source_target(f'{owner}:{identity}', target_field)
+        unresolved_targets[f'镜头 {item.shot_id} 的参与对象范围待核对'] = source_target(f'shot:{item.shot_id}', 'participant_ids')
+    if unit.organization:
+        for requirement in unit.organization.reference_requirements:
+            unresolved_targets['参考待绑定：' + requirement] = source_target(f'unit:{unit.id}', 'reference_requirements')
     basis_id = f'unit:{unit.id}:basis'
     obj = CanvasObject(version_id=context.version_id, revision=context.revision,
         kind='unit_basis', id=f'{unit.id}:basis', path=['units', index])
@@ -73,7 +95,7 @@ def _unit_basis(context, unit, index, graph, director):
             f'执行 {len(scope.execution)} 项 · 约束 {len(scope.constraints)} 项 · '
             f'背景 {len(scope.background)} 项 · 待核对 {len(scope.unresolved)} 项'))],
         issues=[CanvasIssue(code='unit-scope-unresolved', message=message, severity='warning',
-                            target=target) for message in scope.unresolved])
+                            target=unresolved_targets.get(message) or target) for message in scope.unresolved])
 
 
 def unit_graph(context: CanvasReadContext, director: DirectorCanvasGraph) -> UnitCanvasGraph:

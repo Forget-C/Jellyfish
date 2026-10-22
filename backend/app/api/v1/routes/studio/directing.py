@@ -48,7 +48,8 @@ from app.core.contracts.directing.scene_copy import SceneVersionCopy, SceneCopyR
 from app.services.directing.scene_copy import SceneCopyService
 from app.core.contracts.directing.scene_export import SceneExportRequest, SceneExportRead, SceneExportRetry, SceneExportInspect, SceneExportInspection
 from app.services.directing.scene_export import SceneExportService
-from app.core.contracts.directing.scene_version import SceneIdentityCleanup, SceneVersionCreate, SceneVersionRead, SceneVersionSave, SceneVersionContent
+from app.core.contracts.directing.scene_version import SceneIdentityCleanup, SceneVersionCreate, SceneVersionRead, SceneVersionSave, SceneVersionContent, SceneUnitCanvasPreview
+from app.core.contracts.directing.canvas_graph import UnitCanvasGraph
 from app.core.contracts.directing.scene_design import SceneDesignRequest, SceneDesignPreviewRequest, SceneDesignPreview, SceneDesignSuggestionRead
 from app.services.directing.scene_design import SceneDesignService
 from app.services.directing.scene_unit_design import SceneUnitDesignService
@@ -185,6 +186,12 @@ async def scene_version(project_id: str, sequence_id: str, version_id: str, db: 
 async def save_scene_version(project_id: str, sequence_id: str, version_id: str, body: SceneVersionSave, db: AsyncSession = Depends(get_db, scope='function')):
     """更新同一版本，保存并不确认设计或发起执行。"""
     return success_response(await _call(DirectingStore(db, project_id).save_scene_version(sequence_id, version_id, body)))
+
+
+@router.post('/sequences/{sequence_id}/versions/{version_id}/unit-canvas/preview', response_model=ApiResponse[UnitCanvasGraph], operation_id='directing_preview_unit_canvas')
+async def preview_unit_canvas(project_id: str, sequence_id: str, version_id: str, body: SceneUnitCanvasPreview, db: AsyncSession = Depends(get_db, scope='function')):
+    """只读投影当前编辑的单元卡片，不保存版本或创建任务。"""
+    return success_response(await _call(DirectingStore(db, project_id).preview_unit_canvas(sequence_id, version_id, body)))
 
 
 @router.post('/sequences/{sequence_id}/versions/{version_id}/identity-references/cleanup', response_model=ApiResponse[SceneVersionRead], operation_id='directing_cleanup_identity_references')

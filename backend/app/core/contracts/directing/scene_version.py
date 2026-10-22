@@ -290,6 +290,13 @@ class SceneIdentityCleanup(Contract):
     expected_revision: int = Field(gt=0)
 
 
+class SceneUnitCanvasPreview(Contract):
+    """按保存基线投影当前编辑；不保存、不确认依据或授权生成。"""
+
+    expected_revision: int = Field(gt=0)
+    content: SceneVersionContent
+
+
 class SceneVersionRead(Contract):
     """带归属与保存状态的场次版本，不向用户暴露多层草稿确认。"""
 

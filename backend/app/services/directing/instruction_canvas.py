@@ -23,6 +23,9 @@ async def instruction_graph(context: CanvasReadContext, units: UnitCanvasGraph, 
                 for row in node.field_targets:
                     if row.target:
                         row.target.external = True
+                for issue in node.issues:
+                    if issue.target.node_id != node.id:
+                        issue.target.external = True
             graph.add_node(node)
         obj = CanvasObject(version_id=context.version_id, revision=context.revision,
             kind='instruction', id=unit.id, path=['units', index, 'instruction'])

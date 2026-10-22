@@ -1,6 +1,6 @@
 import { makeWorkspace } from './directing-fixtures.mjs'
 import { workbenchControl, workbenchShot } from './workbenchControls.mjs'
-import { unitSettings } from './workbenchControls.mjs'
+import { unitCard, closeWorkbenchDetails } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -59,27 +59,34 @@ try {
   await (await workbenchControl(page, '保存设置', 'switch', '自动保存')).click()
   await (await workbenchShot(page, '镜头 1：准备指令')).click()
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
-  await unitSettings(page)
+  await unitCard(page, '生成配置')
   await page.getByRole('spinbutton', { name: '单元预计时长', exact: true }).fill('')
+  await closeWorkbenchDetails(page)
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
   const primary = page.getByRole('navigation', { name: '当前指令主操作', exact: true })
-  await primary.getByRole('button', { name: '补齐当前单元准备', exact: true }).waitFor({ timeout: 5000 })
+  await page.getByRole('button', { name: '单元准备状态', exact: true }).waitFor({ timeout: 5000 })
+  assert.equal(await page.getByRole('button', { name: '补齐当前单元准备', exact: true }).count(), 0)
   const suggestions = page.getByRole('region', { name: '当前单元指令建议', exact: true })
   assert.equal(await suggestions.getByRole('button', { name: '生成当前单元指令建议', exact: true }).isDisabled(), true)
-  await primary.getByRole('button', { name: '补齐当前单元准备', exact: true }).click()
+  await page.getByRole('button', { name: '单元准备状态', exact: true }).click()
+  await page.getByRole('group', { name: '单元准备状态选项', exact: true }).getByRole('button', { name: '填写预计时长', exact: true }).click()
   await page.waitForFunction(() => document.activeElement?.id === 'scene-unit-duration')
   assert.deepEqual((await (await fetch(tasksUrl)).json()).data, [])
-  await unitSettings(page)
+  await unitCard(page, '生成配置')
   await page.getByRole('spinbutton', { name: '单元预计时长', exact: true }).fill('5')
   await page.route('**/video-generation-options?*', route => route.abort('failed'))
+  await closeWorkbenchDetails(page)
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
-  await primary.getByRole('button', { name: '补齐当前单元准备', exact: true }).click()
+  await page.getByRole('button', { name: '单元准备状态', exact: true }).click()
+  await page.getByRole('group', { name: '单元准备状态选项', exact: true }).getByRole('button', { name: /模型能力核实失败/ }).click()
   await page.getByText('模型能力读取失败', { exact: true }).waitFor()
   assert.deepEqual((await (await fetch(tasksUrl)).json()).data, [])
   await page.unroute('**/video-generation-options?*')
   await page.getByRole('button', { name: '重试模型能力', exact: true }).click()
-  await page.getByRole('status').filter({ hasText: '当前单元基础准备已齐备' }).waitFor()
+  await closeWorkbenchDetails(page)
+  await page.getByRole('button', { name: '单元准备状态', exact: true }).filter({ hasText: '准备齐备' }).waitFor()
 
+  await closeWorkbenchDetails(page)
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
   await primary.getByRole('button', { name: '生成当前单元指令建议', exact: true }).waitFor()
   await primary.getByRole('button', { name: '生成当前单元指令建议', exact: true }).click()

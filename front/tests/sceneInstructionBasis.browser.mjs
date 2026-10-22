@@ -1,4 +1,4 @@
-import { unitSettings, workbenchShot } from './workbenchControls.mjs'
+import { unitCard, workbenchShot } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -76,7 +76,7 @@ try {
   const confirmed = (await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.content.units[0]
   assert.ok(confirmed.instruction_basis_id)
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
-  await unitSettings(page)
+  await unitCard(page)
   await page.getByRole('textbox', { name: '单元动作范围', exact: true }).fill('收下信封')
   await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
@@ -110,7 +110,7 @@ try {
   assert.notEqual((await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.content.units[0].instruction_basis_id, confirmed.instruction_basis_id)
   // A committed confirmation with a lost response must recover the exact request after reload.
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
-  await unitSettings(page)
+  await unitCard(page)
   await page.getByRole('textbox', { name: '单元动作范围', exact: true }).fill('收下信封并拆开')
   await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
@@ -147,7 +147,7 @@ try {
   await page.unroute('**/instruction-basis/confirm')
   // A late confirmation cannot acknowledge text edited while its response was pending.
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
-  await unitSettings(page)
+  await unitCard(page)
   await page.getByRole('textbox', { name: '单元动作范围', exact: true }).fill('收下信封并阅读')
   await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   await page.getByRole('button', { name: '指令画布', exact: true }).click()

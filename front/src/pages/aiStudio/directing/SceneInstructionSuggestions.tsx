@@ -35,14 +35,14 @@ function clearRequest(key: string, requestId: string) {
 }
 
 /** 建议保留在任务中；只有显式应用才修改当前单元正文。 */
-export function SceneInstructionSuggestions({ onEvidenceChanged, onPriority, primaryHost, onLocate, projectId, sequenceId, versionId, revision, unitId, content, disabled, onChange, compact, initialTaskId, recordFocus, onOpen, onTask, onPrepare }: {
+export function SceneInstructionSuggestions({ onEvidenceChanged, onPriority, primaryHost, onLocate, projectId, sequenceId, versionId, revision, unitId, content, disabled, onChange, compact, initialTaskId, recordFocus, onOpen, onTask, preparationBlocked }: {
   onEvidenceChanged?: () => void
   projectId: string; sequenceId: string; versionId: string; revision: number; unitId: string
   content: SceneVersionContent_Output; disabled: boolean; onChange: (content: SceneVersionContent_Output) => void
   onPriority?: (state: { versionId: string; unitId: string; priority: boolean }) => void
   onLocate?: () => void
   primaryHost?: HTMLElement | null
-  onPrepare?: () => void
+  preparationBlocked?: boolean
   recordFocus?: { taskId: string; serial: number }
   compact?: boolean; initialTaskId?: string; onOpen?: (taskId?: string) => void
   onTask?: (taskId: string, unitId: string) => void
@@ -136,7 +136,7 @@ export function SceneInstructionSuggestions({ onEvidenceChanged, onPriority, pri
   const scopeReady = !limited || selection && selection.before === currentText
   const submit = async () => {
     if (busy || live.current.disabled) return
-    if (!pendingRequests.has(key) && onPrepare) { onPrepare(); return }
+    if (!pendingRequests.has(key) && preparationBlocked) return
     if (!pendingRequests.has(key) && !scopeReady) { setError('请重新选择允许修订的正文范围'); return }
     const request = pendingRequests.get(key) || { request_id: crypto.randomUUID(), expected_revision: revision, content: structuredClone(live.current.content), requirements, scope: limited ? selection?.scope : null }
     if (!pendingRequests.has(key)) generation.current = { requestId: request.request_id, serial: editing.current.serial }
@@ -181,8 +181,7 @@ export function SceneInstructionSuggestions({ onEvidenceChanged, onPriority, pri
     const task = rows?.find(row => !terminal.includes(row.status)) || selected
       || (!currentText.trim() ? rows?.find(row => row.status === 'succeeded') : undefined)
     const pending = pendingRequests.has(key)
-    const preparation = !!onPrepare && !pending && !running
-    const showTask = !pending && !preparation
+    const showTask = !pending
     return <section className="scene-unit-instruction-action" aria-label="当前单元指令操作">
       {reading && <Spin size="small" />}
       {readError && <Alert type="error" message="指令建议读取失败" description={readError} action={<Button onClick={() => setAttempt(value => value + 1)}>重试指令记录</Button>} />}
@@ -190,9 +189,8 @@ export function SceneInstructionSuggestions({ onEvidenceChanged, onPriority, pri
       {showTask && task && <span>指令任务：{statuses[task.status] || task.status}</span>}
       {showTask && task && <Button onClick={() => onOpen?.(task.task_id)}>{task.status === 'succeeded' ? '查看指令建议' : '查看指令任务'}</Button>}
       {showTask && !task && currentText && <Button type="primary" onClick={() => onOpen?.()}>查看当前指令</Button>}
-      {preparation && !reading && !readError && <Button type="primary" onClick={onPrepare}>补齐当前单元准备</Button>}
-      {(pending || !onPrepare && !running && !currentText && task?.status !== 'succeeded') && <Button type="primary"
-        disabled={disabled || busy || !pendingRequests.has(key) && (reading || !!readError || !rows || running)} onClick={() => void submit()}>
+      {(pending || !running && !currentText && task?.status !== 'succeeded') && <Button type="primary"
+        disabled={disabled || busy || !pendingRequests.has(key) && (reading || !!readError || !rows || running || preparationBlocked)} onClick={() => void submit()}>
         {pendingRequests.has(key) ? '核实原指令请求' : '生成当前单元指令建议'}
       </Button>}
     </section>
@@ -213,9 +211,8 @@ export function SceneInstructionSuggestions({ onEvidenceChanged, onPriority, pri
   const primary = busy ? <Button disabled>正在核实当前指令操作</Button> : pendingRequests.has(key) ? <Button type="primary" disabled={disabled || busy} onClick={() => void submit()}>核实原指令请求</Button>
     : readError ? <Button onClick={() => setAttempt(value => value + 1)}>重试指令记录</Button>
     : !rows ? <Button disabled>正在核实指令建议</Button>
-    : onPrepare && !running ? <Button type="primary" onClick={onPrepare}>补齐当前单元准备</Button>
     : primaryTask ? <Button type="primary" onClick={locateTask}>{primaryTask.status === 'succeeded' ? '查看指令建议' : '查看指令任务'}</Button>
-    : <Button type="primary" disabled={disabled || busy || !scopeReady} onClick={() => void submit()}>生成当前单元指令建议</Button>
+    : <Button type="primary" disabled={disabled || busy || !scopeReady || preparationBlocked} onClick={() => void submit()}>生成当前单元指令建议</Button>
   return <section id="scene-instruction-suggestions" ref={panel} tabIndex={-1} className="scene-design-suggestions" aria-label="当前单元指令建议">
     {primaryHost && createPortal(primary, primaryHost)}
     <h3>指令建议</h3>
@@ -240,8 +237,8 @@ export function SceneInstructionSuggestions({ onEvidenceChanged, onPriority, pri
       {selection && selection.before !== currentText && <p>正文已变化，请重新选择修订范围。</p>}
     </>}
     <Input.TextArea aria-label="本次指令编写要求" value={requirements} disabled={disabled || busy || !!pendingRequests.get(key)} onChange={event => setRequirements(event.target.value)} placeholder="本次编写要求（可选）" />
-    {onPrepare && !pendingRequests.has(key) && <p>当前单元准备尚未齐备，请先补齐模型、动作、参考及依赖。</p>}
-    <Button type="primary" disabled={disabled || busy || !pendingRequests.get(key) && (reading || !!readError || !rows || running || !scopeReady || !!onPrepare)} onClick={() => void submit()}>
+    {preparationBlocked && !pendingRequests.has(key) && <p>当前单元准备尚未齐备，请查看顶部准备状态。</p>}
+    <Button type="primary" disabled={disabled || busy || !pendingRequests.get(key) && (reading || !!readError || !rows || running || !scopeReady || !!preparationBlocked)} onClick={() => void submit()}>
       {pendingRequests.get(key) ? '核实原指令请求' : '生成当前单元指令建议'}
     </Button>
     {!!rows?.length && <Select className="scene-instruction-select" aria-label="指令建议记录" style={{ width: '100%' }} placeholder="明确选择建议查看" value={selectedId}

@@ -1,7 +1,7 @@
 import { closeWorkbenchDetails } from './workbenchControls.mjs'
 import { makeWorkspace } from './directing-fixtures.mjs'
 import { workbenchShot } from './workbenchControls.mjs'
-import { unitSettings } from './workbenchControls.mjs'
+import { unitCard } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -62,7 +62,7 @@ try {
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
   for (const [index, action] of ['拆开信封', '只拍抬头'].entries()) {
     await page.getByRole('button', { name: index ? '为当前镜头增加补拍单元' : '为当前镜头建立单元', exact: true }).click()
-    await unitSettings(page)
+    await unitCard(page)
     await page.getByRole('textbox', { name: '单元动作范围', exact: true }).fill(action)
     await page.getByRole('combobox', { name: '覆盖 1 节拍', exact: true }).press('ArrowDown')
     await page.locator('.ant-select-dropdown:visible').getByText(`节拍 ${index + 1}：目标 ${index + 1}`, { exact: true }).click()
@@ -79,7 +79,7 @@ try {
     const action = index ? '只拍抬头' : '拆开信封'
     await page.getByRole('combobox', { name: '当前单元', exact: true }).press('ArrowDown')
     await page.locator('.ant-select-dropdown:visible').getByText(`单元 ${index + 1} · ${action}`, { exact: true }).click()
-    await unitSettings(page)
+    await unitCard(page)
     assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), action)
     await closeWorkbenchDetails(page)
     const response = await fetch(`${versionsUrl}/${version.id}/units/${unit.id}/instruction-basis`, {

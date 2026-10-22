@@ -1,6 +1,6 @@
 import { makeWorkspace } from './directing-fixtures.mjs'
 import { workbenchControl, workbenchShot } from './workbenchControls.mjs'
-import { unitSettings } from './workbenchControls.mjs'
+import { unitCard } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -84,14 +84,14 @@ try {
 
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
   await primary.getByRole('button', { name: '查看指令任务', exact: true }).waitFor()
-  await unitSettings(page)
+  await unitCard(page, '生成配置')
   await page.getByRole('spinbutton', { name: '单元预计时长', exact: true }).fill('')
   await primary.getByRole('button', { name: '查看指令任务', exact: true }).waitFor({ timeout: 5000 })
   assert.equal(await page.getByRole('button', { name: '补齐当前单元准备', exact: true }).count(), 0)
   assert.equal((await fetch(`${api}/browser-test/instruction-tasks/${nextTask.task_id}/complete`, { method: 'POST' })).status, 200)
-  await page.getByRole('button', { name: '补齐当前单元准备', exact: true }).waitFor({ timeout: 6000 })
+  await primary.getByRole('button', { name: '查看指令建议', exact: true }).waitFor({ timeout: 6000 })
   assert.equal((await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.content.units[0].duration_ms, 5000)
-  await unitSettings(page)
+  await unitCard(page, '生成配置')
   await page.getByRole('spinbutton', { name: '单元预计时长', exact: true }).fill('5')
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
   await instructionPrimary.getByRole('button', { name: '查看指令建议', exact: true }).click({ timeout: 5000 })

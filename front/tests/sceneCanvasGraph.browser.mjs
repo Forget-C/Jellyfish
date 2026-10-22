@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
 import { createServer } from 'vite'
-import { closeWorkbenchDetails, directorObject, selectWorkbenchOption } from './workbenchControls.mjs'
+import { closeWorkbenchDetails, directorObject, selectWorkbenchOption, unitCard } from './workbenchControls.mjs'
 
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
@@ -163,15 +163,23 @@ try {
   await page.setViewportSize({ width: 1440, height: 960 })
   await page.locator('[data-canvas-node="unit:shared"]').getByRole('button', { name: /^进入子图：/ }).click()
   await page.locator('[data-layout-view="service-unit-view"]').waitFor()
-  assert.equal(await page.getByRole('button', { name: '查看单元设置', exact: true }).count(), 1)
+  assert.equal(await page.getByRole('button', { name: '查看单元设置', exact: true }).count(), 0)
   await page.unroute('**/versions*')
   // HTTP 边界控制展示内容：不改业务字段，证明客户端消费的是 graph 而非自行重算。
+  await page.route('**/unit-canvas/preview', async route => {
+    const response = await route.fetch()
+    const body = await response.json()
+    for (const node of body.data.nodes) if (node.kind === 'unit_references') for (const preview of node.previews) { preview.display_name = '后端素材名称'; preview.thumbnail_url += '?from=graph' }
+    body.data.nodes.find(node => node.kind === 'unit').preview_title = '服务端已经解析的单元范围'
+    body.data.nodes.find(node => node.kind === 'unit_config' && node.coverage_item_id === 'second').summary[1].text = '服务端解析的第二覆盖摘要'
+    await route.fulfill({ response, json: body })
+  })
   await page.route('**/versions*', async route => {
     if (route.request().method() !== 'GET') { await route.continue(); return }
     const response = await route.fetch()
     const body = await response.json()
     for (const row of Array.isArray(body.data) ? body.data : [body.data]) {
-      if (!row?.director_graph) continue
+      if (!row?.director_graph || row.id !== version.id) continue
       const card = row.director_graph.nodes.find(node => node.id === 'overview')
       card.title = '服务端全场卡片'
       card.summary[0].text = '后端已经解析的展示摘要'
@@ -255,7 +263,7 @@ try {
   await page.locator('[data-canvas-node="unit:shared"]').waitFor()
   const unitFilter = page.getByRole('combobox', { name: '单元镜头筛选', exact: true })
   await unitFilter.waitFor()
-  assert.match(await page.locator('[data-canvas-node="unit:shared"]').textContent(), /服务端已经解析的单元范围/)
+  await page.locator('[data-canvas-node="unit:shared"]').filter({ hasText: '服务端已经解析的单元范围' }).waitFor()
   const referenceImage = page.locator('[data-canvas-node="unit:shared:references"]').getByRole('img', { name: '参考素材：后端素材名称', exact: true })
   await referenceImage.waitFor()
   assert.match(await referenceImage.getAttribute('src'), /from=graph/)
@@ -317,6 +325,7 @@ try {
   await page.getByRole('button', { name: '定位画布节点', exact: true }).click()
   await page.getByRole('menuitem', { name: '动作覆盖 2', exact: true }).click()
   await page.getByRole('button', { name: '查看节点：动作覆盖 2', exact: true }).click()
+  await page.unroute('**/unit-canvas/preview')
   const coverageInput = page.getByRole('textbox', { name: '覆盖 2 动作范围', exact: true })
   assert.equal(await coverageInput.inputValue(), '抬头')
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).count(), 0, 'coverage card edits its own occurrence only')
@@ -334,7 +343,6 @@ try {
   assert.equal(await page.getByRole('textbox', { name: '覆盖 2 动作范围', exact: true }).count(), 0)
   await page.getByRole('spinbutton', { name: '单元预计时长', exact: true }).fill('6')
   await page.getByRole('textbox', { name: '单元画幅', exact: true }).fill('9:16')
-  await page.getByRole('button', { name: '编辑模型参数', exact: true }).click()
   await page.getByRole('spinbutton', { name: '单元随机种子', exact: true }).fill('42')
   await closeWorkbenchDetails(page)
   await openUnitCard('组织要求')
@@ -363,91 +371,30 @@ try {
   await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '组织结束状态', null, { timeout: 5000 })
   assert.equal(await page.getByRole('textbox', { name: '组织结束状态', exact: true }).evaluate(node => node === document.activeElement), true, 'basis location focuses the exact organization field')
   await closeWorkbenchDetails(page)
-  await selectWorkbenchOption(page, '单元镜头筛选', '全部镜头')
-  await page.getByRole('button', { name: '建立单元', exact: true }).click()
-  const createUnit = page.getByRole('dialog', { name: '建立单元', exact: true })
-  await createUnit.waitFor()
-  assert.equal(await createUnit.getByRole('button', { name: '创建单元', exact: true }).isDisabled(), true)
-  await selectWorkbenchOption(page, '新增单元目标镜头', '镜头 1')
-  await createUnit.getByRole('button', { name: '创建单元', exact: true }).click()
-  await createUnit.waitFor({ state: 'hidden' })
-  await page.getByRole('textbox', { name: '单元动作范围', exact: true }).fill('未保存的新单元动作')
+  await unitCard(page, '动作覆盖 2')
+  await coverageInput.fill('保存失败后仍显示的当前动作')
   await closeWorkbenchDetails(page)
-  await page.getByRole('button', { name: '编辑参考素材', exact: true }).waitFor({ timeout: 5000 })
-  await page.getByRole('button', { name: '编辑参考素材', exact: true }).click()
-  const unsavedReferences = page.getByRole('dialog', { name: '编辑参考素材', exact: true })
-  await selectWorkbenchOption(page, '参考素材来源', '上传')
-  await unsavedReferences.locator('input[type=file]').setInputFiles({ name: 'unsaved-unit-reference.png', mimeType: 'image/png',
-    buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=', 'base64') })
-  await page.waitForFunction(() => { const image = document.querySelector('img[alt="参考图 1"]'); return image?.complete && image.naturalWidth === 1 })
-  await selectWorkbenchOption(page, '参考用途', '场所空间')
-  await unsavedReferences.getByRole('button', { name: '应用到本单元', exact: true }).click()
-  await unsavedReferences.waitFor({ state: 'hidden' })
-  let failedSaveContent
-  await page.route(`**/versions/${version.id}`, async route => {
-    if (route.request().method() === 'PUT') { failedSaveContent = route.request().postDataJSON().content; await route.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ detail: '单元内容待修正' }) }) }
-    else await route.continue()
-  }, { times: 1 })
+  await page.locator('[data-canvas-node="unit:shared:coverage:second"]').filter({ hasText: '保存失败后仍显示的当前动作' }).waitFor()
+  await page.route(`**/versions/${version.id}`, route => route.request().method() === 'PUT'
+    ? route.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ detail: '单元内容待修正' }) }) : route.continue(), { times: 1 })
   await page.getByRole('button', { name: '保存', exact: true }).click()
   await page.getByText('保存失败，输入已保留', { exact: true }).waitFor()
-  assert.equal(failedSaveContent.units.at(-1).coverage[0].action_scope, '未保存的新单元动作', 'submitted content includes the new unit edit')
-  assert.equal(failedSaveContent.units.at(-1).references.length, 1, 'new units accept real references before their first successful save')
-  await page.getByRole('button', { name: '查看单元设置', exact: true }).click()
-  assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '未保存的新单元动作')
-  await closeWorkbenchDetails(page)
-  assert.equal(await page.locator('[data-canvas-node="unit:shared"]').count(), 1, 'save failure keeps the server graph baseline')
-  assert.equal(await page.getByRole('button', { name: 'AI设计', exact: true }).isEnabled(), true)
-  await page.getByRole('button', { name: 'AI设计', exact: true }).click()
-  const aiDesign = page.getByRole('dialog', { name: 'AI设计', exact: true })
-  await aiDesign.getByRole('combobox', { name: 'AI 单元目标镜头', exact: true }).waitFor()
-  assert.equal(await aiDesign.getByRole('button', { name: '开始设计', exact: true }).isDisabled(), true)
-  await selectWorkbenchOption(page, 'AI 单元目标镜头', '镜头 1')
-  assert.match(await aiDesign.textContent(), new RegExp(failedSaveContent.units.at(-1).id))
-  await aiDesign.getByRole('button', { name: '取消', exact: true }).click()
-  await page.getByRole('button', { name: '导演画布', exact: true }).click()
-  await page.locator('[data-canvas-node="shot:A"]').getByRole('button', { name: /^进入子图：/ }).click()
-  await page.getByRole('button', { name: '下一步：单元画布', exact: true }).click()
-  await page.getByRole('navigation', { name: '单元画布位置', exact: true }).waitFor()
-  await page.locator('[data-layout-view="shot:A"]').waitFor()
-  assert.equal(await page.getByRole('button', { name: '为当前镜头建立单元', exact: true }).count(), 1)
-  await page.screenshot({ path: join(output, 'director-global-graph.png'), fullPage: true, animations: 'disabled' })
-  const recoveryUrl = page.url()
+  await page.locator('[data-canvas-node="unit:shared:coverage:second"]').filter({ hasText: '保存失败后仍显示的当前动作' }).waitFor()
+  assert.equal((await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.content.units[0].coverage[1].action_scope, '仅修改第二出现项')
+  await page.screenshot({ path: join(output, 'unit-save-failure-current-cards.png'), animations: 'disabled' })
   page.once('dialog', dialog => dialog.accept())
-  await page.close()
-  page = await context.newPage()
-  await page.goto(recoveryUrl)
+  await page.reload()
   await page.getByRole('button', { name: '恢复编辑', exact: true }).click()
-  await page.getByRole('button', { name: '单元画布', exact: true }).click()
-  await selectWorkbenchOption(page, '当前单元', '单元 3')
-  await page.getByRole('button', { name: '查看单元设置', exact: true }).click()
-  assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '未保存的新单元动作', 'closing and reopening the page restores the failed new unit through the current editor')
-  assert.equal(await page.locator(`[data-canvas-node="unit:${failedSaveContent.units.at(-1).id}"]`).count(), 0, 'recovery does not fabricate a graph for the unsaved unit')
-  const persistedAfterRecovery = (await (await fetch(`${versionsUrl}/${version.id}`)).json()).data
-  assert.equal(persistedAfterRecovery.content.units.length, 2, 'restoring the new unit does not force a server save')
-  await page.screenshot({ path: join(output, 'new-unit-close-recovery.png'), fullPage: true, animations: 'disabled' })
-  await closeWorkbenchDetails(page)
+  await page.locator('[data-canvas-node="unit:shared:coverage:second"]').filter({ hasText: '保存失败后仍显示的当前动作' }).waitFor()
+  assert.equal(await page.getByRole('button', { name: '查看单元设置', exact: true }).count(), 0)
+  assert.equal(await page.getByRole('button', { name: /^(建立单元|为当前镜头建立单元)$/ }).count(), 0)
   await page.getByRole('button', { name: '保存', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
-  let undoCount = 0
-  while (await page.getByRole('button', { name: '查看单元设置', exact: true }).isVisible() && undoCount < 10) {
-    await page.getByRole('button', { name: '撤销', exact: true }).click()
-    undoCount++
-  }
-  assert.equal(await page.getByRole('button', { name: '查看单元设置', exact: true }).count(), 0, 'undo removes the unit only from current editing, while its saved graph remains')
-  await page.getByRole('button', { name: '定位画布节点', exact: true }).click()
-  await page.getByRole('menuitem', { name: '单元 3', exact: true }).click()
-  await page.locator(`[data-canvas-node="unit:${failedSaveContent.units.at(-1).id}"]`).getByRole('button', { name: /^进入子图：/ }).click()
-  await page.getByRole('button', { name: '定位画布节点', exact: true }).click()
-  await page.getByRole('menuitem', { name: '参考素材', exact: true }).click()
-  await page.locator(`[data-canvas-node="unit:${failedSaveContent.units.at(-1).id}:references"]`).getByRole('button', { name: /^查看节点：/ }).click()
-  await page.getByText('当前编辑中该来源已移除；保存后画布将同步，不会选择其他对象代替', { exact: true }).waitFor()
-  assert.equal(await page.getByRole('dialog', { name: '编辑参考素材', exact: true }).count(), 0, 'an obsolete reference entry cannot bind another unit')
-  for (let step = 0; step < undoCount; step++) await page.getByRole('button', { name: '重做', exact: true }).click()
-  await page.getByRole('button', { name: '查看单元设置', exact: true }).click()
-  assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '未保存的新单元动作')
+  await page.getByRole('button', { name: '撤销', exact: true }).click()
+  await page.locator('[data-canvas-node="unit:shared:coverage:second"]').filter({ hasText: '仅修改第二出现项' }).waitFor()
+  await page.getByRole('button', { name: '重做', exact: true }).click()
+  await page.locator('[data-canvas-node="unit:shared:coverage:second"]').filter({ hasText: '保存失败后仍显示的当前动作' }).waitFor()
 
-  await closeWorkbenchDetails(page)
-  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   const newDirectorResponse = await fetch(versionsUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ request_id: crypto.randomUUID(), title: '未保存导演对象重进' }) })
   assert.equal(newDirectorResponse.status, 200)

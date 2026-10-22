@@ -303,6 +303,25 @@ class DirectingStore:
                 await self.inherited_scene_review_ids(snapshot['id'], 'seam'),
                 await self.inherited_scene_review_ids(snapshot['id'], 'cut')))
 
+    async def preview_unit_canvas(self, sequence_id, version_id, body):
+        """校验项目、场次与基线后投影当前编辑，缺项及无效外部证据留在卡片中。
+
+        不执行保存校验或注册媒体引用，允许用户继续修正准备中的内容。
+        所有文件、模型与依赖证据仍通过项目范围的共同读取上下文核实。
+        """
+        sequence = await self.sequence(sequence_id)
+        row, _ = await self._scene_version_snapshot(sequence, version_id)
+        revision = row.revision
+        if revision != body.expected_revision:
+            raise RevisionConflict('场次版本已变化，当前编辑已保留，请核对保存基线')
+        content = body.content
+        relationships = scene_relationship_graph(version_id, revision, content)
+        canvas = await CanvasReadContext.load(self.db, self.project_id, version_id, revision,
+            content, relationships, lambda name: self.applicable_style(
+                content.design.style_revision_id, sequence.id, name),
+            lambda: self.canvas_dependency_evidence(sequence.id, version_id, content))
+        return unit_graph(canvas, director_graph(canvas))
+
     async def create_scene_version(self, sequence_id: str, body: SceneVersionCreate) -> SceneVersionRead:
         """明确创建空方案，原文依据来自已核实的当前场次，不复制历史方案。"""
         sequence = await self.current_sequence(sequence_id)

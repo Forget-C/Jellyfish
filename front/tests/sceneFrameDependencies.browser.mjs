@@ -1,7 +1,7 @@
 import { makeWorkspace } from './directing-fixtures.mjs'
 import { locateCanvasNode } from './workbenchControls.mjs'
 import { workbenchControl } from './workbenchControls.mjs'
-import { selectWorkbenchOption, unitSettings } from './workbenchControls.mjs'
+import { selectWorkbenchOption, unitCard } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -77,13 +77,12 @@ try {
   await selectWorkbenchOption(page, '单元镜头筛选', '镜头 1')
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('ArrowDown')
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('Enter')
-  await unitSettings(page)
-  await page.getByRole('button', { name: '编辑前段依赖', exact: true }).click()
+  await unitCard(page, '前段依赖')
   const dialog = page.getByRole('complementary', { name: '前段依赖', exact: true })
   await dialog.getByRole('button', { name: '依赖当前版本片段 1', exact: true }).click({ timeout: 5000 })
   await dialog.getByRole('button', { name: '依赖 1 绑定落幅 1', exact: true }).click()
   await dialog.getByText('依赖 1：实际落幅适用', { exact: true }).waitFor()
-  await dialog.getByRole('button', { name: '返回单元设置', exact: true }).click()
+  await closeWorkbenchDetails(page)
   await page.getByRole('button', { name: '保存', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   let current = await read()
@@ -137,8 +136,7 @@ try {
   await selectWorkbenchOption(page, '单元镜头筛选', '镜头 1')
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('ArrowDown')
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('Enter')
-  await unitSettings(page)
-  await page.getByRole('button', { name: '编辑前段依赖', exact: true }).click()
+  await unitCard(page, '前段依赖')
   await dialog.getByText('依赖 1：实际落幅依据已变，请重新提取并明确换绑', { exact: true }).waitFor()
   assert.equal((await read()).content.units[0].references[0].file_id, bound.references[0].file_id)
   await dialog.getByRole('button', { name: '定位依赖 1 原采用并提取落幅', exact: true }).click()
@@ -170,8 +168,7 @@ try {
   assert.equal((await prepare('affected')).status, 200)
   assert.equal((await prepare('independent')).status, 200)
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
-  await unitSettings(page)
-  await page.getByRole('button', { name: '编辑前段依赖', exact: true }).click()
+  await unitCard(page, '前段依赖')
   await page.route('**/end-frames', route => route.request().method() === 'GET' ? route.abort('failed') : route.continue())
   await dialog.getByRole('button', { name: '刷新场次落幅', exact: true }).click()
   await dialog.getByText('场次落幅读取失败，依赖适用性尚未核实', { exact: true }).waitFor()

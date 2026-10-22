@@ -19,6 +19,8 @@ pnpm --dir front run test:browser
 
 `lint` 保留未过滤的原始输出。`lint:check` 只允许 `front/eslint-baseline.json` 中已知的存量问题，新增问题、解析错误及工具错误均失败；修复旧问题后运行 `pnpm --dir front run lint:baseline` 收缩豁免。维护命令不能接纳新问题；源代码行发生变化后仍存在的诊断也需要解决，不靠行号维持旧豁免。首次基线包含 181 个错误、117 个警告，不表示这些问题已经修复。
 
+`test:workbench-ui` 还登记了 `unit-design` 和 `instruction-preparation`：验证 AI 明确应用后未保存卡片、保存失败恢复、当前编辑投影，以及顶部准备清单的定位和独立生成门禁。
+
 `test:unit` 运行全部纯逻辑及公开 CLI 回归。`test:browser` 先调用现有 preflight，再运行清单中的用例；清单是文件、端口与超时的唯一登记处。所有用例串行执行，启动前检查声明端口，端口占用时停止且不终止占用者。端口检查不是系统级端口预留；请勿另外并行启动使用相同端口的脚本。
 
 ```bash

@@ -1,3 +1,4 @@
+import { unitCard } from './workbenchControls.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import { workbenchShot, selectWorkbenchOption } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
@@ -233,7 +234,7 @@ try {
     await started
     if (closeFirst) {
       await dialog.getByRole('button', { name: 'Close', exact: true }).click()
-      await page.getByRole('button', { name: '编辑参考素材', exact: true }).click(); dialog = page.getByRole('dialog').last()
+      await unitCard(page, '参考素材'); dialog = page.getByRole('dialog').last()
     } else await selectWorkbenchOption(page, '参考素材来源', '已有素材')
     const completed = page.waitForResponse(response => response.url().endsWith('/files/upload'))
     release(); await completed
@@ -254,7 +255,7 @@ try {
   await dialog.getByRole('button', { name: '选入 手动乙 图片 2', exact: true }).click(); await apply()
   await page.getByRole('status').filter({ hasText: '保存失败' }).first().waitFor()
   assert.deepEqual((await read()).content, beforeUpload)
-  await page.getByRole('button', { name: '编辑参考素材', exact: true }).click(); dialog = page.getByRole('dialog').last()
+  await unitCard(page, '参考素材'); dialog = page.getByRole('dialog').last()
   await dialog.getByText('素材来源：手动乙 · 选择时的资产记录', { exact: true }).waitFor()
   assert.equal(await targetCard().getByRole('button', { name: '更换素材', exact: true }).count(), 1)
   await cancel(); rejectSave = false
@@ -263,7 +264,7 @@ try {
   saved = await waitSaved(value => targetRefs(value).length === 1 && targetRefs(value)[0].asset_origin?.id === assets[1].id)
   assertIsolation(saved)
   // 同一界面中撤销了底层参考后，旧弹窗基线不能覆写较新编辑。
-  await page.getByRole('button', { name: '编辑参考素材', exact: true }).click(); dialog = page.getByRole('dialog').last()
+  await unitCard(page, '参考素材'); dialog = page.getByRole('dialog').last()
   await targetCard().getByRole('button', { name: '更换来源', exact: true }).click()
   await chooseFile('third')
   await dialog.getByRole('button', { name: '应用到本单元', exact: true }).focus()
@@ -319,7 +320,7 @@ try {
   await (await workbenchShot(reader, '镜头 1：读信反应')).click()
   await reader.getByRole('button', { name: '单元画布', exact: true }).click()
   await selectWorkbenchOption(reader, '当前单元', '单元 1')
-  await reader.getByRole('button', { name: '编辑参考素材', exact: true }).click()
+  await unitCard(reader, '参考素材')
   const readonly = reader.getByRole('dialog', { name: '编辑参考素材', exact: true })
   await readonly.getByRole('status').filter({ hasText: '只读' }).waitFor()
   assert.ok(await readonly.getByRole('button', { name: '更换来源', exact: true }).count())

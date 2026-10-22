@@ -1185,13 +1185,6 @@
       "count": 1
     },
     {
-      "file": "src/pages/aiStudio/directing/SceneUnitCanvas.tsx",
-      "rule": "react-hooks/exhaustive-deps",
-      "severity": 1,
-      "fingerprint": "5db67289074243da124c8322f909887da8eba49cc0298529f1ed9483065372ba",
-      "count": 1
-    },
-    {
       "file": "src/pages/aiStudio/directing/SceneUnitDesignSuggestions.tsx",
       "rule": "eqeqeq",
       "severity": 2,
@@ -1385,13 +1378,6 @@
       "rule": "eqeqeq",
       "severity": 2,
       "fingerprint": "f0b331cd679fd3e94006576eb7d4974f7946d383f09b81a91ca53d712ce39b63",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/directing/useSceneUnitPreparation.ts",
-      "rule": "react-hooks/exhaustive-deps",
-      "severity": 1,
-      "fingerprint": "900724267f42b0e22ea4f5bb1eda7c82c3ca366dd6bbf1047c723e8c86b8b74f",
       "count": 1
     },
     {

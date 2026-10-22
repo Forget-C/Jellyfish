@@ -2,7 +2,7 @@ import { closeWorkbenchDetails } from './workbenchControls.mjs'
 import { makeWorkspace } from './directing-fixtures.mjs'
 import { workbenchControl } from './workbenchControls.mjs'
 import { workbenchShot } from './workbenchControls.mjs'
-import { unitSettings } from './workbenchControls.mjs'
+import { unitCard } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -108,7 +108,7 @@ try {
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
   await page.getByRole('combobox', { name: '当前单元', exact: true }).click()
   await page.locator('.ant-select-dropdown:visible').getByText('单元 1 · 抬头', { exact: true }).click()
-  const settings = await unitSettings(page)
+  const settings = await unitCard(page)
   assert.equal(await settings.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '抬头')
   await settings.getByRole('textbox', { name: '单元动作范围', exact: true }).fill('读信')
   await closeWorkbenchDetails(page)

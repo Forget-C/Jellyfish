@@ -187,7 +187,9 @@
 /* 四种画布共用克制的工具外壳，浮层不参与节点或视口布局。 */
 .canvas-workbench { font-size: 14px; }
 .canvas-toolbar-identity, .canvas-toolbar-actions { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.canvas-toolbar-actions { justify-content: flex-end; }
+.canvas-toolbar-actions { justify-content: flex-end; flex-wrap: wrap; }
+.canvas-toolbar-preparation:empty { display: none; }
+.canvas-toolbar-preparation .canvas-toolbar-popover .ant-btn { min-width: 0; max-width: 100%; min-height: 32px; height: auto; white-space: normal; overflow-wrap: anywhere; text-align: left; }
 .canvas-director-navigation-host { position: absolute; z-index: 30; top: calc(var(--workbench-content-top, 100px) + 12px); left: 16px; max-width: calc(100% - 32px); }
 .canvas-workbench[data-canvas="director"] .canvas-toolbar-primary { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; }
 .canvas-workbench[data-canvas="director"] .canvas-toolbar-actions { flex-wrap: wrap; }
