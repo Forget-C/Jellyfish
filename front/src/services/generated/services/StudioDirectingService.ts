@@ -540,7 +540,7 @@ export class StudioDirectingService {
     }
     /**
      * Scene Versions
-     * 浏览已存在的场次版本，不创建默认方案。
+     * 浏览已存在方案；当前可编辑版本在投影前受控整理已保存的身份参考。
      * @returns ApiResponse_list_SceneVersionRead__ Successful Response
      * @throws ApiError
      */
@@ -594,7 +594,7 @@ export class StudioDirectingService {
     }
     /**
      * Scene Version
-     * 读取具有固定原文依据的当前方案。
+     * 打开方案；当前可编辑版本在投影前受控整理已保存的身份参考。
      * @returns ApiResponse_SceneVersionRead_ Successful Response
      * @throws ApiError
      */
