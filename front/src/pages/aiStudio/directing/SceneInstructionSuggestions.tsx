@@ -190,8 +190,8 @@ export function SceneInstructionSuggestions({ onEvidenceChanged, onOpenChange, o
     {primaryHost && createPortal(primary, primaryHost)}
     <WorkbenchModal title="AI 指令设计" open={open} onCancel={() => setOpen(false)}
       footer={<WorkbenchDialogActions secondary={<WorkbenchButton variant="quiet" onClick={() => setOpen(false)}>返回画布</WorkbenchButton>}>
-        {selected?.text != null && <WorkbenchButton variant="primary" disabled={disabled || busy || !!readError} onClick={() => void apply()}>应用指令建议</WorkbenchButton>}
-        <WorkbenchButton variant={selected?.text != null ? 'secondary' : 'primary'} disabled={disabled || busy || !pendingRequests.get(key) && (reading || !!readError || !rows || running || !scopeReady || !!preparationBlocked)} onClick={() => void submit()}>
+        {selected && selected.text !== null && <WorkbenchButton variant="primary" disabled={disabled || busy || !!readError} onClick={() => void apply()}>应用指令建议</WorkbenchButton>}
+        <WorkbenchButton variant={selected && selected.text !== null ? 'secondary' : 'primary'} disabled={disabled || busy || !pendingRequests.get(key) && (reading || !!readError || !rows || running || !scopeReady || !!preparationBlocked)} onClick={() => void submit()}>
           {pendingRequests.get(key) ? '核实原指令请求' : '生成指令'}
         </WorkbenchButton>
       </WorkbenchDialogActions>}>
@@ -234,7 +234,7 @@ export function SceneInstructionSuggestions({ onEvidenceChanged, onOpenChange, o
         catch (cause) { if (mounted.current) setError(directingError(cause)) }
         finally { if (mounted.current) setBusy(false) }
       }}>取消本次指令任务</Button>}
-      {selected.text != null && <section aria-label="指令建议差异"><p>生成前正文</p><pre>{selected.unit.instruction || '尚无正文'}</pre>{selected.unit.instruction_source && <SourceLinks sources={[selected.unit.instruction_source]} />}<p>建议正文</p><pre>{selected.text}</pre>
+      {selected.text !== null && <section aria-label="指令建议差异"><p>生成前正文</p><pre>{selected.unit.instruction || '尚无正文'}</pre>{selected.unit.instruction_source && <SourceLinks sources={[selected.unit.instruction_source]} />}<p>建议正文</p><pre>{selected.text}</pre>
         <p>{selected.scope ? '应用前核实范围外文字未变，范围内整次应用。' : '应用替换当前单元整份正文。'}可一次撤销；不会自动检查或生成视频。</p></section>}
     </>}
     </section>
