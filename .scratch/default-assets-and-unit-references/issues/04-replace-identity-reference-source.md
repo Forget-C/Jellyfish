@@ -51,3 +51,8 @@ Blocked by: 03
 工作台桌面／390 截图已实际查看；resize 后等待现有响应动画稳定再断言文档宽度，无需生产 CSS 修改。正式浏览器清单登记 reference-source 与 references 套件；受影响组件 typecheck 通过，ESLint 零错误、仅原有请求 ref 清理警告。未修改后端应用或外部契约，复用集成 03 的完整 directing／Pylint 结果；最终集成工作台、unit、lint 与双轴 code-review 由根代理执行。独立证据及红绿记录位于 /tmp/jellyfish-reference-04-evidence；未调用付费模型、未执行真实数据整理。
 
 最终正式 runner：reference-source 全流程通过（79.5s），包含真实二页只读；default-assets 在相同应用代码状态通过（31.2s）。最终证据分别为 /tmp/jellyfish-reference-04-evidence/complete 与 references-final/default-assets；两个尺寸截图已使用 view_image 查看，未出现最终横向溢出。
+
+
+2026-10-22 最终审查修正：仅本票新增的“更换来源”“撤回选入”“取消更换来源”在工作台实例改用 WorkbenchButton，取消采用 quiet 层级；非工作台浅色实例继续使用既有按钮主题。未迁移无关旧动作。真实画布回归先证明新增动作缺少共享层级，再通过 secondary／quiet 断言及完整来源流程；最终实现默认候选浏览器通过（30.9s）、来源流程通过（82.6s），桌面与 390px 截图已实际查看。前端 typecheck 与收缩后的 lint:check 通过；无新增 lint 诊断。后端自动存量整理与并发读取修正见 03 的本日最终记录，完整 directing 553 passed、15 skipped，Pylint 10.00/10。证据位于 /tmp/jellyfish-reference-review-fixes-evidence；最终集成工作台全套、unit 与正式 OpenAPI 同步由根代理执行。
+
+最终截图验收补充：final-visible-source 正式 runner 全流程 82.6s 通过；自动整理后的真实管理弹窗中继续“更换来源→选入素材→取消”，已实际查看可见截图中的撤回次动作及 quiet 取消动作。证据路径 /tmp/jellyfish-reference-review-fixes-evidence/final-visible-source。

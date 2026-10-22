@@ -24,7 +24,7 @@ from app.services.directing.relationship_graph import scene_relationship_graph
 from app.core.contracts.directing.style import ProjectStyleProfile, ProjectStyleRevision, StyleWrite
 from app.core.contracts.directing.scene_version import (
     EditableSceneDesign, SceneVersionContent, SceneVersionCreate, SceneVersionRead,
-    SceneVersionSave, SceneVersionSource, validate_new_design_row_ids,
+    SceneVersionSave, SceneVersionSource, SceneIdentityCleanup, validate_new_design_row_ids,
 )
 from app.models.directing import SceneVersionRecord, SceneUnitIdentityRecord, InstructionBasisRecord, SceneVideoExecution, SceneTakeRecord, SceneTakeReviewRecord, SceneEndFrameRecord, SceneCopyOrigin
 from app.models.directing import ActiveCut, CutFrame, ProjectStyleRecord, Sequence, DirectingRevision, RevisionDependency, Take, CutTakeReference
@@ -236,6 +236,42 @@ class DirectingStore:
                 SceneVersionRecord.created_at, SceneVersionRecord.id))
         return [await self.read_scene_version(sequence_id, key) for key in ids]
 
+    async def open_scene_versions(self, sequence_id: str) -> list[SceneVersionRead]:
+        """工作台浏览入口只升级本次访问的可编辑版本，不扫描其他场次。"""
+        await self.sequence(sequence_id)
+        ids = list(await self.db.scalars(select(SceneVersionRecord.id).where(
+            SceneVersionRecord.sequence_id == sequence_id).order_by(
+                SceneVersionRecord.created_at, SceneVersionRecord.id)))
+        return [await self.open_scene_version(sequence_id, key) for key in ids]
+
+    async def open_scene_version(self, sequence_id: str, version_id: str) -> SceneVersionRead:
+        """鉴权后的正常打开先受控整理已存基线，再以同一修订投影所有画布。
+
+        与写入保持章节、场次锁顺序；非当前场次仅阅读，内部快照读取和新提交
+        不经过此入口，固定历史与非法新输入不会被整理逻辑重写。
+        """
+        sequence = await self.sequence(sequence_id)
+        await self.db.scalar(select(Chapter).where(Chapter.id == sequence.chapter_id).with_for_update())
+        sequence = await self.db.get(Sequence, sequence_id, with_for_update=True, populate_existing=True)
+        if not sequence.is_current:
+            return await self.read_scene_version(sequence_id, version_id)
+        # 无行锁的数据库仍可能在两次读取之间完成保存；只重试已存的新基线，
+        # 不将新内容裁剪或覆盖。显式整理及普通保存继续保留原有 CAS 冲突。
+        for attempt in range(3):
+            row = await self.db.get(SceneVersionRecord, version_id, populate_existing=True)
+            if row is None or row.sequence_id != sequence_id:
+                raise ValueError('scene version not found in sequence')
+            try:
+                return await self.cleanup_identity_references(sequence_id, version_id, SceneIdentityCleanup(
+                    expected_revision=row.revision, request_id=f'open:{row.revision}'))
+            except RevisionConflict:
+                sequence = await self.sequence(sequence_id)
+                if not sequence.is_current:
+                    return await self.read_scene_version(sequence_id, version_id)
+                if attempt == 2:
+                    raise
+        raise RevisionConflict('场次版本持续变化，请重新打开')
+
     async def _scene_version_snapshot(self, sequence: Sequence, version_id: str) -> tuple[SceneVersionRecord, SceneVersionContent]:
         """从已鉴权场次读取强类型内容；证据校验不触发图投影或其他版本图读取。"""
         row = await self.db.get(SceneVersionRecord, version_id, populate_existing=True)
@@ -352,7 +388,7 @@ class DirectingStore:
         return await self.read_scene_version(sequence_id, version_id)
 
     async def cleanup_identity_references(self, sequence_id, version_id, body):
-        """显式 CAS 整理保存过的当前编辑数据，不扫描或重写任何固定历史。
+        """按 CAS 整理保存过的当前编辑数据，不扫描或重写任何固定历史。
 
         合规组即使文件失效仍保留，因此不能调用普通保存的全量文件有效性检查。
         仅在原始组不合规且必须选择幸存者时核实文件及项目访问权限。
@@ -395,7 +431,8 @@ class DirectingStore:
                     chosen = ref.id
                     break
                 removed.update(ref.id for ref in candidates if ref.id != chosen)
-            unit['references'] = [ref for ref in unit.get('references', []) if ref['id'] not in removed]
+            if removed:
+                unit['references'] = [ref for ref in unit.get('references', []) if ref['id'] not in removed]
         if content == row.content:
             return await self.read_scene_version(sequence_id, version_id)
         # 只校验整理后契约和新主体约束；保留未知能力、缺文件及其他真实缺项。

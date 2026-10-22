@@ -9,4 +9,3 @@ export type SceneIdentityCleanup = {
     request_id: string;
     expected_revision: number;
 };
-
