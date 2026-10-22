@@ -28,10 +28,11 @@ export function ReferencePicker({ rootClassName, projectId, assets, assetError, 
     else if (readingTrigger.current?.isConnected) readingTrigger.current.focus({ preventScroll: true })
   }, [readingFile])
   const [tab, setTab] = useState('assets')
-  const [role, setRole] = useState<NonNullable<Reference['input_role']>>(initialRole || 'subject')
+  const frameScope = fixedInputRole === 'first_frame' || fixedInputRole === 'last_frame'
+  const [role, setRole] = useState<NonNullable<Reference['input_role']>>(fixedInputRole || initialRole || 'subject')
   const [participantIds, setParticipantIds] = useState(initialParticipantIds || [])
   const baseline = useRef(structuredClone(references))
-  const scopeIds = new Set(baseline.current.filter(ref => referenceIds ? referenceIds.includes(ref.id) : location ? ref.asset_origin?.kind === 'scene' || ref.purpose === 'space' : initialParticipantIds?.length ? ref.participant_ids.some(id => initialParticipantIds.includes(id)) : true).map(ref => ref.id))
+  const scopeIds = new Set(baseline.current.filter(ref => referenceIds ? referenceIds.includes(ref.id) : fixedInputRole ? ref.input_role === fixedInputRole : location ? ref.asset_origin?.kind === 'scene' || ref.purpose === 'space' : initialParticipantIds?.length ? ref.participant_ids.some(id => initialParticipantIds.includes(id)) : true).map(ref => ref.id))
   const groupScope = fixedInputRole === 'subject' && referenceIds !== undefined
   const groupId = useRef(baseline.current.find(ref => scopeIds.has(ref.id))?.subject_group_id || baseline.current.find(ref => scopeIds.has(ref.id))?.id || 'group-' + crypto.randomUUID().slice(0, 8))
   const [adding, setAdding] = useState(!title || title === '添加参考')
@@ -107,8 +108,9 @@ export function ReferencePicker({ rootClassName, projectId, assets, assetError, 
     const participants = pending ? [pending.participantId] : scoped ? scoped.participant_ids : asset?.kind === 'scene' ? [] : participantIds
     const chosenPurpose = pending ? 'identity' : scoped?.purpose || purpose || (groupScope ? participants.length ? 'identity' : 'composition' : asset ? asset.kind === 'scene' ? 'space' : 'identity' : participants.length ? 'identity' : 'composition')
     const current = pending ? [...latest.current.filter(ref => !pending.ids.includes(ref.id)), ...pending.references] : latest.current
-    if (current.some(ref => ref.id !== replaceId && ref.file_id === fileId && (!groupScope || ref.subject_group_id === groupId.current || scopeIds.has(ref.id)))) return
-    const replaced = current.find(ref => ref.id === replaceId)
+    const targetId = frameScope ? current.find(ref => ref.input_role === fixedInputRole)?.id : replaceId
+    if (current.some(ref => ref.id !== targetId && ref.file_id === fileId && (!frameScope || ref.input_role === fixedInputRole) && (!groupScope || ref.subject_group_id === groupId.current || scopeIds.has(ref.id)))) return
+    const replaced = current.find(ref => ref.id === targetId)
     if (replaced?.purpose === 'identity' && (replaced.input_role || 'subject') === 'subject' && (asset ? replaced.asset_origin?.kind !== asset.kind || replaced.asset_origin.id !== asset.id : !!replaced.asset_origin)) {
       setError('更换身份素材来源请使用“更换来源”，以整组替换'); return
     }
@@ -126,8 +128,9 @@ export function ReferencePicker({ rootClassName, projectId, assets, assetError, 
     if (pending) prepareReplacement({ ...pending, references: next.filter(ref => !latest.current.some(old => old.id === ref.id)) })
     else change(next)
     setReplaceId(undefined); setError('')
+    if (frameScope) setChoosing(false)
   }
-  const selected = (id: string) => (replacement ? [...draft.filter(ref => !replacement.ids.includes(ref.id)), ...replacement.references] : draft).some(ref => ref.id !== replaceId && ref.file_id === id && (!groupScope || scopeIds.has(ref.id) || ref.subject_group_id === groupId.current))
+  const selected = (id: string) => (replacement ? [...draft.filter(ref => !replacement.ids.includes(ref.id)), ...replacement.references] : draft).some(ref => ref.id !== replaceId && ref.file_id === id && (!frameScope || ref.input_role === fixedInputRole) && (!groupScope || scopeIds.has(ref.id) || ref.subject_group_id === groupId.current))
   const visible = (ref: Reference) => !adding && scopeIds.has(ref.id) || !baseline.current.some(old => old.id === ref.id)
   const cancelAction = <Button onClick={close}>{disabled ? '关闭' : '取消'}</Button>
   const applyAction = !disabled && <Button type="primary" onClick={() => {
@@ -143,6 +146,8 @@ export function ReferencePicker({ rootClassName, projectId, assets, assetError, 
     <Space direction="vertical" style={{ width: '100%' }}>
       {contextLabel && <p role="status">{contextLabel}</p>}
       {error && <Alert type="error" message={error} />}
+      {fixedInputRole && <p>输入位置：{referenceRoles[fixedInputRole]}</p>}
+      {fixedInputRole && !roles.includes(fixedInputRole) && <Alert type="warning" message={`当前模型不支持${referenceRoles[fixedInputRole]}，请在生成配置中更换模型；已有绑定保留。`} />}
       {!draft.length && <p>本单元尚未选入参考素材。{disabled ? '当前内容只读。' : '请明确选入素材后应用到本单元。'}</p>}
       {onEditAssets && <p>导演默认只提供候选，具体参考由本单元独立选择。<Button type="link" disabled={disabled || JSON.stringify(draft) !== JSON.stringify(baseline.current)} onClick={() => { close(); onEditAssets() }}>前往导演设置默认资产</Button></p>}
       {!!scopes.length && <details><summary>查看设计关联依据</summary><p>镜头设计范围不代表部分动作中的实际可见对象，也不代表已选入模型参考。</p>{scopes.map(row => <p key={row.coverage.id}>镜头 {design.direction.shots.findIndex(shot => shot.id === row.coverage.shot_id) + 1} · {row.known ? row.participants.map(person => design.participants.find(item => item.id === person.id)?.name || '对象引用不可用').join('、') || '明确无参与对象' : '范围待核对；现有调度与表演仅作关联依据'}{onInspectDesign && <Button type="link" disabled={disabled || JSON.stringify(draft) !== JSON.stringify(baseline.current)} onClick={() => { close(); onInspectDesign(`shot:${row.coverage.shot_id}`) }}>查看镜头设计关联</Button>}</p>)}
@@ -167,7 +172,7 @@ export function ReferencePicker({ rootClassName, projectId, assets, assetError, 
             <Space wrap>{group.map(item => <Space direction="vertical" key={item.id}><ReferencePreview reference={item} />{dependencyReferenceIds.includes(item.id) && <span>此参考用于实际落幅依赖。</span>}
               {groupScope && <><span>来源：{item.asset_origin?.name || '人工素材'}</span><SourceLinks sources={[item.source]} /></>}
               <Space wrap><Button disabled={disabled || !!replacement} onClick={() => { setChoosing(true); setReplaceId(item.id); setParticipantIds(item.participant_ids); setAssetId(item.asset_origin?.id); setRole(item.input_role || 'subject'); setPurpose(item.purpose); setTab('assets') }}>更换素材</Button>
-                <Button disabled={disabled || !!replacement || group.indexOf(item) === 0} onClick={() => { const previous = group[group.indexOf(item) - 1]; change(latest.current.map(row => row.id === item.id ? { ...row, ordinal: previous.ordinal } : row.id === previous.id ? { ...row, ordinal: item.ordinal } : row)) }}>上移</Button>
+                {!frameScope && <Button disabled={disabled || !!replacement || group.indexOf(item) === 0} onClick={() => { const previous = group[group.indexOf(item) - 1]; change(latest.current.map(row => row.id === item.id ? { ...row, ordinal: previous.ordinal } : row.id === previous.id ? { ...row, ordinal: item.ordinal } : row)) }}>上移</Button>}
                 <Button danger disabled={disabled || !!replacement} onClick={() => change(latest.current.filter(row => row.id !== item.id))}>移除</Button></Space>
               {references.some(old => old.id === item.id && old.file_id !== item.file_id) && <span>素材已替换，应用后更新单元。</span>}
             </Space>)}</Space>
@@ -186,8 +191,8 @@ export function ReferencePicker({ rootClassName, projectId, assets, assetError, 
         <SourceButton {...(Modal === WorkbenchModal ? { variant: 'quiet' as const } : {})} onClick={() => { prepareReplacement(undefined); setChoosing(false); setError('') }}>取消更换来源</SourceButton>
       </Card>}
       <p>拟发送：{referenceSummary(appliedReferences())}</p>
-      {!groupScope && adding && !!baseline.current.length && <Button onClick={() => { setAdding(false); setChoosing(false) }}>查看本单元全部参考</Button>}
-      {!disabled && !choosing && <Button onClick={() => {
+      {!fixedInputRole && adding && !!baseline.current.length && <Button onClick={() => { setAdding(false); setChoosing(false) }}>查看本单元全部参考</Button>}
+      {!disabled && !choosing && (!frameScope || !draft.some(ref => ref.input_role === fixedInputRole)) && <Button onClick={() => {
         const current = groupScope ? latest.current.find(ref => scopeIds.has(ref.id) || ref.subject_group_id === groupId.current) : undefined
         if (current) { setParticipantIds(current.participant_ids); setPurpose(current.purpose); setAssetId(current.asset_origin?.id) }
         setChoosing(true)
@@ -201,7 +206,7 @@ export function ReferencePicker({ rootClassName, projectId, assets, assetError, 
       {groupScope && <Select aria-label="本次参考用途" disabled={!!replacement || draft.some(ref => scopeIds.has(ref.id) || ref.subject_group_id === groupId.current)} value={purpose || (participantIds.length ? 'identity' : 'composition')} options={Object.entries(referencePurposes).map(([value, label]) => ({ value, label }))} onChange={setPurpose} />}
       <Select aria-label="本次素材资产" allowClear placeholder="选择项目素材资产，不修改默认或参考对象" value={assetId} style={{ width: '100%' }} options={(assets || []).filter(asset => replacement ? asset.kind !== 'scene' : !location || asset.kind === 'scene').map(asset => ({ value: asset.id, label: asset.name }))} onChange={id => { setAssetId(id); setError('') }} />
       <Select aria-label="参考素材来源" value={tab} options={[{ value: 'assets', label: '资产图片' }, { value: 'files', label: '已有素材' }, { value: 'upload', label: '上传' }]} onChange={value => { setTab(value); if (value === 'files') void load() }} />
-      {!!roles.length && <Select aria-label="参考输入位置" disabled={!!replacement || !!fixedInputRole} style={{ minWidth: 160 }} value={inputRole} options={roles.map(value => ({ value, label: referenceRoles[value] }))} onChange={setRole} />}
+      {!fixedInputRole && !!roles.length && <Select aria-label="参考输入位置" disabled={!!replacement} style={{ minWidth: 160 }} value={inputRole} options={roles.map(value => ({ value, label: referenceRoles[value] }))} onChange={setRole} />}
       {tab === 'assets' && <Space direction="vertical" style={{ width: '100%' }}>
           {!assets ? <Alert type={assetError ? 'error' : 'info'} message={assetError || '正在读取本场资产'} action={assetError && <Button onClick={onReloadAssets}>重试读取资产</Button>} /> : <>
             {!!unavailableDefaults.length && <Alert type="warning" message={`默认资产不可用：${unavailableDefaults.join('、')}。可独立选择其他素材。`} />}
@@ -211,7 +216,7 @@ export function ReferencePicker({ rootClassName, projectId, assets, assetError, 
               {!asset.image_file_ids?.length && <span>尚无可用图片，请在本场资产中准备。</span>}
               {!!asset.image_file_ids?.length && asset.image_file_ids.every(selected) && <p>暂无可新增素材；已选参考可在上方管理。</p>}
               <Space wrap>{asset.image_file_ids?.map((fileId, index) => selected(fileId) ? null : <Space key={fileId} direction="vertical"><Image width={96} preview={false} src={buildFileDownloadUrl(fileId)} /><Button onClick={event => inspectFile(fileId, event.currentTarget)}>查看参考图 {index + 1}</Button>
-                <Button disabled={!inputRole || inputRole === 'subject' && capability && !capability.subject_images} onClick={() => add(fileId, 'image', asset)}>选入 {asset.name} 图片 {index + 1}</Button>
+                <Button disabled={!inputRole || !roles.includes(inputRole) || inputRole === 'subject' && capability && !capability.subject_images} onClick={() => add(fileId, 'image', asset)}>选入 {asset.name} 图片 {index + 1}</Button>
               </Space>)}</Space>
             </section>)}
           </>}
@@ -220,15 +225,15 @@ export function ReferencePicker({ rootClassName, projectId, assets, assetError, 
           <Input.Search placeholder="搜索素材" value={query} onChange={event => setQuery(event.target.value)} onSearch={() => void load()} loading={loading} />
           <Select value={global ? 'all' : 'project'} options={[{ value: 'project', label: '当前项目素材' }, { value: 'all', label: '全部已有素材' }]} onChange={value => { setGlobal(value === 'all'); void load(1, value === 'all') }} />
           {files.filter(file => !selected(file.id)).map(file => <Space wrap key={file.id}>{file.type === 'image' ? <><Image width={64} preview={false} src={file.thumbnail || buildFileDownloadUrl(file.id)} /><Button onClick={event => inspectFile(file.id, event.currentTarget)}>查看图片：{file.name}</Button></> : <span>视频</span>}<span>{file.name}</span>
-            <Button disabled={!inputRole} onClick={() => add(file.id, file.type as Reference['media_kind'])}>选入</Button></Space>)}
+            <Button disabled={!inputRole || !roles.includes(inputRole)} onClick={() => add(file.id, file.type as Reference['media_kind'])}>选入</Button></Space>)}
           <Button onClick={() => void load(page)} loading={loading}>刷新素材</Button><Pagination size="small" current={page} total={total} pageSize={20} onChange={next => void load(next)} />
         </Space>}
-        {tab === 'upload' && <><p>上传只添加本次参考，不创建项目资产。</p><Upload accept="image/*,video/*" disabled={!inputRole} showUploadList={false} beforeUpload={file => {
+        {tab === 'upload' && <><p>上传只添加本次参考，不创建项目资产。</p><Upload accept={frameScope ? "image/*" : "image/*,video/*"} disabled={!inputRole || !roles.includes(inputRole)} showUploadList={false} beforeUpload={file => {
           const chosenRole = inputRole
           const scope = selection.current
           void StudioFilesService.uploadFileApiApiV1StudioFilesUploadPost({ formData: { file: file as unknown as string, project_id: projectId, usage_kind: 'upload' } }).then(response => { if (response.data && active.current && scope === selection.current) add(response.data.id, response.data.type as Reference['media_kind'], undefined, chosenRole) }).catch(cause => { if (active.current && scope === selection.current) setError(directingError(cause)) })
           return false
-        }}><Button disabled={!inputRole}>上传参考素材</Button></Upload></>}
+        }}><Button disabled={!inputRole || !roles.includes(inputRole)}>上传参考素材</Button></Upload></>}
       </Space></fieldset>}
     </Space>
     </div>
