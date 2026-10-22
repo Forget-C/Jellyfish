@@ -38,6 +38,38 @@ def _reference_preview(context, binding):
         thumbnail_url=thumbnail_url, media_url=media_url, preview_issue=preview_issue)
 
 
+def reference_card(context, unit, index, key, title, bindings, input_role='all', subject_group_id=None):
+    """同一固定绑定在单元位置卡与指令只读摘要中保留完整来源和文件证据。"""
+    node_id = f'unit:{unit.id}:{key}'
+    obj = CanvasObject(version_id=context.version_id, revision=context.revision,
+        kind='reference', id=f'{unit.id}:{key}', path=['units', index, 'references'])
+    bindings = sorted(bindings, key=lambda binding: binding.ordinal)
+    node = UnitReferencesCanvasNode(id=node_id, title=title, object=obj,
+        home_view_id=f'unit:{unit.id}', unit_id=unit.id, input_role=input_role,
+        subject_group_id=subject_group_id, binding_count=len(bindings), bindings=bindings,
+        previews=[_reference_preview(context, binding) for binding in bindings],
+        edit_target=CanvasTarget(node_id=node_id, object=obj),
+        summary=[CanvasSummaryField(field='bindings', label='已绑定素材',
+            text=f'{len(bindings)} 项' if bindings else '尚未添加')])
+    target = CanvasTarget(node_id=node_id, object=obj)
+    issues: list[CanvasIssue] = []
+    for preview in node.previews:
+        if preview.status != 'available':
+            issues.append(CanvasIssue(code=f'reference-file-{preview.status}', severity='warning', target=target,
+                message=f'固定参考 {preview.binding_id}：' + {
+                    'deleted': '文件已删除', 'unavailable': '文件不可用或不属于当前项目',
+                    'wrong_media_kind': '实际文件类型与绑定不一致',
+                }[preview.status]))
+        if preview.source_status == 'unavailable':
+            issues.append(CanvasIssue(code='reference-source-unavailable', severity='warning', target=target,
+                message=f'固定参考 {preview.binding_id} 的来源资产不可用；保留选择时来源，文件可用性单独核实'))
+        if preview.preview_issue:
+            issues.append(CanvasIssue(code='reference-preview-unverified', severity='warning', target=target,
+                message=preview.preview_issue))
+    node.issues = issues
+    return node
+
+
 def _unit_basis(context, unit, index, graph, director):
     """执行内容由既有范围函数决定；导演图仅提供跨画布的来源定位地址。"""
     scope = unit_scope(context.content.design, unit, context.style_rules.get(unit.model_id or '', []))
@@ -241,32 +273,23 @@ def unit_graph(context: CanvasReadContext, director: DirectorCanvasGraph) -> Uni
             field('dependencies', '固定计划单元', '；'.join(dependency_rows['plan']) or '未声明'),
             field('scene_dependencies', '场次采用', '；'.join(dependency_rows['scene']) or '未声明'),
         ]
-        reference_id = f'{unit_id}:references'
-        reference_obj = identity('reference', f'{unit.id}:references', ['units', index, 'references'])
-        reference = UnitReferencesCanvasNode(id=reference_id, title='参考素材', object=reference_obj,
-            home_view_id=view_id, unit_id=unit.id, binding_count=len(unit.references),
-            bindings=sorted(unit.references, key=lambda binding: binding.ordinal),
-            previews=[_reference_preview(context, binding) for binding in sorted(unit.references, key=lambda binding: binding.ordinal)], edit_target=CanvasTarget(node_id=reference_id, object=reference_obj),
-            summary=[field('bindings', '已绑定素材', f'{len(unit.references)} 项')])
-        for preview in reference.previews:
-            if preview.status != 'available':
-                issue(reference, f'reference-file-{preview.status}', f'固定参考 {preview.binding_id}：' + {
-                    'deleted': '文件已删除', 'unavailable': '文件不可用或不属于当前项目',
-                    'wrong_media_kind': '实际文件类型与绑定不一致',
-                }[preview.status])
-            if preview.source_status == 'unavailable':
-                issue(reference, 'reference-source-unavailable', f'固定参考 {preview.binding_id} 的来源资产不可用；保留选择时来源，文件可用性单独核实')
-            if preview.preview_issue:
-                issue(reference, 'reference-preview-unverified', preview.preview_issue)
-        if input_error and (unit.duration_ms or input_error.section != 'generation'):
-            issue(generation if input_error.section == 'generation' else reference,
-                  'model-input-invalid', str(input_error))
-        graph.add_node(reference)
-        members.append(CanvasMember(node_id=reference_id, group='references'))
-        edge_id = f'{unit_id}:reference-input'
-        graph.add_edge(CanvasEdge(id=edge_id, source=reference_id, target=unit_id,
-            kind='business', category='input', label='真实参考输入', sources=[target(reference, 'references')]))
-        edge_ids.append(edge_id)
+        references = [reference_card(context, unit, index, key, title,
+            [binding for binding in unit.references if binding.input_role == role], role)
+            for role, key, title in [('first_frame', 'first-frame', '首帧参考'), ('last_frame', 'last-frame', '尾帧参考')]]
+        references.append(reference_card(context, unit, index, 'references', '主体参考',
+            [binding for binding in unit.references if binding.input_role not in ('first_frame', 'last_frame')], 'subject'))
+        if input_error and unit.duration_ms and input_error.section == 'generation':
+            issue(generation, 'model-input-invalid', str(input_error))
+        for reference in references:
+            if input_error and input_error.section != 'generation' and reference.bindings:
+                issue(reference, 'model-input-invalid', str(input_error))
+            graph.add_node(reference)
+            members.append(CanvasMember(node_id=reference.id, group='references'))
+            if reference.bindings:
+                edge_id = f'{reference.id}:input'
+                graph.add_edge(CanvasEdge(id=edge_id, source=reference.id, target=unit_id,
+                    kind='business', category='input', label=reference.title, sources=[target(reference, 'references')]))
+                edge_ids.append(edge_id)
         basis = _unit_basis(context, unit, index, graph, director)
         graph.add_node(basis)
         members.append(CanvasMember(node_id=basis.id, group='execution-basis'))
@@ -283,8 +306,9 @@ def unit_graph(context: CanvasReadContext, director: DirectorCanvasGraph) -> Uni
                 members.extend([
                     CanvasMember(node_id=f'unit:{unit.id}', presentation='entry',
                         group='units', entry_view_id=f'unit:{unit.id}'),
-                    CanvasMember(node_id=f'unit:{unit.id}:references', group='references'),
                 ])
+                members.extend(CanvasMember(node_id=node.id, group='references')
+                    for node in graph.nodes.values() if node.kind == 'unit_references' and node.unit_id == unit.id)
         member_ids = {member.node_id for member in members}
         edges = [edge.id for edge in graph.edges.values() if edge.kind == 'business'
                  and edge.source in member_ids and edge.target in member_ids]

@@ -9,7 +9,7 @@ import type { CanvasSummaryField } from './CanvasSummaryField';
 import type { CanvasTarget } from './CanvasTarget';
 import type { ReferenceBinding_Output } from './ReferenceBinding_Output';
 /**
- * 每个单元一个真实输入集合；绑定保留用途、角色、顺序及固定文件身份。
+ * 单元的真实输入集合或固定位置；绑定保留用途、角色、顺序及固定文件身份。
  */
 export type UnitReferencesCanvasNode = {
     id: string;
@@ -22,7 +22,10 @@ export type UnitReferencesCanvasNode = {
     home_view_id: string;
     kind: 'unit_references';
     unit_id: string;
+    input_role: 'all' | 'first_frame' | 'last_frame' | 'subject';
+    subject_group_id: (string | null);
     binding_count: number;
     bindings: Array<ReferenceBinding_Output>;
     previews: Array<CanvasReferencePreview>;
 };
+

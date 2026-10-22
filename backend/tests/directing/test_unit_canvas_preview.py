@@ -92,3 +92,58 @@ async def test_preview_rejects_stale_baselines_and_foreign_or_invalid_targets(tm
             assert response.status_code == status, response.text
         saved = (await client.get(detail)).json()['data']
         assert saved['revision'] == 1 and saved['content'] == version['content']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('case', ['pair', 'duplicate', 'unsupported', 'mixed', 'missing', 'wrong_kind', 'foreign'])
+async def test_frame_preview_preserves_positions_and_exposes_input_guards(tmp_path, case):
+    """真实草稿投影与保存使用同一帧位置；非法组合可修正，非法文件不能落盘。"""
+    from app.models.llm import Model, Provider
+    from app.models.studio import FileUsage
+
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        async with sessions.begin() as db:
+            db.add(Provider(id='frames', name='openai' if case == 'unsupported' else 'Vidu',
+                            base_url='https://provider.example', api_key='fixture'))
+            await db.flush()
+            db.add(Model(id='frames-model', provider_id='frames', category='video', name='sora-2' if case == 'unsupported' else 'viduq2'))
+            if case == 'foreign':
+                db.add(FileUsage(file_id='image1', project_id='p2', usage_kind='upload', source_ref='foreign'))
+        path = await sequence_path(client)
+        version = (await client.post(path + '/versions', json={'request_id': str(uuid4()), 'title': '帧输入边界'})).json()['data']
+        detail = path + '/versions/' + version['id']
+        content = deepcopy(version['content'])
+        content['design']['direction']['shots'] = [{'id': 'shot', 'beat_ids': [], 'event_ids': [],
+            'blocking_state_ids': [], 'participant_ids': [], 'criterion_ids': [], 'visible_result': {}, 'narrative_function': {}}]
+        references = [{'id': key, 'file_id': 'image1', 'media_kind': 'image', 'purpose': 'composition',
+            'participant_ids': [], 'ordinal': ordinal, 'input_role': role,
+            'source': {'kind': 'human', 'reference': 'author', 'version': '1'}}
+            for ordinal, (key, role) in enumerate([('first', 'first_frame'), ('last', 'last_frame')])]
+        if case == 'duplicate':
+            references[1]['input_role'] = 'first_frame'
+        if case == 'mixed':
+            references[1]['input_role'] = 'subject'
+        if case in {'missing', 'wrong_kind'}:
+            references[0]['file_id'] = 'missing-file' if case == 'missing' else 'video1'
+        content['units'] = [{'id': 'unit', 'model_id': 'frames-model', 'duration_ms': 5000,
+            'ratio': '16:9', 'instruction': '人物抬头。', 'references': references,
+            'coverage': [{'id': 'coverage', 'shot_id': 'shot', 'action_scope': '抬头'}]}]
+        preview = await client.post(detail + '/unit-canvas/preview', json={'expected_revision': 1, 'content': content})
+        saved = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})
+        if case in {'missing', 'wrong_kind', 'foreign'}:
+            assert saved.status_code == (404 if case == 'missing' else 422), saved.text
+            assert (await client.get(detail)).json()['data']['revision'] == 1
+        else:
+            assert preview.status_code == saved.status_code == 200, (preview.text, saved.text)
+            draft_graph, saved_graph = preview.json()['data'], saved.json()['data']['unit_graph']
+            cards = lambda graph: {node['id']: (node['input_role'], node['bindings'], node['edit_target']['object']['path'])
+                for node in graph['nodes'] if node['kind'] == 'unit_references'}
+            assert cards(draft_graph) == cards(saved_graph)
+            edges = lambda graph: [(edge['source'], edge['target']) for edge in graph['edges'] if edge['category'] == 'input']
+            assert edges(draft_graph) == edges(saved_graph)
+            if case == 'pair':
+                assert [binding['input_role'] for binding in saved.json()['data']['content']['units'][0]['references']] == ['first_frame', 'last_frame']
+            else:
+                expected = {'duplicate': '首帧或尾帧只能选择一份图片', 'unsupported': '不支持所选帧位置', 'mixed': '不支持主体参考与帧参考组合'}[case]
+                assert any(expected in issue['message'] for issue in saved_graph['issues']), saved_graph['issues']
+        assert (await client.get(detail + '/units/unit/video')).json()['data'] == []

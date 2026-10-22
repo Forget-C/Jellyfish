@@ -5,6 +5,7 @@ from app.core.contracts.directing.canvas_graph import (
     InstructionCanvasGraph, InstructionCanvasNode, InstructionCanvasRecord, UnitCanvasGraph,
 )
 from app.services.directing.canvas_graph import CanvasReadContext, GraphAssembler
+from app.services.directing.unit_canvas import reference_card
 
 
 async def instruction_graph(context: CanvasReadContext, units: UnitCanvasGraph, store, sequence_id) -> InstructionCanvasGraph:
@@ -15,7 +16,12 @@ async def instruction_graph(context: CanvasReadContext, units: UnitCanvasGraph, 
     for index, unit in enumerate(context.content.units):
         view_id = f'instruction-unit:{unit.id}'
         selected = [node.model_copy(deep=True) for node in units.nodes
-                    if node.kind in ('unit_basis', 'unit_references') and node.unit_id == unit.id]
+                    if node.kind == 'unit_basis' and node.unit_id == unit.id]
+        reference = reference_card(context, unit, index, 'references', '参考素材', unit.references)
+        input_issues = {issue.message: issue.model_copy(update={'target': CanvasTarget(node_id=reference.id, object=reference.object)})
+            for node in units.nodes if node.kind == 'unit_references' and node.unit_id == unit.id
+            for issue in node.issues if issue.code == 'model-input-invalid'}
+        selected.append(reference.model_copy(update={'issues': [*reference.issues, *input_issues.values()]}))
         for node in selected:
             node.home_view_id = view_id
             node.edit_target = None
