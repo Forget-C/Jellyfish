@@ -1,6 +1,7 @@
 {
   "preflight": "preflight.mjs",
   "cases": {
+    "instruction-inputs": { "file": "sceneInstructionInputs.browser.mjs", "ports": [4266, 8266], "timeoutMs": 180000 },
     "frame-inputs": { "file": "sceneFrameInputs.browser.mjs", "ports": [4263, 8263], "timeoutMs": 240000 },
     "instruction-card": { "file": "sceneInstructionCard.browser.mjs", "ports": [4262, 8262], "timeoutMs": 180000 },
     "candidate-refresh": { "file": "sceneCandidateRefresh.browser.mjs", "ports": [4267, 8267], "timeoutMs": 180000 },
@@ -31,7 +32,7 @@
     "periodic-save": { "file": "scenePeriodicSave.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 }
   },
   "suites": {
-    "instructions": ["instruction-design", "instruction-primary", "instruction-preparation", "instruction-suggestions", "instruction-evidence"],
+    "instructions": ["instruction-inputs", "instruction-design", "instruction-primary", "instruction-preparation", "instruction-suggestions", "instruction-evidence"],
     "references": ["frame-inputs", "default-assets", "reference-source"],
     "workbench": ["workbench-ui", "workbench-style", "design-scope", "unit-design", "instruction-preparation", "instruction-design"],
     "graph": ["browse-controls", "graph-navigation", "director-layout", "canvas-graph", "graph-summary", "legacy-graph", "periodic-save", "instruction-evidence", "edit-graph", "edit-seams-graph", "edit-cut-evidence", "timeline", "take-library-graph", "take-library", "legacy-take-library"]

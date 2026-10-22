@@ -444,3 +444,12 @@
 @media (max-width: 700px) {
   .canvas-filters > .wb-action { min-height: 36px; min-width: 36px; }
 }
+
+/* 本次输入保留三类位置，完整来源在同一只读详情阅读。 */
+.instruction-inputs h3 { font-size: 14px; margin: 8px 0; }
+.instruction-inputs p { margin: 4px 0; overflow-wrap: anywhere; }
+.instruction-input-media { display: flex; flex-wrap: wrap; gap: 8px; }
+.instruction-input-media > section { min-width: 0; max-width: 100%; }
+.instruction-inputs-compact { min-height: 0; overflow: hidden; }
+.instruction-inputs-compact .instruction-input-media > section { max-width: 96px; }
+.instruction-inputs-compact p { font-size: 12px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }

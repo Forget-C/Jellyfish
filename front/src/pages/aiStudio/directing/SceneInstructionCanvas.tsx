@@ -2,7 +2,8 @@ import { CanvasBrowse } from './CanvasBrowse'
 import { SceneUnitPreparationStatus } from './SceneUnitPreparationStatus'
 import { WorkbenchButton } from './ui/WorkbenchButton'
 import { WorkbenchDetails } from './ui/WorkbenchDetails'
-import { ReferencePreview } from './ReferencePreview'
+import { SceneInstructionInputs } from './SceneInstructionInputs'
+import { SourceInspector } from './Sources'
 import { useSceneUnitPreparation } from './useSceneUnitPreparation'
 import type { ScenePreparationIssue } from './useSceneUnitPreparation'
 import { useState } from 'react'
@@ -12,7 +13,6 @@ import { GraphCanvas } from './GraphCanvas'
 import type { GraphArrange } from './graphLayout'
 import { UnitScopeSummary } from './UnitScopeSummary'
 import type { CanvasTarget, InstructionCanvasGraph, UnitCanvasGraph } from '../../../services/generated'
-import { referencePurposes } from './referenceInput'
 import { humanNote } from './common'
 import { SceneInstructionSuggestions } from './SceneInstructionSuggestions'
 import { SceneInstructionChecks } from './SceneInstructionChecks'
@@ -32,7 +32,7 @@ const arrangeInstruction: GraphArrange = (nodes, sizes, _width, anchor, retained
 }
 
 /** 指令正文属于明确选中的原单元；查看、编辑与执行分别授权。 */
-export function SceneInstructionCanvas({ onDesignOpenChange, preparationHost, unitGraphState, graph, evidenceError, onEvidenceChanged, onRetryGraph, onLocateSource, primaryHost, onPrepare, focusRequest, projectId, sequenceId, versionId, revision, content, unitId, disabled, onSelectUnit, onChange, taskId, onTask, dirty, videoBusy, savePending, onVerifyVideo, videoRefresh, onGenerateVideo, onRetryVideo, videoFocus, onVideoFocused }: {
+export function SceneInstructionCanvas({ onDesignOpenChange, preparationHost, unitGraphState, graph, evidenceError, onEvidenceChanged, onRetryGraph, onLocateSource, onLocateInput, primaryHost, onPrepare, focusRequest, projectId, sequenceId, versionId, revision, content, unitId, disabled, onSelectUnit, onChange, taskId, onTask, dirty, videoBusy, savePending, onVerifyVideo, videoRefresh, onGenerateVideo, onRetryVideo, videoFocus, onVideoFocused }: {
   onDesignOpenChange: (state: { versionId: string; unitId: string; open: boolean }) => void
   preparationHost: HTMLElement | null
   unitGraphState: { graph?: UnitCanvasGraph; current: boolean; pending: boolean; error: string; retry: () => void }
@@ -41,6 +41,7 @@ export function SceneInstructionCanvas({ onDesignOpenChange, preparationHost, un
   graph: InstructionCanvasGraph
   onRetryGraph: () => void
   onLocateSource: (target: CanvasTarget) => boolean
+  onLocateInput: (target: CanvasTarget) => boolean
   primaryHost: HTMLElement | null
   projectId: string; sequenceId: string; revision: number; versionId: string; content: SceneVersionContent_Output; unitId?: string; disabled: boolean
   onSelectUnit: (id: string) => void; onChange: (content: SceneVersionContent_Output) => void
@@ -69,10 +70,12 @@ export function SceneInstructionCanvas({ onDesignOpenChange, preparationHost, un
   const validGraph = !!graph && graph.kind === 'instructions' && graph.version_id === versionId && graph.revision === revision && Array.isArray(graph.nodes) && Array.isArray(graph.edges) && Array.isArray(graph.views)
   const nodes = validGraph && unit ? graph.nodes.filter(node => node.unit_id === unitId) : []
   const basis = nodes.find(node => node.kind === 'unit_basis')
-  const references = nodes.find(node => node.kind === 'unit_references')
   const instruction = nodes.find(node => node.kind === 'instruction')
   const view = validGraph ? graph.views.find(row => row.anchor_id === instruction?.id) : undefined
   const summary = (node: typeof graph.nodes[number]) => <><div className="design-compact-fields">{node.summary.slice(0, 3).map(field => <p key={field.field} title={`${field.label}：${field.text}`}><span>{field.label}：</span><strong>{field.text}</strong></p>)}</div>{node.issues.length > 0 && <div className="design-compact-fields"><p><strong>{node.issues[0].message}</strong></p></div>}</>
+  const inputs = (compact = false) => unit && <SceneInstructionInputs key={`${unit.id}:${compact}`} compact={compact} unitId={unit.id}
+    graph={unitGraphState.graph} current={unitGraphState.current} error={unitGraphState.error || evidenceError} retry={() => { unitGraphState.retry(); onRetryGraph() }}
+    readonly={disabled} onLocate={target => { const found = onLocateInput(target); if (found) setReading(undefined); return found }} />
   const editor = <section className="canvas-workbench-card">
       {unit ? <><p>单元 {allUnits.indexOf(unit) + 1} · 人工编辑按当前保存模式保存，可撤销。</p>
         <Input.TextArea id="scene-current-instruction" aria-label="当前单元指令正文" rows={expandedUnit === unit.id ? 16 : 4} onFocus={() => setExpandedUnit(unit.id)} disabled={disabled} value={unit.instruction || ''}
@@ -127,10 +130,10 @@ export function SceneInstructionCanvas({ onDesignOpenChange, preparationHost, un
                 document.querySelector(`[aria-label="当前单元指令${record.kind === 'suggestion' ? '建议' : '检查'}"]`)?.scrollIntoView({ block: 'center' })
               }}>查看原{record.kind === 'suggestion' ? '建议' : '检查'}记录</WorkbenchButton></>}
             {!node.records.length && <p>尚无已登记的建议或检查；待核实原请求仍在工作区核实。</p>}
-          </section><WorkbenchButton variant="secondary" disabled={!unit} onClick={() => document.getElementById('scene-current-instruction')?.focus()}>修改指令</WorkbenchButton></section> : <section className="canvas-workbench-card">{summary(node)}
+          </section><WorkbenchButton variant="secondary" disabled={!unit} onClick={() => document.getElementById('scene-current-instruction')?.focus()}>修改指令</WorkbenchButton></section> : <section className="canvas-workbench-card">{node.kind === 'unit_references' ? inputs(true) : summary(node)}
             {node.kind === 'unit_basis' ? <WorkbenchButton variant="secondary" disabled={!unit} onClick={() => setReading('basis')}>查看完整单元依据</WorkbenchButton> : <>
-              <WorkbenchButton variant="secondary" disabled={!unit} onClick={() => setReading('references')}>查看完整参考输入</WorkbenchButton>
-              <p>在单元画布明确选择或修改参考；正文中的提及不会自动绑定素材。</p>
+              <WorkbenchButton variant="secondary" disabled={!unit} onClick={() => setReading('references')}>查看完整本次输入</WorkbenchButton>
+              <p>参考修改在单元画布进行。</p>
             </>}
           </section>, onInspect: node.kind === 'instruction' ? () => document.getElementById('scene-current-instruction')?.focus() : () => { if (unit) setReading(node.kind === 'unit_basis' ? 'basis' : 'references') } }]
       })}
@@ -142,10 +145,10 @@ export function SceneInstructionCanvas({ onDesignOpenChange, preparationHost, un
           unitId={unit.id} content={content} disabled={disabled} onChange={onChange} initialTaskId={taskId} recordFocus={recordFocus?.unitId === unit?.id && recordFocus?.kind === 'suggestion' ? recordFocus : undefined} onTask={onTask} />}
     </div>
 
-    <WorkbenchDetails title={reading === 'basis' ? '单元依据 · 只读' : '参考输入 · 只读'} status="只读" open={!!reading && !!unit} onClose={() => setReading(undefined)}>
+    <WorkbenchDetails title={reading === 'basis' ? '单元依据 · 只读' : '本次输入 · 只读'} status="只读" open={!!reading && !!unit} onClose={() => setReading(undefined)}>
       {unavailableSource && <p role="alert">当前来源目标不可用，请保存后重新核对；不会选择其他对象。</p>}
       {reading === 'basis' && basis?.kind === 'unit_basis' && <UnitScopeSummary value={basis.scope} fieldTargets={basis.field_targets} onLocate={target => { if (onLocateSource(target)) { setUnavailableSource(false); setReading(undefined) } else setUnavailableSource(true) }} />}
-      {reading === 'references' && references?.kind === 'unit_references' && (!references.bindings.length ? <p>当前没有明确参考输入。</p> : references.bindings.map(reference => <section key={reference.id}><p>绑定身份：{reference.id} · 用途：{referencePurposes[reference.purpose]} · 输入角色：{reference.input_role} · 顺序：{reference.ordinal}</p><ReferencePreview reference={reference} /></section>))}
+      {reading === 'references' && <SourceInspector identity={unit?.id}>{inputs()}</SourceInspector>}
     </WorkbenchDetails>
   </div>
 }
