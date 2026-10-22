@@ -274,7 +274,7 @@ async def test_unit_graph_filters_share_one_unit_and_keep_its_complete_subgraph(
         assert any(issue['code'] == 'single-coverage-required' for issue in unit['issues'])
         reference = next(node for node in graph['nodes'] if node['kind'] == 'unit_references')
         assert reference['binding_count'] == 0
-        assert any(edge['source'] == reference['id'] and edge['target'] == unit['id']
+        assert not any(edge['source'] == reference['id'] and edge['target'] == unit['id']
                    and edge['category'] == 'input' for edge in graph['edges'])
         assert CanvasGraph.model_validate(graph).revision == saved['revision']
 
@@ -449,7 +449,7 @@ async def test_unit_reference_graph_preserves_binding_roles_order_and_live_file_
                     'source': {'kind': 'file', 'reference': 'image1', 'version': '1', 'file_id': 'image1'}}
         content['units'] = [
             {'id': 'first', 'coverage': [{'id': 'c1', 'shot_id': 'shot', 'action_scope': '开门'}],
-             'references': [binding('frame', 'first_frame', 1, 'composition'), binding('subject', 'subject', 0, 'identity')],
+             'references': [binding('frame', 'first_frame', 1, 'composition'), binding('subject', 'subject', 0, 'identity'), binding('end', 'last_frame', 2, 'composition')],
              'model_id': None, 'duration_ms': None, 'ratio': '16:9'},
             {'id': 'second', 'coverage': [{'id': 'c2', 'shot_id': 'shot', 'action_scope': '停步'}],
              'references': [binding('last', 'last_frame', 0, 'continuity')],
@@ -461,18 +461,26 @@ async def test_unit_reference_graph_preserves_binding_roles_order_and_live_file_
         })
         assert response.status_code == 200, response.text
         saved = response.json()['data']
-        collections = {node['unit_id']: node for node in saved['unit_graph']['nodes']
+        collections = {node['unit_id']: node for node in saved['instruction_graph']['nodes']
                        if node['kind'] == 'unit_references'}
         first = collections['first']
         assert first['input_role'] == 'all'
         assert first['subject_group_id'] is None
-        assert [row['id'] for row in first['bindings']] == ['subject', 'frame']
-        assert [row['input_role'] for row in first['bindings']] == ['subject', 'first_frame']
-        assert first['binding_count'] == 2
+        assert [row['id'] for row in first['bindings']] == ['subject', 'frame', 'end']
+        assert [row['input_role'] for row in first['bindings']] == ['subject', 'first_frame', 'last_frame']
+        assert first['binding_count'] == 3
         assert collections['second']['bindings'][0]['input_role'] == 'last_frame'
-        assert [row['binding_id'] for row in first['previews']] == ['subject', 'frame']
+        assert [row['binding_id'] for row in first['previews']] == ['subject', 'frame', 'end']
         assert all(row['display_name'] == '空间图' and row['status'] == 'available' for row in first['previews'])
         assert all(row['thumbnail_url'] == '/api/v1/studio/files/image1/download' for row in first['previews'])
+        frames = {node['input_role']: node for node in saved['unit_graph']['nodes']
+                  if node['kind'] == 'unit_references' and node['unit_id'] == 'first' and node['input_role'] != 'subject'}
+        assert set(frames) == {'first_frame', 'last_frame'}
+        assert [row['id'] for row in frames['first_frame']['bindings']] == ['frame']
+        assert [row['id'] for row in frames['last_frame']['bindings']] == ['end']
+        assert frames['first_frame']['id'] == 'unit:first:first-frame'
+        assert frames['last_frame']['id'] == 'unit:first:last-frame'
+        assert frames['first_frame']['edit_target']['object']['path'] == ['units', 0, 'references']
         for invalid in ['wrong_count', 'wrong_file', 'duplicate_preview']:
             malformed = deepcopy(saved['unit_graph'])
             collection = next(node for node in malformed['nodes'] if node['kind'] == 'unit_references')
@@ -490,7 +498,7 @@ async def test_unit_reference_graph_preserves_binding_roles_order_and_live_file_
         })
         assert removed.status_code == 200, removed.text
         second = next(node for node in removed.json()['data']['unit_graph']['nodes']
-                      if node['kind'] == 'unit_references' and node['unit_id'] == 'second')
+                      if node['kind'] == 'unit_references' and node['unit_id'] == 'second' and node['input_role'] == 'last_frame')
         assert second['bindings'] == collections['second']['bindings']
         async with sessions.begin() as db:
             file = await db.get(FileItem, 'image1')
@@ -498,7 +506,7 @@ async def test_unit_reference_graph_preserves_binding_roles_order_and_live_file_
         reread = (await client.get(detail)).json()['data']
         assert reread['revision'] == 3
         for node in reread['unit_graph']['nodes']:
-            if node['kind'] == 'unit_references':
+            if node['kind'] == 'unit_references' and node['bindings']:
                 assert node['previews'][0]['status'] == 'deleted'
                 assert node['previews'][0]['thumbnail_url'] is None
                 assert any(issue['code'] == 'reference-file-deleted' for issue in node['issues'])
@@ -546,7 +554,7 @@ async def test_graph_generation_uses_actual_model_input_validation_without_submi
             'request_id': str(uuid4()), 'expected_revision': 2, 'content': content,
         })
         assert response.status_code == 200, response.text
-        reference = next(node for node in response.json()['data']['unit_graph']['nodes'] if node['kind'] == 'unit_references')
+        reference = next(node for node in response.json()['data']['unit_graph']['nodes'] if node['kind'] == 'unit_references' and node['input_role'] == 'subject')
         assert any('不支持主体图片' in issue['message'] for issue in reference['issues'])
         async with sessions.begin() as db:
             provider = await db.get(Provider, 'input-provider')
