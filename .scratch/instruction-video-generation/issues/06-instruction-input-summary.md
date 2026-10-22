@@ -28,7 +28,9 @@
 - 验证同一图片占用两个位置、参考组重排和当前未保存编辑的场景，避免错误定位或旧数据覆盖。
 
 
-## Implementation and verification
+## Comments
+
+### Implementation and verification
 
 2026-10-22：指令图保留一个“本次输入”节点和媒体输入连线，使用既有 sources 记录精确跨画布目标；页面分区与修改入口复用当前编辑的服务端单元图、首尾位置、主体组身份及 edit_target。无需新增 schema 字段或手写客户端。当前参考与历史任务固定输入继续分别阅读。
 

@@ -27,4 +27,12 @@
 
 ## 集成检查
 
-待最终集成填写命令及结果。逐票红绿和证据详见 issues 01–07；已有成功结果只在相关实现变化后重跑。
+- 后端全量：`S3_BUCKET_NAME=browser-test-storage S3_PUBLIC_BASE_URL=http://storage.test uv run --no-sync pytest -q`，856 passed、19 skipped（209.19s）。隔离工作树不加载真实 S3 配置，使用虚拟 URL；此前的三项 URL 构造失败在该配置下复核通过。19 项既有跳过不计为通过。
+- `pnpm --dir front run typecheck` 通过；`lint:check` 为 275 项存量、0 项新增；`test:unit` 全部通过；后端 `uv run pylint app` 为 10.00/10。
+- 标准 `test:workbench-ui` 六项全部通过（workbench-ui/style、design-scope、unit-design、instruction-preparation/design）。
+- `instruction-video` 已通过 instruction-card、frame-inputs、default-assets、reference-source、frame-dependencies、instruction-inputs、candidate-refresh；scene-video 旧导航及模型夹具迁移后单独通过（61.0s）。原始套件失败记录保留，复跑不覆盖历史。
+- 原视频恢复回归复现了自己的待核实保存被证据刷新误判为外部冲突；刷新延后并在核实后补读，scene-video 61.0s 转绿。修复后 candidate-refresh 24.4s、periodic-save 10.6s 通过，后者仍验证真正的外部保存冲突。
+- 最终截图、原始日志和逐用例结果保存在主工作区 `front/test-results/instruction-video-08/`，排除 SQLite 和缓存。四种真实视频独立保存在 `instruction-video-real/`。
+- 实施与上述验证均已完成，双轴代码审查进行中。
+
+逐票红绿和证据详见 issues 01–07；已有成功结果只在相关实现变化后重跑。
