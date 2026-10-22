@@ -1,5 +1,5 @@
 import { makeWorkspace } from './directing-fixtures.mjs'
-import { workbenchControl, workbenchShot, closeWorkbenchDetails } from './workbenchControls.mjs'
+import { selectWorkbenchOption, workbenchControl, workbenchShot, closeWorkbenchDetails } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -73,8 +73,7 @@ try {
   await page.goto(`http://127.0.0.1:4252/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
   await (await workbenchShot(page, '镜头 1：读信反应')).click()
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
-  await page.getByRole('combobox', { name: '当前单元', exact: true }).press('ArrowDown')
-  await page.getByRole('combobox', { name: '当前单元', exact: true }).press('Enter')
+  await selectWorkbenchOption(page, '当前单元', '单元 1')
   await page.getByRole('button', { name: '生成当前单元指令建议', exact: true }).click()
   await page.getByText('指令任务：等待执行', { exact: true }).waitFor()
   const primaryTasksUrl = `${versionsUrl}/${version.id}/units/unit-one/instruction-suggestions`
@@ -148,8 +147,7 @@ try {
   await page.reload()
   await (await workbenchShot(page, '镜头 1：读信反应')).click()
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
-  await page.getByRole('combobox', { name: '当前单元', exact: true }).press('ArrowDown')
-  await page.getByRole('combobox', { name: '当前单元', exact: true }).press('Enter')
+  await selectWorkbenchOption(page, '当前单元', '单元 1')
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
   await page.getByRole('button', { name: '查看原建议记录', exact: true }).click()
   await page.getByText('建议 2 · 已完成', { exact: true }).first().waitFor()

@@ -313,9 +313,9 @@ try {
   assert.equal(await page.locator('[data-canvas-node="unit:shared:coverage:first"]').count(), 1)
   assert.equal(await page.locator('[data-canvas-node="unit:shared:coverage:second"]').count(), 1)
   assert.match(await page.locator('[data-canvas-node="unit:shared:coverage:second"]').textContent(), /服务端解析的第二覆盖摘要/)
-  await page.getByRole('navigation', { name: '单元画布位置', exact: true }).getByRole('button', { name: '后退', exact: true }).click()
+  await page.locator('.canvas-workbench-toolbar').getByRole('button', { name: '后退', exact: true }).click()
   await page.locator('[data-layout-view="shot:B"]').waitFor()
-  await page.getByRole('navigation', { name: '单元画布位置', exact: true }).getByRole('button', { name: '前进', exact: true }).click()
+  await page.locator('.canvas-workbench-toolbar').getByRole('button', { name: '前进', exact: true }).click()
   await page.locator('[data-layout-view="unit:shared"]').waitFor()
   const overlappingGroups = await page.locator('.director-layout-region').evaluateAll(regions => {
     const boxes = regions.map(region => ({ x: region.offsetLeft, y: region.offsetTop, w: region.offsetWidth, h: region.offsetHeight }))

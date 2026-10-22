@@ -1,9 +1,8 @@
+import { CanvasBrowse } from './CanvasBrowse'
 import { CanvasCard } from '../../../components/canvas/Canvas'
 import { WorkbenchDetails } from './ui/WorkbenchDetails'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router-dom'
-import { ArrowLeftOutlined, ArrowRightOutlined } from '@ant-design/icons'
-import { useGraphBrowse } from './useGraphBrowse'
+import { useLocation, useNavigationType, useSearchParams } from 'react-router-dom'
 import { Alert, Button, Input, InputNumber, Select, Space } from 'antd'
 import { StudioDirectingService } from '../../../services/generated'
 import type { SceneTakeAnnotation_Output, SceneTakeLibraryRead, SceneVersionContent_Output } from '../../../services/generated'
@@ -20,7 +19,7 @@ import { SceneTakeCoverage } from './SceneTakeCoverage'
 import type { SceneMediaNavigationTarget } from './SceneRelationsNavigation'
 import { EditGraphCanvas } from './EditGraphCanvas'
 import type { EditCanvasGraph } from '../../../services/generated'
-import { WorkbenchButton, WorkbenchIconButton } from './ui/WorkbenchButton'
+import { WorkbenchButton } from './ui/WorkbenchButton'
 import { DirectorCanvasSurface } from './DirectorCanvasSurface'
 
 const identity = (take: { take_kind: string; take_id: string }) => `${take.take_kind}:${take.take_id}`
@@ -52,8 +51,7 @@ export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectI
   const [graphNavigation, setGraphNavigation] = useState<number | undefined>(session.graphNavigation)
   useEffect(() => { session.graphNavigation = graphNavigation }, [session, graphNavigation])
   const [params, setParams] = useSearchParams()
-  const location = useLocation(), navigate = useNavigate(), navigationType = useNavigationType()
-  const { canBrowse } = useGraphBrowse(`jellyfish:edit:local-user:${contextKey}`)
+  const location = useLocation(), navigationType = useNavigationType()
   const routed = params.get('editVersion') === versionId && params.has('editView')
   const rootViewId = graph?.views?.find(view => view.parent_id === null)?.id || ''
   const library = routed ? params.get('editView') === graph?.library_view_id : !!session.library
@@ -177,19 +175,21 @@ export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectI
         <details><summary>查看固定生产依据</summary><p>原单元：{take.unit_id}</p><p>原任务：{take.task_id}</p>
           <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(take.video_preparation || { prompt: take.prompt, production_plan: take.production_plan }, null, 2)}</pre></details>
   </>
-  return <><div className="scene-edit-navigation" aria-label="剪辑浏览">
-    <WorkbenchIconButton label="后退" variant="quiet" icon={<ArrowLeftOutlined />} disabled={!canBrowse(-1)} onClick={() => navigate(-1)} />
-    <WorkbenchIconButton label="前进" variant="quiet" icon={<ArrowRightOutlined />} disabled={!canBrowse(1)} onClick={() => navigate(1)} />
+  return <><CanvasBrowse storageKey={`jellyfish:edit:local-user:${contextKey}`} label="编辑画布位置" actions={<>
     <WorkbenchButton variant="secondary" onClick={() => setWorkspace(value => !value)}>{workspace ? '浏览整场剪辑' : '打开剪辑工作区'}</WorkbenchButton>
     <WorkbenchButton variant="secondary" onClick={() => { setWorkspace(true); setFocusTarget({ nodeId: '同场次素材', fieldId: '', serial: Date.now() }) }}>浏览同场次素材</WorkbenchButton>
     <WorkbenchButton variant="secondary" onClick={() => go(false, !(library && !workspace))}>{library && !workspace ? '返回整场剪辑图' : '浏览同场素材图'}</WorkbenchButton>
     <WorkbenchButton variant="secondary" onClick={onRefreshGraph}>刷新图证据</WorkbenchButton>
+    </>} notice={<>
     {loading && takes.length > 0 && <span role="status">正在刷新素材证据；已核实素材及当前输入保留。</span>}
     {dirty && <span aria-label="剪辑图同步状态">图待同步：总览展示已保存内容，工作区保留当前输入。</span>}
     {evidenceError && <p role="alert">图证据读取失败，保留旧摘要：{evidenceError}。请刷新图证据重试。</p>}
     {unavailableCoverage && <p role="alert">原覆盖目标在当前编辑中已不可用，请明确核对；未选择替代对象。</p>}
     {unavailableClip && <p role="alert">原片段 {unavailableClip} 在当前编辑中已不可用，请保存后重新核对。</p>}
-  </div><div className="scene-edit-overview" hidden={workspace}><EditGraphCanvas graph={graph} versionId={versionId} revision={revision} contextKey={contextKey} viewId={routed ? params.get('editView') || undefined : library ? graph?.library_view_id || undefined : undefined} onRetry={onRefreshGraph} onLocateCoverage={node => {
+    </>}>
+      <WorkbenchButton aria-label="返回编辑概览" variant="quiet" onClick={() => go(false, false)}>编辑画布</WorkbenchButton>
+      <span>› {routed && !graph?.views.some(view => view.id === params.get('editView')) ? '原视图不可用' : workspace ? '剪辑工作区' : library ? '同场素材图' : '整场图'}</span>
+    </CanvasBrowse><div className="scene-edit-overview" hidden={workspace}><EditGraphCanvas graph={graph} versionId={versionId} revision={revision} contextKey={contextKey} viewId={routed ? params.get('editView') || undefined : library ? graph?.library_view_id || undefined : undefined} onRetry={onRefreshGraph} onLocateCoverage={node => {
     const unit = content.units.find(row => row.id === node.coverage.unit_id)
     if (!unit?.coverage.some(row => row.id === node.coverage.coverage_item_id)) { setUnavailableCoverage(true); return }
     setUnavailableCoverage(false); onOpenUnit(unit.id, node.coverage.coverage_item_id)

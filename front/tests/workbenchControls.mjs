@@ -60,15 +60,10 @@ export async function directorObject(page, label, search = typeof label === 'str
 /** 从当前单元子图打开某一类配置详情。 */
 export async function unitCard(page, title = '动作覆盖 1') {
   await closeWorkbenchDetails(page)
-  const selected = await page.locator('.scene-unit-editor-entry .ant-select-selection-item').textContent()
+  const combo = page.getByRole('combobox', { name: '当前单元', exact: true })
+  const selected = await combo.locator('xpath=ancestor::div[contains(@class,"ant-select")][1]').textContent()
+  if (selected.includes('全部单元')) await selectWorkbenchOption(page, '当前单元', '单元 1')
   const target = page.getByRole('button', { name: `查看节点：${title}`, exact: true })
-  if (!await page.getByRole('button', { name: `查看节点：${selected}`, exact: true }).count()) {
-    await page.getByRole('navigation', { name: '单元画布位置', exact: true }).getByRole('button', { name: '单元画布', exact: true }).click()
-    const entry = page.getByRole('button', { name: `进入子图：${selected}`, exact: true })
-    if (!await entry.count()) await selectWorkbenchOption(page, '单元镜头筛选', '全部镜头')
-    await locateCanvasNode(page, selected)
-    await entry.click()
-  }
   await locateCanvasNode(page, title)
   await target.click()
   const details = title === '参考素材' ? page.getByRole('dialog', { name: '编辑参考素材', exact: true }) : page.locator('.wb-details:visible')

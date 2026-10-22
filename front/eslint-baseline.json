@@ -549,20 +549,6 @@
     },
     {
       "file": "src/pages/aiStudio/directing/DirectorDesignCanvas.tsx",
-      "rule": "no-irregular-whitespace",
-      "severity": 2,
-      "fingerprint": "84e9e9a73813cd7709836306d67f9335cde01a2c407a99d69fd40cb4183ed59b",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/directing/DirectorDesignCanvas.tsx",
-      "rule": "react-hooks/exhaustive-deps",
-      "severity": 1,
-      "fingerprint": "0287c3206229edffd5c7bc12b36bd0505228de2f5e56672f843e32bf6a850d6d",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/directing/DirectorDesignCanvas.tsx",
       "rule": "react-hooks/exhaustive-deps",
       "severity": 1,
       "fingerprint": "19ab2e1965db20598297eecbb800ce88bc267576e7779efa141bdf1786305ae0",
@@ -581,13 +567,6 @@
       "severity": 1,
       "fingerprint": "3755f8227a1c81962f02712ae8ab0c1efcbc51f633c616ab9dc59570c177721f",
       "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/directing/DirectorDesignCanvas.tsx",
-      "rule": "react-hooks/exhaustive-deps",
-      "severity": 1,
-      "fingerprint": "5b04b046485788c9439b06c864be864f294a9e19a9480e83bf456c6f286053bf",
-      "count": 3
     },
     {
       "file": "src/pages/aiStudio/directing/DirectorDesignCanvas.tsx",
@@ -1315,34 +1294,6 @@
       "rule": "react-hooks/exhaustive-deps",
       "severity": 1,
       "fingerprint": "517ede19ad3ec025f572686de973a0c455c3c387ed91627fb0468cefd4e1cf33",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/directing/UnitGraphCanvas.tsx",
-      "rule": "eqeqeq",
-      "severity": 2,
-      "fingerprint": "5877bbbda34f649f0ed0c59f8ca296bd0eff081195cf79c38b8fad7946246301",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/directing/UnitGraphCanvas.tsx",
-      "rule": "react-hooks/exhaustive-deps",
-      "severity": 1,
-      "fingerprint": "309313bbcfbbfa3d924a874025e4bb1bed279142dc08c9a862901edddef1f437",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/directing/UnitGraphCanvas.tsx",
-      "rule": "react-hooks/exhaustive-deps",
-      "severity": 1,
-      "fingerprint": "3aac6f332fb9879e98dcd97311880a7b7c9fdc51b97f92da3a2c9a18591e7085",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/directing/UnitGraphCanvas.tsx",
-      "rule": "react-hooks/exhaustive-deps",
-      "severity": 1,
-      "fingerprint": "abb0f9c9e24a21a0f0697e878ede481f7d40bcdd1f1fc47a69c71cc30ced8414",
       "count": 1
     },
     {

@@ -1,7 +1,7 @@
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import { closeWorkbenchDetails } from './workbenchControls.mjs'
 import { checkWorkbenchStyleDetails } from './workbenchStyleDetails.mjs'
-import { workbenchShot, directorObject, directorSelect } from './workbenchControls.mjs'
+import { selectWorkbenchOption, workbenchShot, directorObject, directorSelect } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -236,6 +236,7 @@ try {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 960 })
     for (const [key, name] of [['director', '导演画布'], ['units', '单元画布'], ['instructions', '指令画布'], ['edit', '编辑画布']]) {
       await page.getByRole('navigation', { name: '画布切换', exact: true }).getByRole('button', { name, exact: true }).click()
+      if (key === 'units') await selectWorkbenchOption(page, '当前单元', '单元 1')
       if (key === 'director') { await closeWorkbenchDetails(page); await directorSelect(page, '设计域', '导演画布'); await closeWorkbenchDetails(page) }
       if (key === 'edit' && await page.getByRole('button', { name: '打开剪辑工作区', exact: true }).count()) {
         await page.getByLabel('整场剪辑画布视口', { exact: true }).waitFor()

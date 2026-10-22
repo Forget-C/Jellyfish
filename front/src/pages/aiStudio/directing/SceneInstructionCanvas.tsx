@@ -1,3 +1,4 @@
+import { CanvasBrowse } from './CanvasBrowse'
 import { SceneUnitPreparationStatus } from './SceneUnitPreparationStatus'
 import { WorkbenchButton } from './ui/WorkbenchButton'
 import { WorkbenchDetails } from './ui/WorkbenchDetails'
@@ -32,7 +33,7 @@ const arrangeInstruction: GraphArrange = (nodes, sizes, _width, anchor, retained
 }
 
 /** 指令正文属于明确选中的原单元；查看、编辑与执行分别授权。 */
-export function SceneInstructionCanvas({ preparationHost, unitGraphState, graph, evidenceError, onEvidenceChanged, onRetryGraph, onLocateSource, primaryHost, onPrepare, focusRequest, projectId, sequenceId, versionId, revision, content, shotId, unitId, disabled, onSelectUnit, onChange, taskId, onTask, dirty, videoBusy, savePending, onVerifyVideo, videoRefresh, onGenerateVideo, onRetryVideo, videoFocus, onVideoFocused }: {
+export function SceneInstructionCanvas({ preparationHost, unitGraphState, graph, evidenceError, onEvidenceChanged, onRetryGraph, onLocateSource, primaryHost, onPrepare, focusRequest, projectId, sequenceId, versionId, revision, content, unitId, disabled, onSelectUnit, onChange, taskId, onTask, dirty, videoBusy, savePending, onVerifyVideo, videoRefresh, onGenerateVideo, onRetryVideo, videoFocus, onVideoFocused }: {
   preparationHost: HTMLElement | null
   unitGraphState: { graph?: UnitCanvasGraph; current: boolean; pending: boolean; error: string; retry: () => void }
   evidenceError: string
@@ -41,7 +42,7 @@ export function SceneInstructionCanvas({ preparationHost, unitGraphState, graph,
   onRetryGraph: () => void
   onLocateSource: (target: CanvasTarget) => boolean
   primaryHost: HTMLElement | null
-  projectId: string; sequenceId: string; revision: number; versionId: string; content: SceneVersionContent_Output; shotId?: string; unitId?: string; disabled: boolean
+  projectId: string; sequenceId: string; revision: number; versionId: string; content: SceneVersionContent_Output; unitId?: string; disabled: boolean
   onSelectUnit: (id: string) => void; onChange: (content: SceneVersionContent_Output) => void
   focusRequest?: { unitId: string; serial: number }
   onPrepare: (unitId: string, issue: ScenePreparationIssue) => void
@@ -62,12 +63,12 @@ export function SceneInstructionCanvas({ preparationHost, unitGraphState, graph,
   const [suggestionsHost, setSuggestionsHost] = useState<HTMLSpanElement | null>(null)
   const [actionHost, setActionHost] = useState<HTMLSpanElement | null>(null)
   const allUnits = content.units || []
-  const units = allUnits.filter(row => !shotId || row.id === unitId || row.coverage.some(item => item.shot_id === shotId))
+  const units = allUnits
   const unit = allUnits.find(row => row.id === unitId)
   const [preparationAttempt, setPreparationAttempt] = useState(0)
   const { missing, checking, failed, frameEvidence } = useSceneUnitPreparation(projectId, sequenceId, versionId, revision, content, unit, preparationAttempt, unitGraphState)
   const validGraph = !!graph && graph.kind === 'instructions' && graph.version_id === versionId && graph.revision === revision && Array.isArray(graph.nodes) && Array.isArray(graph.edges) && Array.isArray(graph.views)
-  const nodes = validGraph ? graph.nodes.filter(node => node.unit_id === unitId) : []
+  const nodes = validGraph && unit ? graph.nodes.filter(node => node.unit_id === unitId) : []
   const basis = nodes.find(node => node.kind === 'unit_basis')
   const references = nodes.find(node => node.kind === 'unit_references')
   const instruction = nodes.find(node => node.kind === 'instruction')
@@ -87,16 +88,21 @@ export function SceneInstructionCanvas({ preparationHost, unitGraphState, graph,
     </section>
   return <div className="scene-instruction-canvas">
     {unit && <SceneUnitPreparationStatus host={preparationHost} missing={missing} checking={checking} failed={failed} onLocate={issue => onPrepare(unit.id, issue)} onRetry={() => { setPreparationAttempt(value => value + 1); unitGraphState.retry(); frameEvidence.reload() }} />}
-    {primaryHost && createPortal(<nav className="scene-unit-primary" aria-label="当前指令主操作"><strong>{unit ? `当前单元 ${allUnits.indexOf(unit) + 1} 的指令` : '请明确选择单元'}</strong><span ref={setActionHost} /></nav>, primaryHost)}<div className="scene-instruction-selector">
-      <Select className="scene-instruction-select" aria-label="指令所属单元" placeholder="明确选择单元" value={unit?.id} style={{ width: '100%' }}
-        options={units.map(row => ({ value: row.id, label: `单元 ${allUnits.indexOf(row) + 1} · ${row.coverage.map(item => item.action_scope).join('；') || '动作待填写'}` }))}
-        onChange={id => onSelectUnit(id)} />
-      {!validGraph && <p role="alert">指令图与当前版本不一致。<WorkbenchButton variant="secondary" onClick={onRetryGraph}>重新读取版本</WorkbenchButton></p>}
-      <WorkbenchButton variant="secondary" onClick={onRetryGraph}>刷新图证据</WorkbenchButton>
-      {evidenceError && <p role="alert">图证据读取失败，保留旧摘要：{evidenceError}。请刷新图证据重试。</p>}
-      {dirty && <p aria-label="指令图同步状态">图待同步：图展示已保存内容，正文编辑器保留当前输入。</p>}
-      {!unit && <p>{unitId ? '原单元不可用，请重新选择。' : '先在单元画布明确准备单元，再编辑对应指令。'}</p>}
-    </div>
+    {primaryHost && createPortal(<nav className="scene-unit-primary" aria-label="当前指令主操作"><strong>{unit ? `当前单元 ${allUnits.indexOf(unit) + 1} 的指令` : '请明确选择单元'}</strong><span ref={setActionHost} /></nav>, primaryHost)}
+    <CanvasBrowse storageKey={`jellyfish:instructions:local-user:${projectId}:${sequenceId}:${versionId}`} label="指令画布位置" filtered={!!unitId}
+      filters={<label>单元<Select aria-label="指令所属单元" value={unitId || ''} onChange={onSelectUnit}
+        options={[{ value: '', label: '请选择单元' }, ...units.map(row => ({ value: row.id, label: `单元 ${allUnits.indexOf(row) + 1} · ${row.coverage.map(item => item.action_scope).join('；') || '动作待填写'}` })),
+          ...(unitId && !unit ? [{ value: unitId, label: '原单元不可用' }] : [])]} /></label>}
+      actions={<WorkbenchButton variant="secondary" onClick={onRetryGraph}>刷新图证据</WorkbenchButton>}
+      notice={<>
+        {!validGraph && <p role="alert">指令图与当前版本不一致。<WorkbenchButton variant="secondary" onClick={onRetryGraph}>重新读取版本</WorkbenchButton></p>}
+        {evidenceError && <p role="alert">图证据读取失败，当前选择和输入已保留：{evidenceError}。请刷新图证据重试。</p>}
+        {dirty && <p aria-label="指令图同步状态">图待同步：图展示已保存内容，正文编辑器保留当前输入。</p>}
+        {!unit && <p>{unitId ? '原单元不可用，请重新选择。' : '先明确选择单元，再编辑对应指令。'}</p>}
+      </>}>
+      <WorkbenchButton aria-label="返回指令概览" variant="quiet" onClick={() => onSelectUnit('')}>指令画布</WorkbenchButton>
+      {unitId && <span>{unit ? `› 单元 ${allUnits.indexOf(unit) + 1}` : '› 原单元不可用'}</span>}
+    </CanvasBrowse>
 
     {validGraph && <GraphCanvas key={`${versionId}:instructions:${unitId || 'empty'}`} contextKey={`${projectId}:${sequenceId}:${versionId}:instructions:${unitId || 'empty'}`} ariaLabel="指令画布视口"
       focusTarget={focusRequest && instruction && focusRequest.unitId === unit?.id ? { nodeId: instruction.id, fieldId: 'scene-current-instruction', serial: focusRequest.serial } : suggestionFocus && references && suggestionFocus.unitId === unit?.id ? { nodeId: references.id, fieldId: 'scene-instruction-suggestions', serial: suggestionFocus.serial } : undefined}

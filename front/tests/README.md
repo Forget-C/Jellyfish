@@ -35,6 +35,8 @@ pnpm --dir front run test:browser -- --list
 
 `--manifest <文件>` 可使用同一 CLI 运行明确声明的本地清单；相对文件路径从清单目录解析，清单需包含 preflight、cases 和 suites。公开命令回归使用隔离清单验证成功、失败、超时、中断和端口占用，不启动真实模型。直接运行原 `.browser.mjs` 文件仍可用，但不会获得统一入口的预检／端口保护；没有指定统一证据目录时仍使用原有临时目录。
 
+`sceneBrowseControls.browser.mjs` 通过真实选择器、导航按钮和卡片编辑覆盖四画布布局、明确对象传递、概览退出单元操作、收起偏好、失效目标及预览失败恢复；服务端图地址改名，避免依赖地址前缀。
+
 新增或迁移用例时复用 `browser-runtime.mjs` 的证据目录、后端日志与幂等清理。graph 地址异常夹具复用 `canvas-graph-fixtures.mjs`：同时改名节点／边／视图和所有引用，保留 object、record、shot、unit 业务身份；跨画布来源只映射当前快照。长文本、多参考、历史重复行与并发读取继续由真实旅程／HTTP 回归验证。
 
 `.github/workflows/frontend-checks.yml` 在相关 PR 与 merge queue 运行 lint 基线、纯逻辑、typecheck 和上述八组浏览器回归，并上传截图／JSON／日志。后端既有 pytest、Pylint CI 继续独立执行。本地通过不等同于 GitHub runner 已执行。

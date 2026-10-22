@@ -1,6 +1,6 @@
 import { opaqueCanvasAddresses, remapCanvasGraph } from './canvas-graph-fixtures.mjs'
 import { workbenchControl } from './workbenchControls.mjs'
-import { workbenchShot } from './workbenchControls.mjs'
+import { selectWorkbenchOption, workbenchShot } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -84,6 +84,7 @@ try {
   await (await workbenchControl(page, '保存设置', 'switch', '自动保存')).click()
   await (await workbenchShot(page, '镜头 1：读信')).click()
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
+  await selectWorkbenchOption(page, '指令所属单元', '单元 1')
   const body = page.getByRole('textbox', { name: '当前单元指令正文', exact: true })
   await body.fill('保持未保存正文')
   const relations = page.getByRole('navigation', { name: '场次关系树', exact: true })

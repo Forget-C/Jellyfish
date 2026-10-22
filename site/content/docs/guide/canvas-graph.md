@@ -40,6 +40,8 @@ description: "后端投影、共同校验、前端渲染与编辑保存的复用
 
 - 从 OpenAPI generated client 消费具体 graph 类型；业务节点、关系、摘要、计数、问题及视图成员由后端提供，前端不从业务数组重新拼图。先核对 graph 与版本快照，失败显示明确错误。
 - 复用 `GraphCanvas`、`GraphSubgraphPreview`、`graphLayout`、`useGraphLayout` 与 `useGraphBrowse`。前端负责几何、视口、缓存和浏览历史；业务布局尺寸与旧缓存迁移保留在对应适配器中。
+- 浏览控件复用 `CanvasBrowse`：前进／后退在顶部，面包屑和可收起筛选各自悬浮；历史限定当前画布与版本，收起偏好按画布类型存储，不进入历史。导演选择镜头，单元选择镜头及单元，指令选择单元，编辑视图切换放顶部操作区。
+- `browseUnit` 保留明确的业务单元身份，`unitShot` 表达进入路径；图视图仍通过服务端节点的 `home_view_id` 解析。选择镜头回到全部单元，单元候选仅列该镜头覆盖项；精确定位范围外单元清除镜头条件。返回概览清除单元操作上下文；图更新或失败保留选择与草稿，失效目标明确提示并提供返回有效概览的入口。
 - 使用返回的视图和定位地址导航，不解析 ID 前缀或用第一 coverage 替代精确单元。锚点和有效布局节点集合使用后端地址；原文标题不能充当节点 ID，旧缓存键仅在业务适配层迁移。镜头筛选只选择后端视图，不裁剪完整单元子图。
 - 卡面使用有限尺寸及两行字段摘要；指令记录与整场问题通过明确选择定位原记录或片段，完整内容在原工作区阅读。为诊断数量、原因及操作保留空间；参考卡仅预览有限绑定，整卡激活直接进入“编辑参考素材”管理弹窗，先展示完整已选集合，按需添加并明确应用；只读场景保留阅读，后端总数保持不变。
 - 参考管理中，同一人物／物件的身份主体参考采用一个项目资产或一组人工素材。使用“更换来源”准备新组，选入具体素材后点击“应用到本单元”一次替换；取消、更换来源的准备失败或关闭均保留原组。更换素材只在原来源内替换单张，跨来源统一使用整组动作。同对象的首尾帧、构图、连续性参考及其他对象不受来源更换影响，保存沿用当前工作台流程。
@@ -50,7 +52,7 @@ description: "后端投影、共同校验、前端渲染与编辑保存的复用
 
 ## 验证与接口同步
 
-共同契约测试覆盖四类投影及非法结构；版本 HTTP 用例核对读取／保存快照、实际来源与外部证据变化。真实浏览器验证导航、详情编辑、旧图与当前输入分离、失败恢复和精确回跳。当前回归入口包括 `test_canvas_graph.py`、`test_scene_dependencies.py`、`sceneCanvasGraph.browser.mjs`、`sceneLegacyGraph.browser.mjs`、`directorLayout.browser.mjs`、`sceneGraphSummary.browser.mjs` 和 `scenePeriodicSave.browser.mjs`。
+共同契约测试覆盖四类投影及非法结构；版本 HTTP 用例核对读取／保存快照、实际来源与外部证据变化。真实浏览器验证导航、详情编辑、旧图与当前输入分离、失败恢复和精确回跳。当前回归入口包括 `sceneBrowseControls.browser.mjs`（四画布导航、选择联动、收起偏好、失效与更新失败恢复）、`test_canvas_graph.py`、`test_scene_dependencies.py`、`sceneCanvasGraph.browser.mjs`、`sceneLegacyGraph.browser.mjs`、`directorLayout.browser.mjs`、`sceneGraphSummary.browser.mjs` 和 `scenePeriodicSave.browser.mjs`。
 
 对外 schema 变化后，先核实 8000 端口加载当前工作区后端，再从仓库根目录运行 `pnpm --dir front run openapi:update`。随后执行受影响测试、前端 typecheck 和后端 Pylint；工作台展示与键盘、窄屏检查遵循[工作台前端设计标准](/docs/guide/workbench-design/)。
 

@@ -1,72 +1,58 @@
-import { useEffect, useMemo, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { useEffect, useLayoutEffect, useMemo } from 'react'
 import { Alert, Select } from 'antd'
-import { ArrowLeftOutlined, ArrowRightOutlined } from '@ant-design/icons'
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import type { UnitCanvasGraph } from '../../../services/generated'
+import { useSearchParams } from 'react-router-dom'
+import type { SceneVersionContent_Output, UnitCanvasGraph } from '../../../services/generated'
 import { GraphCanvas } from './GraphCanvas'
 import { ReferencePreview } from './ReferencePreview'
 import { SourceLinks } from './Sources'
 import { GraphSubgraphPreview } from './GraphSubgraphPreview'
-import { useGraphBrowse } from './useGraphBrowse'
+import { CanvasBrowse } from './CanvasBrowse'
 import { readStoredGraphView } from './useGraphLayout'
 import { arrangeUnitGraph } from './unitLayout'
-import { WorkbenchButton, WorkbenchIconButton } from './ui/WorkbenchButton'
+import { WorkbenchButton } from './ui/WorkbenchButton'
 
 type UnitNode = UnitCanvasGraph['nodes'][number]
 
 /** 服务端决定成员、摘要与入口；当前编辑器由稳定业务 ID 单独打开。 */
-export function UnitGraphCanvas({ graph, versionId, revision, storageKey, navigationHost, pending, updating, focusUnitId, onSelectUnit, onSelectShot, onInspect, onReference, onBrowseShotChange }: {
-  graph: UnitCanvasGraph; versionId: string; revision: number; storageKey: string; navigationHost: HTMLElement | null
-  updating: boolean; pending: boolean; focusUnitId?: string
-  onSelectUnit: (id: string) => void; onSelectShot: (id: string) => void
+export function UnitGraphCanvas({ graph, content, unitId, versionId, revision, storageKey, pending, updating, error, onRetry, onInspect, onReference, onBrowseShotChange }: {
+  graph: UnitCanvasGraph; content: SceneVersionContent_Output; unitId?: string; versionId: string; revision: number; storageKey: string
+  updating: boolean; pending: boolean; error: string; onRetry: () => void
   onBrowseShotChange: (id?: string) => void
   onInspect: (node: UnitNode) => void; onReference: (id: string) => void
 }) {
   const [params, setParams] = useSearchParams()
-  const location = useLocation(), navigate = useNavigate()
-  const { canBrowse } = useGraphBrowse(storageKey)
-  const [remembered] = useState<string>(() => {
-    try { return localStorage.getItem(`${storageKey}:filter`) || '' } catch { return '' }
-  })
-  const filter = params.has('unitShot') ? params.get('unitShot') || '' : remembered
-  const shotView = (id: string) => graph?.nodes.find(node => node.kind === 'shot_basis' && node.shot_id === id)?.home_view_id
-  const rootViewId = graph?.views.find(view => view.parent_id == null)?.id || ''
+  const filter = params.get('unitShot') || ''
+  const shots = content.design.direction.shots
+  const unit = content.units.find(row => row.id === unitId)
+  const shotView = (id: string) => graph.nodes.find(node => node.kind === 'shot_basis' && node.shot_id === id)?.home_view_id
+  const rootViewId = graph.views.find(view => view.parent_id === null)?.id || ''
   const filterView = filter ? shotView(filter) : rootViewId
-  const [unavailableFocus, setUnavailableFocus] = useState(false)
-  const focusView = graph?.nodes.find(node => node.kind === 'unit' && node.unit_id === focusUnitId)?.home_view_id
-  const viewId = params.get('unitView') || filterView
-  const view = unavailableFocus ? undefined : graph?.views.find(candidate => candidate.id === viewId)
-  const byId = useMemo(() => new Map(graph?.nodes.map(node => [node.id, node])), [graph])
-  const valid = graph?.kind === 'units' && graph.version_id === versionId && graph.revision === revision && !!rootViewId
-  const go = (nextView: string, nextFilter = filter, replace = false) => {
-    setUnavailableFocus(false)
+  const viewId = unitId ? graph.nodes.find(node => node.kind === 'unit' && node.unit_id === unitId)?.home_view_id : params.get('unitView') || filterView
+  const unavailable = !!unitId && !unit || !!filter && !shots.some(shot => shot.id === filter)
+  const view = unavailable ? undefined : graph.views.find(candidate => candidate.id === viewId)
+  const byId = useMemo(() => new Map(graph.nodes.map(node => [node.id, node])), [graph])
+  const valid = graph.kind === 'units' && graph.version_id === versionId && graph.revision === revision && !!rootViewId
+  const go = (id = '', nextFilter = filter) => {
+    const target = content.units.find(row => row.id === id)
     const next = new URLSearchParams(params)
-    next.set('unitShot', nextFilter)
-    if (nextView === rootViewId || graph?.nodes.some(node => node.kind === 'shot_basis' && node.home_view_id === nextView)) next.delete('unitView')
-    else next.set('unitView', nextView)
-    setParams(next, { replace })
+    next.set('canvas', 'units')
+    next.set('unitShot', id && !target?.coverage.some(item => item.shot_id === nextFilter) ? '' : nextFilter)
+    next.set('browseUnit', id)
+    next.delete('unitView')
+    setParams(next)
   }
-  useEffect(() => {
-    onBrowseShotChange(filter || undefined)
-    try { localStorage.setItem(`${storageKey}:filter`, filter) } catch { /* 会话筛选仍可使用。 */ }
-  }, [filter, storageKey])
-  useEffect(() => {
-    if (!focusUnitId) { setUnavailableFocus(false); return }
-    if (focusView) go(focusView)
-    else setUnavailableFocus(true)
-  }, [focusUnitId, focusView])
-  useEffect(() => {
-    const node = byId.get(view?.anchor_id || '')
-    if (node?.kind === 'unit') onSelectUnit(node.unit_id)
-  }, [view?.anchor_id, location.key])
+  useEffect(() => { onBrowseShotChange(filter || undefined) }, [filter, onBrowseShotChange])
+  useLayoutEffect(() => {
+    const outsideShot = !!unit && !!filter && !unit.coverage.some(item => item.shot_id === filter)
+    const resolvedView = !!unitId && !params.has('browseUnit')
+    if (!outsideShot && !resolvedView && params.get('canvas') === 'units') return
+    const next = new URLSearchParams(params)
+    next.set('canvas', 'units')
+    if (outsideShot) next.set('unitShot', '')
+    if (resolvedView) { next.set('browseUnit', unitId); next.delete('unitView') }
+    setParams(next, { replace: true })
+  }, [unit, unitId, filter, params, setParams])
   if (!valid) return <Alert type="error" message="单元图数据与当前版本不一致；当前编辑内容已保留" />
-  const select = (id: string) => {
-    const nextView = id ? shotView(id) : rootViewId
-    if (!nextView) return
-    if (id) onSelectShot(id)
-    go(nextView, id)
-  }
   const preview = (node: UnitNode, target: string) => {
     const child = graph.views.find(candidate => candidate.id === target)
     if (!child || node.kind !== 'unit') return <p>子图不可用</p>
@@ -86,7 +72,7 @@ export function UnitGraphCanvas({ graph, versionId, revision, storageKey, naviga
     return [{ id: node.id, label: member.title || node.title, title: member.title || node.title,
       group: member.group, entry: member.presentation === 'entry', related: member.presentation === 'reference',
       size: { width: 360, height: member.presentation === 'entry' ? 360 : 320 },
-      onInspect: member.presentation === 'entry' && member.entry_view_id ? () => go(member.entry_view_id!) : node.kind === 'unit_references' ? () => onReference(node.unit_id) : node.edit_target || node.kind === 'unit_basis' ? () => onInspect(node) : undefined,
+      onInspect: member.presentation === 'entry' && member.entry_view_id ? () => go('unit_id' in node ? node.unit_id : '') : node.kind === 'unit_references' ? () => onReference(node.unit_id) : node.edit_target || node.kind === 'unit_basis' ? () => onInspect(node) : undefined,
       content: updating ? <section className="canvas-workbench-card unit-graph-card" aria-busy="true"><p role="status">当前卡片核实中</p></section> : member.presentation === 'entry' && member.entry_view_id ? preview(node, member.entry_view_id) : <section className="canvas-workbench-card unit-graph-card">
         <div className="design-compact-summary">
           <div className="design-compact-fields">{node.summary.map(field => <p key={field.field} title={`${field.label}：${field.text}`}><span>{field.label}：</span><strong>{field.text}</strong></p>)}
@@ -109,19 +95,29 @@ export function UnitGraphCanvas({ graph, versionId, revision, storageKey, naviga
   const edgeIds = new Set(view?.edge_ids)
   const relations = graph.edges.filter(edge => edgeIds.has(edge.id) && edge.kind === 'business' && edge.target)
     .map(edge => ({ from: edge.source, to: edge.target!, label: edge.label, category: edge.category }))
-  const navigation = <nav className="canvas-director-browse canvas-unit-browse" aria-label="单元画布位置" data-graph-navigation>
-    <WorkbenchIconButton label="后退" variant="quiet" icon={<ArrowLeftOutlined />} disabled={!canBrowse(-1)} onClick={() => navigate(-1)} />
-    <WorkbenchIconButton label="前进" variant="quiet" icon={<ArrowRightOutlined />} disabled={!canBrowse(1)} onClick={() => navigate(1)} />
-    <WorkbenchButton variant="quiet" onClick={() => go(filterView || rootViewId, filterView ? filter : '')}>单元画布</WorkbenchButton>
-    {(!!params.get('unitView') || byId.get(view?.anchor_id || '')?.kind === 'unit') && <span className="canvas-director-location">› {view?.title || '单元不可用'}</span>}
-    <Select aria-label="单元镜头筛选" value={filter} style={{ minWidth: 160 }} onChange={select}
-      options={[{ value: '', label: '全部镜头' }, ...graph.nodes.flatMap(node => node.kind === 'shot_basis' ? [{ value: node.shot_id, label: node.title }] : [])]} />
-    {updating && <span role="status">正在更新单元卡片</span>}
-    {pending && <span role="status">修改待同步</span>}
-  </nav>
+  const unavailableView = !updating && !view
+  const unknownView = !unitId ? params.get('unitView') || '' : ''
+  const candidates = content.units.filter(row => !filter || row.coverage.some(item => item.shot_id === filter))
   return <>
-    {navigationHost ? createPortal(navigation, navigationHost) : navigation}
-    {!view ? <Alert type="warning" message="原浏览目标已不可用" action={<WorkbenchButton onClick={() => go(rootViewId, '')}>返回全部镜头</WorkbenchButton>} /> :
+    <CanvasBrowse storageKey={storageKey} label="单元画布位置" filtered={!!filter || !!unitId} filters={<>
+      <label>镜头<Select aria-label="单元镜头筛选" value={filter} onChange={id => go('', id)}
+        options={[{ value: '', label: '全部镜头' }, ...shots.map((shot, index) => ({ value: shot.id, label: `镜头 ${index + 1}` })),
+          ...(filter && !shots.some(shot => shot.id === filter) ? [{ value: filter, label: '原镜头不可用' }] : [])]} /></label>
+      <label>单元<Select aria-label="当前单元" value={unitId || unknownView || ''} onChange={id => go(id)}
+        options={[{ value: '', label: '全部单元' }, ...candidates.map(row => ({ value: row.id, label: `单元 ${content.units.indexOf(row) + 1}` })),
+          ...(unitId && !unit ? [{ value: unitId, label: '原单元不可用' }] : []), ...(unknownView ? [{ value: unknownView, label: '原浏览目标不可用', disabled: true }] : [])]} /></label>
+    </>} notice={<>
+      {error && <Alert type="error" message="单元卡片更新失败，当前编辑已保留" description={error} action={<WorkbenchButton onClick={onRetry}>重试单元卡片</WorkbenchButton>} />}
+      {(unavailable || unavailableView) && <Alert type="warning" message="原浏览目标已不可用" action={<WorkbenchButton onClick={() => go('', '')}>返回全部镜头</WorkbenchButton>} />}
+      {updating && !error && <span role="status">正在更新单元卡片</span>}
+      {pending && <span role="status">修改待同步</span>}
+    </>}>
+      <WorkbenchButton variant="quiet" onClick={() => go('', '')}>单元画布</WorkbenchButton>
+      {filter && <WorkbenchButton variant="quiet" onClick={() => go()}>{`› ${shots.some(shot => shot.id === filter) ? `镜头 ${shots.findIndex(shot => shot.id === filter) + 1}` : '原镜头不可用'}`}</WorkbenchButton>}
+      {unitId && <span>{unit ? `› 单元 ${content.units.indexOf(unit) + 1}` : '› 原单元不可用'}</span>}
+      {unknownView && <span>› 原单元不可用</span>}
+    </CanvasBrowse>
+    {!updating && view &&
       <GraphCanvas contextKey={storageKey} ariaLabel="单元画布视口" objects={objects} relations={relations}
         groups={view.groups} layoutScope={{ storageKey, viewId: view.id, anchorId: view.anchor_id || '',
           validIds: graph.nodes.map(node => node.id), validViewIds: graph.views.map(candidate => candidate.id), arrange: arrangeUnitGraph, initialTop: window.innerWidth <= 700 ? 112 : 64 }} />}

@@ -28,14 +28,13 @@ type SceneUnitCanvasProps = {
   preparationHost: HTMLElement | null
   graphState: { current: boolean; pending: boolean; error: string; retry: () => void }
   primaryHost: HTMLElement | null
-  navigationHost: HTMLElement | null
   graph: UnitCanvasGraph
   saved: SceneVersionContent_Output
   projectId: string; sequenceId: string; versionId: string; revision: number; content: SceneVersionContent_Output; shotId?: string; unitId?: string; disabled: boolean
   onOpenEdit: (clipId: string) => void
   onOpenInstruction: (taskId?: string) => void
   onInstructionTask: (taskId: string, unitId: string) => void
-  onSelectShot: (id: string) => void; onSelectUnit: (id: string, shotId?: string) => void; onChange: (content: SceneVersionContent_Output) => void
+  onSelectUnit: (id: string, shotId?: string) => void; onChange: (content: SceneVersionContent_Output) => void
   focusRequest?: { versionId: string; unitId: string; nodeId: string; fieldId: string; serial: number }
 }
 
@@ -51,7 +50,7 @@ export function SceneUnitCanvas(props: SceneUnitCanvasProps) {
 }
 
 /** 单元和设计共用一份可编辑方案；画布浏览不创建单元，也不选择替代对象。 */
-function SceneUnitCanvasBody({ preparationHost, graphState, primaryHost, navigationHost, graph, saved, projectId, sequenceId, versionId, revision, content, unitId, disabled, saveStatus, onSelectShot, onSelectUnit, onChange, focusRequest, onOpenInstruction, onInstructionTask, onOpenEdit, unitDesignTaskId, onUnitDesignFocused, onLocateBlocker, onLocateDesign }: SceneUnitCanvasProps) {
+function SceneUnitCanvasBody({ preparationHost, graphState, primaryHost, graph, saved, projectId, sequenceId, versionId, revision, content, unitId, disabled, saveStatus, onSelectUnit, onChange, focusRequest, onOpenInstruction, onInstructionTask, onOpenEdit, unitDesignTaskId, onUnitDesignFocused, onLocateBlocker, onLocateDesign }: SceneUnitCanvasProps) {
   const [browseShotId, setBrowseShotId] = useState<string>()
   const [creationOpen, setCreationOpen] = useState(false)
   const [creationShotId, setCreationShotId] = useState<string>()
@@ -81,9 +80,11 @@ function SceneUnitCanvasBody({ preparationHost, graphState, primaryHost, navigat
   const unit = allUnits.find(row => row.id === unitId)
   const basis = graph.nodes.find(node => node.kind === 'unit_basis' && node.unit_id === basisUnitId)
   const { capability, capabilityError, frameEvidence, missing, checking, failed } = useSceneUnitPreparation(projectId, sequenceId, versionId, revision, content, unit, attempt, { ...graphState, graph })
+  const consumedFocus = useRef<number>()
   const preparationLocator = useRef<(issue: ScenePreparationIssue) => void>()
   useEffect(() => {
-    if (focusRequest?.versionId === versionId && focusRequest.unitId === unit?.id) {
+    if (focusRequest?.serial !== consumedFocus.current && focusRequest?.versionId === versionId && focusRequest.unitId === unit?.id) {
+      consumedFocus.current = focusRequest.serial
       preparationLocator.current?.({ message: '', fieldId: focusRequest.fieldId, nodeId: focusRequest.nodeId })
     }
   }, [focusRequest, versionId, unit?.id])
@@ -253,7 +254,6 @@ function SceneUnitCanvasBody({ preparationHost, graphState, primaryHost, navigat
         unitId={unit.id} content={content} disabled={disabled} onChange={onChange} onOpen={onOpenInstruction} onTask={onInstructionTask} />}
     </nav>, primaryHost)}
     {!graphState.current && <section className="scene-unit-draft-cards" aria-label="当前单元配置卡片">
-      {graphState.error && <Alert type="error" message="单元卡片更新失败，当前编辑已保留" description={graphState.error} action={<WorkbenchButton onClick={graphState.retry}>重试单元卡片</WorkbenchButton>} />}
       <p>以下为当前编辑内容；执行依据与外部证据{graphState.error ? '核实失败，请重试' : '正在核实'}。</p>
       {!unit && <p>请选择当前单元以编辑配置。</p>}
       {unit && <>
@@ -282,11 +282,10 @@ function SceneUnitCanvasBody({ preparationHost, graphState, primaryHost, navigat
         <section className="canvas-workbench-card unit-graph-card"><h3>本单元执行依据</h3><p>尚未核实；核实成功后展示当前执行范围与来源。</p></section>
       </>}
     </section>}
-    <div hidden={!graphState.current}>
-    <UnitGraphCanvas graph={graph} updating={!graphState.current} versionId={versionId} revision={revision} navigationHost={graphState.current ? navigationHost : null}
+    <UnitGraphCanvas error={graphState.error} onRetry={graphState.retry} graph={graph} updating={!graphState.current} versionId={versionId} revision={revision} content={content} unitId={unitId}
       storageKey={`jellyfish:unit-graph:local-user:${projectId}:${sequenceId}:${versionId}`}
-      pending={JSON.stringify(content) !== JSON.stringify(saved)} focusUnitId={focusRequest?.unitId}
-      onSelectUnit={onSelectUnit} onSelectShot={onSelectShot} onBrowseShotChange={setBrowseShotId}
+      pending={JSON.stringify(content) !== JSON.stringify(saved)}
+      onBrowseShotChange={setBrowseShotId}
       onReference={id => {
         if (!allUnits.some(row => row.id === id)) { setUnavailableTarget(true); return }
         setUnavailableTarget(false); onSelectUnit(id); setPicker(id)
@@ -303,11 +302,6 @@ function SceneUnitCanvasBody({ preparationHost, graphState, primaryHost, navigat
         else if (node.kind === 'unit_config' && node.config_kind !== 'dependencies') openSettings(node.unit_id, node.config_kind, node.coverage_item_id || undefined)
         else setBasisUnitId(node.unit_id)
       }} />
-    </div>
-    <section className="scene-unit-editor-entry" aria-label="单元编辑入口">
-      <Select aria-label="当前单元" placeholder="选择当前编辑单元" value={unit?.id} style={{ width: 320 }}
-        options={allUnits.map((row, index) => ({ value: row.id, label: `单元 ${index + 1}` }))} onChange={id => onSelectUnit(id)} />
-    </section>
     {unavailableTarget && <Alert type="warning" message="当前编辑中该来源已移除，请重新选择当前卡片" />}
     {/* 保留手动创建能力；工作台创建入口目前仅提供 AI 方案应用。 */}
     <WorkbenchModal title="建立单元" open={creationOpen} onCancel={() => setCreationOpen(false)} footer={<WorkbenchDialogActions
