@@ -1,0 +1,260 @@
+{
+  "modes": {
+    "text": {
+      "status": "passed",
+      "task_id": "44e3507dab3f4254a7b3d32850e190bc",
+      "suggestion_task_id": "9f002a622cd649beaaaa5e340b6561b0",
+      "check_task_id": "6dfd19ea3d2d4a79b351be98d3ef30b8",
+      "version_id": "5948411320584d09b30ce14c0fa59dee",
+      "instruction": "灰色背景前，一个红色方块从画面左侧缓慢移动到右侧。固定机位，16:9 横向构图，灰色背景保持平整无杂项。红色方块全程保持完整、颜色一致，匀速从左向右平移，约 5 秒内完成横向路径。不添加其他物体、文字或光效变化。",
+      "file_id": "d6474fc13b495835a7a0d580787a0aa3",
+      "take_id": "132dc2b6c1ed416b969d38c041c660f2",
+      "duration_seconds": 5.041667,
+      "local_video": "/Users/extreme/Projects/github.com/jellyfish/front/test-results/instruction-video-real/text.mp4",
+      "media": {
+        "frames": {
+          "first": null,
+          "last": null,
+          "keys": []
+        },
+        "subjects": []
+      },
+      "explicit_adoption": true,
+      "storage_prefix": "acceptance/instruction-video-5d1d2ac0569c4459812d632dedd0450f",
+      "fixed_input": {
+        "model_id": "c85f06499bc7419394b7e883108c8276",
+        "model_name": "viduq3-turbo",
+        "operation_input": {
+          "kind": "video_generation",
+          "ratio": "16:9",
+          "seconds": 5,
+          "seed": null
+        },
+        "execution_prompt": "灰色背景前，一个红色方块从画面左侧缓慢移动到右侧。固定机位，16:9 横向构图，灰色背景保持平整无杂项。红色方块全程保持完整、颜色一致，匀速从左向右平移，约 5 秒内完成横向路径。不添加其他物体、文字或光效变化。",
+        "media_layout": {
+          "kind": "video",
+          "subjects": []
+        },
+        "provider_key": "vidu"
+      },
+      "media_probe": [
+        {
+          "codec_name": "h264",
+          "codec_type": "video",
+          "width": 1280,
+          "height": 720,
+          "r_frame_rate": "24/1"
+        },
+        {
+          "codec_name": "aac",
+          "codec_type": "audio",
+          "r_frame_rate": "0/0"
+        }
+      ],
+      "full_decode_passed": true
+    },
+    "first": {
+      "status": "passed",
+      "task_id": "07e3dc8191c94cb2980e83e780fabc2c",
+      "suggestion_task_id": "c231c5f56c39447f9439da2bb8d5a581",
+      "check_task_id": "92b2cc4ae8824d25a5bc005bcdf99886",
+      "version_id": "7ca4f04d6777420b9084061e4c60e5aa",
+      "instruction": "生成一段5秒、16:9的短视频：在灰色背景前，一个红色方块从画面左侧缓慢移动到画面右侧。以 image1 作为首帧构图参考，保持单镜头固定机位与连贯运动，红色方块为唯一运动主体，背景保持灰色。视频模型使用 viduq3-turbo。",
+      "file_id": "1ac21889b36e544aa3eb2910da6a35dc",
+      "take_id": "be23628002624accbcc132e0efe5f51f",
+      "duration_seconds": 5.041667,
+      "local_video": "/Users/extreme/Projects/github.com/jellyfish/front/test-results/instruction-video-real/first.mp4",
+      "media": {
+        "frames": {
+          "first": {
+            "file_id": "image1",
+            "media_kind": "image",
+            "ordinal": 0
+          },
+          "last": null,
+          "keys": []
+        },
+        "subjects": []
+      },
+      "explicit_adoption": true,
+      "storage_prefix": "acceptance/instruction-video-14b3a7aa829343389e8ca4c19d367071",
+      "fixed_input": {
+        "model_id": "c85f06499bc7419394b7e883108c8276",
+        "model_name": "viduq3-turbo",
+        "operation_input": {
+          "kind": "video_generation",
+          "ratio": "16:9",
+          "seconds": 5,
+          "seed": null
+        },
+        "execution_prompt": "生成一段5秒、16:9的短视频：在灰色背景前，一个红色方块从画面左侧缓慢移动到画面右侧。以 image1 作为首帧构图参考，保持单镜头固定机位与连贯运动，红色方块为唯一运动主体，背景保持灰色。视频模型使用 viduq3-turbo。",
+        "media_layout": {
+          "kind": "video",
+          "subjects": []
+        },
+        "provider_key": "vidu"
+      },
+      "media_probe": [
+        {
+          "codec_name": "h264",
+          "codec_type": "video",
+          "width": 1280,
+          "height": 720,
+          "r_frame_rate": "24/1"
+        },
+        {
+          "codec_name": "aac",
+          "codec_type": "audio",
+          "r_frame_rate": "0/0"
+        }
+      ],
+      "full_decode_passed": true
+    },
+    "first-last": {
+      "status": "passed",
+      "task_id": "e04504f343c04846b9f04a31fc810cf0",
+      "suggestion_task_id": "101be4557f764130b0bf7ae7f59b990d",
+      "check_task_id": "276990cf7fb548a99e6afec16b268228",
+      "version_id": "ca522bbbaf51428bb9878e84b70b1468",
+      "instruction": "镜头1：5秒，16:9画幅。以image1作为首帧、image2作为末帧参考构图。在灰色背景前，一个红色方块从画面左侧缓慢移动到右侧。",
+      "file_id": "849b0a254f045e168331f6c00dc32b51",
+      "take_id": "7241d33a7f6b401ba4ea7d759b0ea798",
+      "duration_seconds": 5.041667,
+      "local_video": "/Users/extreme/Projects/github.com/jellyfish/front/test-results/instruction-video-real/first-last.mp4",
+      "media": {
+        "frames": {
+          "first": {
+            "file_id": "image1",
+            "media_kind": "image",
+            "ordinal": 0
+          },
+          "last": {
+            "file_id": "image2",
+            "media_kind": "image",
+            "ordinal": 1
+          },
+          "keys": []
+        },
+        "subjects": []
+      },
+      "explicit_adoption": true,
+      "storage_prefix": "acceptance/instruction-video-5d1d2ac0569c4459812d632dedd0450f",
+      "fixed_input": {
+        "model_id": "c85f06499bc7419394b7e883108c8276",
+        "model_name": "viduq3-turbo",
+        "operation_input": {
+          "kind": "video_generation",
+          "ratio": "16:9",
+          "seconds": 5,
+          "seed": null
+        },
+        "execution_prompt": "镜头1：5秒，16:9画幅。以image1作为首帧、image2作为末帧参考构图。在灰色背景前，一个红色方块从画面左侧缓慢移动到右侧。",
+        "media_layout": {
+          "kind": "video",
+          "subjects": []
+        },
+        "provider_key": "vidu"
+      },
+      "media_probe": [
+        {
+          "codec_name": "h264",
+          "codec_type": "video",
+          "width": 1280,
+          "height": 720,
+          "r_frame_rate": "24/1"
+        },
+        {
+          "codec_name": "aac",
+          "codec_type": "audio",
+          "r_frame_rate": "0/0"
+        }
+      ],
+      "full_decode_passed": true
+    },
+    "subject": {
+      "status": "passed",
+      "task_id": "11c2b561de9242c7ab28ece056d442e7",
+      "suggestion_task_id": "cb2c224e26ce42dda2792f2e24ca0c05",
+      "check_task_id": "88f4970bbaf840698d4abddef738366d",
+      "version_id": "7fc35fd5a5aa46279b1711036e8df50a",
+      "instruction": "灰色背景前，一个红色方块从画面左侧缓慢移动到右侧。\n\n红色方块（参考图1、参考图2）保持同一身份外观；仅该红色方块出现在画面中，不添加其他物体或角色。\n\n摄影：固定正面机位，16:9 横画幅，灰色背景均匀平整无杂物；方块从画面左侧沿水平方向缓慢移动至画面右侧，运动速度均匀、轨迹稳定，全程明确可见，最终停在画面右侧。",
+      "file_id": "0caf43e17e9d56ff8f0ec04d1a1a276b",
+      "take_id": "d169c69c772947e79e0c7f89553b95de",
+      "duration_seconds": 5.041667,
+      "local_video": "/Users/extreme/Projects/github.com/jellyfish/front/test-results/instruction-video-real/subject.mp4",
+      "media": {
+        "frames": {
+          "first": null,
+          "last": null,
+          "keys": []
+        },
+        "subjects": [
+          {
+            "name": "cube",
+            "media": [
+              {
+                "file_id": "image1",
+                "media_kind": "image",
+                "ordinal": 0
+              },
+              {
+                "file_id": "image2",
+                "media_kind": "image",
+                "ordinal": 1
+              }
+            ]
+          }
+        ]
+      },
+      "explicit_adoption": true,
+      "storage_prefix": "acceptance/instruction-video-14b3a7aa829343389e8ca4c19d367071",
+      "fixed_input": {
+        "model_id": "c85f06499bc7419394b7e883108c8276",
+        "model_name": "viduq3-turbo",
+        "operation_input": {
+          "kind": "video_generation",
+          "ratio": "16:9",
+          "seconds": 5,
+          "seed": null
+        },
+        "execution_prompt": "灰色背景前，一个红色方块从画面左侧缓慢移动到右侧。\n\n红色方块（参考图1、参考图2）保持同一身份外观；仅该红色方块出现在画面中，不添加其他物体或角色。\n\n摄影：固定正面机位，16:9 横画幅，灰色背景均匀平整无杂物；方块从画面左侧沿水平方向缓慢移动至画面右侧，运动速度均匀、轨迹稳定，全程明确可见，最终停在画面右侧。",
+        "media_layout": {
+          "kind": "video",
+          "subjects": [
+            "cube"
+          ]
+        },
+        "provider_key": "vidu"
+      },
+      "media_probe": [
+        {
+          "codec_name": "h264",
+          "codec_type": "video",
+          "width": 1280,
+          "height": 720,
+          "r_frame_rate": "24/1"
+        },
+        {
+          "codec_name": "aac",
+          "codec_type": "audio",
+          "r_frame_rate": "0/0"
+        }
+      ],
+      "full_decode_passed": true
+    }
+  },
+  "storage_prefix": "acceptance/instruction-video-5d1d2ac0569c4459812d632dedd0450f",
+  "video_model": "viduq3-turbo",
+  "text_model": "deepseek-v4.1-flash",
+  "video_provider": "Vidu",
+  "text_provider": "阿里百炼",
+  "reference_sha256": [
+    "f1322c87813525c77ec86996113c051d8d81d35e9da2041eea5af4a22de7ad48",
+    "61d49380b571e3bbf01948df3f9dc71894a2c4382c4b47d5aa07340a9df32be0"
+  ],
+  "notes": [
+    "真实AI起草与六岗审稿；原门槛全部保留。",
+    "首帧和主体参考首次审稿结果身份不一致，已记录失败；新检查通过后才提交视频。",
+    "每种视频均实际下载保存、ffprobe探测、FFmpeg解码及明确采用。"
+  ]
+}
