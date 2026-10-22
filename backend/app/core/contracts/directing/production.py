@@ -42,7 +42,7 @@ class ReferenceBinding(Contract):
     source: Source
     input_role: Literal["subject", "first_frame", "last_frame", "key_frame"] = "subject"
     subject_group_id: Identity | None = None
-    asset_origin: AssetOrigin | None = None
+    asset_origin: AssetOrigin | None = Field(default=None, description="所选素材的真实项目资产来源，与目标参与对象及导演默认独立；新选择须核实项目归属及资产图片。")
 
     @model_validator(mode="after")
     def media_purpose(self):

@@ -367,3 +367,22 @@ def test_generation_retries_foreign_asset_before_finishing_task():
     assert '不存在的角色资产' in calls[1][-1].content
     with pytest.raises(DirectingOutputError, match='不存在的角色资产'):
         generate_directing_result('directing_design', SimpleNamespace(invoke=lambda _: SimpleNamespace(content=json.dumps(invalid))), args)
+
+
+def test_ai_preserves_unchanged_stale_defaults_but_cannot_move_them_to_new_objects():
+    """已有失效偏好可原样保留；不能当成新资产授权复制到另一身份。"""
+    from app.core.contracts.directing.scene_version import EditableSceneDesign
+
+    original = EditableSceneDesign(sources=[{'kind': 'chapter', 'reference': 'chapter', 'version': '1'}]).model_dump(mode='json')
+    original['participants'] = [{'id': 'person', 'name': '人物', 'character_id': 'stale'}]
+    original['direction']['location_asset_id'] = 'stale-place'
+    args = {'scene_version_design': True, 'task_identity': 'current-task',
+            'previous_design': original, 'existing_assets': []}
+    llm = SimpleNamespace(invoke=lambda _: SimpleNamespace(content=json.dumps(original)))
+    result = generate_directing_result('directing_design', llm, args)
+    assert result.participants[0].character_id == 'stale'
+    assert result.direction.location_asset_id == 'stale-place'
+    invalid = deepcopy(original)
+    invalid['participants'].append({'id': 'new-person', 'name': '新人物', 'character_id': 'stale'})
+    with pytest.raises(DirectingOutputError, match='不存在的角色资产'):
+        generate_directing_result('directing_design', SimpleNamespace(invoke=lambda _: SimpleNamespace(content=json.dumps(invalid))), args)

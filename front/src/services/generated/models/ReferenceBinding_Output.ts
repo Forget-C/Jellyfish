@@ -17,6 +17,9 @@ export type ReferenceBinding_Output = {
     source: Source;
     input_role?: 'subject' | 'first_frame' | 'last_frame' | 'key_frame';
     subject_group_id?: (string | null);
+    /**
+     * 所选素材的真实项目资产来源，与目标参与对象及导演默认独立；新选择须核实项目归属及资产图片。
+     */
     asset_origin?: (AssetOrigin | null);
 };
 

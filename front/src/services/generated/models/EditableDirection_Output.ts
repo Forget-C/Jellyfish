@@ -17,6 +17,9 @@ export type EditableDirection_Output = {
     relationship_change: Note_Output;
     turning_point: Note_Output;
     immutable_facts: Array<DesignNote_Output>;
+    /**
+     * 可选默认场所资产；修改不改变已选参考，单元可独立选材。
+     */
     location_asset_id: (string | null);
     spatial_basis: Note_Output;
     shootable_area: Note_Output;

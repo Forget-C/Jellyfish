@@ -1,6 +1,7 @@
 {
   "preflight": "preflight.mjs",
   "cases": {
+    "default-assets": { "file": "sceneDefaultAssets.browser.mjs", "ports": [4257, 8257], "timeoutMs": 180000 },
     "workbench-ui": { "file": "workbenchUi.browser.mjs", "ports": [4195], "timeoutMs": 180000 },
     "workbench-style": { "file": "sceneWorkbenchStyle.browser.mjs", "ports": [4193, 8193], "timeoutMs": 300000 },
     "design-scope": { "file": "designScopeCompleteness.browser.mjs", "ports": [4198, 8198], "timeoutMs": 180000 },

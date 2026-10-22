@@ -543,3 +543,86 @@ async def test_identity_requirement_can_use_bound_reference_for_video(tmp_path, 
         prepared = await client.post(unit_url + '/video/prepare', json={'expected_revision': 2})
         assert prepared.status_code == 200, prepared.text
         assert prepared.json()['data']['inputs']['unit']['references'][0]['id'] == 'portrait'
+
+
+@pytest.mark.asyncio
+async def test_default_preference_changes_preserve_instruction_and_preflight(tmp_path, reference_storage):
+    """默认失效、改选与解除不改变消费依据；真正参考变化仍使检查失效。"""
+    from app.models.studio import Scene, SceneImage, ProjectSceneLink
+    from sqlalchemy import delete
+
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        async with sessions.begin() as db:
+            db.add(Provider(id='provider', name='openai', base_url='https://api.openai.com/v1', api_key='fixture'))
+            await db.flush()
+            db.add_all([Model(id='text', name='gpt-test', category='text', provider_id='provider', params={}),
+                        Model(id='video', name='test-video-model', category='video', provider_id='provider', params={}),
+                        Scene(id='default', name='默认场所', style='真人都市'),
+                        Scene(id='chosen', name='本次场所', style='真人都市')])
+            await db.flush()
+            db.add_all([ProjectSceneLink(project_id='p1', scene_id=key) for key in ['default', 'chosen']])
+            db.add(SceneImage(id=901, scene_id='chosen', file_id='image1'))
+        path = await sequence_path(client)
+        version = (await client.post(path + '/versions', json={'request_id': str(uuid4()), 'title': '默认独立'})).json()['data']
+        detail = path + '/versions/' + version['id']
+        content = deepcopy(version['content'])
+        content['design']['direction']['location_asset_id'] = 'default'
+        content['design']['direction']['shots'] = [{'id': 'shot', 'beat_ids': [], 'event_ids': [], 'blocking_state_ids': [], 'participant_ids': [], 'criterion_ids': [], 'narrative_function': {}, 'visible_result': {}}]
+        content['units'] = [{'id': 'unit', 'model_id': 'video', 'duration_ms': 5000, 'ratio': '16:9',
+            'instruction': '递出信封。', 'coverage': [{'id': 'coverage', 'shot_id': 'shot', 'action_scope': '递出信封'}],
+            'references': [{'id': 'ref', 'file_id': 'image1', 'media_kind': 'image', 'purpose': 'space',
+                'participant_ids': [], 'ordinal': 0, 'input_role': 'first_frame',
+                'source': {'kind': 'human', 'reference': 'author', 'version': '1'},
+                'asset_origin': {'kind': 'scene', 'id': 'chosen', 'name': '本次场所'}}]}]
+        complete_shot_scope_sample(content, '递出信封')
+        saved = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})
+        assert saved.status_code == 200, saved.text
+        async with sessions.begin() as db:
+            await db.execute(delete(ProjectSceneLink).where(ProjectSceneLink.scene_id == 'default'))
+        unit_url = detail + '/units/unit'
+        suggestion = await client.post(unit_url + '/instruction-suggestions', json={
+            'request_id': str(uuid4()), 'expected_revision': 2, 'content': content, 'model_id': 'text'})
+        assert suggestion.status_code == 200, suggestion.text
+        suggestion_id = suggestion.json()['data']['task_id']
+        async with sessions.begin() as db:
+            service = TaskService(db)
+            await service.claim(suggestion_id, worker_id='fixture')
+            await service.finish(suggestion_id, result={'unit_id': 'unit', 'text': '递出信封。'})
+        applied = await client.post(unit_url + '/instruction-suggestions/' + suggestion_id + '/apply', json={'content': content})
+        assert applied.status_code == 200, applied.text
+        content['units'][0]['instruction_basis_id'] = applied.json()['data']['basis_id']
+        submitted = await client.post(unit_url + '/instruction-checks', json={
+            'request_id': str(uuid4()), 'expected_revision': 2, 'content': content, 'model_id': 'text'})
+        assert submitted.status_code == 200, submitted.text
+        check_id = submitted.json()['data']['task_id']
+        async with sessions.begin() as db:
+            service = TaskService(db)
+            await service.claim(check_id, worker_id='fixture')
+            await service.finish(check_id, result={'unit_id': 'unit', 'rows': [
+                {'role': role, 'occurrence_id': 'coverage', 'verdict': 'pass', 'rationale': '明确表达递信动作', 'findings': []}
+                for role in ['direction', 'performance', 'staging', 'cinematography', 'continuity', 'prompt']],
+                'destinations': [{'owner': 'coverage:coverage', 'field': 'action_scope', 'coverage_item_ids': ['coverage'],
+                    'destination': 'instruction', 'instruction_excerpt': '递出信封', 'reference_id': None, 'rationale': '正文直接表达'}]})
+        confirmed = await client.post(unit_url + '/instruction-checks/' + check_id + '/confirm', json={'content': content})
+        assert confirmed.status_code == 200, confirmed.text
+        content['units'][0]['instruction_check_task_id'] = check_id
+        revision = 2
+        for default in ['default', 'chosen', None]:
+            content['design']['direction']['location_asset_id'] = default
+            state = await client.post(unit_url + '/instruction-basis', json={'content': content})
+            assert state.status_code == 200 and state.json()['data']['status'] == 'current', state.text
+            compared = await client.post(unit_url + '/instruction-checks/' + check_id + '/compare', json={'content': content})
+            assert compared.json()['data']['matches_current'] is True, compared.text
+            saved = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': revision, 'content': content})
+            assert saved.status_code == 200, saved.text
+            revision += 1
+            prepared = await client.post(unit_url + '/video/prepare', json={'expected_revision': revision})
+            assert prepared.status_code == 200, prepared.text
+            assert prepared.json()['data']['inputs']['unit']['references'][0]['asset_origin']['id'] == 'chosen'
+        changed = deepcopy(content)
+        changed['units'][0]['references'] = []
+        compared = await client.post(unit_url + '/instruction-checks/' + check_id + '/compare', json={'content': changed})
+        assert compared.json()['data']['matches_current'] is False, compared.text
+        changed['design']['direction']['location_asset_id'] = 'chosen'
+        compared = await client.post(unit_url + '/instruction-checks/' + check_id + '/compare', json={'content': changed})
+        assert compared.json()['data']['matches_current'] is False, compared.text
