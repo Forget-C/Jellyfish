@@ -33,7 +33,8 @@ const arrangeInstruction: GraphArrange = (nodes, sizes, _width, anchor, retained
 }
 
 /** 指令正文属于明确选中的原单元；查看、编辑与执行分别授权。 */
-export function SceneInstructionCanvas({ preparationHost, unitGraphState, graph, evidenceError, onEvidenceChanged, onRetryGraph, onLocateSource, primaryHost, onPrepare, focusRequest, projectId, sequenceId, versionId, revision, content, unitId, disabled, onSelectUnit, onChange, taskId, onTask, dirty, videoBusy, savePending, onVerifyVideo, videoRefresh, onGenerateVideo, onRetryVideo, videoFocus, onVideoFocused }: {
+export function SceneInstructionCanvas({ onDesignOpenChange, preparationHost, unitGraphState, graph, evidenceError, onEvidenceChanged, onRetryGraph, onLocateSource, primaryHost, onPrepare, focusRequest, projectId, sequenceId, versionId, revision, content, unitId, disabled, onSelectUnit, onChange, taskId, onTask, dirty, videoBusy, savePending, onVerifyVideo, videoRefresh, onGenerateVideo, onRetryVideo, videoFocus, onVideoFocused }: {
+  onDesignOpenChange: (state: { versionId: string; unitId: string; open: boolean }) => void
   preparationHost: HTMLElement | null
   unitGraphState: { graph?: UnitCanvasGraph; current: boolean; pending: boolean; error: string; retry: () => void }
   evidenceError: string
@@ -59,7 +60,6 @@ export function SceneInstructionCanvas({ preparationHost, unitGraphState, graph,
   const [reading, setReading] = useState<'basis' | 'references'>()
   const [expandedUnit, setExpandedUnit] = useState<string>()
   const [suggestionPriority, setSuggestionPriority] = useState<{ versionId: string; unitId: string; priority: boolean }>()
-  const [suggestionFocus, setSuggestionFocus] = useState<{ unitId: string; serial: number }>()
   const [suggestionsHost, setSuggestionsHost] = useState<HTMLSpanElement | null>(null)
   const [actionHost, setActionHost] = useState<HTMLSpanElement | null>(null)
   const allUnits = content.units || []
@@ -105,7 +105,7 @@ export function SceneInstructionCanvas({ preparationHost, unitGraphState, graph,
     </CanvasBrowse>
 
     {validGraph && <GraphCanvas key={`${versionId}:instructions:${unitId || 'empty'}`} contextKey={`${projectId}:${sequenceId}:${versionId}:instructions:${unitId || 'empty'}`} ariaLabel="指令画布视口"
-      focusTarget={focusRequest && instruction && focusRequest.unitId === unit?.id ? { nodeId: instruction.id, fieldId: 'scene-current-instruction', serial: focusRequest.serial } : suggestionFocus && references && suggestionFocus.unitId === unit?.id ? { nodeId: references.id, fieldId: 'scene-instruction-suggestions', serial: suggestionFocus.serial } : undefined}
+      focusTarget={focusRequest && instruction && focusRequest.unitId === unit?.id ? { nodeId: instruction.id, fieldId: 'scene-current-instruction', serial: focusRequest.serial } : undefined}
       layoutScope={view ? { storageKey: `jellyfish:instructions:local-user:${projectId}:${sequenceId}:${versionId}`, viewId: view.id, anchorId: instruction?.id || '',
         validIds: graph.nodes.map(node => node.id), validViewIds: graph.views.map(row => row.id), arrange: arrangeInstruction, initialTop: 112 } : undefined}
       objects={(view?.members || []).flatMap(member => {
@@ -137,7 +137,7 @@ export function SceneInstructionCanvas({ preparationHost, unitGraphState, graph,
     <div className="scene-instruction-workspace" aria-label="指令编辑工作区">
       {unit && validGraph && !instruction && <p>此单元尚未保存，图待同步。继续编辑当前正文。</p>}
       {editor}
-      {unit && <SceneInstructionSuggestions onEvidenceChanged={onEvidenceChanged} onPriority={setSuggestionPriority} preparationBlocked={!!missing.length || checking || failed} onLocate={() => setSuggestionFocus({ unitId: unit.id, serial: Date.now() })} primaryHost={suggestionsHost} key={`${versionId}:${unit.id}`} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision}
+      {unit && <SceneInstructionSuggestions onOpenChange={open => onDesignOpenChange({ versionId, unitId: unit.id, open })} onEvidenceChanged={onEvidenceChanged} onPriority={setSuggestionPriority} preparationBlocked={!!missing.length || checking || failed} triggerHost={primaryHost} primaryHost={suggestionsHost} key={`${versionId}:${unit.id}`} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision}
           unitId={unit.id} content={content} disabled={disabled} onChange={onChange} initialTaskId={taskId} recordFocus={recordFocus?.unitId === unit?.id && recordFocus?.kind === 'suggestion' ? recordFocus : undefined} onTask={onTask} />}
     </div>
 

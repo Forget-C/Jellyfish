@@ -1,3 +1,4 @@
+import { instructionDesign, closeInstructionDesign } from './workbenchControls.mjs'
 import { makeWorkspace } from './directing-fixtures.mjs'
 import { workbenchControl, workbenchShot } from './workbenchControls.mjs'
 import { unitCard, closeWorkbenchDetails } from './workbenchControls.mjs'
@@ -56,18 +57,22 @@ try {
 
   const tasksUrl = `${versionsUrl}/${version.id}/units/unit/instruction-suggestions`
   await page.goto(`http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
+  await closeInstructionDesign(page)
   await (await workbenchControl(page, '保存设置', 'switch', '自动保存')).click()
   await (await workbenchShot(page, '镜头 1：准备指令')).click()
+  await closeInstructionDesign(page)
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
   await unitCard(page, '生成配置')
   await page.getByRole('spinbutton', { name: '单元预计时长', exact: true }).fill('')
   await closeWorkbenchDetails(page)
+  await closeInstructionDesign(page)
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
   const primary = page.getByRole('navigation', { name: '当前指令主操作', exact: true })
   await page.getByRole('button', { name: '单元准备状态', exact: true }).waitFor({ timeout: 5000 })
   assert.equal(await page.getByRole('button', { name: '补齐当前单元准备', exact: true }).count(), 0)
-  const suggestions = page.getByRole('region', { name: '当前单元指令建议', exact: true })
-  assert.equal(await suggestions.getByRole('button', { name: '生成当前单元指令建议', exact: true }).isDisabled(), true)
+  const suggestions = await instructionDesign(page)
+  assert.equal(await suggestions.getByRole('button', { name: '生成指令', exact: true }).isDisabled(), true)
+  await closeInstructionDesign(page)
   await page.getByRole('button', { name: '单元准备状态', exact: true }).click()
   await page.getByRole('group', { name: '单元准备状态选项', exact: true }).getByRole('button', { name: '填写预计时长', exact: true }).click()
   await page.waitForFunction(() => document.activeElement?.id === 'scene-unit-duration')
@@ -76,7 +81,9 @@ try {
   await page.getByRole('spinbutton', { name: '单元预计时长', exact: true }).fill('5')
   await page.route('**/video-generation-options?*', route => route.abort('failed'))
   await closeWorkbenchDetails(page)
+  await closeInstructionDesign(page)
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
+  await closeInstructionDesign(page)
   await page.getByRole('button', { name: '单元准备状态', exact: true }).click()
   await page.getByRole('group', { name: '单元准备状态选项', exact: true }).getByRole('button', { name: /模型能力核实失败/ }).click()
   await page.getByText('模型能力读取失败', { exact: true }).waitFor()
@@ -87,9 +94,10 @@ try {
   await page.getByRole('button', { name: '单元准备状态', exact: true }).filter({ hasText: '准备齐备' }).waitFor()
 
   await closeWorkbenchDetails(page)
+  await closeInstructionDesign(page)
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
-  await primary.getByRole('button', { name: '生成当前单元指令建议', exact: true }).waitFor()
-  await primary.getByRole('button', { name: '生成当前单元指令建议', exact: true }).click()
+  await (await instructionDesign(page)).getByRole('button', { name: '生成指令', exact: true }).click()
+  await closeInstructionDesign(page)
   await primary.getByRole('button', { name: '查看指令任务', exact: true }).waitFor()
   assert.equal((await (await fetch(tasksUrl)).json()).data.length, 1)
   const missingCameraVersion = (await (await fetch(versionsUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), title: '缺少摄影工作单定位' }) })).json()).data
@@ -98,9 +106,11 @@ try {
   assert.equal((await fetch(`${versionsUrl}/${missingCameraVersion.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: 1, content: missingCameraContent }) })).status, 200)
   await page.goto(`http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${missingCameraVersion.id}&view=units`)
   await (await workbenchShot(page, '镜头 1：准备指令')).click()
+  await closeInstructionDesign(page)
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
   await unitCard(page, '生成配置')
   await closeWorkbenchDetails(page)
+  await closeInstructionDesign(page)
   await page.getByRole('button', { name: '单元准备状态', exact: true }).click()
   await page.getByRole('group', { name: '单元准备状态选项', exact: true }).getByRole('button', { name: /镜头缺少摄影工作单/ }).click()
   await page.getByRole('button', { name: '建立工作单', exact: true }).waitFor()
