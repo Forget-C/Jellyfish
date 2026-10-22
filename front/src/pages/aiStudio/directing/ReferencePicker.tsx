@@ -1,4 +1,5 @@
 import { WorkbenchModal, WorkbenchDialogActions } from './ui/WorkbenchModal'
+import { WorkbenchButton } from './ui/WorkbenchButton'
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Modal as AntModal, Image, Input, Pagination, Select, Space, Upload } from 'antd'
 import { StudioFilesService } from '../../../services/generated'
@@ -17,6 +18,7 @@ export function ReferencePicker({ rootClassName, projectId, assets, assetError, 
   coverage?: GenerationUnit_Input['coverage']; references: Reference[]; capability?: VideoReferenceCapabilities; onApply: (references: Reference[]) => void; onEditAssets?: () => void; onInspectDesign?: (objectKey: string) => void; onClose: () => void;
 }) {
   const Modal = rootClassName?.includes('canvas-workbench-dialog') ? WorkbenchModal : AntModal
+  const SourceButton = Modal === WorkbenchModal ? WorkbenchButton : Button
   const [readingFile, setReadingFile] = useState<string>()
   const reading = useRef<HTMLElement>(null)
   const readingTrigger = useRef<HTMLElement>()
@@ -155,10 +157,10 @@ export function ReferencePicker({ rootClassName, projectId, assets, assetError, 
         const update = (patch: Partial<Reference>) => change(latest.current.map(row => ids.has(row.id) ? { ...row, ...patch } : row))
         return <Card size="small" key={ref.subject_group_id || ref.id} title={ref.asset_origin?.name || '本次参考'}>
           <Space direction="vertical" style={{ width: '100%' }}>
-            {identity && <Button disabled={disabled || !!replacement || group.some(item => dependencyReferenceIds.includes(item.id))} onClick={() => {
+            {identity && <SourceButton disabled={disabled || !!replacement || group.some(item => dependencyReferenceIds.includes(item.id))} onClick={() => {
               prepareReplacement({ participantId: ref.participant_ids[0], ids: group.map(item => item.id), token: crypto.randomUUID(), references: [] })
               setReplaceId(undefined); setParticipantIds(ref.participant_ids); setAssetId(undefined); setRole('subject'); setPurpose('identity'); setTab('assets'); setChoosing(true); setError('')
-            }}>更换来源</Button>}
+            }}>更换来源</SourceButton>}
             <Space wrap>{group.map(item => <Space direction="vertical" key={item.id}><ReferencePreview reference={item} />{dependencyReferenceIds.includes(item.id) && <span>此参考用于实际落幅依赖。</span>}
               <Space wrap><Button disabled={disabled || !!replacement} onClick={() => { setChoosing(true); setReplaceId(item.id); setParticipantIds(item.participant_ids); setAssetId(item.asset_origin?.id); setRole(item.input_role || 'subject'); setPurpose(item.purpose); setTab('assets') }}>更换素材</Button>
                 <Button disabled={disabled || !!replacement || draft.indexOf(item) === 0} onClick={() => { const next = [...latest.current]; const index = next.findIndex(row => row.id === item.id); [next[index - 1], next[index]] = [next[index], next[index - 1]]; change(next.map((row, ordinal) => ({ ...row, ordinal }))) }}>上移</Button>
@@ -176,8 +178,8 @@ export function ReferencePicker({ rootClassName, projectId, assets, assetError, 
       })}
       {replacement && <Card size="small" title={`准备替换：${design.participants.find(person => person.id === replacement.participantId)?.name || '当前对象'}`}>
         <p>原身份组保留；选好新素材并应用后一次替换。其他用途和对象不受影响。</p>
-        <Space wrap>{replacement.references.map(ref => <Space direction="vertical" key={ref.id}><ReferencePreview reference={ref} /><span>{ref.asset_origin?.name || '人工素材'}</span><Button disabled={disabled} onClick={() => prepareReplacement({ ...replacement, references: replacement.references.filter(item => item.id !== ref.id) })}>撤回选入</Button></Space>)}</Space>
-        <Button onClick={() => { prepareReplacement(undefined); setChoosing(false); setError('') }}>取消更换来源</Button>
+        <Space wrap>{replacement.references.map(ref => <Space direction="vertical" key={ref.id}><ReferencePreview reference={ref} /><span>{ref.asset_origin?.name || '人工素材'}</span><SourceButton disabled={disabled} onClick={() => prepareReplacement({ ...replacement, references: replacement.references.filter(item => item.id !== ref.id) })}>撤回选入</SourceButton></Space>)}</Space>
+        <SourceButton {...(Modal === WorkbenchModal ? { variant: 'quiet' as const } : {})} onClick={() => { prepareReplacement(undefined); setChoosing(false); setError('') }}>取消更换来源</SourceButton>
       </Card>}
       <p>拟发送：{referenceSummary(appliedReferences())}</p>
       {adding && !!baseline.current.length && <Button onClick={() => { setAdding(false); setChoosing(false) }}>查看本单元全部参考</Button>}

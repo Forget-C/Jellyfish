@@ -81,7 +81,8 @@ async def test_cleanup_classifies_original_groups_and_is_idempotent(tmp_path):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('grouped', [True, False])
-async def test_cleanup_preserves_compliant_multimedia_but_crops_original_ungrouped(tmp_path, grouped):
+@pytest.mark.parametrize('access', ['maintenance', 'detail', 'list'])
+async def test_cleanup_preserves_compliant_multimedia_but_crops_original_ungrouped(tmp_path, grouped, access):
     from datetime import UTC, datetime
     from app.models.directing import SceneVersionRecord, SceneVideoExecution, SceneTakeRecord, DirectingRevision
     from app.models.task import Task, TaskOutput
@@ -111,9 +112,9 @@ async def test_cleanup_preserves_compliant_multimedia_but_crops_original_ungroup
         async with sessions() as db:
             original_bytes = [await db.scalar(select(cast(field, Text))) for field in (
                 SceneVideoExecution.preparation, Task.input_snapshot, SceneTakeRecord.annotation, DirectingRevision.payload)]
-        response = await client.post(detail + '/identity-references/cleanup', json={'expected_revision': 2, 'request_id': str(uuid4())})
+        response = await client.post(detail + '/identity-references/cleanup', json={'expected_revision': 2, 'request_id': str(uuid4())}) if access == 'maintenance' else await client.get(detail if access == 'detail' else detail.rsplit('/', 1)[0])
         assert response.status_code == 200, response.text
-        actual = response.json()['data']
+        actual = response.json()['data'] if access != 'list' else response.json()['data'][0]
         assert [ref['id'] for ref in actual['content']['units'][0]['references']] == (['r1', 'r2'] if grouped else ['r1'])
         assert actual['revision'] == (2 if grouped else 3)
         async with sessions() as db:
@@ -138,7 +139,8 @@ async def test_cleanup_stale_revision_and_retired_sequence_are_rejected(tmp_path
 
 
 @pytest.mark.asyncio
-async def test_cleanup_database_failure_rolls_back_all_input_changes(tmp_path):
+@pytest.mark.parametrize('access', ['maintenance', 'detail', 'list'])
+async def test_cleanup_database_failure_rolls_back_all_input_changes(tmp_path, access):
     from sqlalchemy import event
     from app.models.directing import SceneVersionRecord
 
@@ -156,12 +158,19 @@ async def test_cleanup_database_failure_rolls_back_all_input_changes(tmp_path):
         event.listen(engine, 'after_cursor_execute', fail_after_update)
         try:
             with pytest.raises(RuntimeError, match='simulated transaction failure'):
-                await client.post(detail + '/identity-references/cleanup', json={'expected_revision': 2, 'request_id': str(uuid4())})
+                if access == 'maintenance':
+                    await client.post(detail + '/identity-references/cleanup', json={'expected_revision': 2, 'request_id': str(uuid4())})
+                else:
+                    await client.get(detail if access == 'detail' else detail.rsplit('/', 1)[0])
         finally:
             event.remove(engine, 'after_cursor_execute', fail_after_update)
-        reread = (await client.get(detail)).json()['data']
-        assert reread['revision'] == 2
-        assert reread['content'] == legacy
+        async with sessions() as db:
+            row = await db.get(SceneVersionRecord, detail.rsplit('/', 1)[-1])
+            assert row.revision == 2
+            assert row.content == legacy
+        retried = (await client.get(detail)).json()['data']
+        assert retried['revision'] == 3
+        assert retried['content']['units'][0]['references'] == []
 
 
 @pytest.mark.asyncio
@@ -285,3 +294,83 @@ async def test_asset_rename_does_not_split_a_subject_group(tmp_path):
         actual = response.json()['data']['content']['units'][0]['references']
         assert [ref['asset_origin']['name'] for ref in actual] == ['原名', '新名']
         assert {ref['subject_group_id'] for ref in actual} == {'person-group'}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('access', ['detail', 'list'])
+async def test_open_version_upgrades_saved_identity_groups_before_graph_projection(tmp_path, access):
+    from app.models.directing import SceneVersionRecord
+
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        detail, content = await version_with_identity(client)
+        saved = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})
+        legacy = deepcopy(saved.json()['data']['content'])
+        extra = deepcopy(legacy['units'][0]['references'][0])
+        extra.update(id='r2', ordinal=1, subject_group_id='second')
+        legacy['units'][0]['references'].append(extra)
+        async with sessions.begin() as db:
+            (await db.get(SceneVersionRecord, detail.rsplit('/', 1)[-1])).content = legacy
+        opened = await client.get(detail if access == 'detail' else detail.rsplit('/', 1)[0])
+        assert opened.status_code == 200, opened.text
+        actual = opened.json()['data'] if access == 'detail' else opened.json()['data'][0]
+        assert [ref['id'] for ref in actual['content']['units'][0]['references']] == ['r1']
+        assert actual['revision'] == 3
+        for key in ['relationship_graph', 'director_graph', 'unit_graph', 'instruction_graph', 'edit_graph']:
+            assert actual[key]['revision'] == 3
+        assert (await client.get(detail)).json()['data'] == actual
+        actual['content']['design']['participants'][0]['name'] = '改名'
+        renamed = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 3, 'content': actual['content']})
+        assert renamed.status_code == 200, renamed.text
+        assert renamed.json()['data']['revision'] == 4
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('access', ['detail', 'list'])
+async def test_open_retired_sequence_preserves_saved_legacy_references(tmp_path, access):
+    from app.models.directing import SceneVersionRecord, Sequence
+
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        detail, content = await version_with_identity(client)
+        saved = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})
+        legacy = deepcopy(saved.json()['data']['content'])
+        extra = deepcopy(legacy['units'][0]['references'][0])
+        extra.update(id='r2', ordinal=1, subject_group_id='second')
+        legacy['units'][0]['references'].append(extra)
+        async with sessions.begin() as db:
+            row = await db.get(SceneVersionRecord, detail.rsplit('/', 1)[-1])
+            row.content = legacy
+            (await db.get(Sequence, row.sequence_id)).is_current = False
+        response = await client.get(detail if access == 'detail' else detail.rsplit('/', 1)[0])
+        assert response.status_code == 200, response.text
+        actual = response.json()['data'] if access == 'detail' else response.json()['data'][0]
+        assert actual['revision'] == 2
+        assert actual['content'] == legacy
+
+
+@pytest.mark.asyncio
+async def test_open_versions_during_saves_does_not_report_a_stale_cleanup_conflict(tmp_path):
+    import asyncio
+
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        detail, content = await version_with_identity(client)
+        saved = (await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})).json()['data']
+
+        async def edit():
+            current = saved
+            for index in range(8):
+                proposed = deepcopy(current['content'])
+                proposed['design']['participants'][0]['name'] = f'并发编辑{index}'
+                response = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': current['revision'], 'content': proposed})
+                assert response.status_code == 200, response.text
+                current = response.json()['data']
+            return current
+
+        async def browse():
+            for index in range(16):
+                response = await client.get(detail if index % 2 else detail.rsplit('/', 1)[0])
+                assert response.status_code == 200, response.text
+
+        edited, _ = await asyncio.gather(edit(), browse())
+        actual = (await client.get(detail)).json()['data']
+        assert actual['revision'] == edited['revision']
+        assert actual['content'] == edited['content']

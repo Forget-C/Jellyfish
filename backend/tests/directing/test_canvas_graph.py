@@ -640,19 +640,19 @@ async def test_graph_read_keeps_one_snapshot_when_dependency_refreshes_the_same_
         newer['design']['direction']['viewpoint'] = {'state': 'proposal', 'text': '另一会话的新输入',
             'sources': [{'kind': 'human', 'reference': 'concurrent-editor', 'version': '2'}]}
         request_id = str(uuid4())
-        reads = 0
+        advanced = False
 
         def concurrent_write(connection, cursor, statement, parameters, context, executemany):
             """在数据库边界控制时序：依赖核验重读同版本前，另一连接提交新内容。"""
-            nonlocal reads
-            if 'FROM directing_scene_versions' not in statement:
+            nonlocal advanced
+            # 正常打开现在先核实已存身份组；在响应快照已读取、图投影开始前推进。
+            if 'FROM directing_scene_copy_origins' not in statement or advanced:
                 return
-            reads += 1
-            if reads == 2:
-                with sqlite3.connect(tmp_path / 'directing.sqlite') as other:
-                    other.execute('UPDATE directing_scene_versions SET revision = 2, title = ?, '
-                        'last_save_request_id = ?, content = ? WHERE id = ?',
-                        ('另一会话保存的版本', request_id, json.dumps(newer), created['id']))
+            advanced = True
+            with sqlite3.connect(tmp_path / 'directing.sqlite') as other:
+                other.execute('UPDATE directing_scene_versions SET revision = 2, title = ?, '
+                    'last_save_request_id = ?, content = ? WHERE id = ?',
+                    ('另一会话保存的版本', request_id, json.dumps(newer), created['id']))
 
         engine = sessions.kw['bind'].sync_engine
         event.listen(engine, 'before_cursor_execute', concurrent_write)

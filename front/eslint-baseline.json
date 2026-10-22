@@ -780,13 +780,6 @@
     },
     {
       "file": "src/pages/aiStudio/directing/ReferencePicker.tsx",
-      "rule": "no-extra-semi",
-      "severity": 2,
-      "fingerprint": "b74f5073c375a5708f41622c8a6b75aa492acb1a5b085354a2f43a54c56cfb50",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/directing/ReferencePicker.tsx",
       "rule": "react-hooks/exhaustive-deps",
       "severity": 1,
       "fingerprint": "67159b8dc2db54419d3b8b0f6a15fa605237b06bfa65a68866aa9248790a20f2",

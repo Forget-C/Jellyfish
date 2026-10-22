@@ -138,6 +138,25 @@ async def duplicate_legacy_activities_fixture(version_id: str):
     return {'ok': True}
 
 
+@app.post('/browser-test/scene-versions/{version_id}/duplicate-legacy-identity')
+async def duplicate_legacy_identity_fixture(version_id: str):
+    """只在隔离库注入旧主体分组，首次工作台打开仍走正式读取入口。"""
+    from app.models.directing import SceneVersionRecord
+
+    async with sessions.begin() as db:
+        version = await db.get(SceneVersionRecord, version_id)
+        content = deepcopy(version.content)
+        unit = content['units'][0]
+        original = next(ref for ref in unit['references'] if ref['purpose'] == 'identity'
+            and ref.get('input_role', 'subject') == 'subject' and ref['participant_ids'] == ['reader'])
+        extra = deepcopy(original)
+        extra.update(id='legacy-extra', subject_group_id='legacy-second',
+            ordinal=max(ref['ordinal'] for ref in unit['references']) + 1)
+        unit['references'].append(extra)
+        version.content = content
+        return {'revision': version.revision, 'survivor_id': original['id']}
+
+
 @app.put('/browser-test-storage/scene-test/{key:path}')
 async def put_object_fixture(key: str, request: Request):
     """真实上传接口仍经过 boto3 HTTP；只替代外部对象存储，不替代业务服务。"""

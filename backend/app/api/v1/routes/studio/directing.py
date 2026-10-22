@@ -165,8 +165,8 @@ async def resolve_sources(project_id: str, sequence_id: str, body: SourceResolve
 
 @router.get('/sequences/{sequence_id}/versions', response_model=ApiResponse[list[SceneVersionRead]], operation_id='directing_scene_versions')
 async def scene_versions(project_id: str, sequence_id: str, db: AsyncSession = Depends(get_db, scope='function')):
-    """浏览已存在的场次版本，不创建默认方案。"""
-    return success_response(await _call(DirectingStore(db, project_id).list_scene_versions(sequence_id)))
+    """浏览已存在方案；当前可编辑版本在投影前受控整理已保存的身份参考。"""
+    return success_response(await _call(DirectingStore(db, project_id).open_scene_versions(sequence_id)))
 
 
 @router.post('/sequences/{sequence_id}/versions', response_model=ApiResponse[SceneVersionRead], operation_id='directing_create_scene_version')
@@ -177,8 +177,8 @@ async def create_scene_version(project_id: str, sequence_id: str, body: SceneVer
 
 @router.get('/sequences/{sequence_id}/versions/{version_id}', response_model=ApiResponse[SceneVersionRead], operation_id='directing_scene_version')
 async def scene_version(project_id: str, sequence_id: str, version_id: str, db: AsyncSession = Depends(get_db, scope='function')):
-    """读取具有固定原文依据的当前方案。"""
-    return success_response(await _call(DirectingStore(db, project_id).read_scene_version(sequence_id, version_id)))
+    """打开方案；当前可编辑版本在投影前受控整理已保存的身份参考。"""
+    return success_response(await _call(DirectingStore(db, project_id).open_scene_version(sequence_id, version_id)))
 
 
 @router.put('/sequences/{sequence_id}/versions/{version_id}', response_model=ApiResponse[SceneVersionRead], operation_id='directing_save_scene_version')
