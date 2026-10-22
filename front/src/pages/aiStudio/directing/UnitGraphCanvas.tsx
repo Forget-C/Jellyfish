@@ -56,7 +56,7 @@ export function UnitGraphCanvas({ graph, content, unitId, versionId, revision, s
   const preview = (node: UnitNode, target: string) => {
     const child = graph.views.find(candidate => candidate.id === target)
     if (!child || node.kind !== 'unit') return <p>子图不可用</p>
-    const layoutNodes = child.members.map(member => ({ id: member.node_id, group: member.group, size: { width: 360, height: 320 } }))
+    const layoutNodes = child.members.map(member => ({ id: member.node_id, group: member.group, size: { width: 360, height: byId.get(member.node_id)?.kind === 'unit_references' ? 480 : 320 } }))
     const sizes = Object.fromEntries(layoutNodes.map(item => [item.id, item.size]))
     const stored = readStoredGraphView(`${storageKey}:view:${child.id}`)
     const positions = arrangeUnitGraph(layoutNodes, sizes, 1440, child.anchor_id || '', stored?.positions)
@@ -71,7 +71,7 @@ export function UnitGraphCanvas({ graph, content, unitId, versionId, revision, s
     if (!node) return []
     return [{ id: node.id, label: member.title || node.title, title: member.title || node.title,
       group: member.group, entry: member.presentation === 'entry', related: member.presentation === 'reference',
-      size: { width: 360, height: member.presentation === 'entry' ? 360 : 320 },
+      size: { width: 360, height: member.presentation === 'entry' ? 360 : node.kind === 'unit_references' ? 480 : 320 },
       onInspect: member.presentation === 'entry' && member.entry_view_id ? () => go('unit_id' in node ? node.unit_id : '') : node.kind === 'unit_references' ? () => onReference(node) : node.edit_target || node.kind === 'unit_basis' ? () => onInspect(node) : undefined,
       content: member.presentation === 'entry' && member.entry_view_id ? preview(node, member.entry_view_id) : <section className="canvas-workbench-card unit-graph-card">
         <div className="design-compact-summary">

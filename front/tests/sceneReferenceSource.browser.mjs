@@ -129,6 +129,17 @@ try {
   assert.equal(card.bindings.length, 2)
   assert.equal(saved.unit_graph.edges.filter(edge => edge.source === card.id && edge.target === 'unit:unit').length, 1)
   assert.ok(saved.unit_graph.nodes.some(node => node.title === '添加参考组' && node.bindings.length === 0))
+  await locateCanvasNode(page, card.title)
+  await page.keyboard.press('Escape')
+  const groupNode = page.locator(`[data-canvas-node="${card.id}"]`)
+  const visibleContent = await groupNode.locator('.design-compact-fields').boundingBox()
+  const thumbnails = await groupNode.locator('.unit-graph-reference-previews img').all()
+  assert.equal(thumbnails.length, 2)
+  for (const thumbnail of thumbnails) {
+    const bounds = await thumbnail.boundingBox()
+    assert.ok(bounds.y + bounds.height <= visibleContent.y + visibleContent.height + 1, 'group thumbnails are visible within the card')
+  }
+  await page.screenshot({ path: join(output, 'reference-group-card.png'), animations: 'disabled' })
   dialog = await open()
   assert.equal(await dialog.getByRole('button', { name: '更换来源', exact: true }).getAttribute('data-variant'), 'secondary')
   await dialog.getByRole('button', { name: '更换来源', exact: true }).click()
@@ -250,6 +261,11 @@ try {
   await start(); await chooseFile('second'); await apply()
   saved = await waitSaved(value => targetRefs(value)[0].file_id === extraFiles[0])
   assert.equal(targetRefs(saved).length, 1); assertIsolation(saved)
+  const warningContent = await groupNode.locator('.design-compact-fields').boundingBox()
+  for (const thumbnail of await groupNode.locator('.unit-graph-reference-previews img').all()) {
+    const bounds = await thumbnail.boundingBox()
+    assert.ok(bounds.y + bounds.height <= warningContent.y + warningContent.height + 1, 'capability warning does not hide the selected image')
+  }
   await page.screenshot({ path: join(output, 'replacement-isolation.png'), animations: 'disabled' })
   await start(); await chooseFile('third'); await chooseFile('reference'); await apply()
   saved = await waitSaved(value => targetRefs(value).length === 2)
