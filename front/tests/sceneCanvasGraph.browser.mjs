@@ -270,6 +270,8 @@ try {
   assert.equal(await referenceImage.evaluate(image => image.decode().then(() => image.naturalWidth > 0).catch(() => false)), true, 'the backend preview renders actual image bytes')
   const referenceCard = page.locator('[data-canvas-node="unit:shared:references"]')
   assert.equal(await referenceCard.getByRole('button', { name: '编辑本单元参考', exact: true }).count(), 0, 'reference card has one direct entry')
+  await selectWorkbenchOption(page, '当前单元', '单元 1')
+  await page.locator('[data-layout-view="unit:shared"]').waitFor()
   const referenceEntry = referenceCard.getByRole('button', { name: /^查看节点：/ })
   const canvasGeometry = () => page.locator('.director-canvas-content').evaluate(node => ({ transform: node.style.transform, cards: [...node.querySelectorAll('[data-canvas-node]')].map(card => [card.getAttribute('data-canvas-node'), card.style.left, card.style.top]) }))
   const beforeReference = await canvasGeometry()

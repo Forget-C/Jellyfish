@@ -88,7 +88,7 @@ try {
   assert.equal(await graph.locator('[data-relation-from]').count(), 2)
   await page.goBack()
   await page.waitForFunction(() => document.querySelector('.canvas-toolbar-views button[aria-pressed="true"]')?.textContent === '导演画布', undefined, { timeout: 4000 })
-  assert.equal(new URL(page.url()).searchParams.has('canvas'), false)
+  assert.equal(new URL(page.url()).searchParams.get('canvas'), 'director')
   await page.goForward()
   await graph.waitFor({ state: 'visible' })
   await page.screenshot({ path: join(output, 'edit-graph-desktop.png'), fullPage: true })

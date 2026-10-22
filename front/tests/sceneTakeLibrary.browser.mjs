@@ -1,5 +1,5 @@
 import { makeWorkspace } from './directing-fixtures.mjs'
-import { locateCanvasNode, workbenchShot, workbenchControl, closeWorkbenchDetails } from './workbenchControls.mjs'
+import { locateCanvasNode, workbenchShot, workbenchControl, closeWorkbenchDetails, selectWorkbenchOption } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -65,8 +65,7 @@ try {
   await page.goto(`http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
   await (await workbenchShot(page, '镜头 1：读信反应')).click()
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
-  await page.getByRole('combobox', { name: '当前单元', exact: true }).press('ArrowDown')
-  await page.getByRole('combobox', { name: '当前单元', exact: true }).press('Enter')
+  await selectWorkbenchOption(page, '当前单元', '单元 1')
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
   const body = page.getByRole('textbox', { name: '当前单元指令正文', exact: true })
   await body.fill('历史场次的原指令。')
@@ -176,6 +175,7 @@ try {
 
   assert.deepEqual(a.content.take_judgments[0].annotation.retained_ranges, [{ source_in_ms: 0, source_out_ms: 1000 }])
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
+  await selectWorkbenchOption(page, '指令所属单元', '单元 1')
   await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).fill('后来修改的原单元正文')
   await page.getByRole('button', { name: '编辑画布', exact: true }).click()
   if (await page.getByRole('button', { name: '打开剪辑工作区', exact: true }).isVisible()) await page.getByRole('button', { name: '打开剪辑工作区', exact: true }).click()

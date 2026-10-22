@@ -67,6 +67,7 @@ try {
   await page.getByRole('button', { name: '查看素材固定依据', exact: true }).click()
   await page.getByText('旧生产计划素材：请按当前方案人工核对适用性', { exact: true }).waitFor()
   await page.getByText(`原所属生产计划：${library[0].origin_id}`, { exact: true }).waitFor()
+  await page.waitForFunction(() => document.querySelector('.wb-details:not([hidden])')?.getBoundingClientRect().top >= document.querySelector('.canvas-workbench-toolbar')?.getBoundingClientRect().bottom)
   await closeWorkbenchDetails(page)
   assert.equal(await page.locator('video').count(), 0)
   await page.getByRole('button', { name: '预览当前素材', exact: true }).click()

@@ -48,6 +48,10 @@ export function WorkbenchDetails({ title, status, open, onClose, trigger, childr
     if (!trigger) opener.current = document.activeElement as HTMLElement
     const node = panel.current
     const workbench = document.querySelector<HTMLElement>('.canvas-workbench')
+    const toolbar = workbench?.querySelector<HTMLElement>('.canvas-workbench-toolbar')
+    const position = () => { if (!modal && node && toolbar) node.style.top = `${Math.max(88, toolbar.getBoundingClientRect().bottom + 8)}px` }
+    const toolbarObserver = new ResizeObserver(position)
+    if (toolbar && !modal) { toolbarObserver.observe(toolbar); position() }
     const wasInert = workbench?.inert
     if (modal) {
       if (workbench) workbench.inert = true
@@ -83,6 +87,7 @@ export function WorkbenchDetails({ title, status, open, onClose, trigger, childr
     }
     document.addEventListener('keydown', keyboard)
     return () => {
+      toolbarObserver.disconnect(); node?.style.removeProperty('top')
       observer.disconnect(); document.removeEventListener('keydown', keyboard)
       if (modal && workbench) workbench.inert = !!wasInert
       if (!node || node.contains(document.activeElement) || document.activeElement === document.body) {
