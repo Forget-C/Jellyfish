@@ -358,6 +358,11 @@ async def test_reference_asset_origin_checked_only_when_saving(tmp_path):
             await service._validate(sequence, content)
             assert content.units[0].references[0].asset_origin.name == "哥哥"
             assert content.units[0].references[0].file_id == "image1"
+            # 普通派生不能伪造跨单元继承；只有服务端显式重组带可信原单元映射。
+            copied = deepcopy(data)
+            copied['units'][0]['id'] = 'forged-unit'
+            with pytest.raises(ValueError, match='资产来源'):
+                await service.save_revision(sequence.id, kind='plan', payload=copied, parent_id=plan.id)
             from app.core.contracts.directing.workspace import RegroupRequest
             from app.services.directing.production import ProductionService
             regrouped = await ProductionService(db, "p1").regroup_units(sequence.id, RegroupRequest(plan_revision_id=plan.id, unit_ids=["u1"], operation="split"))

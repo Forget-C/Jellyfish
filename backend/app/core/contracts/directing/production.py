@@ -115,8 +115,10 @@ class GenerationUnit(Contract):
             if binding.subject_group_id in standalone:
                 raise ValueError("主体分组名称与独立参考冲突")
             previous = groups.setdefault(binding.subject_group_id, binding)
+            previous_source = (previous.asset_origin.kind, previous.asset_origin.id) if previous.asset_origin else None
+            current_source = (binding.asset_origin.kind, binding.asset_origin.id) if binding.asset_origin else None
             if (set(previous.participant_ids) != set(binding.participant_ids)
-                    or previous.purpose != binding.purpose or previous.asset_origin != binding.asset_origin):
+                    or previous.purpose != binding.purpose or previous_source != current_source):
                 raise ValueError("同组参考必须具有相同主体、用途和资产来源")
         return self
 

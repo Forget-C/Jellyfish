@@ -622,7 +622,8 @@ async def test_scene_version_cannot_cross_project_or_rewrite_frozen_design(tmp_p
 
 
 @pytest.mark.asyncio
-async def test_saved_asset_origin_survives_rename_but_new_binding_is_checked(tmp_path):
+@pytest.mark.parametrize('source_loss', ['unlinked', 'deleted'])
+async def test_saved_asset_origin_survives_rename_but_new_binding_is_checked(tmp_path, source_loss):
     """历史参考保持原名称；解除默认不改变引用，伪造的新来源仍拒绝。"""
     from app.models.studio import Scene, SceneImage, ProjectSceneLink
 
@@ -661,6 +662,42 @@ async def test_saved_asset_origin_survives_rename_but_new_binding_is_checked(tmp
         reread = (await client.get(detail)).json()['data']
         assert reread['revision'] == 4
         assert reread['content']['units'][0]['references'][0]['asset_origin']['name'] == '原场所'
+        from sqlalchemy import delete
+        async with sessions.begin() as db:
+            await db.execute(delete(ProjectSceneLink).where(ProjectSceneLink.scene_id == 'location'))
+            if source_loss == 'deleted':
+                await db.execute(delete(SceneImage).where(SceneImage.scene_id == 'location'))
+                await db.execute(delete(Scene).where(Scene.id == 'location'))
+        content = reread['content']
+        retained = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 4, 'content': content})
+        assert retained.status_code == 200, retained.text
+        assert retained.json()['data']['content']['units'][0]['references'] == content['units'][0]['references']
+        graph = retained.json()['data']['unit_graph']
+        collection = next(node for node in graph['nodes'] if node['kind'] == 'unit_references')
+        assert collection['previews'][0]['source_status'] == 'unavailable'
+        assert collection['previews'][0]['status'] == 'available'
+        assert collection['previews'][0]['media_url'] == '/api/v1/studio/files/image1/download'
+        for change in ['reference-id', 'unit-id', 'extra-reference', 'origin-name', 'file-id', 'selection-source']:
+            invalid = deepcopy(content)
+            unit = invalid['units'][0]
+            reference = unit['references'][0]
+            if change == 'reference-id':
+                reference['id'] = 'forged-reference'
+            elif change == 'unit-id':
+                unit['id'] = 'forged-unit'
+            elif change == 'extra-reference':
+                extra = deepcopy(reference)
+                extra.update(id='forged-reference', ordinal=1)
+                unit['references'].append(extra)
+            elif change == 'origin-name':
+                reference['asset_origin']['name'] = '伪造名称'
+            elif change == 'selection-source':
+                reference['source']['reference'] = '伪造选择凭据'
+            else:
+                reference['file_id'] = 'video1'
+            rejected = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 5, 'content': invalid})
+            assert rejected.status_code == 422, (change, rejected.text)
+        assert (await client.get(detail)).json()['data']['revision'] == 5
 
 
 

@@ -35,6 +35,15 @@ def reference_storage(monkeypatch):
             self.send_header('Content-Type', 'image/png')
             self.end_headers()
 
+        def do_GET(self):
+            value = objects.get(self.path)
+            self.send_response(404 if value is None else 200)
+            self.send_header('Content-Length', str(len(value) if value else 0))
+            self.send_header('Content-Type', 'image/png')
+            self.end_headers()
+            if value:
+                self.wfile.write(value)
+
         def log_message(self, *_args):
             pass
 
@@ -546,7 +555,8 @@ async def test_identity_requirement_can_use_bound_reference_for_video(tmp_path, 
 
 
 @pytest.mark.asyncio
-async def test_default_preference_changes_preserve_instruction_and_preflight(tmp_path, reference_storage):
+@pytest.mark.parametrize("source_state", ["unchanged", "renamed", "unlinked", "deleted"])
+async def test_default_preference_changes_preserve_instruction_and_preflight(tmp_path, reference_storage, source_state):
     """默认失效、改选与解除不改变消费依据；真正参考变化仍使检查失效。"""
     from app.models.studio import Scene, SceneImage, ProjectSceneLink
     from sqlalchemy import delete
@@ -606,8 +616,18 @@ async def test_default_preference_changes_preserve_instruction_and_preflight(tmp
         confirmed = await client.post(unit_url + '/instruction-checks/' + check_id + '/confirm', json={'content': content})
         assert confirmed.status_code == 200, confirmed.text
         content['units'][0]['instruction_check_task_id'] = check_id
+        frozen_check = (await client.get(unit_url + '/instruction-checks')).json()['data'][0]
+        async with sessions.begin() as db:
+            if source_state == 'renamed':
+                (await db.get(Scene, 'chosen')).name = '改名后的场所'
+                (await db.get(SceneImage, 901)).file_id = None
+            elif source_state in ['unlinked', 'deleted']:
+                await db.execute(delete(ProjectSceneLink).where(ProjectSceneLink.scene_id == 'chosen'))
+                if source_state == 'deleted':
+                    await db.execute(delete(SceneImage).where(SceneImage.scene_id == 'chosen'))
+                    await db.execute(delete(Scene).where(Scene.id == 'chosen'))
         revision = 2
-        for default in ['default', 'chosen', None]:
+        for default in ['default', None] if source_state in ['unlinked', 'deleted'] else ['default', 'chosen', None]:
             content['design']['direction']['location_asset_id'] = default
             state = await client.post(unit_url + '/instruction-basis', json={'content': content})
             assert state.status_code == 200 and state.json()['data']['status'] == 'current', state.text
@@ -619,10 +639,91 @@ async def test_default_preference_changes_preserve_instruction_and_preflight(tmp
             prepared = await client.post(unit_url + '/video/prepare', json={'expected_revision': revision})
             assert prepared.status_code == 200, prepared.text
             assert prepared.json()['data']['inputs']['unit']['references'][0]['asset_origin']['id'] == 'chosen'
+            fixed = prepared.json()['data']['inputs']['unit']['references'][0]
+            assert fixed['file_id'] == 'image1'
+            assert fixed['asset_origin']['name'] == '本次场所'
+        assert (await client.get(unit_url + '/instruction-checks')).json()['data'][0]['inputs'] == frozen_check['inputs']
+        if source_state == 'deleted':
+            from app.models.studio import FileUsage
+            # 目录保留例外不能绕过真实字节、媒体或当前项目访问权限。
+            import asyncio
+            import httpx
+            from app.task_worker import TaskWorker
+            fixed_executions = []
+            for bytes_available in [True, False]:
+                if not bytes_available:
+                    reference_storage.pop('/scene-test/files/space.png')
+                submitted_video = await client.post(unit_url + '/video', json={'request_id': str(uuid4()), 'expected_revision': revision})
+                assert submitted_video.status_code == 200, submitted_video.text
+                provider_requests = []
+                def provider(request):
+                    provider_requests.append(json.loads(request.content))
+                    return httpx.Response(200, json={'id': 'controlled-video'})
+                async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as provider_client:
+                    worker = TaskWorker(sessions, client=provider_client)
+                    try:
+                        await worker.tick()
+                        await asyncio.gather(*list(worker.jobs.values()))
+                    finally:
+                        worker.text_pool.shutdown(wait=True)
+                video = next(row for row in (await client.get(unit_url + '/video')).json()['data']
+                             if row['task_id'] == submitted_video.json()['data']['task_id'])
+                assert video['preparation']['inputs']['unit']['references'][0]['file_id'] == 'image1'
+                assert video['takes'] == []
+                fixed_executions.append(video['preparation'])
+                if bytes_available:
+                    assert video['status'] == 'running'
+                    assert provider_requests[0]['input_reference']['image_url'] == 'data:image/png;base64,b3JpZ2luYWwtcmVmZXJlbmNl'
+                    async with sessions.begin() as db:
+                        db.add(FileItem(id='fixed-output', type='video', name='受控样片', storage_key='fixtures/fixed-output.mp4', content_type='video/mp4', duration_ms=5000))
+                        await db.flush()
+                        service = TaskService(db)
+                        await service.add_output(video['task_id'], ordinal=0, file_id='fixed-output')
+                        await service.finish(video['task_id'], deliver=deliver_media)
+                    completed = next(row for row in (await client.get(unit_url + '/video')).json()['data'] if row['task_id'] == video['task_id'])
+                    assert completed['status'] == 'succeeded'
+                    assert completed['takes'][0]['file_id'] == 'fixed-output'
+                    fixed_takes = completed['takes']
+                else:
+                    assert video['status'] == 'failed'
+                    assert provider_requests == []
+            reference_storage['/scene-test/files/space.png'] = b'original-reference'
+            async with sessions.begin() as db:
+                (await db.get(FileItem, 'image1')).type = 'video'
+            wrong_media = await client.post(unit_url + '/video/prepare', json={'expected_revision': revision})
+            assert wrong_media.status_code == 422, wrong_media.text
+            async with sessions.begin() as db:
+                (await db.get(FileItem, 'image1')).type = 'image'
+            for unavailable_field in ['deleted_at', 'delete_requested_at']:
+                async with sessions.begin() as db:
+                    setattr(await db.get(FileItem, 'image1'), unavailable_field, datetime.now(timezone.utc))
+                unavailable = await client.post(unit_url + '/video/prepare', json={'expected_revision': revision})
+                assert unavailable.status_code == 410, unavailable.text
+                async with sessions.begin() as db:
+                    setattr(await db.get(FileItem, 'image1'), unavailable_field, None)
+            async with sessions.begin() as db:
+                (await db.get(FileItem, 'image1')).type = 'image'
+                await db.execute(delete(FileUsage).where(FileUsage.file_id == 'image1'))
+                db.add(FileUsage(file_id='image1', project_id='p2', usage_kind='upload', source_ref='private'))
+            revoked = await client.post(unit_url + '/video/prepare', json={'expected_revision': revision})
+            assert revoked.status_code == 422, revoked.text
+            rejected_save = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': revision, 'content': content})
+            assert rejected_save.status_code == 422, rejected_save.text
+            fixed_version = (await client.get(detail)).json()['data']
+            assert fixed_version['revision'] == revision
+            assert fixed_version['content']['units'][0]['references'] == saved.json()['data']['content']['units'][0]['references']
+            preview = next(node for node in fixed_version['unit_graph']['nodes'] if node['kind'] == 'unit_references')['previews'][0]
+            assert preview['source_status'] == 'unavailable'
+            assert preview['status'] == 'unavailable'
+            async with sessions.begin() as db:
+                await db.execute(delete(FileUsage).where(FileUsage.file_id == 'image1'))
+                db.add(FileUsage(file_id='image1', project_id='p1', usage_kind='upload', source_ref='restored'))
+            assert [row['preparation'] for row in reversed((await client.get(unit_url + '/video')).json()['data'])] == fixed_executions
+            assert (await client.get(unit_url + '/video')).json()['data'][-1]['takes'] == fixed_takes
         changed = deepcopy(content)
         changed['units'][0]['references'] = []
         compared = await client.post(unit_url + '/instruction-checks/' + check_id + '/compare', json={'content': changed})
         assert compared.json()['data']['matches_current'] is False, compared.text
-        changed['design']['direction']['location_asset_id'] = 'chosen'
+        changed['design']['direction']['location_asset_id'] = None
         compared = await client.post(unit_url + '/instruction-checks/' + check_id + '/compare', json={'content': changed})
         assert compared.json()['data']['matches_current'] is False, compared.text

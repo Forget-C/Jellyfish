@@ -29,8 +29,11 @@ def _reference_preview(context, binding):
                 preview_issue = '缩略图存储尚未核实；固定文件身份保留'
         elif binding.media_kind == 'image':
             thumbnail_url = media_url
+    source_status = None
+    if binding.asset_origin:
+        source_status = 'available' if (binding.asset_origin.kind, binding.asset_origin.id) in context.available_sources else 'unavailable'
     return CanvasReferencePreview(binding_id=binding.id, file_id=binding.file_id,
-        display_name=file.name if file else '原文件不可用', status=status,
+        display_name=file.name if file else '原文件不可用', status=status, source_status=source_status,
         thumbnail_url=thumbnail_url, media_url=media_url, preview_issue=preview_issue)
 
 
@@ -229,6 +232,8 @@ def unit_graph(context: CanvasReadContext, director: DirectorCanvasGraph) -> Uni
                     'deleted': '文件已删除', 'unavailable': '文件不可用或不属于当前项目',
                     'wrong_media_kind': '实际文件类型与绑定不一致',
                 }[preview.status])
+            if preview.source_status == 'unavailable':
+                issue(reference, 'reference-source-unavailable', f'固定参考 {preview.binding_id} 的来源资产不可用；保留选择时来源，文件可用性单独核实')
             if preview.preview_issue:
                 issue(reference, 'reference-preview-unverified', preview.preview_issue)
         if input_error and (unit.duration_ms or input_error.section != 'generation'):

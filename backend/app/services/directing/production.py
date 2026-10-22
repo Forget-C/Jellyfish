@@ -79,7 +79,10 @@ class ProductionService(DirectingAIService):
                     units.append(replacement)
         content = ProductionPlan.model_validate({"design_revision_id": plan.design_revision_id,
             "units": [unit.model_dump(mode="json") for unit in units]})
-        return await self.save_revision(sequence_id, kind="plan", payload=content.model_dump(mode="json"), parent_id=row.id)
+        # 仅服务端重组可证明新单元复制自哪个原单元；普通保存不能伪造此映射。
+        source_unit_ids = {replacement.id: source_id for source_id, rows in replacements.items() for replacement in rows}
+        return await self.save_revision(sequence_id, kind="plan", payload=content.model_dump(mode="json"), parent_id=row.id,
+                                        source_unit_ids=source_unit_ids)
 
     async def generate_visual(self, sequence_id: str, body: VisualRequest):
         """复用统一图片生成管线，只交付候选文件，不修改设计、资产默认图或参考。"""
