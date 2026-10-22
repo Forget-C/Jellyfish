@@ -10,7 +10,7 @@ import { Alert, Button, Modal, Select, Space, Spin, Switch } from 'antd'
 import { ArrowLeftOutlined, DownOutlined, MoreOutlined, RedoOutlined, SaveOutlined, UndoOutlined } from '@ant-design/icons'
 import { CanvasToolbarMenu } from './CanvasToolbarMenu'
 import { CanvasTextPreview } from './CanvasTextPreview'
-import { Link, useBeforeUnload, useBlocker, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useBeforeUnload, useBlocker, useLocation, useNavigationType, useParams, useSearchParams } from 'react-router-dom'
 import { ApiError, StudioDirectingService } from '../../../services/generated'
 import type { SceneVersionContent_Output, SceneVersionCopy, SceneVersionCreate, SceneVersionRead, SceneVideoSaveResult, SequenceRead, SourceCanvasNode } from '../../../services/generated'
 import { directingError } from './common'
@@ -74,6 +74,7 @@ const autoSavePreference = 'jellyfish:scene-autosave:local-user'
 /** 只在明确创建时产生方案；保存状态属于同一场次版本，而不是设计草稿。 */
 function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId: string; chapterId: string; sequenceId: string; ownership: SceneEditOwnership }) {
   const [params, setParams] = useSearchParams()
+  const location = useLocation(), navigationType = useNavigationType()
   const copyKey = `jellyfish:scene-copy:${projectId}:${sequenceId}`
   const [copyInitial] = useState(() => {
     try {
@@ -93,7 +94,15 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
   const [sequence, setSequence] = useState<SequenceRead>()
   const [versions, setVersions] = useState<SceneVersionRead[]>([])
   const [draft, setDraft] = useState<Draft>()
-  const [canvas, setCanvas] = useState<'director' | 'units' | 'instructions' | 'edit'>(() => params.has('unitView') ? 'units' : 'director')
+  const [canvas, setCanvas] = useState<'director' | 'units' | 'instructions' | 'edit'>(() => {
+    const requested = params.get('canvas')
+    return requested === 'director' || requested === 'units' || requested === 'instructions' || requested === 'edit' ? requested : params.has('unitView') ? 'units' : 'director'
+  })
+  useEffect(() => {
+    if (navigationType !== 'POP') return
+    const requested = params.get('canvas')
+    if (requested === 'director' || requested === 'units' || requested === 'instructions' || requested === 'edit') setCanvas(requested)
+  }, [location.key, navigationType, params])
   const [unitSelections, setUnitSelections] = useState<Record<string, string>>({})
   const shotUnitSelections = useRef<Record<string, Record<string, string>>>({})
   const rememberUnit = (versionId: string, shotId: string | undefined, unitId: string) => {
@@ -182,6 +191,15 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
     setHistoryNavigating(false); setHistoryNavigationError('')
     return () => { historyNavigationRequest.current += 1 }
   }, [projectId, sequenceId, selectedId, historyTaskId, historyVersionId, historyUnitId, historyTaskKind])
+  const openCanvas = (nextCanvas: typeof canvas) => {
+    const next = new URLSearchParams(params)
+    next.set('canvas', nextCanvas)
+    next.delete('unitView')
+    if (nextCanvas !== 'edit') for (const key of ['editVersion', 'editView', 'editWorkspace']) next.delete(key)
+    setParams(next)
+    if (nextCanvas === 'units') setUnitFocus(undefined)
+    setEditor(undefined); setCanvas(nextCanvas)
+  }
   const leaveUnitSubgraph = () => {
     if (!params.has('unitView')) return
     const next = new URLSearchParams(params)
@@ -941,10 +959,10 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
         {selected && <WorkbenchIconButton label={saveLabel} variant={dirty || videoUnverified ? "primary" : "quiet"} icon={<SaveOutlined />} onClick={() => void save()} disabled={handingOff || !!recovery || !!currentConflict || (!dirty && !pendingSave.current) || !!busy || deliveryBusy || exportBusy || readonly || loadState !== 'ready'} loading={busy === 'save'} />}
       </div>
       <nav className="canvas-toolbar-views" aria-label="画布切换">
-        <WorkbenchButton onClick={() => { leaveUnitSubgraph(); setEditor(undefined); setCanvas('director') }} variant="quiet" aria-pressed={canvas === 'director'}>导演画布</WorkbenchButton>
-        <WorkbenchButton disabled={!selected} onClick={() => { const next = new URLSearchParams(params); next.delete('unitView'); setParams(next); setUnitFocus(undefined); setEditor(undefined); setCanvas('units') }} variant="quiet" aria-pressed={canvas === 'units'}>单元画布</WorkbenchButton>
-        <WorkbenchButton disabled={!selected} onClick={() => { leaveUnitSubgraph(); setEditor(undefined); setCanvas('instructions') }} variant="quiet" aria-pressed={canvas === 'instructions'}>指令画布</WorkbenchButton>
-        <WorkbenchButton disabled={!selected} onClick={() => { leaveUnitSubgraph(); setEditor(undefined); setCanvas('edit') }} variant="quiet" aria-pressed={canvas === 'edit'}>编辑画布</WorkbenchButton>
+        <WorkbenchButton onClick={() => openCanvas('director')} variant="quiet" aria-pressed={canvas === 'director'}>导演画布</WorkbenchButton>
+        <WorkbenchButton disabled={!selected} onClick={() => openCanvas('units')} variant="quiet" aria-pressed={canvas === 'units'}>单元画布</WorkbenchButton>
+        <WorkbenchButton disabled={!selected} onClick={() => openCanvas('instructions')} variant="quiet" aria-pressed={canvas === 'instructions'}>指令画布</WorkbenchButton>
+        <WorkbenchButton disabled={!selected} onClick={() => openCanvas('edit')} variant="quiet" aria-pressed={canvas === 'edit'}>编辑画布</WorkbenchButton>
       </nav>
       <div className="canvas-toolbar-actions">
         <div ref={setPrimaryHost} className="canvas-toolbar-primary">{canvas === 'director' && <span ref={setDesignNextHost} />}</div>

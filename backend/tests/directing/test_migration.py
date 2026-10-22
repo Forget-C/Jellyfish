@@ -91,6 +91,9 @@ def test_foundation_migration_and_next_upgrade():
         review_bases = revision_module('b4e8f2a6c735_index_scene_review_bases.py')
         review_bases.op = migration.op
         review_bases.upgrade()
+        seam_bases = revision_module('c5f9a3b7d846_index_scene_seam_review_bases.py')
+        seam_bases.op = migration.op
+        seam_bases.upgrade()
         context = MigrationContext.configure(connection, opts={"compare_type": True})
         assert not compare_metadata(context, Base.metadata)
         connection.execute(sa.text("INSERT INTO projects (id,name,description,style,visual_style,seed,unify_style,progress,stats) VALUES ('p','p','','drama','live_action',0,1,0,'{}')"))
@@ -130,7 +133,7 @@ def test_foundation_migration_and_next_upgrade():
             cut_reviews.downgrade()
         assert connection.scalar(sa.text("SELECT COUNT(*) FROM directing_scene_cut_reviews")) == 1
         connection.execute(sa.text("DELETE FROM directing_scene_cut_reviews"))
-        connection.execute(sa.text("INSERT INTO directing_scene_seam_reviews (id,version_id,request_id,review,content) VALUES ('seam-review','v','request','{}','{}')"))
+        connection.execute(sa.text("INSERT INTO directing_scene_seam_reviews (id,version_id,request_id,review,content,basis_key) VALUES ('seam-review','v','request','{}','{}','fixture')"))
         with pytest.raises(RuntimeError, match='Scene seam reviews exist'):
             seam_reviews.downgrade()
         assert connection.scalar(sa.text("SELECT COUNT(*) FROM directing_scene_seam_reviews")) == 1
@@ -153,6 +156,7 @@ def test_foundation_migration_and_next_upgrade():
         assert connection.scalar(sa.text("SELECT COUNT(*) FROM directing_scene_copy_origins")) == 1
         connection.execute(sa.text("DELETE FROM directing_scene_copy_origins"))
         copies.downgrade()
+        seam_bases.downgrade()
         seam_reviews.downgrade()
         cut_reviews.downgrade()
         connection.execute(sa.text("DELETE FROM directing_scene_versions"))

@@ -1,8 +1,6 @@
 """已鉴权场次快照的整场采用投影；不调用高层版本读取或读取媒体字节。"""
 
-from types import SimpleNamespace
-
-from sqlalchemy import select, tuple_, func, or_
+from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.directing.canvas_graph import (
@@ -12,10 +10,9 @@ from app.core.contracts.directing.canvas_graph import (
 )
 from app.models.directing import Take, SceneTakeRecord, SceneVideoExecution, SceneVersionRecord
 from app.models.studio import FileItem
-from app.core.contracts.directing.scene_timeline import SceneTimeline
 from app.core.contracts.directing.scene_seam_review import SceneSeamReviewCreate
-from app.models.directing import SceneSeamReviewRecord
-from app.services.directing.seam_basis import scene_seam_bases, seam_review_query
+from app.services.directing.seam_basis import scene_seam_bases, latest_seam_reviews
+from app.services.directing.review_basis_key import review_basis_key
 from app.services.directing.canvas_graph import CanvasReadContext, GraphAssembler
 from app.services.directing.scene_take_evidence import latest_take_reviews
 
@@ -112,26 +109,17 @@ async def edit_graph(context: CanvasReadContext, db: AsyncSession, sequence_id: 
     bases = scene_seam_bases(context.content)
     reviews, failures = {}, {}
     if bases:
-        # 只取局部比较所需时间线和输出比例，完整历史正文留在原按需入口。
-        rows = await db.execute(seam_review_query(context.version_id, inherited_seams).with_only_columns(
-            SceneSeamReviewRecord.id, SceneSeamReviewRecord.version_id, SceneSeamReviewRecord.review,
-            SceneSeamReviewRecord.content['timeline'], SceneSeamReviewRecord.content['output_aspect_ratio']).where(
-                tuple_(SceneSeamReviewRecord.review['left_clip_id'].as_string(),
-                    SceneSeamReviewRecord.review['right_clip_id'].as_string()).in_(list(bases))))
-        for record_id, version_id, review, timeline, ratio in rows:
+        rows = await latest_seam_reviews(db, context.version_id, inherited_seams, bases)
+        for record_id, version_id, review, basis_key in rows:
             pair = (review.get('left_clip_id'), review.get('right_clip_id'))
             if pair not in bases:
                 continue
             try:
                 request = SceneSeamReviewCreate.model_validate(review)
-                original = scene_seam_bases(SimpleNamespace(timeline=SceneTimeline.model_validate(timeline),
-                    output_aspect_ratio=ratio)).get(pair)
-                if original is None:
-                    raise ValueError('固定接缝依据无效，请核对原记录')
                 summary = EditSeamReviewSummary(id=record_id, version_id=version_id,
                     revision=request.expected_revision, **request.decision.model_dump())
-                applicable = original == bases[pair]
-                if pair not in reviews or applicable or not reviews[pair][1]:
+                applicable = basis_key == review_basis_key(bases[pair])
+                if pair not in reviews or applicable and not reviews[pair][1]:
                     reviews[pair] = (summary, applicable)
             except ValueError:
                 failures[pair] = '接缝审查依据读取失败，请从原记录核对并重试'

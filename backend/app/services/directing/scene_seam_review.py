@@ -9,7 +9,7 @@ from app.core.contracts.directing.scene_version import SceneVersionContent
 from app.models.directing import SceneSeamReviewRecord
 from app.models.studio import Chapter
 from app.services.directing.store import DirectingStore, RevisionConflict
-from app.services.directing.seam_basis import scene_seam_basis, seam_review_query
+from app.services.directing.seam_basis import scene_seam_basis, seam_review_query, seam_review_basis_key
 
 
 
@@ -55,6 +55,7 @@ class SceneSeamReviewService(DirectingStore):
             raise ValueError('所选片段未直接相接，或包含待拍占位；不能作为真实接缝审查')
         await self.validate_scene_content(sequence, version.content, previous=version.content)
         row = SceneSeamReviewRecord(id=uuid4().hex, version_id=version_id, request_id=body.request_id,
+            basis_key=seam_review_basis_key(version.content, body.left_clip_id, body.right_clip_id),
             review=body.model_dump(mode='json'), content=version.content.model_dump(mode='json'))
         self.db.add(row)
         await self.protect_scene_review_files(sequence, row.content, 'scene-seam-review:' + row.id)

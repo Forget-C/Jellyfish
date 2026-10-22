@@ -36,3 +36,40 @@ def test_review_basis_upgrade_backfills_old_json_and_downgrades_without_losing_e
             assert connection.execute(sa.select(table.c.content).where(table.c.id.in_(['a', 'b'])).order_by(table.c.id)).scalars().all() == [old, equivalent]
             assert connection.scalar(sa.select(sa.func.count()).select_from(table)) == 72
             assert 'basis_key' not in {column['name'] for column in sa.inspect(connection).get_columns(table.name)}
+
+
+def test_seam_basis_upgrade_preserves_history_and_ignores_pair_translation():
+    engine = sa.create_engine('sqlite://')
+    content = {'basis': {'source': {'kind': 'chapter', 'reference': 'c', 'version': '1'}, 'text': '原文'},
+        'design': editable_design_sample(), 'timeline': {'items': [
+            {'kind': 'media', 'id': 'a:b', 'take_kind': 'scene_video', 'take_id': 'take', 'file_id': 'file',
+                'media_range': {'source_in_ms': 0, 'source_out_ms': 1000}, 'timeline_start_ms': 0},
+            {'kind': 'media', 'id': 'c', 'take_kind': 'scene_video', 'take_id': 'take', 'file_id': 'file',
+                'media_range': {'source_in_ms': 1000, 'source_out_ms': 2000}, 'timeline_start_ms': 1000}]}}
+    from copy import deepcopy
+    shifted = deepcopy(content)
+    for item in shifted['timeline']['items']:
+        item['timeline_start_ms'] += 500
+    changed = deepcopy(content)
+    changed['timeline']['items'][0]['fit'] = 'cover'
+    review = {'left_clip_id': 'a:b', 'right_clip_id': 'c'}
+    table = sa.Table('directing_scene_seam_reviews', sa.MetaData(), sa.Column('id', sa.String(64), primary_key=True),
+        sa.Column('version_id', sa.String(64)), sa.Column('review', sa.JSON()), sa.Column('content', sa.JSON()))
+    with engine.begin() as connection:
+        table.create(connection)
+        connection.execute(table.insert(), [{'id': f'old-{index:03}', 'version_id': 'v', 'review': review,
+            'content': content if index % 2 else shifted} for index in range(70)] + [
+            {'id': 'changed', 'version_id': 'v', 'review': review, 'content': changed}])
+        migration = revision_module('c5f9a3b7d846_index_scene_seam_review_bases.py')
+        migration.op = Operations(MigrationContext.configure(connection))
+        migration.upgrade()
+        columns = {column['name']: column for column in sa.inspect(connection).get_columns(table.name)}
+        assert columns['basis_key']['nullable'] is False
+        keys = connection.execute(sa.text('SELECT basis_key FROM directing_scene_seam_reviews WHERE id LIKE :prefix'), {'prefix': 'old-%'}).scalars().all()
+        assert len(keys) == 70 and len(keys[0]) == 64 and len(set(keys)) == 1
+        assert connection.scalar(sa.text("SELECT basis_key FROM directing_scene_seam_reviews WHERE id='changed'")) != keys[0]
+        migration.downgrade()
+        assert connection.scalar(sa.select(sa.func.count()).select_from(table)) == 71
+        assert connection.scalar(sa.select(table.c.content).where(table.c.id == 'old-001')) == content
+        assert 'basis_key' not in {column['name'] for column in sa.inspect(connection).get_columns(table.name)}
+    engine.dispose()
