@@ -22,7 +22,7 @@ export async function checkWorkbenchStyleDetails(page, output) {
   await capture('details-location-active')
   await page.keyboard.press('Escape')
   await page.getByRole('button', { name: '关联项目资产', exact: true }).click()
-  await page.getByRole('complementary', { name: '项目资产关联', exact: true }).waitFor()
+  await page.getByRole('complementary', { name: '设置默认资产', exact: true }).waitFor()
   await capture('details-asset-modal')
   await page.getByRole('button', { name: '关闭详情', exact: true }).click()
   const version = page.getByRole('button', { name: '版本管理', exact: true })

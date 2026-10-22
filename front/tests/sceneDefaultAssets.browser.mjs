@@ -1,6 +1,4 @@
-import { makeWorkspace } from './directing-fixtures.mjs'
-import { workbenchControl, workbenchShot, closeWorkbenchDetails } from './workbenchControls.mjs'
-import { unitSettings, selectWorkbenchOption, locateCanvasNode } from './workbenchControls.mjs'
+import { workbenchShot, selectWorkbenchOption, locateCanvasNode } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -85,7 +83,7 @@ try {
     await page.getByRole('combobox', { name: '当前单元', exact: true }).press('ArrowDown')
     await page.getByRole('combobox', { name: '当前单元', exact: true }).press('Enter')
     await locateCanvasNode(page, '参考素材')
-    await page.locator('[data-canvas-node="unit:unit:references"]').getByRole('button', { name: /编辑本单元参考|编辑参考素材/ }).click()
+    await page.locator('[data-canvas-node="unit:unit:references"]').getByRole('button', { name: /^查看节点：/ }).click()
     return page.getByRole('dialog').last()
   }
   let dialog = await open()
@@ -130,6 +128,20 @@ try {
     assert.equal(await dialog.getByRole('img', { name: '参考图 1', exact: true }).count(), 0)
     await dialog.getByRole('button', { name: /取\s*消/ }).click()
   }
+  const removed = await fetch(`${api}/api/v1/studio/entities/character/${assets[2].id}`, { method: 'DELETE' })
+  assert.ok(removed.ok, await removed.text())
+  dialog = await open()
+  await dialog.getByText('默认资产不可用：读信者角色。可独立选择其他素材。', { exact: true }).waitFor()
+  await selectWorkbenchOption(page, '本次素材资产', '手动乙')
+  await dialog.getByRole('button', { name: '选入 手动乙 图片 1', exact: true }).waitFor()
+  await dialog.getByRole('button', { name: /取\s*消/ }).click()
+  await page.getByRole('button', { name: '导演画布', exact: true }).click()
+  const overview = page.getByRole('button', { name: '总览', exact: true })
+  if (await overview.isEnabled()) await overview.click()
+  await locateCanvasNode(page, '本场场所')
+  await page.locator('[data-canvas-node="location"]').getByRole('button', { name: '设置默认资产', exact: true }).click()
+  await page.getByRole('complementary', { name: /设置默认资产/ }).waitFor()
+  await page.getByText('默认资产随设计保存，仅用于单元选材候选。解除或修改默认不会更改已选参考；单元也可独立选择其他项目资产。', { exact: true }).waitFor()
   console.log(`PASS independent default candidates and chosen reference: ${output}`)
 } catch (error) {
   if (page) await page.screenshot({ path: join(output, 'failure.png'), fullPage: true, animations: 'disabled' }).catch(() => {})

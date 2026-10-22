@@ -59,9 +59,13 @@ export function ReferencePicker({ rootClassName, projectId, assets, assetError, 
   const inputRole = role && roles.includes(role) ? role : roles.includes('subject') ? 'subject' : roles[0]
   const candidates = design.participants.filter(person => related.has(person.id))
   const linked = (assets || []).filter(asset => asset.kind === 'scene' ? design.direction.location_asset_id === asset.id : candidates.some(person => (asset.kind === 'character' ? person.character_id : person.prop_id) === asset.id))
-  const unavailableDefaults = candidates.filter(person => (person.character_id || person.prop_id) && !(assets || []).some(asset => asset.id === (asset.kind === 'character' ? person.character_id : asset.kind === 'prop' ? person.prop_id : undefined))).map(person => person.name)
+  const unavailableDefaults: string[] = []
+  for (const person of candidates) {
+    if (person.character_id && !(assets || []).some(asset => asset.kind === 'character' && asset.id === person.character_id)) unavailableDefaults.push(person.name + '角色')
+    if (person.prop_id && !(assets || []).some(asset => asset.kind === 'prop' && asset.id === person.prop_id)) unavailableDefaults.push(person.name + '物件')
+  }
   if (design.direction.location_asset_id && !(assets || []).some(asset => asset.kind === 'scene' && asset.id === design.direction.location_asset_id)) unavailableDefaults.push('本场场所')
-  const matching = assetId ? (assets || []).filter(asset => asset.id === assetId) : linked.filter(asset => asset.kind === 'scene' ? location || !participantIds.length : !participantIds.length || design.participants.some(person => participantIds.includes(person.id) && (asset.kind === 'character' ? person.character_id : person.prop_id) === asset.id))
+  const matching = assetId ? (assets || []).filter(asset => asset.id === assetId) : linked.filter(asset => asset.kind === 'scene' ? location || !participantIds.length : !location && (!participantIds.length || design.participants.some(person => participantIds.includes(person.id) && (asset.kind === 'character' ? person.character_id : person.prop_id) === asset.id)))
   const load = async (next = 1, all = global) => {
     const id = ++request.current
     setLoading(true); setError('')

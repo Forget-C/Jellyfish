@@ -55,7 +55,7 @@ async function locationAssets(target) {
   await directorSelect(target, '设计域', '导演画布')
   await target.getByRole('button', { name: '定位画布节点', exact: true }).click()
   await target.getByRole('menuitem', { name: '本场场所', exact: true }).click()
-  await target.locator('[data-canvas-node="location"]').getByRole('button', { name: '编辑场所资产绑定' }).click()
+  await target.locator('[data-canvas-node="location"]').getByRole('button', { name: '设置默认资产' }).click()
 }
 
 try {
@@ -415,7 +415,7 @@ try {
   const participant = page.locator(`[data-canvas-node="participant:${assetDesign.participants[0].id}"]`)
   await page.getByRole('button', { name: '定位画布节点', exact: true }).click()
   await page.getByRole('menuitem', { name: '人物 / 物件 01 · 项目读信者', exact: true }).click()
-  await participant.getByRole('button', { name: '编辑资产绑定' }).click()
+  await participant.getByRole('button', { name: '设置默认资产' }).click()
   await page.getByRole('button', { name: '解除项目读信者角色关联', exact: true }).click()
   await directorSelect(page, '项目读信者角色关联', '项目读信者')
   await page.screenshot({ path: join(output, 'asset-links.png'), fullPage: true, animations: 'disabled' })
@@ -608,7 +608,13 @@ try {
   await page.goto(`${currentUrl.split('?')[0]}?version=${first[0].id}`)
   await page.getByRole('link', { name: '返回待恢复版本', exact: true }).click()
   await page.getByRole('button', { name: '恢复编辑', exact: true }).waitFor()
-  assert.equal(page.url(), currentUrl)
+  const restoredUrl = new URL(page.url())
+  const expectedUrl = new URL(currentUrl)
+  assert.equal(restoredUrl.origin + restoredUrl.pathname, expectedUrl.origin + expectedUrl.pathname)
+  assert.equal(restoredUrl.searchParams.get('canvas') || 'director', expectedUrl.searchParams.get('canvas') || 'director')
+  restoredUrl.searchParams.delete('canvas')
+  expectedUrl.searchParams.delete('canvas')
+  assert.deepEqual([...restoredUrl.searchParams].sort(), [...expectedUrl.searchParams].sort())
   await page.getByRole('button', { name: '丢弃本地编辑', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   const currentVersionId = new URL(currentUrl).searchParams.get('version')
