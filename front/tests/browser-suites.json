@@ -1,6 +1,7 @@
 {
   "preflight": "preflight.mjs",
   "cases": {
+    "instruction-card": { "file": "sceneInstructionCard.browser.mjs", "ports": [4262, 8262], "timeoutMs": 180000 },
     "browse-controls": { "file": "sceneBrowseControls.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 },
     "unit-design": { "file": "sceneUnitDesign.browser.mjs", "ports": [4247, 8247], "timeoutMs": 300000 },
     "instruction-preparation": { "file": "sceneInstructionPreparation.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 },
