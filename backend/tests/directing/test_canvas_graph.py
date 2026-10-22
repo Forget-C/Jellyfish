@@ -438,13 +438,14 @@ async def test_unit_reference_graph_preserves_binding_roles_order_and_live_file_
             'request_id': str(uuid4()), 'title': '参考集合证据',
         })).json()['data']
         content = deepcopy(version['content'])
+        content['design']['participants'] = [{'id': 'person', 'name': '对象'}]
         content['design']['direction']['shots'] = [{
             'id': 'shot', 'beat_ids': [], 'event_ids': [], 'blocking_state_ids': [],
             'participant_ids': [], 'criterion_ids': [], 'visible_result': {}, 'narrative_function': {},
         }]
         def binding(key, role, ordinal, purpose):
             return {'id': key, 'file_id': 'image1', 'media_kind': 'image', 'purpose': purpose,
-                    'participant_ids': [], 'ordinal': ordinal, 'input_role': role,
+                    'participant_ids': ['person'] if purpose == 'identity' else [], 'ordinal': ordinal, 'input_role': role,
                     'source': {'kind': 'file', 'reference': 'image1', 'version': '1', 'file_id': 'image1'}}
         content['units'] = [
             {'id': 'first', 'coverage': [{'id': 'c1', 'shot_id': 'shot', 'action_scope': '开门'}],

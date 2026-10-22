@@ -649,7 +649,7 @@ async def test_default_preference_changes_preserve_instruction_and_preflight(tmp
             import asyncio
             import httpx
             from app.task_worker import TaskWorker
-            fixed_executions = []
+            fixed_executions = {}
             for bytes_available in [True, False]:
                 if not bytes_available:
                     reference_storage.pop('/scene-test/files/space.png')
@@ -670,7 +670,7 @@ async def test_default_preference_changes_preserve_instruction_and_preflight(tmp
                              if row['task_id'] == submitted_video.json()['data']['task_id'])
                 assert video['preparation']['inputs']['unit']['references'][0]['file_id'] == 'image1'
                 assert video['takes'] == []
-                fixed_executions.append(video['preparation'])
+                fixed_executions[video['task_id']] = video['preparation']
                 if bytes_available:
                     assert video['status'] == 'running'
                     assert provider_requests[0]['input_reference']['image_url'] == 'data:image/png;base64,b3JpZ2luYWwtcmVmZXJlbmNl'
@@ -718,8 +718,9 @@ async def test_default_preference_changes_preserve_instruction_and_preflight(tmp
             async with sessions.begin() as db:
                 await db.execute(delete(FileUsage).where(FileUsage.file_id == 'image1'))
                 db.add(FileUsage(file_id='image1', project_id='p1', usage_kind='upload', source_ref='restored'))
-            assert [row['preparation'] for row in reversed((await client.get(unit_url + '/video')).json()['data'])] == fixed_executions
-            assert (await client.get(unit_url + '/video')).json()['data'][-1]['takes'] == fixed_takes
+            final_executions = (await client.get(unit_url + '/video')).json()['data']
+            assert {row['task_id']: row['preparation'] for row in final_executions} == fixed_executions
+            assert next(row for row in final_executions if row['task_id'] == completed['task_id'])['takes'] == fixed_takes
         changed = deepcopy(content)
         changed['units'][0]['references'] = []
         compared = await client.post(unit_url + '/instruction-checks/' + check_id + '/compare', json={'content': changed})

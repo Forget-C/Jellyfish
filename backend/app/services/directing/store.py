@@ -351,6 +351,80 @@ class DirectingStore:
                     source_ref=source_ref)
         return await self.read_scene_version(sequence_id, version_id)
 
+    async def cleanup_identity_references(self, sequence_id, version_id, body):
+        """显式 CAS 整理保存过的当前编辑数据，不扫描或重写任何固定历史。
+
+        合规组即使文件失效仍保留，因此不能调用普通保存的全量文件有效性检查。
+        仅在原始组不合规且必须选择幸存者时核实文件及项目访问权限。
+        """
+        from copy import deepcopy  # pylint: disable=import-outside-toplevel
+        from app.core.contracts.directing.production import ReferenceBinding  # pylint: disable=import-outside-toplevel
+        from app.services.directing.identity_references import identity_classification  # pylint: disable=import-outside-toplevel
+        sequence = await self.sequence(sequence_id)
+        await self.db.scalar(select(Chapter).where(Chapter.id == sequence.chapter_id).with_for_update())
+        await self.current_sequence(sequence_id)
+        row = await self.db.get(SceneVersionRecord, version_id, populate_existing=True)
+        if row is None or row.sequence_id != sequence_id:
+            raise ValueError('scene version not found in sequence')
+        request_id = 'cleanup:' + sha256(body.request_id.encode()).hexdigest()[:56]
+        if row.last_save_request_id == request_id and row.revision == body.expected_revision + 1:
+            return await self.read_scene_version(sequence_id, version_id)
+        if row.revision != body.expected_revision:
+            raise RevisionConflict('场次版本已变化，请重新读取后整理')
+        content = deepcopy(row.content)
+        original_files = {ref['file_id'] for unit in content['units'] for ref in unit.get('references', [])}
+        participants = {person['id'] for person in content['design']['participants']}
+        for unit in content['units']:
+            bindings = [ReferenceBinding.model_validate(ref) for ref in unit.get('references', [])]
+            groups, invalid, conflicts = identity_classification(bindings, participants)
+            removed = {ref.id for key in invalid for ref in groups[key]}
+            for owner in conflicts:
+                candidates = sorted((ref for group in groups.values() for ref in group
+                    if owner in ref.participant_ids), key=lambda ref: ref.ordinal)
+                chosen = None
+                for ref in candidates:
+                    if ref.id in removed:
+                        continue
+                    try:
+                        await require_available_file(self.db, file_id=ref.file_id, expected_type=ref.media_kind)
+                    except (ValueError, HTTPException):
+                        continue
+                    projects = set(await self.db.scalars(select(FileUsage.project_id).where(FileUsage.file_id == ref.file_id)))
+                    if projects and self.project_id not in projects:
+                        continue
+                    chosen = ref.id
+                    break
+                removed.update(ref.id for ref in candidates if ref.id != chosen)
+            unit['references'] = [ref for ref in unit.get('references', []) if ref['id'] not in removed]
+        if content == row.content:
+            return await self.read_scene_version(sequence_id, version_id)
+        # 只校验整理后契约和新主体约束；保留未知能力、缺文件及其他真实缺项。
+        parsed = SceneVersionContent.model_validate(content)
+        from app.services.directing.identity_references import validate_identity_references  # pylint: disable=import-outside-toplevel
+        validate_identity_references(parsed.units, participants)
+        async with self.db.begin_nested():
+            result = await self.db.execute(update(SceneVersionRecord).where(
+                SceneVersionRecord.id == version_id, SceneVersionRecord.revision == body.expected_revision,
+            ).values(content=content, revision=SceneVersionRecord.revision + 1, last_save_request_id=request_id))
+            if result.rowcount != 1:
+                raise RevisionConflict('场次版本已变化，请重新读取后整理')
+            # 只释放本版本已不再引用的文件；历史任务等各自的保护记录不动。
+            remaining_files = set()
+            pending = [content]
+            while pending:
+                value = pending.pop()
+                if isinstance(value, dict):
+                    if value.get('file_id'):
+                        remaining_files.add(value['file_id'])
+                    pending.extend(value.values())
+                elif isinstance(value, list):
+                    pending.extend(value)
+            await self.db.execute(delete(FileUsage).where(FileUsage.project_id == self.project_id,
+                FileUsage.usage_kind == FileUsageKind.directing_reference,
+                FileUsage.source_ref == 'scene-version:' + version_id,
+                FileUsage.file_id.in_(original_files - remaining_files)))
+        return await self.read_scene_version(sequence_id, version_id)
+
     async def _record_scene_take_reviews(self, sequence, previous, content):
         """判断变更与方案保存同事务固定；幂等重放在保存入口直接返回。"""
         prior = {(item.take_kind, item.take_id): item for item in previous.content.take_judgments}
@@ -576,6 +650,8 @@ class DirectingStore:
         if previous is not None:
             validate_new_design_row_ids(content.design, previous.design)
         _, files, _ = await self._validate(sequence, content.design, previous_design=previous.design if previous else None)
+        from app.services.directing.identity_references import validate_identity_references  # pylint: disable=import-outside-toplevel
+        validate_identity_references(content.units, {person.id for person in content.design.participants})
         await self._validate_asset_origins(content, previous)
         for unit in content.units:
             if unit.model_id:

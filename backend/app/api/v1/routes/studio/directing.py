@@ -48,7 +48,7 @@ from app.core.contracts.directing.scene_copy import SceneVersionCopy, SceneCopyR
 from app.services.directing.scene_copy import SceneCopyService
 from app.core.contracts.directing.scene_export import SceneExportRequest, SceneExportRead, SceneExportRetry, SceneExportInspect, SceneExportInspection
 from app.services.directing.scene_export import SceneExportService
-from app.core.contracts.directing.scene_version import SceneVersionCreate, SceneVersionRead, SceneVersionSave, SceneVersionContent
+from app.core.contracts.directing.scene_version import SceneIdentityCleanup, SceneVersionCreate, SceneVersionRead, SceneVersionSave, SceneVersionContent
 from app.core.contracts.directing.scene_design import SceneDesignRequest, SceneDesignPreviewRequest, SceneDesignPreview, SceneDesignSuggestionRead
 from app.services.directing.scene_design import SceneDesignService
 from app.services.directing.scene_unit_design import SceneUnitDesignService
@@ -185,6 +185,12 @@ async def scene_version(project_id: str, sequence_id: str, version_id: str, db: 
 async def save_scene_version(project_id: str, sequence_id: str, version_id: str, body: SceneVersionSave, db: AsyncSession = Depends(get_db, scope='function')):
     """更新同一版本，保存并不确认设计或发起执行。"""
     return success_response(await _call(DirectingStore(db, project_id).save_scene_version(sequence_id, version_id, body)))
+
+
+@router.post('/sequences/{sequence_id}/versions/{version_id}/identity-references/cleanup', response_model=ApiResponse[SceneVersionRead], operation_id='directing_cleanup_identity_references')
+async def cleanup_identity_references(project_id: str, sequence_id: str, version_id: str, body: SceneIdentityCleanup, db: AsyncSession = Depends(get_db, scope='function')):
+    """受控整理已保存的可编辑身份参考；业务范围和 CAS 由存储层核实。"""
+    return success_response(await _call(DirectingStore(db, project_id).cleanup_identity_references(sequence_id, version_id, body)))
 
 
 @router.get('/sequences/{sequence_id}/versions/{version_id}/copy-readiness', response_model=ApiResponse[SceneCopyReadiness], operation_id='directing_scene_copy_readiness')
