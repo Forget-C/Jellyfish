@@ -4,9 +4,11 @@ import { StudioDirectingService } from '../../../services/generated'
 import type { ContinuityRead, GenerationUnit_Input, UnitDependency, WorkspaceRead } from '../../../services/generated'
 import { buildFileDownloadUrl } from '../assets/utils'
 import { directingError } from './common'
+import type { ScenePredecessorSelection } from './ScenePredecessorDialog'
 
 /** 显式声明历史单元依赖，选入实际落幅时同时建立真实图片输入绑定。 */
-export function DependencyEditor({ projectId, workspace, unit, onChange, disabled, selectedSource, sceneVersion = false }: {
+export function DependencyEditor({ projectId, workspace, unit, onChange, disabled, selectedSource, sceneVersion = false, onSceneSelect }: {
+  onSceneSelect?: (selection: ScenePredecessorSelection) => void;
   sceneVersion?: boolean; selectedSource?: { planId: string; unitId: string };
   projectId: string; workspace: WorkspaceRead; unit: Pick<GenerationUnit_Input, 'references' | 'dependencies'>; onChange: (value: Partial<Pick<GenerationUnit_Input, 'references' | 'dependencies'>>) => void; disabled: boolean
 }) {
@@ -32,7 +34,9 @@ export function DependencyEditor({ projectId, workspace, unit, onChange, disable
     if (!source) return
     const [plan_revision_id, unit_id] = source.split('/')
     if (unit.dependencies?.some(link => link.plan_revision_id === plan_revision_id && link.unit_id === unit_id)) return
-    onChange({ dependencies: [...unit.dependencies || [], { plan_revision_id, unit_id }] }); setSource(undefined)
+    if (onSceneSelect) onSceneSelect({ kind: 'plan', link: { plan_revision_id, unit_id } })
+    else onChange({ dependencies: [...unit.dependencies || [], { plan_revision_id, unit_id }] })
+    setSource(undefined)
   }
   /** 明确替换该依赖的证据输入，保留其他参考和历史计划身份。 */
   const bind = (link: UnitDependency, frameId: string) => {
@@ -44,6 +48,7 @@ export function DependencyEditor({ projectId, workspace, unit, onChange, disable
       participant_ids: existing?.participant_ids || [], ordinal: existing?.ordinal ?? Math.max(-1, ...unit.references.map(ref => ref.ordinal)) + 1,
       input_role: existing?.input_role || (unit.references.some(ref => ref.input_role === 'first_frame') ? 'subject' as const : 'first_frame' as const),
       source: { kind: 'human' as const, reference: 'local-user', version: 'actual-frame-1' } }
+    if (onSceneSelect) { onSceneSelect({ kind: 'plan', link: { ...link, frame_id: frame.id, reference_id: referenceId }, reference }); return }
     onChange({ dependencies: (unit.dependencies || []).map(row => row === link ? { ...row, frame_id: frame.id, reference_id: referenceId } : row),
       references: existing ? unit.references.map(ref => ref.id === referenceId ? reference : ref) : [...unit.references, reference] })
   }
@@ -52,7 +57,7 @@ export function DependencyEditor({ projectId, workspace, unit, onChange, disable
       {reading && <p>正在核实实际落幅</p>}
       {error && <Alert type="error" message="实际落幅读取失败" description={error} />}
       {!options.length && <p>当前暂无已确认的来源单元</p>}
-      <Typography.Text type="secondary">{sceneVersion ? '选择固定拍摄依据中的来源单元，再绑定当前实际采用的落幅。' : '选择已确认计划中的来源单元，再绑定当前实际采用的落幅。'}参考输入位置可在下方调整，多个首帧或不支持的输入会阻止提交。</Typography.Text>
+      <Typography.Text type="secondary">{sceneVersion ? '历史来源占用本单元承接位置；重新选择会明确替换为一个前段和首帧。' : '选择已确认计划中的来源单元，再绑定当前实际采用的落幅。'}{!sceneVersion && '参考输入位置可在下方调整，多个首帧或不支持的输入会阻止提交。'}</Typography.Text>
       <Space wrap><Select aria-label="前段来源单元" disabled={disabled} showSearch optionFilterProp="label" placeholder={sceneVersion ? '选择固定依据与来源单元' : '选择来源计划与单元'} style={{ width: 350 }} value={source} options={options} onChange={setSource} /><Button disabled={disabled || !source} onClick={add}>声明依赖</Button><Button onClick={() => setAttempt(value => value + 1)}>刷新实际落幅</Button></Space>
       {(unit.dependencies || []).filter(link => !selectedSource || link.plan_revision_id === selectedSource.planId && link.unit_id === selectedSource.unitId).map((link, index) => {
         const frame = state?.frames.find(row => row.id === link.frame_id)

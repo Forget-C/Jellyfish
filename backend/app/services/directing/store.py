@@ -374,6 +374,17 @@ class DirectingStore:
             source_versions={source.source.version for source in source_bases})
         files = await self.validate_scene_content(basis, body.content, previous=current.content)
         for unit in body.content.units:
+            previous_unit = next((item for item in current.content.units if item.id == unit.id), None)
+            changed = self._changed_scene_predecessors(unit, previous_unit)
+            scene_links = [link for link in changed if link in unit.scene_dependencies and link.frame_id]
+            plan_links = [link for link in changed if link in unit.dependencies and link.frame_id]
+            if scene_links:
+                await self.require_scene_dependencies(sequence_id, version_id,
+                    unit.model_copy(update={'scene_dependencies': scene_links}), body.content)
+            if plan_links:
+                errors = await self.continuity_errors(sequence_id, unit.model_copy(update={'dependencies': plan_links}))
+                if errors:
+                    raise RevisionConflict('；'.join(errors))
             if unit.instruction_basis_id:
                 await self.instruction_basis(version_id, unit.id, unit.instruction_basis_id)
             if unit.instruction_check_task_id:
@@ -705,6 +716,7 @@ class DirectingStore:
         content = SceneVersionContent.model_validate(content.model_dump(mode='json'))
         if previous is not None:
             validate_new_design_row_ids(content.design, previous.design)
+            self._validate_scene_predecessor_changes(content, previous)
         _, files, _ = await self._validate(sequence, content.design, previous_design=previous.design if previous else None)
         from app.services.directing.identity_references import validate_identity_references  # pylint: disable=import-outside-toplevel
         validate_identity_references(content.units, {person.id for person in content.design.participants})
@@ -749,6 +761,33 @@ class DirectingStore:
         for file_id in files:
             await require_available_file(self.db, file_id=file_id)
         return files
+
+    @staticmethod
+    def _changed_scene_predecessors(unit, old):
+        """只比较承接证据和输入位置，参考排序等无关编辑不重配旧来源。"""
+        old_links = [*old.scene_dependencies, *old.dependencies] if old else []
+        def binding(reference):
+            return reference.model_dump(include={'file_id', 'media_kind', 'input_role', 'purpose', 'source'}) if reference else None
+        return [link for link in [*unit.scene_dependencies, *unit.dependencies]
+                if link not in old_links or binding(next((item for item in unit.references if item.id == link.reference_id), None))
+                != binding(next((item for item in old.references if item.id == link.reference_id), None) if old else None)]
+
+    @classmethod
+    def _validate_scene_predecessor_changes(cls, content: SceneVersionContent, previous: SceneVersionContent):
+        """场次工作台新承接只占一个首帧；历史列表原样保留，不改旧计划契约。"""
+        for unit in content.units:
+            old = next((item for item in previous.units if item.id == unit.id), None)
+            links = [*unit.scene_dependencies, *unit.dependencies]
+            old_links = [*old.scene_dependencies, *old.dependencies] if old else []
+            changed = cls._changed_scene_predecessors(unit, old)
+            if (links != old_links or changed) and len(links) > 1:
+                raise ValueError(f'单元 {unit.id} 重新配置承接时只能选择一个前段，请明确替换原依赖')
+            for link in changed:
+                if not link.reference_id:
+                    continue
+                reference = next((item for item in unit.references if item.id == link.reference_id), None)
+                if reference is None or reference.input_role != 'first_frame':
+                    raise ValueError(f'单元 {unit.id} 的承接前段落幅必须绑定首帧，请明确替换当前首帧')
 
     @staticmethod
     def scene_frame_source(frame: SceneEndFrameRecord) -> Source:

@@ -88,6 +88,10 @@ export function UnitGraphCanvas({ graph, content, unitId, versionId, revision, s
         </div>
         <div className="unit-graph-actions">
           {node.kind === 'unit_references' && <WorkbenchButton onClick={() => onReference(node)}>{node.binding_count ? '编辑参考' : node.input_role === 'subject' ? '添加参考组' : `添加${node.title}`}</WorkbenchButton>}
+          {node.kind === 'unit_references' && node.summary.some(field => field.field === 'predecessor') && <WorkbenchButton onClick={() => {
+            const dependency = graph.nodes.find(candidate => candidate.kind === 'unit_config' && candidate.unit_id === node.unit_id && candidate.config_kind === 'dependencies')
+            if (dependency) onInspect(dependency)
+          }}>定位承接片段与取帧依据</WorkbenchButton>}
           {node.kind === 'unit_basis' && <WorkbenchButton onClick={() => onInspect(node)}>查看执行依据</WorkbenchButton>}
           {node.edit_target && node.kind !== 'unit_references' && <WorkbenchButton onClick={() => onInspect(node)}>查看详情</WorkbenchButton>}
         </div>
