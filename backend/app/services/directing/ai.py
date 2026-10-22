@@ -143,12 +143,14 @@ def generate_directing_result(kind: str, llm, args: dict):
                 validate_new_design_row_ids(result, original)
                 if args.get('existing_assets') is not None:
                     assets = {(row['kind'], row['id']) for row in args['existing_assets']}
+                    previous_participants = {row.id: row for row in original.participants}
                     for participant in result.participants:
-                        if participant.character_id and ('character', participant.character_id) not in assets:
+                        old = previous_participants.get(participant.id)
+                        if participant.character_id and (old is None or old.character_id != participant.character_id) and ('character', participant.character_id) not in assets:
                             raise ValueError('人物引用了当前项目不存在的角色资产')
-                        if participant.prop_id and ('prop', participant.prop_id) not in assets:
+                        if participant.prop_id and (old is None or old.prop_id != participant.prop_id) and ('prop', participant.prop_id) not in assets:
                             raise ValueError('参与对象引用了当前项目不存在的道具资产')
-                    if result.direction.location_asset_id and ('scene', result.direction.location_asset_id) not in assets:
+                    if result.direction.location_asset_id and result.direction.location_asset_id != original.direction.location_asset_id and ('scene', result.direction.location_asset_id) not in assets:
                         raise ValueError('场所引用了当前项目不存在的场所资产')
                 if args.get('design_scope'):
                     from app.services.directing.scene_design_scope import validate_design_scope  # pylint: disable=import-outside-toplevel

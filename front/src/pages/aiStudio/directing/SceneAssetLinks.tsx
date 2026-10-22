@@ -66,7 +66,7 @@ export function SceneAssetLinks({ projectId, value, disabled, onChange, assetKin
     </div>
   }
   return <section aria-label="项目资产关联">
-    <p>本场关联随设计保存；解除关联不会删除项目资产。图片参考需在单元中另行选择。</p>
+    <p>默认资产随设计保存，仅用于单元选材候选。解除或修改默认不会更改已选参考；单元也可独立选择其他项目资产。</p>
     <Link to={`/projects/${projectId}`}>前往项目工作台管理资产</Link>
     {loading && <p><Spin size="small" /> 正在读取项目资产</p>}
     {error && <Alert type="error" message="项目资产读取失败，已有内容已保留" description={error}

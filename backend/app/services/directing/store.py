@@ -575,8 +575,8 @@ class DirectingStore:
         content = SceneVersionContent.model_validate(content.model_dump(mode='json'))
         if previous is not None:
             validate_new_design_row_ids(content.design, previous.design)
-        _, files, _ = await self._validate(sequence, content.design)
-        await self._validate_asset_origins(content, previous, design=content.design)
+        _, files, _ = await self._validate(sequence, content.design, previous_design=previous.design if previous else None)
+        await self._validate_asset_origins(content, previous)
         for unit in content.units:
             if unit.model_id:
                 model = await self.db.get(Model, unit.model_id)
@@ -850,12 +850,10 @@ class DirectingStore:
                 await self.db.flush()
         return await self.revision(row.id)
 
-    async def _validate_asset_origins(self, plan, previous, *, design=None):
+    async def _validate_asset_origins(self, plan, previous):
         """只在保存选择时核对资产来源；已确认输入不随资产改名或换图变化。"""
         from app.models.studio import Scene, Prop, CharacterImage, SceneImage, PropImage
 
-        if design is None:
-            design = SceneDesign.model_validate((await self.revision(plan.design_revision_id, kind="design", confirmed=True)).payload)
         same_design = (isinstance(plan, SceneVersionContent) and isinstance(previous, SceneVersionContent)) or (
             previous is not None and getattr(previous, "design_revision_id", None) == getattr(plan, "design_revision_id", None))
         inherited = {(binding.file_id, binding.media_kind, binding.asset_origin.model_dump_json())
@@ -867,29 +865,24 @@ class DirectingStore:
                 origin = binding.asset_origin
                 if origin is None:
                     continue
-                if origin.kind != "scene" and any(getattr(person, origin.kind + "_id") != origin.id
-                        for person in design.participants if person.id in binding.participant_ids):
-                    raise ValueError("资产来源与参考绑定的参与者不符")
                 inherited_origin = (binding.file_id, binding.media_kind, origin.model_dump_json()) in inherited
                 model, image_model, owner = models[origin.kind]
                 asset = await self.db.get(model, origin.id)
-                linked = ({design.direction.location_asset_id} if origin.kind == "scene" else
-                          {getattr(person, origin.kind + "_id") for person in design.participants})
                 if origin.kind == "character":
                     in_project = asset and asset.project_id == self.project_id
                 else:
                     link = ProjectSceneLink if origin.kind == "scene" else ProjectPropLink
                     in_project = await self.db.scalar(select(link.id).where(link.project_id == self.project_id,
                         getattr(link, origin.kind + "_id") == origin.id))
-                if not asset or not in_project or origin.id not in linked or (not inherited_origin and asset.name != origin.name):
-                    raise ValueError("资产来源与当前项目、固定设计或名称不符")
+                if not asset or not in_project or (not inherited_origin and asset.name != origin.name):
+                    raise ValueError("资产来源与当前项目或名称不符")
                 if inherited_origin:
                     continue
                 if binding.media_kind != "image" or not await self.db.scalar(select(image_model.id).where(
                         owner == origin.id, image_model.file_id == binding.file_id)):
                     raise ValueError("资产来源中不存在所选图片")
 
-    async def _validate(self, sequence, content):
+    async def _validate(self, sequence, content, *, previous_design=None):
         """解析版本、局部 ID、媒体与实际区间，返回派生索引而不产生第二份真值。"""
         dependencies, files, takes = set(), set(), set()
 
@@ -902,16 +895,19 @@ class DirectingStore:
         if isinstance(content, SceneDesign):
             if content.style_revision_id is not None:
                 await self.style_revision(content.style_revision_id, confirmed=True)
+            # 默认是可选候选；仅新增或改选时验证，保留已有失效偏好不影响实际输入。
+            previous_participants = {row.id: row for row in previous_design.participants} if previous_design else {}
             for participant in content.participants:
-                if participant.character_id and not await self.db.scalar(select(Character.id).where(
+                old = previous_participants.get(participant.id)
+                if participant.character_id and (old is None or old.character_id != participant.character_id) and not await self.db.scalar(select(Character.id).where(
                     Character.id == participant.character_id, Character.project_id == self.project_id,
                 )):
                     raise ValueError("character not linked to project")
-                if participant.prop_id and not await self.db.scalar(select(ProjectPropLink.id).where(
+                if participant.prop_id and (old is None or old.prop_id != participant.prop_id) and not await self.db.scalar(select(ProjectPropLink.id).where(
                     ProjectPropLink.prop_id == participant.prop_id, ProjectPropLink.project_id == self.project_id,
                 )):
                     raise ValueError("prop not linked to project")
-            if content.direction.location_asset_id and not await self.db.scalar(select(ProjectSceneLink.id).where(
+            if content.direction.location_asset_id and (previous_design is None or previous_design.direction.location_asset_id != content.direction.location_asset_id) and not await self.db.scalar(select(ProjectSceneLink.id).where(
                 ProjectSceneLink.scene_id == content.direction.location_asset_id, ProjectSceneLink.project_id == self.project_id,
             )):
                 raise ValueError("location not linked to project")

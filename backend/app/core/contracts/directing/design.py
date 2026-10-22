@@ -10,8 +10,8 @@ class Participant(Contract):
 
     id: Identity
     name: Text
-    character_id: Identity | None = None
-    prop_id: Identity | None = None
+    character_id: Identity | None = Field(default=None, description="可选默认角色资产，仅提供选材候选；单元可独立选择其他项目资产，不自动选入图片。")
+    prop_id: Identity | None = Field(default=None, description="可选默认道具资产，仅提供选材候选，不限制单元参考来源。")
 
 
 class Event(Contract):
@@ -89,7 +89,7 @@ class Direction(Contract):
     relationship_change: Note
     turning_point: Note
     immutable_facts: list[Note]
-    location_asset_id: Identity | None = None
+    location_asset_id: Identity | None = Field(default=None, description="可选默认场所资产；修改不改变已选参考，单元可独立选材。")
     spatial_basis: Note
     shootable_area: Note
     axis: Note

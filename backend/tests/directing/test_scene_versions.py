@@ -623,7 +623,7 @@ async def test_scene_version_cannot_cross_project_or_rewrite_frozen_design(tmp_p
 
 @pytest.mark.asyncio
 async def test_saved_asset_origin_survives_rename_but_new_binding_is_checked(tmp_path):
-    """历史参考保持原名称；新来源和脱离当前设计的旧来源仍拒绝保存。"""
+    """历史参考保持原名称；解除默认不改变引用，伪造的新来源仍拒绝。"""
     from app.models.studio import Scene, SceneImage, ProjectSceneLink
 
     async with database(tmp_path) as sessions, client_for(sessions) as client:
@@ -651,12 +651,103 @@ async def test_saved_asset_origin_survives_rename_but_new_binding_is_checked(tmp
         content['output_aspect_ratio'] = '9:16'
         saved = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 2, 'content': content})
         assert saved.status_code == 200, saved.text
-        for change in ('origin', 'design'):
+        invalid = deepcopy(content)
+        invalid['units'][0]['references'][0]['asset_origin']['name'] = '新场所'
+        rejected = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 3, 'content': invalid})
+        assert rejected.status_code == 422, rejected.text
+        content['design']['direction']['location_asset_id'] = None
+        saved = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 3, 'content': content})
+        assert saved.status_code == 200, saved.text
+        reread = (await client.get(detail)).json()['data']
+        assert reread['revision'] == 4
+        assert reread['content']['units'][0]['references'][0]['asset_origin']['name'] == '原场所'
+
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('default_asset', [None, 'default-character'])
+async def test_unit_reference_is_independent_of_director_default(tmp_path, default_asset):
+    """人物身份固定，默认可选；选用另一项目资产不回写默认或其他单元。"""
+    from app.models.studio import Character, CharacterImage
+
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        async with sessions.begin() as db:
+            db.add_all([Character(id=key, project_id='p1', name=key, style='真人都市')
+                        for key in ['default-character', 'chosen-character']])
+            await db.flush()
+            db.add(CharacterImage(id=778, character_id='chosen-character', file_id='image1'))
+        path = await sequence_path(client)
+        version = (await client.post(path + '/versions', json={'request_id': str(uuid4()), 'title': '独立参考'})).json()['data']
+        detail = path + '/versions/' + version['id']
+        content = deepcopy(version['content'])
+        content['design']['participants'] = [{'id': 'person', 'name': '人物', 'character_id': default_asset}]
+        content['design']['direction']['shots'] = [{'id': 'shot', 'participant_ids': ['person'], 'event_ids': [], 'blocking_state_ids': [], 'criterion_ids': [], 'narrative_function': {}, 'visible_result': {}}]
+        content['units'] = [{'id': key, 'ratio': '16:9', 'coverage': [{'id': 'coverage', 'shot_id': 'shot', 'action_scope': '交谈'}]}
+                            for key in ['unit', 'other-unit']]
+        content['units'][0]['references'] = [{
+            'id': 'reference', 'file_id': 'image1', 'media_kind': 'image', 'purpose': 'identity',
+            'participant_ids': ['person'], 'ordinal': 0, 'subject_group_id': 'person-group',
+            'source': {'kind': 'human', 'reference': 'author', 'version': '1'},
+            'asset_origin': {'kind': 'character', 'id': 'chosen-character', 'name': 'chosen-character'},
+        }]
+        saved = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})
+        assert saved.status_code == 200, saved.text
+        reread = (await client.get(detail)).json()['data']['content']
+        assert reread['design']['participants'][0]['character_id'] == default_asset
+        assert reread['units'][0]['references'][0]['participant_ids'] == ['person']
+        assert reread['units'][0]['references'][0]['asset_origin']['id'] == 'chosen-character'
+        assert reread['units'][1]['references'] == []
+        for origin_id, origin_name, file_id, media in [
+            ('missing', 'missing', 'image1', 'image'),
+            ('default-character', 'default-character', 'image1', 'image'),
+            ('chosen-character', 'forged-name', 'image1', 'image'),
+            ('chosen-character', 'chosen-character', 'video1', 'video'),
+        ]:
+            invalid = deepcopy(reread)
+            reference = invalid['units'][0]['references'][0]
+            reference.update(file_id=file_id, media_kind=media,
+                             asset_origin={'kind': 'character', 'id': origin_id, 'name': origin_name})
+            rejected = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 2, 'content': invalid})
+            assert rejected.status_code == 422, rejected.text
+        assert (await client.get(detail)).json()['data']['revision'] == 2
+
+
+@pytest.mark.asyncio
+async def test_stale_defaults_are_retained_but_new_invalid_defaults_rejected(tmp_path):
+    """存量默认失效只影响候选；新增无效默认仍拒绝且不覆盖已保存内容。"""
+    from sqlalchemy import delete
+    from app.models.studio import Character, Scene, Prop, ProjectSceneLink, ProjectPropLink
+
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        async with sessions.begin() as db:
+            db.add_all([Character(id='default-person', project_id='p1', name='原人物', style='真人都市'),
+                        Scene(id='default-place', name='原场所', style='真人都市'),
+                        Prop(id='default-prop', name='原物件', style='真人都市')])
+            await db.flush()
+            db.add_all([ProjectSceneLink(project_id='p1', scene_id='default-place'),
+                        ProjectPropLink(project_id='p1', prop_id='default-prop')])
+        path = await sequence_path(client)
+        version = (await client.post(path + '/versions', json={'request_id': str(uuid4()), 'title': '存量默认'})).json()['data']
+        detail = path + '/versions/' + version['id']
+        content = deepcopy(version['content'])
+        content['design']['participants'] = [{'id': 'person', 'name': '人物', 'character_id': 'default-person'},
+                                             {'id': 'prop', 'name': '物件', 'prop_id': 'default-prop'}]
+        content['design']['direction']['location_asset_id'] = 'default-place'
+        saved = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})
+        assert saved.status_code == 200, saved.text
+        async with sessions.begin() as db:
+            await db.execute(delete(Character).where(Character.id == 'default-person'))
+            await db.execute(delete(ProjectSceneLink).where(ProjectSceneLink.scene_id == 'default-place'))
+            await db.execute(delete(ProjectPropLink).where(ProjectPropLink.prop_id == 'default-prop'))
+        content['output_aspect_ratio'] = '9:16'
+        saved = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 2, 'content': content})
+        assert saved.status_code == 200, saved.text
+        for kind in ['character', 'prop', 'scene']:
             invalid = deepcopy(content)
-            if change == 'origin':
-                invalid['units'][0]['references'][0]['asset_origin']['name'] = '新场所'
+            if kind == 'scene':
+                invalid['design']['direction']['location_asset_id'] = 'forged'
             else:
-                invalid['design']['direction']['location_asset_id'] = None
+                invalid['design']['participants'][0 if kind == 'character' else 1][kind + '_id'] = 'forged'
             rejected = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 3, 'content': invalid})
             assert rejected.status_code == 422, rejected.text
         assert (await client.get(detail)).json()['data']['revision'] == 3

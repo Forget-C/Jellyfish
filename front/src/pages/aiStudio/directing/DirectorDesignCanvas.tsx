@@ -271,7 +271,7 @@ function DirectorDesignCanvasBody({ projectId, sequenceId, versionId, content, s
           <WorkbenchButton onClick={() => jump(node, identity(node))}>定位共享原卡</WorkbenchButton>
         </> : node.key === 'location' ? <>
           {serverCard.kind !== 'source' && <DirectorGraphSummary node={serverCard} />}
-          <WorkbenchButton disabled={disabled} onClick={() => setAssetTarget('location')}>编辑场所资产绑定</WorkbenchButton>
+          <WorkbenchButton disabled={disabled} onClick={() => setAssetTarget('location')}>设置默认资产</WorkbenchButton>
         </> : <>
           {serverCard.kind !== 'source' && <DirectorGraphSummary node={serverCard} />}
           {node.kind !== 'missing' && <Space wrap><WorkbenchButton disabled={disabled || unavailableObject} onClick={event => edit(node, event.currentTarget)}>编辑此卡</WorkbenchButton>
@@ -282,7 +282,7 @@ function DirectorDesignCanvasBody({ projectId, sequenceId, versionId, content, s
                 content.design.direction.shots.map(row => row.id), node.key.slice(5), destination.id))}>{offset < 0 ? '镜头前移' : '镜头后移'}</WorkbenchButton>
             })}
           </Space>}
-          {node.key.startsWith('participant:') && <WorkbenchButton disabled={disabled} onClick={() => setAssetTarget(node.key)}>编辑资产绑定</WorkbenchButton>}
+          {node.key.startsWith('participant:') && <WorkbenchButton disabled={disabled} onClick={() => setAssetTarget(node.key)}>设置默认资产</WorkbenchButton>}
           {node.kind === 'missing' && <WorkbenchButton onClick={() => {
             const owner = allObjects.find(row => row.key === graph.edges.find(edge => edge.to === node.key)?.from)
             if (owner) jump(owner)
@@ -405,7 +405,7 @@ function DirectorDesignCanvasBody({ projectId, sequenceId, versionId, content, s
         else { setUnavailable(true); trigger.focus({ preventScroll: true }) }
       }} onLocateUnit={onLocateUnit} focusRequest={focusRequest} onFocusHandled={() => setFocusRequest(undefined)}
       onSideClose={() => setEditingTarget(undefined)} sideContext={`${versionId}:${editorContext}`} saveStatus={saveStatus} />
-    <WorkbenchDetails title="项目资产关联" status={saveStatus}
+    <WorkbenchDetails title="设置默认资产" status={saveStatus}
       open={!!assetTarget} onClose={() => setAssetTarget(undefined)}>
       {assetTarget && <SceneAssetLinks projectId={projectId} value={content.design} disabled={disabled} onChange={changeDesign}
         shotId={assetTarget === 'create' && scope === 'shot' ? activeShotId : undefined}
