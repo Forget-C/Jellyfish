@@ -108,7 +108,7 @@ export function ReferencePicker({ rootClassName, projectId, assets, assetError, 
     const participants = pending ? [pending.participantId] : scoped ? scoped.participant_ids : asset?.kind === 'scene' ? [] : participantIds
     const chosenPurpose = pending ? 'identity' : scoped?.purpose || purpose || (groupScope ? participants.length ? 'identity' : 'composition' : asset ? asset.kind === 'scene' ? 'space' : 'identity' : participants.length ? 'identity' : 'composition')
     const current = pending ? [...latest.current.filter(ref => !pending.ids.includes(ref.id)), ...pending.references] : latest.current
-    const targetId = frameScope ? current.find(ref => ref.input_role === fixedInputRole)?.id : replaceId
+    const targetId = replaceId || (frameScope ? current.find(ref => ref.input_role === fixedInputRole)?.id : undefined)
     if (current.some(ref => ref.id !== targetId && ref.file_id === fileId && (!frameScope || ref.input_role === fixedInputRole) && (!groupScope || ref.subject_group_id === groupId.current || scopeIds.has(ref.id)))) return
     const replaced = current.find(ref => ref.id === targetId)
     if (replaced?.purpose === 'identity' && (replaced.input_role || 'subject') === 'subject' && (asset ? replaced.asset_origin?.kind !== asset.kind || replaced.asset_origin.id !== asset.id : !!replaced.asset_origin)) {

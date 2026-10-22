@@ -1,6 +1,7 @@
 """当前单元检查的固定正文、依据与任务隔离，经真实 HTTP 验证。"""
 from copy import deepcopy
 import json
+import base64
 from types import SimpleNamespace
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -63,16 +64,23 @@ def reference_storage(monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('with_reference', [False, True, 'replacement'])
+@pytest.mark.parametrize('with_reference', [False, True, 'replacement', 'first_last', 'same_file'])
 @pytest.mark.parametrize('remove_running', [False, True])
 async def test_video_submission_freezes_original_unit_and_registers_only_candidate(tmp_path, with_reference, reference_storage, monkeypatch, remove_running):
+    first_bytes = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC')
+    last_bytes = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYPgPAAEDAQAIicLsAAAAAElFTkSuQmCC')
+    reference_storage['/scene-test/files/space.png'] = first_bytes
+    frame_pair = with_reference in ('first_last', 'same_file')
+    video_model = 'viduq2' if frame_pair else 'test-video-model'
+    video_provider = 'frame-provider' if frame_pair else 'check-provider'
     async with database(tmp_path) as sessions, client_for(sessions) as client:
         async with sessions.begin() as db:
             db.add(Provider(id='check-provider', name='openai', base_url='https://api.openai.com/v1', api_key='fixture'))
+            db.add(Provider(id='frame-provider', name='Vidu', base_url='https://api.vidu.cn', api_key='fixture'))
             await db.flush()
             db.add_all([Model(id='check-text', name='gpt-test', category='text', provider_id='check-provider', params={}),
                         Model(id='current-video', name='current-video-model', category='video', provider_id='check-provider', params={}),
-                        Model(id='check-video', name='test-video-model', category='video', provider_id='check-provider', params={})])
+                        Model(id='check-video', name=video_model, category='video', provider_id=video_provider, params={})])
             db.add(FileItem(id='current-image', type='image', name='当前新参考', storage_key='fixtures/current.png'))
         path = await sequence_path(client)
         version = (await client.post(path + '/versions', json={'request_id': str(uuid4()), 'title': '检查输入'})).json()['data']
@@ -85,6 +93,14 @@ async def test_video_submission_freezes_original_unit_and_registers_only_candida
                 'media_kind': 'image', 'purpose': 'space', 'participant_ids': [], 'ordinal': 0,
                 'input_role': 'first_frame',
                 'source': {'kind': 'file', 'reference': 'image1', 'file_id': 'image1', 'version': '1'}}]
+        if frame_pair:
+            async with sessions.begin() as db:
+                db.add(FileItem(id='last-image', type='image', name='尾帧', storage_key='files/end.png'))
+            reference_storage['/scene-test/files/end.png'] = last_bytes
+            last_file = 'image1' if with_reference == 'same_file' else 'last-image'
+            content['units'][0]['references'].append({'id': 'last-frame', 'file_id': last_file,
+                'media_kind': 'image', 'purpose': 'composition', 'participant_ids': [], 'ordinal': 1,
+                'input_role': 'last_frame', 'source': {'kind': 'file', 'reference': last_file, 'file_id': last_file, 'version': '1'}})
         complete_shot_scope_sample(content, '递出信封')
         detail = path + '/versions/' + version['id']
         unit_url = detail + '/units/unit'
@@ -172,7 +188,9 @@ async def test_video_submission_freezes_original_unit_and_registers_only_candida
         assert rows[0]['preparation']['request']['execution_prompt'] == '递出信封。'
         assert rows[0]['takes'] == []
         bound['units'][0]['instruction'] = '收下信封。'
-        assert (await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 2, 'content': bound})).status_code == 200
+        changed_after_submit = deepcopy(bound)
+        changed_after_submit['units'][0]['references'] = []
+        assert (await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 2, 'content': changed_after_submit})).status_code == 200
         assert (await client.post(video_url, json=submit)).json()['data']['task_id'] == video_id
         assert (await client.post(video_url, json={'request_id': str(uuid4()), 'expected_revision': 3})).status_code == 409
         if remove_running:
@@ -201,12 +219,40 @@ async def test_video_submission_freezes_original_unit_and_registers_only_candida
             assert removed.status_code == 200, removed.text
             running = (await client.get(video_url)).json()['data'][0]
             assert running['status'] == 'running' and running['preparation'] == rows[0]['preparation']
+        if not remove_running:
+            import asyncio
+            import httpx
+            from app.task_worker import TaskWorker
+            provider_requests = []
+            def provider(request):
+                provider_requests.append((request.url.path, json.loads(request.content)))
+                return httpx.Response(200, json={'task_id': 'fixed-media-video'})
+            async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as provider_client:
+                worker = TaskWorker(sessions, client=provider_client)
+                try:
+                    await worker.tick()
+                    await asyncio.gather(*list(worker.jobs.values()))
+                finally:
+                    worker.text_pool.shutdown(wait=True)
+            assert len(provider_requests) == 1
+            request_path, payload = provider_requests[0]
+            assert payload['prompt'] == '递出信封。'
+            assert payload['model'] == video_model
+            if frame_pair:
+                assert request_path == '/ent/v2/start-end2video'
+                expected = [first_bytes, first_bytes if with_reference == 'same_file' else last_bytes]
+                assert payload['images'] == ['data:image/png;base64,' + base64.b64encode(value).decode() for value in expected]
+                assert 'subjects' not in payload
+            elif with_reference:
+                assert payload['input_reference']['image_url'] == 'data:image/png;base64,' + base64.b64encode(first_bytes).decode()
+            else:
+                assert 'input_reference' not in payload
+            running = next(row for row in (await client.get(video_url)).json()['data'] if row['task_id'] == video_id)
+            assert running['status'] == 'running'
         async with sessions.begin() as db:
             db.add(FileItem(id='video-output', type='video', name='model-output.mp4', storage_key='fixtures/video-output.mp4', content_type='video/mp4', duration_ms=5000))
             await db.flush()
             service = TaskService(db)
-            if not remove_running:
-                assert await service.claim(video_id, worker_id='video-result-fixture')
             await service.add_output(video_id, ordinal=0, file_id='video-output')
             await service.finish(video_id, deliver=deliver_media)
             await service.finish(video_id, deliver=deliver_media)
@@ -322,17 +368,17 @@ async def test_video_submission_freezes_original_unit_and_registers_only_candida
         assert (await client.get(detail)).json()['data']['revision'] == 6
         assert (await client.get(detail)).json()['data']['content']['units'][0]['instruction'] == '递出信封。后来继续编辑。'
         async with sessions.begin() as db:
-            (await db.get(Model, 'check-video')).name = 'test-video-model'
+            (await db.get(Model, 'check-video')).name = video_model
         async with sessions.begin() as db:
             db.add(Provider(id='replacement-provider', name='openai', base_url='https://replacement.invalid/v1', api_key='fixture'))
             await db.flush()
             (await db.get(Model, 'check-video')).provider_id = 'replacement-provider'
         rerouted = await client.post(retry_url, json=retry_request)
-        assert rerouted.status_code == 409, rerouted.text
+        assert rerouted.status_code == (422 if frame_pair else 409), rerouted.text
         assert len((await client.get(video_url)).json()['data']) == 2
         assert (await client.get(detail)).json()['data']['revision'] == 6
         async with sessions.begin() as db:
-            (await db.get(Model, 'check-video')).provider_id = 'check-provider'
+            (await db.get(Model, 'check-video')).provider_id = video_provider
         if with_reference:
             assert original_execution['preparation']['request']['media']['frames']['first']['file_id'] == 'image1'
             for unavailable_field in ('delete_requested_at', 'deleted_at'):
