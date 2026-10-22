@@ -1,4 +1,3 @@
-import { ReferencePreview } from './ReferencePreview'
 import { WorkbenchDetails } from './ui/WorkbenchDetails'
 import { createPortal } from 'react-dom'
 import { useSceneUnitPreparation } from './useSceneUnitPreparation'
@@ -10,7 +9,6 @@ import { UnitGraphCanvas } from './UnitGraphCanvas'
 import { SceneFrameDependencies } from './SceneFrameDependencies'
 import { DependencyEditor } from './DependencyEditor'
 import { ReferencePicker } from './ReferencePicker'
-import { referencePurposes } from './referenceInput'
 import { directingError } from './common'
 import { SourceLinks } from './Sources'
 import { WorkbenchButton } from './ui/WorkbenchButton'
@@ -70,7 +68,6 @@ function SceneUnitCanvasBody({ primaryHost, navigationHost, graph, saved, projec
   }
   const showSettings = (section: typeof settingsSection) => settingsSection === 'all' || settingsSection === section
   const [basisUnitId, setBasisUnitId] = useState<string>()
-  const [referenceUnitId, setReferenceUnitId] = useState<string>()
   const [picker, setPicker] = useState<string>()
   const [parametersUnitId, setParametersUnitId] = useState<string>()
   const [dependencyUnitId, setDependencyUnitId] = useState<string>()
@@ -250,7 +247,7 @@ function SceneUnitCanvasBody({ primaryHost, navigationHost, graph, saved, projec
         setUnavailableTarget(false)
         onSelectUnit(node.unit_id)
         if (node.kind === 'unit_basis') setBasisUnitId(node.unit_id)
-        else if (node.kind === 'unit_references') setReferenceUnitId(node.unit_id)
+        else if (node.kind === 'unit_references') setPicker(node.unit_id)
         else if (node.kind === 'unit_config' && node.config_kind === 'dependencies') setDependencyUnitId(node.unit_id)
         else if (node.kind === 'unit_config' && node.config_kind !== 'dependencies') openSettings(node.unit_id, node.config_kind, node.coverage_item_id || undefined)
         else openSettings(node.unit_id)
@@ -259,7 +256,7 @@ function SceneUnitCanvasBody({ primaryHost, navigationHost, graph, saved, projec
       <Select aria-label="当前单元" placeholder="选择当前编辑单元" value={unit?.id} style={{ width: 320 }}
         options={allUnits.map((row, index) => ({ value: row.id, label: `单元 ${index + 1}` }))} onChange={id => onSelectUnit(id)} />
       {unit && <><WorkbenchButton variant="secondary" onClick={() => openSettings(unit.id)}>查看单元设置</WorkbenchButton>
-        <WorkbenchButton variant="secondary" disabled={disabled} onClick={() => setPicker(unit.id)}>编辑当前单元参考</WorkbenchButton></>}
+        <WorkbenchButton variant="secondary" onClick={() => setPicker(unit.id)}>编辑参考素材</WorkbenchButton></>}
       <WorkbenchButton disabled={disabled || !content.design.direction.shots.length} onClick={() => {
         if (browseShotId) create(browseShotId)
         else { setCreationShotId(undefined); setCreationOpen(true) }
@@ -293,9 +290,6 @@ function SceneUnitCanvasBody({ primaryHost, navigationHost, graph, saved, projec
         }
       }} />}
     </WorkbenchDetails>
-    <WorkbenchDetails title="单元参考 · 只读" status="只读" open={!!unit && referenceUnitId === unit.id} onClose={() => setReferenceUnitId(undefined)}>
-      {unit?.references.map(reference => <section key={reference.id}><p>{reference.asset_origin?.name || reference.file_id} · {referencePurposes[reference.purpose]}</p><ReferencePreview reference={reference} /><SourceLinks sources={[reference.source]} /></section>)}
-    </WorkbenchDetails>
     {unit && parametersUnitId === unit.id && <WorkbenchDetails status={saveStatus} title="当前单元模型参数" open onClose={() => setParametersUnitId(undefined)}>
       <Button onClick={() => { setParametersUnitId(undefined); if (unit) openSettings(unit.id) }}>返回单元设置</Button>
       <p>当前执行器支持随机种子；留空使用模型的默认行为。参数随本单元保存，不修改其他单元。</p>
@@ -315,8 +309,8 @@ function SceneUnitCanvasBody({ primaryHost, navigationHost, graph, saved, projec
       {workspaceError && <Alert type="error" message="来源单元读取失败" description={workspaceError} action={<Button onClick={() => setAttempt(value => value + 1)}>重试来源单元</Button>} />}
       {!!unit.dependencies.length && workspace && <DependencyEditor sceneVersion projectId={projectId} workspace={workspace} unit={unit} disabled={disabled} onChange={patch} />}
     </WorkbenchDetails>}
-    {unit && picker === unit.id && <ReferencePicker title={unit.references.length ? '本单元参考' : '添加参考'} rootClassName="canvas-workbench-dialog" key={`${versionId}:${unit.id}`} projectId={projectId} assets={assets} assetError={assetError}
-      onReloadAssets={() => setAttempt(value => value + 1)} design={content.design} coverage={unit.coverage} references={unit.references}
+    {unit && picker === unit.id && <ReferencePicker title="编辑参考素材" rootClassName="canvas-workbench-dialog" key={`${versionId}:${unit.id}`} projectId={projectId} assets={assets} assetError={assetError}
+      contextLabel={`单元 ${allUnits.findIndex(row => row.id === unit.id) + 1} · ${disabled ? '只读' : saveStatus}`} onReloadAssets={() => setAttempt(value => value + 1)} design={content.design} coverage={unit.coverage} references={unit.references}
       capability={capability} capabilityError={capabilityError} onRetryCapability={() => setAttempt(value => value + 1)} disabled={disabled}
       dependencyReferenceIds={[...unit.dependencies, ...(unit.scene_dependencies || [])].flatMap(link => link.reference_id ? [link.reference_id] : [])}
       onApply={references => patch({ references })} onClose={() => setPicker(undefined)} />}

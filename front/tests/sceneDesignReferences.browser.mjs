@@ -106,7 +106,7 @@ try {
   await page.screenshot({ path: join(output, 'design-reference-recovery.png'), animations: 'disabled' })
   await page.getByRole('button', { name: '导演画布', exact: true }).click()
   await (await workbenchShot(page, '镜头 2：相同名称')).click()
-  await page.locator('[data-canvas-node="camera:camera-two"]').getByRole('button', { name: '编辑此卡', exact: true }).click()
+  await page.locator('[data-canvas-node="camera:camera-two"]').getByRole('button', { name: /^查看节点：/ }).click()
   await page.getByRole('button', { name: '删除此卡', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   const beforeGuard = (await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.content
