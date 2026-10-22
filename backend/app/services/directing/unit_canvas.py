@@ -66,6 +66,14 @@ def reference_card(context, unit, index, key, title, bindings, input_role='all',
         if preview.preview_issue:
             issues.append(CanvasIssue(code='reference-preview-unverified', severity='warning', target=target,
                 message=preview.preview_issue))
+    if input_role == 'first_frame':
+        rows = [evidence for evidence in context.dependencies.get(unit.id, [])
+                if evidence.reference_id in {binding.id for binding in bindings}]
+        if rows:
+            node.summary = [*node.summary, CanvasSummaryField(field='predecessor', label='承接片段',
+                text='；'.join((f'版本 {row.version_id} · 片段 {row.clip_id}' if row.kind == 'scene'
+                              else f'固定计划 {row.plan_revision_id} · 单元 {row.unit_id}')
+                             + f' · {row.message}' for row in rows))]
     node.issues = issues
     return node
 
