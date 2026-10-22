@@ -15,7 +15,7 @@ const output = await mkdtemp(join(tmpdir(), 'jellyfish-scene-version-'))
 const api = 'http://127.0.0.1:8257'
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.directing.scene_version_browser_server'], {
   cwd: join(root, '../backend'),
-  env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', SCENE_BROWSER_TEST_DATABASE: join(output, 'browser.sqlite'), SCENE_BROWSER_TEST_PORT: '8257' },
+  env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', SCENE_BROWSER_TEST_DATABASE: join(output, 'browser.sqlite'), SCENE_BROWSER_TEST_PORT: '8257', SCENE_BROWSER_TEST_SUBJECTS: '1' },
   stdio: ['ignore', 'pipe', 'pipe'],
 })
 let backendOutput = ''
@@ -64,10 +64,23 @@ try {
     const response = await fetch(`${api}/api/v1/studio/entities/character/${asset.id}/images`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file_id: fileId }) })
     assert.ok(response.ok, await response.text())
   }
+  const extraFiles = []
+  for (const name of ['second.png', 'third.png']) {
+    const extraForm = new FormData()
+    extraForm.set('file', new Blob([png], { type: 'image/png' }), name)
+    extraForm.set('project_id', 'canvas-project'); extraForm.set('usage_kind', 'upload')
+    const response = await fetch(`${api}/api/v1/studio/files/upload`, { method: 'POST', body: extraForm })
+    assert.equal(response.status, 201)
+    extraFiles.push((await response.json()).data.id)
+  }
+  for (const [index, extraId] of extraFiles.entries()) {
+    const response = await fetch(`${api}/api/v1/studio/entities/character/${assets[index === 0 ? 1 : 0].id}/images`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file_id: extraId, view_angle: 'LEFT' }) })
+    assert.ok(response.ok, await response.text())
+  }
   const content = version.content
   content.design.participants = [{ id: 'reader', name: '读信者', character_id: assets[0].id }, { id: 'outside', name: '其他人物', character_id: assets[2].id }]
   content.design.direction.shots = [{ id: 'shot', beat_ids: [], event_ids: [], blocking_state_ids: [], participant_ids: ['reader'], criterion_ids: [], narrative_function: {}, visible_result: { state: 'proposal', text: '读信反应', sources: [{ kind: 'human', reference: 'browser', version: '1' }] } }]
-  content.units = [{ id: 'unit', model_id: 'browser-video-model', duration_ms: 5000, ratio: '16:9', coverage: [{ id: 'coverage', shot_id: 'shot', action_scope: '读信' }] }]
+  content.units = [{ id: 'unit', model_id: 'browser-subject-model', duration_ms: 5000, ratio: '16:9', coverage: [{ id: 'coverage', shot_id: 'shot', action_scope: '读信' }] }]
   const detail = `${versionsUrl}/${version.id}`
   const save = async (revision, body) => {
     const response = await fetch(detail, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: revision, content: body }) })
@@ -114,6 +127,53 @@ try {
   assert.deepEqual(saved.content.units[0].references[0].participant_ids, ['reader'])
   assert.equal(saved.content.design.participants[0].character_id, assets[0].id)
   await page.screenshot({ path: join(output, 'independent-reference.png'), animations: 'disabled' })
+  // 同对象追加同来源的多图进入同组；新来源明确拒绝且原组不变。
+  dialog = await open()
+  await dialog.getByRole('button', { name: '添加参考', exact: true }).click()
+  await selectWorkbenchOption(page, '本次参考绑定人物或物件', '读信者')
+  await page.keyboard.press('Escape')
+  await selectWorkbenchOption(page, '本次素材资产', '手动乙')
+  await dialog.getByRole('button', { name: '选入 手动乙 图片 2', exact: true }).click()
+  await selectWorkbenchOption(page, '本次素材资产', '默认甲')
+  await dialog.getByRole('button', { name: `选入 默认甲 图片 ${[fileId, extraFiles[1]].sort().indexOf(extraFiles[1]) + 1}`, exact: true }).click()
+  await dialog.getByText('同一人物或物件只能使用一个身份主体组及单一素材来源，请更换整组来源', { exact: true }).waitFor()
+  await dialog.getByRole('button', { name: '应用到本单元', exact: true }).click()
+  for (let i = 0; i < 40; i++) {
+    saved = (await (await fetch(detail)).json()).data
+    if (saved.content.units[0].references.length === 2) break
+    await delay(200)
+  }
+  assert.equal(saved.content.units[0].references.length, 2)
+  assert.equal(new Set(saved.content.units[0].references.map(ref => ref.subject_group_id)).size, 1)
+  assert.ok(saved.content.units[0].references.every(ref => ref.asset_origin.id === assets[1].id))
+  await page.screenshot({ path: join(output, 'single-source-identity-group.png'), animations: 'disabled' })
+  console.log('PASS browser asset subject grouping and source conflict')
+  // 人工已有文件和上传共组；原单份无显式组可正常追加，不能生成两个模型主体。
+  const assetReferenceContent = structuredClone(saved.content)
+  const manualContent = structuredClone(saved.content)
+  manualContent.units[0].references = [{ ...manualContent.units[0].references[0], file_id: fileId, asset_origin: null, subject_group_id: null }]
+  saved = await save(saved.revision, manualContent)
+  dialog = await open()
+  await dialog.getByRole('button', { name: '添加参考', exact: true }).click()
+  await selectWorkbenchOption(page, '本次参考绑定人物或物件', '读信者')
+  await page.keyboard.press('Escape')
+  await selectWorkbenchOption(page, '参考素材来源', '已有素材')
+  await dialog.getByText('second', { exact: true }).locator('../..').getByRole('button', { name: /^选\s*入$/ }).click()
+  await selectWorkbenchOption(page, '参考素材来源', '上传')
+  console.log('PASS browser manual existing file appended')
+  await dialog.locator('input[type=file]').setInputFiles({ name: 'manual-upload.png', mimeType: 'image/png', buffer: png })
+  await dialog.getByText('拟发送：提示词 + 3 张图片 · 1 组主体参考', { exact: true }).waitFor()
+  await dialog.getByRole('button', { name: '应用到本单元', exact: true }).click()
+  for (let i = 0; i < 40; i++) {
+    saved = (await (await fetch(detail)).json()).data
+    if (saved.content.units[0].references.length === 3) break
+    await delay(200)
+  }
+  assert.equal(saved.content.units[0].references.length, 3)
+  assert.equal(new Set(saved.content.units[0].references.map(ref => ref.subject_group_id)).size, 1)
+  assert.ok(saved.content.units[0].references.every(ref => !ref.asset_origin))
+  saved = await save(saved.revision, assetReferenceContent)
+  console.log('PASS browser manual upload group and standalone extension')
   // 来源目录删除后固定文件仍可用；不能从已失效来源新增。
   const fixedReferences = structuredClone(saved.content.units[0].references)
   const deleteSource = await fetch(`${api}/api/v1/studio/entities/character/${assets[1].id}`, { method: 'DELETE' })
@@ -133,7 +193,7 @@ try {
   assert.equal(fixedCollection.previews[0].status, 'available')
   await page.screenshot({ path: join(output, 'fixed-reference-source-unavailable.png'), animations: 'disabled' })
   // 外部对象存储夹具中移除真实字节；来源失效提示与文件读取失败分别显示。
-  const stored = (await readdir(join(output, 'objects'), { recursive: true })).find(name => name.endsWith('.png'))
+  const stored = (await readdir(join(output, 'objects'), { recursive: true })).find(name => name.endsWith(`${fileId}.png`))
   assert.ok(stored)
   const storedPath = join(output, 'objects', stored)
   const storedBytes = await readFile(storedPath)
@@ -176,6 +236,7 @@ try {
   await page.getByText('默认资产随设计保存，仅用于单元选材候选。解除或修改默认不会更改已选参考；单元也可独立选择其他项目资产。', { exact: true }).waitFor()
   console.log(`PASS independent default candidates and chosen reference: ${output}`)
 } catch (error) {
+  console.error(backendOutput)
   if (page) await page.screenshot({ path: join(output, 'failure.png'), fullPage: true, animations: 'disabled' }).catch(() => {})
   throw error
 } finally {

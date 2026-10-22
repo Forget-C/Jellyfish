@@ -48,3 +48,26 @@ export function referenceIssues(references: Reference[], capability?: VideoRefer
   }
   return [...new Set(issues)]
 }
+
+/** 身份主体按执行器的显式组校验；其他用途和帧输入保持独立。 */
+export function identityReferenceIssues(references: Reference[], participantIds: string[]) {
+  const issues: string[] = []
+  const owners = new Map<string, { group: string; source: string }>()
+  const groups = new Map<string, string>()
+  for (const reference of references) {
+    if (reference.purpose !== 'identity' || (reference.input_role || 'subject') !== 'subject') continue
+    if (reference.participant_ids.length !== 1 || !participantIds.includes(reference.participant_ids[0])) {
+      issues.push('身份主体组必须恰好对应一个存在的人物或物件'); continue
+    }
+    const owner = reference.participant_ids[0]
+    const group = reference.subject_group_id || reference.id
+    const source = reference.asset_origin ? `${reference.asset_origin.kind}:${reference.asset_origin.id}` : 'manual'
+    const groupOwner = groups.get(group)
+    if (groupOwner && groupOwner !== owner) issues.push('身份主体组必须恰好对应一个存在的人物或物件')
+    groups.set(group, owner)
+    const previous = owners.get(owner)
+    if (previous && (previous.group !== group || previous.source !== source)) issues.push('同一人物或物件只能使用一个身份主体组及单一素材来源，请更换整组来源')
+    owners.set(owner, { group, source })
+  }
+  return [...new Set(issues)]
+}

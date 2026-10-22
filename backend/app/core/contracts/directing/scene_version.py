@@ -283,6 +283,13 @@ class SceneVersionSave(Contract):
     content: SceneVersionContent
 
 
+class SceneIdentityCleanup(Contract):
+    """显式整理已保存身份参考；不接受待清理的新内容。"""
+
+    request_id: Identity
+    expected_revision: int = Field(gt=0)
+
+
 class SceneVersionRead(Contract):
     """带归属与保存状态的场次版本，不向用户暴露多层草稿确认。"""
 

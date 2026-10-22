@@ -54,6 +54,10 @@ async def prepare():
     async with sessions.begin() as db:
         db.add(Provider(id='browser-text-provider', name='openai', base_url='https://api.openai.com/v1', api_key='fixture'))
         await db.flush()
+        if os.environ.get('SCENE_BROWSER_TEST_SUBJECTS') == '1':
+            db.add(Provider(id='browser-subject-provider', name='Vidu', base_url='https://api.vidu.cn', api_key='fixture'))
+            await db.flush()
+            db.add(Model(id='browser-subject-model', name='viduq2', category='video', provider_id='browser-subject-provider', params={}))
         db.add(Model(id='browser-video-model', name='test-video-model', category='video', provider_id='browser-text-provider', params={}))
         db.add(Model(id='browser-text-model', name='test-design-model', category='text', provider_id='browser-text-provider', params={}))
         await db.flush()
