@@ -19,7 +19,7 @@ pnpm --dir front run test:browser
 
 `lint` 保留未过滤的原始输出。`lint:check` 只允许 `front/eslint-baseline.json` 中已知的存量问题，新增问题、解析错误及工具错误均失败；修复旧问题后运行 `pnpm --dir front run lint:baseline` 收缩豁免。维护命令不能接纳新问题；源代码行发生变化后仍存在的诊断也需要解决，不靠行号维持旧豁免。首次基线包含 181 个错误、117 个警告，不表示这些问题已经修复。
 
-`test:unit` 运行全部纯逻辑及公开 CLI 回归。`test:browser` 先调用现有 preflight，再运行清单中的八个用例；清单是文件、端口与超时的唯一登记处。所有用例串行执行，启动前检查声明端口，端口占用时停止且不终止占用者。端口检查不是系统级端口预留；请勿另外并行启动使用相同端口的脚本。
+`test:unit` 运行全部纯逻辑及公开 CLI 回归。`test:browser` 先调用现有 preflight，再运行清单中的用例；清单是文件、端口与超时的唯一登记处。所有用例串行执行，启动前检查声明端口，端口占用时停止且不终止占用者。端口检查不是系统级端口预留；请勿另外并行启动使用相同端口的脚本。
 
 ```bash
 pnpm --dir front run test:workbench-ui
@@ -181,3 +181,7 @@ node front/tests/workspaceShootSteps.browser.mjs
 ### 单元指令内容区（实施中）
 
 `node --test front/tests/instructionContent.test.mjs front/tests/reviewRevision.test.mjs` 覆盖固定正文全量保留、背景与执行边界、重复和重叠映射、字段归属、路径层级匹配、局部范围存储及损坏范围阻止提交。`node front/tests/workspaceInstructionContent.browser.mjs` 使用 4216 端口，验证真实分块正文、从摄影卡片选择范围、刷新恢复、提交精确 scope、切回整体范围保留输入、原文切换、四尺寸和零采用／拍摄写入。运行环境沿用上文 Codex Node.js / Playwright。专项还覆盖关联图节点查看、真实候选与过期草稿分离、图视图刷新恢复、返回正文焦点、1920px 三列及窄屏纵向布局；检查问题定位由 compact-review 回归验证。图只读关系的证据约束由 instructionContent 单元测试验证，包括无正文决定、固定单元参数和跨检查来源隔离。浏览器专项验证超过三项的展开／收起、键盘选择节点和内容、来源直接编辑、生成中编辑与迟到候选不抢焦点；compact-review 覆盖多处正文定位、精确片段高亮及历史关联图只读。
+
+### 默认资产与单元身份参考
+
+`pnpm --dir front run test:browser -- references` 通过真实导演／单元画布、独立 HTTP 后端、数据库和对象存储验证默认候选解耦与身份参考来源。`reference-source`（4258／8258）验证明确更换来源、整组应用／取消、逐图跨源拒绝、非目标输入及单元隔离；模型请求不调用付费服务。
