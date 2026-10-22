@@ -15,6 +15,7 @@ export async function workbenchShot(page, name) {
 
 async function directorOverview(page) {
   const overview = page.getByRole('button', { name: '总览', exact: true })
+  if (!await overview.isVisible()) await page.getByRole('button', { name: '导演画布', exact: true }).click()
   if (await overview.isEnabled()) await overview.click()
 }
 
