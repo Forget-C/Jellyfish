@@ -339,6 +339,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
   const latest = useRef({ selected, content })
   latest.current = { selected, content }
   const evidenceRead = useRef(0)
+  const deferredEvidence = useRef<string>()
   const [evidenceError, setEvidenceError] = useState('')
   useEffect(() => {
     evidenceRead.current += 1
@@ -346,15 +347,18 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
     return () => { evidenceRead.current += 1 }
   }, [projectId, sequenceId, selected?.id, selected?.revision, loadState])
   // 证据可在相同 revision 更新；只替换固定基线的投影，不改草稿或重建工作区。
-  const refreshEvidence = async (versionId = latest.current.selected?.id) => {
+  const refreshEvidence = useCallback(async (versionId = latest.current.selected?.id) => {
     const base = latest.current.selected
     if (!base || base.id !== versionId || loadState !== 'ready') return
+    // 本页原保存尚待核实时，先保留刷新意图，避免将自己的保存误判为外部冲突。
+    if (pendingSave.current?.versionId === base.id) { deferredEvidence.current = base.id; return }
     const serial = ++evidenceRead.current
     const stillCurrent = () => live.current && serial === evidenceRead.current && latest.current.selected === base &&
       latest.current.selected?.id === base.id && latest.current.selected.revision === base.revision &&
       sameContent(latest.current.selected.content, base.content)
     try {
       const response = await StudioDirectingService.directingSceneVersion({ projectId, sequenceId, versionId: base.id })
+      if (pendingSave.current?.versionId === base.id) { deferredEvidence.current = base.id; return }
       if (!stillCurrent()) return
       const saved = response.data
       if (!saved || saved.id !== base.id) throw new Error('证据响应的场次版本不一致')
@@ -377,7 +381,13 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
     } catch (cause) {
       if (stillCurrent()) setEvidenceError(directingError(cause))
     }
-  }
+  }, [projectId, sequenceId, loadState])
+  useEffect(() => {
+    const versionId = deferredEvidence.current
+    if (!versionId || busy || pendingSave.current?.versionId === versionId || selected?.id !== versionId) return
+    deferredEvidence.current = undefined
+    void refreshEvidence(versionId)
+  }, [busy, selected?.id, selected?.revision, refreshEvidence])
   const hasChanges = () => !!latest.current.selected && !sameContent(latest.current.content, latest.current.selected.content)
   const restoreEditing = () => {
     restoreEditingPending.current = true

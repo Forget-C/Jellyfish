@@ -1,6 +1,6 @@
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import { makeWorkspace } from './directing-fixtures.mjs'
-import { workbenchControl, workbenchShot, closeWorkbenchDetails, selectWorkbenchOption } from './workbenchControls.mjs'
+import { workbenchControl, workbenchShot, closeWorkbenchDetails, selectWorkbenchOption, locateCanvasNode } from './workbenchControls.mjs'
 import { unitCard } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -16,7 +16,7 @@ const output = await browserOutput('jellyfish-scene-video-')
 const api = 'http://127.0.0.1:8193'
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.directing.scene_version_browser_server'], {
   cwd: join(root, '../backend'),
-  env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', SCENE_BROWSER_TEST_DATABASE: join(output, 'browser.sqlite'), SCENE_BROWSER_TEST_PORT: '8193' },
+  env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', SCENE_BROWSER_TEST_SUBJECTS: '1', SCENE_BROWSER_TEST_DATABASE: join(output, 'browser.sqlite'), SCENE_BROWSER_TEST_PORT: '8193' },
   stdio: ['ignore', 'pipe', 'pipe'],
 })
 let backendOutput = ''
@@ -44,6 +44,13 @@ try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 960 } })
   page = await context.newPage()
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
+  const editCoverage = async () => {
+    await closeWorkbenchDetails(page)
+    const fallback = page.getByRole('button', { name: '编辑动作覆盖 1', exact: true })
+    if (await fallback.isVisible()) await fallback.click()
+    else await unitCard(page)
+    await page.getByRole('textbox', { name: '单元动作范围', exact: true }).waitFor()
+  }
   const create = await fetch(versionsUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), title: '覆盖编辑验收' }) })
   assert.equal(create.status, 200)
   const version = (await create.json()).data
@@ -66,19 +73,14 @@ try {
   await page.goto(`http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
   await (await workbenchShot(page, '镜头 1：读信反应')).click()
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
-  await page.getByRole('combobox', { name: '当前单元', exact: true }).press('ArrowDown')
-  await page.getByRole('combobox', { name: '当前单元', exact: true }).press('Enter')
+  await selectWorkbenchOption(page, '当前单元', '单元 1')
   await unitCard(page, '生成配置')
-  await selectWorkbenchOption(page, '单元视频模型', 'test-video-model')
+  await selectWorkbenchOption(page, '单元视频模型', 'viduq2')
   await page.getByRole('spinbutton', { name: '单元预计时长', exact: true }).fill('5')
   await closeWorkbenchDetails(page)
-  await page.getByRole('button', { name: '定位画布节点', exact: true }).click()
-  await page.getByRole('menuitem', { name: '单元 1', exact: true }).click()
-  await page.locator('[data-canvas-node="unit:unit-one"]').getByRole('button', { name: /^进入子图：/ }).click()
-  await page.getByRole('button', { name: '定位画布节点', exact: true }).click()
-  await page.getByRole('menuitem', { name: '参考素材', exact: true }).click()
-  await page.getByRole('button', { name: '查看节点：参考素材', exact: true }).click()
-  const referencePicker = page.getByRole('dialog', { name: '编辑参考素材', exact: true })
+  await locateCanvasNode(page, '添加参考组')
+  await page.getByRole('button', { name: '查看节点：添加参考组', exact: true }).click()
+  const referencePicker = page.getByRole('dialog', { name: '添加参考组', exact: true })
   await selectWorkbenchOption(page, '参考素材来源', '上传')
   await referencePicker.locator('input[type=file]').setInputFiles({ name: 'space-reference.png', mimeType: 'image/png',
     buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=', 'base64') })
@@ -88,7 +90,7 @@ try {
   await referencePicker.waitFor({ state: 'hidden' })
   await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   const configured = (await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.content.units[0]
-  assert.equal(configured.model_id, 'browser-video-model')
+  assert.equal(configured.model_id, 'browser-subject-model')
   assert.equal(configured.duration_ms, 5000)
   assert.equal(configured.references.length, 1)
   assert.equal(configured.references[0].purpose, 'space')
@@ -142,22 +144,24 @@ try {
   await acceptedSave
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
   await selectWorkbenchOption(page, '当前单元', '单元 2')
-  await unitCard(page)
+  await editCoverage()
   await page.getByRole('textbox', { name: '单元动作范围', exact: true }).fill('保存未知期间 B 的编辑')
   await page.route('**/units/unit-one/video', route => route.abort('failed'))
   loseSaveResponse()
   await page.getByRole('status').filter({ hasText: '视频提交待核实' }).first().waitFor({ timeout: 5000 })
-  await unitCard(page)
+  await editCoverage()
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '保存未知期间 B 的编辑')
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
   await page.getByRole('button', { name: 'AI 设计', exact: true }).waitFor({ timeout: 5000 })
   await selectWorkbenchOption(page, '指令所属单元', '单元 1 · 拆开信封')
   await page.unroute('**/units/unit-one/video')
   await page.getByRole('navigation', { name: '当前指令主操作', exact: true }).getByRole('button', { name: '核实当前单元原视频请求', exact: true }).click()
+  await page.getByText('视频任务：等待执行', { exact: true }).waitFor()
+  assert.equal(await page.getByRole('dialog', { name: '保存冲突 · 比较本地与服务器', exact: true }).count(), 0, '原授权保存核实不应变成外部冲突')
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
   await selectWorkbenchOption(page, '当前单元', '单元 2')
   await page.getByRole('status').filter({ hasText: '未保存' }).first().waitFor({ timeout: 5000 })
-  await unitCard(page)
+  await editCoverage()
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '保存未知期间 B 的编辑')
   assert.equal(videoSubmissions, 2)
   assert.deepEqual(saveRequests[1], saveRequests[0])
@@ -205,11 +209,11 @@ try {
   assert.equal((await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.revision, beforeCleanGeneration)
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
   await selectWorkbenchOption(page, '当前单元', '单元 2')
-  await unitCard(page)
+  await editCoverage()
   await page.getByRole('textbox', { name: '单元动作范围', exact: true }).fill('另一单元独立新动作')
   releaseSubmission()
   await page.getByRole('status').filter({ hasText: '未保存' }).first().waitFor()
-  await unitCard(page)
+  await editCoverage()
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '另一单元独立新动作')
   assert.equal(await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).count(), 0)
   await page.getByRole('button', { name: '保存', exact: true }).click()
@@ -224,7 +228,7 @@ try {
   await notification.getByText('视频任务等待执行', { exact: true }).waitFor({ timeout: 5000 })
   await page.route('**/units/unit-one/video', route => route.abort('failed'))
   await notification.getByText('视频任务状态读取失败', { exact: true }).waitFor({ timeout: 5000 })
-  await unitCard(page)
+  await editCoverage()
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '另一单元独立新动作')
   await page.unroute('**/units/unit-one/video')
   await closeWorkbenchDetails(page)
@@ -234,7 +238,7 @@ try {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: '浏览器验收取消' }),
   })).status, 200)
   await notification.getByText('视频任务已取消', { exact: true }).waitFor({ timeout: 5000 })
-  await unitCard(page)
+  await editCoverage()
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '另一单元独立新动作')
   assert.equal(await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).count(), 0)
   await closeWorkbenchDetails(page)
@@ -327,13 +331,13 @@ try {
   await (await workbenchShot(page, '镜头 1：读信反应')).click()
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
   await selectWorkbenchOption(page, '当前单元', '单元 2')
-  await unitCard(page)
+  await editCoverage()
   await page.getByRole('textbox', { name: '单元动作范围', exact: true }).fill('完成通知到达时继续编辑')
   const completed = await fetch(`${api}/browser-test/video-tasks/${restoredTask.task_id}/complete`, { method: 'POST' })
   assert.equal(completed.status, 200, await completed.text())
   const completionNotice = page.getByRole('region', { name: `单元 1 视频任务 ${restoredTask.task_id} 通知`, exact: true })
   await completionNotice.getByText('视频任务已完成', { exact: true }).waitFor({ timeout: 5000 })
-  await unitCard(page)
+  await editCoverage()
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '完成通知到达时继续编辑')
   await page.getByRole('status').filter({ hasText: '未保存' }).first().waitFor()
   await closeWorkbenchDetails(page)
@@ -374,7 +378,7 @@ try {
   await page.getByRole('button', { name: '撤销', exact: true }).click()
   await candidate.getByText('视频固定输入与当前内容一致，候选仍需审片', { exact: true }).waitFor({ timeout: 5000 })
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
-  await unitCard(page)
+  await editCoverage()
   await page.getByRole('textbox', { name: '单元动作范围', exact: true }).fill('与旧视频不同的新动作')
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
   await candidate.getByText('旧依据候选：当前正文或相关依据已变化，请重新核对', { exact: true }).waitFor({ timeout: 5000 })
@@ -392,7 +396,7 @@ try {
   await candidate.getByText('视频固定输入与当前内容一致，候选仍需审片', { exact: true }).waitFor()
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
   await selectWorkbenchOption(page, '当前单元', '单元 2')
-  await unitCard(page)
+  await editCoverage()
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '完成通知到达时继续编辑')
   await page.screenshot({ path: join(output, 'scene-video.png'), animations: 'disabled' })
   console.log(`PASS scene video workflow; evidence: ${output}`)
