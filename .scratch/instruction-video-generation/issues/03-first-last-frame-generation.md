@@ -39,8 +39,10 @@
 
 - `backend/.venv/bin/python -m pytest backend/tests/directing/test_canvas_graph.py backend/tests/directing/test_unit_canvas_preview.py -q --tb=short`：37 passed。
 - `backend/.venv/bin/python -m pytest backend/tests/directing/test_scene_video.py -q --tb=short`：15 passed。沿现有场次 HTTP 夹具新增无参考／首帧／替换／首尾帧／同文件首尾帧共 10 个执行组合，使用有效且可区分的 PNG、真实存储读取、真实 TaskWorker，在外部供应商 HTTP 边界核对提示词、实际 data URL 字节及首尾顺序。提交后改正文及清空当前参考不替换冻结请求；候选登记及既有检查／重试硬门槛仍通过。
-- `PLAYWRIGHT_CHANNEL=chrome pnpm --dir front run test:browser frame-inputs`：PASS。最终证据 `front/test-results/browser-DST9NE/frame-inputs/`，含 1440×960、390×844 截图与运行日志；已目视核对。覆盖上传后取消、已有图片、同图双位置、单处替换和移除、一次撤销、旧弹窗保护、不支持尾帧的保留与解释、通用准备问题定位，以及保存后同步提示恢复。
+- `PLAYWRIGHT_CHANNEL=chrome pnpm --dir front run test:browser frame-inputs`：PASS。最终证据 `front/test-results/browser-u7TVur/frame-inputs/`，含 1440×960、390×844 截图与运行日志；已目视核对。覆盖上传后取消、已有图片、同图双位置、单处替换和移除、一次撤销、旧弹窗保护、不支持尾帧的保留与解释、通用准备问题定位，以及保存后同步提示恢复。
 - `pnpm --dir front run typecheck`：通过。
 - 在 `backend` 目录运行 `UV_CACHE_DIR=/tmp/jellyfish-uv-cache uv run --no-sync pylint app`：10.00/10。
 - 本树生产 `app.main:app` 在独占 `127.0.0.1:8000` 加载后执行 `pnpm --dir front run openapi:update`，OpenAPI 与 generated client 已同步；后续改动没有继续改变接口 schema。
 - 整套 `test:workbench-ui` 由根集成任务统一执行，避免与并行票据争用浏览器测试端口。03 不做前段依赖清绑与重绑（05），不把受控供应商请求测试声称为真实视频模型生成（08）。
+
+- 合入集成分支 `d07d364` 后再次通过 `typecheck` 与 `frame-inputs`；仅测试清单发生合并冲突，已同时保留各票用例。
