@@ -1086,6 +1086,14 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
     {loadState === 'ready' && !selected && selectedId && <Alert type="warning" message="原场次版本不可用，请重新选择" />}
     </div>
     <div className="scene-instruction-activity-list">{videoActivities.map(target => <SceneVideoActivity key={target.taskId} target={target}
+      onEvidenceChanged={() => void refreshEvidence()}
+      onLocateCandidate={async takeId => {
+        const current = latest.current.selected
+        if (!current) throw new Error('当前场次版本尚未核实，请先选择版本')
+        const result = await StudioDirectingService.directingSceneTakeLibrary({ projectId, sequenceId, versionId: current.id })
+        if (latest.current.selected?.id !== current.id || !result.data?.some(take => take.take_kind === 'scene_video' && take.take_id === takeId)) throw new Error('候选素材尚未核实，请重试')
+        navigateRelation({ kind: 'take', takeKind: 'scene_video', takeId })
+      }}
       hidden={canvas === 'instructions' && selectedId === target.versionId && currentUnitId === target.unitId}
       onDismiss={() => setVideoActivities(previous => previous.filter(item => item.taskId !== target.taskId))}
       onLocate={() => locateVideoUnit(target)} />)}
