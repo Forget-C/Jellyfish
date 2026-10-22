@@ -913,13 +913,6 @@
     },
     {
       "file": "src/pages/aiStudio/directing/SceneInstructionSuggestions.tsx",
-      "rule": "eqeqeq",
-      "severity": 2,
-      "fingerprint": "d926268d5a6f1dc752a74cbced8ff55609650d54ab7411932bd0734f70f4ac3d",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/directing/SceneInstructionSuggestions.tsx",
       "rule": "react-hooks/exhaustive-deps",
       "severity": 1,
       "fingerprint": "dfc9486a15510a94484bc0ae64a9f82b8ee0d1fcee6cf763e55358fdbc4b6898",
