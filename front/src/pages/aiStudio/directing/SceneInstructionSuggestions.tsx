@@ -6,6 +6,8 @@ import type { SceneInstructionRequest, SceneInstructionScope, SceneInstructionSu
 import { directingError } from './common'
 import { SourceLinks } from './Sources'
 import { SceneInstructionSnapshot } from './SceneInstructionSnapshot'
+import { WorkbenchModal, WorkbenchDialogActions } from './ui/WorkbenchModal'
+import { WorkbenchButton } from './ui/WorkbenchButton'
 
 // 只记录本页会话的查看状态，不进入业务内容或改变建议的应用状态。
 const viewedSuggestions = new Map<string, Set<string>>()
@@ -35,19 +37,24 @@ function clearRequest(key: string, requestId: string) {
 }
 
 /** 建议保留在任务中；只有显式应用才修改当前单元正文。 */
-export function SceneInstructionSuggestions({ onEvidenceChanged, onPriority, primaryHost, onLocate, projectId, sequenceId, versionId, revision, unitId, content, disabled, onChange, compact, initialTaskId, recordFocus, onOpen, onTask, preparationBlocked }: {
+export function SceneInstructionSuggestions({ onEvidenceChanged, onOpenChange, onPriority, primaryHost, triggerHost, projectId, sequenceId, versionId, revision, unitId, content, disabled, onChange, initialTaskId, recordFocus, onTask, preparationBlocked }: {
   onEvidenceChanged?: () => void
+  onOpenChange?: (open: boolean) => void
   projectId: string; sequenceId: string; versionId: string; revision: number; unitId: string
   content: SceneVersionContent_Output; disabled: boolean; onChange: (content: SceneVersionContent_Output) => void
   onPriority?: (state: { versionId: string; unitId: string; priority: boolean }) => void
-  onLocate?: () => void
+  triggerHost?: HTMLElement | null
   primaryHost?: HTMLElement | null
   preparationBlocked?: boolean
   recordFocus?: { taskId: string; serial: number }
-  compact?: boolean; initialTaskId?: string; onOpen?: (taskId?: string) => void
+  initialTaskId?: string
   onTask?: (taskId: string, unitId: string) => void
 }) {
-  const panel = useRef<HTMLElement>(null)
+  const [open, setOpen] = useState(!!initialTaskId)
+  const workspaceCallback = useRef(onOpenChange)
+  workspaceCallback.current = onOpenChange
+  useEffect(() => { workspaceCallback.current?.(open); return () => workspaceCallback.current?.(false) }, [open])
+  useEffect(() => { if (initialTaskId) { setSelectedId(initialTaskId); setOpen(true) } }, [initialTaskId])
   const key = `${projectId}:${sequenceId}:${versionId}:${unitId}`
   const evidenceCallback = useRef(onEvidenceChanged)
   evidenceCallback.current = onEvidenceChanged
@@ -62,7 +69,7 @@ export function SceneInstructionSuggestions({ onEvidenceChanged, onPriority, pri
   const [selectedId, setSelectedId] = useState<string | undefined>(initialTaskId)
   const focusedTaskId = recordFocus?.taskId
   const focusedSerial = recordFocus?.serial
-  useEffect(() => { if (focusedTaskId) { setSelectedId(focusedTaskId); setAttempt(value => value + 1) } }, [focusedTaskId, focusedSerial])
+  useEffect(() => { if (focusedTaskId) { setSelectedId(focusedTaskId); setOpen(true); setAttempt(value => value + 1) } }, [focusedTaskId, focusedSerial])
   const [requirements, setRequirements] = useState('')
   const [limited, setLimited] = useState(false)
   const [selection, setSelection] = useState<{ scope: SceneInstructionScope; before: string }>()
@@ -74,17 +81,14 @@ export function SceneInstructionSuggestions({ onEvidenceChanged, onPriority, pri
   const mounted = useRef(true)
   const errorElement = useRef<HTMLDivElement>(null)
   const live = useRef({ content, disabled })
-  const editing = useRef({ value: JSON.stringify(content), serial: 0 })
-  const value = JSON.stringify(content)
-  if (editing.current.value !== value) editing.current = { value, serial: editing.current.serial + 1 }
-  const generation = useRef<{ requestId: string; taskId?: string; serial: number }>()
   live.current = { content, disabled }
   useEffect(() => {
     const field = errorElement.current
-    const container = field?.closest<HTMLElement>('.director-canvas-object-content')
+    const container = field?.closest<HTMLElement>('.ant-modal-body')
     if (!error || !field || !container) return
+    field.focus({ preventScroll: true })
     const bounds = container.getBoundingClientRect(), message = field.getBoundingClientRect()
-    // 仅滚动本节点，保持画布位置；缩放后仍使拒绝原因可见。
+    // 仅滚动弹窗正文，保持画布位置并使拒绝原因可见。
     const scale = bounds.width / container.offsetWidth
     if (message.top < bounds.top || message.bottom > bounds.bottom) container.scrollTop += (message.top - bounds.top) / scale - 16
   }, [error])
@@ -122,12 +126,6 @@ export function SceneInstructionSuggestions({ onEvidenceChanged, onPriority, pri
   }, [key, attempt])
   const selected = rows?.find(row => row.task_id === selectedId)
   const running = rows?.some(row => !terminal.includes(row.status))
-  useEffect(() => {
-    const origin = generation.current
-    if (!origin?.taskId || selected?.task_id !== origin.taskId || !terminal.includes(selected.status)) return
-    generation.current = undefined
-    if (compact && selected.status === 'succeeded' && origin.serial === editing.current.serial && !live.current.disabled) onOpen?.(selected.task_id)
-  }, [selected, compact, onOpen])
   const newestSuggestion = rows?.find(row => row.status === 'succeeded')
   const unseenSuggestion = newestSuggestion && !viewed.has(newestSuggestion.task_id) ? newestSuggestion : undefined
   const priority = !!unseenSuggestion || busy || pendingRequests.has(key) || !!running || !rows || !!readError
@@ -139,7 +137,6 @@ export function SceneInstructionSuggestions({ onEvidenceChanged, onPriority, pri
     if (!pendingRequests.has(key) && preparationBlocked) return
     if (!pendingRequests.has(key) && !scopeReady) { setError('请重新选择允许修订的正文范围'); return }
     const request = pendingRequests.get(key) || { request_id: crypto.randomUUID(), expected_revision: revision, content: structuredClone(live.current.content), requirements, scope: limited ? selection?.scope : null }
-    if (!pendingRequests.has(key)) generation.current = { requestId: request.request_id, serial: editing.current.serial }
     try {
       localStorage.setItem(storageKey(key), JSON.stringify(request))
       pendingRequests.set(key, request)
@@ -149,7 +146,6 @@ export function SceneInstructionSuggestions({ onEvidenceChanged, onPriority, pri
       const result = await StudioDirectingService.directingSceneInstructionSuggest({ ...target, requestBody: request })
       if (!result.data) throw new Error('指令提交结果尚未核实')
       onTask?.(result.data.task_id, unitId)
-      if (generation.current?.requestId === request.request_id) generation.current.taskId = result.data.task_id
       clearRequest(key, request.request_id)
       if (mounted.current) { setSelectedId(result.data.task_id); setAttempt(value => value + 1) }
     } catch (cause) {
@@ -174,52 +170,38 @@ export function SceneInstructionSuggestions({ onEvidenceChanged, onPriority, pri
       if (preview.unit_id !== unitId || !snapshot.units.some(unit => unit.id === unitId)) throw new Error('原单元已不可用，未应用建议')
       markViewed(selected.task_id)
       onChange({ ...snapshot, units: snapshot.units.map(unit => unit.id === unitId ? { ...unit, instruction: preview.text, instruction_source: preview.source, instruction_basis_id: preview.basis_id } : unit) })
+      setOpen(false)
     } catch (cause) { if (mounted.current) setError(directingError(cause)) }
     finally { if (mounted.current) setBusy(false) }
   }
-  if (compact) {
-    const task = rows?.find(row => !terminal.includes(row.status)) || selected
-      || (!currentText.trim() ? rows?.find(row => row.status === 'succeeded') : undefined)
-    const pending = pendingRequests.has(key)
-    const showTask = !pending
-    return <section className="scene-unit-instruction-action" aria-label="当前单元指令操作">
-      {reading && <Spin size="small" />}
-      {readError && <Alert type="error" message="指令建议读取失败" description={readError} action={<Button onClick={() => setAttempt(value => value + 1)}>重试指令记录</Button>} />}
-      {error && <Alert type="error" message={error} />}
-      {showTask && task && <span>指令任务：{statuses[task.status] || task.status}</span>}
-      {showTask && task && <Button onClick={() => onOpen?.(task.task_id)}>{task.status === 'succeeded' ? '查看指令建议' : '查看指令任务'}</Button>}
-      {showTask && !task && currentText && <Button type="primary" onClick={() => onOpen?.()}>查看当前指令</Button>}
-      {(pending || !running && !currentText && task?.status !== 'succeeded') && <Button type="primary"
-        disabled={disabled || busy || !pendingRequests.has(key) && (reading || !!readError || !rows || running || preparationBlocked)} onClick={() => void submit()}>
-        {pendingRequests.has(key) ? '核实原指令请求' : '生成当前单元指令建议'}
-      </Button>}
-    </section>
-  }
   const primaryTask = rows?.find(row => !terminal.includes(row.status)) || unseenSuggestion || selected || rows?.find(row => row.status === 'succeeded')
+  const primaryTaskId = primaryTask?.task_id
+  useEffect(() => { if (open && !selectedId && primaryTaskId) setSelectedId(primaryTaskId) }, [open, selectedId, primaryTaskId])
   const locateTask = () => {
     if (primaryTask) {
       setSelectedId(primaryTask.task_id)
       if (primaryTask.status === 'succeeded') markViewed(primaryTask.task_id)
     }
-    const node = panel.current?.closest<HTMLElement>('.director-canvas-object-content')
-    if (!node || !panel.current) return
-    onLocate?.()
-    panel.current.focus({ preventScroll: true })
-    const scale = node.getBoundingClientRect().width / node.offsetWidth
-    node.scrollTop += (panel.current.getBoundingClientRect().top - node.getBoundingClientRect().top) / scale - 16
+    setOpen(true)
   }
-  const primary = busy ? <Button disabled>正在核实当前指令操作</Button> : pendingRequests.has(key) ? <Button type="primary" disabled={disabled || busy} onClick={() => void submit()}>核实原指令请求</Button>
-    : readError ? <Button onClick={() => setAttempt(value => value + 1)}>重试指令记录</Button>
-    : !rows ? <Button disabled>正在核实指令建议</Button>
-    : primaryTask ? <Button type="primary" onClick={locateTask}>{primaryTask.status === 'succeeded' ? '查看指令建议' : '查看指令任务'}</Button>
-    : <Button type="primary" disabled={disabled || busy || !scopeReady || preparationBlocked} onClick={() => void submit()}>生成当前单元指令建议</Button>
-  return <section id="scene-instruction-suggestions" ref={panel} tabIndex={-1} className="scene-design-suggestions" aria-label="当前单元指令建议">
+  const primary = <WorkbenchButton variant="primary" onClick={locateTask}>{pendingRequests.has(key) ? '核实原指令请求' : primaryTask ? primaryTask.status === 'succeeded' ? '查看指令建议' : '查看指令任务' : '查看 AI 指令设计'}</WorkbenchButton>
+  return <>
+    {triggerHost && createPortal(<WorkbenchButton variant="primary" onClick={locateTask}>AI 设计</WorkbenchButton>, triggerHost)}
     {primaryHost && createPortal(primary, primaryHost)}
+    <WorkbenchModal title="AI 指令设计" open={open} onCancel={() => setOpen(false)}
+      footer={<WorkbenchDialogActions secondary={<WorkbenchButton variant="quiet" onClick={() => setOpen(false)}>返回画布</WorkbenchButton>}>
+        {selected?.text != null && <WorkbenchButton variant="primary" disabled={disabled || busy || !!readError} onClick={() => void apply()}>应用指令建议</WorkbenchButton>}
+        <WorkbenchButton variant={selected?.text != null ? 'secondary' : 'primary'} disabled={disabled || busy || !pendingRequests.get(key) && (reading || !!readError || !rows || running || !scopeReady || !!preparationBlocked)} onClick={() => void submit()}>
+          {pendingRequests.get(key) ? '核实原指令请求' : '生成指令'}
+        </WorkbenchButton>
+      </WorkbenchDialogActions>}>
+    <section id="scene-instruction-suggestions" tabIndex={-1} className="scene-design-suggestions" aria-label="当前单元指令建议">
+    <p>当前单元 {content.units.findIndex(unit => unit.id === unitId) + 1}</p>
     <h3>指令建议</h3>
     <p>先明确允许修改的范围，再查看建议并明确应用。</p>
     {reading && <Spin size="small" />}
     {readError && <Alert type="error" message="指令建议读取失败" description={readError} action={<Button onClick={() => setAttempt(value => value + 1)}>重试指令记录</Button>} />}
-    {error && <div ref={errorElement}><Alert type="error" message={error} /></div>}
+    {error && <div ref={errorElement} tabIndex={-1}><Alert type="error" message={error} /></div>}
     {pendingRequests.has(key) && <p>有尚未核实的指令提交。核实使用原请求和当时的输入，不改写当前正文。</p>}
     <Select className="scene-instruction-select" aria-label="指令修订范围" value={limited ? 'selection' : 'whole'} style={{ width: '100%' }}
       disabled={disabled || busy || pendingRequests.has(key)} options={[{ value: 'whole', label: '当前单元整份指令' }, { value: 'selection', label: '限定选中文字' }]}
@@ -238,9 +220,6 @@ export function SceneInstructionSuggestions({ onEvidenceChanged, onPriority, pri
     </>}
     <Input.TextArea aria-label="本次指令编写要求" value={requirements} disabled={disabled || busy || !!pendingRequests.get(key)} onChange={event => setRequirements(event.target.value)} placeholder="本次编写要求（可选）" />
     {preparationBlocked && !pendingRequests.has(key) && <p>当前单元准备尚未齐备，请查看顶部准备状态。</p>}
-    <Button type="primary" disabled={disabled || busy || !pendingRequests.get(key) && (reading || !!readError || !rows || running || !scopeReady || !!preparationBlocked)} onClick={() => void submit()}>
-      {pendingRequests.get(key) ? '核实原指令请求' : '生成当前单元指令建议'}
-    </Button>
     {!!rows?.length && <Select className="scene-instruction-select" aria-label="指令建议记录" style={{ width: '100%' }} placeholder="明确选择建议查看" value={selectedId}
       options={rows.map((row, index) => ({ value: row.task_id, label: `建议 ${rows.length - index} · ${statuses[row.status] || row.status}` }))}
       onChange={id => { setSelectedId(id); setError(''); if (rows?.find(row => row.task_id === id)?.status === 'succeeded') markViewed(id) }} />}
@@ -255,9 +234,10 @@ export function SceneInstructionSuggestions({ onEvidenceChanged, onPriority, pri
         catch (cause) { if (mounted.current) setError(directingError(cause)) }
         finally { if (mounted.current) setBusy(false) }
       }}>取消本次指令任务</Button>}
-      {selected.text != null && <><p>生成前正文</p><pre>{selected.unit.instruction || '尚无正文'}</pre>{selected.unit.instruction_source && <SourceLinks sources={[selected.unit.instruction_source]} />}<p>建议正文</p><pre>{selected.text}</pre>
-        <Button type="primary" disabled={disabled || busy || !!readError} onClick={() => void apply()}>应用指令建议</Button>
-        <p>{selected.scope ? '应用前核实范围外文字未变，范围内整次应用。' : '应用替换当前单元整份正文。'}可一次撤销；不会自动检查或生成视频。</p></>}
+      {selected.text != null && <section aria-label="指令建议差异"><p>生成前正文</p><pre>{selected.unit.instruction || '尚无正文'}</pre>{selected.unit.instruction_source && <SourceLinks sources={[selected.unit.instruction_source]} />}<p>建议正文</p><pre>{selected.text}</pre>
+        <p>{selected.scope ? '应用前核实范围外文字未变，范围内整次应用。' : '应用替换当前单元整份正文。'}可一次撤销；不会自动检查或生成视频。</p></section>}
     </>}
-  </section>
+    </section>
+    </WorkbenchModal>
+  </>
 }

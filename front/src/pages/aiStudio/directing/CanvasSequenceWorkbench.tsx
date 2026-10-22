@@ -107,6 +107,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
     setCanvasState(previous => previous.key === location.key ? previous : { kind: navigationType === 'POP' ? routedCanvas : previous.kind, key: location.key })
   }, [routedCanvas, navigationType, location.key])
   const [instructionSelection, setInstructionSelection] = useState<{ versionId: string; unitId: string; taskId?: string }>()
+  const [instructionDesign, setInstructionDesign] = useState<{ versionId: string; unitId: string; open: boolean }>()
   const [instructionActivities, setInstructionActivities] = useState<InstructionActivityTarget[]>([])
   const [mediaFocus, setMediaFocus] = useState<{ versionId: string; target: SceneMediaNavigationTarget; serial: number }>()
   const [editClipFocus, setEditClipFocus] = useState<{ versionId: string; clipId: string }>()
@@ -1090,7 +1091,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       onDismiss={() => setVideoActivities(previous => previous.filter(item => item.taskId !== target.taskId))}
       onLocate={() => locateVideoUnit(target)} />)}
     {instructionActivities.map(target => <SceneInstructionActivity key={target.taskId} target={target} onEvidenceChanged={() => void refreshEvidence(target.versionId)}
-      hidden={canvas === 'instructions' && selectedId === target.versionId && currentUnitId === target.unitId}
+      hidden={canvas === 'instructions' && selectedId === target.versionId && currentUnitId === target.unitId && !!instructionDesign?.open && instructionDesign.versionId === target.versionId && instructionDesign.unitId === target.unitId}
       onDismiss={() => setInstructionActivities(previous => previous.filter(item => item.taskId !== target.taskId))}
       onLocate={async () => {
         const versionContent = latest.current.selected?.id === target.versionId ? latest.current.content :
@@ -1118,7 +1119,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       setEditor(undefined); setCanvas('units')
     }} dirty={dirty} key={selected.id} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} content={content} revision={selected.revision}
       disabled={readonly || handingOff || !!recovery || busy === 'create' || leaving} onChange={editContent} />}
-    {loadState === 'ready' && canvas === 'instructions' && selected && content && <SceneInstructionCanvas preparationHost={preparationHost} unitGraphState={unitGraphState} evidenceError={evidenceError} onEvidenceChanged={() => void refreshEvidence(selected.id)} onRetryGraph={() => void refreshEvidence(selected.id)} graph={selected.instruction_graph} onLocateSource={target => {
+    {loadState === 'ready' && canvas === 'instructions' && selected && content && <SceneInstructionCanvas onDesignOpenChange={setInstructionDesign} preparationHost={preparationHost} unitGraphState={unitGraphState} evidenceError={evidenceError} onEvidenceChanged={() => void refreshEvidence(selected.id)} onRetryGraph={() => void refreshEvidence(selected.id)} graph={selected.instruction_graph} onLocateSource={target => {
       const source = selected.unit_graph.nodes.find(node => node.id === target.node_id)
       setEditor(undefined)
       if (source?.kind === 'unit_config') {
@@ -1162,7 +1163,6 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       next.delete('unitDesignTask'); setParams(next, { replace: true })
     }} unitDesignTaskId={params.get('version') === selected.id ? params.get('unitDesignTask') || undefined : undefined} saveStatus={readonly ? '只读' : status} primaryHost={primaryHost} key={selected.id} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} revision={selected.revision} content={content} focusRequest={unitFocus}
       onOpenEdit={clipId => { leaveUnitSubgraph(); setMediaFocus(undefined); setEditClipFocus({ versionId: selected.id, clipId }); setEditor(undefined); setCanvas('edit') }}
-      onInstructionTask={trackInstruction}
       onOpenInstruction={taskId => { setInstructionSelection({ versionId: selected.id, unitId: currentUnitId, taskId }); browseUnit(currentUnitId, 'instructions') }}
       unitId={currentUnitId} disabled={readonly || handingOff || !!recovery || busy === 'create' || leaving}
       onSelectUnit={selectUnit} onChange={editContent} />}

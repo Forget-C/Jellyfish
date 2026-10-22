@@ -1,3 +1,4 @@
+import { instructionDesign, closeInstructionDesign } from './workbenchControls.mjs'
 import { makeWorkspace } from './directing-fixtures.mjs'
 import { selectWorkbenchOption, workbenchControl, workbenchShot, closeWorkbenchDetails } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
@@ -72,18 +73,22 @@ try {
   assert.equal(saved.status, 200, await saved.text())
   await page.goto(`http://127.0.0.1:4252/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
   await (await workbenchShot(page, '镜头 1：读信反应')).click()
+  await closeInstructionDesign(page)
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
   await selectWorkbenchOption(page, '当前单元', '单元 1')
-  await page.getByRole('button', { name: '生成当前单元指令建议', exact: true }).click()
+  await (await instructionDesign(page)).getByRole('button', { name: '生成指令', exact: true }).click()
   await page.getByText('指令任务：等待执行', { exact: true }).waitFor()
   const primaryTasksUrl = `${versionsUrl}/${version.id}/units/unit-one/instruction-suggestions`
   const primaryTask = (await (await fetch(primaryTasksUrl)).json()).data[0]
+  await closeInstructionDesign(page)
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
   await page.getByLabel('已保存指令记录').getByText('建议 · 等待执行', { exact: true }).waitFor({ timeout: 6000 })
   const before = (await (await fetch(`${versionsUrl}/${version.id}`)).json()).data
+  await closeInstructionDesign(page)
   await (await workbenchControl(page, '保存设置', 'switch', '自动保存')).click()
   await page.getByRole('button', { name: '保存设置', exact: true }).click()
   const input = page.getByRole('textbox', { name: '当前单元指令正文', exact: true })
+  await closeInstructionDesign(page)
   await input.fill('刷新期间保留的未保存正文')
   const handle = await input.elementHandle()
   assert.equal((await fetch(`${api}/browser-test/instruction-tasks/${primaryTask.task_id}/complete`, { method: 'POST' })).status, 200)
@@ -108,9 +113,11 @@ try {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ code: 0, data: before }) })
     } else await route.continue()
   })
+  await closeInstructionDesign(page)
   await page.getByRole('button', { name: '刷新图证据', exact: true }).click()
   await started
   const newerRead = page.waitForResponse(response => response.url().endsWith(`/versions/${version.id}`) && response.request().method() === 'GET')
+  await closeInstructionDesign(page)
   await page.getByRole('button', { name: '刷新图证据', exact: true }).click()
   await newerRead
   await input.focus()
@@ -122,6 +129,7 @@ try {
   assert.equal(await input.evaluate(node => node === document.activeElement), true)
   await page.unroute(detailPattern)
   await page.route(detailPattern, route => route.abort('failed'))
+  await closeInstructionDesign(page)
   await page.getByRole('button', { name: '刷新图证据', exact: true }).click()
   await page.getByRole('alert').filter({ hasText: '图证据读取失败' }).waitFor()
   await page.getByLabel('已保存指令记录').getByText('建议 · 已完成', { exact: true }).waitFor()
@@ -136,18 +144,22 @@ try {
   const externalTask = (await externalTaskResponse.json()).data
   assert.equal((await fetch(`${api}/browser-test/instruction-tasks/${externalTask.task_id}/complete?${new URLSearchParams({ text: '图记录明确应用正文。' })}`, { method: 'POST' })).status, 200)
   const refreshedGraph = page.waitForResponse(response => response.url().endsWith(`/versions/${version.id}`) && response.request().method() === 'GET')
+  await closeInstructionDesign(page)
   await page.getByRole('button', { name: '刷新图证据', exact: true }).click()
   await refreshedGraph
   await page.getByRole('button', { name: '查看原建议记录', exact: true }).click()
   await page.getByText('建议 2 · 已完成', { exact: true }).first().waitFor({ timeout: 5000 })
   assert.equal(await input.inputValue(), '刷新期间保留的未保存正文')
   // 从已保存基线开始应用；期间纯证据刷新不能冒充正文编辑而拒绝合法响应。
+  await closeInstructionDesign(page)
   await input.fill('')
   await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   await page.reload()
   await (await workbenchShot(page, '镜头 1：读信反应')).click()
+  await closeInstructionDesign(page)
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
   await selectWorkbenchOption(page, '当前单元', '单元 1')
+  await closeInstructionDesign(page)
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
   await page.getByRole('button', { name: '查看原建议记录', exact: true }).click()
   await page.getByText('建议 2 · 已完成', { exact: true }).first().waitFor()
@@ -159,22 +171,26 @@ try {
     await new Promise(resolve => { releaseApply = resolve })
     await route.fulfill({ response })
   })
-  await page.getByRole('button', { name: '应用指令建议', exact: true }).click()
+  await (await instructionDesign(page)).getByRole('button', { name: '应用指令建议', exact: true }).click()
   await receivedApply
   const inFlightTaskResponse = await fetch(primaryTasksUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: after.revision, content: after.content, model_id: 'browser-text-model', requirements: '应用期间独立外部任务' }) })
   assert.equal(inFlightTaskResponse.status, 200)
   const inFlightTask = (await inFlightTaskResponse.json()).data
+  await closeInstructionDesign(page)
   await page.getByRole('button', { name: '刷新图证据', exact: true }).click()
   await page.getByLabel('已保存指令记录').getByText('建议 · 等待执行', { exact: true }).waitFor()
   releaseApply()
   await page.waitForFunction(() => document.getElementById('scene-current-instruction')?.value === '图记录明确应用正文。', undefined, { timeout: 5000 })
   await page.unroute('**/instruction-suggestions/*/apply')
+  await closeInstructionDesign(page)
   await page.getByRole('button', { name: '撤销', exact: true }).click()
   assert.equal(await input.inputValue(), '')
   await fetch(`${api}/api/v1/film/tasks/${inFlightTask.task_id}/cancel`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+  await closeInstructionDesign(page)
   await input.fill('刷新期间保留的未保存正文')
   await page.screenshot({ path: join(output, 'instruction-evidence-refresh.png'), animations: 'disabled' })
   await page.setViewportSize({ width: 390, height: 844 })
+  await closeInstructionDesign(page)
   await input.fill('窄屏键盘编辑保留')
   await input.press('ArrowLeft')
   assert.equal(await input.inputValue(), '窄屏键盘编辑保留')
@@ -186,6 +202,7 @@ try {
   externalContent.units[0].instruction = '另一编辑者保存的正文'
   const externalSave = await fetch(`${versionsUrl}/${version.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: after.revision, content: externalContent }) })
   assert.equal(externalSave.status, 200)
+  await closeInstructionDesign(page)
   await page.getByRole('button', { name: '刷新图证据', exact: true }).click()
   await page.getByRole('dialog', { name: '保存冲突 · 比较本地与服务器', exact: true }).waitFor()
   assert.equal(await input.inputValue(), '窄屏键盘编辑保留')

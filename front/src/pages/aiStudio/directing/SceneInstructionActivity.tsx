@@ -24,7 +24,7 @@ export function SceneInstructionActivity({ target, hidden, onLocate, onDismiss, 
   const [attempt, setAttempt] = useState(0)
   const [locating, setLocating] = useState(false)
   useEffect(() => {
-    // 用户已经在该单元的指令画布查看结果时，不积累重复完成通知。
+    // 用户已经在该单元的 AI 指令工作区查看结果时，不积累重复完成通知。
     if (hidden && record && ['succeeded', 'failed', 'cancelled'].includes(record.status)) onDismiss()
   }, [hidden, record?.status])
   useEffect(() => {
