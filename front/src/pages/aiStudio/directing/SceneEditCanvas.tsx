@@ -59,7 +59,12 @@ export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectI
   const library = routed ? params.get('editView') === graph?.library_view_id : !!session.library
   useEffect(() => { session.library = library }, [library, session])
   const [reviewFocus, setReviewFocus] = useState<{ recordId: string; serial: number }>()
-  const [fallbackWorkspace, setFallbackWorkspace] = useState(!!session.workspace)
+  const initialBrowse = useRef({
+    key: location.key,
+    workspace: !!session.workspace || !!(navigation && session.navigationSerial !== navigation.serial) || !!(focusClipId && session.focusClipId !== focusClipId),
+    library: !!session.library,
+  })
+  const [fallbackWorkspace, setFallbackWorkspace] = useState(initialBrowse.current.workspace)
   const workspace = routed ? params.get('editWorkspace') === '1' : fallbackWorkspace
   useEffect(() => { session.workspace = workspace }, [workspace, session])
   const [selected, setSelected] = useState(session.selected)
@@ -98,11 +103,16 @@ export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectI
     setReviewFocus(stored.reviewFocus)
   }, [location.key, location.state?.editBrowse, navigationType, routed, workspace, versionId])
   useEffect(() => {
-    if (!routed) { go(!!session.workspace, !!session.library, true); return }
+    if (!routed) {
+      // 返回其他画布的历史入口时，由父级恢复默认画布，不改写该历史位置。
+      if (navigationType === 'POP' && location.key !== initialBrowse.current.key && params.get('canvas') !== 'edit') return
+      go(initialBrowse.current.workspace, initialBrowse.current.library, true)
+      return
+    }
     if (restoringBrowse.current) { restoringBrowse.current = false; return }
     if (JSON.stringify(location.state?.editBrowse) === JSON.stringify(browseState)) return
     setParams(params, { replace: true, state: { ...location.state, editBrowse: browseState } })
-  }, [routed, go, session.workspace, session.library, location.state, browseState, params, setParams])
+  }, [routed, go, navigationType, location.key, location.state, browseState, params, setParams])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [attempt, setAttempt] = useState(0)

@@ -101,7 +101,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
   useEffect(() => {
     if (navigationType !== 'POP') return
     const requested = params.get('canvas')
-    if (requested === 'director' || requested === 'units' || requested === 'instructions' || requested === 'edit') setCanvas(requested)
+    setCanvas(requested === 'director' || requested === 'units' || requested === 'instructions' || requested === 'edit' ? requested : params.has('unitView') ? 'units' : 'director')
   }, [location.key, navigationType, params])
   const [unitSelections, setUnitSelections] = useState<Record<string, string>>({})
   const shotUnitSelections = useRef<Record<string, Record<string, string>>>({})
