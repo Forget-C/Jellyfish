@@ -143,7 +143,7 @@ weight: 32
 
 ModelCapability 默认 unknown；明确 supported/unsupported 或参考媒体能力需附来源。未知/不支持的方案可作为计划保存；当前编译与执行仅接受单镜试拍，页面提供显式拆分。多镜艺术控制能力尚未经过真实验证。
 
-参考素材固定 file_id、用途、主体及顺序，服务检查媒体类型与可用性。新增 `directing_reference`、`directing_take` 两类 FileUsage；现有 API 的 usage_kind 是字符串，场次 API 使用专用类型化契约。冻结设计、参考包、来源证据、Take 和剪辑都复用现有文件可用性检查与删除保护。
+参考素材固定 file_id、用途、主体及顺序，服务检查媒体类型与可用性。 单元画布按显式 `subject_group_id` 投影普通参考组，历史未分组单图以绑定身份独立呈现；组卡保留稳定编辑目标、全部绑定及文件可用状态。当前编辑预览与保存读取使用同一投影，空添加入口不代表实际输入。组内编辑只改变目标组，其他组、首尾帧和其他单元保持原值；身份主体继续遵守一对象一组及单一来源。新增 `directing_reference`、`directing_take` 两类 FileUsage；现有 API 的 usage_kind 是字符串，场次 API 使用专用类型化契约。冻结设计、参考包、来源证据、Take 和剪辑都复用现有文件可用性检查与删除保护。
 
 Take 只登记已成功、项目匹配、input_snapshot.prompt_revision_id 匹配的 TaskOutput，唯一键为 `(task_id, output_ordinal)`。MySQL 锁定输出行后检查幂等身份。重复登记返回原 Take；明确再次试拍对应另一任务。任务终态交付已接入该服务，TaskService 成功事务中原子登记 Take；取消优先，重复交付不重复登记。
 
