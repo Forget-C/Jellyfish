@@ -93,6 +93,7 @@ import type { SceneEndFrameCreate } from '../models/SceneEndFrameCreate';
 import type { SceneExportInspect } from '../models/SceneExportInspect';
 import type { SceneExportRequest } from '../models/SceneExportRequest';
 import type { SceneExportRetry } from '../models/SceneExportRetry';
+import type { SceneIdentityCleanup } from '../models/SceneIdentityCleanup';
 import type { SceneInstructionRequest } from '../models/SceneInstructionRequest';
 import type { SceneSeamReviewCreate } from '../models/SceneSeamReviewCreate';
 import type { SceneTakeReviewConfirm } from '../models/SceneTakeReviewConfirm';
@@ -639,6 +640,38 @@ export class StudioDirectingService {
         return __request(OpenAPI, {
             method: 'PUT',
             url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}',
+            path: {
+                'project_id': projectId,
+                'sequence_id': sequenceId,
+                'version_id': versionId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Cleanup Identity References
+     * 受控整理已保存的可编辑身份参考；业务范围和 CAS 由存储层核实。
+     * @returns ApiResponse_SceneVersionRead_ Successful Response
+     * @throws ApiError
+     */
+    public static directingCleanupIdentityReferences({
+        projectId,
+        sequenceId,
+        versionId,
+        requestBody,
+    }: {
+        projectId: string,
+        sequenceId: string,
+        versionId: string,
+        requestBody: SceneIdentityCleanup,
+    }): CancelablePromise<ApiResponse_SceneVersionRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/projects/{project_id}/directing/sequences/{sequence_id}/versions/{version_id}/identity-references/cleanup',
             path: {
                 'project_id': projectId,
                 'sequence_id': sequenceId,

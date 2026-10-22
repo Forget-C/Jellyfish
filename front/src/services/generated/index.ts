@@ -448,6 +448,7 @@ export type { SceneExportRequest } from './models/SceneExportRequest';
 export type { SceneExportRetry } from './models/SceneExportRetry';
 export type { SceneExportSnapshot } from './models/SceneExportSnapshot';
 export type { SceneFrameDependency } from './models/SceneFrameDependency';
+export type { SceneIdentityCleanup } from './models/SceneIdentityCleanup';
 export type { SceneInfoAnalysisRequest } from './models/SceneInfoAnalysisRequest';
 export type { SceneInfoAnalysisResult } from './models/SceneInfoAnalysisResult';
 export type { SceneInstructionApply } from './models/SceneInstructionApply';
