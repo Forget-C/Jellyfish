@@ -16,6 +16,9 @@ export function SceneTimelinePreview({ items, takes, onStart, outputAspectRatio,
   const name = scope === 'seam' ? '接缝' : '时间线'
   const [frameWidth, frameHeight] = outputAspectRatio.split(':').map(Number)
   const frameStyle = { width: '100%', maxWidth: 320 * frameWidth / frameHeight, aspectRatio: `${frameWidth} / ${frameHeight}`, background: '#000', marginInline: 'auto' }
+  // 一次明确播放固定源URL；后台候选／签名刷新只供下一次播放使用。
+  const [playbackSources, setPlaybackSources] = useState<SceneTakeLibraryRead[]>()
+  const sources = playbackSources || takes
   const segments = useMemo(() => {
     const result: Segment[] = []
     let cursor = 0
@@ -23,11 +26,11 @@ export function SceneTimelinePreview({ items, takes, onStart, outputAspectRatio,
       if (item.timeline_start_ms > cursor) result.push({ start: cursor, duration: item.timeline_start_ms - cursor })
       const duration = 'media_range' in item ? item.media_range.source_out_ms - item.media_range.source_in_ms : item.estimated_duration_ms
       result.push({ start: item.timeline_start_ms, duration, item,
-        source: 'media_range' in item ? takes.find(take => take.take_kind === item.take_kind && take.take_id === item.take_id && take.file_id === item.file_id) : undefined })
+        source: 'media_range' in item ? sources.find(take => take.take_kind === item.take_kind && take.take_id === item.take_id && take.file_id === item.file_id) : undefined })
       cursor = item.timeline_start_ms + duration
     }
     return result
-  }, [items, takes])
+  }, [items, sources])
   const [index, setIndex] = useState<number>()
   const [running, setRunning] = useState(false)
   const [ready, setReady] = useState(false)
@@ -73,8 +76,14 @@ export function SceneTimelinePreview({ items, takes, onStart, outputAspectRatio,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, running, ready, segments])
   const startPlayback = () => {
-    const invalid = segments.find(row => row.item && 'media_range' in row.item && (!row.source?.available || !row.source.media_url || invalidTakeRange(row.item.media_range, row.source.duration_ms)))
+    const invalid = segments.find(row => {
+      if (!row.item || !('media_range' in row.item)) return false
+      const item = row.item
+      const source = takes.find(take => take.take_kind === item.take_kind && take.take_id === item.take_id && take.file_id === item.file_id)
+      return !source?.available || !source.media_url || invalidTakeRange(item.media_range, source.duration_ms)
+    })
     if (invalid) { fail(`片段 ${invalid.item?.id} 的素材或源区间不可用，请修正后播放。`); return }
+    setPlaybackSources(takes)
     onStart(); video.current?.pause(); elapsed.current = 0; setReady(false); setFinished(false); setError(''); setAttempt(value => value + 1); setPosition(0); setIndex(0); setRunning(true)
   }
   useEffect(() => {
@@ -107,7 +116,7 @@ export function SceneTimelinePreview({ items, takes, onStart, outputAspectRatio,
     </> : <div aria-label={segment.item ? '时间线待拍占位' : '时间线黑场'} style={{ ...frameStyle, color: '#fff', display: 'grid', placeItems: 'center' }}>
       {segment.item ? `待拍占位 · 预计 ${segment.duration} 毫秒，不代表真实覆盖` : '空白 · 黑场静音'}
     </div>)}
-    {error && <Alert type="error" message={error} action={media && <Button onClick={() => { setError(''); elapsed.current = 0; setPosition(segment!.start); setReady(false); setAttempt(value => value + 1); setRunning(true) }}>重试当前片段</Button>} />}
+    {error && <Alert type="error" message={error} action={media && <Button onClick={() => { setPlaybackSources(takes); setError(''); elapsed.current = 0; setPosition(segment!.start); setReady(false); setAttempt(value => value + 1); setRunning(true) }}>重试当前片段</Button>} />}
     {finished && <p>{name}播放完毕</p>}
     <p>按真实源区间播放原声；无音轨素材及时间线空白保持静音。编辑时间线或切换素材预览会停止本次播放。</p>
   </section>

@@ -255,13 +255,6 @@
     },
     {
       "file": "src/pages/aiStudio/directing/CanvasSequenceWorkbench.tsx",
-      "rule": "eqeqeq",
-      "severity": 2,
-      "fingerprint": "8ac339ec6457e5ac2a6b6d4bcabe6b99e577ff11d1f2e0b9817f1de1403cf428",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/directing/CanvasSequenceWorkbench.tsx",
       "rule": "react-hooks/exhaustive-deps",
       "severity": 1,
       "fingerprint": "17378ad6e6b48c4a16d90a04a262758e485b14e97f90c8692b8bdb199aaf98f1",
@@ -898,20 +891,6 @@
       "count": 1
     },
     {
-      "file": "src/pages/aiStudio/directing/SceneEditCanvas.tsx",
-      "rule": "react-hooks/exhaustive-deps",
-      "severity": 1,
-      "fingerprint": "7b6eaadc575fe553c574c5cc81ec73ae2966424a52fb4350b6524eabd33226c8",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/directing/SceneEditCanvas.tsx",
-      "rule": "react-hooks/exhaustive-deps",
-      "severity": 1,
-      "fingerprint": "fa86734a08adf113e73ea050b25cd30694f0715ad7f84e9627a199cd96d9f497",
-      "count": 1
-    },
-    {
       "file": "src/pages/aiStudio/directing/SceneExportPanel.tsx",
       "rule": "react-hooks/exhaustive-deps",
       "severity": 1,
@@ -944,20 +923,6 @@
       "rule": "react-hooks/exhaustive-deps",
       "severity": 1,
       "fingerprint": "267e91527e8d8590bf4c34729cf512b1cd72bc8bd538652a4f2a78f581b7bb81",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/directing/SceneInstructionCanvas.tsx",
-      "rule": "eqeqeq",
-      "severity": 2,
-      "fingerprint": "55199953de129bee6f0d934f6e96127504bd837239efcf823ac1d478970c17ee",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/directing/SceneInstructionCanvas.tsx",
-      "rule": "eqeqeq",
-      "severity": 2,
-      "fingerprint": "e2176623e93a9b6e24e8230eb581e49e5318bfe73a0a340d3a4ebeb9959fbc1b",
       "count": 1
     },
     {
@@ -1308,13 +1273,6 @@
       "rule": "react-hooks/exhaustive-deps",
       "severity": 1,
       "fingerprint": "41992ecc4b8b91b74bf99180fdef2f16003f8c7ba987ca1105e1500ade69b0aa",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/directing/SceneWorkbenchOverview.tsx",
-      "rule": "eqeqeq",
-      "severity": 2,
-      "fingerprint": "ca072f731af9ffdbf80622b02ee3afe1658b65574153c371d88eca2fd3ac37d7",
       "count": 1
     },
     {

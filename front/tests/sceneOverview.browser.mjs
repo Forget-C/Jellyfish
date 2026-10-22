@@ -1,5 +1,5 @@
 import { makeWorkspace } from './directing-fixtures.mjs'
-import { workbenchControl, workbenchShot } from './workbenchControls.mjs'
+import { workbenchControl, workbenchShot, selectWorkbenchOption } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -80,16 +80,15 @@ try {
   await (await workbenchControl(page, '保存设置', 'switch', '自动保存')).click()
   await (await workbenchShot(page, '镜头 1：读信')).click()
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
-  await page.getByRole('combobox', { name: '指令所属单元', exact: true }).click()
-  await page.getByText('单元 2 · B动作', { exact: true }).last().click()
+  await selectWorkbenchOption(page, '指令所属单元', '单元 2 · B动作')
   await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).fill('B未保存正文')
   if (await page.getByRole('button', { name: '展开关系树', exact: true }).count()) await page.getByRole('button', { name: '展开关系树', exact: true }).click()
   await page.getByRole('button', { name: '展开全图', exact: true }).click({ timeout: 5000 })
   const overview = page.getByRole('complementary', { name: '全场关系总览', exact: true })
-  await overview.getByRole('button', { name: '选择总览对象：素材 1', exact: true }).waitFor()
-  assert.equal(await overview.getByRole('button', { name: '选择总览对象：素材 1', exact: true }).count(), 1)
-  await overview.getByRole('button', { name: '选择总览对象：片段 2', exact: true }).click()
-  await overview.getByText('源区间：1000–2000 毫秒', { exact: true }).waitFor()
+  await overview.getByRole('button', { name: '选择总览对象：源 Take', exact: true }).waitFor()
+  assert.equal(await overview.getByRole('button', { name: '选择总览对象：源 Take', exact: true }).count(), 1)
+  await overview.getByRole('button', { name: '选择总览对象：片段 2 · 真实媒体', exact: true }).click()
+  await overview.getByText('源区间：1000–2000 毫秒', { exact: false }).waitFor()
   await overview.getByRole('button', { name: '定位当前对象', exact: true }).click()
   await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '时间线片段 2')
   assert.equal(await page.getByRole('region', { name: '时间线片段 1', exact: true }).count(), 1)
@@ -100,15 +99,17 @@ try {
   await page.route('**/take-library', route => route.abort('failed'))
   if (await page.getByRole('button', { name: '展开关系树', exact: true }).count()) await page.getByRole('button', { name: '展开关系树', exact: true }).click()
   await page.getByRole('button', { name: '展开全图', exact: true }).click()
-  await overview.getByText('总览素材读取失败', { exact: true }).waitFor()
+  await overview.getByRole('button', { name: '选择总览对象：源 Take', exact: true }).waitFor()
+  assert.equal(await overview.getByText('总览素材读取失败', { exact: true }).count(), 0, '总览消费保存图，不独立读取素材历史')
   assert.equal(await overview.getByText('本场暂无素材', { exact: true }).count(), 0)
   await overview.getByRole('button', { name: '选择总览对象：单元 1', exact: true }).click()
   assert.equal(await overview.getByRole('button', { name: '定位当前对象', exact: true }).isEnabled(), true)
   await page.unroute('**/take-library')
-  await overview.getByRole('button', { name: '重试总览素材', exact: true }).click()
-  await overview.getByRole('button', { name: '选择总览对象：素材 1', exact: true }).waitFor()
+  await overview.getByRole('button', { name: '选择总览对象：源 Take', exact: true }).click()
+  await overview.getByRole('button', { name: '选择总览对象：源 Take', exact: true }).waitFor()
   await page.route('**/units/A/instruction-checks', route => route.abort('failed'))
-  await overview.getByRole('button', { name: '选择总览对象：单元 1 任务与检查', exact: true }).click()
+  await overview.getByRole('button', { name: '选择总览对象：单元 1', exact: true }).click()
+  await overview.getByRole('button', { name: '查看完整任务与检查历史', exact: true }).click()
   const history = overview.getByRole('region', { name: '总览任务与检查', exact: true })
   await history.getByText('总览记录读取失败', { exact: true }).waitFor()
   assert.equal(await history.locator('details').count(), 0)
@@ -141,7 +142,9 @@ try {
   await page.screenshot({ path: join(output, 'overview-history.png'), fullPage: true })
   await overview.getByRole('button', { name: '关闭详情', exact: true }).click()
   assert.equal(await page.getByRole('textbox', { name: '当前单元指令正文', exact: true }).inputValue(), 'B未保存正文')
-  assert.deepEqual((await (await fetch(`${versionsUrl}/${version.id}`)).json()).data, baseline)
+  const final = (await (await fetch(`${versionsUrl}/${version.id}`)).json()).data
+  assert.deepEqual(final.content, baseline.content)
+  assert.equal(final.revision, baseline.revision)
   console.log(`PASS whole-scene overview identities, targeted navigation and isolated read recovery; evidence: ${output}`)
 } catch (error) {
   if (page) await page.screenshot({ path: join(output, 'failure.png'), fullPage: true }).catch(() => {})

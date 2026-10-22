@@ -1,3 +1,4 @@
+import { locateCanvasNode } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -59,9 +60,13 @@ try {
   assert.equal(saved.status, 200, await saved.text())
   await page.goto(`http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('button', { name: '保存设置', exact: true }).click()
   await page.getByRole('switch', { name: '自动保存', exact: true }).click()
+  await page.getByRole('button', { name: '保存设置', exact: true }).click()
   await page.getByRole('button', { name: '编辑画布', exact: true }).click()
-  await page.getByRole('button', { name: '时间线', exact: true }).click()
+  await page.getByRole('button', { name: '打开剪辑工作区', exact: true }).click()
+  await page.getByRole('button', { name: '查看完整落幅记录历史', exact: true }).click()
+  await locateCanvasNode(page, '时间线')
   const framesUrl = `${versionsUrl}/${version.id}/end-frames`
   const detailUrl = `${versionsUrl}/${version.id}`
   const before = (await (await fetch(detailUrl)).json()).data
@@ -75,7 +80,8 @@ try {
   await image.evaluate(image => image.decode())
   assert.equal(await image.evaluate(image => image.naturalWidth), 160)
   assert.equal(await image.evaluate(image => image.naturalHeight), 90)
-  assert.deepEqual((await (await fetch(detailUrl)).json()).data, before)
+  assert.deepEqual((await (await fetch(detailUrl)).json()).data.content, before.content)
+  assert.equal((await (await fetch(detailUrl)).json()).data.revision, before.revision)
   await page.getByRole('button', { name: '编辑片段 1', exact: true }).click()
   await page.getByRole('spinbutton', { name: '片段源出点毫秒', exact: true }).fill('2000')
   await page.getByRole('button', { name: '保存片段修改', exact: true }).click()
@@ -102,7 +108,9 @@ try {
   await page.unroute('**/end-frames')
   await page.reload()
   await page.getByRole('button', { name: '编辑画布', exact: true }).click()
-  await page.getByRole('button', { name: '时间线', exact: true }).click()
+  await page.getByRole('button', { name: '打开剪辑工作区', exact: true }).click()
+  await page.getByRole('button', { name: '查看完整落幅记录历史', exact: true }).click()
+  await locateCanvasNode(page, '时间线')
   const replay = page.waitForRequest(request => request.url().endsWith('/end-frames') && request.method() === 'POST')
   await page.getByRole('button', { name: '核实原提帧请求', exact: true }).click()
   assert.deepEqual((await replay).postDataJSON(), submitted)

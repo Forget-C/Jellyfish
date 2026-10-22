@@ -244,6 +244,17 @@ export type { EditableShotCoverage_Input } from './models/EditableShotCoverage_I
 export type { EditableShotCoverage_Output } from './models/EditableShotCoverage_Output';
 export type { EditableUnitPreparation_Input } from './models/EditableUnitPreparation_Input';
 export type { EditableUnitPreparation_Output } from './models/EditableUnitPreparation_Output';
+export type { EditCanvasGraph } from './models/EditCanvasGraph';
+export type { EditClipCanvasNode } from './models/EditClipCanvasNode';
+export type { EditCoverageCanvasNode } from './models/EditCoverageCanvasNode';
+export type { EditCutReviewCanvasNode } from './models/EditCutReviewCanvasNode';
+export type { EditDownstreamCanvasNode } from './models/EditDownstreamCanvasNode';
+export type { EditEndFrameCanvasNode } from './models/EditEndFrameCanvasNode';
+export type { EditPlannedCanvasNode } from './models/EditPlannedCanvasNode';
+export type { EditSeamCanvasNode } from './models/EditSeamCanvasNode';
+export type { EditSeamReviewSummary } from './models/EditSeamReviewSummary';
+export type { EditTakeCanvasNode } from './models/EditTakeCanvasNode';
+export type { EditTakeReviewSummary } from './models/EditTakeReviewSummary';
 export type { EntityNameExistenceCheckRequest } from './models/EntityNameExistenceCheckRequest';
 export type { EntityNameExistenceCheckResponse } from './models/EntityNameExistenceCheckResponse';
 export type { EntityNameExistenceItem } from './models/EntityNameExistenceItem';
@@ -280,6 +291,9 @@ export type { ImageGenerationOptionsRead } from './models/ImageGenerationOptions
 export type { ImageMediaInput } from './models/ImageMediaInput';
 export type { InstructionBasisConfirm } from './models/InstructionBasisConfirm';
 export type { InstructionBasisRead } from './models/InstructionBasisRead';
+export type { InstructionCanvasGraph } from './models/InstructionCanvasGraph';
+export type { InstructionCanvasNode } from './models/InstructionCanvasNode';
+export type { InstructionCanvasRecord } from './models/InstructionCanvasRecord';
 export type { InstructionCheckComparison } from './models/InstructionCheckComparison';
 export type { InstructionCheckConfirmation } from './models/InstructionCheckConfirmation';
 export type { InstructionCheckRead } from './models/InstructionCheckRead';

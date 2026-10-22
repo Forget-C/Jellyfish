@@ -84,7 +84,7 @@ export function SceneTimelineEditor({ take, takes, content, disabled, onChange, 
       options={[{ value: '16:9', label: '16:9 横屏' }, { value: '9:16', label: '9:16 竖屏' }, { value: '1:1', label: '1:1 方形' }]}
       onChange={output_aspect_ratio => onChange({ ...content, output_aspect_ratio })} />
     <p>输出画幅用于整场构图；已有单元生成画幅保持原值，新建单元使用当前默认画幅。导出像素尺寸另行选择。</p>
-    <SceneTimelinePreview key={JSON.stringify([content.output_aspect_ratio, items, takes.map(row => [row.take_kind, row.take_id, row.file_id, row.available, row.duration_ms, row.media_url]), previewStop])}
+    <SceneTimelinePreview key={JSON.stringify([content.output_aspect_ratio, items, previewStop])}
       outputAspectRatio={content.output_aspect_ratio} items={items} takes={takes} onStart={onPreviewStart} />
     <p>采用须明确选择源区间和时间位置；素材审查与剪辑采用分别表达。</p>
     <Button disabled={disabled || !items.length} onClick={() => {

@@ -37,6 +37,17 @@ async def test_scene_cut_review_freezes_basis_and_rechecks_actual_composition(tm
         saved = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})
         assert saved.status_code == 200, saved.text
         saved = saved.json()['data']
+        from app.models.directing import SceneEndFrameRecord
+        async with sessions.begin() as db:
+            db.add(SceneEndFrameRecord(id='fixed-frame', version_id=version['id'], request_id='fixed-request',
+                request={'request_id': 'fixed-request', 'expected_revision': saved['revision'], 'clip_id': 'clip'},
+                clip=saved['content']['timeline']['items'][0], file_id='missing-frame-file', at_ms=960))
+        projected_frames = (await client.get(detail)).json()['data']['edit_graph']['nodes']
+        frame_node = next(node for node in projected_frames if node['kind'] == 'edit_end_frame')
+        assert frame_node['frame']['clip']['id'] == 'clip'
+        assert frame_node['frame']['at_ms'] == 960
+        assert frame_node['frame']['matches_current'] is True
+        assert frame_node['frame']['available'] is False
         review_path = detail + '/cut-reviews'
         request = {'request_id': str(uuid4()), 'expected_revision': saved['revision'], 'decision': {
             'verdict': 'pass', 'overall': '画面叙事成立', 'established': '动作与反应连贯', 'coverage_status': 'verified',
@@ -45,6 +56,13 @@ async def test_scene_cut_review_freezes_basis_and_rechecks_actual_composition(tm
         assert response.status_code == 200, response.text
         review = response.json()['data']
         assert review['matches_current'] is True
+        projected = (await client.get(detail)).json()['data']
+        assert projected['revision'] == saved['revision']
+        nodes = [node for node in projected['edit_graph']['nodes'] if node['kind'] == 'edit_cut_review']
+        assert len(nodes) == 1
+        assert nodes[0]['record_id'] == review['id']
+        assert nodes[0]['matches_current'] is True
+        assert nodes[0]['decision']['sound_status'] == 'pending_postproduction'
         assert review['content'] == saved['content']
         assert review['decision']['sound_status'] == 'pending_postproduction'
         assert (await client.post(review_path, json=request)).json()['data'] == review
@@ -79,12 +97,18 @@ async def test_scene_cut_review_freezes_basis_and_rechecks_actual_composition(tm
         unrelated_response = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': unrelated['revision'], 'content': unrelated_content})
         assert unrelated_response.status_code == 200, unrelated_response.text
         assert (await client.get(review_path)).json()['data'][0]['matches_current'] is True
+        unrelated_graph = unrelated_response.json()['data']['edit_graph']['nodes']
+        assert next(node for node in unrelated_graph if node['kind'] == 'edit_cut_review')['matches_current'] is True
+        assert next(node for node in unrelated_graph if node['kind'] == 'edit_end_frame')['frame']['matches_current'] is True
         current = unrelated_response.json()['data']
         interval = deepcopy(current['content'])
         interval['timeline']['items'][0]['media_range']['source_out_ms'] = 800
         interval_response = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': current['revision'], 'content': interval})
         assert interval_response.status_code == 200, interval_response.text
         assert (await client.get(review_path)).json()['data'][0]['matches_current'] is False
+        interval_nodes = interval_response.json()['data']['edit_graph']['nodes']
+        assert next(node for node in interval_nodes if node['kind'] == 'edit_cut_review')['matches_current'] is False
+        assert next(node for node in interval_nodes if node['kind'] == 'edit_end_frame')['frame']['matches_current'] is False
         current = interval_response.json()['data']
         planned = deepcopy(current['content'])
         planned['timeline']['items'].append({'kind': 'planned', 'id': 'placeholder', 'shot_id': 's1', 'estimated_duration_ms': 1000, 'timeline_start_ms': 2000})
@@ -99,3 +123,41 @@ async def test_scene_cut_review_freezes_basis_and_rechecks_actual_composition(tm
         assert (await client.post(review_path, json=with_placeholder)).status_code == 200
         assert (await client.get(review_path)).json()['data'][0] == {**review, 'matches_current': False}
         assert (await client.get(path)).json()['data']['takes'] == original
+
+
+@pytest.mark.asyncio
+async def test_version_lists_restore_oldest_applicable_cut_summary_after_many_other_bases(tmp_path):
+    """版本和列表只有最新与最近适用摘要；历史量不会截断旧依据恢复。"""
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        path = await sequence_path(client)
+        created = (await client.post(path + '/versions', json={'request_id': str(uuid4()), 'title': '历史摘要'})).json()['data']
+        detail = path + '/versions/' + created['id']
+        content = deepcopy(created['content'])
+        content['design'] = editable_design_sample()
+        content['timeline']['items'] = [{'kind': 'planned', 'id': 'pending', 'shot_id': 's1', 'timeline_start_ms': 0, 'estimated_duration_ms': 1000}]
+        saved = (await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})).json()['data']
+        original = deepcopy(saved['content'])
+        first_id = None
+        for index in range(36):
+            if index:
+                content = deepcopy(original)
+                content['design']['direction']['viewpoint'] = {'state': 'proposal', 'text': f'固定历史依据 {index}', 'sources': [SOURCE]}
+                response = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': saved['revision'], 'content': content})
+                assert response.status_code == 200, response.text
+                saved = response.json()['data']
+            response = await client.post(detail + '/cut-reviews', json={'request_id': str(uuid4()), 'expected_revision': saved['revision'], 'decision': {
+                'verdict': 'revise', 'overall': f'固定结论 {index}', 'coverage_status': 'gaps', 'coverage_notes': '仍有占位', 'sound_status': 'pending_postproduction'}})
+            assert response.status_code == 200, response.text
+            first_id = first_id or response.json()['data']['id']
+        changed = deepcopy(original)
+        changed['output_aspect_ratio'] = '9:16'
+        saved = (await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': saved['revision'], 'content': changed})).json()['data']
+        nodes = [node for node in saved['edit_graph']['nodes'] if node['kind'] == 'edit_cut_review']
+        assert len(nodes) == 1 and nodes[0]['matches_current'] is False
+        restored = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': saved['revision'], 'content': original})
+        assert restored.status_code == 200, restored.text
+        for projected in [restored.json()['data'], (await client.get(detail)).json()['data'], (await client.get(path + '/versions')).json()['data'][0]]:
+            nodes = [node for node in projected['edit_graph']['nodes'] if node['kind'] == 'edit_cut_review']
+            assert len(nodes) == 2
+            assert [node['matches_current'] for node in nodes] == [False, True]
+            assert nodes[1]['record_id'] == first_id

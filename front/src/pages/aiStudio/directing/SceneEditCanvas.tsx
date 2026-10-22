@@ -1,6 +1,9 @@
 import { CanvasCard } from '../../../components/canvas/Canvas'
 import { WorkbenchDetails } from './ui/WorkbenchDetails'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router-dom'
+import { ArrowLeftOutlined, ArrowRightOutlined } from '@ant-design/icons'
+import { useGraphBrowse } from './useGraphBrowse'
 import { Alert, Button, Input, InputNumber, Select, Space } from 'antd'
 import { StudioDirectingService } from '../../../services/generated'
 import type { SceneTakeAnnotation_Output, SceneTakeLibraryRead, SceneVersionContent_Output } from '../../../services/generated'
@@ -15,20 +18,30 @@ import { SceneTakeBasis } from './SceneTakeBasis'
 import { SceneTakeReviews } from './SceneTakeReviews'
 import { SceneTakeCoverage } from './SceneTakeCoverage'
 import type { SceneMediaNavigationTarget } from './SceneRelationsNavigation'
+import { EditGraphCanvas } from './EditGraphCanvas'
+import type { EditCanvasGraph } from '../../../services/generated'
+import { WorkbenchButton, WorkbenchIconButton } from './ui/WorkbenchButton'
 import { DirectorCanvasSurface } from './DirectorCanvasSurface'
 
 const identity = (take: { take_kind: string; take_id: string }) => `${take.take_kind}:${take.take_id}`
 
-const editingSessions = new Map<string, { selected: string; navigationSerial?: number; focusClipId?: string }>()
+const editingSessions = new Map<string, { selected: string; navigationSerial?: number; focusClipId?: string; workspace?: boolean; graphNavigation?: number; library?: boolean }>()
 
 /** 素材来源只读；人工判断属于当前版本，统一交给工作台保存与撤销。 */
-export function SceneEditCanvas({ projectId, sequenceId, versionId, revision, content, disabled, dirty, onChange, onOpenUnit, onOpenVersion, focusClipId, navigation }: {
+export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectId, sequenceId, versionId, revision, content, disabled, dirty, onChange, onOpenUnit, onOpenVersion, focusClipId, navigation }: {
+  graph: EditCanvasGraph; evidenceError: string; onRefreshGraph: () => void
   navigation?: { target: SceneMediaNavigationTarget; serial: number }
   onOpenVersion: (target: { versionId: string; unitId: string }) => Promise<void>
-  onOpenUnit: (unitId: string) => void; focusClipId?: string
+  onOpenUnit: (unitId: string, coverageId?: string) => void; focusClipId?: string
   projectId: string; sequenceId: string; versionId: string; revision: number; content: SceneVersionContent_Output; disabled: boolean; dirty: boolean
   onChange: (content: SceneVersionContent_Output) => void
 }) {
+  const [unavailableCoverage, setUnavailableCoverage] = useState(false)
+  const [previewUrl, setPreviewUrl] = useState('')
+  const [cutNavigation, setCutNavigation] = useState<string>()
+  const [frameNavigation, setFrameNavigation] = useState<string>()
+  const [seamNavigation, setSeamNavigation] = useState<{ leftClipId: string; rightClipId: string; serial: number }>()
+  const [unavailableClip, setUnavailableClip] = useState('')
   const [takes, setTakes] = useState<SceneTakeLibraryRead[]>([])
   const contextKey = `${projectId}:${sequenceId}:${versionId}`
   const [session] = useState(() => {
@@ -36,9 +49,70 @@ export function SceneEditCanvas({ projectId, sequenceId, versionId, revision, co
     editingSessions.set(contextKey, value)
     return value
   })
+  const [graphNavigation, setGraphNavigation] = useState<number | undefined>(session.graphNavigation)
+  useEffect(() => { session.graphNavigation = graphNavigation }, [session, graphNavigation])
+  const [params, setParams] = useSearchParams()
+  const location = useLocation(), navigate = useNavigate(), navigationType = useNavigationType()
+  const { canBrowse } = useGraphBrowse(`jellyfish:edit:local-user:${contextKey}`)
+  const routed = params.get('editVersion') === versionId && params.has('editView')
+  const rootViewId = graph?.views?.find(view => view.parent_id === null)?.id || ''
+  const library = routed ? params.get('editView') === graph?.library_view_id : !!session.library
+  useEffect(() => { session.library = library }, [library, session])
+  const [reviewFocus, setReviewFocus] = useState<{ recordId: string; serial: number }>()
+  const initialBrowse = useRef({
+    key: location.key,
+    workspace: !!session.workspace || !!(navigation && session.navigationSerial !== navigation.serial) || !!(focusClipId && session.focusClipId !== focusClipId),
+    library: !!session.library,
+  })
+  const [fallbackWorkspace, setFallbackWorkspace] = useState(initialBrowse.current.workspace)
+  const workspace = routed ? params.get('editWorkspace') === '1' : fallbackWorkspace
+  useEffect(() => { session.workspace = workspace }, [workspace, session])
   const [selected, setSelected] = useState(session.selected)
   useEffect(() => { session.selected = selected }, [session, selected])
   const [focusTarget, setFocusTarget] = useState<{ nodeId: string; fieldId: string; serial: number }>()
+  const restoringBrowse = useRef(false)
+  const browseState = useMemo(() => ({ versionId, selected, focusTarget, seamNavigation, cutNavigation, frameNavigation, reviewFocus }),
+    [versionId, selected, focusTarget, seamNavigation, cutNavigation, frameNavigation, reviewFocus])
+  const go = useCallback((nextWorkspace: boolean, nextLibrary = library, replace = false) => {
+    const viewId = (nextLibrary ? graph?.library_view_id : rootViewId) || (routed ? params.get('editView') : undefined)
+    // 图尚未核实时只切换原工作区，不伪造 graph 视图或丢失编辑入口。
+    if (!viewId) { setFallbackWorkspace(nextWorkspace); return }
+    const next = new URLSearchParams(params)
+    next.set('canvas', 'edit'); next.delete('unitView')
+    next.set('editVersion', versionId); next.set('editView', viewId)
+    if (nextWorkspace) next.set('editWorkspace', '1')
+    else next.delete('editWorkspace')
+    setParams(next, { replace, state: { ...location.state, editBrowse: browseState } })
+  }, [library, graph?.library_view_id, rootViewId, params, versionId, setParams, location.state, browseState, routed])
+  const setWorkspace = (value: boolean | ((previous: boolean) => boolean)) => {
+    const next = typeof value === 'function' ? value(workspace) : value
+    go(next, next ? library : false)
+  }
+  const workspaceRequest = useRef(setWorkspace)
+  workspaceRequest.current = setWorkspace
+  // POP 只恢复浏览身份和焦点；不重建工作区，不回放业务命令或覆盖当前输入。
+  useLayoutEffect(() => {
+    if (navigationType !== 'POP' || !routed || !workspace) return
+    const stored = location.state?.editBrowse as typeof browseState | undefined
+    if (!stored || stored.versionId !== versionId) return
+    restoringBrowse.current = true
+    setSelected(stored.selected)
+    setFocusTarget(stored.focusTarget ? { ...stored.focusTarget, serial: Date.now() } : undefined)
+    setSeamNavigation(stored.seamNavigation)
+    setCutNavigation(stored.cutNavigation); setFrameNavigation(stored.frameNavigation)
+    setReviewFocus(stored.reviewFocus)
+  }, [location.key, location.state?.editBrowse, navigationType, routed, workspace, versionId])
+  useEffect(() => {
+    if (!routed) {
+      // 返回其他画布的历史入口时，由父级恢复默认画布，不改写该历史位置。
+      if (navigationType === 'POP' && location.key !== initialBrowse.current.key && params.get('canvas') !== 'edit') return
+      go(initialBrowse.current.workspace, initialBrowse.current.library, true)
+      return
+    }
+    if (restoringBrowse.current) { restoringBrowse.current = false; return }
+    if (JSON.stringify(location.state?.editBrowse) === JSON.stringify(browseState)) return
+    setParams(params, { replace: true, state: { ...location.state, editBrowse: browseState } })
+  }, [routed, go, navigationType, location.key, location.state, browseState, params, setParams])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [attempt, setAttempt] = useState(0)
@@ -49,22 +123,26 @@ export function SceneEditCanvas({ projectId, sequenceId, versionId, revision, co
   const [previewAttempt, setPreviewAttempt] = useState(0)
   useEffect(() => {
     let active = true
-    setLoading(true); setError('')
+    setLoading(true)
     void StudioDirectingService.directingSceneTakeLibrary({ projectId, sequenceId, versionId }).then(response => {
       if (!response.data) throw new Error('素材列表尚未核实')
-      if (active) setTakes(response.data)
+      if (active) { setTakes(response.data); setError('') }
     }).catch(cause => { if (active) setError(directingError(cause)) }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [projectId, sequenceId, versionId, attempt])
+  }, [projectId, sequenceId, versionId, attempt, graph])
   useEffect(() => {
     if (!focusClipId || session.focusClipId === focusClipId) return
+    workspaceRequest.current(true)
     session.focusClipId = focusClipId
     setFocusTarget({ nodeId: '时间线', fieldId: `scene-end-frame-${focusClipId}`, serial: Date.now() })
-  }, [focusClipId])
+  }, [focusClipId, session])
   useEffect(() => {
     if (!navigation || session.navigationSerial === navigation.serial) return
+    workspaceRequest.current(true)
+    setGraphNavigation(undefined)
     session.navigationSerial = navigation.serial
     setPreview(false); setPreviewError(''); setPreviewStop(value => value + 1); setSeamStop(value => value + 1)
+    setReviewFocus(undefined)
     const target = navigation.target
     if (target.kind === 'take') {
       setSelected(`${target.takeKind}:${target.takeId}`)
@@ -73,14 +151,16 @@ export function SceneEditCanvas({ projectId, sequenceId, versionId, revision, co
       setSelected('')
       setFocusTarget({ nodeId: '时间线', fieldId: `scene-clip-${target.clipId}`, serial: navigation.serial })
     }
-  }, [navigation?.serial])
+  }, [navigation, session])
   const navigationClipId = navigation?.target.kind === 'clip' ? navigation.target.clipId : undefined
+  // 后台证据刷新不阻断已核实素材的本地编辑；保存仍由服务端复核真实输入。
+  const libraryBlocked = loading && takes.length === 0 || !!error
   const take = takes.find(row => identity(row) === selected)
   const annotation = content.take_judgments?.find(row => identity(row) === selected)?.annotation || {
     coverage: [], review_status: 'unreviewed', rationale: {}, retained_ranges: [],
   } satisfies SceneTakeAnnotation_Output
   const change = (next: SceneTakeAnnotation_Output) => {
-    if (disabled || !take || loading || error) return
+    if (disabled || !take || libraryBlocked) return
     const judgment = { take_kind: take.take_kind, take_id: take.take_id, file_id: take.file_id, annotation: next }
     const existing = content.take_judgments || []
     onChange({ ...content, take_judgments: existing.some(row => identity(row) === selected)
@@ -88,7 +168,7 @@ export function SceneEditCanvas({ projectId, sequenceId, versionId, revision, co
   }
   const [takeDetails, setTakeDetails] = useState(false)
   const stopLivePreview = () => { setPreview(false); setPreviewStop(value => value + 1); setSeamStop(value => value + 1) }
-  const editDisabled = disabled || loading || !!error || !take?.available
+  const editDisabled = disabled || libraryBlocked || !take?.available
   const takeInformation = take && <>
         <p>素材：{take.take_id}</p><p>文件：{take.file_id}</p><p>原所属{take.take_kind === 'scene_video' ? '场次版本' : '生产计划'}：{take.origin_id}</p>
         {take.take_kind === 'scene_video' && <OpenTakeVersion key={selected} disabled={loading || !!error} onOpen={() => onOpenVersion({ versionId: take.origin_id, unitId: take.unit_id })} />}
@@ -97,7 +177,61 @@ export function SceneEditCanvas({ projectId, sequenceId, versionId, revision, co
         <details><summary>查看固定生产依据</summary><p>原单元：{take.unit_id}</p><p>原任务：{take.task_id}</p>
           <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(take.video_preparation || { prompt: take.prompt, production_plan: take.production_plan }, null, 2)}</pre></details>
   </>
-  return <><DirectorCanvasSurface focusTarget={focusTarget} contextKey={`${versionId}:edit`} inspectors={{ 当前素材: take ? () => setTakeDetails(true) : undefined }} ariaLabel="编辑画布视口" labels={['同场次素材', '当前素材', '方案判断', '时间线']} initialPositions={{ 方案判断: { x: 800, y: 0 }, 时间线: { x: 0, y: 740 } }}>
+  return <><div className="scene-edit-navigation" aria-label="剪辑浏览">
+    <WorkbenchIconButton label="后退" variant="quiet" icon={<ArrowLeftOutlined />} disabled={!canBrowse(-1)} onClick={() => navigate(-1)} />
+    <WorkbenchIconButton label="前进" variant="quiet" icon={<ArrowRightOutlined />} disabled={!canBrowse(1)} onClick={() => navigate(1)} />
+    <WorkbenchButton variant="secondary" onClick={() => setWorkspace(value => !value)}>{workspace ? '浏览整场剪辑' : '打开剪辑工作区'}</WorkbenchButton>
+    <WorkbenchButton variant="secondary" onClick={() => { setWorkspace(true); setFocusTarget({ nodeId: '同场次素材', fieldId: '', serial: Date.now() }) }}>浏览同场次素材</WorkbenchButton>
+    <WorkbenchButton variant="secondary" onClick={() => go(false, !(library && !workspace))}>{library && !workspace ? '返回整场剪辑图' : '浏览同场素材图'}</WorkbenchButton>
+    <WorkbenchButton variant="secondary" onClick={onRefreshGraph}>刷新图证据</WorkbenchButton>
+    {loading && takes.length > 0 && <span role="status">正在刷新素材证据；已核实素材及当前输入保留。</span>}
+    {dirty && <span aria-label="剪辑图同步状态">图待同步：总览展示已保存内容，工作区保留当前输入。</span>}
+    {evidenceError && <p role="alert">图证据读取失败，保留旧摘要：{evidenceError}。请刷新图证据重试。</p>}
+    {unavailableCoverage && <p role="alert">原覆盖目标在当前编辑中已不可用，请明确核对；未选择替代对象。</p>}
+    {unavailableClip && <p role="alert">原片段 {unavailableClip} 在当前编辑中已不可用，请保存后重新核对。</p>}
+  </div><div className="scene-edit-overview" hidden={workspace}><EditGraphCanvas graph={graph} versionId={versionId} revision={revision} contextKey={contextKey} viewId={routed ? params.get('editView') || undefined : library ? graph?.library_view_id || undefined : undefined} onRetry={onRefreshGraph} onLocateCoverage={node => {
+    const unit = content.units.find(row => row.id === node.coverage.unit_id)
+    if (!unit?.coverage.some(row => row.id === node.coverage.coverage_item_id)) { setUnavailableCoverage(true); return }
+    setUnavailableCoverage(false); onOpenUnit(unit.id, node.coverage.coverage_item_id)
+  }} onLocate={(node, recordId) => {
+    if (node.kind === 'edit_downstream') {
+      if (!content.units.some(unit => unit.id === node.unit_id)) { setUnavailableCoverage(true); return }
+      setUnavailableCoverage(false); onOpenUnit(node.unit_id); return
+    }
+    if (node.kind === 'edit_cut_review' || node.kind === 'edit_end_frame') {
+      setWorkspace(true)
+      if (node.kind === 'edit_cut_review') setCutNavigation(node.record_id)
+      else setFrameNavigation(node.frame.id)
+      setFocusTarget({ nodeId: '时间线', fieldId: node.kind === 'edit_cut_review' ? `scene-cut-review-${node.record_id}` : `scene-end-frame-${node.frame.id}`, serial: Date.now() }); return
+    }
+    if (node.kind === 'edit_coverage') {
+      const judgment = content.take_judgments.find(row => identity(row) === identity(node))
+      if (!judgment?.annotation.coverage.some(row => row.id === node.coverage.id)) { setUnavailableCoverage(true); return }
+      setReviewFocus(undefined); setUnavailableCoverage(false); if (selected !== identity(node)) setPreview(false)
+      setSelected(identity(node)); setWorkspace(true)
+      setFocusTarget({ nodeId: '方案判断', fieldId: `scene-actual-coverage-${node.coverage.id}`, serial: Date.now() }); return
+    }
+    if (node.kind === 'edit_take') {
+      if (selected !== identity(node)) setPreview(false)
+      setSelected(`${node.take_kind}:${node.take_id}`); setWorkspace(true); setReviewFocus(recordId ? { recordId, serial: Date.now() } : undefined)
+      setFocusTarget({ nodeId: recordId ? '方案判断' : '当前素材', fieldId: recordId ? `scene-take-review-${recordId}` : 'scene-current-take', serial: Date.now() }); return
+    }
+    if (node.kind === 'edit_seam') {
+      const missing = [node.left_clip_id, node.right_clip_id].find(id => !content.timeline.items.some(item => item.id === id && item.kind === 'media'))
+      if (missing) { setUnavailableClip(missing); return }
+      const serial = Date.now()
+      setUnavailableClip(''); setWorkspace(true)
+      setSeamNavigation({ leftClipId: node.left_clip_id, rightClipId: node.right_clip_id, serial })
+      setFocusTarget({ nodeId: '时间线', fieldId: 'scene-seam-review', serial }); return
+    }
+    const clip = content.timeline.items.find(item => item.id === node.clip_id)
+    if (!clip) { setUnavailableClip(node.clip_id); return }
+    setUnavailableClip(''); setWorkspace(true)
+    setReviewFocus(undefined)
+    if ('media_range' in clip) setSelected(`${clip.take_kind}:${clip.take_id}`)
+    const serial = Date.now(); setGraphNavigation(serial)
+    setFocusTarget({ nodeId: '时间线', fieldId: `scene-clip-${clip.id}`, serial })
+  }} /></div><div hidden={!workspace}><DirectorCanvasSurface focusTarget={focusTarget} contextKey={`${versionId}:edit`} inspectors={{ 当前素材: take ? () => setTakeDetails(true) : undefined }} ariaLabel="编辑画布视口" labels={['同场次素材', '当前素材', '方案判断', '时间线']} initialPositions={{ 方案判断: { x: 800, y: 0 }, 时间线: { x: 0, y: 740 } }}>
     <section className="canvas-workbench-card">
       <Button loading={loading} onClick={() => setAttempt(value => value + 1)}>刷新素材库</Button>
       {error && <Alert type="warning" message="素材库读取失败" description={error} />}
@@ -105,11 +239,11 @@ export function SceneEditCanvas({ projectId, sequenceId, versionId, revision, co
       {takes.map((row, index) => {
         const judgment = content.take_judgments.find(item => identity(item) === identity(row))
         const issues = !loading && !error && judgment ? sceneTakeIssues(judgment, row, content) : []
-        return <CanvasCard key={identity(row)} aria-label={`素材 ${index + 1}`} onActivate={() => { setSelected(identity(row)); setPreview(false); setPreviewError(''); setTakeDetails(true) }}><Button onClick={() => {
-          setSelected(identity(row)); setPreview(false); setPreviewError('')
+        return <CanvasCard key={identity(row)} aria-label={`素材 ${index + 1}`} onActivate={() => { setReviewFocus(undefined); setSelected(identity(row)); setPreview(false); setPreviewError(''); setTakeDetails(true) }}><Button onClick={() => {
+          setReviewFocus(undefined); setSelected(identity(row)); setPreview(false); setPreviewError('')
         }}>选择素材 {index + 1}</Button><p>{row.take_kind === 'scene_video' ? '场次版本素材' : '生产计划素材'} · {row.available ? '已登记' : '文件不可用'}</p>
           {issues.map(issue => <p key={issue.label}><Button danger onClick={() => {
-            setSelected(identity(row)); setPreview(false); setPreviewError('')
+            setReviewFocus(undefined); setSelected(identity(row)); setPreview(false); setPreviewError('')
             setFocusTarget(previous => ({ nodeId: '方案判断', fieldId: issue.fieldId, serial: (previous?.serial || 0) + 1 }))
           }}>定位素材 {index + 1}：{issue.label}</Button></p>)}
         </CanvasCard>
@@ -121,12 +255,12 @@ export function SceneEditCanvas({ projectId, sequenceId, versionId, revision, co
         <p>实际媒体时长：{take.duration_ms == null ? '尚未核实' : `${take.duration_ms / 1000} 秒`}</p>
         <Button onClick={() => setTakeDetails(true)}>查看素材固定依据</Button>
         <Button disabled={!take.available || !take.media_url || loading || !!error} onClick={() => {
-          setPreviewStop(value => value + 1); setSeamStop(value => value + 1); setPreview(true); setPreviewError(''); setPreviewAttempt(value => value + 1)
+          setPreviewStop(value => value + 1); setSeamStop(value => value + 1); setPreview(true); setPreviewUrl(resolveAssetUrl(take.media_url || '') || ''); setPreviewError(''); setPreviewAttempt(value => value + 1)
         }}>{previewError ? '重试当前素材预览' : '预览当前素材'}</Button>
         {!take.available && <Alert type="warning" message="原素材文件不可用，请恢复后刷新素材库" />}
         {previewError && <Alert type="warning" message={previewError} />}
         {preview && take.media_url && <video key={`${selected}:${previewAttempt}`} aria-label="当前素材视频" controls preload="metadata"
-          src={resolveAssetUrl(take.media_url)} style={{ width: '100%', maxHeight: 320 }}
+          src={previewUrl} style={{ width: '100%', maxHeight: 320 }}
           onError={() => setPreviewError('原素材无法读取或解码，请重试；素材身份和当前判断保留。')} />}
         <p>预览不自动播放，也不代表剪辑采用。旧版本素材需人工核对当前适用性。</p>
       </>}
@@ -159,20 +293,20 @@ export function SceneEditCanvas({ projectId, sequenceId, versionId, revision, co
         <Button disabled={editDisabled || !take.duration_ms} onClick={() => { if (take.duration_ms) change({ ...annotation, retained_ranges: [...annotation.retained_ranges, { source_in_ms: 0, source_out_ms: take.duration_ms }] }) }}>新增可用区间</Button>
         {take.duration_ms == null && <p>真实时长尚未核实，暂不能新增可用区间。</p>}
         <p>可用区间不等于实际覆盖或时间线采用。</p>
-        <SceneTakeReviews key={selected} dirty={dirty} disabled={editDisabled} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} take={take} content={content} />
+        <SceneTakeReviews key={selected} onEvidenceChanged={onRefreshGraph} focusRecordId={reviewFocus?.recordId} focusSerial={reviewFocus?.serial} dirty={dirty} disabled={editDisabled} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} take={take} content={content} />
       </>}
     </section>
-    <SceneTimelineEditor contextKey={contextKey} selectionKey={selected} navigationSerial={navigation?.serial} previewStop={previewStop} onPreviewStart={() => { setPreview(false); setSeamStop(value => value + 1) }} take={take} takes={takes} content={content} disabled={disabled || loading || !!error} onChange={onChange}>
+    <SceneTimelineEditor contextKey={contextKey} selectionKey={selected} navigationSerial={graphNavigation || navigation?.serial} previewStop={previewStop} onPreviewStart={() => { setPreview(false); setSeamStop(value => value + 1) }} take={take} takes={takes} content={content} disabled={disabled || libraryBlocked} onChange={onChange}>
       {navigationClipId && !content.timeline.items.some(item => item.id === navigationClipId) && <Alert type="warning" message="原片段已不可用，请重新选择；未选择其他片段。" />}
       {focusClipId && !content.timeline.items.some(item => item.id === focusClipId) && <Alert type="warning" message={`原采用 ${focusClipId} 已不存在，请核对原依赖；未选择其他片段。`} />}
-      <SceneEndFrames onOpenUnit={onOpenUnit} key={versionId} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content}
+      <SceneEndFrames navigation={frameNavigation} onRecorded={onRefreshGraph} onOpenUnit={onOpenUnit} key={versionId} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content}
         dirty={dirty} disabled={disabled || loading || !!error} />
-      <SceneSeamReviews onHistoryPreviewStart={stopLivePreview} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content} takes={takes}
+      <SceneSeamReviews navigation={seamNavigation} onRecorded={onRefreshGraph} onHistoryPreviewStart={stopLivePreview} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content} takes={takes}
         dirty={dirty} disabled={disabled || loading || !!error} previewStop={seamStop} onPreviewStart={() => { setPreview(false); setPreviewStop(value => value + 1) }} />
-      <SceneCutReviews takes={takes} onHistoryPreviewStart={stopLivePreview} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content}
+      <SceneCutReviews navigation={cutNavigation} onRecorded={onRefreshGraph} takes={takes} onHistoryPreviewStart={stopLivePreview} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content}
         dirty={dirty} disabled={disabled || loading || !!error} />
     </SceneTimelineEditor>
-  </DirectorCanvasSurface><WorkbenchDetails title="素材固定依据 · 只读" status="只读" open={takeDetails && !!take} onClose={() => setTakeDetails(false)}>{takeInformation}</WorkbenchDetails></>
+  </DirectorCanvasSurface></div><WorkbenchDetails title="素材固定依据 · 只读" status="只读" open={takeDetails && !!take} onClose={() => setTakeDetails(false)}>{takeInformation}</WorkbenchDetails></>
 }
 
 /** 明确打开原版本才执行切换保护；读取错误只归属当前素材入口。 */

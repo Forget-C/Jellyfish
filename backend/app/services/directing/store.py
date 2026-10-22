@@ -37,6 +37,8 @@ from app.services.studio.file_usages import upsert_file_usage
 from app.services.directing.canvas_graph import CanvasReadContext
 from app.services.directing.director_canvas import director_graph
 from app.services.directing.unit_canvas import unit_graph
+from app.services.directing.instruction_canvas import instruction_graph
+from app.services.directing.edit_canvas import edit_graph
 
 CONTRACTS = {"design": SceneDesign, "plan": ProductionPlan, "prompt": Prompt,
              "review": ReviewPacket, "cut": SequenceCut, "cut_review": CutReview,
@@ -255,11 +257,15 @@ class DirectingStore:
                 content.design.style_revision_id, sequence.id, name),
             lambda: self.canvas_dependency_evidence(sequence.id, version_id, content))
         director = director_graph(canvas)
+        units = unit_graph(canvas, director)
         return SceneVersionRead(**snapshot, copied_from_version_id=origin.source_version_id if origin else None,
             project_id=self.project_id, chapter_id=sequence.chapter_id, sequence_id=sequence.id,
             source=content.basis, content=content,
             relationship_graph=relationships, director_graph=director,
-            unit_graph=unit_graph(canvas, director))
+            unit_graph=units, instruction_graph=await instruction_graph(canvas, units, self, sequence.id),
+            edit_graph=await edit_graph(canvas, self.db, sequence.id,
+                await self.inherited_scene_review_ids(snapshot['id'], 'seam'),
+                await self.inherited_scene_review_ids(snapshot['id'], 'cut')))
 
     async def create_scene_version(self, sequence_id: str, body: SceneVersionCreate) -> SceneVersionRead:
         """明确创建空方案，原文依据来自已核实的当前场次，不复制历史方案。"""
@@ -354,9 +360,11 @@ class DirectingStore:
 
     async def create_scene_take_review(self, sequence, version_id, revision, content, judgment):
         """固定审片依据并独立保护文件；调用方核实当前修订与重复请求。"""
+        from app.services.directing.scene_take_evidence import take_review_basis_key
         snapshot = content.model_copy(update={'take_judgments': [judgment]}).model_dump(mode='json')
         row = SceneTakeReviewRecord(id=uuid4().hex, version_id=version_id,
-            revision=revision, take_kind=judgment.take_kind, take_id=judgment.take_id, content=snapshot)
+            revision=revision, take_kind=judgment.take_kind, take_id=judgment.take_id, content=snapshot,
+            basis_key=take_review_basis_key(SceneVersionContent.model_validate(snapshot)))
         self.db.add(row)
         await self.protect_scene_review_files(sequence, snapshot, 'scene-take-review:' + row.id)
         await self.db.flush()

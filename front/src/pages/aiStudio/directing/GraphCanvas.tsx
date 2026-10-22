@@ -32,6 +32,7 @@ export type GraphCanvasProps = {
 export function GraphCanvas({ contextKey, objects = [], relations = [], guides = [], groups = [], tools = [],
   initialPositions = {}, fallbackLayout, focusTarget, layoutScope, onInspectRelation,
   ariaLabel = '画布视口', toolsLabel = '画布工具' }: GraphCanvasProps) {
+  const [locatorOpen, setLocatorOpen] = useState(false)
   const [classicView, setClassicView] = useState<ViewState>(() => views.get(contextKey) || {
     transform: { x: 120, y: 30, scale: Math.max(.3, Math.min(1, (window.innerWidth - 180) / 1160)) }, positions: {},
   })
@@ -135,7 +136,11 @@ export function GraphCanvas({ contextKey, objects = [], relations = [], guides =
     const scale = Math.min(1, ((viewport.surface.current?.clientWidth || window.innerWidth) - 32) / 360)
     const top = layoutScope ? 56 : 20
     setView(previous => ({ ...previous, transform: { scale, x: 16 - point.x * scale, y: top - point.y * scale } }))
-    requestAnimationFrame(() => cards.current.get(id)?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true }))
+    const previousFocus = document.activeElement
+    requestAnimationFrame(() => {
+      // 新的明确输入／按钮焦点优先，迟到的定位不能再抢回拖动柄。
+      if (document.activeElement === previousFocus || document.activeElement === document.body) cards.current.get(id)?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true })
+    })
   }
   useEffect(() => {
     if (!focusTarget || layoutScope && (!layout.ready || !view.positions[focusTarget.nodeId] || !sizes[focusTarget.nodeId]) || locatedRequests.get(contextKey) === focusTarget.serial || !nodes.some(node => node.id === focusTarget.nodeId)) return
@@ -285,7 +290,7 @@ export function GraphCanvas({ contextKey, objects = [], relations = [], guides =
       </svg>}
     <nav className="director-canvas-tools" aria-label={toolsLabel}>{tools.map(tool => <Tooltip key={tool.label} title={tool.label} placement="right"><Button type="text" aria-label={tool.label} icon={tool.icon || <ToolOutlined />} key={tool.label} data-director-tool={tool.label} draggable onDragStart={event => { event.dataTransfer.setData(toolDrag, tool.label); event.dataTransfer.effectAllowed = 'link' }} onClick={event => tool.onClick(event.currentTarget)} /></Tooltip>)}</nav>
     <div className="director-canvas-bottom">
-      <Dropdown trigger={['click']} menu={{ style: { maxHeight: '60dvh', overflowY: 'auto', maxWidth: 'calc(100vw - 32px)' }, items: [...groupRegions.map(group => ({ key: `group:${group.group}`, label: `${group.label}分区 · ${group.count}`, onClick: () => locate(group.first) })), ...nodes.map(node => ({ key: node.id, label: node.label, onClick: () => locate(node.id) }))] }}>
+      <Dropdown open={locatorOpen} onOpenChange={setLocatorOpen} trigger={['click']} menu={{ onClick: () => setLocatorOpen(false), onKeyDown: event => { if (event.key === 'Escape') { setLocatorOpen(false); event.stopPropagation() } }, style: { maxHeight: '60dvh', overflowY: 'auto', maxWidth: 'calc(100vw - 32px)' }, items: [...groupRegions.map(group => ({ key: `group:${group.group}`, label: `${group.label}分区 · ${group.count}`, onClick: () => locate(group.first) })), ...nodes.map(node => ({ key: node.id, label: node.label, onClick: () => locate(node.id) }))] }}>
         <Button type="text" aria-label="定位画布节点" title="定位画布节点" icon={<AimOutlined />} />
       </Dropdown>
     <Space className="director-canvas-controls" aria-label="画布视口控制">

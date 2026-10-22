@@ -8,10 +8,19 @@
     "canvas-graph": { "file": "sceneCanvasGraph.browser.mjs", "ports": [4193, 8193], "timeoutMs": 300000 },
     "graph-summary": { "file": "sceneGraphSummary.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 },
     "legacy-graph": { "file": "sceneLegacyGraph.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 },
+    "graph-navigation": { "file": "sceneGraphNavigation.browser.mjs", "ports": [4247, 8247], "timeoutMs": 180000 },
+    "instruction-evidence": { "file": "sceneInstructionEvidence.browser.mjs", "ports": [4252, 8252], "timeoutMs": 180000 },
+    "edit-cut-evidence": { "file": "sceneEditCutEvidence.browser.mjs", "ports": [4246, 8246], "timeoutMs": 180000 },
+    "edit-seams-graph": { "file": "sceneEditSeamsGraph.browser.mjs", "ports": [4245, 8245], "timeoutMs": 180000 },
+    "edit-graph": { "file": "sceneEditGraph.browser.mjs", "ports": [4243, 8243], "timeoutMs": 180000 },
+    "take-library": { "file": "sceneTakeLibrary.browser.mjs", "ports": [4193, 8193], "timeoutMs": 300000 },
+    "legacy-take-library": { "file": "sceneLegacyTakeLibrary.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 },
+    "take-library-graph": { "file": "sceneTakeLibraryGraph.browser.mjs", "ports": [4244, 8244], "timeoutMs": 180000 },
+    "timeline": { "file": "sceneTimeline.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 },
     "periodic-save": { "file": "scenePeriodicSave.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 }
   },
   "suites": {
     "workbench": ["workbench-ui", "workbench-style", "design-scope"],
-    "graph": ["director-layout", "canvas-graph", "graph-summary", "legacy-graph", "periodic-save"]
+    "graph": ["graph-navigation", "director-layout", "canvas-graph", "graph-summary", "legacy-graph", "periodic-save", "instruction-evidence", "edit-graph", "edit-seams-graph", "edit-cut-evidence", "timeline", "take-library-graph", "take-library", "legacy-take-library"]
   }
 }

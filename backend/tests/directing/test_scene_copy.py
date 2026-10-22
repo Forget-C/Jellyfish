@@ -98,6 +98,11 @@ async def test_copy_rechecks_tasks_after_readiness_and_accepts_failed_terminal(t
         copied_unit = path + '/versions/' + target['id'] + '/units/unit'
         rows = (await client.get(copied_unit + '/instruction-checks')).json()['data']
         if terminal == 'succeeded':
+            graph_body = next(node for node in target['instruction_graph']['nodes'] if node['kind'] == 'instruction')
+            assert graph_body['basis_status'] == 'current'
+            assert graph_body['records'][0]['task_id'] == task_id
+            assert graph_body['records'][0]['version_id'] == original['id']
+            assert graph_body['records'][0]['confirmed'] is True
             assert len(rows) == 1 and rows[0]['task_id'] == task_id
             assert rows[0]['origin_version_id'] == original['id']
             compared = await client.post(copied_unit + '/instruction-checks/' + task_id + '/compare', json={'content': target['content']})

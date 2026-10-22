@@ -310,3 +310,59 @@ async def test_partial_unit_compiles_and_checks_only_selected_execution(tmp_path
         history = (await client.get(unit_url + '/instruction-suggestions')).json()['data']
         assert history[0]['unit_scope']['background'][0]['text'] == '拆信、读信、抬头'
         assert (await client.get(detail)).json()['data'] == version
+
+
+@pytest.mark.asyncio
+async def test_instruction_graph_keeps_bound_and_active_records_without_expanding_history(tmp_path):
+    """当前摘要保留真实绑定与原活动请求，完整历史仍从原接口查看。"""
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        async with sessions.begin() as db:
+            db.add(Provider(id='graph-provider', name='openai', base_url='https://api.openai.com/v1', api_key='fixture'))
+            await db.flush()
+            db.add_all([Model(id='graph-text', name='gpt-test', category='text', provider_id='graph-provider', params={}),
+                        Model(id='graph-video', name='test-video-model', category='video', provider_id='graph-provider', params={})])
+        path = await sequence_path(client)
+        version = (await client.post(path + '/versions', json={'request_id': str(uuid4()), 'title': '记录摘要'})).json()['data']
+        content = deepcopy(version['content'])
+        content['design']['direction']['shots'] = [{'id': 'shot', 'beat_ids': [], 'event_ids': [],
+            'blocking_state_ids': [], 'participant_ids': [], 'criterion_ids': [], 'narrative_function': {}, 'visible_result': {}}]
+        content['units'] = [{'id': 'unit', 'model_id': 'graph-video', 'duration_ms': 5000, 'ratio': '16:9',
+            'coverage': [{'id': 'coverage', 'shot_id': 'shot', 'action_scope': '递出信封'}]}]
+        detail = path + '/versions/' + version['id']
+        url = detail + '/units/unit/instruction-suggestions'
+        async def submit(revision):
+            response = await client.post(url, json={'request_id': str(uuid4()), 'expected_revision': revision,
+                'content': content, 'model_id': 'graph-text'})
+            assert response.status_code == 200, response.text
+            return response.json()['data']['task_id']
+        original = await submit(1)
+        async with sessions.begin() as db:
+            service = TaskService(db)
+            assert await service.claim(original, worker_id='graph-fixture')
+            await service.finish(original, result={'unit_id': 'unit', 'text': '递出信封。'})
+        applied = await client.post(url + '/' + original + '/apply', json={'content': content})
+        assert applied.status_code == 200, applied.text
+        result = applied.json()['data']
+        content['units'][0].update(instruction=result['text'], instruction_source=result['source'], instruction_basis_id=result['basis_id'])
+        saved = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 1, 'content': content})
+        assert saved.status_code == 200, saved.text
+        # 新取消记录不应抹去实际绑定的旧建议，也不把全部历史正文放进主图。
+        for _ in range(3):
+            cancelled = await submit(2)
+            response = await client.post('/api/v1/film/tasks/' + cancelled + '/cancel', json={})
+            assert response.status_code == 200, response.text
+        active = await submit(2)
+        graph_read = (await client.get(detail)).json()['data']
+        body = next(node for node in graph_read['instruction_graph']['nodes'] if node['kind'] == 'instruction')
+        assert graph_read['revision'] == 2
+        assert body['basis_status'] == 'current'
+        assert {row['task_id'] for row in body['records']} == {original, active}
+        assert next(row for row in body['records'] if row['task_id'] == original)['bound'] is True
+        assert next(row for row in body['records'] if row['task_id'] == active)['status'] == 'queued'
+        assert all('inputs' not in row and 'instruction' not in row for row in body['records'])
+        assert len((await client.get(url)).json()['data']) == 5
+        await client.post('/api/v1/film/tasks/' + active + '/cancel', json={})
+        refreshed = (await client.get(detail)).json()['data']
+        records = next(node for node in refreshed['instruction_graph']['nodes'] if node['kind'] == 'instruction')['records']
+        assert refreshed['revision'] == graph_read['revision']
+        assert next(row for row in records if row['task_id'] == active)['status'] == 'cancelled'

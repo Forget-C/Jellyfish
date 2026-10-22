@@ -5,8 +5,11 @@ from typing import Annotated, Literal
 from pydantic import ConfigDict, Field, model_validator
 
 from app.core.contracts.directing.common import Contract, Identity, Source, Text, unique
-from app.core.contracts.directing.production import ReferenceBinding
+from app.core.contracts.directing.production import ReferenceBinding, MediaRange
 from app.core.contracts.directing.unit_scope import UnitScopeProjection
+from app.core.contracts.directing.scene_take import SceneTakeAnnotation, SceneActualCoverage
+from app.core.contracts.directing.scene_cut_decision import SceneCutReviewDecision
+from app.core.contracts.directing.scene_end_frame import SceneEndFrameRead
 from app.core.contracts.video_generation import VideoReferenceCapabilities
 
 
@@ -15,7 +18,7 @@ class CanvasObject(Contract):
 
     version_id: Identity
     revision: int = Field(gt=0)
-    kind: Literal['source', 'design', 'unit', 'coverage', 'reference', 'dependency', 'unit_config', 'unit_basis']
+    kind: Literal['source', 'design', 'unit', 'coverage', 'reference', 'dependency', 'unit_config', 'unit_basis', 'instruction', 'clip', 'planned', 'take', 'seam', 'cut_review', 'end_frame']
     id: Text
     stable: bool = True
     path: list[str | int] = Field(default_factory=list)
@@ -220,9 +223,141 @@ class UnitBasisCanvasNode(CanvasNode):
     field_targets: list[CanvasBasisTarget]
 
 
+class InstructionCanvasRecord(Contract):
+    """当前相关原任务的轻量只读定位；不携带历史正文或执行授权。"""
+
+    task_id: Identity
+    version_id: Identity
+    unit_id: Identity
+    request_id: Identity
+    kind: Literal['suggestion', 'check']
+    status: str
+    bound: bool = False
+    matches_current: bool | None = None
+    confirmed: bool = False
+    reason: str | None = None
+
+
+class InstructionCanvasNode(CanvasNode):
+    """完整自由文本的已保存投影；编辑目标始终指向明确生产单元。"""
+
+    kind: Literal['instruction'] = Field(default='instruction', json_schema_extra={'enum': ['instruction']})
+    unit_id: Identity
+    text: str
+    source: Source | None = None
+    basis_id: Identity | None = None
+    basis_status: Literal['empty', 'unbound', 'current', 'changed', 'unverified'] = 'unverified'
+    evidence_issue: str | None = None
+    records: list[InstructionCanvasRecord] = Field(default_factory=list)
+
+
+class EditTakeReviewSummary(Contract):
+    """当前相关固定复核的身份与适用性，完整输入沿原记录入口按需读取。"""
+
+    id: Identity
+    version_id: Identity
+    revision: int
+    matches_current: bool
+
+
+class EditCoverageCanvasNode(CanvasNode):
+    """人工观察与当前方案目标；不从生成计划推测实际覆盖。"""
+
+    kind: Literal['edit_coverage'] = Field(default='edit_coverage', json_schema_extra={'enum': ['edit_coverage']})
+    take_kind: Literal['production_plan', 'scene_video']
+    take_id: Identity
+    coverage: SceneActualCoverage
+
+
+class EditTakeCanvasNode(CanvasNode):
+    """共享素材的轻量固定来源；不展开完整生成输入或历史正文。"""
+
+    kind: Literal['edit_take'] = Field(default='edit_take', json_schema_extra={'enum': ['edit_take']})
+    take_kind: Literal['production_plan', 'scene_video']
+    take_id: Identity
+    file_id: Identity
+    origin_id: Identity | None
+    unit_id: Identity | None
+    task_id: Identity | None
+    available: bool
+    duration_ms: int | None = None
+    annotation: SceneTakeAnnotation | None = None
+    reviews: list[EditTakeReviewSummary] = Field(default_factory=list)
+
+
+class EditClipCanvasNode(CanvasNode):
+    """每次采用独立保存真实源区间、位置和片段适配。"""
+
+    kind: Literal['edit_clip'] = Field(default='edit_clip', json_schema_extra={'enum': ['edit_clip']})
+    clip_id: Identity
+    take_kind: Literal['production_plan', 'scene_video']
+    take_id: Identity
+    file_id: Identity
+    media_range: MediaRange
+    timeline_start_ms: int = Field(ge=0)
+    fit: Literal['contain', 'cover']
+
+
+class EditSeamReviewSummary(Contract):
+    """当前相关固定审查身份和结论；完整历史由原记录入口读取。"""
+
+    id: Identity
+    version_id: Identity
+    revision: int
+    verdict: Literal['pass', 'revise']
+    observation: str
+    established: str
+    issues: str
+
+
+class EditSeamCanvasNode(CanvasNode):
+    """真实相接的独立采用对；来源引用保留两侧素材与真实区间。"""
+
+    kind: Literal['edit_seam'] = Field(default='edit_seam', json_schema_extra={'enum': ['edit_seam']})
+    left_clip_id: Identity
+    right_clip_id: Identity
+    review_status: Literal['applicable', 'needs_review', 'unreviewed', 'failed']
+    review: EditSeamReviewSummary | None = None
+    review_issue: str | None = None
+
+
+class EditPlannedCanvasNode(CanvasNode):
+    """预期内容只有预计时长，不拥有真实媒体或源区间。"""
+
+    kind: Literal['edit_planned'] = Field(default='edit_planned', json_schema_extra={'enum': ['edit_planned']})
+    clip_id: Identity
+    shot_id: Identity
+    expected_content: str
+    estimated_duration_ms: int = Field(gt=0)
+    timeline_start_ms: int = Field(ge=0)
+
+
+class EditCutReviewCanvasNode(CanvasNode):
+    """整场固定结论摘要；问题保留全部真实片段身份。"""
+    kind: Literal['edit_cut_review'] = Field(default='edit_cut_review', json_schema_extra={'enum': ['edit_cut_review']})
+    record_id: Identity
+    record_version_id: Identity
+    matches_current: bool
+    decision: SceneCutReviewDecision
+
+
+class EditEndFrameCanvasNode(CanvasNode):
+    """当前采用相关实际落幅及其不可改写的来源。"""
+    kind: Literal['edit_end_frame'] = Field(default='edit_end_frame', json_schema_extra={'enum': ['edit_end_frame']})
+    frame: SceneEndFrameRead
+
+
+class EditDownstreamCanvasNode(CanvasNode):
+    """明确后段绑定及现有依赖核验，不推断补拍计划。"""
+    kind: Literal['edit_downstream'] = Field(default='edit_downstream', json_schema_extra={'enum': ['edit_downstream']})
+    unit_id: Identity
+    dependency: CanvasDependencyEvidence
+
+
 CanvasGraphNode = Annotated[SourceCanvasNode | DesignCanvasNode | MissingCanvasNode |
                             ShotBasisCanvasNode | UnitCanvasNode | UnitConfigCanvasNode |
-                            UnitReferencesCanvasNode | UnitBasisCanvasNode,
+                            UnitReferencesCanvasNode | UnitBasisCanvasNode | InstructionCanvasNode |
+                            EditTakeCanvasNode | EditClipCanvasNode | EditPlannedCanvasNode | EditCoverageCanvasNode | EditSeamCanvasNode | EditCutReviewCanvasNode | EditEndFrameCanvasNode | EditDownstreamCanvasNode,
                             Field(discriminator='kind')]
 
 
@@ -287,7 +422,7 @@ class CanvasView(Contract):
 class CanvasGraph(Contract):
     """与业务内容属于同一快照的派生图；校验引用闭合，不进行领域推断。"""
 
-    kind: Literal['director', 'units']
+    kind: Literal['director', 'units', 'instructions', 'edit']
     version_id: Identity
     revision: int = Field(gt=0)
     nodes: list[CanvasGraphNode]
@@ -326,6 +461,8 @@ class CanvasGraph(Contract):
                 target_exists(node.edit_target)
                 if node.edit_target.external or node.edit_target.object != node.object:
                     raise ValueError(f'canvas edit target does not identify its object: {node.id}')
+                if isinstance(node, InstructionCanvasNode) and node.edit_target.field not in (None, 'instruction'):
+                    raise ValueError(f'unknown canvas target field: {node.id}/{node.edit_target.field}')
                 if (isinstance(node, (DesignCanvasNode, UnitConfigCanvasNode)) and node.edit_target.field is not None
                         and node.edit_target.field not in node.fields):
                     raise ValueError(f'unknown canvas target field: {node.id}/{node.edit_target.field}')
@@ -424,3 +561,79 @@ class UnitCanvasGraph(CanvasGraph):
     nodes: list[Annotated[ShotBasisCanvasNode | UnitCanvasNode | UnitConfigCanvasNode |
                           UnitReferencesCanvasNode | UnitBasisCanvasNode | MissingCanvasNode,
                           Field(discriminator='kind')]]
+
+
+class InstructionCanvasGraph(CanvasGraph):
+    """按明确单元进入的指令图，不要求用户先浏览全场概览。"""
+
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
+    kind: Literal['instructions'] = Field(default='instructions', json_schema_extra={'enum': ['instructions']})
+    nodes: list[Annotated[InstructionCanvasNode | UnitReferencesCanvasNode | UnitBasisCanvasNode,
+                          Field(discriminator='kind')]]
+
+
+class EditCanvasGraph(CanvasGraph):
+    """整场已保存采用总览；素材身份与采用身份分别表达。"""
+
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
+    kind: Literal['edit'] = Field(default='edit', json_schema_extra={'enum': ['edit']})
+    library_view_id: str | None = None
+    nodes: list[Annotated[EditTakeCanvasNode | EditClipCanvasNode | EditPlannedCanvasNode | EditCoverageCanvasNode | EditSeamCanvasNode | EditCutReviewCanvasNode | EditEndFrameCanvasNode | EditDownstreamCanvasNode,
+                          Field(discriminator='kind')]]
+
+    @model_validator(mode='after')
+    def adoption_sources(self):
+        """采用只能编辑自己的时间线对象；取材边须保留同一素材和文件身份。"""
+        nodes = {node.id: node for node in self.nodes}
+        if self.library_view_id is not None and self.library_view_id not in {view.id for view in self.views}:
+            raise ValueError('invalid canvas take library view')
+        for node in self.nodes:
+            if isinstance(node, (EditCutReviewCanvasNode, EditEndFrameCanvasNode, EditDownstreamCanvasNode)):
+                expected = ('cut_review', node.record_id) if isinstance(node, EditCutReviewCanvasNode) else (
+                    ('end_frame', node.frame.id) if isinstance(node, EditEndFrameCanvasNode) else ('dependency', node.object.id))
+                if node.edit_target or (node.object.kind, node.object.id) != expected:
+                    raise ValueError('invalid canvas review evidence identity')
+                continue
+            if isinstance(node, EditTakeCanvasNode):
+                if node.edit_target or node.object.kind != 'take' or node.object.id != f'{node.take_kind}:{node.take_id}':
+                    raise ValueError('invalid canvas take identity or edit target')
+                continue
+            if isinstance(node, EditCoverageCanvasNode):
+                if node.edit_target or node.object.kind != 'coverage' or node.object.id != f'{node.take_kind}:{node.take_id}:{node.coverage.id}':
+                    raise ValueError('invalid canvas actual coverage identity')
+                sources = [nodes.get(target.node_id) for target in node.sources if not target.external]
+                matches = [source for source in sources if isinstance(source, EditTakeCanvasNode)
+                    and (source.take_kind, source.take_id, source.file_id) == (node.take_kind, node.take_id, node.coverage.source.file_id)
+                    and source.annotation and node.coverage in source.annotation.coverage]
+                if len(matches) != 1 or not any(edge.kind == 'business' and edge.source == matches[0].id
+                        and edge.target == node.id for edge in self.edges):
+                    raise ValueError('invalid canvas actual coverage source')
+                continue
+            if isinstance(node, EditSeamCanvasNode):
+                if node.edit_target or node.object.kind != 'seam' or node.object.id != (
+                        f'{len(node.left_clip_id)}:{node.left_clip_id}:{node.right_clip_id}'):
+                    raise ValueError('invalid canvas seam target')
+                pair = [nodes.get(target.node_id) for target in node.sources if not target.external]
+                if len(pair) != 2 or any(not isinstance(clip, EditClipCanvasNode) for clip in pair):
+                    raise ValueError('invalid canvas seam sources')
+                left, right = pair
+                if (left.clip_id, right.clip_id) != (node.left_clip_id, node.right_clip_id) or (
+                        left.timeline_start_ms + left.media_range.source_out_ms - left.media_range.source_in_ms
+                        != right.timeline_start_ms):
+                    raise ValueError('invalid canvas seam pair')
+                continue
+            expected = 'clip' if isinstance(node, EditClipCanvasNode) else 'planned'
+            if node.object.kind != expected or node.object.id != node.clip_id:
+                raise ValueError('invalid canvas adoption identity')
+            if node.edit_target and node.edit_target.field is not None:
+                raise ValueError('invalid canvas adoption edit field')
+            if isinstance(node, EditClipCanvasNode):
+                sources = [nodes.get(target.node_id) for target in node.sources if not target.external]
+                matches = [source for source in sources if isinstance(source, EditTakeCanvasNode) and
+                    (source.take_kind, source.take_id, source.file_id) == (node.take_kind, node.take_id, node.file_id)]
+                if len(matches) != 1 or not any(edge.kind == 'business' and edge.source == matches[0].id
+                        and edge.target == node.id for edge in self.edges):
+                    raise ValueError('invalid canvas adoption source')
+        return self

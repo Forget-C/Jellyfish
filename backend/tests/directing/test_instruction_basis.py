@@ -65,6 +65,10 @@ async def test_basis_receipt_is_explicit_immutable_and_unit_owned(tmp_path, hist
         assert state['current']['unit']['coverage'][0]['action_scope'] == '收下信封'
         saved = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': 1, 'content': changed})
         assert saved.status_code == 200, saved.text
+        body = next(node for node in saved.json()['data']['instruction_graph']['nodes']
+                    if node['kind'] == 'instruction' and node['unit_id'] == 'unit-one')
+        assert body['basis_id'] == basis_id
+        assert body['basis_status'] == 'changed'
         assert (await client.post(url, json={'content': saved.json()['data']['content']})).json()['data']['status'] == 'changed'
         assert (await client.post(url + '/confirm', json=request)).json()['data']['basis_id'] == basis_id
         assert (await client.post(url + '/confirm', json={**request, 'content': changed})).status_code == 409

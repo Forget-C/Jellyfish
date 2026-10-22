@@ -67,6 +67,7 @@ try {
   await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   await (await workbenchControl(page, '保存设置', 'switch', '自动保存')).click()
   await page.getByRole('button', { name: '编辑画布', exact: true }).click()
+  await page.getByRole('button', { name: '打开剪辑工作区', exact: true }).click()
   await locateCanvasNode(page, '时间线')
   const detailUrl = `${versionsUrl}/${version.id}`
   const read = async () => (await (await fetch(detailUrl)).json()).data

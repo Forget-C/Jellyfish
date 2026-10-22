@@ -1,3 +1,4 @@
+import { sceneContentKey as contentKey } from './sceneContentKey'
 import { WorkbenchDetails, WorkbenchDetailsProvider } from './ui/WorkbenchDetails'
 import { WorkbenchTheme } from './ui/WorkbenchTheme'
 import { WorkbenchButton, WorkbenchIconButton } from './ui/WorkbenchButton'
@@ -9,7 +10,7 @@ import { Alert, Button, Modal, Select, Space, Spin, Switch } from 'antd'
 import { ArrowLeftOutlined, DownOutlined, MoreOutlined, RedoOutlined, SaveOutlined, UndoOutlined } from '@ant-design/icons'
 import { CanvasToolbarMenu } from './CanvasToolbarMenu'
 import { CanvasTextPreview } from './CanvasTextPreview'
-import { Link, useBeforeUnload, useBlocker, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useBeforeUnload, useBlocker, useLocation, useNavigationType, useParams, useSearchParams } from 'react-router-dom'
 import { ApiError, StudioDirectingService } from '../../../services/generated'
 import type { SceneVersionContent_Output, SceneVersionCopy, SceneVersionCreate, SceneVersionRead, SceneVideoSaveResult, SequenceRead, SourceCanvasNode } from '../../../services/generated'
 import { directingError } from './common'
@@ -46,13 +47,6 @@ type Transition = { action: () => void; cancel?: () => void }
 type EditHistory = { undo: SceneVersionContent_Output[]; redo: SceneVersionContent_Output[] }
 type RecoveryState = { data?: SceneRecovery; stage: 'checking' | 'available' | 'unknown' | 'conflict' | 'foreign' | 'invalid'; message?: string }
 const sessionHistories = new Map<string, EditHistory>()
-// 输入 DTO 可省略空列表及 nullable 默认值，响应会补齐；比较业务值而非 JSON 字段顺序。
-const contentKey = (value: unknown) => JSON.stringify(value, (_key, item) => {
-  if (!item || typeof item !== 'object' || Array.isArray(item)) return item
-  return Object.fromEntries(Object.keys(item).sort()
-    .filter(key => item[key] != null && !(Array.isArray(item[key]) && item[key].length === 0 && key !== 'participant_ids'))
-    .map(key => [key, item[key]]))
-})
 const sameContent = (a: unknown, b: unknown) => contentKey(a) === contentKey(b)
 const verifiedSave = (operation: SaveOperation, saved: SceneVersionRead) => {
   const revision = operation.body.expected_revision + (operation.videoOnly ? 0 : 1)
@@ -63,7 +57,11 @@ const verifiedSave = (operation: SaveOperation, saved: SceneVersionRead) => {
     !saved.director_graph || saved.director_graph.kind !== 'director' ||
     saved.director_graph.version_id !== saved.id || saved.director_graph.revision !== saved.revision ||
     !saved.unit_graph || saved.unit_graph.kind !== 'units' ||
-    saved.unit_graph.version_id !== saved.id || saved.unit_graph.revision !== saved.revision) {
+    saved.unit_graph.version_id !== saved.id || saved.unit_graph.revision !== saved.revision ||
+    !saved.instruction_graph || saved.instruction_graph.kind !== 'instructions' ||
+    saved.instruction_graph.version_id !== saved.id || saved.instruction_graph.revision !== saved.revision ||
+    !saved.edit_graph || saved.edit_graph.kind !== 'edit' ||
+    saved.edit_graph.version_id !== saved.id || saved.edit_graph.revision !== saved.revision) {
     throw new Error('保存响应与本次请求、内容或关系图修订不一致，请核实原请求')
   }
   return saved
@@ -76,6 +74,7 @@ const autoSavePreference = 'jellyfish:scene-autosave:local-user'
 /** 只在明确创建时产生方案；保存状态属于同一场次版本，而不是设计草稿。 */
 function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId: string; chapterId: string; sequenceId: string; ownership: SceneEditOwnership }) {
   const [params, setParams] = useSearchParams()
+  const location = useLocation(), navigationType = useNavigationType()
   const copyKey = `jellyfish:scene-copy:${projectId}:${sequenceId}`
   const [copyInitial] = useState(() => {
     try {
@@ -95,7 +94,15 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
   const [sequence, setSequence] = useState<SequenceRead>()
   const [versions, setVersions] = useState<SceneVersionRead[]>([])
   const [draft, setDraft] = useState<Draft>()
-  const [canvas, setCanvas] = useState<'director' | 'units' | 'instructions' | 'edit'>(() => params.has('unitView') ? 'units' : 'director')
+  const [canvas, setCanvas] = useState<'director' | 'units' | 'instructions' | 'edit'>(() => {
+    const requested = params.get('canvas')
+    return requested === 'director' || requested === 'units' || requested === 'instructions' || requested === 'edit' ? requested : params.has('unitView') ? 'units' : 'director'
+  })
+  useEffect(() => {
+    if (navigationType !== 'POP') return
+    const requested = params.get('canvas')
+    setCanvas(requested === 'director' || requested === 'units' || requested === 'instructions' || requested === 'edit' ? requested : params.has('unitView') ? 'units' : 'director')
+  }, [location.key, navigationType, params])
   const [unitSelections, setUnitSelections] = useState<Record<string, string>>({})
   const shotUnitSelections = useRef<Record<string, Record<string, string>>>({})
   const rememberUnit = (versionId: string, shotId: string | undefined, unitId: string) => {
@@ -184,6 +191,15 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
     setHistoryNavigating(false); setHistoryNavigationError('')
     return () => { historyNavigationRequest.current += 1 }
   }, [projectId, sequenceId, selectedId, historyTaskId, historyVersionId, historyUnitId, historyTaskKind])
+  const openCanvas = (nextCanvas: typeof canvas) => {
+    const next = new URLSearchParams(params)
+    next.set('canvas', nextCanvas)
+    next.delete('unitView')
+    if (nextCanvas !== 'edit') for (const key of ['editVersion', 'editView', 'editWorkspace']) next.delete(key)
+    setParams(next)
+    if (nextCanvas === 'units') setUnitFocus(undefined)
+    setEditor(undefined); setCanvas(nextCanvas)
+  }
   const leaveUnitSubgraph = () => {
     if (!params.has('unitView')) return
     const next = new URLSearchParams(params)
@@ -288,11 +304,11 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       setMediaFocus({ versionId: current.selected.id, target, serial: Date.now() })
       return
     }
-    if (!current.selected || !current.content?.design.direction.shots.some(shot => shot.id === target.shotId)) return
-    if (target.kind !== 'shot' && !current.content.units.some(unit => unit.id === target.unitId && unit.coverage.some(item => item.shot_id === target.shotId))) return
+    if (!current.selected || !current.content || (target.shotId && !current.content.design.direction.shots.some(shot => shot.id === target.shotId))) return
+    if (target.kind !== 'shot' && !current.content.units.some(unit => unit.id === target.unitId && (!target.shotId || unit.coverage.some(item => item.shot_id === target.shotId)))) return
     setEditor(undefined)
     if (target.kind === 'shot') {
-      selectShot(target.shotId); setCanvas('director')
+      selectShot(target.shotId!); setCanvas('director')
       setDirectorFocus({ versionId: current.selected.id, nodeId: '镜头设计', fieldId: '', serial: Date.now() })
     } else {
       selectUnit(target.unitId, target.shotId)
@@ -307,6 +323,46 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
   }
   const latest = useRef({ selected, content })
   latest.current = { selected, content }
+  const evidenceRead = useRef(0)
+  const [evidenceError, setEvidenceError] = useState('')
+  useEffect(() => {
+    evidenceRead.current += 1
+    setEvidenceError('')
+    return () => { evidenceRead.current += 1 }
+  }, [projectId, sequenceId, selected?.id, selected?.revision, loadState])
+  // 证据可在相同 revision 更新；只替换固定基线的投影，不改草稿或重建工作区。
+  const refreshEvidence = async (versionId = latest.current.selected?.id) => {
+    const base = latest.current.selected
+    if (!base || base.id !== versionId || loadState !== 'ready') return
+    const serial = ++evidenceRead.current
+    const stillCurrent = () => live.current && serial === evidenceRead.current && latest.current.selected === base &&
+      latest.current.selected?.id === base.id && latest.current.selected.revision === base.revision &&
+      sameContent(latest.current.selected.content, base.content)
+    try {
+      const response = await StudioDirectingService.directingSceneVersion({ projectId, sequenceId, versionId: base.id })
+      if (!stillCurrent()) return
+      const saved = response.data
+      if (!saved || saved.id !== base.id) throw new Error('证据响应的场次版本不一致')
+      if (saved.revision !== base.revision || !sameContent(saved.content, base.content)) {
+        setSaveConflict(saved)
+        throw new Error('服务端内容已变化，请先核对版本冲突；保留当前输入与旧图')
+      }
+      if (saved.relationship_graph.version_id !== base.id || saved.relationship_graph.revision !== base.revision ||
+        !saved.director_graph || saved.director_graph.kind !== 'director' ||
+        !saved.unit_graph || saved.unit_graph.kind !== 'units' ||
+        !saved.instruction_graph || saved.instruction_graph.kind !== 'instructions' ||
+        !saved.edit_graph || saved.edit_graph.kind !== 'edit' ||
+        [saved.director_graph, saved.unit_graph, saved.instruction_graph, saved.edit_graph].some(graph => graph.version_id !== base.id || graph.revision !== base.revision)) {
+        throw new Error('证据图与已保存内容基线不一致')
+      }
+      const refreshed = { ...saved, content: base.content }
+      latest.current.selected = refreshed
+      setVersions(previous => previous.map(row => row.id === refreshed.id ? refreshed : row))
+      setEvidenceError('')
+    } catch (cause) {
+      if (stillCurrent()) setEvidenceError(directingError(cause))
+    }
+  }
   const hasChanges = () => !!latest.current.selected && !sameContent(latest.current.content, latest.current.selected.content)
   const restoreEditing = () => {
     restoreEditingPending.current = true
@@ -903,10 +959,10 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
         {selected && <WorkbenchIconButton label={saveLabel} variant={dirty || videoUnverified ? "primary" : "quiet"} icon={<SaveOutlined />} onClick={() => void save()} disabled={handingOff || !!recovery || !!currentConflict || (!dirty && !pendingSave.current) || !!busy || deliveryBusy || exportBusy || readonly || loadState !== 'ready'} loading={busy === 'save'} />}
       </div>
       <nav className="canvas-toolbar-views" aria-label="画布切换">
-        <WorkbenchButton onClick={() => { leaveUnitSubgraph(); setEditor(undefined); setCanvas('director') }} variant="quiet" aria-pressed={canvas === 'director'}>导演画布</WorkbenchButton>
-        <WorkbenchButton disabled={!selected} onClick={() => { const next = new URLSearchParams(params); next.delete('unitView'); setParams(next); setUnitFocus(undefined); setEditor(undefined); setCanvas('units') }} variant="quiet" aria-pressed={canvas === 'units'}>单元画布</WorkbenchButton>
-        <WorkbenchButton disabled={!selected} onClick={() => { leaveUnitSubgraph(); setEditor(undefined); setCanvas('instructions') }} variant="quiet" aria-pressed={canvas === 'instructions'}>指令画布</WorkbenchButton>
-        <WorkbenchButton disabled={!selected} onClick={() => { leaveUnitSubgraph(); setEditor(undefined); setCanvas('edit') }} variant="quiet" aria-pressed={canvas === 'edit'}>编辑画布</WorkbenchButton>
+        <WorkbenchButton onClick={() => openCanvas('director')} variant="quiet" aria-pressed={canvas === 'director'}>导演画布</WorkbenchButton>
+        <WorkbenchButton disabled={!selected} onClick={() => openCanvas('units')} variant="quiet" aria-pressed={canvas === 'units'}>单元画布</WorkbenchButton>
+        <WorkbenchButton disabled={!selected} onClick={() => openCanvas('instructions')} variant="quiet" aria-pressed={canvas === 'instructions'}>指令画布</WorkbenchButton>
+        <WorkbenchButton disabled={!selected} onClick={() => openCanvas('edit')} variant="quiet" aria-pressed={canvas === 'edit'}>编辑画布</WorkbenchButton>
       </nav>
       <div className="canvas-toolbar-actions">
         <div ref={setPrimaryHost} className="canvas-toolbar-primary">{canvas === 'director' && <span ref={setDesignNextHost} />}</div>
@@ -1012,7 +1068,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       hidden={canvas === 'instructions' && selectedId === target.versionId && unitSelections[target.versionId] === target.unitId}
       onDismiss={() => setVideoActivities(previous => previous.filter(item => item.taskId !== target.taskId))}
       onLocate={() => locateVideoUnit(target)} />)}
-    {instructionActivities.map(target => <SceneInstructionActivity key={target.taskId} target={target}
+    {instructionActivities.map(target => <SceneInstructionActivity key={target.taskId} target={target} onEvidenceChanged={() => void refreshEvidence(target.versionId)}
       hidden={canvas === 'instructions' && selectedId === target.versionId && unitSelections[target.versionId] === target.unitId}
       onDismiss={() => setInstructionActivities(previous => previous.filter(item => item.taskId !== target.taskId))}
       onLocate={async () => {
@@ -1033,15 +1089,28 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
         if (latest.current.selected?.id === target.versionId) action()
         else await requestTransition({ action })
       }} />)}</div>
-    {loadState === 'ready' && canvas === 'edit' && selected && content && <SceneEditCanvas onOpenVersion={locateVideoUnit} navigation={mediaFocus?.versionId === selected.id ? mediaFocus : undefined} focusClipId={editClipFocus?.versionId === selected.id ? editClipFocus.clipId : undefined} onOpenUnit={unitId => {
+    {loadState === 'ready' && canvas === 'edit' && selected && content && <SceneEditCanvas graph={selected.edit_graph} evidenceError={evidenceError} onRefreshGraph={() => void refreshEvidence(selected.id)} onOpenVersion={locateVideoUnit} navigation={mediaFocus?.versionId === selected.id ? mediaFocus : undefined} focusClipId={editClipFocus?.versionId === selected.id ? editClipFocus.clipId : undefined} onOpenUnit={(unitId, coverageId) => {
       const unit = content.units.find(row => row.id === unitId)
       if (!unit) return
       rememberUnit(selected.id, undefined, unitId)
-      setUnitFocus({ versionId: selected.id, unitId, nodeId: '单元设置', fieldId: 'scene-unit-dependencies', serial: Date.now() })
+      setUnitFocus({ versionId: selected.id, unitId, nodeId: '单元设置', fieldId: coverageId ? `scene-unit-action-${coverageId}` : 'scene-unit-dependencies', serial: Date.now() })
       setEditor(undefined); setCanvas('units')
     }} dirty={dirty} key={selected.id} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} content={content} revision={selected.revision}
       disabled={readonly || handingOff || !!recovery || busy === 'create' || leaving} onChange={editContent} />}
-    {loadState === 'ready' && canvas === 'instructions' && selected && content && <SceneInstructionCanvas primaryHost={primaryHost} onPrepare={(unitId, issue) => { setEditor(undefined); setCanvas('units'); setUnitFocus({ versionId: selected.id, unitId, nodeId: issue.nodeId || '单元设置', fieldId: issue.fieldId, serial: Date.now() }) }} focusRequest={instructionFocus} onVideoFocused={() => setVideoFocus(undefined)} videoFocus={videoFocus?.versionId === selected.id && videoFocus.unitId === unitSelections[selected.id] ? videoFocus : undefined} key={selected.id} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} revision={selected.revision} content={content} onTask={trackInstruction} dirty={dirty} videoBusy={!!currentDirectVideo || !!pendingSave.current?.video && pendingSave.current.versionId === selected.id && pendingSave.current.video.unitId === unitSelections[selected.id]} savePending={!!busy || !!pendingSave.current}
+    {loadState === 'ready' && canvas === 'instructions' && selected && content && <SceneInstructionCanvas evidenceError={evidenceError} onEvidenceChanged={() => void refreshEvidence(selected.id)} onRetryGraph={() => void refreshEvidence(selected.id)} graph={selected.instruction_graph} onLocateSource={target => {
+      const source = selected.unit_graph.nodes.find(node => node.id === target.node_id)
+      setEditor(undefined)
+      if (source?.kind === 'unit_config') {
+        const current = content.units.find(row => row.id === source.unit_id)
+        if (!current || source.config_kind === 'coverage' && !current.coverage.some(row => row.id === source.coverage_item_id) || source.config_kind === 'organization' && !current.organization) return false
+        selectUnit(source.unit_id); setCanvas('units')
+        setUnitFocus({ versionId: selected.id, unitId: source.unit_id, nodeId: source.id, fieldId: source.config_kind === 'coverage' ? `scene-unit-action-${source.coverage_item_id}` : source.config_kind === 'organization' ? `scene-unit-organization-${source.unit_id}-${target.field}` : target.field || '', serial: Date.now() })
+      } else {
+        leaveUnitSubgraph(); setCanvas('director')
+        setDirectorFocus({ versionId: selected.id, nodeId: target.node_id, fieldId: target.field || '', serial: Date.now() })
+      }
+      return true
+    }} primaryHost={primaryHost} onPrepare={(unitId, issue) => { setEditor(undefined); setCanvas('units'); setUnitFocus({ versionId: selected.id, unitId, nodeId: issue.nodeId || '单元设置', fieldId: issue.fieldId, serial: Date.now() }) }} focusRequest={instructionFocus} onVideoFocused={() => setVideoFocus(undefined)} videoFocus={videoFocus?.versionId === selected.id && videoFocus.unitId === unitSelections[selected.id] ? videoFocus : undefined} key={selected.id} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} revision={selected.revision} content={content} onTask={trackInstruction} dirty={dirty} videoBusy={!!currentDirectVideo || !!pendingSave.current?.video && pendingSave.current.versionId === selected.id && pendingSave.current.video.unitId === unitSelections[selected.id]} savePending={!!busy || !!pendingSave.current}
       onVerifyVideo={!busy && pendingSave.current?.versionId === selected.id && pendingSave.current?.video?.unitId === unitSelections[selected.id]
         ? () => { void save() } : currentDirectVideo && !currentDirectVideo.submitting ? () => { void directVideos.retry(currentDirectVideo) } : undefined}
       videoRefresh={videoRefresh} onGenerateVideo={generateVideo} onRetryVideo={retryVideo}
@@ -1105,7 +1174,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
         {!selectedId && <p>尚无场次版本，明确新建后开始设计。</p>}
       </section>
     </DirectorCanvasSurface>}
-    {loadState === 'ready' && selected && content && <SceneRelationsNavigation triggerHost={navigationHost} open={currentNavigation === 'relations'} onOpenChange={open => open ? openNavigation('relations') : setNavigation(undefined)} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} key={`relations:${selected.id}`} content={content} shotId={currentShotId} unitId={unitSelections[selected.id]} canvas={canvas} onNavigate={navigateRelation} />}
+    {loadState === 'ready' && selected && content && <SceneRelationsNavigation triggerHost={navigationHost} open={currentNavigation === 'relations'} onOpenChange={open => open ? openNavigation('relations') : setNavigation(undefined)} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} key={`relations:${selected.id}`} snapshot={selected} evidenceError={evidenceError} onRefreshGraph={() => void refreshEvidence(selected.id)} content={content} shotId={currentShotId} unitId={unitSelections[selected.id]} canvas={canvas} onNavigate={navigateRelation} />}
     <WorkbenchModal title="保存冲突 · 比较本地与服务器" open={!!currentConflict} closable={false} maskClosable={false} keyboard={false}
       footer={<WorkbenchDialogActions secondary={<WorkbenchButton variant="quiet" onClick={() => resolveConflict(false)}>放弃本地编辑并载入服务器</WorkbenchButton>}>
         <WorkbenchButton variant="primary" onClick={() => resolveConflict(true)}>以服务器修订为基线保留本地编辑</WorkbenchButton></WorkbenchDialogActions>}>

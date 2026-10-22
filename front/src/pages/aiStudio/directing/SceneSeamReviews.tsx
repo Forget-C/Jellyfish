@@ -1,3 +1,4 @@
+import { WorkbenchButton } from './ui/WorkbenchButton'
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Input, Select } from 'antd'
 import { ApiError, StudioDirectingService } from '../../../services/generated'
@@ -52,8 +53,9 @@ function Boundary({ clip, source, side, ratio, onReady }: {
 }
 
 /** 每条接缝以两个采用身份定位；未知响应绑定原对象，历史结论不被新输入覆盖。 */
-export function SceneSeamReviews({ projectId, sequenceId, versionId, revision, content, takes, dirty, disabled, previewStop, onPreviewStart, onHistoryPreviewStart }: {
+export function SceneSeamReviews({ projectId, sequenceId, versionId, revision, content, takes, dirty, disabled, previewStop, onPreviewStart, onHistoryPreviewStart, navigation, onRecorded }: {
   projectId: string; sequenceId: string; versionId: string; revision: number; content: SceneVersionContent_Output; takes: SceneTakeLibraryRead[]; dirty: boolean; disabled: boolean
+  navigation?: { leftClipId: string; rightClipId: string; serial: number }; onRecorded?: () => void
   previewStop: number; onPreviewStart: () => void; onHistoryPreviewStart: () => void
 }) {
   const storageKey = `scene-seam-review:${projectId}:${sequenceId}:${versionId}`
@@ -76,7 +78,9 @@ export function SceneSeamReviews({ projectId, sequenceId, versionId, revision, c
   const [storageBlocked, setStorageBlocked] = useState(!!initial.error)
   const [history, setHistory] = useState<SceneSeamReviewRead>()
   const [records, setRecords] = useState<SceneSeamReviewRead[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
+  const [historyRequested, setHistoryRequested] = useState(false)
+  useEffect(() => { if (navigation) { setHistoryRequested(true); setAttempt(value => value + 1) } }, [navigation])
   const [readError, setReadError] = useState('')
   const [submitError, setSubmitError] = useState('')
   const [attempt, setAttempt] = useState(0)
@@ -90,6 +94,13 @@ export function SceneSeamReviews({ projectId, sequenceId, versionId, revision, c
     if (storageBlocked) return
     try { persist(next); setStorageError('') } catch { setStorageError('接缝输入未能保存在本地，当前输入保留；请恢复存储。') }
   }
+  const navigationState = useRef({ navigation, change })
+  navigationState.current = { navigation, change }
+  const navigationSerial = navigation?.serial
+  useEffect(() => {
+    const { navigation: target, change: update } = navigationState.current
+    if (target) update({ ...cache.current, selected: [target.leftClipId, target.rightClipId] })
+  }, [navigationSerial])
   const currentPairs = pairs(content)
   const selected = currentPairs.find(row => row.left.id === state.selected?.[0] && row.right.id === state.selected?.[1])
   const selectedKey = state.selected?.join('|') || ''
@@ -100,13 +111,14 @@ export function SceneSeamReviews({ projectId, sequenceId, versionId, revision, c
   const mediaIdentity = selected ? JSON.stringify([source(selected.left)?.available, source(selected.left)?.media_url, source(selected.right)?.available, source(selected.right)?.media_url]) : ''
   useEffect(() => { setReady({ left: false, right: false }) }, [selectedBasis, mediaIdentity])
   useEffect(() => {
+    if (!historyRequested) return
     let active = true
     setLoading(true); setReadError('')
     void StudioDirectingService.directingSceneSeamReviews({ projectId, sequenceId, versionId }).then(response => {
       if (active) setRecords(response.data || [])
     }).catch(error => { if (active) setReadError(directingError(error)) }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [projectId, sequenceId, versionId, revision, attempt])
+  }, [projectId, sequenceId, versionId, attempt, historyRequested])
   const clearPending = (requestId: string) => {
     const latest = mounted.current ? cache.current : readStored()
     if (latest.pending?.request_id !== requestId) return
@@ -123,7 +135,7 @@ export function SceneSeamReviews({ projectId, sequenceId, versionId, revision, c
       const response = await StudioDirectingService.directingCreateSceneSeamReview({ projectId, sequenceId, versionId, requestBody: request })
       if (!response.data) throw new Error('接缝结果尚未核实')
       clearPending(request.request_id)
-      if (mounted.current) setAttempt(value => value + 1)
+      if (mounted.current) { setHistoryRequested(true); setAttempt(value => value + 1); onRecorded?.() }
     } catch (error) {
       if (mounted.current) {
         setSubmitError(directingError(error))
@@ -137,19 +149,20 @@ export function SceneSeamReviews({ projectId, sequenceId, versionId, revision, c
     && basis(row.content, left, right) === basis(content, left, right))
   const current = selected ? matching(selected.left.id, selected.right.id) : undefined
   const hadReview = records.some(row => row.left_clip_id === state.selected?.[0] && row.right_clip_id === state.selected?.[1])
-  return <section aria-label="接缝审查"><h3>接缝审查</h3>
+  return <section id="scene-seam-review" tabIndex={-1} aria-label="接缝审查"><h3>接缝审查</h3>
     <p>只检查直接相接的两个真实采用片段；空白和待拍占位不是接缝。</p>
     {!currentPairs.length && <p>当前没有可审查的真实接缝。</p>}
     {currentPairs.map((pair, index) => <div key={`${pair.left.id}:${pair.right.id}`}>
-      <Button disabled={busy} onClick={() => { onPreviewStart(); change({ ...state, selected: [pair.left.id, pair.right.id] }) }}>审查接缝：片段 {pair.index + 1} → {pair.index + 2}</Button>
-      {!loading && !readError && <p>接缝 {index + 1}：{matching(pair.left.id, pair.right.id)?.decision.verdict === 'pass' ? '已通过' : matching(pair.left.id, pair.right.id) ? '需修改' : '待核对'}</p>}
+      <Button disabled={busy} onClick={() => { onPreviewStart(); setHistoryRequested(true); change({ ...state, selected: [pair.left.id, pair.right.id] }) }}>审查接缝：片段 {pair.index + 1} → {pair.index + 2}</Button>
+      {historyRequested && !loading && !readError && <p>接缝 {index + 1}：{matching(pair.left.id, pair.right.id)?.decision.verdict === 'pass' ? '已通过' : matching(pair.left.id, pair.right.id) ? '需修改' : '待核对'}</p>}
     </div>)}
+    <WorkbenchButton variant="secondary" onClick={() => { setHistoryRequested(true); setAttempt(value => value + 1) }}>查看完整接缝审查历史</WorkbenchButton>
     {loading && <p>正在读取接缝记录</p>}
-    {readError && <Alert type="warning" message="接缝记录读取失败" description={readError} action={<Button onClick={() => setAttempt(value => value + 1)}>重读接缝记录</Button>} />}
+    {readError && <Alert type="warning" message="接缝记录读取失败" description={readError} action={<Button onClick={() => { setHistoryRequested(true); setAttempt(value => value + 1) }}>重读接缝记录</Button>} />}
     {state.selected && <>
       {!selected && <Alert type="warning" message="原接缝已不再直接相接或包含占位，请明确重新选择；原观察保留。" />}
-      {!loading && !readError && selected && <p>{current ? current.decision.verdict === 'pass' ? '所选接缝当前通过' : '所选接缝当前需修改' : hadReview ? '所选接缝依据已变，请重新核对' : '所选接缝尚未审查'}</p>}
-      {!loading && !readError && current && current.version_id !== versionId && <p>引用原版本接缝审查：{current.version_id}</p>}
+      {historyRequested && !loading && !readError && selected && <p>{current ? current.decision.verdict === 'pass' ? '所选接缝当前通过' : '所选接缝当前需修改' : hadReview ? '所选接缝依据已变，请重新核对' : '所选接缝尚未审查'}</p>}
+      {historyRequested && !loading && !readError && current && current.version_id !== versionId && <p>引用原版本接缝审查：{current.version_id}</p>}
       {selected && <>
         <Boundary key={`left:${selectedBasis}:${source(selected.left)?.media_url}`} clip={selected.left} source={source(selected.left)} side="left" ratio={content.output_aspect_ratio} onReady={value => setReady(previous => ({ ...previous, left: value }))} />
         <Boundary key={`right:${selectedBasis}:${source(selected.right)?.media_url}`} clip={selected.right} source={source(selected.right)} side="right" ratio={content.output_aspect_ratio} onReady={value => setReady(previous => ({ ...previous, right: value }))} />

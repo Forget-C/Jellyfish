@@ -1,3 +1,5 @@
+import { makeWorkspace } from './directing-fixtures.mjs'
+import { workbenchShot } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -49,6 +51,7 @@ try {
   content.design.events = [{ id: 'event-one', description: note('拆开信封') }]
   content.design.participants = [{ id: 'reader', name: '读信者' }]
   content.design.direction.shots = [{ id: 'shot-one', beat_ids: ['beat-one', 'beat-two'], event_ids: ['event-one'], blocking_state_ids: [], participant_ids: ['reader'], criterion_ids: [], narrative_function: {}, visible_result: note('读信反应') }]
+  content.design.cinematography = content.design.direction.shots.map((shot, index) => ({ ...structuredClone(makeWorkspace().designs[0].content.cinematography[0]), id: `camera-${index}`, shot_id: shot.id, criterion_ids: [] }))
   content.units = [{ id: 'unit-one', model_id: 'browser-video-model', duration_ms: 5000, ratio: '16:9', coverage: [
     { id: 'coverage-one', shot_id: 'shot-one', beat_ids: ['beat-one'], event_ids: [], action_scope: '拆开信封' },
 
@@ -57,9 +60,8 @@ try {
   const saved = await fetch(`${versionsUrl}/${version.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: version.revision, content }) })
   assert.equal(saved.status, 200, await saved.text())
   await page.goto(`http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
+  await (await workbenchShot(page, '镜头 1：读信反应')).click()
   await page.getByRole('button', { name: '单元画布', exact: true }).click()
-  await page.getByRole('combobox', { name: '单元所属镜头', exact: true }).click()
-  await page.getByText('镜头 1：读信反应', { exact: true }).last().click()
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('ArrowDown')
   await page.getByRole('combobox', { name: '当前单元', exact: true }).press('Enter')
   await page.getByRole('button', { name: '指令画布', exact: true }).click()

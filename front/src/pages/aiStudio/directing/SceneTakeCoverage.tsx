@@ -34,7 +34,7 @@ export function SceneTakeCoverage({ take, content, coverage, disabled, onChange 
     {!coverage.length && <p>尚未记录实际覆盖。</p>}
     {coverage.map((row, index) => {
       const action = choices.find(item => item.unitId === row.unit_id && item.actionId === row.coverage_item_id)
-      return <div key={row.id}>
+      return <div key={row.id} id={`scene-actual-coverage-${row.id}`} tabIndex={-1}>
         <p>{action?.label || `原动作已失效：${row.unit_id} / ${row.coverage_item_id}`}</p>
         <p>{row.media_range.source_in_ms}–{row.media_range.source_out_ms} 毫秒：{row.observation}</p>
         {!action && <Alert type="warning" message="覆盖目标已失效，请明确改绑或删除此判断后保存" />}

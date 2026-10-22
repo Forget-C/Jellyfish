@@ -35,5 +35,6 @@ export function remapCanvasGraph(graph, { nodes = {}, edges = {}, views = {}, ex
       member.entry_view_id = views[member.entry_view_id] || member.entry_view_id
     }
   }
+  if (graph.library_view_id) graph.library_view_id = views[graph.library_view_id] || graph.library_view_id
   graph.issues.forEach(issue => address(issue.target))
 }

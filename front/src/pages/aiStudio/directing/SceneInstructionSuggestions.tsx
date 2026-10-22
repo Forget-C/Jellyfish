@@ -35,18 +35,23 @@ function clearRequest(key: string, requestId: string) {
 }
 
 /** 建议保留在任务中；只有显式应用才修改当前单元正文。 */
-export function SceneInstructionSuggestions({ onPriority, primaryHost, onLocate, projectId, sequenceId, versionId, revision, unitId, content, disabled, onChange, compact, initialTaskId, onOpen, onTask, onPrepare }: {
+export function SceneInstructionSuggestions({ onEvidenceChanged, onPriority, primaryHost, onLocate, projectId, sequenceId, versionId, revision, unitId, content, disabled, onChange, compact, initialTaskId, recordFocus, onOpen, onTask, onPrepare }: {
+  onEvidenceChanged?: () => void
   projectId: string; sequenceId: string; versionId: string; revision: number; unitId: string
   content: SceneVersionContent_Output; disabled: boolean; onChange: (content: SceneVersionContent_Output) => void
   onPriority?: (state: { versionId: string; unitId: string; priority: boolean }) => void
   onLocate?: () => void
   primaryHost?: HTMLElement | null
   onPrepare?: () => void
+  recordFocus?: { taskId: string; serial: number }
   compact?: boolean; initialTaskId?: string; onOpen?: (taskId?: string) => void
   onTask?: (taskId: string, unitId: string) => void
 }) {
   const panel = useRef<HTMLElement>(null)
   const key = `${projectId}:${sequenceId}:${versionId}:${unitId}`
+  const evidenceCallback = useRef(onEvidenceChanged)
+  evidenceCallback.current = onEvidenceChanged
+  const evidenceKey = useRef('')
   const [viewed, setViewed] = useState(() => new Set(viewedSuggestions.get(key)))
   const markViewed = (taskId: string) => {
     const next = new Set(viewedSuggestions.get(key)); next.add(taskId)
@@ -55,6 +60,9 @@ export function SceneInstructionSuggestions({ onPriority, primaryHost, onLocate,
   const target = { projectId, sequenceId, versionId, unitId }
   const [rows, setRows] = useState<SceneInstructionSuggestionRead[]>()
   const [selectedId, setSelectedId] = useState<string | undefined>(initialTaskId)
+  const focusedTaskId = recordFocus?.taskId
+  const focusedSerial = recordFocus?.serial
+  useEffect(() => { if (focusedTaskId) { setSelectedId(focusedTaskId); setAttempt(value => value + 1) } }, [focusedTaskId, focusedSerial])
   const [requirements, setRequirements] = useState('')
   const [limited, setLimited] = useState(false)
   const [selection, setSelection] = useState<{ scope: SceneInstructionScope; before: string }>()
@@ -97,6 +105,11 @@ export function SceneInstructionSuggestions({ onPriority, primaryHost, onLocate,
         if (!result.data) throw new Error('指令建议记录尚未核实')
         if (!active) return
         setRows(result.data); setReadError('')
+        const evidence = JSON.stringify(result.data)
+        if (evidence !== evidenceKey.current) {
+          evidenceKey.current = evidence
+          evidenceCallback.current?.()
+        }
         const found = result.data.find(row => row.request_id === pendingRequests.get(key)?.request_id)
         if (found) { clearRequest(key, found.request_id); setSelectedId(found.task_id); setError(''); onTask?.(found.task_id, unitId) }
         result.data.filter(row => !terminal.includes(row.status)).forEach(row => onTask?.(row.task_id, unitId))

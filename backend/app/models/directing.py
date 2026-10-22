@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import Boolean, Computed, CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint, Integer, JSON, String, Text, UniqueConstraint, func, text
+from sqlalchemy import Boolean, Computed, CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint, Integer, Index, JSON, String, Text, UniqueConstraint, func, text
 from sqlalchemy.dialects.mysql import DATETIME
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -131,10 +131,11 @@ class SceneTakeReviewRecord(Base):
     revision: Mapped[int] = mapped_column(Integer, nullable=False)
     take_kind: Mapped[str] = mapped_column(String(32), nullable=False)
     take_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    basis_key: Mapped[str] = mapped_column(String(64), nullable=False)
     content: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), server_default=func.now(), nullable=False)
 
-    __table_args__ = (UniqueConstraint('version_id', 'revision', 'take_kind', 'take_id', name='uq_scene_take_review_revision'),)
+    __table_args__ = (Index('ix_scene_take_review_basis', 'version_id', 'basis_key'), UniqueConstraint('version_id', 'revision', 'take_kind', 'take_id', name='uq_scene_take_review_revision'),)
 
 
 class SceneCutReviewRecord(Base):
@@ -146,10 +147,11 @@ class SceneCutReviewRecord(Base):
     version_id: Mapped[str] = mapped_column(ForeignKey('directing_scene_versions.id', ondelete='RESTRICT'), nullable=False)
     request_id: Mapped[str] = mapped_column(String(64), nullable=False)
     review: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    basis_key: Mapped[str] = mapped_column(String(64), nullable=False)
     content: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), server_default=func.now(), nullable=False)
 
-    __table_args__ = (UniqueConstraint('version_id', 'request_id', name='uq_scene_cut_review_request'),)
+    __table_args__ = (Index('ix_scene_cut_review_basis', 'version_id', 'basis_key'), UniqueConstraint('version_id', 'request_id', name='uq_scene_cut_review_request'),)
 
 
 class SceneSeamReviewRecord(Base):
@@ -160,11 +162,12 @@ class SceneSeamReviewRecord(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     version_id: Mapped[str] = mapped_column(ForeignKey('directing_scene_versions.id', ondelete='RESTRICT'), nullable=False)
     request_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    basis_key: Mapped[str] = mapped_column(String(64), nullable=False)
     review: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     content: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), server_default=func.now(), nullable=False)
 
-    __table_args__ = (UniqueConstraint('version_id', 'request_id', name='uq_scene_seam_review_request'),)
+    __table_args__ = (Index('ix_scene_seam_review_basis', 'version_id', 'basis_key'), UniqueConstraint('version_id', 'request_id', name='uq_scene_seam_review_request'),)
 
 
 class SceneEndFrameRecord(Base):
