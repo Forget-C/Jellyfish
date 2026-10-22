@@ -53,9 +53,7 @@ export async function directorObject(page, label, search = typeof label === 'str
     if (!await unlinked.isChecked()) await unlinked.click()
   }
   await directorSelect(page, '定位设计对象', label, search)
-  const edit = object.getByRole('button', { name: '编辑此卡', exact: true })
-  if (await edit.isDisabled()) await object.getByRole('button', { name: /^查看节点：/ }).click()
-  else await edit.click()
+  await object.getByRole('button', { name: /^查看节点：/ }).click()
   return page.locator('.wb-details:visible').last()
 }
 
