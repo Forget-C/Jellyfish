@@ -17,7 +17,9 @@ async def instruction_graph(context: CanvasReadContext, units: UnitCanvasGraph, 
         view_id = f'instruction-unit:{unit.id}'
         selected = [node.model_copy(deep=True) for node in units.nodes
                     if node.kind == 'unit_basis' and node.unit_id == unit.id]
-        reference = reference_card(context, unit, index, 'references', '参考素材', unit.references)
+        reference = reference_card(context, unit, index, 'references', '本次输入', unit.references)
+        reference.sources = [node.edit_target.model_copy(update={'external': True})
+            for node in units.nodes if node.kind == 'unit_references' and node.unit_id == unit.id and node.edit_target]
         input_issues = {issue.message: issue.model_copy(update={'target': CanvasTarget(node_id=reference.id, object=reference.object)})
             for node in units.nodes if node.kind == 'unit_references' and node.unit_id == unit.id
             for issue in node.issues if issue.code == 'model-input-invalid'}
@@ -50,7 +52,7 @@ async def instruction_graph(context: CanvasReadContext, units: UnitCanvasGraph, 
         for node in selected:
             edge = CanvasEdge(id=f'{body.id}:{node.kind}', source=node.id, target=body.id,
                 kind='business', category='input' if node.kind == 'unit_references' else 'evidence',
-                label='明确输入' if node.kind == 'unit_references' else '编写依据',
+                label='本次媒体输入' if node.kind == 'unit_references' else '编写依据',
                 sources=[CanvasTarget(node_id=node.id, object=node.object)])
             graph.add_edge(edge)
             edges.append(edge.id)

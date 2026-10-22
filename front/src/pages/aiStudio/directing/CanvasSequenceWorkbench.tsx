@@ -1127,7 +1127,15 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       setEditor(undefined); setCanvas('units')
     }} dirty={dirty} key={selected.id} projectId={projectId} sequenceId={sequenceId} versionId={selected.id} content={content} revision={selected.revision}
       disabled={readonly || handingOff || !!recovery || busy === 'create' || leaving} onChange={editContent} />}
-    {loadState === 'ready' && canvas === 'instructions' && selected && content && <SceneInstructionCanvas onDesignOpenChange={setInstructionDesign} preparationHost={preparationHost} unitGraphState={unitGraphState} evidenceError={evidenceError} onEvidenceChanged={() => void refreshEvidence(selected.id)} onRetryGraph={() => void refreshEvidence(selected.id)} graph={selected.instruction_graph} onLocateSource={target => {
+    {loadState === 'ready' && canvas === 'instructions' && selected && content && <SceneInstructionCanvas onDesignOpenChange={setInstructionDesign} preparationHost={preparationHost} unitGraphState={unitGraphState} evidenceError={evidenceError} onEvidenceChanged={() => void refreshEvidence(selected.id)} onRetryGraph={() => void refreshEvidence(selected.id)} graph={selected.instruction_graph} onLocateInput={target => {
+      if (!unitGraphState.current || unitGraphState.error) return false
+      const source = unitGraphState.graph?.nodes.find(node => node.id === target.node_id && 'unit_id' in node && node.unit_id === currentUnitId)
+      if (!source || source.kind !== 'unit_references' && !(source.kind === 'unit_config' && source.config_kind === 'dependencies') || target.object.version_id !== selected.id || source.object.id !== target.object.id || source.object.kind !== target.object.kind) return false
+      browseUnit(source.unit_id, 'units')
+      setEditor(undefined)
+      setUnitFocus({ versionId: selected.id, unitId: source.unit_id, nodeId: source.id, fieldId: source.kind === 'unit_config' ? 'scene-unit-dependencies' : '', serial: Date.now() })
+      return true
+    }} onLocateSource={target => {
       const source = selected.unit_graph.nodes.find(node => node.id === target.node_id)
       setEditor(undefined)
       if (source?.kind === 'unit_config') {
