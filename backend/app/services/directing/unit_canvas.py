@@ -78,6 +78,36 @@ def reference_card(context, unit, index, key, title, bindings, input_role='all',
     return node
 
 
+
+def _reference_group_cards(context, unit, index):
+    """只按显式主体组聚合；对象、用途、来源分别描述，不由默认资产推断绑定。"""
+    purposes = {'identity': '人物／物件身份', 'space': '场所空间', 'composition': '构图',
+                'continuity': '连续性', 'performance': '表演', 'sound': '声音'}
+    participants = {person.id: person.name for person in context.content.design.participants}
+    groups = {}
+    for binding in sorted(unit.references, key=lambda item: item.ordinal):
+        if binding.input_role == 'subject':
+            groups.setdefault(binding.subject_group_id or binding.id, []).append(binding)
+    cards = []
+    for group_id, bindings in groups.items():
+        names = '、'.join(dict.fromkeys(participants.get(key, '原对象不可用')
+            for binding in bindings for key in binding.participant_ids))
+        purpose = '、'.join(dict.fromkeys(purposes[binding.purpose] for binding in bindings))
+        title = f'{names} · 身份参考' if bindings[0].purpose == 'identity' and names else f'{names + " · " if names else ""}{purpose}参考'
+        card = reference_card(context, unit, index, f'reference-group:{group_id}', title,
+                              bindings, 'subject', group_id)
+        counts = [(sum(binding.media_kind == kind for binding in bindings), label)
+                  for kind, label in [('image', '张图片'), ('video', '份视频'), ('audio', '份声音')]]
+        card.summary = [CanvasSummaryField(field=field, label=label, text=text) for field, label, text in [
+            ('participants', '对应对象', names or '未指定对象'),
+            ('purpose', '用途', purpose),
+            ('bindings', '组内素材', ' · '.join(f'{count} {label}' for count, label in counts if count)),
+            ('source', '素材来源', '、'.join(dict.fromkeys(binding.asset_origin.name if binding.asset_origin else '人工素材' for binding in bindings))),
+        ]]
+        cards.append(card)
+    cards.append(reference_card(context, unit, index, 'references:add', '添加参考组', [], 'subject'))
+    return cards
+
 def _unit_basis(context, unit, index, graph, director):
     """执行内容由既有范围函数决定；导演图仅提供跨画布的来源定位地址。"""
     scope = unit_scope(context.content.design, unit, context.style_rules.get(unit.model_id or '', []))
@@ -284,8 +314,10 @@ def unit_graph(context: CanvasReadContext, director: DirectorCanvasGraph) -> Uni
         references = [reference_card(context, unit, index, key, title,
             [binding for binding in unit.references if binding.input_role == role], role)
             for role, key, title in [('first_frame', 'first-frame', '首帧参考'), ('last_frame', 'last-frame', '尾帧参考')]]
-        references.append(reference_card(context, unit, index, 'references', '主体参考',
-            [binding for binding in unit.references if binding.input_role not in ('first_frame', 'last_frame')], 'subject'))
+        references.extend(_reference_group_cards(context, unit, index))
+        legacy_keys = [binding for binding in unit.references if binding.input_role == 'key_frame']
+        if legacy_keys:
+            references.append(reference_card(context, unit, index, 'key-frames', '已有关键帧', legacy_keys))
         if input_error and unit.duration_ms and input_error.section == 'generation':
             issue(generation, 'model-input-invalid', str(input_error))
         for reference in references:
@@ -296,7 +328,7 @@ def unit_graph(context: CanvasReadContext, director: DirectorCanvasGraph) -> Uni
             if reference.bindings:
                 edge_id = f'{reference.id}:input'
                 graph.add_edge(CanvasEdge(id=edge_id, source=reference.id, target=unit_id,
-                    kind='business', category='input', label=reference.title, sources=[target(reference, 'references')]))
+                    kind='business', category='input', label=next((item.text for item in reference.summary if item.field == 'purpose'), reference.title), sources=[target(reference, 'references')]))
                 edge_ids.append(edge_id)
         basis = _unit_basis(context, unit, index, graph, director)
         graph.add_node(basis)

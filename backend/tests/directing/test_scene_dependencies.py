@@ -123,7 +123,7 @@ async def test_plan_frame_graph_rechecks_actual_adoption_without_changing_scene_
         preserved = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': legacy['revision'], 'content': unrelated})
         assert preserved.status_code == 200, preserved.text
         assert preserved.json()['data']['content']['units'][0]['dependencies'] == saved['content']['units'][0]['dependencies']
-        assert preserved.json()['data']['content']['units'][0]['scene_dependencies'] == mixed['units'][0]['scene_dependencies']
+        assert preserved.json()['data']['content']['units'][0]['scene_dependencies'] == legacy['content']['units'][0]['scene_dependencies']
         single = deepcopy(preserved.json()['data']['content'])
         single['units'][0]['scene_dependencies'] = []
         response = await client.put(detail, json={'request_id': str(uuid4()), 'expected_revision': preserved.json()['data']['revision'], 'content': single})
