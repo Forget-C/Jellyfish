@@ -232,7 +232,7 @@ try {
   await (await workbenchShot(page, '镜头 2：镜头 2：视线和动作继续展开。')).click()
   await (await workbenchShot(page, '镜头 1：他把旧信放在桌上，她缓缓抬头。')).click()
   assert.equal(await page.getByRole('dialog').count(), 0, '选择镜头只切换查看上下文')
-  for (const width of [1440, 1280, 390]) {
+  for (const width of [1920, 1440, 1280, 390]) {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 960 })
     for (const [key, name] of [['director', '导演画布'], ['units', '单元画布'], ['instructions', '指令画布'], ['edit', '编辑画布']]) {
       await page.getByRole('navigation', { name: '画布切换', exact: true }).getByRole('button', { name, exact: true }).click()
@@ -248,6 +248,11 @@ try {
       if (key === 'edit') await page.getByRole('button', { name: '选择素材 1', exact: true }).waitFor()
       if (key === 'instructions') await page.waitForFunction(() => !document.querySelector('.canvas-toolbar-primary')?.textContent.includes('正在核对'))
       if (width === 390) await locate({ director: '原文依据', units: '单元 1', instructions: '当前指令', edit: '当前素材' }[key])
+      if (key === 'units' && width === 1920) {
+        const design = await page.getByRole('button', { name: 'AI设计', exact: true }).boundingBox()
+        const instruction = await page.getByRole('button', { name: '查看当前指令', exact: true }).boundingBox()
+        assert.ok(design && instruction && Math.abs(design.y - instruction.y) <= 2, '宽屏单元状态栏的主操作应横向对齐')
+      }
       await checkChrome(`${key}-${width}`)
       await screenshot(`${key}-${width}`)
       const before = await transform()

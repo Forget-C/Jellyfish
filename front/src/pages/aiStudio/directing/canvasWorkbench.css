@@ -191,7 +191,7 @@
 .canvas-toolbar-preparation:empty { display: none; }
 .canvas-toolbar-preparation .canvas-toolbar-popover .ant-btn { min-width: 0; max-width: 100%; min-height: 32px; height: auto; white-space: normal; overflow-wrap: anywhere; text-align: left; }
 .canvas-director-navigation-host { position: absolute; z-index: 30; top: calc(var(--workbench-content-top, 100px) + 12px); left: 16px; max-width: calc(100% - 32px); }
-.canvas-workbench[data-canvas="director"] .canvas-toolbar-primary { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; }
+.canvas-workbench[data-canvas="director"] .canvas-toolbar-primary { flex: 0 0 auto; }
 .canvas-workbench[data-canvas="director"] .canvas-toolbar-actions { flex-wrap: wrap; }
 .canvas-director-browse { display: flex; align-items: center; gap: 8px; width: fit-content; max-width: 100%; min-height: 36px; padding: 2px 6px; border: 1px solid #2d2d2d; border-radius: 10px; background: var(--wb-surface); }
 .canvas-unit-browse { flex-wrap: wrap; }
@@ -206,7 +206,7 @@
 .canvas-toolbar-views { display: flex; gap: 2px; padding: 3px; background: #191919; border: 1px solid #292929; border-radius: 10px; }
 .canvas-toolbar-views .ant-btn { color: var(--wb-muted); padding-inline: 12px; }
 .canvas-toolbar-views .ant-btn[aria-pressed="true"] { color: #f0f0f0; background: #303030; }
-.canvas-toolbar-primary { min-width: 0; }
+.canvas-toolbar-primary { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
 .canvas-toolbar-primary .ant-btn { max-width: 100%; white-space: normal; height: auto; min-height: 32px; }
 .canvas-toolbar-primary .scene-unit-instruction-action { gap: 6px; }
 .canvas-toolbar-menu { position: relative; flex-shrink: 0; }
