@@ -99,3 +99,25 @@ export async function selectWorkbenchOption(page, name, label) {
   const popup = page.locator(`[id="${await combo.getAttribute('aria-controls')}"]`).locator('xpath=ancestor::div[contains(@class,"ant-select-dropdown")][1]')
   await popup.locator('.ant-select-item-option').filter({ hasText: label }).click()
 }
+
+/** 打开当前单元的 AI 指令工作区；浏览本身不提交生成。 */
+export async function instructionDesign(page) {
+  const dialog = page.getByRole('dialog', { name: 'AI 指令设计', exact: true })
+  if (!await dialog.isVisible()) {
+    await closeWorkbenchDetails(page)
+    if (await page.getByRole('combobox', { name: '当前单元', exact: true }).isVisible()) {
+      await page.getByRole('button', { name: '进入指令画布', exact: true }).click()
+    }
+    await page.getByRole('button', { name: 'AI 设计', exact: true }).click()
+  }
+  await dialog.waitFor()
+  return dialog
+}
+
+export async function closeInstructionDesign(page) {
+  const dialog = page.getByRole('dialog', { name: 'AI 指令设计', exact: true })
+  if (await dialog.isVisible()) {
+    await dialog.getByRole('button', { name: '返回画布', exact: true }).click()
+    await dialog.waitFor({ state: 'hidden' })
+  }
+}

@@ -149,7 +149,7 @@ try {
   await unitCard(page)
   assert.equal(await page.getByRole('textbox', { name: '单元动作范围', exact: true }).inputValue(), '保存未知期间 B 的编辑')
   await page.getByRole('button', { name: '指令画布', exact: true }).click()
-  await page.getByRole('navigation', { name: '当前指令主操作', exact: true }).getByRole('button', { name: '生成当前单元指令建议', exact: true }).waitFor({ timeout: 5000 })
+  await page.getByRole('button', { name: 'AI 设计', exact: true }).waitFor({ timeout: 5000 })
   await selectWorkbenchOption(page, '指令所属单元', '单元 1 · 拆开信封')
   await page.unroute('**/units/unit-one/video')
   await page.getByRole('navigation', { name: '当前指令主操作', exact: true }).getByRole('button', { name: '核实当前单元原视频请求', exact: true }).click()
