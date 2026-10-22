@@ -1,9 +1,9 @@
+import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import { workbenchShot, selectWorkbenchOption, locateCanvasNode } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
-import { mkdtemp, readFile, readdir, unlink, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { readFile, readdir, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -11,7 +11,7 @@ import { createServer } from 'vite'
 
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
-const output = await mkdtemp(join(tmpdir(), 'jellyfish-scene-version-'))
+const output = await browserOutput('jellyfish-default-assets-')
 const api = 'http://127.0.0.1:8257'
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.directing.scene_version_browser_server'], {
   cwd: join(root, '../backend'),
@@ -22,6 +22,8 @@ let backendOutput = ''
 backend.stdout.on('data', data => { backendOutput += data })
 backend.stderr.on('data', data => { backendOutput += data })
 let server, browser, page
+const cleanup = browserCleanup(() => ({ browser, server, backend }))
+captureBackend(backend, output)
 try {
   let chapter
   for (let attempt = 0; attempt < 80; attempt++) {
@@ -241,7 +243,5 @@ try {
   if (page) await page.screenshot({ path: join(output, 'failure.png'), fullPage: true, animations: 'disabled' }).catch(() => {})
   throw error
 } finally {
-  await browser?.close()
-  await server?.close()
-  backend.kill('SIGTERM')
+  await cleanup()
 }

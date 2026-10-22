@@ -42,3 +42,8 @@
 - 对外图字段及 generated client 复用 03 的已同步契约。同步当前架构与画布操作文档；新控件复用 WorkbenchButton，浏览器脚本沿用统一 runtime 的证据和清理。
 
 上述供应商响应为 HTTP 边界受控响应，不代表真实模型生成质量；真实供应商验收仍由 08 汇总。综合 workbench 套件由集成阶段统一执行，避免与并行分支争用端口。
+
+
+合入 03 及集成分支 `2c959e2` 后：保留首尾帧替换所点绑定、通用参考问题定位、当前内容图同步与指令聚合诊断。冲突解决后重新运行图投影／预览／参考组 HTTP 共 38 项通过；typecheck 与 Pylint（10.00/10）通过。`reference-source` 浏览器回归 97.6s 通过（`browser-FqJBc7`）；`frame-inputs` 浏览器回归 32.9s 通过（`browser-NrybPZ`）。`default-assets` 迁移至统一 `browser-runtime` 后 32.9s 通过（`browser-GWd3Gn`）。
+
+浏览器截图、日志和结果另保留在主仓库 `front/test-results/instruction-video-04/`（ignored，不提交，排除 SQLite 与 Vite 缓存），工作树归档后仍可查阅。
