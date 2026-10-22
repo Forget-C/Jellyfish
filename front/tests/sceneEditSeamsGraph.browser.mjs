@@ -75,7 +75,7 @@ try {
     if (route.request().method() === 'POST') posts++
     return route.continue()
   })
-  await page.route('**/versions*', async route => {
+  await page.route(/\/versions(?:\/[^/?]+)?(?:\?.*)?$/, async route => {
     if (route.request().method() !== 'GET') return route.continue()
     const response = await route.fetch()
     const payload = await response.json()

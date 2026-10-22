@@ -90,7 +90,7 @@ try {
     if (request.url().endsWith('/end-frames')) historyReads.frame++
   })
   await page.route('**/*', route => { if (route.request().method() === 'POST' && /\/(cut-reviews|end-frames|seam-reviews|take-reviews|exports)(\?|$)/.test(route.request().url())) posts++; return route.continue() })
-  await page.route('**/versions*', async route => {
+  await page.route(/\/versions(?:\/[^/?]+)?(?:\?.*)?$/, async route => {
     if (route.request().method() !== 'GET') return route.continue()
     const response = await route.fetch()
     const payload = await response.json()

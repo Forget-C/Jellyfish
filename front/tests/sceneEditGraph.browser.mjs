@@ -68,7 +68,7 @@ try {
   const put = await fetch(detail, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: 1, content }) })
   assert.equal(put.status, 200, await put.clone().text())
   const saved = (await put.json()).data
-  await page.route('**/versions*', async route => {
+  await page.route(/\/versions(?:\/[^/?]+)?(?:\?.*)?$/, async route => {
     if (route.request().method() !== 'GET') return route.continue()
     const response = await route.fetch()
     const payload = await response.json()
