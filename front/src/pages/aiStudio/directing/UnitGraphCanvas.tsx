@@ -18,7 +18,7 @@ export function UnitGraphCanvas({ graph, content, unitId, versionId, revision, s
   graph: UnitCanvasGraph; content: SceneVersionContent_Output; unitId?: string; versionId: string; revision: number; storageKey: string
   updating: boolean; pending: boolean; error: string; onRetry: () => void
   onBrowseShotChange: (id?: string) => void
-  onInspect: (node: UnitNode) => void; onReference: (id: string) => void
+  onInspect: (node: UnitNode) => void; onReference: (node: Extract<UnitNode, { kind: 'unit_references' }>) => void
 }) {
   const [params, setParams] = useSearchParams()
   const filter = params.get('unitShot') || ''
@@ -72,7 +72,7 @@ export function UnitGraphCanvas({ graph, content, unitId, versionId, revision, s
     return [{ id: node.id, label: member.title || node.title, title: member.title || node.title,
       group: member.group, entry: member.presentation === 'entry', related: member.presentation === 'reference',
       size: { width: 360, height: member.presentation === 'entry' ? 360 : 320 },
-      onInspect: member.presentation === 'entry' && member.entry_view_id ? () => go('unit_id' in node ? node.unit_id : '') : node.kind === 'unit_references' ? () => onReference(node.unit_id) : node.edit_target || node.kind === 'unit_basis' ? () => onInspect(node) : undefined,
+      onInspect: member.presentation === 'entry' && member.entry_view_id ? () => go('unit_id' in node ? node.unit_id : '') : node.kind === 'unit_references' ? () => onReference(node) : node.edit_target || node.kind === 'unit_basis' ? () => onInspect(node) : undefined,
       content: member.presentation === 'entry' && member.entry_view_id ? preview(node, member.entry_view_id) : <section className="canvas-workbench-card unit-graph-card">
         <div className="design-compact-summary">
           <div className="design-compact-fields">{node.summary.map(field => <p key={field.field} title={`${field.label}：${field.text}`}><span>{field.label}：</span><strong>{field.text}</strong></p>)}

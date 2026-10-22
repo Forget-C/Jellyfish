@@ -190,10 +190,12 @@ class CanvasReferencePreview(Contract):
 
 
 class UnitReferencesCanvasNode(CanvasNode):
-    """每个单元一个真实输入集合；绑定保留用途、角色、顺序及固定文件身份。"""
+    """单元的真实输入集合或固定位置；绑定保留用途、角色、顺序及固定文件身份。"""
 
     kind: Literal['unit_references'] = Field(default='unit_references', json_schema_extra={'enum': ['unit_references']})
     unit_id: Identity
+    input_role: Literal['all', 'first_frame', 'last_frame', 'subject'] = 'all'
+    subject_group_id: Identity | None = None
     binding_count: int = Field(ge=0)
     bindings: list[ReferenceBinding]
     previews: list[CanvasReferencePreview]

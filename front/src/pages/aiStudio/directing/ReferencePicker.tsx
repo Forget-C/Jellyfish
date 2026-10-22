@@ -12,9 +12,9 @@ import { referenceGroups, identityReferenceIssues, referenceIssues, referencePur
 import { shotParticipantRelations } from './productionGraph'
 
 /** 对象与参考共用的事务式编辑弹窗；仅应用时更新单元，设计资产修改仍经过版本流程。 */
-export function ReferencePicker({ rootClassName, projectId, assets, assetError, onReloadAssets, design, coverage = [], references, capability, initialParticipantIds, initialAssetId, initialRole, initialPurpose, title, contextLabel, referenceIds, location = false, disabled = false, capabilityError, onRetryCapability, dependencyReferenceIds = [], onApply, onEditAssets, onInspectDesign, onClose }: {
+export function ReferencePicker({ rootClassName, projectId, assets, assetError, onReloadAssets, design, coverage = [], references, capability, initialParticipantIds, initialAssetId, initialRole, initialPurpose, title, contextLabel, referenceIds, inputRole: fixedInputRole, location = false, disabled = false, capabilityError, onRetryCapability, dependencyReferenceIds = [], onApply, onEditAssets, onInspectDesign, onClose }: {
   rootClassName?: string; projectId: string; assets?: AssetSummary[]; assetError?: string; onReloadAssets?: () => void; design: SceneDesign_Input;
-  initialParticipantIds?: string[]; initialAssetId?: string; initialRole?: Reference['input_role']; initialPurpose?: Reference['purpose']; title?: string; contextLabel?: string; referenceIds?: string[]; location?: boolean; disabled?: boolean; capabilityError?: string; onRetryCapability?: () => void; dependencyReferenceIds?: string[];
+  initialParticipantIds?: string[]; initialAssetId?: string; initialRole?: Reference['input_role']; initialPurpose?: Reference['purpose']; title?: string; contextLabel?: string; referenceIds?: string[]; inputRole?: 'first_frame' | 'last_frame' | 'subject'; location?: boolean; disabled?: boolean; capabilityError?: string; onRetryCapability?: () => void; dependencyReferenceIds?: string[];
   coverage?: GenerationUnit_Input['coverage']; references: Reference[]; capability?: VideoReferenceCapabilities; onApply: (references: Reference[]) => void; onEditAssets?: () => void; onInspectDesign?: (objectKey: string) => void; onClose: () => void;
 }) {
   const Modal = rootClassName?.includes('canvas-workbench-dialog') ? WorkbenchModal : AntModal
@@ -70,7 +70,7 @@ export function ReferencePicker({ rootClassName, projectId, assets, assetError, 
   const related = new Set(scopes.filter(row => row.known).flatMap(row => row.participants.map(person => person.id)))
   const pending = new Set(scopes.filter(row => !row.known).flatMap(row => row.participants.map(person => person.id)))
   const participantOptions = ['当前单元设计对象', '范围待核对的设计关联', '其他场内对象'].map((label, index) => ({ label, options: design.participants.filter(person => (related.has(person.id) ? 0 : pending.has(person.id) ? 1 : 2) === index).map(person => ({ value: person.id, label: person.name })) })).filter(group => group.options.length)
-  const inputRole = role && roles.includes(role) ? role : roles.includes('subject') ? 'subject' : roles[0]
+  const inputRole = fixedInputRole || (role && roles.includes(role) ? role : roles.includes('subject') ? 'subject' : roles[0])
   const candidates = design.participants.filter(person => related.has(person.id))
   const linked = (assets || []).filter(asset => asset.kind === 'scene' ? design.direction.location_asset_id === asset.id : candidates.some(person => (asset.kind === 'character' ? person.character_id : person.prop_id) === asset.id))
   const unavailableDefaults: string[] = []

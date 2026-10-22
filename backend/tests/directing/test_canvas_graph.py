@@ -464,6 +464,8 @@ async def test_unit_reference_graph_preserves_binding_roles_order_and_live_file_
         collections = {node['unit_id']: node for node in saved['unit_graph']['nodes']
                        if node['kind'] == 'unit_references'}
         first = collections['first']
+        assert first['input_role'] == 'all'
+        assert first['subject_group_id'] is None
         assert [row['id'] for row in first['bindings']] == ['subject', 'frame']
         assert [row['input_role'] for row in first['bindings']] == ['subject', 'first_frame']
         assert first['binding_count'] == 2

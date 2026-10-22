@@ -286,7 +286,8 @@ function SceneUnitCanvasBody({ preparationHost, graphState, primaryHost, graph, 
       storageKey={`jellyfish:unit-graph:local-user:${projectId}:${sequenceId}:${versionId}`}
       pending={JSON.stringify(content) !== JSON.stringify(saved)}
       onBrowseShotChange={setBrowseShotId}
-      onReference={id => {
+      onReference={node => {
+          const id = node.unit_id
         if (!allUnits.some(row => row.id === id)) { setUnavailableTarget(true); return }
         setUnavailableTarget(false); onSelectUnit(id); setPicker(id)
       }}
