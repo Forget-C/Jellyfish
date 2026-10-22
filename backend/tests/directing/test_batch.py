@@ -14,9 +14,9 @@ from tests.directing.test_store import database, frozen
 from tests.directing.test_production import prepare
 
 
-async def pair(db):
+async def pair(db, reference_origin=None):
     """同一确认计划的两个单元各自编译、审稿，不调用模型。"""
-    base, sequence_id, plan_id, prompt_id, review_id = await prepare(db)
+    base, sequence_id, plan_id, prompt_id, review_id = await prepare(db, reference_origin=reference_origin)
     prompt = await base.compile_unit(sequence_id, plan_id, 'u2')
     packet = deepcopy((await base.revision(review_id)).payload)
     packet['occurrences'][0].update(prompt_revision_id=prompt.id, unit_id='u2', coverage_item_id='c3', shot_id='s2')
@@ -148,3 +148,47 @@ async def test_batch_rolls_back_only_failed_item_after_task_creation(tmp_path, m
             assert accepted.items[1].status == 'blocked'
             assert await db.scalar(select(func.count()).select_from(Task)) == 1
             assert await db.scalar(select(func.count()).select_from(DirectingAction).where(DirectingAction.action == 'execute')) == 1
+
+
+@pytest.mark.asyncio
+async def test_batch_keeps_fixed_source_after_asset_deletion_and_rechecks_files(tmp_path):
+    """批量 HTTP 预检读取固定计划；来源失效不改历史，文件失效仍阻止受理。"""
+    from datetime import datetime, timezone
+    from sqlalchemy import delete
+    from app.models.studio import FileItem, FileUsage, Scene, SceneImage, ProjectSceneLink
+    from tests.directing.test_api import client_for
+
+    async with database(tmp_path) as sessions, client_for(sessions) as client:
+        async with sessions.begin() as db:
+            db.add(Scene(id='fixed-source', name='选择时场所', style='真人都市'))
+            await db.flush()
+            db.add_all([ProjectSceneLink(project_id='p1', scene_id='fixed-source'),
+                        SceneImage(id=990, scene_id='fixed-source', file_id='image1')])
+            await db.flush()
+            _, sequence_id, selection = await pair(db, reference_origin={'kind': 'scene', 'id': 'fixed-source', 'name': '选择时场所'})
+        path = f'/api/v1/studio/projects/p1/directing/sequences/{sequence_id}'
+        frozen_plans = (await client.get(path)).json()['data']['plans']
+        async with sessions.begin() as db:
+            await db.execute(delete(ProjectSceneLink).where(ProjectSceneLink.scene_id == 'fixed-source'))
+            await db.execute(delete(SceneImage).where(SceneImage.scene_id == 'fixed-source'))
+            await db.execute(delete(Scene).where(Scene.id == 'fixed-source'))
+        prepared = await client.post(path + '/batches/prepare', json=selection.model_dump(mode='json'))
+        assert prepared.status_code == 200, prepared.text
+        assert [row['status'] for row in prepared.json()['data']['items']] == ['ready', 'ready']
+        accepted = await client.post(path + '/batches/' + prepared.json()['data']['id'] + '/submit', json={'expected_version': 1})
+        assert accepted.status_code == 200, accepted.text
+        assert [row['status'] for row in accepted.json()['data']['items']] == ['queued', 'queued']
+        for field in ['deleted_at', 'delete_requested_at']:
+            async with sessions.begin() as db:
+                setattr(await db.get(FileItem, 'image1'), field, datetime.now(timezone.utc))
+            blocked = await client.post(path + '/batches/prepare', json=selection.model_dump(mode='json'))
+            assert blocked.status_code == 200, blocked.text
+            assert [row['status'] for row in blocked.json()['data']['items']] == ['blocked', 'blocked']
+            async with sessions.begin() as db:
+                setattr(await db.get(FileItem, 'image1'), field, None)
+        async with sessions.begin() as db:
+            await db.execute(delete(FileUsage).where(FileUsage.file_id == 'image1'))
+            db.add(FileUsage(file_id='image1', project_id='p2', usage_kind='upload', source_ref='private'))
+        blocked = await client.post(path + '/batches/prepare', json=selection.model_dump(mode='json'))
+        assert [row['status'] for row in blocked.json()['data']['items']] == ['blocked', 'blocked']
+        assert (await client.get(path)).json()['data']['plans'] == frozen_plans

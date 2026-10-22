@@ -765,8 +765,12 @@ class DirectingStore:
 
     async def save_revision(self, sequence_id: str, *, kind: str, payload: dict,
                             revision_id: str | None = None, expected_version: int | None = None,
-                            parent_id: str | None = None, source_task_id: str | None = None) -> DirectingRevision:
-        """创建草稿或 CAS 更新草稿；冻结版本必须派生新 ID，引用索引与正文同事务。"""
+                            parent_id: str | None = None, source_task_id: str | None = None,
+                            source_unit_ids: dict[str, str] | None = None) -> DirectingRevision:
+        """创建或 CAS 更新草稿；source_unit_ids 仅供服务端显式重组的原单元映射。
+
+        冻结版本必须派生新 ID，引用索引与正文同事务；请求数据不能提供来源映射。
+        """
         sequence = await self.current_sequence(sequence_id)
         if kind not in CONTRACTS:
             raise ValueError("unknown revision kind")
@@ -786,7 +790,7 @@ class DirectingStore:
                     previous_row = await self.revision(revision_id or parent_id, kind="plan", sequence_id=sequence_id,
                                                        confirmed=bool(parent_id))
                     previous = ProductionPlan.model_validate(previous_row.payload)
-                await self._validate_asset_origins(content, previous)
+                await self._validate_asset_origins(content, previous, source_unit_ids=source_unit_ids)
             if revision_id is None:
                 if expected_version is not None:
                     raise ValueError("new revision has no expected version")
@@ -850,13 +854,17 @@ class DirectingStore:
                 await self.db.flush()
         return await self.revision(row.id)
 
-    async def _validate_asset_origins(self, plan, previous):
-        """只在保存选择时核对资产来源；已确认输入不随资产改名或换图变化。"""
+    async def _validate_asset_origins(self, plan, previous, *, source_unit_ids=None):
+        """新增选择核对目录；同单元同绑定的固定文件及来源快照可继续使用。
+
+        目录失效不取消已有文件选择；文件归属、权限与媒体校验仍由调用方执行。
+        """
         from app.models.studio import Scene, Prop, CharacterImage, SceneImage, PropImage
 
         same_design = (isinstance(plan, SceneVersionContent) and isinstance(previous, SceneVersionContent)) or (
             previous is not None and getattr(previous, "design_revision_id", None) == getattr(plan, "design_revision_id", None))
-        inherited = {(binding.file_id, binding.media_kind, binding.asset_origin.model_dump_json())
+        inherited = {(unit.id, binding.id, binding.file_id, binding.media_kind, binding.asset_origin.model_dump_json(),
+                      binding.source.model_dump_json())
                      for unit in previous.units for binding in unit.references if binding.asset_origin} if previous and same_design else set()
         models = {"character": (Character, CharacterImage, CharacterImage.character_id),
                   "scene": (Scene, SceneImage, SceneImage.scene_id), "prop": (Prop, PropImage, PropImage.prop_id)}
@@ -865,7 +873,11 @@ class DirectingStore:
                 origin = binding.asset_origin
                 if origin is None:
                     continue
-                inherited_origin = (binding.file_id, binding.media_kind, origin.model_dump_json()) in inherited
+                source_unit_id = (source_unit_ids or {}).get(unit.id, unit.id)
+                inherited_origin = (source_unit_id, binding.id, binding.file_id, binding.media_kind, origin.model_dump_json(),
+                                    binding.source.model_dump_json()) in inherited
+                if inherited_origin:
+                    continue
                 model, image_model, owner = models[origin.kind]
                 asset = await self.db.get(model, origin.id)
                 if origin.kind == "character":
@@ -874,10 +886,8 @@ class DirectingStore:
                     link = ProjectSceneLink if origin.kind == "scene" else ProjectPropLink
                     in_project = await self.db.scalar(select(link.id).where(link.project_id == self.project_id,
                         getattr(link, origin.kind + "_id") == origin.id))
-                if not asset or not in_project or (not inherited_origin and asset.name != origin.name):
+                if not asset or not in_project or asset.name != origin.name:
                     raise ValueError("资产来源与当前项目或名称不符")
-                if inherited_origin:
-                    continue
                 if binding.media_kind != "image" or not await self.db.scalar(select(image_model.id).where(
                         owner == origin.id, image_model.file_id == binding.file_id)):
                     raise ValueError("资产来源中不存在所选图片")

@@ -15,7 +15,7 @@ from tests.directing.samples import design_sample, plan_sample
 from tests.directing.test_store import database, frozen
 
 
-async def prepare(db, design_payload=None):
+async def prepare(db, design_payload=None, reference_origin=None):
     """明确拆为单镜试拍，供应商配置只供离线提交验证。"""
     db.add(Provider(id="provider1", name="OpenAI", base_url="https://example.invalid/v1", api_key="test-only", status="active"))
     await db.flush()
@@ -29,6 +29,8 @@ async def prepare(db, design_payload=None):
     data["units"][0]["references"] = [{"id": "r1", "file_id": "image1", "purpose": "composition", "media_kind": "image",
                                        "participant_ids": [], "ordinal": 0, "input_role": "first_frame",
                                        "source": {"kind": "human", "reference": "author", "version": "1"}}]
+    if reference_origin:
+        data['units'][0]['references'][0]['asset_origin'] = reference_origin
     plan = await frozen(service, sequence.id, "plan", data)
     prompt = await service.compile_unit(sequence.id, plan.id, "u1")
     packet = {"mode": "formal", "roles": list(ROLES), "context": {},

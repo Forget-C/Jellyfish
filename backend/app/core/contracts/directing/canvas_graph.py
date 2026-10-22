@@ -183,6 +183,7 @@ class CanvasReferencePreview(Contract):
     file_id: Identity
     display_name: str
     status: Literal['available', 'deleted', 'unavailable', 'wrong_media_kind']
+    source_status: Literal['available', 'unavailable'] | None = Field(default=None, description='来源资产当前是否仍属于项目；独立于固定文件状态，名称仍用选择时快照。')
     thumbnail_url: str | None = None
     media_url: str | None = None
     preview_issue: str | None = None

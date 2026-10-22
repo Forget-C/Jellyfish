@@ -2,7 +2,7 @@ import { workbenchShot, selectWorkbenchOption, locateCanvasNode } from './workbe
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp, readFile, readdir, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -114,6 +114,38 @@ try {
   assert.deepEqual(saved.content.units[0].references[0].participant_ids, ['reader'])
   assert.equal(saved.content.design.participants[0].character_id, assets[0].id)
   await page.screenshot({ path: join(output, 'independent-reference.png'), animations: 'disabled' })
+  // 来源目录删除后固定文件仍可用；不能从已失效来源新增。
+  const fixedReferences = structuredClone(saved.content.units[0].references)
+  const deleteSource = await fetch(`${api}/api/v1/studio/entities/character/${assets[1].id}`, { method: 'DELETE' })
+  assert.ok(deleteSource.ok, await deleteSource.text())
+  dialog = await open()
+  await dialog.getByText('素材来源：手动乙 · 选择时的资产记录', { exact: true }).waitFor()
+  await dialog.getByText('来源资产不可用；已选固定文件保留，可用性在执行前单独核实。', { exact: true }).waitFor()
+  await dialog.getByRole('button', { name: '添加参考', exact: true }).click()
+  await dialog.getByRole('combobox', { name: '本次素材资产', exact: true }).click()
+  assert.equal(await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText('手动乙', { exact: true }).count(), 0)
+  await page.keyboard.press('Escape')
+  await dialog.getByRole('button', { name: '应用到本单元', exact: true }).click()
+  saved = (await (await fetch(detail)).json()).data
+  assert.deepEqual(saved.content.units[0].references, fixedReferences)
+  const fixedCollection = saved.unit_graph.nodes.find(node => node.kind === 'unit_references')
+  assert.equal(fixedCollection.previews[0].source_status, 'unavailable')
+  assert.equal(fixedCollection.previews[0].status, 'available')
+  await page.screenshot({ path: join(output, 'fixed-reference-source-unavailable.png'), animations: 'disabled' })
+  // 外部对象存储夹具中移除真实字节；来源失效提示与文件读取失败分别显示。
+  const stored = (await readdir(join(output, 'objects'), { recursive: true })).find(name => name.endsWith('.png'))
+  assert.ok(stored)
+  const storedPath = join(output, 'objects', stored)
+  const storedBytes = await readFile(storedPath)
+  await unlink(storedPath)
+  await page.route('**/files/*/download', route => route.continue())
+  dialog = await open()
+  await dialog.getByText('来源资产不可用；已选固定文件保留，可用性在执行前单独核实。', { exact: true }).waitFor()
+  await dialog.getByRole('status').filter({ hasText: `读取失败；固定文件 ${fileId} 保留` }).waitFor()
+  await page.screenshot({ path: join(output, 'fixed-reference-file-unavailable.png'), animations: 'disabled' })
+  await dialog.getByRole('button', { name: /取\s*消/ }).click()
+  await writeFile(storedPath, storedBytes)
+  await page.unroute('**/files/*/download')
   // 明确空范围与未知范围不借用全场人物默认；无图候选仍可独立选材。
   for (const participantIds of [[], null, ['reader']]) {
     const next = structuredClone(saved.content)
@@ -132,8 +164,8 @@ try {
   assert.ok(removed.ok, await removed.text())
   dialog = await open()
   await dialog.getByText('默认资产不可用：读信者角色。可独立选择其他素材。', { exact: true }).waitFor()
-  await selectWorkbenchOption(page, '本次素材资产', '手动乙')
-  await dialog.getByRole('button', { name: '选入 手动乙 图片 1', exact: true }).waitFor()
+  await selectWorkbenchOption(page, '本次素材资产', '默认甲')
+  await dialog.getByRole('button', { name: '选入 默认甲 图片 1', exact: true }).waitFor()
   await dialog.getByRole('button', { name: /取\s*消/ }).click()
   await page.getByRole('button', { name: '导演画布', exact: true }).click()
   const overview = page.getByRole('button', { name: '总览', exact: true })

@@ -90,8 +90,8 @@ export function ReferencePicker({ rootClassName, projectId, assets, assetError, 
     const current = latest.current
     if (current.some(ref => ref.id !== replaceId && ref.file_id === fileId)) return
     const replaced = current.find(ref => ref.id === replaceId)
-    const existing = asset && current.find(ref => ref.input_role === 'subject' && ref.subject_group_id && ref.purpose === chosenPurpose && ref.asset_origin?.kind === asset.kind && ref.asset_origin.id === asset.id && ref.asset_origin.name === asset.name && [...ref.participant_ids].sort().join() === [...participants].sort().join())
-    const sameSubject = replaced && [...replaced.participant_ids].sort().join() === [...participants].sort().join() && replaced.purpose === chosenPurpose && JSON.stringify(replaced.asset_origin) === JSON.stringify(asset ? { kind: asset.kind, id: asset.id, name: asset.name } : undefined)
+    const existing = asset && current.find(ref => ref.input_role === 'subject' && ref.subject_group_id && ref.purpose === chosenPurpose && ref.asset_origin?.kind === asset.kind && ref.asset_origin.id === asset.id && [...ref.participant_ids].sort().join() === [...participants].sort().join())
+    const sameSubject = replaced && [...replaced.participant_ids].sort().join() === [...participants].sort().join() && replaced.purpose === chosenPurpose && (asset ? replaced.asset_origin?.kind === asset.kind && replaced.asset_origin.id === asset.id : !replaced.asset_origin)
     const id = 'ref-' + crypto.randomUUID().slice(0, 8)
     const added: Reference = { id: replaced?.id || id, file_id: fileId, media_kind: kind, purpose: chosenPurpose, participant_ids: participants, ordinal: replaced?.ordinal ?? Math.max(-1, ...current.map(ref => ref.ordinal)) + 1,
       input_role: chosenRole, subject_group_id: chosenRole === 'subject' ? (sameSubject ? replaced?.subject_group_id : undefined) || existing?.subject_group_id || 'group-' + crypto.randomUUID().slice(0, 8) : undefined,
@@ -130,6 +130,7 @@ export function ReferencePicker({ rootClassName, projectId, assets, assetError, 
               {references.some(old => old.id === item.id && old.file_id !== item.file_id) && <span>素材已替换，应用后更新单元。</span>}
             </Space>)}</Space>
             {ref.asset_origin && <span>素材来源：{ref.asset_origin.name} · 选择时的资产记录</span>}
+            {ref.asset_origin && assets && !assets.some(asset => asset.kind === ref.asset_origin?.kind && asset.id === ref.asset_origin.id) && <p role="status">来源资产不可用；已选固定文件保留，可用性在执行前单独核实。</p>}
             <SourceLinks sources={[ref.source]} />
             <Select aria-label="参考对应人物或物件" mode="multiple" disabled={disabled} style={{ width: '100%' }} value={ref.participant_ids} options={design.participants.map(person => ({ value: person.id, label: person.name, disabled: !!ref.asset_origin && (ref.asset_origin.kind === 'scene' || (ref.asset_origin.kind === 'character' ? person.character_id : person.prop_id) !== ref.asset_origin.id) }))} onChange={participant_ids => update({ participant_ids })} />
             <Space wrap><Select aria-label="参考用途" disabled={disabled} value={ref.purpose} options={Object.entries(referencePurposes).map(([value, label]) => ({ value, label }))} onChange={purpose => update({ purpose })} />

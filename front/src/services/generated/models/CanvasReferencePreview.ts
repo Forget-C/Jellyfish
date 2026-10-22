@@ -10,6 +10,10 @@ export type CanvasReferencePreview = {
     file_id: string;
     display_name: string;
     status: 'available' | 'deleted' | 'unavailable' | 'wrong_media_kind';
+    /**
+     * 来源资产当前是否仍属于项目；独立于固定文件状态，名称仍用选择时快照。
+     */
+    source_status?: ('available' | 'unavailable' | null);
     thumbnail_url?: (string | null);
     media_url?: (string | null);
     preview_issue?: (string | null);

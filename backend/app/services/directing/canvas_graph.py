@@ -17,7 +17,7 @@ from app.core.contracts.directing.relationship_graph import SceneRelationshipGra
 from app.core.contracts.directing.style import StyleRule
 from app.services.directing.unit_video_inputs import VideoUnitModel, read_video_unit_model
 from app.models.llm import Model
-from app.models.studio import FileItem, FileUsage, ProjectSceneLink, Scene
+from app.models.studio import Character, FileItem, FileUsage, ProjectPropLink, ProjectSceneLink, Prop, Scene
 
 if TYPE_CHECKING:
     from app.core.contracts.directing.scene_version import SceneVersionContent
@@ -94,6 +94,7 @@ class CanvasReadContext:
     style_rules: dict[str, list[StyleRule]]
     style_issues: dict[str, str]
     files: dict[str, FileItem]
+    available_sources: set[tuple[str, str]]
     dependencies: dict[str, list[CanvasDependencyEvidence]]
 
     @classmethod
@@ -132,8 +133,22 @@ class CanvasReadContext:
         files = {file.id: file for file in (await db.scalars(select(FileItem).join(
             FileUsage, FileUsage.file_id == FileItem.id).where(
                 FileItem.id.in_(file_ids), FileUsage.project_id == project_id))).unique()} if file_ids else {}
+        origins = {(binding.asset_origin.kind, binding.asset_origin.id)
+                   for unit in content.units for binding in unit.references if binding.asset_origin}
+        available_sources = set()
+        for kind, model, link in [('character', Character, None), ('scene', Scene, ProjectSceneLink),
+                                  ('prop', Prop, ProjectPropLink)]:
+            ids = {identity for source_kind, identity in origins if source_kind == kind}
+            if not ids:
+                continue
+            query = select(model.id).where(model.id.in_(ids))
+            if link is None:
+                query = query.where(model.project_id == project_id)
+            else:
+                query = query.join(link, getattr(link, kind + '_id') == model.id).where(link.project_id == project_id)
+            available_sources.update((kind, identity) for identity in await db.scalars(query))
         return cls(version_id, revision, content, relationships, location_name,
-                   model_names, model_inputs, model_input_errors, style_rules, style_issues, files, await dependency_loader())
+                   model_names, model_inputs, model_input_errors, style_rules, style_issues, files, available_sources, await dependency_loader())
 
 
 def note_summary(note: Note) -> str:

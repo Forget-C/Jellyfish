@@ -125,6 +125,9 @@ def test_subject_group_contract():
                "asset_origin": {"kind": "character", "id": "role1", "name": "哥哥"}}
     data["units"][0]["references"] = [binding, {**binding, "id": "r2", "ordinal": 1}]
     assert ProductionPlan.model_validate(data).units[0].references[0].subject_group_id == "person"
+    renamed = deepcopy(data)
+    renamed['units'][0]['references'][1]['asset_origin'] = {'kind': 'character', 'id': 'role1', 'name': '新的显示名称'}
+    assert ProductionPlan.model_validate(renamed).units[0].references[1].asset_origin.name == '新的显示名称'
     for patch in ({"purpose": "space"}, {"participant_ids": ["younger"]},
                   {"asset_origin": None}, {"input_role": "first_frame"}):
         bad = deepcopy(data)
