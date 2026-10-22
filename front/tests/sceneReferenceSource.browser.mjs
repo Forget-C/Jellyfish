@@ -1,4 +1,4 @@
-import { unitCard } from './workbenchControls.mjs'
+import { closeWorkbenchDetails, locateCanvasNode } from './workbenchControls.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import { workbenchShot, selectWorkbenchOption } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
@@ -92,15 +92,21 @@ try {
     return (await response.json()).data
   }
   await save(1, content)
+  const openReferenceGroup = async targetPage => {
+    await closeWorkbenchDetails(targetPage)
+    const current = (await (await fetch(detail)).json()).data
+    const group = current.unit_graph.nodes.find(node => node.input_role === 'subject' && node.bindings.some(ref => ref.purpose === 'identity' && ref.participant_ids.includes('reader')))
+    const title = group?.title || '添加参考组'
+    await locateCanvasNode(targetPage, title)
+    await targetPage.getByRole('button', { name: `查看节点：${title}`, exact: true }).click()
+  }
   const open = async () => {
     await page.goto(`http://127.0.0.1:4258/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${version.id}`)
     await page.getByRole('button', { name: '定位画布节点', exact: true }).waitFor()
     await (await workbenchShot(page, '镜头 1：读信反应')).click()
     await page.getByRole('button', { name: '单元画布', exact: true }).click()
     await selectWorkbenchOption(page, '当前单元', '单元 1')
-    await page.getByRole('button', { name: '定位画布节点', exact: true }).click()
-    await page.getByRole('menuitem', { name: '参考素材', exact: true }).first().click()
-    await page.locator('[data-canvas-node="unit:unit:references"]').getByRole('button', { name: /^查看节点：/ }).click()
+    await openReferenceGroup(page)
     return page.getByRole('dialog').last()
   }
   let dialog = await open()
@@ -117,6 +123,23 @@ try {
   }
   let saved = await waitSaved(value => value.content.units[0].references.length === 2)
   const old = structuredClone(saved.content.units[0].references)
+  const card = saved.unit_graph.nodes.find(node => node.input_role === 'subject' && node.subject_group_id === old[0].subject_group_id)
+  assert.equal(card.binding_count, 2)
+  assert.equal(card.title, '读信者 · 身份参考')
+  assert.equal(card.bindings.length, 2)
+  assert.equal(saved.unit_graph.edges.filter(edge => edge.source === card.id && edge.target === 'unit:unit').length, 1)
+  assert.ok(saved.unit_graph.nodes.some(node => node.title === '添加参考组' && node.bindings.length === 0))
+  await locateCanvasNode(page, card.title)
+  await page.keyboard.press('Escape')
+  const groupNode = page.locator(`[data-canvas-node="${card.id}"]`)
+  const visibleContent = await groupNode.locator('.design-compact-fields').boundingBox()
+  const thumbnails = await groupNode.locator('.unit-graph-reference-previews img').all()
+  assert.equal(thumbnails.length, 2)
+  for (const thumbnail of thumbnails) {
+    const bounds = await thumbnail.boundingBox()
+    assert.ok(bounds.y + bounds.height <= visibleContent.y + visibleContent.height + 1, 'group thumbnails are visible within the card')
+  }
+  await page.screenshot({ path: join(output, 'reference-group-card.png'), animations: 'disabled' })
   dialog = await open()
   assert.equal(await dialog.getByRole('button', { name: '更换来源', exact: true }).getAttribute('data-variant'), 'secondary')
   await dialog.getByRole('button', { name: '更换来源', exact: true }).click()
@@ -149,6 +172,36 @@ try {
   isolation.units[0].references.push(...unrelated)
   isolation.units.push({ ...structuredClone(isolation.units[0]), id: 'other-unit', references: [structuredClone(template)] })
   saved = await save(saved.revision, isolation)
+  // 普通用途按目标组编辑：组内多图、对象和用途一次应用，撤销恢复整组。
+  const beforeGroupEdit = structuredClone(saved.content)
+  const openComposition = async () => {
+    await locateCanvasNode(page, '读信者 · 构图参考')
+    await page.getByRole('button', { name: '查看节点：读信者 · 构图参考', exact: true }).click()
+    dialog = page.getByRole('dialog').last()
+    assert.equal(await dialog.getByRole('combobox', { name: '参考用途', exact: true }).count(), 1)
+    await dialog.getByRole('button', { name: '添加组内素材', exact: true }).click()
+    await selectWorkbenchOption(page, '参考素材来源', '已有素材')
+    await dialog.getByText('third', { exact: true }).locator('../..').getByRole('button', { name: /^选\s*入$/ }).click()
+    await selectWorkbenchOption(page, '参考用途', '场所空间')
+    await selectWorkbenchOption(page, '参考对应人物或物件', '其他人物')
+    await page.keyboard.press('Escape')
+  }
+  dialog = await open()
+  await dialog.getByRole('button', { name: /^取\s*消$/ }).click()
+  await openComposition()
+  await dialog.getByRole('button', { name: /^取\s*消$/ }).click()
+  assert.deepEqual((await read()).content, beforeGroupEdit)
+  await openComposition()
+  await dialog.getByRole('button', { name: '应用到本单元', exact: true }).click()
+  saved = await waitSaved(value => value.content.units[0].references.filter(ref => ref.subject_group_id === 'composition').length === 2)
+  const changedGroup = saved.content.units[0].references.filter(ref => ref.subject_group_id === 'composition')
+  assert.deepEqual(changedGroup.map(ref => ref.purpose), ['space', 'space'])
+  assert.deepEqual(changedGroup.map(ref => ref.participant_ids), [['reader', 'outside'], ['reader', 'outside']])
+  assert.deepEqual(saved.content.units[0].references.filter(ref => ref.subject_group_id !== 'composition'), beforeGroupEdit.units[0].references.filter(ref => ref.subject_group_id !== 'composition'))
+  assert.deepEqual(saved.content.units[1], beforeGroupEdit.units[1])
+  await page.getByRole('button', { name: '撤销', exact: true }).click()
+  saved = await waitSaved(value => JSON.stringify(value.content) === JSON.stringify(beforeGroupEdit))
+  console.log('PASS scoped non-identity group editing, multiple objects, cancellation, and one-step undo')
   const basisUrl = detail + '/units/unit/instruction-basis'
   const confirmed = await fetch(basisUrl + '/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: saved.revision, content: saved.content }) })
   assert.equal(confirmed.status, 200, await confirmed.clone().text())
@@ -179,7 +232,7 @@ try {
   const original = structuredClone(saved.content)
   await start()
   assert.equal(await dialog.getByRole('combobox', { name: '本次参考绑定人物或物件', exact: true }).isDisabled(), true)
-  assert.equal(await dialog.getByRole('combobox', { name: '参考输入位置', exact: true }).isDisabled(), true)
+  assert.equal(await dialog.getByRole('combobox', { name: '参考输入位置', exact: true }).count(), 0)
   assert.equal(await targetCard().getByRole('combobox', { name: '参考用途', exact: true }).isDisabled(), true)
   await selectWorkbenchOption(page, '本次素材资产', '默认甲')
   await dialog.getByRole('button', { name: '应用到本单元', exact: true }).click()
@@ -208,6 +261,11 @@ try {
   await start(); await chooseFile('second'); await apply()
   saved = await waitSaved(value => targetRefs(value)[0].file_id === extraFiles[0])
   assert.equal(targetRefs(saved).length, 1); assertIsolation(saved)
+  const warningContent = await groupNode.locator('.design-compact-fields').boundingBox()
+  for (const thumbnail of await groupNode.locator('.unit-graph-reference-previews img').all()) {
+    const bounds = await thumbnail.boundingBox()
+    assert.ok(bounds.y + bounds.height <= warningContent.y + warningContent.height + 1, 'capability warning does not hide the selected image')
+  }
   await page.screenshot({ path: join(output, 'replacement-isolation.png'), animations: 'disabled' })
   await start(); await chooseFile('third'); await chooseFile('reference'); await apply()
   saved = await waitSaved(value => targetRefs(value).length === 2)
@@ -234,7 +292,7 @@ try {
     await started
     if (closeFirst) {
       await dialog.getByRole('button', { name: 'Close', exact: true }).click()
-      await unitCard(page, '参考素材'); dialog = page.getByRole('dialog').last()
+      await openReferenceGroup(page); dialog = page.getByRole('dialog').last()
     } else await selectWorkbenchOption(page, '参考素材来源', '已有素材')
     const completed = page.waitForResponse(response => response.url().endsWith('/files/upload'))
     release(); await completed
@@ -255,7 +313,7 @@ try {
   await dialog.getByRole('button', { name: '选入 手动乙 图片 2', exact: true }).click(); await apply()
   await page.getByRole('status').filter({ hasText: '保存失败' }).first().waitFor()
   assert.deepEqual((await read()).content, beforeUpload)
-  await unitCard(page, '参考素材'); dialog = page.getByRole('dialog').last()
+  await openReferenceGroup(page); dialog = page.getByRole('dialog').last()
   await dialog.getByText('素材来源：手动乙 · 选择时的资产记录', { exact: true }).waitFor()
   assert.equal(await targetCard().getByRole('button', { name: '更换素材', exact: true }).count(), 1)
   await cancel(); rejectSave = false
@@ -264,7 +322,7 @@ try {
   saved = await waitSaved(value => targetRefs(value).length === 1 && targetRefs(value)[0].asset_origin?.id === assets[1].id)
   assertIsolation(saved)
   // 同一界面中撤销了底层参考后，旧弹窗基线不能覆写较新编辑。
-  await unitCard(page, '参考素材'); dialog = page.getByRole('dialog').last()
+  await openReferenceGroup(page); dialog = page.getByRole('dialog').last()
   await targetCard().getByRole('button', { name: '更换来源', exact: true }).click()
   await chooseFile('third')
   await dialog.getByRole('button', { name: '应用到本单元', exact: true }).focus()
@@ -320,8 +378,8 @@ try {
   await (await workbenchShot(reader, '镜头 1：读信反应')).click()
   await reader.getByRole('button', { name: '单元画布', exact: true }).click()
   await selectWorkbenchOption(reader, '当前单元', '单元 1')
-  await unitCard(reader, '参考素材')
-  const readonly = reader.getByRole('dialog', { name: '编辑参考素材', exact: true })
+  await openReferenceGroup(reader)
+  const readonly = reader.getByRole('dialog', { name: '编辑参考组', exact: true })
   await readonly.getByRole('status').filter({ hasText: '只读' }).waitFor()
   assert.ok(await readonly.getByRole('button', { name: '更换来源', exact: true }).count())
   for (const button of await readonly.getByRole('button', { name: '更换来源', exact: true }).all()) assert.equal(await button.isDisabled(), true)

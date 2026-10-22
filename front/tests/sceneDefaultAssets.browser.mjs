@@ -1,9 +1,9 @@
+import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import { workbenchShot, selectWorkbenchOption, locateCanvasNode } from './workbenchControls.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
-import { mkdtemp, readFile, readdir, unlink, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { readFile, readdir, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -11,7 +11,7 @@ import { createServer } from 'vite'
 
 const { chromium } = createRequire(import.meta.url)('playwright')
 const root = fileURLToPath(new URL('..', import.meta.url))
-const output = await mkdtemp(join(tmpdir(), 'jellyfish-scene-version-'))
+const output = await browserOutput('jellyfish-default-assets-')
 const api = 'http://127.0.0.1:8257'
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.directing.scene_version_browser_server'], {
   cwd: join(root, '../backend'),
@@ -22,6 +22,8 @@ let backendOutput = ''
 backend.stdout.on('data', data => { backendOutput += data })
 backend.stderr.on('data', data => { backendOutput += data })
 let server, browser, page
+const cleanup = browserCleanup(() => ({ browser, server, backend }))
+captureBackend(backend, output)
 try {
   let chapter
   for (let attempt = 0; attempt < 80; attempt++) {
@@ -95,8 +97,11 @@ try {
     await page.getByRole('button', { name: '单元画布', exact: true }).click()
     await page.getByRole('combobox', { name: '当前单元', exact: true }).press('ArrowDown')
     await page.getByRole('combobox', { name: '当前单元', exact: true }).press('Enter')
-    await locateCanvasNode(page, '参考素材')
-    await page.locator('[data-canvas-node="unit:unit:references"]').getByRole('button', { name: /^查看节点：/ }).click()
+    const current = (await (await fetch(detail)).json()).data
+    const group = current.unit_graph.nodes.find(node => node.input_role === 'subject' && node.bindings.length)
+    const title = group?.title || '添加参考组'
+    await locateCanvasNode(page, title)
+    await page.getByRole('button', { name: `查看节点：${title}`, exact: true }).click()
     return page.getByRole('dialog').last()
   }
   let dialog = await open()
@@ -129,9 +134,8 @@ try {
   await page.screenshot({ path: join(output, 'independent-reference.png'), animations: 'disabled' })
   // 同对象追加同来源的多图进入同组；新来源明确拒绝且原组不变。
   dialog = await open()
-  await dialog.getByRole('button', { name: '添加参考', exact: true }).click()
-  await selectWorkbenchOption(page, '本次参考绑定人物或物件', '读信者')
-  await page.keyboard.press('Escape')
+  await dialog.getByRole('button', { name: '添加组内素材', exact: true }).click()
+  assert.equal(await dialog.getByRole('combobox', { name: '本次参考绑定人物或物件', exact: true }).isDisabled(), true)
   await selectWorkbenchOption(page, '本次素材资产', '手动乙')
   await dialog.getByRole('button', { name: '选入 手动乙 图片 2', exact: true }).click()
   await selectWorkbenchOption(page, '本次素材资产', '默认甲')
@@ -154,9 +158,8 @@ try {
   manualContent.units[0].references = [{ ...manualContent.units[0].references[0], file_id: fileId, asset_origin: null, subject_group_id: null }]
   saved = await save(saved.revision, manualContent)
   dialog = await open()
-  await dialog.getByRole('button', { name: '添加参考', exact: true }).click()
-  await selectWorkbenchOption(page, '本次参考绑定人物或物件', '读信者')
-  await page.keyboard.press('Escape')
+  await dialog.getByRole('button', { name: '添加组内素材', exact: true }).click()
+  assert.equal(await dialog.getByRole('combobox', { name: '本次参考绑定人物或物件', exact: true }).isDisabled(), true)
   await selectWorkbenchOption(page, '参考素材来源', '已有素材')
   await dialog.getByText('second', { exact: true }).locator('../..').getByRole('button', { name: /^选\s*入$/ }).click()
   await selectWorkbenchOption(page, '参考素材来源', '上传')
@@ -181,14 +184,14 @@ try {
   dialog = await open()
   await dialog.getByText('素材来源：手动乙 · 选择时的资产记录', { exact: true }).waitFor()
   await dialog.getByText('来源资产不可用；已选固定文件保留，可用性在执行前单独核实。', { exact: true }).waitFor()
-  await dialog.getByRole('button', { name: '添加参考', exact: true }).click()
-  await dialog.getByRole('combobox', { name: '本次素材资产', exact: true }).click()
+  await dialog.getByRole('button', { name: '添加组内素材', exact: true }).click()
+  await dialog.getByRole('combobox', { name: '本次素材资产', exact: true }).locator('xpath=ancestor::div[contains(@class,"ant-select-selector")][1]').click()
   assert.equal(await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText('手动乙', { exact: true }).count(), 0)
   await page.keyboard.press('Escape')
   await dialog.getByRole('button', { name: '应用到本单元', exact: true }).click()
   saved = (await (await fetch(detail)).json()).data
   assert.deepEqual(saved.content.units[0].references, fixedReferences)
-  const fixedCollection = saved.unit_graph.nodes.find(node => node.kind === 'unit_references')
+  const fixedCollection = saved.unit_graph.nodes.find(node => node.kind === 'unit_references' && node.bindings.length)
   assert.equal(fixedCollection.previews[0].source_status, 'unavailable')
   assert.equal(fixedCollection.previews[0].status, 'available')
   await page.screenshot({ path: join(output, 'fixed-reference-source-unavailable.png'), animations: 'disabled' })
@@ -240,7 +243,5 @@ try {
   if (page) await page.screenshot({ path: join(output, 'failure.png'), fullPage: true, animations: 'disabled' }).catch(() => {})
   throw error
 } finally {
-  await browser?.close()
-  await server?.close()
-  backend.kill('SIGTERM')
+  await cleanup()
 }
