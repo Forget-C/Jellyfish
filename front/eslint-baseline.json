@@ -271,21 +271,7 @@
       "file": "src/pages/aiStudio/directing/CanvasSequenceWorkbench.tsx",
       "rule": "react-hooks/exhaustive-deps",
       "severity": 1,
-      "fingerprint": "2e365f49a1a3bb76ece933061a011a610a13f3793609710eaac9c5519a940980",
-      "count": 2
-    },
-    {
-      "file": "src/pages/aiStudio/directing/CanvasSequenceWorkbench.tsx",
-      "rule": "react-hooks/exhaustive-deps",
-      "severity": 1,
       "fingerprint": "4efaa2d8b4d3201aace6e9b95db088ed8068fda09f70cea42a24dbef4d7c56c5",
-      "count": 1
-    },
-    {
-      "file": "src/pages/aiStudio/directing/CanvasSequenceWorkbench.tsx",
-      "rule": "react-hooks/exhaustive-deps",
-      "severity": 1,
-      "fingerprint": "bdf25ee4bd5577a4050c6af0d667b8b0f8a1e1c5e2a0585b8494750bbd6ac0c7",
       "count": 1
     },
     {

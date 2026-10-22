@@ -72,7 +72,7 @@ try {
   await page.getByRole('tooltip').getByText(/填写动作范围、模型、时长和参考/).waitFor()
   await nextStep.blur()
   const positions = await page.evaluate(() => {
-    const nav = document.querySelector('.canvas-director-navigation-host')
+    const nav = document.querySelector('.canvas-breadcrumb-host')
     const toolbar = document.querySelector('.canvas-workbench-toolbar')
     const next = [...toolbar.querySelectorAll('button')].find(button => button.textContent === '下一步：单元画布')
     const ai = toolbar.querySelector('[aria-label="AI 设计"]')
@@ -98,6 +98,7 @@ try {
   await page.getByRole('button', { name: '导演画布', exact: true }).click()
   await page.getByRole('button', { name: '总览', exact: true }).click()
   await page.getByRole('button', { name: '隐藏附加信息', exact: true }).click()
+  await page.getByRole('button', { name: '收起筛选', exact: true }).click()
   const anchor = page.locator('[data-canvas-node="anchor:anchor1"]')
   assert.match(await anchor.innerText(), /全场背景/)
   assert.doesNotMatch(await anchor.innerText(), /未建立镜头关联/)

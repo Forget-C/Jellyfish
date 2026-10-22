@@ -6,7 +6,7 @@ import { WorkbenchButton, WorkbenchIconButton } from './ui/WorkbenchButton'
 import { WorkbenchDialogActions, WorkbenchModal } from './ui/WorkbenchModal'
 import { SourceProvider } from './Sources'
 import { SceneSourceRevision } from './SceneSourceRevision'
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Alert, Button, Modal, Select, Space, Spin, Switch } from 'antd'
 import { ArrowLeftOutlined, DownOutlined, MoreOutlined, RedoOutlined, SaveOutlined, UndoOutlined } from '@ant-design/icons'
 import { CanvasToolbarMenu } from './CanvasToolbarMenu'
@@ -96,15 +96,16 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
   const [sequence, setSequence] = useState<SequenceRead>()
   const [versions, setVersions] = useState<SceneVersionRead[]>([])
   const [draft, setDraft] = useState<Draft>()
-  const [canvas, setCanvas] = useState<'director' | 'units' | 'instructions' | 'edit'>(() => {
-    const requested = params.get('canvas')
-    return requested === 'director' || requested === 'units' || requested === 'instructions' || requested === 'edit' ? requested : params.has('unitView') ? 'units' : 'director'
-  })
+  const requestedCanvas = params.get('canvas')
+  const routedCanvas = requestedCanvas === 'director' || requestedCanvas === 'units' || requestedCanvas === 'instructions' || requestedCanvas === 'edit'
+    ? requestedCanvas : params.has('unitView') ? 'units' : 'director'
+  const [canvasState, setCanvasState] = useState<{ kind: typeof routedCanvas; key: string }>({ kind: routedCanvas, key: location.key })
+  const setCanvas = useCallback((kind: typeof routedCanvas) => setCanvasState({ kind, key: location.key }), [location.key])
+  // POP 在渲染时恢复画布，避免旧画布的布局 effect 改写正在返回的地址。
+  const canvas = navigationType === 'POP' && canvasState.key !== location.key ? routedCanvas : canvasState.kind
   useEffect(() => {
-    if (navigationType !== 'POP') return
-    const requested = params.get('canvas')
-    setCanvas(requested === 'director' || requested === 'units' || requested === 'instructions' || requested === 'edit' ? requested : params.has('unitView') ? 'units' : 'director')
-  }, [location.key, navigationType, params])
+    setCanvasState(previous => previous.key === location.key ? previous : { kind: navigationType === 'POP' ? routedCanvas : previous.kind, key: location.key })
+  }, [routedCanvas, navigationType, location.key])
   const [instructionSelection, setInstructionSelection] = useState<{ versionId: string; unitId: string; taskId?: string }>()
   const [instructionActivities, setInstructionActivities] = useState<InstructionActivityTarget[]>([])
   const [mediaFocus, setMediaFocus] = useState<{ versionId: string; target: SceneMediaNavigationTarget; serial: number }>()
@@ -193,11 +194,18 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
     return () => { historyNavigationRequest.current += 1 }
   }, [projectId, sequenceId, selectedId, historyTaskId, historyVersionId, historyUnitId, historyTaskKind])
   const openCanvas = (nextCanvas: typeof canvas) => {
+    if (nextCanvas === canvas) return
     const next = new URLSearchParams(params)
+    const shot = canvas === 'director' ? params.get('directorScope') === 'shot' ? params.get('directorShot') || '' : ''
+      : canvas === 'units' || canvas === 'instructions' ? params.get('unitShot') || '' : ''
     next.set('canvas', nextCanvas)
     next.delete('unitView')
-    next.set('browseUnit', canvas === 'units' || canvas === 'instructions' ? currentUnitId : '')
-    if (nextCanvas === 'units' && canvas === 'director') next.set('unitShot', params.get('directorScope') === 'shot' ? params.get('directorShot') || '' : '')
+    next.set('browseUnit', nextCanvas === 'units' || nextCanvas === 'instructions' ? currentUnitId : '')
+    next.set('unitShot', nextCanvas === 'units' || nextCanvas === 'instructions' ? shot : '')
+    if (nextCanvas === 'director') {
+      next.set('directorView', shot ? 'shot' : 'outer'); next.set('directorScope', shot ? 'shot' : 'all')
+      next.set('directorShot', shot); next.delete('directorTarget'); next.delete('directorTemporary')
+    }
     if (nextCanvas !== 'edit') for (const key of ['editVersion', 'editView', 'editWorkspace']) next.delete(key)
     setParams(next)
     setUnitFocus(undefined); setInstructionFocus(undefined)
@@ -269,7 +277,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
     onRejected: (target, error) => setVideoFeedback(previous => ({ ...previous, [`${target.versionId}:${target.unitId}`]: { message: `${target.versionTitle} · ${target.unitLabel}：视频未提交：${error}`, versionId: target.versionId, unitId: target.unitId, executionId: target.executionId } })),
   })
   const currentDirectVideo = directVideos.pending.find(row => row.versionId === selectedId && row.unitId === currentUnitId)
-  const currentShotId = canvas === 'director' ? params.get('directorScope') === 'shot' ? params.get('directorShot') || undefined : undefined : params.get('unitShot') || undefined
+  const currentShotId = canvas === 'director' ? params.get('directorScope') === 'shot' ? params.get('directorShot') || undefined : undefined : canvas === 'units' || canvas === 'instructions' ? params.get('unitShot') || undefined : undefined
   const unitDesignNavigation = useRef<string>()
   useEffect(() => {
     const taskId = params.get('unitDesignTask')
@@ -277,7 +285,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
     if (!selected || !content || params.get('version') !== selected.id || unitDesignNavigation.current === taskId) return
     unitDesignNavigation.current = taskId
     setEditor(undefined); setCanvas('units')
-  }, [params.get('unitDesignTask'), params.get('version'), selected?.id, content])
+  }, [params, selected, content, setCanvas])
   const currentEditor = editor?.versionId === selected?.id ? editor?.kind : undefined
   const openEditor = (kind: 'source' | 'ai') => {
     if (!selected) return
@@ -289,15 +297,16 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
     setNavigation({ versionId: selected.id, kind })
   }
   const selectShot = (id: string) => {
-    const { selected, content } = latest.current
-    if (!selected || !content?.design.direction.shots.some(row => row.id === id)) return
+    if (!latest.current.selected || !id) return
     if (params.get('directorShot') !== id || params.get('directorScope') !== 'shot' || params.get('canvas') !== 'director') {
       const next = new URLSearchParams(params)
       next.set('canvas', 'director'); next.set('directorScope', 'shot'); next.set('directorView', 'shot'); next.set('directorShot', id); next.delete('directorTarget'); next.delete('directorTemporary'); next.delete('unitView')
       setParams(next, { replace: true })
     }
   }
-  const selectUnit = (id: string) => browseUnit(id, canvas === 'instructions' ? 'instructions' : 'units')
+  const selectUnit = (id: string) => {
+    if (id !== currentUnitId) browseUnit(id, canvas === 'instructions' ? 'instructions' : 'units')
+  }
   const navigateRelation = (target: SceneNavigationTarget) => {
     const current = latest.current
     if (target.kind === 'take' || target.kind === 'clip') {
@@ -306,8 +315,8 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       setMediaFocus({ versionId: current.selected.id, target, serial: Date.now() })
       return
     }
-    if (!current.selected || !current.content || (target.shotId && !current.content.design.direction.shots.some(shot => shot.id === target.shotId))) return
-    if (target.kind !== 'shot' && !current.content.units.some(unit => unit.id === target.unitId && (!target.shotId || unit.coverage.some(item => item.shot_id === target.shotId)))) return
+    if (!current.selected || !current.content) return
+    // 关系树来自保存图；定位按稳定身份核对当前输入，不以旧镜头关联阻断有效单元。
     setEditor(undefined)
     if (target.kind === 'shot') {
       selectShot(target.shotId!); setCanvas('director')

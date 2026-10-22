@@ -73,7 +73,7 @@ export function UnitGraphCanvas({ graph, content, unitId, versionId, revision, s
       group: member.group, entry: member.presentation === 'entry', related: member.presentation === 'reference',
       size: { width: 360, height: member.presentation === 'entry' ? 360 : 320 },
       onInspect: member.presentation === 'entry' && member.entry_view_id ? () => go('unit_id' in node ? node.unit_id : '') : node.kind === 'unit_references' ? () => onReference(node.unit_id) : node.edit_target || node.kind === 'unit_basis' ? () => onInspect(node) : undefined,
-      content: updating ? <section className="canvas-workbench-card unit-graph-card" aria-busy="true"><p role="status">当前卡片核实中</p></section> : member.presentation === 'entry' && member.entry_view_id ? preview(node, member.entry_view_id) : <section className="canvas-workbench-card unit-graph-card">
+      content: member.presentation === 'entry' && member.entry_view_id ? preview(node, member.entry_view_id) : <section className="canvas-workbench-card unit-graph-card">
         <div className="design-compact-summary">
           <div className="design-compact-fields">{node.summary.map(field => <p key={field.field} title={`${field.label}：${field.text}`}><span>{field.label}：</span><strong>{field.text}</strong></p>)}
             {node.kind === 'unit_config' && node.config_kind === 'dependencies' && node.dependency_evidence.map((evidence, index) => evidence.source && <SourceLinks key={index} sources={[evidence.source]} />)}
@@ -117,9 +117,9 @@ export function UnitGraphCanvas({ graph, content, unitId, versionId, revision, s
       {unitId && <span>{unit ? `› 单元 ${content.units.indexOf(unit) + 1}` : '› 原单元不可用'}</span>}
       {unknownView && <span>› 原单元不可用</span>}
     </CanvasBrowse>
-    {!updating && view &&
+    <div style={{ visibility: updating ? 'hidden' : undefined }} aria-hidden={updating}>{view &&
       <GraphCanvas contextKey={storageKey} ariaLabel="单元画布视口" objects={objects} relations={relations}
         groups={view.groups} layoutScope={{ storageKey, viewId: view.id, anchorId: view.anchor_id || '',
-          validIds: graph.nodes.map(node => node.id), validViewIds: graph.views.map(candidate => candidate.id), arrange: arrangeUnitGraph, initialTop: window.innerWidth <= 700 ? 112 : 64 }} />}
+          validIds: graph.nodes.map(node => node.id), validViewIds: graph.views.map(candidate => candidate.id), arrange: arrangeUnitGraph, initialTop: window.innerWidth <= 700 ? 112 : 64 }} />}</div>
   </>
 }
