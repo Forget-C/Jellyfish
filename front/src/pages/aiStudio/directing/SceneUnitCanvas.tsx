@@ -12,6 +12,7 @@ import { SceneFrameDependencies } from './SceneFrameDependencies'
 import { DependencyEditor } from './DependencyEditor'
 import { ReferencePicker } from './ReferencePicker'
 import { directingError } from './common'
+import { sceneContentKey } from './sceneContentKey'
 import { SourceLinks } from './Sources'
 import { WorkbenchButton } from './ui/WorkbenchButton'
 import { WorkbenchModal, WorkbenchDialogActions } from './ui/WorkbenchModal'
@@ -71,6 +72,7 @@ function SceneUnitCanvasBody({ preparationHost, graphState, primaryHost, graph, 
   }
   const showSettings = (section: typeof settingsSection) => settingsSection === section
   const [basisUnitId, setBasisUnitId] = useState<string>()
+  const [referenceUnitId, setReferenceUnitId] = useState<string>()
   const [picker, setPicker] = useState<UnitReferencesCanvasNode>()
   const [dependencyUnitId, setDependencyUnitId] = useState<string>()
   const [workspace, setWorkspace] = useState<WorkspaceRead>()
@@ -134,6 +136,7 @@ function SceneUnitCanvasBody({ preparationHost, graphState, primaryHost, graph, 
     const node = graph.nodes.find(row => row.id === (issue.target?.node_id || issue.nodeId))
     const fieldId = issue.fieldId
     if (node?.kind === 'unit_references') setPicker(node)
+    else if (fieldId === 'scene-unit-references') setReferenceUnitId(unit.id)
     else if (fieldId === 'scene-unit-dependencies' || node?.kind === 'unit_config' && node.config_kind === 'dependencies') setDependencyUnitId(unit.id)
     else if (node?.kind === 'unit_config' && node.config_kind !== 'dependencies') openSettings(unit.id, node.config_kind, node.coverage_item_id || undefined)
     else {
@@ -284,7 +287,7 @@ function SceneUnitCanvasBody({ preparationHost, graphState, primaryHost, graph, 
     </section>}
     <UnitGraphCanvas error={graphState.error} onRetry={graphState.retry} graph={graph} updating={!graphState.current} versionId={versionId} revision={revision} content={content} unitId={unitId}
       storageKey={`jellyfish:unit-graph:local-user:${projectId}:${sequenceId}:${versionId}`}
-      pending={JSON.stringify(content) !== JSON.stringify(saved)}
+      pending={sceneContentKey(content) !== sceneContentKey(saved)}
       onBrowseShotChange={setBrowseShotId}
       onReference={node => {
           const id = node.unit_id
@@ -338,6 +341,11 @@ function SceneUnitCanvasBody({ preparationHost, graphState, primaryHost, graph, 
       {!!unit.dependencies.length && workspaceLoading && <Spin />}
       {workspaceError && <Alert type="error" message="来源单元读取失败" description={workspaceError} action={<Button onClick={() => setAttempt(value => value + 1)}>重试来源单元</Button>} />}
       {!!unit.dependencies.length && workspace && <DependencyEditor sceneVersion projectId={projectId} workspace={workspace} unit={unit} disabled={disabled} onChange={patch} />}</section>
+    </WorkbenchDetails>}
+    {unit && referenceUnitId === unit.id && <WorkbenchDetails status={saveStatus} title="参考输入" open onClose={() => setReferenceUnitId(undefined)}>
+      <section id="scene-unit-references" tabIndex={-1}><p>选择要核对的参考位置。</p>
+        {graph.nodes.filter(node => node.kind === 'unit_references' && node.unit_id === unit.id).map(node => node.kind === 'unit_references' && <WorkbenchButton key={node.id} onClick={() => { setReferenceUnitId(undefined); setPicker(node) }}>{node.title}</WorkbenchButton>)}
+      </section>
     </WorkbenchDetails>}
     {unit && picker?.unit_id === unit.id && <ReferencePicker title={picker.input_role === 'subject' ? picker.bindings.length ? '编辑参考组' : '添加参考组' : `${picker.bindings.length ? '编辑' : '添加'}${picker.title}`}
       inputRole={picker.input_role === 'all' ? undefined : picker.input_role} referenceIds={picker.bindings.map(binding => binding.id)}

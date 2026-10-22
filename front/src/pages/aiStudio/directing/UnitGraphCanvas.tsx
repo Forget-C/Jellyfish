@@ -56,7 +56,7 @@ export function UnitGraphCanvas({ graph, content, unitId, versionId, revision, s
   const preview = (node: UnitNode, target: string) => {
     const child = graph.views.find(candidate => candidate.id === target)
     if (!child || node.kind !== 'unit') return <p>子图不可用</p>
-    const layoutNodes = child.members.map(member => ({ id: member.node_id, group: member.group, size: { width: 360, height: 320 } }))
+    const layoutNodes = child.members.map(member => ({ id: member.node_id, group: member.group, size: { width: 360, height: byId.get(member.node_id)?.kind === 'unit_references' ? 480 : 320 } }))
     const sizes = Object.fromEntries(layoutNodes.map(item => [item.id, item.size]))
     const stored = readStoredGraphView(`${storageKey}:view:${child.id}`)
     const positions = arrangeUnitGraph(layoutNodes, sizes, 1440, child.anchor_id || '', stored?.positions)
@@ -71,7 +71,7 @@ export function UnitGraphCanvas({ graph, content, unitId, versionId, revision, s
     if (!node) return []
     return [{ id: node.id, label: member.title || node.title, title: member.title || node.title,
       group: member.group, entry: member.presentation === 'entry', related: member.presentation === 'reference',
-      size: { width: 360, height: member.presentation === 'entry' ? 360 : 320 },
+      size: { width: 360, height: member.presentation === 'entry' ? 360 : node.kind === 'unit_references' ? 480 : 320 },
       onInspect: member.presentation === 'entry' && member.entry_view_id ? () => go('unit_id' in node ? node.unit_id : '') : node.kind === 'unit_references' ? () => onReference(node) : node.edit_target || node.kind === 'unit_basis' ? () => onInspect(node) : undefined,
       content: member.presentation === 'entry' && member.entry_view_id ? preview(node, member.entry_view_id) : <section className="canvas-workbench-card unit-graph-card">
         <div className="design-compact-summary">
@@ -79,7 +79,7 @@ export function UnitGraphCanvas({ graph, content, unitId, versionId, revision, s
             {node.kind === 'unit_config' && node.config_kind === 'dependencies' && node.dependency_evidence.map((evidence, index) => evidence.source && <SourceLinks key={index} sources={[evidence.source]} />)}
             {node.kind === 'unit_references' && <div className="unit-graph-reference-previews">{node.bindings.map(binding => {
               const preview = node.previews.find(item => item.binding_id === binding.id)
-              return <section key={binding.id}>{preview ? <><p title={preview.display_name}>{preview.display_name}</p><ReferencePreview reference={binding} preview={preview} /></> : <p role="status">固定参考预览尚未核实</p>}</section>
+              return <section key={binding.id}>{preview ? <><p title={preview.display_name}>{preview.display_name}</p>{node.input_role !== 'subject' && <p>{binding.input_role === 'first_frame' ? '起始画面' : binding.input_role === 'last_frame' ? '结束画面' : '关键帧'}</p>}<p>来源：{binding.asset_origin?.name || '人工素材'}</p><SourceLinks sources={[binding.source]} /><ReferencePreview reference={binding} preview={preview} /></> : <p role="status">固定参考预览尚未核实</p>}</section>
             })}</div>}
           </div>
           {!!node.issues.length && <div className="unit-graph-issues" role="status" title={node.issues.map(issue => issue.message).join('；')}>
@@ -87,7 +87,7 @@ export function UnitGraphCanvas({ graph, content, unitId, versionId, revision, s
           </div>}
         </div>
         <div className="unit-graph-actions">
-          {node.kind === 'unit_references' && <WorkbenchButton onClick={() => onReference(node)}>{node.binding_count ? '编辑参考' : `添加${node.title}`}</WorkbenchButton>}
+          {node.kind === 'unit_references' && <WorkbenchButton onClick={() => onReference(node)}>{node.binding_count ? '编辑参考' : node.input_role === 'subject' ? '添加参考组' : `添加${node.title}`}</WorkbenchButton>}
           {node.kind === 'unit_basis' && <WorkbenchButton onClick={() => onInspect(node)}>查看执行依据</WorkbenchButton>}
           {node.edit_target && node.kind !== 'unit_references' && <WorkbenchButton onClick={() => onInspect(node)}>查看详情</WorkbenchButton>}
         </div>

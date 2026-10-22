@@ -556,6 +556,8 @@ async def test_graph_generation_uses_actual_model_input_validation_without_submi
         assert response.status_code == 200, response.text
         reference = next(node for node in response.json()['data']['unit_graph']['nodes'] if node['kind'] == 'unit_references' and node['input_role'] == 'subject')
         assert any('不支持主体图片' in issue['message'] for issue in reference['issues'])
+        summary = next(node for node in response.json()['data']['instruction_graph']['nodes'] if node['kind'] == 'unit_references')
+        assert any('不支持主体图片' in issue['message'] for issue in summary['issues'])
         async with sessions.begin() as db:
             provider = await db.get(Provider, 'input-provider')
             provider.name = 'unknown-provider'

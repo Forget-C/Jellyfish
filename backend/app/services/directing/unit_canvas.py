@@ -52,19 +52,21 @@ def reference_card(context, unit, index, key, title, bindings, input_role='all',
         summary=[CanvasSummaryField(field='bindings', label='已绑定素材',
             text=f'{len(bindings)} 项' if bindings else '尚未添加')])
     target = CanvasTarget(node_id=node_id, object=obj)
+    issues: list[CanvasIssue] = []
     for preview in node.previews:
         if preview.status != 'available':
-            node.issues.append(CanvasIssue(code=f'reference-file-{preview.status}', severity='warning', target=target,
+            issues.append(CanvasIssue(code=f'reference-file-{preview.status}', severity='warning', target=target,
                 message=f'固定参考 {preview.binding_id}：' + {
                     'deleted': '文件已删除', 'unavailable': '文件不可用或不属于当前项目',
                     'wrong_media_kind': '实际文件类型与绑定不一致',
                 }[preview.status]))
         if preview.source_status == 'unavailable':
-            node.issues.append(CanvasIssue(code='reference-source-unavailable', severity='warning', target=target,
+            issues.append(CanvasIssue(code='reference-source-unavailable', severity='warning', target=target,
                 message=f'固定参考 {preview.binding_id} 的来源资产不可用；保留选择时来源，文件可用性单独核实'))
         if preview.preview_issue:
-            node.issues.append(CanvasIssue(code='reference-preview-unverified', severity='warning', target=target,
+            issues.append(CanvasIssue(code='reference-preview-unverified', severity='warning', target=target,
                 message=preview.preview_issue))
+    node.issues = issues
     return node
 
 
