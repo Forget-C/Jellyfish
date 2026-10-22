@@ -100,7 +100,7 @@ export function UnitGraphCanvas({ graph, content, unitId, versionId, revision, s
   const candidates = content.units.filter(row => !filter || row.coverage.some(item => item.shot_id === filter))
   return <>
     <CanvasBrowse storageKey={storageKey} label="单元画布位置" filtered={!!filter || !!unitId} filters={<>
-      <label>镜头<Select aria-label="单元镜头筛选" value={filter} onChange={id => go('', id)}
+      <label><Select aria-label="单元镜头筛选" value={filter} onChange={id => go('', id)}
         options={[{ value: '', label: '全部镜头' }, ...shots.map((shot, index) => ({ value: shot.id, label: `镜头 ${index + 1}` })),
           ...(filter && !shots.some(shot => shot.id === filter) ? [{ value: filter, label: '原镜头不可用' }] : [])]} /></label>
       <label>单元<Select aria-label="当前单元" value={unitId || unknownView || ''} onChange={id => go(id)}

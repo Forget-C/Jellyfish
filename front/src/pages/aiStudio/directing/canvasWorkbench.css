@@ -432,9 +432,9 @@
 .canvas-breadcrumb-host { position: absolute; z-index: 35; top: var(--workbench-toolbar-bottom, 100px); left: 16px; max-width: calc(100% - 32px); }
 .canvas-breadcrumb { display: flex; align-items: center; gap: 4px; min-height: 36px; max-width: 100%; overflow-x: auto; white-space: nowrap; padding: 2px 6px; border: 1px solid var(--wb-border); border-radius: 10px; background: var(--wb-surface); }
 .canvas-breadcrumb > * { flex-shrink: 0; }
-.canvas-filter-host { position: absolute; z-index: 30; top: calc(var(--workbench-overlay-bottom, 100px) + 8px); left: 0; max-width: calc(100% - 16px); }
-.canvas-filters { position: relative; display: flex; align-items: center; gap: 4px; width: max-content; max-width: 100%; padding: 4px 0 4px 8px; border: 1px solid var(--wb-border); border-left: 0; border-radius: 0 8px 8px 0; background: var(--wb-surface); }
-.canvas-filters[data-collapsed="true"] { padding-left: 0; }
+.canvas-filter-host { position: absolute; z-index: 30; top: calc(var(--workbench-overlay-bottom, 100px) + 8px); left: 16px; max-width: calc(100% - 32px); }
+.canvas-filters { position: relative; display: flex; align-items: center; gap: 4px; width: max-content; max-width: 100%; padding: 4px; border: 1px solid var(--wb-border); border-radius: 10px; background: var(--wb-surface); }
+.canvas-filters[data-collapsed="true"] { padding: 2px; }
 .canvas-filters > .wb-action { flex-shrink: 0; }
 .canvas-filter-active { position: absolute; right: 4px; top: 3px; width: 5px; height: 5px; border-radius: 50%; background: var(--wb-text); }
 .canvas-filter-fields { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; min-width: 0; }

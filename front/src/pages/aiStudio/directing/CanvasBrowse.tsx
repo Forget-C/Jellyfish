@@ -2,7 +2,7 @@ import { createContext, useContext, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeftOutlined, ArrowRightOutlined, RightOutlined, LeftOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, ArrowRightOutlined, SearchOutlined, LeftOutlined } from '@ant-design/icons'
 import { WorkbenchIconButton } from './ui/WorkbenchButton'
 import { useGraphBrowse } from './useGraphBrowse'
 
@@ -34,7 +34,7 @@ export function CanvasBrowse({ storageKey, label, children, filters, filtered = 
     {render(<nav className="canvas-breadcrumb" aria-label={label} data-graph-navigation>{children}</nav>, hosts?.breadcrumb)}
     {filters && render(<aside className="canvas-filters" aria-label="画布筛选" data-collapsed={collapsed}>
       <div hidden={collapsed} className="canvas-filter-fields">{filters}</div>
-      <WorkbenchIconButton variant="quiet" label={collapsed ? '展开筛选' : '收起筛选'} icon={collapsed ? <RightOutlined /> : <LeftOutlined />} aria-expanded={!collapsed} onClick={toggle} />
+      <WorkbenchIconButton variant="quiet" label={collapsed ? '展开筛选' : '收起筛选'} icon={collapsed ? <SearchOutlined /> : <LeftOutlined />} aria-expanded={!collapsed} onClick={toggle} />
       {filtered && <span className="canvas-filter-active" role="status" aria-label="筛选已生效" />}
     </aside>, hosts?.filters)}
     {actions && render(actions, hosts?.actions)}

@@ -306,10 +306,10 @@ function DirectorDesignCanvasBody({ projectId, sequenceId, versionId, content, s
   try { restore = navigationType === 'POP' && !!localStorage.getItem(`${storageKey}:view:${viewId}`) } catch { /* 使用会话布局。 */ }
   return <>
     <CanvasBrowse storageKey={storageKey} label="导演画布位置" filtered={state.scope === 'shot' || unlinkedOpen}
-      filters={<><label>镜头<Select aria-label="导演镜头筛选" value={state.scope === 'shot' ? activeShotId : ''}
+      filters={<><label><Select aria-label="导演镜头筛选" value={state.scope === 'shot' ? activeShotId : ''}
         options={[{ value: '', label: '全部镜头' }, ...content.design.direction.shots.map((shot, index) => ({ value: shot.id, label: `镜头 ${index + 1}` })), ...(state.scope === 'shot' && !hasShot ? [{ value: activeShotId || '', label: '原镜头不可用' }] : [])]}
         onChange={id => go({ scope: id ? 'shot' : 'all', shotId: id || undefined })} /></label>
-        {scope === 'all' && <label>显示未关联设计<Switch aria-label="显示未关联设计" checked={unlinkedOpen} disabled={!graph.unlinked.length} onChange={setUnlinkedOpen} /></label>}</>}
+        {scope === 'all' && <label>未关联设计<Switch size="small" aria-label="显示未关联设计" checked={unlinkedOpen} disabled={!graph.unlinked.length} onChange={setUnlinkedOpen} /></label>}</>}
       status={<>
         {scope === 'all' && pendingCount > 0 && <span>待归镜头 {pendingCount}</span>}
         {scope === 'all' && unlinkedCount > 0 && <span>未关联设计 {unlinkedCount}</span>}
