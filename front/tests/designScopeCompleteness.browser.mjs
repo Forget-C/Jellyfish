@@ -102,7 +102,7 @@ try {
   assert.doesNotMatch(await anchor.innerText(), /未建立镜头关联/)
   await page.getByRole('button', { name: '定位画布节点', exact: true }).click()
   await page.getByRole('menuitem', { name: /锚点/ }).click()
-  await anchor.getByRole('button', { name: '编辑此卡', exact: true }).click()
+  await anchor.getByRole('button', { name: /^查看节点：/ }).click()
   const anchorSummary = page.locator('.wb-details:not([hidden]) .design-object-summary')
   assert.match(await anchorSummary.innerText(), /全场背景/)
   assert.doesNotMatch(await anchorSummary.innerText(), /关联镜头与依据|修改将影响镜头/, '详情关系沿用后端全场归属，不以引用连通性重判')

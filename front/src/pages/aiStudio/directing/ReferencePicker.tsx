@@ -11,9 +11,9 @@ import { referenceGroups, referenceIssues, referencePurposes, referenceSummary, 
 import { shotParticipantRelations } from './productionGraph'
 
 /** 对象与参考共用的事务式编辑弹窗；仅应用时更新单元，设计资产修改仍经过版本流程。 */
-export function ReferencePicker({ rootClassName, projectId, assets, assetError, onReloadAssets, design, coverage = [], references, capability, initialParticipantIds, initialAssetId, initialRole, initialPurpose, title, referenceIds, location = false, disabled = false, capabilityError, onRetryCapability, dependencyReferenceIds = [], onApply, onEditAssets, onInspectDesign, onClose }: {
+export function ReferencePicker({ rootClassName, projectId, assets, assetError, onReloadAssets, design, coverage = [], references, capability, initialParticipantIds, initialAssetId, initialRole, initialPurpose, title, contextLabel, referenceIds, location = false, disabled = false, capabilityError, onRetryCapability, dependencyReferenceIds = [], onApply, onEditAssets, onInspectDesign, onClose }: {
   rootClassName?: string; projectId: string; assets?: AssetSummary[]; assetError?: string; onReloadAssets?: () => void; design: SceneDesign_Input;
-  initialParticipantIds?: string[]; initialAssetId?: string; initialRole?: Reference['input_role']; initialPurpose?: Reference['purpose']; title?: string; referenceIds?: string[]; location?: boolean; disabled?: boolean; capabilityError?: string; onRetryCapability?: () => void; dependencyReferenceIds?: string[];
+  initialParticipantIds?: string[]; initialAssetId?: string; initialRole?: Reference['input_role']; initialPurpose?: Reference['purpose']; title?: string; contextLabel?: string; referenceIds?: string[]; location?: boolean; disabled?: boolean; capabilityError?: string; onRetryCapability?: () => void; dependencyReferenceIds?: string[];
   coverage?: GenerationUnit_Input['coverage']; references: Reference[]; capability?: VideoReferenceCapabilities; onApply: (references: Reference[]) => void; onEditAssets?: () => void; onInspectDesign?: (objectKey: string) => void; onClose: () => void;
 }) {
   const Modal = rootClassName?.includes('canvas-workbench-dialog') ? WorkbenchModal : AntModal
@@ -103,6 +103,8 @@ export function ReferencePicker({ rootClassName, projectId, assets, assetError, 
   return <Modal rootClassName={rootClassName} title={title && title !== '添加参考' ? title : adding ? '添加参考' : '本单元参考'} zIndex={1050} open onCancel={close} width={640} styles={{ body: { maxHeight: 'min(70vh, calc(100dvh - 200px))', overflowY: 'auto' } }} footer={Modal === WorkbenchModal ? <WorkbenchDialogActions secondary={cancelAction}>{applyAction}</WorkbenchDialogActions> : <Space>{cancelAction}{applyAction}</Space>}>
     <div hidden={!!readingFile}>
     <Space direction="vertical" style={{ width: '100%' }}>
+      {contextLabel && <p role="status">{contextLabel}</p>}
+      {!draft.length && <p>本单元尚未选入参考素材。{disabled ? '当前内容只读。' : '请明确选入素材后应用到本单元。'}</p>}
       {onEditAssets && <p>导演默认只提供候选，具体参考由本单元独立选择。<Button type="link" disabled={disabled || JSON.stringify(draft) !== JSON.stringify(baseline.current)} onClick={() => { close(); onEditAssets() }}>前往导演设置默认资产</Button></p>}
       {!!scopes.length && <details><summary>查看设计关联依据</summary><p>镜头设计范围不代表部分动作中的实际可见对象，也不代表已选入模型参考。</p>{scopes.map(row => <p key={row.coverage.id}>镜头 {design.direction.shots.findIndex(shot => shot.id === row.coverage.shot_id) + 1} · {row.known ? row.participants.map(person => design.participants.find(item => item.id === person.id)?.name || '对象引用不可用').join('、') || '明确无参与对象' : '范围待核对；现有调度与表演仅作关联依据'}{onInspectDesign && <Button type="link" disabled={disabled || JSON.stringify(draft) !== JSON.stringify(baseline.current)} onClick={() => { close(); onInspectDesign(`shot:${row.coverage.shot_id}`) }}>查看镜头设计关联</Button>}</p>)}
         {onInspectDesign && design.staging.activities.map((row, index) => initialParticipantIds?.includes(row.participant_id) && <p key={`activity:${row.id || index}`}>全场背景活动 · {row.ongoing_task.text || row.ongoing_task.reason}<Button type="link" disabled={disabled || JSON.stringify(draft) !== JSON.stringify(baseline.current)} onClick={() => { close(); onInspectDesign(`activity:${row.id || index}`) }}>查看背景依据</Button></p>)}

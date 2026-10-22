@@ -76,8 +76,8 @@ try {
   await page.locator('[data-canvas-node="unit:unit-one"]').getByRole('button', { name: /^进入子图：/ }).click()
   await page.getByRole('button', { name: '定位画布节点', exact: true }).click()
   await page.getByRole('menuitem', { name: '参考素材', exact: true }).click()
-  await page.getByRole('button', { name: '编辑本单元参考', exact: true }).click()
-  const referencePicker = page.getByRole('dialog', { name: '添加参考', exact: true })
+  await page.getByRole('button', { name: '查看节点：参考素材', exact: true }).click()
+  const referencePicker = page.getByRole('dialog', { name: '编辑参考素材', exact: true })
   await selectWorkbenchOption(page, '参考素材来源', '上传')
   await referencePicker.locator('input[type=file]').setInputFiles({ name: 'space-reference.png', mimeType: 'image/png',
     buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=', 'base64') })

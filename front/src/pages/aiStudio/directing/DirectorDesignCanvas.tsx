@@ -274,8 +274,8 @@ function DirectorDesignCanvasBody({ projectId, sequenceId, versionId, content, s
           <WorkbenchButton disabled={disabled} onClick={() => setAssetTarget('location')}>设置默认资产</WorkbenchButton>
         </> : <>
           {serverCard.kind !== 'source' && <DirectorGraphSummary node={serverCard} />}
-          {node.kind !== 'missing' && <Space wrap><WorkbenchButton disabled={disabled || unavailableObject} onClick={event => edit(node, event.currentTarget)}>编辑此卡</WorkbenchButton>
-            {node.key.startsWith('shot:') && ([-1, 1] as const).map(offset => {
+          {node.key.startsWith('shot:') && <Space wrap>
+            {([-1, 1] as const).map(offset => {
               const index = content.design.direction.shots.findIndex(row => `shot:${row.id}` === node.key)
               const destination = content.design.direction.shots[index + offset]
               return <WorkbenchButton key={offset} variant="quiet" disabled={disabled || !destination} onClick={() => changeDesign(reorderScopeShots(content.design,
