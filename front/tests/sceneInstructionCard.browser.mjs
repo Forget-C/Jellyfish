@@ -73,7 +73,7 @@ try {
   const body = page.getByRole('textbox', { name: '当前单元指令正文', exact: true })
   await body.fill('拆开信封。')
   await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
-  await card.getByText(/模型：.*browser-video-model/).waitFor()
+  await card.getByText(/模型：.*test-video-model/).waitFor()
   await card.getByText(/时长：5 秒.*画幅：16:9.*参考：0/).waitFor()
   let submissions = 0
   page.on('request', request => { if (request.method() === 'POST' && /\/video(?:\/save-and-submit)?$/.test(new URL(request.url()).pathname)) submissions++ })

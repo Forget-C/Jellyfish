@@ -65,6 +65,8 @@ export function SceneInstructionCanvas({ onDesignOpenChange, preparationHost, un
   const allUnits = content.units || []
   const units = allUnits
   const unit = allUnits.find(row => row.id === unitId)
+  const generation = unitGraphState.current ? unitGraphState.graph?.nodes.find(node => node.kind === 'unit_config' && node.unit_id === unit?.id && node.config_kind === 'generation') : undefined
+  const modelName = generation?.summary.find(field => field.field === 'model_id')?.text
   const [preparationAttempt, setPreparationAttempt] = useState(0)
   const { missing, checking, failed, frameEvidence } = useSceneUnitPreparation(projectId, sequenceId, versionId, revision, content, unit, preparationAttempt, unitGraphState)
   const validGraph = !!graph && graph.kind === 'instructions' && graph.version_id === versionId && graph.revision === revision && Array.isArray(graph.nodes) && Array.isArray(graph.edges) && Array.isArray(graph.views)
@@ -115,7 +117,7 @@ export function SceneInstructionCanvas({ onDesignOpenChange, preparationHost, un
         const record = node.kind === 'instruction' ? node.records.find(row => row.task_id === selectedRecord) || node.records[0] : undefined
         return [{ id: node.id, label: node.title, group: member.group, size: { width: 392, height: 560 },
           content: node.kind === 'instruction' ? <section className="canvas-workbench-card">{summary(node)}
-            {unit && <><p>模型：{unit.model_id || '未选择'}</p><p>时长：{typeof unit.duration_ms === 'number' ? `${unit.duration_ms / 1000} 秒` : '未填写'} · 画幅：{unit.ratio} · 参考：{unit.references.length}</p></>}
+            {unit && <><p>模型：{unit.model_id ? modelName || (unitGraphState.error ? '模型读取失败' : '模型待核对') : '未选择'}</p><p>时长：{typeof unit.duration_ms === 'number' ? `${unit.duration_ms / 1000} 秒` : '未填写'} · 画幅：{unit.ratio} · 参考：{unit.references.length}</p></>}
             <nav className="scene-unit-primary" aria-label="当前指令主操作"><span ref={setActionHost} /></nav>
             <section aria-label="已保存指令记录">
             <p>正文来源：{node.source?.kind || '未绑定'} · 依据：{({ empty: '正文为空', unbound: '依据未绑定', current: '依据一致', changed: '依据已变', unverified: '依据待核实' })[node.basis_status]}</p>

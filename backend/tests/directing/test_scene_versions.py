@@ -673,8 +673,10 @@ async def test_saved_asset_origin_survives_rename_but_new_binding_is_checked(tmp
         assert retained.status_code == 200, retained.text
         assert retained.json()['data']['content']['units'][0]['references'] == content['units'][0]['references']
         graph = retained.json()['data']['unit_graph']
-        collection = next(node for node in graph['nodes'] if node['kind'] == 'unit_references')
-        assert collection['previews'][0]['source_status'] == 'unavailable'
+        collection = next(node for node in graph['nodes'] if node['kind'] == 'unit_references'
+                          and any(binding['id'] == 'reference' for binding in node['bindings']))
+        preview = next(item for item in collection['previews'] if item['binding_id'] == 'reference')
+        assert preview['source_status'] == 'unavailable'
         assert collection['previews'][0]['status'] == 'available'
         assert collection['previews'][0]['media_url'] == '/api/v1/studio/files/image1/download'
         for change in ['reference-id', 'unit-id', 'extra-reference', 'origin-name', 'file-id', 'selection-source']:
