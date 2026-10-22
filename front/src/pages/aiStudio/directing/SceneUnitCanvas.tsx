@@ -6,7 +6,7 @@ import { useSceneUnitPreparation } from './useSceneUnitPreparation'
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Input, InputNumber, Select, Spin } from 'antd'
 import { LlmService, StudioDirectingService } from '../../../services/generated'
-import type { AssetSummary, CanvasTarget, UnitCanvasGraph, SceneUnitDesignBlocker, EditableGenerationUnit_Output, ModelRead, SceneVersionContent_Output, WorkspaceRead } from '../../../services/generated'
+import type { AssetSummary, CanvasTarget, UnitCanvasGraph, UnitReferencesCanvasNode, SceneUnitDesignBlocker, EditableGenerationUnit_Output, ModelRead, SceneVersionContent_Output, WorkspaceRead } from '../../../services/generated'
 import { UnitGraphCanvas } from './UnitGraphCanvas'
 import { SceneFrameDependencies } from './SceneFrameDependencies'
 import { DependencyEditor } from './DependencyEditor'
@@ -71,7 +71,7 @@ function SceneUnitCanvasBody({ preparationHost, graphState, primaryHost, graph, 
   }
   const showSettings = (section: typeof settingsSection) => settingsSection === section
   const [basisUnitId, setBasisUnitId] = useState<string>()
-  const [picker, setPicker] = useState<string>()
+  const [picker, setPicker] = useState<UnitReferencesCanvasNode>()
   const [dependencyUnitId, setDependencyUnitId] = useState<string>()
   const [workspace, setWorkspace] = useState<WorkspaceRead>()
   const [workspaceError, setWorkspaceError] = useState('')
@@ -133,7 +133,7 @@ function SceneUnitCanvasBody({ preparationHost, graphState, primaryHost, graph, 
     if (issue.target?.external) { onLocateDesign(issue.target); return }
     const node = graph.nodes.find(row => row.id === (issue.target?.node_id || issue.nodeId))
     const fieldId = issue.fieldId
-    if (fieldId === 'scene-unit-references' || node?.kind === 'unit_references') setPicker(unit.id)
+    if (node?.kind === 'unit_references') setPicker(node)
     else if (fieldId === 'scene-unit-dependencies' || node?.kind === 'unit_config' && node.config_kind === 'dependencies') setDependencyUnitId(unit.id)
     else if (node?.kind === 'unit_config' && node.config_kind !== 'dependencies') openSettings(unit.id, node.config_kind, node.coverage_item_id || undefined)
     else {
@@ -277,7 +277,7 @@ function SceneUnitCanvasBody({ preparationHost, graphState, primaryHost, graph, 
         </section>
         <section className="canvas-workbench-card unit-graph-card"><h3>参考素材</h3>
           <p>已绑定 {unit.references.length} 项 · 文件可用性未核实</p>
-          <WorkbenchButton onClick={() => setPicker(unit.id)}>编辑参考素材</WorkbenchButton>
+          {graph.nodes.filter(node => node.kind === 'unit_references' && node.unit_id === unit.id).map(node => node.kind === 'unit_references' && <WorkbenchButton key={node.id} onClick={() => setPicker(node)}>{node.title}</WorkbenchButton>)}
         </section>
         <section className="canvas-workbench-card unit-graph-card"><h3>本单元执行依据</h3><p>尚未核实；核实成功后展示当前执行范围与来源。</p></section>
       </>}
@@ -289,7 +289,7 @@ function SceneUnitCanvasBody({ preparationHost, graphState, primaryHost, graph, 
       onReference={node => {
           const id = node.unit_id
         if (!allUnits.some(row => row.id === id)) { setUnavailableTarget(true); return }
-        setUnavailableTarget(false); onSelectUnit(id); setPicker(id)
+        setUnavailableTarget(false); onSelectUnit(id); setPicker(node)
       }}
       onInspect={node => {
         if (!('unit_id' in node)) return
@@ -298,7 +298,7 @@ function SceneUnitCanvasBody({ preparationHost, graphState, primaryHost, graph, 
         setUnavailableTarget(false)
         onSelectUnit(node.unit_id)
         if (node.kind === 'unit_basis') setBasisUnitId(node.unit_id)
-        else if (node.kind === 'unit_references') setPicker(node.unit_id)
+        else if (node.kind === 'unit_references') setPicker(node)
         else if (node.kind === 'unit_config' && node.config_kind === 'dependencies') setDependencyUnitId(node.unit_id)
         else if (node.kind === 'unit_config' && node.config_kind !== 'dependencies') openSettings(node.unit_id, node.config_kind, node.coverage_item_id || undefined)
         else setBasisUnitId(node.unit_id)
@@ -339,7 +339,9 @@ function SceneUnitCanvasBody({ preparationHost, graphState, primaryHost, graph, 
       {workspaceError && <Alert type="error" message="来源单元读取失败" description={workspaceError} action={<Button onClick={() => setAttempt(value => value + 1)}>重试来源单元</Button>} />}
       {!!unit.dependencies.length && workspace && <DependencyEditor sceneVersion projectId={projectId} workspace={workspace} unit={unit} disabled={disabled} onChange={patch} />}</section>
     </WorkbenchDetails>}
-    {unit && picker === unit.id && <ReferencePicker title="编辑参考素材" rootClassName="canvas-workbench-dialog" key={`${versionId}:${unit.id}`} projectId={projectId} assets={assets} assetError={assetError}
+    {unit && picker?.unit_id === unit.id && <ReferencePicker title={picker.input_role === 'subject' ? picker.bindings.length ? '编辑参考组' : '添加参考组' : `${picker.bindings.length ? '编辑' : '添加'}${picker.title}`}
+      inputRole={picker.input_role === 'all' ? undefined : picker.input_role} referenceIds={picker.bindings.map(binding => binding.id)}
+      initialParticipantIds={picker.bindings[0]?.participant_ids} initialPurpose={picker.bindings[0]?.purpose} initialAssetId={picker.bindings[0]?.asset_origin?.id} rootClassName="canvas-workbench-dialog" key={`${versionId}:${picker.id}`} projectId={projectId} assets={assets} assetError={assetError}
       contextLabel={`单元 ${allUnits.findIndex(row => row.id === unit.id) + 1} · ${disabled ? '只读' : saveStatus}`} onReloadAssets={() => setAttempt(value => value + 1)} design={content.design} coverage={unit.coverage} references={unit.references}
       capability={capability} capabilityError={capabilityError} onRetryCapability={() => setAttempt(value => value + 1)} disabled={disabled}
       dependencyReferenceIds={[...unit.dependencies, ...(unit.scene_dependencies || [])].flatMap(link => link.reference_id ? [link.reference_id] : [])}
