@@ -3,6 +3,7 @@ import { Alert, Button } from 'antd'
 import { StudioDirectingService } from '../../../services/generated'
 import type { EditableGenerationUnit_Output, SceneEndFrameRead, SceneFrameDependency, SceneVersionContent_Output } from '../../../services/generated'
 import { directingError } from './common'
+import type { ScenePredecessorSelection } from './ScenePredecessorDialog'
 
 export function useSceneFrameEvidence(projectId: string, sequenceId: string, versionId: string, revision: number, unit?: EditableGenerationUnit_Output) {
   const versions = JSON.stringify([...new Set([versionId, ...(unit?.scene_dependencies || []).map(link => link.version_id)])].sort())
@@ -42,7 +43,8 @@ export function sceneDependencyIssue(link: SceneFrameDependency, unit: EditableG
 }
 
 /** 新场次依赖明确引用单次采用；选择落幅才同步建立实际模型参考。 */
-export function SceneFrameDependencies({ unit, content, versionId, evidence, disabled, onChange, onOpenEdit }: {
+export function SceneFrameDependencies({ unit, content, versionId, evidence, disabled, onChange, onOpenEdit, onSelect }: {
+  onSelect: (selection: ScenePredecessorSelection) => void
   onOpenEdit: (clipId: string) => void
   unit: EditableGenerationUnit_Output; content: SceneVersionContent_Output; versionId: string; evidence: ReturnType<typeof useSceneFrameEvidence>; disabled: boolean
   onChange: (changes: Partial<EditableGenerationUnit_Output>) => void
@@ -56,16 +58,18 @@ export function SceneFrameDependencies({ unit, content, versionId, evidence, dis
     const previous = unit.references.find(row => row.id === referenceId)
     const reference = { id: referenceId, file_id: frame.file_id, media_kind: 'image' as const, purpose: 'continuity' as const,
       participant_ids: previous?.participant_ids || [], ordinal: previous?.ordinal ?? Math.max(-1, ...unit.references.map(row => row.ordinal)) + 1,
-      input_role: previous?.input_role || (unit.references.some(row => row.input_role === 'first_frame') ? 'subject' as const : 'first_frame' as const), source: frame.source }
-    onChange({ scene_dependencies: links.map(row => row === link ? { ...row, frame_id: frame.id, reference_id: referenceId } : row),
-      references: previous ? unit.references.map(row => row.id === referenceId ? reference : row) : [...unit.references, reference] })
+      input_role: 'first_frame' as const, source: frame.source }
+    onSelect({ kind: 'scene', link: { ...link, frame_id: frame.id, reference_id: referenceId }, reference })
   }
   return <section aria-label="场次版本落幅依赖"><h3>场次版本实际落幅依赖</h3>
-    <p>明确选择来源采用，再绑定已提取的实际落幅。换绑后前往指令画布更新正文依据并重新检查。</p>
+    <p>每单元承接一个前段；选择来源采用，再将已提取的实际落幅明确应用为首帧。换绑后前往指令画布更新正文依据并重新检查。</p>
     <Button loading={loading} onClick={reload}>刷新场次落幅</Button>
     {error && <Alert type="warning" message="场次落幅读取失败，依赖适用性尚未核实" description={error} />}
     {items.map((clip, index) => 'media_range' in clip && <Button key={clip.id} disabled={disabled || links.some(link => link.version_id === versionId && link.clip_id === clip.id)}
-      onClick={() => onChange({ scene_dependencies: [...links, { version_id: versionId, clip_id: clip.id }] })}>依赖当前版本片段 {index + 1}</Button>)}
+      onClick={() => onSelect({ kind: 'scene', link: { version_id: versionId, clip_id: clip.id } })}>依赖当前版本片段 {index + 1}</Button>)}
+    {!loading && !error && items.flatMap((clip, index) => frames.filter(frame => frame.clip.id === clip.id && frame.version_id === versionId && frame.available && sceneFrameCurrent(frame, content, versionId))
+      .map((frame, frameIndex) => <Button key={frame.id} disabled={disabled || links.some(link => link.frame_id === frame.id)}
+        onClick={() => bind({ version_id: versionId, clip_id: clip.id }, frame)}>承接当前版本片段 {index + 1} 落幅 {frameIndex + 1}</Button>))}
     {!items.some(item => 'media_range' in item) && <p>当前时间线暂无真实采用，请先在编辑画布明确采用素材。</p>}
     {links.map((link, index) => <div key={`${link.version_id}:${link.clip_id}`}>
       {link.version_id === versionId && <Button onClick={() => onOpenEdit(link.clip_id)}>定位依赖 {index + 1} 原采用并提取落幅</Button>}

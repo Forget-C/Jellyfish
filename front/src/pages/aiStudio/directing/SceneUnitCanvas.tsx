@@ -17,6 +17,8 @@ import { SourceLinks } from './Sources'
 import { WorkbenchButton } from './ui/WorkbenchButton'
 import { WorkbenchModal, WorkbenchDialogActions } from './ui/WorkbenchModal'
 import { SceneUnitDesignSuggestions } from './SceneUnitDesignSuggestions'
+import { ScenePredecessorDialog } from './ScenePredecessorDialog'
+import type { ScenePredecessorSelection } from './ScenePredecessorDialog'
 import { UnitScopeSummary } from './UnitScopeSummary'
 
 type SceneUnitCanvasProps = {
@@ -73,6 +75,7 @@ function SceneUnitCanvasBody({ preparationHost, graphState, primaryHost, graph, 
   const [referenceUnitId, setReferenceUnitId] = useState<string>()
   const [picker, setPicker] = useState<UnitReferencesCanvasNode>()
   const [dependencyUnitId, setDependencyUnitId] = useState<string>()
+  const [predecessor, setPredecessor] = useState<{ unit: EditableGenerationUnit_Output; selection: ScenePredecessorSelection }>()
   const [workspace, setWorkspace] = useState<WorkspaceRead>()
   const [workspaceError, setWorkspaceError] = useState('')
   const [workspaceLoading, setWorkspaceLoading] = useState(false)
@@ -114,6 +117,16 @@ function SceneUnitCanvasBody({ preparationHost, graphState, primaryHost, graph, 
   const patch = (changes: Partial<EditableGenerationUnit_Output>) => {
     if (!unit || disabled) return
     onChange({ ...content, units: allUnits.map(row => row.id === unit.id ? { ...row, ...changes } : row) })
+  }
+  const selectPredecessor = (selection: ScenePredecessorSelection) => {
+    if (unit && !disabled) setPredecessor({ unit, selection })
+  }
+  const applyReferences = (references: EditableGenerationUnit_Output['references']) => {
+    if (!unit) return
+    // 图片解绑只清实际证据，声明继续提醒用户准备前段；与参考修改共用一次撤销。
+    const changed = (id: string | null | undefined) => !!id && JSON.stringify(unit.references.find(row => row.id === id)) !== JSON.stringify(references.find(row => row.id === id))
+    patch({ references, scene_dependencies: unit.scene_dependencies.map(link => changed(link.reference_id) ? { ...link, frame_id: null, reference_id: null } : link),
+      dependencies: unit.dependencies.map(link => changed(link.reference_id) ? { ...link, frame_id: null, reference_id: null } : link) })
   }
   const create = (targetShotId: string) => {
     const shot = content.design.direction.shots.find(row => row.id === targetShotId)
@@ -334,11 +347,12 @@ function SceneUnitCanvasBody({ preparationHost, graphState, primaryHost, graph, 
     </WorkbenchDetails>
     {unit && dependencyUnitId === unit.id && <WorkbenchDetails status={saveStatus} title="前段依赖" open onClose={() => setDependencyUnitId(undefined)}>
       <Button onClick={() => { setDependencyUnitId(undefined); onOpenInstruction() }}>前往当前单元指令核对</Button>
-      <section id="scene-unit-dependencies" tabIndex={-1}><SceneFrameDependencies onOpenEdit={onOpenEdit} unit={unit} content={content} versionId={versionId} evidence={frameEvidence} disabled={disabled} onChange={patch} />
+      <section id="scene-unit-dependencies" tabIndex={-1}><SceneFrameDependencies onSelect={selectPredecessor} onOpenEdit={onOpenEdit} unit={unit} content={content} versionId={versionId} evidence={frameEvidence} disabled={disabled} onChange={patch} />
       {!!unit.dependencies.length && workspaceLoading && <Spin />}
       {workspaceError && <Alert type="error" message="来源单元读取失败" description={workspaceError} action={<Button onClick={() => setAttempt(value => value + 1)}>重试来源单元</Button>} />}
-      {!!unit.dependencies.length && workspace && <DependencyEditor sceneVersion projectId={projectId} workspace={workspace} unit={unit} disabled={disabled} onChange={patch} />}</section>
+      {!!unit.dependencies.length && workspace && <DependencyEditor sceneVersion onSceneSelect={selectPredecessor} projectId={projectId} workspace={workspace} unit={unit} disabled={disabled} onChange={patch} />}</section>
     </WorkbenchDetails>}
+    {unit && predecessor?.unit.id === unit.id && <ScenePredecessorDialog unit={predecessor.unit} selection={predecessor.selection} stale={JSON.stringify(predecessor.unit) !== JSON.stringify(unit)} disabled={disabled} onApply={patch} onClose={() => setPredecessor(undefined)} />}
     {unit && referenceUnitId === unit.id && <WorkbenchDetails status={saveStatus} title="参考输入" open onClose={() => setReferenceUnitId(undefined)}>
       <section id="scene-unit-references" tabIndex={-1}><p>选择要核对的参考位置。</p>
         {graph.nodes.filter(node => node.kind === 'unit_references' && node.unit_id === unit.id).map(node => node.kind === 'unit_references' && <WorkbenchButton key={node.id} onClick={() => { setReferenceUnitId(undefined); setPicker(node) }}>{node.title}</WorkbenchButton>)}
@@ -349,7 +363,8 @@ function SceneUnitCanvasBody({ preparationHost, graphState, primaryHost, graph, 
       initialParticipantIds={picker.bindings[0]?.participant_ids} initialPurpose={picker.bindings[0]?.purpose} initialAssetId={picker.bindings[0]?.asset_origin?.id} rootClassName="canvas-workbench-dialog" key={`${versionId}:${picker.id}`} projectId={projectId} assets={assets} assetError={assetError}
       contextLabel={`单元 ${allUnits.findIndex(row => row.id === unit.id) + 1} · ${disabled ? '只读' : saveStatus}`} onReloadAssets={() => setAttempt(value => value + 1)} design={content.design} coverage={unit.coverage} references={unit.references}
       capability={capability} capabilityError={capabilityError} onRetryCapability={() => setAttempt(value => value + 1)} disabled={disabled}
+      dependencyChangeMessage="应用后将清除原落幅与参考绑定，保留前段声明为待绑定；新图只是普通参考，需要重新绑定承接才能生成。"
       dependencyReferenceIds={[...unit.dependencies, ...(unit.scene_dependencies || [])].flatMap(link => link.reference_id ? [link.reference_id] : [])}
-      onApply={references => patch({ references })} onClose={() => setPicker(undefined)} />}
+      onApply={applyReferences} onClose={() => setPicker(undefined)} />}
   </section>
 }

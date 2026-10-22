@@ -103,7 +103,7 @@ try {
   assert.deepEqual(await textbox.evaluate(node => [node.selectionStart, node.selectionEnd]), [7, 12])
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   assert.equal((await (await fetch(`${versionsUrl}/${version.id}`)).json()).data.content.units[1].instruction, longText)
-  const instructionCard = page.getByLabel('指令画布视口', { exact: true }).locator('[data-canvas-node]').filter({ has: page.getByRole('button', { name: '编辑当前指令', exact: true }) })
+  const instructionCard = page.getByLabel('指令画布视口', { exact: true }).locator('[data-canvas-node]').filter({ has: page.getByRole('button', { name: '修改指令', exact: true }) })
   assert.ok(await instructionCard.evaluate(node => node.getBoundingClientRect().height <= 600), '长正文只占有限摘要卡')
   assert.equal(await instructionCard.evaluate(node => {
     const rect = node.getBoundingClientRect()
