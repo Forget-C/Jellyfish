@@ -17,7 +17,6 @@ import { SourceLinks } from './Sources'
 import { WorkbenchButton } from './ui/WorkbenchButton'
 import { WorkbenchModal, WorkbenchDialogActions } from './ui/WorkbenchModal'
 import { SceneUnitDesignSuggestions } from './SceneUnitDesignSuggestions'
-import { SceneInstructionSuggestions } from './SceneInstructionSuggestions'
 import { UnitScopeSummary } from './UnitScopeSummary'
 
 type SceneUnitCanvasProps = {
@@ -34,7 +33,6 @@ type SceneUnitCanvasProps = {
   projectId: string; sequenceId: string; versionId: string; revision: number; content: SceneVersionContent_Output; shotId?: string; unitId?: string; disabled: boolean
   onOpenEdit: (clipId: string) => void
   onOpenInstruction: (taskId?: string) => void
-  onInstructionTask: (taskId: string, unitId: string) => void
   onSelectUnit: (id: string, shotId?: string) => void; onChange: (content: SceneVersionContent_Output) => void
   focusRequest?: { versionId: string; unitId: string; nodeId: string; fieldId: string; serial: number }
 }
@@ -51,7 +49,7 @@ export function SceneUnitCanvas(props: SceneUnitCanvasProps) {
 }
 
 /** 单元和设计共用一份可编辑方案；画布浏览不创建单元，也不选择替代对象。 */
-function SceneUnitCanvasBody({ preparationHost, graphState, primaryHost, graph, saved, projectId, sequenceId, versionId, revision, content, unitId, disabled, saveStatus, onSelectUnit, onChange, focusRequest, onOpenInstruction, onInstructionTask, onOpenEdit, unitDesignTaskId, onUnitDesignFocused, onLocateBlocker, onLocateDesign }: SceneUnitCanvasProps) {
+function SceneUnitCanvasBody({ preparationHost, graphState, primaryHost, graph, saved, projectId, sequenceId, versionId, revision, content, unitId, disabled, saveStatus, onSelectUnit, onChange, focusRequest, onOpenInstruction, onOpenEdit, unitDesignTaskId, onUnitDesignFocused, onLocateBlocker, onLocateDesign }: SceneUnitCanvasProps) {
   const [browseShotId, setBrowseShotId] = useState<string>()
   const [creationOpen, setCreationOpen] = useState(false)
   const [creationShotId, setCreationShotId] = useState<string>()
@@ -253,8 +251,7 @@ function SceneUnitCanvasBody({ preparationHost, graphState, primaryHost, graph, 
     {unit && <SceneUnitPreparationStatus host={preparationHost} missing={missing} checking={checking} failed={failed} onLocate={locateIssue} onRetry={retryPreparation} />}
     <SceneUnitDesignSuggestions onLocateBlocker={onLocateBlocker} onChange={onChange} onFocused={onUnitDesignFocused} triggerHost={primaryHost} focusTaskId={unitDesignTaskId} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content} shotId={browseShotId} unitId={unit?.id} disabled={disabled} />
     {unit && primaryHost && createPortal(<nav className="scene-unit-primary" aria-label="当前单元主操作"><strong>当前单元 {allUnits.indexOf(unit) + 1}</strong>
-      {<SceneInstructionSuggestions preparationBlocked={!!missing.length || checking || failed} key={unit.id} compact projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision}
-        unitId={unit.id} content={content} disabled={disabled} onChange={onChange} onOpen={onOpenInstruction} onTask={onInstructionTask} />}
+      <WorkbenchButton variant="primary" onClick={() => onOpenInstruction()}>进入指令画布</WorkbenchButton>
     </nav>, primaryHost)}
     {!graphState.current && <section className="scene-unit-draft-cards" aria-label="当前单元配置卡片">
       <p>以下为当前编辑内容；执行依据与外部证据{graphState.error ? '核实失败，请重试' : '正在核实'}。</p>

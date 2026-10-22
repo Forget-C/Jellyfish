@@ -1199,13 +1199,6 @@
       "count": 1
     },
     {
-      "file": "src/pages/aiStudio/directing/SceneVideoActivity.tsx",
-      "rule": "react-hooks/exhaustive-deps",
-      "severity": 1,
-      "fingerprint": "fbea5d67d398cbbdf5694b67649562c6800b8fd71aa176c1bfad975719a74c10",
-      "count": 1
-    },
-    {
       "file": "src/pages/aiStudio/directing/SceneVideoBatch.tsx",
       "rule": "react-hooks/exhaustive-deps",
       "severity": 1,
