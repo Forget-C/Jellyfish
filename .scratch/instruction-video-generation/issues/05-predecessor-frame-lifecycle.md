@@ -39,3 +39,5 @@
 - `PLAYWRIGHT_CHANNEL=chrome node front/tests/sceneFrameDependencies.browser.mjs`：PASS。端口 4265/8265，统一 browser-runtime；桌面与 390px，取消、整次撤销、移除图、换普通图、重新绑定、A→B、历史来源占用和未相关单元门槛均覆盖。
 - `pnpm --dir front run typecheck`、`cd backend && UV_CACHE_DIR=/tmp/jellyfish-uv-cache uv run --no-sync pylint app`：通过，Pylint 10.00/10。没有 schema 变化；沿用已有 generated client。
 - 最终截图/日志保留于主仓库忽略目录 `front/test-results/instruction-video-05/`（`predecessor-desktop.png`、`predecessor-mobile.png`、`run.log`）；未复制数据库或凭据。
+
+- 合并最新集成 `92e0b96` 后，参考组实现与本票的 selector/卡片/文档共同保留；再次通过完整承接浏览器、typecheck 和 Pylint10，并扩大到参考组 HTTP/provider 回归：59 passed in 38.70s。最终浏览器来源为 `jellyfish-predecessor-kwlw79`，保留副本已更新至上述主仓库路径。
