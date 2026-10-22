@@ -106,11 +106,12 @@ export function UnitGraphCanvas({ graph, content, unitId, versionId, revision, s
       <label>单元<Select aria-label="当前单元" value={unitId || unknownView || ''} onChange={id => go(id)}
         options={[{ value: '', label: '全部单元' }, ...candidates.map(row => ({ value: row.id, label: `单元 ${content.units.indexOf(row) + 1}` })),
           ...(unitId && !unit ? [{ value: unitId, label: '原单元不可用' }] : []), ...(unknownView ? [{ value: unknownView, label: '原浏览目标不可用', disabled: true }] : [])]} /></label>
+    </>} status={<>
+      {pending && <span>图待同步</span>}
+      {updating && !error && <span>正在更新单元卡片</span>}
     </>} notice={<>
       {error && <Alert type="error" message="单元卡片更新失败，当前编辑已保留" description={error} action={<WorkbenchButton onClick={onRetry}>重试单元卡片</WorkbenchButton>} />}
       {(unavailable || unavailableView) && <Alert type="warning" message="原浏览目标已不可用" action={<WorkbenchButton onClick={() => go('', '')}>返回全部镜头</WorkbenchButton>} />}
-      {updating && !error && <span role="status">正在更新单元卡片</span>}
-      {pending && <span role="status">修改待同步</span>}
     </>}>
       <WorkbenchButton variant="quiet" onClick={() => go('', '')}>单元画布</WorkbenchButton>
       {filter && <WorkbenchButton variant="quiet" onClick={() => go()}>{`› ${shots.some(shot => shot.id === filter) ? `镜头 ${shots.findIndex(shot => shot.id === filter) + 1}` : '原镜头不可用'}`}</WorkbenchButton>}

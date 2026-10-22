@@ -2,17 +2,17 @@ import { createContext, useContext, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeftOutlined, ArrowRightOutlined, FilterOutlined, LeftOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, ArrowRightOutlined, RightOutlined, LeftOutlined } from '@ant-design/icons'
 import { WorkbenchIconButton } from './ui/WorkbenchButton'
 import { useGraphBrowse } from './useGraphBrowse'
 
 export const CanvasBrowseContext = createContext<{
-  kind: string; history: HTMLElement | null; breadcrumb: HTMLElement | null; filters: HTMLElement | null; actions: HTMLElement | null; notices: HTMLElement | null
+  kind: string; history: HTMLElement | null; breadcrumb: HTMLElement | null; filters: HTMLElement | null; actions: HTMLElement | null; notices: HTMLElement | null; status: HTMLElement | null
 } | null>(null)
 
 /** 导航、位置与筛选各有固定宿主；筛选显隐仅是设备偏好，不修改浏览历史或画布几何。 */
-export function CanvasBrowse({ storageKey, label, children, filters, filtered = false, actions, notice }: {
-  storageKey: string; label: string; children: ReactNode; filters?: ReactNode; filtered?: boolean; actions?: ReactNode; notice?: ReactNode
+export function CanvasBrowse({ storageKey, label, children, filters, filtered = false, actions, notice, status }: {
+  storageKey: string; label: string; children: ReactNode; filters?: ReactNode; filtered?: boolean; actions?: ReactNode; notice?: ReactNode; status?: ReactNode
 }) {
   const hosts = useContext(CanvasBrowseContext)
   const navigate = useNavigate()
@@ -33,11 +33,12 @@ export function CanvasBrowse({ storageKey, label, children, filters, filtered = 
     </nav>, hosts?.history)}
     {render(<nav className="canvas-breadcrumb" aria-label={label} data-graph-navigation>{children}</nav>, hosts?.breadcrumb)}
     {filters && render(<aside className="canvas-filters" aria-label="画布筛选" data-collapsed={collapsed}>
-      <header><WorkbenchIconButton label={collapsed ? '展开筛选' : '收起筛选'} icon={collapsed ? <FilterOutlined /> : <LeftOutlined />} aria-expanded={!collapsed} onClick={toggle} />
-        {filtered && <span role="status">筛选中</span>}</header>
       <div hidden={collapsed} className="canvas-filter-fields">{filters}</div>
+      <WorkbenchIconButton variant="quiet" label={collapsed ? '展开筛选' : '收起筛选'} icon={collapsed ? <RightOutlined /> : <LeftOutlined />} aria-expanded={!collapsed} onClick={toggle} />
+      {filtered && <span className="canvas-filter-active" role="status" aria-label="筛选已生效" />}
     </aside>, hosts?.filters)}
     {actions && render(actions, hosts?.actions)}
     {notice && render(notice, hosts?.notices)}
+    {status && render(status, hosts?.status)}
   </>
 }

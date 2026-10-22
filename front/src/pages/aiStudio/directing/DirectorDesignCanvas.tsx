@@ -309,7 +309,13 @@ function DirectorDesignCanvasBody({ projectId, sequenceId, versionId, content, s
       filters={<><label>镜头<Select aria-label="导演镜头筛选" value={state.scope === 'shot' ? activeShotId : ''}
         options={[{ value: '', label: '全部镜头' }, ...content.design.direction.shots.map((shot, index) => ({ value: shot.id, label: `镜头 ${index + 1}` })), ...(state.scope === 'shot' && !hasShot ? [{ value: activeShotId || '', label: '原镜头不可用' }] : [])]}
         onChange={id => go({ scope: id ? 'shot' : 'all', shotId: id || undefined })} /></label>
-        {scope === 'all' && <label>待归镜头 {pendingCount} · 未关联设计 {unlinkedCount}<Switch aria-label="显示未关联设计" checked={unlinkedOpen} disabled={!graph.unlinked.length} onChange={setUnlinkedOpen} /></label>}</>}
+        {scope === 'all' && <label>显示未关联设计<Switch aria-label="显示未关联设计" checked={unlinkedOpen} disabled={!graph.unlinked.length} onChange={setUnlinkedOpen} /></label>}</>}
+      status={<>
+        {scope === 'all' && pendingCount > 0 && <span>待归镜头 {pendingCount}</span>}
+        {scope === 'all' && unlinkedCount > 0 && <span>未关联设计 {unlinkedCount}</span>}
+        {graphPending && <span title={`关系图来自已保存 revision ${relationshipGraph.revision}；关系更新中`}>图待同步</span>}
+        {!graphPending && relationshipGraph.complete && <span>设计范围完整</span>}
+      </>}
       actions={<WorkbenchIconButton label="附加信息" variant="quiet" icon={<InfoCircleOutlined />} aria-pressed={infoOpen} onClick={() => setInfoOpen(!infoOpen)} />}>
       <WorkbenchButton variant="quiet" aria-current={scope === 'all' ? 'page' : undefined} disabled={scope === 'all'} onClick={() => go({ scope: 'all', shotId: activeShotId })}>总览</WorkbenchButton>
       {state.scope === 'shot' && <span aria-current="page">› {hasShot ? `镜头 ${String(activeShotNumber).padStart(2, '0')} 子图` : '原镜头不可用'}</span>}
@@ -319,10 +325,8 @@ function DirectorDesignCanvasBody({ projectId, sequenceId, versionId, content, s
         <WorkbenchButton variant="primary" onClick={() => onPrepare(scope === 'shot' && hasShot ? activeShotId : undefined)}>下一步：单元画布</WorkbenchButton>
       </Tooltip>, nextHost)}
     {noticeHost && createPortal(<>
-      {graphPending && <Alert type="info" message={`关系图来自已保存 revision ${relationshipGraph.revision}；关系更新中`} />}
       {!graphPending && !!relationshipGraph.issues?.length && <Alert type="warning" message={`设计未完整 · ${relationshipGraph.issues.length} 项缺项`}
         action={<WorkbenchButton variant="quiet" onClick={() => setInfoOpen(true)}>查看设计缺项</WorkbenchButton>} />}
-      {!graphPending && relationshipGraph.complete && <span role="status">设计范围完整</span>}
       {unavailable && <Alert type="warning" message="原对象不可用，请重新选择" closable onClose={() => setUnavailable(false)} />}
       {!focusStillVisible && <Alert type="info" message="关联已变化，已定位到当前视图中心" />}
       {scope === 'shot' && !hasShot && <Alert type="warning" message="原镜头不可用，请重新选择镜头" action={<WorkbenchButton onClick={() => go({ scope: 'all' })}>返回有效总览</WorkbenchButton>} />}

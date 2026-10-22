@@ -94,10 +94,10 @@ export function SceneInstructionCanvas({ preparationHost, unitGraphState, graph,
         options={[{ value: '', label: '请选择单元' }, ...units.map(row => ({ value: row.id, label: `单元 ${allUnits.indexOf(row) + 1} · ${row.coverage.map(item => item.action_scope).join('；') || '动作待填写'}` })),
           ...(unitId && !unit ? [{ value: unitId, label: '原单元不可用' }] : [])]} /></label>}
       actions={<WorkbenchButton variant="secondary" onClick={onRetryGraph}>刷新图证据</WorkbenchButton>}
+      status={dirty && <span aria-label="指令图同步状态" title="图展示已保存内容，正文编辑器保留当前输入。">图待同步</span>}
       notice={<>
         {!validGraph && <p role="alert">指令图与当前版本不一致。<WorkbenchButton variant="secondary" onClick={onRetryGraph}>重新读取版本</WorkbenchButton></p>}
         {evidenceError && <p role="alert">图证据读取失败，当前选择和输入已保留：{evidenceError}。请刷新图证据重试。</p>}
-        {dirty && <p aria-label="指令图同步状态">图待同步：图展示已保存内容，正文编辑器保留当前输入。</p>}
         {!unit && <p>{unitId ? '原单元不可用，请重新选择。' : '先明确选择单元，再编辑对应指令。'}</p>}
       </>}>
       <WorkbenchButton aria-label="返回指令概览" variant="quiet" onClick={() => onSelectUnit('')}>指令画布</WorkbenchButton>

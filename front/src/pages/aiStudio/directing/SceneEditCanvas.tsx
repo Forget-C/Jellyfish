@@ -180,9 +180,10 @@ export function SceneEditCanvas({ graph, evidenceError, onRefreshGraph, projectI
     <WorkbenchButton variant="secondary" onClick={() => { setWorkspace(true); setFocusTarget({ nodeId: '同场次素材', fieldId: '', serial: Date.now() }) }}>浏览同场次素材</WorkbenchButton>
     <WorkbenchButton variant="secondary" onClick={() => go(false, !(library && !workspace))}>{library && !workspace ? '返回整场剪辑图' : '浏览同场素材图'}</WorkbenchButton>
     <WorkbenchButton variant="secondary" onClick={onRefreshGraph}>刷新图证据</WorkbenchButton>
+    </>} status={<>
+    {loading && takes.length > 0 && <span>正在刷新素材证据</span>}
+    {dirty && <span aria-label="剪辑图同步状态" title="总览展示已保存内容，工作区保留当前输入。">图待同步</span>}
     </>} notice={<>
-    {loading && takes.length > 0 && <span role="status">正在刷新素材证据；已核实素材及当前输入保留。</span>}
-    {dirty && <span aria-label="剪辑图同步状态">图待同步：总览展示已保存内容，工作区保留当前输入。</span>}
     {evidenceError && <p role="alert">图证据读取失败，保留旧摘要：{evidenceError}。请刷新图证据重试。</p>}
     {unavailableCoverage && <p role="alert">原覆盖目标在当前编辑中已不可用，请明确核对；未选择替代对象。</p>}
     {unavailableClip && <p role="alert">原片段 {unavailableClip} 在当前编辑中已不可用，请保存后重新核对。</p>}

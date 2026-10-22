@@ -121,6 +121,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
   const [directorNavigationHost, setDirectorNavigationHost] = useState<HTMLDivElement | null>(null)
   const [browseHistoryHost, setBrowseHistoryHost] = useState<HTMLDivElement | null>(null)
   const [filterHost, setFilterHost] = useState<HTMLDivElement | null>(null)
+  const [statusHost, setStatusHost] = useState<HTMLDivElement | null>(null)
   const [preparationHost, setPreparationHost] = useState<HTMLDivElement | null>(null)
   const [feedbackHost, setFeedbackHost] = useState<HTMLDivElement | null>(null)
   const [moreHost, setMoreHost] = useState<HTMLDivElement | null>(null)
@@ -136,7 +137,9 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       const breadcrumbHeight = directorNavigationHost?.offsetHeight || 0
       root?.style.setProperty('--workbench-breadcrumb-bottom', `${toolbarBottom + breadcrumbHeight + (breadcrumbHeight ? 8 : 0)}px`)
       root?.style.setProperty('--workbench-toolbar-bottom', `${toolbarBottom}px`)
-      root?.style.setProperty('--workbench-content-top', `${toolbarBottom + breadcrumbHeight + (breadcrumbHeight ? 8 : 0) + noticeHeight + (noticeHeight ? 8 : 0)}px`)
+      // 面包屑和筛选覆盖画布；只有顶部操作及需明确处理的提示保留视口空间。
+      root?.style.setProperty('--workbench-content-top', `${toolbarBottom + noticeHeight + (noticeHeight ? 8 : 0)}px`)
+      root?.style.setProperty('--workbench-overlay-bottom', `${toolbarBottom + breadcrumbHeight + (breadcrumbHeight ? 8 : 0) + noticeHeight + (noticeHeight ? 8 : 0)}px`)
     }
     const observer = new ResizeObserver(measure)
     observer.observe(element)
@@ -938,7 +941,7 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
     return () => window.clearInterval(timer)
   }, [autoSave])
 
-  return <WorkbenchDetailsProvider><SourceProvider projectId={projectId} sequenceId={sequenceId} renderRevision={source => <SceneSourceRevision key={`${source.revision_id}:${source.source.version}`} projectId={projectId} sequenceId={sequenceId} source={source} />}><WorkbenchTheme><CanvasBrowseContext.Provider value={{ kind: canvas, history: browseHistoryHost, breadcrumb: directorNavigationHost, filters: filterHost, actions: primaryHost, notices: feedbackHost }}><section ref={node => { if (node) node.inert = copyLocked }} className="canvas-workbench" data-canvas={canvas} aria-label="场次画布工作台" onBlurCapture={event => {
+  return <WorkbenchDetailsProvider><SourceProvider projectId={projectId} sequenceId={sequenceId} renderRevision={source => <SceneSourceRevision key={`${source.revision_id}:${source.source.version}`} projectId={projectId} sequenceId={sequenceId} source={source} />}><WorkbenchTheme><CanvasBrowseContext.Provider value={{ kind: canvas, history: browseHistoryHost, breadcrumb: directorNavigationHost, filters: filterHost, actions: primaryHost, notices: feedbackHost, status: statusHost }}><section ref={node => { if (node) node.inert = copyLocked }} className="canvas-workbench" data-canvas={canvas} aria-label="场次画布工作台" onBlurCapture={event => {
     if (event.target instanceof HTMLTextAreaElement) {
       const element = event.target
       lastEditing.current = { element, start: element.selectionStart, end: element.selectionEnd, scrollTop: element.scrollTop }
@@ -1027,10 +1030,13 @@ function Workbench({ projectId, chapterId, sequenceId, ownership }: { projectId:
       </div>
     </header>
     {selected && <><div ref={setDirectorNavigationHost} className="canvas-breadcrumb-host" /><div ref={setFilterHost} className="canvas-filter-host" /></>}
+    <div className="canvas-bottom-right">
+    <div ref={setStatusHost} className="canvas-status-host" role="status" aria-label="画布状态" />
     <nav className="canvas-history-controls" aria-label="编辑历史">
       <WorkbenchIconButton label="撤销" variant="quiet" icon={<UndoOutlined />} onClick={() => stepHistory('undo')} disabled={handingOff || !selected || !histories.current.get(selected.id)?.undo.length || readonly || leaving || busy === 'create'} />
       <WorkbenchIconButton label="重做" variant="quiet" icon={<RedoOutlined />} onClick={() => stepHistory('redo')} disabled={handingOff || !selected || !histories.current.get(selected.id)?.redo.length || readonly || leaving || busy === 'create'} />
     </nav>
+    </div>
     {selected && content && <SceneDesignSuggestions triggerHost={canvas === 'director' ? primaryHost : moreHost} key={`design:${selected.id}`} projectId={projectId} sequenceId={sequenceId} version={selected} content={content}
       disabled={readonly || handingOff || !!recovery || busy === 'create' || leaving} open={currentEditor === 'ai'}
       onOpenChange={open => open ? openEditor('ai') : setEditor(undefined)} onChange={editContent}
