@@ -251,7 +251,7 @@ try {
       if (width === 390) await locate({ director: '原文依据', units: '单元 1', instructions: '当前指令', edit: '当前素材' }[key])
       if (key === 'units' && width === 1920) {
         const design = await page.getByRole('button', { name: 'AI设计', exact: true }).boundingBox()
-        const instruction = await page.getByRole('button', { name: '查看当前指令', exact: true }).boundingBox()
+        const instruction = await page.getByRole('button', { name: '进入指令画布', exact: true }).boundingBox()
         assert.ok(design && instruction && Math.abs(design.y - instruction.y) <= 2, '宽屏单元状态栏的主操作应横向对齐')
       }
       await checkChrome(`${key}-${width}`)
