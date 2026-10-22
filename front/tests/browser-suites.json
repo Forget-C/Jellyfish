@@ -1,6 +1,7 @@
 {
   "preflight": "preflight.mjs",
   "cases": {
+    "reference-source": { "file": "sceneReferenceSource.browser.mjs", "ports": [4258, 8258], "timeoutMs": 240000 },
     "default-assets": { "file": "sceneDefaultAssets.browser.mjs", "ports": [4257, 8257], "timeoutMs": 180000 },
     "workbench-ui": { "file": "workbenchUi.browser.mjs", "ports": [4195], "timeoutMs": 180000 },
     "workbench-style": { "file": "sceneWorkbenchStyle.browser.mjs", "ports": [4193, 8193], "timeoutMs": 300000 },
@@ -21,6 +22,7 @@
     "periodic-save": { "file": "scenePeriodicSave.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 }
   },
   "suites": {
+    "references": ["default-assets", "reference-source"],
     "workbench": ["workbench-ui", "workbench-style", "design-scope"],
     "graph": ["graph-navigation", "director-layout", "canvas-graph", "graph-summary", "legacy-graph", "periodic-save", "instruction-evidence", "edit-graph", "edit-seams-graph", "edit-cut-evidence", "timeline", "take-library-graph", "take-library", "legacy-take-library"]
   }
