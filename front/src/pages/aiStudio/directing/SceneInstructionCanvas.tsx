@@ -3,7 +3,6 @@ import { SceneUnitPreparationStatus } from './SceneUnitPreparationStatus'
 import { WorkbenchButton } from './ui/WorkbenchButton'
 import { WorkbenchDetails } from './ui/WorkbenchDetails'
 import { ReferencePreview } from './ReferencePreview'
-import { createPortal } from 'react-dom'
 import { useSceneUnitPreparation } from './useSceneUnitPreparation'
 import type { ScenePreparationIssue } from './useSceneUnitPreparation'
 import { useState } from 'react'
@@ -88,7 +87,6 @@ export function SceneInstructionCanvas({ onDesignOpenChange, preparationHost, un
     </section>
   return <div className="scene-instruction-canvas">
     {unit && <SceneUnitPreparationStatus host={preparationHost} missing={missing} checking={checking} failed={failed} onLocate={issue => onPrepare(unit.id, issue)} onRetry={() => { setPreparationAttempt(value => value + 1); unitGraphState.retry(); frameEvidence.reload() }} />}
-    {primaryHost && createPortal(<nav className="scene-unit-primary" aria-label="当前指令主操作"><strong>{unit ? `当前单元 ${allUnits.indexOf(unit) + 1} 的指令` : '请明确选择单元'}</strong><span ref={setActionHost} /></nav>, primaryHost)}
     <CanvasBrowse storageKey={`jellyfish:instructions:local-user:${projectId}:${sequenceId}:${versionId}`} label="指令画布位置" filtered={!!unitId}
       filters={<label>单元<Select aria-label="指令所属单元" value={unitId || ''} onChange={onSelectUnit}
         options={[{ value: '', label: '请选择单元' }, ...units.map(row => ({ value: row.id, label: `单元 ${allUnits.indexOf(row) + 1} · ${row.coverage.map(item => item.action_scope).join('；') || '动作待填写'}` })),
@@ -113,7 +111,10 @@ export function SceneInstructionCanvas({ onDesignOpenChange, preparationHost, un
         if (!node) return []
         const record = node.kind === 'instruction' ? node.records.find(row => row.task_id === selectedRecord) || node.records[0] : undefined
         return [{ id: node.id, label: node.title, group: member.group, size: { width: 392, height: 560 },
-          content: node.kind === 'instruction' ? <section className="canvas-workbench-card">{summary(node)}<section aria-label="已保存指令记录">
+          content: node.kind === 'instruction' ? <section className="canvas-workbench-card">{summary(node)}
+            {unit && <><p>模型：{unit.model_id || '未选择'}</p><p>时长：{typeof unit.duration_ms === 'number' ? `${unit.duration_ms / 1000} 秒` : '未填写'} · 画幅：{unit.ratio} · 参考：{unit.references.length}</p></>}
+            <nav className="scene-unit-primary" aria-label="当前指令主操作"><span ref={setActionHost} /></nav>
+            <section aria-label="已保存指令记录">
             <p>正文来源：{node.source?.kind || '未绑定'} · 依据：{({ empty: '正文为空', unbound: '依据未绑定', current: '依据一致', changed: '依据已变', unverified: '依据待核实' })[node.basis_status]}</p>
             {node.evidence_issue && <div className="design-compact-fields"><p><strong>{node.evidence_issue}</strong></p></div>}
             <p>相关建议／检查 {node.records.length} 条；在原工作区阅读完整记录与原因。</p>
@@ -126,7 +127,7 @@ export function SceneInstructionCanvas({ onDesignOpenChange, preparationHost, un
                 document.querySelector(`[aria-label="当前单元指令${record.kind === 'suggestion' ? '建议' : '检查'}"]`)?.scrollIntoView({ block: 'center' })
               }}>查看原{record.kind === 'suggestion' ? '建议' : '检查'}记录</WorkbenchButton></>}
             {!node.records.length && <p>尚无已登记的建议或检查；待核实原请求仍在工作区核实。</p>}
-          </section><WorkbenchButton variant="secondary" disabled={!unit} onClick={() => document.getElementById('scene-current-instruction')?.focus()}>编辑当前指令</WorkbenchButton></section> : <section className="canvas-workbench-card">{summary(node)}
+          </section><WorkbenchButton variant="secondary" disabled={!unit} onClick={() => document.getElementById('scene-current-instruction')?.focus()}>修改指令</WorkbenchButton></section> : <section className="canvas-workbench-card">{summary(node)}
             {node.kind === 'unit_basis' ? <WorkbenchButton variant="secondary" disabled={!unit} onClick={() => setReading('basis')}>查看完整单元依据</WorkbenchButton> : <>
               <WorkbenchButton variant="secondary" disabled={!unit} onClick={() => setReading('references')}>查看完整参考输入</WorkbenchButton>
               <p>在单元画布明确选择或修改参考；正文中的提及不会自动绑定素材。</p>
