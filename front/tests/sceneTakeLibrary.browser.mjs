@@ -127,6 +127,7 @@ try {
   assert.equal(await page.getByRole('spinbutton', { name: '可用区间 1 出点毫秒', exact: true }).inputValue(), '2500')
   assert.deepEqual((await (await fetch(`${versionsUrl}/${version.id}`)).json()).data, beforeInvalidRange)
   await page.getByRole('button', { name: '导演画布', exact: true }).click()
+  await closeWorkbenchDetails(page)
   await page.getByRole('button', { name: '编辑画布', exact: true }).click()
   await locateCanvasNode(page, '同场次素材')
   await page.getByRole('button', { name: '定位素材 1：可用区间 1 无效', exact: true }).click({ timeout: 5000 })
