@@ -119,6 +119,8 @@ try {
   await dialog.getByRole('button', { name: '应用指令建议', exact: true }).click()
   await dialog.getByText('本单元正文或生成依据已变化，请核对差异后重新生成建议', { exact: false }).waitFor()
   assert.equal(await instruction.inputValue(), '等待期间的新人工指令', '旧建议不能覆盖后续编辑')
+  const titleBounds = await dialog.getByText('AI 指令设计', { exact: true }).boundingBox()
+  assert.ok(titleBounds && titleBounds.y >= 0, '弹窗标题必须始终留在视口内')
   await page.screenshot({ path: join(output, 'instruction-ai-desktop.png'), animations: 'disabled' })
   await page.setViewportSize({ width: 390, height: 844 })
   await dialog.waitFor()

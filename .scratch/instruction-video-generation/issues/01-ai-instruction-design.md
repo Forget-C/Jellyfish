@@ -37,7 +37,7 @@
 ### 红绿与验证证据
 
 - 浏览器真实连接测试后端，未调用真实模型。先后观察到导航入口缺失、应用后弹窗未关闭、同单元后台完成通知缺失、应用拒绝后焦点丢失、早于任务列表读取打开时原任务未显示的红灯，逐项实现并转绿。
-- `PLAYWRIGHT_CHANNEL=chrome node front/tests/sceneInstructionDesign.browser.mjs`：通过；覆盖导航不提交、准备硬门槛、空要求、预览应用、手工修改和撤销、后台通知及冲突拒绝、只读、键盘和 1440/390 布局。截图与日志目录：`/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-scene-version-sTFiiJ`（桌面和窄屏截图已目视检查）。
+- `PLAYWRIGHT_CHANNEL=chrome node front/tests/sceneInstructionDesign.browser.mjs`：通过；覆盖导航不提交、准备硬门槛、空要求、预览应用、手工修改和撤销、后台通知及冲突拒绝、只读、键盘、标题视口边界和 1440/390 布局。截图与日志目录：`/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-scene-version-IOCd45`（桌面和窄屏截图已目视检查）。
 - `PLAYWRIGHT_CHANNEL=chrome node front/tests/sceneInstructionPrimary.browser.mjs`：通过；原任务浏览与准备不足保持草稿，未重复提交。证据目录：`/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-scene-version-KB7QuD`。
 - `PLAYWRIGHT_CHANNEL=chrome node front/tests/sceneInstructionSuggestions.browser.mjs`：通过；原请求恢复、刷新、存储失败、取消、Unicode 选段、越界拒绝、撤销、跨单元通知和失效目标保护。证据目录：`/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-scene-version-ovboqW`。
 - `PLAYWRIGHT_CHANNEL=chrome node front/tests/sceneInstructionPreparation.browser.mjs`：通过；缺项定位和能力核实硬门槛。证据目录：`/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-scene-version-9qwxOo`。
