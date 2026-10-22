@@ -92,6 +92,19 @@ try {
   await primary.getByRole('button', { name: '生成当前单元指令建议', exact: true }).click()
   await primary.getByRole('button', { name: '查看指令任务', exact: true }).waitFor()
   assert.equal((await (await fetch(tasksUrl)).json()).data.length, 1)
+  const missingCameraVersion = (await (await fetch(versionsUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), title: '缺少摄影工作单定位' }) })).json()).data
+  const missingCameraContent = structuredClone(saved.content)
+  missingCameraContent.design.cinematography = []
+  assert.equal((await fetch(`${versionsUrl}/${missingCameraVersion.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: 1, content: missingCameraContent }) })).status, 200)
+  await page.goto(`http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}?version=${missingCameraVersion.id}&view=units`)
+  await (await workbenchShot(page, '镜头 1：准备指令')).click()
+  await page.getByRole('button', { name: '单元画布', exact: true }).click()
+  await unitCard(page, '生成配置')
+  await closeWorkbenchDetails(page)
+  await page.getByRole('button', { name: '单元准备状态', exact: true }).click()
+  await page.getByRole('group', { name: '单元准备状态选项', exact: true }).getByRole('button', { name: /镜头缺少摄影工作单/ }).click()
+  await page.getByRole('button', { name: '建立工作单', exact: true }).waitFor()
+  assert.equal((await (await fetch(`${versionsUrl}/${missingCameraVersion.id}`)).json()).data.content.design.cinematography.length, 0, '问题定位只打开创建表单，不自动创建工作单')
   console.log(`PASS instruction preparation locates missing duration before generation; evidence: ${output}`)
 } catch (error) {
   if (page) await page.screenshot({ path: join(output, 'failure.png'), fullPage: true }).catch(() => {})

@@ -68,7 +68,7 @@ def _unit_basis(context, unit, index, graph, director):
                 '固定来源不在当前画布；保留原字段、版本与来源供核对'))
     # 缺项沿真实设计字段或组织要求定位，不再把所有问题指向第一项动作范围。
     unresolved_targets = {
-        f'{issue.owner}.{issue.field}：{issue.reason}': source_target(issue.owner, 'applicability')
+        f'{issue.owner}.{issue.field}：{issue.reason}': source_target(issue.owner, issue.field if issue.shot_ids else 'applicability')
         for issue in design_scope_issues(context.content.design)
     }
     for item in unit.coverage:

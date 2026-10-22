@@ -60,6 +60,13 @@ async def test_unsaved_units_are_visible_without_saving_the_version(tmp_path):
         issue = next(issue for issue in graph['issues'] if issue['message'] == '已选事件 event 尚无可拍内容')
         assert issue['target']['node_id'] == 'event:event'
         assert issue['target']['external'] is True and issue['target']['field'] == 'description'
+        content['design']['direction']['shots'][0]['visible_result'] = {}
+        graph = (await client.post(detail + '/unit-canvas/preview', json={
+            'expected_revision': 1, 'content': content,
+        })).json()['data']
+        issue = next(issue for issue in graph['issues'] if '镜头尚无可见结果' in issue['message'])
+        assert issue['target']['node_id'] == 'shot:shot'
+        assert issue['target']['field'] == 'visible_result'
         assert (await client.get(detail + '/unit-design-suggestions')).json()['data'] == []
 
 

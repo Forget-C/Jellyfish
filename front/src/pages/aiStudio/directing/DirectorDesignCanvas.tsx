@@ -166,7 +166,11 @@ function DirectorDesignCanvasBody({ projectId, sequenceId, versionId, content, s
     const node = allObjects.find(row => row.key === (externalFocus.nodeId === '镜头设计' ? `shot:${shotId}` : externalFocus.nodeId) || identity(row) === externalFocus.nodeId)
     if (node) {
       jump(node)
-      if (externalFocus.fieldId) edit(node, document.activeElement instanceof HTMLElement ? document.activeElement : document.body, externalFocus.fieldId === 'applicability', externalFocus.fieldId)
+      const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : document.body
+      if (externalFocus.fieldId === 'cinematography' && node.key.startsWith('shot:')) {
+        setFocusRequest({ target: { path: ['cinematography'] }, trigger, serial: Date.now(),
+          side: true, createPath: ['cinematography'], defaults: { shot_id: node.key.slice(5) } })
+      } else if (externalFocus.fieldId) edit(node, trigger, externalFocus.fieldId === 'applicability', externalFocus.fieldId)
     } else setUnavailable(true)
     onExternalFocusHandled()
   }, [externalFocus?.serial])

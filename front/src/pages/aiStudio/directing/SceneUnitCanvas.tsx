@@ -247,13 +247,43 @@ function SceneUnitCanvasBody({ preparationHost, graphState, primaryHost, navigat
       </>
   return <section className="scene-unit-canvas">
     {unit && <SceneUnitPreparationStatus host={preparationHost} missing={missing} checking={checking} failed={failed} onLocate={locateIssue} onRetry={retryPreparation} />}
-    {graphState.error && <Alert type="error" message="单元卡片更新失败，当前编辑已保留" description={graphState.error} action={<WorkbenchButton onClick={graphState.retry}>重试单元卡片</WorkbenchButton>} />}
     <SceneUnitDesignSuggestions onLocateBlocker={onLocateBlocker} onChange={onChange} onFocused={onUnitDesignFocused} triggerHost={primaryHost} focusTaskId={unitDesignTaskId} projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision} content={content} shotId={browseShotId} unitId={unit?.id} disabled={disabled} />
     {unit && primaryHost && createPortal(<nav className="scene-unit-primary" aria-label="当前单元主操作"><strong>当前单元 {allUnits.indexOf(unit) + 1}</strong>
       {<SceneInstructionSuggestions preparationBlocked={!!missing.length || checking || failed} key={unit.id} compact projectId={projectId} sequenceId={sequenceId} versionId={versionId} revision={revision}
         unitId={unit.id} content={content} disabled={disabled} onChange={onChange} onOpen={onOpenInstruction} onTask={onInstructionTask} />}
     </nav>, primaryHost)}
-    <UnitGraphCanvas graph={graph} updating={!graphState.current} versionId={versionId} revision={revision} navigationHost={navigationHost}
+    {!graphState.current && <section className="scene-unit-draft-cards" aria-label="当前单元配置卡片">
+      {graphState.error && <Alert type="error" message="单元卡片更新失败，当前编辑已保留" description={graphState.error} action={<WorkbenchButton onClick={graphState.retry}>重试单元卡片</WorkbenchButton>} />}
+      <p>以下为当前编辑内容；执行依据与外部证据{graphState.error ? '核实失败，请重试' : '正在核实'}。</p>
+      {!unit && <p>请选择当前单元以编辑配置。</p>}
+      {unit && <>
+        {unit.coverage.map((item, index) => <section className="canvas-workbench-card unit-graph-card" key={item.id}>
+          <h3>动作覆盖 {index + 1}</h3><p>{item.action_scope || '未填写动作范围'}</p>
+          <WorkbenchButton onClick={() => openSettings(unit.id, 'coverage', item.id)}>编辑动作覆盖 {index + 1}</WorkbenchButton>
+        </section>)}
+        <section className="canvas-workbench-card unit-graph-card"><h3>生成配置</h3>
+          <p>模型：{unit.model_id || '未选择'} · 时长：{unit.duration_ms ?? '未填写'} 毫秒 · 画幅：{unit.ratio}</p>
+          <p>参数：{Object.entries(unit.parameters).map(([name, value]) => `${name}：${String(value)}`).join('、') || '默认'}</p>
+          <WorkbenchButton onClick={() => openSettings(unit.id, 'generation')}>编辑生成配置</WorkbenchButton>
+        </section>
+        <section className="canvas-workbench-card unit-graph-card"><h3>组织要求</h3>
+          <p>{unit.organization?.reason || '未填写组织理由'}</p><p>{unit.organization?.entry_state || '未填写进入状态'}</p>
+          <p>{unit.organization?.exit_state || '未填写结束状态'}</p>
+          <WorkbenchButton onClick={() => openSettings(unit.id, 'organization')}>编辑组织要求</WorkbenchButton>
+        </section>
+        <section className="canvas-workbench-card unit-graph-card"><h3>前段依赖</h3>
+          <p>单元依赖 {unit.dependencies.length} 项 · 场次依赖 {unit.scene_dependencies.length} 项 · 证据未核实</p>
+          <WorkbenchButton onClick={() => setDependencyUnitId(unit.id)}>编辑前段依赖</WorkbenchButton>
+        </section>
+        <section className="canvas-workbench-card unit-graph-card"><h3>参考素材</h3>
+          <p>已绑定 {unit.references.length} 项 · 文件可用性未核实</p>
+          <WorkbenchButton onClick={() => setPicker(unit.id)}>编辑参考素材</WorkbenchButton>
+        </section>
+        <section className="canvas-workbench-card unit-graph-card"><h3>本单元执行依据</h3><p>尚未核实；核实成功后展示当前执行范围与来源。</p></section>
+      </>}
+    </section>}
+    <div hidden={!graphState.current}>
+    <UnitGraphCanvas graph={graph} updating={!graphState.current} versionId={versionId} revision={revision} navigationHost={graphState.current ? navigationHost : null}
       storageKey={`jellyfish:unit-graph:local-user:${projectId}:${sequenceId}:${versionId}`}
       pending={JSON.stringify(content) !== JSON.stringify(saved)} focusUnitId={focusRequest?.unitId}
       onSelectUnit={onSelectUnit} onSelectShot={onSelectShot} onBrowseShotChange={setBrowseShotId}
@@ -273,6 +303,7 @@ function SceneUnitCanvasBody({ preparationHost, graphState, primaryHost, navigat
         else if (node.kind === 'unit_config' && node.config_kind !== 'dependencies') openSettings(node.unit_id, node.config_kind, node.coverage_item_id || undefined)
         else setBasisUnitId(node.unit_id)
       }} />
+    </div>
     <section className="scene-unit-editor-entry" aria-label="单元编辑入口">
       <Select aria-label="当前单元" placeholder="选择当前编辑单元" value={unit?.id} style={{ width: 320 }}
         options={allUnits.map((row, index) => ({ value: row.id, label: `单元 ${index + 1}` }))} onChange={id => onSelectUnit(id)} />

@@ -425,3 +425,9 @@
 .scene-edit-empty { position: absolute; top: calc(var(--workbench-content-top, 180px) + 96px); left: 24px; right: 24px; z-index: 1; max-width: 600px; }
 
 .scene-edit-overview .director-canvas-surface { top: calc(var(--workbench-content-top, 180px) + 96px); }
+
+.scene-unit-draft-cards { position: absolute; inset: var(--workbench-content-top, 100px) 0 80px; display: grid; align-content: start; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; padding: 24px 16px 160px; max-height: 100%; overflow: auto; }
+.scene-unit-draft-cards > p, .scene-unit-draft-cards > .ant-alert { grid-column: 1 / -1; }
+.scene-unit-draft-cards .unit-graph-card { min-width: 0; overflow-wrap: anywhere; }
+
+.scene-unit-draft-cards .unit-graph-card p { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
