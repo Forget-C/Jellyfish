@@ -33,6 +33,13 @@
 - `instruction-video` 已通过 instruction-card、frame-inputs、default-assets、reference-source、frame-dependencies、instruction-inputs、candidate-refresh；scene-video 旧导航及模型夹具迁移后单独通过（61.0s）。原始套件失败记录保留，复跑不覆盖历史。
 - 原视频恢复回归复现了自己的待核实保存被证据刷新误判为外部冲突；刷新延后并在核实后补读，scene-video 61.0s 转绿。修复后 candidate-refresh 24.4s、periodic-save 10.6s 通过，后者仍验证真正的外部保存冲突。
 - 最终截图、原始日志和逐用例结果保存在主工作区 `front/test-results/instruction-video-08/`，排除 SQLite 和缓存。四种真实视频独立保存在 `instruction-video-real/`。
-- 实施与上述验证均已完成，双轴代码审查进行中。
+- 实施与上述验证均已完成；双轴代码审查及修复复核已完成。
 
 逐票红绿和证据详见 issues 01–07；已有成功结果只在相关实现变化后重跑。
+
+## 双轴代码审查（2026-10-23）
+
+- 固定基线：`91d2da5dcd046ec2b070802164a1107c62c654da`，实施审查头：`b2299d56e68643d7394a4ce1ff01b94be23b2b16`。两位独立只读审查者分别检查规范与规格；本轮审查未独立执行测试，运行结果来自上述实施验证。
+- Standards：最初发现 1 项规范 P3（参考卡重复编辑按钮）及 1 项启发式 P3（选择器范围判断重复）。同一实施者删除冗余按钮，保留整卡激活与独立承接定位，并复用局部 `inEditScope` 判断；原审查者已针对修复复核，两项关闭，无遗留项。
+- Spec：未发现缺失、错误实现或范围蔓延，0 项发现；保留所有既有硬门槛及候选人工采用规则。
+- 修复提交 `8c4490b` 的验证：typecheck、lint（275 存量／0 新增）通过；frame-inputs 32.6s、reference-source 97.5s、frame-dependencies 28.6s 全部通过。桌面／窄屏截图及日志保存在主工作区 `front/test-results/instruction-video-review/`。
