@@ -34,10 +34,10 @@
 
 - HTTP 红灯：旧聚合节点仍为“参考素材”且缺少逐输入来源目标。实现后 `backend` 下 `uv run --no-sync pytest tests/directing/test_instruction_inputs_canvas.py tests/directing/test_canvas_graph.py tests/directing/test_unit_canvas_preview.py -q --tb=short`：38 passed，覆盖单聚合卡、同图首尾、组内多图、完整预览、精确外部地址与输入连线，复用失效文件和预览回归。
 - 浏览器红灯：旧界面没有“本次输入”分区。后续真实键盘验收还发现大图关闭时详情暂时 inert 导致焦点恢复失败；按模态关闭完成时序恢复后通过。
-- `PLAYWRIGHT_CHANNEL=chrome node front/tests/run-browser.mjs instruction-inputs`：PASS 17.5s，证据 `front/test-results/browser-rAgdfy`。真实浏览器与隔离后端覆盖空输入、同图两位置、主体同组双图、来源、大图读取与键盘焦点、标题碰撞／地址改名／节点逆序后四个精确回跳、未保存指令与参考修改／撤销、只读、390px 详情／大图，以及零浏览器保存和生成请求。合法已采用片段通过真实提帧 HTTP 建立承接后显示原片段／版本／帧时间；传输边界受控响应分别验证加载中、图读取失败、文件不可用与原图读取失败。
+- `PLAYWRIGHT_CHANNEL=chrome node front/tests/run-browser.mjs instruction-inputs`：PASS 17.4s（合入 `e0b4f83` 后重跑），证据 `front/test-results/browser-erLyKE`。真实浏览器与隔离后端覆盖空输入、同图两位置、主体同组双图、来源、大图读取与键盘焦点、标题碰撞／地址改名／节点逆序后四个精确回跳、未保存指令与参考修改／撤销、只读、390px 详情／大图，以及零浏览器保存和生成请求。合法已采用片段通过真实提帧 HTTP 建立承接后显示原片段／版本／帧时间；传输边界受控响应分别验证加载中、图读取失败、文件不可用与原图读取失败。
 - `PLAYWRIGHT_CHANNEL=chrome node front/tests/run-browser.mjs instruction-evidence`：PASS 14.0s，证据 `front/test-results/browser-k2OHVF`，原指令证据刷新、编辑和焦点保护保持有效。
 - `pnpm --dir front run typecheck`、`git diff --check` 通过；`backend` 下 `uv run --no-sync pylint app`：10.00/10。
-- `pnpm --dir front run lint:check` 仅报告本票未修改的 `SceneInstructionSuggestions.tsx` 三处 `!= null`，已告知集成负责人；本票文件无新增问题。
+- 合入 `e0b4f83` 后重跑 `pnpm --dir front run typecheck`、`pnpm --dir front run lint:check`、38 项图接口测试与 `uv run pylint app` 均通过；lint 为 275 项存量、0 项新增，Pylint 10.00/10。此前其他票据三处 lint 问题已由集成分支修复。
 - 复用 WorkbenchDetails、WorkbenchModal、WorkbenchButton、ReferencePreview 和 SourceInspector。图投影与界面只读查看不改变生成硬门槛、绑定或历史输入；架构和操作说明同步。
 
 截图、结果与日志另保留主仓库 `front/test-results/instruction-video-06/`（ignored，不提交，排除 SQLite 和缓存），供集成与工作树归档后查阅。综合 workbench 验收由集成阶段统一执行。
