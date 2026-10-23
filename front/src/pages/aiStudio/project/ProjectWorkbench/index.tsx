@@ -135,7 +135,7 @@ const ProjectWorkbench: React.FC = () => {
               ),
             }))}
           />
-          <Space size="small" wrap className="shrink-0">
+          {activeTab !== 'generation' && <Space size="small" wrap className="shrink-0">
             <Button
               type="primary"
               icon={primaryCta.icon}
@@ -146,11 +146,11 @@ const ProjectWorkbench: React.FC = () => {
             <Dropdown menu={{ items: moreMenuItems }} placement="bottomRight">
               <Button icon={<EllipsisOutlined />}>更多</Button>
             </Dropdown>
-          </Space>
+          </Space>}
         </div>
-        <div className="text-xs text-gray-500">
+        {activeTab !== 'generation' && <div className="text-xs text-gray-500">
           {primaryCta.hint}
-        </div>
+        </div>}
       </div>
 
       <WorkspaceScrollPanel
