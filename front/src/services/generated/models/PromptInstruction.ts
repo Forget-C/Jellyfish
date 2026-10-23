@@ -13,4 +13,3 @@ export type PromptInstruction = {
     parameters?: Record<string, any>;
     references?: Array<PromptReference>;
 };
-

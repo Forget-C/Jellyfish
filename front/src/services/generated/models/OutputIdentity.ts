@@ -11,4 +11,3 @@ export type OutputIdentity = {
     port_id: string;
     position: number;
 };
-

@@ -11,4 +11,3 @@ export type PromptReference = {
     kind: 'reference';
     source: OutputIdentity;
 };
-

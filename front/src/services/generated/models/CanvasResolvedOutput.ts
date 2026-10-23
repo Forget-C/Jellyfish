@@ -14,4 +14,3 @@ export type CanvasResolvedOutput = {
     token?: string;
     available?: boolean;
 };
-

@@ -11,4 +11,3 @@ import type { PromptText } from './PromptText';
 export type PromptDocument = {
     segments?: Array<(PromptText | PromptReference | PromptInstruction)>;
 };
-
