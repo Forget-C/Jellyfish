@@ -8,14 +8,13 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.generation_canvas import CanvasSaveReceipt, GenerationCanvas
 from app.models.studio import Project
-from app.schemas.generation_canvas import CanvasDocument, CanvasSave
+from app.schemas.generation_canvas import CanvasDocument, CanvasSave, ModelCard
 from app.services.common import get_or_404
+from app.services.generation_canvas.errors import diagnostic
+from app.services.generation_canvas.graph import validate_graph
+from app.services.generation_canvas.capabilities import model_capability
 
 
-def diagnostic(code: str, message: str, target: dict, *, status: int = 422) -> HTTPException:
-    """所有画布领域错误提供稳定代号、结构定位与阻止动作。"""
-    return HTTPException(status, detail={'code': code, 'severity': 'error', 'message': message,
-                                        'target': target, 'blocks': ['save']})
 
 
 class CanvasStore:
@@ -77,6 +76,19 @@ class CanvasStore:
                 raise diagnostic('INVALID_CARD_IDENTITY', '卡片身份必须唯一且类型不可修改', {'card_id': card.id})
             seen.add(card.id)
             identities[card.id] = card.type
+        validate_graph(document)
+        previous_edges = {(edge['source_card'], edge['source_port'], edge['target_card'], edge['target_port'])
+                          for edge in canvas.document.get('edges', [])}
+        by_id = {card.id: card for card in document.cards}
+        for edge in document.edges:
+            endpoint = (edge.source_card, edge.source_port, edge.target_card, edge.target_port)
+            card = by_id[edge.target_card]
+            # 模型切换保留已有候选；只校验本次新建连接的动态能力。
+            if endpoint not in previous_edges and isinstance(card, ModelCard) and card.model_id:
+                cap = await model_capability(self.db, card.model_id)
+                if edge.target_port not in cap.input_ports or card.type != 'model.' + cap.modality:
+                    raise diagnostic('UNSUPPORTED_INPUT', '所选模型未接入该输入用途',
+                                     {'edge_id': edge.id, 'card_id': card.id, 'port_id': edge.target_port})
         result = await self.db.execute(update(GenerationCanvas).where(
             GenerationCanvas.id == canvas_id, GenerationCanvas.revision == command.expected_revision).values(
                 document=document.model_dump(), revision=command.expected_revision + 1, card_types=identities))

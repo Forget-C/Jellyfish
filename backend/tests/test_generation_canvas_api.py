@@ -26,6 +26,13 @@ async def canvas_client(request):
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     async with sessions() as db:
         db.add_all([Project(id='p', name='项目', style='真人都市'), Project(id='other', name='其他', style='真人都市')])
+        from app.models.llm import Model, Provider
+        from app.bootstrap import bootstrap_all_registries
+        bootstrap_all_registries()
+        db.add(Provider(id='canvas-provider', name='openai', base_url='https://example.test'))
+        await db.flush()
+        db.add_all([Model(id=f'canvas-{kind}', name=f'canvas-{kind}', category=kind, provider_id='canvas-provider')
+                    for kind in ('text', 'image', 'video')])
         await db.commit()
     async def database():
         async with sessions() as db:
@@ -47,6 +54,9 @@ async def canvas_client(request):
             from app.models.generation_canvas import CanvasSaveReceipt
             await db.execute(delete(CanvasSaveReceipt).where(CanvasSaveReceipt.canvas_id.in_(ids)))
             await db.execute(delete(GenerationCanvas).where(GenerationCanvas.id.in_(ids)))
+            from app.models.llm import Model, Provider
+            await db.execute(delete(Model).where(Model.provider_id == 'canvas-provider'))
+            await db.execute(delete(Provider).where(Provider.id == 'canvas-provider'))
             await db.execute(delete(Project).where(Project.id.in_(['p', 'other'])))
     await engine.dispose()
 
@@ -150,3 +160,91 @@ async def test_non_object_document_has_machine_readable_save_diagnostic(canvas_c
     assert response.status_code == 422
     assert response.json()['detail']['code'] == 'INVALID_DOCUMENT'
     assert response.json()['detail']['blocks'] == ['save']
+
+@pytest.mark.asyncio
+async def test_typed_graph_roundtrip_preserves_port_order_and_groups(canvas_client):
+    client = canvas_client
+    canvas = (await client.post('/canvases/p', json={'name': '图'})).json()['data']
+    doc = canvas['document']
+    doc.update(cards=[{'id': 'a', 'type': 'content.text', 'text': 'first'},
+                      {'id': 'b', 'type': 'content.text', 'text': 'second'},
+                      {'id': 'm', 'type': 'model.text', 'model_id': None, 'prompt': '', 'config': {}}],
+               edges=[{'id': 'e1', 'source_card': 'a', 'source_port': 'text', 'target_card': 'm', 'target_port': 'text'},
+                      {'id': 'e2', 'source_card': 'b', 'source_port': 'text', 'target_card': 'm', 'target_port': 'text'}],
+               input_order={'m': {'text': ['e2', 'e1']}},
+               groups=[{'id': 'g', 'name': '组一', 'card_ids': ['a', 'm'], 'collapsed': True}])
+    url = f"/canvases/p/{canvas['id']}"
+    saved = await client.put(url, json={'request_id': 'graph', 'expected_revision': 0, 'document': doc})
+    assert saved.status_code == 200, saved.text
+    reopened = (await client.get(url)).json()['data']['document']
+    assert reopened['input_order'] == {'m': {'text': ['e2', 'e1']}}
+    assert reopened['groups'] == doc['groups']
+    assert reopened['cards'][2]['model_id'] is None
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('change,code', [
+    ({'edges': [{'id': 'bad', 'source_card': 'absent', 'source_port': 'text', 'target_card': 'm', 'target_port': 'text'}]}, 'INVALID_ENDPOINT'),
+    ({'edges': [{'id': 'bad', 'source_card': 'm', 'source_port': 'text', 'target_card': 'm', 'target_port': 'text'}]}, 'SELF_CONNECTION'),
+    ({'edges': [{'id': 'e', 'source_card': 'm', 'source_port': 'text', 'target_card': 'n', 'target_port': 'text'},
+                {'id': 'f', 'source_card': 'n', 'source_port': 'text', 'target_card': 'm', 'target_port': 'text'}]}, 'GRAPH_CYCLE'),
+    ({'input_order': {'m': {'text': ['missing']}}}, 'INVALID_INPUT_ORDER'),
+    ({'groups': [{'id': 'g', 'name': '损坏组', 'card_ids': ['missing']}]}, 'INVALID_GROUP'),
+])
+async def test_invalid_graph_has_located_save_diagnostic(canvas_client, change, code):
+    canvas = (await canvas_client.post('/canvases/p', json={})).json()['data']
+    document = {**canvas['document'], 'cards': [{'id': 'm', 'type': 'model.text'}, {'id': 'n', 'type': 'model.text'}], **change}
+    response = await canvas_client.put(f"/canvases/p/{canvas['id']}", json={
+        'request_id': 'broken-graph', 'expected_revision': 0, 'document': document})
+    assert response.status_code == 422
+    assert response.json()['detail']['code'] == code
+    assert response.json()['detail']['target']
+
+@pytest.mark.asyncio
+async def test_new_incompatible_connection_rejected_but_model_switch_keeps_existing_candidates(canvas_client):
+    client = canvas_client
+    canvas = (await client.post('/canvases/p', json={})).json()['data']
+    url = f"/canvases/p/{canvas['id']}"
+    doc = {**canvas['document'], 'cards': [{'id': 'a', 'type': 'content.text', 'text': 'x'},
+                                        {'id': 'm', 'type': 'model.image'}],
+           'edges': [{'id': 'e', 'source_card': 'a', 'source_port': 'text', 'target_card': 'm', 'target_port': 'text'}],
+           'input_order': {'m': {'text': ['e']}}}
+    assert (await client.put(url, json={'request_id': 'candidate', 'expected_revision': 0, 'document': doc})).status_code == 200
+    doc['cards'][1]['model_id'] = 'no-longer-available'
+    response = await client.put(url, json={'request_id': 'switch', 'expected_revision': 1, 'document': doc})
+    assert response.status_code == 200
+    assert (await client.get(url)).json()['data']['document']['edges'] == doc['edges']
+
+
+@pytest.mark.asyncio
+async def test_capability_declarations_match_real_dtos_and_video_adapter(canvas_client):
+    from app.core.integrations.video_capabilities import VideoModelCapability, register_video_model_capability, clear_video_model_capability_overrides
+    register_video_model_capability(provider='openai', model_prefix='canvas-video', capability=VideoModelCapability(
+        supports_seed=False, allowed_ratios={'9:16'}, min_seconds=4, max_seconds=8,
+        supports_subject_video_reference=True, max_subjects=2))
+    try:
+        canvas = (await canvas_client.post('/canvases/p', json={})).json()['data']
+        base = f"/canvases/p/{canvas['id']}"
+        text = (await canvas_client.get(base + '/models/canvas-text/capability')).json()['data']
+        assert text['input_ports'] == ['text']
+        assert not text['supports_seed']
+        video = (await canvas_client.get(base + '/models/canvas-video/capability')).json()['data']
+        assert video['ratios'] == ['9:16']
+        assert video['min_seconds'] == 4 and video['max_seconds'] == 8
+        assert video['max_subjects'] == 2 and not video['supports_seed']
+        assert 'subject_video' in video['input_ports'] and 'subject_image' not in video['input_ports']
+        doc = {**canvas['document'], 'cards': [{'id': 'a', 'type': 'model.video'},
+                                            {'id': 'm', 'type': 'model.video', 'model_id': 'canvas-video'}],
+               'edges': [{'id': 'e', 'source_card': 'a', 'source_port': 'video', 'target_card': 'm', 'target_port': 'subject_video'}],
+               'input_order': {'m': {'subject_video': ['e']}}}
+        assert (await canvas_client.put(base, json={'request_id': 'video', 'expected_revision': 0, 'document': doc})).status_code == 200
+        # 去掉支持后，已有候选仍能保存；相同结构的新连接须拒绝。
+        register_video_model_capability(provider='openai', model_prefix='canvas-video', capability=VideoModelCapability())
+        assert (await canvas_client.put(base, json={'request_id': 'switch', 'expected_revision': 1, 'document': doc})).status_code == 200
+        doc['cards'].append({'id': 'b', 'type': 'model.video'})
+        doc['edges'].append({'id': 'f', 'source_card': 'b', 'source_port': 'video', 'target_card': 'm', 'target_port': 'subject_video'})
+        doc['input_order']['m']['subject_video'].append('f')
+        response = await canvas_client.put(base, json={'request_id': 'unsupported', 'expected_revision': 2, 'document': doc})
+        assert response.status_code == 422
+        assert response.json()['detail']['code'] == 'UNSUPPORTED_INPUT'
+    finally:
+        clear_video_model_capability_overrides(provider='openai')

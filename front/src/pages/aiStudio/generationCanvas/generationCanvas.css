@@ -1,0 +1,24 @@
+.generation-graph { width: 100%; min-width: 0; }
+.generation-toolbar { padding-bottom: 8px; }
+.generation-connection-reason { min-height: 28px; color: #475569; }
+.generation-surface { position: relative; height: 720px; overflow: hidden; border: 1px solid #cbd5e1; border-radius: 8px; background: #f1f5f9; touch-action: none; }
+.generation-world { position: absolute; inset: 0; transform-origin: 0 0; }
+.generation-edges { position: absolute; overflow: visible; pointer-events: none; }
+.generation-card { position: absolute; z-index: 2; min-width: 300px; min-height: 240px; background: white; border: 1px solid #94a3b8; border-radius: 8px; box-sizing: border-box; resize: both; overflow: auto; }
+.generation-card header { display: flex; gap: 8px; align-items: center; padding: 8px; background: #e2e8f0; }
+.generation-card header strong { flex: 1; }
+.generation-card button:focus-visible, .generation-group button:focus-visible { outline: 2px solid #1677ff; outline-offset: 2px; }
+.generation-ports { display: flex; align-items: start; gap: 4px; flex-wrap: wrap; padding: 8px; border-bottom: 1px solid #e2e8f0; }
+.generation-ports button { border: 1px solid #94a3b8; border-radius: 4px; background: #f8fafc; padding: 4px; cursor: crosshair; }
+.generation-ports button small { display: block; max-width: 160px; font-size: 11px; }
+.generation-ports [data-output-port] { margin-left: auto; }
+.generation-ports [data-compatible=true] { background: #dcfce7; border-color: #15803d; }
+.generation-ports [data-compatible=false] { background: #fef2f2; border-color: #b91c1c; }
+.generation-card-body { margin: 0; padding: 12px; border: 0; min-width: 0; }
+.generation-card-body ol { padding-left: 24px; }
+.generation-card-body li { margin-block: 4px; overflow-wrap: anywhere; }
+.generation-group { position: absolute; z-index: 1; padding: 8px; background: #e2e8f055; border: 2px dashed #94a3b8; border-radius: 12px; box-sizing: border-box; pointer-events: none; }
+.generation-group-header { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; pointer-events: auto; max-width: 520px; }
+.generation-group-header .ant-input { width: 130px; }
+.generation-drag-hint { position: absolute; z-index: 10; pointer-events: none; background: white; border: 1px solid #94a3b8; padding: 4px; }
+@media(max-width: 600px) { .generation-surface { height: 680px; } }

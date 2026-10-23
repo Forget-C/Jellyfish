@@ -2,7 +2,12 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { GenerationCanvasEdge } from './GenerationCanvasEdge';
+import type { GenerationCanvasGroup } from './GenerationCanvasGroup';
+import type { ImageModelCard } from './ImageModelCard';
 import type { TextContentCard } from './TextContentCard';
+import type { TextModelCard } from './TextModelCard';
+import type { VideoModelCard } from './VideoModelCard';
 /**
  * 完整编辑文档；位置、尺寸和视角由浏览器另存。
  */
@@ -11,6 +16,9 @@ export type CanvasDocument = {
     project_id: string;
     name: string;
     schema_version?: number;
-    cards?: Array<TextContentCard>;
+    cards?: Array<(TextContentCard | TextModelCard | ImageModelCard | VideoModelCard)>;
+    edges?: Array<GenerationCanvasEdge>;
+    input_order?: Record<string, Record<string, Array<string>>>;
+    groups?: Array<GenerationCanvasGroup>;
 };
 

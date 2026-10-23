@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ApiResponse_CanvasModelCapability_ } from '../models/ApiResponse_CanvasModelCapability_';
 import type { ApiResponse_CanvasRead_ } from '../models/ApiResponse_CanvasRead_';
 import type { ApiResponse_CanvasSaved_ } from '../models/ApiResponse_CanvasSaved_';
 import type { ApiResponse_list_CanvasRead__ } from '../models/ApiResponse_list_CanvasRead__';
@@ -134,6 +135,34 @@ export class StudioGenerationCanvasesService {
             path: {
                 'project_id': projectId,
                 'canvas_id': canvasId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Model Capability
+     * 核实画布归属后返回所选模型的真实输入与参数能力。
+     * @returns ApiResponse_CanvasModelCapability_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasModelCapability({
+        projectId,
+        canvasId,
+        modelId,
+    }: {
+        projectId: string,
+        canvasId: string,
+        modelId: string,
+    }): CancelablePromise<ApiResponse_CanvasModelCapability_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/models/{model_id}/capability',
+            path: {
+                'project_id': projectId,
+                'canvas_id': canvasId,
+                'model_id': modelId,
             },
             errors: {
                 422: `Validation Error`,
