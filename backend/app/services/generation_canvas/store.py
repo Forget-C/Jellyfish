@@ -87,6 +87,23 @@ class CanvasStore:
         occupied = list(await self.db.scalars(select(CanvasScopeOccupancy.card_id).where(CanvasScopeOccupancy.canvas_id == canvas_id)))
         if any(card_id not in seen for card_id in occupied):
             raise diagnostic("RUN_SCOPE_BUSY", "活动模型卡不可删除", {"canvas_id": canvas_id}, status=409)
+        # Provenance cannot be removed or rewritten by edits to independent content.
+        previous_cards = {card['id']: card for card in canvas.document.get('cards', [])}
+        for card in document.cards:
+            origin = getattr(card, 'origin', None)
+            previous = previous_cards.get(card.id)
+            if previous and previous.get('origin') != (origin.model_dump() if origin else None):
+                raise diagnostic('IMMUTABLE_ORIGIN', '已保存内容的历史来源不可修改', {'card_id': card.id, 'path': ['origin']})
+            if origin and not previous:
+                from app.services.generation_canvas.runtime import CanvasRuntime
+                if origin.canvas_id != canvas_id:
+                    raise diagnostic('INVALID_ORIGIN', '历史来源必须属于当前画布', {'card_id': card.id})
+                node = await CanvasRuntime(self.db, self.project_id).output_node(canvas_id, origin.run_id, origin.node_id, origin.position)
+                output = node.outputs[origin.position]
+                if origin.incomplete != (node.status != 'succeeded') or card.type != 'content.' + output['modality'] or (
+                    output['modality'] == 'text' and card.text != output.get('text')) or (
+                    output['modality'] != 'text' and card.file_id != output.get('file_id')):
+                    raise diagnostic('INVALID_ORIGIN', '另存内容须与固定成果及完成状态一致', {'card_id': card.id})
         validate_graph(document)
         # 最终文档中的实际引用决定保护；同一次保存清理引用即可断线或删来源。
         from app.services.generation_canvas.compiler import prompt_references

@@ -197,6 +197,53 @@ class CanvasRuntime:
         await self.db.flush()
         return response
 
+    async def content(self, canvas_id: str, run_id: str, node_id: str, position: int):
+        """返回一次明确另存的独立内容；文档仍通过普通 CAS 队列保存。"""
+        from app.schemas.generation_canvas import CanvasContentOrigin, TextContentCard
+        node = await self.output_node(canvas_id, run_id, node_id, position)
+        output = node.outputs[position]
+        if output['modality'] != 'text':
+            raise diagnostic('UNSUPPORTED_OUTPUT', '此成果尚不支持另存内容卡', {'node_id': node_id}, blocks=['save'])
+        return TextContentCard(id=uuid4().hex, text=output['text'], origin=CanvasContentOrigin(
+            canvas_id=canvas_id, run_id=run_id, node_id=node_id, position=position, incomplete=node.status != 'succeeded'))
+
+    async def output_node(self, canvas_id: str, run_id: str, node_id: str, position: int):
+        """按项目和画布校验历史输出；运行中内容不伪装成固定成果。"""
+        await CanvasStore(self.db, self.project_id).get(canvas_id)
+        node = await self.db.scalar(select(CanvasRunNode).where(CanvasRunNode.id == node_id,
+            CanvasRunNode.canvas_id == canvas_id, CanvasRunNode.run_id == run_id))
+        if node is None or node.status not in TERMINAL or position < 0 or position >= len(node.outputs):
+            raise diagnostic('OUTPUT_NOT_AVAILABLE', '历史成果不存在或尚未完成', {'node_id': node_id, 'position': position}, status=422)
+        return node
+
+    async def cancel(self, canvas_id: str, run_id: str, node_id: str | None = None) -> CanvasRunRead:
+        """明确取消范围；先确定性锁住全部既有 Task，再触发任何事件写入。
+
+        接收取消意图不释放占用；TaskService 的真实终态仍是唯一裁决。
+        """
+        from app.models.task import Task
+        from app.services.task_service import TaskService
+        await CanvasStore(self.db, self.project_id).get(canvas_id)
+        run = await self.db.scalar(select(CanvasRun).where(CanvasRun.id == run_id, CanvasRun.canvas_id == canvas_id))
+        if run is None:
+            raise diagnostic('RUN_NOT_FOUND', '运行不存在', {'run_id': run_id}, status=404, blocks=['cancel'])
+        nodes = list(await self.db.scalars(select(CanvasRunNode).where(CanvasRunNode.run_id == run_id)))
+        targets = [node for node in nodes if node_id is None or node.id == node_id]
+        if not targets:
+            raise diagnostic('NODE_NOT_FOUND', '运行节点不存在', {'run_id': run_id, 'node_id': node_id}, status=404, blocks=['cancel'])
+        task_ids = sorted(node.task_id for node in targets if node.task_id)
+        # Do not acquire document/head locks before existing Tasks. Future DAG
+        # cancellation can safely reuse this order for several running branches.
+        for task_id in task_ids:
+            await self.db.scalar(select(Task).where(Task.id == task_id).with_for_update().execution_options(populate_existing=True))
+        for task_id in task_ids:
+            await TaskService(self.db).request_cancel(task_id, reason='画布运行取消')
+        await self.db.refresh(run)
+        for node in nodes:
+            await self.db.refresh(node)
+        return CanvasRunRead(id=run.id, canvas_id=canvas_id, lifecycle=run.lifecycle,
+                             nodes=[CanvasNodeRead.model_validate(node) for node in nodes])
+
     async def snapshot(self, canvas_id: str) -> CanvasSnapshot:
         """先锁事件头再读事实，调用方必须立即提交，不把事务留给 SSE 生命周期。"""
         head = await event_head(self.db, canvas_id)
@@ -220,6 +267,8 @@ async def sync_task_fact(db: AsyncSession, task, *, delta: str | None = None):
     if node.status in TERMINAL:
         return
     node.status, node.stage, node.progress = task.status, task.stage, task.progress
+    if task.cancel_requested_at is not None and node.status not in TERMINAL:
+        node.stage = 'cancelling'
     node.error_code, node.error_message = task.error_code, task.error_message
     if delta:
         node.text += delta
