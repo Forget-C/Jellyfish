@@ -13,12 +13,15 @@ import { cardTitles, connect, connectionReason, disconnect, inputPorts, outputPo
 import type { GenerationCard, GenerationEdge } from './graphRules'
 import './generationCanvas.css'
 
+const emptyCards: NonNullable<CanvasDocument['cards']> = []
+const emptyGroups: NonNullable<CanvasDocument['groups']> = []
+
 const arrange: GraphArrange = (nodes, _sizes, _width, _anchor, retained = {}) => Object.fromEntries(nodes.map((node, index) =>
   [node.id, retained[node.id] || { x: index % 3 * 440, y: Math.floor(index / 3) * 560 }]))
 
 /** 独立画布编辑适配：候选关系与文档持久化，几何沿用公共布局缓存。 */
 export function GenerationCanvasGraph({ document, onChange, readonly = false, runtime }: { document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string, kind?: 'single' | 'target' | 'selection', cardIds?: string[]) => void } }) {
-  const cards = document.cards || [], edges = document.edges || [], groups = document.groups || []
+  const cards = document.cards || emptyCards, edges = document.edges || [], groups = document.groups || emptyGroups
   const [selected, setSelected] = useState<string[]>([])
   const [reason, setReason] = useState('')
   const [selecting, setSelecting] = useState(false)
@@ -32,11 +35,12 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false, ru
   const [drag, setDrag] = useState<{ card: string; port: string; x: number; y: number }>()
   const latest = useRef(document); latest.current = document
   const container = useRef<HTMLDivElement>(null)
-  const hidden = new Set(groups.filter(group => group.collapsed).flatMap(group => group.card_ids || []))
-  const hiddenIdentity = [...hidden].join('|')
+  const hidden = useMemo(() => new Set(groups.filter(group => group.collapsed).flatMap(group => group.card_ids || [])), [groups])
+  const cardIdentity = cards.map(card => card.id).join('|')
+  const groupIdentity = groups.map(group => `${group.id}:${group.collapsed}`).join('|')
   // 折叠成员在新浏览器没有本地测量；保留几何占位，不能让整个布局永远等待隐藏 DOM。
-  const layoutMeasurements = useMemo(() => ({ ...Object.fromEntries([...hidden].map(id => [id, { width: 400, height: 350 }])), ...measured }), [measured, hiddenIdentity])
-  const nodes = useMemo(() => cards.map(card => ({ id: card.id })), [cards.map(card => card.id).join('|')])
+  const layoutMeasurements = useMemo(() => ({ ...Object.fromEntries([...hidden].map(id => [id, { width: 400, height: 350 }])), ...measured }), [measured, hidden])
+  const nodes = useMemo(() => cards.map(card => ({ id: card.id })), [cards])
   const layout = useGraphLayout({ storageKey: `jellyfish:generation-layout:${document.project_id}:${document.id}`, viewId: 'canvas',
     initialTop: 104, anchorId: cards[0]?.id || '', validIds: [...cards.map(card => card.id), ...groups.map(group => group.id)], arrange,
     onStorageError: setStorageError }, nodes, layoutMeasurements, container.current?.clientWidth || 1200)
@@ -58,7 +62,7 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false, ru
       }).catch(() => { if (active) setCapabilityErrors(previous => ({ ...previous, [modelId]: '模型能力读取失败，原配置和连接已保留' })) })
     }
     return () => { active = false }
-  }, [document.id, modelIds])
+  }, [document.id, document.project_id, modelIds])
   useEffect(() => {
     const root = container.current
     if (!root) return
@@ -73,7 +77,7 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false, ru
     }))
     root.querySelectorAll('[data-card-id]').forEach(card => observer.observe(card))
     return () => observer.disconnect()
-  }, [cards.map(card => card.id).join('|'), groups.map(group => `${group.id}:${group.collapsed}`).join('|')])
+  }, [cardIdentity, groupIdentity])
   const edit = (next: CanvasDocument) => { if (!readonly) onChange(next) }
   const updateCard = (next: GenerationCard) => edit({ ...latest.current, cards: latest.current.cards?.map(card => card.id === next.id ? next : card) })
   const showProtection = (protection: NonNullable<ReturnType<typeof referenceProtection>>) => {

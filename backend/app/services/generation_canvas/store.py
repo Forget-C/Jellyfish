@@ -181,7 +181,7 @@ class CanvasStore:
         return result
 
     async def delete(self, canvas_id: str) -> None:
-        """当前切片尚无运行；先删回执再删除文档，适配 SQLite 与 MySQL 外键。"""
+        """删除前核实真实占用；历史、引用与文档在调用方事务内一起释放。"""
         canvas = await self.get(canvas_id, lock=True)
         from app.models.generation_canvas import CanvasScopeOccupancy
         if await self.db.scalar(select(CanvasScopeOccupancy.node_id).where(CanvasScopeOccupancy.canvas_id == canvas_id).limit(1)):

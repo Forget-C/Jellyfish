@@ -82,7 +82,7 @@ async def list_files_api(
 async def upload_file_api(
     file: UploadFile = File(..., description="要上传的二进制文件"),
     name: str | None = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     project_id: str | None = Form(None, description="可选：写入 file_usages 的项目 ID"),
     chapter_id: str | None = Form(None),
 
@@ -171,7 +171,7 @@ async def delete_file_api(
     operation_id="release_upload_retention", summary="显式清理画布上传保留关系",
 )
 async def release_upload_retention_api(
-    file_id: str, project_id: str = Query(...), db: AsyncSession = Depends(get_db),
+    file_id: str, project_id: str = Query(...), db: AsyncSession = Depends(get_db, scope="function"),
 ) -> ApiResponse[None]:
     """仅清理指定项目的上传保留；有其他使用者时拒绝，不删除文件字节。"""
     await release_upload_retention(db, file_id=file_id, project_id=project_id)

@@ -73,7 +73,7 @@ export function useGenerationCanvasRuntime(projectId: string, canvasId: string |
       },
     })
     return () => { stream.close(); if (s === state.current) state.current = { ...s, scope: '' } }
-  }, [scope])
+  }, [scope, canvasId, key, projectId])
   const invalidate = () => { state.current.generation++; setPreview(undefined) }
   const precheck = async (cardId: string, kind: 'single' | 'target' | 'selection' = 'single', cardIds?: string[]) => {
     const s = state.current, generation = s.generation
