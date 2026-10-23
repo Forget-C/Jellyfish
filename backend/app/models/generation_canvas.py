@@ -43,13 +43,14 @@ class CanvasRun(Base, TimestampMixin):
 
 
 class CanvasRunNode(Base):
-    """固定依据及累计成果；秘密路由只保存在 Task 私有输入中。"""
+    """固定依据及累计成果；秘密路由保存在服务端私有快照与 Task 输入中。"""
     __tablename__ = 'generation_canvas_run_nodes'
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     run_id: Mapped[str] = mapped_column(ForeignKey('generation_canvas_runs.id', ondelete='CASCADE'), index=True)
     canvas_id: Mapped[str] = mapped_column(ForeignKey('generation_canvases.id', ondelete='CASCADE'), index=True)
     card_id: Mapped[str] = mapped_column(String(64), nullable=False)
     task_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    execution_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default='queued')
     stage: Mapped[str] = mapped_column(String(64), nullable=False, default='queued')
     progress: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -97,6 +98,7 @@ class CanvasPreview(Base):
     token: Mapped[str] = mapped_column(String(64), primary_key=True)
     canvas_id: Mapped[str] = mapped_column(ForeignKey('generation_canvases.id', ondelete='CASCADE'), index=True)
     card_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, default='single')
     revision: Mapped[int] = mapped_column(Integer, nullable=False)
     basis_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     expires_at: Mapped[Any] = mapped_column(DateTime, nullable=False)

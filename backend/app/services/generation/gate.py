@@ -41,10 +41,16 @@ class GenerationEntityGate:
     async def validate(self, db: AsyncSession, command: GenerationCommand) -> ResolvedGenerationSnapshot:
         """将可验证的提交命令冻结为不含 ORM/凭据的执行快照。"""
         await self._validate_target(db, command)
-        model = await self._resolve_model(db, command)
-        await self._validate_media(db, command.request.media)
         frozen = None
         if command.target.kind == GenerationTargetKind.canvas_node:
+            from app.models.generation_canvas import CanvasRunNode
+            node = await db.get(CanvasRunNode, command.target.entity_id)
+            private = node.execution_snapshot or {}
+            if private.get('execution_config'):
+                frozen = FrozenGenerationConfig.model_validate(private['execution_config'])
+        model = None if frozen else await self._resolve_model(db, command)
+        await self._validate_media(db, command.request.media)
+        if frozen is None and command.target.kind == GenerationTargetKind.canvas_node:
             from app.services.llm.provider_resolver import resolve_provider_config_from_provider
             provider = await db.get(Provider, model.provider_id)
             cfg = resolve_provider_config_from_provider(provider=provider, category=model.category)
@@ -52,7 +58,7 @@ class GenerationEntityGate:
                 provider_key=cfg.provider_key, api_key=cfg.api_key, base_url=cfg.base_url)
         return ResolvedGenerationSnapshot(
             execution_config=frozen,
-            model_id=model.id,
+            model_id=command.request.model_id if frozen else model.id,
             prompt_revision_id=command.target.entity_id if command.target.kind == GenerationTargetKind.directing_unit else None,
             canonical_target=command.target,
             expected_version_id=await self._target_version(db, command),

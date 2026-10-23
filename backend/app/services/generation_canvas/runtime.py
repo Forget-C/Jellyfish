@@ -6,6 +6,7 @@
 import hashlib
 import json
 from datetime import timedelta
+from types import SimpleNamespace
 from uuid import uuid4
 from fastapi import HTTPException
 from sqlalchemy import delete, select
@@ -68,7 +69,7 @@ class CanvasRuntime:
     def __init__(self, db: AsyncSession, project_id: str):
         self.db, self.project_id = db, project_id
 
-    async def _basis(self, canvas, card_id, outputs, *, lock_config=False):
+    async def _basis(self, canvas, card_id, outputs, *, lock_config=False, admission=None):
         document = CanvasDocument.model_validate(canvas.document)
         card = next((card for card in document.cards if card.id == card_id), None)
         if not isinstance(card, ModelCard):
@@ -78,7 +79,14 @@ class CanvasRuntime:
         issues = []
         if card.type != 'model.text':
             issues.append(CanvasDiagnostic(code='UNSUPPORTED_OPERATION', message='此入口当前支持文本模型', target={'card_id': card_id}, blocks=['run']))
-        if card.model_id:
+        if admission:
+            frozen = admission['execution_config']
+            model = SimpleNamespace(id=card.model_id, name=frozen['model_name'], params=frozen['model_params'])
+            provider = SimpleNamespace(id=frozen['provider_id'])
+            config = SimpleNamespace(**{key: frozen[key] for key in ('provider_key', 'api_key', 'base_url')})
+            from app.schemas.generation_canvas import CanvasModelCapability
+            cap = CanvasModelCapability.model_validate(admission['capability'])
+        elif card.model_id:
             try:
                 model = await self.db.get(Model, card.model_id, with_for_update=lock_config, populate_existing=True)
                 if model is None or model.category != ModelCategoryKey.text:
@@ -142,23 +150,21 @@ class CanvasRuntime:
     async def precheck(self, canvas_id: str, command: CanvasPrecheckRequest) -> CanvasPrecheck:
         """预检不占用节点，令牌绑定当前修订和实际使用依据。"""
         canvas = await CanvasStore(self.db, self.project_id).get(canvas_id)
-        outputs = await self.current_outputs(canvas)
-        compiled, basis, fingerprint, _ = await self._basis(canvas, command.card_id, outputs)
-        token = uuid4().hex if compiled.can_run else None
+        from app.services.generation_canvas.planner import plan
+        prepared = await plan(self, canvas, command)
+        token = uuid4().hex if prepared['can_run'] else None
         if token:
-            self.db.add(CanvasPreview(token=token, canvas_id=canvas_id, card_id=command.card_id,
-                revision=canvas.revision, basis_hash=fingerprint, expires_at=utcnow() + timedelta(minutes=10)))
+            self.db.add(CanvasPreview(token=token, canvas_id=canvas_id, card_id=command.card_id, kind=command.kind,
+                revision=canvas.revision, basis_hash=prepared['hash'], expires_at=utcnow() + timedelta(minutes=10)))
             await self.db.flush()
-        return CanvasPrecheck(revision=canvas.revision, card_id=command.card_id, execution_nodes=[command.card_id],
-            reused_results=sorted({item.result_set_id for item in compiled.used if item.result_set_id}),
-            input=compiled, model=basis['model'], diagnostics=compiled.diagnostics, can_run=compiled.can_run, preview_token=token)
+        target = prepared['nodes'][command.card_id]
+        return CanvasPrecheck(revision=canvas.revision, card_id=command.card_id, execution_nodes=list(prepared['nodes']),
+            reused_results=prepared['reused'], input=target['compiled'], model=target['basis']['model'],
+            diagnostics=prepared['diagnostics'], can_run=prepared['can_run'], preview_token=token)
 
     async def submit(self, canvas_id: str, command: CanvasRunSubmit) -> dict:
-        """回执优先；范围占用、Task、固定依据和事件在同一事务受理。"""
-        from app.core.contracts.generation import (GenerationCommand, GenerationTarget, GenerationSubmitRequest)
-        from app.core.contracts.text_generation import TextChatInput, TextChatMessage
-        from app.services.generation.gate import GenerationEntityGate
-        from app.services.generation.submission.submitter import GenerationSubmitter
+        """原子固定全部节点；等待输入只能来自本轮固定生产者。"""
+        from app.services.generation_canvas.planner import plan, start_node
         canvas = await CanvasStore(self.db, self.project_id).get(canvas_id, lock=True)
         request_hash = digest(command.model_dump(exclude={'request_id'}))
         receipt = await self.db.get(CanvasRunReceipt, (canvas_id, command.request_id))
@@ -169,30 +175,38 @@ class CanvasRuntime:
         preview = await self.db.get(CanvasPreview, command.preview_token)
         if preview is None or preview.canvas_id != canvas_id or preview.revision != canvas.revision or preview.expires_at <= utcnow():
             raise diagnostic('PREVIEW_STALE', '执行预检已过期，请重新预检', {'canvas_id': canvas_id}, status=409, blocks=['run'])
-        outputs = await self.current_outputs(canvas)
-        compiled, basis, fingerprint, _ = await self._basis(canvas, preview.card_id, outputs, lock_config=True)
-        if not compiled.can_run or fingerprint != preview.basis_hash:
+        prepared = await plan(self, canvas, CanvasPrecheckRequest(card_id=preview.card_id, kind=preview.kind), lock_config=True)
+        if not prepared['can_run'] or prepared['hash'] != preview.basis_hash:
             raise diagnostic('PREVIEW_STALE', '实际输入或有效模型配置已变，请重新预检', {'card_id': preview.card_id}, status=409, blocks=['run'])
-        if await self.db.get(CanvasScopeOccupancy, (canvas_id, preview.card_id)):
-            raise diagnostic('RUN_SCOPE_BUSY', '模型卡仍在执行中', {'card_id': preview.card_id}, status=409, blocks=['run'])
-        run = CanvasRun(id=uuid4().hex, canvas_id=canvas_id, revision=canvas.revision, scope=[preview.card_id])
+        for card_id in prepared['nodes']:
+            if await self.db.get(CanvasScopeOccupancy, (canvas_id, card_id)):
+                raise diagnostic('RUN_SCOPE_BUSY', '模型卡仍在执行中', {'card_id': card_id}, status=409, blocks=['run'])
+        run = CanvasRun(id=uuid4().hex, canvas_id=canvas_id, revision=canvas.revision, scope=list(prepared['nodes']))
         self.db.add(run)
         await self.db.flush()
-        node = CanvasRunNode(id=uuid4().hex, run_id=run.id, canvas_id=canvas_id, card_id=preview.card_id,
-                             basis=basis, basis_hash=fingerprint)
-        self.db.add(node)
-        await self.db.flush()
-        self.db.add(CanvasScopeOccupancy(canvas_id=canvas_id, card_id=preview.card_id, node_id=node.id))
-        generation = GenerationCommand(modality='text', operation='text_chat', delivery='async_polling',
-            target=GenerationTarget(kind='canvas_node', entity_id=node.id),
-            request=GenerationSubmitRequest(model_id=basis['model']['id'], operation_input=TextChatInput(
-                messages=[TextChatMessage(role='user', content=compiled.text, sequence=1)])))
-        accepted = await GenerationSubmitter(entity_gate=GenerationEntityGate()).submit_async(self.db, generation)
-        node.task_id = accepted.task_id
-        await self.db.flush()
+        nodes = []
+        from app.services.studio.file_usages import upsert_file_usage
+        for card_id, item in prepared['nodes'].items():
+            private = item['private']
+            private['dependencies'] = item['dependencies']
+            node = CanvasRunNode(id=uuid4().hex, run_id=run.id, canvas_id=canvas_id, card_id=card_id,
+                status='waiting', stage='waiting', basis=item['basis'], basis_hash=item['hash'], execution_snapshot=private)
+            self.db.add(node)
+            await self.db.flush()
+            self.db.add(CanvasScopeOccupancy(canvas_id=canvas_id, card_id=card_id, node_id=node.id))
+            # Protect every concrete known input at admission, before a downstream Task exists.
+            for media in item['compiled'].media:
+                await upsert_file_usage(self.db, file_id=media.file_id, project_id=self.project_id,
+                    chapter_id=None, usage_kind='canvas_run', source_ref=f'{canvas_id}:{node.id}')
+            nodes.append(node)
+        for node in nodes:
+            if not node.execution_snapshot['dependencies']:
+                await start_node(self.db, node)
         head = await event_head(self.db, canvas_id)
-        await append_event(self.db, head, 'node.updated', node=node, payload={'node': CanvasNodeRead.model_validate(node).model_dump()})
-        response = {'request_id': command.request_id, 'canvas_id': canvas_id, 'run_id': run.id, 'task_ids': [accepted.task_id]}
+        for node in nodes:
+            await append_event(self.db, head, 'node.updated', node=node, payload={'node': CanvasNodeRead.model_validate(node).model_dump()})
+        response = {'request_id': command.request_id, 'canvas_id': canvas_id, 'run_id': run.id,
+                    'task_ids': [node.task_id for node in nodes if node.task_id]}
         self.db.add(CanvasRunReceipt(canvas_id=canvas_id, request_id=command.request_id, request_hash=request_hash, response=response))
         await self.db.flush()
         return response
@@ -236,8 +250,18 @@ class CanvasRuntime:
         # cancellation can safely reuse this order for several running branches.
         for task_id in task_ids:
             await self.db.scalar(select(Task).where(Task.id == task_id).with_for_update().execution_options(populate_existing=True))
+        head = await event_head(self.db, canvas_id)
+        from app.services.generation_canvas.planner import stop_waiting, advance
+        for node in targets:
+            if node.status == 'waiting':
+                await stop_waiting(self.db, node, head, 'cancelled', 'RUN_CANCELLED', '画布运行取消')
+        if node_id is None:
+            for node in nodes:
+                if node.status == 'waiting':
+                    await stop_waiting(self.db, node, head, 'blocked', 'RUN_CANCELLED', '画布运行取消')
         for task_id in task_ids:
             await TaskService(self.db).request_cancel(task_id, reason='画布运行取消')
+        await advance(self.db, run_id, head)
         await self.db.refresh(run)
         for node in nodes:
             await self.db.refresh(node)
@@ -308,11 +332,8 @@ async def sync_task_fact(db: AsyncSession, task, *, delta: str | None = None):
         payload.update(delta=delta, position=0)
     await append_event(db, head, 'node.finished' if terminal else 'text.delta' if delta else 'node.updated', node=node, payload=payload)
     if terminal:
-        remaining = await db.scalar(select(CanvasRunNode.id).where(CanvasRunNode.run_id == node.run_id, CanvasRunNode.status.not_in(TERMINAL)).limit(1))
-        if remaining is None:
-            run = await db.get(CanvasRun, node.run_id)
-            run.lifecycle = 'finished'
-            await append_event(db, head, 'run.finished', run_id=run.id, payload={'run_id': run.id})
+        from app.services.generation_canvas.planner import advance
+        await advance(db, node.run_id, head, interrupted=task.error_code in ('execution_interrupted', 'submission_interrupted'))
 
 
 async def ensure_project_idle(db: AsyncSession, project_id: str) -> None:
@@ -326,6 +347,8 @@ async def ensure_project_idle(db: AsyncSession, project_id: str) -> None:
 
 async def delete_runtime(db: AsyncSession, canvas_id: str) -> None:
     """Delete only this canvas runtime after its occupancy guard, retaining unrelated data."""
+    from app.models.studio import FileUsage
+    await db.execute(delete(FileUsage).where(FileUsage.usage_kind == 'canvas_run', FileUsage.source_ref.like(f'{canvas_id}:%')))
     for model in (CanvasCurrentOutput, CanvasRunReceipt, CanvasPreview, CanvasScopeOccupancy,
                   CanvasResultSet, CanvasRunNode, CanvasRun, CanvasEvent, CanvasEventHead):
         await db.execute(delete(model).where(model.canvas_id == canvas_id))
