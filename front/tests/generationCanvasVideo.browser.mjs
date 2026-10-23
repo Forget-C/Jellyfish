@@ -41,9 +41,11 @@ try {
     form.append('project_id', 'canvas-project'); form.append('usage_kind', 'generation_upload')
     fileIds.push((await (await fetch(`${api}/api/v1/studio/files/upload`, { method: 'POST', body: form })).json()).data.id)
   }
-  const document = { ...canvas.document, cards: [{ id: 'm', type: 'model.video', model_id: 'video-frames', prompt: { segments: [] }, config: { ratio: '16:9', seconds: 5, seed: 7 } }, ...fileIds.map((file_id, i) => ({ id: `s${i}`, type: 'content.image', file_id }))],
-    edges: fileIds.map((_, i) => ({ id: `e${i}`, source_card: `s${i}`, source_port: 'image', target_card: 'm', target_port: i ? 'key_frame' : 'first_frame' })), input_order: { m: { first_frame: ['e0'], key_frame: ['e1'] } } }
+  const document = { ...canvas.document, cards: [{ id: 'm', type: 'model.video', model_id: 'video-frames', prompt: { segments: [] }, config: { ratio: '16:9', seconds: 5, seed: 7 } }, ...fileIds.map((file_id, i) => ({ id: `s${i}`, type: 'content.image', file_id })), { id: 'text-source', type: 'content.text', text: '原文' }],
+    edges: fileIds.map((_, i) => ({ id: `e${i}`, source_card: `s${i}`, source_port: 'image', target_card: 'm', target_port: i ? 'key_frame' : 'first_frame' })), input_order: { m: { first_frame: ['e0'], key_frame: ['e1'], text: ['et'] } } }
+  document.edges.push({ id: 'et', source_card: 'text-source', source_port: 'text', target_card: 'm', target_port: 'text' })
   assert.ok((await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })).ok)
+  await page.addInitScript(id => localStorage.setItem(`jellyfish:generation-layout:canvas-project:${id}:view:canvas`, JSON.stringify({ schema: 1, transform: { x: 40, y: 104, scale: 1 }, positions: { m: { x: 0, y: 0 }, s0: { x: 900, y: 0 }, s1: { x: 1400, y: 0 }, 'text-source': { x: 1900, y: 0 } }, sizes: {} })), canvas.id)
   await page.goto(`http://127.0.0.1:4279/projects/canvas-project?tab=generation&canvas=${canvas.id}`)
   const card = page.locator('[data-card-id="m"]'), editor = card.getByRole('textbox', { name: '模型正文', exact: true })
   const preview = page.getByRole('region', { name: '运行预检', exact: true })
@@ -70,11 +72,18 @@ try {
   }
   persisted = await save()
   assert.equal(persisted.prompt.segments.filter(segment => segment.kind === 'instruction').length, 8)
+  await check()
+  await preview.getByRole('alert').filter({ hasText: 'INSTRUCTION_REFERENCE_REQUIRED' }).first().waitFor()
+  await preview.getByRole('alert').filter({ hasText: 'INSTRUCTION_PARAMETER_REQUIRED' }).first().waitFor()
   assert.deepEqual(persisted.prompt.segments.filter(segment => segment.kind === 'instruction').slice(4).map(item => item.command), instructions.map(item => item.command))
   while (await card.getByRole('button', { name: '删除指令', exact: true }).count()) await card.getByRole('button', { name: '删除指令', exact: true }).first().click()
   await editor.fill('/首帧参考 @图片1 /首帧参考 @图片2')
   await editor.press('Tab'); await check()
   await preview.getByRole('alert').filter({ hasText: 'INSTRUCTION_COUNT_EXCEEDED' }).waitFor()
+  while (await card.getByRole('button', { name: '删除指令', exact: true }).count()) await card.getByRole('button', { name: '删除指令', exact: true }).first().click()
+  await editor.fill('/首帧参考 @文本1 同行正文'); await editor.press('Tab'); await check()
+  await preview.getByRole('alert').filter({ hasText: 'INSTRUCTION_REFERENCE_TYPE' }).getByRole('button', { name: '定位问题' }).click()
+  assert.ok(await card.locator('[data-segment-id]:focus').count())
   // Actual subject modes through the public page; surrounding prose survives all cases.
   while (await card.getByRole('button', { name: '删除指令', exact: true }).count()) await card.getByRole('button', { name: '删除指令', exact: true }).first().click()
   await card.getByRole('combobox', { name: '选择模型', exact: true }).locator('..').locator('..').click()

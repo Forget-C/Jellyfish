@@ -122,18 +122,24 @@ async def test_actual_worker_video_frame_fields_and_every_poll_keep_frozen_route
     from app.task_worker import TaskWorker
     from app.services.task_service import utcnow
     from datetime import timedelta
+    clock = [utcnow()]
+    monkeypatch.setattr('app.task_worker.utcnow', lambda: clock[0])
+    monkeypatch.setattr('app.services.task_service.utcnow', lambda: clock[0])
     async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as client:
         worker = TaskWorker(runtime.sessions, client=client)
         await worker.tick()
         await asyncio.gather(*worker.jobs.values())
+        await asyncio.sleep(0)
         async with runtime.sessions.begin() as db:
             selected = await db.get(Provider, runtime.provider_id)
             selected.name, selected.base_url, selected.api_key = 'openai', 'https://changed.test', 'changed'
             model = await db.get(Model, runtime.model_id)
             model.name = 'changed'
+        clock[0] += timedelta(seconds=1)
         await worker.tick()
         await asyncio.gather(*worker.jobs.values())
-        monkeypatch.setattr('app.task_worker.utcnow', lambda: utcnow() + timedelta(seconds=10))
+        await asyncio.sleep(0)
+        clock[0] += timedelta(seconds=10)
         await worker.tick()
         await asyncio.gather(*worker.jobs.values())
         worker.text_pool.shutdown(wait=False)
