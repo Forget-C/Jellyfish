@@ -39,3 +39,4 @@ Blocked by: 01
 - 2026-10-23：剩余布局验收由并行 04 的真实 GenerationCanvasGraph 使用 useGraphLayout 完成：位置/尺寸/视角重开保留、内容刷新和浮层不重置、布局变化无业务 PUT。未提前勾选该项；最终集成后补证据。
 
 - 2026-10-23：04 已在真实 GenerationCanvasGraph 完成剩余布局验收：位置移动、原生宽高调整、视角缩放在刷新后恢复；等待超过自动保存周期仍无内容 PUT；内容输入顺序及分组编辑不重置已存布局。`generation-canvas-graph` PASS（12.9s），证据 `/private/tmp/jellyfish-generation-canvas-evidence/04/typed-graph-final`。本票全部验收已完成。
+- 2026-10-23：最终图浏览器验收再次 PASS（13.4s），额外验证无本地布局缓存的新浏览器可读取已折叠分组并排布剩余卡片；最新证据 `/private/tmp/jellyfish-generation-canvas-evidence/04/typed-graph-fresh`。
