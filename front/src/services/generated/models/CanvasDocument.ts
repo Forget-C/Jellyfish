@@ -13,4 +13,3 @@ export type CanvasDocument = {
     schema_version?: number;
     cards?: Array<TextContentCard>;
 };
-

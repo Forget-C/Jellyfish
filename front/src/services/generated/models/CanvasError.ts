@@ -9,4 +9,3 @@ import type { CanvasDiagnostic } from './CanvasDiagnostic';
 export type CanvasError = {
     detail: CanvasDiagnostic;
 };
-

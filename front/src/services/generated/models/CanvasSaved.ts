@@ -10,4 +10,3 @@ export type CanvasSaved = {
     canvas_id: string;
     revision: number;
 };
-
