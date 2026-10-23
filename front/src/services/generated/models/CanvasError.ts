@@ -24,4 +24,3 @@ export type CanvasError = {
      */
     meta?: (Record<string, any> | null);
 };
-
