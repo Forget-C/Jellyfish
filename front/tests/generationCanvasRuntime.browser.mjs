@@ -184,7 +184,7 @@ try {
   await page.getByRole('button', { name: '任务中心', exact: true }).click()
   const task = page.locator('.app-task-card').filter({ hasText: '流式文本' }).first()
   await task.getByRole('button', { name: /查看/ }).click()
-  await page.waitForURL(`**/projects/canvas-project?tab=generation&canvas=${canvas.id}`)
+  await page.waitForURL(url => url.pathname === '/projects/canvas-project' && url.searchParams.get('tab') === 'generation' && url.searchParams.get('canvas') === canvas.id && url.searchParams.has('run') && url.searchParams.has('node'))
   await card.getByRole('status').filter({ hasText: '失败 · 未完成' }).waitFor()
   console.log(JSON.stringify({ output, success: true, calls: (await control()).calls.length }))
 } catch (reason) {

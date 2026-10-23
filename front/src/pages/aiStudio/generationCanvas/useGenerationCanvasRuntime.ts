@@ -22,10 +22,13 @@ export function useGenerationCanvasRuntime(projectId: string, canvasId: string |
   const [pending, setPending] = useState<Pending>()
   const [error, setError] = useState('')
   const [storageBlocked, setStorageBlocked] = useState(false)
+  const [cancelling, setCancelling] = useState<Set<string>>(new Set())
+  const cancelRequests = useRef(new Set<string>())
   const state = useRef({ scope, generation: 0, previewGeneration: -1, checking: false, submitting: false, pending: undefined as Pending | undefined })
   useEffect(() => {
     const s = { scope, generation: 0, previewGeneration: -1, checking: false, submitting: false, pending: undefined as Pending | undefined }
     state.current = s
+    cancelRequests.current = new Set(); setCancelling(new Set())
     setSnapshot(empty()); setPreview(undefined); setChecking(undefined); setSubmitting(false); setPending(undefined); setError(''); setStorageBlocked(false); setConnection('connecting')
     if (!canvasId) return
     try {
@@ -106,8 +109,24 @@ export function useGenerationCanvasRuntime(projectId: string, canvasId: string |
       setError(s.pending ? describe(reason) : reason instanceof ApiError ? describe(reason) : '运行回执保护无法保存，未提交运行；请恢复浏览器存储后重试')
     } finally { if (s === state.current) { s.submitting = false; setSubmitting(false) } }
   }
+  const cancel = async (runId: string, nodeId?: string) => {
+    const s = state.current, id = nodeId || runId, requests = cancelRequests.current
+    if (!canvasId || s.scope !== scope || requests.has(id) || !canEdit()) return
+    requests.add(id); setCancelling(new Set(requests)); setError('')
+    try {
+      if (nodeId) await Canvases.canvasCancelNode({ projectId, canvasId, runId, nodeId })
+      else await Canvases.canvasCancelRun({ projectId, canvasId, runId })
+      // The command acknowledges intent only. The persistent stream remains the
+      // authority for status, retained text and releasing an occupied card.
+    } catch (reason) {
+      if (s === state.current) setError(reason instanceof ApiError ? describe(reason) : '取消请求结果未知，继续观察真实任务状态；可核实后再次请求取消')
+    } finally {
+      requests.delete(id)
+      if (s === state.current) setCancelling(new Set(requests))
+    }
+  }
   const nodes = snapshot.runs.flatMap(run => run.nodes)
   const latestNodes = Object.fromEntries(nodes.map(node => [node.card_id, node])) as Record<string, CanvasNodeRead>
   const busyCards = new Set(nodes.filter(activeNode).map(node => node.card_id))
-  return { snapshot, latestNodes, busyCards, connection, preview, checking, submitting, pending, error, storageBlocked, invalidate, precheck, submit }
+  return { snapshot, latestNodes, busyCards, connection, preview, checking, submitting, pending, error, storageBlocked, invalidate, precheck, submit, cancelling, cancel }
 }

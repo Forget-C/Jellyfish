@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Empty, Input, Popconfirm, Select, Space, Typography } from 'antd'
 import { useSearchParams } from 'react-router-dom'
 import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
-import type { CanvasRead } from '../../../services/generated'
+import type { CanvasRead, TextContentCard } from '../../../services/generated'
 import { useGenerationCanvasEditor } from './useGenerationCanvasEditor'
 import { GenerationCanvasGraph } from './GenerationCanvasGraph'
 import { useGenerationCanvasRuntime } from './useGenerationCanvasRuntime'
 import { RunPreview } from './RunPreview'
+import { RunHistory } from './RunHistory'
 
 /** 项目级文档编辑；运行、结果和浏览器布局有独立生命周期。 */
 export function GenerationCanvasPage({ projectId }: { projectId: string }) {
@@ -18,6 +19,8 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
   const runtime = useGenerationCanvasRuntime(projectId, canvasId, save, ownership.canEdit)
   const change: typeof edit = next => { runtime.invalidate(); edit(next) }
   const [error, setError] = useState('')
+  const scope = `${projectId}:${canvasId}`, latestScope = useRef(scope); latestScope.current = scope
+  const retainedCopies = useRef(new Map<string, TextContentCard>())
 
   const fail = (reason: unknown) => {
     const detail = reason instanceof ApiError ? reason.body?.data : undefined
@@ -26,6 +29,7 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
   const refreshList = () => Canvases.canvasList({ projectId }).then(response => setCanvases(response.data || []))
   const select = (id?: string) => setSearch(previous => {
     const next = new URLSearchParams(previous)
+    next.delete('run'); next.delete('node')
     if (id) next.set('canvas', id)
     else next.delete('canvas')
     return next
@@ -52,6 +56,25 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
     } catch (reason) { fail(reason) }
   }
 
+  const saveOutput = async (node: { id: string; run_id: string }, position: number) => {
+    if (!canvasId || !ownership.canEdit() || editor.recovery || editor.conflict) return false
+    const targetScope = scope, key = `${scope}:${node.id}:${position}`
+    let card = retainedCopies.current.get(key)
+    if (!card) {
+      const response = await Canvases.canvasOutputContent({ projectId, canvasId, runId: node.run_id, nodeId: node.id, position })
+      if (!response.data) throw new Error('missing content receipt')
+      card = response.data; retainedCopies.current.set(key, card)
+    }
+    if (latestScope.current !== targetScope || !ownership.canEdit()) return false
+    const copy = card
+    // Functional insertion preserves edits made while the historical DTO loads.
+    // Failed saves keep this same card identity for an explicit retry.
+    change(previous => ({ ...previous, cards: previous.cards?.some(item => item.id === copy.id) ? previous.cards : [...(previous.cards || []), copy] }))
+    const saved = await save()
+    if (saved) retainedCopies.current.delete(key)
+    return saved
+  }
+
   return <Space direction="vertical" size="middle" style={{ width: '100%' }}>
     <Space wrap>
       <Typography.Title level={4} style={{ margin: 0 }}>画布生成</Typography.Title>
@@ -76,6 +99,8 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
       {runtime.error && <Alert type="error" message={runtime.error} />}
       {runtime.pending && <Alert type="warning" message="运行请求结果待核实；将使用原请求身份取得回执" action={<Button loading={runtime.submitting} disabled={!ownership.editable} onClick={() => void runtime.submit()}>核实运行请求</Button>} />}
       {runtime.preview && <RunPreview preview={runtime.preview} submitting={runtime.submitting} disabled={!ownership.editable || !!runtime.pending || runtime.busyCards.has(runtime.preview.card_id)} onSubmit={() => void runtime.submit()} />}
+      <RunHistory key={document.id} runs={runtime.snapshot.runs} targetRun={search.get('run')} targetNode={search.get('node')}
+        disabled={!ownership.editable || !!editor.recovery || editor.conflict} onSave={saveOutput} onCancel={runtime.cancel} cancelling={runtime.cancelling} />
       <GenerationCanvasGraph key={document.id} document={document} onChange={next => change(next)} readonly={!ownership.editable || !!editor.recovery}
         runtime={{ outputs: runtime.snapshot.current_outputs, nodes: runtime.latestNodes, busyCards: runtime.busyCards, checking: runtime.checking,
           disabled: runtime.storageBlocked || !!runtime.pending || !!runtime.checking || runtime.submitting || editor.conflict, precheck: cardId => void runtime.precheck(cardId) }} />
