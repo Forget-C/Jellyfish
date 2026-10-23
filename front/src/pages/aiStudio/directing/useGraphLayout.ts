@@ -6,6 +6,7 @@ import type { CanvasPoint } from '../../../components/canvas/geometry'
 export type GraphLayoutScope = {
   storageKey: string; viewId: string; anchorId: string; validIds: string[]; validViewIds?: string[]
   initialTop?: number; identityAliases?: Record<string, string>; onInvalidTarget?: () => void
+  onStorageError?: (message: string) => void
   arrange: GraphArrange
   parseView?: (raw: string | null) => GraphView | undefined
   migrate?: (view: GraphView, nodes: GraphLayoutNode[], sizes: Record<string, GraphSize>) => { view: GraphView; undo?: GraphView } | undefined
@@ -18,9 +19,9 @@ const undoMemory = new Map<string, GraphView>()
 export const readStoredGraphView = (key: string, parse = readGraphView) => {
   try { return memory.get(key) || parse(localStorage.getItem(key)) } catch { return memory.get(key) }
 }
-const storeView = (key: string, view: GraphView) => {
+const storeView = (key: string, view: GraphView, onStorageError?: (message: string) => void) => {
   memory.set(key, view)
-  try { localStorage.setItem(key, JSON.stringify({ schema: 1, ...view })) } catch { /* 保留本次页面会话。 */ }
+  try { localStorage.setItem(key, JSON.stringify({ schema: 1, ...view })) } catch { onStorageError?.('浏览器存储不可用，布局仅在本次会话保留') }
 }
 
 /** 共用布局缓存、手动位置及整理撤销；排布与旧缓存迁移由具体画布提供。 */
@@ -65,7 +66,7 @@ export function useGraphLayout(scope: GraphLayoutScope | undefined, nodes: Graph
   }, [key, identity, validIdentity, aliasIdentity, measured, scope?.anchorId, scope?.initialTop, state.view.positions])
   useEffect(() => {
     if (state.key && state.ready) {
-      storeView(state.key, pruneGraphView(state.view, new Set(scope?.validIds), scope?.identityAliases))
+      storeView(state.key, pruneGraphView(state.view, new Set(scope?.validIds), scope?.identityAliases), scope?.onStorageError)
       if (state.undo) undoMemory.set(state.key, state.undo)
       else undoMemory.delete(state.key)
     }
@@ -82,14 +83,14 @@ export function useGraphLayout(scope: GraphLayoutScope | undefined, nodes: Graph
         try { localStorage.removeItem(item) } catch { /* 使用会话缓存。 */ }
       } else {
         const view = readStoredGraphView(item, scope.parseView)
-        if (view) storeView(item, pruneGraphView(view, valid, scope.identityAliases))
+        if (view) storeView(item, pruneGraphView(view, valid, scope.identityAliases), scope.onStorageError)
       }
     })
   }, [scope?.storageKey, validIdentity, aliasIdentity, validViews])
   useEffect(() => {
     const save = () => {
       const current = latest.current, currentScope = latestScope.current
-      if (current.key && current.ready) storeView(current.key, pruneGraphView(current.view, new Set(currentScope?.validIds), currentScope?.identityAliases))
+      if (current.key && current.ready) storeView(current.key, pruneGraphView(current.view, new Set(currentScope?.validIds), currentScope?.identityAliases), currentScope?.onStorageError)
     }
     window.addEventListener('pagehide', save)
     return () => { save(); window.removeEventListener('pagehide', save) }

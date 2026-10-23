@@ -16,4 +16,3 @@ export type CanvasDocument = {
     schema_version?: number;
     cards?: Array<(TextContentCard | ImageContentCard | VideoContentCard | AudioContentCard)>;
 };
-

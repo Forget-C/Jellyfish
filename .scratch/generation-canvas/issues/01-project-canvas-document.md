@@ -40,3 +40,4 @@ Blocked by: None
 - 契约已从本工作树 app.openapi 导出并运行 `pnpm --dir front run openapi:gen`，只保留有语义变化的生成内容。由于 8000 是用户既有服务，未停止或替换它；集成分支合入后由主代理核实该服务载入当前代码，再执行规定的 `pnpm --dir front run openapi:update`。这是剩余的集成检查，不宣称临时导出等价于已完成指定命令。
 - 本票无付费模型调用。自动保存、恢复／冲突交互与独立布局由 02 接续；媒体、图结构及活动运行删除保护按后续依赖票接续。HTTP 命令封套自身（如 request_id／expected_revision）的基本错误仍沿用 FastAPI 422；文档结构／类型／身份错误与 CAS 冲突使用 CanvasError 诊断契约。
 - 后端最终全量静态检查：`UV_CACHE_DIR=/tmp/jellyfish-uv-cache UV_PROJECT_ENVIRONMENT=/Users/extreme/Projects/github.com/jellyfish/backend/.venv uv run pylint app`：10.00/10，无诊断。`git diff --check` 通过。
+- 截图证据补充：同一 generation-canvas 用例再次通过（6.4 秒），截图使用 `animations: disabled` 完成现有页面 fadeIn 动画，避免刷新后短暂半透明画面；稳定证据 `/private/tmp/jellyfish-generation-canvas-evidence/01/browser-tyL67W/`。

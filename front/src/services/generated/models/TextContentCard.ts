@@ -11,4 +11,3 @@ export type TextContentCard = {
     type?: string;
     text?: string;
 };
-
