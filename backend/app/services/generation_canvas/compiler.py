@@ -155,6 +155,8 @@ def compile_card(document: CanvasDocument, card_id: str, *,
                 used = (edge.source_card, edge.source_port, edge.target_port) in used_ports
                 issue('UNSUPPORTED_INPUT' if used else 'UNUSED_INCOMPATIBLE_INPUT', '当前模型不支持此输入用途', '',
                       ['edges', edge.id], warning=not used)
+    if card.type == 'model.video':
+        result.video_media = video_media(document, card_id, result)
     result.can_run = not any('run' in item.blocks for item in result.diagnostics)
     return result
 

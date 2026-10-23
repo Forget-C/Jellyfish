@@ -112,7 +112,8 @@ class GenerationSubmitRequest(BaseModel):
     def require_prompt_for_prompt_operations(self) -> "GenerationSubmitRequest":
         """单提示词 operation 必须显式冻结最终提示词，聊天与 Agent 不使用伪 prompt。"""
         if isinstance(self.operation_input, (ImageGenerationOperationInput, VideoGenerationOperationInput)):
-            if not self.execution_prompt or not self.execution_prompt.strip():
+            has_video_media = isinstance(self.operation_input, VideoGenerationOperationInput) and isinstance(self.media, VideoMediaInput) and bool(self.media.frames.first or self.media.frames.last or self.media.frames.keys or self.media.subjects)
+            if not (self.execution_prompt or '').strip() and not has_video_media:
                 raise ValueError("execution_prompt is required for image and video generation")
         if self.asset_prompt_audit is not None:
             audit = self.asset_prompt_audit

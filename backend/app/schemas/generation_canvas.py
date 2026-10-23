@@ -2,6 +2,7 @@
 from typing import Any, ClassVar, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.schemas.common import ApiResponse
+from app.core.contracts.media import VideoMediaInput
 
 
 class CardDefinition(BaseModel):
@@ -271,6 +272,7 @@ class CanvasCompiledInput(BaseModel):
     text: str = ''
     used: list[CanvasResolvedOutput] = Field(default_factory=list)
     media: list[CanvasResolvedOutput] = Field(default_factory=list)
+    video_media: VideoMediaInput | None = None
     mapping: list[dict[str, Any]] = Field(default_factory=list)
     diagnostics: list[CanvasDiagnostic] = Field(default_factory=list)
     can_run: bool = True
