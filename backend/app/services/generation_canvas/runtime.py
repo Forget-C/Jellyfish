@@ -375,7 +375,11 @@ async def ensure_project_idle(db: AsyncSession, project_id: str) -> None:
 async def delete_runtime(db: AsyncSession, canvas_id: str) -> None:
     """Delete only this canvas runtime after its occupancy guard, retaining unrelated data."""
     from app.models.studio import FileUsage
-    await db.execute(delete(FileUsage).where(FileUsage.usage_kind == 'canvas_run', FileUsage.source_ref.like(f'{canvas_id}:%')))
+    canvas = await db.get(GenerationCanvas, canvas_id)
+    if canvas is not None:
+        await db.execute(delete(FileUsage).where(
+            FileUsage.project_id == canvas.project_id, FileUsage.usage_kind.in_(['canvas_run', 'canvas_history']),
+            FileUsage.source_ref.like(f'{canvas_id}:%')))
     for model in (CanvasCurrentOutput, CanvasRunReceipt, CanvasPreview, CanvasScopeOccupancy,
                   CanvasResultSet, CanvasRunNode, CanvasRun, CanvasEvent, CanvasEventHead):
         await db.execute(delete(model).where(model.canvas_id == canvas_id))
