@@ -21,4 +21,3 @@ export type ApiResponse_CanvasRead_ = {
      */
     meta?: (Record<string, any> | null);
 };
-
