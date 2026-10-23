@@ -418,3 +418,61 @@ async def test_runtime_migration_preserves_existing_canvas_observation(tmp_path)
         snapshot = await CanvasRuntime(db, 'existing-project').snapshot('existing-canvas')
         assert snapshot.cursor == 0 and snapshot.runs == [] and snapshot.current_outputs == {}
     await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_canvas_cancel_running_intent_retains_scope_until_actual_terminal(runtime):
+    from app.services.task_service import TaskService
+    accepted, _ = await accept(runtime)
+    task_id = accepted['task_ids'][0]
+    async with runtime.sessions.begin() as db:
+        await TaskService(db).claim(task_id, worker_id='cancel-test')
+        await TaskService(db).append_canvas_text(task_id, 'Partial text')
+    state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+    node = state['runs'][0]['nodes'][0]
+    response = await runtime.client.post(runtime.url + f"/runs/{accepted['run_id']}/nodes/{node['id']}/cancel")
+    assert response.status_code == 200, response.text
+    state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+    node = state['runs'][0]['nodes'][0]
+    assert node['status'] == 'running' and node['stage'] == 'cancelling'
+    assert node['basis']['input']['text'] == 'Frozen prompt'
+    preview = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'm'})).json()['data']
+    busy = await runtime.client.post(runtime.url + '/runs', json={'request_id': 'still-busy', 'preview_token': preview['preview_token']})
+    assert busy.status_code == 409
+    async with runtime.sessions.begin() as db:
+        await TaskService(db).finish(task_id, result={'text': 'late result'})
+    terminal = (await runtime.client.post(runtime.url + f"/runs/{accepted['run_id']}/cancel")).json()['data']
+    assert terminal['nodes'][0]['status'] == 'cancelled'
+    assert terminal['nodes'][0]['text'] == 'Partial text'
+    assert terminal['nodes'][0]['result_set_id'] is None
+    assert terminal['nodes'][0]['outputs'][0]['text'] == 'Partial text'
+    await accept(runtime, 'released')
+
+
+@pytest.mark.asyncio
+async def test_saved_unfinished_content_has_immutable_origin_and_independent_text(runtime):
+    from app.services.task_service import TaskService
+    accepted, _ = await accept(runtime)
+    async with runtime.sessions.begin() as db:
+        service = TaskService(db)
+        task_id = accepted['task_ids'][0]
+        await service.claim(task_id, worker_id='partial')
+        await service.append_canvas_text(task_id, 'Unfinished original')
+        await service.finish(task_id, error_code='provider_failed', error='controlled')
+    state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+    node = state['runs'][0]['nodes'][0]
+    response = await runtime.client.get(runtime.url + f"/runs/{accepted['run_id']}/nodes/{node['id']}/outputs/0/content")
+    assert response.status_code == 200, response.text
+    card = response.json()['data']
+    assert card['text'] == 'Unfinished original'
+    assert card['origin'] == {'canvas_id': runtime.canvas_id, 'run_id': accepted['run_id'], 'node_id': node['id'], 'position': 0, 'incomplete': True}
+    runtime.document['cards'].append(card)
+    assert (await runtime.client.put(runtime.url, json={'request_id': 'save-partial', 'expected_revision': 1, 'document': runtime.document})).status_code == 200
+    runtime.document['cards'][-1]['text'] = 'Independent edit'
+    assert (await runtime.client.put(runtime.url, json={'request_id': 'edit-independent', 'expected_revision': 2, 'document': runtime.document})).status_code == 200
+    runtime.document['cards'][-1]['origin']['incomplete'] = False
+    tamper = await runtime.client.put(runtime.url, json={'request_id': 'tamper', 'expected_revision': 3, 'document': runtime.document})
+    assert tamper.status_code == 422 and tamper.json()['detail']['code'] == 'IMMUTABLE_ORIGIN'
+    history = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+    assert history['runs'][0]['nodes'][0]['text'] == 'Unfinished original'
+    assert history['current_outputs'] == {}
