@@ -115,10 +115,10 @@ async def cancel_canvas_node(project_id: str, canvas_id: str, run_id: str, node_
     return success_response(await CanvasRuntime(db, project_id).cancel(canvas_id, run_id, node_id))
 
 
-from app.schemas.generation_canvas import TextContentCard
+from app.schemas.generation_canvas import TextContentCard, ImageContentCard, VideoContentCard
 
 
-@router.get('/{project_id}/{canvas_id}/runs/{run_id}/nodes/{node_id}/outputs/{position}/content', response_model=ApiResponse[TextContentCard], operation_id='canvas_output_content')
+@router.get('/{project_id}/{canvas_id}/runs/{run_id}/nodes/{node_id}/outputs/{position}/content', response_model=ApiResponse[TextContentCard | ImageContentCard | VideoContentCard], operation_id='canvas_output_content')
 async def canvas_output_content(project_id: str, canvas_id: str, run_id: str, node_id: str, position: int, db: AsyncSession = Depends(get_db)):
     """准备独立内容卡；调用方通过已有文档保存队列显式持久化。"""
     return success_response(await CanvasRuntime(db, project_id).content(canvas_id, run_id, node_id, position))
