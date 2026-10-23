@@ -73,3 +73,43 @@ async def accept(runtime, request_id='run'):
     result = await runtime.client.post(runtime.url + '/runs', json={'request_id': request_id, 'preview_token': preview['preview_token']})
     assert result.status_code == 200, result.text
     return result.json()['data'], preview
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('sources,expected', [(['three', 'three'], [b'three']), (['three', 'alias', 'three'], [b'three', b'three'])])
+async def test_actual_image_subset_uses_identity_order_and_never_replaces_literal_words(runtime, image_storage, sources, expected):
+    from app.models.studio_prompts_files_timeline import FileItem
+    from app.services.studio.file_usages import upsert_file_usage
+    await image_card(runtime, 1)
+    async with runtime.sessions.begin() as db:
+        for name in ('one', 'two', 'three'):
+            key = 'references/' + name
+            image_storage[key] = (name.encode(), 'image/png', {})
+            db.add(FileItem(id=name, name=name, type='image', storage_key=key, content_type='image/png'))
+        await db.flush()
+        for name in ('one', 'two', 'three'):
+            await upsert_file_usage(db, file_id=name, project_id=runtime.project_id, chapter_id=None, usage_kind='upload')
+    for name in ('one', 'two', 'three', 'alias'):
+        runtime.document['cards'].append({'id': name, 'type': 'content.image', 'file_id': 'three' if name == 'alias' else name})
+    runtime.document['edges'] = [{'id': name, 'source_card': name, 'source_port': 'image', 'target_card': 'image', 'target_port': 'image'} for name in ('one', 'two', 'three', 'alias')]
+    runtime.document['input_order'] = {'image': {'image': ['one', 'two', 'three', 'alias']}}
+    runtime.document['cards'][0]['prompt']['segments'] = [{'kind': 'text', 'id': 'literal', 'text': '普通图片3 [media:1] '}] + [
+        {'kind': 'reference', 'id': str(index), 'source': {'canvas_id': runtime.canvas_id, 'card_id': name, 'port_id': 'image', 'position': 0}} for index, name in enumerate(sources)]
+    assert (await runtime.client.put(runtime.url, json={'request_id': 'refs', 'expected_revision': 2, 'document': runtime.document})).status_code == 200
+    _, preview = await accept(runtime)
+    calls = []
+    def provider(request):
+        calls.append(request)
+        return httpx.Response(200, json={'data': [{'b64_json': 'eA=='}]})
+    from app.task_worker import TaskWorker
+    async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as client:
+        worker = TaskWorker(runtime.sessions, client=client)
+        await worker.tick()
+        await asyncio.gather(*worker.jobs.values())
+        worker.text_pool.shutdown(wait=False)
+    assert len(calls) == 1 and calls[0].url.path == '/v1/images/edits'
+    body = json.loads(calls[0].content)
+    assert [base64.b64decode(item['image_url'].split(',')[1]) for item in body['images']] == expected
+    assert body['prompt'] == '普通图片3 [media:1] ' + ''.join('image ' + str(1 if name == 'three' else 2) for name in sources)
+    assert preview['input']['text'] == body['prompt']
+    assert [item['token'] for item in preview['input']['media']] == (['@图片3'] if len(expected) == 1 else ['@图片3', '@图片4'])
