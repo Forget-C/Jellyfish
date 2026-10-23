@@ -69,10 +69,10 @@
 
 ## 验证边界与补充说明
 
-1. 单一组合链实际提交器/TaskWorker的文本→图片→视频，含本轮上游结果取代旧输出、unused候选不扩大依赖、真实媒体字节/用途payload与preview一致；不要只断言snapshot。
-2. 统一SSE逐事件记录/精确游标及重连，unknown保存/unknown运行保留原身份、取消真终态、部分归档/历史显式保存；可复用已通过纵切片，不必穷举全部组合，但应标明未新增场景。
-3. 原工作台/实验室浏览器回归、TaskCenter回跳及通道边界；父已完成当前MAIN的:8000核实与`openapi:update`；13如改契约再同步。
-4. 不要把“真实流程中断”表述成浏览器断线：已有interruption是TaskService真实启动中断入口（claim+interrupt_previous_workers），未kill真实进程。部分图片归档是第三下载失败，部分文本是取消；视频partial尚无专门证据。
+1. 跨模态组合链通过真实提交器/TaskWorker执行文本→图片→视频，真实素材与用途payload和preview一致；上下游失效/unused候选仍由10/11纵切片覆盖。
+2. 统一SSE、unknown保存/运行、取消真实终态与部分图片归档/历史显式保存复用已通过纵切片，并由13的40项后端回归复验。没有把每种故障都注入同一组合链。
+3. 当前场次工作台由`canvas-graph`验证；项目/资产/实验室由显式注册`legacy-labs`验证。完整旧shell脚本在当前独立场次shell的断言过时，未声称其全通过。
+4. “流程中断”证据是TaskService真实启动中断入口（claim+interrupt_previous_workers），未kill真实进程。部分图片归档是第三下载失败，部分文本是取消；视频partial尚无专门证据。
 
 ## 父任务后续确认（写稿后收到）
 
