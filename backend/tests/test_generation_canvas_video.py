@@ -54,3 +54,96 @@ def test_frame_subject_combination_and_group_limits_locate_stable_instruction():
     compiled = compile_card(doc, 'v', capability=cap)
     assert not compiled.can_run
     assert {(item.code, item.target['segment_id']) for item in compiled.diagnostics} >= {('UNSUPPORTED_REFERENCE_COMBINATION', '主体参考'), ('SUBJECT_LIMIT_EXCEEDED', '主体参考')}
+
+
+import asyncio
+import base64
+import json
+import httpx
+import pytest
+from app.models.llm import Model, Provider
+from tests.test_generation_canvas_runs import runtime  # noqa: F401
+from tests.test_generation_canvas_images import image_storage  # noqa: F401
+
+
+async def setup_video(runtime, provider='volcengine', segments=None):
+    from app.api.v1.routes.studio.files import router
+    runtime.app.include_router(router, prefix='/files')
+    files = []
+    for name, content, mime in [('a.png', b'first-image', 'image/png'), ('b.png', b'last-image', 'image/png'), ('ref.mp4', b'video-with-audio', 'video/mp4')]:
+        result = await runtime.client.post('/files/upload', files={'file': (name, content, mime)}, data={'project_id': runtime.project_id, 'usage_kind': 'canvas_upload', 'source_ref': runtime.canvas_id})
+        assert result.status_code == 201, result.text
+        files.append(result.json()['data']['id'])
+    async with runtime.sessions.begin() as db:
+        model = await db.get(Model, runtime.model_id)
+        model.category, model.name, model.params = 'video', 'viduq2-pro' if provider == 'vidu' else 'doubao-seedance', {}
+        selected = await db.get(Provider, runtime.provider_id)
+        selected.name = provider
+    doc = runtime.document
+    doc['cards'] = [{'id': source, 'type': 'content.' + kind, 'file_id': file} for source, kind, file in zip(['a', 'b', 'clip'], ['image', 'image', 'video'], files)] + [
+        {'id': 'v', 'type': 'model.video', 'model_id': runtime.model_id, 'config': {'ratio': '16:9', 'seconds': 5, 'seed': 7}, 'prompt': {'segments': segments or [instruction('首帧参考', ['a']), instruction('尾帧参考', ['b']), instruction('关键帧参考', ['b', 'a'])]}}]
+    # Rebind helper identities to the actual canvas, never use display indices.
+    for segment in doc['cards'][-1]['prompt']['segments']:
+        for reference in ([segment] if segment['kind'] == 'reference' else segment.get('references', [])):
+            reference['source']['canvas_id'] = runtime.canvas_id
+    doc['edges'] = [{'id': source, 'source_card': source, 'source_port': kind, 'target_card': 'v', 'target_port': port} for source, kind, port in [('a', 'image', 'first_frame'), ('b', 'image', 'key_frame'), ('clip', 'video', 'subject_video')]]
+    if provider == 'vidu':
+        doc['edges'] = [{'id': source, 'source_card': source, 'source_port': kind, 'target_card': 'v', 'target_port': port} for source, kind, port in [('a', 'image', 'subject_image'), ('b', 'image', 'subject_image'), ('clip', 'video', 'subject_video')]]
+        doc['input_order'] = {'v': {'subject_image': ['b', 'a'], 'subject_video': ['clip']}}
+    else:
+        doc['edges'] = doc['edges'][:2]
+        doc['input_order'] = {'v': {'first_frame': ['a'], 'key_frame': ['b']}}
+    response = await runtime.client.put(runtime.url, json={'request_id': 'video', 'expected_revision': 1, 'document': doc})
+    assert response.status_code == 200, response.text
+    preview = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'v'})).json()['data']
+    assert preview['can_run'], preview
+    accepted = await runtime.client.post(runtime.url + '/runs', json={'request_id': 'video-run', 'preview_token': preview['preview_token']})
+    assert accepted.status_code == 200, accepted.text
+    return accepted.json()['data'], preview
+
+
+@pytest.mark.asyncio
+async def test_actual_worker_video_frame_fields_and_every_poll_keep_frozen_route(runtime, image_storage, monkeypatch):
+    accepted, preview = await setup_video(runtime)
+    assert preview['input']['video_media']['frames']['keys'][0]['file_id'] != preview['input']['video_media']['frames']['first']['file_id']
+    calls = []
+    video_bytes = b'complete-video-original-audio-track'
+    def provider(request):
+        calls.append(request)
+        if request.method == 'POST':
+            return httpx.Response(200, json={'id': 'remote-video'})
+        if request.url.host == 'media.test':
+            return httpx.Response(200, content=video_bytes, headers={'Content-Type': 'video/mp4'})
+        polls = sum(call.method == 'GET' and call.url.host == 'frozen.test' for call in calls)
+        return httpx.Response(200, json={'status': 'running'} if polls == 1 else {'status': 'succeeded', 'content': {'video_url': 'https://media.test/video.mp4'}})
+    from app.task_worker import TaskWorker
+    from app.services.task_service import utcnow
+    from datetime import timedelta
+    async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as client:
+        worker = TaskWorker(runtime.sessions, client=client)
+        await worker.tick()
+        await asyncio.gather(*worker.jobs.values())
+        async with runtime.sessions.begin() as db:
+            selected = await db.get(Provider, runtime.provider_id)
+            selected.name, selected.base_url, selected.api_key = 'openai', 'https://changed.test', 'changed'
+            model = await db.get(Model, runtime.model_id)
+            model.name = 'changed'
+        await worker.tick()
+        await asyncio.gather(*worker.jobs.values())
+        monkeypatch.setattr('app.task_worker.utcnow', lambda: utcnow() + timedelta(seconds=10))
+        await worker.tick()
+        await asyncio.gather(*worker.jobs.values())
+        worker.text_pool.shutdown(wait=False)
+    assert len(calls) == 4
+    assert [str(call.url) for call in calls[:3]] == ['https://frozen.test/v1/contents/generations/tasks', 'https://frozen.test/v1/contents/generations/tasks/remote-video', 'https://frozen.test/v1/contents/generations/tasks/remote-video']
+    assert [call.headers['authorization'] for call in calls[:3]] == ['Bearer private-secret'] * 3
+    body = json.loads(calls[0].content)
+    assert body == {'model': 'doubao-seedance', 'ratio': '16:9', 'duration': 5, 'seed': 7, 'content': [
+        {'type': 'image_url', 'role': role, 'image_url': {'url': 'data:image/png;base64,' + base64.b64encode(value).decode()}} for role, value in [('first_frame', b'first-image'), ('last_frame', b'last-image'), ('key_frame', b'last-image'), ('key_frame', b'first-image')]]}
+    assert image_storage['generated/' + accepted['task_ids'][0] + '/0'][0] == video_bytes
+    state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+    node = state['runs'][0]['nodes'][0]
+    assert node['status'] == 'succeeded' and node['result_set_id'] and not node['current_output_updated']
+    saved = await runtime.client.get(runtime.url + f"/runs/{accepted['run_id']}/nodes/{node['id']}/outputs/0/content")
+    assert saved.status_code == 200, saved.text
+    assert saved.json()['data']['type'] == 'content.video'

@@ -18,7 +18,7 @@ def image_storage(monkeypatch):
             raise ClientError({'Error': {'Code': 'NoSuchKey'}}, 'HeadObject')
         content, mime, extra = objects[key]
         return storage.StoredFileInfo(key=key, url='unused', size=len(content), content_type=mime, extra=extra)
-    async def upload(*, key, data, content_type, extra_args):
+    async def upload(*, key, data, content_type, extra_args=None):
         objects[key] = (data.read(), content_type, extra_args)
     async def download(*, key):
         return objects[key][0]

@@ -68,7 +68,7 @@ export function PromptEditor({ document, card, value, onChange, disabled, modelO
   }
   const read = () => root.current ? readNodes(root.current) : { segments: [] }
   const publish = (next: PromptDocument, redraw = false) => { local.current = next; last.current = JSON.stringify(next); onChange(next); if (redraw) draw(next) }
-  const confirm = () => {
+  const confirm = (finalize = false) => {
     if (composing.current) return false
     const selection = window.getSelection()
     let caret: number | undefined
@@ -91,7 +91,7 @@ export function PromptEditor({ document, card, value, onChange, disabled, modelO
     for (let index = 0; index < segments.length; index++) {
       const segment = segments[index]
       const match = segment.kind === 'text' ? (segment.text || '').match(/(?<!\\)\/(首帧参考|尾帧参考|关键帧参考|主体参考)(?:\s+"([^"]*)")?\s*$/) : null
-      if (!match) { structured.push(segment); continue }
+      if (!match || !finalize && !segments.slice(index + 1).some((next, offset, tail) => next.kind === 'reference' && tail.slice(0, offset).every(item => item.kind === 'text' && /^\s+$/.test(item.text || '')))) { structured.push(segment); continue }
       const text = (segment as PromptText).text || '', prefix = text.slice(0, match.index)
       if (prefix) structured.push({ ...segment as PromptText, text: prefix })
       const instruction: PromptInstruction = { kind: 'instruction', id: crypto.randomUUID(), command: match[1], parameters: match[2] !== undefined ? { name: match[2] } : {}, references: [] }
@@ -130,19 +130,19 @@ export function PromptEditor({ document, card, value, onChange, disabled, modelO
   }
   return <>
     <Space wrap>
-      {card.type === 'model.video' && <Select<string> aria-label="系统指令" placeholder="添加系统指令" value={undefined} options={['首帧参考', '尾帧参考', '关键帧参考', '主体参考'].map(command => ({ value: command, label: `/${command}` }))}
+      {card.type === 'model.video' && <Select<string> disabled={disabled} aria-label="系统指令" placeholder="添加系统指令" value={undefined} options={['首帧参考', '尾帧参考', '关键帧参考', '主体参考'].map(command => ({ value: command, label: `/${command}` }))}
         onChange={command => { if (command) publish({ segments: [...(read().segments || []), { id: crypto.randomUUID(), kind: 'instruction', command, parameters: {}, references: [] }] }, true) }} />}
       <Select aria-label="引用分类" value={category} onChange={setCategory} options={Object.entries({ text: '文本', image: '图片', video: '视频', audio: '音频' }).map(([value, label]) => ({ value, label }))} />
       {candidates.filter(item => item.source.port_id === category).map(item => <Button key={sourceKey(item.source)} size="small" disabled={disabled || !item.available} onClick={() => insert({ id: crypto.randomUUID(), kind: 'reference', source: item.source })}>{item.token}{!item.available && ' 缺失'}</Button>)}
       {query && <small role="status">匹配 {query}；完整代号确认后绑定</small>}
     </Space>
-    {(value.segments || []).filter((segment): segment is PromptInstruction => segment.kind === 'instruction').map(instruction => <section key={instruction.id} aria-label={`指令 ${instruction.command}`} data-instruction-id={instruction.id}>
+    {(value.segments || []).filter((segment): segment is PromptInstruction => segment.kind === 'instruction').map(instruction => <section key={instruction.id} aria-label={`指令 ${instruction.command}`} data-instruction-id={instruction.id} data-segment-id={instruction.id}>
       <strong>/{instruction.command}</strong>
-      {instruction.command === '主体参考' && <Input aria-label="主体名称" value={instruction.parameters?.name || ''} onChange={event => publish({ segments: (value.segments || []).map(segment => segment.id === instruction.id ? { ...instruction, parameters: { ...instruction.parameters, name: event.target.value } } : segment) }, true)} />}
-      <Select<string[]> aria-label={`指令引用 ${instruction.command}`} mode="multiple" value={(instruction.references || []).map(reference => sourceKey(reference.source))}
+      {instruction.command === '主体参考' && <Input disabled={disabled} aria-label="主体名称" value={instruction.parameters?.name || ''} onChange={event => publish({ segments: (value.segments || []).map(segment => segment.id === instruction.id ? { ...instruction, parameters: { ...instruction.parameters, name: event.target.value } } : segment) }, true)} />}
+      <Select<string[]> disabled={disabled} aria-label={`指令引用 ${instruction.command}`} mode="multiple" value={(instruction.references || []).map(reference => sourceKey(reference.source))}
         options={candidates.filter(candidate => candidate.available).map(candidate => ({ value: sourceKey(candidate.source), label: candidate.token }))}
         onChange={keys => publish({ segments: (value.segments || []).map(segment => segment.id === instruction.id ? { ...instruction, references: keys.map(key => instruction.references?.find(reference => sourceKey(reference.source) === key) || { id: crypto.randomUUID(), kind: 'reference', source: candidates.find(candidate => sourceKey(candidate.source) === key)!.source }) } : segment) }, true)} />
-      <Button size="small" onClick={() => publish({ segments: (value.segments || []).filter(segment => segment.id !== instruction.id) }, true)}>删除指令</Button>
+      <Button disabled={disabled} size="small" onClick={() => publish({ segments: (value.segments || []).filter(segment => segment.id !== instruction.id) }, true)}>删除指令</Button>
       {!instruction.references?.length && <small role="alert">指令缺少引用，可继续编辑保存</small>}
     </section>)}
     {query && <div role="listbox" aria-label="引用候选" onMouseDown={event => event.preventDefault()}>
@@ -165,9 +165,9 @@ export function PromptEditor({ document, card, value, onChange, disabled, modelO
         if (query && ['ArrowDown', 'ArrowUp'].includes(event.key)) { event.preventDefault(); setActiveIndex(previous => Math.max(0, previous + (event.key === 'ArrowDown' ? 1 : -1))); return }
         if (['Enter', 'Tab'].includes(event.key)) {
           if (query === '@' && matches.length) { event.preventDefault(); insert({ id: crypto.randomUUID(), kind: 'reference', source: matches[activeIndex % matches.length].source }); return }
-          if (confirm()) { event.preventDefault(); setQuery('') }
+          if (confirm(true)) { event.preventDefault(); setQuery('') }
         }
-      }} onBlur={() => { confirm(); requestAnimationFrame(() => { if (!root.current?.contains(window.document.activeElement)) setQuery('') }) }}
+      }} onBlur={() => { confirm(true); requestAnimationFrame(() => { if (!root.current?.contains(window.document.activeElement)) setQuery('') }) }}
       onCopy={event => {
         const selection = window.getSelection(); if (!selection?.rangeCount) return
         const fragment = selection.getRangeAt(0).cloneContents(), box = window.document.createElement('div'); box.append(fragment)
