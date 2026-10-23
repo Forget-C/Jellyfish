@@ -3,8 +3,9 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * 单卡执行范围，不隐式执行上游。
+ * 单卡或按实际引用运行到目标；默认保持单卡行为。
  */
 export type CanvasPrecheckRequest = {
     card_id: string;
+    kind?: 'single' | 'target';
 };

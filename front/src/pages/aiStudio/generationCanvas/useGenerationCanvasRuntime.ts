@@ -75,13 +75,13 @@ export function useGenerationCanvasRuntime(projectId: string, canvasId: string |
     return () => { stream.close(); if (s === state.current) state.current = { ...s, scope: '' } }
   }, [scope])
   const invalidate = () => { state.current.generation++; setPreview(undefined) }
-  const precheck = async (cardId: string) => {
+  const precheck = async (cardId: string, kind: 'single' | 'target' = 'single') => {
     const s = state.current, generation = s.generation
     if (!canvasId || s.scope !== scope || s.checking || s.submitting || s.pending || storageBlocked || !canEdit()) return
     s.checking = true; setChecking(cardId); setPreview(undefined); setError('')
     try {
       if (!await save() || s !== state.current || generation !== s.generation) return
-      const response = await Canvases.canvasPrecheck({ projectId, canvasId, requestBody: { card_id: cardId } })
+      const response = await Canvases.canvasPrecheck({ projectId, canvasId, requestBody: { card_id: cardId, kind } })
       if (s === state.current && generation === s.generation) { s.previewGeneration = generation; setPreview(response.data || undefined) }
     } catch (reason) { if (s === state.current && generation === s.generation) setError(describe(reason)) }
     finally { if (s === state.current) { s.checking = false; setChecking(undefined) } }

@@ -58,18 +58,23 @@ class GenerationSubmitter:
         self, *, db: AsyncSession, command: GenerationCommand, snapshot: ResolvedGenerationSnapshot, retry_of_task_id: str | None = None,
     ) -> GenerationAccepted:
         """冻结模型路由身份；canvas 私有 override 固定实际配置，其他目标仍执行期解析。"""
-        model = await db.get(Model, snapshot.model_id)
-        provider = await db.get(Provider, model.provider_id) if model is not None else None
-        if model is None or provider is None:
-            raise HTTPException(status_code=422, detail="generation_model_unavailable")
-        config = resolve_provider_config_from_provider(provider=provider, category=ModelCategoryKey(command.modality.value))
+        frozen = snapshot.execution_config
+        if frozen:
+            model_name, provider_id, provider_key = frozen.model_name, frozen.provider_id, frozen.provider_key
+        else:
+            model = await db.get(Model, snapshot.model_id)
+            provider = await db.get(Provider, model.provider_id) if model is not None else None
+            if model is None or provider is None:
+                raise HTTPException(status_code=422, detail="generation_model_unavailable")
+            config = resolve_provider_config_from_provider(provider=provider, category=ModelCategoryKey(command.modality.value))
+            model_name, provider_id, provider_key = model.name, provider.id, config.provider_key
         mode = TaskExecutionMode.direct
         if command.operation.value == "video_generation" or (
-            command.operation.value == "image_generation" and config.provider_key in {"vidu", "kling"}
+            command.operation.value == "image_generation" and provider_key in {"vidu", "kling"}
         ):
             mode = TaskExecutionMode.remote
         data, target_type, target_id, inputs = split_snapshot(snapshot)
-        data.update(model_name=model.name, provider_key=config.provider_key)
+        data.update(model_name=model_name, provider_key=provider_key)
         kind = command.operation.value
         if kind == "text_agent":
             kind = {
@@ -84,7 +89,7 @@ class GenerationSubmitter:
         )])).get("submission")
         task = await TaskService(db).submit(
             kind=kind, snapshot=data, title=kind, target_type=target_type, target_id=target_id,
-            expected_target_version=snapshot.expected_version_id, provider_id=provider.id,
+            expected_target_version=snapshot.expected_version_id, provider_id=provider_id,
             execution_mode=mode, inputs=inputs, project_id=source.project_id if source else None, retry_of_task_id=retry_of_task_id,
         )
         return GenerationAccepted(task_id=task.id)
