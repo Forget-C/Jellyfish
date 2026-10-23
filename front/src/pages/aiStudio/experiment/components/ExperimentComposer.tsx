@@ -37,7 +37,7 @@ export function ExperimentComposer({
           {options}
           {contextActions}
         </div>
-        <Button type="primary" icon={<SendOutlined />} loading={submitting} disabled={submitDisabled} onClick={onSubmit}>
+        <Button type="primary" icon={<SendOutlined aria-hidden="true" />} loading={submitting} disabled={submitDisabled} onClick={onSubmit}>
           {submitLabel}
         </Button>
       </div>

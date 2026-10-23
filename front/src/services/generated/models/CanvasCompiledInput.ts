@@ -17,4 +17,3 @@ export type CanvasCompiledInput = {
     diagnostics?: Array<CanvasDiagnostic>;
     can_run?: boolean;
 };
-

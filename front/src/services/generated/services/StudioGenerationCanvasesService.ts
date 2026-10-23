@@ -4,11 +4,18 @@
 /* eslint-disable */
 import type { ApiResponse_CanvasCompiledInput_ } from '../models/ApiResponse_CanvasCompiledInput_';
 import type { ApiResponse_CanvasModelCapability_ } from '../models/ApiResponse_CanvasModelCapability_';
+import type { ApiResponse_CanvasPrecheck_ } from '../models/ApiResponse_CanvasPrecheck_';
 import type { ApiResponse_CanvasRead_ } from '../models/ApiResponse_CanvasRead_';
+import type { ApiResponse_CanvasRunAccepted_ } from '../models/ApiResponse_CanvasRunAccepted_';
 import type { ApiResponse_CanvasSaved_ } from '../models/ApiResponse_CanvasSaved_';
+import type { ApiResponse_CanvasSnapshot_ } from '../models/ApiResponse_CanvasSnapshot_';
+import type { ApiResponse_CanvasStreamConnection_ } from '../models/ApiResponse_CanvasStreamConnection_';
 import type { ApiResponse_list_CanvasRead__ } from '../models/ApiResponse_list_CanvasRead__';
 import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
 import type { CanvasCreate } from '../models/CanvasCreate';
+import type { CanvasPrecheckRequest } from '../models/CanvasPrecheckRequest';
+import type { CanvasRunSubmit } from '../models/CanvasRunSubmit';
+import type { CanvasRuntimeEvent } from '../models/CanvasRuntimeEvent';
 import type { CanvasSave } from '../models/CanvasSave';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
@@ -192,6 +199,144 @@ export class StudioGenerationCanvasesService {
                 'project_id': projectId,
                 'canvas_id': canvasId,
                 'card_id': cardId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Precheck Canvas
+     * 核实已保存单卡的实际输入、模型及配置，返回短期预检凭据。
+     * @returns ApiResponse_CanvasPrecheck_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasPrecheck({
+        projectId,
+        canvasId,
+        requestBody,
+    }: {
+        projectId: string,
+        canvasId: string,
+        requestBody: CanvasPrecheckRequest,
+    }): CancelablePromise<ApiResponse_CanvasPrecheck_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/precheck',
+            path: {
+                'project_id': projectId,
+                'canvas_id': canvasId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Submit Canvas Run
+     * 原子受理并返回原或新运行；不在 HTTP 请求中调用供应商。
+     * @returns ApiResponse_CanvasRunAccepted_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasRunSubmit({
+        projectId,
+        canvasId,
+        requestBody,
+    }: {
+        projectId: string,
+        canvasId: string,
+        requestBody: CanvasRunSubmit,
+    }): CancelablePromise<ApiResponse_CanvasRunAccepted_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/runs',
+            path: {
+                'project_id': projectId,
+                'canvas_id': canvasId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Canvas Runtime
+     * 读取运行、累计正文和当前输出的一致切点。
+     * @returns ApiResponse_CanvasSnapshot_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasRuntime({
+        projectId,
+        canvasId,
+    }: {
+        projectId: string,
+        canvasId: string,
+    }): CancelablePromise<ApiResponse_CanvasSnapshot_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/runtime',
+            path: {
+                'project_id': projectId,
+                'canvas_id': canvasId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Canvas Stream Connection
+     * 提供 generated client 可获取的公共流连接地址。
+     * @returns ApiResponse_CanvasStreamConnection_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasStreamConnection({
+        projectId,
+        canvasId,
+    }: {
+        projectId: string,
+        canvasId: string,
+    }): CancelablePromise<ApiResponse_CanvasStreamConnection_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/events/connection',
+            path: {
+                'project_id': projectId,
+                'canvas_id': canvasId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Canvas Events
+     * 多运行 SSE；读取事务仅持续一次数据库追读，不随连接存活。
+     * @returns CanvasRuntimeEvent Successful Response
+     * @throws ApiError
+     */
+    public static canvasEvents({
+        projectId,
+        canvasId,
+        cursor,
+    }: {
+        projectId: string,
+        canvasId: string,
+        cursor?: (number | null),
+    }): CancelablePromise<CanvasRuntimeEvent> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/events',
+            path: {
+                'project_id': projectId,
+                'canvas_id': canvasId,
+            },
+            query: {
+                'cursor': cursor,
             },
             errors: {
                 422: `Validation Error`,

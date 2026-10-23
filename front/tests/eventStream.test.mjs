@@ -58,3 +58,23 @@ test('stream delivers split unicode and multiline SSE before EOF, then reconnect
     assert.equal(headers[0].accept, 'text/event-stream')
   } finally { transport?.close(); clearTimeout(timer); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)) }
 })
+
+test('a fresh snapshot replaces the projection even at the last delivered cursor', async () => {
+  let transport
+  const server = createServer((_request, response) => {
+    response.writeHead(200, { 'Content-Type': 'text/event-stream' })
+    response.write('data: {"cursor":7,"type":"text.delta","text":"片段"}\n\ndata: {"cursor":7,"type":"text.delta","text":"重复"}\n\ndata: {"cursor":7,"type":"snapshot","text":"完整累计正文"}\n\ndata: {"cursor":8,"type":"text.delta","text":"后续"}\n\n')
+  })
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+  try {
+    const events = []
+    await new Promise((resolve, reject) => {
+      const deadline = setTimeout(() => reject(new Error('stream stalled')), 3000)
+      transport = connectEventStream({ url: async () => `http://127.0.0.1:${server.address().port}/events`, onEvent: event => {
+        events.push(event)
+        if (event.cursor === 8) { clearTimeout(deadline); resolve() }
+      } })
+    })
+    assert.deepEqual(events.map(event => event.text), ['片段', '完整累计正文', '后续'])
+  } finally { transport?.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)) }
+})

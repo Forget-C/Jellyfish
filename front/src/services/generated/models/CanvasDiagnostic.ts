@@ -12,4 +12,3 @@ export type CanvasDiagnostic = {
     target: Record<string, any>;
     blocks: Array<string>;
 };
-

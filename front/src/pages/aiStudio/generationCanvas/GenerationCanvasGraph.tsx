@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent } from 'react'
 import { Alert, Button, Input, Select, Space } from 'antd'
 import { StudioGenerationCanvasesService as Canvases, LlmService } from '../../../services/generated'
-import type { CanvasDocument, CanvasModelCapability, ModelRead } from '../../../services/generated'
+import type { CanvasDocument, CanvasModelCapability, CanvasNodeRead, CanvasResolvedOutput, ModelRead } from '../../../services/generated'
 import { CanvasDragHandle, CanvasEdge, useCanvasViewport } from '../../../components/canvas/Canvas'
 import { useGraphLayout } from '../directing/useGraphLayout'
 import type { GraphArrange, GraphSize } from '../directing/graphLayout'
@@ -17,7 +17,7 @@ const arrange: GraphArrange = (nodes, _sizes, _width, _anchor, retained = {}) =>
   [node.id, retained[node.id] || { x: index % 3 * 440, y: Math.floor(index / 3) * 560 }]))
 
 /** 独立画布编辑适配：候选关系与文档持久化，几何沿用公共布局缓存。 */
-export function GenerationCanvasGraph({ document, onChange, readonly = false }: { document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean }) {
+export function GenerationCanvasGraph({ document, onChange, readonly = false, runtime }: { document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string) => void } }) {
   const cards = document.cards || [], edges = document.edges || [], groups = document.groups || []
   const [selected, setSelected] = useState<string[]>([])
   const [reason, setReason] = useState('')
@@ -80,6 +80,7 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false }: 
     if (segment) { segment.tabIndex = -1; segment.focus(); segment.scrollIntoView({ block: 'nearest', inline: 'nearest' }) }
   }
   const removeCard = (id: string) => {
+    if (runtime?.busyCards.has(id)) { setReason('卡片正在运行，结束前不可删除'); return }
     const protection = referenceProtection(latest.current, id)
     if (protection) { showProtection(protection); return }
     let next = latest.current
@@ -211,14 +212,14 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false }: 
           const Renderer = rendererRegistry[card.type || 'content.text']
           const size = layout.view.sizes[card.id]
           return <CardShell key={`${document.id}:${card.id}`} id={card.id} title={cardTitles[card.type || 'content.text']} contextKey={document.id} point={point(card.id)}
-            scale={transform.scale} width={size?.width || 400} height={size?.height} selected={selected.includes(card.id)} readonly={readonly}
+            scale={transform.scale} width={size?.width || 400} height={size?.height} selected={selected.includes(card.id)} readonly={readonly} removeDisabled={runtime?.busyCards.has(card.id)}
             onSelect={checked => setSelected(previous => checked ? [...previous, card.id] : previous.filter(id => id !== card.id))}
             onMove={position => layout.move(card.id, position)} onResize={(width, height) => {
               if (Math.abs(width - (size?.width || 400)) > 2 || Math.abs(height - (size?.height || measured[card.id]?.height || height)) > 2)
                 layout.setView(previous => ({ ...previous, sizes: { ...previous.sizes, [card.id]: { width, height } } }))
             }} onRemove={() => removeCard(card.id)} inputs={inputPorts(card).map(name => port(card, name, true))} outputs={outputPorts(card).map(name => port(card, name, false))}>
             {Renderer ? <Renderer card={card} document={document} projectId={document.project_id} onChange={updateCard} models={models} capability={capability(card)}
-              capabilityError={'model_id' in card && card.model_id ? capabilityErrors[card.model_id] : undefined} references={references(card)} disabled={readonly} /> : <Alert type="error" message="卡片编辑器尚未接入" />}
+              capabilityError={'model_id' in card && card.model_id ? capabilityErrors[card.model_id] : undefined} references={references(card)} disabled={readonly} modelOutputs={runtime?.outputs} node={runtime?.nodes[card.id]} busy={runtime?.busyCards.has(card.id)} checking={runtime?.checking === card.id} runDisabled={runtime?.disabled} onPrecheck={() => runtime?.precheck(card.id)} /> : <Alert type="error" message="卡片编辑器尚未接入" />}
           </CardShell>
         })}
       </div>
