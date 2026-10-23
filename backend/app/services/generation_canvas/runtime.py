@@ -101,7 +101,7 @@ class CanvasRuntime:
             issues.append(CanvasDiagnostic(code='MODEL_REQUIRED', message='请选择模型', target={'card_id': card_id, 'path': ['model_id']}, blocks=['run']))
         compiled = compile_card(document, card_id, model_outputs=outputs, capability=cap)
         compiled.revision = canvas.revision
-        if not compiled.text.strip():
+        if not compiled.text.strip() and not (card.type == 'model.video' and compiled.media):
             issues.append(CanvasDiagnostic(code='TEXT_REQUIRED', message='请提供非空文本输入', target={'card_id': card_id, 'path': ['prompt']}, blocks=['run']))
         if any(not item.basis_current for item in compiled.used):
             issues.append(CanvasDiagnostic(code="INPUT_STALE", message="实际引用的模型输出依据已变，请先执行来源",
@@ -120,6 +120,8 @@ class CanvasRuntime:
                   'config': card.config.model_dump(), 'text': compiled.text,
                   'used': [item.model_dump(exclude={'token', 'basis_current'}) for item in compiled.used],
                   'media': [item.model_dump(exclude={'token', 'basis_current'}) for item in compiled.media]}
+        if card.type == 'model.video':
+            actual['video_media'] = compiled.video_media.model_dump()
         return compiled, public, digest({'basis': actual, 'execution': frozen}), frozen
 
     async def current_outputs(self, canvas) -> dict[str, list[CanvasResolvedOutput]]:
