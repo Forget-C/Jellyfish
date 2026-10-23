@@ -16,7 +16,7 @@ export type MediaContentEditorProps = {
 export function MediaPreview({ fileId, type }: { fileId: string; type: string }) {
   const src = buildFileDownloadUrl(fileId)
   if (type === 'audio') return <audio aria-label="音频预览" src={src} controls preload="metadata" style={{ width: '100%' }} />
-  if (type === 'video') return <video aria-label="视频预览" src={src} controls playsInline preload="metadata" style={{ width: '100%' }} />
+  if (type === 'video') return <video aria-label="视频预览" src={src} controls playsInline preload="metadata" style={{ width: '100%', maxHeight: 260 }} />
   return <img alt="图片预览" src={src} style={{ maxWidth: '100%', maxHeight: 260 }} />
 }
 

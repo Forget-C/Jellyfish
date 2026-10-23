@@ -38,7 +38,6 @@
     "periodic-save": { "file": "scenePeriodicSave.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 }
   },
   "suites": {
-    "generation": ["generation-canvas-graph", "generation-canvas", "generation-canvas-media"],
     "generation": ["generation-canvas-graph", "generation-canvas", "generation-canvas-save", "generation-canvas-media"],
     "instruction-video": ["instruction-card", "frame-inputs", "default-assets", "reference-source", "frame-dependencies", "instruction-inputs", "candidate-refresh", "scene-video"],
     "instructions": ["instruction-inputs", "instruction-design", "instruction-primary", "instruction-preparation", "instruction-suggestions", "instruction-evidence"],
