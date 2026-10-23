@@ -1,46 +1,331 @@
 {
   "preflight": "preflight.mjs",
   "cases": {
-    "generation-canvas-save": { "file": "generationCanvasSave.browser.mjs", "ports": [4271, 8271], "timeoutMs": 180000 },
-    "generation-canvas": { "file": "generationCanvas.browser.mjs", "ports": [4271, 8271], "timeoutMs": 180000 },
-    "frame-dependencies": { "file": "sceneFrameDependencies.browser.mjs", "ports": [4265, 8265], "timeoutMs": 240000 },
-    "scene-video": { "file": "sceneVideo.browser.mjs", "ports": [4193, 8193], "timeoutMs": 300000 },
-    "instruction-inputs": { "file": "sceneInstructionInputs.browser.mjs", "ports": [4266, 8266], "timeoutMs": 180000 },
-    "frame-inputs": { "file": "sceneFrameInputs.browser.mjs", "ports": [4263, 8263], "timeoutMs": 240000 },
-    "instruction-card": { "file": "sceneInstructionCard.browser.mjs", "ports": [4262, 8262], "timeoutMs": 180000 },
-    "candidate-refresh": { "file": "sceneCandidateRefresh.browser.mjs", "ports": [4267, 8267], "timeoutMs": 180000 },
-    "browse-controls": { "file": "sceneBrowseControls.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 },
-    "unit-design": { "file": "sceneUnitDesign.browser.mjs", "ports": [4247, 8247], "timeoutMs": 300000 },
-    "instruction-design": { "file": "sceneInstructionDesign.browser.mjs", "ports": [4291, 8291], "timeoutMs": 180000 },
-    "instruction-primary": { "file": "sceneInstructionPrimary.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 },
-    "instruction-suggestions": { "file": "sceneInstructionSuggestions.browser.mjs", "ports": [4193, 8193], "timeoutMs": 300000 },
-    "instruction-preparation": { "file": "sceneInstructionPreparation.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 },
-    "reference-source": { "file": "sceneReferenceSource.browser.mjs", "ports": [4258, 8258], "timeoutMs": 240000 },
-    "default-assets": { "file": "sceneDefaultAssets.browser.mjs", "ports": [4257, 8257], "timeoutMs": 180000 },
-    "workbench-ui": { "file": "workbenchUi.browser.mjs", "ports": [4195], "timeoutMs": 180000 },
-    "workbench-style": { "file": "sceneWorkbenchStyle.browser.mjs", "ports": [4193, 8193], "timeoutMs": 300000 },
-    "design-scope": { "file": "designScopeCompleteness.browser.mjs", "ports": [4198, 8198], "timeoutMs": 180000 },
-    "director-layout": { "file": "directorLayout.browser.mjs", "ports": [4198, 8198], "timeoutMs": 180000 },
-    "canvas-graph": { "file": "sceneCanvasGraph.browser.mjs", "ports": [4193, 8193], "timeoutMs": 300000 },
-    "graph-summary": { "file": "sceneGraphSummary.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 },
-    "legacy-graph": { "file": "sceneLegacyGraph.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 },
-    "graph-navigation": { "file": "sceneGraphNavigation.browser.mjs", "ports": [4247, 8247], "timeoutMs": 180000 },
-    "instruction-evidence": { "file": "sceneInstructionEvidence.browser.mjs", "ports": [4252, 8252], "timeoutMs": 180000 },
-    "edit-cut-evidence": { "file": "sceneEditCutEvidence.browser.mjs", "ports": [4246, 8246], "timeoutMs": 180000 },
-    "edit-seams-graph": { "file": "sceneEditSeamsGraph.browser.mjs", "ports": [4245, 8245], "timeoutMs": 180000 },
-    "edit-graph": { "file": "sceneEditGraph.browser.mjs", "ports": [4243, 8243], "timeoutMs": 180000 },
-    "take-library": { "file": "sceneTakeLibrary.browser.mjs", "ports": [4193, 8193], "timeoutMs": 300000 },
-    "legacy-take-library": { "file": "sceneLegacyTakeLibrary.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 },
-    "take-library-graph": { "file": "sceneTakeLibraryGraph.browser.mjs", "ports": [4244, 8244], "timeoutMs": 180000 },
-    "timeline": { "file": "sceneTimeline.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 },
-    "periodic-save": { "file": "scenePeriodicSave.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 }
+    "generation-canvas-save": {
+      "file": "generationCanvasSave.browser.mjs",
+      "ports": [
+        4271,
+        8271
+      ],
+      "timeoutMs": 180000
+    },
+    "generation-canvas": {
+      "file": "generationCanvas.browser.mjs",
+      "ports": [
+        4271,
+        8271
+      ],
+      "timeoutMs": 180000
+    },
+    "frame-dependencies": {
+      "file": "sceneFrameDependencies.browser.mjs",
+      "ports": [
+        4265,
+        8265
+      ],
+      "timeoutMs": 240000
+    },
+    "scene-video": {
+      "file": "sceneVideo.browser.mjs",
+      "ports": [
+        4193,
+        8193
+      ],
+      "timeoutMs": 300000
+    },
+    "instruction-inputs": {
+      "file": "sceneInstructionInputs.browser.mjs",
+      "ports": [
+        4266,
+        8266
+      ],
+      "timeoutMs": 180000
+    },
+    "frame-inputs": {
+      "file": "sceneFrameInputs.browser.mjs",
+      "ports": [
+        4263,
+        8263
+      ],
+      "timeoutMs": 240000
+    },
+    "instruction-card": {
+      "file": "sceneInstructionCard.browser.mjs",
+      "ports": [
+        4262,
+        8262
+      ],
+      "timeoutMs": 180000
+    },
+    "candidate-refresh": {
+      "file": "sceneCandidateRefresh.browser.mjs",
+      "ports": [
+        4267,
+        8267
+      ],
+      "timeoutMs": 180000
+    },
+    "browse-controls": {
+      "file": "sceneBrowseControls.browser.mjs",
+      "ports": [
+        4193,
+        8193
+      ],
+      "timeoutMs": 180000
+    },
+    "unit-design": {
+      "file": "sceneUnitDesign.browser.mjs",
+      "ports": [
+        4247,
+        8247
+      ],
+      "timeoutMs": 300000
+    },
+    "instruction-design": {
+      "file": "sceneInstructionDesign.browser.mjs",
+      "ports": [
+        4291,
+        8291
+      ],
+      "timeoutMs": 180000
+    },
+    "instruction-primary": {
+      "file": "sceneInstructionPrimary.browser.mjs",
+      "ports": [
+        4193,
+        8193
+      ],
+      "timeoutMs": 180000
+    },
+    "instruction-suggestions": {
+      "file": "sceneInstructionSuggestions.browser.mjs",
+      "ports": [
+        4193,
+        8193
+      ],
+      "timeoutMs": 300000
+    },
+    "instruction-preparation": {
+      "file": "sceneInstructionPreparation.browser.mjs",
+      "ports": [
+        4193,
+        8193
+      ],
+      "timeoutMs": 180000
+    },
+    "reference-source": {
+      "file": "sceneReferenceSource.browser.mjs",
+      "ports": [
+        4258,
+        8258
+      ],
+      "timeoutMs": 240000
+    },
+    "default-assets": {
+      "file": "sceneDefaultAssets.browser.mjs",
+      "ports": [
+        4257,
+        8257
+      ],
+      "timeoutMs": 180000
+    },
+    "workbench-ui": {
+      "file": "workbenchUi.browser.mjs",
+      "ports": [
+        4195
+      ],
+      "timeoutMs": 180000
+    },
+    "workbench-style": {
+      "file": "sceneWorkbenchStyle.browser.mjs",
+      "ports": [
+        4193,
+        8193
+      ],
+      "timeoutMs": 300000
+    },
+    "design-scope": {
+      "file": "designScopeCompleteness.browser.mjs",
+      "ports": [
+        4198,
+        8198
+      ],
+      "timeoutMs": 180000
+    },
+    "director-layout": {
+      "file": "directorLayout.browser.mjs",
+      "ports": [
+        4198,
+        8198
+      ],
+      "timeoutMs": 180000
+    },
+    "canvas-graph": {
+      "file": "sceneCanvasGraph.browser.mjs",
+      "ports": [
+        4193,
+        8193
+      ],
+      "timeoutMs": 300000
+    },
+    "graph-summary": {
+      "file": "sceneGraphSummary.browser.mjs",
+      "ports": [
+        4193,
+        8193
+      ],
+      "timeoutMs": 180000
+    },
+    "legacy-graph": {
+      "file": "sceneLegacyGraph.browser.mjs",
+      "ports": [
+        4193,
+        8193
+      ],
+      "timeoutMs": 180000
+    },
+    "graph-navigation": {
+      "file": "sceneGraphNavigation.browser.mjs",
+      "ports": [
+        4247,
+        8247
+      ],
+      "timeoutMs": 180000
+    },
+    "instruction-evidence": {
+      "file": "sceneInstructionEvidence.browser.mjs",
+      "ports": [
+        4252,
+        8252
+      ],
+      "timeoutMs": 180000
+    },
+    "edit-cut-evidence": {
+      "file": "sceneEditCutEvidence.browser.mjs",
+      "ports": [
+        4246,
+        8246
+      ],
+      "timeoutMs": 180000
+    },
+    "edit-seams-graph": {
+      "file": "sceneEditSeamsGraph.browser.mjs",
+      "ports": [
+        4245,
+        8245
+      ],
+      "timeoutMs": 180000
+    },
+    "edit-graph": {
+      "file": "sceneEditGraph.browser.mjs",
+      "ports": [
+        4243,
+        8243
+      ],
+      "timeoutMs": 180000
+    },
+    "take-library": {
+      "file": "sceneTakeLibrary.browser.mjs",
+      "ports": [
+        4193,
+        8193
+      ],
+      "timeoutMs": 300000
+    },
+    "legacy-take-library": {
+      "file": "sceneLegacyTakeLibrary.browser.mjs",
+      "ports": [
+        4193,
+        8193
+      ],
+      "timeoutMs": 180000
+    },
+    "take-library-graph": {
+      "file": "sceneTakeLibraryGraph.browser.mjs",
+      "ports": [
+        4244,
+        8244
+      ],
+      "timeoutMs": 180000
+    },
+    "timeline": {
+      "file": "sceneTimeline.browser.mjs",
+      "ports": [
+        4193,
+        8193
+      ],
+      "timeoutMs": 180000
+    },
+    "periodic-save": {
+      "file": "scenePeriodicSave.browser.mjs",
+      "ports": [
+        4193,
+        8193
+      ],
+      "timeoutMs": 180000
+    },
+    "generation-canvas-graph": {
+      "file": "generationCanvasGraph.browser.mjs",
+      "ports": [
+        4274,
+        8274
+      ],
+      "timeoutMs": 180000
+    }
   },
   "suites": {
-    "generation": ["generation-canvas", "generation-canvas-save"],
-    "instruction-video": ["instruction-card", "frame-inputs", "default-assets", "reference-source", "frame-dependencies", "instruction-inputs", "candidate-refresh", "scene-video"],
-    "instructions": ["instruction-inputs", "instruction-design", "instruction-primary", "instruction-preparation", "instruction-suggestions", "instruction-evidence"],
-    "references": ["frame-inputs", "default-assets", "reference-source"],
-    "workbench": ["workbench-ui", "workbench-style", "design-scope", "unit-design", "instruction-preparation", "instruction-design"],
-    "graph": ["browse-controls", "graph-navigation", "director-layout", "canvas-graph", "graph-summary", "legacy-graph", "periodic-save", "instruction-evidence", "edit-graph", "edit-seams-graph", "edit-cut-evidence", "timeline", "take-library-graph", "take-library", "legacy-take-library"]
+    "generation": [
+      "generation-canvas",
+      "generation-canvas-save",
+      "generation-canvas-graph"
+    ],
+    "instruction-video": [
+      "instruction-card",
+      "frame-inputs",
+      "default-assets",
+      "reference-source",
+      "frame-dependencies",
+      "instruction-inputs",
+      "candidate-refresh",
+      "scene-video"
+    ],
+    "instructions": [
+      "instruction-inputs",
+      "instruction-design",
+      "instruction-primary",
+      "instruction-preparation",
+      "instruction-suggestions",
+      "instruction-evidence"
+    ],
+    "references": [
+      "frame-inputs",
+      "default-assets",
+      "reference-source"
+    ],
+    "workbench": [
+      "workbench-ui",
+      "workbench-style",
+      "design-scope",
+      "unit-design",
+      "instruction-preparation",
+      "instruction-design"
+    ],
+    "graph": [
+      "browse-controls",
+      "graph-navigation",
+      "director-layout",
+      "canvas-graph",
+      "graph-summary",
+      "legacy-graph",
+      "periodic-save",
+      "instruction-evidence",
+      "edit-graph",
+      "edit-seams-graph",
+      "edit-cut-evidence",
+      "timeline",
+      "take-library-graph",
+      "take-library",
+      "legacy-take-library"
+    ]
   }
 }

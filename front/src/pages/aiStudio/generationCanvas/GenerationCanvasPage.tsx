@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Alert, Button, Card, Empty, Input, Popconfirm, Select, Space, Typography } from 'antd'
+import { Alert, Button, Empty, Input, Popconfirm, Select, Space, Typography } from 'antd'
 import { useSearchParams } from 'react-router-dom'
 import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasRead } from '../../../services/generated'
 import { useGenerationCanvasEditor } from './useGenerationCanvasEditor'
-import { rendererRegistry } from './rendererRegistry'
+import { GenerationCanvasGraph } from './GenerationCanvasGraph'
 
 /** 项目级文档编辑；运行、结果和浏览器布局有独立生命周期。 */
 export function GenerationCanvasPage({ projectId }: { projectId: string }) {
@@ -68,10 +68,7 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
         <Popconfirm title="删除这张画布？" onConfirm={remove}><Button danger disabled={saving || !ownership.editable}>删除画布</Button></Popconfirm>
         <span role="status">revision {current.revision} · {saving ? '保存中' : !dirty ? '已保存' : '待保存'}</span>
       </Space>
-      <Button disabled={!ownership.editable || !!editor.recovery} onClick={() => edit(previous => ({ ...previous, cards: [...(previous.cards || []), { id: crypto.randomUUID(), type: 'content.text', type_version: 1, text: '' }] }))}>添加文本卡</Button>
-      <fieldset disabled={!ownership.editable || !!editor.recovery} style={{ border: 0, padding: 0 }}>
-        {(document.cards || []).map(card => { const Renderer = rendererRegistry[card.type || 'content.text']; return <Card key={card.id} title="文本内容卡" data-card-id={card.id}><Renderer card={card} onChange={next => edit(previous => ({ ...previous, cards: previous.cards?.map(item => item.id === next.id ? next : item) }))} /></Card> })}
-      </fieldset>
+      <GenerationCanvasGraph key={document.id} document={document} onChange={next => edit(next)} readonly={!ownership.editable || !!editor.recovery} />
     </>}
   </Space>
 }
