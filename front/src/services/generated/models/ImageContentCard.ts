@@ -12,4 +12,3 @@ export type ImageContentCard = {
     uploading?: boolean;
     type?: string;
 };
-
