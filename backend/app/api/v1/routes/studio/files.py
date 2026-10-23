@@ -12,6 +12,7 @@ from app.services.studio.file_usages import list_files_by_scope_paginated
 from app.services.studio.files import (
     build_download_response,
     delete_file,
+    release_upload_retention,
     get_file_detail as get_file_detail_service,
     get_storage_info,
     list_files_paginated,
@@ -162,4 +163,16 @@ async def delete_file_api(
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[None]:
     await delete_file(db, file_id=file_id)
+    return empty_response()
+
+
+@router.delete(
+    "/{file_id}/upload-retention", response_model=ApiResponse[None],
+    operation_id="release_upload_retention", summary="显式清理画布上传保留关系",
+)
+async def release_upload_retention_api(
+    file_id: str, project_id: str = Query(...), db: AsyncSession = Depends(get_db),
+) -> ApiResponse[None]:
+    """仅清理指定项目的上传保留；有其他使用者时拒绝，不删除文件字节。"""
+    await release_upload_retention(db, file_id=file_id, project_id=project_id)
     return empty_response()

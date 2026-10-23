@@ -5,6 +5,7 @@ import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../
 import type { CanvasRead } from '../../../services/generated'
 import { useGenerationCanvasEditor } from './useGenerationCanvasEditor'
 import { rendererRegistry } from './rendererRegistry'
+import { MediaContentEditor } from './MediaContentEditor'
 
 /** 项目级文档编辑；运行、结果和浏览器布局有独立生命周期。 */
 export function GenerationCanvasPage({ projectId }: { projectId: string }) {
@@ -69,8 +70,18 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
         <span role="status">revision {current.revision} · {saving ? '保存中' : !dirty ? '已保存' : '待保存'}</span>
       </Space>
       <Button disabled={!ownership.editable || !!editor.recovery} onClick={() => edit(previous => ({ ...previous, cards: [...(previous.cards || []), { id: crypto.randomUUID(), type: 'content.text', type_version: 1, text: '' }] }))}>添加文本卡</Button>
+      <Space wrap>
+        {(['image', 'video', 'audio'] as const).map(type => <Button key={type} disabled={!ownership.editable || !!editor.recovery} onClick={() => edit(previous => ({ ...previous, cards: [...(previous.cards || []), { id: crypto.randomUUID(), type: `content.${type}`, type_version: 1, file_id: null, uploading: false }] }))}>添加{type === 'image' ? '图片' : type === 'video' ? '视频' : '音频'}卡</Button>)}
+      </Space>
       <fieldset disabled={!ownership.editable || !!editor.recovery} style={{ border: 0, padding: 0 }}>
-        {(document.cards || []).map(card => { const Renderer = rendererRegistry[card.type || 'content.text']; return <Card key={card.id} title="文本内容卡" data-card-id={card.id}><Renderer card={card} onChange={next => edit(previous => ({ ...previous, cards: previous.cards?.map(item => item.id === next.id ? next : item) }))} /></Card> })}
+        {(document.cards || []).map(card => {
+          const Renderer = rendererRegistry[card.type || 'content.text']
+          const change = (next: typeof card) => edit(previous => ({ ...previous, cards: previous.cards?.map(item => item.id === next.id ? next : item) }))
+          return <Card key={`${current.id}:${card.id}`} title={card.type === 'content.text' ? '文本内容卡' : card.type === 'content.image' ? '图片内容卡' : card.type === 'content.video' ? '视频内容卡' : '音频内容卡'} data-card-id={card.id}>
+            <Button disabled={!ownership.editable || !!editor.recovery} onClick={() => edit(previous => ({ ...previous, cards: previous.cards?.filter(item => item.id !== card.id) }))}>删除卡片</Button>
+            {card.type !== 'content.text' ? <MediaContentEditor card={card} projectId={projectId} disabled={!ownership.editable || !!editor.recovery} onChange={change} /> : <Renderer card={card} onChange={change} />}
+          </Card>
+        })}
       </fieldset>
     </>}
   </Space>

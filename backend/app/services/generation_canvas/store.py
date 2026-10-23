@@ -7,9 +7,11 @@ from pydantic import ValidationError
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.generation_canvas import CanvasSaveReceipt, GenerationCanvas
-from app.models.studio import Project
-from app.schemas.generation_canvas import CanvasDocument, CanvasSave
+from app.models.studio import Project, FileUsage
+from app.schemas.generation_canvas import CanvasDocument, CanvasSave, MediaContentCard
 from app.services.common import get_or_404
+from app.services.studio.file_usages import upsert_file_usage
+from app.services.studio.files import require_available_file
 
 
 def diagnostic(code: str, message: str, target: dict, *, status: int = 422) -> HTTPException:
@@ -77,6 +79,23 @@ class CanvasStore:
                 raise diagnostic('INVALID_CARD_IDENTITY', '卡片身份必须唯一且类型不可修改', {'card_id': card.id})
             seen.add(card.id)
             identities[card.id] = card.type
+        # Validate all replacements before releasing existing protection in this transaction.
+        for card in document.cards:
+            if isinstance(card, MediaContentCard) and card.file_id:
+                try:
+                    await require_available_file(self.db, file_id=card.file_id, expected_type=card.type.split('.')[1])
+                except HTTPException as exc:
+                    raise diagnostic('INVALID_MEDIA_FILE', str(exc.detail), {'card_id': card.id, 'path': ['file_id']}) from exc
+                if not await self.db.scalar(select(FileUsage.id).where(
+                        FileUsage.file_id == card.file_id, FileUsage.project_id == self.project_id).limit(1)):
+                    raise diagnostic('INVALID_MEDIA_FILE', '文件不属于当前项目', {'card_id': card.id, 'path': ['file_id']})
+        await self.db.execute(delete(FileUsage).where(
+            FileUsage.project_id == self.project_id, FileUsage.usage_kind == 'canvas_content',
+            FileUsage.source_ref.like(f'{canvas_id}:%')))
+        for card in document.cards:
+            if isinstance(card, MediaContentCard) and card.file_id:
+                await upsert_file_usage(self.db, file_id=card.file_id, project_id=self.project_id,
+                                        chapter_id=None, usage_kind='canvas_content', source_ref=f'{canvas_id}:{card.id}')
         result = await self.db.execute(update(GenerationCanvas).where(
             GenerationCanvas.id == canvas_id, GenerationCanvas.revision == command.expected_revision).values(
                 document=document.model_dump(), revision=command.expected_revision + 1, card_types=identities))
@@ -91,5 +110,8 @@ class CanvasStore:
         """当前切片尚无运行；先删回执再删除文档，适配 SQLite 与 MySQL 外键。"""
         canvas = await self.get(canvas_id, lock=True)
         await self.db.execute(delete(CanvasSaveReceipt).where(CanvasSaveReceipt.canvas_id == canvas_id))
+        await self.db.execute(delete(FileUsage).where(
+            FileUsage.project_id == self.project_id, FileUsage.usage_kind == 'canvas_content',
+            FileUsage.source_ref.like(f'{canvas_id}:%')))
         await self.db.delete(canvas)
         await self.db.flush()

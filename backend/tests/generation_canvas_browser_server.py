@@ -1,6 +1,7 @@
 """生成画布真实页面的隔离 HTTP 后端，无章节、场次或模型配置。"""
 import asyncio
 import os
+from pathlib import Path
 import uvicorn
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.core.db import Base
@@ -28,6 +29,17 @@ async def prepare():
 
 
 if __name__ == '__main__':
+    if os.environ.get('CANVAS_BROWSER_MEDIA_STORAGE'):
+        from app.core import storage
+        media_dir = Path(os.environ['CANVAS_BROWSER_MEDIA_STORAGE'])
+        media_dir.mkdir(parents=True, exist_ok=True)
+        async def upload_file(*, key, data, **kwargs):
+            """只替换外部对象存储 I/O，保留真实文件路由及服务。"""
+            (media_dir / Path(key).name).write_bytes(data.read())
+        async def download_file(*, key):
+            return (media_dir / Path(key).name).read_bytes()
+        storage.upload_file = upload_file
+        storage.download_file = download_file
     asyncio.run(prepare())
     app.dependency_overrides[get_db] = database
     uvicorn.run(app, host='127.0.0.1', port=int(os.environ.get('CANVAS_BROWSER_PORT', '8271')))

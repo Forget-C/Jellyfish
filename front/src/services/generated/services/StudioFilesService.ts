@@ -201,4 +201,31 @@ export class StudioFilesService {
             },
         });
     }
+    /**
+     * 显式清理画布上传保留关系
+     * 仅清理指定项目的上传保留；有其他使用者时拒绝，不删除文件字节。
+     * @returns ApiResponse_NoneType_ Successful Response
+     * @throws ApiError
+     */
+    public static releaseUploadRetention({
+        fileId,
+        projectId,
+    }: {
+        fileId: string,
+        projectId: string,
+    }): CancelablePromise<ApiResponse_NoneType_> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/v1/studio/files/{file_id}/upload-retention',
+            path: {
+                'file_id': fileId,
+            },
+            query: {
+                'project_id': projectId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
 }
