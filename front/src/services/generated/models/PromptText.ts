@@ -10,4 +10,3 @@ export type PromptText = {
     kind: 'text';
     text?: string;
 };
-

@@ -15,4 +15,3 @@ export type TextModelCard = {
     type?: string;
     config?: TextModelConfig;
 };
-

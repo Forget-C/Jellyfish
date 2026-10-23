@@ -15,4 +15,3 @@ export type VideoModelCard = {
     type?: string;
     config?: VideoModelConfig;
 };
-

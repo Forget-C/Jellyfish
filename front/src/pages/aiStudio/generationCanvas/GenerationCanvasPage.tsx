@@ -5,6 +5,8 @@ import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../
 import type { CanvasRead } from '../../../services/generated'
 import { useGenerationCanvasEditor } from './useGenerationCanvasEditor'
 import { GenerationCanvasGraph } from './GenerationCanvasGraph'
+import { useGenerationCanvasRuntime } from './useGenerationCanvasRuntime'
+import { RunPreview } from './RunPreview'
 
 /** 项目级文档编辑；运行、结果和浏览器布局有独立生命周期。 */
 export function GenerationCanvasPage({ projectId }: { projectId: string }) {
@@ -13,6 +15,8 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
   const [canvases, setCanvases] = useState<CanvasRead[]>([])
   const editor = useGenerationCanvasEditor(projectId, canvasId)
   const { current, document, edit, save, saving, dirty, ownership } = editor
+  const runtime = useGenerationCanvasRuntime(projectId, canvasId, save, ownership.canEdit)
+  const change: typeof edit = next => { runtime.invalidate(); edit(next) }
   const [error, setError] = useState('')
 
   const fail = (reason: unknown) => {
@@ -41,7 +45,7 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
   }
   useEffect(() => { if (current) setCanvases(previous => previous.map(item => item.id === current.id ? current : item)) }, [current])
   const remove = async () => {
-    if (!current || !ownership.canEdit() || !await editor.requestLeave()) return
+    if (!current || runtime.busyCards.size || !ownership.canEdit() || !await editor.requestLeave()) return
     try {
       await Canvases.canvasDelete({ projectId, canvasId: current.id })
       select(); await refreshList()
@@ -63,12 +67,18 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
     {!document || !current ? <Empty description="创建或选择一张画布" /> : <>
       <Space wrap>
         <Input aria-label="画布名称" value={document.name} maxLength={255} disabled={!ownership.editable || !!editor.recovery}
-          onChange={event => edit({ ...document, name: event.target.value })} />
+          onChange={event => change({ ...document, name: event.target.value })} />
         <Button type="primary" onClick={() => void save()} loading={saving} disabled={!ownership.editable || !!editor.recovery || editor.conflict}>保存画布</Button>
-        <Popconfirm title="删除这张画布？" onConfirm={remove}><Button danger disabled={saving || !ownership.editable}>删除画布</Button></Popconfirm>
+        <Popconfirm title="删除这张画布？" onConfirm={remove}><Button danger disabled={saving || !ownership.editable || !!runtime.busyCards.size}>删除画布</Button></Popconfirm>
         <span role="status">revision {current.revision} · {saving ? '保存中' : !dirty ? '已保存' : '待保存'}</span>
       </Space>
-      <GenerationCanvasGraph key={document.id} document={document} onChange={next => edit(next)} readonly={!ownership.editable || !!editor.recovery} />
+      <span role="status" aria-label="运行连接">{runtime.connection === 'connected' ? '运行事件已连接' : runtime.connection === 'connecting' ? '正在连接运行事件' : '运行连接恢复中，保留已接收内容'}</span>
+      {runtime.error && <Alert type="error" message={runtime.error} />}
+      {runtime.pending && <Alert type="warning" message="运行请求结果待核实；将使用原请求身份取得回执" action={<Button loading={runtime.submitting} disabled={!ownership.editable} onClick={() => void runtime.submit()}>核实运行请求</Button>} />}
+      {runtime.preview && <RunPreview preview={runtime.preview} submitting={runtime.submitting} disabled={!ownership.editable || !!runtime.pending || runtime.busyCards.has(runtime.preview.card_id)} onSubmit={() => void runtime.submit()} />}
+      <GenerationCanvasGraph key={document.id} document={document} onChange={next => change(next)} readonly={!ownership.editable || !!editor.recovery}
+        runtime={{ outputs: runtime.snapshot.current_outputs, nodes: runtime.latestNodes, busyCards: runtime.busyCards, checking: runtime.checking,
+          disabled: runtime.storageBlocked || !!runtime.pending || !!runtime.checking || runtime.submitting || editor.conflict, precheck: cardId => void runtime.precheck(cardId) }} />
     </>}
   </Space>
 }
