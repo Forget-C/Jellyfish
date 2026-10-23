@@ -8,7 +8,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.generation_canvas import CanvasSaveReceipt, GenerationCanvas
 from app.models.studio import Project
-from app.schemas.generation_canvas import CanvasDocument, CanvasSave, ModelCard
+from app.schemas.generation_canvas import CanvasDocument, CanvasSave, ModelCard, CanvasDiagnostic, CanvasCompiledInput
 from app.services.common import get_or_404
 from app.services.generation_canvas.errors import diagnostic
 from app.services.generation_canvas.graph import validate_graph
@@ -136,6 +136,23 @@ class CanvasStore:
         self.db.add(CanvasSaveReceipt(canvas_id=canvas_id, request_id=command.request_id, request_hash=digest, response=response))
         await self.db.flush()
         return response
+
+    async def compile_input(self, canvas_id: str, card_id: str) -> CanvasCompiledInput:
+        """编译已保存内容；不受理任务，不发布尚未存在的模型输出。"""
+        from app.services.generation_canvas.compiler import compile_card
+        canvas = await self.get(canvas_id)
+        document = CanvasDocument.model_validate(canvas.document)
+        card = next((card for card in document.cards if card.id == card_id), None)
+        if not isinstance(card, ModelCard):
+            raise HTTPException(404, 'Model card not found')
+        capability = await model_capability(self.db, card.model_id) if card.model_id else None
+        result = compile_card(document, card_id, capability=capability)
+        result.revision = canvas.revision
+        if not card.model_id:
+            result.diagnostics = list(result.diagnostics) + [CanvasDiagnostic(code='MODEL_REQUIRED', message='请选择模型',
+                target={'card_id': card_id, 'path': ['model_id']}, blocks=['run'])]
+            result.can_run = False
+        return result
 
     async def delete(self, canvas_id: str) -> None:
         """当前切片尚无运行；先删回执再删除文档，适配 SQLite 与 MySQL 外键。"""

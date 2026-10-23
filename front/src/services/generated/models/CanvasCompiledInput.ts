@@ -9,6 +9,7 @@ import type { CanvasResolvedOutput } from './CanvasResolvedOutput';
  */
 export type CanvasCompiledInput = {
     card_id: string;
+    revision?: (number | null);
     text?: string;
     used?: Array<CanvasResolvedOutput>;
     media?: Array<CanvasResolvedOutput>;

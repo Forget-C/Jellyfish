@@ -30,8 +30,10 @@ export function referenceIssue(document: CanvasDocument, receiver: GenerationCar
 /** 清理引用与删边/来源可以在同一份最终编辑文档里完成。 */
 export function referenceProtection(document: CanvasDocument, sourceCard: string, receiverId?: string, sourcePort?: string) {
   for (const card of document.cards || []) if ('prompt' in card && (!receiverId || card.id === receiverId)) {
-    const ref = referencesIn(card.prompt).find(item => item.source.canvas_id === document.id && item.source.card_id === sourceCard && (!sourcePort || item.source.port_id === sourcePort))
-    if (ref) return `请先清理 ${card.id} 的引用 ${ref.id}（正文或指令）`
+    for (const segment of card.prompt?.segments || []) {
+      const refs = segment.kind === 'reference' ? [segment] : segment.kind === 'instruction' ? segment.references || [] : []
+      const ref = refs.find(item => item.source.canvas_id === document.id && item.source.card_id === sourceCard && (!sourcePort || item.source.port_id === sourcePort))
+      if (ref) return { message: `请先清理 ${card.id} 的引用 ${ref.id}（${segment.kind === 'instruction' ? '指令配置' : '正文'}）`, cardId: card.id, segmentId: segment.id, referenceId: ref.id }
+    }
   }
-  return ''
 }

@@ -7,6 +7,8 @@ from app.schemas.generation_canvas import (
 )
 from app.services.generation_canvas.capabilities import parameter_diagnostics
 
+COMMAND_PORTS = {'首帧参考': 'first_frame', '尾帧参考': 'last_frame', '关键帧参考': 'key_frame', '主体参考': 'subject_image'}
+
 LABELS = {'text': '文本', 'image': '图片', 'video': '视频', 'audio': '音频'}
 
 
@@ -85,22 +87,47 @@ def compile_card(document: CanvasDocument, card_id: str, *,
     for item in result.used:
         media_position = result.media.index(item) + 1 if item in result.media else None
         result.mapping.append({'token': item.token, 'source': item.source.model_dump(), 'media_position': media_position})
+    command_counts = {}
+    used_ports = set()
     for segment in card.prompt.segments:
         if segment.kind == 'text':
             result.text += re.sub(r'\\(?=[@/])', '', segment.text)
             if re.search(r'(?<!\\)@(?:文本|图片|视频|音频)\d*', segment.text):
                 issue('UNCONFIRMED_REFERENCE', '代号尚未确认或不存在，请选择实际输出', segment.id)
         elif isinstance(segment, PromptReference):
+            port = segment.source.port_id
+            if card.type == 'model.video' and port in ('image', 'video'):
+                port = 'subject_' + port
+            used_ports.add((segment.source.card_id, segment.source.port_id, port))
+            if capability and port not in capability.input_ports:
+                issue('UNSUPPORTED_INPUT', '当前模型不支持实际使用的输入', segment.id)
             item = by_source.get(identity_key(segment.source))
             if item and item.available:
                 result.text += item.text if item.modality == 'text' else f'[media:{result.media.index(item) + 1}]'
         elif isinstance(segment, PromptInstruction):
-            issue('INSTRUCTION_REQUIRES_VIDEO_COMPILER', '指令由视频用途编译器校验', segment.id)
+            port = COMMAND_PORTS.get(segment.command)
+            command_counts[segment.command] = command_counts.get(segment.command, 0) + 1
+            if card.type != 'model.video' or not port:
+                issue('UNSUPPORTED_INSTRUCTION', '当前卡片不支持此系统指令', segment.id)
+            if not segment.references:
+                issue('INSTRUCTION_REFERENCE_REQUIRED', '指令缺少实际引用', segment.id)
+            if segment.command in ('首帧参考', '尾帧参考') and (command_counts[segment.command] > 1 or len(segment.references) > 1):
+                issue('INSTRUCTION_COUNT_EXCEEDED', '首尾帧指令各至多一项', segment.id)
+            if segment.command == '主体参考' and not segment.parameters.get('name'):
+                issue('INSTRUCTION_PARAMETER_REQUIRED', '主体参考缺少主体名称', segment.id)
+            for reference in segment.references:
+                actual_port = 'subject_video' if port == 'subject_image' and reference.source.port_id == 'video' else port
+                used_ports.add((reference.source.card_id, reference.source.port_id, actual_port))
+                if reference.source.port_id not in (('image', 'video') if segment.command == '主体参考' else ('image',)):
+                    issue('INSTRUCTION_REFERENCE_TYPE', '指令引用类型不匹配', reference.id)
+                if capability and actual_port not in capability.input_ports:
+                    issue('UNSUPPORTED_INPUT', '当前模型不支持此指令用途', segment.id)
+
     if capability:
         result.diagnostics.extend(CanvasDiagnostic.model_validate(item) for item in parameter_diagnostics(card, capability))
         for edge in document.edges:
             if edge.target_card == card_id and edge.target_port not in capability.input_ports:
-                used = any(ref.source.card_id == edge.source_card and ref.source.port_id == edge.source_port for ref, _ in refs)
+                used = (edge.source_card, edge.source_port, edge.target_port) in used_ports
                 issue('UNSUPPORTED_INPUT' if used else 'UNUSED_INCOMPATIBLE_INPUT', '当前模型不支持此输入用途', '',
                       ['edges', edge.id], warning=not used)
     result.can_run = not any('run' in item.blocks for item in result.diagnostics)

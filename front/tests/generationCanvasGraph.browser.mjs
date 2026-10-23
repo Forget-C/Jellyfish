@@ -143,7 +143,7 @@ try {
   await card('v').getByRole('combobox', { name: '选择模型', exact: true }).press('ArrowDown')
   await page.getByText('graph-video-alt', { exact: true }).last().click()
   await card('v').getByText('当前模型不支持，候选保留', { exact: true }).waitFor()
-  assert.equal(await card('v').getByRole('textbox', { name: '模型正文', exact: true }).inputValue(), '保留正文')
+  assert.equal(await card('v').getByRole('textbox', { name: '模型正文', exact: true }).textContent(), '保留正文')
   await card('v').getByText('当前模型不支持已有视频画幅，配置已保留', { exact: true }).waitFor()
   await card('v').getByText('视频时长超出模型范围，配置已保留', { exact: true }).waitFor()
   await dragPort('j', 'image', 'v', 'subject_image')

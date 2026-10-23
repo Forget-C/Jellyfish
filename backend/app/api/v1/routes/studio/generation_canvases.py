@@ -54,18 +54,4 @@ async def get_model_capability(project_id: str, canvas_id: str, model_id: str, d
             operation_id='canvas_compile')
 async def compile_canvas_card(project_id: str, canvas_id: str, card_id: str, db: AsyncSession = Depends(get_db)):
     """读取已保存文档的单次编译预览，不提交执行也不虚构模型输出。"""
-    from fastapi import HTTPException
-    from app.schemas.generation_canvas import CanvasDocument, ModelCard
-    from app.services.generation_canvas.compiler import compile_card
-    canvas = await CanvasStore(db, project_id).get(canvas_id)
-    document = CanvasDocument.model_validate(canvas.document)
-    card = next((card for card in document.cards if card.id == card_id), None)
-    if not isinstance(card, ModelCard):
-        raise HTTPException(404, 'Model card not found')
-    capability = await model_capability(db, card.model_id) if card.model_id else None
-    result = compile_card(document, card_id, capability=capability)
-    if not card.model_id:
-        from app.schemas.generation_canvas import CanvasDiagnostic
-        result.diagnostics.append(CanvasDiagnostic(code='MODEL_REQUIRED', message='请选择模型', target={'card_id': card_id, 'path': ['model_id']}, blocks=['run']))
-        result.can_run = False
-    return success_response(result)
+    return success_response(await CanvasStore(db, project_id).compile_input(canvas_id, card_id))

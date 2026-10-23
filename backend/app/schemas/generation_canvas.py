@@ -1,6 +1,6 @@
 """首个画布消费者使用的轻量类型契约，不包含布局或运行状态。"""
 from typing import Any, ClassVar, Literal
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.schemas.common import ApiResponse
 
 
@@ -59,6 +59,18 @@ class PromptDocument(BaseModel):
     """编辑器无关的原文、稳定引用与指令；不存正文偏移。"""
     model_config = ConfigDict(extra='forbid')
     segments: list[PromptText | PromptReference | PromptInstruction] = Field(default_factory=list)
+
+    @model_validator(mode='after')
+    def validate_segment_identities(self):
+        """片段和指令内引用共享定位命名空间，避免诊断指向多处。"""
+        identities = []
+        for segment in self.segments:
+            identities.append(segment.id)
+            if isinstance(segment, PromptInstruction):
+                identities.extend(reference.id for reference in segment.references)
+        if len(identities) != len(set(identities)):
+            raise ValueError('提示词片段身份必须唯一')
+        return self
 
 
 class ModelCard(CardDefinition):
@@ -241,6 +253,7 @@ class CanvasResolvedOutput(BaseModel):
 class CanvasCompiledInput(BaseModel):
     """单次展开与实际使用映射，媒体位置为实际提交子集内的序号。"""
     card_id: str
+    revision: int | None = None
     text: str = ''
     used: list[CanvasResolvedOutput] = Field(default_factory=list)
     media: list[CanvasResolvedOutput] = Field(default_factory=list)

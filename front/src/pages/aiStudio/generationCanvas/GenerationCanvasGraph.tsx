@@ -73,9 +73,15 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false }: 
   }, [cards.map(card => card.id).join('|'), groups.map(group => `${group.id}:${group.collapsed}`).join('|')])
   const edit = (next: CanvasDocument) => { if (!readonly) onChange(next) }
   const updateCard = (next: GenerationCard) => edit({ ...latest.current, cards: latest.current.cards?.map(card => card.id === next.id ? next : card) })
+  const showProtection = (protection: NonNullable<ReturnType<typeof referenceProtection>>) => {
+    setReason(protection.message)
+    const card = window.document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(protection.cardId)}"]`)
+    const segment = card?.querySelector<HTMLElement>(`[data-segment-id="${CSS.escape(protection.segmentId)}"]`)
+    if (segment) { segment.tabIndex = -1; segment.focus(); segment.scrollIntoView({ block: 'nearest', inline: 'nearest' }) }
+  }
   const removeCard = (id: string) => {
     const protection = referenceProtection(latest.current, id)
-    if (protection) { setReason(protection); return }
+    if (protection) { showProtection(protection); return }
     let next = latest.current
     for (const edge of next.edges || []) if (edge.source_card === id || edge.target_card === id) next = disconnect(next, edge.id)
     const order = { ...next.input_order }; delete order[id]
@@ -125,6 +131,14 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false }: 
       const next = { ...latest.current, cards: [...(latest.current.cards || []), source] }
       edit(connect(next, { id: crypto.randomUUID(), source_card: source.id, source_port: 'text', target_card: card.id, target_port: 'text' }))
     }}>添加文本参考</Button>
+    <Select<string> aria-label="添加媒体参考" placeholder="添加媒体参考" value={undefined} disabled={readonly} style={{ width: 150 }}
+      options={inputPorts(card).filter(port => port !== 'text').map(port => ({ value: port, label: `新建${portLabels[port]}内容卡` }))}
+      onChange={targetPort => {
+        if (!targetPort) return
+        const sourcePort = ['first_frame', 'last_frame', 'key_frame', 'subject_image'].includes(targetPort) ? 'image' : targetPort === 'subject_video' ? 'video' : targetPort
+        const source = { id: crypto.randomUUID(), type: `content.${sourcePort}`, type_version: 1, file_id: null, uploading: false }
+        edit(connect({ ...latest.current, cards: [...(latest.current.cards || []), source] }, { id: crypto.randomUUID(), source_card: source.id, source_port: sourcePort, target_card: card.id, target_port: targetPort }))
+      }} />
     <Select<string> aria-label="连接已有卡" placeholder="选择已有卡" value={undefined} disabled={readonly} style={{ width: 160 }}
       options={cards.flatMap(source => outputPorts(source).flatMap(sourcePort => inputPorts(card).filter(targetPort => !connectionReason(document, { id: 'candidate', source_card: source.id, source_port: sourcePort, target_card: card.id, target_port: targetPort }, capability(card))).map(targetPort => ({ value: `${source.id}|${sourcePort}|${targetPort}`, label: `${source.id.slice(0, 8)} → ${portLabels[targetPort]}` }))))}
       onChange={value => { if (!value) return; const [source_card, source_port, target_port] = value.split('|'); edit(connect(latest.current, { id: crypto.randomUUID(), source_card, source_port, target_card: card.id, target_port })) }} />
@@ -143,7 +157,7 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false }: 
           edit({ ...document, input_order: { ...document.input_order, [card.id]: { ...document.input_order?.[card.id], [name]: next } } })
         }}>↑</Button><Button size="small" disabled={readonly} aria-label={`断开连接 ${id}`} onClick={() => {
           const protection = referenceProtection(latest.current, edge.source_card, edge.target_card, edge.source_port)
-          if (protection) { setReason(protection); return }
+          if (protection) { showProtection(protection); return }
           edit(disconnect(latest.current, id))
         }}>断开</Button>
       </li>
