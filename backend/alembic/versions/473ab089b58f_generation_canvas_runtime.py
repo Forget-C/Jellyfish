@@ -97,7 +97,7 @@ def upgrade():
         sa.ForeignKeyConstraint(['canvas_id'], ['generation_canvases.id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['result_set_id'], ['generation_canvas_result_sets.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('canvas_id', 'card_id'))
-    op.execute("INSERT INTO generation_canvas_event_heads (canvas_id, cursor) SELECT id, 0 FROM generation_canvases")
+    op.execute("INSERT INTO generation_canvas_event_heads (canvas_id, `cursor`) SELECT id, 0 FROM generation_canvases")
 
 def downgrade():
     """Remove only canvas runtime tables."""
