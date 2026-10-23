@@ -76,17 +76,16 @@ class CanvasRuntime:
         cap = None
         model, provider, config = None, None, None
         issues = []
-        if card.type != 'model.text':
-            issues.append(CanvasDiagnostic(code='UNSUPPORTED_OPERATION', message='此入口当前支持文本模型', target={'card_id': card_id}, blocks=['run']))
+        category = ModelCategoryKey(card.type.removeprefix('model.'))
         if card.model_id:
             try:
                 model = await self.db.get(Model, card.model_id, with_for_update=lock_config, populate_existing=True)
-                if model is None or model.category != ModelCategoryKey.text:
+                if model is None or model.category != category:
                     raise HTTPException(422, 'model_unavailable')
                 provider = await self.db.get(Provider, model.provider_id, with_for_update=lock_config, populate_existing=True)
                 if provider is None:
                     raise HTTPException(422, 'provider_unavailable')
-                config = resolve_provider_config_from_provider(provider=provider, category=ModelCategoryKey.text)
+                config = resolve_provider_config_from_provider(provider=provider, category=category)
                 cap = await model_capability(self.db, card.model_id)
             except HTTPException:
                 issues.append(CanvasDiagnostic(code='MODEL_UNAVAILABLE', message='所选模型或供应商不可用', target={'card_id': card_id, 'path': ['model_id']}, blocks=['run']))
@@ -94,7 +93,7 @@ class CanvasRuntime:
             issues.append(CanvasDiagnostic(code='MODEL_REQUIRED', message='请选择模型', target={'card_id': card_id, 'path': ['model_id']}, blocks=['run']))
         compiled = compile_card(document, card_id, model_outputs=outputs, capability=cap)
         compiled.revision = canvas.revision
-        if not compiled.text.strip():
+        if not compiled.text.strip() and not (card.type == 'model.video' and compiled.media):
             issues.append(CanvasDiagnostic(code='TEXT_REQUIRED', message='请提供非空文本输入', target={'card_id': card_id, 'path': ['prompt']}, blocks=['run']))
         if any(not item.basis_current for item in compiled.used):
             issues.append(CanvasDiagnostic(code="INPUT_STALE", message="实际引用的模型输出依据已变，请先执行来源",
@@ -102,7 +101,7 @@ class CanvasRuntime:
         compiled.diagnostics += issues
         compiled.can_run = compiled.can_run and not issues
         public = {'card': card.model_dump(), 'input': compiled.model_dump(exclude={'revision', 'diagnostics', 'can_run'}),
-                  'model': {'id': model.id, 'name': model.name, 'params': public_parameters(model.params)} if model else {}}
+                  'model': {'id': model.id, 'name': model.name, 'params': public_parameters(model.params) if category == ModelCategoryKey.text else card.config.model_dump()} if model else {}}
         frozen = None
         if config and model and provider:
             frozen = {'model_name': model.name, 'model_params': model.params or {}, 'provider_key': config.provider_key,
@@ -113,6 +112,8 @@ class CanvasRuntime:
                   'config': card.config.model_dump(), 'text': compiled.text,
                   'used': [item.model_dump(exclude={'token', 'basis_current'}) for item in compiled.used],
                   'media': [item.model_dump(exclude={'token', 'basis_current'}) for item in compiled.media]}
+        if card.type == 'model.video':
+            actual['video_media'] = compiled.video_media.model_dump()
         return compiled, public, digest({'basis': actual, 'execution': frozen}), frozen
 
     async def current_outputs(self, canvas) -> dict[str, list[CanvasResolvedOutput]]:
@@ -183,10 +184,24 @@ class CanvasRuntime:
         self.db.add(node)
         await self.db.flush()
         self.db.add(CanvasScopeOccupancy(canvas_id=canvas_id, card_id=preview.card_id, node_id=node.id))
-        generation = GenerationCommand(modality='text', operation='text_chat', delivery='async_polling',
-            target=GenerationTarget(kind='canvas_node', entity_id=node.id),
-            request=GenerationSubmitRequest(model_id=basis['model']['id'], operation_input=TextChatInput(
-                messages=[TextChatMessage(role='user', content=compiled.text, sequence=1)])))
+        card = next(card for card in CanvasDocument.model_validate(canvas.document).cards if card.id == preview.card_id)
+        modality = card.type.removeprefix('model.')
+        if modality == 'text':
+            request = GenerationSubmitRequest(model_id=basis['model']['id'], operation_input=TextChatInput(
+                messages=[TextChatMessage(role='user', content=compiled.text, sequence=1)]))
+        elif modality == 'video':
+            from app.core.contracts.generation import VideoGenerationOperationInput
+            request = GenerationSubmitRequest(model_id=basis['model']['id'], execution_prompt=compiled.text,
+                operation_input=VideoGenerationOperationInput(**card.config.model_dump()), media=compiled.video_media)
+        else:
+            from app.core.contracts.generation import ImageGenerationOperationInput
+            from app.core.contracts.media import ImageMediaInput, MediaReference
+            request = GenerationSubmitRequest(model_id=basis['model']['id'], execution_prompt=compiled.text,
+                operation_input=ImageGenerationOperationInput(**card.config.model_dump()),
+                media=ImageMediaInput(references=[MediaReference(file_id=item.file_id, media_kind='image', ordinal=index)
+                    for index, item in enumerate(compiled.media)]))
+        generation = GenerationCommand(modality=modality, operation='text_chat' if modality == 'text' else modality + '_generation',
+            delivery='async_polling', target=GenerationTarget(kind='canvas_node', entity_id=node.id), request=request)
         accepted = await GenerationSubmitter(entity_gate=GenerationEntityGate()).submit_async(self.db, generation)
         node.task_id = accepted.task_id
         await self.db.flush()
@@ -199,13 +214,17 @@ class CanvasRuntime:
 
     async def content(self, canvas_id: str, run_id: str, node_id: str, position: int):
         """返回一次明确另存的独立内容；文档仍通过普通 CAS 队列保存。"""
-        from app.schemas.generation_canvas import CanvasContentOrigin, TextContentCard
+        from app.schemas.generation_canvas import CanvasContentOrigin, TextContentCard, ImageContentCard, VideoContentCard
         node = await self.output_node(canvas_id, run_id, node_id, position)
         output = node.outputs[position]
-        if output['modality'] != 'text':
-            raise diagnostic('UNSUPPORTED_OUTPUT', '此成果尚不支持另存内容卡', {'node_id': node_id}, blocks=['save'])
-        return TextContentCard(id=uuid4().hex, text=output['text'], origin=CanvasContentOrigin(
-            canvas_id=canvas_id, run_id=run_id, node_id=node_id, position=position, incomplete=node.status != 'succeeded'))
+        origin = CanvasContentOrigin(canvas_id=canvas_id, run_id=run_id, node_id=node_id,
+                                     position=position, incomplete=node.status != 'succeeded')
+        if output['modality'] == 'text':
+            return TextContentCard(id=uuid4().hex, text=output['text'], origin=origin)
+        from app.services.studio.files import require_available_file
+        await require_available_file(self.db, file_id=output['file_id'], expected_type=output['modality'])
+        kind = ImageContentCard if output['modality'] == 'image' else VideoContentCard
+        return kind(id=uuid4().hex, file_id=output['file_id'], origin=origin)
 
     async def output_node(self, canvas_id: str, run_id: str, node_id: str, position: int):
         """按项目和画布校验历史输出；运行中内容不伪装成固定成果。"""
@@ -279,6 +298,16 @@ async def sync_task_fact(db: AsyncSession, task, *, delta: str | None = None):
         if node.text:
             node.outputs = [CanvasResolvedOutput(source=OutputIdentity(canvas_id=node.canvas_id, card_id=node.card_id,
                 port_id='text', position=0), modality='text', text=node.text).model_dump()]
+        if task.kind in ('image_generation', 'video_generation'):
+            from app.models.task import TaskOutput
+            from app.services.studio.file_usages import upsert_file_usage
+            modality = 'image' if task.kind == 'image_generation' else 'video'
+            outputs = list(await db.scalars(select(TaskOutput).where(TaskOutput.task_id == task.id).order_by(TaskOutput.ordinal)))
+            node.outputs = [CanvasResolvedOutput(source=OutputIdentity(canvas_id=node.canvas_id, card_id=node.card_id,
+                port_id=modality, position=item.ordinal), modality=modality, file_id=item.file_id).model_dump() for item in outputs]
+            for item in outputs:
+                await upsert_file_usage(db, file_id=item.file_id, project_id=task.project_id, chapter_id=None,
+                    usage_kind='canvas_history', source_ref=f'{node.canvas_id}:{node.id}:{item.ordinal}')
         if node.status == 'succeeded':
             result = CanvasResultSet(id=uuid4().hex, canvas_id=node.canvas_id, node_id=node.id, card_id=node.card_id,
                 basis=node.basis, basis_hash=node.basis_hash, outputs=node.outputs)

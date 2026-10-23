@@ -13,7 +13,7 @@ import type { ApiResponse_CanvasSnapshot_ } from '../models/ApiResponse_CanvasSn
 import type { ApiResponse_CanvasStreamConnection_ } from '../models/ApiResponse_CanvasStreamConnection_';
 import type { ApiResponse_list_CanvasRead__ } from '../models/ApiResponse_list_CanvasRead__';
 import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
-import type { ApiResponse_TextContentCard_ } from '../models/ApiResponse_TextContentCard_';
+import type { ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__ } from '../models/ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__';
 import type { CanvasCreate } from '../models/CanvasCreate';
 import type { CanvasPrecheckRequest } from '../models/CanvasPrecheckRequest';
 import type { CanvasRunSubmit } from '../models/CanvasRunSubmit';
@@ -407,7 +407,7 @@ export class StudioGenerationCanvasesService {
     /**
      * Canvas Output Content
      * 准备独立内容卡；调用方通过已有文档保存队列显式持久化。
-     * @returns ApiResponse_TextContentCard_ Successful Response
+     * @returns ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__ Successful Response
      * @throws ApiError
      */
     public static canvasOutputContent({
@@ -422,7 +422,7 @@ export class StudioGenerationCanvasesService {
         runId: string,
         nodeId: string,
         position: number,
-    }): CancelablePromise<ApiResponse_TextContentCard_> {
+    }): CancelablePromise<ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/runs/{run_id}/nodes/{node_id}/outputs/{position}/content',

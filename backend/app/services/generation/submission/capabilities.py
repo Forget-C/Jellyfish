@@ -80,6 +80,7 @@ _DEFAULT_CAPABILITIES: Mapping[GenerationOperation, frozenset[GenerationDelivery
 _DEFAULT_TARGET_CAPABILITIES: Mapping[
     tuple[GenerationOperation, GenerationTargetKind], frozenset[GenerationDelivery]
 ] = {
+    (GenerationOperation.image_generation, GenerationTargetKind.canvas_node): frozenset({GenerationDelivery.async_polling}),
     (GenerationOperation.text_chat, GenerationTargetKind.canvas_node): frozenset({GenerationDelivery.async_polling}),
     (GenerationOperation.text_chat, GenerationTargetKind.experiment_session): frozenset({
         GenerationDelivery.inline,
@@ -96,6 +97,7 @@ _DEFAULT_TARGET_CAPABILITIES: Mapping[
     (GenerationOperation.image_generation, GenerationTargetKind.asset_image_slot): frozenset({
         GenerationDelivery.async_polling,
     }),
+    (GenerationOperation.video_generation, GenerationTargetKind.canvas_node): frozenset({GenerationDelivery.async_polling}),
     (GenerationOperation.video_generation, GenerationTargetKind.experiment_session): frozenset({
         GenerationDelivery.async_polling,
     }),

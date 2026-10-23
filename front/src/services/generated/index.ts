@@ -132,9 +132,9 @@ export type { ApiResponse_TaskOutputPageRead_ } from './models/ApiResponse_TaskO
 export type { ApiResponse_TaskPageRead_ } from './models/ApiResponse_TaskPageRead_';
 export type { ApiResponse_TaskResultRead_ } from './models/ApiResponse_TaskResultRead_';
 export type { ApiResponse_TaskStatusRead_ } from './models/ApiResponse_TaskStatusRead_';
-export type { ApiResponse_TextContentCard_ } from './models/ApiResponse_TextContentCard_';
 export type { ApiResponse_TextLabRunStatus_ } from './models/ApiResponse_TextLabRunStatus_';
 export type { ApiResponse_Union_DivisionSaved__NoneType__ } from './models/ApiResponse_Union_DivisionSaved__NoneType__';
+export type { ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__ } from './models/ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__';
 export type { ApiResponse_UnitCanvasGraph_ } from './models/ApiResponse_UnitCanvasGraph_';
 export type { ApiResponse_VideoGenerationOptionsRead_ } from './models/ApiResponse_VideoGenerationOptionsRead_';
 export type { ApiResponse_VideoReferenceCapabilities_ } from './models/ApiResponse_VideoReferenceCapabilities_';

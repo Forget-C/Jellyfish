@@ -2,6 +2,7 @@
 from typing import Any, ClassVar, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.schemas.common import ApiResponse
+from app.core.contracts.media import VideoMediaInput
 
 
 class CardDefinition(BaseModel):
@@ -163,6 +164,8 @@ class CanvasModelCapability(BaseModel):
     resolution_profiles: dict[str, dict[str, str]] = Field(default_factory=dict)
     min_count: int = 1
     max_count: int = 10
+    max_reference_images: int | None = None
+    supports_duplicate_reference_images: bool = True
     min_seconds: int | None = None
     max_seconds: int | None = None
     supports_seed: bool = False
@@ -271,6 +274,7 @@ class CanvasCompiledInput(BaseModel):
     text: str = ''
     used: list[CanvasResolvedOutput] = Field(default_factory=list)
     media: list[CanvasResolvedOutput] = Field(default_factory=list)
+    video_media: VideoMediaInput | None = None
     mapping: list[dict[str, Any]] = Field(default_factory=list)
     diagnostics: list[CanvasDiagnostic] = Field(default_factory=list)
     can_run: bool = True
