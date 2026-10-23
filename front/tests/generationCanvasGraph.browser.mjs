@@ -106,6 +106,17 @@ try {
   saved = (await (await fetch(`${base}/${canvas.id}`)).json()).data
   assert.deepEqual(saved.document.input_order.m.text, [order[1], order[0]])
   assert.equal(saved.document.groups[0].collapsed, true)
+  const fresh = await browser.newPage({ viewport: { width: 1440, height: 960 } })
+  await fresh.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
+  await fresh.goto(page.url())
+  await fresh.locator('[data-card-id="m"]').waitFor()
+  await fresh.waitForFunction(() => {
+    const group = document.querySelector('[data-group-id]')?.getBoundingClientRect()
+    const model = document.querySelector('[data-card-id="m"]')?.getBoundingClientRect()
+    return group && model && model.x > group.x + group.width
+  })
+  await fresh.screenshot({ path: join(output, 'collapsed-fresh-browser.png'), fullPage: true })
+  await fresh.close()
   await group.getByRole('button', { name: '展开组', exact: true }).click()
   await group.getByRole('button', { name: '解散组', exact: true }).click()
   assert.equal(await page.locator('[data-card-id]').count(), 3)
