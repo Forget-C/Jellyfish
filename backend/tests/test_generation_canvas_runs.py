@@ -35,10 +35,14 @@ async def runtime(tmp_path, request):
         db.add(Provider(id=provider_id, name='openai', api_key='private-secret', base_url='https://frozen.test/v1'))
         await db.flush()
         db.add(Model(id=model_id, name='frozen-model', category='text', provider_id=provider_id, params={'temperature': 0.3, 'default_headers': {'Authorization': 'Bearer model-private-secret'}}))
-    app = FastAPI()
-    app.include_router(router, prefix='/canvases')
-    from app.api.v1.routes.studio.projects import router as projects_router
-    app.include_router(projects_router, prefix='/projects')
+    real_app = getattr(request, 'param', None) == 'app-handler'
+    if real_app:
+        from app.main import app
+    else:
+        app = FastAPI()
+        app.include_router(router, prefix='/canvases')
+        from app.api.v1.routes.studio.projects import router as projects_router
+        app.include_router(projects_router, prefix='/projects')
     async def database():
         async with sessions() as db:
             try:
@@ -47,15 +51,19 @@ async def runtime(tmp_path, request):
             except Exception:
                 await db.rollback()
                 raise
+    previous_overrides = dict(app.dependency_overrides)
     app.dependency_overrides[get_db] = database
+    prefix = '/api/v1/studio/generation-canvases' if real_app else '/canvases'
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
-        canvas = (await client.post(f'/canvases/{project_id}', json={'name': 'run'})).json()['data']
-        url = f"/canvases/{project_id}/{canvas['id']}"
+        canvas = (await client.post(f'{prefix}/{project_id}', json={'name': 'run'})).json()['data']
+        url = f"{prefix}/{project_id}/{canvas['id']}"
         document = canvas['document']
         document['cards'] = [{'id': 'm', 'type': 'model.text', 'model_id': model_id,
                               'prompt': {'segments': [{'id': 'body', 'kind': 'text', 'text': 'Frozen prompt'}]}}]
         assert (await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': document})).status_code == 200
         yield SimpleNamespace(client=client, sessions=sessions, url=url, document=document, canvas_id=canvas['id'], project_id=project_id, provider_id=provider_id, model_id=model_id)
+    app.dependency_overrides.clear()
+    app.dependency_overrides.update(previous_overrides)
     if mysql:
         from sqlalchemy import delete
         from app.models.generation_canvas import CanvasSaveReceipt, GenerationCanvas
@@ -421,6 +429,7 @@ async def test_runtime_migration_preserves_existing_canvas_observation(tmp_path)
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('runtime', ['mysql', 'app-handler'], indirect=True)
 async def test_canvas_cancel_running_intent_retains_scope_until_actual_terminal(runtime):
     from app.services.task_service import TaskService
     accepted, _ = await accept(runtime)
@@ -450,6 +459,7 @@ async def test_canvas_cancel_running_intent_retains_scope_until_actual_terminal(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('runtime', ['mysql', 'app-handler'], indirect=True)
 async def test_saved_unfinished_content_has_immutable_origin_and_independent_text(runtime):
     from app.services.task_service import TaskService
     accepted, _ = await accept(runtime)
@@ -472,7 +482,30 @@ async def test_saved_unfinished_content_has_immutable_origin_and_independent_tex
     assert (await runtime.client.put(runtime.url, json={'request_id': 'edit-independent', 'expected_revision': 2, 'document': runtime.document})).status_code == 200
     runtime.document['cards'][-1]['origin']['incomplete'] = False
     tamper = await runtime.client.put(runtime.url, json={'request_id': 'tamper', 'expected_revision': 3, 'document': runtime.document})
-    assert tamper.status_code == 422 and tamper.json()['detail']['code'] == 'IMMUTABLE_ORIGIN'
+    assert tamper.status_code == 422
+    assert (tamper.json().get('data') or tamper.json().get('detail'))['code'] == 'IMMUTABLE_ORIGIN'
     history = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
     assert history['runs'][0]['nodes'][0]['text'] == 'Unfinished original'
     assert history['current_outputs'] == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('runtime', ['app-handler'], indirect=True)
+async def test_queued_cancel_targets_history_and_structured_errors_after_source_removed(runtime):
+    accepted, _ = await accept(runtime)
+    snapshot = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+    node = snapshot['runs'][0]['nodes'][0]
+    invalid = await runtime.client.post(runtime.url + f"/runs/{accepted['run_id']}/nodes/wrong/cancel")
+    assert invalid.status_code == 404
+    assert invalid.json()['data']['code'] == 'NODE_NOT_FOUND'
+    response = await runtime.client.post(runtime.url + f"/runs/{accepted['run_id']}/cancel")
+    assert response.status_code == 200
+    assert response.json()['data']['nodes'][0]['status'] == 'cancelled'
+    removed = {**runtime.document, 'cards': []}
+    assert (await runtime.client.put(runtime.url, json={'request_id': 'remove-terminal', 'expected_revision': 1, 'document': removed})).status_code == 200
+    history = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+    assert history['runs'][0]['nodes'][0]['id'] == node['id']
+    assert history['runs'][0]['nodes'][0]['basis']['input']['text'] == 'Frozen prompt'
+    assert 'private-secret' not in str(history) and 'model-private-secret' not in str(history)
+    replay = await runtime.client.post(runtime.url + f"/runs/{accepted['run_id']}/nodes/{node['id']}/cancel")
+    assert replay.json()['data']['nodes'][0]['status'] == 'cancelled'

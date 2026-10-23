@@ -27,7 +27,7 @@ class TextContentCard(CardDefinition):
     """一张卡一份文本，空字符串可以保存但没有可用输出。"""
     type: Literal['content.text'] = 'content.text'
     text: str = ''
-    origin: CanvasContentOrigin | None = None
+    origin: CanvasContentOrigin | None = Field(default=None, exclude_if=lambda value: value is None)
     output_ports: ClassVar[tuple[str, ...]] = ('text',)
 
 
@@ -178,7 +178,7 @@ class MediaContentCard(CardDefinition):
     """媒体内容固定引用一份项目文件；上传期间已有文件仍受保护但不发布输出。"""
     file_id: str | None = Field(default=None, min_length=1, max_length=36)
     uploading: bool = False
-    origin: CanvasContentOrigin | None = None
+    origin: CanvasContentOrigin | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class ImageContentCard(MediaContentCard):
