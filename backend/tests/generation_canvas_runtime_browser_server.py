@@ -16,7 +16,7 @@ import app.task_worker as worker_module
 
 engine = create_async_engine('sqlite+aiosqlite:///' + os.environ['CANVAS_BROWSER_DATABASE'])
 sessions = async_sessionmaker(engine, expire_on_commit=False)
-control = {'release': 0, 'fail_next': False, 'calls': []}
+control = {'release': 0, 'fail_next': False, 'calls': [], 'stream_connections': 0, 'disconnect_epoch': 0, 'duplicate_next': False}
 
 
 class ControlledModel:
@@ -57,7 +57,14 @@ async def read_control():
 
 @app.post('/test/runtime-controls')
 async def set_control(body: dict = Body(...)):
-    for key in ('release', 'fail_next'):
+    if body.get('disconnect'):
+        control['disconnect_epoch'] += 1
+    if body.get('expire_events'):
+        from sqlalchemy import delete
+        from app.models.generation_canvas import CanvasEvent
+        async with sessions.begin() as db:
+            await db.execute(delete(CanvasEvent))
+    for key in ('release', 'fail_next', 'duplicate_next'):
         if key in body:
             control[key] = body[key]
     return control
@@ -66,6 +73,20 @@ async def set_control(body: dict = Body(...)):
 @asynccontextmanager
 async def lifespan(_app):
     worker_module.ChatOpenAI = ControlledModel
+    from app.services.generation_canvas import stream
+    original_stream = stream.stream_events
+    async def controlled_stream(*args, **kwargs):
+        # Real persistent stream; faults live only at the HTTP transport boundary.
+        control['stream_connections'] += 1
+        epoch = control['disconnect_epoch']
+        async for chunk in original_stream(*args, **kwargs):
+            if epoch != control['disconnect_epoch']:
+                return
+            yield chunk
+            if control['duplicate_next'] and chunk.startswith('id:'):
+                control['duplicate_next'] = False
+                yield chunk
+    stream.stream_events = controlled_stream
     worker = TaskWorker(sessions)
     async def tick():
         while True:
