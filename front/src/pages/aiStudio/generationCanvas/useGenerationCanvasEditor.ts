@@ -8,7 +8,7 @@ type Recovery = { schema: 1; baseline: CanvasRead; document: CanvasDocument; pen
 const validDocument = (value: CanvasDocument, projectId: string, canvasId: string) => value && value.id === canvasId && value.project_id === projectId && typeof value.name === 'string' && Array.isArray(value.cards) && value.cards.every(card => card && typeof card.id === 'string' && typeof card.type === 'string')
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 const describe = (reason: unknown) => reason instanceof ApiError
-  ? `${reason.body?.detail?.code || reason.status}: ${reason.body?.detail?.message || '保存失败，请重试'}` : '请求结果未知，请重试核实原请求'
+  ? `${reason.body?.data?.code || reason.status}: ${reason.body?.data?.message || '保存失败，请重试'}` : '请求结果未知，请重试核实原请求'
 
 /** 文档快照串行保存；原回执只推进基线，绝不替换仍在编辑的正文。 */
 export function useGenerationCanvasEditor(projectId: string, canvasId: string | null) {

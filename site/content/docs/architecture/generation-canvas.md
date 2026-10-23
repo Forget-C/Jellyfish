@@ -11,7 +11,7 @@ description: "独立项目画布当前已实现的文档、保存及页面边界
 
 HTTP 边界为 `/api/v1/studio/generation-canvases/{project_id}` 的列表／创建，以及 `/{canvas_id}` 的读取／PUT 保存／删除。读取、写入和删除均限定项目归属，沿用现有项目 API 的访问边界。前端普通请求由 OpenAPI generated client 发出。
 
-保存提交 `request_id`、`expected_revision` 和完整 `document`。事务先锁文档行，再核实持久回执，最后执行 revision CAS。文档更新和 `generation_canvas_save_receipts` 在同一事务提交。同请求重放原回执，不因后续 revision 改变；同身份不同正文返回 HTTP 409 `IDEMPOTENCY_CONFLICT`，过期修订返回 HTTP 409 `REVISION_CONFLICT`。结构、类型和身份错误返回带 `code`、`severity`、`message`、`target`、`blocks` 的文档诊断。HTTP 命令封套的基本校验仍使用 FastAPI 422 格式。
+保存提交 `request_id`、`expected_revision` 和完整 `document`。事务先锁文档行，再核实持久回执，最后执行 revision CAS。文档更新和 `generation_canvas_save_receipts` 在同一事务提交。同请求重放原回执，不因后续 revision 改变；同身份不同正文返回 HTTP 409 `IDEMPOTENCY_CONFLICT`，过期修订返回 HTTP 409 `REVISION_CONFLICT`。结构、类型和身份错误返回带 `code`、`severity`、`message`、`target`、`blocks` 的文档诊断。画布领域异常使用标准 `{code,message,data,meta}` 封套，`data` 保留类型化诊断；不从 message 反解析字段。普通 HTTP 异常仍保持原有 `data=null`，命令封套基本校验沿用统一 422 处理。
 
 迁移 `d6a0b4c8e957` 建立两张表。MySQL 验证使用显式隔离测试库与独立 HTTP 请求事务，覆盖 CAS、同请求竞争及迁移／模型一致性；SQLite 用于功能持久化与真实页面旅程，不能代替 MySQL 竞争证据。
 

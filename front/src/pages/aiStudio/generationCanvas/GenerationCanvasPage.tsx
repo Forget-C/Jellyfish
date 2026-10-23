@@ -16,7 +16,7 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
   const [error, setError] = useState('')
 
   const fail = (reason: unknown) => {
-    const detail = reason instanceof ApiError ? reason.body?.detail : undefined
+    const detail = reason instanceof ApiError ? reason.body?.data : undefined
     setError(detail?.code ? `${detail.code}: ${detail.message}` : '操作失败，请重试')
   }
   const refreshList = () => Canvases.canvasList({ projectId }).then(response => setCanvases(response.data || []))

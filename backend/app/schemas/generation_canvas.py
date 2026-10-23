@@ -1,6 +1,7 @@
 """首个画布消费者使用的轻量类型契约，不包含布局或运行状态。"""
 from typing import Any, ClassVar, Literal
 from pydantic import BaseModel, ConfigDict, Field
+from app.schemas.common import ApiResponse
 
 
 class CardDefinition(BaseModel):
@@ -182,6 +183,5 @@ class CanvasDiagnostic(BaseModel):
     blocks: list[str]
 
 
-class CanvasError(BaseModel):
-    """文档结构或 CAS 失败的 HTTP 错误正文。"""
-    detail: CanvasDiagnostic
+class CanvasError(ApiResponse[CanvasDiagnostic]):
+    """统一 HTTP 错误封套，data 保留稳定代号、定位及阻止动作。"""
