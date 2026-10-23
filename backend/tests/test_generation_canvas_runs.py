@@ -570,3 +570,34 @@ async def test_lost_cancel_response_observes_real_worker_without_reexecution(run
     assert terminal['runs'][0]['nodes'][0]['status'] == 'cancelled'
     assert terminal['runs'][0]['nodes'][0]['text'] == 'Retained partial'
     assert terminal['current_outputs'] == {} and calls == ['one external request']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('runtime', ['mysql'], indirect=True)
+async def test_terminal_canonical_text_replay_converges_and_stream_observes_next_run(runtime):
+    import json
+    from app.services.task_service import TaskService
+    from app.services.generation_canvas.stream import stream_events
+    accepted, _ = await accept(runtime)
+    async with runtime.sessions.begin() as db:
+        await TaskService(db).claim(accepted['task_ids'][0], worker_id='canonical')
+        await TaskService(db).append_canvas_text(accepted['task_ids'][0], 'Provisional body')
+    cut = (await runtime.client.get(runtime.url + '/runtime')).json()['data']['cursor']
+    async with runtime.sessions.begin() as db:
+        await TaskService(db).finish(accepted['task_ids'][0], result={'text': 'Canonical final body'})
+    stream = stream_events(runtime.sessions, runtime.project_id, runtime.canvas_id, cut)
+    try:
+        terminal = json.loads((await anext(stream)).split('data: ', 1)[1])
+        assert terminal['type'] == 'node.finished'
+        assert terminal['payload']['node']['text'] == 'Canonical final body'
+        assert terminal['payload']['node']['outputs'][0]['text'] == 'Canonical final body'
+        finished = json.loads((await anext(stream)).split('data: ', 1)[1])
+        assert finished['type'] == 'run.finished'
+        second, _ = await accept(runtime, 'second-on-same-stream')
+        following = json.loads((await anext(stream)).split('data: ', 1)[1])
+        assert following['type'] == 'node.updated' and following['run_id'] == second['run_id']
+        snapshot = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+        assert snapshot['runs'][0]['nodes'][0]['text'] == 'Canonical final body'
+        assert snapshot['current_outputs']['m'][0]['text'] == 'Canonical final body'
+    finally:
+        await stream.aclose()
