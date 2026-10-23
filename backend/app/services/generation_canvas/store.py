@@ -52,6 +52,9 @@ class CanvasStore:
         canvas = GenerationCanvas(id=canvas_id, project_id=self.project_id, document=document.model_dump(), revision=0)
         self.db.add(canvas)
         await self.db.flush()
+        from app.models.generation_canvas import CanvasEventHead
+        self.db.add(CanvasEventHead(canvas_id=canvas_id))
+        await self.db.flush()
         return canvas
 
     async def save(self, canvas_id: str, command: CanvasSave) -> dict:

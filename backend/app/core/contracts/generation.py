@@ -31,6 +31,7 @@ class GenerationDelivery(str, Enum):
 class GenerationTargetKind(str, Enum):
     """受信任业务目标的封闭集合。"""
 
+    canvas_node = "canvas_node"
     experiment_session = "experiment_session"
     asset_image_slot = "asset_image_slot"
     directing_unit = "directing_unit"
@@ -133,9 +134,21 @@ class GenerationCommand(BaseModel):
     request: GenerationSubmitRequest
 
 
+class FrozenGenerationConfig(BaseModel):
+    """Canvas-only private execution override; never serialize into public run DTOs."""
+    model_config = ConfigDict(extra="forbid")
+    model_name: str
+    model_params: dict = Field(default_factory=dict)
+    provider_id: str
+    provider_key: str
+    api_key: str = Field(repr=False)
+    base_url: str | None = None
+
+
 class ResolvedGenerationSnapshot(BaseModel):
     """Entity Gate 生成的异步任务参数快照，绝不保存凭据或模型配置副本。
 
+    Canvas target 可携带服务端私有 execution_config；其他目标保持原行为。
     Worker 会在真正执行时按 ``model_id`` 读取当前模型与 Provider 配置；快照只
     保存用户提交的输入，避免待执行任务因模型管理更新而被阻塞。
     """
@@ -144,9 +157,11 @@ class ResolvedGenerationSnapshot(BaseModel):
 
     model_id: str
     canonical_target: GenerationTarget
+    execution_config: FrozenGenerationConfig | None = Field(default=None, repr=False)
     expected_version_id: int | None = Field(default=None, ge=1)
     prompt_revision_id: str | None = None
     media: ImageMediaInput | VideoMediaInput | None = None
     operation_input: TypedOperationInput
     execution_prompt: str | None = None
     asset_prompt_audit: AssetPromptAudit | None = None
+

@@ -55,3 +55,46 @@ async def get_model_capability(project_id: str, canvas_id: str, model_id: str, d
 async def compile_canvas_card(project_id: str, canvas_id: str, card_id: str, db: AsyncSession = Depends(get_db)):
     """读取已保存文档的单次编译预览，不提交执行也不虚构模型输出。"""
     return success_response(await CanvasStore(db, project_id).compile_input(canvas_id, card_id))
+
+
+from app.schemas.generation_canvas import (CanvasPrecheckRequest, CanvasPrecheck, CanvasRunSubmit,
+    CanvasRunAccepted, CanvasSnapshot, CanvasRuntimeEvent, CanvasStreamConnection)
+from app.services.generation_canvas.runtime import CanvasRuntime
+
+
+@router.post('/{project_id}/{canvas_id}/precheck', response_model=ApiResponse[CanvasPrecheck], operation_id='canvas_precheck')
+async def precheck_canvas(project_id: str, canvas_id: str, body: CanvasPrecheckRequest, db: AsyncSession = Depends(get_db)):
+    """核实已保存单卡的实际输入、模型及配置，返回短期预检凭据。"""
+    return success_response(await CanvasRuntime(db, project_id).precheck(canvas_id, body))
+
+
+@router.post('/{project_id}/{canvas_id}/runs', response_model=ApiResponse[CanvasRunAccepted], operation_id='canvas_run_submit')
+async def submit_canvas_run(project_id: str, canvas_id: str, body: CanvasRunSubmit, db: AsyncSession = Depends(get_db)):
+    """原子受理并返回原或新运行；不在 HTTP 请求中调用供应商。"""
+    return success_response(await CanvasRuntime(db, project_id).submit(canvas_id, body))
+
+
+@router.get('/{project_id}/{canvas_id}/runtime', response_model=ApiResponse[CanvasSnapshot], operation_id='canvas_runtime')
+async def get_canvas_runtime(project_id: str, canvas_id: str, db: AsyncSession = Depends(get_db)):
+    """读取运行、累计正文和当前输出的一致切点。"""
+    return success_response(await CanvasRuntime(db, project_id).snapshot(canvas_id))
+
+
+@router.get('/{project_id}/{canvas_id}/events/connection', response_model=ApiResponse[CanvasStreamConnection], operation_id='canvas_stream_connection')
+async def canvas_stream_connection(project_id: str, canvas_id: str, db: AsyncSession = Depends(get_db)):
+    """提供 generated client 可获取的公共流连接地址。"""
+    await CanvasStore(db, project_id).get(canvas_id)
+    return success_response(CanvasStreamConnection(url=f'/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/events'))
+
+
+@router.get('/{project_id}/{canvas_id}/events', response_model=CanvasRuntimeEvent, operation_id='canvas_events')
+async def canvas_events(project_id: str, canvas_id: str, cursor: int | None = None, db: AsyncSession = Depends(get_db)):
+    """多运行 SSE；读取事务仅持续一次数据库追读，不随连接存活。"""
+    from fastapi.responses import StreamingResponse
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+    from app.services.generation_canvas.stream import stream_events
+    await CanvasStore(db, project_id).get(canvas_id)
+    sessions = async_sessionmaker(db.bind, expire_on_commit=False)
+    await db.commit()
+    return StreamingResponse(stream_events(sessions, project_id, canvas_id, cursor), media_type='text/event-stream',
+                             headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})

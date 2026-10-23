@@ -298,6 +298,9 @@ class TaskWorker:
 
     async def _text(self, task: Task) -> None:
         """先解析模型后释放事务；同步 Agent 在有界线程池执行，结果统一交付。"""
+        if task.target_type == "canvas_node":
+            await self._canvas_text(task)
+            return
         stopped = Event()
         async with self.sessions() as db:
             model = await db.get(Model, task.input_snapshot.get("model_id"))
@@ -347,6 +350,37 @@ class TaskWorker:
                     result.update(candidate.model_dump(mode="json"))
         async with self.sessions() as db:
             await TaskService(db).finish(task.id, result=result, deliver=deliver)
+            await db.commit()
+
+    async def _canvas_text(self, task: Task) -> None:
+        """Use the admitted private config and persist chunks in short transactions."""
+        from app.core.contracts.generation import FrozenGenerationConfig
+        frozen = FrozenGenerationConfig.model_validate(task.input_snapshot.get('execution_config'))
+        params = dict(frozen.model_params)
+        params.update(model=frozen.model_name, api_key=frozen.api_key, base_url=frozen.base_url,
+                      max_retries=0, timeout=self.limits.request_seconds, http_async_client=self.client)
+        params['extra_body'] = {**params.get('extra_body', {}), 'enable_thinking': False}
+        llm = ChatOpenAI(**params)
+        roles = {'system': SystemMessage, 'user': HumanMessage, 'assistant': AIMessage}
+        messages = [roles[item['role']](content=item['content']) for item in sorted(
+            task.input_snapshot['operation_input']['messages'], key=lambda item: item['sequence'])]
+        text = ''
+        async for chunk in llm.astream(messages):
+            content = chunk.content
+            if isinstance(content, list):
+                content = ''.join(item.get('text', '') for item in content if isinstance(item, dict))
+            if not isinstance(content, str) or not content:
+                continue
+            async with self.sessions() as db:
+                active = await TaskService(db).append_canvas_text(task.id, content)
+                await db.commit()
+            if not active:
+                return
+            text += content
+        if not text.strip():
+            raise ProviderDataError('text_result_empty')
+        async with self.sessions() as db:
+            await TaskService(db).finish(task.id, result={'text': text, 'model_id': task.input_snapshot['model_id']})
             await db.commit()
 
     async def _render_scene(self, task, content, sources, profile):
