@@ -50,6 +50,27 @@ try {
     await locator.filter({ hasText: new RegExp(`^${text}$`) }).waitFor()
     assert.equal(await locator.textContent(), text)
   }
+  const showRuntime = async () => {
+    const runtime = card.getByRole('region', { name: '运行正文', exact: true })
+    const bounds = () => runtime.evaluate(element => {
+      const text = element.getBoundingClientRect(), surface = element.closest('.generation-surface').getBoundingClientRect(), card = element.closest('[data-card-id]').getBoundingClientRect()
+      const visible = { left: Math.max(0, surface.left, card.left), top: Math.max(0, surface.top, card.top), right: Math.min(innerWidth, surface.right, card.right), bottom: Math.min(innerHeight, surface.bottom, card.bottom) }
+      return { text: { left: text.left, top: text.top, right: text.right, bottom: text.bottom }, visible,
+        cameraContained: text.top >= Math.max(0, surface.top) && text.bottom <= Math.min(innerHeight, surface.bottom),
+        contained: text.width > 0 && text.height > 0 && text.left >= visible.left && text.top >= visible.top && text.right <= visible.right && text.bottom <= visible.bottom }
+    })
+    // Camera controls are independent of document edits; bring the actual running
+    // text into view instead of equating Playwright's CSS visibility with exposure.
+    for (let attempt = 0; attempt < 3 && !(await bounds()).cameraContained; attempt++) await page.getByRole('button', { name: '缩小', exact: true }).click()
+    if (!(await bounds()).contained) {
+      const box = await card.boundingBox()
+      await page.mouse.move(box.x + box.width / 2, Math.min(page.viewportSize().height - 20, box.y + box.height / 2))
+      await page.mouse.wheel(0, 400)
+      for (let attempt = 0; attempt < 20 && !(await bounds()).contained; attempt++) await delay(25)
+    }
+    const measured = await bounds()
+    assert.equal(measured.contained, true, `runtime text must be fully exposed in viewport, canvas and card: ${JSON.stringify(measured)}`)
+  }
   // Independent layout changes preserve a valid precheck.
   await page.getByRole('button', { name: '放大', exact: true }).click()
   assert.equal(await execute().isEnabled(), true)
@@ -106,8 +127,14 @@ try {
   await page.getByRole('button', { name: '核实运行请求', exact: true }).waitFor({ state: 'detached' })
   assert.deepEqual(submissions[1], submissions[0], 'unknown outcome uses identical identity and token')
   assert.equal((await control()).calls.length, 1)
+  await showRuntime()
+  assert.equal((await control()).release, 0, 'first increment is exposed while provider is blocked before second chunk')
+  await page.screenshot({ path: join(output, 'stream-first-increment.png'), fullPage: true })
   await control({ release: 1 })
   await waitText(card.getByRole('region', { name: '运行正文', exact: true }), '第一段第二段')
+  await showRuntime()
+  assert.equal((await control()).release, 1, 'second increment is exposed while provider is blocked before completion')
+  await page.screenshot({ path: join(output, 'stream-second-increment.png'), fullPage: true })
   // Refresh restores accumulated text, then continues the existing open run.
   await page.reload()
   await waitText(card.getByRole('region', { name: '运行正文', exact: true }), '第一段第二段')
@@ -138,6 +165,7 @@ try {
   assert.equal(await prompt.textContent(), '运行期间的后续编辑')
   assert.equal((await control()).calls[1].text, '固定输入正文', 'accepted run keeps the frozen input')
   assert.equal(connections, connectionsBeforeSecondRun, 'completed run keeps the shared SSE connection open')
+  await showRuntime()
   await page.screenshot({ path: join(output, 'runtime-failure.png'), fullPage: true })
   await page.reload()
   await card.getByRole('status').filter({ hasText: '失败 · 未完成' }).waitFor()
