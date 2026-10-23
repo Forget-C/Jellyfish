@@ -103,7 +103,11 @@ def compile_card(document: CanvasDocument, card_id: str, *,
                 issue('UNSUPPORTED_INPUT', '当前模型不支持实际使用的输入', segment.id)
             item = by_source.get(identity_key(segment.source))
             if item and item.available:
-                result.text += item.text if item.modality == 'text' else f'[media:{result.media.index(item) + 1}]'
+                if item.modality == 'text':
+                    result.text += item.text
+                else:
+                    position = result.media.index(item) + 1
+                    result.text += f'image {position}' if capability and capability.modality == 'image' else f'[media:{position}]'
         elif isinstance(segment, PromptInstruction):
             port = COMMAND_PORTS.get(segment.command)
             command_counts[segment.command] = command_counts.get(segment.command, 0) + 1
