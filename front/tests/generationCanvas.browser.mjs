@@ -63,6 +63,6 @@ try {
   const second = (await (await fetch(`${base}/${secondId}`)).json()).data
   assert.equal(second.document.cards[0].text, '')
   assert.equal(second.document.name, '第二张独立画布')
-  await page.screenshot({ path: join(output, 'generation-canvas.png'), fullPage: true })
+  await page.screenshot({ path: join(output, 'generation-canvas.png'), fullPage: true, animations: 'disabled' })
   console.log('new → edit → save → second canvas → switch → refresh: persistent content and revision verified')
 } finally { await cleanup() }
