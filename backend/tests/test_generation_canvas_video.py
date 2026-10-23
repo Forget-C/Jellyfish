@@ -48,6 +48,29 @@ def test_implicit_and_multiple_group_material_keeps_actual_media_alias():
     assert [(item.name, [ref.file_id for ref in item.media]) for item in video_media(doc, 'v', compiled).subjects] == [('甲', ['a']), ('乙', ['a']), ('media1', ['b']), ('media2', ['a'])]
 
 
+def test_implicit_subject_alias_avoids_later_explicit_name_without_merging_media():
+    doc = document([ref('a', 'body'), instruction('主体参考', ['b'], 'media1')])
+    doc.input_order['v']['subject_image'] = ['a', 'b', 'unused']
+    cap = CanvasModelCapability(model_id='m', modality='video', input_ports=['subject_image'],
+        ratios=['16:9'], max_images_per_subject=1, max_subjects=2)
+    compiled = compile_card(doc, 'v', capability=cap)
+    assert compiled.can_run, compiled.diagnostics
+    assert compiled.text == '@media2'
+    assert [(group.name, [item.file_id for item in group.media]) for group in compiled.video_media.subjects] == [
+        ('media1', ['b']), ('media2', ['a'])]
+
+
+def test_multiple_implicit_aliases_avoid_casefolded_explicit_groups_and_keep_shared_media():
+    doc = document([ref('a', 'body'), ref('b', 'body'), ref('unused', 'body'),
+        instruction('主体参考', ['a'], 'Media2'), instruction('主体参考', ['a'], 'media3', 'second'),
+        instruction('主体参考', ['unused'], 'mEdIa1', 'third'), instruction('主体参考', ['unused'], 'MEDIA1', 'same')])
+    compiled = compile_card(doc, 'v')
+    assert compiled.can_run, compiled.diagnostics
+    assert compiled.text == '@media5@media4@mEdIa1'
+    assert [(group.name, [item.file_id for item in group.media]) for group in compiled.video_media.subjects] == [
+        ('Media2', ['a']), ('media3', ['a']), ('mEdIa1', ['unused']), ('media4', ['b']), ('media5', ['a'])]
+
+
 def test_frame_subject_combination_and_group_limits_locate_stable_instruction():
     doc = document([instruction('首帧参考', ['a']), instruction('主体参考', ['b', 'a'], '张三')])
     cap = CanvasModelCapability(model_id='m', modality='video', input_ports=['text', 'first_frame', 'subject_image'], ratios=['16:9'], max_images_per_subject=1)
@@ -161,13 +184,16 @@ async def test_actual_worker_video_frame_fields_and_every_poll_keep_frozen_route
 @pytest.mark.asyncio
 @pytest.mark.parametrize(('mode', 'expected_prompt', 'names'), [
     ('implicit', '让 @media1 中的人物转身，保留 [media:1]。', ['media1']),
+    ('collision', '让 @media3 中的人物转身，保留 [media:1]。', ['MeDiA2', 'media3']),
     ('unique', '让 @张三 中的人物转身，保留 [media:1]。', ['张三']),
     ('multiple', '让 @media2 中的人物转身，保留 [media:1]。', ['张三', '李四', 'media2']),
 ])
 async def test_actual_vidu_subject_names_and_literal_surroundings(runtime, image_storage, mode, expected_prompt, names):
     segments = [{'kind': 'text', 'id': 'before', 'text': '让 '}, ref('a', 'body'), {'kind': 'text', 'id': 'after', 'text': ' 中的人物转身，保留 [media:1]。'}]
-    if mode != 'implicit':
+    if mode in ('unique', 'multiple'):
         segments += [instruction('主体参考', ['a'], '张三'), instruction('主体参考', ['b'], '张三', 'same')]
+    if mode == 'collision':
+        segments += [instruction('主体参考', ['b'], 'MeDiA2')]
     if mode == 'multiple':
         segments += [instruction('主体参考', ['a'], '李四', 'other')]
     accepted, preview = await setup_video(runtime, 'vidu', segments)
@@ -187,6 +213,10 @@ async def test_actual_vidu_subject_names_and_literal_surroundings(runtime, image
     body = json.loads(calls[0].content)
     assert body['prompt'] == expected_prompt
     assert [subject['name'] for subject in body['subjects']] == names
+    if mode == 'collision':
+        assert [subject['images'] for subject in body['subjects']] == [
+            ['data:image/png;base64,' + base64.b64encode(value).decode()] for value in (b'last-image', b'first-image')]
+        assert [group['name'] for group in preview['input']['video_media']['subjects']] == names
     if mode == 'unique':
         assert body['subjects'][0]['images'] == ['data:image/png;base64,' + base64.b64encode(value).decode() for value in (b'first-image', b'last-image')]
     assert body['model'] == 'viduq2-pro' and body['duration'] == 5 and body['seed'] == 7 and body['aspect_ratio'] == '16:9'

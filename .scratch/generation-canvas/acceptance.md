@@ -78,3 +78,11 @@
 ## 父任务后续确认（写稿后收到）
 
 父于MAIN b31e0b7已实际curl :8000 schema核实selection+card_ids，并运行 `pnpm --dir front run openapi:update` 成功，normalize后git diff为零；证据 `/private/tmp/jellyfish-generation-canvas-openapi-11.json`。12无schema变更。故A31当前11契约主集成同步已完成；13若改对外契约父会再执行。本子任务未亲自重跑，采用父的可信执行报告。
+
+## 最终双轴审查修复（2026-10-23）
+
+- Standards P3：仅创建画布使用 `created_response`，响应壳 `code=201`，沿现有包装保留 HTTP 200。公开 HTTP 创建与随后读取断言先 RED（实际 code=200）后 GREEN；预检、运行等动作保持原响应。
+- Spec P2 / A14：普通素材自动主体代指避开所有显式主体名称（包括后出现名称、大小写折叠）及其他自动代指。正文和视频媒体 DTO 复用同一名称分配规则；原 `media1` 碰撞反例、单主体素材容量、多显式/多隐式、同源多组均由公开 `compile_card` 回归覆盖。
+- Vidu 真实 HTTP→提交器→TaskWorker 链补充 `MeDiA2` 碰撞场景，核对预检正文、DTO 主体名、最终 provider prompt 与各主体实际 base64 图片关联，避免只验证中间结构。
+- `tests/test_generation_canvas_api.py tests/test_generation_canvas_video.py tests/test_generation_canvas_compiler.py tests/test_generation_canvas_journey.py -q`：54 passed、0 skipped；隔离 MySQL `jellyfish_check_gcreview_01a16891` 单独迁移至 `9b11d05c742f`。`uv run --no-sync pylint app`：10.00/10，退出码 0（沙箱仅阻止写 Pylint 缓存）。代码导入路径显式核实为 review-fixes worktree。
+- 原始 RED/GREEN、迁移、回归、Pylint 与导入路径证据：`/private/tmp/jellyfish-generation-canvas-evidence/review-fixes/`。只替换外部供应商和存储，不证明真实付费供应商可用性或生成质量。创建响应语义变化的实际 :8000 `openapi:update` 由父任务集成后执行；本 worktree 不操作该服务或其数据库。
