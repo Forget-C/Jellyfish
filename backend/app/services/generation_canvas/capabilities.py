@@ -62,6 +62,8 @@ def parameter_diagnostics(card: ModelCard, capability: CanvasModelCapability) ->
         issue('seconds', '时长超出模型允许范围')
     if config.get('seed') is not None and not capability.supports_seed:
         issue('seed', '当前模型不支持随机种子')
+    if card.type == 'model.video' and config.get('seed') is not None and not -1 <= config['seed'] <= 4294967295:
+        issue('seed', '随机种子须为 -1 或 [0, 2^32-1]')
     count = config.get('count')
     if count is not None and not capability.min_count <= count <= capability.max_count:
         issue('count', '图片数量超出模型允许范围')

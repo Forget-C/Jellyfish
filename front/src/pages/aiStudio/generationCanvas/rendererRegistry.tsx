@@ -44,10 +44,9 @@ function ModelRenderer({ card: raw, document, disabled, onChange, models, capabi
     <ExperimentComposer options={<><Select aria-label="选择模型" placeholder="选择模型" allowClear value={card.model_id || undefined} style={{ minWidth: 180 }}
       options={models?.filter(model => model.category === category).map(model => ({ value: model.id, label: model.name }))}
       onChange={id => onChange({ ...card, model_id: id ?? null })} />{parameters}</>}
-      onSubmit={() => onPrecheck?.()} submitting={checking} submitDisabled={disabled || busy || runDisabled || card.type === 'model.video'} submitLabel={busy ? '运行中' : '预检运行'}>
+      onSubmit={() => onPrecheck?.()} submitting={checking} submitDisabled={disabled || busy || runDisabled} submitLabel={busy ? '运行中' : '预检运行'}>
       <PromptEditor document={document} card={card} value={card.prompt || { segments: [] }} modelOutputs={modelOutputs} disabled={disabled} onChange={prompt => onChange({ ...card, prompt })} />
     </ExperimentComposer>
-    {card.type === 'model.video' && <small>该模态执行尚未接入</small>}
     {node && <section aria-label="本次运行" data-run-id={node.run_id}>
       <p role="status">{({ waiting: '等待上游', queued: '排队中', running: '运行中', succeeded: '已完成', failed: '失败 · 未完成', cancelled: '已取消 · 未完成', blocked: '已阻止 · 未完成' } as Record<string, string>)[node.status] || node.status} · {({ queued: '等待执行', generating: '生成中', archiving: '归档中', cancelling: '取消中，等待任务终态', finished: '已结束' } as Record<string, string>)[node.stage] || node.stage}{node.progress != null && ` · ${node.progress}%`}</p>
       {node.text && <div role="region" aria-label="运行正文"><CanvasTextPreview text={node.text} label="生成正文" /></div>}

@@ -113,7 +113,6 @@ def compile_card(document: CanvasDocument, card_id: str, *,
                 else:
                     position = result.media.index(item) + 1
                     result.text += f'image {position}' if capability and capability.modality == 'image' else f'[media:{position}]'
-
         elif isinstance(segment, PromptInstruction):
             port = COMMAND_PORTS.get(segment.command)
             command_counts[segment.command] = command_counts.get(segment.command, 0) + 1
@@ -129,27 +128,29 @@ def compile_card(document: CanvasDocument, card_id: str, *,
                 actual_port = 'subject_video' if port == 'subject_image' and reference.source.port_id == 'video' else port
                 used_ports.add((reference.source.card_id, reference.source.port_id, actual_port))
                 if reference.source.port_id not in (('image', 'video') if segment.command == '主体参考' else ('image',)):
-                    issue('INSTRUCTION_REFERENCE_TYPE', '指令引用类型不匹配', reference.id)
+                    issue('INSTRUCTION_REFERENCE_TYPE', '指令引用类型不匹配', segment.id, ['prompt', 'segments', segment.id, 'references', reference.id])
                 if capability and actual_port not in capability.input_ports:
                     issue('UNSUPPORTED_INPUT', '当前模型不支持此指令用途', segment.id)
 
-    if card.type == 'model.video' and capability:
-        groups = {}
-        for segment in card.prompt.segments:
-            if not isinstance(segment, PromptInstruction) or segment.command != '主体参考':
-                continue
-            name = segment.parameters.get('name', '').strip().casefold()
-            groups.setdefault(name, []).extend(segment.references)
-            if any(command_counts.get(command) for command in ('首帧参考', '尾帧参考', '关键帧参考')) and not capability.supports_subject_reference_with_frame_reference:
-                issue('UNSUPPORTED_REFERENCE_COMBINATION', '当前模型不支持主体与帧参考组合', segment.id)
-            references = groups[name]
-            images = sum(ref.source.port_id == 'image' for ref in references)
-            videos = sum(ref.source.port_id == 'video' for ref in references)
-            limits = ((capability.max_subjects, len(groups)), (capability.max_images_per_subject, images),
-                      (capability.max_videos_per_subject, videos), (capability.max_media_per_subject, len(references)),
-                      (capability.max_total_subject_videos, sum(ref.source.port_id == 'video' for refs_ in groups.values() for ref in refs_)))
-            if any(limit is not None and count > limit for limit, count in limits):
-                issue('SUBJECT_LIMIT_EXCEEDED', '主体参考数量超出模型限制', segment.id)
+    if card.type == 'model.video':
+        result.video_media = video_media(document, card_id, result)
+        if capability:
+            media = result.video_media
+            total_videos = sum(ref.media_kind == 'video' for group in media.subjects for ref in group.media)
+            for group in media.subjects:
+                segment = next((segment for segment in card.prompt.segments if isinstance(segment, PromptInstruction)
+                    and segment.parameters.get('name', '').strip().casefold() == group.name.casefold()), None)
+                target_id = segment.id if segment else next((segment.id for segment in card.prompt.segments
+                    if isinstance(segment, PromptReference) and segment.source.port_id in ('image', 'video')), '')
+                if (media.frames.first or media.frames.last or media.frames.keys) and not capability.supports_subject_reference_with_frame_reference:
+                    issue('UNSUPPORTED_REFERENCE_COMBINATION', '当前模型不支持主体与帧参考组合', target_id)
+                images = sum(ref.media_kind == 'image' for ref in group.media)
+                videos = sum(ref.media_kind == 'video' for ref in group.media)
+                limits = ((capability.max_subjects, len(media.subjects)), (capability.max_images_per_subject, images),
+                          (capability.max_videos_per_subject, videos), (capability.max_media_per_subject, len(group.media)),
+                          (capability.max_total_subject_videos, total_videos))
+                if any(limit is not None and count > limit for limit, count in limits):
+                    issue('SUBJECT_LIMIT_EXCEEDED', '主体参考数量超出模型限制', target_id)
     if capability:
         if card.type == 'model.image':
             if capability.max_reference_images is not None and len(result.media) > capability.max_reference_images:
@@ -163,8 +164,6 @@ def compile_card(document: CanvasDocument, card_id: str, *,
                 used = (edge.source_card, edge.source_port, edge.target_port) in used_ports
                 issue('UNSUPPORTED_INPUT' if used else 'UNUSED_INCOMPATIBLE_INPUT', '当前模型不支持此输入用途', '',
                       ['edges', edge.id], warning=not used)
-    if card.type == 'model.video':
-        result.video_media = video_media(document, card_id, result)
     result.can_run = not any('run' in item.blocks for item in result.diagnostics)
     return result
 
@@ -190,13 +189,17 @@ def video_media(document: CanvasDocument, card_id: str, compiled: CanvasCompiled
     card = next(card for card in document.cards if card.id == card_id)
     available = {identity_key(item.source): item for item in compiled.media}
     result = VideoMediaInput()
-    groups = {}
+    groups, seen = {}, {}
     def reference(ref, ordinal):
         item = available.get(identity_key(ref.source))
         return MediaReference(file_id=item.file_id, media_kind=item.modality, ordinal=ordinal) if item and item.modality in ('image', 'video') else None
     def add_subject(name, refs):
         group = groups.setdefault(name.casefold(), {'name': name, 'media': []})
         for ref in refs:
+            key = identity_key(ref.source)
+            if key in seen.setdefault(name.casefold(), set()):
+                continue
+            seen[name.casefold()].add(key)
             media = reference(ref, len(group['media']))
             if media:
                 group['media'].append(media)

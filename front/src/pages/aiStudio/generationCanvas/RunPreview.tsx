@@ -17,6 +17,7 @@ export function RunPreview({ preview, submitting, disabled, onSubmit }: { previe
     <section aria-label="实际提交文本"><CanvasTextPreview text={preview.input.text || ''} label="实际提交文本" /></section>
     <p>模型：{preview.model?.name || preview.model?.id || '未选择'}</p>
     <details><summary>有效模型参数</summary><pre>{JSON.stringify(preview.model?.params || {}, null, 2)}</pre></details>
+    {preview.input.video_media && <details open><summary>实际视频用途</summary><pre>{JSON.stringify(preview.input.video_media, null, 2)}</pre></details>}
     {!!preview.input.mapping?.length && <details><summary>实际使用来源及媒体对应关系</summary><pre>{JSON.stringify(preview.input.mapping, null, 2)}</pre></details>}
     {(preview.diagnostics || []).map((diagnostic, index) => <Alert key={`${diagnostic.code}:${index}`} type={diagnostic.severity === 'warning' ? 'warning' : 'error'}
       message={`${diagnostic.code}: ${diagnostic.message}`} description={`阻止：${diagnostic.blocks.map(action => ({ run: '运行', save: '保存' }[action] || action)).join('、') || '无'}`}
