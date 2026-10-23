@@ -103,7 +103,7 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
         disabled={!ownership.editable || !!editor.recovery || editor.conflict} onSave={saveOutput} onCancel={runtime.cancel} cancelling={runtime.cancelling} />
       <GenerationCanvasGraph key={document.id} document={document} onChange={next => change(next)} readonly={!ownership.editable || !!editor.recovery}
         runtime={{ outputs: runtime.snapshot.current_outputs, nodes: runtime.latestNodes, busyCards: runtime.busyCards, checking: runtime.checking,
-          disabled: runtime.storageBlocked || !!runtime.pending || !!runtime.checking || runtime.submitting || editor.conflict, precheck: (cardId, kind) => void runtime.precheck(cardId, kind) }} />
+          disabled: runtime.storageBlocked || !!runtime.pending || !!runtime.checking || runtime.submitting || editor.conflict, precheck: (cardId, kind, cardIds) => void runtime.precheck(cardId, kind, cardIds) }} />
     </>}
   </Space>
 }

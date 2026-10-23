@@ -14,9 +14,19 @@ from app.models.studio import Project
 from app.task_worker import TaskWorker
 import app.task_worker as worker_module
 
-engine = create_async_engine('sqlite+aiosqlite:///' + os.environ['CANVAS_BROWSER_DATABASE'])
+database_url = os.environ.get('CANVAS_BROWSER_DATABASE_URL')
+if database_url:
+    from sqlalchemy.engine import make_url
+    parsed = make_url(database_url)
+    if parsed.get_backend_name() != 'mysql' or not (parsed.database or '').startswith('jellyfish_check'):
+        raise ValueError('browser MySQL evidence requires an explicit jellyfish_check database')
+engine = create_async_engine(database_url, isolation_level='READ COMMITTED') if database_url else create_async_engine(
+    'sqlite+aiosqlite:///' + os.environ['CANVAS_BROWSER_DATABASE'])
+project_id = os.environ.get('CANVAS_BROWSER_PROJECT_ID', 'canvas-project')
+provider_id = project_id + '-provider' if database_url else 'canvas-runtime-provider'
+model_id = project_id + '-text' if database_url else 'canvas-runtime-text'
 sessions = async_sessionmaker(engine, expire_on_commit=False)
-control = {'release': 0, 'fail_next': False, 'calls': [], 'stream_connections': 0, 'disconnect_epoch': 0, 'duplicate_next': False}
+control = {'release': 0, 'release_for': {}, 'fail_next': False, 'calls': [], 'stream_connections': 0, 'disconnect_epoch': 0, 'duplicate_next': False}
 
 
 class ControlledModel:
@@ -25,15 +35,18 @@ class ControlledModel:
         self.params = params
 
     async def astream(self, messages):
+        if database_url and self.params.get('model') != model_id:
+            yield SimpleNamespace(content='unrelated isolated fixture')
+            return
         control['calls'].append({key: self.params.get(key) for key in ('model', 'temperature', 'base_url', 'max_retries')}
                                 | {'text': messages[0].content})
         fail = control['fail_next']
         control['fail_next'] = False
         yield SimpleNamespace(content='第一段')
-        while control['release'] < 1:
+        while control['release_for'].get(messages[0].content, control['release']) < 1:
             await asyncio.sleep(.03)
         yield SimpleNamespace(content='第二段')
-        while control['release'] < 2:
+        while control['release_for'].get(messages[0].content, control['release']) < 2:
             await asyncio.sleep(.03)
         if fail:
             raise RuntimeError('controlled provider failure')
@@ -64,7 +77,7 @@ async def set_control(body: dict = Body(...)):
         from app.models.generation_canvas import CanvasEvent
         async with sessions.begin() as db:
             await db.execute(delete(CanvasEvent))
-    for key in ('release', 'fail_next', 'duplicate_next'):
+    for key in ('release', 'release_for', 'fail_next', 'duplicate_next'):
         if key in body:
             control[key] = body[key]
     return control
@@ -93,6 +106,12 @@ async def lifespan(_app):
             await worker.tick()
             await asyncio.sleep(.05)
     runner = asyncio.create_task(tick())
+    def report_worker_failure(future):
+        if not future.cancelled() and future.exception():
+            import traceback
+            traceback.print_exception(future.exception())
+            control['worker_error'] = str(future.exception())
+    runner.add_done_callback(report_worker_failure)
     try:
         yield
     finally:
@@ -110,10 +129,12 @@ async def prepare():
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
     async with sessions.begin() as db:
-        db.add(Project(id='canvas-project', name='文本流画布项目', style='真人都市'))
-        db.add(Provider(id='canvas-runtime-provider', name='openai', api_key='fixture-private', base_url='https://fixture.test/v1'))
+        db.add(Project(id=project_id, name='文本流画布项目', style='真人都市'))
+        db.add(Provider(id=provider_id, name='openai', api_key='fixture-private', base_url='https://fixture.test/v1'))
         await db.flush()
-        db.add(Model(id='canvas-runtime-text', name='controlled-text', provider_id='canvas-runtime-provider', category='text', params={'temperature': 0.2}))
+        db.add(Model(id=model_id, name=model_id if database_url else 'controlled-text', provider_id=provider_id, category='text', params={'temperature': 0.2}))
+    # Bootstrap and Uvicorn run on separate loops; no pooled MySQL connection may cross them.
+    await engine.dispose()
 
 
 if __name__ == '__main__':

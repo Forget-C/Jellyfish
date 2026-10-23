@@ -17,10 +17,13 @@ const arrange: GraphArrange = (nodes, _sizes, _width, _anchor, retained = {}) =>
   [node.id, retained[node.id] || { x: index % 3 * 440, y: Math.floor(index / 3) * 560 }]))
 
 /** 独立画布编辑适配：候选关系与文档持久化，几何沿用公共布局缓存。 */
-export function GenerationCanvasGraph({ document, onChange, readonly = false, runtime }: { document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string, kind?: 'single' | 'target') => void } }) {
+export function GenerationCanvasGraph({ document, onChange, readonly = false, runtime }: { document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string, kind?: 'single' | 'target' | 'selection', cardIds?: string[]) => void } }) {
   const cards = document.cards || [], edges = document.edges || [], groups = document.groups || []
   const [selected, setSelected] = useState<string[]>([])
   const [reason, setReason] = useState('')
+  const [selecting, setSelecting] = useState(false)
+  const [selectionBox, setSelectionBox] = useState<{ x: number; y: number; width: number; height: number }>()
+  const selectionStart = useRef<{ x: number; y: number }>()
   const [storageError, setStorageError] = useState('')
   const [models, setModels] = useState<ModelRead[]>([])
   const [capabilities, setCapabilities] = useState<Record<string, CanvasModelCapability>>({})
@@ -164,6 +167,18 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false, ru
       </li>
     })}</ol></div>
   })}</>
+  const selectedModels = cards.filter(card => selected.includes(card.id) && card.type?.startsWith('model.'))
+  const finishSelection = (event: PointerEvent<HTMLDivElement>) => {
+    const start = selectionStart.current
+    if (!start) return
+    const left = Math.min(start.x, event.clientX), right = Math.max(start.x, event.clientX)
+    const top = Math.min(start.y, event.clientY), bottom = Math.max(start.y, event.clientY)
+    const ids = [...event.currentTarget.querySelectorAll<HTMLElement>('[data-card-id]')].filter(card => {
+      const box = card.getBoundingClientRect()
+      return box.left < right && box.right > left && box.top < bottom && box.bottom > top
+    }).map(card => card.dataset.cardId!)
+    setSelected(ids); selectionStart.current = undefined; setSelectionBox(undefined)
+  }
   const point = (id: string) => layout.view.positions[id] || { x: 0, y: 0 }
   return <div className="generation-graph" ref={container}>
     <Space wrap className="generation-toolbar">
@@ -173,11 +188,34 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false, ru
         if (!members.length) { setReason('所选卡片已经属于分组'); return }
         edit({ ...document, groups: [...groups, { id: crypto.randomUUID(), name: '新分组', card_ids: members, collapsed: false }] }); setSelected([])
       }}>将所选卡片分组</Button>
+      <Button aria-label="框选" type={selecting ? 'primary' : 'default'} aria-pressed={selecting} onClick={() => setSelecting(value => !value)}>框选</Button>
+      <Button aria-label={`运行所选模型（${selectedModels.length}）`} disabled={readonly || !selectedModels.length || !runtime || runtime.disabled || selectedModels.some(card => runtime.busyCards.has(card.id))}
+        onClick={() => runtime?.precheck(selectedModels[0].id, 'selection', selected)}>运行所选模型（{selectedModels.length}）</Button>
       <Button aria-label="放大" onClick={() => viewport.zoom(.1)}>放大</Button><Button aria-label="缩小" onClick={() => viewport.zoom(-.1)}>缩小</Button>
     </Space>
     {storageError && <Alert type="warning" message={`布局本地保存失败：${storageError}`} />}
-    <div role="status" className="generation-connection-reason">{reason || '拖动输出端口到接收端口建立候选连接'}</div>
-    <div ref={viewport.surface} {...viewport.surfaceProps} className="generation-surface" aria-label="生成画布视口">
+    <div role="status" className="generation-connection-reason">{reason || '拖动输出端口建立连接；按住 Shift 或启用框选后拖动空白选择卡片'}</div>
+    <div ref={viewport.surface} {...viewport.surfaceProps} className="generation-surface" aria-label="生成画布视口"
+      onPointerDown={event => {
+        if ((selecting || event.shiftKey) && event.button === 0 && event.currentTarget.contains(event.target as Node)
+          && !(event.target as Element).closest('[data-card-id], .generation-group, button, input, select, textarea')) {
+          event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId)
+          selectionStart.current = { x: event.clientX, y: event.clientY }
+          const box = event.currentTarget.getBoundingClientRect()
+          setSelectionBox({ x: event.clientX - box.left, y: event.clientY - box.top, width: 0, height: 0 })
+        } else viewport.surfaceProps.onPointerDown?.(event)
+      }}
+      onPointerMove={event => {
+        const start = selectionStart.current
+        if (!start) { viewport.surfaceProps.onPointerMove?.(event); return }
+        const box = event.currentTarget.getBoundingClientRect()
+        setSelectionBox({ x: Math.min(start.x, event.clientX) - box.left, y: Math.min(start.y, event.clientY) - box.top,
+          width: Math.abs(event.clientX - start.x), height: Math.abs(event.clientY - start.y) })
+      }}
+      onPointerUp={event => { finishSelection(event); viewport.surfaceProps.onPointerUp?.(event) }}
+      onPointerCancel={event => { selectionStart.current = undefined; setSelectionBox(undefined); viewport.surfaceProps.onPointerCancel?.(event) }}
+      onLostPointerCapture={event => { selectionStart.current = undefined; setSelectionBox(undefined); viewport.surfaceProps.onLostPointerCapture?.(event) }}>
+      {selectionBox && <div className="generation-selection-box" aria-hidden="true" style={{ left: selectionBox.x, top: selectionBox.y, width: selectionBox.width, height: selectionBox.height }} />}
       <div className="generation-world" style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }}>
         <svg className="generation-edges" width={12000} height={12000}>
           {edges.filter(edge => !hidden.has(edge.source_card) && !hidden.has(edge.target_card)).map(edge => {

@@ -36,3 +36,5 @@
 .generation-run-history [data-history-node] { margin: 8px 0; padding: 12px; border: 1px solid #cbd5e1; border-radius: 6px; }
 .generation-run-history pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .generation-run-history [data-history-node]:focus { outline: 2px solid #1677ff; outline-offset: 2px; }
+
+.generation-selection-box { position: absolute; border: 1px solid var(--ant-color-primary, #1677ff); background: rgb(22 119 255 / 10%); pointer-events: none; z-index: 20; }

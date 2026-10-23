@@ -281,10 +281,11 @@ class CanvasCompiledInput(BaseModel):
 
 
 class CanvasPrecheckRequest(BaseModel):
-    """单卡或按实际引用运行到目标；默认保持单卡行为。"""
+    """单卡、运行到目标或严格框选；框选 ID 中的内容卡与分组不执行。"""
     model_config = ConfigDict(extra='forbid')
     card_id: str
-    kind: Literal['single', 'target'] = 'single'
+    kind: Literal['single', 'target', 'selection'] = 'single'
+    card_ids: list[str] = Field(default_factory=list, max_length=1000)
 
 
 class CanvasPrecheck(BaseModel):
