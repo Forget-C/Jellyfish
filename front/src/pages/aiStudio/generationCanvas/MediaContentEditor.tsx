@@ -70,6 +70,7 @@ export function MediaContentEditor({ card, projectId, onChange, disabled }: Medi
   }, [library, page, projectId])
 
   return <Space direction="vertical" style={{ width: '100%' }}>
+    {card.origin && <p>来自运行 {card.origin.run_id} · {card.origin.incomplete ? '未完成成果副本' : '完整成果副本'}</p>}
     {card.file_id ? <MediaPreview fileId={card.file_id} type={type} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚未选择文件" />}
     {error && <Alert type="error" message={error} />}
     {(uploading || card.uploading) && <Alert type="info" message={uploading ? '上传中，暂不发布有效输出' : '上次上传未完成，请重新上传或从项目文件选择'} />}

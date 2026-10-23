@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Empty, Space } from 'antd'
 import type { CanvasNodeRead, CanvasRunRead } from '../../../services/generated'
 import { CanvasTextPreview } from '../directing/CanvasTextPreview'
+import { MediaPreview } from './MediaContentEditor'
 import { activeNode } from './useGenerationCanvasRuntime'
 
 /** Canvas-level records remain accessible even after the editable source card is removed. */
@@ -58,8 +59,8 @@ export function RunHistory({ runs, targetRun, targetNode, disabled, onSave, onCa
           {!activeNode(node) && node.outputs.map((output, position) => <section key={position} aria-label={`历史成果 ${position + 1}`}>
             <p>{node.status === 'succeeded' ? '完整成果' : '未完成成果'} · 输出 {position + 1}</p>
             {output.text && output.text !== node.text && <CanvasTextPreview text={output.text} label="成果正文" />}
-            {output.file_id && <span>文件 {output.file_id}</span>}
-            {output.modality === 'text' && <Space><Button disabled={disabled || !!saving} loading={saving === `${node.id}:${position}`} onClick={() => void save(node, position)}>另存为文本内容卡</Button></Space>}
+            {output.file_id && <MediaPreview fileId={output.file_id} type={output.modality} />}
+            {['text', 'image', 'video'].includes(output.modality) && <Space><Button disabled={disabled || !!saving} loading={saving === `${node.id}:${position}`} onClick={() => void save(node, position)}>另存为{({ text: '文本', image: '图片', video: '视频' } as Record<string, string>)[output.modality]}内容卡</Button></Space>}
           </section>)}
           {node.error_message && <Alert type="error" message={`${node.error_code || '运行失败'}: ${node.error_message}`} />}
         </section>)}
