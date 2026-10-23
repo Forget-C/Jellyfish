@@ -476,6 +476,20 @@ async def test_saved_unfinished_content_has_immutable_origin_and_independent_tex
     card = response.json()['data']
     assert card['text'] == 'Unfinished original'
     assert card['origin'] == {'canvas_id': runtime.canvas_id, 'run_id': accepted['run_id'], 'node_id': node['id'], 'position': 0, 'incomplete': True}
+    # Provenance claims must match the saved historical body, ownership and status.
+    from copy import deepcopy
+    for index, mutate in enumerate(('body', 'status', 'canvas')):
+        forged = deepcopy(card)
+        if mutate == 'body':
+            forged['text'] = 'Fabricated body'
+        elif mutate == 'status':
+            forged['origin']['incomplete'] = False
+        else:
+            forged['origin']['canvas_id'] = 'other-canvas'
+        rejected = await runtime.client.put(runtime.url, json={'request_id': f'forged-{index}', 'expected_revision': 1,
+            'document': {**runtime.document, 'cards': [*runtime.document['cards'], forged]}})
+        assert rejected.status_code == 422
+        assert (rejected.json().get('data') or rejected.json().get('detail'))['code'] == 'INVALID_ORIGIN'
     runtime.document['cards'].append(card)
     assert (await runtime.client.put(runtime.url, json={'request_id': 'save-partial', 'expected_revision': 1, 'document': runtime.document})).status_code == 200
     runtime.document['cards'][-1]['text'] = 'Independent edit'
