@@ -44,3 +44,11 @@ HTTP 边界为 `/api/v1/studio/generation-canvases/{project_id}` 的列表／创
 `GET /{canvas_id}/runtime` 返回一致快照；generated `GET /{canvas_id}/events/connection` 提供公共 SSE 地址，传输层逐段解析并恢复订阅。每张画布的一条连接复用 `snapshot`、`node.updated`、`text.delta`、`node.finished` 和 `run.finished`，单次运行结束不关闭连接。事件头行锁使事实、事件游标和提交顺序一致；快照使用同一把锁复制事实及游标。既有 Task 写入遵守 Task → event head 顺序，受理只创建新 Task；流每次追读使用独立短事务，释放所有锁后才 yield。恢复游标之后只重放已提交事件，过期／超前游标发送权威快照，前端按游标去重；没有运行状态轮询。
 
 活动模型卡不可删除，活动画布和项目也不能删除；取消意图尚未形成真实终态时仍保持占用。文档保存校验最终保留的卡片集合，仍允许修改活动卡的后续输入。本地任意内容编辑立即失效预检，并拒绝迟到的旧预检响应；独立布局改变不失效。运行信息和当前模型输出始终在编辑文档之外归并，不影响未保存提示词或保存 revision。
+
+## 取消与独立历史内容
+
+`POST /{canvas_id}/runs/{run_id}/cancel` 与 `POST /{canvas_id}/runs/{run_id}/nodes/{node_id}/cancel` 明确取消范围，并返回真实运行节点。执行中的任务接收意图后仍为 `running`，以 `stage=cancelling` 展示取消中；排队任务沿用 TaskService 立即终结规则。未知或失败回包不释放范围占用，也不推断终态。整轮取消先按任务 ID 排序锁定全部既有 Task，再逐个调用 TaskService，避免持有事件头后等待另一个 Task。
+
+运行快照和节点事件提供安全的固定 `basis`、实际状态、累计正文、成果和正式结果集身份。源卡删除后运行记录仍在，任务中心来源仍保留项目、画布、运行与节点身份。成果非空不表示成功；未完成正文保留在历史中，不替换旧正式输出。
+
+`GET /{canvas_id}/runs/{run_id}/nodes/{node_id}/outputs/{position}/content` 为已终结文本成果准备独立文本内容卡。前端将它加入当前编辑文档并走既有 CAS 保存队列。卡片的 `origin` 固定画布、运行、节点、输出位置及 `incomplete` 标记，服务端校验来源归属、实际成果与完成状态；保存后正文可独立编辑，来源不可移除或改写。这项显式操作不改变原模型输出指向，不会跟随后续运行更新。媒体内容卡预留相同来源字段，其成果适配由媒体运行接入。
