@@ -38,7 +38,7 @@ try {
   const doc = { ...canvas.document, cards: [
     { id: 'a', type: 'content.text', text: '第一份来源' },
     { id: 'b', type: 'content.text', text: '第二份来源' },
-    { id: 'm', type: 'model.text', model_id: 'graph-text', prompt: '', config: {} },
+    { id: 'm', type: 'model.text', model_id: 'graph-text', prompt: { segments: [] }, config: {} },
   ] }
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: doc }) })
   assert.ok(seeded.ok, await seeded.text())
@@ -129,7 +129,7 @@ try {
   const modelDoc = { ...second.document, cards: [
     { id: 'i', type: 'content.image', file_id: null },
     { id: 'j', type: 'content.image', file_id: null },
-    { id: 'v', type: 'model.video', model_id: 'graph-video-main', prompt: '保留正文', config: { ratio: '9:16', seconds: 4, seed: 7 } },
+    { id: 'v', type: 'model.video', model_id: 'graph-video-main', prompt: { segments: [{ id: 'retained', kind: 'text', text: '保留正文' }] }, config: { ratio: '9:16', seconds: 4, seed: 7 } },
   ] }
   const modelSave = await fetch(`${base}/${second.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed-model', expected_revision: 0, document: modelDoc }) })
   assert.ok(modelSave.ok, await modelSave.text())
@@ -143,7 +143,7 @@ try {
   await card('v').getByRole('combobox', { name: '选择模型', exact: true }).press('ArrowDown')
   await page.getByText('graph-video-alt', { exact: true }).last().click()
   await card('v').getByText('当前模型不支持，候选保留', { exact: true }).waitFor()
-  assert.equal(await card('v').getByRole('textbox', { name: '模型正文', exact: true }).inputValue(), '保留正文')
+  assert.equal(await card('v').getByRole('textbox', { name: '模型正文', exact: true }).textContent(), '保留正文')
   await card('v').getByText('当前模型不支持已有视频画幅，配置已保留', { exact: true }).waitFor()
   await card('v').getByText('视频时长超出模型范围，配置已保留', { exact: true }).waitFor()
   await dragPort('j', 'image', 'v', 'subject_image')

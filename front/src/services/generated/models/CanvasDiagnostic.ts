@@ -7,8 +7,9 @@
  */
 export type CanvasDiagnostic = {
     code: string;
-    severity?: string;
+    severity?: 'error' | 'warning';
     message: string;
     target: Record<string, any>;
     blocks: Array<string>;
 };
+

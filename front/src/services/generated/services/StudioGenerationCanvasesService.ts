@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ApiResponse_CanvasCompiledInput_ } from '../models/ApiResponse_CanvasCompiledInput_';
 import type { ApiResponse_CanvasModelCapability_ } from '../models/ApiResponse_CanvasModelCapability_';
 import type { ApiResponse_CanvasRead_ } from '../models/ApiResponse_CanvasRead_';
 import type { ApiResponse_CanvasSaved_ } from '../models/ApiResponse_CanvasSaved_';
@@ -163,6 +164,34 @@ export class StudioGenerationCanvasesService {
                 'project_id': projectId,
                 'canvas_id': canvasId,
                 'model_id': modelId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Compile Canvas Card
+     * 读取已保存文档的单次编译预览，不提交执行也不虚构模型输出。
+     * @returns ApiResponse_CanvasCompiledInput_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasCompile({
+        projectId,
+        canvasId,
+        cardId,
+    }: {
+        projectId: string,
+        canvasId: string,
+        cardId: string,
+    }): CancelablePromise<ApiResponse_CanvasCompiledInput_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/cards/{card_id}/compile',
+            path: {
+                'project_id': projectId,
+                'canvas_id': canvasId,
+                'card_id': cardId,
             },
             errors: {
                 422: `Validation Error`,

@@ -188,7 +188,7 @@ async def test_typed_graph_roundtrip_preserves_port_order_and_groups(canvas_clie
     doc = canvas['document']
     doc.update(cards=[{'id': 'a', 'type': 'content.text', 'text': 'first'},
                       {'id': 'b', 'type': 'content.text', 'text': 'second'},
-                      {'id': 'm', 'type': 'model.text', 'model_id': None, 'prompt': '', 'config': {}}],
+                      {'id': 'm', 'type': 'model.text', 'model_id': None, 'prompt': {'segments': []}, 'config': {}}],
                edges=[{'id': 'e1', 'source_card': 'a', 'source_port': 'text', 'target_card': 'm', 'target_port': 'text'},
                       {'id': 'e2', 'source_card': 'b', 'source_port': 'text', 'target_card': 'm', 'target_port': 'text'}],
                input_order={'m': {'text': ['e2', 'e1']}},
@@ -369,6 +369,24 @@ async def test_model_switch_preserves_candidate_added_since_last_save(canvas_cli
     assert (await canvas_client.put(base, json={'request_id': 'switch', 'expected_revision': 1, 'document': doc})).status_code == 200
     assert (await canvas_client.get(base)).json()['data']['document']['edges'] == doc['edges']
 
+@pytest.mark.asyncio
+async def test_reference_protects_disconnect_but_final_document_cleanup_saves_once(canvas_client):
+    client = canvas_client
+    canvas = (await client.post('/canvases/p', json={})).json()['data']
+    doc = canvas['document']
+    reference = {'id': 'ref', 'kind': 'reference', 'source': {'canvas_id': canvas['id'], 'card_id': 'source', 'port_id': 'text', 'position': 0}}
+    doc['cards'] = [{'id': 'source', 'type': 'content.text', 'text': 'actual'}, {'id': 'receiver', 'type': 'model.text', 'prompt': {'segments': [reference]}}]
+    doc['edges'] = [{'id': 'edge', 'source_card': 'source', 'source_port': 'text', 'target_card': 'receiver', 'target_port': 'text'}]
+    doc['input_order'] = {'receiver': {'text': ['edge']}}
+    url = f"/canvases/p/{canvas['id']}"
+    assert (await client.put(url, json={'request_id': 'initial', 'expected_revision': 0, 'document': doc})).status_code == 200
+    doc['edges'] = []
+    doc['input_order'] = {}
+    blocked = await client.put(url, json={'request_id': 'blocked', 'expected_revision': 1, 'document': doc})
+    assert blocked.status_code == 422
+    assert blocked.json()['detail']['code'] == 'REFERENCE_IN_USE'
+    doc['cards'][1]['prompt']['segments'] = []
+    assert (await client.put(url, json={'request_id': 'clean', 'expected_revision': 1, 'document': doc})).status_code == 200
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('canvas_client', ['app-handler'], indirect=True)
@@ -389,3 +407,35 @@ async def test_real_app_handler_preserves_located_canvas_diagnostic_envelope(can
     # 普通 API 异常保留原有统一封套，不扩大诊断协议影响范围。
     missing = await canvas_client.get('other/missing')
     assert missing.json() == {'code': 404, 'message': 'Canvas not found', 'data': None, 'meta': None}
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('canvas_client', ['app-handler'], indirect=True)
+async def test_real_http_compile_preserves_mapping_and_locates_disconnect(canvas_client):
+    client = canvas_client
+    canvas = (await client.post('p', json={})).json()['data']
+    ref = {'id': 'reference', 'kind': 'reference', 'source': {'canvas_id': canvas['id'], 'card_id': 'source', 'port_id': 'text', 'position': 0}}
+    doc = {**canvas['document'], 'cards': [{'id': 'source', 'type': 'content.text', 'text': 'literal @图片1'},
+           {'id': 'model', 'type': 'model.text', 'model_id': 'canvas-text', 'prompt': {'segments': [ref]}}],
+           'edges': [{'id': 'edge', 'source_card': 'source', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}],
+           'input_order': {'model': {'text': ['edge']}}}
+    url = f"p/{canvas['id']}"
+    assert (await client.put(url, json={'request_id': 'seed', 'expected_revision': 0, 'document': doc})).status_code == 200
+    compiled = (await client.get(f'{url}/cards/model/compile')).json()['data']
+    assert compiled['revision'] == 1
+    assert compiled['text'] == 'literal @图片1' and compiled['can_run']
+    assert compiled['mapping'] == [{'token': '@文本1', 'source': ref['source'], 'media_position': None}]
+    doc['edges'] = []
+    doc['input_order'] = {}
+    blocked = await client.put(url, json={'request_id': 'disconnect', 'expected_revision': 1, 'document': doc})
+    assert blocked.json()['data']['target'] == {'card_id': 'model', 'segment_id': 'reference', 'path': ['prompt', 'segments', 'reference']}
+    assert blocked.json()['data']['blocks'] == ['save']
+    doc['cards'][1]['prompt']['segments'] = []
+    assert (await client.put(url, json={'request_id': 'clear-and-disconnect', 'expected_revision': 1, 'document': doc})).status_code == 200
+
+@pytest.mark.asyncio
+async def test_duplicate_prompt_segment_identity_cannot_save(canvas_client):
+    canvas = (await canvas_client.post('/canvases/p', json={})).json()['data']
+    doc = {**canvas['document'], 'cards': [{'id': 'model', 'type': 'model.text', 'prompt': {'segments': [
+        {'id': 'same', 'kind': 'text', 'text': 'first'}, {'id': 'same', 'kind': 'text', 'text': 'second'}]}}]}
+    response = await canvas_client.put(f"/canvases/p/{canvas['id']}", json={'request_id': 'duplicate', 'expected_revision': 0, 'document': doc})
+    assert response.status_code == 422

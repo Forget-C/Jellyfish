@@ -8,7 +8,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.generation_canvas import CanvasSaveReceipt, GenerationCanvas
 from app.models.studio import Project
-from app.schemas.generation_canvas import CanvasDocument, CanvasSave, ModelCard
+from app.schemas.generation_canvas import CanvasDocument, CanvasSave, ModelCard, CanvasDiagnostic, CanvasCompiledInput
 from app.services.common import get_or_404
 from app.services.generation_canvas.errors import diagnostic
 from app.services.generation_canvas.graph import validate_graph
@@ -81,6 +81,20 @@ class CanvasStore:
             seen.add(card.id)
             identities[card.id] = card.type
         validate_graph(document)
+        # 最终文档中的实际引用决定保护；同一次保存清理引用即可断线或删来源。
+        from app.services.generation_canvas.compiler import prompt_references
+        for receiver in document.cards:
+            if not isinstance(receiver, ModelCard):
+                continue
+            for reference, path in prompt_references(receiver):
+                source = reference.source
+                was_connected = any(edge['source_card'] == source.card_id and edge['source_port'] == source.port_id
+                                    and edge['target_card'] == receiver.id for edge in canvas.document.get('edges', []))
+                connected = any(edge.source_card == source.card_id and edge.source_port == source.port_id
+                                and edge.target_card == receiver.id for edge in document.edges)
+                if source.canvas_id == canvas_id and was_connected and not connected:
+                    raise diagnostic('REFERENCE_IN_USE', '请先清理实际引用再断开或删除来源',
+                                     {'card_id': receiver.id, 'segment_id': reference.id, 'path': path})
         previous_edges = {(edge['source_card'], edge['source_port'], edge['target_card'], edge['target_port'])
                           for edge in canvas.document.get('edges', [])}
         by_id = {card.id: card for card in document.cards}
@@ -122,6 +136,23 @@ class CanvasStore:
         self.db.add(CanvasSaveReceipt(canvas_id=canvas_id, request_id=command.request_id, request_hash=digest, response=response))
         await self.db.flush()
         return response
+
+    async def compile_input(self, canvas_id: str, card_id: str) -> CanvasCompiledInput:
+        """编译已保存内容；不受理任务，不发布尚未存在的模型输出。"""
+        from app.services.generation_canvas.compiler import compile_card
+        canvas = await self.get(canvas_id)
+        document = CanvasDocument.model_validate(canvas.document)
+        card = next((card for card in document.cards if card.id == card_id), None)
+        if not isinstance(card, ModelCard):
+            raise HTTPException(404, 'Model card not found')
+        capability = await model_capability(self.db, card.model_id) if card.model_id else None
+        result = compile_card(document, card_id, capability=capability)
+        result.revision = canvas.revision
+        if not card.model_id:
+            result.diagnostics = list(result.diagnostics) + [CanvasDiagnostic(code='MODEL_REQUIRED', message='请选择模型',
+                target={'card_id': card_id, 'path': ['model_id']}, blocks=['run'])]
+            result.can_run = False
+        return result
 
     async def delete(self, canvas_id: str) -> None:
         """当前切片尚无运行；先删回执再删除文档，适配 SQLite 与 MySQL 外键。"""
