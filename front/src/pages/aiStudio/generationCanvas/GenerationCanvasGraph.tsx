@@ -6,6 +6,7 @@ import type { CanvasDocument, CanvasModelCapability, ModelRead } from '../../../
 import { CanvasDragHandle, CanvasEdge, useCanvasViewport } from '../../../components/canvas/Canvas'
 import { useGraphLayout } from '../directing/useGraphLayout'
 import type { GraphArrange, GraphSize } from '../directing/graphLayout'
+import { referenceProtection } from './promptRules'
 import { CardShell } from './CardShell'
 import { rendererRegistry } from './rendererRegistry'
 import { cardTitles, connect, connectionReason, disconnect, inputPorts, outputPorts, portLabels } from './graphRules'
@@ -69,6 +70,8 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false }: 
   const edit = (next: CanvasDocument) => { if (!readonly) onChange(next) }
   const updateCard = (next: GenerationCard) => edit({ ...latest.current, cards: latest.current.cards?.map(card => card.id === next.id ? next : card) })
   const removeCard = (id: string) => {
+    const protection = referenceProtection(latest.current, id)
+    if (protection) { setReason(protection); return }
     let next = latest.current
     for (const edge of next.edges || []) if (edge.source_card === id || edge.target_card === id) next = disconnect(next, edge.id)
     const order = { ...next.input_order }; delete order[id]
@@ -77,7 +80,7 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false }: 
   }
   const add = (type: string) => {
     const card = type === 'content.text' ? { id: crypto.randomUUID(), type, type_version: 1, text: '' }
-      : type.startsWith('model.') ? { id: crypto.randomUUID(), type, type_version: 1, model_id: null, prompt: '', config: {} }
+      : type.startsWith('model.') ? { id: crypto.randomUUID(), type, type_version: 1, model_id: null, prompt: { segments: [] }, config: {} }
       : { id: crypto.randomUUID(), type, type_version: 1, file_id: null, uploading: false }
     edit({ ...latest.current, cards: [...(latest.current.cards || []), card] })
   }
@@ -112,7 +115,17 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false }: 
       {input ? '○' : '●'} {portLabels[name]}
     </button>
   }
-  const references = (card: GenerationCard) => inputPorts(card).map(name => {
+  const references = (card: GenerationCard) => <>
+    <Space wrap><Button disabled={readonly} size="small" onClick={() => {
+      const source = { id: crypto.randomUUID(), type: 'content.text' as const, type_version: 1 as const, text: '' }
+      const next = { ...latest.current, cards: [...(latest.current.cards || []), source] }
+      edit(connect(next, { id: crypto.randomUUID(), source_card: source.id, source_port: 'text', target_card: card.id, target_port: 'text' }))
+    }}>添加文本参考</Button>
+    <Select<string> aria-label="连接已有卡" placeholder="选择已有卡" value={undefined} disabled={readonly} style={{ width: 160 }}
+      options={cards.flatMap(source => outputPorts(source).flatMap(sourcePort => inputPorts(card).filter(targetPort => !connectionReason(document, { id: 'candidate', source_card: source.id, source_port: sourcePort, target_card: card.id, target_port: targetPort }, capability(card))).map(targetPort => ({ value: `${source.id}|${sourcePort}|${targetPort}`, label: `${source.id.slice(0, 8)} → ${portLabels[targetPort]}` }))))}
+      onChange={value => { if (!value) return; const [source_card, source_port, target_port] = value.split('|'); edit(connect(latest.current, { id: crypto.randomUUID(), source_card, source_port, target_card: card.id, target_port })) }} />
+    </Space>
+    {inputPorts(card).map(name => {
     const order = document.input_order?.[card.id]?.[name] || []
     if (!order.length) return null
     return <div key={name}><strong>{portLabels[name]}</strong><ol>{order.map((id, index) => {
@@ -124,10 +137,14 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false }: 
         <Button size="small" disabled={readonly || index === 0} aria-label={`前移输入 ${id}`} onClick={() => {
           const next = [...order]; [next[index - 1], next[index]] = [next[index], next[index - 1]]
           edit({ ...document, input_order: { ...document.input_order, [card.id]: { ...document.input_order?.[card.id], [name]: next } } })
-        }}>↑</Button><Button size="small" disabled={readonly} aria-label={`断开连接 ${id}`} onClick={() => edit(disconnect(latest.current, id))}>断开</Button>
+        }}>↑</Button><Button size="small" disabled={readonly} aria-label={`断开连接 ${id}`} onClick={() => {
+          const protection = referenceProtection(latest.current, edge.source_card, edge.target_card, edge.source_port)
+          if (protection) { setReason(protection); return }
+          edit(disconnect(latest.current, id))
+        }}>断开</Button>
       </li>
     })}</ol></div>
-  })
+  })}</>
   const hidden = new Set(groups.filter(group => group.collapsed).flatMap(group => group.card_ids || []))
   const point = (id: string) => layout.view.positions[id] || { x: 0, y: 0 }
   return <div className="generation-graph" ref={container}>

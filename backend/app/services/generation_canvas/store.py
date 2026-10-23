@@ -81,6 +81,20 @@ class CanvasStore:
             seen.add(card.id)
             identities[card.id] = card.type
         validate_graph(document)
+        # 最终文档中的实际引用决定保护；同一次保存清理引用即可断线或删来源。
+        from app.services.generation_canvas.compiler import prompt_references
+        for receiver in document.cards:
+            if not isinstance(receiver, ModelCard):
+                continue
+            for reference, path in prompt_references(receiver):
+                source = reference.source
+                was_connected = any(edge['source_card'] == source.card_id and edge['source_port'] == source.port_id
+                                    and edge['target_card'] == receiver.id for edge in canvas.document.get('edges', []))
+                connected = any(edge.source_card == source.card_id and edge.source_port == source.port_id
+                                and edge.target_card == receiver.id for edge in document.edges)
+                if source.canvas_id == canvas_id and was_connected and not connected:
+                    raise diagnostic('REFERENCE_IN_USE', '请先清理实际引用再断开或删除来源',
+                                     {'card_id': receiver.id, 'segment_id': reference.id, 'path': path})
         previous_edges = {(edge['source_card'], edge['source_port'], edge['target_card'], edge['target_port'])
                           for edge in canvas.document.get('edges', [])}
         by_id = {card.id: card for card in document.cards}

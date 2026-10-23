@@ -2,6 +2,7 @@ import type { ComponentType, ReactNode } from 'react'
 import { Alert, Input, Select } from 'antd'
 import type { CanvasDocument, CanvasModelCapability, ImageModelCard, ModelRead, TextContentCard, TextModelCard, VideoModelCard } from '../../../services/generated'
 import { ExperimentComposer } from '../experiment/components/ExperimentComposer'
+import { PromptEditor } from './PromptEditor'
 import { MediaContentEditor } from './MediaContentEditor'
 import type { MediaCard } from './MediaContentEditor'
 import { ImageModelParameters, VideoModelParameters } from './ModelParameters'
@@ -11,7 +12,7 @@ export type CardRendererProps = { card: GenerationCard; document: CanvasDocument
   models?: ModelRead[]; capability?: CanvasModelCapability; capabilityError?: string; references?: ReactNode; disabled?: boolean }
 
 /** 模型卡共享受控 Composer 布局，参数由各模态组件表达。 */
-function ModelRenderer({ card: raw, onChange, models, capability, capabilityError, references }: CardRendererProps) {
+function ModelRenderer({ card: raw, document, disabled, onChange, models, capability, capabilityError, references }: CardRendererProps) {
   const card = raw as TextModelCard | ImageModelCard | VideoModelCard
   const category = card.type?.split('.')[1]
   let parameters: ReactNode = <span>使用模型管理中的文本参数 · 仅接收文本</span>
@@ -41,7 +42,7 @@ function ModelRenderer({ card: raw, onChange, models, capability, capabilityErro
       options={models?.filter(model => model.category === category).map(model => ({ value: model.id, label: model.name }))}
       onChange={id => onChange({ ...card, model_id: id ?? null })} />{parameters}</>}
       onSubmit={() => {}} submitDisabled submitLabel="运行尚未接入">
-      <Input.TextArea aria-label="模型正文" rows={5} value={card.prompt} onChange={event => onChange({ ...card, prompt: event.target.value })} />
+      <PromptEditor document={document} card={card} value={card.prompt || { segments: [] }} disabled={disabled} onChange={prompt => onChange({ ...card, prompt })} />
     </ExperimentComposer>
   </>
 }

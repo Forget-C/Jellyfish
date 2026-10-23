@@ -177,7 +177,7 @@ async def test_typed_graph_roundtrip_preserves_port_order_and_groups(canvas_clie
     doc = canvas['document']
     doc.update(cards=[{'id': 'a', 'type': 'content.text', 'text': 'first'},
                       {'id': 'b', 'type': 'content.text', 'text': 'second'},
-                      {'id': 'm', 'type': 'model.text', 'model_id': None, 'prompt': '', 'config': {}}],
+                      {'id': 'm', 'type': 'model.text', 'model_id': None, 'prompt': {'segments': []}, 'config': {}}],
                edges=[{'id': 'e1', 'source_card': 'a', 'source_port': 'text', 'target_card': 'm', 'target_port': 'text'},
                       {'id': 'e2', 'source_card': 'b', 'source_port': 'text', 'target_card': 'm', 'target_port': 'text'}],
                input_order={'m': {'text': ['e2', 'e1']}},
@@ -357,3 +357,22 @@ async def test_model_switch_preserves_candidate_added_since_last_save(canvas_cli
     # 新模型不支持这个候选，但模型切换必须保留同一未保存文档中的现场。
     assert (await canvas_client.put(base, json={'request_id': 'switch', 'expected_revision': 1, 'document': doc})).status_code == 200
     assert (await canvas_client.get(base)).json()['data']['document']['edges'] == doc['edges']
+
+@pytest.mark.asyncio
+async def test_reference_protects_disconnect_but_final_document_cleanup_saves_once(canvas_client):
+    client = canvas_client
+    canvas = (await client.post('/canvases/p', json={})).json()['data']
+    doc = canvas['document']
+    reference = {'id': 'ref', 'kind': 'reference', 'source': {'canvas_id': canvas['id'], 'card_id': 'source', 'port_id': 'text', 'position': 0}}
+    doc['cards'] = [{'id': 'source', 'type': 'content.text', 'text': 'actual'}, {'id': 'receiver', 'type': 'model.text', 'prompt': {'segments': [reference]}}]
+    doc['edges'] = [{'id': 'edge', 'source_card': 'source', 'source_port': 'text', 'target_card': 'receiver', 'target_port': 'text'}]
+    doc['input_order'] = {'receiver': {'text': ['edge']}}
+    url = f"/canvases/p/{canvas['id']}"
+    assert (await client.put(url, json={'request_id': 'initial', 'expected_revision': 0, 'document': doc})).status_code == 200
+    doc['edges'] = []
+    doc['input_order'] = {}
+    blocked = await client.put(url, json={'request_id': 'blocked', 'expected_revision': 1, 'document': doc})
+    assert blocked.status_code == 422
+    assert blocked.json()['detail']['code'] == 'REFERENCE_IN_USE'
+    doc['cards'][1]['prompt']['segments'] = []
+    assert (await client.put(url, json={'request_id': 'clean', 'expected_revision': 1, 'document': doc})).status_code == 200

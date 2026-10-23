@@ -19,10 +19,51 @@ class TextContentCard(CardDefinition):
     output_ports: ClassVar[tuple[str, ...]] = ('text',)
 
 
+class OutputIdentity(BaseModel):
+    """稳定输出位置不等于历史产物 ID；不得按文件合并来源。"""
+    model_config = ConfigDict(extra='forbid')
+    canvas_id: str
+    card_id: str
+    port_id: str
+    position: int = Field(ge=0)
+
+
+class PromptText(BaseModel):
+    """普通正文保留字面内容，不因候选重排而改写。"""
+    model_config = ConfigDict(extra='forbid')
+    id: str = Field(min_length=1)
+    kind: Literal['text'] = Field(json_schema_extra={'enum': ['text']})
+    text: str = ''
+
+
+class PromptReference(BaseModel):
+    """引用按稳定片段身份定位，显示代号由接收端计算。"""
+    model_config = ConfigDict(extra='forbid')
+    id: str = Field(min_length=1)
+    kind: Literal['reference'] = Field(json_schema_extra={'enum': ['reference']})
+    source: OutputIdentity
+
+
+class PromptInstruction(BaseModel):
+    """本地显式系统指令；视频用途的具体映射由视频编译器消费。"""
+    model_config = ConfigDict(extra='forbid')
+    id: str = Field(min_length=1)
+    kind: Literal['instruction'] = Field(json_schema_extra={'enum': ['instruction']})
+    command: str
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    references: list[PromptReference] = Field(default_factory=list)
+
+
+class PromptDocument(BaseModel):
+    """编辑器无关的原文、稳定引用与指令；不存正文偏移。"""
+    model_config = ConfigDict(extra='forbid')
+    segments: list[PromptText | PromptReference | PromptInstruction] = Field(default_factory=list)
+
+
 class ModelCard(CardDefinition):
     """模型切换只替换模型身份；未完成配置也可持久保存。"""
     model_id: str | None = None
-    prompt: str = ''
+    prompt: PromptDocument = Field(default_factory=PromptDocument)
 
 
 class TextModelConfig(BaseModel):
@@ -176,7 +217,7 @@ class CanvasSaved(BaseModel):
 class CanvasDiagnostic(BaseModel):
     """按稳定身份和字段路径定位的业务诊断。"""
     code: str
-    severity: Literal['error'] = 'error'
+    severity: Literal['error', 'warning'] = 'error'
     message: str
     target: dict[str, Any]
     blocks: list[str]
@@ -185,3 +226,24 @@ class CanvasDiagnostic(BaseModel):
 class CanvasError(BaseModel):
     """文档结构或 CAS 失败的 HTTP 错误正文。"""
     detail: CanvasDiagnostic
+
+
+class CanvasResolvedOutput(BaseModel):
+    """已发布的实际输出，运行层可注入模型当前输出而无需虚构未来结果。"""
+    source: OutputIdentity
+    modality: str
+    text: str | None = None
+    file_id: str | None = None
+    token: str = ''
+    available: bool = True
+
+
+class CanvasCompiledInput(BaseModel):
+    """单次展开与实际使用映射，媒体位置为实际提交子集内的序号。"""
+    card_id: str
+    text: str = ''
+    used: list[CanvasResolvedOutput] = Field(default_factory=list)
+    media: list[CanvasResolvedOutput] = Field(default_factory=list)
+    mapping: list[dict[str, Any]] = Field(default_factory=list)
+    diagnostics: list[CanvasDiagnostic] = Field(default_factory=list)
+    can_run: bool = True

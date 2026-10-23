@@ -22,3 +22,7 @@
 .generation-group-header .ant-input { width: 130px; }
 .generation-drag-hint { position: absolute; z-index: 10; pointer-events: none; background: white; border: 1px solid #94a3b8; padding: 4px; }
 @media(max-width: 600px) { .generation-surface { height: 680px; } }
+
+.generation-prompt-editor { min-height: 120px; white-space: pre-wrap; padding: 8px; border: 1px solid var(--color-border, #ccc); border-radius: 6px; }
+.generation-prompt-token { display: inline-block; padding: 0 4px; margin: 0 2px; border-radius: 4px; background: #e6f4ff; color: #0958d9; }
+.generation-prompt-token[data-invalid="true"] { background: #fff1f0; color: #a8071a; }
