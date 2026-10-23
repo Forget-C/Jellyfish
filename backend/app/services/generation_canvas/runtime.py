@@ -190,6 +190,10 @@ class CanvasRuntime:
         head = await event_head(self.db, canvas_id)
         nodes = []
         from app.services.studio.file_usages import upsert_file_usage
+        from app.services.studio.files import require_available_file
+        known_files = sorted({media.file_id for item in prepared['nodes'].values() for media in item['compiled'].media})
+        for file_id in known_files:
+            await require_available_file(self.db, file_id=file_id)
         for card_id, item in prepared['nodes'].items():
             private = item['private']
             private['dependencies'] = item['dependencies']
