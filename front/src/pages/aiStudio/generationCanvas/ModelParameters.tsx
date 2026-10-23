@@ -26,7 +26,7 @@ export function VideoModelParameters({ card, capability, onChange }: Props<Video
       onChange={value => onChange({ ...card, config: { ...config, seconds: value } })} />
     <details><summary>高级设置</summary><label>随机种子 <InputNumber aria-label="随机种子" value={config.seed} disabled={!capability?.supports_seed}
       onChange={value => onChange({ ...card, config: { ...config, seed: value } })} /></label>
-      {card.config?.seed != null && !capability?.supports_seed && <span role="alert">当前模型不支持已有随机种子，配置已保留</span>}
+      {card.config?.seed !== undefined && card.config?.seed !== null && !capability?.supports_seed && <span role="alert">当前模型不支持已有随机种子，配置已保留</span>}
     </details>
   </Space>
 }
