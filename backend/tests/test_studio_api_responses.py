@@ -59,6 +59,12 @@ class _FakeStudioDB:
             return
         raise TypeError(f"Unsupported object type: {type(obj)!r}")
 
+    async def scalars(self, stmt):
+        """This fixture has no canvases; preserve the real project deletion guard."""
+        from app.models.generation_canvas import GenerationCanvas
+        assert stmt.column_descriptions[0]['entity'] is GenerationCanvas
+        return []
+
     async def execute(self, _stmt):  # noqa: ANN001
         class _EmptyResult:
             def all(self) -> list[tuple]:

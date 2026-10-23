@@ -189,3 +189,11 @@ node front/tests/workspaceShootSteps.browser.mjs
 ### 默认资产与单元身份参考
 
 `pnpm --dir front run test:browser -- references` 通过真实导演／单元画布、独立 HTTP 后端、数据库和对象存储验证默认候选解耦与身份参考来源。`reference-source`（4258／8258）验证明确更换来源、整组应用／取消、逐图跨源拒绝、非目标输入及单元隔离；模型请求不调用付费服务。
+
+### 生成画布综合验收
+
+`node front/tests/run-browser.mjs generation-canvas-acceptance` 使用4283/8283、真实HTTP/TaskWorker与受控图片供应商/对象存储，检查1440/375宽度下的媒体解码与视口边界、长正文保留、底部参数键盘焦点和独立画布入口。截图使用保存的可读缩放布局，按媒体/长文/参数分别核查卡内滚动；不将截图存在视为视觉验收。
+
+`backend/tests/test_generation_canvas_journey.py` 使用显式 `JELLYFISH_TEST_MYSQL_URL` 的隔离MySQL库，依次真实生成文本、图片、视频，前一成果完成后才创建下一引用，并比对预检与真实供应商payload；无真实模型费用。
+
+应用壳的项目/资产/三类实验室交互通过注册用例运行：`PLAYWRIGHT_CHANNEL=chrome node front/tests/run-browser.mjs legacy-labs`（4184端口）。该入口明确设置`SHELL_INTERACTIONS_ONLY=1 SHELL_LAB_REGRESSION_ONLY=1`，默认完整壳脚本的原断言仍保持启用。此范围明确不含末段旧场次壳断言；当前场次工作台使用统一runner的`canvas-graph`单独回归。完整规格证据与实际限制见`.scratch/generation-canvas/acceptance.md`。
