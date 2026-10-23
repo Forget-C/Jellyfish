@@ -11,7 +11,7 @@ from typing import Any
 from urllib.parse import quote
 
 from fastapi import HTTPException, UploadFile
-from sqlalchemy import exists
+from sqlalchemy import delete, exists
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,12 +19,12 @@ from sqlalchemy.orm import selectinload
 
 from app.api.utils import apply_keyword_filter, apply_order, paginate
 from app.core import storage
-from app.models.studio import FileItem, FileType
+from app.models.studio import FileItem, FileType, Project
 from app.models.task import Task, TaskInput, TaskOutput
 from app.models.studio import ActorImage, CharacterImage, SceneImage, PropImage, CostumeImage
 from app.schemas.common import ApiResponse, PaginatedData, paginated_response
 from app.schemas.studio import FileDetailRead, FileRead, FileUpdate, FileUsageRead, FileUsageWrite
-from app.services.common import create_and_refresh, entity_not_found, flush_and_refresh, patch_model
+from app.services.common import get_or_404, create_and_refresh, entity_not_found, flush_and_refresh, patch_model
 from app.services.studio.file_usages import upsert_file_usage
 from app.models.studio_file_usages import FileUsage
 
@@ -37,6 +37,8 @@ def _detect_file_type(filename: str) -> FileType:
         return FileType.image
     if ext in {".mp4", ".mov", ".mkv", ".avi", ".webm"}:
         return FileType.video
+    if ext in {".mp3", ".wav", ".ogg", ".m4a", ".aac", ".flac", ".opus"}:
+        return FileType.audio
     raise HTTPException(status_code=400, detail=f"不支持的文件类型: {ext or '未知后缀'}")
 
 
@@ -57,6 +59,13 @@ def _resolve_download_media_type(filename: str) -> str:
         ".gif": "image/gif",
         ".mp4": "video/mp4",
         ".mov": "video/quicktime",
+        ".mp3": "audio/mpeg",
+        ".wav": "audio/wav",
+        ".ogg": "audio/ogg",
+        ".m4a": "audio/mp4",
+        ".aac": "audio/aac",
+        ".flac": "audio/flac",
+        ".opus": "audio/ogg",
     }
     if ext in media_types:
         return media_types[ext]
@@ -150,6 +159,8 @@ async def upload_file(
     if not file.filename:
         raise HTTPException(status_code=400, detail="上传文件缺少文件名")
 
+    if project_id:
+        await get_or_404(db, Project, project_id, detail="Project not found")
     file_type = _detect_file_type(file.filename)
     display_name = _build_display_name(file.filename, name)
     file_id = uuid.uuid4().hex
@@ -262,10 +273,13 @@ async def require_available_file(
     return file
 
 
-async def _ensure_file_is_unreferenced(db: AsyncSession, *, file_id: str) -> None:
+async def _ensure_file_is_unreferenced(db: AsyncSession, *, file_id: str, ignored_usage_ids: tuple[int, ...] = ()) -> None:
     """历史任务引用不阻止删除字节；活动任务与实际业务采用关系必须保护。"""
     for model in (FileUsage, ActorImage, CharacterImage, SceneImage, PropImage, CostumeImage):
-        if await db.scalar(select(exists().where(model.file_id == file_id))):
+        conditions = [model.file_id == file_id]
+        if model is FileUsage and ignored_usage_ids:
+            conditions.append(FileUsage.id.not_in(ignored_usage_ids))
+        if await db.scalar(select(exists().where(*conditions))):
             raise HTTPException(status_code=409, detail="素材仍被业务使用")
     for relation in (TaskInput, TaskOutput):
         active = select(relation.task_id).join(Task, Task.id == relation.task_id).where(
@@ -273,3 +287,16 @@ async def _ensure_file_is_unreferenced(db: AsyncSession, *, file_id: str) -> Non
         ).limit(1)
         if await db.scalar(active) is not None:
             raise HTTPException(status_code=409, detail="素材仍被活动任务使用")
+
+
+async def release_upload_retention(db: AsyncSession, *, file_id: str, project_id: str) -> None:
+    """显式释放本项目的画布上传保留；其他真实引用存在时拒绝，文件删除仍需单独请求。"""
+    await require_available_file(db, file_id=file_id)
+    ids = tuple((await db.scalars(select(FileUsage.id).where(
+        FileUsage.file_id == file_id, FileUsage.project_id == project_id,
+        FileUsage.usage_kind == 'generation_upload'))).all())
+    if not ids:
+        raise HTTPException(404, 'Upload retention not found')
+    await _ensure_file_is_unreferenced(db, file_id=file_id, ignored_usage_ids=ids)
+    await db.execute(delete(FileUsage).where(FileUsage.id.in_(ids)))
+    await db.flush()

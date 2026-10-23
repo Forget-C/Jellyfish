@@ -2,4 +2,4 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type FileTypeEnum = 'image' | 'video';
+export type FileTypeEnum = 'image' | 'video' | 'audio';

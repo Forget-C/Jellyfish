@@ -11,7 +11,7 @@ from app.models.studio import Project
 from sqlalchemy import delete, select
 
 @pytest_asyncio.fixture
-async def canvas_client(request):
+async def canvas_client(request, monkeypatch):
     from app.api.v1.routes.studio.generation_canvases import router
     mysql = getattr(request, 'param', None) == 'mysql'
     if mysql:
@@ -44,6 +44,15 @@ async def canvas_client(request):
                 raise
     app = FastAPI()
     app.include_router(router, prefix='/canvases')
+    from app.api.v1.routes.studio.files import router as files_router
+    from app.core import storage
+    async def upload(**kwargs):
+        return None
+    async def download(**kwargs):
+        return b'media-bytes'
+    monkeypatch.setattr(storage, 'upload_file', upload)
+    monkeypatch.setattr(storage, 'download_file', download)
+    app.include_router(files_router, prefix='/files')
     app.dependency_overrides[get_db] = database
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
         yield client
@@ -248,3 +257,103 @@ async def test_capability_declarations_match_real_dtos_and_video_adapter(canvas_
         assert response.json()['detail']['code'] == 'UNSUPPORTED_INPUT'
     finally:
         clear_video_model_capability_overrides(provider='openai')
+
+
+
+@pytest.mark.asyncio
+async def test_media_uploads_are_project_files_and_canvas_content_protects_them(canvas_client):
+    client = canvas_client
+    audio = await client.post('/files/upload', files={'file': ('voice.mp3', b'media-bytes', 'audio/mpeg')},
+                              data={'project_id': 'p', 'usage_kind': 'generation_upload'})
+    assert audio.status_code == 201, audio.text
+    file = audio.json()['data']
+    assert file['type'] == 'audio'
+    assert (await client.get(f"/files/{file['id']}/download")).headers['content-type'] == 'audio/mpeg'
+    listed = (await client.get('/files', params={'project_id': 'p'})).json()['data']['items']
+    assert [item['id'] for item in listed] == [file['id']]
+    canvas = (await client.post('/canvases/p', json={'name': '媒体'})).json()['data']
+    url = f"/canvases/p/{canvas['id']}"
+    document = canvas['document']
+    document['cards'] = [{'id': 'audio', 'type': 'content.audio', 'file_id': file['id']},
+                         {'id': 'empty-image', 'type': 'content.image'},
+                         {'id': 'empty-video', 'type': 'content.video'}]
+    saved = await client.put(url, json={'request_id': 'media', 'expected_revision': 0, 'document': document})
+    assert saved.status_code == 200, saved.text
+    assert (await client.get(url)).json()['data']['document']['cards'][0]['file_id'] == file['id']
+    assert (await client.delete(f"/files/{file['id']}")).status_code == 409
+    assert (await client.delete(f"/files/{file['id']}/upload-retention", params={'project_id': 'p'})).status_code == 409
+    assert (await client.delete(url)).status_code == 200
+    assert (await client.get('/files', params={'project_id': 'p'})).json()['data']['pagination']['total'] == 1
+    assert (await client.delete(f"/files/{file['id']}/upload-retention", params={'project_id': 'other'})).status_code == 404
+    assert (await client.delete(f"/files/{file['id']}/upload-retention", params={'project_id': 'p'})).status_code == 200
+    assert (await client.delete(f"/files/{file['id']}")).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_media_card_rejects_missing_foreign_and_wrong_type_files_without_losing_saved_content(canvas_client):
+    client = canvas_client
+    image = (await client.post('/files/upload', files={'file': ('image.png', b'image', 'image/png')},
+                               data={'project_id': 'p', 'usage_kind': 'generation_upload'})).json()['data']
+    foreign = (await client.post('/files/upload', files={'file': ('foreign.png', b'image', 'image/png')},
+                                 data={'project_id': 'other', 'usage_kind': 'generation_upload'})).json()['data']
+    canvas = (await client.post('/canvases/p', json={'name': '图片'})).json()['data']
+    url = f"/canvases/p/{canvas['id']}"
+    document = {**canvas['document'], 'cards': [{'id': 'image', 'type': 'content.image', 'file_id': image['id']}]}
+    assert (await client.put(url, json={'request_id': 'valid', 'expected_revision': 0, 'document': document})).status_code == 200
+    for index, (file_id, card_type) in enumerate([('missing', 'content.image'), (foreign['id'], 'content.image'), (image['id'], 'content.video')]):
+        invalid = {**document, 'cards': [{'id': 'other-card', 'type': card_type, 'file_id': file_id}]}
+        response = await client.put(url, json={'request_id': f'invalid-{index}', 'expected_revision': 1, 'document': invalid})
+        assert response.status_code == 422, response.text
+        assert response.json()['detail']['code'] == 'INVALID_MEDIA_FILE'
+    reopened = (await client.get(url)).json()['data']
+    assert reopened['revision'] == 1
+    assert reopened['document']['cards'][0]['file_id'] == image['id']
+    detail = (await client.get(f"/files/{image['id']}")).json()['data']
+    assert {usage['usage_kind'] for usage in detail['usages']} == {'generation_upload', 'canvas_content'}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('extension,mime,modality', [('png', 'image/png', 'image'), ('mp4', 'video/mp4', 'video'), ('wav', 'audio/wav', 'audio')])
+async def test_each_media_content_can_replace_clear_and_save_during_upload_without_losing_file_protection(canvas_client, extension, mime, modality):
+    client = canvas_client
+    files = []
+    for index in range(2):
+        response = await client.post('/files/upload', files={'file': (f'file{index}.{extension}', b'content', mime)},
+                                     data={'project_id': 'p', 'usage_kind': 'generation_upload'})
+        assert response.status_code == 201
+        files.append(response.json()['data']['id'])
+    canvas = (await client.post('/canvases/p', json={'name': modality})).json()['data']
+    url = f"/canvases/p/{canvas['id']}"
+    document = canvas['document']
+    for revision, (file_id, uploading) in enumerate([(files[0], False), (files[0], True), (files[1], False), (None, False)]):
+        document['cards'] = [{'id': 'stable-source', 'type': f'content.{modality}', 'file_id': file_id, 'uploading': uploading}]
+        response = await client.put(url, json={'request_id': f'save-{revision}', 'expected_revision': revision, 'document': document})
+        assert response.status_code == 200, response.text
+        reopened = (await client.get(url)).json()['data']['document']['cards'][0]
+        assert reopened['id'] == 'stable-source'
+        assert reopened['file_id'] == file_id
+        assert reopened['uploading'] == uploading
+        usages = (await client.get(f'/files/{files[0]}')).json()['data']['usages']
+        assert any(usage['usage_kind'] == 'canvas_content' for usage in usages) is (file_id == files[0])
+    assert (await client.get('/files', params={'project_id': 'p'})).json()['data']['pagination']['total'] == 2
+
+
+@pytest.mark.asyncio
+async def test_upload_rejects_missing_project_before_retaining_file(canvas_client):
+    response = await canvas_client.post('/files/upload', files={'file': ('audio.mp3', b'content', 'audio/mpeg')},
+                                        data={'project_id': 'missing-project', 'usage_kind': 'generation_upload'})
+    assert response.status_code == 404
+
+@pytest.mark.asyncio
+async def test_model_switch_preserves_candidate_added_since_last_save(canvas_client):
+    canvas = (await canvas_client.post('/canvases/p', json={})).json()['data']
+    base = f"/canvases/p/{canvas['id']}"
+    doc = {**canvas['document'], 'cards': [{'id': 'a', 'type': 'model.video'},
+                                        {'id': 'm', 'type': 'model.video', 'model_id': None}]}
+    assert (await canvas_client.put(base, json={'request_id': 'before', 'expected_revision': 0, 'document': doc})).status_code == 200
+    doc['cards'][1]['model_id'] = 'canvas-video'
+    doc['edges'] = [{'id': 'e', 'source_card': 'a', 'source_port': 'video', 'target_card': 'm', 'target_port': 'subject_video'}]
+    doc['input_order'] = {'m': {'subject_video': ['e']}}
+    # 新模型不支持这个候选，但模型切换必须保留同一未保存文档中的现场。
+    assert (await canvas_client.put(base, json={'request_id': 'switch', 'expected_revision': 1, 'document': doc})).status_code == 200
+    assert (await canvas_client.get(base)).json()['data']['document']['edges'] == doc['edges']

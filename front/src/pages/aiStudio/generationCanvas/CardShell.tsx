@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Button, Checkbox } from 'antd'
+import { Button, Checkbox, ConfigProvider } from 'antd'
 import { CanvasDragHandle } from '../../../components/canvas/Canvas'
 import type { CanvasPoint } from '../../../components/canvas/geometry'
 
@@ -15,6 +15,6 @@ export function CardShell({ id, title, contextKey, point, scale, width, height, 
       <strong>{title}</strong><Button danger size="small" disabled={readonly} onClick={onRemove}>删除卡片</Button>
     </header>
     <div className="generation-ports">{inputs}{outputs}</div>
-    <fieldset disabled={readonly} className="generation-card-body">{children}</fieldset>
+    <ConfigProvider componentDisabled={readonly}><fieldset disabled={readonly} className="generation-card-body">{children}</fieldset></ConfigProvider>
   </article>
 }

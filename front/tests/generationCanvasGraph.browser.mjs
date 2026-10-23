@@ -31,6 +31,8 @@ try {
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
   const page = await browser.newPage({ viewport: { width: 1440, height: 960 } })
+  page.setDefaultTimeout(12000)
+  page.on('pageerror', error => console.log('PAGE ERROR', error.message))
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '类型化画布' }) })).json()).data
   const doc = { ...canvas.document, cards: [
@@ -44,6 +46,7 @@ try {
   const card = id => page.locator(`[data-card-id="${id}"]`)
   await card('a').getByRole('textbox', { name: '文本内容', exact: true }).waitFor()
   await page.getByRole('status').filter({ hasText: 'revision 1 · 已保存' }).waitFor()
+  console.log('graph loaded')
   await page.getByRole('button', { name: '缩小', exact: true }).click()
   await page.getByRole('button', { name: '缩小', exact: true }).click()
   const dragPort = async (from, output, to, input) => {
@@ -71,6 +74,14 @@ try {
   let puts = 0
   page.on('request', request => { if (request.method() === 'PUT' && request.url().includes('/generation-canvases/')) puts++ })
   const beforeMove = await card('a').boundingBox()
+  // 原生卡壳调整尺寸只写本地布局；宽高刷新恢复。
+  await page.mouse.move(beforeMove.x + beforeMove.width - 3, beforeMove.y + beforeMove.height - 3)
+  await page.mouse.down()
+  await page.mouse.move(beforeMove.x + beforeMove.width + 37, beforeMove.y + beforeMove.height + 37, { steps: 8 })
+  await page.mouse.up()
+  const resized = await card('a').boundingBox()
+  assert.ok(resized.width > beforeMove.width + 20)
+  assert.ok(resized.height > beforeMove.height + 20)
   await card('a').getByRole('button', { name: '移动布局：文本内容卡', exact: true }).press('ArrowDown')
   await page.getByRole('button', { name: '放大', exact: true }).click()
   await delay(5200)
@@ -81,6 +92,7 @@ try {
   await card('a').waitFor()
   const reopened = await card('a').boundingBox()
   assert.ok(Math.abs(reopened.y - afterMove.y) < 2, 'layout/viewport restored')
+  assert.ok(Math.abs(reopened.width - afterMove.width) < 2 && Math.abs(reopened.height - afterMove.height) < 2, 'card size restored')
   await card('a').getByRole('checkbox').check()
   await card('b').getByRole('checkbox').check()
   await page.getByRole('button', { name: '将所选卡片分组', exact: true }).click()
@@ -100,8 +112,46 @@ try {
   await dragPort('m', 'text', 'm', 'text')
   await page.getByRole('status').filter({ hasText: '卡片不能连接自身' }).waitFor()
   await page.screenshot({ path: join(output, 'typed-graph-desktop.png'), fullPage: true })
+  await page.getByRole('button', { name: '保存画布', exact: true }).click()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
+  const second = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '模型切换' }) })).json()).data
+  const modelDoc = { ...second.document, cards: [
+    { id: 'i', type: 'content.image', file_id: null },
+    { id: 'j', type: 'content.image', file_id: null },
+    { id: 'v', type: 'model.video', model_id: 'graph-video-main', prompt: '保留正文', config: { ratio: '9:16', seconds: 4, seed: 7 } },
+  ] }
+  const modelSave = await fetch(`${base}/${second.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed-model', expected_revision: 0, document: modelDoc }) })
+  assert.ok(modelSave.ok, await modelSave.text())
+  await page.goto(`http://127.0.0.1:4274/projects/canvas-project?tab=generation&canvas=${second.id}`)
+  await card('v').getByRole('textbox', { name: '模型正文', exact: true }).waitFor()
+  await page.getByRole('button', { name: '缩小', exact: true }).click()
+  await page.getByRole('button', { name: '缩小', exact: true }).click()
+  await card('v').getByRole('combobox', { name: '视频画幅', exact: true }).waitFor()
+  await dragPort('i', 'image', 'v', 'subject_image')
+  await page.getByRole('status').filter({ hasText: '已连接候选输入' }).waitFor()
+  await card('v').getByRole('combobox', { name: '选择模型', exact: true }).press('ArrowDown')
+  await page.getByText('graph-video-alt', { exact: true }).last().click()
+  await card('v').getByText('当前模型不支持，候选保留', { exact: true }).waitFor()
+  assert.equal(await card('v').getByRole('textbox', { name: '模型正文', exact: true }).inputValue(), '保留正文')
+  await card('v').getByText('当前模型不支持已有视频画幅，配置已保留', { exact: true }).waitFor()
+  await card('v').getByText('视频时长超出模型范围，配置已保留', { exact: true }).waitFor()
+  await dragPort('j', 'image', 'v', 'subject_image')
+  await page.getByRole('status').filter({ hasText: '所选模型未接入该输入用途' }).waitFor()
+  await dragPort('i', 'image', 'v', 'text')
+  await page.getByRole('status').filter({ hasText: '端口模态不匹配' }).waitFor()
+  await page.getByRole('button', { name: '保存画布', exact: true }).click()
+  await page.getByRole('status').filter({ hasText: 'revision 2 · 已保存' }).waitFor()
+  const switched = (await (await fetch(`${base}/${second.id}`)).json()).data.document
+  assert.equal(switched.edges.length, 1)
+  assert.equal(switched.cards[2].model_id, 'graph-video-alt')
+  assert.deepEqual(switched.cards[2].config, { ratio: '9:16', seconds: 4, seed: 7 })
+  await page.screenshot({ path: join(output, 'model-switch-preserved.png'), fullPage: true })
   await page.setViewportSize({ width: 390, height: 844 })
   await page.screenshot({ path: join(output, 'typed-graph-narrow.png'), fullPage: true })
   console.log('typed port drag, duplicate/self rejection, independent input order, group move/collapse/dissolve, local layout+viewport reopen and no content PUT verified')
 
+} catch (error) {
+  const pages = browser?.contexts()[0]?.pages() || []
+  if (pages[0]) await pages[0].screenshot({ path: join(output, 'failure.png'), fullPage: true })
+  throw error
 } finally { await cleanup() }

@@ -109,7 +109,7 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false }: 
       } : undefined}
       onPointerMove={!input ? event => { if (drag) setDrag({ ...drag, x: event.clientX, y: event.clientY }) } : undefined}
       onPointerUp={!input ? finishDrag : undefined} onPointerCancel={() => setDrag(undefined)}>
-      {input ? '○' : '●'} {portLabels[name]} {input && drag && issue && <small>{issue}</small>}
+      {input ? '○' : '●'} {portLabels[name]}
     </button>
   }
   const references = (card: GenerationCard) => inputPorts(card).map(name => {
@@ -138,7 +138,7 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false }: 
         if (!members.length) { setReason('所选卡片已经属于分组'); return }
         edit({ ...document, groups: [...groups, { id: crypto.randomUUID(), name: '新分组', card_ids: members, collapsed: false }] }); setSelected([])
       }}>将所选卡片分组</Button>
-      <Button onClick={() => viewport.zoom(.1)}>放大</Button><Button onClick={() => viewport.zoom(-.1)}>缩小</Button>
+      <Button aria-label="放大" onClick={() => viewport.zoom(.1)}>放大</Button><Button aria-label="缩小" onClick={() => viewport.zoom(-.1)}>缩小</Button>
     </Space>
     {storageError && <Alert type="warning" message={`布局本地保存失败：${storageError}`} />}
     <div role="status" className="generation-connection-reason">{reason || '拖动输出端口到接收端口建立候选连接'}</div>
@@ -176,8 +176,8 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false }: 
         {cards.filter(card => !hidden.has(card.id)).map(card => {
           const Renderer = rendererRegistry[card.type || 'content.text']
           const size = layout.view.sizes[card.id]
-          return <CardShell key={card.id} id={card.id} title={cardTitles[card.type || 'content.text']} contextKey={document.id} point={point(card.id)}
-            scale={transform.scale} width={size?.width || 400} selected={selected.includes(card.id)} readonly={readonly}
+          return <CardShell key={`${document.id}:${card.id}`} id={card.id} title={cardTitles[card.type || 'content.text']} contextKey={document.id} point={point(card.id)}
+            scale={transform.scale} width={size?.width || 400} height={size?.height} selected={selected.includes(card.id)} readonly={readonly}
             onSelect={checked => setSelected(previous => checked ? [...previous, card.id] : previous.filter(id => id !== card.id))}
             onMove={position => layout.move(card.id, position)} onResize={(width, height) => {
               if (Math.abs(width - (size?.width || 400)) > 2 || Math.abs(height - (size?.height || measured[card.id]?.height || height)) > 2)

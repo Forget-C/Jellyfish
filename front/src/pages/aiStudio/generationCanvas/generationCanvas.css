@@ -8,7 +8,7 @@
 .generation-card header { display: flex; gap: 8px; align-items: center; padding: 8px; background: #e2e8f0; }
 .generation-card header strong { flex: 1; }
 .generation-card button:focus-visible, .generation-group button:focus-visible { outline: 2px solid #1677ff; outline-offset: 2px; }
-.generation-ports { display: flex; align-items: start; gap: 4px; flex-wrap: wrap; padding: 8px; border-bottom: 1px solid #e2e8f0; }
+.generation-ports { display: flex; align-items: flex-start; gap: 4px; flex-wrap: wrap; padding: 8px; border-bottom: 1px solid #e2e8f0; }
 .generation-ports button { border: 1px solid #94a3b8; border-radius: 4px; background: #f8fafc; padding: 4px; cursor: crosshair; }
 .generation-ports button small { display: block; max-width: 160px; font-size: 11px; }
 .generation-ports [data-output-port] { margin-left: auto; }

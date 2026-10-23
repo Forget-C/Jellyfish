@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 class FileTypeEnum(str, Enum):
     image = "image"
     video = "video"
+    audio = "audio"
 
 
 class FileBase(BaseModel):

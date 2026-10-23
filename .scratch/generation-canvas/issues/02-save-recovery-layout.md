@@ -14,7 +14,7 @@ Blocked by: 01
 - [x] 临时失败保留当前编辑；结果未知时核实或原样重放原请求，不混入后来编辑、不换新请求制造重复保存。
 - [x] revision 冲突显式处理，保留本地内容；本地恢复先核实服务器及未明回执，不盲目覆盖。
 - [x] 复用离开保护与编辑所有权行为，按项目／画布隔离存储键、请求及所有权；不复用场次版本 ID 或全场次业务状态。
-- [ ] useGraphLayout 按画布保存位置、尺寸和视角，不推进内容修订；内容刷新、浮层开合不重置布局。
+- [x] useGraphLayout 按画布保存位置、尺寸和视角，不推进内容修订；内容刷新、浮层开合不重置布局。
 - [x] 浏览器存储不可用、加载失败与恢复失败显示真实状态，不虚报已保存，不新增独立草稿或撤销体系。
 
 ## Validation
@@ -37,3 +37,5 @@ Blocked by: 01
 - 2026-10-23：TDD red 证据：原页面在挂起保存回包时禁用画布名称，`generation-canvas-save` 超时于继续输入，`/private/tmp/jellyfish-generation-canvas-02/front/test-results/browser-Z7UOWp`。green：`node front/tests/run-browser.mjs generation-canvas-save` PASS（12.4s）；真实页面与 generated client + 隔离后端验证迟到回包、串行补存 B、丢回包已提交 A 后重开核实并保留 B、CAS 冲突、两标签交接/两画布隔离、五秒自动保存、存储异常提示及切换前保存。证据 `/private/tmp/jellyfish-generation-canvas-evidence/02/save-recovery-ownership`。
 - 2026-10-23：`pnpm --dir front run typecheck` PASS；`node front/tests/run-browser.mjs periodic-save` PASS（10.3s）；`node front/tests/run-browser.mjs canvas-graph` PASS（25.4s）。原功能证据 `/private/tmp/jellyfish-generation-canvas-evidence/02/original-periodic-save`、`/private/tmp/jellyfish-generation-canvas-evidence/02/original-canvas-graph`。最小共享改动仅为所有权可选作用域和 useGraphLayout 可选存储错误回调；未改变后端契约。
 - 2026-10-23：剩余布局验收由并行 04 的真实 GenerationCanvasGraph 使用 useGraphLayout 完成：位置/尺寸/视角重开保留、内容刷新和浮层不重置、布局变化无业务 PUT。未提前勾选该项；最终集成后补证据。
+
+- 2026-10-23：04 已在真实 GenerationCanvasGraph 完成剩余布局验收：位置移动、原生宽高调整、视角缩放在刷新后恢复；等待超过自动保存周期仍无内容 PUT；内容输入顺序及分组编辑不重置已存布局。`generation-canvas-graph` PASS（12.9s），证据 `/private/tmp/jellyfish-generation-canvas-evidence/04/typed-graph-final`。本票全部验收已完成。

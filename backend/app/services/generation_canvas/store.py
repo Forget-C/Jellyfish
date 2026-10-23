@@ -13,6 +13,10 @@ from app.services.common import get_or_404
 from app.services.generation_canvas.errors import diagnostic
 from app.services.generation_canvas.graph import validate_graph
 from app.services.generation_canvas.capabilities import model_capability
+from app.models.studio import FileUsage
+from app.schemas.generation_canvas import MediaContentCard
+from app.services.studio.file_usages import upsert_file_usage
+from app.services.studio.files import require_available_file
 
 
 
@@ -80,15 +84,35 @@ class CanvasStore:
         previous_edges = {(edge['source_card'], edge['source_port'], edge['target_card'], edge['target_port'])
                           for edge in canvas.document.get('edges', [])}
         by_id = {card.id: card for card in document.cards}
+        previous_models = {card['id']: card.get('model_id') for card in canvas.document.get('cards', [])}
         for edge in document.edges:
             endpoint = (edge.source_card, edge.source_port, edge.target_card, edge.target_port)
             card = by_id[edge.target_card]
-            # 模型切换保留已有候选；只校验本次新建连接的动态能力。
-            if endpoint not in previous_edges and isinstance(card, ModelCard) and card.model_id:
+            # 完整文档不带操作日志；模型已切换时也保留尚未单独保存的候选。
+            # 同模型新建连接校验动态能力，实际使用的能力由运行预检再次核实。
+            model_changed = card.id in previous_models and isinstance(card, ModelCard) and previous_models[card.id] != card.model_id
+            if endpoint not in previous_edges and isinstance(card, ModelCard) and card.model_id and not model_changed:
                 cap = await model_capability(self.db, card.model_id)
                 if edge.target_port not in cap.input_ports or card.type != 'model.' + cap.modality:
                     raise diagnostic('UNSUPPORTED_INPUT', '所选模型未接入该输入用途',
                                      {'edge_id': edge.id, 'card_id': card.id, 'port_id': edge.target_port})
+        # Validate all replacements before releasing existing protection in this transaction.
+        for card in document.cards:
+            if isinstance(card, MediaContentCard) and card.file_id:
+                try:
+                    await require_available_file(self.db, file_id=card.file_id, expected_type=card.type.split('.')[1])
+                except HTTPException as exc:
+                    raise diagnostic('INVALID_MEDIA_FILE', str(exc.detail), {'card_id': card.id, 'path': ['file_id']}) from exc
+                if not await self.db.scalar(select(FileUsage.id).where(
+                        FileUsage.file_id == card.file_id, FileUsage.project_id == self.project_id).limit(1)):
+                    raise diagnostic('INVALID_MEDIA_FILE', '文件不属于当前项目', {'card_id': card.id, 'path': ['file_id']})
+        await self.db.execute(delete(FileUsage).where(
+            FileUsage.project_id == self.project_id, FileUsage.usage_kind == 'canvas_content',
+            FileUsage.source_ref.like(f'{canvas_id}:%')))
+        for card in document.cards:
+            if isinstance(card, MediaContentCard) and card.file_id:
+                await upsert_file_usage(self.db, file_id=card.file_id, project_id=self.project_id,
+                                        chapter_id=None, usage_kind='canvas_content', source_ref=f'{canvas_id}:{card.id}')
         result = await self.db.execute(update(GenerationCanvas).where(
             GenerationCanvas.id == canvas_id, GenerationCanvas.revision == command.expected_revision).values(
                 document=document.model_dump(), revision=command.expected_revision + 1, card_types=identities))
@@ -103,5 +127,8 @@ class CanvasStore:
         """当前切片尚无运行；先删回执再删除文档，适配 SQLite 与 MySQL 外键。"""
         canvas = await self.get(canvas_id, lock=True)
         await self.db.execute(delete(CanvasSaveReceipt).where(CanvasSaveReceipt.canvas_id == canvas_id))
+        await self.db.execute(delete(FileUsage).where(
+            FileUsage.project_id == self.project_id, FileUsage.usage_kind == 'canvas_content',
+            FileUsage.source_ref.like(f'{canvas_id}:%')))
         await self.db.delete(canvas)
         await self.db.flush()
