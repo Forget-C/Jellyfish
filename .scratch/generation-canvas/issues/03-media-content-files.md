@@ -1,6 +1,7 @@
 # 03: 四类内容卡与项目媒体导入
 
 Status: ready-for-agent
+Completion: complete
 Blocked by: 01
 
 **What to build:** 用户可创建图片、视频、音频内容卡，上传、替换或选用项目文件并预览；失败和迟到响应不丢失已有内容或复活删卡。

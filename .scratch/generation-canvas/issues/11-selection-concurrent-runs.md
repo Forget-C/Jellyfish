@@ -1,6 +1,7 @@
 # 11: 严格框选与互不重叠的并行运行
 
 Status: ready-for-agent
+Completion: complete
 Blocked by: 10
 
 **What to build:** 用户框选部分模型卡重新执行选中部分；无重叠流程可同时运行，冲突明确定位而不自动扩大范围或排队。

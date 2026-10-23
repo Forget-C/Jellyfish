@@ -1,6 +1,7 @@
 # 12: 引用保护、画布删除与文件保留的完整生命周期
 
 Status: ready-for-agent
+Completion: complete
 Blocked by: 08, 10
 
 **What to build:** 用户清理引用、删除卡片或画布时获得准确阻止原因，保留的历史和其他使用者仍能访问文件，最终无引用文件可显式清理。

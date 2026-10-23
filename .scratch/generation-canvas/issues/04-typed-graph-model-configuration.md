@@ -1,6 +1,7 @@
 # 04: 类型化连线、分组与模型卡配置
 
 Status: ready-for-agent
+Completion: complete
 Blocked by: 01
 
 **What to build:** 用户创建三类模型卡，选择模型、查看类型参数，并用兼容端口和分组组织可保存的画布。

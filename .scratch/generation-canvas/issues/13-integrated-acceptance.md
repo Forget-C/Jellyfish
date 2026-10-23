@@ -1,6 +1,7 @@
 # 13: 跨模态完整旅程、协议故障与既有功能回归
 
 Status: ready-for-agent
+Completion: complete
 Blocked by: 09, 11, 12
 
 **What to build:** 验证用户从独立画布创建到文本、图片、视频生成、局部执行、取消、恢复及清理的完整旅程，并留下可复现的交付证据。

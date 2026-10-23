@@ -1,6 +1,7 @@
 # 02: 自动保存、恢复保护与独立布局
 
 Status: ready-for-agent
+Completion: complete
 Blocked by: 01
 
 **What to build:** 用户持续编辑或关闭重开画布时，自动保存、冲突与恢复保护内容；布局独立记忆，迟到回包不撤销新输入。

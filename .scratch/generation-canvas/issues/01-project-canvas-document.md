@@ -1,6 +1,7 @@
 # 01: 项目画布与文本内容的创建、保存、重开
 
 Status: ready-for-agent
+Completion: complete
 Blocked by: None
 
 **What to build:** 用户从项目进入画布生成，创建并命名多张画布，编辑文本内容卡、手动保存并重开，获得真实的版本冲突及幂等保护。
