@@ -128,7 +128,7 @@ def compile_card(document: CanvasDocument, card_id: str, *,
                 actual_port = 'subject_video' if port == 'subject_image' and reference.source.port_id == 'video' else port
                 used_ports.add((reference.source.card_id, reference.source.port_id, actual_port))
                 if reference.source.port_id not in (('image', 'video') if segment.command == '主体参考' else ('image',)):
-                    issue('INSTRUCTION_REFERENCE_TYPE', '指令引用类型不匹配', reference.id)
+                    issue('INSTRUCTION_REFERENCE_TYPE', '指令引用类型不匹配', segment.id, ['prompt', 'segments', segment.id, 'references', reference.id])
                 if capability and actual_port not in capability.input_ports:
                     issue('UNSUPPORTED_INPUT', '当前模型不支持此指令用途', segment.id)
 

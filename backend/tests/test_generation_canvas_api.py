@@ -238,10 +238,18 @@ async def test_new_incompatible_connection_rejected_but_model_switch_keeps_exist
 @pytest.mark.asyncio
 async def test_capability_declarations_match_real_dtos_and_video_adapter(canvas_client):
     from app.core.integrations.video_capabilities import VideoModelCapability, register_video_model_capability, clear_video_model_capability_overrides
-    register_video_model_capability(provider='openai', model_prefix='canvas-video', capability=VideoModelCapability(
+    register_video_model_capability(provider='vidu', model_prefix='canvas-video', capability=VideoModelCapability(
         supports_seed=False, allowed_ratios={'9:16'}, min_seconds=4, max_seconds=8,
         supports_subject_video_reference=True, max_subjects=2))
     try:
+        # Subject fields are delivered by Vidu; OpenAI never serializes them.
+        from app.models.llm import Provider
+        from app.dependencies import get_db
+        dependency = canvas_client._transport.app.dependency_overrides[get_db]
+        async for db in dependency():
+            provider = await db.get(Provider, 'canvas-provider')
+            provider.name = 'vidu'
+            await db.commit()
         canvas = (await canvas_client.post('/canvases/p', json={})).json()['data']
         base = f"/canvases/p/{canvas['id']}"
         text = (await canvas_client.get(base + '/models/canvas-text/capability')).json()['data']
@@ -258,7 +266,7 @@ async def test_capability_declarations_match_real_dtos_and_video_adapter(canvas_
                'input_order': {'m': {'subject_video': ['e']}}}
         assert (await canvas_client.put(base, json={'request_id': 'video', 'expected_revision': 0, 'document': doc})).status_code == 200
         # 去掉支持后，已有候选仍能保存；相同结构的新连接须拒绝。
-        register_video_model_capability(provider='openai', model_prefix='canvas-video', capability=VideoModelCapability())
+        register_video_model_capability(provider='vidu', model_prefix='canvas-video', capability=VideoModelCapability())
         assert (await canvas_client.put(base, json={'request_id': 'switch', 'expected_revision': 1, 'document': doc})).status_code == 200
         doc['cards'].append({'id': 'b', 'type': 'model.video'})
         doc['edges'].append({'id': 'f', 'source_card': 'b', 'source_port': 'video', 'target_card': 'm', 'target_port': 'subject_video'})
@@ -267,7 +275,7 @@ async def test_capability_declarations_match_real_dtos_and_video_adapter(canvas_
         assert response.status_code == 422
         assert response.json()['detail']['code'] == 'UNSUPPORTED_INPUT'
     finally:
-        clear_video_model_capability_overrides(provider='openai')
+        clear_video_model_capability_overrides(provider='vidu')
 
 
 

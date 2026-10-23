@@ -66,7 +66,7 @@ from tests.test_generation_canvas_runs import runtime  # noqa: F401
 from tests.test_generation_canvas_images import image_storage  # noqa: F401
 
 
-async def setup_video(runtime, provider='volcengine', segments=None):
+async def setup_video(runtime, provider='volcengine', segments=None, can_run=True):
     from app.api.v1.routes.studio.files import router
     runtime.app.include_router(router, prefix='/files')
     files = []
@@ -96,13 +96,16 @@ async def setup_video(runtime, provider='volcengine', segments=None):
     response = await runtime.client.put(runtime.url, json={'request_id': 'video', 'expected_revision': 1, 'document': doc})
     assert response.status_code == 200, response.text
     preview = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'v'})).json()['data']
-    assert preview['can_run'], preview
+    assert preview['can_run'] is can_run, preview
+    if not can_run:
+        return preview
     accepted = await runtime.client.post(runtime.url + '/runs', json={'request_id': 'video-run', 'preview_token': preview['preview_token']})
     assert accepted.status_code == 200, accepted.text
     return accepted.json()['data'], preview
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('runtime', ['sqlite', 'mysql'], indirect=True)
 async def test_actual_worker_video_frame_fields_and_every_poll_keep_frozen_route(runtime, image_storage, monkeypatch):
     accepted, preview = await setup_video(runtime)
     assert preview['input']['video_media']['frames']['keys'][0]['file_id'] != preview['input']['video_media']['frames']['first']['file_id']
@@ -196,3 +199,37 @@ def test_expanded_source_text_never_creates_subjects_or_media_mapping():
     compiled = compile_card(doc, 'v')
     assert compiled.text == '/主体参考 "fake" @图片2 [media:1]@media1'
     assert [group.name for group in compiled.video_media.subjects] == ['media1']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(('segments', 'provider', 'code', 'target'), [
+    ([instruction('首帧参考', ['a']), instruction('首帧参考', ['b'], suffix='again')], 'volcengine', 'INSTRUCTION_COUNT_EXCEEDED', '首帧参考again'),
+    ([instruction('首帧参考', [])], 'volcengine', 'INSTRUCTION_REFERENCE_REQUIRED', '首帧参考'),
+    ([instruction('主体参考', ['a'], ' ')], 'vidu', 'INSTRUCTION_PARAMETER_REQUIRED', '主体参考'),
+    ([instruction('首帧参考', ['a']), instruction('主体参考', ['b'], '张三')], 'vidu', 'UNSUPPORTED_REFERENCE_COMBINATION', '主体参考'),
+])
+async def test_invalid_video_instructions_save_but_precheck_blocks_with_stable_target(runtime, image_storage, segments, provider, code, target):
+    preview = await setup_video(runtime, provider, segments, can_run=False)
+    issue = next(item for item in preview['diagnostics'] if item['code'] == code)
+    assert issue['target']['card_id'] == 'v' and issue['target']['segment_id'] == target
+    assert issue['blocks'] == ['run'] and not preview['preview_token']
+    reopened = (await runtime.client.get(runtime.url)).json()['data']['document']
+    assert reopened['cards'][-1]['prompt']['segments'] == runtime.document['cards'][-1]['prompt']['segments']
+
+
+@pytest.mark.asyncio
+async def test_video_frame_rejects_video_reference_at_its_saved_instruction(runtime, image_storage):
+    segment = instruction('首帧参考', ['clip'])
+    segment['references'][0]['source']['port_id'] = 'video'
+    preview = await setup_video(runtime, 'vidu', [segment], can_run=False)
+    issue = next(item for item in preview['diagnostics'] if item['code'] == 'INSTRUCTION_REFERENCE_TYPE')
+    assert issue['target'] == {'card_id': 'v', 'segment_id': '首帧参考', 'path': ['prompt', 'segments', '首帧参考', 'references', 'clip首帧参考']}
+
+
+def test_seed_outside_standard_video_dto_range_blocks_before_acceptance():
+    from app.services.generation_canvas.capabilities import parameter_diagnostics
+    doc = document([])
+    doc.cards[-1].config.seed = 4294967296
+    cap = CanvasModelCapability(model_id='m', modality='video', input_ports=['text'], ratios=['16:9'], supports_seed=True)
+    issues = parameter_diagnostics(doc.cards[-1], cap)
+    assert [(item['code'], item['target']['path']) for item in issues] == [('INVALID_PARAMETER', ['config', 'seed'])]

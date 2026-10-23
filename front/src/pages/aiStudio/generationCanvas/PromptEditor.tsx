@@ -87,11 +87,25 @@ export function PromptEditor({ document, card, value, onChange, disabled, modelO
       if (start < text.length) segments.push({ ...segment, id: start ? crypto.randomUUID() : segment.id, text: text.slice(start) })
     }
     // 仅解释本地显式指令，连续结构化引用构成参数；遇到正文结束。
+    if (finalize) {
+      const split: NonNullable<PromptDocument['segments']> = []
+      for (const segment of segments) {
+        if (segment.kind !== 'text') { split.push(segment); continue }
+        const text = segment.text || '', command = /(?<!\\)\/(首帧参考|尾帧参考|关键帧参考|主体参考)(?:[ \t]+"[^"]*")?[ \t]*/g
+        let start = 0
+        for (const match of text.matchAll(command)) {
+          if (match.index! > start) split.push({ ...segment, id: crypto.randomUUID(), text: text.slice(start, match.index) })
+          split.push({ ...segment, id: crypto.randomUUID(), text: match[0] }); start = match.index! + match[0].length
+        }
+        if (start < text.length) split.push({ ...segment, id: start ? crypto.randomUUID() : segment.id, text: text.slice(start) })
+      }
+      segments.splice(0, segments.length, ...split)
+    }
     const structured: NonNullable<PromptDocument['segments']> = []
     for (let index = 0; index < segments.length; index++) {
       const segment = segments[index]
       const match = segment.kind === 'text' ? (segment.text || '').match(/(?<!\\)\/(首帧参考|尾帧参考|关键帧参考|主体参考)(?:\s+"([^"]*)")?\s*$/) : null
-      if (!match || !finalize && !segments.slice(index + 1).some((next, offset, tail) => next.kind === 'reference' && tail.slice(0, offset).every(item => item.kind === 'text' && /^\s+$/.test(item.text || '')))) { structured.push(segment); continue }
+      if (!finalize || !match) { structured.push(segment); continue }
       const text = (segment as PromptText).text || '', prefix = text.slice(0, match.index)
       if (prefix) structured.push({ ...segment as PromptText, text: prefix })
       const instruction: PromptInstruction = { kind: 'instruction', id: crypto.randomUUID(), command: match[1], parameters: match[2] !== undefined ? { name: match[2] } : {}, references: [] }
