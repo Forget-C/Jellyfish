@@ -4,6 +4,7 @@ import { StudioDirectingService } from '../../../services/generated'
 import type { EditableGenerationUnit_Output, SceneEndFrameRead, SceneFrameDependency, SceneVersionContent_Output } from '../../../services/generated'
 import { directingError } from './common'
 import type { ScenePredecessorSelection } from './ScenePredecessorDialog'
+import { WorkbenchButton } from './ui/WorkbenchButton'
 
 export function useSceneFrameEvidence(projectId: string, sequenceId: string, versionId: string, revision: number, unit?: EditableGenerationUnit_Output) {
   const versions = JSON.stringify([...new Set([versionId, ...(unit?.scene_dependencies || []).map(link => link.version_id)])].sort())
@@ -68,8 +69,8 @@ export function SceneFrameDependencies({ unit, content, versionId, evidence, dis
     {items.map((clip, index) => 'media_range' in clip && <Button key={clip.id} disabled={disabled || links.some(link => link.version_id === versionId && link.clip_id === clip.id)}
       onClick={() => onSelect({ kind: 'scene', link: { version_id: versionId, clip_id: clip.id } })}>依赖当前版本片段 {index + 1}</Button>)}
     {!loading && !error && items.flatMap((clip, index) => frames.filter(frame => frame.clip.id === clip.id && frame.version_id === versionId && frame.available && sceneFrameCurrent(frame, content, versionId))
-      .map((frame, frameIndex) => <Button key={frame.id} disabled={disabled || links.some(link => link.frame_id === frame.id)}
-        onClick={() => bind({ version_id: versionId, clip_id: clip.id }, frame)}>承接当前版本片段 {index + 1} 落幅 {frameIndex + 1}</Button>))}
+      .map((frame, frameIndex) => <WorkbenchButton key={frame.id} disabled={disabled || links.some(link => link.frame_id === frame.id)}
+        onClick={() => bind({ version_id: versionId, clip_id: clip.id }, frame)}>承接当前版本片段 {index + 1} 落幅 {frameIndex + 1}</WorkbenchButton>))}
     {!items.some(item => 'media_range' in item) && <p>当前时间线暂无真实采用，请先在编辑画布明确采用素材。</p>}
     {links.map((link, index) => <div key={`${link.version_id}:${link.clip_id}`}>
       {link.version_id === versionId && <Button onClick={() => onOpenEdit(link.clip_id)}>定位依赖 {index + 1} 原采用并提取落幅</Button>}
