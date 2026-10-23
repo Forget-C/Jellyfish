@@ -81,6 +81,17 @@ async def canvas_client(request, monkeypatch):
     await engine.dispose()
 
 @pytest.mark.asyncio
+async def test_create_canvas_returns_created_response_and_readable_document(canvas_client):
+    response = await canvas_client.post('/canvases/p', json={'name': '新画布'})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body['code'] == 201
+    assert body['data']['document']['name'] == '新画布'
+    reopened = await canvas_client.get(f"/canvases/p/{body['data']['id']}")
+    assert reopened.json()['data'] == body['data']
+
+
+@pytest.mark.asyncio
 async def test_project_canvas_can_save_empty_text_and_reopen_independently(canvas_client):
     client = canvas_client
     first = (await client.post('/canvases/p', json={'name': '画布一'})).json()['data']

@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_db
-from app.schemas.common import ApiResponse, empty_response, success_response
+from app.schemas.common import ApiResponse, created_response, empty_response, success_response
 from app.schemas.generation_canvas import CanvasCreate, CanvasRead, CanvasSave, CanvasSaved, CanvasError, CanvasModelCapability, CanvasCompiledInput
 from app.services.generation_canvas.store import CanvasStore
 from app.services.generation_canvas.capabilities import model_capability
@@ -19,7 +19,7 @@ async def list_canvases(project_id: str, db: AsyncSession = Depends(get_db, scop
 @router.post('/{project_id}', response_model=ApiResponse[CanvasRead], operation_id='canvas_create')
 async def create_canvas(project_id: str, body: CanvasCreate, db: AsyncSession = Depends(get_db, scope='function')):
     """创建空画布。"""
-    return success_response(await CanvasStore(db, project_id).create(body.name))
+    return created_response(await CanvasStore(db, project_id).create(body.name))
 
 
 @router.get('/{project_id}/{canvas_id}', response_model=ApiResponse[CanvasRead], operation_id='canvas_get')

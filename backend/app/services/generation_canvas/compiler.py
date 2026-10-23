@@ -88,7 +88,7 @@ def compile_card(document: CanvasDocument, card_id: str, *,
     for item in result.used:
         media_position = result.media.index(item) + 1 if item in result.media else None
         result.mapping.append({'token': item.token, 'source': item.source.model_dump(), 'media_position': media_position})
-    subjects = video_subjects(card) if card.type == 'model.video' else {}
+    subjects = video_subjects(card, result.media) if card.type == 'model.video' else {}
     command_counts = {}
     used_ports = set()
     for segment in card.prompt.segments:
@@ -109,7 +109,7 @@ def compile_card(document: CanvasDocument, card_id: str, *,
                     result.text += item.text
                 elif card.type == 'model.video':
                     names = subjects.get(identity_key(item.source), [])
-                    result.text += '@' + (names[0] if len(names) == 1 else f'media{result.media.index(item) + 1}')
+                    result.text += '@' + names[0]
                 else:
                     position = result.media.index(item) + 1
                     result.text += f'image {position}' if capability and capability.modality == 'image' else f'[media:{position}]'
@@ -168,8 +168,8 @@ def compile_card(document: CanvasDocument, card_id: str, *,
     return result
 
 
-def video_subjects(card):
-    """显式名称按不区分大小写合并；素材可同时归属多个人物。"""
+def video_subjects(card, media):
+    """显式主体按名称合并；普通引用的自动代指避开全部显式名称及其他自动代指。"""
     result, names = {}, {}
     for segment in card.prompt.segments:
         if isinstance(segment, PromptInstruction) and segment.command == '主体参考':
@@ -181,6 +181,17 @@ def video_subjects(card):
                 groups = result.setdefault(identity_key(reference.source), [])
                 if name not in groups:
                     groups.append(name)
+    body_sources = {identity_key(segment.source) for segment in card.prompt.segments if isinstance(segment, PromptReference)}
+    for position, item in enumerate(media, 1):
+        key = identity_key(item.source)
+        if key not in body_sources or len(result.get(key, [])) == 1:
+            continue
+        name = f'media{position}'
+        while name.casefold() in names:
+            position += 1
+            name = f'media{position}'
+        names[name.casefold()] = name
+        result[key] = [name]
     return result
 
 
@@ -220,10 +231,10 @@ def video_media(document: CanvasDocument, card_id: str, compiled: CanvasCompiled
                 media = reference(ref, len(result.frames.keys))
                 if media and media.media_kind == 'image':
                     result.frames.keys.append(media)
-    named = video_subjects(card)
+    named = video_subjects(card, compiled.media)
     for item in compiled.media:
         key = identity_key(item.source)
-        if any(isinstance(segment, PromptReference) and identity_key(segment.source) == key for segment in card.prompt.segments) and len(named.get(key, [])) != 1:
-            add_subject(f'media{compiled.media.index(item) + 1}', [PromptReference(kind='reference', id='implicit', source=item.source)])
+        if any(isinstance(segment, PromptReference) and identity_key(segment.source) == key for segment in card.prompt.segments):
+            add_subject(named[key][0], [PromptReference(kind='reference', id='implicit', source=item.source)])
     result.subjects = [VideoSubjectMediaReference(**group) for group in groups.values() if group['media']]
     return result
