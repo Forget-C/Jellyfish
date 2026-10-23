@@ -11,4 +11,3 @@ export type GenerationCanvasGroup = {
     card_ids?: Array<string>;
     collapsed?: boolean;
 };
-

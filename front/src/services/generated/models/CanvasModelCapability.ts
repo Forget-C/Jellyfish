@@ -23,4 +23,3 @@ export type CanvasModelCapability = {
     max_media_per_subject?: (number | null);
     max_total_subject_videos?: (number | null);
 };
-

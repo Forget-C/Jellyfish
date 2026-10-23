@@ -11,4 +11,3 @@ def diagnostic(code: str, message: str, target: dict, *, status: int = 422,
     """所有画布领域错误提供稳定代号、结构定位与阻止动作。"""
     return CanvasDomainError(status, detail={'code': code, 'severity': 'error', 'message': message,
                                         'target': target, 'blocks': blocks if blocks is not None else ['save']})
-
