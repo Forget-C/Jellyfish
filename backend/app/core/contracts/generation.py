@@ -164,4 +164,3 @@ class ResolvedGenerationSnapshot(BaseModel):
     operation_input: TypedOperationInput
     execution_prompt: str | None = None
     asset_prompt_audit: AssetPromptAudit | None = None
-
