@@ -10,6 +10,7 @@
 - `final-backend-origin.log`（显式`PYTHONPATH`；`import-origin.log`证实本worktree app与function-scope依赖）：journey、runs、selection、studio response、generation worker architecture 共 **40 passed**；复验真实 MySQL CAS、实际 HTTP commit barrier、受理/取消回执、固定依据、SSE 快照/重复/游标过期、并发与终态。2项既有 websockets 弃用警告。
 - `browser-final/results.json`：新注册 `generation-canvas-acceptance` **PASS 6.2s**。真实图片 Worker / HTTP / SSE、原生 PNG 解码；1440×1000 与375×1000无页面横向溢出，媒体实际边界落在画布视口；长正文完整保留，参数 combobox 可取得键盘焦点。`media-*`、`parameters-*`、`long-text-*`截图已实际打开核查。使用本地布局缓存和0.78/0.68缩放展示一张完整卡片，媒体截图与长文截图分别观察内部滚动；不是默认自动排布所有卡的全景证明。
 - `original-canvas-graph/results.json`：当前场次工作台 **PASS 25.3s**，独立真实画布入口/图交互/保存回归。`legacy-labs/results.json` **PASS 35.9s**（errors=[]、overflow=[]），项目/资产/三类实验室使用注册`legacy-labs`检查输入、历史滚动稳定、路由与原模型/资产交互；范围明确不含完整旧shell末段场次断言（当前场次已使用独立shell，旧脚本等待`.app-topbar`的默认假设过时），不将旧完整shell失败归为本次生产缺陷，也不声称全旧suite已通过。
+- `composer-final/results.json`：合并`084a1b8`后本13worktree的完整`generation-canvas-composer` **PASS 8.1s**；原IME、菜单、@后Enter、粘贴、中间插入、来源身份与断线保护强断言完整。失败根因是AntD Select异步回焦与测试立即输入竞争；仅等待popup真实hidden，无业务编辑器改动。红/绿与native blur堆栈见`E/composer-fix/handoff.md`。
 - `typecheck.log`：`pnpm --dir front run typecheck` **PASS**；`lint.log`：275项既有、0项新增。本票未改后端应用代码，不要求为测试替身改动运行 Pylint；既有应用 Pylint 复用11/12及父最终检查。
 - `parent-api-sync.md`：父已在主集成真实8000核实 selection/card_ids 并执行 `openapi:update`；normalize后零diff。本票无外部契约变化。
 
