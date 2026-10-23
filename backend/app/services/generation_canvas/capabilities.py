@@ -23,15 +23,18 @@ async def model_capability(db: AsyncSession, model_id: str) -> CanvasModelCapabi
         result.min_count, result.max_count = cap.min_n or 1, cap.max_n or 10
     if model.category == 'video':
         cap = resolve_video_capability(provider=key, model=model.name)
-        result.input_ports.extend(['first_frame', 'last_frame', 'key_frame'])
-        if cap.supports_subject_image_reference:
+        roles = ['first_frame'] if key == 'openai' else ['first_frame', 'last_frame', 'key_frame']
+        if key == 'kling':
+            roles = ['first_frame', 'last_frame'] if model.name.strip().lower() == 'kling-3.0' else []
+        result.input_ports.extend(roles)
+        if key == 'vidu' and cap.supports_subject_image_reference:
             result.input_ports.append('subject_image')
-        if cap.supports_subject_video_reference:
+        if key == 'vidu' and cap.supports_subject_video_reference:
             result.input_ports.append('subject_video')
         result.ratios = sorted(cap.allowed_ratios or {'16:9'})
         result.min_seconds, result.max_seconds = cap.min_seconds, cap.max_seconds
         result.supports_seed = cap.supports_seed
-        result.supports_subject_reference_with_frame_reference = cap.supports_subject_reference_with_frame_reference
+        result.supports_subject_reference_with_frame_reference = False
         for name in ('max_subjects', 'max_images_per_subject', 'max_videos_per_subject', 'max_media_per_subject', 'max_total_subject_videos'):
             setattr(result, name, getattr(cap, name))
     return result

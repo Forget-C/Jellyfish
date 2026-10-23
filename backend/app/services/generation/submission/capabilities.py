@@ -97,6 +97,7 @@ _DEFAULT_TARGET_CAPABILITIES: Mapping[
     (GenerationOperation.image_generation, GenerationTargetKind.asset_image_slot): frozenset({
         GenerationDelivery.async_polling,
     }),
+    (GenerationOperation.video_generation, GenerationTargetKind.canvas_node): frozenset({GenerationDelivery.async_polling}),
     (GenerationOperation.video_generation, GenerationTargetKind.experiment_session): frozenset({
         GenerationDelivery.async_polling,
     }),
