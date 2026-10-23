@@ -131,6 +131,7 @@ async def test_success_current_output_receipt_replay_and_failure_keep_prior_publ
     request = {'request_id': 'run', 'preview_token': preview['preview_token']}
     busy = await runtime.client.post(runtime.url + '/runs', json={**request, 'request_id': 'overlap'})
     assert busy.status_code == 409 and busy.json()['detail']['code'] == 'RUN_SCOPE_BUSY'
+    assert busy.json()['detail']['blocks'] == ['run']
     class GoodModel:
         def __init__(self, **params):
             assert params['max_retries'] == 0
@@ -349,8 +350,14 @@ async def test_single_card_uses_published_input_without_executing_upstream_and_r
     await worker.tick()
     await asyncio.gather(*worker.jobs.values())
     assert calls == ['Frozen prompt', 'Actual source']
+    runtime.document['cards'].append({'id': 'unused', 'type': 'content.text', 'text': 'Unused candidate'})
+    runtime.document['edges'].append({'id': 'unused-edge', 'source_card': 'unused', 'source_port': 'text', 'target_card': 'consumer', 'target_port': 'text'})
+    runtime.document['input_order']['consumer']['text'] = ['unused-edge', 'input']
+    assert (await runtime.client.put(runtime.url, json={'request_id': 'unused', 'expected_revision': 2, 'document': runtime.document})).status_code == 200
+    unchanged = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+    assert unchanged['current_outputs']['consumer'][0]['basis_current']
     runtime.document['cards'][0]['prompt']['segments'][0]['text'] = 'changed source basis'
-    assert (await runtime.client.put(runtime.url, json={'request_id': 'change-source', 'expected_revision': 2, 'document': runtime.document})).status_code == 200
+    assert (await runtime.client.put(runtime.url, json={'request_id': 'change-source', 'expected_revision': 3, 'document': runtime.document})).status_code == 200
     snapshot = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
     assert snapshot['current_outputs']['m'][0]['text'] == 'Actual source'
     assert not snapshot['current_outputs']['m'][0]['basis_current']
@@ -379,3 +386,35 @@ async def test_mysql_activity_guard_sees_run_committed_after_earlier_read(runtim
     assert error.value.status_code == 409
     await deleting.rollback()
     await deleting.close()
+
+
+@pytest.mark.asyncio
+async def test_runtime_migration_preserves_existing_canvas_observation(tmp_path):
+    """An existing document must have an event mutex before its first subscription."""
+    import importlib.util
+    from pathlib import Path
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    from app.models.generation_canvas import GenerationCanvas, CanvasSaveReceipt
+    from app.services.generation_canvas.runtime import CanvasRuntime
+    engine = create_async_engine(f'sqlite+aiosqlite:///{tmp_path}/upgrade.db')
+    async with engine.begin() as db:
+        def migrate(connection):
+            Project.__table__.create(connection)
+            GenerationCanvas.__table__.create(connection)
+            CanvasSaveReceipt.__table__.create(connection)
+            connection.execute(Project.__table__.insert().values(id='existing-project', name='existing', style='真人都市'))
+            connection.execute(GenerationCanvas.__table__.insert().values(id='existing-canvas', project_id='existing-project', revision=7,
+                card_types={}, document={'id': 'existing-canvas', 'project_id': 'existing-project', 'name': 'old'}))
+            path = Path(__file__).parents[1] / 'alembic/versions/473ab089b58f_generation_canvas_runtime.py'
+            spec = importlib.util.spec_from_file_location('canvas_runtime_migration', path)
+            migration = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(migration)
+            with Operations.context(MigrationContext.configure(connection)):
+                migration.upgrade()
+        await db.run_sync(migrate)
+    sessions = async_sessionmaker(engine)
+    async with sessions.begin() as db:
+        snapshot = await CanvasRuntime(db, 'existing-project').snapshot('existing-canvas')
+        assert snapshot.cursor == 0 and snapshot.runs == [] and snapshot.current_outputs == {}
+    await engine.dispose()

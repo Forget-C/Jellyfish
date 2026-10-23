@@ -107,7 +107,13 @@ class CanvasRuntime:
         if config and model and provider:
             frozen = {'model_name': model.name, 'model_params': model.params or {}, 'provider_key': config.provider_key,
                       'provider_id': provider.id, 'api_key': config.api_key, 'base_url': config.base_url}
-        return compiled, public, digest({'basis': public, 'execution': frozen}), frozen
+        # Display nicknames and segment IDs do not change the actual request. Inserting
+        # an unused candidate may renumber tokens without invalidating a publication.
+        actual = {'card_id': card.id, 'type': card.type, 'model_id': card.model_id,
+                  'config': card.config.model_dump(), 'text': compiled.text,
+                  'used': [item.model_dump(exclude={'token', 'basis_current'}) for item in compiled.used],
+                  'media': [item.model_dump(exclude={'token', 'basis_current'}) for item in compiled.media]}
+        return compiled, public, digest({'basis': actual, 'execution': frozen}), frozen
 
     async def current_outputs(self, canvas) -> dict[str, list[CanvasResolvedOutput]]:
         """保留当前正式结果指向，同时递归标明依据是否仍有效。"""
@@ -125,9 +131,9 @@ class CanvasRuntime:
             for edge in document.edges:
                 if edge.target_card == card_id and edge.source_card in stored:
                     await resolve(edge.source_card)
-            _, _, fingerprint, _ = await self._basis(canvas, card_id, result)
+            compiled, _, fingerprint, _ = await self._basis(canvas, card_id, result)
             result[card_id] = [CanvasResolvedOutput.model_validate(item).model_copy(update={
-                "basis_current": fingerprint == stored[card_id].basis_hash, "result_set_id": stored[card_id].id}) for item in stored[card_id].outputs]
+                "basis_current": compiled.can_run and fingerprint == stored[card_id].basis_hash, "result_set_id": stored[card_id].id}) for item in stored[card_id].outputs]
             visiting.remove(card_id)
         for card_id in stored:
             await resolve(card_id)
@@ -158,17 +164,17 @@ class CanvasRuntime:
         receipt = await self.db.get(CanvasRunReceipt, (canvas_id, command.request_id))
         if receipt:
             if receipt.request_hash != request_hash:
-                raise diagnostic('IDEMPOTENCY_CONFLICT', '请求身份已用于其他执行', {'canvas_id': canvas_id}, status=409)
+                raise diagnostic('IDEMPOTENCY_CONFLICT', '请求身份已用于其他执行', {'canvas_id': canvas_id}, status=409, blocks=['run'])
             return receipt.response
         preview = await self.db.get(CanvasPreview, command.preview_token)
         if preview is None or preview.canvas_id != canvas_id or preview.revision != canvas.revision or preview.expires_at <= utcnow():
-            raise diagnostic('PREVIEW_STALE', '执行预检已过期，请重新预检', {'canvas_id': canvas_id}, status=409)
+            raise diagnostic('PREVIEW_STALE', '执行预检已过期，请重新预检', {'canvas_id': canvas_id}, status=409, blocks=['run'])
         outputs = await self.current_outputs(canvas)
         compiled, basis, fingerprint, _ = await self._basis(canvas, preview.card_id, outputs, lock_config=True)
         if not compiled.can_run or fingerprint != preview.basis_hash:
-            raise diagnostic('PREVIEW_STALE', '实际输入或有效模型配置已变，请重新预检', {'card_id': preview.card_id}, status=409)
+            raise diagnostic('PREVIEW_STALE', '实际输入或有效模型配置已变，请重新预检', {'card_id': preview.card_id}, status=409, blocks=['run'])
         if await self.db.get(CanvasScopeOccupancy, (canvas_id, preview.card_id)):
-            raise diagnostic('RUN_SCOPE_BUSY', '模型卡仍在执行中', {'card_id': preview.card_id}, status=409)
+            raise diagnostic('RUN_SCOPE_BUSY', '模型卡仍在执行中', {'card_id': preview.card_id}, status=409, blocks=['run'])
         run = CanvasRun(id=uuid4().hex, canvas_id=canvas_id, revision=canvas.revision, scope=[preview.card_id])
         self.db.add(run)
         await self.db.flush()
@@ -235,10 +241,11 @@ async def sync_task_fact(db: AsyncSession, task, *, delta: str | None = None):
             canvas = await db.get(GenerationCanvas, node.canvas_id, populate_existing=True)
             runtime = CanvasRuntime(db, canvas.project_id)
             try:
-                _, _, fingerprint, _ = await runtime._basis(canvas, node.card_id, await runtime.current_outputs(canvas))
+                compiled, _, fingerprint, _ = await runtime._basis(canvas, node.card_id, await runtime.current_outputs(canvas))
+                can_publish = compiled.can_run and fingerprint == node.basis_hash
             except HTTPException:
-                fingerprint = None
-            if fingerprint == node.basis_hash:
+                can_publish = False
+            if can_publish:
                 pointer = await db.get(CanvasCurrentOutput, (node.canvas_id, node.card_id))
                 if pointer:
                     pointer.result_set_id = result.id
@@ -265,7 +272,7 @@ async def ensure_project_idle(db: AsyncSession, project_id: str) -> None:
                                     .order_by(GenerationCanvas.id).with_for_update()))
     for canvas in canvases:
         if await db.scalar(select(CanvasScopeOccupancy.node_id).where(CanvasScopeOccupancy.canvas_id == canvas.id).limit(1)):
-            raise diagnostic('RUN_SCOPE_BUSY', '项目仍有活动画布运行', {'canvas_id': canvas.id}, status=409)
+            raise diagnostic('RUN_SCOPE_BUSY', '项目仍有活动画布运行', {'canvas_id': canvas.id}, status=409, blocks=['delete'])
 
 
 async def delete_runtime(db: AsyncSession, canvas_id: str) -> None:

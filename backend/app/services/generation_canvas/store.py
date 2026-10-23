@@ -168,7 +168,7 @@ class CanvasStore:
         canvas = await self.get(canvas_id, lock=True)
         from app.models.generation_canvas import CanvasScopeOccupancy
         if await self.db.scalar(select(CanvasScopeOccupancy.node_id).where(CanvasScopeOccupancy.canvas_id == canvas_id).limit(1)):
-            raise diagnostic("RUN_SCOPE_BUSY", "画布仍有活动运行", {"canvas_id": canvas_id}, status=409)
+            raise diagnostic("RUN_SCOPE_BUSY", "画布仍有活动运行", {"canvas_id": canvas_id}, status=409, blocks=["delete"])
         # Explicit child cleanup supports SQLite tests without relying on FK pragmas.
         from app.services.generation_canvas.runtime import delete_runtime
         await delete_runtime(self.db, canvas_id)
