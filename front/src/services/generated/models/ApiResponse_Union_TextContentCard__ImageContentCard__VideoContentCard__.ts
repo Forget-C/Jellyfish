@@ -23,4 +23,3 @@ export type ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCar
      */
     meta?: (Record<string, any> | null);
 };
-
