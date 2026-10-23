@@ -29,6 +29,16 @@ from app.services.task_service import utcnow
 TERMINAL = frozenset({'succeeded', 'failed', 'cancelled', 'blocked'})
 
 
+def public_parameters(value):
+    """Keep credentials private, including nested model options."""
+    if isinstance(value, dict):
+        sensitive = {'api_key', 'api_secret', 'openai_api_key', 'authorization', 'password', 'access_token'}
+        return {key: public_parameters(item) for key, item in value.items() if key.lower() not in sensitive}
+    if isinstance(value, list):
+        return [public_parameters(item) for item in value]
+    return value
+
+
 def digest(value) -> str:
     """规范化 JSON 摘要用于依据比较及原请求核实。"""
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()).hexdigest()
@@ -86,10 +96,13 @@ class CanvasRuntime:
         compiled.revision = canvas.revision
         if not compiled.text.strip():
             issues.append(CanvasDiagnostic(code='TEXT_REQUIRED', message='请提供非空文本输入', target={'card_id': card_id, 'path': ['prompt']}, blocks=['run']))
+        if any(not item.basis_current for item in compiled.used):
+            issues.append(CanvasDiagnostic(code="INPUT_STALE", message="实际引用的模型输出依据已变，请先执行来源",
+                target={"card_id": card_id}, blocks=["run"]))
         compiled.diagnostics += issues
         compiled.can_run = compiled.can_run and not issues
         public = {'card': card.model_dump(), 'input': compiled.model_dump(exclude={'revision', 'diagnostics', 'can_run'}),
-                  'model': {'id': model.id, 'name': model.name, 'params': model.params} if model else {}}
+                  'model': {'id': model.id, 'name': model.name, 'params': public_parameters(model.params)} if model else {}}
         frozen = None
         if config and model and provider:
             frozen = {'model_name': model.name, 'model_params': model.params or {}, 'provider_key': config.provider_key,
@@ -97,7 +110,7 @@ class CanvasRuntime:
         return compiled, public, digest({'basis': public, 'execution': frozen}), frozen
 
     async def current_outputs(self, canvas) -> dict[str, list[CanvasResolvedOutput]]:
-        """仅返回当前仍匹配实际输入和有效配置的成功成果，递归核实上游。"""
+        """保留当前正式结果指向，同时递归标明依据是否仍有效。"""
         rows = list((await self.db.execute(select(CanvasCurrentOutput, CanvasResultSet).join(
             CanvasResultSet, CanvasCurrentOutput.result_set_id == CanvasResultSet.id).where(
             CanvasCurrentOutput.canvas_id == canvas.id))).all())
@@ -113,8 +126,8 @@ class CanvasRuntime:
                 if edge.target_card == card_id and edge.source_card in stored:
                     await resolve(edge.source_card)
             _, _, fingerprint, _ = await self._basis(canvas, card_id, result)
-            if fingerprint == stored[card_id].basis_hash:
-                result[card_id] = [CanvasResolvedOutput.model_validate(item) for item in stored[card_id].outputs]
+            result[card_id] = [CanvasResolvedOutput.model_validate(item).model_copy(update={
+                "basis_current": fingerprint == stored[card_id].basis_hash, "result_set_id": stored[card_id].id}) for item in stored[card_id].outputs]
             visiting.remove(card_id)
         for card_id in stored:
             await resolve(card_id)
@@ -131,6 +144,7 @@ class CanvasRuntime:
                 revision=canvas.revision, basis_hash=fingerprint, expires_at=utcnow() + timedelta(minutes=10)))
             await self.db.flush()
         return CanvasPrecheck(revision=canvas.revision, card_id=command.card_id, execution_nodes=[command.card_id],
+            reused_results=sorted({item.result_set_id for item in compiled.used if item.result_set_id}),
             input=compiled, model=basis['model'], diagnostics=compiled.diagnostics, can_run=compiled.can_run, preview_token=token)
 
     async def submit(self, canvas_id: str, command: CanvasRunSubmit) -> dict:
@@ -215,6 +229,8 @@ async def sync_task_fact(db: AsyncSession, task, *, delta: str | None = None):
                 basis=node.basis, basis_hash=node.basis_hash, outputs=node.outputs)
             db.add(result)
             node.result_set_id = result.id
+            node.outputs = [{**item, 'result_set_id': result.id} for item in node.outputs]
+            result.outputs = node.outputs
             await db.flush()
             canvas = await db.get(GenerationCanvas, node.canvas_id, populate_existing=True)
             runtime = CanvasRuntime(db, canvas.project_id)

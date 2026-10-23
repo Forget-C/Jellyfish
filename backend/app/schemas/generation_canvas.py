@@ -248,6 +248,8 @@ class CanvasResolvedOutput(BaseModel):
     file_id: str | None = None
     token: str = ''
     available: bool = True
+    basis_current: bool = True
+    result_set_id: str | None = None
 
 
 class CanvasCompiledInput(BaseModel):
