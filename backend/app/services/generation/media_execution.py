@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import storage
-from app.core.contracts.generation import GenerationTargetKind, ResolvedGenerationSnapshot
+from app.core.contracts.generation import FrozenGenerationConfig, GenerationTargetKind, ResolvedGenerationSnapshot
 from app.core.contracts.media import ImageMediaInput, VideoMediaInput
 from app.core.contracts.provider import ProviderConfig
 from app.core.contracts.provider_media import ProviderImageInput, ProviderImageReference, ProviderVideoFrames, ProviderVideoInput, ProviderVideoSubject
@@ -31,13 +31,18 @@ from app.services.task_service import TaskService, utcnow
 
 async def load_media_context(db: AsyncSession, task: Task) -> tuple[ProviderConfig, ResolvedGenerationSnapshot, dict[str, FileItem]]:
     """在短事务内读取路由与文件元信息，不在会话内发起下载或供应商请求。"""
-    provider = await db.get(Provider, task.provider_id) if task.provider_id else None
-    if provider is None:
-        raise ProviderDataError("provider_missing")
-    category = ModelCategoryKey.image if task.kind == "image_generation" else ModelCategoryKey.video
-    config = resolve_provider_config_from_provider(provider=provider, category=category)
-    if config.provider_key != task.input_snapshot.get("provider_key"):
-        raise ProviderDataError("provider_route_changed")
+    if task.target_type == 'canvas_node':
+        frozen = FrozenGenerationConfig.model_validate(task.input_snapshot.get('execution_config'))
+        provider_config = ProviderConfig(provider=frozen.provider_key, api_key=frozen.api_key, base_url=frozen.base_url)
+    else:
+        provider = await db.get(Provider, task.provider_id) if task.provider_id else None
+        if provider is None:
+            raise ProviderDataError("provider_missing")
+        category = ModelCategoryKey.image if task.kind == "image_generation" else ModelCategoryKey.video
+        config = resolve_provider_config_from_provider(provider=provider, category=category)
+        if config.provider_key != task.input_snapshot.get("provider_key"):
+            raise ProviderDataError("provider_route_changed")
+        provider_config = ProviderConfig(provider=config.provider_key, api_key=config.api_key, base_url=config.base_url)
     relations = list(await db.scalars(select(TaskInput).where(TaskInput.task_id == task.id)))
     files = list(await db.scalars(select(FileItem).where(FileItem.id.in_({item.file_id for item in relations})))) if relations else []
     by_id = {file.id: file for file in files}
@@ -46,7 +51,7 @@ async def load_media_context(db: AsyncSession, task: Task) -> tuple[ProviderConf
     if any(file.deleted_at is not None or file.delete_requested_at is not None for file in files):
         raise ProviderDataError("input_file_deleted")
     snapshot = restore_snapshot(task, [(item, by_id[item.file_id]) for item in relations])
-    return ProviderConfig(provider=config.provider_key, api_key=config.api_key, base_url=config.base_url), snapshot, by_id
+    return provider_config, snapshot, by_id
 
 
 async def build_media_input(task: Task, snapshot: ResolvedGenerationSnapshot, files: dict[str, FileItem]) -> ProviderImageInput | ProviderVideoInput:
@@ -181,6 +186,12 @@ async def deliver_media(db: AsyncSession, task: Task) -> None:
                                  .where(TaskInput.task_id == task.id))).all()
     snapshot = restore_snapshot(task, relations)
     outputs = list(await db.scalars(select(TaskOutput).where(TaskOutput.task_id == task.id)))
+    if snapshot.canonical_target.kind == GenerationTargetKind.canvas_node:
+        # Formal ResultSet/current publication is part of TaskService's terminal canvas fact hook.
+        for output in outputs:
+            output.delivery_status = 'published'
+            output.delivery_reason = 'canvas_history'
+        return
     if snapshot.canonical_target.kind == GenerationTargetKind.scene_video:
         from app.services.directing.store import DirectingStore
         store = DirectingStore(db, task.project_id)
