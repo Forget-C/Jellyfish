@@ -34,9 +34,11 @@ async def runtime(tmp_path, request):
         db.add(Project(id=project_id, name='project', style='真人都市'))
         db.add(Provider(id=provider_id, name='openai', api_key='private-secret', base_url='https://frozen.test/v1'))
         await db.flush()
-        db.add(Model(id=model_id, name='frozen-model', category='text', provider_id=provider_id, params={'temperature': 0.3}))
+        db.add(Model(id=model_id, name='frozen-model', category='text', provider_id=provider_id, params={'temperature': 0.3, 'default_headers': {'Authorization': 'Bearer model-private-secret'}}))
     app = FastAPI()
     app.include_router(router, prefix='/canvases')
+    from app.api.v1.routes.studio.projects import router as projects_router
+    app.include_router(projects_router, prefix='/projects')
     async def database():
         async with sessions() as db:
             try:
@@ -84,6 +86,7 @@ async def accept(runtime, request_id='run'):
 async def test_frozen_text_stream_persists_partial_then_publishes_only_complete_result(runtime, monkeypatch):
     accepted, preview = await accept(runtime)
     assert 'private-secret' not in str(preview)
+    assert 'model-private-secret' not in str(preview)
     async with runtime.sessions.begin() as db:
         model = await db.get(Model, runtime.model_id)
         model.name, model.params = 'changed-model', {'temperature': 0.9}
@@ -110,6 +113,7 @@ async def test_frozen_text_stream_persists_partial_then_publishes_only_complete_
     assert calls[0]['temperature'] == 0.3
     assert calls[0]['base_url'] == 'https://frozen.test/v1'
     assert calls[0]['api_key'] == 'private-secret'
+    assert calls[0]['default_headers']['Authorization'] == 'Bearer model-private-secret'
     state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
     node = state['runs'][0]['nodes'][0]
     assert node['task_id'] == accepted['task_ids'][0]
@@ -178,6 +182,7 @@ async def test_activity_guards_allow_edits_but_reject_card_canvas_project_deleti
     assert response.status_code == 409
     assert response.json()['detail']['code'] == 'RUN_SCOPE_BUSY'
     assert (await runtime.client.delete(runtime.url)).status_code == 409
+    assert (await runtime.client.delete('/projects/' + runtime.project_id)).status_code == 409
 
 
 @pytest.mark.asyncio
@@ -353,3 +358,24 @@ async def test_single_card_uses_published_input_without_executing_upstream_and_r
     stale = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'consumer'})).json()['data']
     assert not stale['can_run'] and any(issue['code'] == 'INPUT_STALE' for issue in stale['diagnostics'])
     worker.text_pool.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('runtime', ['mysql'], indirect=True)
+async def test_mysql_activity_guard_sees_run_committed_after_earlier_read(runtime):
+    from fastapi import HTTPException
+    from app.services.generation_canvas.store import CanvasStore
+    from app.services.generation_canvas.runtime import ensure_project_idle
+    deleting = runtime.sessions()
+    await CanvasStore(deleting, runtime.project_id).get(runtime.canvas_id)
+    await accept(runtime)
+    with pytest.raises(HTTPException) as error:
+        await CanvasStore(deleting, runtime.project_id).delete(runtime.canvas_id)
+    assert error.value.status_code == 409
+    await deleting.rollback()
+    await CanvasStore(deleting, runtime.project_id).get(runtime.canvas_id)
+    with pytest.raises(HTTPException) as error:
+        await ensure_project_idle(deleting, runtime.project_id)
+    assert error.value.status_code == 409
+    await deleting.rollback()
+    await deleting.close()

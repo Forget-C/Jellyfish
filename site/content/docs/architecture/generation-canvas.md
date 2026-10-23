@@ -5,7 +5,7 @@ description: "独立项目画布当前已实现的文档、保存及页面边界
 
 # 生成画布文档存储
 
-项目工作台的“画布生成”入口无需章节或场次。一个项目可创建多张命名画布，通过 URL 的 `tab=generation&canvas=<id>` 重开。当前支持四类内容卡、三类模型卡、候选连接、分组、独立布局以及自动保存和恢复保护。模型卡用于编辑配置，尚未提供运行。完整设计决策见 [独立生成画布](adr/0001-independent-generation-canvas.md) 与 [协议边界](adr/0002-generation-canvas-protocol-boundaries.md)。
+项目工作台的“画布生成”入口无需章节或场次。一个项目可创建多张命名画布，通过 URL 的 `tab=generation&canvas=<id>` 重开。当前支持四类内容卡、三类模型卡、候选连接、分组、独立布局以及自动保存和恢复保护。文本模型卡已提供保存、预检、后台执行和持久文本流；图片及视频卡当前只编辑配置。完整设计决策见 [独立生成画布](adr/0001-independent-generation-canvas.md) 与 [协议边界](adr/0002-generation-canvas-protocol-boundaries.md)。
 
 `generation_canvases` 保存项目归属、当前完整文档、内容 revision 和已登记卡片身份／类型。文档包含画布身份、项目身份、名称、schema_version、卡片、候选连接、每目标端口独立输入顺序和分组。文本卡使用 `content.text`、type_version 1、不可变 ID 和一份 text，允许空字符串。后端轻量 `CardDefinition` 使用具体卡类型，前端显式 `rendererRegistry` 和 `CardShell` 消费同一文档。布局、运行状态与运行结果不进入此文档。
 
@@ -13,7 +13,7 @@ HTTP 边界为 `/api/v1/studio/generation-canvases/{project_id}` 的列表／创
 
 保存提交 `request_id`、`expected_revision` 和完整 `document`。事务先锁文档行，再核实持久回执，最后执行 revision CAS。文档更新和 `generation_canvas_save_receipts` 在同一事务提交。同请求重放原回执，不因后续 revision 改变；同身份不同正文返回 HTTP 409 `IDEMPOTENCY_CONFLICT`，过期修订返回 HTTP 409 `REVISION_CONFLICT`。结构、类型和身份错误返回带 `code`、`severity`、`message`、`target`、`blocks` 的文档诊断。画布领域异常使用标准 `{code,message,data,meta}` 封套，`data` 保留类型化诊断；不从 message 反解析字段。普通 HTTP 异常仍保持原有 `data=null`，命令封套基本校验沿用统一 422 处理。
 
-迁移 `d6a0b4c8e957` 建立两张表。MySQL 验证使用显式隔离测试库与独立 HTTP 请求事务，覆盖 CAS、同请求竞争及迁移／模型一致性；SQLite 用于功能持久化与真实页面旅程，不能代替 MySQL 竞争证据。
+迁移 `d6a0b4c8e957` 建立文档和保存回执表，`473ab089b58f` 增加独立运行、节点、预检、执行回执、占用、成果、当前输出指向及事件表。MySQL 验证使用显式隔离测试库与独立 HTTP 请求事务，覆盖 CAS、同请求竞争及迁移／模型一致性；SQLite 用于功能持久化与真实页面旅程，不能代替 MySQL 竞争证据。
 
 媒体内容卡使用 `content.image`、`content.video`、`content.audio`，只有各自模态的一个输出位置，没有输入。`file_id` 可为空；`uploading=true` 时即使保留旧文件也不发布有效输出。替换与清空引用保留卡片身份。保存通过真实文件记录核实类型、可用性和项目归属，以 `canvas_content` usage（`canvas_id:card_id`）保护引用，删卡／删画布只释放自己的内容引用。
 
@@ -33,3 +33,14 @@ HTTP 边界为 `/api/v1/studio/generation-canvases/{project_id}` 的列表／创
 `services/generation_canvas/compiler.py` 的公开 `compile_card` 与 `resolve_outputs` 解析实际引用。内容输出来自真实内容卡；运行层通过独立的 `model_outputs` 参数提供已发布的模型当前结果，不把结果写入编辑文档或虚构未来输出。编译仅在结构化引用处展开文本一次，实际媒体按接收端顺序选出使用子集，并提供本地代号、稳定来源与实际媒体位置映射。通用 `[media:N]` 表达是基础编译映射，供应商请求表达由对应模态执行适配消费。
 
 `GET /{canvas_id}/cards/{card_id}/compile` 返回已保存正文的基础编译预览、实际使用集合、映射及结构化诊断，不提交任务。保存未完成正文与允许运行分开；未使用的不兼容候选是 warning 且不阻塞，实际使用的不兼容输入与无效参数阻止运行。正文和指令内实际引用共同保护断线及删除来源，定位到稳定片段；保存检查最终文档，因此可清理引用后立即断线／删卡并一次保存。视频指令的具体供应商字段映射和运行预检由后续运行实现消费此边界。
+
+
+文本单卡运行采用 `POST /{canvas_id}/precheck` → `POST /{canvas_id}/runs`。预检绑定保存 revision、实际引用的结果集、编译后的正文和有效模型参数／供应商路由，十分钟内可提交；不占用节点。受理先锁文档并重放原回执，再核实预检及活动占用；运行、固定依据、真实 Task、占用和回执同事务写入。相同身份不同正文为 `IDEMPOTENCY_CONFLICT`，过期依据为 `PREVIEW_STALE`，重叠执行为 `RUN_SCOPE_BUSY`。单卡仅执行自己一次，不自动补跑上游；实际引用的失效成果为 `INPUT_STALE`。
+
+画布使用 `canvas_node` 生成目标及 `text_chat × canvas_node × async_polling` 提交矩阵。此 delivery 表示后台 Task 受理协议，画布观察仍使用 SSE。目标指向独立运行节点，任务来源可回跳项目、画布、运行及节点；不创建实验室消息。受理冻结的文本模型名、参数、供应商身份、路由及凭据只保存在 Task 私有执行输入中；公开预检、运行、事件不携带凭据。Worker 使用该配置调用 `llm.astream`，关闭 SDK 自动重试，每次有效增量在短事务中持久累计正文及事件。离开或刷新页面不改变 Task，也不重发模型请求。
+
+`TaskService` 仍是唯一任务写入口。领取、进度和唯一终态裁决后调用窄范围画布事实同步；成功、失败、取消、排队取消、过期和启动中断均在 Task 的原事务更新节点与事件。完整成功才创建 ResultSet；相关当前依据仍匹配时整体更新当前输出指向，不推进编辑 revision。失败及取消保留未完成正文和旧正式成果。正式指向即使依据已变也保留，`basis_current=false` 表示不能作为单卡有效输入；实际内容仍可显示和绑定引用。结果集身份作为实际输入依据的一部分，未使用候选和无关文档编辑不使已有成果失效。
+
+`GET /{canvas_id}/runtime` 返回一致快照；generated `GET /{canvas_id}/events/connection` 提供公共 SSE 地址，传输层逐段解析并恢复订阅。每张画布的一条连接复用 `snapshot`、`node.updated`、`text.delta`、`node.finished` 和 `run.finished`，单次运行结束不关闭连接。事件头行锁使事实、事件游标和提交顺序一致；快照使用同一把锁复制事实及游标。既有 Task 写入遵守 Task → event head 顺序，受理只创建新 Task；流每次追读使用独立短事务，释放所有锁后才 yield。恢复游标之后只重放已提交事件，过期／超前游标发送权威快照，前端按游标去重；没有运行状态轮询。
+
+活动模型卡不可删除，活动画布和项目也不能删除；取消意图尚未形成真实终态时仍保持占用。文档保存校验最终保留的卡片集合，仍允许修改活动卡的后续输入。本地任意内容编辑立即失效预检，并拒绝迟到的旧预检响应；独立布局改变不失效。运行信息和当前模型输出始终在编辑文档之外归并，不影响未保存提示词或保存 revision。
