@@ -40,4 +40,6 @@ Blocked by: 07
 - 2026-10-23：真实 A→B→C 与独立 X→Y 分支验收失败、单节点／整轮取消、确认执行中断；未建 Task 等待节点明确 failed／blocked 退出，已有 Task 沿用真实状态，独立分支继续。真实图片 Worker 产生缩减位置结果时，下游自身校验 failed，必要后继 blocked，旧正式历史保留且不回退。
 - 2026-10-23：合法图片运行输入在受理时写入 `canvas_run` FileUsage，公开文件详情和删除接口证明 waiting 下游尚无 Task 已受保护；后续删除对应当前内容／引用仍保留受理保护。没有伪称文本模型支持媒体。取消按冻结拓扑顺序预锁整轮既有 Task，再取 event head；真实 MySQL 两连接验证等待 B 在取消竞争中刚获得 Task 时不会漏取消，C 不创建 Task。
 - 2026-10-23：合并最新图片集成后，后端 Canvas／生成／Task／文件／架构与隔离 MySQL 联合命令 **136 passed，无 skip**；Pylint **10.00/10**，前端 typecheck 通过。最终 `generation-canvas-target` 真实浏览器 **PASS 7.0s**，原 `generation-canvas-runtime` 单卡回归 **PASS 9.0s**，均含预检 preflight；目标运行共用一条持久 SSE。命令、原始日志与截图位于 `/private/tmp/jellyfish-generation-canvas-evidence/10/`。
-- 2026-10-23：11／12 交接见 `/private/tmp/jellyfish-generation-canvas-evidence/10/handoff.md`，已合入最新主集成 `2644e0c`。OpenAPI/client 来自本分支实际 app；协调者合并后仍核实真实8000并执行必需 `pnpm --dir front run openapi:update`。保留原 Status 分诊标签。
+- 2026-10-23：11／12 交接见 `/private/tmp/jellyfish-generation-canvas-evidence/10/handoff.md`，已合入最新主集成 `70404f5`（含完整08、09）。OpenAPI/client 来自本分支实际 app；协调者合并后仍核实真实8000并执行必需 `pnpm --dir front run openapi:update`。保留原 Status 分诊标签。
+- 2026-10-23：最终受理文件统一排序加锁后复验实际 Worker／MySQL／取消与媒体文件路径 **43 passed**；合并完整视频编译后交叉回归 **31 passed**，Pylint与typecheck再次通过，原始日志为 `final-lock-tests.log`、`final-video-merge-tests.log`。联合测试中的空身份 ORM 警告来自专用库中既有通用 Task 测试的空输入快照夹具；独立 DAG 警告升错检查 **7 passed**，未改动通用 Task 调度行为。
+- 2026-10-23：完整08／09／10合并状态的目标页面最终复验 **PASS 5.8s**（含preflight），结果和截图见 `final-combined-target/`；无新增失败或未完成验收项。
