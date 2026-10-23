@@ -12,4 +12,3 @@ export type VideoContentCard = {
     uploading?: boolean;
     type?: string;
 };
-
