@@ -66,3 +66,5 @@ __all__ = [
     "ExperimentSession",
     "ExperimentMessage",
 ]
+
+from app.models.generation_canvas import GenerationCanvas, CanvasSaveReceipt

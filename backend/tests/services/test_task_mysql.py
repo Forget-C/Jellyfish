@@ -7,6 +7,8 @@ from uuid import uuid4
 import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import inspect, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -42,7 +44,7 @@ async def test_migrated_mysql_schema_matches_task_models():
                         return False
                     return None
 
-                scope = {"tasks", "task_inputs", "task_outputs", "files", "file_usages"}
+                scope = {"tasks", "task_inputs", "task_outputs", "files", "file_usages", "generation_canvases", "generation_canvas_save_receipts"}
                 context = MigrationContext.configure(connection, opts={
                     "compare_type": True, "compare_server_default": compare_default,
                     "include_object": lambda obj, name, type_, reflected, compare_to: (name if type_ == "table" else obj.table.name) in scope,
@@ -53,7 +55,7 @@ async def test_migrated_mysql_schema_matches_task_models():
                 assert not substantive, substantive
                 assert not {"generation_tasks", "generation_runs", "generation_artifacts", "media_blobs"} & set(inspect(connection).get_table_names())
             await db.run_sync(compare)
-            assert (await db.execute(text("SELECT version_num FROM alembic_version"))).scalar_one() == "24c8e1a6b902"
+            assert (await db.execute(text("SELECT version_num FROM alembic_version"))).scalar_one() == ScriptDirectory.from_config(Config("alembic.ini")).get_current_head()
     finally:
         await engine.dispose()
 
