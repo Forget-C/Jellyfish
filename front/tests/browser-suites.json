@@ -1,6 +1,7 @@
 {
   "preflight": "preflight.mjs",
   "cases": {
+    "generation-canvas-images": { "file": "generationCanvasImages.browser.mjs", "ports": [4278, 8278], "timeoutMs": 180000 },
     "generation-canvas-history": { "file": "generationCanvasHistory.browser.mjs", "ports": [4277, 8277], "timeoutMs": 180000 },
     "generation-canvas-runtime": { "file": "generationCanvasRuntime.browser.mjs", "ports": [4276, 8276], "timeoutMs": 180000 },
     "generation-canvas-composer": { "file": "generationCanvasComposer.browser.mjs", "ports": [4275, 8275], "timeoutMs": 180000 },
@@ -41,7 +42,7 @@
     "periodic-save": { "file": "scenePeriodicSave.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 }
   },
   "suites": {
-    "generation": ["generation-canvas-history", "generation-canvas-runtime", "generation-canvas-composer", "generation-canvas-graph", "generation-canvas", "generation-canvas-save", "generation-canvas-media"],
+    "generation": ["generation-canvas-images", "generation-canvas-history", "generation-canvas-runtime", "generation-canvas-composer", "generation-canvas-graph", "generation-canvas", "generation-canvas-save", "generation-canvas-media"],
     "instruction-video": ["instruction-card", "frame-inputs", "default-assets", "reference-source", "frame-dependencies", "instruction-inputs", "candidate-refresh", "scene-video"],
     "instructions": ["instruction-inputs", "instruction-design", "instruction-primary", "instruction-preparation", "instruction-suggestions", "instruction-evidence"],
     "references": ["frame-inputs", "default-assets", "reference-source"],

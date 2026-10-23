@@ -13,6 +13,8 @@ export type CanvasModelCapability = {
     resolution_profiles?: Record<string, Record<string, string>>;
     min_count?: number;
     max_count?: number;
+    max_reference_images?: (number | null);
+    supports_duplicate_reference_images?: boolean;
     min_seconds?: (number | null);
     max_seconds?: (number | null);
     supports_seed?: boolean;
