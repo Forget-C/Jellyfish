@@ -10,4 +10,3 @@ export type VideoModelConfig = {
     seconds?: (number | null);
     seed?: (number | null);
 };
-

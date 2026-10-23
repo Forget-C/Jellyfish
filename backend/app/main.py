@@ -32,9 +32,14 @@ def _error_message(detail: object) -> str:
 
 
 async def http_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    """HTTP 异常统一为 { code, message, data: null }。"""
+    """HTTP 异常沿用统一封套；画布领域失败在 data 保留类型化诊断。"""
     from fastapi import HTTPException
+    from app.services.generation_canvas.errors import CanvasDomainError
+    from app.schemas.generation_canvas import CanvasError
 
+    if isinstance(exc, CanvasDomainError):
+        body = CanvasError(code=exc.status_code, message=exc.detail['message'], data=exc.detail).model_dump()
+        return JSONResponse(status_code=exc.status_code, content=body)
     if isinstance(exc, HTTPException):
         code = exc.status_code
         message = _error_message(exc.detail)

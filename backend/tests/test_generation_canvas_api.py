@@ -42,8 +42,12 @@ async def canvas_client(request, monkeypatch):
             except Exception:
                 await db.rollback()
                 raise
-    app = FastAPI()
-    app.include_router(router, prefix='/canvases')
+    real_app = getattr(request, 'param', None) == 'app-handler'
+    if real_app:
+        from app.main import app
+    else:
+        app = FastAPI()
+        app.include_router(router, prefix='/canvases')
     from app.api.v1.routes.studio.files import router as files_router
     from app.core import storage
     async def upload(**kwargs):
@@ -52,10 +56,17 @@ async def canvas_client(request, monkeypatch):
         return b'media-bytes'
     monkeypatch.setattr(storage, 'upload_file', upload)
     monkeypatch.setattr(storage, 'download_file', download)
-    app.include_router(files_router, prefix='/files')
+    if not real_app:
+        app.include_router(files_router, prefix='/files')
+    previous_overrides = dict(app.dependency_overrides)
     app.dependency_overrides[get_db] = database
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
-        yield client
+    base_url = 'http://test/api/v1/studio/generation-canvases/' if real_app else 'http://test'
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url=base_url) as client:
+            yield client
+    finally:
+        app.dependency_overrides.clear()
+        app.dependency_overrides.update(previous_overrides)
     if mysql:
         async with sessions.begin() as db:
             from app.models.generation_canvas import GenerationCanvas
@@ -376,3 +387,23 @@ async def test_reference_protects_disconnect_but_final_document_cleanup_saves_on
     assert blocked.json()['detail']['code'] == 'REFERENCE_IN_USE'
     doc['cards'][1]['prompt']['segments'] = []
     assert (await client.put(url, json={'request_id': 'clean', 'expected_revision': 1, 'document': doc})).status_code == 200
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('canvas_client', ['app-handler'], indirect=True)
+async def test_real_app_handler_preserves_located_canvas_diagnostic_envelope(canvas_client):
+    canvas = (await canvas_client.post('p', json={})).json()['data']
+    base = f"p/{canvas['id']}"
+    response = await canvas_client.put(base, json={'request_id': 'bad-order', 'expected_revision': 0,
+        'document': {**canvas['document'], 'input_order': {'absent': {'text': ['missing']}}}})
+    assert response.status_code == 422
+    body = response.json()
+    assert body['code'] == 422 and body['message'] == '输入顺序必须完整且仅包含本目标端口连接'
+    assert body['data'] == {'code': 'INVALID_INPUT_ORDER', 'severity': 'error',
+        'message': '输入顺序必须完整且仅包含本目标端口连接',
+        'target': {'card_id': 'absent', 'port_id': 'text'}, 'blocks': ['save']}
+    assert body['meta'] is None
+    conflict = await canvas_client.put(base, json={'request_id': 'stale', 'expected_revision': 5, 'document': canvas['document']})
+    assert conflict.status_code == 409 and conflict.json()['data']['code'] == 'REVISION_CONFLICT'
+    # 普通 API 异常保留原有统一封套，不扩大诊断协议影响范围。
+    missing = await canvas_client.get('other/missing')
+    assert missing.json() == {'code': 404, 'message': 'Canvas not found', 'data': None, 'meta': None}

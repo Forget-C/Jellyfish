@@ -29,10 +29,14 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false }: 
   const [drag, setDrag] = useState<{ card: string; port: string; x: number; y: number }>()
   const latest = useRef(document); latest.current = document
   const container = useRef<HTMLDivElement>(null)
+  const hidden = new Set(groups.filter(group => group.collapsed).flatMap(group => group.card_ids || []))
+  const hiddenIdentity = [...hidden].join('|')
+  // 折叠成员在新浏览器没有本地测量；保留几何占位，不能让整个布局永远等待隐藏 DOM。
+  const layoutMeasurements = useMemo(() => ({ ...Object.fromEntries([...hidden].map(id => [id, { width: 400, height: 350 }])), ...measured }), [measured, hiddenIdentity])
   const nodes = useMemo(() => cards.map(card => ({ id: card.id })), [cards.map(card => card.id).join('|')])
   const layout = useGraphLayout({ storageKey: `jellyfish:generation-layout:${document.project_id}:${document.id}`, viewId: 'canvas',
-    anchorId: cards[0]?.id || '', validIds: [...cards.map(card => card.id), ...groups.map(group => group.id)], arrange,
-    onStorageError: setStorageError }, nodes, measured, container.current?.clientWidth || 1200)
+    initialTop: 104, anchorId: cards[0]?.id || '', validIds: [...cards.map(card => card.id), ...groups.map(group => group.id)], arrange,
+    onStorageError: setStorageError }, nodes, layoutMeasurements, container.current?.clientWidth || 1200)
   const transform = layout.view.transform
   const viewport = useCanvasViewport(document.id, transform, update => layout.setView(previous => ({ ...previous,
     transform: typeof update === 'function' ? update(previous.transform) : update })), { x: 2000, y: 1800 })
@@ -145,7 +149,6 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false }: 
       </li>
     })}</ol></div>
   })}</>
-  const hidden = new Set(groups.filter(group => group.collapsed).flatMap(group => group.card_ids || []))
   const point = (id: string) => layout.view.positions[id] || { x: 0, y: 0 }
   return <div className="generation-graph" ref={container}>
     <Space wrap className="generation-toolbar">
