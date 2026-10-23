@@ -151,6 +151,12 @@ def compile_card(document: CanvasDocument, card_id: str, *,
             if any(limit is not None and count > limit for limit, count in limits):
                 issue('SUBJECT_LIMIT_EXCEEDED', '主体参考数量超出模型限制', segment.id)
     if capability:
+        if card.type == 'model.image':
+            if capability.max_reference_images is not None and len(result.media) > capability.max_reference_images:
+                issue('REFERENCE_COUNT_EXCEEDED', '实际提交图片数量超出模型允许范围', '', ['prompt'])
+            files = [item.file_id for item in result.media]
+            if not capability.supports_duplicate_reference_images and len(files) != len(set(files)):
+                issue('DUPLICATE_MEDIA_UNSUPPORTED', '当前模型不支持不同来源使用同一图片文件', '', ['prompt'])
         result.diagnostics.extend(CanvasDiagnostic.model_validate(item) for item in parameter_diagnostics(card, capability))
         for edge in document.edges:
             if edge.target_card == card_id and edge.target_port not in capability.input_ports:

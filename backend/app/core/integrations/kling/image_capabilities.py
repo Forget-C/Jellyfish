@@ -22,6 +22,7 @@ _KLING_IMAGE_3_0 = ImageModelCapability(
     ratio_size_profiles=_KLING_IMAGE_RATIO_SIZE_PROFILES,
     min_n=1,
     max_n=9,
+    max_reference_images=1,
 )
 
 _KLING_MODEL_OVERRIDES: dict[str, ImageModelCapability] = {"kling-v3": _KLING_IMAGE_3_0}
