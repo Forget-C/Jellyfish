@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Alert, Button, Card, Empty, Input, Popconfirm, Select, Space, Typography } from 'antd'
 import { useSearchParams } from 'react-router-dom'
 import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
-import type { CanvasDocument, CanvasRead, CanvasSave } from '../../../services/generated'
+import type { CanvasRead } from '../../../services/generated'
+import { useGenerationCanvasEditor } from './useGenerationCanvasEditor'
 import { rendererRegistry } from './rendererRegistry'
 
 /** 项目级文档编辑；运行、结果和浏览器布局有独立生命周期。 */
@@ -10,12 +11,9 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
   const [search, setSearch] = useSearchParams()
   const canvasId = search.get('canvas')
   const [canvases, setCanvases] = useState<CanvasRead[]>([])
-  const [current, setCurrent] = useState<CanvasRead>()
-  const [document, setDocument] = useState<CanvasDocument>()
-  const [saving, setSaving] = useState(false)
+  const editor = useGenerationCanvasEditor(projectId, canvasId)
+  const { current, document, edit, save, saving, dirty, ownership } = editor
   const [error, setError] = useState('')
-  const [saved, setSaved] = useState(false)
-  const pending = useRef<CanvasSave>()
 
   const fail = (reason: unknown) => {
     const detail = reason instanceof ApiError ? reason.body?.detail : undefined
@@ -33,43 +31,17 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
     Canvases.canvasList({ projectId }).then(response => { if (active) setCanvases(response.data || []) }).catch(fail)
     return () => { active = false }
   }, [projectId])
-  useEffect(() => {
-    let active = true
-    setCurrent(undefined); setDocument(undefined); setError(''); setSaved(false); pending.current = undefined
-    if (canvasId) Canvases.canvasGet({ projectId, canvasId }).then(response => {
-      if (active && response.data) { setCurrent(response.data); setDocument(response.data.document) }
-    }).catch(reason => { if (active) fail(reason) })
-    return () => { active = false }
-  }, [projectId, canvasId])
-
-  const edit = (next: CanvasDocument) => { setDocument(next); setSaved(false) }
-  const save = async () => {
-    if (!document || !current || saving) return
-    const command = pending.current || { request_id: crypto.randomUUID(), expected_revision: current.revision, document }
-    pending.current = command
-    setSaving(true); setError('')
-    try {
-      const response = await Canvases.canvasSave({ projectId, canvasId: current.id, requestBody: command })
-      if (!response.data) throw new Error('missing receipt')
-      pending.current = undefined
-      setCurrent({ ...current, revision: response.data.revision, document: command.document as CanvasDocument })
-      setSaved(command.document === document)
-      await refreshList()
-    } catch (reason) {
-      // 明确未提交的校验/冲突允许修正；结果未知须保留原请求核实。
-      if (reason instanceof ApiError && reason.status >= 400 && reason.status < 500) pending.current = undefined
-      fail(reason)
-    } finally { setSaving(false) }
-  }
   const create = async () => {
+    if (!await editor.requestLeave()) return
     try {
       const response = await Canvases.canvasCreate({ projectId, requestBody: { name: '未命名画布' } })
       await refreshList()
       if (response.data) select(response.data.id)
     } catch (reason) { fail(reason) }
   }
+  useEffect(() => { if (current) setCanvases(previous => previous.map(item => item.id === current.id ? current : item)) }, [current])
   const remove = async () => {
-    if (!current) return
+    if (!current || !ownership.canEdit() || !await editor.requestLeave()) return
     try {
       await Canvases.canvasDelete({ projectId, canvasId: current.id })
       select(); await refreshList()
@@ -83,26 +55,23 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
         disabled={saving} options={canvases.map(item => ({ value: item.id, label: item.document.name }))} onChange={select} />
       <Button onClick={create} disabled={saving}>新建画布</Button>
     </Space>
-    {error && <Alert type="error" showIcon message={error} />}
+    {(error || editor.error) && <Alert type="error" showIcon message={error || editor.error} />}
+    {editor.storageError && <Alert type="warning" message={editor.storageError} />}
+    {editor.recovery && <Alert type="warning" message="发现本地未保存内容；恢复前将核实服务器及未明请求" action={<Space><Button onClick={editor.restore} disabled={!ownership.editable || saving}>恢复本地内容</Button><Button onClick={() => editor.reload()} disabled={!ownership.editable || saving}>使用服务器内容</Button></Space>} />}
+    {editor.conflict && <Alert type="warning" message="修订冲突，本地内容已保留。核对后选择处理方式" action={<Space><Button onClick={() => editor.reload(true)}>保留本地并以最新修订保存</Button><Button onClick={() => editor.reload()}>使用服务器内容</Button></Space>} />}
+    {canvasId && !ownership.editable && <Alert type="warning" message={ownership.message || (ownership.state === 'unsupported' ? '浏览器不支持编辑所有权保护，当前只读' : '此画布当前只读')} action={<Space><Button onClick={ownership.takeEditing}>取得编辑权</Button>{ownership.state === 'choice' && <><Button onClick={() => ownership.chooseHandoff('save')}>保存后交接</Button><Button onClick={() => ownership.chooseHandoff('discard')}>放弃后交接</Button></>}</Space>} />}
     {!document || !current ? <Empty description="创建或选择一张画布" /> : <>
       <Space wrap>
-        <Input aria-label="画布名称" value={document.name} maxLength={255} disabled={saving}
+        <Input aria-label="画布名称" value={document.name} maxLength={255} disabled={!ownership.editable || !!editor.recovery}
           onChange={event => edit({ ...document, name: event.target.value })} />
-        <Button onClick={() => edit({ ...document, cards: [...(document.cards || []), {
-          id: crypto.randomUUID(), type: 'content.text', type_version: 1, text: '',
-        }] })} disabled={saving}>添加文本卡</Button>
-        <Button type="primary" onClick={save} loading={saving}>保存画布</Button>
-        <Popconfirm title="删除这张画布？" onConfirm={remove}><Button danger disabled={saving}>删除画布</Button></Popconfirm>
-        <span role="status">revision {current.revision} · {saving ? '保存中' : saved ? '已保存' : '手动保存'}</span>
+        <Button type="primary" onClick={() => void save()} loading={saving} disabled={!ownership.editable || !!editor.recovery || editor.conflict}>保存画布</Button>
+        <Popconfirm title="删除这张画布？" onConfirm={remove}><Button danger disabled={saving || !ownership.editable}>删除画布</Button></Popconfirm>
+        <span role="status">revision {current.revision} · {saving ? '保存中' : !dirty ? '已保存' : '待保存'}</span>
       </Space>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
-        {(document.cards || []).map(card => {
-          const Renderer = rendererRegistry[card.type || 'content.text']
-          return <Card key={card.id} title="文本内容卡" data-card-id={card.id}>
-            <Renderer card={card} onChange={next => edit({ ...document, cards: document.cards?.map(item => item.id === next.id ? next : item) })} />
-          </Card>
-        })}
-      </div>
+      <Button disabled={!ownership.editable || !!editor.recovery} onClick={() => edit(previous => ({ ...previous, cards: [...(previous.cards || []), { id: crypto.randomUUID(), type: 'content.text', type_version: 1, text: '' }] }))}>添加文本卡</Button>
+      <fieldset disabled={!ownership.editable || !!editor.recovery} style={{ border: 0, padding: 0 }}>
+        {(document.cards || []).map(card => { const Renderer = rendererRegistry[card.type || 'content.text']; return <Card key={card.id} title="文本内容卡" data-card-id={card.id}><Renderer card={card} onChange={next => edit(previous => ({ ...previous, cards: previous.cards?.map(item => item.id === next.id ? next : item) }))} /></Card> })}
+      </fieldset>
     </>}
   </Space>
 }
