@@ -1,5 +1,5 @@
 import type { ComponentType, ReactNode } from 'react'
-import { Alert, Input, Select } from 'antd'
+import { Alert, Button, Input, Select } from 'antd'
 import type { CanvasDocument, CanvasModelCapability, CanvasNodeRead, CanvasResolvedOutput, ImageModelCard, ModelRead, TextContentCard, TextModelCard, VideoModelCard } from '../../../services/generated'
 import { ExperimentComposer } from '../experiment/components/ExperimentComposer'
 import { PromptEditor } from './PromptEditor'
@@ -11,10 +11,10 @@ import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 import { activeNode } from './useGenerationCanvasRuntime'
 
 export type CardRendererProps = { card: GenerationCard; document: CanvasDocument; projectId: string; onChange: (card: GenerationCard) => void;
-  models?: ModelRead[]; capability?: CanvasModelCapability; capabilityError?: string; references?: ReactNode; disabled?: boolean; modelOutputs?: Record<string, CanvasResolvedOutput[]>; node?: CanvasNodeRead; busy?: boolean; checking?: boolean; runDisabled?: boolean; onPrecheck?: () => void }
+  models?: ModelRead[]; capability?: CanvasModelCapability; capabilityError?: string; references?: ReactNode; disabled?: boolean; modelOutputs?: Record<string, CanvasResolvedOutput[]>; node?: CanvasNodeRead; busy?: boolean; checking?: boolean; runDisabled?: boolean; onPrecheck?: () => void; onTargetPrecheck?: () => void }
 
 /** 模型卡共享受控 Composer 布局，参数由各模态组件表达。 */
-function ModelRenderer({ card: raw, document, disabled, onChange, models, capability, capabilityError, references, modelOutputs, node, busy, checking, runDisabled, onPrecheck }: CardRendererProps) {
+function ModelRenderer({ card: raw, document, disabled, onChange, models, capability, capabilityError, references, modelOutputs, node, busy, checking, runDisabled, onPrecheck, onTargetPrecheck }: CardRendererProps) {
   const card = raw as TextModelCard | ImageModelCard | VideoModelCard
   const category = card.type?.split('.')[1]
   let parameters: ReactNode = <span>使用模型管理中的文本参数 · 仅接收文本</span>
@@ -40,6 +40,7 @@ function ModelRenderer({ card: raw, document, disabled, onChange, models, capabi
     {capabilityError && <Alert type="warning" message={capabilityError} />}
     {card.model_id && !models?.some(model => model.id === card.model_id) && <Alert type="warning" message="已选模型当前不可用，原配置和连线已保留" />}
     <section aria-label="候选参考区">{references || <small>连接仅提供候选，正文或用途配置决定实际使用</small>}</section>
+    <Button disabled={disabled || busy || runDisabled} onClick={() => onTargetPrecheck?.()}>运行到此处</Button>
     <ExperimentComposer options={<><Select aria-label="选择模型" placeholder="选择模型" allowClear value={card.model_id || undefined} style={{ minWidth: 180 }}
       options={models?.filter(model => model.category === category).map(model => ({ value: model.id, label: model.name }))}
       onChange={id => onChange({ ...card, model_id: id ?? null })} />{parameters}</>}

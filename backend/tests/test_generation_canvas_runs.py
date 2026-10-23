@@ -420,6 +420,11 @@ async def test_runtime_migration_preserves_existing_canvas_observation(tmp_path)
             spec.loader.exec_module(migration)
             with Operations.context(MigrationContext.configure(connection)):
                 migration.upgrade()
+                snapshot_path = path.with_name('8a10d04c631e_canvas_dag_snapshots.py')
+                snapshot_spec = importlib.util.spec_from_file_location('canvas_dag_migration', snapshot_path)
+                snapshot_migration = importlib.util.module_from_spec(snapshot_spec)
+                snapshot_spec.loader.exec_module(snapshot_migration)
+                snapshot_migration.upgrade()
         await db.run_sync(migrate)
     sessions = async_sessionmaker(engine)
     async with sessions.begin() as db:
@@ -597,7 +602,7 @@ async def test_terminal_canonical_text_replay_converges_and_stream_observes_next
         following = json.loads((await anext(stream)).split('data: ', 1)[1])
         assert following['type'] == 'node.updated' and following['run_id'] == second['run_id']
         snapshot = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
-        assert snapshot['runs'][0]['nodes'][0]['text'] == 'Canonical final body'
+        assert next(run for run in snapshot['runs'] if run['id'] == accepted['run_id'])['nodes'][0]['text'] == 'Canonical final body'
         assert snapshot['current_outputs']['m'][0]['text'] == 'Canonical final body'
     finally:
         await stream.aclose()

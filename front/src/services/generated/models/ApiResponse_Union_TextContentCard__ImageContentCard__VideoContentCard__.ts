@@ -2,8 +2,10 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ImageContentCard } from './ImageContentCard';
 import type { TextContentCard } from './TextContentCard';
-export type ApiResponse_TextContentCard_ = {
+import type { VideoContentCard } from './VideoContentCard';
+export type ApiResponse_Union_TextContentCard__ImageContentCard__VideoContentCard__ = {
     /**
      * 与 HTTP 状态码一致
      */
@@ -15,7 +17,7 @@ export type ApiResponse_TextContentCard_ = {
     /**
      * 实际数据
      */
-    data?: (TextContentCard | null);
+    data?: (TextContentCard | ImageContentCard | VideoContentCard | null);
     /**
      * 附加元信息
      */

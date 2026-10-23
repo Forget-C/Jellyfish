@@ -12,7 +12,8 @@ def upgrade():
     """Retain old single-card runs; only new admissions need private state."""
     op.add_column('generation_canvas_run_nodes', sa.Column('execution_snapshot', sa.JSON(), nullable=True))
     op.add_column('generation_canvas_previews', sa.Column('kind', sa.String(16), nullable=False, server_default='single'))
-    op.alter_column('generation_canvas_previews', 'kind', server_default=None)
+    with op.batch_alter_table('generation_canvas_previews') as batch:
+        batch.alter_column('kind', server_default=None)
 
 
 def downgrade():

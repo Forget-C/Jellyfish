@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { CanvasDiagnostic } from './CanvasDiagnostic';
 import type { CanvasResolvedOutput } from './CanvasResolvedOutput';
+import type { VideoMediaInput_Output } from './VideoMediaInput_Output';
 /**
  * 单次展开与实际使用映射，媒体位置为实际提交子集内的序号。
  */
@@ -13,6 +14,7 @@ export type CanvasCompiledInput = {
     text?: string;
     used?: Array<CanvasResolvedOutput>;
     media?: Array<CanvasResolvedOutput>;
+    video_media?: (VideoMediaInput_Output | null);
     mapping?: Array<Record<string, any>>;
     diagnostics?: Array<CanvasDiagnostic>;
     can_run?: boolean;

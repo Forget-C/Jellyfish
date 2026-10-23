@@ -4,6 +4,8 @@ import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 
 /** Preview is bound to the current edit generation; diagnostics use stable targets. */
 export function RunPreview({ preview, submitting, disabled, onSubmit }: { preview: CanvasPrecheck; submitting: boolean; disabled: boolean; onSubmit: () => void }) {
+  const awaitingUpstream = preview.execution_nodes.length > 1
+  const inputLabel = awaitingUpstream ? '受理时输入预览' : '实际提交文本'
   const locate = (target: Record<string, unknown>) => {
     const cardId = target.card_id || preview.card_id
     const card = document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(String(cardId))}"]`)
@@ -14,7 +16,8 @@ export function RunPreview({ preview, submitting, disabled, onSubmit }: { previe
   return <section aria-label="运行预检" className="generation-run-preview">
     <strong>运行预检 · revision {preview.revision}</strong>
     <p>执行 {preview.execution_nodes.join('、')} · 复用已有结果 {preview.reused_results?.length || 0} 项</p>
-    <section aria-label="实际提交文本"><CanvasTextPreview text={preview.input.text || ''} label="实际提交文本" /></section>
+    {awaitingUpstream && <p>本轮上游完成后将使用新结果，下方为受理时已有输入。</p>}
+    <section aria-label={inputLabel}><CanvasTextPreview text={preview.input.text || ''} label={inputLabel} /></section>
     <p>模型：{preview.model?.name || preview.model?.id || '未选择'}</p>
     <details><summary>有效模型参数</summary><pre>{JSON.stringify(preview.model?.params || {}, null, 2)}</pre></details>
     {!!preview.input.mapping?.length && <details><summary>实际使用来源及媒体对应关系</summary><pre>{JSON.stringify(preview.input.mapping, null, 2)}</pre></details>}

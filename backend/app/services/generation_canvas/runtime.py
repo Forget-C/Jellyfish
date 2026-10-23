@@ -65,7 +65,7 @@ async def append_event(db, head, kind, *, node=None, run_id=None, payload=None):
 
 
 class CanvasRuntime:
-    """单卡运行是画布编排最小完整切片，沿用真实 Submitter 和 Task 生命周期。"""
+    """画布受理与观察边界；范围调度沿用真实 Submitter 和 Task 生命周期。"""
     def __init__(self, db: AsyncSession, project_id: str):
         self.db, self.project_id = db, project_id
 
@@ -185,6 +185,9 @@ class CanvasRuntime:
         run = CanvasRun(id=uuid4().hex, canvas_id=canvas_id, revision=canvas.revision, scope=list(prepared['nodes']))
         self.db.add(run)
         await self.db.flush()
+        # Both admission and terminal scheduling acquire head before concrete
+        # input file locks. Existing Tasks are never acquired by admission.
+        head = await event_head(self.db, canvas_id)
         nodes = []
         from app.services.studio.file_usages import upsert_file_usage
         for card_id, item in prepared['nodes'].items():
@@ -203,7 +206,6 @@ class CanvasRuntime:
         for node in nodes:
             if not node.execution_snapshot['dependencies']:
                 await start_node(self.db, node)
-        head = await event_head(self.db, canvas_id)
         for node in nodes:
             await append_event(self.db, head, 'node.updated', node=node, payload={'node': CanvasNodeRead.model_validate(node).model_dump()})
         response = {'request_id': command.request_id, 'canvas_id': canvas_id, 'run_id': run.id,
@@ -250,16 +252,22 @@ class CanvasRuntime:
         targets = [node for node in nodes if node_id is None or node.id == node_id]
         if not targets:
             raise diagnostic('NODE_NOT_FOUND', '运行节点不存在', {'run_id': run_id, 'node_id': node_id}, status=404, blocks=['cancel'])
-        task_ids = sorted(node.task_id for node in targets if node.task_id)
-        # Do not acquire document/head locks before existing Tasks. Future DAG
-        # cancellation can safely reuse this order for several running branches.
-        for task_id in task_ids:
-            await self.db.scalar(select(Task).where(Task.id == task_id).with_for_update().execution_options(populate_existing=True))
+        # Lock the entire run in frozen topological scope order, including ancestors
+        # of a waiting single-node cancel. A producer lock makes its later child
+        # identity stable before that child's turn; no Task can appear behind the
+        # cancellation scan. Every cancellation uses this same order.
+        by_card = {node.card_id: node for node in nodes}
+        for card_id in run.scope:
+            node = by_card[card_id]
+            await self.db.refresh(node)
+            if node.task_id:
+                await self.db.scalar(select(Task).where(Task.id == node.task_id).with_for_update().execution_options(populate_existing=True))
+        task_ids = [node.task_id for node in targets if node.task_id]
         head = await event_head(self.db, canvas_id)
         from app.services.generation_canvas.planner import stop_waiting, advance
         for node in targets:
             if node.status == 'waiting':
-                await stop_waiting(self.db, node, head, 'cancelled', 'RUN_CANCELLED', '画布运行取消')
+                await stop_waiting(self.db, node, head, 'blocked' if node_id is None else 'cancelled', 'RUN_CANCELLED', '画布运行取消')
         if node_id is None:
             for node in nodes:
                 if node.status == 'waiting':

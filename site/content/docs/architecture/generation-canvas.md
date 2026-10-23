@@ -13,7 +13,7 @@ HTTP 边界为 `/api/v1/studio/generation-canvases/{project_id}` 的列表／创
 
 保存提交 `request_id`、`expected_revision` 和完整 `document`。事务先锁文档行，再核实持久回执，最后执行 revision CAS。文档更新和 `generation_canvas_save_receipts` 在同一事务提交。同请求重放原回执，不因后续 revision 改变；同身份不同正文返回 HTTP 409 `IDEMPOTENCY_CONFLICT`，过期修订返回 HTTP 409 `REVISION_CONFLICT`。结构、类型和身份错误返回带 `code`、`severity`、`message`、`target`、`blocks` 的文档诊断。画布领域异常使用标准 `{code,message,data,meta}` 封套，`data` 保留类型化诊断；不从 message 反解析字段。普通 HTTP 异常仍保持原有 `data=null`，命令封套基本校验沿用统一 422 处理。
 
-迁移 `d6a0b4c8e957` 建立文档和保存回执表，`473ab089b58f` 增加独立运行、节点、预检、执行回执、占用、成果、当前输出指向及事件表。MySQL 验证使用显式隔离测试库与独立 HTTP 请求事务，覆盖 CAS、同请求竞争及迁移／模型一致性；SQLite 用于功能持久化与真实页面旅程，不能代替 MySQL 竞争证据。
+迁移 `d6a0b4c8e957` 建立文档和保存回执表，`473ab089b58f` 增加独立运行、节点、预检、执行回执、占用、成果、当前输出指向及事件表；`8a10d04c631e` 增加等待节点私有执行快照和预检范围意图。MySQL 验证使用显式隔离测试库与独立 HTTP 请求事务，覆盖 CAS、同请求竞争及迁移／模型一致性；SQLite 用于功能持久化与真实页面旅程，不能代替 MySQL 竞争证据。
 
 媒体内容卡使用 `content.image`、`content.video`、`content.audio`，只有各自模态的一个输出位置，没有输入。`file_id` 可为空；`uploading=true` 时即使保留旧文件也不发布有效输出。替换与清空引用保留卡片身份。保存通过真实文件记录核实类型、可用性和项目归属，以 `canvas_content` usage（`canvas_id:card_id`）保护引用，删卡／删画布只释放自己的内容引用。
 
@@ -35,9 +35,9 @@ HTTP 边界为 `/api/v1/studio/generation-canvases/{project_id}` 的列表／创
 `GET /{canvas_id}/cards/{card_id}/compile` 返回已保存正文的基础编译预览、实际使用集合、映射及结构化诊断，不提交任务。保存未完成正文与允许运行分开；未使用的不兼容候选是 warning 且不阻塞，实际使用的不兼容输入与无效参数阻止运行。正文和指令内实际引用共同保护断线及删除来源，定位到稳定片段；保存检查最终文档，因此可清理引用后立即断线／删卡并一次保存。视频指令的具体供应商字段映射和运行预检由后续运行实现消费此边界。
 
 
-文本单卡运行采用 `POST /{canvas_id}/precheck` → `POST /{canvas_id}/runs`。预检绑定保存 revision、实际引用的结果集、编译后的正文和有效模型参数／供应商路由，十分钟内可提交；不占用节点。受理先锁文档并重放原回执，再核实预检及活动占用；运行、固定依据、真实 Task、占用和回执同事务写入。相同身份不同正文为 `IDEMPOTENCY_CONFLICT`，过期依据为 `PREVIEW_STALE`，重叠执行为 `RUN_SCOPE_BUSY`。单卡仅执行自己一次，不自动补跑上游；实际引用的失效成果为 `INPUT_STALE`。
+单卡及运行到目标采用 `POST /{canvas_id}/precheck` → `POST /{canvas_id}/runs`。预检绑定保存 revision、实际引用的结果集、编译后的正文和有效模型参数／供应商路由，十分钟内可提交；不占用节点。受理先锁文档并重放原回执，再核实预检及活动占用；运行、固定依据、真实 Task、占用和回执同事务写入。相同身份不同正文为 `IDEMPOTENCY_CONFLICT`，过期依据为 `PREVIEW_STALE`，重叠执行为 `RUN_SCOPE_BUSY`。单卡仅执行自己一次，不自动补跑上游；实际引用的失效成果为 `INPUT_STALE`。
 
-画布使用 `canvas_node` 生成目标及 `text_chat × canvas_node × async_polling` 提交矩阵。此 delivery 表示后台 Task 受理协议，画布观察仍使用 SSE。目标指向独立运行节点，任务来源可回跳项目、画布、运行及节点；不创建实验室消息。受理冻结的文本模型名、参数、供应商身份、路由及凭据只保存在 Task 私有执行输入中；公开预检、运行、事件不携带凭据。Worker 使用该配置调用 `llm.astream`，关闭 SDK 自动重试，每次有效增量在短事务中持久累计正文及事件。离开或刷新页面不改变 Task，也不重发模型请求。
+画布使用 `canvas_node` 生成目标及 `text_chat × canvas_node × async_polling` 提交矩阵。此 delivery 表示后台 Task 受理协议，画布观察仍使用 SSE。目标指向独立运行节点，任务来源可回跳项目、画布、运行及节点；不创建实验室消息。受理冻结的文本模型名、参数、供应商身份、路由及凭据保存在服务端节点私有快照和 Task 私有执行输入中；公开预检、运行、事件不携带凭据。Worker 使用该配置调用 `llm.astream`，关闭 SDK 自动重试，每次有效增量在短事务中持久累计正文及事件。离开或刷新页面不改变 Task，也不重发模型请求。
 
 `TaskService` 仍是唯一任务写入口。领取、进度和唯一终态裁决后调用窄范围画布事实同步；成功、失败、取消、排队取消、过期和启动中断均在 Task 的原事务更新节点与事件。完整成功才创建 ResultSet；相关当前依据仍匹配时整体更新当前输出指向，不推进编辑 revision。失败及取消保留未完成正文和旧正式成果。正式指向即使依据已变也保留，`basis_current=false` 表示不能作为单卡有效输入；实际内容仍可显示和绑定引用。结果集身份作为实际输入依据的一部分，未使用候选和无关文档编辑不使已有成果失效。
 
@@ -45,9 +45,19 @@ HTTP 边界为 `/api/v1/studio/generation-canvases/{project_id}` 的列表／创
 
 活动模型卡不可删除，活动画布和项目也不能删除；取消意图尚未形成真实终态时仍保持占用。文档保存校验最终保留的卡片集合，仍允许修改活动卡的后续输入。本地任意内容编辑立即失效预检，并拒绝迟到的旧预检响应；独立布局改变不失效。运行信息和当前模型输出始终在编辑文档之外归并，不影响未保存提示词或保存 revision。
 
+## 运行到目标与固定依赖
+
+预检请求增加 `kind=single|target`，省略时仍为单卡。目标预检返回按实际引用拓扑排序的 `execution_nodes` 和复用结果；目标总执行一次，有效上游只读复用且不占执行范围，依据已变但仍有实际内容的上游进入范围。候选连线未实际使用时不构成依赖。引用位置缺失时始终阻止受理，即使该来源已在执行范围内。
+
+`planner.py` 统一规划、节点提交和终态唤起。受理一次性固定完整图、所有计划节点的已有具体输入、实际使用依赖、模型能力与有效模型／供应商配置，等待节点也不例外。公开 `basis` 不含凭据，服务端私有 `execution_snapshot` 不进入预检、历史 DTO 或事件。等待节点只用本轮必要上游的成功 ResultSet 整体替换相应来源，再校验实际内容、能力和缺失位置，生成具体 Task 输入；不读当前编辑或其他运行的输出，也不经提交门禁重新解析可变模型配置。
+
+必要上游失败或取消使尚未创建 Task 的后继成为 `blocked`；下游自身输入校验失败为 `failed`。独立分支继续，旧正式结果仍可查看但不能作为本轮失败分支的后备来源。确认的任务启动中断会终结本轮等待节点，不自动补交；已有 Task 保持其真实状态。整轮取消终结全部等待节点并请求取消已有 Task。全部节点终结后释放范围占用并结束生命周期，不计算整轮成功等级。
+
+所有已知媒体输入在受理事务以 `canvas_run` usage（`canvas_id:node_id`）持久保护，包含尚无 Task 的等待节点。后续编辑移除内容卡或引用不会改写该保护及固定输入。受理和终态调度均先取得 event head 再保护具体输入文件；受理只创建新 Task，不取得既有 Task 锁。
+
 ## 取消与独立历史内容
 
-`POST /{canvas_id}/runs/{run_id}/cancel` 与 `POST /{canvas_id}/runs/{run_id}/nodes/{node_id}/cancel` 明确取消范围，并返回真实运行节点。执行中的任务接收意图后仍为 `running`，以 `stage=cancelling` 展示取消中；排队任务沿用 TaskService 立即终结规则。未知或失败回包不释放范围占用，也不推断终态。整轮取消先按任务 ID 排序锁定全部既有 Task，再逐个调用 TaskService，避免持有事件头后等待另一个 Task。
+`POST /{canvas_id}/runs/{run_id}/cancel` 与 `POST /{canvas_id}/runs/{run_id}/nodes/{node_id}/cancel` 明确取消范围，并返回真实运行节点。执行中的任务接收意图后仍为 `running`，以 `stage=cancelling` 展示取消中；排队任务沿用 TaskService 立即终结规则。未知或失败回包不释放范围占用，也不推断终态。取消命令先按已冻结范围的拓扑顺序锁定整轮既有 Task，再逐个调用 TaskService，避免持有事件头后等待另一个 Task。每锁定父节点后重新读取后继 Task 身份，确保等待节点在并发调度中刚获得 Task 时也不会漏取消；单节点取消仅向指定 Task 发取消请求。
 
 运行快照和节点事件提供安全的固定 `basis`、实际状态、累计正文、成果和正式结果集身份。源卡删除后运行记录仍在，任务中心来源仍保留项目、画布、运行与节点身份。成果非空不表示成功；未完成正文保留在历史中，不替换旧正式输出。
 

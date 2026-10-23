@@ -67,10 +67,24 @@ async def start_node(db, node, producers=None):
         raise HTTPException(422, {'code': 'INPUT_VALIDATION_FAILED', 'message': '固定上游结果不满足下游输入要求'})
     node.basis, node.basis_hash = basis, fingerprint
     node.status, node.stage = 'queued', 'queued'
-    command = GenerationCommand(modality='text', operation='text_chat', delivery='async_polling',
-        target=GenerationTarget(kind='canvas_node', entity_id=node.id),
-        request=GenerationSubmitRequest(model_id=basis['model']['id'], operation_input=TextChatInput(
-            messages=[TextChatMessage(role='user', content=compiled.text, sequence=1)])))
+    card = next(card for card in CanvasDocument.model_validate(private['document']).cards if card.id == node.card_id)
+    modality = card.type.removeprefix('model.')
+    if modality == 'text':
+        request = GenerationSubmitRequest(model_id=basis['model']['id'], operation_input=TextChatInput(
+            messages=[TextChatMessage(role='user', content=compiled.text, sequence=1)]))
+    elif modality == 'image':
+        from app.core.contracts.generation import ImageGenerationOperationInput
+        from app.core.contracts.media import ImageMediaInput, MediaReference
+        request = GenerationSubmitRequest(model_id=basis['model']['id'], execution_prompt=compiled.text,
+            operation_input=ImageGenerationOperationInput(**card.config.model_dump()),
+            media=ImageMediaInput(references=[MediaReference(file_id=item.file_id, media_kind='image', ordinal=index)
+                for index, item in enumerate(compiled.media)]))
+    else:
+        from app.core.contracts.generation import VideoGenerationOperationInput
+        request = GenerationSubmitRequest(model_id=basis['model']['id'], execution_prompt=compiled.text,
+            operation_input=VideoGenerationOperationInput(**card.config.model_dump()), media=compiled.video_media)
+    command = GenerationCommand(modality=modality, operation='text_chat' if modality == 'text' else modality + '_generation',
+        delivery='async_polling', target=GenerationTarget(kind='canvas_node', entity_id=node.id), request=request)
     accepted = await GenerationSubmitter(entity_gate=GenerationEntityGate()).submit_async(db, command)
     node.task_id = accepted.task_id
     await db.flush()
@@ -104,6 +118,7 @@ async def advance(db, run_id, head, *, interrupted=False):
                 async with db.begin_nested():
                     await start_node(db, node, producers)
             except (HTTPException, ValidationError) as exc:
+                await db.refresh(node)
                 await stop_waiting(db, node, head, 'failed', 'INPUT_VALIDATION_FAILED', str(exc))
             else:
                 await append_event(db, head, 'node.updated', node=node, payload={'node': CanvasNodeRead.model_validate(node).model_dump()})
