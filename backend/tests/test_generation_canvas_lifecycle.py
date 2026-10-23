@@ -141,3 +141,59 @@ async def test_waiting_actual_image_chain_retains_uploaded_input_until_canvas_hi
         assert (await runtime.client.get('/files/' + file_id + '/download')).content == b'known'
         assert (await runtime.client.delete('/files/' + file_id)).status_code == 200
         worker.text_pool.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('runtime', ['mysql'], indirect=True)
+async def test_upload_retention_http_success_waits_for_real_database_commit(runtime, image_storage):
+    """A received success must already describe a committed retention release."""
+    import socket
+    import uvicorn
+    from fastapi import Request
+    from app.api.v1.routes.studio.files import router
+    from app.dependencies import get_db
+    runtime.app.include_router(router, prefix='/files')
+    uploaded = await runtime.client.post('/files/upload', files={'file': ('commit.png', b'commit', 'image/png')},
+        data={'project_id': runtime.project_id, 'usage_kind': 'generation_upload'})
+    assert uploaded.status_code == 201, uploaded.text
+    file_id = uploaded.json()['data']['id']
+    commit_started, allow_commit = asyncio.Event(), asyncio.Event()
+    original = runtime.app.dependency_overrides[get_db]
+    async def database(request: Request):
+        async with runtime.sessions() as db:
+            try:
+                yield db
+                if request.url.path.endswith('/upload-retention'):
+                    commit_started.set()
+                    await allow_commit.wait()
+                await db.commit()
+            except Exception:
+                await db.rollback()
+                raise
+    runtime.app.dependency_overrides[get_db] = database
+    listener = socket.socket()
+    listener.bind(('127.0.0.1', 0))
+    port = listener.getsockname()[1]
+    server = uvicorn.Server(uvicorn.Config(runtime.app, log_level='warning', lifespan='off'))
+    serving = asyncio.create_task(server.serve(sockets=[listener]))
+    pending = None
+    try:
+        while not server.started:
+            await asyncio.sleep(.01)
+        async with httpx.AsyncClient(base_url=f'http://127.0.0.1:{port}') as client:
+            pending = asyncio.create_task(client.delete('/files/' + file_id + '/upload-retention', params={'project_id': runtime.project_id}))
+            await asyncio.wait_for(commit_started.wait(), timeout=5)
+            done, _ = await asyncio.wait({pending}, timeout=.1)
+            assert not done, 'success reached the HTTP client before retention release committed'
+            allow_commit.set()
+            response = await pending
+            assert response.status_code == 200, response.text
+            assert (await client.get('/files/' + file_id)).json()['data']['usages'] == []
+            assert (await client.delete('/files/' + file_id)).status_code == 200
+    finally:
+        allow_commit.set()
+        if pending:
+            await asyncio.gather(pending, return_exceptions=True)
+        server.should_exit = True
+        await serving
+        runtime.app.dependency_overrides[get_db] = original
