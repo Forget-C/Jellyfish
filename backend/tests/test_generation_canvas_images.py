@@ -38,6 +38,7 @@ async def image_card(runtime, count=3):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('runtime', [None, 'mysql'], indirect=True)
 async def test_image_worker_publishes_all_ordered_results_and_history_content(runtime, image_storage):
     await image_card(runtime)
     accepted, preview = await accept(runtime)
@@ -196,7 +197,7 @@ async def test_third_download_failure_retains_two_unfinished_images_and_previous
 
 
 @pytest.mark.asyncio
-async def test_remote_image_submission_and_every_poll_use_frozen_route_after_edits(runtime, image_storage):
+async def test_remote_image_submission_and_every_poll_use_frozen_route_after_edits(runtime, image_storage, monkeypatch):
     from app.models.llm import Provider
     from app.task_worker import TaskWorker
     await image_card(runtime, 1)
@@ -220,6 +221,8 @@ async def test_remote_image_submission_and_every_poll_use_frozen_route_after_edi
             assert json.loads(request.content)['model'] == 'image-model'
             assert json.loads(request.content)['prompt'] == preview['input']['text']
             return httpx.Response(200, json={'task_id': 'remote-image'})
+        if len(calls) == 2:
+            return httpx.Response(200, json={'state': 'processing'})
         return httpx.Response(200, json={'state': 'success', 'creations': [{'b64_json': 'eA=='}]})
     async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as client:
         worker = TaskWorker(runtime.sessions, client=client)
@@ -227,12 +230,106 @@ async def test_remote_image_submission_and_every_poll_use_frozen_route_after_edi
         await asyncio.gather(*worker.jobs.values())
         await worker.tick()
         await asyncio.gather(*worker.jobs.values())
+        from datetime import timedelta
+        from app.services.task_service import utcnow
+        later = utcnow() + timedelta(seconds=10)
+        monkeypatch.setattr('app.task_worker.utcnow', lambda: later)
+        await worker.tick()
+        await asyncio.gather(*worker.jobs.values())
         worker.text_pool.shutdown(wait=False)
-    assert [request.method for request in calls] == ['POST', 'GET']
-    assert calls[1].url.path == '/v1/ent/v2/tasks/remote-image/creations'
+    assert [request.method for request in calls] == ['POST', 'GET', 'GET']
+    assert calls[1].url.path == calls[2].url.path == '/v1/ent/v2/tasks/remote-image/creations'
     state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
     node = next(run['nodes'][0] for run in state['runs'] if run['id'] == accepted['run_id'])
     assert node['status'] == 'succeeded', node
     assert len(node['outputs']) == 1 and not node['current_output_updated']
     assert state['current_outputs'] == {}
     assert 'private-secret' not in str(state)
+
+
+@pytest.mark.asyncio
+async def test_new_complete_images_replace_whole_set_and_prior_order_remains_in_history(runtime, image_storage):
+    from app.task_worker import TaskWorker
+    await image_card(runtime)
+    calls = []
+    def provider(request):
+        body = json.loads(request.content)
+        calls.append(body)
+        return httpx.Response(200, json={'data': [{'b64_json': base64.b64encode(f"run{len(calls)}-{i}".encode()).decode()} for i in range(body['n'])]})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as client:
+        worker = TaskWorker(runtime.sessions, client=client)
+        first, _ = await accept(runtime)
+        await worker.tick()
+        await asyncio.gather(*worker.jobs.values())
+        old = (await runtime.client.get(runtime.url + '/runtime')).json()['data']['current_outputs']['image']
+        runtime.document['cards'][0]['config']['count'] = 1
+        assert (await runtime.client.put(runtime.url, json={'request_id': 'count-one', 'expected_revision': 2, 'document': runtime.document})).status_code == 200
+        second, _ = await accept(runtime, 'replace')
+        await worker.tick()
+        await asyncio.gather(*worker.jobs.values())
+        worker.text_pool.shutdown(wait=False)
+    state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+    assert len(state['current_outputs']['image']) == 1
+    assert state['current_outputs']['image'][0]['result_set_id'] != old[0]['result_set_id']
+    history = next(run['nodes'][0] for run in state['runs'] if run['id'] == first['run_id'])
+    assert [item['file_id'] for item in history['outputs']] == [item['file_id'] for item in old]
+    assert len(history['outputs']) == 3
+    assert next(run['nodes'][0] for run in state['runs'] if run['id'] == second['run_id'])['current_output_updated']
+    assert len(calls) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('response', [{'data': [{'url': 'https://images.test/0'}]}, {'data': [{'url': 'https://images.test/0'}, {}, {'url': 'https://images.test/2'}]}])
+async def test_malformed_image_results_fail_without_partial_formal_publication(runtime, image_storage, response):
+    from app.task_worker import TaskWorker
+    await image_card(runtime)
+    calls = []
+    def provider(request):
+        calls.append(request)
+        return httpx.Response(200, json=response)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as client:
+        worker = TaskWorker(runtime.sessions, client=client)
+        await accept(runtime)
+        await worker.tick()
+        await asyncio.gather(*worker.jobs.values())
+        await worker.tick()
+        worker.text_pool.shutdown(wait=False)
+    state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+    node = state['runs'][0]['nodes'][0]
+    assert node['status'] == 'failed' and node['result_set_id'] is None
+    assert node['outputs'] == [] and state['current_outputs'] == {}
+    assert len(calls) == 1 and image_storage == {}
+
+
+@pytest.mark.asyncio
+async def test_downstream_image_three_request_contains_only_the_third_model_result(runtime, image_storage):
+    from app.task_worker import TaskWorker
+    await image_card(runtime)
+    calls = []
+    def provider(request):
+        body = json.loads(request.content)
+        calls.append(body)
+        values = [b'first', b'second', b'third'] if len(calls) == 1 else [b'consumer']
+        return httpx.Response(200, json={'data': [{'b64_json': base64.b64encode(value).decode()} for value in values]})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as client:
+        worker = TaskWorker(runtime.sessions, client=client)
+        await accept(runtime)
+        await worker.tick()
+        await asyncio.gather(*worker.jobs.values())
+        reference = {'canvas_id': runtime.canvas_id, 'card_id': 'image', 'port_id': 'image', 'position': 2}
+        runtime.document['cards'].append({'id': 'consumer', 'type': 'model.image', 'model_id': runtime.model_id, 'config': {'count': 1},
+            'prompt': {'segments': [{'kind': 'text', 'id': 'literal', 'text': '图片3 [media:1] '}, {'kind': 'reference', 'id': 'third', 'source': reference}, {'kind': 'reference', 'id': 'third-again', 'source': reference}]}})
+        runtime.document['edges'] = [{'id': 'models', 'source_card': 'image', 'source_port': 'image', 'target_card': 'consumer', 'target_port': 'image'}]
+        runtime.document['input_order'] = {'consumer': {'image': ['models']}}
+        assert (await runtime.client.put(runtime.url, json={'request_id': 'downstream', 'expected_revision': 2, 'document': runtime.document})).status_code == 200
+        preview = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'consumer'})).json()['data']
+        assert preview['can_run'] and len(preview['input']['media']) == 1
+        assert preview['input']['mapping'][0]['token'] == '@图片3'
+        assert preview['input']['mapping'][0]['media_position'] == 1
+        assert (await runtime.client.post(runtime.url + '/runs', json={'request_id': 'consumer', 'preview_token': preview['preview_token']})).status_code == 200
+        await worker.tick()
+        await asyncio.gather(*worker.jobs.values())
+        worker.text_pool.shutdown(wait=False)
+    assert len(calls) == 2
+    assert calls[1]['prompt'] == preview['input']['text'] == '图片3 [media:1] image 1image 1'
+    assert [base64.b64decode(item['image_url'].split(',')[1]) for item in calls[1]['images']] == [b'third']

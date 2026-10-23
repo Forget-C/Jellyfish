@@ -57,7 +57,10 @@ try {
   const revision = (await (await fetch(`${base}/${canvas.id}`)).json()).data.revision
   await formal.getByRole('button', { name: '预览输出 3', exact: true }).click()
   await formal.getByText('输出 3 / 3', { exact: true }).waitFor()
-  assert.equal(await formal.getByRole('img', { name: '图片预览', exact: true }).getAttribute('src'), `/api/v1/studio/files/${original[2].file_id}/download`)
+  assert.equal(await formal.getByRole('img', { name: '图片预览', exact: true }).getAttribute('src'), `http://127.0.0.1:4278/api/v1/studio/files/${original[2].file_id}/download`)
+  await formal.getByRole('img', { name: '图片预览', exact: true }).scrollIntoViewIfNeeded()
+  assert.equal(await formal.getByRole('img', { name: '图片预览', exact: true }).evaluate(image => image.complete && image.naturalWidth === 240), true)
+  await page.screenshot({ path: join(output, 'formal-third-selected.png'), fullPage: true })
   assert.deepEqual((await runtime()).current_outputs.m, original)
   assert.equal((await (await fetch(`${base}/${canvas.id}`)).json()).data.revision, revision)
   const prompt = consumer.getByRole('textbox', { name: '模型正文', exact: true })
@@ -83,6 +86,7 @@ try {
   assert.equal(await record.getByRole('img', { name: '图片预览', exact: true }).count(), 2)
   await record.getByRole('button', { name: '另存为图片内容卡', exact: true }).nth(1).click()
   await history.getByRole('status').filter({ hasText: '已另存为独立内容卡' }).waitFor()
+  await page.screenshot({ path: join(output, 'complete-and-unfinished-history.png'), fullPage: true })
   const saved = (await (await fetch(`${base}/${canvas.id}`)).json()).data.document
   const copy = saved.cards.find(item => item.type === 'content.image')
   assert.equal(copy.file_id, failedNode.outputs[1].file_id)

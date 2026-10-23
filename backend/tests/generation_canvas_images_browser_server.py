@@ -1,6 +1,7 @@
 """Real HTTP/DB/TaskWorker media harness; only external HTTP/storage use local fakes."""
 import asyncio
-import base64
+import struct
+import zlib
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -22,7 +23,14 @@ sessions = async_sessionmaker(engine, expire_on_commit=False)
 control = {'calls': [], 'stream_connections': 0, 'fail_next': False}
 objects = {}
 media_dir = Path(os.environ['CANVAS_BROWSER_MEDIA_STORAGE'])
-PNG = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=')
+def image_bytes(index):
+    """Small deterministic native PNGs make each preview visibly distinguishable."""
+    def chunk(kind, data):
+        return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data))
+    color = ((235, 85, 85), (70, 175, 110), (70, 120, 230))[index]
+    pixels = b''.join(b'\0' + bytes(color) * 240 for _ in range(120))
+    return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 240, 120, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(pixels)) + chunk(b'IEND', b'')
+
 
 
 async def head(*, key):
@@ -53,7 +61,7 @@ def external(request):
         return httpx.Response(200, json={'data': [{'url': 'https://media.test/' + ('failed/' if failed else 'complete/') + str(index)} for index in range(3)]})
     if request.url.path == '/failed/2':
         return httpx.Response(503)
-    return httpx.Response(200, content=PNG, headers={'Content-Type': 'image/png'})
+    return httpx.Response(200, content=image_bytes(int(request.url.path.rsplit('/', 1)[1])), headers={'Content-Type': 'image/png'})
 
 
 async def database():
