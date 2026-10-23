@@ -83,6 +83,10 @@ class CanvasStore:
                 raise diagnostic('INVALID_CARD_IDENTITY', '卡片身份必须唯一且类型不可修改', {'card_id': card.id})
             seen.add(card.id)
             identities[card.id] = card.type
+        from app.models.generation_canvas import CanvasScopeOccupancy
+        occupied = list(await self.db.scalars(select(CanvasScopeOccupancy.card_id).where(CanvasScopeOccupancy.canvas_id == canvas_id)))
+        if any(card_id not in seen for card_id in occupied):
+            raise diagnostic("RUN_SCOPE_BUSY", "活动模型卡不可删除", {"canvas_id": canvas_id}, status=409)
         validate_graph(document)
         # 最终文档中的实际引用决定保护；同一次保存清理引用即可断线或删来源。
         from app.services.generation_canvas.compiler import prompt_references
@@ -160,6 +164,12 @@ class CanvasStore:
     async def delete(self, canvas_id: str) -> None:
         """当前切片尚无运行；先删回执再删除文档，适配 SQLite 与 MySQL 外键。"""
         canvas = await self.get(canvas_id, lock=True)
+        from app.models.generation_canvas import CanvasScopeOccupancy
+        if await self.db.scalar(select(CanvasScopeOccupancy.node_id).where(CanvasScopeOccupancy.canvas_id == canvas_id).limit(1)):
+            raise diagnostic("RUN_SCOPE_BUSY", "画布仍有活动运行", {"canvas_id": canvas_id}, status=409)
+        # Explicit child cleanup supports SQLite tests without relying on FK pragmas.
+        from app.services.generation_canvas.runtime import delete_runtime
+        await delete_runtime(self.db, canvas_id)
         await self.db.execute(delete(CanvasSaveReceipt).where(CanvasSaveReceipt.canvas_id == canvas_id))
         await self.db.execute(delete(FileUsage).where(
             FileUsage.project_id == self.project_id, FileUsage.usage_kind == 'canvas_content',

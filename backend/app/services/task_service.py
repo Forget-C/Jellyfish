@@ -162,6 +162,9 @@ class TaskService:
             raise ValueError("progress must be between 0 and 100")
         await self.db.execute(update(Task).where(Task.id == task_id, Task.status == TaskStatus.running)
                               .values(progress=progress, stage=stage))
+        row = await self._lock(task_id)
+        if row is not None and row.status == TaskStatus.running:
+            await self._sync_canvas(row)
 
     async def request_cancel(self, task_id: str, *, reason: str | None = None) -> Task | None:
         """排队任务立即取消，执行任务只登记意图，由统一终结规则裁决。"""
