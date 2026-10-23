@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { CanvasContentOrigin } from './CanvasContentOrigin';
 /**
  * 一张卡一份文本，空字符串可以保存但没有可用输出。
  */
@@ -10,4 +11,5 @@ export type TextContentCard = {
     type_version?: number;
     type?: string;
     text?: string;
+    origin?: (CanvasContentOrigin | null);
 };

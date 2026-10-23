@@ -31,3 +31,8 @@
 .generation-run-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .generation-run-preview .ant-alert { margin-block: 8px; }
 .generation-card [aria-label="本次运行"] { margin-top: 12px; }
+.generation-run-history { margin-top: 8px; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; }
+.generation-run-history details { margin-block: 8px; }
+.generation-run-history [data-history-node] { margin: 8px 0; padding: 12px; border: 1px solid #cbd5e1; border-radius: 6px; }
+.generation-run-history pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.generation-run-history [data-history-node]:focus { outline: 2px solid #1677ff; outline-offset: 2px; }

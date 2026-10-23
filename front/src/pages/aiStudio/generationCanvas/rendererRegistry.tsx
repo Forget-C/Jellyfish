@@ -48,7 +48,7 @@ function ModelRenderer({ card: raw, document, disabled, onChange, models, capabi
     </ExperimentComposer>
     {card.type !== 'model.text' && <small>该模态执行尚未接入</small>}
     {node && <section aria-label="本次运行" data-run-id={node.run_id}>
-      <p role="status">{({ waiting: '等待上游', queued: '排队中', running: '运行中', succeeded: '已完成', failed: '失败 · 未完成', cancelled: '已取消 · 未完成', blocked: '已阻止 · 未完成' } as Record<string, string>)[node.status] || node.status} · {({ queued: '等待执行', generating: '生成中', archiving: '归档中', finished: '已结束' } as Record<string, string>)[node.stage] || node.stage}{node.progress != null && ` · ${node.progress}%`}</p>
+      <p role="status">{({ waiting: '等待上游', queued: '排队中', running: '运行中', succeeded: '已完成', failed: '失败 · 未完成', cancelled: '已取消 · 未完成', blocked: '已阻止 · 未完成' } as Record<string, string>)[node.status] || node.status} · {({ queued: '等待执行', generating: '生成中', archiving: '归档中', cancelling: '取消中，等待任务终态', finished: '已结束' } as Record<string, string>)[node.stage] || node.stage}{node.progress != null && ` · ${node.progress}%`}</p>
       {node.text && <div role="region" aria-label="运行正文"><CanvasTextPreview text={node.text} label="生成正文" /></div>}
       {node.error_message && <Alert type="error" message={`${node.error_code || '运行失败'}: ${node.error_message}`} />}
       {node.status === 'succeeded' && !node.current_output_updated && <small>配置已改变，结果保留在本次运行，未替换当前输出</small>}
@@ -62,7 +62,8 @@ function ModelRenderer({ card: raw, document, disabled, onChange, models, capabi
 export const rendererRegistry: Record<string, ComponentType<CardRendererProps>> = {
   'content.text': ({ card: raw, onChange }) => {
     const card = raw as TextContentCard
-    return <Input.TextArea aria-label="文本内容" value={card.text} rows={6} onChange={event => onChange({ ...card, text: event.target.value })} />
+    return <>{card.origin && <p>来自运行 {card.origin.run_id} · {card.origin.incomplete ? '未完成成果副本' : '完整成果副本'}</p>}
+      <Input.TextArea aria-label="文本内容" value={card.text} rows={6} onChange={event => onChange({ ...card, text: event.target.value })} /></>
   },
   'content.image': ({ card, onChange, projectId, disabled }) => <MediaContentEditor card={card as MediaCard} projectId={projectId} onChange={onChange} disabled={disabled} />,
   'content.video': ({ card, onChange, projectId, disabled }) => <MediaContentEditor card={card as MediaCard} projectId={projectId} onChange={onChange} disabled={disabled} />,
