@@ -101,6 +101,7 @@ try {
     await mediaCard.locator(preview).evaluate(async media => { await media.play(); media.pause() })
   }
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
+  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   await page.screenshot({ path: join(output, 'media-content.png'), fullPage: true })
   console.log('media upload failure, replacement preservation, save failure library reuse, late deleted upload, audio/video native preview: verified')
 
