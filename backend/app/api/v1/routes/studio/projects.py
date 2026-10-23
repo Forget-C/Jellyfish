@@ -170,5 +170,7 @@ async def delete_project(
     project_id: str,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[None]:
+    from app.services.generation_canvas.runtime import ensure_project_idle
+    await ensure_project_idle(db, project_id)
     await delete_if_exists(db, Project, project_id)
     return empty_response()

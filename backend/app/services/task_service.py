@@ -88,6 +88,9 @@ class TaskService:
             ).values(status=TaskStatus.running, stage="submitting", worker_instance_id=worker_id,
                      started_at=now, deadline_at=now + timedelta(seconds=timeout_seconds), progress=0)
         )
+        if result.rowcount:
+            row = await self.db.get(Task, task_id, populate_existing=True)
+            await self._sync_canvas(row)
         return bool(result.rowcount)
 
     async def claim_next(self, *, worker_id: str, kinds: Sequence[str], timeout_seconds: int = 1800) -> Task | None:
@@ -159,6 +162,9 @@ class TaskService:
             raise ValueError("progress must be between 0 and 100")
         await self.db.execute(update(Task).where(Task.id == task_id, Task.status == TaskStatus.running)
                               .values(progress=progress, stage=stage))
+        row = await self._lock(task_id)
+        if row is not None and row.status == TaskStatus.running:
+            await self._sync_canvas(row)
 
     async def request_cancel(self, task_id: str, *, reason: str | None = None) -> Task | None:
         """排队任务立即取消，执行任务只登记意图，由统一终结规则裁决。"""
@@ -233,6 +239,7 @@ class TaskService:
         if status == TaskStatus.succeeded:
             row.progress = 100
         await self.db.flush()
+        await self._sync_canvas(row)
         return row
 
     async def interrupt_previous_workers(self, *, worker_id: str) -> int:
@@ -264,3 +271,24 @@ class TaskService:
         await self.db.flush()
         return await self.db.scalar(select(Task).where(Task.id == task_id).with_for_update()
                                     .execution_options(populate_existing=True))
+
+
+    async def _sync_canvas(self, row: Task, *, delta: str | None = None) -> None:
+        """Canvas fact hook keeps Task and business events in the same transaction."""
+        if row.target_type == 'canvas_node':
+            from app.services.generation_canvas.runtime import sync_task_fact
+            await sync_task_fact(self.db, row, delta=delta)
+
+    async def append_canvas_text(self, task_id: str, delta: str) -> bool:
+        """Persist a provider chunk under the Task lock; cancellation wins before append."""
+        row = await self._lock(task_id)
+        if row is None or row.status != TaskStatus.running or row.cancel_requested_at is not None:
+            if row is not None and row.status == TaskStatus.running and row.cancel_requested_at is not None:
+                await self.finish(task_id, cancelled=True)
+            return False
+        if row.target_type != 'canvas_node':
+            raise ValueError('stream target is not a canvas node')
+        row.stage = 'generating'
+        await self.db.flush()
+        await self._sync_canvas(row, delta=delta)
+        return True

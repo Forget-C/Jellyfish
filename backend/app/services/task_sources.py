@@ -58,6 +58,12 @@ async def resolve_task_sources(db, rows) -> dict[str, TaskSourceRead]:
         elif kind == "directing_chapter":
             for row in (await db.execute(select(Chapter.id, Chapter.title, Chapter.project_id).where(Chapter.id.in_(ids)))).all():
                 found[row.id] = TaskSourceRead(kind="chapter", id=row.id, title=row.title, chapter_id=row.id, project_id=row.project_id)
+        elif kind == "canvas_node":
+            from app.models.generation_canvas import CanvasRunNode, GenerationCanvas
+            query = select(CanvasRunNode, GenerationCanvas).join(GenerationCanvas, GenerationCanvas.id == CanvasRunNode.canvas_id).where(CanvasRunNode.id.in_(ids))
+            for node, canvas in (await db.execute(query)).all():
+                found[node.id] = TaskSourceRead(kind="generation_canvas", id=canvas.id, title=canvas.document["name"],
+                    project_id=canvas.project_id, canvas_id=canvas.id, run_id=node.run_id, node_id=node.id)
         elif kind == "experiment_session":
             for row in (await db.execute(select(ExperimentSession.id, ExperimentSession.title).where(ExperimentSession.id.in_(ids)))).all():
                 found[row.id] = TaskSourceRead(kind=kind, id=row.id, title=row.title)

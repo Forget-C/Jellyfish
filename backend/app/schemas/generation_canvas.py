@@ -248,6 +248,8 @@ class CanvasResolvedOutput(BaseModel):
     file_id: str | None = None
     token: str = ''
     available: bool = True
+    basis_current: bool = True
+    result_set_id: str | None = None
 
 
 class CanvasCompiledInput(BaseModel):
@@ -260,3 +262,86 @@ class CanvasCompiledInput(BaseModel):
     mapping: list[dict[str, Any]] = Field(default_factory=list)
     diagnostics: list[CanvasDiagnostic] = Field(default_factory=list)
     can_run: bool = True
+
+
+class CanvasPrecheckRequest(BaseModel):
+    """单卡执行范围，不隐式执行上游。"""
+    model_config = ConfigDict(extra='forbid')
+    card_id: str
+
+
+class CanvasPrecheck(BaseModel):
+    """可展示的固定输入；秘密供应商配置不进入协议。"""
+    revision: int
+    card_id: str
+    execution_nodes: list[str]
+    reused_results: list[str] = Field(default_factory=list)
+    input: CanvasCompiledInput
+    model: dict[str, Any] = Field(default_factory=dict)
+    diagnostics: list[CanvasDiagnostic] = Field(default_factory=list)
+    can_run: bool
+    preview_token: str | None = None
+
+
+class CanvasRunSubmit(BaseModel):
+    """重放必须保留原始请求身份及预检凭据。"""
+    model_config = ConfigDict(extra='forbid')
+    request_id: str = Field(min_length=1, max_length=64)
+    preview_token: str = Field(min_length=1, max_length=64)
+
+
+class CanvasRunAccepted(BaseModel):
+    """与运行及 Task 原子持久化的受理回执。"""
+    request_id: str
+    canvas_id: str
+    run_id: str
+    task_ids: list[str]
+
+
+class CanvasNodeRead(BaseModel):
+    """运行正文属于累计未完成成果，正式输出由结果集单独标识。"""
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    run_id: str
+    card_id: str
+    task_id: str | None
+    status: str
+    stage: str
+    progress: int | None
+    text: str
+    outputs: list[CanvasResolvedOutput]
+    result_set_id: str | None
+    current_output_updated: bool
+    error_code: str | None
+    error_message: str | None
+
+
+class CanvasRunRead(BaseModel):
+    """生命周期结束不代表整次运行的成功等级。"""
+    id: str
+    canvas_id: str
+    lifecycle: Literal['active', 'finished']
+    nodes: list[CanvasNodeRead]
+
+
+class CanvasSnapshot(BaseModel):
+    """一致切点及其之后的恢复游标。"""
+    cursor: int
+    runs: list[CanvasRunRead]
+    current_outputs: dict[str, list[CanvasResolvedOutput]]
+
+
+class CanvasRuntimeEvent(BaseModel):
+    """共用连接复用所有运行，按画布游标去重。"""
+    version: Literal[1] = 1
+    cursor: int
+    type: Literal['snapshot', 'node.updated', 'text.delta', 'node.finished', 'run.finished']
+    canvas_id: str
+    run_id: str | None = None
+    node_id: str | None = None
+    payload: dict[str, Any]
+
+
+class CanvasStreamConnection(BaseModel):
+    """由 generated operation 提供流地址，通用 transport 负责 SSE。"""
+    url: str

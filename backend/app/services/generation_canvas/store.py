@@ -52,6 +52,9 @@ class CanvasStore:
         canvas = GenerationCanvas(id=canvas_id, project_id=self.project_id, document=document.model_dump(), revision=0)
         self.db.add(canvas)
         await self.db.flush()
+        from app.models.generation_canvas import CanvasEventHead
+        self.db.add(CanvasEventHead(canvas_id=canvas_id))
+        await self.db.flush()
         return canvas
 
     async def save(self, canvas_id: str, command: CanvasSave) -> dict:
@@ -80,6 +83,10 @@ class CanvasStore:
                 raise diagnostic('INVALID_CARD_IDENTITY', '卡片身份必须唯一且类型不可修改', {'card_id': card.id})
             seen.add(card.id)
             identities[card.id] = card.type
+        from app.models.generation_canvas import CanvasScopeOccupancy
+        occupied = list(await self.db.scalars(select(CanvasScopeOccupancy.card_id).where(CanvasScopeOccupancy.canvas_id == canvas_id)))
+        if any(card_id not in seen for card_id in occupied):
+            raise diagnostic("RUN_SCOPE_BUSY", "活动模型卡不可删除", {"canvas_id": canvas_id}, status=409)
         validate_graph(document)
         # 最终文档中的实际引用决定保护；同一次保存清理引用即可断线或删来源。
         from app.services.generation_canvas.compiler import prompt_references
@@ -146,7 +153,9 @@ class CanvasStore:
         if not isinstance(card, ModelCard):
             raise HTTPException(404, 'Model card not found')
         capability = await model_capability(self.db, card.model_id) if card.model_id else None
-        result = compile_card(document, card_id, capability=capability)
+        from app.services.generation_canvas.runtime import CanvasRuntime
+        outputs = await CanvasRuntime(self.db, self.project_id).current_outputs(canvas)
+        result = compile_card(document, card_id, model_outputs=outputs, capability=capability)
         result.revision = canvas.revision
         if not card.model_id:
             result.diagnostics = list(result.diagnostics) + [CanvasDiagnostic(code='MODEL_REQUIRED', message='请选择模型',
@@ -157,6 +166,12 @@ class CanvasStore:
     async def delete(self, canvas_id: str) -> None:
         """当前切片尚无运行；先删回执再删除文档，适配 SQLite 与 MySQL 外键。"""
         canvas = await self.get(canvas_id, lock=True)
+        from app.models.generation_canvas import CanvasScopeOccupancy
+        if await self.db.scalar(select(CanvasScopeOccupancy.node_id).where(CanvasScopeOccupancy.canvas_id == canvas_id).limit(1)):
+            raise diagnostic("RUN_SCOPE_BUSY", "画布仍有活动运行", {"canvas_id": canvas_id}, status=409, blocks=["delete"])
+        # Explicit child cleanup supports SQLite tests without relying on FK pragmas.
+        from app.services.generation_canvas.runtime import delete_runtime
+        await delete_runtime(self.db, canvas_id)
         await self.db.execute(delete(CanvasSaveReceipt).where(CanvasSaveReceipt.canvas_id == canvas_id))
         await self.db.execute(delete(FileUsage).where(
             FileUsage.project_id == self.project_id, FileUsage.usage_kind == 'canvas_content',

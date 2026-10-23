@@ -13,4 +13,6 @@ export type CanvasResolvedOutput = {
     file_id?: (string | null);
     token?: string;
     available?: boolean;
+    basis_current?: boolean;
+    result_set_id?: (string | null);
 };

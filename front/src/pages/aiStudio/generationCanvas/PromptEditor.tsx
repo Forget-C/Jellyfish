@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { Button, Input, Select, Space } from 'antd'
-import type { CanvasDocument, PromptDocument, PromptReference, PromptText, PromptInstruction } from '../../../services/generated'
+import type { CanvasDocument, CanvasResolvedOutput, PromptDocument, PromptReference, PromptText, PromptInstruction } from '../../../services/generated'
 import type { GenerationCard } from './graphRules'
 import { promptCandidates, referenceIssue, sourceKey, referencesIn } from './promptRules'
 
@@ -20,10 +20,10 @@ function copyClipboardSegment(segment: NonNullable<PromptDocument['segments']>[n
   return segment.kind === 'instruction' ? { ...segment, id: crypto.randomUUID(), references: segment.references?.map(reference => ({ ...reference, id: crypto.randomUUID() })) } : { ...segment, id: crypto.randomUUID() }
 }
 /** DOM 仅作为输入表面；持久值是有稳定身份的片段，组合输入期间不重建 DOM。 */
-export function PromptEditor({ document, card, value, onChange, disabled }: { document: CanvasDocument; card: GenerationCard; value: PromptDocument; onChange: (value: PromptDocument) => void; disabled?: boolean }) {
+export function PromptEditor({ document, card, value, onChange, disabled, modelOutputs }: { document: CanvasDocument; card: GenerationCard; value: PromptDocument; onChange: (value: PromptDocument) => void; disabled?: boolean; modelOutputs?: Record<string, CanvasResolvedOutput[]> }) {
   const root = useRef<HTMLDivElement>(null), composing = useRef(false), local = useRef(value), last = useRef('')
   const [category, setCategory] = useState('text'), [query, setQuery] = useState(''), [activeIndex, setActiveIndex] = useState(0)
-  const candidates = promptCandidates(document, card)
+  const candidates = promptCandidates(document, card, modelOutputs)
   local.current = value
   const matches = candidates.filter(item => item.available && item.source.port_id === category && (query === '@' || item.token.startsWith(query)))
   const label = (reference: PromptReference) => candidates.find(item => sourceKey(item.source) === sourceKey(reference.source))?.token || `@缺失(${reference.source.card_id}:${reference.source.position + 1})`
@@ -34,7 +34,7 @@ export function PromptEditor({ document, card, value, onChange, disabled }: { do
       const node = window.document.createElement('span'); node.contentEditable = 'false'; node.dataset.segment = JSON.stringify(segment); node.dataset.segmentId = segment.id
       node.className = 'generation-prompt-token'
       node.textContent = segment.kind === 'reference' ? label(segment) : `/${segment.command}`
-      if (segment.kind === 'reference') { node.title = referenceIssue(document, card, segment.source); node.dataset.invalid = String(!!node.title) }
+      if (segment.kind === 'reference') { node.title = referenceIssue(document, card, segment.source, modelOutputs); node.dataset.invalid = String(!!node.title) }
       return node
     }))
     last.current = JSON.stringify(next)
@@ -43,7 +43,7 @@ export function PromptEditor({ document, card, value, onChange, disabled }: { do
     if (!composing.current && JSON.stringify(value) !== last.current) draw(value)
     root.current?.querySelectorAll<HTMLElement>('[data-segment]').forEach(node => {
       const segment = JSON.parse(node.dataset.segment!)
-      if (segment.kind === 'reference') { node.textContent = label(segment); node.title = referenceIssue(document, card, segment.source); node.dataset.invalid = String(!!node.title) }
+      if (segment.kind === 'reference') { node.textContent = label(segment); node.title = referenceIssue(document, card, segment.source, modelOutputs); node.dataset.invalid = String(!!node.title) }
     })
   })
   const textIds = useRef(new WeakMap<Node, string>())
@@ -190,6 +190,6 @@ export function PromptEditor({ document, card, value, onChange, disabled }: { do
         }
       }} />
     {(value.segments || []).filter(segment => segment.kind === 'text' && /(?<!\\)@(?:文本|图片|视频|音频)\d*/.test(segment.text || '')).map(segment => <small role="alert" key={segment.id}>代号尚未确认或不存在；按完整代号选择实际输出</small>)}
-    {referencesIn(value).map(segment => referenceIssue(document, card, segment.source) && <small role="alert" key={segment.id} data-diagnostic-segment={segment.id}>{label(segment)}：{referenceIssue(document, card, segment.source)}</small>)}
+    {referencesIn(value).map(segment => referenceIssue(document, card, segment.source, modelOutputs) && <small role="alert" key={segment.id} data-diagnostic-segment={segment.id}>{label(segment)}：{referenceIssue(document, card, segment.source, modelOutputs)}</small>)}
   </>
 }
