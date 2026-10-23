@@ -35,10 +35,14 @@ async def runtime(tmp_path, request):
         db.add(Provider(id=provider_id, name='openai', api_key='private-secret', base_url='https://frozen.test/v1'))
         await db.flush()
         db.add(Model(id=model_id, name='frozen-model', category='text', provider_id=provider_id, params={'temperature': 0.3, 'default_headers': {'Authorization': 'Bearer model-private-secret'}}))
-    app = FastAPI()
-    app.include_router(router, prefix='/canvases')
-    from app.api.v1.routes.studio.projects import router as projects_router
-    app.include_router(projects_router, prefix='/projects')
+    real_app = getattr(request, 'param', None) == 'app-handler'
+    if real_app:
+        from app.main import app
+    else:
+        app = FastAPI()
+        app.include_router(router, prefix='/canvases')
+        from app.api.v1.routes.studio.projects import router as projects_router
+        app.include_router(projects_router, prefix='/projects')
     async def database():
         async with sessions() as db:
             try:
@@ -47,15 +51,19 @@ async def runtime(tmp_path, request):
             except Exception:
                 await db.rollback()
                 raise
+    previous_overrides = dict(app.dependency_overrides)
     app.dependency_overrides[get_db] = database
+    prefix = '/api/v1/studio/generation-canvases' if real_app else '/canvases'
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
-        canvas = (await client.post(f'/canvases/{project_id}', json={'name': 'run'})).json()['data']
-        url = f"/canvases/{project_id}/{canvas['id']}"
+        canvas = (await client.post(f'{prefix}/{project_id}', json={'name': 'run'})).json()['data']
+        url = f"{prefix}/{project_id}/{canvas['id']}"
         document = canvas['document']
         document['cards'] = [{'id': 'm', 'type': 'model.text', 'model_id': model_id,
                               'prompt': {'segments': [{'id': 'body', 'kind': 'text', 'text': 'Frozen prompt'}]}}]
         assert (await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': document})).status_code == 200
-        yield SimpleNamespace(client=client, sessions=sessions, url=url, document=document, canvas_id=canvas['id'], project_id=project_id, provider_id=provider_id, model_id=model_id)
+        yield SimpleNamespace(client=client, app=app, sessions=sessions, url=url, document=document, canvas_id=canvas['id'], project_id=project_id, provider_id=provider_id, model_id=model_id)
+    app.dependency_overrides.clear()
+    app.dependency_overrides.update(previous_overrides)
     if mysql:
         from sqlalchemy import delete
         from app.models.generation_canvas import CanvasSaveReceipt, GenerationCanvas
@@ -418,3 +426,178 @@ async def test_runtime_migration_preserves_existing_canvas_observation(tmp_path)
         snapshot = await CanvasRuntime(db, 'existing-project').snapshot('existing-canvas')
         assert snapshot.cursor == 0 and snapshot.runs == [] and snapshot.current_outputs == {}
     await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('runtime', ['mysql', 'app-handler'], indirect=True)
+async def test_canvas_cancel_running_intent_retains_scope_until_actual_terminal(runtime):
+    from app.services.task_service import TaskService
+    accepted, _ = await accept(runtime)
+    task_id = accepted['task_ids'][0]
+    async with runtime.sessions.begin() as db:
+        await TaskService(db).claim(task_id, worker_id='cancel-test')
+        await TaskService(db).append_canvas_text(task_id, 'Partial text')
+    state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+    node = state['runs'][0]['nodes'][0]
+    response = await runtime.client.post(runtime.url + f"/runs/{accepted['run_id']}/nodes/{node['id']}/cancel")
+    assert response.status_code == 200, response.text
+    state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+    node = state['runs'][0]['nodes'][0]
+    assert node['status'] == 'running' and node['stage'] == 'cancelling'
+    assert node['basis']['input']['text'] == 'Frozen prompt'
+    preview = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'm'})).json()['data']
+    busy = await runtime.client.post(runtime.url + '/runs', json={'request_id': 'still-busy', 'preview_token': preview['preview_token']})
+    assert busy.status_code == 409
+    async with runtime.sessions.begin() as db:
+        await TaskService(db).finish(task_id, result={'text': 'late result'})
+    terminal = (await runtime.client.post(runtime.url + f"/runs/{accepted['run_id']}/cancel")).json()['data']
+    assert terminal['nodes'][0]['status'] == 'cancelled'
+    assert terminal['nodes'][0]['text'] == 'Partial text'
+    assert terminal['nodes'][0]['result_set_id'] is None
+    assert terminal['nodes'][0]['outputs'][0]['text'] == 'Partial text'
+    await accept(runtime, 'released')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('runtime', ['mysql', 'app-handler'], indirect=True)
+async def test_saved_unfinished_content_has_immutable_origin_and_independent_text(runtime):
+    from app.services.task_service import TaskService
+    accepted, _ = await accept(runtime)
+    async with runtime.sessions.begin() as db:
+        service = TaskService(db)
+        task_id = accepted['task_ids'][0]
+        await service.claim(task_id, worker_id='partial')
+        await service.append_canvas_text(task_id, 'Unfinished original')
+        await service.finish(task_id, error_code='provider_failed', error='controlled')
+    state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+    node = state['runs'][0]['nodes'][0]
+    response = await runtime.client.get(runtime.url + f"/runs/{accepted['run_id']}/nodes/{node['id']}/outputs/0/content")
+    assert response.status_code == 200, response.text
+    card = response.json()['data']
+    assert card['text'] == 'Unfinished original'
+    assert card['origin'] == {'canvas_id': runtime.canvas_id, 'run_id': accepted['run_id'], 'node_id': node['id'], 'position': 0, 'incomplete': True}
+    # Provenance claims must match the saved historical body, ownership and status.
+    from copy import deepcopy
+    for index, mutate in enumerate(('body', 'status', 'canvas')):
+        forged = deepcopy(card)
+        if mutate == 'body':
+            forged['text'] = 'Fabricated body'
+        elif mutate == 'status':
+            forged['origin']['incomplete'] = False
+        else:
+            forged['origin']['canvas_id'] = 'other-canvas'
+        rejected = await runtime.client.put(runtime.url, json={'request_id': f'forged-{index}', 'expected_revision': 1,
+            'document': {**runtime.document, 'cards': [*runtime.document['cards'], forged]}})
+        assert rejected.status_code == 422
+        assert (rejected.json().get('data') or rejected.json().get('detail'))['code'] == 'INVALID_ORIGIN'
+    runtime.document['cards'].append(card)
+    assert (await runtime.client.put(runtime.url, json={'request_id': 'save-partial', 'expected_revision': 1, 'document': runtime.document})).status_code == 200
+    runtime.document['cards'][-1]['text'] = 'Independent edit'
+    assert (await runtime.client.put(runtime.url, json={'request_id': 'edit-independent', 'expected_revision': 2, 'document': runtime.document})).status_code == 200
+    runtime.document['cards'][-1]['origin']['incomplete'] = False
+    tamper = await runtime.client.put(runtime.url, json={'request_id': 'tamper', 'expected_revision': 3, 'document': runtime.document})
+    assert tamper.status_code == 422
+    assert (tamper.json().get('data') or tamper.json().get('detail'))['code'] == 'IMMUTABLE_ORIGIN'
+    history = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+    assert history['runs'][0]['nodes'][0]['text'] == 'Unfinished original'
+    assert history['current_outputs'] == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('runtime', ['app-handler'], indirect=True)
+async def test_queued_cancel_targets_history_and_structured_errors_after_source_removed(runtime):
+    accepted, _ = await accept(runtime)
+    snapshot = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+    node = snapshot['runs'][0]['nodes'][0]
+    invalid = await runtime.client.post(runtime.url + f"/runs/{accepted['run_id']}/nodes/wrong/cancel")
+    assert invalid.status_code == 404
+    assert invalid.json()['data']['code'] == 'NODE_NOT_FOUND'
+    response = await runtime.client.post(runtime.url + f"/runs/{accepted['run_id']}/cancel")
+    assert response.status_code == 200
+    assert response.json()['data']['nodes'][0]['status'] == 'cancelled'
+    removed = {**runtime.document, 'cards': []}
+    assert (await runtime.client.put(runtime.url, json={'request_id': 'remove-terminal', 'expected_revision': 1, 'document': removed})).status_code == 200
+    history = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+    assert history['runs'][0]['nodes'][0]['id'] == node['id']
+    assert history['runs'][0]['nodes'][0]['basis']['input']['text'] == 'Frozen prompt'
+    task_page = await runtime.client.get('/api/v1/film/tasks', params={'project_id': runtime.project_id})
+    assert task_page.status_code == 200, task_page.text
+    source = task_page.json()['data']['items'][0]['source']
+    assert source['canvas_id'] == runtime.canvas_id and source['run_id'] == accepted['run_id'] and source['node_id'] == node['id']
+    assert 'private-secret' not in str(history) and 'model-private-secret' not in str(history)
+    replay = await runtime.client.post(runtime.url + f"/runs/{accepted['run_id']}/nodes/{node['id']}/cancel")
+    assert replay.json()['data']['nodes'][0]['status'] == 'cancelled'
+
+
+@pytest.mark.asyncio
+async def test_lost_cancel_response_observes_real_worker_without_reexecution(runtime, monkeypatch):
+    started, release = asyncio.Event(), asyncio.Event()
+    calls = []
+    class ControlledModel:
+        def __init__(self, **_params):
+            pass
+        async def astream(self, _messages):
+            calls.append('one external request')
+            yield SimpleNamespace(content='Retained partial')
+            started.set()
+            await release.wait()
+            yield SimpleNamespace(content='Discarded after cancellation')
+    monkeypatch.setattr('app.task_worker.ChatOpenAI', ControlledModel)
+    accepted, _ = await accept(runtime)
+    worker = TaskWorker(runtime.sessions)
+    await worker.tick()
+    await asyncio.wait_for(started.wait(), 3)
+    class LostResponse(httpx.ASGITransport):
+        async def handle_async_request(self, request):
+            await super().handle_async_request(request)
+            raise httpx.ReadError('cancel response lost')
+    try:
+        async with httpx.AsyncClient(transport=LostResponse(app=runtime.app), base_url='http://test') as lossy:
+            with pytest.raises(httpx.ReadError):
+                await lossy.post(runtime.url + f"/runs/{accepted['run_id']}/cancel")
+        state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+        node = state['runs'][0]['nodes'][0]
+        assert node['status'] == 'running' and node['stage'] == 'cancelling'
+        assert state['runs'][0]['lifecycle'] == 'active'
+        preview = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'm'})).json()['data']
+        busy = await runtime.client.post(runtime.url + '/runs', json={'request_id': 'unknown-cancel-overlap', 'preview_token': preview['preview_token']})
+        assert busy.status_code == 409
+    finally:
+        release.set()
+        await asyncio.gather(*worker.jobs.values())
+        worker.text_pool.shutdown(wait=False)
+    terminal = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+    assert terminal['runs'][0]['nodes'][0]['status'] == 'cancelled'
+    assert terminal['runs'][0]['nodes'][0]['text'] == 'Retained partial'
+    assert terminal['current_outputs'] == {} and calls == ['one external request']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('runtime', ['mysql'], indirect=True)
+async def test_terminal_canonical_text_replay_converges_and_stream_observes_next_run(runtime):
+    import json
+    from app.services.task_service import TaskService
+    from app.services.generation_canvas.stream import stream_events
+    accepted, _ = await accept(runtime)
+    async with runtime.sessions.begin() as db:
+        await TaskService(db).claim(accepted['task_ids'][0], worker_id='canonical')
+        await TaskService(db).append_canvas_text(accepted['task_ids'][0], 'Provisional body')
+    cut = (await runtime.client.get(runtime.url + '/runtime')).json()['data']['cursor']
+    async with runtime.sessions.begin() as db:
+        await TaskService(db).finish(accepted['task_ids'][0], result={'text': 'Canonical final body'})
+    stream = stream_events(runtime.sessions, runtime.project_id, runtime.canvas_id, cut)
+    try:
+        terminal = json.loads((await anext(stream)).split('data: ', 1)[1])
+        assert terminal['type'] == 'node.finished'
+        assert terminal['payload']['node']['text'] == 'Canonical final body'
+        assert terminal['payload']['node']['outputs'][0]['text'] == 'Canonical final body'
+        finished = json.loads((await anext(stream)).split('data: ', 1)[1])
+        assert finished['type'] == 'run.finished'
+        second, _ = await accept(runtime, 'second-on-same-stream')
+        following = json.loads((await anext(stream)).split('data: ', 1)[1])
+        assert following['type'] == 'node.updated' and following['run_id'] == second['run_id']
+        snapshot = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+        assert snapshot['runs'][0]['nodes'][0]['text'] == 'Canonical final body'
+        assert snapshot['current_outputs']['m'][0]['text'] == 'Canonical final body'
+    finally:
+        await stream.aclose()

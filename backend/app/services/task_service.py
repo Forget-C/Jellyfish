@@ -177,6 +177,7 @@ class TaskService:
         if row.status == TaskStatus.queued:
             return await self.finish(task_id, cancelled=True)
         await self.db.flush()
+        await self._sync_canvas(row)
         return row
 
     async def add_output(self, task_id: str, *, ordinal: int, file_id: str) -> TaskOutput | None:

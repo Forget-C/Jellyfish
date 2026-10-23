@@ -7,11 +7,13 @@ import type { ApiResponse_CanvasModelCapability_ } from '../models/ApiResponse_C
 import type { ApiResponse_CanvasPrecheck_ } from '../models/ApiResponse_CanvasPrecheck_';
 import type { ApiResponse_CanvasRead_ } from '../models/ApiResponse_CanvasRead_';
 import type { ApiResponse_CanvasRunAccepted_ } from '../models/ApiResponse_CanvasRunAccepted_';
+import type { ApiResponse_CanvasRunRead_ } from '../models/ApiResponse_CanvasRunRead_';
 import type { ApiResponse_CanvasSaved_ } from '../models/ApiResponse_CanvasSaved_';
 import type { ApiResponse_CanvasSnapshot_ } from '../models/ApiResponse_CanvasSnapshot_';
 import type { ApiResponse_CanvasStreamConnection_ } from '../models/ApiResponse_CanvasStreamConnection_';
 import type { ApiResponse_list_CanvasRead__ } from '../models/ApiResponse_list_CanvasRead__';
 import type { ApiResponse_NoneType_ } from '../models/ApiResponse_NoneType_';
+import type { ApiResponse_TextContentCard_ } from '../models/ApiResponse_TextContentCard_';
 import type { CanvasCreate } from '../models/CanvasCreate';
 import type { CanvasPrecheckRequest } from '../models/CanvasPrecheckRequest';
 import type { CanvasRunSubmit } from '../models/CanvasRunSubmit';
@@ -337,6 +339,99 @@ export class StudioGenerationCanvasesService {
             },
             query: {
                 'cursor': cursor,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Cancel Canvas Run
+     * 取消明确的一轮运行，返回真实节点状态而非提前宣告终态。
+     * @returns ApiResponse_CanvasRunRead_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasCancelRun({
+        projectId,
+        canvasId,
+        runId,
+    }: {
+        projectId: string,
+        canvasId: string,
+        runId: string,
+    }): CancelablePromise<ApiResponse_CanvasRunRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/runs/{run_id}/cancel',
+            path: {
+                'project_id': projectId,
+                'canvas_id': canvasId,
+                'run_id': runId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Cancel Canvas Node
+     * 仅请求取消目标节点，终态由 TaskService 确认。
+     * @returns ApiResponse_CanvasRunRead_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasCancelNode({
+        projectId,
+        canvasId,
+        runId,
+        nodeId,
+    }: {
+        projectId: string,
+        canvasId: string,
+        runId: string,
+        nodeId: string,
+    }): CancelablePromise<ApiResponse_CanvasRunRead_> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/runs/{run_id}/nodes/{node_id}/cancel',
+            path: {
+                'project_id': projectId,
+                'canvas_id': canvasId,
+                'run_id': runId,
+                'node_id': nodeId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Canvas Output Content
+     * 准备独立内容卡；调用方通过已有文档保存队列显式持久化。
+     * @returns ApiResponse_TextContentCard_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasOutputContent({
+        projectId,
+        canvasId,
+        runId,
+        nodeId,
+        position,
+    }: {
+        projectId: string,
+        canvasId: string,
+        runId: string,
+        nodeId: string,
+        position: number,
+    }): CancelablePromise<ApiResponse_TextContentCard_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/runs/{run_id}/nodes/{node_id}/outputs/{position}/content',
+            path: {
+                'project_id': projectId,
+                'canvas_id': canvasId,
+                'run_id': runId,
+                'node_id': nodeId,
+                'position': position,
             },
             errors: {
                 422: `Validation Error`,

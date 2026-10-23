@@ -98,3 +98,27 @@ async def canvas_events(project_id: str, canvas_id: str, cursor: int | None = No
     await db.commit()
     return StreamingResponse(stream_events(sessions, project_id, canvas_id, cursor), media_type='text/event-stream',
                              headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
+
+
+from app.schemas.generation_canvas import CanvasRunRead
+
+
+@router.post('/{project_id}/{canvas_id}/runs/{run_id}/cancel', response_model=ApiResponse[CanvasRunRead], operation_id='canvas_cancel_run')
+async def cancel_canvas_run(project_id: str, canvas_id: str, run_id: str, db: AsyncSession = Depends(get_db)):
+    """取消明确的一轮运行，返回真实节点状态而非提前宣告终态。"""
+    return success_response(await CanvasRuntime(db, project_id).cancel(canvas_id, run_id))
+
+
+@router.post('/{project_id}/{canvas_id}/runs/{run_id}/nodes/{node_id}/cancel', response_model=ApiResponse[CanvasRunRead], operation_id='canvas_cancel_node')
+async def cancel_canvas_node(project_id: str, canvas_id: str, run_id: str, node_id: str, db: AsyncSession = Depends(get_db)):
+    """仅请求取消目标节点，终态由 TaskService 确认。"""
+    return success_response(await CanvasRuntime(db, project_id).cancel(canvas_id, run_id, node_id))
+
+
+from app.schemas.generation_canvas import TextContentCard
+
+
+@router.get('/{project_id}/{canvas_id}/runs/{run_id}/nodes/{node_id}/outputs/{position}/content', response_model=ApiResponse[TextContentCard], operation_id='canvas_output_content')
+async def canvas_output_content(project_id: str, canvas_id: str, run_id: str, node_id: str, position: int, db: AsyncSession = Depends(get_db)):
+    """准备独立内容卡；调用方通过已有文档保存队列显式持久化。"""
+    return success_response(await CanvasRuntime(db, project_id).content(canvas_id, run_id, node_id, position))

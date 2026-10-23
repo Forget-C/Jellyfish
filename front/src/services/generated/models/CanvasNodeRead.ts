@@ -15,6 +15,7 @@ export type CanvasNodeRead = {
     stage: string;
     progress: (number | null);
     text: string;
+    basis: Record<string, any>;
     outputs: Array<CanvasResolvedOutput>;
     result_set_id: (string | null);
     current_output_updated: boolean;

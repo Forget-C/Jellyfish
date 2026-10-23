@@ -20,6 +20,7 @@ export type { ApiResponse_CanvasModelCapability_ } from './models/ApiResponse_Ca
 export type { ApiResponse_CanvasPrecheck_ } from './models/ApiResponse_CanvasPrecheck_';
 export type { ApiResponse_CanvasRead_ } from './models/ApiResponse_CanvasRead_';
 export type { ApiResponse_CanvasRunAccepted_ } from './models/ApiResponse_CanvasRunAccepted_';
+export type { ApiResponse_CanvasRunRead_ } from './models/ApiResponse_CanvasRunRead_';
 export type { ApiResponse_CanvasSaved_ } from './models/ApiResponse_CanvasSaved_';
 export type { ApiResponse_CanvasSnapshot_ } from './models/ApiResponse_CanvasSnapshot_';
 export type { ApiResponse_CanvasStreamConnection_ } from './models/ApiResponse_CanvasStreamConnection_';
@@ -131,6 +132,7 @@ export type { ApiResponse_TaskOutputPageRead_ } from './models/ApiResponse_TaskO
 export type { ApiResponse_TaskPageRead_ } from './models/ApiResponse_TaskPageRead_';
 export type { ApiResponse_TaskResultRead_ } from './models/ApiResponse_TaskResultRead_';
 export type { ApiResponse_TaskStatusRead_ } from './models/ApiResponse_TaskStatusRead_';
+export type { ApiResponse_TextContentCard_ } from './models/ApiResponse_TextContentCard_';
 export type { ApiResponse_TextLabRunStatus_ } from './models/ApiResponse_TextLabRunStatus_';
 export type { ApiResponse_Union_DivisionSaved__NoneType__ } from './models/ApiResponse_Union_DivisionSaved__NoneType__';
 export type { ApiResponse_UnitCanvasGraph_ } from './models/ApiResponse_UnitCanvasGraph_';
@@ -161,6 +163,7 @@ export type { CameraShot_Input } from './models/CameraShot_Input';
 export type { CameraShot_Output } from './models/CameraShot_Output';
 export type { CanvasBasisTarget } from './models/CanvasBasisTarget';
 export type { CanvasCompiledInput } from './models/CanvasCompiledInput';
+export type { CanvasContentOrigin } from './models/CanvasContentOrigin';
 export type { CanvasCreate } from './models/CanvasCreate';
 export type { CanvasDiagnostic } from './models/CanvasDiagnostic';
 export type { CanvasDocument } from './models/CanvasDocument';
