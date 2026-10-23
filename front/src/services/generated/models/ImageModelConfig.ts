@@ -10,4 +10,3 @@ export type ImageModelConfig = {
     resolution_profile?: (string | null);
     count?: number;
 };
-

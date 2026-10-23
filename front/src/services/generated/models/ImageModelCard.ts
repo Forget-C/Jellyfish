@@ -14,4 +14,3 @@ export type ImageModelCard = {
     type?: string;
     config?: ImageModelConfig;
 };
-

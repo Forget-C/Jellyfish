@@ -12,4 +12,3 @@ export type GenerationCanvasEdge = {
     target_card: string;
     target_port: string;
 };
-
