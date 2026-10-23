@@ -98,3 +98,62 @@ async def test_frozen_text_stream_persists_partial_then_publishes_only_complete_
     assert state['current_outputs'] == {}
     assert (await runtime.client.get(runtime.url)).json()['data']['revision'] == 1
     assert 'private-secret' not in str(state)
+
+
+@pytest.mark.asyncio
+async def test_success_current_output_receipt_replay_and_failure_keep_prior_publication(runtime, monkeypatch):
+    accepted, preview = await accept(runtime)
+    request = {'request_id': 'run', 'preview_token': preview['preview_token']}
+    busy = await runtime.client.post(runtime.url + '/runs', json={**request, 'request_id': 'overlap'})
+    assert busy.status_code == 409 and busy.json()['detail']['code'] == 'RUN_SCOPE_BUSY'
+    class GoodModel:
+        def __init__(self, **params):
+            assert params['max_retries'] == 0
+        async def astream(self, messages):
+            yield SimpleNamespace(content='Complete output')
+    monkeypatch.setattr('app.task_worker.ChatOpenAI', GoodModel)
+    worker = TaskWorker(runtime.sessions)
+    await worker.tick()
+    await asyncio.gather(*worker.jobs.values())
+    state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+    assert state['current_outputs']['m'][0]['text'] == 'Complete output'
+    assert state['runs'][0]['nodes'][0]['current_output_updated']
+    # Changing only a name advances revision but does not change effective input.
+    runtime.document['name'] = 'renamed'
+    assert (await runtime.client.put(runtime.url, json={'request_id': 'rename', 'expected_revision': 1, 'document': runtime.document})).status_code == 200
+    replay = await runtime.client.post(runtime.url + '/runs', json=request)
+    assert replay.json()['data'] == accepted
+    assert (await runtime.client.post(runtime.url + '/runs', json={**request, 'preview_token': 'different'})).status_code == 409
+    assert (await runtime.client.post(runtime.url + '/runs', json={**request, 'request_id': 'stale'})).json()['detail']['code'] == 'PREVIEW_STALE'
+    await accept(runtime, 'second')
+    calls = []
+    class FailingModel:
+        def __init__(self, **params):
+            assert params['max_retries'] == 0
+        async def astream(self, messages):
+            calls.append('provider request')
+            yield SimpleNamespace(content='Incomplete')
+            raise httpx.ReadError('acceptance unknown')
+    monkeypatch.setattr('app.task_worker.ChatOpenAI', FailingModel)
+    await worker.tick()
+    await asyncio.gather(*worker.jobs.values())
+    await worker.tick()
+    assert calls == ['provider request']
+    state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+    assert state['current_outputs']['m'][0]['text'] == 'Complete output'
+    failed = next(node for run in state['runs'] for node in run['nodes'] if node['status'] == 'failed')
+    assert failed['text'] == 'Incomplete'
+    assert failed['outputs'][0]['text'] == 'Incomplete'
+    assert failed['result_set_id'] is None
+    assert all(run['lifecycle'] == 'finished' for run in state['runs'])
+    worker.text_pool.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+async def test_activity_guards_allow_edits_but_reject_card_canvas_project_deletion(runtime):
+    await accept(runtime)
+    changed = {**runtime.document, 'cards': []}
+    response = await runtime.client.put(runtime.url, json={'request_id': 'delete-card', 'expected_revision': 1, 'document': changed})
+    assert response.status_code == 409
+    assert response.json()['detail']['code'] == 'RUN_SCOPE_BUSY'
+    assert (await runtime.client.delete(runtime.url)).status_code == 409

@@ -179,8 +179,8 @@ class CanvasRuntime:
 
     async def snapshot(self, canvas_id: str) -> CanvasSnapshot:
         """先锁事件头再读事实，调用方必须立即提交，不把事务留给 SSE 生命周期。"""
-        await CanvasStore(self.db, self.project_id).get(canvas_id)
         head = await event_head(self.db, canvas_id)
+        await CanvasStore(self.db, self.project_id).get(canvas_id)
         canvas = await self.db.get(GenerationCanvas, canvas_id, populate_existing=True)
         runs = list(await self.db.scalars(select(CanvasRun).where(CanvasRun.canvas_id == canvas_id).order_by(CanvasRun.created_at, CanvasRun.id)))
         nodes = list(await self.db.scalars(select(CanvasRunNode).where(CanvasRunNode.canvas_id == canvas_id).execution_options(populate_existing=True)))
@@ -241,3 +241,19 @@ async def sync_task_fact(db: AsyncSession, task, *, delta: str | None = None):
             run = await db.get(CanvasRun, node.run_id)
             run.lifecycle = 'finished'
             await append_event(db, head, 'run.finished', run_id=run.id, payload={'run_id': run.id})
+
+
+async def ensure_project_idle(db: AsyncSession, project_id: str) -> None:
+    """Project deletion and run admission share document locks; neither locks Tasks."""
+    canvases = list(await db.scalars(select(GenerationCanvas).where(GenerationCanvas.project_id == project_id)
+                                    .order_by(GenerationCanvas.id).with_for_update()))
+    for canvas in canvases:
+        if await db.scalar(select(CanvasScopeOccupancy.node_id).where(CanvasScopeOccupancy.canvas_id == canvas.id).limit(1)):
+            raise diagnostic('RUN_SCOPE_BUSY', '项目仍有活动画布运行', {'canvas_id': canvas.id}, status=409)
+
+
+async def delete_runtime(db: AsyncSession, canvas_id: str) -> None:
+    """Delete only this canvas runtime after its occupancy guard, retaining unrelated data."""
+    for model in (CanvasCurrentOutput, CanvasRunReceipt, CanvasPreview, CanvasScopeOccupancy,
+                  CanvasResultSet, CanvasRunNode, CanvasRun, CanvasEvent, CanvasEventHead):
+        await db.execute(delete(model).where(model.canvas_id == canvas_id))
