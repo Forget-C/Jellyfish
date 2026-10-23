@@ -3,8 +3,9 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_db
 from app.schemas.common import ApiResponse, empty_response, success_response
-from app.schemas.generation_canvas import CanvasCreate, CanvasRead, CanvasSave, CanvasSaved, CanvasError
+from app.schemas.generation_canvas import CanvasCreate, CanvasRead, CanvasSave, CanvasSaved, CanvasError, CanvasModelCapability
 from app.services.generation_canvas.store import CanvasStore
+from app.services.generation_canvas.capabilities import model_capability
 
 router = APIRouter()
 
@@ -39,3 +40,11 @@ async def delete_canvas(project_id: str, canvas_id: str, db: AsyncSession = Depe
     """删除无运行的画布。"""
     await CanvasStore(db, project_id).delete(canvas_id)
     return empty_response()
+
+
+@router.get('/{project_id}/{canvas_id}/models/{model_id}/capability', response_model=ApiResponse[CanvasModelCapability],
+            operation_id='canvas_model_capability')
+async def get_model_capability(project_id: str, canvas_id: str, model_id: str, db: AsyncSession = Depends(get_db)):
+    """核实画布归属后返回所选模型的真实输入与参数能力。"""
+    await CanvasStore(db, project_id).get(canvas_id)
+    return success_response(await model_capability(db, model_id))

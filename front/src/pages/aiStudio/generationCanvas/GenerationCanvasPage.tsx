@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Alert, Button, Card, Empty, Input, Popconfirm, Select, Space, Typography } from 'antd'
+import { Alert, Button, Empty, Input, Popconfirm, Select, Space, Typography } from 'antd'
 import { useSearchParams } from 'react-router-dom'
 import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasRead } from '../../../services/generated'
 import { useGenerationCanvasEditor } from './useGenerationCanvasEditor'
-import { rendererRegistry } from './rendererRegistry'
-import { MediaContentEditor } from './MediaContentEditor'
+import { GenerationCanvasGraph } from './GenerationCanvasGraph'
 
 /** 项目级文档编辑；运行、结果和浏览器布局有独立生命周期。 */
 export function GenerationCanvasPage({ projectId }: { projectId: string }) {
@@ -69,20 +68,7 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
         <Popconfirm title="删除这张画布？" onConfirm={remove}><Button danger disabled={saving || !ownership.editable}>删除画布</Button></Popconfirm>
         <span role="status">revision {current.revision} · {saving ? '保存中' : !dirty ? '已保存' : '待保存'}</span>
       </Space>
-      <Button disabled={!ownership.editable || !!editor.recovery} onClick={() => edit(previous => ({ ...previous, cards: [...(previous.cards || []), { id: crypto.randomUUID(), type: 'content.text', type_version: 1, text: '' }] }))}>添加文本卡</Button>
-      <Space wrap>
-        {(['image', 'video', 'audio'] as const).map(type => <Button key={type} disabled={!ownership.editable || !!editor.recovery} onClick={() => edit(previous => ({ ...previous, cards: [...(previous.cards || []), { id: crypto.randomUUID(), type: `content.${type}`, type_version: 1, file_id: null, uploading: false }] }))}>添加{type === 'image' ? '图片' : type === 'video' ? '视频' : '音频'}卡</Button>)}
-      </Space>
-      <fieldset disabled={!ownership.editable || !!editor.recovery} style={{ border: 0, padding: 0 }}>
-        {(document.cards || []).map(card => {
-          const Renderer = rendererRegistry[card.type || 'content.text']
-          const change = (next: typeof card) => edit(previous => ({ ...previous, cards: previous.cards?.map(item => item.id === next.id ? next : item) }))
-          return <Card key={`${current.id}:${card.id}`} title={card.type === 'content.text' ? '文本内容卡' : card.type === 'content.image' ? '图片内容卡' : card.type === 'content.video' ? '视频内容卡' : '音频内容卡'} data-card-id={card.id}>
-            <Button disabled={!ownership.editable || !!editor.recovery} onClick={() => edit(previous => ({ ...previous, cards: previous.cards?.filter(item => item.id !== card.id) }))}>删除卡片</Button>
-            {card.type !== 'content.text' ? <MediaContentEditor card={card} projectId={projectId} disabled={!ownership.editable || !!editor.recovery} onChange={change} /> : <Renderer card={card} onChange={change} />}
-          </Card>
-        })}
-      </fieldset>
+      <GenerationCanvasGraph key={document.id} document={document} onChange={next => edit(next)} readonly={!ownership.editable || !!editor.recovery} />
     </>}
   </Space>
 }
