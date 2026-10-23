@@ -52,7 +52,7 @@ try {
   await page.getByText('上传失败，原文件已保留。请选择文件重试。').waitFor()
   assert.equal(await card.locator('img[alt="图片预览"]').getAttribute('src'), original)
   await page.route('**/api/v1/studio/generation-canvases/**', async route => {
-    if (route.request().method() === 'PUT') await route.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ detail: { code: 'TEST_SAVE_FAILURE', message: '保存失败' } }) })
+    if (route.request().method() === 'PUT') await route.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ code: 422, message: '保存失败', data: { code: 'TEST_SAVE_FAILURE', severity: 'error', message: '保存失败', target: {}, blocks: ['save'] } }) })
     else await route.continue()
   })
   await page.getByRole('button', { name: '保存画布', exact: true }).click()

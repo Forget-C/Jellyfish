@@ -66,7 +66,7 @@ export function useGraphLayout(scope: GraphLayoutScope | undefined, nodes: Graph
   }, [key, identity, validIdentity, aliasIdentity, measured, scope?.anchorId, scope?.initialTop, state.view.positions])
   useEffect(() => {
     if (state.key && state.ready) {
-      storeView(state.key, pruneGraphView(state.view, new Set(scope?.validIds), scope?.identityAliases), scope?.onStorageError)
+      storeView(state.key, pruneGraphView(state.view, new Set(scope?.validIds), scope?.identityAliases), latestScope.current?.onStorageError)
       if (state.undo) undoMemory.set(state.key, state.undo)
       else undoMemory.delete(state.key)
     }

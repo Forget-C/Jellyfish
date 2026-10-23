@@ -128,10 +128,11 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
       setCurrent(s.current); setDocument(s.document); setRecovery(undefined); setConflict(false); setError(''); persist(); return true
     } catch (reason) { setError(describe(reason)); return false }
   }
+  const latestActions = useRef({ reload, persist }); latestActions.current = { reload, persist }
   useEffect(() => {
     if (!ownership.editable) return
     const s = state.current
-    if (s.current && !s.recovery && !s.pending && same(s.document, s.current.document)) void reload()
+    if (s.current && !s.recovery && !s.pending && same(s.document, s.current.document)) void latestActions.current.reload()
   }, [ownership.editable])
   const requestLeave = async () => {
     const s = state.current
@@ -149,7 +150,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   const latest = useRef({ save, dirty, recovery, requestLeave }); latest.current = { save, dirty, recovery, requestLeave }
   useEffect(() => { const timer = window.setInterval(() => { if (latest.current.dirty && !latest.current.recovery) void latest.current.save() }, 5000); return () => clearInterval(timer) }, [key])
   useEffect(() => {
-    const leave = (event: BeforeUnloadEvent) => { if (latest.current.dirty || state.current.pending || state.current.recovery) { persist(); event.preventDefault(); event.returnValue = '' } }
+    const leave = (event: BeforeUnloadEvent) => { if (latest.current.dirty || state.current.pending || state.current.recovery) { latestActions.current.persist(); event.preventDefault(); event.returnValue = '' } }
     window.addEventListener('beforeunload', leave); return () => window.removeEventListener('beforeunload', leave)
   }, [key])
   const blocker = useBlocker(({ currentLocation, nextLocation }) => currentLocation.key !== nextLocation.key && (!!state.current.pending || !!state.current.recovery || (!!state.current.current && !same(state.current.document, state.current.current.document))))
