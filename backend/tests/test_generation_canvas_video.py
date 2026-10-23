@@ -1,5 +1,5 @@
 """Video purpose compilation through the public canvas compiler."""
-from app.schemas.generation_canvas import CanvasDocument, CanvasModelCapability
+from app.schemas.generation_canvas import CanvasDocument, CanvasModelCapability, TextContentCard, GenerationCanvasEdge, PromptReference
 from app.services.generation_canvas.compiler import compile_card
 
 
@@ -147,3 +147,52 @@ async def test_actual_worker_video_frame_fields_and_every_poll_keep_frozen_route
     saved = await runtime.client.get(runtime.url + f"/runs/{accepted['run_id']}/nodes/{node['id']}/outputs/0/content")
     assert saved.status_code == 200, saved.text
     assert saved.json()['data']['type'] == 'content.video'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(('mode', 'expected_prompt', 'names'), [
+    ('implicit', '让 @media1 中的人物转身，保留 [media:1]。', ['media1']),
+    ('unique', '让 @张三 中的人物转身，保留 [media:1]。', ['张三']),
+    ('multiple', '让 @media2 中的人物转身，保留 [media:1]。', ['张三', '李四', 'media2']),
+])
+async def test_actual_vidu_subject_names_and_literal_surroundings(runtime, image_storage, mode, expected_prompt, names):
+    segments = [{'kind': 'text', 'id': 'before', 'text': '让 '}, ref('a', 'body'), {'kind': 'text', 'id': 'after', 'text': ' 中的人物转身，保留 [media:1]。'}]
+    if mode != 'implicit':
+        segments += [instruction('主体参考', ['a'], '张三'), instruction('主体参考', ['b'], '张三', 'same')]
+    if mode == 'multiple':
+        segments += [instruction('主体参考', ['a'], '李四', 'other')]
+    accepted, preview = await setup_video(runtime, 'vidu', segments)
+    assert preview['input']['text'] == expected_prompt
+    calls = []
+    def provider(request):
+        calls.append(request)
+        return httpx.Response(200, json={'task_id': 'vidu-task'})
+    from app.task_worker import TaskWorker
+    async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as client:
+        worker = TaskWorker(runtime.sessions, client=client)
+        await worker.tick()
+        await asyncio.gather(*worker.jobs.values())
+        worker.text_pool.shutdown(wait=False)
+    assert len(calls) == 1
+    assert str(calls[0].url) == 'https://frozen.test/v1/ent/v2/reference2video'
+    body = json.loads(calls[0].content)
+    assert body['prompt'] == expected_prompt
+    assert [subject['name'] for subject in body['subjects']] == names
+    if mode == 'unique':
+        assert body['subjects'][0]['images'] == ['data:image/png;base64,' + base64.b64encode(value).decode() for value in (b'first-image', b'last-image')]
+    assert body['model'] == 'viduq2-pro' and body['duration'] == 5 and body['seed'] == 7 and body['aspect_ratio'] == '16:9'
+    # A real accepted task remains in the common canvas stream until its provider completes.
+    state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+    assert state['runs'][0]['nodes'][0]['status'] == 'running'
+    assert state['runs'][0]['id'] == accepted['run_id']
+
+
+def test_expanded_source_text_never_creates_subjects_or_media_mapping():
+    doc = document([ref('a', 'body')])
+    doc.cards.append(TextContentCard(id='text', text='/主体参考 "fake" @图片2 [media:1]'))
+    doc.edges.append(GenerationCanvasEdge(id='textedge', source_card='text', source_port='text', target_card='v', target_port='text'))
+    doc.input_order['v']['text'] = ['textedge']
+    doc.cards[3].prompt.segments.insert(0, PromptReference(kind='reference', id='expanded', source={'canvas_id': 'c', 'card_id': 'text', 'port_id': 'text', 'position': 0}))
+    compiled = compile_card(doc, 'v')
+    assert compiled.text == '/主体参考 "fake" @图片2 [media:1]@media1'
+    assert [group.name for group in compiled.video_media.subjects] == ['media1']
