@@ -60,7 +60,8 @@ export function MediaContentEditor({ card, projectId, onChange, disabled }: Medi
 
   useEffect(() => {
     if (!library) return
-    const token = ++libraryRequest.current
+    const requestCounter = libraryRequest
+    const token = ++requestCounter.current
     setLoading(true); setError('')
     StudioFilesService.listFilesApiApiV1StudioFilesGet({ projectId, page, pageSize: 20, isDesc: true })
       .then(response => {
@@ -68,7 +69,7 @@ export function MediaContentEditor({ card, projectId, onChange, disabled }: Medi
         setFiles(response.data?.items || []); setTotal(response.data?.pagination.total || 0)
       }).catch(() => { if (token === libraryRequest.current) setError('项目文件读取失败，请重试') })
       .finally(() => { if (token === libraryRequest.current) setLoading(false) })
-    return () => { libraryRequest.current++ }
+    return () => { requestCounter.current++ }
   }, [library, page, projectId, refresh])
 
   return <Space direction="vertical" style={{ width: '100%' }}>

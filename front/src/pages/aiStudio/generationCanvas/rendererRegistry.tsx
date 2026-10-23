@@ -33,8 +33,8 @@ function ModelRenderer({ card: raw, document, disabled, onChange, models, capabi
     const value = (card as VideoModelCard).config || {}
     if (!value.ratio) diagnostics.push('请选择视频画幅')
     else if (!capability.ratios?.includes(value.ratio)) diagnostics.push('当前模型不支持已有视频画幅，配置已保留')
-    if (value.seconds != null && (value.seconds < (capability.min_seconds ?? 1) || capability.max_seconds != null && value.seconds > capability.max_seconds)) diagnostics.push('视频时长超出模型范围，配置已保留')
-    if ('seed' in config && config.seed != null && !capability.supports_seed) diagnostics.push('当前模型不支持已有随机种子，配置已保留')
+    if (value.seconds !== undefined && value.seconds !== null && (value.seconds < (capability.min_seconds ?? 1) || capability.max_seconds !== undefined && capability.max_seconds !== null && value.seconds > capability.max_seconds)) diagnostics.push('视频时长超出模型范围，配置已保留')
+    if ('seed' in config && config.seed !== undefined && config.seed !== null && !capability.supports_seed) diagnostics.push('当前模型不支持已有随机种子，配置已保留')
   }
   return <>
     {diagnostics.length > 0 && <Alert type="warning" message={<ul>{diagnostics.map(message => <li key={message}>{message}</li>)}</ul>} />}
@@ -49,7 +49,7 @@ function ModelRenderer({ card: raw, document, disabled, onChange, models, capabi
       <PromptEditor document={document} card={card} value={card.prompt || { segments: [] }} modelOutputs={modelOutputs} disabled={disabled} onChange={prompt => onChange({ ...card, prompt })} />
     </ExperimentComposer>
     {node && <section aria-label="本次运行" data-run-id={node.run_id}>
-      <p role="status">{({ waiting: '等待上游', queued: '排队中', running: '运行中', succeeded: '已完成', failed: '失败 · 未完成', cancelled: '已取消 · 未完成', blocked: '已阻止 · 未完成' } as Record<string, string>)[node.status] || node.status} · {({ queued: '等待执行', generating: '生成中', archiving: '归档中', cancelling: '取消中，等待任务终态', finished: '已结束' } as Record<string, string>)[node.stage] || node.stage}{node.progress != null && ` · ${node.progress}%`}</p>
+      <p role="status">{({ waiting: '等待上游', queued: '排队中', running: '运行中', succeeded: '已完成', failed: '失败 · 未完成', cancelled: '已取消 · 未完成', blocked: '已阻止 · 未完成' } as Record<string, string>)[node.status] || node.status} · {({ queued: '等待执行', generating: '生成中', archiving: '归档中', cancelling: '取消中，等待任务终态', finished: '已结束' } as Record<string, string>)[node.stage] || node.stage}{node.progress !== undefined && node.progress !== null && ` · ${node.progress}%`}</p>
       {node.text && <div role="region" aria-label="运行正文"><CanvasTextPreview text={node.text} label="生成正文" /></div>}
       {node.error_message && <Alert type="error" message={`${node.error_code || '运行失败'}: ${node.error_message}`} />}
       {node.status === 'succeeded' && !node.current_output_updated && <small>配置已改变，结果保留在本次运行，未替换当前输出</small>}
