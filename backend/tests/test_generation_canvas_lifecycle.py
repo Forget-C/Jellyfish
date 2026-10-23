@@ -145,8 +145,9 @@ async def test_waiting_actual_image_chain_retains_uploaded_input_until_canvas_hi
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('runtime', ['mysql'], indirect=True)
-async def test_upload_retention_http_success_waits_for_real_database_commit(runtime, image_storage):
-    """A received success must already describe a committed retention release."""
+@pytest.mark.parametrize('operation', ['initial_upload', 'release'])
+async def test_canvas_upload_and_retention_http_success_waits_for_real_database_commit(runtime, image_storage, operation):
+    """File upload and retention success must describe committed file/usage changes."""
     import socket
     import uvicorn
     from fastapi import Request
@@ -163,7 +164,7 @@ async def test_upload_retention_http_success_waits_for_real_database_commit(runt
         async with runtime.sessions() as db:
             try:
                 yield db
-                if request.url.path.endswith('/upload-retention'):
+                if request.url.path.endswith(('/upload-retention', '/upload')):
                     commit_started.set()
                     await allow_commit.wait()
                 await db.commit()
@@ -181,13 +182,21 @@ async def test_upload_retention_http_success_waits_for_real_database_commit(runt
         while not server.started:
             await asyncio.sleep(.01)
         async with httpx.AsyncClient(base_url=f'http://127.0.0.1:{port}') as client:
-            pending = asyncio.create_task(client.delete('/files/' + file_id + '/upload-retention', params={'project_id': runtime.project_id}))
+            if operation == 'initial_upload':
+                pending = asyncio.create_task(client.post('/files/upload', files={'file': ('initial.png', b'initial', 'image/png')},
+                    data={'project_id': runtime.project_id, 'usage_kind': 'generation_upload'}))
+            else:
+                pending = asyncio.create_task(client.delete('/files/' + file_id + '/upload-retention', params={'project_id': runtime.project_id}))
             await asyncio.wait_for(commit_started.wait(), timeout=5)
             done, _ = await asyncio.wait({pending}, timeout=.1)
-            assert not done, 'success reached the HTTP client before retention release committed'
+            assert not done, 'file/retention success reached the HTTP client before commit'
             allow_commit.set()
             response = await pending
-            assert response.status_code == 200, response.text
+            assert response.status_code == (201 if operation == 'initial_upload' else 200), response.text
+            if operation == 'initial_upload':
+                file_id = response.json()['data']['id']
+                assert [usage['usage_kind'] for usage in (await client.get('/files/' + file_id)).json()['data']['usages']] == ['generation_upload']
+                assert (await client.delete('/files/' + file_id + '/upload-retention', params={'project_id': runtime.project_id})).status_code == 200
             assert (await client.get('/files/' + file_id)).json()['data']['usages'] == []
             assert (await client.delete('/files/' + file_id)).status_code == 200
     finally:

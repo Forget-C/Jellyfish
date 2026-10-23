@@ -17,7 +17,7 @@ HTTP 边界为 `/api/v1/studio/generation-canvases/{project_id}` 的列表／创
 
 媒体内容卡使用 `content.image`、`content.video`、`content.audio`，只有各自模态的一个输出位置，没有输入。`file_id` 可为空；`uploading=true` 时即使保留旧文件也不发布有效输出。替换与清空引用保留卡片身份。保存通过真实文件记录核实类型、可用性和项目归属，以 `canvas_content` usage（`canvas_id:card_id`）保护引用，删卡／删画布只释放自己的内容引用。
 
-上传使用项目文件接口，以 `generation_upload` usage 独立保留项目文件，成功后不随画布保存失败或放弃编辑回滚。迟到上传不会重建已删除的卡片，文件仍可在项目库选择。图片、完整视频和音频通过既有文件下载接口预览，音频支持 MP3、WAV、OGG、M4A、AAC、FLAC、OPUS。`DELETE /api/v1/studio/files/{file_id}/upload-retention?project_id=...` 显式释放本项目的画布上传保留，有其他真实使用关系时返回 409；清除其他引用后可重试，再按需调用已有文件删除接口，释放本身不删除字节。
+上传使用项目文件接口，以 `generation_upload` usage 独立保留项目文件，文件及使用关系在数据库提交后才返回 201，成功后不随画布保存失败或放弃编辑回滚。迟到上传不会重建已删除的卡片，文件仍可在项目库选择。图片、完整视频和音频通过既有文件下载接口预览，音频支持 MP3、WAV、OGG、M4A、AAC、FLAC、OPUS。`DELETE /api/v1/studio/files/{file_id}/upload-retention?project_id=...` 显式释放本项目的画布上传保留，有其他真实使用关系时返回 409；清除其他引用后可重试，再按需调用已有文件删除接口，释放本身不删除字节。
 
 
 模型卡以 `model.text`、`model.image`、`model.video` 区分能力模态，不按供应商复制卡类型。前端复用受控 `ExperimentComposer` 的正文和底部参数布局；文本请求沿用模型管理参数，当前仅接收文本。图片卡配置画幅、分辨率档位和数量；视频仅配置画幅、时长与高级随机种子。`/{canvas_id}/models/{model_id}/capability` 从已接入 DTO 和真实图片／视频能力解析器派生用途、组合、数量及参数范围，未知模型或加载失败保留现场并提示。

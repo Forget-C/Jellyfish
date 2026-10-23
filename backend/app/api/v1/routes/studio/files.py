@@ -82,7 +82,7 @@ async def list_files_api(
 async def upload_file_api(
     file: UploadFile = File(..., description="要上传的二进制文件"),
     name: str | None = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     project_id: str | None = Form(None, description="可选：写入 file_usages 的项目 ID"),
     chapter_id: str | None = Form(None),
 
