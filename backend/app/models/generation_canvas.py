@@ -99,6 +99,7 @@ class CanvasPreview(Base):
     canvas_id: Mapped[str] = mapped_column(ForeignKey('generation_canvases.id', ondelete='CASCADE'), index=True)
     card_id: Mapped[str] = mapped_column(String(64), nullable=False)
     kind: Mapped[str] = mapped_column(String(16), nullable=False, default='single')
+    card_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
     revision: Mapped[int] = mapped_column(Integer, nullable=False)
     basis_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     expires_at: Mapped[Any] = mapped_column(DateTime, nullable=False)

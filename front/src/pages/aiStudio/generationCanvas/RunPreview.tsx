@@ -4,7 +4,7 @@ import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 
 /** Preview is bound to the current edit generation; diagnostics use stable targets. */
 export function RunPreview({ preview, submitting, disabled, onSubmit }: { preview: CanvasPrecheck; submitting: boolean; disabled: boolean; onSubmit: () => void }) {
-  const awaitingUpstream = preview.execution_nodes.length > 1
+  const awaitingUpstream = preview.input.used?.some(item => preview.execution_nodes.includes(item.source.card_id))
   const inputLabel = awaitingUpstream ? '受理时输入预览' : '实际提交文本'
   const locate = (target: Record<string, unknown>) => {
     const cardId = target.card_id || preview.card_id

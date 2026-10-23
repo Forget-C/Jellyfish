@@ -4,7 +4,7 @@ from sqlalchemy import delete, select
 from fastapi import HTTPException
 from pydantic import ValidationError
 from app.models.generation_canvas import CanvasRun, CanvasRunNode, CanvasScopeOccupancy
-from app.schemas.generation_canvas import CanvasDocument, CanvasNodeRead, CanvasResolvedOutput, ModelCard
+from app.schemas.generation_canvas import CanvasDocument, CanvasNodeRead, CanvasResolvedOutput, ModelCard, CanvasDiagnostic
 from app.services.generation_canvas.capabilities import model_capability
 from app.services.generation_canvas.compiler import prompt_references
 
@@ -16,34 +16,67 @@ async def plan(runtime, canvas, command, *, lock_config=False):
     cards = {card.id: card for card in document.cards}
     outputs = await runtime.current_outputs(canvas)
     nodes, diagnostics, reused = {}, [], set()
+    selected = {card.id for card in document.cards if isinstance(card, ModelCard) and card.id in command.card_ids}
+    if command.kind == 'selection' and not selected:
+        from app.services.generation_canvas.errors import diagnostic
+        raise diagnostic('SELECTION_EMPTY', '请至少选择一张模型卡', {'card_id': command.card_id}, blocks=['run'])
+
+    def has_selected_ancestor(card_id, visited=None):
+        visited = set() if visited is None else visited
+        if card_id in visited or not isinstance(cards.get(card_id), ModelCard):
+            return False
+        if card_id in selected:
+            return True
+        visited.add(card_id)
+        return any(has_selected_ancestor(ref.source.card_id, visited) for ref, _ in prompt_references(cards[card_id]))
 
     async def visit(card_id):
         if card_id in nodes:
             return
         compiled, basis, fingerprint, config = await runtime._basis(canvas, card_id, outputs, lock_config=lock_config)
         dependencies = []
-        if command.kind == 'target':
+        if command.kind in ('target', 'selection'):
             for item in compiled.used:
                 source_id = item.source.card_id
-                if isinstance(cards.get(source_id), ModelCard) and not item.basis_current:
+                execute = source_id in selected if command.kind == 'selection' else not item.basis_current
+                if isinstance(cards.get(source_id), ModelCard) and execute:
                     await visit(source_id)
                     if source_id not in dependencies:
                         dependencies.append(source_id)
-        if dependencies:
+                elif command.kind == 'selection' and has_selected_ancestor(source_id):
+                    diagnostics.append(CanvasDiagnostic(code='SELECTION_INCOMPLETE',
+                        message='所选节点之间缺少必要中间模型，请补选此卡',
+                        target={'card_id': source_id, 'consumer_card_id': card_id}, blocks=['run']))
+        if dependencies and command.kind == 'target':
             compiled.diagnostics = [issue for issue in compiled.diagnostics if issue.code != 'INPUT_STALE']
+            compiled.can_run = not any('run' in issue.blocks for issue in compiled.diagnostics)
+        if command.kind == 'selection':
+            # Outside the explicit execution scope, only valid published inputs may be reused.
+            compiled.diagnostics = [issue for issue in compiled.diagnostics if issue.code != 'INPUT_STALE']
+            for item in compiled.used:
+                if not item.basis_current and item.source.card_id not in selected:
+                    compiled.diagnostics.append(CanvasDiagnostic(code='INPUT_STALE',
+                        message='范围外模型结果依据已变，请补选来源或先独立补齐结果',
+                        target={'card_id': item.source.card_id, 'consumer_card_id': card_id}, blocks=['run']))
             compiled.can_run = not any('run' in issue.blocks for issue in compiled.diagnostics)
         diagnostics.extend(compiled.diagnostics)
         for item in compiled.used:
             if item.result_set_id and item.source.card_id not in nodes:
-                reused.add(item.result_set_id)
+                if command.kind != 'selection' or item.source.card_id not in selected:
+                    reused.add(item.result_set_id)
         used_sources = {ref.source.card_id for ref, _ in prompt_references(cards[card_id])}
         nodes[card_id] = {'compiled': compiled, 'basis': basis, 'hash': fingerprint, 'dependencies': dependencies,
             'private': {'document': document.model_dump(), 'revision': canvas.revision,
                 'outputs': {key: [item.model_dump() for item in values] for key, values in outputs.items() if key in used_sources},
                 'execution_config': config,
                 'capability': (await model_capability(runtime.db, cards[card_id].model_id)).model_dump() if config else None}}
-    await visit(command.card_id)
-    return {'nodes': nodes, 'diagnostics': diagnostics, 'can_run': all(item['compiled'].can_run for item in nodes.values()),
+    if command.kind == 'selection':
+        for card in document.cards:
+            if card.id in selected:
+                await visit(card.id)
+    else:
+        await visit(command.card_id)
+    return {'nodes': nodes, 'diagnostics': diagnostics, 'can_run': all(item['compiled'].can_run for item in nodes.values()) and not any('run' in issue.blocks for issue in diagnostics),
         'reused': sorted(reused), 'hash': digest({key: {'hash': item['hash'], 'dependencies': item['dependencies']} for key, item in nodes.items()})}
 
 

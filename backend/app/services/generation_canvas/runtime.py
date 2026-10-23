@@ -153,13 +153,15 @@ class CanvasRuntime:
         canvas = await CanvasStore(self.db, self.project_id).get(canvas_id)
         from app.services.generation_canvas.planner import plan
         prepared = await plan(self, canvas, command)
+        card_id = command.card_id if command.card_id in prepared['nodes'] else next(iter(prepared['nodes']))
         token = uuid4().hex if prepared['can_run'] else None
         if token:
-            self.db.add(CanvasPreview(token=token, canvas_id=canvas_id, card_id=command.card_id, kind=command.kind,
+            self.db.add(CanvasPreview(token=token, canvas_id=canvas_id, card_id=card_id, kind=command.kind,
+                card_ids=list(prepared['nodes']) if command.kind == 'selection' else None,
                 revision=canvas.revision, basis_hash=prepared['hash'], expires_at=utcnow() + timedelta(minutes=10)))
             await self.db.flush()
-        target = prepared['nodes'][command.card_id]
-        return CanvasPrecheck(revision=canvas.revision, card_id=command.card_id, execution_nodes=list(prepared['nodes']),
+        target = prepared['nodes'][card_id]
+        return CanvasPrecheck(revision=canvas.revision, card_id=card_id, execution_nodes=list(prepared['nodes']),
             reused_results=prepared['reused'], input=target['compiled'], model=target['basis']['model'],
             diagnostics=prepared['diagnostics'], can_run=prepared['can_run'], preview_token=token)
 
@@ -176,12 +178,15 @@ class CanvasRuntime:
         preview = await self.db.get(CanvasPreview, command.preview_token)
         if preview is None or preview.canvas_id != canvas_id or preview.revision != canvas.revision or preview.expires_at <= utcnow():
             raise diagnostic('PREVIEW_STALE', '执行预检已过期，请重新预检', {'canvas_id': canvas_id}, status=409, blocks=['run'])
-        prepared = await plan(self, canvas, CanvasPrecheckRequest(card_id=preview.card_id, kind=preview.kind), lock_config=True)
+        prepared = await plan(self, canvas, CanvasPrecheckRequest(card_id=preview.card_id, kind=preview.kind, card_ids=preview.card_ids or []), lock_config=True)
         if not prepared['can_run'] or prepared['hash'] != preview.basis_hash:
             raise diagnostic('PREVIEW_STALE', '实际输入或有效模型配置已变，请重新预检', {'card_id': preview.card_id}, status=409, blocks=['run'])
         for card_id in prepared['nodes']:
-            if await self.db.get(CanvasScopeOccupancy, (canvas_id, card_id)):
-                raise diagnostic('RUN_SCOPE_BUSY', '模型卡仍在执行中', {'card_id': card_id}, status=409, blocks=['run'])
+            occupancy = await self.db.get(CanvasScopeOccupancy, (canvas_id, card_id))
+            if occupancy:
+                occupied = await self.db.get(CanvasRunNode, occupancy.node_id)
+                raise diagnostic('RUN_SCOPE_BUSY', f'卡片 {card_id} 仍由运行 {occupied.run_id} 占用，请等待真实终态后重新发起',
+                    {'card_id': card_id, 'run_id': occupied.run_id, 'node_id': occupied.id}, status=409, blocks=['run'])
         run = CanvasRun(id=uuid4().hex, canvas_id=canvas_id, revision=canvas.revision, scope=list(prepared['nodes']))
         self.db.add(run)
         await self.db.flush()
@@ -355,6 +360,11 @@ async def sync_task_fact(db: AsyncSession, task, *, delta: str | None = None):
         await db.execute(delete(CanvasScopeOccupancy).where(CanvasScopeOccupancy.node_id == node.id))
     await db.flush()
     payload = {'node': CanvasNodeRead.model_validate(node).model_dump()}
+    if terminal and node.current_output_updated:
+        # Publication also changes downstream validity; the shared stream must
+        # carry that authoritative view without executing those downstream cards.
+        payload['current_outputs'] = {key: [item.model_dump() for item in values]
+            for key, values in (await runtime.current_outputs(canvas)).items()}
     if delta:
         payload.update(delta=delta, position=0)
     await append_event(db, head, 'node.finished' if terminal else 'text.delta' if delta else 'node.updated', node=node, payload=payload)

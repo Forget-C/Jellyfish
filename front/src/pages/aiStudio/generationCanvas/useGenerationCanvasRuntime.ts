@@ -53,7 +53,7 @@ export function useGenerationCanvasRuntime(projectId: string, canvasId: string |
         if (event.type !== 'run.finished' && !node) throw new Error('missing runtime node')
         setSnapshot(previous => {
           if (event.cursor <= previous.cursor) return previous
-          const runs = [...previous.runs], outputs = { ...previous.current_outputs }
+          const runs = [...previous.runs], outputs = { ...(event.payload.current_outputs as CanvasSnapshot['current_outputs'] | undefined || previous.current_outputs) }
           if (event.type === 'run.finished') {
             const index = runs.findIndex(run => run.id === event.payload.run_id)
             if (index >= 0) runs[index] = { ...runs[index], lifecycle: 'finished' }
@@ -66,7 +66,7 @@ export function useGenerationCanvasRuntime(projectId: string, canvasId: string |
             const nodes = [...runs[index].nodes], position = nodes.findIndex(item => item.id === node.id)
             if (position < 0) nodes.push(node); else nodes[position] = node
             runs[index] = { ...runs[index], nodes }
-            if (node.current_output_updated) outputs[node.card_id] = node.outputs
+            if (node.current_output_updated && !event.payload.current_outputs) outputs[node.card_id] = node.outputs
           }
           return { cursor: event.cursor, runs, current_outputs: outputs }
         })
@@ -75,13 +75,13 @@ export function useGenerationCanvasRuntime(projectId: string, canvasId: string |
     return () => { stream.close(); if (s === state.current) state.current = { ...s, scope: '' } }
   }, [scope, canvasId, key, projectId])
   const invalidate = () => { state.current.generation++; setPreview(undefined) }
-  const precheck = async (cardId: string, kind: 'single' | 'target' = 'single') => {
+  const precheck = async (cardId: string, kind: 'single' | 'target' | 'selection' = 'single', cardIds?: string[]) => {
     const s = state.current, generation = s.generation
     if (!canvasId || s.scope !== scope || s.checking || s.submitting || s.pending || storageBlocked || !canEdit()) return
     s.checking = true; setChecking(cardId); setPreview(undefined); setError('')
     try {
       if (!await save() || s !== state.current || generation !== s.generation) return
-      const response = await Canvases.canvasPrecheck({ projectId, canvasId, requestBody: { card_id: cardId, kind } })
+      const response = await Canvases.canvasPrecheck({ projectId, canvasId, requestBody: { card_id: cardId, kind, card_ids: cardIds } })
       if (s === state.current && generation === s.generation) { s.previewGeneration = generation; setPreview(response.data || undefined) }
     } catch (reason) { if (s === state.current && generation === s.generation) setError(describe(reason)) }
     finally { if (s === state.current) { s.checking = false; setChecking(undefined) } }
