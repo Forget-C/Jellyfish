@@ -7,7 +7,7 @@ type OwnershipState = 'checking' | 'editing' | 'readonly' | 'waiting' | 'choice'
 type Message = { kind: 'ask' | 'choose' | 'reply' | 'queued' | 'cancel' | 'locate' | 'here' | 'focus'; from: string; to?: string; id: string; action?: HandoffAction; result?: HandoffResult; href?: string }
 
 /** 浏览器锁决定唯一编辑能力；消息只协调保存与交接，不用心跳或超时抢占。 */
-export function useSceneEditOwnership() {
+export function useSceneEditOwnership(scope = lockName) {
   const [state, setState] = useState<OwnershipState>('checking')
   const [message, setMessage] = useState('')
   const [ownerUrl, setOwnerUrl] = useState('')
@@ -19,7 +19,7 @@ export function useSceneEditOwnership() {
     let active = true
     if (!navigator.locks || !window.BroadcastChannel) { setState('unsupported'); return }
     const pageId = crypto.randomUUID()
-    const channel = new BroadcastChannel(lockName)
+    const channel = new BroadcastChannel(scope)
     let release: (() => void) | undefined
     let outgoing: { id: string; timer?: number; abort?: AbortController } | undefined
     let incoming: { id: string; from: string; ready: boolean; timer: number } | undefined
@@ -55,7 +55,7 @@ export function useSceneEditOwnership() {
     const take = (initial = false) => {
       if (owned.current || outgoing) return
       if (!initial) { setState('waiting'); setMessage('') }
-      void navigator.locks.request(lockName, { ifAvailable: true }, async lock => {
+      void navigator.locks.request(scope, { ifAvailable: true }, async lock => {
         if (!active) return
         if (lock) { await hold(lock); return }
         if (initial) { setState('readonly'); post({ kind: 'locate', id: '' }); return }
@@ -112,7 +112,7 @@ export function useSceneEditOwnership() {
         const requestId = outgoing.id
         outgoing.abort = new AbortController()
         outgoing.timer = startTimeout()
-        void navigator.locks.request(lockName, { signal: outgoing.abort.signal }, lock => hold(lock, requestId))
+        void navigator.locks.request(scope, { signal: outgoing.abort.signal }, lock => hold(lock, requestId))
           .catch(error => { if (active && error.name !== 'AbortError') { cancelOutgoing(); setMessage('无法确认编辑权，请重试。') } })
         post({ kind: 'queued', id: requestId, to: data.from })
       }
@@ -145,7 +145,7 @@ export function useSceneEditOwnership() {
       channel.close()
       release?.()
     }
-  }, [])
+  }, [scope])
   return { state, message, ownerUrl, handoff, editable: state === 'editing', canEdit: () => owned.current,
     takeEditing: () => actions.current.take(), chooseHandoff: (action: 'save' | 'discard') => actions.current.choose(action),
     cancelHandoff: () => actions.current.cancel(), locateOwner: () => actions.current.locate() }

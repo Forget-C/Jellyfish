@@ -12,4 +12,3 @@ export type CanvasRead = {
     revision: number;
     document: CanvasDocument;
 };
-

@@ -10,4 +10,3 @@ export type CanvasSave = {
     expected_revision: number;
     document: any;
 };
-

@@ -21,4 +21,3 @@ export type CanvasDocument = {
     input_order?: Record<string, Record<string, Array<string>>>;
     groups?: Array<GenerationCanvasGroup>;
 };
-
