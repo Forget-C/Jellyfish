@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Empty, Modal, Pagination, Space } from 'antd'
-import { StudioFilesService } from '../../../services/generated'
+import { ApiError, StudioFilesService } from '../../../services/generated'
 import type { AudioContentCard, FileRead, ImageContentCard, VideoContentCard } from '../../../services/generated'
 import { buildFileDownloadUrl } from '../assets/utils'
 
@@ -28,6 +28,8 @@ export function MediaContentEditor({ card, projectId, onChange, disabled }: Medi
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [refresh, setRefresh] = useState(0)
+  const [releasing, setReleasing] = useState<string>()
   const [uploading, setUploading] = useState(false)
   const latest = useRef({ card, onChange })
   latest.current = { card, onChange }
@@ -67,7 +69,7 @@ export function MediaContentEditor({ card, projectId, onChange, disabled }: Medi
       }).catch(() => { if (token === libraryRequest.current) setError('项目文件读取失败，请重试') })
       .finally(() => { if (token === libraryRequest.current) setLoading(false) })
     return () => { libraryRequest.current++ }
-  }, [library, page, projectId])
+  }, [library, page, projectId, refresh])
 
   return <Space direction="vertical" style={{ width: '100%' }}>
     {card.origin && <p>来自运行 {card.origin.run_id} · {card.origin.incomplete ? '未完成成果副本' : '完整成果副本'}</p>}
@@ -83,6 +85,8 @@ export function MediaContentEditor({ card, projectId, onChange, disabled }: Medi
       <Button disabled={disabled || uploading} onClick={() => { setPage(1); setLibrary(true) }}>从项目文件选择</Button>
     </Space>
     <Modal title="项目文件库" open={library} onCancel={() => setLibrary(false)} footer={null} destroyOnClose>
+      {error && <Alert type="error" message={error} />}
+      <Button loading={loading} onClick={() => setRefresh(value => value + 1)}>刷新项目文件</Button>
       {files.filter(file => file.type === type).map(file => <div key={file.id} style={{ marginBottom: 16 }}>
         <MediaPreview fileId={file.id} type={type} />
         <Space wrap>
@@ -90,11 +94,16 @@ export function MediaContentEditor({ card, projectId, onChange, disabled }: Medi
           <Button disabled={disabled || uploading} onClick={() => {
             latest.current.onChange({ ...latest.current.card, file_id: file.id, uploading: false }); setLibrary(false)
           }}>选用 {file.name}</Button>
-          <Button danger disabled={loading || disabled} onClick={async () => {
+          <Button danger loading={releasing === file.id} disabled={loading || disabled || !!releasing} onClick={async () => {
+            setReleasing(file.id); setError('')
             try {
               await StudioFilesService.releaseUploadRetention({ fileId: file.id, projectId })
               setFiles(previous => previous.filter(item => item.id !== file.id))
-            } catch { setError('无法释放上传保留：请先移除该文件的其他使用关系') }
+            } catch (reason) {
+              setError(reason instanceof ApiError && reason.status < 500
+                ? reason.body?.message || '无法释放上传保留：请先移除该文件的其他使用关系'
+                : '清理结果未确认，请刷新项目文件核实后重试')
+            } finally { setReleasing(undefined) }
           }}>释放上传保留</Button>
         </Space>
       </div>)}
