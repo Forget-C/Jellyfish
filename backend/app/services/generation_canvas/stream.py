@@ -17,7 +17,7 @@ async def stream_events(sessions, project_id, canvas_id, cursor=None):
         async with sessions() as db:
             head = await event_head(db, canvas_id)
             oldest = await db.scalar(select(CanvasEvent.cursor).where(CanvasEvent.canvas_id == canvas_id).order_by(CanvasEvent.cursor).limit(1))
-            if cursor is None or cursor > head.cursor or cursor < 0 or (oldest is not None and cursor < oldest - 1):
+            if cursor is None or cursor > head.cursor or cursor < 0 or (oldest is not None and cursor < oldest - 1) or (oldest is None and cursor < head.cursor):
                 snapshot = await CanvasRuntime(db, project_id).snapshot(canvas_id)
                 events = [{'version': 1, 'cursor': snapshot.cursor, 'type': 'snapshot', 'canvas_id': canvas_id,
                            'run_id': None, 'node_id': None, 'payload': snapshot.model_dump()}]

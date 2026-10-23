@@ -146,7 +146,7 @@ class FrozenGenerationConfig(BaseModel):
 
 
 class ResolvedGenerationSnapshot(BaseModel):
-    """Entity Gate 生成的异步任务参数快照，绝不保存凭据或模型配置副本。
+    """Entity Gate 生成的异步任务参数快照。
 
     Canvas target 可携带服务端私有 execution_config；其他目标保持原行为。
     Worker 会在真正执行时按 ``model_id`` 读取当前模型与 Provider 配置；快照只

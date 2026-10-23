@@ -57,7 +57,7 @@ class GenerationSubmitter:
     async def persist_async_task(
         self, *, db: AsyncSession, command: GenerationCommand, snapshot: ResolvedGenerationSnapshot, retry_of_task_id: str | None = None,
     ) -> GenerationAccepted:
-        """冻结模型路由身份；凭据仍在执行期解析，媒体引用只存在于 task_inputs。"""
+        """冻结模型路由身份；canvas 私有 override 固定实际配置，其他目标仍执行期解析。"""
         model = await db.get(Model, snapshot.model_id)
         provider = await db.get(Provider, model.provider_id) if model is not None else None
         if model is None or provider is None:

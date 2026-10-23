@@ -153,7 +153,9 @@ class CanvasStore:
         if not isinstance(card, ModelCard):
             raise HTTPException(404, 'Model card not found')
         capability = await model_capability(self.db, card.model_id) if card.model_id else None
-        result = compile_card(document, card_id, capability=capability)
+        from app.services.generation_canvas.runtime import CanvasRuntime
+        outputs = await CanvasRuntime(self.db, self.project_id).current_outputs(canvas)
+        result = compile_card(document, card_id, model_outputs=outputs, capability=capability)
         result.revision = canvas.revision
         if not card.model_id:
             result.diagnostics = list(result.diagnostics) + [CanvasDiagnostic(code='MODEL_REQUIRED', message='请选择模型',

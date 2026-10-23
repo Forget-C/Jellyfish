@@ -44,7 +44,7 @@ async def test_migrated_mysql_schema_matches_task_models():
                         return False
                     return None
 
-                scope = {"tasks", "task_inputs", "task_outputs", "files", "file_usages", "generation_canvases", "generation_canvas_save_receipts"}
+                scope = {"tasks", "task_inputs", "task_outputs", "files", "file_usages", "generation_canvases", "generation_canvas_save_receipts"} | {name for name in Base.metadata.tables if name.startswith("generation_canvas_")}
                 context = MigrationContext.configure(connection, opts={
                     "compare_type": True, "compare_server_default": compare_default,
                     "include_object": lambda obj, name, type_, reflected, compare_to: (name if type_ == "table" else obj.table.name) in scope,
