@@ -19,6 +19,30 @@ class TextContentCard(CardDefinition):
     output_ports: ClassVar[tuple[str, ...]] = ('text',)
 
 
+class MediaContentCard(CardDefinition):
+    """媒体内容固定引用一份项目文件；上传期间已有文件仍受保护但不发布输出。"""
+    file_id: str | None = Field(default=None, min_length=1, max_length=36)
+    uploading: bool = False
+
+
+class ImageContentCard(MediaContentCard):
+    """图片内容卡只有一个图片输出位置。"""
+    type: Literal['content.image'] = 'content.image'
+    output_ports: ClassVar[tuple[str, ...]] = ('image',)
+
+
+class VideoContentCard(MediaContentCard):
+    """视频内容保留完整文件及自带音轨。"""
+    type: Literal['content.video'] = 'content.video'
+    output_ports: ClassVar[tuple[str, ...]] = ('video',)
+
+
+class AudioContentCard(MediaContentCard):
+    """音频内容卡只导入和播放，不提供音频生成。"""
+    type: Literal['content.audio'] = 'content.audio'
+    output_ports: ClassVar[tuple[str, ...]] = ('audio',)
+
+
 class CanvasDocument(BaseModel):
     """完整编辑文档；位置、尺寸和视角由浏览器另存。"""
     model_config = ConfigDict(extra='forbid')
@@ -26,7 +50,7 @@ class CanvasDocument(BaseModel):
     project_id: str
     name: str = Field(min_length=1, max_length=255)
     schema_version: Literal[1] = 1
-    cards: list[TextContentCard] = Field(default_factory=list)
+    cards: list[TextContentCard | ImageContentCard | VideoContentCard | AudioContentCard] = Field(default_factory=list)
 
 
 class CanvasCreate(BaseModel):

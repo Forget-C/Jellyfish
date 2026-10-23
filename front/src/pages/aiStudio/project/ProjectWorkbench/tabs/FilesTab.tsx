@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Button, Card, Checkbox, Col, Empty, Modal, Pagination, Row, Select, Space, Spin, Tag } from 'antd'
-import { DownloadOutlined, FileImageOutlined, VideoCameraOutlined } from '@ant-design/icons'
+import { DownloadOutlined, FileImageOutlined, VideoCameraOutlined, SoundOutlined } from '@ant-design/icons'
 import { useNavigate, useParams } from 'react-router-dom'
 import { StudioFilesService } from '../../../../../services/generated'
 import type { FileRead } from '../../../../../services/generated'
@@ -131,6 +131,7 @@ export function FilesTab() {
                 const url = fileResourceUrl(file)
                 const checked = selectedIds.has(file.id)
                 const isVideo = file.type === 'video'
+                const isAudio = file.type === 'audio'
 
                 return (
                   <Col key={file.id} xs={24} sm={12} md={8} lg={6}>
@@ -150,12 +151,12 @@ export function FilesTab() {
                           </span>
                         </div>
                       }
-                      imageUrl={url}
+                      imageUrl={isAudio ? undefined : url}
                       imageAlt={file.name}
-                      enablePreview={!isVideo}
-                      onImageClick={isVideo ? () => setPreviewVideo(file) : undefined}
+                      enablePreview={!isVideo && !isAudio}
+                      onImageClick={isVideo || isAudio ? () => setPreviewVideo(file) : undefined}
                       placeholder={
-                        isVideo ? (
+                        isAudio ? <SoundOutlined className="text-4xl" /> : isVideo ? (
                           <span className="flex flex-col items-center gap-1 text-gray-400">
                             <VideoCameraOutlined className="text-4xl" />
                             <span className="text-xs">点击预览</span>
@@ -164,7 +165,7 @@ export function FilesTab() {
                           <FileImageOutlined className="text-5xl text-gray-300" />
                         )
                       }
-                      meta={<Tag color={isVideo ? 'purple' : 'blue'}>{isVideo ? '视频' : '图片'}</Tag>}
+                      meta={<Tag color={isVideo ? 'purple' : 'blue'}>{isVideo ? '视频' : isAudio ? '音频' : '图片'}</Tag>}
                       footer={
                         <Button
                           block
@@ -202,14 +203,14 @@ export function FilesTab() {
       </Card>
 
       <Modal
-        title={previewVideo?.name ?? '视频预览'}
+        title={previewVideo?.name ?? '媒体预览'}
         open={previewVideo !== null}
         footer={null}
         width={720}
         onCancel={() => setPreviewVideo(null)}
         destroyOnClose
       >
-        {previewVideo ? (
+        {previewVideo?.type === 'audio' ? <audio aria-label="音频预览" src={buildFileDownloadUrl(previewVideo.id)} controls style={{ width: '100%' }} /> : previewVideo ? (
           <video
             className="w-full max-h-[70vh] bg-black rounded"
             src={buildFileDownloadUrl(previewVideo.id)}
