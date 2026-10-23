@@ -11,6 +11,7 @@ import {
 import type { Chapter } from '../../../../mocks/data'
 
 export type TabKey =
+  | 'generation'
   | 'dashboard'
   | 'chapters'
   | 'actors'
@@ -22,6 +23,7 @@ export type TabKey =
   | 'settings'
 
 const TAB_KEYS: TabKey[] = [
+  'generation',
   'dashboard',
   'chapters',
   'actors',
@@ -40,6 +42,7 @@ export function isTabKey(s: string): s is TabKey {
 export const DEFAULT_TAB: TabKey = 'dashboard'
 
 export const TAB_CONFIG: { key: TabKey; label: string; icon: React.ReactNode }[] = [
+  { key: 'generation', label: '画布生成', icon: <PictureOutlined /> },
   { key: 'dashboard', label: '仪表盘', icon: <HomeOutlined /> },
   { key: 'chapters', label: '章节', icon: <UnorderedListOutlined /> },
   { key: 'actors', label: '演员', icon: <UserOutlined /> },

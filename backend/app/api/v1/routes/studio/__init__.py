@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from app.api.v1.routes.studio import (
     chapters,
+    generation_canvases,
     directing,
     entities,
     experiment_sessions,
@@ -34,3 +35,5 @@ router.include_router(files.router, prefix="/files", tags=["studio/files"])
 router.include_router(generation_prompts.router, prefix="/generation-prompts", tags=["studio/generation-prompts"])
 router.include_router(generation_tasks.router, prefix="/generation-tasks", tags=["studio/generation-tasks"])
 router.include_router(lab_generation_tasks.router, prefix="/generation-tasks/labs", tags=["studio/generation-tasks"])
+
+router.include_router(generation_canvases.router, prefix="/generation-canvases", tags=["studio/generation-canvases"])
