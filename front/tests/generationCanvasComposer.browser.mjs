@@ -117,7 +117,11 @@ try {
   assert.equal(JSON.parse(await editor.locator('[data-segment]').getAttribute('data-segment')).source.card_id, 's10')
   // Inline chooser is opened by @ and confirms a selected real output.
   await card('m').getByRole('combobox', { name: '引用分类', exact: true }).locator('..').locator('..').click()
+  const categoryDropdown = await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').elementHandle()
   await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText('图片', { exact: true }).click()
+  // rc-select restores focus after an option click; finish closing that popup
+  // before typing, so its delayed focus does not blur the new @ chooser.
+  await categoryDropdown.waitForElementState('hidden')
   await editor.fill('@')
   await card('m').getByRole('listbox', { name: '引用候选' }).waitFor()
   await editor.press('Enter')
