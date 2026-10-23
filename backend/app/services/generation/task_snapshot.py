@@ -15,6 +15,8 @@ def split_snapshot(snapshot: ResolvedGenerationSnapshot) -> tuple[dict, str, str
     data = snapshot.model_dump(mode="json", exclude={"canonical_target", "expected_version_id", "media"})
     if data.get("prompt_revision_id") is None:
         data.pop("prompt_revision_id", None)
+    if data.get("execution_config") is None:
+        data.pop("execution_config", None)
     target = snapshot.canonical_target
     target_type = target.kind.value
     target_id = target.entity_id

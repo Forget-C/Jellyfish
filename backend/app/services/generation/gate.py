@@ -6,6 +6,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.contracts.generation import (
+    FrozenGenerationConfig,
     GenerationCommand,
     GenerationModality,
     GenerationTargetKind,
@@ -42,7 +43,15 @@ class GenerationEntityGate:
         await self._validate_target(db, command)
         model = await self._resolve_model(db, command)
         await self._validate_media(db, command.request.media)
+        frozen = None
+        if command.target.kind == GenerationTargetKind.canvas_node:
+            from app.services.llm.provider_resolver import resolve_provider_config_from_provider
+            provider = await db.get(Provider, model.provider_id)
+            cfg = resolve_provider_config_from_provider(provider=provider, category=model.category)
+            frozen = FrozenGenerationConfig(model_name=model.name, model_params=model.params or {}, provider_id=provider.id,
+                provider_key=cfg.provider_key, api_key=cfg.api_key, base_url=cfg.base_url)
         return ResolvedGenerationSnapshot(
+            execution_config=frozen,
             model_id=model.id,
             prompt_revision_id=command.target.entity_id if command.target.kind == GenerationTargetKind.directing_unit else None,
             canonical_target=command.target,
@@ -90,7 +99,11 @@ class GenerationEntityGate:
         """按封闭 target kind 验证目标/槽位存在，避免 Worker 再猜测业务关系。"""
         target = command.target
         exists = False
-        if target.kind == GenerationTargetKind.experiment_session:
+        if target.kind == GenerationTargetKind.canvas_node:
+            from app.models.generation_canvas import CanvasRunNode
+            node = await db.get(CanvasRunNode, target.entity_id)
+            exists = node is not None and node.status == "queued"
+        elif target.kind == GenerationTargetKind.experiment_session:
             session = await db.get(ExperimentSession, target.entity_id, with_for_update=True)
             exists = session is not None
             if session is not None and session.lab_type != command.modality.value:
