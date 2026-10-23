@@ -109,7 +109,7 @@ class CanvasRuntime:
         compiled.diagnostics += issues
         compiled.can_run = compiled.can_run and not issues
         public = {'card': card.model_dump(), 'input': compiled.model_dump(exclude={'revision', 'diagnostics', 'can_run'}),
-                  'model': {'id': model.id, 'name': model.name, 'params': public_parameters(model.params)} if model else {}}
+                  'model': {'id': model.id, 'name': model.name, 'params': public_parameters(model.params) if category == ModelCategoryKey.text else card.config.model_dump()} if model else {}}
         frozen = None
         if config and model and provider:
             frozen = {'model_name': model.name, 'model_params': model.params or {}, 'provider_key': config.provider_key,

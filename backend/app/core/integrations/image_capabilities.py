@@ -31,6 +31,8 @@ class ImageModelCapability:
     ratio_size_profiles: dict[str, dict[str, str]] | None = None
     min_n: int | None = 1
     max_n: int | None = 10
+    max_reference_images: int | None = None
+    supports_duplicate_reference_images: bool = True
 
 
 def register_image_model_capability(

@@ -21,6 +21,8 @@ async def model_capability(db: AsyncSession, model_id: str) -> CanvasModelCapabi
         result.ratios = sorted(cap.supported_ratios or profiles.keys())
         result.resolution_profiles = profiles
         result.min_count, result.max_count = cap.min_n or 1, cap.max_n or 10
+        result.max_reference_images = cap.max_reference_images
+        result.supports_duplicate_reference_images = cap.supports_duplicate_reference_images
     if model.category == 'video':
         cap = resolve_video_capability(provider=key, model=model.name)
         roles = ['first_frame'] if key == 'openai' else ['first_frame', 'last_frame', 'key_frame']

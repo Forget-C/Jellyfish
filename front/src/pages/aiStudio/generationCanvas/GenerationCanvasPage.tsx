@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Empty, Input, Popconfirm, Select, Space, Typography } from 'antd'
 import { useSearchParams } from 'react-router-dom'
 import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
-import type { CanvasRead, TextContentCard } from '../../../services/generated'
+import type { CanvasRead, TextContentCard, ImageContentCard, VideoContentCard } from '../../../services/generated'
 import { useGenerationCanvasEditor } from './useGenerationCanvasEditor'
 import { GenerationCanvasGraph } from './GenerationCanvasGraph'
 import { useGenerationCanvasRuntime } from './useGenerationCanvasRuntime'
@@ -20,7 +20,7 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
   const change: typeof edit = next => { runtime.invalidate(); edit(next) }
   const [error, setError] = useState('')
   const scope = `${projectId}:${canvasId}`, latestScope = useRef(scope); latestScope.current = scope
-  const retainedCopies = useRef(new Map<string, TextContentCard>())
+  const retainedCopies = useRef(new Map<string, TextContentCard | ImageContentCard | VideoContentCard>())
 
   const fail = (reason: unknown) => {
     const detail = reason instanceof ApiError ? reason.body?.data : undefined
