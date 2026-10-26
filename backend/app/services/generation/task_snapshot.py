@@ -42,12 +42,12 @@ def split_snapshot(snapshot: ResolvedGenerationSnapshot) -> tuple[dict, str, str
 
 
 def restore_snapshot(task: Task, inputs: Sequence[tuple[TaskInput, FileItem]]) -> ResolvedGenerationSnapshot:
-    """从唯一任务目标与有序文件关系重建执行输入，缺失文件由调用方拒绝。"""
+    """从目标与文件关系重建业务输入；私有执行配置由执行器独立校验。"""
     data = dict(task.input_snapshot)
     parent_id = data.pop("target_parent_id", None)
     layout = data.pop("media_layout", None)
     # 路由配置供执行器使用，不属于用户生成输入契约。
-    for key in ("model_name", "provider_key"):
+    for key in ("model_name", "provider_key", "execution_config"):
         data.pop(key, None)
     target_type = task.target_type
     target = {"kind": target_type, "entity_id": parent_id or task.target_id}

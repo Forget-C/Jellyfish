@@ -39,7 +39,7 @@ class GenerationEntityGate:
     """统一校验目标、模型和媒体引用，不解释用户编辑后的提示词。"""
 
     async def validate(self, db: AsyncSession, command: GenerationCommand) -> ResolvedGenerationSnapshot:
-        """将可验证的提交命令冻结为不含 ORM/凭据的执行快照。"""
+        """校验生成输入；画布沿用私有固定配置，其他媒体配置由提交器补齐。"""
         await self._validate_target(db, command)
         frozen = None
         if command.target.kind == GenerationTargetKind.canvas_node:

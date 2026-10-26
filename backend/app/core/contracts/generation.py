@@ -136,22 +136,21 @@ class GenerationCommand(BaseModel):
 
 
 class FrozenGenerationConfig(BaseModel):
-    """Canvas-only private execution override; never serialize into public run DTOs."""
+    """服务端私有执行配置；媒体任务及画布运行固定使用，不进入公开 DTO。"""
     model_config = ConfigDict(extra="forbid")
-    model_name: str
+    model_name: str = Field(min_length=1)
     model_params: dict = Field(default_factory=dict)
-    provider_id: str
-    provider_key: str
-    api_key: str = Field(repr=False)
-    base_url: str | None = None
+    provider_id: str = Field(min_length=1)
+    provider_key: str = Field(min_length=1)
+    api_key: str = Field(min_length=1, repr=False)
+    base_url: str | None
 
 
 class ResolvedGenerationSnapshot(BaseModel):
     """Entity Gate 生成的异步任务参数快照。
 
-    Canvas target 可携带服务端私有 execution_config；其他目标保持原行为。
-    Worker 会在真正执行时按 ``model_id`` 读取当前模型与 Provider 配置；快照只
-    保存用户提交的输入，避免待执行任务因模型管理更新而被阻塞。
+    媒体任务在受理时补齐服务端私有 execution_config，执行与轮询均使用它。
+    画布沿用整次运行受理时已固定的配置；其他文本任务保持原执行语义。
     """
 
     model_config = ConfigDict(extra="forbid")

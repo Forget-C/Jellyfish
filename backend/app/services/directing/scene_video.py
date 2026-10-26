@@ -15,7 +15,7 @@ from app.services.llm.resolver import get_model_by_category
 from app.core.contracts.directing.instruction_basis import InstructionInputs
 from app.core.contracts.directing.scene_version import EditableGenerationUnit
 from app.services.generation.gate import GenerationEntityGate
-from app.services.generation.media_execution import load_media_context
+from app.services.generation.media_execution import load_media_inputs
 from app.services.generation.submission.submitter import GenerationSubmitter
 from app.services.directing.instruction_check import InstructionCheckService
 from app.services.directing.store import RevisionConflict
@@ -142,7 +142,7 @@ class SceneVideoService(InstructionCheckService):
                 raise ValueError(f'原参考 {reference.id}（文件 {reference.file_id}）存储对象未能核实，请恢复文件或存储连接后重试；未创建任务') from error
             if not info.size:
                 raise ValueError(f'原参考 {reference.id}（文件 {reference.file_id}）存储对象为空，不能按原依据重试')
-        await load_media_context(self.db, source_task)
+        await load_media_inputs(self.db, source_task)
         check = await self.confirmable_instruction_check(sequence_id, version_id, unit_id, preparation.check_task_id)
         checked = check.input_snapshot['run_args']
         if (checked['instruction'] != preparation.request.execution_prompt

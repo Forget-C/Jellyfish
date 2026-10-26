@@ -7,6 +7,7 @@ import base64
 import hashlib
 import mimetypes
 from tempfile import SpooledTemporaryFile
+from typing import cast, get_args
 from uuid import NAMESPACE_URL, uuid5
 
 import httpx
@@ -17,32 +18,30 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import storage
 from app.core.contracts.generation import FrozenGenerationConfig, GenerationTargetKind, ResolvedGenerationSnapshot
 from app.core.contracts.media import ImageMediaInput, VideoMediaInput
-from app.core.contracts.provider import ProviderConfig
+from app.core.contracts.provider import ProviderConfig, ProviderKey
 from app.core.contracts.provider_media import ProviderImageInput, ProviderImageReference, ProviderVideoFrames, ProviderVideoInput, ProviderVideoSubject
 from app.core.integrations.media_provider import MediaResult, ProviderDataError
-from app.models.llm import ModelCategoryKey, Provider
 from app.models.task import Task, TaskInput, TaskOutput
 from app.models.studio_prompts_files_timeline import FileItem
 from app.services.generation.task_snapshot import restore_snapshot
 from app.services.generation.publishers import AssetImagePublisher
-from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.task_service import TaskService, utcnow
 
 
-async def load_media_context(db: AsyncSession, task: Task) -> tuple[ProviderConfig, ResolvedGenerationSnapshot, dict[str, FileItem]]:
-    """在短事务内读取路由与文件元信息，不在会话内发起下载或供应商请求。"""
-    if task.target_type == 'canvas_node':
+def restore_media_config(task: Task) -> ProviderConfig:
+    """执行与查询共用任务受理时的私有配置，不再解析当前模型或供应商。"""
+    try:
         frozen = FrozenGenerationConfig.model_validate(task.input_snapshot.get('execution_config'))
-        provider_config = ProviderConfig(provider=frozen.provider_key, api_key=frozen.api_key, base_url=frozen.base_url)
-    else:
-        provider = await db.get(Provider, task.provider_id) if task.provider_id else None
-        if provider is None:
-            raise ProviderDataError("provider_missing")
-        category = ModelCategoryKey.image if task.kind == "image_generation" else ModelCategoryKey.video
-        config = resolve_provider_config_from_provider(provider=provider, category=category)
-        if config.provider_key != task.input_snapshot.get("provider_key"):
-            raise ProviderDataError("provider_route_changed")
-        provider_config = ProviderConfig(provider=config.provider_key, api_key=config.api_key, base_url=config.base_url)
+        if frozen.provider_key not in get_args(ProviderKey) or not frozen.base_url:
+            raise ValueError("invalid media route")
+    except ValueError as error:
+        # 校验异常可能带原始凭据，只向任务记录写入固定摘要。
+        raise ProviderDataError("媒体任务缺少有效的供应商配置快照，请重新提交") from error
+    return ProviderConfig(provider=cast(ProviderKey, frozen.provider_key), api_key=frozen.api_key, base_url=frozen.base_url)
+
+
+async def load_media_inputs(db: AsyncSession, task: Task) -> tuple[ResolvedGenerationSnapshot, dict[str, FileItem]]:
+    """在首次执行或显式重试前校验输入文件，并重建完整生成输入。"""
     relations = list(await db.scalars(select(TaskInput).where(TaskInput.task_id == task.id)))
     files = list(await db.scalars(select(FileItem).where(FileItem.id.in_({item.file_id for item in relations})))) if relations else []
     by_id = {file.id: file for file in files}
@@ -51,7 +50,7 @@ async def load_media_context(db: AsyncSession, task: Task) -> tuple[ProviderConf
     if any(file.deleted_at is not None or file.delete_requested_at is not None for file in files):
         raise ProviderDataError("input_file_deleted")
     snapshot = restore_snapshot(task, [(item, by_id[item.file_id]) for item in relations])
-    return provider_config, snapshot, by_id
+    return snapshot, by_id
 
 
 async def build_media_input(task: Task, snapshot: ResolvedGenerationSnapshot, files: dict[str, FileItem]) -> ProviderImageInput | ProviderVideoInput:

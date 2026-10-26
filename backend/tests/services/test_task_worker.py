@@ -281,7 +281,6 @@ def test_stopped_script_blocks_next_actual_model_request():
 @pytest.mark.asyncio
 async def test_poll_and_output_collection_have_total_time_limit(monkeypatch):
     """即使单次下载一直未返回，也会结束本地跟踪，不再无限占用下载名额。"""
-    from types import SimpleNamespace
     from app.task_worker import WorkerLimits
 
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
@@ -290,32 +289,36 @@ async def test_poll_and_output_collection_have_total_time_limit(monkeypatch):
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     download_started = asyncio.Event()
 
-    async def context(*args):
-        """使用本地配置，绕过与超时无关的模型查找。"""
-        return None, None, None
-
-    async def poll(*args, **kwargs):
+    def poll(request):
         """供应商已完成，接下来收取结果。"""
-        return SimpleNamespace(status="succeeded", outputs=[object()])
+        assert request.url.path == "/ent/v2/tasks/original/creations"
+        return httpx.Response(200, json={"state": "success", "creations": [{"b64_json": "eA=="}]})
 
-    async def store(*args, **kwargs):
-        """下载一直未完成，等待总超时取消。"""
+    async def head(**kwargs):
+        """输出尚未存储，需要完整收取。"""
+        raise ClientError({"Error": {"Code": "NoSuchKey"}}, "HeadObject")
+
+    async def upload(**kwargs):
+        """收取一直未完成，等待总超时取消。"""
         download_started.set()
         await asyncio.Event().wait()
 
-    monkeypatch.setattr("app.task_worker.load_media_context", context)
-    monkeypatch.setattr("app.task_worker.MediaProvider.poll", poll)
-    monkeypatch.setattr("app.task_worker.store_media_output", store)
+    monkeypatch.setattr("app.core.storage.get_file_info", head)
+    monkeypatch.setattr("app.core.storage.upload_file", upload)
     try:
         async with sessions.begin() as db:
             service = TaskService(db)
-            task_id = (await service.submit(kind="image_generation", execution_mode="remote", snapshot={})).id
+            task_id = (await service.submit(kind="image_generation", execution_mode="remote", snapshot={
+                "execution_config": {"model_name": "viduq2", "provider_id": "provider", "provider_key": "vidu",
+                                     "api_key": "test", "base_url": "https://provider.invalid"},
+            })).id
             await service.claim(task_id, worker_id="previous")
             await service.record_submission(task_id, provider_task_id="original")
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(poll)) as client:
             worker = TaskWorker(sessions, client=client, limits=WorkerLimits(execution_seconds=0.1))
             try:
-                await asyncio.wait_for(worker._poll(task_id), 2)
+                await worker.tick()
+                await asyncio.wait_for(asyncio.gather(*list(worker.jobs.values())), 2)
                 assert download_started.is_set()
                 async with sessions() as db:
                     task = await db.get(Task, task_id)

@@ -60,14 +60,15 @@ async def test_media_submission_records_project_for_history_filter():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("provider_name,mode", [("OpenAI", "direct"), ("Vidu", "remote")])
 async def test_image_submission_accepts_direct_and_remote_providers(provider_name, mode, monkeypatch):
-    """无需恢复能力也可提交；快照只保存一份输入且不包含供应商凭据。"""
+    """提交固定有效配置，凭据仅留在私有快照，公开查询不泄漏。"""
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     try:
         async with sessions() as db:
-            db.add(Provider(id="provider", name=provider_name, base_url="https://example.invalid", api_key="test-secret"))
+            db.add(Provider(id="provider", name=provider_name, base_url="https://example.invalid",
+                            image_base_url="https://images.invalid", api_key="test-secret"))
             db.add(ExperimentSession(id="session", lab_type="image"))
             db.add(FileItem(id="input", type="image", name="reference", storage_key="input.png"))
             await db.flush()
@@ -97,7 +98,15 @@ async def test_image_submission_accepts_direct_and_remote_providers(provider_nam
             assert task.status == "queued"
             assert task.execution_mode == mode
             assert task.provider_id == "provider"
-            assert "test-secret" not in str(task.input_snapshot)
+            assert task.input_snapshot["execution_config"] == {
+                "model_name": "test-model", "model_params": {}, "provider_id": "provider",
+                "provider_key": provider_name.lower(), "api_key": "test-secret", "base_url": "https://images.invalid",
+            }
+            from app.services.task_queries import TaskQueries
+            queries = TaskQueries(db)
+            public = [(await queries.list()).model_dump_json(), (await queries.status(task.id)).model_dump_json(),
+                      (await queries.result(task.id)).model_dump_json()]
+            assert all("test-secret" not in response and "execution_config" not in response for response in public)
             assert "media" not in task.input_snapshot
             assert "command" not in task.input_snapshot
             rows = (await db.execute(select(TaskInput, FileItem).join(FileItem, FileItem.id == TaskInput.file_id))).all()
@@ -109,10 +118,10 @@ async def test_image_submission_accepts_direct_and_remote_providers(provider_nam
             with pytest.raises(HTTPException) as error:
                 await GenerationSubmitter(entity_gate=GenerationEntityGate()).submit_async(db, command)
             assert error.value.detail == "experiment_session_type_invalid"
-        from app.services.generation.media_execution import load_media_context, build_media_input
+        from app.services.generation.media_execution import load_media_inputs, build_media_input
         async with sessions() as execution_db:
             task = await execution_db.get(Task, accepted.task_id)
-            _, snapshot, files = await load_media_context(execution_db, task)
+            snapshot, files = await load_media_inputs(execution_db, task)
         async def download(*, key):
             """只有执行期下载参考图，而且数据库事务已释放。"""
             assert not execution_db.in_transaction()

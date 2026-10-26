@@ -30,7 +30,7 @@ from app.services.directing.scene_export_execution import execute_scene_export
 from app.services.directing.scene_export_render import render_scene_cut
 from app.services.directing.review_revision import ReviewRevisionService
 from app.services.directing.store import DirectingStore, ContinuityNotReady
-from app.services.generation.media_execution import build_media_input, deliver_media, load_media_context, store_media_output
+from app.services.generation.media_execution import build_media_input, deliver_media, load_media_inputs, restore_media_config, store_media_output
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.script_processing_worker import generate_script_result
 from app.services.studio.experiment_messages import ExperimentMessageDraft, append_experiment_messages
@@ -214,8 +214,9 @@ class TaskWorker:
                 if task.kind not in MEDIA_KINDS:
                     await self._text(task)
                     return
+                cfg = restore_media_config(task)
                 async with self.sessions() as db:
-                    cfg, snapshot, files = await load_media_context(db, task)
+                    snapshot, files = await load_media_inputs(db, task)
                 inp = await build_media_input(task, snapshot, files)
                 if await self._load(task_id) is None:
                     return
@@ -255,8 +256,7 @@ class TaskWorker:
                 task = await self._load(task_id)
                 if task is None:
                     return
-                async with self.sessions() as db:
-                    cfg, _, _ = await load_media_context(db, task)
+                cfg = restore_media_config(task)
                 try:
                     observed = await MediaProvider(self.client).poll(cfg, kind=task.kind, task_id=task.provider_task_id)
                 except (httpx.TransportError, httpx.HTTPStatusError) as error:

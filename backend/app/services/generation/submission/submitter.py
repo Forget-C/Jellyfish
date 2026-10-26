@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.contracts.generation import GenerationCommand, GenerationDelivery, ResolvedGenerationSnapshot
+from app.core.contracts.generation import FrozenGenerationConfig, GenerationCommand, GenerationDelivery, ResolvedGenerationSnapshot
 from app.core.contracts.task import TaskExecutionMode
 from app.models.llm import Model, ModelCategoryKey, Provider
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
@@ -57,7 +57,7 @@ class GenerationSubmitter:
     async def persist_async_task(
         self, *, db: AsyncSession, command: GenerationCommand, snapshot: ResolvedGenerationSnapshot, retry_of_task_id: str | None = None,
     ) -> GenerationAccepted:
-        """冻结模型路由身份；canvas 私有 override 固定实际配置，其他目标仍执行期解析。"""
+        """媒体任务受理时冻结有效执行配置；保留画布运行已固定的更早依据。"""
         frozen = snapshot.execution_config
         if frozen:
             model_name, provider_id, provider_key = frozen.model_name, frozen.provider_id, frozen.provider_key
@@ -68,6 +68,10 @@ class GenerationSubmitter:
                 raise HTTPException(status_code=422, detail="generation_model_unavailable")
             config = resolve_provider_config_from_provider(provider=provider, category=ModelCategoryKey(command.modality.value))
             model_name, provider_id, provider_key = model.name, provider.id, config.provider_key
+            if command.modality.value in {"image", "video"}:
+                frozen = FrozenGenerationConfig(model_name=model.name, model_params=model.params or {},
+                    provider_id=provider.id, provider_key=config.provider_key, api_key=config.api_key, base_url=config.base_url)
+                snapshot = snapshot.model_copy(update={"execution_config": frozen})
         mode = TaskExecutionMode.direct
         if command.operation.value == "video_generation" or (
             command.operation.value == "image_generation" and provider_key in {"vidu", "kling"}

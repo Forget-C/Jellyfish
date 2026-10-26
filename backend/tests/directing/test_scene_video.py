@@ -405,6 +405,18 @@ async def test_video_submission_freezes_original_unit_and_registers_only_candida
                 assert len((await client.get(video_url)).json()['data']) == 2
                 assert (await client.get(detail)).json()['data']['revision'] == 6
             reference_storage['/scene-test/files/space.png'] = b'original-reference'
+        async with sessions.begin() as db:
+            original_task = await db.get(Task, workflow_task)
+            original_snapshot = deepcopy(original_task.input_snapshot)
+            if not with_reference:
+                original_snapshot.pop('execution_config')
+            else:
+                # 原任务的损坏执行配置不参与新任务的业务输入校验。
+                original_snapshot['execution_config']['api_key'] = ''
+            original_task.input_snapshot = deepcopy(original_snapshot)
+            provider = await db.get(Provider, video_provider)
+            provider.api_key = 'retry-secret'
+            provider.video_base_url = 'https://retry.invalid'
         from app.services.directing.scene_video import SceneVideoService  # pylint: disable=import-outside-toplevel
         async def changed_projection(*_args):
             raise AssertionError('历史重试不应重新投影固定输入')
@@ -414,7 +426,18 @@ async def test_video_submission_freezes_original_unit_and_registers_only_candida
         assert retry.status_code == 200, retry.text
         retry_task = retry.json()['data']['task_id']
         assert retry_task != workflow_task
+        async with sessions() as db:
+            frozen = (await db.get(Task, retry_task)).input_snapshot['execution_config']
+            assert frozen['api_key'] == 'retry-secret'
+            assert frozen['base_url'] == 'https://retry.invalid'
+            assert (await db.get(Task, workflow_task)).input_snapshot == original_snapshot
+        assert 'retry-secret' not in (await client.get(video_url)).text
+        async with sessions.begin() as db:
+            provider = await db.get(Provider, video_provider)
+            provider.api_key, provider.video_base_url = 'fixture', None
         assert (await client.post(retry_url, json=retry_request)).json()['data']['task_id'] == retry_task
+        async with sessions() as db:
+            assert (await db.get(Task, retry_task)).input_snapshot['execution_config']['api_key'] == 'retry-secret'
         assert (await client.post(retry_url, json={'request_id': str(uuid4())})).status_code == 409
         retried = next(row for row in (await client.get(video_url)).json()['data'] if row['task_id'] == retry_task)
         assert retried['preparation'] == original_execution['preparation']
