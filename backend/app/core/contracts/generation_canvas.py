@@ -241,6 +241,38 @@ class DialogueBasis(BaseModel):
     speaker: ObjectReferencePayload | None = None
 
 
+class CriterionReferencePayload(BaseModel):
+    """验收依据只提供稳定要求身份与名称，不包含标准正文或示例。"""
+    model_config = ConfigDict(extra='forbid')
+    kind: Literal['criterion_reference'] = Field(default='criterion_reference', json_schema_extra={'enum': ['criterion_reference']})
+    criterion_id: str
+    name: str
+
+
+class CreativeControlFields(BaseModel):
+    """可发挥、保持和待定内容分别保留状态，不推断创作程度。"""
+    model_config = ConfigDict(extra='forbid')
+    freedom: DesignField
+    allowed_range: DesignField
+    keep: DesignField
+    undecided: DesignField
+
+
+class GenerationGuidanceFields(BaseModel):
+    """生成优先级和参考要求仅作为设计，不自动采用媒体。"""
+    model_config = ConfigDict(extra='forbid')
+    priority: DesignField
+    reference_requirements: DesignField
+    sound_strategy: DesignField
+    prohibitions: DesignField
+
+
+class AcceptanceCriterionFields(BaseModel):
+    """可观察的判断标准不代表结果已经通过验收。"""
+    model_config = ConfigDict(extra='forbid')
+    standard: DesignField
+
+
 class NarrativeOverviewFields(BaseModel):
     """本卡强类型完整叙事字段，保留显式状态。"""
     model_config = ConfigDict(extra='forbid')
@@ -336,12 +368,12 @@ class DesignTextPayload(BaseModel):
     """本卡完整设计及直接采用的必要对象，不包含祖先正文或示例媒体。"""
     model_config = ConfigDict(extra='forbid')
     kind: Literal['design'] = Field(default='design', json_schema_extra={'enum': ['design']})
-    design_type: Literal['direction.style', 'direction.space_rule', 'direction.continuity', 'direction.fact', 'direction.situation', 'direction.performance', 'direction.performance_rule', 'direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment', 'direction.narrative', 'direction.beat', 'direction.event', 'direction.shot', 'direction.dialogue', 'direction.sound']
+    design_type: Literal['direction.style', 'direction.space_rule', 'direction.continuity', 'direction.fact', 'direction.creative_control', 'direction.guidance', 'direction.criterion', 'direction.situation', 'direction.performance', 'direction.performance_rule', 'direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment', 'direction.narrative', 'direction.beat', 'direction.event', 'direction.shot', 'direction.dialogue', 'direction.sound']
     adoption: Literal['whole_card'] = Field(default='whole_card', json_schema_extra={'enum': ['whole_card']})
     text: str
     frame_states: list[FrameState] = Field(default_factory=list, exclude_if=lambda value: not value)
     requires_frame_target: bool = Field(default=False, exclude_if=lambda value: not value)
-    fields: StyleDesignFields | SpaceRuleFields | ContinuityFields | ImmutableFactFields | NarrativeOverviewFields | NarrativeBeatFields | NarrativeEventFields | ShotDesignFields | PerformanceDesignFields | AnchorDesignFields | BlockingDesignFields | ActivityDesignFields | EnvironmentDesignFields | SoundDesignFields
+    fields: StyleDesignFields | SpaceRuleFields | ContinuityFields | ImmutableFactFields | CreativeControlFields | GenerationGuidanceFields | AcceptanceCriterionFields | NarrativeOverviewFields | NarrativeBeatFields | NarrativeEventFields | ShotDesignFields | PerformanceDesignFields | AnchorDesignFields | BlockingDesignFields | ActivityDesignFields | EnvironmentDesignFields | SoundDesignFields
     scope: DesignScope
     objects: list[ObjectReferencePayload] = Field(default_factory=list)
     spatial_relations: SpatialDesignRelations | None = Field(default=None, exclude_if=lambda value: value is None)
@@ -351,4 +383,5 @@ class DesignTextPayload(BaseModel):
     dialogue_id: str | None = Field(default=None, exclude_if=lambda value: value is None)
     version: int | None = Field(default=None, exclude_if=lambda value: value is None)
     source_locator: str = ''
+    acceptance_basis: list[CriterionReferencePayload] = Field(default_factory=list, exclude_if=lambda value: not value)
     dialogue_basis: list[DialogueBasis] = Field(default_factory=list, exclude_if=lambda value: not value)

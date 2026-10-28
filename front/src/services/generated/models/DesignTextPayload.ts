@@ -2,14 +2,18 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { AcceptanceCriterionFields } from './AcceptanceCriterionFields';
 import type { ActivityDesignFields } from './ActivityDesignFields';
 import type { AnchorDesignFields } from './AnchorDesignFields';
 import type { BlockingDesignFields } from './BlockingDesignFields';
 import type { ContinuityFields } from './ContinuityFields';
+import type { CreativeControlFields } from './CreativeControlFields';
+import type { CriterionReferencePayload } from './CriterionReferencePayload';
 import type { DesignScope } from './DesignScope';
 import type { DialogueBasis } from './DialogueBasis';
 import type { EnvironmentDesignFields } from './EnvironmentDesignFields';
 import type { FrameState } from './FrameState';
+import type { GenerationGuidanceFields } from './GenerationGuidanceFields';
 import type { ImmutableFactFields } from './ImmutableFactFields';
 import type { NarrativeBeatFields } from './NarrativeBeatFields';
 import type { NarrativeDesignRelation } from './NarrativeDesignRelation';
@@ -29,12 +33,12 @@ import type { StyleDesignFields } from './StyleDesignFields';
  */
 export type DesignTextPayload = {
     kind?: 'design';
-    design_type: 'direction.style' | 'direction.space_rule' | 'direction.continuity' | 'direction.fact' | 'direction.situation' | 'direction.performance' | 'direction.performance_rule' | 'direction.anchor' | 'direction.blocking' | 'direction.activity' | 'direction.environment' | 'direction.narrative' | 'direction.beat' | 'direction.event' | 'direction.shot' | 'direction.dialogue' | 'direction.sound';
+    design_type: 'direction.style' | 'direction.space_rule' | 'direction.continuity' | 'direction.fact' | 'direction.creative_control' | 'direction.guidance' | 'direction.criterion' | 'direction.situation' | 'direction.performance' | 'direction.performance_rule' | 'direction.anchor' | 'direction.blocking' | 'direction.activity' | 'direction.environment' | 'direction.narrative' | 'direction.beat' | 'direction.event' | 'direction.shot' | 'direction.dialogue' | 'direction.sound';
     adoption?: 'whole_card';
     text: string;
     frame_states?: Array<FrameState>;
     requires_frame_target?: boolean;
-    fields: (StyleDesignFields | SpaceRuleFields | ContinuityFields | ImmutableFactFields | NarrativeOverviewFields | NarrativeBeatFields | NarrativeEventFields | ShotDesignFields | PerformanceDesignFields | AnchorDesignFields | BlockingDesignFields | ActivityDesignFields | EnvironmentDesignFields | SoundDesignFields);
+    fields: (StyleDesignFields | SpaceRuleFields | ContinuityFields | ImmutableFactFields | CreativeControlFields | GenerationGuidanceFields | AcceptanceCriterionFields | NarrativeOverviewFields | NarrativeBeatFields | NarrativeEventFields | ShotDesignFields | PerformanceDesignFields | AnchorDesignFields | BlockingDesignFields | ActivityDesignFields | EnvironmentDesignFields | SoundDesignFields);
     scope: DesignScope;
     objects?: Array<ObjectReferencePayload>;
     spatial_relations?: (SpatialDesignRelations | null);
@@ -44,5 +48,6 @@ export type DesignTextPayload = {
     dialogue_id?: (string | null);
     version?: (number | null);
     source_locator?: string;
+    acceptance_basis?: Array<CriterionReferencePayload>;
     dialogue_basis?: Array<DialogueBasis>;
 };

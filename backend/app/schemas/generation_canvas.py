@@ -4,7 +4,7 @@ from typing import Annotated, Any, ClassVar, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.schemas.common import ApiResponse
 from app.core.contracts.media import VideoMediaInput
-from app.core.contracts.generation_canvas import OutputIdentity, InputBinding, TextOutputPayload, MediaOutputPayload, ObjectReferencePayload, DescriptionTextPayload, NamedImageObject, ReferenceImageBinding, NamedImagePayload, CanvasSourceMapping, NamedImageMapping, DesignField, DesignScope, DesignTextPayload, SpatialReferencePayload, NarrativeReferencePayload
+from app.core.contracts.generation_canvas import OutputIdentity, InputBinding, TextOutputPayload, MediaOutputPayload, ObjectReferencePayload, DescriptionTextPayload, NamedImageObject, ReferenceImageBinding, NamedImagePayload, CanvasSourceMapping, NamedImageMapping, DesignField, DesignScope, CriterionReferencePayload, DesignTextPayload, SpatialReferencePayload, NarrativeReferencePayload
 
 
 from app.core.contracts.photography import PhotographyFieldKey, PhotographyFields, PhotographyPhase, PhotographyTextPayload, ImageFrameTarget
@@ -359,6 +359,38 @@ class PerformanceRuleCard(PerformanceDirectionCard):
     input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'image_example', 'video_example')
 
 
+class GuidanceDirectionCard(PerformanceDirectionCard):
+    """创作要求沿用设计保存和固定示例保护，字段由具体卡声明。"""
+    name: str = ''
+    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'image_example', 'video_example')
+
+
+class CreativeControlCard(GuidanceDirectionCard):
+    """控制发挥范围，不建立全场自动适用规则。"""
+    type: Literal['direction.creative_control'] = Field(default='direction.creative_control', json_schema_extra={'enum': ['direction.creative_control']})
+    freedom: DesignField = Field(default_factory=DesignField)
+    allowed_range: DesignField = Field(default_factory=DesignField)
+    keep: DesignField = Field(default_factory=lambda: DesignField(purpose='constraint'))
+    undecided: DesignField = Field(default_factory=lambda: DesignField(state='undecided'))
+
+
+class GenerationGuidanceCard(GuidanceDirectionCard):
+    """编译要求是创作者表达，参考需求不替代明确输入绑定。"""
+    type: Literal['direction.guidance'] = Field(default='direction.guidance', json_schema_extra={'enum': ['direction.guidance']})
+    priority: DesignField = Field(default_factory=DesignField)
+    reference_requirements: DesignField = Field(default_factory=DesignField)
+    sound_strategy: DesignField = Field(default_factory=DesignField)
+    prohibitions: DesignField = Field(default_factory=lambda: DesignField(purpose='constraint'))
+
+
+class AcceptanceCriterionCard(GuidanceDirectionCard):
+    """稳定要求身份独立于标准正文，使用方明确选择引用。"""
+    type: Literal['direction.criterion'] = Field(default='direction.criterion', json_schema_extra={'enum': ['direction.criterion']})
+    criterion_id: str | None = Field(default=None, min_length=1, max_length=64)
+    standard: DesignField = Field(default_factory=lambda: DesignField(purpose='constraint'))
+    output_ports: ClassVar[tuple[str, ...]] = ('text', 'criterion')
+
+
 class SpatialDirectionCard(PerformanceDirectionCard):
     """空间设计共用保存和媒体保护，业务字段仍由各具体类型声明。"""
 
@@ -584,7 +616,7 @@ class CanvasDocument(BaseModel):
     project_id: str
     name: str = Field(min_length=1, max_length=255)
     schema_version: Literal[2] = 2
-    cards: list[VisualStyleCard | SpaceRuleCard | ContinuityCard | ImmutableFactCard | PhotographyCard | DialogueCard | SoundArrangementCard | NarrativeOverviewCard | NarrativeBeatCard | NarrativeEventCard | ShotDesignCard | SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | ObjectDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard] = Field(default_factory=list)
+    cards: list[VisualStyleCard | SpaceRuleCard | ContinuityCard | ImmutableFactCard | CreativeControlCard | GenerationGuidanceCard | AcceptanceCriterionCard | PhotographyCard | DialogueCard | SoundArrangementCard | NarrativeOverviewCard | NarrativeBeatCard | NarrativeEventCard | ShotDesignCard | SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | ObjectDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard] = Field(default_factory=list)
     edges: list[GenerationCanvasEdge] = Field(default_factory=list)
     input_order: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
     groups: list[GenerationCanvasGroup] = Field(default_factory=list)
@@ -645,7 +677,7 @@ class CanvasResolvedOutput(BaseModel):
     """已发布的实际输出，运行层可注入模型当前输出而无需虚构未来结果。"""
     source: OutputIdentity
     modality: str
-    payload: Annotated[TextOutputPayload | MediaOutputPayload | ObjectReferencePayload | DescriptionTextPayload | NamedImagePayload | DesignTextPayload | SpatialReferencePayload | NarrativeReferencePayload | PhotographyTextPayload, Field(discriminator='kind')] | None = None
+    payload: Annotated[TextOutputPayload | MediaOutputPayload | ObjectReferencePayload | DescriptionTextPayload | NamedImagePayload | DesignTextPayload | SpatialReferencePayload | NarrativeReferencePayload | CriterionReferencePayload | PhotographyTextPayload, Field(discriminator='kind')] | None = None
     text: str | None = None
     file_id: str | None = None
     token: str = ''
@@ -663,7 +695,7 @@ class CanvasResolvedOutput(BaseModel):
             elif self.modality in ('image', 'video', 'audio') and self.file_id:
                 self.payload = MediaOutputPayload(kind=self.modality, file_id=self.file_id)
         if self.payload is not None:
-            self.modality = 'text' if isinstance(self.payload, (ObjectReferencePayload, DescriptionTextPayload, DesignTextPayload, SpatialReferencePayload, NarrativeReferencePayload, PhotographyTextPayload)) else 'image' if isinstance(self.payload, NamedImagePayload) else self.payload.kind
+            self.modality = 'text' if isinstance(self.payload, (ObjectReferencePayload, DescriptionTextPayload, DesignTextPayload, SpatialReferencePayload, NarrativeReferencePayload, CriterionReferencePayload, PhotographyTextPayload)) else 'image' if isinstance(self.payload, NamedImagePayload) else self.payload.kind
             self.text = getattr(self.payload, 'text', None)
             self.file_id = getattr(self.payload, 'file_id', None)
         return self

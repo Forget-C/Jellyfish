@@ -18,10 +18,13 @@ class ContentOutputHandler:
     """普通内容只发布自己的正文或具体文件。"""
     def publish(self, canvas_id, card, adopted_inputs, published_results):
         """内容卡没有持续输入，描述来源只随明确描述出口提供。"""
+        from app.schemas.generation_canvas import NarrativeDirectionCard, GuidanceDirectionCard
         if isinstance(card, VisualStyleCard):
             from app.services.generation_canvas.visual_style import publish_style
             return publish_style(canvas_id, card)
-        from app.schemas.generation_canvas import NarrativeDirectionCard
+        if isinstance(card, GuidanceDirectionCard):
+            from app.services.generation_canvas.guidance import publish_guidance
+            return publish_guidance(canvas_id, card, adopted_inputs)
         from app.schemas.generation_canvas import ConstraintDirectionCard
         if isinstance(card, ConstraintDirectionCard):
             from app.services.generation_canvas.continuity import publish_constraint

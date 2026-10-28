@@ -224,6 +224,11 @@ flowchart TD
 
 - 2026-10-29：主区依次集成14（`9678a1f0`）及18（`99659847`），仅README和浏览器套件列表冲突，保留双方新增记录及入口；Completion更新为integrated。合后叙事／混合／摄影／空间／声音／表演HTTP与真实Worker组合 **108 passed**（10.76s），Node24.22.1 typecheck通过，`git diff --check`通过；复用14全画布232 passed／28 MySQL skipped、Pylint10.00/10及两票真实页面证据。主区 `app.__file__` 已确认，当前生产app导出与提交OpenAPI精确一致（`/private/tmp/canvas14-18-integrated-production.json`）。8000父进程73854仍属当前主backend，但升级权限的urllib20／30秒与绕过代理curl10秒均无响应；未终止用户服务，标准 `openapi:update` 留待该服务恢复后复验，不从旧进程覆盖已同步契约。供应商／存储替身和MySQL缺环境边界保留。 当前01–12、14、15、18共十五票已集成，13／16／17可按依赖推进；未推送。
 
+### 17 创作控制、生成指导与验收要求
+
+- 已实现三类要求卡、默认完整设计输出、稳定验收引用及镜头／表演／摄影的明确验收关联。验收只读使用记录按实际绑定统计；关系只传身份名称，标准正文必须由模型直接采用。合法作用对象按字段资格选取，验收禁止反向绑定使用方；示例固定文件与区间不随设计输出传递。
+- 独立验证：15项HTTP含三模态真实Worker，全画布249 passed／28 MySQL skipped，Pylint10、Node24typecheck；统一真实Chrome入口15.5s通过，覆盖真实拖拽候选、三使用方采用与取消、只读使用记录、完整标准直接采用、保存重开及390px窄屏。证据 `/private/tmp/canvas17-guidance-final`。implemented 等待主区集成；详情见17票 Comments。
+
 
 - 2026-10-29：16在独立 `codex-canvas-types-16` 完成空间规则、连续性、不可改事实三类专用卡及强类型完整输出、直接关系、固定证据／前后态、图片目标。实现 `7a5fc1e0`，已合最新集成 `8e94c579`，Completion为implemented待集成，Status不变。本票HTTP17 passed，全部画布249 passed／28 MySQL skipped；Pylint10.00/10、Node24 typecheck及真实Chrome桌面／390px窄屏通过。合18后相关连续性／混合／摄影36 passed；HTTP生产schema与generated精确同步。实际拖线仍仅候选、证据不隐式传媒体、图片目标不截断整卡，图兼容仅补本票space_rule/fact稳定作用对象并与17协调。详情、红绿记录、证据目录和受控供应商／存储限制见16 Comments；共享组件未改，按影响复用12公共验收，主区标准OpenAPI更新待集成执行。
 
@@ -234,3 +239,5 @@ flowchart TD
 - 16交付前已同步13实现及最新主区 `b12275a1`；解决共享契约／导航／生成类型冲突后，连续性／风格／摄影39 passed、Pylint10、Node24 typecheck及真实Chrome完整页面再次通过。当前HTTP生产schema与提交精确一致；风格入口归“画面设计”，三类约束归“连续性与约束”。最后证据与合并边界见16 Comments，Completion仍为implemented待主区集成。
 
 - 2026-10-29：无冲突集成16（分支HEAD `758cb145`，显式合并 `263fc51e`），Completion更新为integrated，分诊Status不变。合后连续性／风格／摄影／叙事HTTP与真实Worker组合 **56 passed**（6.66s）、Node24.22.1 typecheck及差异检查通过；复用同一产品实现全画布249 passed／28 skipped、Pylint10与真实Chrome证据。当前主区app导出、8000实际HTTP和提交OpenAPI精确一致，标准 `openapi:update` 成功，425处纯尾空行generated漂移经字节核对剔除；生产与HTTP证据在 `/private/tmp/canvas16-integrated-production.json`、`/private/tmp/canvas16-integrated-http.json`。保留限定空间规则／事实的结构引用兼容、风格和所有联合类型；不扩大其他接收卡资格。01–16及18共十七票集成，17进行中，19等待17；外部供应商／存储替身及MySQL未运行限制保持，未推送、未操作其他工作树。
+
+- 17交付前已合主区最终 `fb1f95d2`，13风格与16连续性字段／编辑／预设／固定示例全部保留；合后全画布271 passed／28 skipped、Pylint10、Node24typecheck，真实Chrome要求卡统一入口15.7s再次通过，当前WT生产schema精确等提交OpenAPI。证据 `/private/tmp/canvas17-after16-guidance`；implemented待主区merger复验，未推送。

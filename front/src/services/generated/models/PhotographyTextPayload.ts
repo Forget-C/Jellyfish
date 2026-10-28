@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { CriterionReferencePayload } from './CriterionReferencePayload';
 import type { DesignScope } from './DesignScope';
 import type { FrameState } from './FrameState';
 import type { NarrativeReferencePayload } from './NarrativeReferencePayload';
@@ -26,4 +27,5 @@ export type PhotographyTextPayload = {
     objects?: Array<ObjectReferencePayload>;
     shot?: (NarrativeReferencePayload | null);
     source_locator?: string;
+    acceptance_basis?: Array<CriterionReferencePayload>;
 };

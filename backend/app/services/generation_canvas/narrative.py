@@ -1,6 +1,6 @@
 """叙事设计只发布本卡内容；故事对象引用与全文输出分开。"""
 from app.core.contracts.generation_canvas import (
-    FrameState, DesignField, DesignTextPayload, NarrativeOverviewFields, NarrativeBeatFields,
+    CriterionReferencePayload, FrameState, DesignField, DesignTextPayload, NarrativeOverviewFields, NarrativeBeatFields,
     NarrativeEventFields, ShotDesignFields, NarrativeReferencePayload,
     NarrativeDesignRelation, ObjectReferencePayload, SpatialReferencePayload, OutputIdentity,
 )
@@ -38,8 +38,11 @@ def publish_narrative(canvas_id, card, adopted_inputs):
     field_type = FIELD_TYPES[card.type]
     fields = field_type(**{key: getattr(card, key) for key in field_type.model_fields})
     relations = direct_relations(card, adopted_inputs)
+    from app.services.generation_canvas.guidance import adopted_acceptance, acceptance_lines
+    acceptance = adopted_acceptance(adopted_inputs)
     lines = ['名称：' + card.name] if card.name.strip() else []
     lines.extend(relation_lines(relations))
+    lines.extend(acceptance_lines(acceptance))
     lines.extend(f'{PURPOSE_LABELS[field.purpose]} / {FIELD_LABELS[key]} [{STATE_LABELS[field.state]}]：{field.text}' + (f'（来源：{field.source_locator}）' if field.source_locator else '')
                  for key in field_type.model_fields if isinstance((field := getattr(fields, key)), DesignField) and field.state not in ('empty', 'not_applicable') and (field.text or field.state == 'absent'))
     for label, value in [('适用范围', card.scope.description), ('制作阶段', card.scope.phase), ('适用条件', card.scope.condition), ('来源', card.source_locator)]:
@@ -51,7 +54,7 @@ def publish_narrative(canvas_id, card, adopted_inputs):
             payload=DesignTextPayload(design_type=card.type, text='\n'.join(lines), fields=fields, scope=card.scope,
                 objects=[row.reference for row in relations if isinstance(row.reference, ObjectReferencePayload)],
                 references=[row.reference for row in relations if isinstance(row.reference, (SpatialReferencePayload, NarrativeReferencePayload))],
-                narrative_relations=relations, source_locator=card.source_locator,
+                narrative_relations=relations, acceptance_basis=acceptance, source_locator=card.source_locator,
                 frame_states=[FrameState(id='field:visible_result', label='可见结果')] if card.type == 'direction.shot' and card.visible_result.state not in ('empty', 'not_applicable') and card.visible_result.text else [])))
     category = card.type.removeprefix('direction.')
     identifier = getattr(card, category + '_id', None)
@@ -63,6 +66,8 @@ def publish_narrative(canvas_id, card, adopted_inputs):
 
 def narrative_binding_allowed(port, payload):
     """按接收用途限制对象类别，避免把名称或设计全文当身份。"""
+    if isinstance(payload, CriterionReferencePayload):
+        return port == 'acceptance_basis'
     if isinstance(payload, ObjectReferencePayload):
         return port == 'effect_object' or port == 'participant' and payload.category in ('character', 'prop', 'costume')
     if isinstance(payload, SpatialReferencePayload):

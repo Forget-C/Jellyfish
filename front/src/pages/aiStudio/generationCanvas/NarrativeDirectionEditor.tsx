@@ -1,3 +1,4 @@
+import { AcceptanceBasisSelector } from './AcceptanceBasisSelector'
 import { Alert, Input, Select } from 'antd'
 import type { NarrativeOverviewCard, NarrativeBeatCard, NarrativeEventCard, ShotDesignCard, DesignField } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
@@ -30,6 +31,7 @@ export function NarrativeDirectionEditor({ card: raw, document, savedRevision, m
     <p>完整采用本卡叙事设计。关联仅保留身份与名称；全文和媒体需在模型端分别直接采用。预计时长是设计信息，关系不代表实际覆盖或自动执行，生成不自动确认设计。</p>
     <Input aria-label="叙事名称" value={card.name} onChange={event => onChange({ ...card, name: event.target.value })} />
     {identity && <small>稳定身份：{identity}</small>}
+    {card.type === 'direction.shot' && <AcceptanceBasisSelector card={card} document={document} candidates={resolved.candidates} disabled={disabled} onChange={onChange} />}
     {card.type === 'direction.narrative' && <>{field('viewpoint', '观察视点')}{field('information_change', '信息变化')}{field('relationship_change', '人物关系变化')}{field('turning_point', '关键转折')}{field('open_questions', '待确定问题')}</>}
     {card.type === 'direction.beat' && <>{field('objective', '行动目标')}{field('obstacle', '阻碍')}{field('expected_change', '预期变化')}{field('audience_must_see', '必须让观众看到')}</>}
     {card.type === 'direction.event' && field('action_change', '动作或变化说明')}
