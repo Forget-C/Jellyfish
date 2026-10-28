@@ -13,6 +13,11 @@ export function referenceIssue(document: CanvasDocument, _receiver: GenerationCa
 /** 清理引用与删边/来源可以在同一份最终编辑文档里完成。 */
 export function referenceProtection(document: CanvasDocument, sourceCard: string, receiverId?: string, sourcePort?: string) {
   for (const card of document.cards || []) if ('prompt' in card && (!receiverId || card.id === receiverId)) {
+    for (const binding of card.input_bindings || []) {
+      if (binding.source.canvas_id !== document.id || binding.source.card_id !== sourceCard || sourcePort && binding.source.port_id !== sourcePort) continue
+      const ref = referencesIn(editorPrompt(card)).find(reference => reference.binding_id === binding.id)
+      return { message: '请先清理 ' + card.id + ' 的实际输入绑定 ' + binding.id, cardId: card.id, segmentId: ref?.id || binding.id, referenceId: ref?.id || binding.id }
+    }
     for (const segment of editorPrompt(card).segments || []) {
       const refs = segment.kind === 'reference' ? [segment] : segment.kind === 'instruction' ? segment.references || [] : []
       const ref = refs.find(item => item.source.canvas_id === document.id && item.source.card_id === sourceCard && (!sourcePort || item.source.port_id === sourcePort))

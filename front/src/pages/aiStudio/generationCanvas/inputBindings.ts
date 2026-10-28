@@ -22,7 +22,10 @@ export function editorPrompt(card: GenerationCard): EditorPromptDocument {
 
 export function withEditorPrompt(card: GenerationCard, prompt: EditorPromptDocument): GenerationCard {
   if (!('prompt' in card)) return card
-  const bindings: InputBinding[] = []
+  const mentioned = new Set((card.prompt?.segments || []).flatMap(segment => segment.kind === 'reference' ? [segment.binding_id]
+    : segment.kind === 'instruction' ? (segment.references || []).map(reference => reference.binding_id) : []))
+  // 正文只移除它原先引用而本次取消的绑定，保留输入区独立采用的记录。
+  const bindings: InputBinding[] = (card.input_bindings || []).filter(binding => !mentioned.has(binding.id))
   const bind = (reference: EditorPromptReference, command?: string): PromptReference => {
     let input_port = command ? commandPorts[command] || reference.source.port_id : reference.source.port_id
     if (card.type === 'model.video' && ['image', 'video'].includes(input_port)) input_port = 'subject_' + input_port
