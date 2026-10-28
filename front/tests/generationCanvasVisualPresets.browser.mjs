@@ -58,7 +58,7 @@ try {
     await detail.getByRole('button',{name:'浏览'+entry+'预设',exact:true}).click()
     dialog=page.getByRole('dialog',{name:entry+'预设',exact:true})
     assert.equal(await dialog.locator('svg').count()>0,true)
-    if(entry==='运镜') {const video=dialog.locator('video');await video.evaluate(v=>v.play());await page.waitForFunction(()=>document.querySelector('video')?.readyState>=2)}
+    if(entry==='运镜') {const video=dialog.locator('video');await video.evaluate(v=>v.play());await page.waitForFunction(()=>document.querySelector('video')?.readyState>=2);await dialog.screenshot({path:join(output,'photography-motion.png'),animations:'disabled'})}
     await dialog.getByRole('button',{name:'应用到当前卡片',exact:true}).click()
     if(entry==='景别与构图') { await poll(s=>s.document.cards.find(c=>c.id==='photo').fields.shot_size.text==='特写');assert.equal((await read()).document.cards.find(c=>c.id==='photo').fields.light_sources.text,'保留自定义灯光') }
   }
