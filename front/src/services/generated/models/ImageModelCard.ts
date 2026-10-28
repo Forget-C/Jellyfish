@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ImageFrameTarget } from './ImageFrameTarget';
 import type { ImageModelConfig } from './ImageModelConfig';
 import type { InputBinding } from './InputBinding';
 import type { PromptDocument } from './PromptDocument';
@@ -16,4 +17,6 @@ export type ImageModelCard = {
     input_bindings?: Array<InputBinding>;
     type?: string;
     config?: ImageModelConfig;
+    frame_targets?: Array<ImageFrameTarget>;
 };
+

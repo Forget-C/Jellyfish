@@ -44,6 +44,7 @@ class InputBinding(BaseModel):
     source: OutputIdentity
     input_port: str
     subject_name: str | None = None
+    photography_scope: list[str] | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class ObjectReferencePayload(BaseModel):
@@ -158,6 +159,13 @@ class PerformanceDesignFields(BaseModel):
     applicability: DesignField | None = None
 
 
+class FrameState(BaseModel):
+    """导演明确提供的画面状态，图片仅定位其稳定身份。"""
+    model_config = ConfigDict(extra='forbid')
+    id: str
+    label: str
+
+
 class DesignTextPayload(BaseModel):
     """本卡完整设计及直接采用的必要对象，不包含祖先正文或示例媒体。"""
     model_config = ConfigDict(extra='forbid')
@@ -165,6 +173,8 @@ class DesignTextPayload(BaseModel):
     design_type: Literal['direction.situation', 'direction.performance', 'direction.performance_rule']
     adoption: Literal['whole_card'] = Field(default='whole_card', json_schema_extra={'enum': ['whole_card']})
     text: str
+    frame_states: list[FrameState] = Field(default_factory=list, exclude_if=lambda value: not value)
+    requires_frame_target: bool = Field(default=False, exclude_if=lambda value: not value)
     fields: PerformanceDesignFields
     scope: DesignScope
     objects: list[ObjectReferencePayload] = Field(default_factory=list)

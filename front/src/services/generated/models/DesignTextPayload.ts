@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { DesignScope } from './DesignScope';
+import type { FrameState } from './FrameState';
 import type { ObjectReferencePayload } from './ObjectReferencePayload';
 import type { PerformanceDesignFields } from './PerformanceDesignFields';
 /**
@@ -13,9 +14,12 @@ export type DesignTextPayload = {
     design_type: 'direction.situation' | 'direction.performance' | 'direction.performance_rule';
     adoption?: 'whole_card';
     text: string;
+    frame_states?: Array<FrameState>;
+    requires_frame_target?: boolean;
     fields: PerformanceDesignFields;
     scope: DesignScope;
     objects?: Array<ObjectReferencePayload>;
     participant_id?: (string | null);
     source_locator?: string;
 };
+

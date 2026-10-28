@@ -58,7 +58,7 @@ try {
   assert.equal(version.relationship_graph.complete, true)
   assert.deepEqual(version.relationship_graph.nodes.find(row => row.key === 'camera:camera1').shot_ids, ['shot1'])
   assert.ok(version.relationship_graph.preparation_issues.length > 0)
-  server = await createServer({ root, server: { host: '127.0.0.1', port: 4198, strictPort: true, open: false, proxy: { '/api': api } } })
+  server = await createServer({ root, cacheDir: join(output, 'vite-cache'), server: { host: '127.0.0.1', port: 4198, strictPort: true, open: false, proxy: { '/api': api } } })
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
   page = await browser.newPage({ viewport: { width: 1440, height: 960 } })

@@ -6,6 +6,9 @@ from app.core.contracts.media import VideoMediaInput
 from app.core.contracts.generation_canvas import OutputIdentity, InputBinding, TextOutputPayload, MediaOutputPayload, ObjectReferencePayload, DescriptionTextPayload, NamedImageObject, ReferenceImageBinding, NamedImagePayload, CanvasSourceMapping, NamedImageMapping, DesignField, DesignScope, DesignTextPayload
 
 
+from app.core.contracts.photography import PhotographyFieldKey, PhotographyFields, PhotographyPhase, PhotographyTextPayload, ImageFrameTarget
+
+
 class CardDefinition(BaseModel):
     """卡片的稳定身份与类型版本；具体类型声明自己的端口及内容。"""
     model_config = ConfigDict(extra='forbid')
@@ -197,6 +200,7 @@ class ImageModelCard(ModelCard):
     """图片处理卡，参考图片必须被接收端明确使用。"""
     type: Literal['model.image'] = 'model.image'
     config: ImageModelConfig = Field(default_factory=ImageModelConfig)
+    frame_targets: list[ImageFrameTarget] = Field(default_factory=list)
     input_ports: ClassVar[tuple[str, ...]] = ('text', 'image')
     output_ports: ClassVar[tuple[str, ...]] = ('image',)
 
@@ -354,6 +358,27 @@ class PerformanceRuleCard(PerformanceDirectionCard):
     input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'image_example', 'video_example')
 
 
+class PhotographyMediaExample(DesignMediaExample):
+    """摄影示例可定位明确声明的字段，文件仍不随文本采用。"""
+    field_id: PhotographyFieldKey | None = None
+
+
+class PhotographyCard(PerformanceDirectionCard):
+    """五个区域共同维护一张摄影设计；所属镜头不成为使用前置条件。"""
+    type: Literal['direction.photography'] = Field(default='direction.photography', json_schema_extra={'enum': ['direction.photography']})
+    fields: PhotographyFields = Field(default_factory=PhotographyFields)
+    examples: list[PhotographyMediaExample] = Field(default_factory=list)
+    phases: list[PhotographyPhase] = Field(default_factory=list)
+    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'attention_object', 'focus_object', 'shot', 'acceptance_basis', 'image_example', 'video_example')
+
+    @model_validator(mode='after')
+    def validate_phase_ids(self):
+        """阶段必须有唯一稳定身份，不以名称或数组位置绑定。"""
+        if len({phase.id for phase in self.phases}) != len(self.phases):
+            raise ValueError('摄影阶段身份必须唯一')
+        return self
+
+
 class CanvasDocument(BaseModel):
     """完整编辑文档；位置、尺寸和视角由浏览器另存。"""
     model_config = ConfigDict(extra='forbid')
@@ -361,7 +386,7 @@ class CanvasDocument(BaseModel):
     project_id: str
     name: str = Field(min_length=1, max_length=255)
     schema_version: Literal[2] = 2
-    cards: list[CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | ObjectDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard] = Field(default_factory=list)
+    cards: list[PhotographyCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | ObjectDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard] = Field(default_factory=list)
     edges: list[GenerationCanvasEdge] = Field(default_factory=list)
     input_order: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
     groups: list[GenerationCanvasGroup] = Field(default_factory=list)
@@ -422,7 +447,7 @@ class CanvasResolvedOutput(BaseModel):
     """已发布的实际输出，运行层可注入模型当前输出而无需虚构未来结果。"""
     source: OutputIdentity
     modality: str
-    payload: Annotated[TextOutputPayload | MediaOutputPayload | ObjectReferencePayload | DescriptionTextPayload | NamedImagePayload | DesignTextPayload, Field(discriminator='kind')] | None = None
+    payload: Annotated[TextOutputPayload | MediaOutputPayload | ObjectReferencePayload | DescriptionTextPayload | NamedImagePayload | DesignTextPayload | PhotographyTextPayload, Field(discriminator='kind')] | None = None
     text: str | None = None
     file_id: str | None = None
     token: str = ''
@@ -440,7 +465,7 @@ class CanvasResolvedOutput(BaseModel):
             elif self.modality in ('image', 'video', 'audio') and self.file_id:
                 self.payload = MediaOutputPayload(kind=self.modality, file_id=self.file_id)
         if self.payload is not None:
-            self.modality = 'text' if isinstance(self.payload, (ObjectReferencePayload, DescriptionTextPayload, DesignTextPayload)) else 'image' if isinstance(self.payload, NamedImagePayload) else self.payload.kind
+            self.modality = 'text' if isinstance(self.payload, (ObjectReferencePayload, DescriptionTextPayload, DesignTextPayload, PhotographyTextPayload)) else 'image' if isinstance(self.payload, NamedImagePayload) else self.payload.kind
             self.text = getattr(self.payload, 'text', None)
             self.file_id = getattr(self.payload, 'file_id', None)
         return self

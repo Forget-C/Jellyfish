@@ -1,3 +1,5 @@
+import { photographySummary } from './PhotographyEditor'
+import type { PhotographyCard } from '../../../services/generated'
 import { performanceSummary } from './PerformanceDirectionEditor'
 import type { PerformanceCard } from './PerformanceDirectionEditor'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -299,7 +301,7 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false, ru
               if (Math.abs(width - (size?.width || 400)) > 2 || Math.abs(height - (size?.height || measured[card.id]?.height || height)) > 2)
                 layout.setView(previous => ({ ...previous, sizes: { ...previous.sizes, [card.id]: { width, height } } }))
             }} onRemove={() => removeCard(card.id)} inputs={inputPorts(card).map(name => port(card, name, true))} outputs={outputPorts(card).map(name => port(card, name, false))}>
-            <p className="canvas-card-summary">{card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard) : 'title' in card ? `${card.title || '命名图片参考'} · ${card.angle || '正面'} · ${card.image_binding ? '已选主图' : '缺少主图'}` : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '模型配置、输入采用与运行记录' : 'file_id' in card && card.file_id ? '已选择媒体，打开详情预览' : '未选择媒体'}</p>
+            <p className="canvas-card-summary">{card.type === 'direction.photography' ? photographySummary(card as PhotographyCard) : card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard) : 'title' in card ? `${card.title || '命名图片参考'} · ${card.angle || '正面'} · ${card.image_binding ? '已选主图' : '缺少主图'}` : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '模型配置、输入采用与运行记录' : 'file_id' in card && card.file_id ? '已选择媒体，打开详情预览' : '未选择媒体'}</p>
           </CardShell>
         })}
       </div>
@@ -315,6 +317,14 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false, ru
       <rect className="generation-minimap-viewport" x={visibleWorld.x} y={visibleWorld.y} width={visibleWorld.width} height={visibleWorld.height} />
     </svg>}
     <WorkbenchDetails title={detailCard ? cardTitles[detailCard.type || 'content.text'] || '卡片详情' : '卡片详情'} status={readonly ? '只读' : editingStatus} open={!!detailCard} onClose={() => setDetailId(undefined)} trigger={detailTrigger}>
+      {detailCard?.type === 'direction.photography' && <Button disabled={readonly} onClick={() => {
+        const copy = { ...structuredClone(detailCard), id: crypto.randomUUID() }
+        const incoming = (document.edges || []).filter(edge => edge.target_card === detailCard.id)
+        const edgeIds = new Map(incoming.map(edge => [edge.id, crypto.randomUUID()]))
+        edit({ ...latest.current, cards: [...(latest.current.cards || []), copy], edges: [...(latest.current.edges || []), ...incoming.map(edge => ({ ...edge, id: edgeIds.get(edge.id)!, target_card: copy.id }))],
+          input_order: { ...latest.current.input_order, [copy.id]: Object.fromEntries(Object.entries(document.input_order?.[detailCard.id] || {}).map(([port, ids]) => [port, ids.map(id => edgeIds.get(id)!)])) } })
+        setDetailId(copy.id)
+      }}>复制为独立摄影方案</Button>}
       {detailCard && DetailRenderer && <ConfigProvider componentDisabled={readonly}><fieldset disabled={readonly} className="generation-card-body"><DetailRenderer savedCard={savedDocument?.cards?.find(card => card.id === detailCard.id)} savedRevision={savedRevision} key={detailCard.id} card={detailCard} document={document} projectId={document.project_id} onChange={updateCard} onAddAngle={output => {
         if (output.payload?.kind !== 'object_reference' || !('category' in output.payload)) return
         const id = crypto.randomUUID(), edgeId = crypto.randomUUID()

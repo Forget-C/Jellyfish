@@ -100,6 +100,15 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
     """模型编译只接收本卡配置、直接输出与能力，不获得整张画布。"""
     card_id = card.id
     result = CanvasCompiledInput(card_id=card_id)
+    from app.services.generation_canvas.photography import project_photography
+    projected, invalid_scopes = [], []
+    for item in candidates:
+        binding = next((binding for binding in card.input_bindings if identity_key(binding.source) == identity_key(item.source)), None)
+        value, invalid = project_photography(item, binding.photography_scope if binding else None)
+        projected.append(value)
+        if invalid and binding:
+            invalid_scopes.append(binding.id)
+    candidates = projected
     by_source = {identity_key(item.source): item for item in candidates}
     refs = list(prompt_references(card))
     used_keys = {identity_key(ref.source) for ref, _ in refs}
@@ -112,6 +121,8 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
     def issue(code, message, segment_id, path=None, warning=False):
         result.diagnostics.append(CanvasDiagnostic(code=code, message=message, severity='warning' if warning else 'error',
             target={'card_id': card_id, 'segment_id': segment_id, 'path': path or ['prompt', 'segments', segment_id]}, blocks=[] if warning else ['run']))
+    for binding_id in invalid_scopes:
+        issue('PHOTOGRAPHY_SCOPE_MISSING', '采用范围已失效，请替换或取消；不会回退旧内容', binding_id, ['input_bindings', binding_id, 'photography_scope'])
     for ref, path in refs:
         source = by_source.get(identity_key(ref.source))
         if ref.source.canvas_id != canvas_id:
@@ -213,6 +224,8 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
         lines = [mapping_line(entry) for entry in result.mapping if isinstance(entry, NamedImageMapping)]
         if lines:
             result.text += ('\n' if result.text else '') + '\n'.join(lines)
+    if card.type == 'model.image':
+        validate_frame_targets(card, result, issue)
     if card.type == 'model.video':
         result.video_media = compile_video_media(card, result)
         if capability:
@@ -242,6 +255,8 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
             if not capability.supports_duplicate_reference_images and len(files) != len(set(files)):
                 issue('DUPLICATE_MEDIA_UNSUPPORTED', '当前模型不支持不同来源使用同一图片文件', '', ['prompt'])
         result.diagnostics.extend(CanvasDiagnostic.model_validate(item) for item in parameter_diagnostics(card, capability))
+    from app.services.generation_canvas.photography import validate_frame_requirements
+    validate_frame_requirements(card, result, issue)
     result.can_run = not any('run' in item.blocks for item in result.diagnostics)
     return result
 
@@ -331,3 +346,24 @@ def video_media(document: CanvasDocument, card_id: str, compiled: CanvasCompiled
     """现有公开编译入口只定位本卡，再交给不持有画布的模型编译器。"""
     card = next(item for item in document.cards if item.id == card_id)
     return compile_video_media(card, compiled)
+
+
+
+def validate_frame_targets(card, result, issue):
+    """仅接受已采用导演输出声明的目标；自由文字不产生阶段。"""
+    used = {identity_key(item.source): item for item in result.used}
+    bindings = {binding.id: binding for binding in card.input_bindings}
+    targets = {target.binding_id: target for target in card.frame_targets}
+    for target in card.frame_targets:
+        binding = bindings.get(target.binding_id)
+        item = used.get(identity_key(binding.source)) if binding else None
+        states = getattr(item.payload, 'frame_states', []) if item else []
+        if sum(value.binding_id == target.binding_id for value in card.frame_targets) != 1 or target.state_id not in {state.id for state in states}:
+            issue('FRAME_TARGET_MISSING', '画面目标不属于当前已采用的明确状态，请替换或取消', target.binding_id, ['frame_targets', target.binding_id])
+        else:
+            state = next(state for state in states if state.id == target.state_id)
+            result.text += ('\n' if result.text else '') + '画面目标：' + state.label + '（' + state.id + '）'
+    for binding in card.input_bindings:
+        item = used.get(identity_key(binding.source))
+        if item and getattr(item.payload, 'requires_frame_target', False) and binding.id not in targets:
+            issue('FRAME_TARGET_REQUIRED', '多状态设计用于单张静帧时请选择画面目标', binding.id, ['frame_targets', binding.id])
