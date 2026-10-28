@@ -40,3 +40,6 @@
 - 2026-10-29：最终双轴审查修复（待主区集成）：描述编译增加直接载荷自带的名称／稳定身份／类别标注，保持正文原样，避免多个描述与命名图在实际供应商请求中失去对应。公开HTTP→TaskWorker两个对象／反向采用顺序先红后绿；旧单描述Worker断言同步为必要身份，不暴露私有来源定位，未命名描述仍仅正文。可选格式化重复通过最小共享函数处理，五publisher输出不变。全画布 **277 passed／28 skipped**，Pylint **10.00/10**，生产schema与提交精确一致；前端未变，复用同状态26页证据。两个默认merge标题的安全规范化脚本已dry-run及隔离克隆apply验证，主区尚未apply，须合并全部修复后执行并记录最终HEAD；不把元数据待执行写成已完成。
 
 - 2026-10-29：主区无冲突合入最终审查修复 `95ebbe70`（merge `199b3448`），合后对象／命名参考／Compiler公开HTTP及真实Worker **28 passed**（2.52s），`git diff --check`通过；产品树与已完成277／28、Pylint10的修复分支一致。无前端/schema字段变化，复用26页／typecheck／标准OpenAPI同步证据。提交标题脚本经守卫审查后只在合后clean集成HEAD执行，实际映射、备份ref与树等价结果写 `/private/tmp/canvas-card-types-merge-subject-normalization.json`；本条不预填其apply结果或最终两轴复核通过。Completion继续integrated，受控外部服务和隔离MySQL未执行限制保持。
+
+
+- 2026-10-29 最终复核：主区 `31da3534` 的规范轴与规格轴剩余发现均为0；规格代理独立最小回归4 passed／5 deselected。两个提交标题已实际规范化，代码树不变，备份／映射审计 `/private/tmp/canvas-card-types-merge-subject-normalization.json`；上方“待集成／待apply／待审查”为各阶段历史记录，现均已完成。最终277 passed／28 skipped、Pylint10、typecheck、26页及标准OpenAPI证据沿相同受影响代码复用，隔离MySQLselection未执行与外部服务替身限制不变。全部票据闭环，未推送。

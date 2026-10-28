@@ -8,7 +8,7 @@
 
 ## 任务与阻塞关系
 
-编号表示依赖顺序，不要求严格串行执行。01–19 共十九票已实现并集成；最终双轴审查已执行，行为修复已集成；提交元数据收尾及两轴复核结果继续在下方记录，尚不宣称最终审查通过。实际覆盖见[实现核对](implementation-coverage.md)，验证证据在下方及相应票据维护。
+编号表示依赖顺序，不要求严格串行执行。01–19 共十九票已实现并集成，最终规范／规格双轴审查及修复复核均已完成，两轴剩余发现均为 0。实际覆盖见[实现核对](implementation-coverage.md)，验证证据和环境限制在下方及相应票据维护。
 
 | 票据 | Blocked by | 目录负责内容 |
 | --- | --- | --- |
@@ -254,3 +254,10 @@ flowchart TD
 - Standards另有两个早期自动merge标题不符合 `[类型] 摘要`：`c92bc274`、`6639d43a`。安全脚本 `/private/tmp/canvas-card-types-normalize-merge-subjects.py` 已在主区只读dry-run，并在独立临时克隆中验证apply：只改这两个标题，保留树、父拓扑、作者／提交者／日期及其他消息；109个必要后继重算ID，源树哈希不变。原主区HEAD未改；元数据规范化须在本修复合入后由merger执行，不能预记已完成。审计 `/private/tmp/canvas-card-types-merge-subject-normalization-dry-run.json`、`/private/tmp/canvas-card-types-normalization-isolated-apply.json`；后续实际主区apply审计另记。
 
 - 2026-10-29：无冲突集成最终审查修复 `95ebbe70`（合并提交 `199b3448`）。合后对象描述／命名参考／Compiler公开HTTP与实际Worker回归 **28 passed**（2.52s），差异检查通过；合并产品树与修复分支精确相同，复用该分支全画布 **277 passed／28 skipped**、Pylint **10.00/10**。前端及公开schema字段未改，复用已通过的26页、Node24 typecheck和19标准OpenAPI同步，不重复相同契约生成。描述自身身份标注与五publisher格式化均保留；MySQL／受控供应商及存储边界不变。元数据脚本已检查干净集成分支、固定基线、签名拒绝、完整原始headers／父拓扑、隐藏备份ref、旧新tree相同及CAS守卫，实际apply结果记录 `/private/tmp/canvas-card-types-merge-subject-normalization.json`；后续以该审计的 `applied` 及两轴复核为准。尚不预记最终审查通过；未推送、未终止用户服务。
+
+
+- 2026-10-29 最终收口：规范轴与规格轴定向复核均完成，剩余发现均为 **0**。规格代理独立执行描述归属最小公开 HTTP→真实 TaskWorker 回归 **4 passed／5 deselected**；规范代理独立核对五处格式化调用及范围内117个提交标题，并复核112对重算提交的原始headers、消息正文、tree与父拓扑。复核HEAD为 `31da35347ae46d3a3bd9ef3e108aa7b79ac6ed8c`；审查报告 `/private/tmp/canvas-card-types-standards-review.md`、`/private/tmp/canvas-card-types-spec-review.md`。最终实现验证为全画布 **277 passed／28 skipped**、Pylint **10.00/10**、Node24 typecheck、26个真实页面用例、标准OpenAPI同步及生产／提交／实际HTTP契约一致；未配置隔离MySQL的selection页面明确未执行，外部供应商与存储使用受控替身，不宣称真实供应商质量或MySQL竞争通过。01–19均为integrated，分诊Status保持原含义。
+- 提交元数据收尾已实际apply：仅修正两个早期自动merge标题及其必要后继，原新HEAD的tree均为 `f47833340b350528f73039a127ddfd7b22c58660`。备份ref与完整映射保存在 `/private/tmp/canvas-card-types-merge-subject-normalization.json`；旧阶段提交引用仍可通过保留的备份／票据分支读取。后续文档收尾不改变产品代码。
+- 临时工作树清理前，旧记录中的 `front/test-results/browser-*` 证据已复制到 `/private/tmp/jellyfish-canvas-types-preserved-evidence/`，原路径到归档路径见其 `manifest.json`；其他票据使用的 `/private/tmp/canvas*` 和系统临时目录证据继续保留。共享backend editable安装已恢复主工作区并从工作区外导入验证，清理不依赖临时工作树。
+
+- 清理完成：本次21个实现／辅助／审查修复工作树及标题脚本隔离克隆已删除，原票据分支与元数据备份保留；工作树清理审计 `/private/tmp/canvas-worktree-cleanup.json`。当前仅保留用户原主工作区，验收证据归档及独立临时目录未删除。
