@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { AudioContentCard } from './AudioContentCard';
+import type { CreativeBasisCard } from './CreativeBasisCard';
 import type { GenerationCanvasEdge } from './GenerationCanvasEdge';
 import type { GenerationCanvasGroup } from './GenerationCanvasGroup';
 import type { ImageContentCard } from './ImageContentCard';
@@ -19,7 +20,7 @@ export type CanvasDocument = {
     project_id: string;
     name: string;
     schema_version?: number;
-    cards?: Array<(TextContentCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard)>;
+    cards?: Array<(TextContentCard | CreativeBasisCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard)>;
     edges?: Array<GenerationCanvasEdge>;
     input_order?: Record<string, Record<string, Array<string>>>;
     groups?: Array<GenerationCanvasGroup>;

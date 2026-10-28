@@ -20,7 +20,7 @@ const arrange: GraphArrange = (nodes, _sizes, _width, _anchor, retained = {}) =>
   [node.id, retained[node.id] || { x: index % 3 * 440, y: Math.floor(index / 3) * 560 }]))
 
 /** 独立画布编辑适配：候选关系与文档持久化，几何沿用公共布局缓存。 */
-export function GenerationCanvasGraph({ document, onChange, readonly = false, runtime }: { document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string, kind?: 'single' | 'target' | 'selection', cardIds?: string[]) => void } }) {
+export function GenerationCanvasGraph({ document, onChange, readonly = false, runtime, savedRevision }: { savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string, kind?: 'single' | 'target' | 'selection', cardIds?: string[]) => void } }) {
   const cards = document.cards || emptyCards, edges = document.edges || [], groups = document.groups || emptyGroups
   const [selected, setSelected] = useState<string[]>([])
   const [reason, setReason] = useState('')
@@ -97,7 +97,7 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false, ru
       groups: next.groups?.map(group => ({ ...group, card_ids: group.card_ids?.filter(card => card !== id) })) })
   }
   const add = (type: string) => {
-    const card = type === 'content.text' ? { id: crypto.randomUUID(), type, type_version: 1, text: '' }
+    const card = (type === 'content.text' || type === 'content.basis') ? { id: crypto.randomUUID(), type, type_version: 1, text: '' }
       : type.startsWith('model.') ? { id: crypto.randomUUID(), type, type_version: 1, model_id: null, prompt: { segments: [] }, config: {} }
       : { id: crypto.randomUUID(), type, type_version: 1, file_id: null, uploading: false }
     edit({ ...latest.current, cards: [...(latest.current.cards || []), card] })
@@ -260,7 +260,7 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false, ru
               if (Math.abs(width - (size?.width || 400)) > 2 || Math.abs(height - (size?.height || measured[card.id]?.height || height)) > 2)
                 layout.setView(previous => ({ ...previous, sizes: { ...previous.sizes, [card.id]: { width, height } } }))
             }} onRemove={() => removeCard(card.id)} inputs={inputPorts(card).map(name => port(card, name, true))} outputs={outputPorts(card).map(name => port(card, name, false))}>
-            {Renderer ? <Renderer card={card} document={document} projectId={document.project_id} onChange={updateCard} models={models} capability={capability(card)}
+            {Renderer ? <Renderer savedRevision={savedRevision} card={card} document={document} projectId={document.project_id} onChange={updateCard} models={models} capability={capability(card)}
               capabilityError={'model_id' in card && card.model_id ? capabilityErrors[card.model_id] : undefined} references={references(card)} disabled={readonly} modelOutputs={runtime?.outputs} node={runtime?.nodes[card.id]} busy={runtime?.busyCards.has(card.id)} checking={runtime?.checking === card.id} runDisabled={runtime?.disabled} onPrecheck={() => runtime?.precheck(card.id)} onTargetPrecheck={() => runtime?.precheck(card.id, 'target')} /> : <Alert type="error" message="卡片编辑器尚未接入" />}
           </CardShell>
         })}

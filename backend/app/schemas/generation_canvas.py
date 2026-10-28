@@ -1,8 +1,9 @@
 """首个画布消费者使用的轻量类型契约，不包含布局或运行状态。"""
-from typing import Any, ClassVar, Literal
+from typing import Annotated, Any, ClassVar, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.schemas.common import ApiResponse
 from app.core.contracts.media import VideoMediaInput
+from app.core.contracts.generation_canvas import OutputIdentity, InputBinding, TextOutputPayload, MediaOutputPayload
 
 
 class CardDefinition(BaseModel):
@@ -32,13 +33,16 @@ class TextContentCard(CardDefinition):
     output_ports: ClassVar[tuple[str, ...]] = ('text',)
 
 
-class OutputIdentity(BaseModel):
-    """稳定输出位置不等于历史产物 ID；不得按文件合并来源。"""
-    model_config = ConfigDict(extra='forbid')
-    canvas_id: str
-    card_id: str
-    port_id: str
-    position: int = Field(ge=0)
+class CreativeBasisCard(CardDefinition):
+    """独立创作依据保留来源定位，不绑定章节或持续输入。"""
+    type: Literal['content.basis'] = 'content.basis'
+    text: str = ''
+    source_locator: str = ''
+    selection_start: int | None = Field(default=None, ge=0)
+    selection_end: int | None = Field(default=None, ge=0)
+    output_ports: ClassVar[tuple[str, ...]] = ('text',)
+
+
 
 
 class PromptText(BaseModel):
@@ -54,7 +58,8 @@ class PromptReference(BaseModel):
     model_config = ConfigDict(extra='forbid')
     id: str = Field(min_length=1)
     kind: Literal['reference'] = Field(json_schema_extra={'enum': ['reference']})
-    source: OutputIdentity
+    binding_id: str | None = None
+    source: OutputIdentity | None = Field(default=None, exclude=True)
 
 
 class PromptInstruction(BaseModel):
@@ -89,6 +94,41 @@ class ModelCard(CardDefinition):
     """模型切换只替换模型身份；未完成配置也可持久保存。"""
     model_id: str | None = None
     prompt: PromptDocument = Field(default_factory=PromptDocument)
+    input_bindings: list[InputBinding] = Field(default_factory=list)
+
+    @model_validator(mode='after')
+    def resolve_prompt_bindings(self):
+        """读取旧文档时规范化来源；写出的提示词只保留绑定身份。"""
+        bindings = {binding.id: binding for binding in self.input_bindings}
+        if len(bindings) != len(self.input_bindings):
+            raise ValueError('输入绑定身份必须唯一')
+        # after 校验器收到的是 PromptDocument；Pylint 误将默认工厂推断为 FieldInfo。
+        for segment in self.prompt.segments:  # pylint: disable=no-member
+            refs = [segment] if isinstance(segment, PromptReference) else segment.references if isinstance(segment, PromptInstruction) else []
+            port = {'首帧参考': 'first_frame', '尾帧参考': 'last_frame', '关键帧参考': 'key_frame', '主体参考': 'subject_image'}.get(
+                getattr(segment, 'command', ''), None)
+            for ref in refs:
+                if ref.binding_id is None:
+                    if ref.source is None:
+                        raise ValueError('引用缺少输入绑定')
+                    actual_port = port or ref.source.port_id
+                    if self.type == 'model.video' and actual_port in ('image', 'video'):
+                        actual_port = 'subject_' + actual_port
+                    if actual_port == 'subject_image' and ref.source.port_id == 'video':
+                        actual_port = 'subject_video'
+                    existing = next((binding for binding in bindings.values()
+                        if binding.source == ref.source and binding.input_port == actual_port), None)
+                    binding = existing or InputBinding(id='input-' + ref.id, source=ref.source, input_port=actual_port)
+                    bindings[binding.id] = binding
+                    ref.binding_id = binding.id
+                binding = bindings.get(ref.binding_id)
+                if binding is None:
+                    raise ValueError('引用的输入绑定不存在')
+                if ref.source is not None and ref.source != binding.source:
+                    raise ValueError('引用来源与输入绑定不一致')
+                ref.source = binding.source
+        self.input_bindings = list(bindings.values())
+        return self
 
 
 class TextModelConfig(BaseModel):
@@ -208,11 +248,20 @@ class CanvasDocument(BaseModel):
     id: str
     project_id: str
     name: str = Field(min_length=1, max_length=255)
-    schema_version: Literal[1] = 1
-    cards: list[TextContentCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard] = Field(default_factory=list)
+    schema_version: Literal[2] = 2
+    cards: list[TextContentCard | CreativeBasisCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard] = Field(default_factory=list)
     edges: list[GenerationCanvasEdge] = Field(default_factory=list)
     input_order: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
     groups: list[GenerationCanvasGroup] = Field(default_factory=list)
+
+
+    @model_validator(mode='before')
+    @classmethod
+    def read_legacy_document(cls, value):
+        """只读解析旧格式；不原地重写原始幂等正文或历史快照。"""
+        if isinstance(value, dict) and value.get('schema_version', 1) == 1:
+            return {**value, 'schema_version': 2}
+        return value
 
 
 class CanvasCreate(BaseModel):
@@ -255,16 +304,42 @@ class CanvasError(ApiResponse[CanvasDiagnostic]):
     """统一 HTTP 错误封套，data 保留稳定代号、定位及阻止动作。"""
 
 
+
+
 class CanvasResolvedOutput(BaseModel):
     """已发布的实际输出，运行层可注入模型当前输出而无需虚构未来结果。"""
     source: OutputIdentity
     modality: str
+    payload: Annotated[TextOutputPayload | MediaOutputPayload, Field(discriminator='kind')] | None = None
     text: str | None = None
     file_id: str | None = None
     token: str = ''
     available: bool = True
     basis_current: bool = True
     result_set_id: str | None = None
+
+
+    @model_validator(mode='after')
+    def normalize_payload(self):
+        """强类型内容是权威；旧读取字段作为只读投影保持历史可读。"""
+        if self.payload is None:
+            if self.modality == 'text' and self.text is not None:
+                self.payload = TextOutputPayload(text=self.text)
+            elif self.modality in ('image', 'video', 'audio') and self.file_id:
+                self.payload = MediaOutputPayload(kind=self.modality, file_id=self.file_id)
+        if self.payload is not None:
+            self.modality = self.payload.kind
+            self.text = getattr(self.payload, 'text', None)
+            self.file_id = getattr(self.payload, 'file_id', None)
+        return self
+
+
+class CanvasCardOutputs(BaseModel):
+    """已保存修订的本卡输出与直接候选；预览不改变采用。"""
+    revision: int
+    card_id: str
+    outputs: list[CanvasResolvedOutput]
+    candidates: list[CanvasResolvedOutput]
 
 
 class CanvasCompiledInput(BaseModel):
