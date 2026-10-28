@@ -13,4 +13,3 @@ export type InputBinding = {
     subject_name?: (string | null);
     photography_scope?: (Array<string> | null);
 };
-

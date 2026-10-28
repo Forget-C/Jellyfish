@@ -22,4 +22,3 @@ export type DesignTextPayload = {
     participant_id?: (string | null);
     source_locator?: string;
 };
-

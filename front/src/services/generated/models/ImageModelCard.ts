@@ -19,4 +19,3 @@ export type ImageModelCard = {
     config?: ImageModelConfig;
     frame_targets?: Array<ImageFrameTarget>;
 };
-
