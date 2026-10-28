@@ -19,11 +19,11 @@
 规格依据：[总体规格](../spec.md)。共同约束与验证边界见[任务索引](../README.md)；本票已按下方实际证据完成，未执行的 MySQL 竞争及真实供应商质量验证不计为通过。
 
 
-**Completion:** implemented
+**Completion:** integrated
 
 ## Comments
 
-2026-10-28：在 codex-canvas-types-01 实现，并已合并集成分支 cc64b135。
+2026-10-28：在 codex-canvas-types-01 实现，先合入集成分支基线 cc64b135；最终以合并提交 ce816fb0 集成到 codex-generation-canvas。
 
 - 交付独立创作依据 content.basis、明确输出 Protocol、强类型正文／媒体 payload、已保存修订 outputs HTTP 接口，以及前端直接候选消费。文本／依据支持明确导入文件与来源定位。
 - 输入来源唯一保存于 input_bindings，prompt 只保存 binding_id；新文档 schema_version 2，v1 来源片段在解析时转为规范绑定，不原地修改原始幂等正文或历史快照。旧输出 text/file_id 保留为只读投影，重复 payload 不影响旧成果依据哈希。
@@ -35,3 +35,5 @@
 - 合并独立工作台页面后，真实 generation-canvas-composer：8.5s 通过，覆盖完整代号、IME、剪贴板、保存后重排、唯一绑定、删除保护，以及依据文件导入、采用、编译和重开；证据目录 front/test-results/browser-ccteP1；最终输入绑定删除保护复核再次通过 8.1s，证据目录 front/test-results/browser-zHemn3。
 - 本票保留标准文件选择器的原生 input：AntD Input 的内部受控 value 不适用于非空文件值；例外仅限文本文件导入，正文、来源和数值字段仍使用已有基础控件。
 - 运行恢复及图／媒体路径沿既有机制扩展；没有为后续参考卡或导演类型创建空壳处理器，约 1 秒保存由 03 接续。
+
+- 集成验证：核实主区既有 8000 后端已加载 InputBinding、CreativeBasisCard 和 schema v2 后，完整 openapi:update 通过，公开契约及生成客户端与分支交付一致；361 处纯尾空行漂移已剔除。Node 24.22.1 前端 typecheck 与工作区／暂存区 diff 检查通过。复用上述同一实现的后端与真实页面证据；未重跑未改变代码的检查。
