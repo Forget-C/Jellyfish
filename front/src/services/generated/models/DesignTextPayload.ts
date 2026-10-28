@@ -2,13 +2,17 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { AcceptanceCriterionFields } from './AcceptanceCriterionFields';
 import type { ActivityDesignFields } from './ActivityDesignFields';
 import type { AnchorDesignFields } from './AnchorDesignFields';
 import type { BlockingDesignFields } from './BlockingDesignFields';
+import type { CreativeControlFields } from './CreativeControlFields';
+import type { CriterionReferencePayload } from './CriterionReferencePayload';
 import type { DesignScope } from './DesignScope';
 import type { DialogueBasis } from './DialogueBasis';
 import type { EnvironmentDesignFields } from './EnvironmentDesignFields';
 import type { FrameState } from './FrameState';
+import type { GenerationGuidanceFields } from './GenerationGuidanceFields';
 import type { NarrativeBeatFields } from './NarrativeBeatFields';
 import type { NarrativeDesignRelation } from './NarrativeDesignRelation';
 import type { NarrativeEventFields } from './NarrativeEventFields';
@@ -25,12 +29,12 @@ import type { SpatialReferencePayload } from './SpatialReferencePayload';
  */
 export type DesignTextPayload = {
     kind?: 'design';
-    design_type: 'direction.situation' | 'direction.performance' | 'direction.performance_rule' | 'direction.anchor' | 'direction.blocking' | 'direction.activity' | 'direction.environment' | 'direction.narrative' | 'direction.beat' | 'direction.event' | 'direction.shot' | 'direction.dialogue' | 'direction.sound';
+    design_type: 'direction.creative_control' | 'direction.guidance' | 'direction.criterion' | 'direction.situation' | 'direction.performance' | 'direction.performance_rule' | 'direction.anchor' | 'direction.blocking' | 'direction.activity' | 'direction.environment' | 'direction.narrative' | 'direction.beat' | 'direction.event' | 'direction.shot' | 'direction.dialogue' | 'direction.sound';
     adoption?: 'whole_card';
     text: string;
     frame_states?: Array<FrameState>;
     requires_frame_target?: boolean;
-    fields: (NarrativeOverviewFields | NarrativeBeatFields | NarrativeEventFields | ShotDesignFields | PerformanceDesignFields | AnchorDesignFields | BlockingDesignFields | ActivityDesignFields | EnvironmentDesignFields | SoundDesignFields);
+    fields: (CreativeControlFields | GenerationGuidanceFields | AcceptanceCriterionFields | NarrativeOverviewFields | NarrativeBeatFields | NarrativeEventFields | ShotDesignFields | PerformanceDesignFields | AnchorDesignFields | BlockingDesignFields | ActivityDesignFields | EnvironmentDesignFields | SoundDesignFields);
     scope: DesignScope;
     objects?: Array<ObjectReferencePayload>;
     spatial_relations?: (SpatialDesignRelations | null);
@@ -40,5 +44,6 @@ export type DesignTextPayload = {
     dialogue_id?: (string | null);
     version?: (number | null);
     source_locator?: string;
+    acceptance_basis?: Array<CriterionReferencePayload>;
     dialogue_basis?: Array<DialogueBasis>;
 };

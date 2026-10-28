@@ -13,6 +13,8 @@ def render_photography(payload):
     lines = [f'{roles[use.input_port]}：{use.object.name}（{use.object.object_id}，{use.object.category}）' for use in payload.object_uses]
     if payload.shot:
         lines.append(f'所属镜头：{payload.shot.name}（{payload.shot.reference_id}）')
+    from app.services.generation_canvas.guidance import acceptance_lines
+    lines.extend(acceptance_lines(payload.acceptance_basis))
     lines.extend(f'{PURPOSE_LABELS[entry.value.purpose]} / {entry.label} [{STATE_LABELS[entry.value.state]}]：{entry.value.text}' +
                  (f'（来源：{entry.value.source_locator}）' if entry.value.source_locator else '')
                  for entry in payload.entries if entry.value.state not in ('empty', 'not_applicable') and (entry.value.text or entry.value.state == 'absent'))
@@ -46,8 +48,9 @@ def publish_photography(canvas_id, card, adopted_inputs):
     frames = [FrameState(id=entry.id, label=entry.label) for entry in entries if (entry.id in ('field:movement_start', 'field:end_frame') or entry.id.startswith('phase:')) and entry.value.state not in ('empty', 'not_applicable') and entry.value.text]
     objects = {item.payload.object_id: item.payload for item in adopted_inputs if isinstance(item.payload, ObjectReferencePayload) and item.available}
     uses = [PhotographyObjectUse(input_port=binding.input_port, object=objects[binding.source.object_id]) for binding in card.input_bindings if binding.source.object_id in objects]
+    from app.services.generation_canvas.guidance import adopted_acceptance
     payload = PhotographyTextPayload(text='', entries=entries, requirements=[PhotographyRequirement(entry_id='field:shot_size', field=card.fields.shot_size)], adoption_scopes=scopes, frame_states=frames,
-        requires_frame_target=len(frames) > 1, scope=card.scope, source_locator=card.source_locator,
+        requires_frame_target=len(frames) > 1, acceptance_basis=adopted_acceptance(adopted_inputs), scope=card.scope, source_locator=card.source_locator,
         objects=list(objects.values()), object_uses=uses,
         shot=next((item.payload for item in adopted_inputs if isinstance(item.payload, NarrativeReferencePayload) and item.payload.category == 'shot' and item.available), None))
     payload.text = render_photography(payload)

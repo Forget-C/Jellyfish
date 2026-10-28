@@ -1,3 +1,4 @@
+import { AcceptanceBasisSelector } from './AcceptanceBasisSelector'
 import { inputPorts } from './graphRules'
 import { Alert, Input, Select, Space } from 'antd'
 import { useState } from 'react'
@@ -44,6 +45,7 @@ export function PhotographyEditor({ card: raw, document, savedRevision, modelOut
       const name = item.payload && 'name' in item.payload ? item.payload.name : item.source.object_id
       return <WorkbenchButton key={sourceKey(item.source)} disabled={disabled || !item.available || !bound && bindings.some(binding => binding.input_port === 'shot')} onClick={() => update({ ...card, input_bindings: bound ? bindings.filter(binding => binding.id !== bound.id) : [...bindings, { id: crypto.randomUUID(), source: item.source, input_port: 'shot' }] })}>{`${bound ? '取消' : '选择'}所属镜头 ${name}`}</WorkbenchButton>
     })}</section>
+    {<AcceptanceBasisSelector card={card} document={document} candidates={resolved.candidates} disabled={disabled} onChange={onChange} />}
     <details><summary>共享对象、范围与来源</summary>
       {resolved.candidates.filter(item => item.payload?.kind === 'object_reference').map(item => <div key={sourceKey(item.source)}><span>{(item.payload as ObjectReferencePayload).name}</span>{(['effect_object','attention_object','focus_object'] as const).map(port => {
         if (!document.edges?.some(edge => edge.target_card === card.id && edge.target_port === port && edge.source_card === item.source.card_id && edge.source_port === item.source.port_id)) return null

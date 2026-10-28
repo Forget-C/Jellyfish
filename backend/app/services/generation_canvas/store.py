@@ -166,6 +166,8 @@ class CanvasStore:
             published = {card_id: values for card_id, values in published.items() if card_id in models}
             from app.services.generation_canvas.spatial import validate_spatial_relations
             from app.services.generation_canvas.narrative import validate_narrative_relations
+            from app.services.generation_canvas.guidance import validate_guidance_relations
+            validate_guidance_relations(document, published, canvas.document)
             validate_narrative_relations(document, published, canvas.document)
             validate_spatial_relations(document, published, canvas.document)
             from app.services.generation_canvas.sound import validate_sound_relations

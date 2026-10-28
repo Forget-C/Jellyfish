@@ -223,3 +223,8 @@ flowchart TD
 - 18完成前已合入12集成 `e00192ac`，保留双方README实施记录，合后mixed／摄影scope真实HTTP与Worker **19 passed**、Node24 typecheck及mixed真实Chrome **8.1s**通过；独立8295最新生产OpenAPI精确一致。18仍为implemented等待主区集成，具体证据见18 Comments。
 
 - 2026-10-29：主区依次集成14（`9678a1f0`）及18（`99659847`），仅README和浏览器套件列表冲突，保留双方新增记录及入口；Completion更新为integrated。合后叙事／混合／摄影／空间／声音／表演HTTP与真实Worker组合 **108 passed**（10.76s），Node24.22.1 typecheck通过，`git diff --check`通过；复用14全画布232 passed／28 MySQL skipped、Pylint10.00/10及两票真实页面证据。主区 `app.__file__` 已确认，当前生产app导出与提交OpenAPI精确一致（`/private/tmp/canvas14-18-integrated-production.json`）。8000父进程73854仍属当前主backend，但升级权限的urllib20／30秒与绕过代理curl10秒均无响应；未终止用户服务，标准 `openapi:update` 留待该服务恢复后复验，不从旧进程覆盖已同步契约。供应商／存储替身和MySQL缺环境边界保留。 当前01–12、14、15、18共十五票已集成，13／16／17可按依赖推进；未推送。
+
+### 17 创作控制、生成指导与验收要求
+
+- 已实现三类要求卡、默认完整设计输出、稳定验收引用及镜头／表演／摄影的明确验收关联。验收只读使用记录按实际绑定统计；关系只传身份名称，标准正文必须由模型直接采用。合法作用对象按字段资格选取，验收禁止反向绑定使用方；示例固定文件与区间不随设计输出传递。
+- 独立验证：15项HTTP含三模态真实Worker，全画布249 passed／28 MySQL skipped，Pylint10、Node24typecheck；统一真实Chrome入口15.5s通过，覆盖真实拖拽候选、三使用方采用与取消、只读使用记录、完整标准直接采用、保存重开及390px窄屏。证据 `/private/tmp/canvas17-guidance-final`。implemented 等待主区集成；详情见17票 Comments。
