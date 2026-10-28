@@ -13,4 +13,3 @@ export function DesignFieldEditor({ label, value, purpose = 'design', onChange }
     <Input aria-label={`${label}来源`} placeholder="来源定位（可选）" value={field.source_locator} onChange={event => onChange({ ...field, source_locator: event.target.value })} />
   </section>
 }
-
