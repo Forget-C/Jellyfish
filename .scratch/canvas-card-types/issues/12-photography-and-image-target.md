@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented
+**Completion:** integrated
 
 - [x] 构图、机位、运镜、光影和焦点入口编辑同一张摄影内容卡；不创建多张可编辑投影同步隐藏对象，也不因所属镜头相同自动合并独立方案。
 - [x] 保留规格中的摄影字段、状态、用途和必要关系，支持专用摘要与详情编辑；没有镜头仍可独立使用，所属镜头按可选对象输入声明。
@@ -37,3 +37,5 @@
 - 截图取景补验：最后仅调整摄影浏览器测试的截图动画与滚动，不改产品代码。`generation-canvas-photography` 再次 **10.3s 通过**；最终直接可读的预检与图片证据在 `/private/tmp/canvas12-photo-proof/generation-canvas-photography/`，截图已实际打开检查。旧目录保留原始验收记录，不覆盖失败或早期证据。
 
 - 2026-10-29 最后收口：真实页面先以 `1 !== 0` 复现无声明状态仍出现空目标选择器（`/private/tmp/canvas12-no-state-red/`），再只在有明确状态或需处理保留失效目标时显示目标配置；不自动增加阶段或删除失效配置。Node24 typecheck再次通过，最终摄影 **11.4s**、表演 **12.4s**、声音 **11.3s** 三页均通过（`/private/tmp/canvas12-page-target-final/results.json`）。新增产品改动仅该前端显示条件，复用未变的215项后端通过及28项跳过结果。预检截图另等待确认执行按钮可交互，已实际打开确认完整编译文本的截图为 `/private/tmp/canvas12-photo-proof-ready/generation-canvas-photography/photography-preview.png`；最终提交文本仍保存在最终页面目录的 `submitted-text.txt`。所有后端／Vite测试进程均已清理，最新集成tip为 `1b353bf7`。
+
+- 2026-10-29 主区集成：无冲突显式合并 `3ec454a0`，合并提交 `e8b55d61`；主区摄影／空间／声音／表演 HTTP 与真实 Worker **89 passed**（7.97s）、Node24.22.1 typecheck 通过。复用上述相同代码的215 passed／28 skipped、Pylint10.00/10、三项真实页面和共享六项证据。生产导出、8000实际HTTP与提交schema精确一致后标准 `openapi:update` 成功，406处纯尾空行漂移已剔除；09可选名称映射、11空间及15声音／对白契约均保留。详细集成证据见索引；MySQL与受控外部服务限制继续保留。未推送或操作其他票据工作树。
