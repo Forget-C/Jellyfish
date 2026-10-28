@@ -11,7 +11,7 @@ export type PerformanceCard = CharacterPerformanceCard | CharacterSituationCard 
 const states = [{ value: 'empty', label: '未填写' }, { value: 'not_applicable', label: '不适用' }, { value: 'absent', label: '明确没有' }, { value: 'undecided', label: '待确定' }, { value: 'proposal', label: '提议' }, { value: 'fact', label: '事实' }]
 
 /** 同语义字段共享状态控件；各类设计保留自己的编辑布局。 */
-function FieldEditor({ label, value, purpose = 'design', onChange }: { label: string; value?: DesignField; purpose?: DesignField['purpose']; onChange: (field: DesignField) => void }) {
+export function FieldEditor({ label, value, purpose = 'design', onChange }: { label: string; value?: DesignField; purpose?: DesignField['purpose']; onChange: (field: DesignField) => void }) {
   const field = value || { state: 'empty', text: '', purpose }
   return <section aria-label={label}><strong>{label}</strong><Space wrap>
     <Select aria-label={`${label}状态`} value={field.state} options={states} style={{ width: 110 }} onChange={state => onChange({ ...field, state })} />

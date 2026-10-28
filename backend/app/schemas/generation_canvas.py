@@ -3,7 +3,7 @@ from typing import Annotated, Any, ClassVar, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.schemas.common import ApiResponse
 from app.core.contracts.media import VideoMediaInput
-from app.core.contracts.generation_canvas import OutputIdentity, InputBinding, TextOutputPayload, MediaOutputPayload, ObjectReferencePayload, DescriptionTextPayload, NamedImageObject, ReferenceImageBinding, NamedImagePayload, CanvasSourceMapping, NamedImageMapping, DesignField, DesignScope, DesignTextPayload
+from app.core.contracts.generation_canvas import OutputIdentity, InputBinding, TextOutputPayload, MediaOutputPayload, ObjectReferencePayload, DescriptionTextPayload, NamedImageObject, ReferenceImageBinding, NamedImagePayload, CanvasSourceMapping, NamedImageMapping, DesignField, DesignScope, DesignTextPayload, SpatialReferencePayload
 
 
 class CardDefinition(BaseModel):
@@ -354,6 +354,79 @@ class PerformanceRuleCard(PerformanceDirectionCard):
     input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'image_example', 'video_example')
 
 
+class SpatialDirectionCard(PerformanceDirectionCard):
+    """空间设计共用保存和媒体保护，业务字段仍由各具体类型声明。"""
+
+
+class AnchorImageMarker(BaseModel):
+    """图片归一化坐标只定位示意，不推断实际几何。"""
+    model_config = ConfigDict(extra='forbid')
+    example_id: str = Field(min_length=1)
+    x: float = Field(ge=0, le=1)
+    y: float = Field(ge=0, le=1)
+
+
+class SpatialAnchorCard(SpatialDirectionCard):
+    """文字可先于参考图；锚点身份不随媒体更换。"""
+    type: Literal['direction.anchor'] = Field(default='direction.anchor', json_schema_extra={'enum': ['direction.anchor']})
+    anchor_id: str | None = Field(default=None, min_length=1, max_length=64)
+    markers: list[AnchorImageMarker] = Field(default_factory=list)
+
+    @model_validator(mode='after')
+    def validate_markers(self):
+        """标记必须指向本卡明确关联的图片，每张示意图一个位置。"""
+        ids = [marker.example_id for marker in self.markers]
+        if len(ids) != len(set(ids)) or any(not any(example.id == ident and example.source.port_id == 'image' for example in self.examples) for ident in ids):
+            raise ValueError('锚点标记须对应唯一的已关联图片')
+        return self
+    name: str = ''
+    position: DesignField = Field(default_factory=DesignField)
+    orientation: DesignField = Field(default_factory=DesignField)
+    spatial_relation: DesignField = Field(default_factory=DesignField)
+    scale: DesignField = Field(default_factory=DesignField)
+    input_ports: ClassVar[tuple[str, ...]] = ('space', 'effect_object', 'image_example', 'video_example')
+    output_ports: ClassVar[tuple[str, ...]] = ('text', 'anchor')
+
+
+class BlockingDirectionCard(SpatialDirectionCard):
+    """明确调度对象供后续镜头引用；事件来源后续接入。"""
+    type: Literal['direction.blocking'] = Field(default='direction.blocking', json_schema_extra={'enum': ['direction.blocking']})
+    blocking_id: str | None = Field(default=None, min_length=1, max_length=64)
+    name: str = ''
+    position: DesignField = Field(default_factory=DesignField)
+    orientation: DesignField = Field(default_factory=DesignField)
+    initiative: DesignField = Field(default_factory=DesignField)
+    path: DesignField = Field(default_factory=DesignField)
+    transition_reason: DesignField = Field(default_factory=DesignField)
+    input_ports: ClassVar[tuple[str, ...]] = ('participant', 'position_anchor', 'change_event', 'image_example', 'video_example')
+    output_ports: ClassVar[tuple[str, ...]] = ('text', 'blocking')
+
+
+class InFrameActivityCard(SpatialDirectionCard):
+    """持续任务、反应延迟与入出画；触发事件不自动执行。"""
+    type: Literal['direction.activity'] = Field(default='direction.activity', json_schema_extra={'enum': ['direction.activity']})
+    task: DesignField = Field(default_factory=DesignField)
+    attention: DesignField = Field(default_factory=DesignField)
+    main_action_effect: DesignField = Field(default_factory=DesignField)
+    path: DesignField = Field(default_factory=DesignField)
+    delay_basis: DesignField = Field(default_factory=DesignField)
+    delay_ms: int | None = Field(default=None, ge=0)
+    entry_exit: DesignField = Field(default_factory=DesignField)
+    exit_state: DesignField = Field(default_factory=DesignField)
+    depth: DesignField = Field(default_factory=DesignField)
+    intensity: DesignField = Field(default_factory=DesignField)
+    input_ports: ClassVar[tuple[str, ...]] = ('participant', 'area_anchor', 'trigger_event', 'effect_object', 'image_example', 'video_example')
+
+
+class EnvironmentActivityCard(SpatialDirectionCard):
+    """环境活动与留白不要求先建镜头、人物或节拍。"""
+    type: Literal['direction.environment'] = Field(default='direction.environment', json_schema_extra={'enum': ['direction.environment']})
+    activity: DesignField = Field(default_factory=DesignField)
+    empty_space: DesignField = Field(default_factory=DesignField)
+    reason: DesignField = Field(default_factory=DesignField)
+    input_ports: ClassVar[tuple[str, ...]] = ('image_example', 'video_example')
+
+
 class CanvasDocument(BaseModel):
     """完整编辑文档；位置、尺寸和视角由浏览器另存。"""
     model_config = ConfigDict(extra='forbid')
@@ -361,7 +434,7 @@ class CanvasDocument(BaseModel):
     project_id: str
     name: str = Field(min_length=1, max_length=255)
     schema_version: Literal[2] = 2
-    cards: list[CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | ObjectDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard] = Field(default_factory=list)
+    cards: list[SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | ObjectDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard] = Field(default_factory=list)
     edges: list[GenerationCanvasEdge] = Field(default_factory=list)
     input_order: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
     groups: list[GenerationCanvasGroup] = Field(default_factory=list)
@@ -422,7 +495,7 @@ class CanvasResolvedOutput(BaseModel):
     """已发布的实际输出，运行层可注入模型当前输出而无需虚构未来结果。"""
     source: OutputIdentity
     modality: str
-    payload: Annotated[TextOutputPayload | MediaOutputPayload | ObjectReferencePayload | DescriptionTextPayload | NamedImagePayload | DesignTextPayload, Field(discriminator='kind')] | None = None
+    payload: Annotated[TextOutputPayload | MediaOutputPayload | ObjectReferencePayload | DescriptionTextPayload | NamedImagePayload | DesignTextPayload | SpatialReferencePayload, Field(discriminator='kind')] | None = None
     text: str | None = None
     file_id: str | None = None
     token: str = ''
@@ -440,7 +513,7 @@ class CanvasResolvedOutput(BaseModel):
             elif self.modality in ('image', 'video', 'audio') and self.file_id:
                 self.payload = MediaOutputPayload(kind=self.modality, file_id=self.file_id)
         if self.payload is not None:
-            self.modality = 'text' if isinstance(self.payload, (ObjectReferencePayload, DescriptionTextPayload, DesignTextPayload)) else 'image' if isinstance(self.payload, NamedImagePayload) else self.payload.kind
+            self.modality = 'text' if isinstance(self.payload, (ObjectReferencePayload, DescriptionTextPayload, DesignTextPayload, SpatialReferencePayload)) else 'image' if isinstance(self.payload, NamedImagePayload) else self.payload.kind
             self.text = getattr(self.payload, 'text', None)
             self.file_id = getattr(self.payload, 'file_id', None)
         return self
