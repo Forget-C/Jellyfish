@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented
+**Completion:** integrated
 
 - [x] 创作控制保留发挥程度、保持项与待确定信息；生成指导保留优先级、参考要求、声音策略及禁止项；验收要求保留稳定身份与可观察判断标准。
 - [x] 设计文本默认完整采用，按用途和状态参与文本、图片、视频编译；不把参考要求直接变成素材采用，也不重写用户自由文本。
@@ -17,7 +17,7 @@
 - [x] 验收要求被采用只表示提供判断标准，不写入素材审查、真实覆盖或剪辑采用结论，不扩展旧场次生产流程。
 - [x] 在摄影与镜头均可用的链路核对对象指代、相关诊断、保存重开及取消／替换保护；其他已有导演功能的独立使用保持有效。
 
-规格依据：[总体规格](../spec.md)。共同约束与验证边界见[任务索引](../README.md)；本票实现与验收证据见下方 Comments；implemented 表示等待主区集成。
+规格依据：[总体规格](../spec.md)。共同约束与验证边界见[任务索引](../README.md)；本票实现与集成验收证据见下方 Comments。
 
 
 ## Comments
@@ -30,3 +30,5 @@
 - Node24 `pnpm --dir front run typecheck` 通过；相关 Python Pylint 为 **10.00/10**。生产 OpenAPI 从当前工作树 `app.main.app.openapi()` 导出并生成客户端，保留单行文件格式、剔除纯尾空行漂移；主区标准8000更新待集成后执行。未修改共享工作台UI、旧场次入口或主题tokens，复用前序共享验收证据；本票三个真实使用方已独立验证，不重跑无关旧场次套件。真实供应商质量、实际外部存储及MySQL并发未被替身结果代表。
 
 - 完成前合入最新主区 `fb1f95d2`（13风格预设及16连续性事实均已集成）。保留所有强类型字段联合、摄影预设、约束与要求的专用编辑及浏览器入口；作用对象兼容合并16合法引用范围，同时保留验收卡拒绝反向镜头的限制。合后全画布 **271 passed／28 MySQL skipped**（32.94s），Node24 typecheck、`uv run --no-sync pylint app` **10.00/10**、`git diff --check`通过。统一真实Chrome要求卡入口再次 **PASS／15.7s**，证据 `/private/tmp/canvas17-after16-guidance`，桌面／窄屏截图已复核。当前工作树 `app.__file__` 已确认，生产 `app.openapi()` 与提交 OpenAPI 精确一致；主8000标准更新留给合入17后的主区执行，不用仍不含17的主服务覆盖本票契约。
+
+- 2026-10-29：主区无冲突集成17（分支 HEAD `3f84c01b`，合并提交 `d860ad66`），Completion 更新为 integrated，分诊 Status 不变。合后指导／连续性／叙事／摄影 HTTP 与真实 Worker 组合 **66 passed**（6.91s）、Node24.22.1 typecheck、`git diff --check`通过；产品代码与已验证分支一致，复用相同实现全画布271 passed／28 MySQL skipped、Pylint10及真实Chrome证据。主区 `app.__file__` 已核实；当前生产导出、8000实际HTTP与提交schema精确一致，含 `AcceptanceCriterionCard`。标准 `pnpm --dir front run openapi:update` 成功，432处纯尾空行漂移经精确字节核对后还原，schema等价的JSON格式漂移亦还原。生产及HTTP证据分别为 `/private/tmp/canvas17-integrated-production.json`、`/private/tmp/canvas17-integrated-http.json`。外部服务受控替身及MySQL缺环境限制继续保留，未声称真实供应商质量已验收；未推送。
