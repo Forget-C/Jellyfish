@@ -29,3 +29,5 @@
 - 真实 Chrome 页面 `generationCanvasContinuity.browser.mjs`（8299／4299）验证实际锚点→事实拖线保存仅候选且无绑定、随后显式采用、字段编辑、直接事件和空间、固定图片证据与前态字段、键盘用途选择、图片后态目标、完整设计编译无媒体／无祖先正文、保存重开与390px窄屏。最终证据 `/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-generation-canvas-continuity-TTGmx1`；已查看桌面截图，页面与共享主题一致。新增统一浏览器入口 `generation-canvas-continuity`，公共工作台组件／样式没有修改，按实际影响复用12既有公共六项验收，不重跑无关场次流程。
 - 当前工作树真实HTTP OpenAPI（剔除仅测试控制路径）与生产app导出、提交 `front/openapi.json` 精确一致，已生成前端类型，剔除414处纯尾空行变化。主区8000标准 `openapi:update` 由集成后执行，不从旧服务覆盖新契约。
 - 28项可选MySQL环境跳过，外部供应商／存储使用已确认替身，不宣称真实供应商质量、真实MySQL并发或外部存储生产验收。未新增章节绑定、场次生产、音频生成或素材实际审查／剪辑流程；未推送。
+
+- 交付前继续合入13最新实现 `7a8c0b4f` 及集成验证文档 `b12275a1`；显式合并 `20cc467e` 保留风格及三类约束的强类型字段／联合类型、renderer、目录和测试入口，重新从当前生产app生成OpenAPI。合后连续性／风格／摄影 **39 passed**（4.13s）、Pylint10.00/10及Node24 typecheck通过；重新执行真实Chrome完整连续性页面（含实际拖线、固定图片证据／键盘用途与前态定位、图片后态、重开、390px）通过，最终证据 `/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-generation-canvas-continuity-6GLjBt`，HTTP生产schema与当前提交精确一致。合并共享目录时纠正风格归“画面设计”，真实页面明确断言；本票三卡归“连续性与约束”。仅文档变化不重跑全量回归，249／28证据复用范围及外部服务限制不变。

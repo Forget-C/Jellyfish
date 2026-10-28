@@ -230,3 +230,5 @@ flowchart TD
 - 2026-10-29：13在 `codex-canvas-types-13` 实现独立风格整卡输出、图库／对比／大图和摄影五入口可视化预设，应用后成为本卡可编辑字段，示例与媒体输入／模型采用分离；原创 SVG／三秒 MP4 均标为几何示意。合入最新 `8e94c579` 后全画布239 passed／28 skipped、Pylint10、Node24 typecheck，真实预设与摄影页面分别11.7秒／11.4秒通过，生产schema与committed OpenAPI精确一致。Completion implemented待集成，Status不变；详细证据及边界见13票据。
 
 - 2026-10-29：无冲突集成13（分支HEAD `eda252d1`，显式合并 `7a8c0b4f`），Completion更新为integrated，分诊Status不变。合后摄影／风格HTTP与真实Worker组合 **22 passed**（2.92s）、Node24.22.1 typecheck通过；复用同一实现全部画布239 passed／28 skipped、Pylint10及真实预设／摄影页面证据。主区生产app导出、8000实际HTTP与提交OpenAPI精确一致；8000本次已恢复，标准 `openapi:update` 成功，418处纯尾空行生成差异经精确核对后剔除。证据 `/private/tmp/canvas13-integrated-production.json`、`/private/tmp/canvas13-integrated-http.json`。此前14／18标准更新的环境阻塞为历史记录，本次最新主区契约已完成标准同步；MySQL和受控供应商／存储限制保留。01–15及18共十六票集成，16／17进行中，19待其完成；未推送、未操作其他工作树。
+
+- 16交付前已同步13实现及最新主区 `b12275a1`；解决共享契约／导航／生成类型冲突后，连续性／风格／摄影39 passed、Pylint10、Node24 typecheck及真实Chrome完整页面再次通过。当前HTTP生产schema与提交精确一致；风格入口归“画面设计”，三类约束归“连续性与约束”。最后证据与合并边界见16 Comments，Completion仍为implemented待主区集成。
