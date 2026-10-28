@@ -35,3 +35,5 @@
 - 范围边界：`shot`／`acceptance_basis` 仅声明可选接收端点，14／17来源的真实组合由对应后续票据接入，19核对；未伪造镜头或验收对象，不以缺少镜头阻止独立摄影。可视化预设与独立画面风格由13实现，本票无占位预设。未推送、未编辑主工作区、未开展后续票据。
 
 - 截图取景补验：最后仅调整摄影浏览器测试的截图动画与滚动，不改产品代码。`generation-canvas-photography` 再次 **10.3s 通过**；最终直接可读的预检与图片证据在 `/private/tmp/canvas12-photo-proof/generation-canvas-photography/`，截图已实际打开检查。旧目录保留原始验收记录，不覆盖失败或早期证据。
+
+- 2026-10-29 最后收口：真实页面先以 `1 !== 0` 复现无声明状态仍出现空目标选择器（`/private/tmp/canvas12-no-state-red/`），再只在有明确状态或需处理保留失效目标时显示目标配置；不自动增加阶段或删除失效配置。Node24 typecheck再次通过，最终摄影 **11.4s**、表演 **12.4s**、声音 **11.3s** 三页均通过（`/private/tmp/canvas12-page-target-final/results.json`）。新增产品改动仅该前端显示条件，复用未变的215项后端通过及28项跳过结果。预检截图另等待确认执行按钮可交互，已实际打开确认完整编译文本的截图为 `/private/tmp/canvas12-photo-proof-ready/generation-canvas-photography/photography-preview.png`；最终提交文本仍保存在最终页面目录的 `submitted-text.txt`。所有后端／Vite测试进程均已清理，最新集成tip为 `1b353bf7`。
