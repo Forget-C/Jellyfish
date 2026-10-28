@@ -56,7 +56,7 @@ export function PerformanceDirectionEditor({ card: raw, document, savedRevision,
         const object = item.payload as ObjectReferencePayload
         if (object?.kind !== 'object_reference') return null
         return <div key={sourceKey(item.source)}><span>{object.name} · {{ character: '人物', prop: '物件', costume: '服装', place: '场所' }[object.category]}</span>{(['participant', 'effect_object'] as const).map(port => {
-          if (port === 'participant' && (card.type === 'direction.performance_rule' || !['character', 'prop'].includes(object.category))) return null
+          if (port === 'participant' && (card.type === 'direction.performance_rule' || !['character', 'prop', 'costume'].includes(object.category))) return null
           if (!document.edges?.some(edge => edge.target_card === card.id && edge.target_port === port && edge.source_card === item.source.card_id && edge.source_port === item.source.port_id)) return null
           const binding = bindings.find(value => value.input_port === port && sourceKey(value.source) === sourceKey(item.source))
           const label = port === 'participant' ? '参与对象' : '作用对象'

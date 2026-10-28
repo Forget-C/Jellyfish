@@ -55,7 +55,7 @@ def validate_design_relations(document, published):
             connected = any(edge.target_card == card.id and edge.target_port == binding.input_port and edge.source_card == binding.source.card_id and edge.source_port == binding.source.port_id for edge in document.edges)
             if not connected or not item or not isinstance(item.payload, ObjectReferencePayload) or not item.available:
                 raise diagnostic('INVALID_DESIGN_BINDING', '请选择直接候选中的具体对象', target)
-            allowed = ('character', 'prop') if binding.input_port == 'participant' else ('character', 'prop', 'costume', 'place')
+            allowed = ('character', 'prop', 'costume') if binding.input_port == 'participant' else ('character', 'prop', 'costume', 'place')
             if item.payload.category not in allowed:
                 raise diagnostic('INVALID_DESIGN_CATEGORY', '对象类别不适用于此关系', target)
             if binding.input_port == 'participant':
