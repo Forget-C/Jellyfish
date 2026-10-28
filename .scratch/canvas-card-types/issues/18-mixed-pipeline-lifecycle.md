@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented
+**Completion:** integrated
 
 - [x] 在已交付类型上打通图片生成到参考卡再到视频生成、对象参考到表演再到模型等混合链路；全部候选边统一无环，逐卡只消费直接明确输出。
 - [x] 按实际采用组织执行依赖和范围，保留既有运行到目标、严格框选及范围占用规则；未采用候选不产生任务，参考和导演输出处理不成为隐式模型任务。
@@ -34,3 +34,5 @@
 - 共享工作台控件、主题、布局均未修改；按实际影响复用前序票据共享验收，新 mixed 页面独立验证，不额外重跑无关六例。28项MySQL／其他可选环境跳过、受控供应商／外部存储限制保留，不证明真实供应商质量。
 
 - 完成前合入最新集成 `e00192ac`（12摄影已集成）。仅README并行实施记录冲突，双方事实均保留；runtime正式模型媒体有效性修复完整保留，未覆盖12的typed摄影payload、scope投影或图片目标选择。合后针对真正交叉影响执行 `pytest tests/test_generation_canvas_mixed.py tests/test_generation_canvas_photography.py -q`：**19 passed**，覆盖图片／文本／视频真实Worker、摄影所选范围相关性、阶段目标及整卡表演规则；Node24 typecheck通过。混合真实Chrome统一入口再次通过（**8.1s**），证据 `/private/tmp/canvas18-after12/generation-canvas-mixed`，窄屏截图已复核；独立8295生产schema与最新提交OpenAPI精确一致。相同本地runtime实现的Pylint10及200/28全画布结果复用，不无谓重跑已过基础。
+
+- 2026-10-29：主区依次集成14（`9678a1f0`）及18（`99659847`），仅README和浏览器套件列表冲突，保留双方新增记录及入口；Completion更新为integrated。合后叙事／混合／摄影／空间／声音／表演HTTP与真实Worker组合 **108 passed**（10.76s），Node24.22.1 typecheck通过，`git diff --check`通过；复用14全画布232 passed／28 MySQL skipped、Pylint10.00/10及两票真实页面证据。主区 `app.__file__` 已确认，当前生产app导出与提交OpenAPI精确一致（`/private/tmp/canvas14-18-integrated-production.json`）。8000父进程73854仍属当前主backend，但升级权限的urllib20／30秒与绕过代理curl10秒均无响应；未终止用户服务，标准 `openapi:update` 留待该服务恢复后复验，不从旧进程覆盖已同步契约。供应商／存储替身和MySQL缺环境边界保留。
