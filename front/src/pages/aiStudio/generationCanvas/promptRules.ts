@@ -3,7 +3,7 @@ import type { GenerationCard } from './graphRules'
 import { editorPrompt } from './inputBindings'
 import type { EditorPromptDocument as PromptDocument, EditorPromptReference as PromptReference } from './inputBindings'
 export type Candidate = { source: OutputIdentity; token: string; available: boolean }
-export const sourceKey = (source: OutputIdentity) => JSON.stringify([source.canvas_id, source.card_id, source.port_id, source.position])
+export const sourceKey = (source: OutputIdentity) => JSON.stringify([source.canvas_id, source.card_id, source.port_id, source.object_id || source.position])
 export const referencesIn = (prompt?: PromptDocument): PromptReference[] => (prompt?.segments || []).flatMap(segment => segment.kind === 'reference' ? [segment] : segment.kind === 'instruction' ? segment.references || [] : [])
 export function referenceIssue(document: CanvasDocument, _receiver: GenerationCard, source: OutputIdentity, candidates: Candidate[] = []) {
   if (source.canvas_id !== document.id) return '来源属于其他画布'
@@ -12,7 +12,9 @@ export function referenceIssue(document: CanvasDocument, _receiver: GenerationCa
 }
 /** 清理引用与删边/来源可以在同一份最终编辑文档里完成。 */
 export function referenceProtection(document: CanvasDocument, sourceCard: string, receiverId?: string, sourcePort?: string) {
-  for (const card of document.cards || []) if ('prompt' in card && (!receiverId || card.id === receiverId)) {
+  for (const card of document.cards || []) if (('input_bindings' in card || 'image_binding' in card) && (!receiverId || card.id === receiverId)) {
+    if ('image_binding' in card && card.image_binding?.source?.card_id === sourceCard && (!sourcePort || card.image_binding.source.port_id === sourcePort))
+      return { message: '请先取消或替换已采用主图来源', cardId: card.id, segmentId: 'image', referenceId: 'image' }
     for (const binding of card.input_bindings || []) {
       if (binding.source.canvas_id !== document.id || binding.source.card_id !== sourceCard || sourcePort && binding.source.port_id !== sourcePort) continue
       const ref = referencesIn(editorPrompt(card)).find(reference => reference.binding_id === binding.id)

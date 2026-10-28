@@ -5,7 +5,7 @@ import type { GenerationCard } from './graphRules'
 export type EditorPromptReference = PromptReference & { source: OutputIdentity }
 export type EditorPromptInstruction = Omit<PromptInstruction, 'references'> & { references?: EditorPromptReference[] }
 export type EditorPromptDocument = { segments?: (PromptText | EditorPromptReference | EditorPromptInstruction)[] }
-const key = (source: OutputIdentity) => JSON.stringify([source.canvas_id, source.card_id, source.port_id, source.position])
+const key = (source: OutputIdentity) => JSON.stringify([source.canvas_id, source.card_id, source.port_id, source.object_id || source.position])
 const commandPorts: Record<string, string> = { 首帧参考: 'first_frame', 尾帧参考: 'last_frame', 关键帧参考: 'key_frame', 主体参考: 'subject_image' }
 
 export function editorPrompt(card: GenerationCard): EditorPromptDocument {
