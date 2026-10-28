@@ -49,7 +49,7 @@ def validate_design_relations(document, published):
         if not isinstance(card, PerformanceDirectionCard) or isinstance(card, (SoundDirectionCard, SpatialDirectionCard, NarrativeDirectionCard)):
             continue
         candidates = resolve_outputs(document, card.id, published)
-        ids, participants = set(), set()
+        ids, participants, beats = set(), set(), set()
         for binding in card.input_bindings:
             target = {'card_id': card.id, 'path': ['input_bindings', binding.id]}
             if binding.id in ids or binding.input_port not in ('participant', 'effect_object', 'beat', 'received_event', 'dialogue_basis') or binding.input_port not in card.input_ports:
@@ -68,7 +68,7 @@ def validate_design_relations(document, published):
                 if not narrative_binding_allowed(binding.input_port, item.payload):
                     raise diagnostic('INVALID_DESIGN_CATEGORY', '故事对象类别不适用于此关系', target)
                 if binding.input_port == 'beat':
-                    participants.add(('beat', item.payload.reference_id))
+                    beats.add(item.payload.reference_id)
                 continue
             if not isinstance(item.payload, ObjectReferencePayload):
                 raise diagnostic('INVALID_DESIGN_CATEGORY', '请选择明确对象身份', target)
@@ -77,9 +77,9 @@ def validate_design_relations(document, published):
                 raise diagnostic('INVALID_DESIGN_CATEGORY', '对象类别不适用于此关系', target)
             if binding.input_port == 'participant':
                 participants.add(item.payload.object_id)
-        if len({value for value in participants if isinstance(value, tuple)}) > 1:
+        if len(beats) > 1:
             raise diagnostic('BEAT_COUNT_EXCEEDED', '所属节拍至多一个', {'card_id': card.id, 'port_id': 'beat'})
-        if len({value for value in participants if not isinstance(value, tuple)}) > 1:
+        if len(participants) > 1:
             raise diagnostic('PARTICIPANT_COUNT_EXCEEDED', '情境和表演主体至多一个对象', {'card_id': card.id, 'port_id': 'participant'})
 
 

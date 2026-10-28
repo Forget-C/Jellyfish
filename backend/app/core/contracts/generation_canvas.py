@@ -285,7 +285,7 @@ class NarrativeReferencePayload(BaseModel):
 class NarrativeDesignRelation(BaseModel):
     """直接采用的用途与必要身份，保留多个不同用途。"""
     model_config = ConfigDict(extra='forbid')
-    input_port: str
+    input_port: Literal['participant', 'effect_object', 'covered_beat', 'related_event', 'blocking_basis', 'beat', 'received_event', 'change_event', 'trigger_event', 'shot', 'space', 'position_anchor', 'area_anchor']
     reference: ObjectReferencePayload | SpatialReferencePayload | NarrativeReferencePayload
 
 
