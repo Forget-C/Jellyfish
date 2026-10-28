@@ -88,7 +88,9 @@ try {
   await card.getByRole('button', { name: '采用对白 line-1 · 版本 1', exact: true }).click()
   await poll(state => state.document.cards.find(item => item.id === 'act').input_bindings?.length === 1)
   const outputs = (await (await fetch(`${base}/${canvas.id}/cards/act/outputs`)).json()).data.outputs
-  assert.match(outputs[0].text, /请等一等/)
+  assert.doesNotMatch(outputs[0].text, /请等一等/)
+  assert.match(outputs[0].text, /line-1.*版本 1.*小雪/)
+  assert.ok(!('content' in outputs[0].payload.dialogue_basis[0]))
   assert.equal(outputs[0].payload.dialogue_basis[0].speaker.object_id, 'alice')
   await page.reload()
   await open('line')

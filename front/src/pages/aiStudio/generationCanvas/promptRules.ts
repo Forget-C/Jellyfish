@@ -11,18 +11,20 @@ export function referenceIssue(document: CanvasDocument, _receiver: GenerationCa
   return !item ? '来源未连接' : !item.available ? '来源输出缺失' : ''
 }
 /** 清理引用与删边/来源可以在同一份最终编辑文档里完成。 */
-export function referenceProtection(document: CanvasDocument, sourceCard: string, receiverId?: string, sourcePort?: string) {
+export function referenceProtection(document: CanvasDocument, sourceCard: string, receiverId?: string, sourcePort?: string, targetPort?: string) {
   for (const card of document.cards || []) if (('input_bindings' in card || 'image_binding' in card) && (!receiverId || card.id === receiverId)) {
-    if ('image_binding' in card && card.image_binding?.source?.card_id === sourceCard && (!sourcePort || card.image_binding.source.port_id === sourcePort))
+    if ((!targetPort || targetPort === 'image_source') && 'image_binding' in card && card.image_binding?.source?.card_id === sourceCard && (!sourcePort || card.image_binding.source.port_id === sourcePort))
       return { message: '请先取消或替换已采用主图来源', cardId: card.id, segmentId: 'image', referenceId: 'image' }
-    if ('examples' in card) for (const example of card.examples || []) {
+    if ((!targetPort || targetPort === `${sourcePort}_example`) && 'examples' in card) for (const example of card.examples || []) {
       if (example.source.card_id === sourceCard && (!sourcePort || example.source.port_id === sourcePort)) return { message: '请先取消示例关联', cardId: card.id, segmentId: example.id, referenceId: example.id }
     }
     for (const binding of card.input_bindings || []) {
-      if (binding.source.canvas_id !== document.id || binding.source.card_id !== sourceCard || sourcePort && binding.source.port_id !== sourcePort) continue
+      if (targetPort && binding.input_port !== targetPort || binding.source.canvas_id !== document.id || binding.source.card_id !== sourceCard || sourcePort && binding.source.port_id !== sourcePort) continue
       const ref = referencesIn(editorPrompt(card)).find(reference => reference.binding_id === binding.id)
       return { message: '请先清理 ' + card.id + ' 的实际输入绑定 ' + binding.id, cardId: card.id, segmentId: ref?.id || binding.id, referenceId: ref?.id || binding.id }
     }
+    // 精确断边由实际输入用途判断；旧正文引用回退仅保护整张来源删除。
+    if (targetPort) continue
     for (const segment of editorPrompt(card).segments || []) {
       const refs = segment.kind === 'reference' ? [segment] : segment.kind === 'instruction' ? segment.references || [] : []
       const ref = refs.find(item => item.source.canvas_id === document.id && item.source.card_id === sourceCard && (!sourcePort || item.source.port_id === sourcePort))

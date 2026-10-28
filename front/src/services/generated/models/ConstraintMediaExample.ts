@@ -11,8 +11,9 @@ export type ConstraintMediaExample = {
     source: OutputIdentity;
     file_id: string;
     purpose?: 'positive' | 'negative' | 'before' | 'after' | 'evidence';
+    field_id?: ('spatial_basis' | 'shootable_area' | 'axis' | 'scale' | 'before' | 'change' | 'after' | 'following_constraints' | 'fact' | 'source_basis' | null);
     description?: string;
     start_ms?: (number | null);
     end_ms?: (number | null);
-    field_id?: ('spatial_basis' | 'shootable_area' | 'axis' | 'scale' | 'before' | 'change' | 'after' | 'following_constraints' | 'fact' | 'source_basis' | null);
 };
+

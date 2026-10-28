@@ -1,5 +1,5 @@
 """对白及声音安排只发布本卡设计；参考素材不进入出口。"""
-from app.core.contracts.generation_canvas import DesignField, DesignTextPayload, SoundDesignFields, ObjectReferencePayload, OutputIdentity
+from app.core.contracts.generation_canvas import DialogueReferencePayload, DesignField, DesignTextPayload, SoundDesignFields, ObjectReferencePayload, OutputIdentity
 from app.schemas.generation_canvas import CanvasResolvedOutput, DialogueCard, SoundDirectionCard
 from app.services.generation_canvas.errors import diagnostic
 from app.services.generation_canvas.performance import STATE_LABELS, PURPOSE_LABELS
@@ -30,7 +30,11 @@ def publish_sound(canvas_id, card, adopted_inputs):
             lines.append(f'{label}：{value}')
     payload = DesignTextPayload(design_type=card.type, text='\n'.join(lines), fields=SoundDesignFields(**fields), scope=card.scope,
                                 objects=objects, participant_id=speaker, source_locator=card.source_locator, **values)
-    return [CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id, port_id=port, position=0), modality='text', payload=payload) for port in card.output_ports]
+    outputs = [CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id, port_id='text', position=0), modality='text', payload=payload)]
+    if isinstance(card, DialogueCard):
+        outputs.append(CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id, port_id='dialogue', position=0), modality='text',
+            payload=DialogueReferencePayload(dialogue_id=card.dialogue_id, version=card.version, speaker=next((obj for obj in objects if obj.object_id == speaker), None))))
+    return outputs
 
 
 def validate_sound_relations(document, published, previous):

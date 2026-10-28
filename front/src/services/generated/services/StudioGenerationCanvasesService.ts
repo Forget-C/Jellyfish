@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { ApiResponse_CanvasCardOutputs_ } from '../models/ApiResponse_CanvasCardOutputs_';
+import type { ApiResponse_CanvasCatalog_ } from '../models/ApiResponse_CanvasCatalog_';
 import type { ApiResponse_CanvasCompiledInput_ } from '../models/ApiResponse_CanvasCompiledInput_';
 import type { ApiResponse_CanvasModelCapability_ } from '../models/ApiResponse_CanvasModelCapability_';
 import type { ApiResponse_CanvasPrecheck_ } from '../models/ApiResponse_CanvasPrecheck_';
@@ -461,6 +462,31 @@ export class StudioGenerationCanvasesService {
                 'project_id': projectId,
                 'canvas_id': canvasId,
                 'card_id': cardId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Canvas Catalog
+     * 核实画布归属后提供当前系统卡片与端点声明。
+     * @returns ApiResponse_CanvasCatalog_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasCatalog({
+        projectId,
+        canvasId,
+    }: {
+        projectId: string,
+        canvasId: string,
+    }): CancelablePromise<ApiResponse_CanvasCatalog_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/catalog',
+            path: {
+                'project_id': projectId,
+                'canvas_id': canvasId,
             },
             errors: {
                 422: `Validation Error`,

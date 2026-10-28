@@ -1,5 +1,5 @@
 """独立表演卡输出与直接关系校验，不读取祖先设计或运行模型。"""
-from app.core.contracts.generation_canvas import CriterionReferencePayload, FrameState, DialogueBasis, DesignField, DesignTextPayload, PerformanceDesignFields, ObjectReferencePayload, OutputIdentity
+from app.core.contracts.generation_canvas import DialogueReferencePayload, CriterionReferencePayload, FrameState, DialogueBasis, DesignField, DesignTextPayload, PerformanceDesignFields, ObjectReferencePayload, OutputIdentity
 from app.schemas.generation_canvas import CanvasResolvedOutput, PerformanceDirectionCard, SoundDirectionCard, SpatialDirectionCard, NarrativeDirectionCard, GuidanceDirectionCard, ConstraintDirectionCard
 from app.services.generation_canvas.errors import diagnostic
 
@@ -16,7 +16,7 @@ def publish_design(canvas_id, card, adopted_inputs):
     """完整设计只发布一个出口；空与不适用不编译为要求，开放状态保持原意。"""
     fields = {key: getattr(card, key) for key in FIELD_LABELS if isinstance(getattr(card, key, None), DesignField)}
     active = [(key, value) for key, value in fields.items() if value.state not in ('empty', 'not_applicable') and (value.text or value.state == 'absent')]
-    dialogues = [item.payload for item in adopted_inputs if isinstance(item.payload, DesignTextPayload) and item.source.port_id == 'dialogue' and item.available]
+    dialogues = [item.payload for item in adopted_inputs if isinstance(item.payload, DialogueReferencePayload) and item.source.port_id == 'dialogue' and item.available]
     from app.services.generation_canvas.guidance import adopted_acceptance, acceptance_lines
     acceptance = adopted_acceptance(adopted_inputs)
     if not active and not dialogues and not acceptance:
@@ -38,8 +38,8 @@ def publish_design(canvas_id, card, adopted_inputs):
     if card.source_locator:
         lines.append('来源：' + card.source_locator)
     lines.extend(acceptance_lines(acceptance))
-    lines.extend('对白依据：' + item.text for item in dialogues)
-    basis = [DialogueBasis(dialogue_id=item.dialogue_id, version=item.version, content=item.fields.content, speaker=next((obj for obj in item.objects if obj.object_id == item.participant_id), None)) for item in dialogues]
+    lines.extend(f'对白依据：{item.dialogue_id} · 版本 {item.version} · 说话对象：{item.speaker.name if item.speaker else "待确定"}' for item in dialogues)
+    basis = [DialogueBasis(dialogue_id=item.dialogue_id, version=item.version, speaker=item.speaker) for item in dialogues]
     payload = DesignTextPayload(design_type=card.type, text='\n'.join(lines), fields=PerformanceDesignFields(**fields),
                                 scope=card.scope, objects=objects, participant_id=participant, narrative_relations=relations, source_locator=card.source_locator, dialogue_basis=basis, acceptance_basis=acceptance,
                                 frame_states=[FrameState(id='field:exit_state', label='结束状态')] if any(key == 'exit_state' for key, _ in active) else [])
@@ -66,7 +66,7 @@ def validate_design_relations(document, published):
                     raise diagnostic('INVALID_REQUIREMENT_BINDING', '请选择直接候选中的验收要求', target)
                 continue
             if binding.input_port == 'dialogue_basis':
-                if not connected or not item or not item.available or not isinstance(item.payload, DesignTextPayload) or item.source.port_id != 'dialogue' or item.payload.design_type != 'direction.dialogue':
+                if not connected or not item or not item.available or not isinstance(item.payload, DialogueReferencePayload) or item.source.port_id != 'dialogue':
                     raise diagnostic('INVALID_DESIGN_BINDING', '请选择直接候选中的具体对白', target)
                 continue
             if not connected or not item or not item.available:
@@ -110,6 +110,8 @@ async def validate_design_examples(db, document, published, project_id, previous
         ids = set()
         for example in card.examples:
             target = {'card_id': card.id, 'path': ['examples', example.id]}
+            if example.field_id and not isinstance(getattr(card, example.field_id, getattr(getattr(card, 'fields', None), example.field_id, None)), DesignField):
+                raise diagnostic('INVALID_EXAMPLE_FIELD', '请选择本卡声明的设计字段', {**target, 'field': 'field_id'})
             port = {'image': 'image_example', 'video': 'video_example', 'audio': 'audio_example'}.get(example.source.port_id)
             connected = any(edge.target_card == card.id and edge.target_port == port and edge.source_card == example.source.card_id and edge.source_port == example.source.port_id for edge in document.edges)
             item = next((item for item in candidates if identity_key(item.source) == identity_key(example.source)), None)

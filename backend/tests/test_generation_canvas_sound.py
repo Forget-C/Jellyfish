@@ -47,7 +47,10 @@ async def test_performance_explicitly_adopts_dialogue_identity_version_without_r
     response = await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
     assert response.status_code == 200, response.text
     compiled = (await client.get(url + '/cards/model/compile')).json()['data']
-    assert 'line-7' in compiled['text'] and '版本 3' in compiled['text'] and '等等' in compiled['text']
+    assert 'line-7' in compiled['text'] and '版本 3' in compiled['text'] and '等等' not in compiled['text']
+    relation = (await client.get(url + '/cards/line/outputs')).json()['data']['outputs'][1]['payload']
+    assert relation == {'kind': 'dialogue_reference', 'dialogue_id': 'line-7', 'version': 3, 'speaker': None}
+    assert 'content' not in (await client.get(url + '/cards/act/outputs')).json()['data']['outputs'][0]['payload']['dialogue_basis'][0]
     deleted = {**doc, 'cards': doc['cards'][1:], 'edges': doc['edges'][1:], 'input_order': {'model': {'text': ['b']}}}
     protected = await client.put(url, json={'request_id': 'delete-source', 'expected_revision': 1, 'document': deleted})
     assert protected.status_code == 422 and protected.json()['detail']['code'] == 'REFERENCE_IN_USE'

@@ -1,6 +1,6 @@
 """跨层画布输入输出值契约，不包含运行编排或存储行为。"""
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, model_serializer
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 
 class OutputIdentity(BaseModel):
@@ -27,6 +27,16 @@ class TextOutputPayload(BaseModel):
     model_config = ConfigDict(extra='forbid')
     kind: Literal['text'] = 'text'
     text: str
+
+
+class BasisTextOutputPayload(BaseModel):
+    """创作依据直接输出正文与只读来源定位，定位信息不是模型指令。"""
+    model_config = ConfigDict(extra='forbid')
+    kind: Literal['basis'] = Field(default='basis', json_schema_extra={'enum': ['basis']})
+    text: str
+    source_locator: str
+    selection_start: int | None = None
+    selection_end: int | None = None
 
 
 class MediaOutputPayload(BaseModel):
@@ -237,8 +247,18 @@ class DialogueBasis(BaseModel):
     model_config = ConfigDict(extra='forbid')
     dialogue_id: str
     version: int
-    content: DesignField
     speaker: ObjectReferencePayload | None = None
+
+    @model_validator(mode='before')
+    @classmethod
+    def read_historical_basis(cls, value):
+        """旧运行记录可读，但正文不再是关系出口的一部分。"""
+        return {key: item for key, item in value.items() if key != 'content'} if isinstance(value, dict) else value
+
+
+class DialogueReferencePayload(DialogueBasis):
+    """对白关系出口只声明身份、版本与说话对象。"""
+    kind: Literal['dialogue_reference'] = Field(default='dialogue_reference', json_schema_extra={'enum': ['dialogue_reference']})
 
 
 class CriterionReferencePayload(BaseModel):

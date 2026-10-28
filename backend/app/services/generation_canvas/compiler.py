@@ -64,7 +64,7 @@ def resolve_outputs(document: CanvasDocument, card_id: str,
             source = cards[edge.source_card]
             outputs = [item for item in published_card_outputs(document, source.id, model_outputs) if item.source.port_id == edge.source_port]
             positions = {item.source.position for item in outputs}
-            outputs = list(outputs) + [CanvasResolvedOutput(source=ref, modality=edge.source_port, available=False)
+            outputs = list(outputs) + [CanvasResolvedOutput(source=ref, modality=edge.source_port if edge.source_port in ('image', 'video', 'audio') else 'text', available=False)
                 for ref in retained if ref.canvas_id == document.id and ref.card_id == source.id and ref.port_id == edge.source_port and ref.position not in positions]
             for item in sorted(outputs, key=lambda value: value.source.position):
                 key = identity_key(item.source)

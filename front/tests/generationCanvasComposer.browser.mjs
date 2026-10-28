@@ -52,6 +52,12 @@ try {
   await open('m')
   const editor = detail().getByRole('textbox', { name: '模型正文', exact: true })
   await editor.waitFor()
+  assert.equal(await editor.evaluate(element => {
+    for (let current = element; current; current = current.parentElement) {
+      const color = getComputedStyle(current).backgroundColor
+      if (color !== 'rgba(0, 0, 0, 0)' && color !== 'transparent') return color
+    }
+  }), 'rgb(27, 27, 27)', 'model composer inherits workbench surface instead of the default white experiment frame')
   await editor.fill('@图片10')
   await detail().getByRole('button', { name: '@图片10', exact: true }).waitFor()
   assert.equal(await editor.locator('[data-segment]').count(), 0, 'no prefix binding while typing')

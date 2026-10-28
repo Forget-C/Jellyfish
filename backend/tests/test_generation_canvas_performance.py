@@ -67,9 +67,10 @@ async def test_examples_are_protected_direct_media_and_never_enter_design_output
     source = {'canvas_id': canvas['id'], 'card_id': 'v', 'port_id': 'video', 'position': 0}
     doc.update(cards=[{'id': 'v', 'type': 'content.video', 'file_id': file['id']},
         {'id': 'rule', 'type': 'direction.performance_rule', 'applicability': {'state': 'proposal', 'text': '动作克制', 'purpose': 'constraint'},
-         'examples': [{'id': 'ex', 'source': source, 'file_id': file['id'], 'start_ms': 100, 'end_ms': 900, 'purpose': 'negative'}]}],
+         'examples': [{'id': 'ex', 'source': source, 'file_id': file['id'], 'start_ms': 100, 'end_ms': 900, 'purpose': 'negative', 'field_id': 'applicability'}]}],
         edges=[{'id': 'e', 'source_card': 'v', 'source_port': 'video', 'target_card': 'rule', 'target_port': 'video_example'}], input_order={'rule': {'video_example': ['e']}})
     assert (await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': doc})).status_code == 200
+    assert (await client.get(url)).json()['data']['document']['cards'][1]['examples'][0]['field_id'] == 'applicability'
     outputs = (await client.get(url + '/cards/rule/outputs')).json()['data']['outputs']
     assert file['id'] not in str(outputs) and '900' not in str(outputs)
     doc['cards'] = doc['cards'][1:]
@@ -284,3 +285,21 @@ async def test_costume_object_can_participate_without_description_or_image(canva
     assert output['payload']['participant_id'] == 'coat'
     assert output['payload']['objects'] == [{'kind': 'object_reference', 'object_id': 'coat', 'name': '蓝衣', 'category': 'costume'}]
     assert '不应沿关系读取的正文' not in output['text'] and output['file_id'] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('card_type,field_id', [('direction.performance', 'physical_action'), ('direction.anchor', 'position')])
+async def test_example_field_location_is_saved_and_rejects_other_card_fields(canvas_client, card_type, field_id):
+    client = canvas_client
+    file_id = (await client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'}, files={'file': ('example.png', b'image', 'image/png')})).json()['data']['id']
+    canvas = (await client.post('/canvases/p', json={'name': '字段定位'})).json()['data']
+    url, doc = f"/canvases/p/{canvas['id']}", canvas['document']
+    doc.update(cards=[{'id': 'image', 'type': 'content.image', 'file_id': file_id}, {'id': 'design', 'type': card_type, 'examples': [{'id': 'ex', 'source': {'canvas_id': canvas['id'], 'card_id': 'image', 'port_id': 'image', 'position': 0}, 'file_id': file_id, 'field_id': field_id, 'purpose': 'negative'}]}],
+        edges=[{'id': 'edge', 'source_card': 'image', 'source_port': 'image', 'target_card': 'design', 'target_port': 'image_example'}], input_order={'design': {'image_example': ['edge']}})
+    saved = await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
+    assert saved.status_code == 200, saved.text
+    example = (await client.get(url)).json()['data']['document']['cards'][1]['examples'][0]
+    assert example['field_id'] == field_id and example['purpose'] == 'negative'
+    doc['cards'][1]['examples'][0]['field_id'] = 'standard'
+    invalid = await client.put(url, json={'request_id': 'invalid', 'expected_revision': 1, 'document': doc})
+    assert invalid.status_code == 422 and invalid.json()['detail']['code'] == 'INVALID_EXAMPLE_FIELD'

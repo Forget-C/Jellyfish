@@ -1,10 +1,8 @@
 """候选图结构校验与目标端口语义；不将候选误当实际运行依赖。"""
-from app.schemas.generation_canvas import CanvasDocument, GuidanceDirectionCard
+from app.schemas.generation_canvas import CanvasDocument
 from app.services.generation_canvas.errors import diagnostic
 
-PORT_MODALITIES = {'criterion': 'criterion', 'attention_object': 'object_reference', 'focus_object': 'object_reference', 'speaker': 'object_reference', 'audio_example': 'audio', 'dialogue': 'dialogue', 'shot': 'shot', 'event': 'event', 'covered_beat': 'beat', 'related_event': 'event', 'blocking_basis': 'blocking', 'space': 'object_reference', 'anchor': 'anchor', 'position_anchor': 'anchor', 'area_anchor': 'anchor', 'blocking': 'blocking', 'change_event': 'event', 'trigger_event': 'event', 'participant': 'object_reference', 'effect_object': 'object_reference', 'beat': 'beat', 'received_event': 'event', 'dialogue_basis': 'dialogue', 'acceptance_basis': 'criterion', 'image_example': 'image', 'video_example': 'video', 'name': 'object_reference', 'image_source': 'image', 'object': 'object_reference', 'text': 'text', 'image': 'image', 'video': 'video', 'audio': 'audio',
-                   'first_frame': 'image', 'last_frame': 'image', 'key_frame': 'image',
-                   'subject_image': 'image', 'subject_video': 'video'}
+from app.services.generation_canvas.catalog import ports_compatible
 
 
 def validate_graph(document: CanvasDocument) -> None:
@@ -25,9 +23,7 @@ def validate_graph(document: CanvasDocument) -> None:
             raise diagnostic('INVALID_ENDPOINT', '连接端点不存在', target)
         if edge.source_card == edge.target_card:
             raise diagnostic('SELF_CONNECTION', '卡片不能连接自身', target)
-        effect_reference = (isinstance(receiver, GuidanceDirectionCard) or receiver.type in ('direction.space_rule', 'direction.fact')) and edge.target_port == 'effect_object' and edge.source_port in ('anchor', 'blocking', 'beat', 'event', 'shot')
-        reverse_acceptance = receiver.type == 'direction.criterion' and edge.source_port == 'shot'
-        if reverse_acceptance or (not effect_reference and PORT_MODALITIES[edge.source_port] != PORT_MODALITIES[edge.target_port]):
+        if not ports_compatible(edge.source_port, receiver.type, edge.target_port):
             raise diagnostic('INCOMPATIBLE_PORT', '端口模态不匹配，不提供隐式转换', target)
         successors[edge.source_card].add(edge.target_card)
         expected.setdefault(edge.target_card, {}).setdefault(edge.target_port, []).append(edge.id)

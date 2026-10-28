@@ -1,9 +1,11 @@
 /** Shared composer frame for submitting prompts in every experiment modality. */
 import type { ReactNode } from 'react'
 import { Button } from 'antd'
+import { WorkbenchButton } from '../../directing/ui/WorkbenchButton'
 import { SendOutlined } from '@ant-design/icons'
 
 type ExperimentComposerProps = {
+  appearance?: 'default' | 'workbench'
   options: ReactNode
   contextActions?: ReactNode
   children: ReactNode
@@ -20,6 +22,7 @@ type ExperimentComposerProps = {
  */
 export function ExperimentComposer({
   options,
+  appearance = 'default',
   contextActions,
   children,
   submitting = false,
@@ -27,19 +30,22 @@ export function ExperimentComposer({
   onSubmit,
   submitLabel = '发送',
 }: ExperimentComposerProps) {
+  const workbench = appearance === 'workbench'
   return (
-    <div className="mt-3 overflow-hidden rounded-md border border-slate-300 bg-white text-slate-900 transition-colors focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100">
+    <div className={`mt-3 overflow-hidden rounded-md border transition-colors focus-within:ring-2 ${workbench ? 'focus-within:ring-[var(--wb-focus)]' : 'border-slate-300 bg-white text-slate-900 focus-within:border-blue-500 focus-within:ring-blue-100'}`}
+      style={workbench ? { borderColor: 'var(--wb-border)', background: 'var(--wb-surface)', color: 'var(--wb-text)' } : undefined}>
       <div className="p-4">
         {children}
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-100/80 px-4 py-3">
+      <div className={`flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3 ${workbench ? '' : 'border-slate-200 bg-slate-100/80'}`}
+        style={workbench ? { borderColor: 'var(--wb-border)', background: 'var(--wb-inset)' } : undefined}>
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           {options}
           {contextActions}
         </div>
-        <Button type="primary" icon={<SendOutlined aria-hidden="true" />} loading={submitting} disabled={submitDisabled} onClick={onSubmit}>
+        {workbench ? <WorkbenchButton variant="primary" icon={<SendOutlined aria-hidden="true" />} loading={submitting} disabled={submitDisabled} onClick={onSubmit}>{submitLabel}</WorkbenchButton> : <Button type="primary" icon={<SendOutlined aria-hidden="true" />} loading={submitting} disabled={submitDisabled} onClick={onSubmit}>
           {submitLabel}
-        </Button>
+        </Button>}
       </div>
     </div>
   )

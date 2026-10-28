@@ -5,12 +5,13 @@ import type { CanvasModelCapability, CanvasResolvedOutput, InputBinding, VideoMo
 import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
 import { editorPrompt, withEditorPrompt } from './inputBindings'
 import { sourceKey } from './promptRules'
-import { portLabels } from './graphRules'
+import { useGraphRules } from './CanvasCatalogContext'
 
 /** 直接候选只在明确选择用途和主体后采用；所有实际顺序及分组保存在绑定中。 */
 export function VideoInputBindings({ card, candidates, capability, loading, disabled, onChange }: {
   card: VideoModelCard; candidates: CanvasResolvedOutput[]; capability?: CanvasModelCapability; loading?: boolean; disabled?: boolean; onChange: (card: VideoModelCard) => void
 }) {
+  const { portLabels } = useGraphRules()
   const [names, setNames] = useState<Record<string, string>>({})
   const bindings = card.input_bindings || []
   const change = (input_bindings: InputBinding[]) => onChange({ ...card, input_bindings })

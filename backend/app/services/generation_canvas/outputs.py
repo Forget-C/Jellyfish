@@ -1,5 +1,6 @@
 """单卡输出行为：处理器没有整张画布或数据库读取能力。"""
 from typing import Protocol
+from app.core.contracts.generation_canvas import BasisTextOutputPayload
 from app.schemas.generation_canvas import (
     VisualStyleCard, PhotographyCard, SoundDirectionCard, SpatialDirectionCard, PerformanceDirectionCard, CardDefinition, CanvasResolvedOutput, CreativeBasisCard, MediaContentCard,
     NamedImageReferenceCard, NamedImagePayload, NamedImageObject, ObjectDescriptionCard, ObjectReferencePayload, DescriptionTextPayload, ModelCard, OutputIdentity, TextContentCard, TextOutputPayload, MediaOutputPayload,
@@ -69,7 +70,10 @@ class ContentOutputHandler:
                 outputs.append(CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id, port_id='object', position=0, object_id=card.object_id),
                     modality='text', payload=ObjectReferencePayload(object_id=card.object_id, name=card.name.strip(), category=card.category)))
             return outputs
-        if isinstance(card, (TextContentCard, CreativeBasisCard)):
+        if isinstance(card, CreativeBasisCard):
+            payload = BasisTextOutputPayload(text=card.text, source_locator=card.source_locator, selection_start=card.selection_start, selection_end=card.selection_end) if card.text else None
+            port = 'text'
+        elif isinstance(card, TextContentCard):
             payload = TextOutputPayload(text=card.text) if card.text else None
             port = 'text'
         elif isinstance(card, MediaContentCard):

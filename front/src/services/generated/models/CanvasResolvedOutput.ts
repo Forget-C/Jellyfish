@@ -2,9 +2,11 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { BasisTextOutputPayload } from './BasisTextOutputPayload';
 import type { CriterionReferencePayload } from './CriterionReferencePayload';
 import type { DescriptionTextPayload } from './DescriptionTextPayload';
 import type { DesignTextPayload } from './DesignTextPayload';
+import type { DialogueReferencePayload } from './DialogueReferencePayload';
 import type { MediaOutputPayload } from './MediaOutputPayload';
 import type { NamedImagePayload } from './NamedImagePayload';
 import type { NarrativeReferencePayload } from './NarrativeReferencePayload';
@@ -18,8 +20,8 @@ import type { TextOutputPayload } from './TextOutputPayload';
  */
 export type CanvasResolvedOutput = {
     source: OutputIdentity;
-    modality: string;
-    payload?: ((TextOutputPayload | MediaOutputPayload | ObjectReferencePayload | DescriptionTextPayload | NamedImagePayload | DesignTextPayload | SpatialReferencePayload | NarrativeReferencePayload | CriterionReferencePayload | PhotographyTextPayload) | null);
+    modality: 'text' | 'image' | 'video' | 'audio';
+    payload?: ((BasisTextOutputPayload | DialogueReferencePayload | TextOutputPayload | MediaOutputPayload | ObjectReferencePayload | DescriptionTextPayload | NamedImagePayload | DesignTextPayload | SpatialReferencePayload | NarrativeReferencePayload | CriterionReferencePayload | PhotographyTextPayload) | null);
     text?: (string | null);
     file_id?: (string | null);
     token?: string;
@@ -27,3 +29,4 @@ export type CanvasResolvedOutput = {
     basis_current?: boolean;
     result_set_id?: (string | null);
 };
+

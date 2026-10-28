@@ -133,3 +133,14 @@ async def get_card_outputs(project_id: str, canvas_id: str, card_id: str,
                            db: AsyncSession = Depends(get_db, scope='function')):
     """展示已保存修订的明确出口及直接候选，不修改绑定。"""
     return success_response(await CanvasStore(db, project_id).card_outputs(canvas_id, card_id))
+
+
+from app.core.contracts.canvas_catalog import CanvasCatalog
+from app.services.generation_canvas.catalog import canvas_catalog
+
+
+@router.get('/{project_id}/{canvas_id}/catalog', response_model=ApiResponse[CanvasCatalog], operation_id='canvas_catalog')
+async def get_canvas_catalog(project_id: str, canvas_id: str, db: AsyncSession = Depends(get_db, scope='function')):
+    """核实画布归属后提供当前系统卡片与端点声明。"""
+    await CanvasStore(db, project_id).get(canvas_id)
+    return success_response(canvas_catalog())

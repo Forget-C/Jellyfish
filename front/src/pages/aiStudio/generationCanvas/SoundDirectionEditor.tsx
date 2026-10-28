@@ -3,6 +3,7 @@ import type { DialogueCard, SoundArrangementCard, ObjectReferencePayload } from 
 import type { CardRendererProps } from './rendererRegistry'
 import { DesignFieldEditor as FieldEditor } from './DesignFieldEditor'
 import { useCardCandidates } from './useCardCandidates'
+import { useGraphRules } from './CanvasCatalogContext'
 import { sourceKey } from './promptRules'
 import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
@@ -12,6 +13,7 @@ export type SoundCard = DialogueCard | SoundArrangementCard
 
 /** 声音设计的对象、制作安排与固定素材分别编辑；不会把示例当作模型输入。 */
 export function SoundDirectionEditor({ card: raw, document, savedRevision, modelOutputs, onChange, disabled }: CardRendererProps) {
+  const { cardDefinitions } = useGraphRules()
   const card = raw as SoundCard
   const sound = raw as SoundArrangementCard
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs, false)
@@ -53,6 +55,7 @@ export function SoundDirectionEditor({ card: raw, document, savedRevision, model
       {resolved.candidates.filter(item => item.file_id && (item.modality === 'audio' || card.type === 'direction.dialogue' && item.modality === 'video')).map(item => <WorkbenchButton key={sourceKey(item.source)} disabled={disabled || !item.available} onClick={() => update({ ...card, examples: [...examples, { id: crypto.randomUUID(), source: item.source, file_id: item.file_id!, purpose: 'positive' }] })}>关联参考 {item.token}</WorkbenchButton>)}
       {examples.map(example => <section key={example.id} aria-label={`参考 ${example.id}`}><MediaPreview fileId={example.file_id} type={example.source.port_id === 'audio' ? 'audio' : 'video'} />
         <Select aria-label="参考用途" value={example.purpose} options={[{ value: 'positive', label: '正向参考' }, { value: 'negative', label: '反例' }]} onChange={purpose => exampleUpdate(example.id, { purpose })} />
+        <Select aria-label="参考定位字段" placeholder="选择定位字段" style={{width:180,maxWidth:'100%'}} disabled={disabled} allowClear value={example.field_id || undefined} options={cardDefinitions[card.type!].fields.map(field=>({value:field.id,label:field.label}))} onChange={field_id=>exampleUpdate(example.id,{field_id:field_id??null})}/>
         <Input aria-label="参考说明" value={example.description} onChange={event => exampleUpdate(example.id, { description: event.target.value })} />
         <Space wrap><InputNumber aria-label="参考起点毫秒" min={0} value={example.start_ms} onChange={start => exampleUpdate(example.id, start === null ? { start_ms: null, end_ms: null } : { start_ms: start, end_ms: Math.max(example.end_ms || 0, start + 1) })} />
           <InputNumber aria-label="参考终点毫秒" min={(example.start_ms || 0) + 1} value={example.end_ms} onChange={end => exampleUpdate(example.id, end === null ? { start_ms: null, end_ms: null } : { start_ms: example.start_ms || 0, end_ms: end })} /></Space>
