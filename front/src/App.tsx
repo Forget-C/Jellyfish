@@ -1,6 +1,6 @@
 import type React from 'react'
 import { lazy, Suspense } from 'react'
-import { createBrowserRouter, createRoutesFromElements, RouterProvider, Navigate, Route, useLocation } from 'react-router-dom'
+import { createBrowserRouter, createRoutesFromElements, RouterProvider, Navigate, Route, useLocation, useParams } from 'react-router-dom'
 import MainLayout from './layouts/MainLayout'
 import Settings from './pages/Settings'
 import NotFound from './pages/NotFound'
@@ -20,6 +20,8 @@ import ModelManagement from './pages/aiStudio/models/ModelManagement'
 import ExperimentLabPage from './pages/aiStudio/experiment/ExperimentLabPage'
 import ChapterSequencesPage from './pages/aiStudio/directing/ChapterSequencesPage'
 import CanvasSequenceWorkbench from './pages/aiStudio/directing/CanvasSequenceWorkbench'
+import { GenerationCanvasRoute } from './pages/aiStudio/generationCanvas/GenerationCanvasRoute'
+import { generationCanvasLocation } from './pages/aiStudio/generationCanvas/navigation'
 import './App.css'
 
 /** 兼容旧实验室地址，并保留原 URL 的会话定位参数。 */
@@ -30,6 +32,15 @@ function LegacyLabRedirect({ mode }: { mode: 'text' | 'image' | 'video' }) {
   return <Navigate to={`/lab?${params.toString()}`} replace />
 }
 
+/** 旧画布链接直接转入独立工作区，不初始化项目页的章节加载。 */
+function ProjectEntry() {
+  const location = useLocation()
+  const { projectId } = useParams()
+  return projectId && new URLSearchParams(location.search).get('tab') === 'generation'
+    ? <Navigate replace to={generationCanvasLocation(projectId, new URLSearchParams(location.search))} />
+    : <ProjectWorkbench />
+}
+
 const WorkbenchExamples = import.meta.env.DEV ? lazy(() => import('./pages/aiStudio/directing/ui/WorkbenchExamples')) : undefined
 
 const router = createBrowserRouter(createRoutesFromElements(
@@ -37,7 +48,8 @@ const router = createBrowserRouter(createRoutesFromElements(
         <Route path="/" element={<MainLayout />}>
           <Route index element={<Navigate to="/projects" replace />} />
           <Route path="projects" element={<ProjectLobby />} />
-          <Route path="projects/:projectId" element={<ProjectWorkbench />} />
+          <Route path="projects/:projectId" element={<ProjectEntry />} />
+          <Route path="projects/:projectId/generation-canvas" element={<GenerationCanvasRoute />} />
           <Route path="projects/:projectId/roles/:characterId/edit" element={<RoleDetailPage />} />
           <Route path="projects/:projectId/chapters/:chapterId/sequences" element={<ChapterSequencesPage />} />
           <Route path="projects/:projectId/chapters/:chapterId/sequences/:sequenceId" element={<CanvasSequenceWorkbench />} />

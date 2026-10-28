@@ -1,12 +1,14 @@
-import { Alert, Button, Space } from 'antd'
+import { Alert, Space } from 'antd'
+import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
 import type { CanvasPrecheck } from '../../../services/generated'
 import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 
 /** Preview is bound to the current edit generation; diagnostics use stable targets. */
-export function RunPreview({ preview, submitting, disabled, onSubmit }: { preview: CanvasPrecheck; submitting: boolean; disabled: boolean; onSubmit: () => void }) {
+export function RunPreview({ preview, submitting, disabled, onSubmit, onLocate }: { preview: CanvasPrecheck; submitting: boolean; disabled: boolean; onSubmit: () => void; onLocate?: (target: Record<string, unknown>) => void }) {
   const awaitingUpstream = preview.input.used?.some(item => preview.execution_nodes.includes(item.source.card_id))
   const inputLabel = awaitingUpstream ? '受理时输入预览' : '实际提交文本'
   const locate = (target: Record<string, unknown>) => {
+    if (onLocate) { onLocate(target); return }
     const cardId = target.card_id || preview.card_id
     const card = document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(String(cardId))}"]`)
     const segmentId = target.segment_id || target.reference_id
@@ -25,7 +27,7 @@ export function RunPreview({ preview, submitting, disabled, onSubmit }: { previe
     {(preview.diagnostics || []).map((diagnostic, index) => <Alert key={`${diagnostic.code}:${index}`} type={diagnostic.severity === 'warning' ? 'warning' : 'error'}
       message={`${diagnostic.code}: ${diagnostic.message}`} description={`阻止：${diagnostic.blocks.map(action => ({ run: '运行', save: '保存' }[action] || action)).join('、') || '无'}`}
       action={<Button size="small" onClick={() => locate(diagnostic.target)}>定位问题</Button>} />)}
-    <Space><Button type="primary" loading={submitting} disabled={disabled || !preview.can_run || !preview.preview_token} onClick={onSubmit}>确认执行</Button>
+    <Space><Button variant="primary" loading={submitting} disabled={disabled || !preview.can_run || !preview.preview_token} onClick={onSubmit}>确认执行</Button>
       {!preview.can_run && <span>请修正阻塞问题并重新预检</span>}</Space>
   </section>
 }
