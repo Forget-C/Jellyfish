@@ -177,4 +177,6 @@ flowchart TD
 
 - 2026-10-28：合并 codex-canvas-types-01（分支 HEAD 938a8607，集成提交 ce816fb0），无冲突，01 Completion 更新为 integrated，分诊 Status 保持不变。核实主区 8000 已加载新绑定／创作依据／schema v2 后执行完整 openapi:update，结果与交付契约一致；剔除 361 处纯尾空行漂移。Node 24 前端 typecheck、git diff --check 和 git diff --cached --check 均通过；复用 01 票据中同一实现的后端及真实页面检查。当前前沿为 03、04、07。
 
+- 2026-10-28：03 在 codex-canvas-types-03 实现一秒周期合并保存、失败暂停与已保存 revision 的来源／正式输出／诊断刷新，等待集成。真实页面 autosave、既有 save、工作台六用例及前端 typecheck 通过，证据与限制见 03 票据；未改变公开 HTTP 契约。
+
 - 2026-10-28：合并 codex-canvas-types-04（分支 HEAD `7d4ed6ad`，集成提交 `436691a2`），无冲突；04 Completion 更新为 integrated，分诊 Status 保持不变。复用 91 passed／27 skipped、Pylint 10.00/10 和真实 Chrome 媒体页面证据；主区 Node 24 typecheck 与差异检查通过。04 公开 schema 精确一致；本次 8000 无响应，未重复执行标准 OpenAPI 生成，复用 01 集成后已验证结果，不声称本次请求通过。当前前沿为 03、05、06、07，其中 03、07 进行中。
