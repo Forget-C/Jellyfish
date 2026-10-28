@@ -3,6 +3,8 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { AudioContentCard } from './AudioContentCard';
+import type { CharacterPerformanceCard } from './CharacterPerformanceCard';
+import type { CharacterSituationCard } from './CharacterSituationCard';
 import type { CreativeBasisCard } from './CreativeBasisCard';
 import type { GenerationCanvasEdge } from './GenerationCanvasEdge';
 import type { GenerationCanvasGroup } from './GenerationCanvasGroup';
@@ -10,6 +12,7 @@ import type { ImageContentCard } from './ImageContentCard';
 import type { ImageModelCard } from './ImageModelCard';
 import type { NamedImageReferenceCard } from './NamedImageReferenceCard';
 import type { ObjectDescriptionCard } from './ObjectDescriptionCard';
+import type { PerformanceRuleCard } from './PerformanceRuleCard';
 import type { PlaceDescriptionCard } from './PlaceDescriptionCard';
 import type { TextContentCard } from './TextContentCard';
 import type { TextModelCard } from './TextModelCard';
@@ -23,7 +26,7 @@ export type CanvasDocument = {
     project_id: string;
     name: string;
     schema_version?: number;
-    cards?: Array<(NamedImageReferenceCard | TextContentCard | CreativeBasisCard | ObjectDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard)>;
+    cards?: Array<(CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | ObjectDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard)>;
     edges?: Array<GenerationCanvasEdge>;
     input_order?: Record<string, Record<string, Array<string>>>;
     groups?: Array<GenerationCanvasGroup>;

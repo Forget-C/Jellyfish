@@ -8,7 +8,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.generation_canvas import CanvasSaveReceipt, GenerationCanvas
 from app.models.studio import Project
-from app.schemas.generation_canvas import CanvasDocument, CanvasSave, ModelCard, CanvasDiagnostic, CanvasCompiledInput
+from app.schemas.generation_canvas import CanvasDocument, CanvasSave, ModelCard, PerformanceDirectionCard, CanvasDiagnostic, CanvasCompiledInput
 from app.services.common import get_or_404
 from app.services.generation_canvas.errors import diagnostic
 from app.services.generation_canvas.graph import validate_graph
@@ -126,12 +126,14 @@ class CanvasStore:
         # 最终文档中的实际引用决定保护；同一次保存清理引用即可断线或删来源。
         from app.services.generation_canvas.compiler import prompt_references
         for receiver in document.cards:
-            if not isinstance(receiver, (ModelCard, NamedImageReferenceCard)):
+            if not isinstance(receiver, (ModelCard, NamedImageReferenceCard, PerformanceDirectionCard)):
                 continue
             references = [(reference.source, reference.id, path) for reference, path in prompt_references(receiver)] if isinstance(receiver, ModelCard) else [
                 (binding.source, binding.id, ['input_bindings', binding.id]) for binding in receiver.input_bindings]
             if isinstance(receiver, NamedImageReferenceCard) and receiver.image_binding and receiver.image_binding.source:
                 references.append((receiver.image_binding.source, 'image', ['image_binding']))
+            if isinstance(receiver, PerformanceDirectionCard):
+                references.extend((example.source, example.id, ['examples', example.id]) for example in receiver.examples)
             for source, reference_id, path in references:
                 was_connected = any(edge['source_card'] == source.card_id and edge['source_port'] == source.port_id
                                     and edge['target_card'] == receiver.id for edge in canvas.document.get('edges', []))
@@ -156,6 +158,14 @@ class CanvasStore:
                     raise diagnostic('UNSUPPORTED_INPUT', '所选模型未接入该输入用途',
                                      {'edge_id': edge.id, 'card_id': card.id, 'port_id': edge.target_port})
         from app.services.generation_canvas.references import validate_references
+        if any(isinstance(card, PerformanceDirectionCard) for card in document.cards):
+            from app.services.generation_canvas.runtime import CanvasRuntime
+            from app.services.generation_canvas.performance import validate_design_relations, validate_design_examples
+            published = await CanvasRuntime(self.db, self.project_id).current_outputs(canvas)
+            models = {card.id for card in document.cards if isinstance(card, ModelCard)}
+            published = {card_id: values for card_id, values in published.items() if card_id in models}
+            validate_design_relations(document, published)
+            await validate_design_examples(self.db, document, published, self.project_id, canvas.document)
         await validate_references(self.db, document, canvas.document, self.project_id)
         # Validate all replacements before releasing existing protection in this transaction.
         for card in document.cards:
@@ -171,6 +181,10 @@ class CanvasStore:
             FileUsage.project_id == self.project_id, FileUsage.usage_kind == 'canvas_content',
             FileUsage.source_ref.like(f'{canvas_id}:%')))
         for card in document.cards:
+            if isinstance(card, PerformanceDirectionCard):
+                for example in card.examples:
+                    await upsert_file_usage(self.db, file_id=example.file_id, project_id=self.project_id,
+                                            chapter_id=None, usage_kind='canvas_content', source_ref=f'{canvas_id}:{card.id}:{example.id}')
             if isinstance(card, NamedImageReferenceCard) and card.image_binding:
                 await upsert_file_usage(self.db, file_id=card.image_binding.file_id, project_id=self.project_id,
                                         chapter_id=None, usage_kind='canvas_content', source_ref=f'{canvas_id}:{card.id}')

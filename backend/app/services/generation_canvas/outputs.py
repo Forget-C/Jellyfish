@@ -1,7 +1,7 @@
 """单卡输出行为：处理器没有整张画布或数据库读取能力。"""
 from typing import Protocol
 from app.schemas.generation_canvas import (
-    CardDefinition, CanvasResolvedOutput, CreativeBasisCard, MediaContentCard,
+    PerformanceDirectionCard, CardDefinition, CanvasResolvedOutput, CreativeBasisCard, MediaContentCard,
     NamedImageReferenceCard, NamedImagePayload, NamedImageObject, ObjectDescriptionCard, ObjectReferencePayload, DescriptionTextPayload, ModelCard, OutputIdentity, TextContentCard, TextOutputPayload, MediaOutputPayload,
 )
 
@@ -18,6 +18,9 @@ class ContentOutputHandler:
     """普通内容只发布自己的正文或具体文件。"""
     def publish(self, canvas_id, card, adopted_inputs, published_results):
         """内容卡没有持续输入，描述来源只随明确描述出口提供。"""
+        if isinstance(card, PerformanceDirectionCard):
+            from app.services.generation_canvas.performance import publish_design
+            return publish_design(canvas_id, card, adopted_inputs)
         if isinstance(card, NamedImageReferenceCard):
             objects = [item.model_copy(update={'name': item.name.strip()}) for item in card.objects if item.name.strip()]
             for item in adopted_inputs:

@@ -3,7 +3,7 @@ import re
 from app.core.contracts.media import MediaReference, VideoMediaInput, VideoSubjectMediaReference
 from app.schemas.generation_canvas import (
     CanvasDocument, CanvasResolvedOutput, CanvasCompiledInput, CanvasDiagnostic,
-    ModelCard, NamedImageReferenceCard, NamedImagePayload, CanvasSourceMapping, NamedImageMapping, PromptReference, PromptInstruction,
+    DesignTextPayload, ModelCard, PerformanceDirectionCard, NamedImageReferenceCard, NamedImagePayload, CanvasSourceMapping, NamedImageMapping, PromptReference, PromptInstruction,
     CanvasModelCapability, OutputIdentity,
 )
 from app.services.generation_canvas.capabilities import parameter_diagnostics
@@ -39,7 +39,7 @@ def published_card_outputs(document, card_id, model_outputs=None):
     """仅把已采用的直接对象出口交给本卡处理器，按 DAG 逐层解析。"""
     card = next(card for card in document.cards if card.id == card_id)
     adopted = []
-    if isinstance(card, NamedImageReferenceCard):
+    if isinstance(card, (NamedImageReferenceCard, PerformanceDirectionCard)):
         for binding in card.input_bindings:
             if any(edge.source_card == binding.source.card_id and edge.source_port == binding.source.port_id
                    and edge.target_card == card_id and edge.target_port == binding.input_port for edge in document.edges):
@@ -121,6 +121,13 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
         elif not source.available:
             issue('OUTPUT_MISSING', '引用的来源位置暂无实际输出', ref.id, path)
     for item in result.used:
+        if card.type in ('model.image', 'model.video') and isinstance(item.payload, DesignTextPayload):
+            design = item.payload
+            # 只在实际采用需要主体的情境／动作设计时阻止视觉生成；文本分析允许不完整设计。
+            if design.design_type in ('direction.situation', 'direction.performance') and not design.participant_id:
+                binding_id = next(binding.id for binding in card.input_bindings if identity_key(binding.source) == identity_key(item.source))
+                issue('DESIGN_SUBJECT_REQUIRED', '本次视觉生成所用情境或表演须明确参与对象', binding_id,
+                      ['input_bindings', binding_id])
         media_position = result.media.index(item) + 1 if item in result.media else None
         result.mapping.append(CanvasSourceMapping(token=item.token, source=item.source, media_position=media_position))
     if card.type == 'model.image':

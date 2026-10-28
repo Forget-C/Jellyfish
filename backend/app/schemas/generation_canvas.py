@@ -3,7 +3,7 @@ from typing import Annotated, Any, ClassVar, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.schemas.common import ApiResponse
 from app.core.contracts.media import VideoMediaInput
-from app.core.contracts.generation_canvas import OutputIdentity, InputBinding, TextOutputPayload, MediaOutputPayload, ObjectReferencePayload, DescriptionTextPayload, NamedImageObject, ReferenceImageBinding, NamedImagePayload, CanvasSourceMapping, NamedImageMapping
+from app.core.contracts.generation_canvas import OutputIdentity, InputBinding, TextOutputPayload, MediaOutputPayload, ObjectReferencePayload, DescriptionTextPayload, NamedImageObject, ReferenceImageBinding, NamedImagePayload, CanvasSourceMapping, NamedImageMapping, DesignField, DesignScope, DesignTextPayload
 
 
 class CardDefinition(BaseModel):
@@ -288,6 +288,72 @@ class NamedImageReferenceCard(CardDefinition):
     output_ports: ClassVar[tuple[str, ...]] = ('image', 'object')
 
 
+class DesignMediaExample(BaseModel):
+    """示例只关联直接媒体，正反用途和视频有效区间不成为生成输入。"""
+    model_config = ConfigDict(extra='forbid')
+    id: str = Field(min_length=1)
+    source: OutputIdentity
+    file_id: str = Field(min_length=1)
+    purpose: Literal['positive', 'negative'] = 'positive'
+    description: str = ''
+    start_ms: int | None = Field(default=None, ge=0)
+    end_ms: int | None = Field(default=None, gt=0)
+
+    @model_validator(mode='after')
+    def validate_interval(self):
+        """图片无时间区间，视频起止必须完整且递增。"""
+        if (self.start_ms is None) != (self.end_ms is None):
+            raise ValueError('有效区间须同时填写起点和终点')
+        if self.end_ms is not None and (self.source.port_id != 'video' or self.end_ms <= self.start_ms):
+            raise ValueError('仅视频可以使用递增有效区间')
+        return self
+
+
+class PerformanceDirectionCard(CardDefinition):
+    """独立导演设计公共元信息；无章节、节拍或镜头前置要求。"""
+    scope: DesignScope = Field(default_factory=DesignScope)
+    source_locator: str = ''
+    input_bindings: list[InputBinding] = Field(default_factory=list)
+    examples: list[DesignMediaExample] = Field(default_factory=list)
+    output_ports: ClassVar[tuple[str, ...]] = ('text',)
+
+
+class CharacterSituationCard(PerformanceDirectionCard):
+    """情境只维护本卡处境和关系背景，不复制对象描述。"""
+    type: Literal['direction.situation'] = Field(default='direction.situation', json_schema_extra={'enum': ['direction.situation']})
+    situation: DesignField = Field(default_factory=lambda: DesignField(purpose='background'))
+    relationship: DesignField = Field(default_factory=lambda: DesignField(purpose='background'))
+    input_ports: ClassVar[tuple[str, ...]] = ('participant', 'effect_object')
+
+
+class CharacterPerformanceCard(PerformanceDirectionCard):
+    """完整表演；可选后续端点待对应来源票据接入，不伪造身份。"""
+    type: Literal['direction.performance'] = Field(default='direction.performance', json_schema_extra={'enum': ['direction.performance']})
+    objective: DesignField = Field(default_factory=lambda: DesignField(purpose='background'))
+    obstacle: DesignField = Field(default_factory=lambda: DesignField(purpose='background'))
+    subtext: DesignField = Field(default_factory=lambda: DesignField(purpose='background'))
+    attention: DesignField = Field(default_factory=lambda: DesignField(purpose='background'))
+    internal_adjustment: DesignField = Field(default_factory=lambda: DesignField(purpose='background'))
+    physical_action: DesignField = Field(default_factory=DesignField)
+    gaze: DesignField = Field(default_factory=DesignField)
+    breath: DesignField = Field(default_factory=DesignField)
+    weight: DesignField = Field(default_factory=DesignField)
+    hands: DesignField = Field(default_factory=DesignField)
+    voice: DesignField = Field(default_factory=DesignField)
+    delivery: DesignField = Field(default_factory=DesignField)
+    reaction_order: DesignField = Field(default_factory=DesignField)
+    exit_state: DesignField = Field(default_factory=DesignField)
+    avoid: DesignField = Field(default_factory=lambda: DesignField(purpose='constraint'))
+    input_ports: ClassVar[tuple[str, ...]] = ('participant', 'effect_object', 'beat', 'received_event', 'dialogue_basis', 'acceptance_basis', 'image_example', 'video_example')
+
+
+class PerformanceRuleCard(PerformanceDirectionCard):
+    """规则保留背景或约束用途、适用范围和必要制作阶段。"""
+    type: Literal['direction.performance_rule'] = Field(default='direction.performance_rule', json_schema_extra={'enum': ['direction.performance_rule']})
+    applicability: DesignField = Field(default_factory=lambda: DesignField(purpose='constraint'))
+    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'image_example', 'video_example')
+
+
 class CanvasDocument(BaseModel):
     """完整编辑文档；位置、尺寸和视角由浏览器另存。"""
     model_config = ConfigDict(extra='forbid')
@@ -295,7 +361,7 @@ class CanvasDocument(BaseModel):
     project_id: str
     name: str = Field(min_length=1, max_length=255)
     schema_version: Literal[2] = 2
-    cards: list[NamedImageReferenceCard | TextContentCard | CreativeBasisCard | ObjectDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard] = Field(default_factory=list)
+    cards: list[CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | ObjectDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard] = Field(default_factory=list)
     edges: list[GenerationCanvasEdge] = Field(default_factory=list)
     input_order: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
     groups: list[GenerationCanvasGroup] = Field(default_factory=list)
@@ -356,7 +422,7 @@ class CanvasResolvedOutput(BaseModel):
     """已发布的实际输出，运行层可注入模型当前输出而无需虚构未来结果。"""
     source: OutputIdentity
     modality: str
-    payload: Annotated[TextOutputPayload | MediaOutputPayload | ObjectReferencePayload | DescriptionTextPayload | NamedImagePayload, Field(discriminator='kind')] | None = None
+    payload: Annotated[TextOutputPayload | MediaOutputPayload | ObjectReferencePayload | DescriptionTextPayload | NamedImagePayload | DesignTextPayload, Field(discriminator='kind')] | None = None
     text: str | None = None
     file_id: str | None = None
     token: str = ''
@@ -374,7 +440,7 @@ class CanvasResolvedOutput(BaseModel):
             elif self.modality in ('image', 'video', 'audio') and self.file_id:
                 self.payload = MediaOutputPayload(kind=self.modality, file_id=self.file_id)
         if self.payload is not None:
-            self.modality = 'text' if isinstance(self.payload, (ObjectReferencePayload, DescriptionTextPayload)) else 'image' if isinstance(self.payload, NamedImagePayload) else self.payload.kind
+            self.modality = 'text' if isinstance(self.payload, (ObjectReferencePayload, DescriptionTextPayload, DesignTextPayload)) else 'image' if isinstance(self.payload, NamedImagePayload) else self.payload.kind
             self.text = getattr(self.payload, 'text', None)
             self.file_id = getattr(self.payload, 'file_id', None)
         return self
