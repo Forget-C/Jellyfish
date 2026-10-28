@@ -46,3 +46,7 @@
 - 主区 `PYTHONPATH=. uv run --no-sync` 核实 app 导入来自当前工作区；视频及公开 API 回归 **61 passed / 2 skipped**，Node24.22.1 typecheck 与差异检查通过。复用同一代码的全部画布 **110 passed / 27 skipped**、Pylint **10.00/10**、图片／视频真实页面及旧版文本／图片实际成果跨版本依据兼容证据，未重复扩大验证。
 - 主区生产 app 在隔离 `8286` 导出 OpenAPI，与已提交 schema 精确一致且不包含测试控制路由，证据 `/private/tmp/canvas06-integrated/openapi-8286.json`。重新生成 client 仅365处纯尾空行漂移，核对后全部剔除；8000 在隔离环境内探测无响应，提升权限复核健康检查已响应，但未核实其代码归属；未停止、重载或从其拉取 schema，不声称本次标准 `openapi:update` 成功。
 - 继续保留 MySQL 专用测试未运行、供应商与外部存储使用受控替身的限制；08 独立工作树未触碰，后续接入需保留可空 `InputBinding.subject_name` 及新绑定权威语义。
+
+### 集成后标准接口生成复核
+
+主区确认 8000 服务已恢复，进程工作目录为当前 backend，公开 schema 与集成版本精确一致；标准 openapi:update 成功。仅尾空行生成差异已逐文件确认并剔除。此前隔离导出时的 8000 限制已解除，MySQL 与真实供应商验证限制保留。
