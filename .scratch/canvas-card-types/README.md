@@ -176,3 +176,5 @@ flowchart TD
 - 2026-10-28：合并 codex-canvas-types-02（代码提交 9b14739，合并前分支 HEAD 6639d43），无冲突。复用票据中的真实页面验证证据，集成后 Node 24 前端 typecheck 与 git diff --check、git diff --cached --check 均通过；分诊 Status 保持不变。
 
 - 2026-10-28：合并 codex-canvas-types-01（分支 HEAD 938a8607，集成提交 ce816fb0），无冲突，01 Completion 更新为 integrated，分诊 Status 保持不变。核实主区 8000 已加载新绑定／创作依据／schema v2 后执行完整 openapi:update，结果与交付契约一致；剔除 361 处纯尾空行漂移。Node 24 前端 typecheck、git diff --check 和 git diff --cached --check 均通过；复用 01 票据中同一实现的后端及真实页面检查。当前前沿为 03、04、07。
+
+- 2026-10-28：03 在 codex-canvas-types-03 实现一秒周期合并保存、失败暂停与已保存 revision 的来源／正式输出／诊断刷新，等待集成。真实页面 autosave、既有 save、工作台六用例及前端 typecheck 通过，证据与限制见 03 票据；未改变公开 HTTP 契约。

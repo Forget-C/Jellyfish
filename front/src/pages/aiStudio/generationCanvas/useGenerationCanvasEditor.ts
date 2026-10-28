@@ -21,7 +21,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   const [storageError, setStorageError] = useState('')
   const [recovery, setRecovery] = useState<Recovery>()
   const [conflict, setConflict] = useState(false)
-  const state = useRef<{ scope: string; current?: CanvasRead; document?: CanvasDocument; pending?: CanvasSave; recovery?: Recovery; conflict: boolean }>({ scope: key, conflict: false })
+  const state = useRef<{ scope: string; current?: CanvasRead; document?: CanvasDocument; pending?: CanvasSave; blocked?: CanvasDocument; recovery?: Recovery; conflict: boolean }>({ scope: key, conflict: false })
   const inFlight = useRef<Promise<boolean>>()
   const history = useRef<{ scope: string; past: CanvasDocument[]; future: CanvasDocument[] }>({ scope: key, past: [], future: [] })
   const dirty = !!document && !!current && !same(document, current.document)
@@ -86,16 +86,19 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
           const result = await Canvases.canvasSave({ projectId, canvasId: s.current!.id, requestBody: command })
           if (!result.data || result.data.request_id !== command.request_id || result.data.canvas_id !== s.current!.id) throw new Error('invalid receipt')
           if (s !== state.current) return false
-          s.current = { ...s.current!, revision: result.data.revision, document: command.document as CanvasDocument }; s.pending = undefined
+          s.current = { ...s.current!, revision: result.data.revision, document: command.document as CanvasDocument }; s.pending = undefined; s.blocked = undefined
           setCurrent(s.current); persist()
         }
         return true
       } catch (reason) {
         if (s !== state.current) return false
+        const failedDocument = s.pending?.document
         if (reason instanceof ApiError && [400, 409, 422].includes(reason.status)) {
           s.pending = undefined
           if (reason.status === 409) { s.conflict = true; setConflict(true) }
         }
+        // 暂停相同失败正文；未知结果保留原请求，手动保存可随时核实。
+        s.blocked = structuredClone(s.pending ? s.document : failedDocument as CanvasDocument)
         setError(describe(reason)); persist(); return false
       } finally { if (s === state.current) { setSaving(false); inFlight.current = undefined } }
     }
@@ -163,7 +166,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     return s.pending || s.recovery || (s.current && !same(s.document, s.current.document)) ? 'choice' : 'ready'
   }
   const latest = useRef({ save, dirty, recovery, requestLeave }); latest.current = { save, dirty, recovery, requestLeave }
-  useEffect(() => { const timer = window.setInterval(() => { if (latest.current.dirty && !latest.current.recovery) void latest.current.save() }, 5000); return () => clearInterval(timer) }, [key])
+  useEffect(() => { const timer = window.setInterval(() => { if (latest.current.dirty && !latest.current.recovery && !same(state.current.blocked, state.current.document)) void latest.current.save() }, 1000); return () => clearInterval(timer) }, [key])
   useEffect(() => {
     const leave = (event: BeforeUnloadEvent) => { if (latest.current.dirty || state.current.pending || state.current.recovery) { latestActions.current.persist(); event.preventDefault(); event.returnValue = '' } }
     window.addEventListener('beforeunload', leave); return () => window.removeEventListener('beforeunload', leave)
