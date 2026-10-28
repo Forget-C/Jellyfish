@@ -37,7 +37,7 @@ try {
 
   const form = new FormData()
   form.set('project_id', 'canvas-project'); form.set('usage_kind', 'generation_upload')
-  form.set('file', new Blob([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==', 'base64')], { type: 'image/png' }), 'evidence.png')
+  form.set('file', new Blob([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jV4kAAAAASUVORK5CYII=', 'base64')], { type: 'image/png' }), 'evidence.png')
   const uploaded = await fetch(`${api}/api/v1/studio/files/upload`, { method: 'POST', body: form })
   assert.ok(uploaded.ok, await uploaded.clone().text())
   const file = (await uploaded.json()).data.id
@@ -81,7 +81,8 @@ try {
   await poll(state => state.document.cards.find(item => item.id === 'continuity').after?.text === '握住钥匙')
   await card.getByText('固定证据与前后态素材', { exact: true }).click()
   await card.getByRole('button', { name: '关联证据 @图片1', exact: true }).click()
-  await card.getByRole('combobox', { name: '证据用途', exact: true }).click()
+  await card.getByRole('combobox', { name: '证据用途', exact: true }).focus()
+  await card.getByRole('combobox', { name: '证据用途', exact: true }).press('ArrowDown')
   await page.getByText('前态', { exact: true }).last().click()
   await poll(state => state.document.cards.find(item => item.id === 'continuity').examples?.[0]?.purpose === 'before')
   const evidence = (await read()).document.cards.find(item => item.id === 'continuity').examples[0]

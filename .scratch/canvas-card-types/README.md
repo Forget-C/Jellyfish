@@ -170,7 +170,7 @@ flowchart TD
 ## 实施记录
 
 - 集成分支：codex-generation-canvas；实现前基线：66f32c19b2bb68eb494a18db6f429a9c874d5bc8。
-- 当前进展：01、02、03、04、05、06、07、08、09、10、11、12、15 共十三票已合并到集成分支。文本闭环、独立页面、一秒自动保存与已保存输出刷新、基础媒体、图片／视频生成与结果选择、对象描述、四类命名图片参考、多角度参考与视频名称映射及人物表演与情境设计、空间锚点与空间调度、摄影设计与图片目标、对白与声音设计已交付，完成证据见对应票据；13 可开始，14／18 进行中，其他票据尚未开始。
+- 当前进展：01–12、14、15、18 共十五票已合并到集成分支。16 已在独立工作树实现并验证、等待集成；13／17 进行中，19 等待这三票，完成证据见对应票据。
 - implement-spec 要求实施子代理使用独立工作树并执行 TDD，合并后统一审查。用户已确认 HTTP 与真实页面接缝，生成供应商与外部存储使用受控替身；后续每票复用该确认执行 TDD，不重复询问。
 
 - 2026-10-28：合并 codex-canvas-types-02（代码提交 9b14739，合并前分支 HEAD 6639d43），无冲突。复用票据中的真实页面验证证据，集成后 Node 24 前端 typecheck 与 git diff --check、git diff --cached --check 均通过；分诊 Status 保持不变。
@@ -223,3 +223,6 @@ flowchart TD
 - 18完成前已合入12集成 `e00192ac`，保留双方README实施记录，合后mixed／摄影scope真实HTTP与Worker **19 passed**、Node24 typecheck及mixed真实Chrome **8.1s**通过；独立8295最新生产OpenAPI精确一致。18仍为implemented等待主区集成，具体证据见18 Comments。
 
 - 2026-10-29：主区依次集成14（`9678a1f0`）及18（`99659847`），仅README和浏览器套件列表冲突，保留双方新增记录及入口；Completion更新为integrated。合后叙事／混合／摄影／空间／声音／表演HTTP与真实Worker组合 **108 passed**（10.76s），Node24.22.1 typecheck通过，`git diff --check`通过；复用14全画布232 passed／28 MySQL skipped、Pylint10.00/10及两票真实页面证据。主区 `app.__file__` 已确认，当前生产app导出与提交OpenAPI精确一致（`/private/tmp/canvas14-18-integrated-production.json`）。8000父进程73854仍属当前主backend，但升级权限的urllib20／30秒与绕过代理curl10秒均无响应；未终止用户服务，标准 `openapi:update` 留待该服务恢复后复验，不从旧进程覆盖已同步契约。供应商／存储替身和MySQL缺环境边界保留。 当前01–12、14、15、18共十五票已集成，13／16／17可按依赖推进；未推送。
+
+
+- 2026-10-29：16在独立 `codex-canvas-types-16` 完成空间规则、连续性、不可改事实三类专用卡及强类型完整输出、直接关系、固定证据／前后态、图片目标。实现 `7a5fc1e0`，已合最新集成 `8e94c579`，Completion为implemented待集成，Status不变。本票HTTP17 passed，全部画布249 passed／28 MySQL skipped；Pylint10.00/10、Node24 typecheck及真实Chrome桌面／390px窄屏通过。合18后相关连续性／混合／摄影36 passed；HTTP生产schema与generated精确同步。实际拖线仍仅候选、证据不隐式传媒体、图片目标不截断整卡，图兼容仅补本票space_rule/fact稳定作用对象并与17协调。详情、红绿记录、证据目录和受控供应商／存储限制见16 Comments；共享组件未改，按影响复用12公共验收，主区标准OpenAPI更新待集成执行。
