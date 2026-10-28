@@ -8,7 +8,7 @@
 
 ## 任务与阻塞关系
 
-编号表示依赖顺序，不要求严格串行执行。01–16、18 共十七票已实现并集成；17 进行中，19 等待17完成，验证证据在下方实施记录及相应票据中维护。
+编号表示依赖顺序，不要求严格串行执行。01–18 共十八票已实现并集成；19 已解除阻塞，可开始完整旅程与统一契约收口，验证证据在下方实施记录及相应票据中维护。
 
 | 票据 | Blocked by | 目录负责内容 |
 | --- | --- | --- |
@@ -241,3 +241,5 @@ flowchart TD
 - 2026-10-29：无冲突集成16（分支HEAD `758cb145`，显式合并 `263fc51e`），Completion更新为integrated，分诊Status不变。合后连续性／风格／摄影／叙事HTTP与真实Worker组合 **56 passed**（6.66s）、Node24.22.1 typecheck及差异检查通过；复用同一产品实现全画布249 passed／28 skipped、Pylint10与真实Chrome证据。当前主区app导出、8000实际HTTP和提交OpenAPI精确一致，标准 `openapi:update` 成功，425处纯尾空行generated漂移经字节核对剔除；生产与HTTP证据在 `/private/tmp/canvas16-integrated-production.json`、`/private/tmp/canvas16-integrated-http.json`。保留限定空间规则／事实的结构引用兼容、风格和所有联合类型；不扩大其他接收卡资格。01–16及18共十七票集成，17进行中，19等待17；外部供应商／存储替身及MySQL未运行限制保持，未推送、未操作其他工作树。
 
 - 17交付前已合主区最终 `fb1f95d2`，13风格与16连续性字段／编辑／预设／固定示例全部保留；合后全画布271 passed／28 skipped、Pylint10、Node24typecheck，真实Chrome要求卡统一入口15.7s再次通过，当前WT生产schema精确等提交OpenAPI。证据 `/private/tmp/canvas17-after16-guidance`；implemented待主区merger复验，未推送。
+
+- 2026-10-29：无冲突合并17（分支 HEAD `3f84c01b`，显式合并提交 `d860ad66`），Completion 更新为 integrated，分诊 Status 不变；01–18共十八票集成，19解除阻塞。合后指导／连续性／叙事／摄影 HTTP 与真实 Worker **66 passed**（6.91s）、Node24.22.1 typecheck、差异检查通过；代码与实现分支一致，复用271 passed／28 MySQL skipped、Pylint10及真实Chrome要求卡证据。主区 app导入路径已确认，生产导出、8000实际HTTP、提交schema精确一致，含验收新契约；标准 `openapi:update` 成功，432处已证明仅尾空行的生成漂移及schema等价JSON格式差异已还原。证据 `/private/tmp/canvas17-integrated-production.json`、`/private/tmp/canvas17-integrated-http.json`，真实页面 `/private/tmp/canvas17-after16-guidance`。受控供应商／存储和MySQL缺环境限制保留；未推送。
