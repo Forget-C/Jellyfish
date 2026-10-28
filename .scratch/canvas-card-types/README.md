@@ -192,3 +192,5 @@ flowchart TD
 - 2026-10-28：06 在 `codex-canvas-types-06` 实现视频用途明确采用、统一binding分组与有序编译、定位诊断、固定视频用途历史、完整音轨及下游主体视频；代码 `d5b3827a`，无冲突合并最新集成 `07e7ab7e` 得 `418b759b` 后复验。全部画布后端110 passed／27 skipped、Pylint10.00/10、Node24 typecheck及图片／视频真实页面通过；旧07e7ab7e文本／图片实际成果跨版本读取保持依据有效，独立8279生产schema与OpenAPI精确一致。06 Completion为implemented待主区集成，分诊Status不变；详细红绿、截图与受控供应商／外部存储及MySQL限制见06票据。未提前实现08／09命名图片，不操作主区8000。
 
 - 2026-10-28：无冲突合并06（分支HEAD `39800559`，合并提交 `63a028ac`），Completion 更新为 integrated，分诊Status保持不变。主区Node24.22.1 typecheck、视频及API HTTP回归61 passed／2 skipped与差异检查通过；已核实 `PYTHONPATH=. uv run --no-sync` 导入主区app。复用同一代码的全部画布110 passed／27 skipped、Pylint10.00/10、图片／视频真实页面及旧版文本／图片实际成果basis_current兼容证据。隔离8286生产OpenAPI与提交schema精确一致，无测试控制路径；重新gen仅365处纯尾空行并已剔除，证据 `/private/tmp/canvas06-integrated/openapi-8286.json`。8000隔离环境内探测无响应，提升权限复核健康检查已响应，但未核实其代码归属，未操作或从其生成schema，不声称标准openapi:update本次成功；MySQL及受控外部服务限制保留。当前共七票集成，08独立工作树进行中，09／10待08；未触碰08工作树。
+
+- 后续主区复核：8000 已恢复响应，PID61721／73854 工作目录均为本工作区 backend；生产 OpenAPI 与集成 b64ce5e5 的 schema 精确一致（含 subject_name）。标准 openapi:update 已通过；生成器纯尾空行漂移已剔除，不引入无关文件变化。此前超时记录为当时事实，不再作为当前限制。
