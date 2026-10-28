@@ -3,7 +3,7 @@ from typing import Annotated, Any, ClassVar, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.schemas.common import ApiResponse
 from app.core.contracts.media import VideoMediaInput
-from app.core.contracts.generation_canvas import OutputIdentity, InputBinding, TextOutputPayload, MediaOutputPayload, ObjectReferencePayload, DescriptionTextPayload, NamedImageObject, ReferenceImageBinding, NamedImagePayload, CanvasSourceMapping, NamedImageMapping, DesignField, DesignScope, DesignTextPayload, SpatialReferencePayload
+from app.core.contracts.generation_canvas import OutputIdentity, InputBinding, TextOutputPayload, MediaOutputPayload, ObjectReferencePayload, DescriptionTextPayload, NamedImageObject, ReferenceImageBinding, NamedImagePayload, CanvasSourceMapping, NamedImageMapping, DesignField, DesignScope, DesignTextPayload, SpatialReferencePayload, NarrativeReferencePayload
 
 
 class CardDefinition(BaseModel):
@@ -427,6 +427,54 @@ class EnvironmentActivityCard(SpatialDirectionCard):
     input_ports: ClassVar[tuple[str, ...]] = ('image_example', 'video_example')
 
 
+class NarrativeDirectionCard(PerformanceDirectionCard):
+    """独立叙事设计，不要求完整场次计划。"""
+    name: str = ''
+
+
+class NarrativeOverviewCard(NarrativeDirectionCard):
+    """narrative 的专用字段及可选直接关系。"""
+    type: Literal['direction.narrative'] = Field(default='direction.narrative', json_schema_extra={'enum': ['direction.narrative']})
+    viewpoint: DesignField = Field(default_factory=DesignField)
+    information_change: DesignField = Field(default_factory=DesignField)
+    relationship_change: DesignField = Field(default_factory=DesignField)
+    turning_point: DesignField = Field(default_factory=DesignField)
+    open_questions: DesignField = Field(default_factory=DesignField)
+    input_ports: ClassVar[tuple[str, ...]] = ('effect_object',)
+
+
+class NarrativeBeatCard(NarrativeDirectionCard):
+    """beat 的专用字段及可选直接关系。"""
+    type: Literal['direction.beat'] = Field(default='direction.beat', json_schema_extra={'enum': ['direction.beat']})
+    beat_id: str | None = Field(default=None, min_length=1, max_length=64)
+    objective: DesignField = Field(default_factory=DesignField)
+    obstacle: DesignField = Field(default_factory=DesignField)
+    expected_change: DesignField = Field(default_factory=DesignField)
+    audience_must_see: DesignField = Field(default_factory=DesignField)
+    input_ports: ClassVar[tuple[str, ...]] = ('related_event',)
+    output_ports: ClassVar[tuple[str, ...]] = ('text', 'beat')
+
+
+class NarrativeEventCard(NarrativeDirectionCard):
+    """event 的专用字段及可选直接关系。"""
+    type: Literal['direction.event'] = Field(default='direction.event', json_schema_extra={'enum': ['direction.event']})
+    event_id: str | None = Field(default=None, min_length=1, max_length=64)
+    action_change: DesignField = Field(default_factory=DesignField)
+    input_ports: ClassVar[tuple[str, ...]] = ('effect_object',)
+    output_ports: ClassVar[tuple[str, ...]] = ('text', 'event')
+
+
+class ShotDesignCard(NarrativeDirectionCard):
+    """shot 的专用字段及可选直接关系。"""
+    type: Literal['direction.shot'] = Field(default='direction.shot', json_schema_extra={'enum': ['direction.shot']})
+    shot_id: str | None = Field(default=None, min_length=1, max_length=64)
+    narrative_role: DesignField = Field(default_factory=DesignField)
+    visible_result: DesignField = Field(default_factory=DesignField)
+    estimated_duration: DesignField = Field(default_factory=DesignField)
+    input_ports: ClassVar[tuple[str, ...]] = ('participant', 'covered_beat', 'related_event', 'blocking_basis', 'acceptance_basis', 'image_example', 'video_example')
+    output_ports: ClassVar[tuple[str, ...]] = ('text', 'shot')
+
+
 class CanvasDocument(BaseModel):
     """完整编辑文档；位置、尺寸和视角由浏览器另存。"""
     model_config = ConfigDict(extra='forbid')
@@ -434,7 +482,7 @@ class CanvasDocument(BaseModel):
     project_id: str
     name: str = Field(min_length=1, max_length=255)
     schema_version: Literal[2] = 2
-    cards: list[SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | ObjectDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard] = Field(default_factory=list)
+    cards: list[NarrativeOverviewCard | NarrativeBeatCard | NarrativeEventCard | ShotDesignCard | SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | ObjectDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard] = Field(default_factory=list)
     edges: list[GenerationCanvasEdge] = Field(default_factory=list)
     input_order: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
     groups: list[GenerationCanvasGroup] = Field(default_factory=list)
@@ -495,7 +543,7 @@ class CanvasResolvedOutput(BaseModel):
     """已发布的实际输出，运行层可注入模型当前输出而无需虚构未来结果。"""
     source: OutputIdentity
     modality: str
-    payload: Annotated[TextOutputPayload | MediaOutputPayload | ObjectReferencePayload | DescriptionTextPayload | NamedImagePayload | DesignTextPayload | SpatialReferencePayload, Field(discriminator='kind')] | None = None
+    payload: Annotated[TextOutputPayload | MediaOutputPayload | ObjectReferencePayload | DescriptionTextPayload | NamedImagePayload | DesignTextPayload | SpatialReferencePayload | NarrativeReferencePayload, Field(discriminator='kind')] | None = None
     text: str | None = None
     file_id: str | None = None
     token: str = ''
@@ -513,7 +561,7 @@ class CanvasResolvedOutput(BaseModel):
             elif self.modality in ('image', 'video', 'audio') and self.file_id:
                 self.payload = MediaOutputPayload(kind=self.modality, file_id=self.file_id)
         if self.payload is not None:
-            self.modality = 'text' if isinstance(self.payload, (ObjectReferencePayload, DescriptionTextPayload, DesignTextPayload, SpatialReferencePayload)) else 'image' if isinstance(self.payload, NamedImagePayload) else self.payload.kind
+            self.modality = 'text' if isinstance(self.payload, (ObjectReferencePayload, DescriptionTextPayload, DesignTextPayload, SpatialReferencePayload, NarrativeReferencePayload)) else 'image' if isinstance(self.payload, NamedImagePayload) else self.payload.kind
             self.text = getattr(self.payload, 'text', None)
             self.file_id = getattr(self.payload, 'file_id', None)
         return self

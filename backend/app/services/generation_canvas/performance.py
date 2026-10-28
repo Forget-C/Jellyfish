@@ -1,6 +1,6 @@
 """独立表演卡输出与直接关系校验，不读取祖先设计或运行模型。"""
 from app.core.contracts.generation_canvas import DesignField, DesignTextPayload, PerformanceDesignFields, ObjectReferencePayload, OutputIdentity
-from app.schemas.generation_canvas import CanvasResolvedOutput, PerformanceDirectionCard, SpatialDirectionCard
+from app.schemas.generation_canvas import CanvasResolvedOutput, PerformanceDirectionCard, SpatialDirectionCard, NarrativeDirectionCard
 from app.services.generation_canvas.errors import diagnostic
 
 FIELD_LABELS = {'situation': '当前处境', 'relationship': '人物关系', 'objective': '人物目标', 'obstacle': '阻碍',
@@ -20,7 +20,9 @@ def publish_design(canvas_id, card, adopted_inputs):
         return []
     objects = list({item.payload.object_id: item.payload for item in adopted_inputs if isinstance(item.payload, ObjectReferencePayload) and item.available}.values())
     participant = next((binding.source.object_id for binding in card.input_bindings if binding.input_port == 'participant'), None)
-    lines = [f'对象：{obj.name}（{obj.object_id}，{obj.category}）' for obj in objects]
+    from app.services.generation_canvas.narrative import direct_relations, relation_lines
+    relations = direct_relations(card, adopted_inputs)
+    lines = relation_lines([row for row in relations if row.input_port in ('beat', 'received_event')]) + [f'对象：{obj.name}（{obj.object_id}，{obj.category}）' for obj in objects]
     if participant:
         lines.append(f'参与对象：{participant}')
     lines.extend(f'{PURPOSE_LABELS[value.purpose]} / {FIELD_LABELS[key]} [{STATE_LABELS[value.state]}]：{value.text}' + (f'（来源：{value.source_locator}）' if value.source_locator else '') for key, value in active)
@@ -33,7 +35,7 @@ def publish_design(canvas_id, card, adopted_inputs):
     if card.source_locator:
         lines.append('来源：' + card.source_locator)
     payload = DesignTextPayload(design_type=card.type, text='\n'.join(lines), fields=PerformanceDesignFields(**fields),
-                                scope=card.scope, objects=objects, participant_id=participant, source_locator=card.source_locator)
+                                scope=card.scope, objects=objects, participant_id=participant, narrative_relations=relations, source_locator=card.source_locator)
     return [CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id, port_id='text', position=0), modality='text', payload=payload)]
 
 
@@ -41,25 +43,36 @@ def validate_design_relations(document, published):
     """只允许直接明确对象；多人参考逐身份选取，主体按真实身份至多一个。"""
     from app.services.generation_canvas.compiler import resolve_outputs, identity_key
     for card in document.cards:
-        if not isinstance(card, PerformanceDirectionCard) or isinstance(card, SpatialDirectionCard):
+        if not isinstance(card, PerformanceDirectionCard) or isinstance(card, (SpatialDirectionCard, NarrativeDirectionCard)):
             continue
         candidates = resolve_outputs(document, card.id, published)
         ids, participants = set(), set()
         for binding in card.input_bindings:
             target = {'card_id': card.id, 'path': ['input_bindings', binding.id]}
-            if binding.id in ids or binding.input_port not in ('participant', 'effect_object') or binding.input_port not in card.input_ports:
+            if binding.id in ids or binding.input_port not in ('participant', 'effect_object', 'beat', 'received_event') or binding.input_port not in card.input_ports:
                 raise diagnostic('INVALID_DESIGN_BINDING', '请选择已接入的明确关系用途', target)
             ids.add(binding.id)
             item = next((item for item in candidates if identity_key(item.source) == identity_key(binding.source)), None)
             connected = any(edge.target_card == card.id and edge.target_port == binding.input_port and edge.source_card == binding.source.card_id and edge.source_port == binding.source.port_id for edge in document.edges)
-            if not connected or not item or not isinstance(item.payload, ObjectReferencePayload) or not item.available:
+            if not connected or not item or not item.available:
                 raise diagnostic('INVALID_DESIGN_BINDING', '请选择直接候选中的具体对象', target)
+            if binding.input_port in ('beat', 'received_event'):
+                from app.services.generation_canvas.narrative import narrative_binding_allowed
+                if not narrative_binding_allowed(binding.input_port, item.payload):
+                    raise diagnostic('INVALID_DESIGN_CATEGORY', '故事对象类别不适用于此关系', target)
+                if binding.input_port == 'beat':
+                    participants.add(('beat', item.payload.reference_id))
+                continue
+            if not isinstance(item.payload, ObjectReferencePayload):
+                raise diagnostic('INVALID_DESIGN_CATEGORY', '请选择明确对象身份', target)
             allowed = ('character', 'prop', 'costume') if binding.input_port == 'participant' else ('character', 'prop', 'costume', 'place')
             if item.payload.category not in allowed:
                 raise diagnostic('INVALID_DESIGN_CATEGORY', '对象类别不适用于此关系', target)
             if binding.input_port == 'participant':
                 participants.add(item.payload.object_id)
-        if len(participants) > 1:
+        if len({value for value in participants if isinstance(value, tuple)}) > 1:
+            raise diagnostic('BEAT_COUNT_EXCEEDED', '所属节拍至多一个', {'card_id': card.id, 'port_id': 'beat'})
+        if len({value for value in participants if not isinstance(value, tuple)}) > 1:
             raise diagnostic('PARTICIPANT_COUNT_EXCEEDED', '情境和表演主体至多一个对象', {'card_id': card.id, 'port_id': 'participant'})
 
 

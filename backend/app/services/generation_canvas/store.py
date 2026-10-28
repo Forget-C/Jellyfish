@@ -165,6 +165,8 @@ class CanvasStore:
             models = {card.id for card in document.cards if isinstance(card, ModelCard)}
             published = {card_id: values for card_id, values in published.items() if card_id in models}
             from app.services.generation_canvas.spatial import validate_spatial_relations
+            from app.services.generation_canvas.narrative import validate_narrative_relations
+            validate_narrative_relations(document, published, canvas.document)
             validate_spatial_relations(document, published, canvas.document)
             validate_design_relations(document, published)
             await validate_design_examples(self.db, document, published, self.project_id, canvas.document)

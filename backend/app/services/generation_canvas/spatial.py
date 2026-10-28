@@ -25,7 +25,9 @@ def publish_spatial(canvas_id, card, adopted_inputs):
             setattr(relations, binding.input_port + '_id', binding.source.object_id)
         elif binding.input_port in ('effect_object', 'position_anchor'):
             getattr(relations, binding.input_port + '_ids').append(binding.source.object_id)
-    lines = []
+    from app.services.generation_canvas.narrative import direct_relations, relation_lines
+    narrative_relations = [row for row in direct_relations(card, adopted_inputs) if row.input_port in ('change_event', 'trigger_event')]
+    lines = relation_lines(narrative_relations)
     for binding in card.input_bindings:
         item = next((item for item in adopted_inputs if item.source == binding.source and item.available), None)
         if item and isinstance(item.payload, (ObjectReferencePayload, SpatialReferencePayload)):
@@ -45,7 +47,7 @@ def publish_spatial(canvas_id, card, adopted_inputs):
         participant = next((binding.source.object_id for binding in card.input_bindings if binding.input_port == 'participant'), None)
         outputs.append(CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id, port_id='text', position=0), modality='text',
             payload=DesignTextPayload(design_type=card.type, text='\n'.join(lines), fields=fields, scope=card.scope,
-                objects=objects, references=references, spatial_relations=relations, participant_id=participant, source_locator=card.source_locator)))
+                objects=objects, references=references, spatial_relations=relations, narrative_relations=narrative_relations, participant_id=participant, source_locator=card.source_locator)))
     if card.type not in ('direction.anchor', 'direction.blocking'):
         return outputs
     port = 'anchor' if isinstance(card, SpatialAnchorCard) else 'blocking'
@@ -85,8 +87,10 @@ def validate_spatial_relations(document, published, previous):
             payload = item.payload
             allowed = isinstance(payload, ObjectReferencePayload) and (binding.input_port == 'effect_object' or binding.input_port == 'space' and payload.category == 'place' or binding.input_port == 'participant' and payload.category in ('character', 'costume', 'prop'))
             allowed = allowed or isinstance(payload, SpatialReferencePayload) and payload.category == 'anchor' and binding.input_port in ('position_anchor', 'area_anchor')
+            from app.services.generation_canvas.narrative import narrative_binding_allowed
+            allowed = allowed or binding.input_port in ('change_event', 'trigger_event') and narrative_binding_allowed(binding.input_port, payload)
             if not allowed:
                 raise diagnostic('INVALID_SPATIAL_CATEGORY', '对象类别不适用于此空间关系', target)
             counts.setdefault(binding.input_port, set()).add(payload.object_id if isinstance(payload, ObjectReferencePayload) else payload.reference_id)
-        if any(len(counts.get(port, set())) > 1 for port in ('space', 'participant', 'area_anchor')):
+        if any(len(counts.get(port, set())) > 1 for port in ('space', 'participant', 'area_anchor', 'change_event', 'trigger_event')):
             raise diagnostic('SPATIAL_RELATION_COUNT', '所属空间、参与对象和区域锚点各至多一个', {'card_id': card.id})
