@@ -42,3 +42,4 @@
 
 - 2026-10-28规格审查修正：`participant` 资格包含人物、服装、道具。新增直接服装文本／独立服装参考 × 情境／表演四个 HTTP 用例，先均因 `INVALID_DESIGN_CATEGORY` 失败，再只补后端资格与前端对应过滤后通过；完整本票 `27 passed`（2.40s），继续覆盖场所拒绝和人数上限，服装只传身份／名称不读取描述或图片。Pylint `10.00/10`（stats缓存写入提示不影响exit0）、Node24.22.1 typecheck及差异检查通过。未改变公开schema，不重新生成接口。
 
+- 修正提交 `440e5372`；报告前合入最新集成 `567b3e04`，合并提交 `2c46f189`，仅票据追加记录冲突并保留双方证据，Completion 维持 integrated。09 映射三字段／serializer 与实际用途内顺序均保留；合并后情境表演／命名参考／视频 HTTP 与 Worker 回归 `68 passed, 2 skipped`（6.87s），Node24.22.1 typecheck 通过。未修改公开契约、未操作主区或推送。
