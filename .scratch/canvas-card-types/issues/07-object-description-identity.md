@@ -31,3 +31,5 @@
 - 尚无名称关联或导演业务接收端（08 及后续票交付），因此未声称验证这些跨票绑定；当前对象出口与强类型契约可供其接入，不生成占位接收方。
 
 - 最终检查：`PYTHONPATH=. .venv/bin/python -m pytest tests/test_generation_canvas_objects.py tests/test_generation_canvas_compiler.py tests/test_generation_canvas_api.py tests/test_generation_canvas_lifecycle.py -q -k "not mysql"`：46 passed，7 deselected（MySQL 专用用例未运行）；`uv run pylint app`：10.00/10；Node 24 `pnpm --dir front run typecheck`：通过；`git diff --check`：通过。
+
+- 集成前同步：合并集成分支 436691a2（04），输出处理器冲突保留04媒体可用性投影与07描述分支；同步其canvas_client依赖fixture。合并后相关HTTP：50 passed，7 deselected；Node 24 typecheck、Pylint 10.00/10、diff检查通过。

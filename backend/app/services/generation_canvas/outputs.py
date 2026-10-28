@@ -17,8 +17,8 @@ class CardOutputHandler(Protocol):
 class ContentOutputHandler:
     """普通内容只发布自己的正文或具体文件。"""
     def publish(self, canvas_id, card, adopted_inputs, published_results):
-        """内容卡没有持续输入，来源定位不随正文出口传递。"""
-        del adopted_inputs, published_results
+        """内容卡没有持续输入，描述来源只随明确描述出口提供。"""
+        del adopted_inputs
         if isinstance(card, ObjectDescriptionCard):
             outputs = []
             if card.text:
@@ -32,7 +32,12 @@ class ContentOutputHandler:
             payload = TextOutputPayload(text=card.text) if card.text else None
             port = 'text'
         elif isinstance(card, MediaContentCard):
+            if published_results:
+                return list(published_results)
             port = card.output_ports[0]
+            if card.file_id and card.uploading:
+                return [CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id,
+                    port_id=port, position=0), modality=port, available=False)]
             payload = MediaOutputPayload(kind=port, file_id=card.file_id) if card.file_id and not card.uploading else None
         else:
             return []

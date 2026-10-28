@@ -1,6 +1,6 @@
 """人物、物件和场所经画布 HTTP 保存并发布明确出口。"""
 import pytest
-from tests.test_generation_canvas_api import canvas_client  # noqa: F401
+from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
 from tests.test_generation_canvas_runs import runtime  # noqa: F401
 
 
