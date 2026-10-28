@@ -1,9 +1,10 @@
 """公开引用解析与单次编译边界；候选关系不等于实际输入。"""
 import re
+from app.core.contracts.generation_canvas import SoundDesignFields
 from app.core.contracts.media import MediaReference, VideoMediaInput, VideoSubjectMediaReference
 from app.schemas.generation_canvas import (
     CanvasDocument, CanvasResolvedOutput, CanvasCompiledInput, CanvasDiagnostic,
-    DesignTextPayload, ModelCard, PerformanceDirectionCard, NamedImageReferenceCard, NamedImagePayload, CanvasSourceMapping, NamedImageMapping, PromptReference, PromptInstruction,
+    DesignTextPayload, ModelCard, SoundDirectionCard, PerformanceDirectionCard, NamedImageReferenceCard, NamedImagePayload, CanvasSourceMapping, NamedImageMapping, PromptReference, PromptInstruction,
     CanvasModelCapability, OutputIdentity,
 )
 from app.services.generation_canvas.capabilities import parameter_diagnostics
@@ -39,7 +40,7 @@ def published_card_outputs(document, card_id, model_outputs=None):
     """仅把已采用的直接对象出口交给本卡处理器，按 DAG 逐层解析。"""
     card = next(card for card in document.cards if card.id == card_id)
     adopted = []
-    if isinstance(card, (NamedImageReferenceCard, PerformanceDirectionCard)):
+    if isinstance(card, (NamedImageReferenceCard, PerformanceDirectionCard, SoundDirectionCard)):
         for binding in card.input_bindings:
             if any(edge.source_card == binding.source.card_id and edge.source_port == binding.source.port_id
                    and edge.target_card == card_id and edge.target_port == binding.input_port for edge in document.edges):
@@ -131,13 +132,19 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
             issue('SOURCE_NOT_CONNECTED', '引用来源未连接，请手动连接或替换', ref.id, path)
         elif not source.available:
             issue('OUTPUT_MISSING', '引用的来源位置暂无实际输出', ref.id, path)
+    def design_text(item):
+        if isinstance(item.payload, DesignTextPayload) and item.payload.design_type in ('direction.dialogue', 'direction.sound'):
+            note = '仅表达可见声源或说话状态；图片不包含声音。' if card.type == 'model.image' else '声音要求按模型实际能力执行；制作安排不代表已生成声音。' if card.type == 'model.video' else ''
+            return item.text + ('\n' + note if note else '')
+        return item.text
     for item in result.used:
         if card.type in ('model.image', 'model.video') and isinstance(item.payload, DesignTextPayload):
             design = item.payload
-            # 只在实际采用需要主体的情境／动作设计时阻止视觉生成；文本分析允许不完整设计。
-            if design.design_type in ('direction.situation', 'direction.performance', 'direction.blocking', 'direction.activity') and not design.participant_id:
+            # 明确没有对白无需虚构说话对象；文本分析允许不完整设计。
+            requires_subject = design.design_type in ('direction.situation', 'direction.performance', 'direction.blocking', 'direction.activity') or (design.design_type == 'direction.dialogue' and isinstance(design.fields, SoundDesignFields) and design.fields.content and design.fields.content.state != 'absent')
+            if requires_subject and not design.participant_id:
                 binding_id = next(binding.id for binding in card.input_bindings if identity_key(binding.source) == identity_key(item.source))
-                issue('DESIGN_SUBJECT_REQUIRED', '本次视觉生成所用情境或表演须明确参与对象', binding_id,
+                issue('DESIGN_SUBJECT_REQUIRED', '本次视觉生成所用情境、表演或对白须明确对象', binding_id,
                       ['input_bindings', binding_id])
         media_position = result.media.index(item) + 1 if item in result.media else None
         result.mapping.append(CanvasSourceMapping(token=item.token, source=item.source, media_position=media_position))
@@ -166,7 +173,7 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
             item = by_source.get(identity_key(segment.source))
             if item and item.available:
                 if item.modality == 'text':
-                    result.text += item.text
+                    result.text += design_text(item)
                 elif card.type == 'model.video':
                     names = subjects.get(identity_key(item.source), [])
                     result.text += '@' + names[0] if port in ('subject_image', 'subject_video') else f'[media:{result.media.index(item) + 1}]'
@@ -211,7 +218,7 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
                 and binding.input_port in ('subject_image', 'subject_video') and not (binding.subject_name or '').strip()):
             issue('SUBJECT_NAME_REQUIRED', '请选择主体分组名称，不自动归组', binding.id, ['input_bindings', binding.id])
         if binding.id not in mentioned and item and item.available and item.modality == 'text':
-            result.text += ('\n' if result.text else '') + item.text
+            result.text += ('\n' if result.text else '') + design_text(item)
 
     if card.type in ('model.image', 'model.video'):
         def mapping_line(entry):

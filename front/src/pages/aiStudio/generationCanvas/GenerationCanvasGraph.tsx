@@ -1,6 +1,8 @@
 import { photographySummary } from './PhotographyEditor'
 import type { PhotographyCard } from '../../../services/generated'
 import { spatialSummary, type SpatialCard } from './SpatialDirectionEditor'
+import { soundSummary } from './SoundDirectionEditor'
+import type { SoundCard } from './SoundDirectionEditor'
 import { performanceSummary } from './PerformanceDirectionEditor'
 import type { PerformanceCard } from './PerformanceDirectionEditor'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -115,6 +117,7 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false, ru
       : (type === 'content.object' || type === 'content.place') ? { id: crypto.randomUUID(), type, type_version: 1, object_id: null, name: '', category: type === 'content.place' ? 'place' : 'character', text: '', source_locator: '' }
       : type === 'direction.anchor' ? { id: crypto.randomUUID(), type, anchor_id: crypto.randomUUID(), name: '', input_bindings: [], examples: [], scope: {} }
       : type === 'direction.blocking' ? { id: crypto.randomUUID(), type, blocking_id: crypto.randomUUID(), name: '', input_bindings: [], examples: [], scope: {} }
+      : type === 'direction.dialogue' ? { id: crypto.randomUUID(), type, type_version: 1, dialogue_id: crypto.randomUUID(), version: 1, input_bindings: [], examples: [], scope: {} }
       : type.startsWith('direction.') ? { id: crypto.randomUUID(), type, type_version: 1, input_bindings: [], examples: [], scope: {} }
       : type.startsWith('reference.') ? { id: crypto.randomUUID(), type, type_version: 1, title: '', angle: '正面', objects: [], input_bindings: [] }
       : type.startsWith('model.') ? { id: crypto.randomUUID(), type, type_version: 1, model_id: null, prompt: { segments: [] }, config: {} }
@@ -304,7 +307,7 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false, ru
               if (Math.abs(width - (size?.width || 400)) > 2 || Math.abs(height - (size?.height || measured[card.id]?.height || height)) > 2)
                 layout.setView(previous => ({ ...previous, sizes: { ...previous.sizes, [card.id]: { width, height } } }))
             }} onRemove={() => removeCard(card.id)} inputs={inputPorts(card).map(name => port(card, name, true))} outputs={outputPorts(card).map(name => port(card, name, false))}>
-            <p className="canvas-card-summary">{card.type === 'direction.photography' ? photographySummary(card as PhotographyCard) : ['direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'].includes(card.type || '') ? spatialSummary(card as SpatialCard) : card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard) : 'title' in card ? `${card.title || '命名图片参考'} · ${card.angle || '正面'} · ${card.image_binding ? '已选主图' : '缺少主图'}` : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '模型配置、输入采用与运行记录' : 'file_id' in card && card.file_id ? '已选择媒体，打开详情预览' : '未选择媒体'}</p>
+            <p className="canvas-card-summary">{card.type === 'direction.photography' ? photographySummary(card as PhotographyCard) : ['direction.dialogue', 'direction.sound'].includes(card.type || '') ? soundSummary(card as SoundCard) : ['direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'].includes(card.type || '') ? spatialSummary(card as SpatialCard) : card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard) : 'title' in card ? `${card.title || '命名图片参考'} · ${card.angle || '正面'} · ${card.image_binding ? '已选主图' : '缺少主图'}` : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '模型配置、输入采用与运行记录' : 'file_id' in card && card.file_id ? '已选择媒体，打开详情预览' : '未选择媒体'}</p>
           </CardShell>
         })}
       </div>

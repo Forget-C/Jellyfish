@@ -6,6 +6,7 @@ import type { ComponentType, ReactNode } from 'react'
 import { Alert, Button, Select, Space } from 'antd'
 import type { CanvasDocument, CanvasModelCapability, CanvasNodeRead, CanvasResolvedOutput, CreativeBasisCard, ImageModelCard, ModelRead, ObjectDescriptionCard, PlaceDescriptionCard, TextContentCard, TextModelCard, VideoModelCard } from '../../../services/generated'
 import { ExperimentComposer } from '../experiment/components/ExperimentComposer'
+import { SoundDirectionEditor } from './SoundDirectionEditor'
 import { PerformanceDirectionEditor } from './PerformanceDirectionEditor'
 import { VideoInputBindings } from './VideoInputBindings'
 import { PromptEditor } from './PromptEditor'
@@ -128,6 +129,8 @@ export const rendererRegistry: Record<string, ComponentType<CardRendererProps>> 
   'direction.environment': SpatialDirectionEditor,
   'direction.photography': PhotographyEditor,
   'direction.situation': PerformanceDirectionEditor,
+  'direction.dialogue': SoundDirectionEditor,
+  'direction.sound': SoundDirectionEditor,
   'direction.performance': PerformanceDirectionEditor,
   'direction.performance_rule': PerformanceDirectionEditor,
   'reference.character': NamedImageReferenceEditor,

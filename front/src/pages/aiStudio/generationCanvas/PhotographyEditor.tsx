@@ -1,3 +1,4 @@
+import { inputPorts } from './graphRules'
 import { Alert, Input, Select, Space } from 'antd'
 import { useState } from 'react'
 import type { PhotographyCard, PhotographyFields, PhotographyMediaExample, ObjectReferencePayload } from '../../../services/generated'
@@ -50,7 +51,7 @@ export function PhotographyEditor({ card: raw, document, savedRevision, modelOut
       <Input aria-label="摄影适用条件" value={card.scope?.condition} onChange={event => update({ ...card, scope: { ...card.scope, condition: event.target.value } })} />
       <Input aria-label="摄影来源" value={card.source_locator} onChange={event => update({ ...card, source_locator: event.target.value })} />
     </details>
-    <DesignMediaExamples fieldOptions={Object.values(photographyRegions).flatMap(region => Object.entries(region.fields).map(([value,label]) => ({value:value as NonNullable<PhotographyMediaExample["field_id"]>,label})))} examples={card.examples || []} candidates={resolved.candidates} disabled={disabled} onChange={examples => update({ ...card, examples })} />
+    <DesignMediaExamples ports={inputPorts(card)} fieldOptions={Object.values(photographyRegions).flatMap(region => Object.entries(region.fields).map(([value,label]) => ({value:value as NonNullable<PhotographyMediaExample["field_id"]>,label})))} examples={card.examples || []} candidates={resolved.candidates} disabled={disabled} onChange={examples => update({ ...card, examples })} />
     <section aria-label="摄影已保存输出"><h3>已保存摄影设计 · revision {resolved.revision}</h3>{resolved.outputs.map(item => <CanvasTextPreview key={sourceKey(item.source)} text={item.text || ''} label="摄影设计" />)}</section>
   </>
 }
