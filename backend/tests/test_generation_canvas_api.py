@@ -10,8 +10,14 @@ from app.dependencies import get_db
 from app.models.studio import Project
 from sqlalchemy import delete, select
 
+@pytest.fixture
+def canvas_file_store():
+    """真实文件库场景准备；行为断言仍只经过 HTTP。"""
+    return {}
+
+
 @pytest_asyncio.fixture
-async def canvas_client(request, monkeypatch):
+async def canvas_client(request, monkeypatch, canvas_file_store):
     from app.api.v1.routes.studio.generation_canvases import router
     mysql = getattr(request, 'param', None) == 'mysql'
     if mysql:
@@ -24,6 +30,7 @@ async def canvas_client(request, monkeypatch):
         async with engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
     sessions = async_sessionmaker(engine, expire_on_commit=False)
+    canvas_file_store["sessions"] = sessions
     async with sessions() as db:
         db.add_all([Project(id='p', name='项目', style='真人都市'), Project(id='other', name='其他', style='真人都市')])
         from app.models.llm import Model, Provider
@@ -546,3 +553,65 @@ async def test_legacy_prompt_document_is_read_as_version_two_without_duplicate_s
     assert model['input_bindings'][0]['source'] == source
     assert model['prompt']['segments'][0]['binding_id'] == model['input_bindings'][0]['id']
     assert 'source' not in model['prompt']['segments'][0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('modality,extension,mime', [
+    ('image', 'png', 'image/png'), ('video', 'mp4', 'video/mp4'), ('audio', 'wav', 'audio/wav'),
+])
+async def test_media_output_identity_survives_upload_and_file_replacement(canvas_client, modality, extension, mime):
+    """上传中保留出口身份但不泄漏有效媒体；保存重开与替换不改输出位置。"""
+    client = canvas_client
+    files = []
+    for index in range(2):
+        uploaded = await client.post('/files/upload', files={'file': (f'media-{index}.{extension}', b'content', mime)},
+                                     data={'project_id': 'p', 'usage_kind': 'generation_upload'})
+        files.append(uploaded.json()['data']['id'])
+    canvas = (await client.post('/canvases/p', json={})).json()['data']
+    url = f"/canvases/p/{canvas['id']}"
+    source = {'canvas_id': canvas['id'], 'card_id': 'media', 'port_id': modality, 'position': 0}
+    document = canvas['document']
+    for revision, (file_id, uploading) in enumerate([(files[0], False), (files[0], True), (files[1], False)]):
+        document['cards'] = [{'id': 'media', 'type': f'content.{modality}', 'file_id': file_id, 'uploading': uploading}]
+        saved = await client.put(url, json={'request_id': f'media-{revision}', 'expected_revision': revision, 'document': document})
+        assert saved.status_code == 200, saved.text
+        reopened = (await client.get(url)).json()['data']['document']['cards'][0]
+        assert reopened['file_id'] == file_id
+        output = (await client.get(url + '/cards/media/outputs')).json()['data']['outputs'][0]
+        assert output['source'] == source
+        assert output['available'] is not uploading
+        assert output['payload'] == (None if uploading else {'kind': modality, 'file_id': file_id})
+        assert output['file_id'] == (None if uploading else file_id)
+        assert (await client.delete(f'/files/{file_id}')).status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_unavailable_saved_media_has_no_usable_output_and_locates_adopted_reference(canvas_client, canvas_file_store):
+    from app.models.studio import FileItem
+    from app.services.task_service import utcnow
+    client = canvas_client
+    uploaded = await client.post('/files/upload', files={'file': ('image.png', b'image', 'image/png')},
+                                 data={'project_id': 'p', 'usage_kind': 'generation_upload'})
+    file_id = uploaded.json()['data']['id']
+    canvas = (await client.post('/canvases/p', json={})).json()['data']
+    url = f"/canvases/p/{canvas['id']}"
+    source = {'canvas_id': canvas['id'], 'card_id': 'media', 'port_id': 'image', 'position': 0}
+    document = canvas['document']
+    document.update(cards=[{'id': 'media', 'type': 'content.image', 'file_id': file_id},
+        {'id': 'model', 'type': 'model.image', 'input_bindings': [
+            {'id': 'image-input', 'source': source, 'input_port': 'image'}]}],
+        edges=[{'id': 'edge', 'source_card': 'media', 'source_port': 'image', 'target_card': 'model', 'target_port': 'image'}],
+        input_order={'model': {'image': ['edge']}})
+    assert (await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': document})).status_code == 200
+    # 模拟外部文件库后来撤回文件，不能绕过正常 HTTP 删除保护来制造有效输出。
+    async with canvas_file_store['sessions'].begin() as db:
+        file = await db.get(FileItem, file_id)
+        file.delete_requested_at = utcnow()
+    output = (await client.get(url + '/cards/media/outputs')).json()['data']['outputs'][0]
+    assert output['source'] == source and not output['available']
+    assert output['payload'] is None and output['file_id'] is None
+    compiled = (await client.get(url + '/cards/model/compile')).json()['data']
+    assert not compiled['can_run'] and compiled['media'] == []
+    diagnostic = next(item for item in compiled['diagnostics'] if item['code'] == 'OUTPUT_MISSING')
+    assert diagnostic['target']['card_id'] == 'model'
+    assert diagnostic['target']['path'] == ['input_bindings', 'image-input']
