@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented
+**Completion:** integrated
 
 - [x] 完整旅程串起项目进入、新建／选择画布、内容导入、对象和命名参考、导演设计、明确采用、预检、生成、结果另存／下游使用与重开恢复。
 - [x] 逐项核对 39 行目录覆盖：11 类基础内容、3 类模型生成、25 项导演功能入口；不把目录行数当作物理卡片／数据表数量，摄影仍是单一内容所有者。
@@ -34,3 +34,5 @@
 - 原版六用例仍按旧卡内编辑／运行布局操作，已由独立辅助WT仅迁移测试到真实浮动详情，保持运行／取消／目标／历史／恢复断言，并合入测试提交 `54e48736`（本分支 cherry-pick `1e648875`）。其中 acceptance6.4s、lifecycle8.7s、target7.7s、runtime10.4s、history14.3s 真实通过，证据 `/private/tmp/canvas19-legacy-suite-migration.md` 及其中独立结果目录；同产品分支已包含 `c1a7230b`，后续 caret 相关影响由 Composer／Video／VideoBindings／最终旅程复验。`selection` 保留 `JELLYFISH_TEST_MYSQL_URL` 隔离库guard，当前未配置，只有静态详情迁移与语法检查，明确未执行浏览器，不降级到SQLite或使用用户库。累计26个真实用例通过（20现行＋5迁移＋新旅程），不是声称27个注册用例全部通过。
 - 失败经过保留：默认沙箱预检权限失败后采用已授权升级本机验证；sound旧断言错误期待对白跨级正文，已按规格修正；visual旧用例在预设弹窗关闭前填写底层字段，补明确等待关闭后通过；graph旧断言使用“模态不匹配”，随新值种类语义同步；原版video先迁移详情／弹窗／历史入口，再发现并修复真实caret与诊断聚焦。首次完整旅程默认请求一图而替身固定返回三图，供应商数量校验正确阻断；改为用户在真实页明确设置三图后通过。另将错误读取snapshot.outputs的测试改为公开current_outputs，不改产品协议。上述红灯不掩盖、不记为通过。
 - MySQL缺环境与受控供应商／存储限制保留；结果不证明真实供应商质量、真实外部存储或MySQL竞争已验收。未推送、未改用户主区服务；最终集成与双轴审查由主代理继续。
+
+- 2026-10-29：主区无冲突合入 `1a2b350d`（merge `4da2f90e`），Completion为integrated，Status仍为分诊状态。合后API／Catalog／Compiler **42 passed／1 skipped**（3.63s）、Node24.22.1 typecheck及 `git diff --check`通过；产品树与验收分支一致，复用本票275／28、Pylint10及26个真实页面证据，selection隔离MySQL未执行限制不变。主区 `app.__file__`确认来自当前backend，生产导出、8000实际HTTP与提交schema精确一致；核对Catalog、BasisText、DialogueReference和四模态枚举后标准 `openapi:update`成功，440处证明仅尾空行／等价格式漂移还原。主区证据 `/private/tmp/canvas19-integrated-production.json`、`/private/tmp/canvas19-integrated-http.json`；未推送、未停止用户服务。最终双轴审查尚待执行，不预记审查通过。
