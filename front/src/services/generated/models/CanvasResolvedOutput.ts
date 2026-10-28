@@ -2,7 +2,9 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { DescriptionTextPayload } from './DescriptionTextPayload';
 import type { MediaOutputPayload } from './MediaOutputPayload';
+import type { ObjectReferencePayload } from './ObjectReferencePayload';
 import type { OutputIdentity } from './OutputIdentity';
 import type { TextOutputPayload } from './TextOutputPayload';
 /**
@@ -11,7 +13,7 @@ import type { TextOutputPayload } from './TextOutputPayload';
 export type CanvasResolvedOutput = {
     source: OutputIdentity;
     modality: string;
-    payload?: ((TextOutputPayload | MediaOutputPayload) | null);
+    payload?: ((TextOutputPayload | MediaOutputPayload | ObjectReferencePayload | DescriptionTextPayload) | null);
     text?: (string | null);
     file_id?: (string | null);
     token?: string;

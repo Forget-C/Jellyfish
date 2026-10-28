@@ -2,7 +2,7 @@
 from typing import Protocol
 from app.schemas.generation_canvas import (
     CardDefinition, CanvasResolvedOutput, CreativeBasisCard, MediaContentCard,
-    ModelCard, OutputIdentity, TextContentCard, TextOutputPayload, MediaOutputPayload,
+    ObjectDescriptionCard, ObjectReferencePayload, DescriptionTextPayload, ModelCard, OutputIdentity, TextContentCard, TextOutputPayload, MediaOutputPayload,
 )
 
 
@@ -17,8 +17,17 @@ class CardOutputHandler(Protocol):
 class ContentOutputHandler:
     """普通内容只发布自己的正文或具体文件。"""
     def publish(self, canvas_id, card, adopted_inputs, published_results):
-        """内容卡没有持续输入，来源定位不随正文出口传递。"""
+        """内容卡没有持续输入，描述来源只随明确描述出口提供。"""
         del adopted_inputs
+        if isinstance(card, ObjectDescriptionCard):
+            outputs = []
+            if card.text:
+                outputs.append(CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id, port_id='text', position=0),
+                    modality='text', payload=DescriptionTextPayload(text=card.text, object_id=card.object_id, name=card.name.strip(), category=card.category, source_locator=card.source_locator)))
+            if card.object_id and card.name.strip():
+                outputs.append(CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id, port_id='object', position=0),
+                    modality='text', payload=ObjectReferencePayload(object_id=card.object_id, name=card.name.strip(), category=card.category)))
+            return outputs
         if isinstance(card, (TextContentCard, CreativeBasisCard)):
             payload = TextOutputPayload(text=card.text) if card.text else None
             port = 'text'

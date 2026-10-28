@@ -9,6 +9,11 @@ description: "独立项目画布当前已实现的文档、保存及页面边界
 
 `generation_canvases` 保存项目归属、当前完整文档、内容 revision 和已登记卡片身份／类型。文档包含画布身份、项目身份、名称、schema_version、卡片、候选连接、每目标端口独立输入顺序和分组。文本卡使用 `content.text`、type_version 1、不可变 ID 和一份 text，允许空字符串。后端轻量 `CardDefinition` 使用具体卡类型，前端显式 `rendererRegistry` 和 `CardShell` 消费同一文档。布局、运行状态与运行结果不进入此文档。
 
+人物／物件描述使用 `content.object`，类别由 `category` 明确区分 `character`、`prop`、`costume`；场所描述使用 `content.place`，类别固定 `place`。本卡保存 `object_id`、`name`、`text` 与 `source_locator`，不选择资产、不创建旧场次实体。对象身份一旦保存不可替换；名称、描述、来源定位及物件类别可以编辑。同画布独立描述对象的名称去除首尾空白后唯一，跨画布可以重名；复制成独立对象须提供新身份和不同名称。未完成名称或身份可以保存，但没有有效对象引用。
+
+描述卡分别声明 `text` 与 `object` 出口。`text` 的 `DescriptionTextPayload` 保留本卡名称、身份、类别、正文和来源定位，模型仅展开所采用的正文。`object` 的 `ObjectReferencePayload` 仅提供身份、名称、类别，属于文本来源上的关系数据，不增加内容模态，也不能接入模型文本端口。它为后续名称关联与类别适配的业务端点提供统一引用；当前不添加占位接收方。改名后重新读取输出即取得新名称，已采用正文仍沿既有绑定保护断线和删除；未采用候选不额外确认。
+
+
 HTTP 边界为 `/api/v1/studio/generation-canvases/{project_id}` 的列表／创建，以及 `/{canvas_id}` 的读取／PUT 保存／删除。读取、写入和删除均限定项目归属，沿用现有项目 API 的访问边界。前端普通请求由 OpenAPI generated client 发出。
 
 保存提交 `request_id`、`expected_revision` 和完整 `document`。事务先锁文档行，再核实持久回执，最后执行 revision CAS。文档更新和 `generation_canvas_save_receipts` 在同一事务提交。同请求重放原回执，不因后续 revision 改变；同身份不同正文返回 HTTP 409 `IDEMPOTENCY_CONFLICT`，过期修订返回 HTTP 409 `REVISION_CONFLICT`。结构、类型和身份错误返回带 `code`、`severity`、`message`、`target`、`blocks` 的文档诊断。画布领域异常使用标准 `{code,message,data,meta}` 封套，`data` 保留类型化诊断；不从 message 反解析字段。普通 HTTP 异常仍保持原有 `data=null`，命令封套基本校验沿用统一 422 处理。
