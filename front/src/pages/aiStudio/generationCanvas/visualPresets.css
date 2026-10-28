@@ -1,0 +1,5 @@
+.canvas-preset-gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 12px; margin: 16px 0; }
+.canvas-preset-gallery section { padding: 8px; border: 1px solid var(--wb-border); border-radius: 8px; }
+.canvas-preset-gallery svg, .canvas-preset-comparison svg, .canvas-preset-comparison video { display: block; width: 100%; border-radius: 8px; }
+.canvas-preset-comparison { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 16px; }
+.canvas-preset-comparison section { min-width: 0; }

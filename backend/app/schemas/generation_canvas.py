@@ -1,4 +1,5 @@
 """首个画布消费者使用的轻量类型契约，不包含布局或运行状态。"""
+from app.core.contracts.generation_canvas import StyleDesignFields
 from typing import Annotated, Any, ClassVar, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.schemas.common import ApiResponse
@@ -460,6 +461,13 @@ class SoundArrangementCard(SoundDirectionCard):
     input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'audio_example')
 
 
+class VisualStyleCard(PerformanceDirectionCard):
+    """独立风格整卡采用，内置预设应用后成为本卡普通字段。"""
+    type: Literal['direction.style'] = Field(default='direction.style', json_schema_extra={'enum': ['direction.style']})
+    fields: StyleDesignFields = Field(default_factory=StyleDesignFields)
+    input_ports: ClassVar[tuple[str, ...]] = ('image_example', 'video_example')
+
+
 class PhotographyMediaExample(DesignMediaExample):
     """摄影示例可定位明确声明的字段，文件仍不随文本采用。"""
     field_id: PhotographyFieldKey | None = None
@@ -488,7 +496,7 @@ class CanvasDocument(BaseModel):
     project_id: str
     name: str = Field(min_length=1, max_length=255)
     schema_version: Literal[2] = 2
-    cards: list[PhotographyCard | DialogueCard | SoundArrangementCard | SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | ObjectDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard] = Field(default_factory=list)
+    cards: list[VisualStyleCard | PhotographyCard | DialogueCard | SoundArrangementCard | SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | ObjectDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard] = Field(default_factory=list)
     edges: list[GenerationCanvasEdge] = Field(default_factory=list)
     input_order: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
     groups: list[GenerationCanvasGroup] = Field(default_factory=list)
