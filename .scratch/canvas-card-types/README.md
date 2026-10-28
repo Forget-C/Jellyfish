@@ -8,7 +8,7 @@
 
 ## 任务与阻塞关系
 
-编号表示依赖顺序，不要求严格串行执行。01–15、18 共十六票已实现并集成；16／17 进行中，19 等待这两票完成，验证证据在下方实施记录及相应票据中维护。
+编号表示依赖顺序，不要求严格串行执行。01–16、18 共十七票已实现并集成；17 进行中，19 等待17完成，验证证据在下方实施记录及相应票据中维护。
 
 | 票据 | Blocked by | 目录负责内容 |
 | --- | --- | --- |
@@ -232,3 +232,5 @@ flowchart TD
 - 2026-10-29：无冲突集成13（分支HEAD `eda252d1`，显式合并 `7a8c0b4f`），Completion更新为integrated，分诊Status不变。合后摄影／风格HTTP与真实Worker组合 **22 passed**（2.92s）、Node24.22.1 typecheck通过；复用同一实现全部画布239 passed／28 skipped、Pylint10及真实预设／摄影页面证据。主区生产app导出、8000实际HTTP与提交OpenAPI精确一致；8000本次已恢复，标准 `openapi:update` 成功，418处纯尾空行生成差异经精确核对后剔除。证据 `/private/tmp/canvas13-integrated-production.json`、`/private/tmp/canvas13-integrated-http.json`。此前14／18标准更新的环境阻塞为历史记录，本次最新主区契约已完成标准同步；MySQL和受控供应商／存储限制保留。01–15及18共十六票集成，16／17进行中，19待其完成；未推送、未操作其他工作树。
 
 - 16交付前已同步13实现及最新主区 `b12275a1`；解决共享契约／导航／生成类型冲突后，连续性／风格／摄影39 passed、Pylint10、Node24 typecheck及真实Chrome完整页面再次通过。当前HTTP生产schema与提交精确一致；风格入口归“画面设计”，三类约束归“连续性与约束”。最后证据与合并边界见16 Comments，Completion仍为implemented待主区集成。
+
+- 2026-10-29：无冲突集成16（分支HEAD `758cb145`，显式合并 `263fc51e`），Completion更新为integrated，分诊Status不变。合后连续性／风格／摄影／叙事HTTP与真实Worker组合 **56 passed**（6.66s）、Node24.22.1 typecheck及差异检查通过；复用同一产品实现全画布249 passed／28 skipped、Pylint10与真实Chrome证据。当前主区app导出、8000实际HTTP和提交OpenAPI精确一致，标准 `openapi:update` 成功，425处纯尾空行generated漂移经字节核对剔除；生产与HTTP证据在 `/private/tmp/canvas16-integrated-production.json`、`/private/tmp/canvas16-integrated-http.json`。保留限定空间规则／事实的结构引用兼容、风格和所有联合类型；不扩大其他接收卡资格。01–16及18共十七票集成，17进行中，19等待17；外部供应商／存储替身及MySQL未运行限制保持，未推送、未操作其他工作树。
