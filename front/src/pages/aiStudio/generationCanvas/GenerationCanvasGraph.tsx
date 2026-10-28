@@ -1,4 +1,5 @@
 import { constraintSummary, type ConstraintCard } from './ConstraintDirectionEditor'
+import type { VisualStyleCard } from '../../../services/generated'
 import { narrativeSummary, type NarrativeCard } from './NarrativeDirectionEditor'
 import { photographySummary } from './PhotographyEditor'
 import type { PhotographyCard } from '../../../services/generated'
@@ -235,7 +236,7 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false, ru
         if (['direction.space_rule', 'direction.continuity', 'direction.fact'].includes(type)) return group === '连续性与约束'
         if (['direction.narrative', 'direction.beat', 'direction.event', 'direction.shot'].includes(type)) return group === '叙事与镜头'
         if (['direction.dialogue', 'direction.sound'].includes(type)) return group === '声音设计'
-        if (type === 'direction.photography') return group === '画面设计'
+        if (['direction.style', 'direction.photography'].includes(type)) return group === '画面设计'
         return group === '表演与调度'
       }).map(([type, title]) => <Button key={type} disabled={readonly} onClick={() => add(type)}>添加{title}</Button>)}</div>)}</section>
     </nav>
@@ -318,7 +319,7 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false, ru
               if (Math.abs(width - (size?.width || 400)) > 2 || Math.abs(height - (size?.height || measured[card.id]?.height || height)) > 2)
                 layout.setView(previous => ({ ...previous, sizes: { ...previous.sizes, [card.id]: { width, height } } }))
             }} onRemove={() => removeCard(card.id)} inputs={inputPorts(card).map(name => port(card, name, true))} outputs={outputPorts(card).map(name => port(card, name, false))}>
-            <p className="canvas-card-summary">{['direction.space_rule', 'direction.continuity', 'direction.fact'].includes(card.type || '') ? constraintSummary(card as ConstraintCard) : card.type === 'direction.photography' ? photographySummary(card as PhotographyCard) : ['direction.dialogue', 'direction.sound'].includes(card.type || '') ? soundSummary(card as SoundCard) : ['direction.narrative', 'direction.beat', 'direction.event', 'direction.shot'].includes(card.type || '') ? narrativeSummary(card as NarrativeCard) : ['direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'].includes(card.type || '') ? spatialSummary(card as SpatialCard) : card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard) : 'title' in card ? `${card.title || '命名图片参考'} · ${card.angle || '正面'} · ${card.image_binding ? '已选主图' : '缺少主图'}` : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '模型配置、输入采用与运行记录' : 'file_id' in card && card.file_id ? '已选择媒体，打开详情预览' : '未选择媒体'}</p>
+            <p className="canvas-card-summary">{card.type === 'direction.style' ? Object.values((card as VisualStyleCard).fields || {}).map(value => value.text).filter(Boolean).join(' · ') || '风格方向、视觉特征、材质与色彩待编辑' : ['direction.space_rule', 'direction.continuity', 'direction.fact'].includes(card.type || '') ? constraintSummary(card as ConstraintCard) : card.type === 'direction.photography' ? photographySummary(card as PhotographyCard) : ['direction.dialogue', 'direction.sound'].includes(card.type || '') ? soundSummary(card as SoundCard) : ['direction.narrative', 'direction.beat', 'direction.event', 'direction.shot'].includes(card.type || '') ? narrativeSummary(card as NarrativeCard) : ['direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'].includes(card.type || '') ? spatialSummary(card as SpatialCard) : card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard) : 'title' in card ? `${card.title || '命名图片参考'} · ${card.angle || '正面'} · ${card.image_binding ? '已选主图' : '缺少主图'}` : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '模型配置、输入采用与运行记录' : 'file_id' in card && card.file_id ? '已选择媒体，打开详情预览' : '未选择媒体'}</p>
           </CardShell>
         })}
       </div>

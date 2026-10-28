@@ -322,16 +322,26 @@ class FrameState(BaseModel):
     label: str
 
 
+class StyleDesignFields(BaseModel):
+    """风格只保留可编辑创作意图；示例文件不属于设计输出。"""
+    model_config = ConfigDict(extra='forbid')
+    direction: DesignField = Field(default_factory=DesignField)
+    visual_features: DesignField = Field(default_factory=DesignField)
+    materials: DesignField = Field(default_factory=DesignField)
+    colors: DesignField = Field(default_factory=DesignField)
+    notes: DesignField = Field(default_factory=DesignField)
+
+
 class DesignTextPayload(BaseModel):
     """本卡完整设计及直接采用的必要对象，不包含祖先正文或示例媒体。"""
     model_config = ConfigDict(extra='forbid')
     kind: Literal['design'] = Field(default='design', json_schema_extra={'enum': ['design']})
-    design_type: Literal['direction.space_rule', 'direction.continuity', 'direction.fact', 'direction.situation', 'direction.performance', 'direction.performance_rule', 'direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment', 'direction.narrative', 'direction.beat', 'direction.event', 'direction.shot', 'direction.dialogue', 'direction.sound']
+    design_type: Literal['direction.style', 'direction.space_rule', 'direction.continuity', 'direction.fact', 'direction.situation', 'direction.performance', 'direction.performance_rule', 'direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment', 'direction.narrative', 'direction.beat', 'direction.event', 'direction.shot', 'direction.dialogue', 'direction.sound']
     adoption: Literal['whole_card'] = Field(default='whole_card', json_schema_extra={'enum': ['whole_card']})
     text: str
     frame_states: list[FrameState] = Field(default_factory=list, exclude_if=lambda value: not value)
     requires_frame_target: bool = Field(default=False, exclude_if=lambda value: not value)
-    fields: SpaceRuleFields | ContinuityFields | ImmutableFactFields | NarrativeOverviewFields | NarrativeBeatFields | NarrativeEventFields | ShotDesignFields | PerformanceDesignFields | AnchorDesignFields | BlockingDesignFields | ActivityDesignFields | EnvironmentDesignFields | SoundDesignFields
+    fields: StyleDesignFields | SpaceRuleFields | ContinuityFields | ImmutableFactFields | NarrativeOverviewFields | NarrativeBeatFields | NarrativeEventFields | ShotDesignFields | PerformanceDesignFields | AnchorDesignFields | BlockingDesignFields | ActivityDesignFields | EnvironmentDesignFields | SoundDesignFields
     scope: DesignScope
     objects: list[ObjectReferencePayload] = Field(default_factory=list)
     spatial_relations: SpatialDesignRelations | None = Field(default=None, exclude_if=lambda value: value is None)
