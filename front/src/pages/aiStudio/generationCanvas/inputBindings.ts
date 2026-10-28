@@ -33,7 +33,7 @@ export function withEditorPrompt(card: GenerationCard, prompt: EditorPromptDocum
     let binding = bindings.find(value => key(value.source) === key(reference.source) && value.input_port === input_port && (value.subject_name || '') === (subject_name || ''))
     if (!binding) {
       const existing = card.input_bindings?.find(value => key(value.source) === key(reference.source) && value.input_port === input_port && (value.subject_name || '') === (subject_name || ''))
-      binding = { id: existing?.id || crypto.randomUUID(), source: reference.source, input_port, subject_name }
+      binding = { ...existing, id: existing?.id || crypto.randomUUID(), source: reference.source, input_port, subject_name }
       bindings.push(binding)
     }
     return { id: reference.id, kind: 'reference', binding_id: binding.id }
@@ -50,7 +50,7 @@ export function withEditorPrompt(card: GenerationCard, prompt: EditorPromptDocum
 /** 取消采用同时移除正文中的同一绑定引用，不保留第二份选择状态。 */
 export function withoutInputBinding(card: GenerationCard, id: string): GenerationCard {
   if (!('prompt' in card)) return card
-  return { ...card, input_bindings: card.input_bindings?.filter(binding => binding.id !== id),
+  return { ...card, ...('frame_targets' in card ? { frame_targets: card.frame_targets?.filter(target => target.binding_id !== id) } : {}), input_bindings: card.input_bindings?.filter(binding => binding.id !== id),
     prompt: { segments: card.prompt?.segments?.filter(segment => segment.kind !== 'reference' || segment.binding_id !== id)
       .map(segment => segment.kind === 'instruction' ? { ...segment, references: segment.references?.filter(reference => reference.binding_id !== id) } : segment) } }
 }

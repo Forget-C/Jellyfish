@@ -1,6 +1,6 @@
 """空间设计只展开本卡字段和直接选择的身份，媒体关联不成为输出。"""
 from app.core.contracts.generation_canvas import (
-    DesignTextPayload, SpatialDesignRelations, DesignField, AnchorDesignFields, BlockingDesignFields, ActivityDesignFields, EnvironmentDesignFields, SpatialReferencePayload,
+    FrameState, DesignTextPayload, SpatialDesignRelations, DesignField, AnchorDesignFields, BlockingDesignFields, ActivityDesignFields, EnvironmentDesignFields, SpatialReferencePayload,
     ObjectReferencePayload, OutputIdentity,
 )
 from app.schemas.generation_canvas import SpatialDirectionCard, SpatialAnchorCard, CanvasResolvedOutput
@@ -42,11 +42,13 @@ def publish_spatial(canvas_id, card, adopted_inputs):
     for label, value in [('适用范围', card.scope.description), ('制作阶段', card.scope.phase), ('适用条件', card.scope.condition), ('来源', card.source_locator)]:
         if value:
             lines.append(label + '：' + value)
+    exit_state = getattr(card, 'exit_state', None)
+    frame_states = [FrameState(id='field:exit_state', label='结束状态')] if exit_state and exit_state.state not in ('empty', 'not_applicable') and (exit_state.text or exit_state.state == 'absent') else []
     outputs = []
     if lines:
         participant = next((binding.source.object_id for binding in card.input_bindings if binding.input_port == 'participant'), None)
         outputs.append(CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id, port_id='text', position=0), modality='text',
-            payload=DesignTextPayload(design_type=card.type, text='\n'.join(lines), fields=fields, scope=card.scope,
+            payload=DesignTextPayload(frame_states=frame_states, design_type=card.type, text='\n'.join(lines), fields=fields, scope=card.scope,
                 objects=objects, references=references, spatial_relations=relations, narrative_relations=narrative_relations, participant_id=participant, source_locator=card.source_locator)))
     if card.type not in ('direction.anchor', 'direction.blocking'):
         return outputs

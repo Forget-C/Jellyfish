@@ -1,4 +1,4 @@
-import { Alert, Input, InputNumber, Select, Space } from 'antd'
+import { Alert, Input, Select } from 'antd'
 import type { CharacterPerformanceCard, CharacterSituationCard, DesignTextPayload, PerformanceRuleCard, ObjectReferencePayload, NarrativeReferencePayload } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
 import { useCardCandidates } from './useCardCandidates'
@@ -7,9 +7,10 @@ import { sourceKey } from './promptRules'
 import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
 import { DesignFieldEditor as FieldEditor } from './DesignFieldEditor'
-import { MediaPreview } from './MediaContentEditor'
+import { DesignMediaExamples } from './DesignMediaExamples'
 
 export type PerformanceCard = CharacterPerformanceCard | CharacterSituationCard | PerformanceRuleCard
+
 function SituationFields({ card, onChange }: { card: CharacterSituationCard; onChange: (card: PerformanceCard) => void }) {
   return <><FieldEditor label="当前处境" purpose="background" value={card.situation} onChange={situation => onChange({ ...card, situation })} />
     <FieldEditor label="人物关系" purpose="background" value={card.relationship} onChange={relationship => onChange({ ...card, relationship })} /></>
@@ -47,7 +48,6 @@ export function PerformanceDirectionEditor({ card: raw, document, savedRevision,
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs, false)
   const bindings = card.input_bindings || [], examples = card.examples || []
   const update = (next: PerformanceCard) => onChange(next)
-  const exampleUpdate = (id: string, patch: Partial<(typeof examples)[number]>) => update({ ...card, examples: examples.map(item => item.id === id ? { ...item, ...patch } : item) })
   return <>
     <p>按完整设计采用；背景解释情境，设计表达呈现，约束保留限制。对象关系仅提供身份和名称；描述或图片须在模型端另行直接采用。</p>
     {resolved.error && <Alert type="warning" message={resolved.error} />}
@@ -79,16 +79,7 @@ export function PerformanceDirectionEditor({ card: raw, document, savedRevision,
       <Input aria-label="适用条件" value={card.scope?.condition} onChange={event => update({ ...card, scope: { ...card.scope, condition: event.target.value } })} />
       <Input aria-label="设计来源" value={card.source_locator} onChange={event => update({ ...card, source_locator: event.target.value })} />
     </details>
-    {card.type !== 'direction.situation' && <details><summary>正向示例与反例</summary><p>示例不随设计文本传给模型；需要时请在模型端直接采用。</p>
-      {resolved.candidates.filter(item => ['image', 'video'].includes(item.modality) && item.file_id).map(item => <WorkbenchButton key={sourceKey(item.source)} disabled={disabled || item.available === false} onClick={() => update({ ...card, examples: [...examples, { id: crypto.randomUUID(), source: item.source, file_id: item.file_id!, purpose: 'positive' }] })}>关联示例 {item.token}</WorkbenchButton>)}
-      {examples.map(example => <section key={example.id} aria-label={`示例 ${example.id}`}><MediaPreview fileId={example.file_id} type={example.source.port_id === 'video' ? 'video' : 'image'} />
-        <Select aria-label="示例用途" value={example.purpose} options={[{ value: 'positive', label: '正向示例' }, { value: 'negative', label: '反例' }]} onChange={purpose => exampleUpdate(example.id, { purpose })} />
-        <Input aria-label="示例说明" value={example.description} onChange={event => exampleUpdate(example.id, { description: event.target.value })} />
-        {example.source.port_id === 'video' && <Space><InputNumber aria-label="示例起点毫秒" min={0} value={example.start_ms} onChange={start => exampleUpdate(example.id, start === null ? { start_ms: null, end_ms: null } : { start_ms: start, end_ms: Math.max(example.end_ms || 0, start + 1) })} />
-          <InputNumber aria-label="示例终点毫秒" min={(example.start_ms || 0) + 1} value={example.end_ms} onChange={end => exampleUpdate(example.id, end === null ? { start_ms: null, end_ms: null } : { start_ms: example.start_ms || 0, end_ms: end })} /></Space>}
-        <WorkbenchButton disabled={disabled} onClick={() => update({ ...card, examples: examples.filter(value => value.id !== example.id) })}>取消示例</WorkbenchButton>
-      </section>)}
-    </details>}
+    {card.type !== 'direction.situation' && <DesignMediaExamples ports={inputPorts(card)} examples={examples} candidates={resolved.candidates} disabled={disabled} onChange={next => update({ ...card, examples: next })} />}
     <section aria-label="完整设计输出"><h3>已保存完整设计 · revision {resolved.revision}</h3>{resolved.outputs.map(item => <CanvasTextPreview key={sourceKey(item.source)} text={item.text || ''} label="完整设计" />)}</section>
   </>
 }

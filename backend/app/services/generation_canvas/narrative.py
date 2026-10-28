@@ -1,6 +1,6 @@
 """叙事设计只发布本卡内容；故事对象引用与全文输出分开。"""
 from app.core.contracts.generation_canvas import (
-    DesignField, DesignTextPayload, NarrativeOverviewFields, NarrativeBeatFields,
+    FrameState, DesignField, DesignTextPayload, NarrativeOverviewFields, NarrativeBeatFields,
     NarrativeEventFields, ShotDesignFields, NarrativeReferencePayload,
     NarrativeDesignRelation, ObjectReferencePayload, SpatialReferencePayload, OutputIdentity,
 )
@@ -51,7 +51,8 @@ def publish_narrative(canvas_id, card, adopted_inputs):
             payload=DesignTextPayload(design_type=card.type, text='\n'.join(lines), fields=fields, scope=card.scope,
                 objects=[row.reference for row in relations if isinstance(row.reference, ObjectReferencePayload)],
                 references=[row.reference for row in relations if isinstance(row.reference, (SpatialReferencePayload, NarrativeReferencePayload))],
-                narrative_relations=relations, source_locator=card.source_locator)))
+                narrative_relations=relations, source_locator=card.source_locator,
+                frame_states=[FrameState(id='field:visible_result', label='可见结果')] if card.type == 'direction.shot' and card.visible_result.state not in ('empty', 'not_applicable') and card.visible_result.text else [])))
     category = card.type.removeprefix('direction.')
     identifier = getattr(card, category + '_id', None)
     if identifier and card.name.strip():

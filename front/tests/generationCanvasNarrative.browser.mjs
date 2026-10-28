@@ -38,16 +38,20 @@ try {
   const document = { ...canvas.document, cards: [
     { id: 'event', type: 'direction.event', event_id: 'bell', name: '钟响', action_change: { state: 'fact', text: '秘密事件正文' } },
     { id: 'beat', type: 'direction.beat', beat_id: 'decision', name: '决定' },
+    { id: 'beat2', type: 'direction.beat', beat_id: 'escape', name: '逃离' },
     { id: 'overview', type: 'direction.narrative', name: '概览' },
     { id: 'shot', type: 'direction.shot', shot_id: 'reaction', name: '反应镜头' },
     { id: 'performance', type: 'direction.performance' },
+    { id: 'photo', type: 'direction.photography', fields: { composition: { state: 'proposal', text: '人物居右' } } },
     { id: 'consumer', type: 'model.image', model_id: 'canvas-image-model' }],
     edges: [
       { id: 'event', source_card: 'event', source_port: 'event', target_card: 'shot', target_port: 'related_event' },
       { id: 'beat', source_card: 'beat', source_port: 'beat', target_card: 'shot', target_port: 'covered_beat' },
+      { id: 'beat2', source_card: 'beat2', source_port: 'beat', target_card: 'shot', target_port: 'covered_beat' },
       { id: 'received', source_card: 'event', source_port: 'event', target_card: 'performance', target_port: 'received_event' },
+      { id: 'photo', source_card: 'shot', source_port: 'shot', target_card: 'photo', target_port: 'shot' },
       { id: 'design', source_card: 'shot', source_port: 'text', target_card: 'consumer', target_port: 'text' }],
-    input_order: { shot: { related_event: ['event'], covered_beat: ['beat'] }, performance: { received_event: ['received'] }, consumer: { text: ['design'] } } }
+    input_order: { photo: { shot: ['photo'] }, shot: { related_event: ['event'], covered_beat: ['beat', 'beat2'] }, performance: { received_event: ['received'] }, consumer: { text: ['design'] } } }
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
   assert.ok(seeded.ok, await seeded.text())
   await page.goto(`http://127.0.0.1:4293/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
@@ -65,6 +69,9 @@ try {
   await poll(state => state.document.cards.find(item => item.id === 'beat').expected_change?.text === '获得主动')
   await open('shot')
   await card.getByRole('button', { name: '选择覆盖节拍 决定', exact: true }).click()
+  await card.getByRole('button', { name: '选择覆盖节拍 逃离', exact: true }).click()
+  await card.getByRole('button', { name: '上移覆盖节拍 逃离', exact: true }).click()
+  await poll(state => state.document.cards.find(item => item.id === 'shot').input_bindings?.filter(binding => binding.input_port === 'covered_beat')[0]?.source.object_id === 'escape')
   await card.getByRole('button', { name: '选择关联事件 钟响', exact: true }).click()
   await card.getByRole('textbox', { name: '可见结果内容', exact: true }).fill('看向门口')
   await card.getByRole('textbox', { name: '预计时长内容', exact: true }).fill('约五秒，尚未拍摄')
@@ -74,9 +81,19 @@ try {
   await card.getByRole('button', { name: '选择接收事件 钟响', exact: true }).click()
   await card.getByRole('textbox', { name: '身体动作内容', exact: true }).fill('抬头')
   await poll(state => state.document.cards.find(item => item.id === 'performance').input_bindings?.length === 1)
+  await open('photo')
+  await card.getByRole('button', { name: '选择所属镜头 反应镜头', exact: true }).click()
+  await poll(state => state.document.cards.find(item => item.id === 'photo').input_bindings?.length === 1)
+  const photoOutput = (await (await fetch(`${base}/${canvas.id}/cards/photo/outputs`)).json()).data.outputs[0]
+  assert.match(photoOutput.text, /所属镜头：反应镜头/)
+  assert.doesNotMatch(photoOutput.text, /看向门口|约五秒|秘密事件正文/)
   await open('consumer')
   await card.getByRole('button', { name: '采用 @文本1', exact: true }).click()
   await poll(state => state.document.cards.find(item => item.id === 'consumer').input_bindings?.length === 1)
+  await card.getByRole('combobox', { name: '画面目标 @文本1', exact: true }).click()
+  await card.getByRole('combobox', { name: '画面目标 @文本1', exact: true }).press('ArrowDown')
+  await card.getByRole('combobox', { name: '画面目标 @文本1', exact: true }).press('Enter')
+  await poll(state => state.document.cards.find(item => item.id === 'consumer').frame_targets?.[0]?.state_id === 'field:visible_result')
   const compiled = (await (await fetch(`${base}/${canvas.id}/cards/consumer/compile`)).json()).data
   assert.match(compiled.text, /看向门口/)
   assert.match(compiled.text, /约五秒，尚未拍摄/)
@@ -85,6 +102,8 @@ try {
   await open('shot')
   assert.equal(await card.getByRole('textbox', { name: '可见结果内容', exact: true }).inputValue(), '看向门口')
   await card.getByRole('button', { name: '取消覆盖节拍 决定', exact: true }).waitFor()
+  const reopened = await read()
+  assert.deepEqual(reopened.document.cards.find(item => item.id === 'shot').input_bindings.filter(binding => binding.input_port === 'covered_beat').map(binding => binding.source.object_id), ['escape', 'decision'])
   await page.setViewportSize({ width: 390, height: 844 })
   assert.equal(await card.evaluate(element => element.scrollWidth <= element.clientWidth), true)
   await page.screenshot({ path: join(output, 'narrative-mobile.png'), fullPage: true })

@@ -194,3 +194,41 @@ async def test_renaming_copying_and_invalidating_story_sources_preserves_identit
     response = await client.put(url, json={'request_id': 'invalidate', 'expected_revision': 2, 'document': doc})
     assert response.status_code == 422 and response.json()['detail']['code'] == 'INVALID_NARRATIVE_BINDING'
     assert response.json()['detail']['target']['path'] == ['input_bindings', 'event']
+
+@pytest.mark.asyncio
+async def test_photography_can_select_one_shot_without_reading_its_design(canvas_client):
+    canvas = (await canvas_client.post('/canvases/p', json={'name': '摄影所属镜头'})).json()['data']
+    url = f"/canvases/p/{canvas['id']}"
+    source = {'canvas_id': canvas['id'], 'card_id': 'shot', 'port_id': 'shot', 'position': 0, 'object_id': 'reaction'}
+    doc = canvas['document']
+    doc.update(cards=[{'id': 'shot', 'type': 'direction.shot', 'shot_id': 'reaction', 'name': '反应镜头', 'visible_result': {'state': 'proposal', 'text': '不跨级传递的镜头全文'}},
+        {'id': 'photo', 'type': 'direction.photography', 'fields': {'composition': {'state': 'proposal', 'text': '人物居右'}}, 'input_bindings': [{'id': 'shot', 'input_port': 'shot', 'source': source}]}],
+        edges=[{'id': 'edge', 'source_card': 'shot', 'source_port': 'shot', 'target_card': 'photo', 'target_port': 'shot'}], input_order={'photo': {'shot': ['edge']}})
+    response = await canvas_client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
+    assert response.status_code == 200, response.text
+    output = (await canvas_client.get(url + '/cards/photo/outputs')).json()['data']['outputs'][0]
+    assert output['payload']['shot'] == {'kind': 'narrative_reference', 'category': 'shot', 'reference_id': 'reaction', 'name': '反应镜头'}
+    assert '所属镜头：反应镜头' in output['text'] and '不跨级' not in output['text']
+    doc['cards'].insert(1, {'id': 'other', 'type': 'direction.shot', 'shot_id': 'other', 'name': '另一个镜头'})
+    doc['cards'][2]['input_bindings'].append({'id': 'other', 'input_port': 'shot', 'source': {**source, 'card_id': 'other', 'object_id': 'other'}})
+    doc['edges'].append({'id': 'other', 'source_card': 'other', 'source_port': 'shot', 'target_card': 'photo', 'target_port': 'shot'})
+    doc['input_order']['photo']['shot'].append('other')
+    response = await canvas_client.put(url, json={'request_id': 'two', 'expected_revision': 1, 'document': doc})
+    assert response.status_code == 422 and response.json()['detail']['code'] == 'SHOT_COUNT_EXCEEDED'
+
+@pytest.mark.asyncio
+async def test_image_target_uses_shot_visible_result_and_keeps_whole_design(canvas_client):
+    canvas = (await canvas_client.post('/canvases/p', json={'name': '镜头画面目标'})).json()['data']
+    url = f"/canvases/p/{canvas['id']}"
+    doc = canvas['document']
+    doc.update(cards=[{'id': 'shot', 'type': 'direction.shot', 'name': '决定', 'visible_result': {'state': 'proposal', 'text': '握住钥匙'}, 'estimated_duration': {'state': 'undecided', 'text': '约五秒'}},
+        {'id': 'image', 'type': 'model.image', 'input_bindings': [{'id': 'design', 'input_port': 'text', 'source': {'canvas_id': canvas['id'], 'card_id': 'shot', 'port_id': 'text', 'position': 0}}], 'frame_targets': [{'binding_id': 'design', 'state_id': 'field:visible_result'}]}],
+        edges=[{'id': 'design', 'source_card': 'shot', 'source_port': 'text', 'target_card': 'image', 'target_port': 'text'}], input_order={'image': {'text': ['design']}})
+    response = await canvas_client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
+    assert response.status_code == 200, response.text
+    compiled = (await canvas_client.get(url + '/cards/image/compile')).json()['data']
+    assert not any(row['code'] == 'FRAME_TARGET_MISSING' for row in compiled['diagnostics'])
+    assert '画面目标：可见结果' in compiled['text']
+    assert compiled['used'][0]['payload']['frame_states'] == [{'id': 'field:visible_result', 'label': '可见结果'}]
+    assert '握住钥匙' in compiled['text'] and '约五秒' in compiled['text']
+    assert compiled['used'][0]['payload']['adoption'] == 'whole_card'

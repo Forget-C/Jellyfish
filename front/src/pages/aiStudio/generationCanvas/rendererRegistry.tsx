@@ -1,5 +1,7 @@
 import { NarrativeDirectionEditor } from './NarrativeDirectionEditor'
 import { SpatialDirectionEditor } from './SpatialDirectionEditor'
+import { PhotographyEditor } from './PhotographyEditor'
+import { PhotographyInputScope } from './PhotographyInputScope'
 import { NamedImageSummary } from './NamedImageSummary'
 import type { ComponentType, ReactNode } from 'react'
 import { Alert, Button, Select, Space } from 'antd'
@@ -71,7 +73,7 @@ function ModelRenderer({ card: raw, savedRevision, savedCard, document, disabled
       <small>已保存 revision {resolved.revision ?? savedRevision} · 本地修改保存后更新</small>
       {card.type === 'model.image' && <p>文本依据与参考图片分别采用；采用顺序决定图片提交顺序。当前输出位置随新结果更新，固定图片请在运行历史中明确另存。</p>}
       {card.type === 'model.image' && capability && <small>参考图片上限：{capability.max_reference_images ?? '未声明'} · {capability.supports_duplicate_reference_images ? '允许重复图片文件' : '不允许重复图片文件'}</small>}
-      {!resolved.loading && resolved.candidates.map(output => {
+      {resolved.candidates.map(output => {
         const binding = bindings.find(value => sourceKey(value.source) === sourceKey(output.source))
         const index = binding ? bindings.indexOf(binding) : -1
         return <div key={sourceKey(output.source)}>
@@ -79,6 +81,7 @@ function ModelRenderer({ card: raw, savedRevision, savedCard, document, disabled
           {output.available === false ? <small>来源输出缺失</small> : output.modality === 'text'
             ? <CanvasTextPreview text={output.text || ''} label="已保存来源" /> : <small>{output.modality} · {output.file_id}</small>}
           <NamedImageSummary output={output} />
+          <PhotographyInputScope card={card} output={output} binding={binding} onChange={onChange} disabled={disabled} />
           {output.basis_current === false && <small>依据已变，需重新生成来源</small>}
           {card.type === 'model.image' && output.modality === 'image' && output.available !== false && output.file_id && <details><summary>预览 {output.token}</summary><MediaPreview fileId={output.file_id} type="image" /></details>}
           {card.type === 'model.image' && ['text', 'image'].includes(output.modality) && <Space wrap>
@@ -95,6 +98,7 @@ function ModelRenderer({ card: raw, savedRevision, savedCard, document, disabled
       {(resolved.compiled?.diagnostics || []).map((diagnostic, index) => <Alert key={`${diagnostic.code}:${index}`} type={diagnostic.severity === 'warning' ? 'warning' : 'error'}
         message={`${diagnostic.code}: ${diagnostic.message}`} />)}
     </section>
+    {card.type !== 'model.image' && resolved.candidates.map(output => <PhotographyInputScope key={sourceKey(output.source)} card={card} output={output} binding={bindings.find(value => sourceKey(value.source) === sourceKey(output.source))} onChange={onChange} disabled={disabled} />)}
     {card.type === 'model.video' && <VideoInputBindings card={card as VideoModelCard} candidates={resolved.candidates} loading={resolved.loading} capability={capability} disabled={disabled} onChange={onChange} />}
     <Button disabled={disabled || busy || runDisabled} onClick={() => onTargetPrecheck?.()}>运行到此处</Button>
     <ExperimentComposer options={<><Select aria-label="选择模型" placeholder="选择模型" allowClear value={card.model_id || undefined} style={{ minWidth: 180 }}
@@ -125,6 +129,7 @@ export const rendererRegistry: Record<string, ComponentType<CardRendererProps>> 
   'direction.blocking': SpatialDirectionEditor,
   'direction.activity': SpatialDirectionEditor,
   'direction.environment': SpatialDirectionEditor,
+  'direction.photography': PhotographyEditor,
   'direction.situation': PerformanceDirectionEditor,
   'direction.dialogue': SoundDirectionEditor,
   'direction.sound': SoundDirectionEditor,
