@@ -239,3 +239,5 @@ flowchart TD
 - 16交付前已同步13实现及最新主区 `b12275a1`；解决共享契约／导航／生成类型冲突后，连续性／风格／摄影39 passed、Pylint10、Node24 typecheck及真实Chrome完整页面再次通过。当前HTTP生产schema与提交精确一致；风格入口归“画面设计”，三类约束归“连续性与约束”。最后证据与合并边界见16 Comments，Completion仍为implemented待主区集成。
 
 - 2026-10-29：无冲突集成16（分支HEAD `758cb145`，显式合并 `263fc51e`），Completion更新为integrated，分诊Status不变。合后连续性／风格／摄影／叙事HTTP与真实Worker组合 **56 passed**（6.66s）、Node24.22.1 typecheck及差异检查通过；复用同一产品实现全画布249 passed／28 skipped、Pylint10与真实Chrome证据。当前主区app导出、8000实际HTTP和提交OpenAPI精确一致，标准 `openapi:update` 成功，425处纯尾空行generated漂移经字节核对剔除；生产与HTTP证据在 `/private/tmp/canvas16-integrated-production.json`、`/private/tmp/canvas16-integrated-http.json`。保留限定空间规则／事实的结构引用兼容、风格和所有联合类型；不扩大其他接收卡资格。01–16及18共十七票集成，17进行中，19等待17；外部供应商／存储替身及MySQL未运行限制保持，未推送、未操作其他工作树。
+
+- 17交付前已合主区最终 `fb1f95d2`，13风格与16连续性字段／编辑／预设／固定示例全部保留；合后全画布271 passed／28 skipped、Pylint10、Node24typecheck，真实Chrome要求卡统一入口15.7s再次通过，当前WT生产schema精确等提交OpenAPI。证据 `/private/tmp/canvas17-after16-guidance`；implemented待主区merger复验，未推送。
