@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented (awaiting integration)
+**Completion:** integrated
 
 - [x] 本卡编辑立即反馈，有修改时约每 1 秒合并提交最新内容；持续输入期间也保存，无修改不发送请求，不改成停止输入后的去抖。
 - [x] 同一画布保存请求串行；在途期间只保留最新待保存内容，不为每次输入排队，回执推进保存基线而不覆盖后续编辑。
@@ -47,3 +47,9 @@
 ### 集成基线复验
 
 - 以 `[chore] 同步画布集成基线` 合并集成 436691a2（含04），合并提交 f5427046，无冲突。03 真实页面 autosave 再次通过（19.5s），证据 /private/tmp/canvas03-merged；合并后 typecheck、git diff --check 通过。04 带入的 Python 与输出契约变更复用04票据验证，本票未额外修改。
+
+### 2026-10-28：03／07 主区集成复验
+
+- 03 通过 `edcea6fe`、07 通过 `15fafb5a` 依次无冲突合入 `codex-generation-canvas`。主区 Node 24.22.1 `pnpm --dir front run typecheck` 通过。
+- `PYTHONPATH=. PLAYWRIGHT_CHANNEL=chrome pnpm --dir front run test:browser generation-canvas-autosave --output /private/tmp/canvas0307-integrated` 通过：preflight 0.9s、autosave 19.5s；隔离端口8271／4271，验证07新类型合并后仍保持保存与已保存输出刷新行为。既有 workbench 六项及07对象页面证据复用同一实现，无冲突不扩大页面检查。
+- 相关真实 HTTP 回归50 passed／7 deselected，Pylint 10.00/10；主区公开 schema 与独立8274导出精确一致，client重生成无语义差异，365处仅尾空行漂移已剔除。未读取、停止或重启无响应的8000；不声称标准 `openapi:update` 本次成功。

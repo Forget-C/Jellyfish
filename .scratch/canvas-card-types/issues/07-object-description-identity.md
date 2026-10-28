@@ -19,7 +19,7 @@
 
 ## Completion
 
-- implemented（待集成）：新增人物／物件与场所描述编辑、稳定对象身份、同画布名称唯一和独立描述／对象引用出口；沿既有直接绑定与删除保护接入文本生成。
+- integrated：新增人物／物件与场所描述编辑、稳定对象身份、同画布名称唯一和独立描述／对象引用出口；沿既有直接绑定与删除保护接入文本生成。
 - OpenAPI 从本工作树独立 8273 服务导出并生成前端 client；未读取或重启主区 8000。
 
 ## Comments
@@ -33,3 +33,11 @@
 - 最终检查：`PYTHONPATH=. .venv/bin/python -m pytest tests/test_generation_canvas_objects.py tests/test_generation_canvas_compiler.py tests/test_generation_canvas_api.py tests/test_generation_canvas_lifecycle.py -q -k "not mysql"`：46 passed，7 deselected（MySQL 专用用例未运行）；`uv run pylint app`：10.00/10；Node 24 `pnpm --dir front run typecheck`：通过；`git diff --check`：通过。
 
 - 集成前同步：合并集成分支 436691a2（04），输出处理器冲突保留04媒体可用性投影与07描述分支；同步其canvas_client依赖fixture。合并后相关HTTP：50 passed，7 deselected；Node 24 typecheck、Pylint 10.00/10、diff检查通过。
+
+### 2026-10-28：主区集成复验
+
+- `15fafb5a` 无冲突合入 `codex-generation-canvas`，保留03一秒自动保存／已保存输出刷新与04媒体可用性投影。07此前真实对象页面、尺寸截图及受控供应商执行证据复用；未把尚未交付的08关系接收端记为已验证。
+- 主区 `PYTHONPATH=. UV_CACHE_DIR=/tmp/jellyfish-uv-cache uv run --no-sync python -c 'import app; print(app.__file__)'` 确认为主区 `backend/app/__init__.py`；同一环境 `pytest tests/test_generation_canvas_objects.py tests/test_generation_canvas_compiler.py tests/test_generation_canvas_api.py tests/test_generation_canvas_lifecycle.py -q -k 'not mysql'`：50 passed／7 deselected。最初指定不存在的 `test_generation_canvas_media.py` 未收集测试，移除该路径后按上述真实文件完整通过。
+- `PYTHONPATH=. UV_CACHE_DIR=/tmp/jellyfish-uv-cache uv run --no-sync pylint app`：10.00/10，退出0；仅用户缓存stats写入受沙箱限制。Node 24.22.1 typecheck、集成 autosave真实页面（19.5s）通过。
+- 从主区 `app.main:app` 独立8274端口导出当前 OpenAPI，与 `front/openapi.json` JSON精确一致；执行 `pnpm --dir front run openapi:gen`，仅365处尾空行漂移，已全部剔除。8000仍无响应且未操作，本次未执行标准8000 `openapi:update`；8274核对服务结束后已关闭。
+- 限制继续保留：7项MySQL专用用例未运行；页面与受控供应商不证明真实供应商质量。无合并冲突，无需扩展到未改动页面或其他票据。
