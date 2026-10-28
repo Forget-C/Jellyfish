@@ -25,7 +25,7 @@ def validate_graph(document: CanvasDocument) -> None:
             raise diagnostic('INVALID_ENDPOINT', '连接端点不存在', target)
         if edge.source_card == edge.target_card:
             raise diagnostic('SELF_CONNECTION', '卡片不能连接自身', target)
-        effect_reference = isinstance(receiver, GuidanceDirectionCard) and edge.target_port == 'effect_object' and edge.source_port in ('anchor', 'blocking', 'beat', 'event', 'shot')
+        effect_reference = (isinstance(receiver, GuidanceDirectionCard) or receiver.type in ('direction.space_rule', 'direction.fact')) and edge.target_port == 'effect_object' and edge.source_port in ('anchor', 'blocking', 'beat', 'event', 'shot')
         reverse_acceptance = receiver.type == 'direction.criterion' and edge.source_port == 'shot'
         if reverse_acceptance or (not effect_reference and PORT_MODALITIES[edge.source_port] != PORT_MODALITIES[edge.target_port]):
             raise diagnostic('INCOMPATIBLE_PORT', '端口模态不匹配，不提供隐式转换', target)

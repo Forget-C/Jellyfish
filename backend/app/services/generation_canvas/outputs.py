@@ -25,6 +25,10 @@ class ContentOutputHandler:
         if isinstance(card, GuidanceDirectionCard):
             from app.services.generation_canvas.guidance import publish_guidance
             return publish_guidance(canvas_id, card, adopted_inputs)
+        from app.schemas.generation_canvas import ConstraintDirectionCard
+        if isinstance(card, ConstraintDirectionCard):
+            from app.services.generation_canvas.continuity import publish_constraint
+            return publish_constraint(canvas_id, card, adopted_inputs)
         if isinstance(card, NarrativeDirectionCard):
             from app.services.generation_canvas.narrative import publish_narrative
             return publish_narrative(canvas_id, card, adopted_inputs)

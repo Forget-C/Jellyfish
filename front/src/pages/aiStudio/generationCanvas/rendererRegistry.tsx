@@ -1,4 +1,5 @@
 import { GuidanceDirectionEditor } from './GuidanceDirectionEditor'
+import { ConstraintDirectionEditor } from './ConstraintDirectionEditor'
 import { VisualStyleEditor } from './VisualStyleEditor'
 import { NarrativeDirectionEditor } from './NarrativeDirectionEditor'
 import { SpatialDirectionEditor } from './SpatialDirectionEditor'
@@ -127,6 +128,7 @@ function ModelRenderer({ card: raw, savedRevision, savedCard, document, disabled
 /** 显式类型入口，无供应商卡片族或通用表单引擎。 */
 export const rendererRegistry: Record<string, ComponentType<CardRendererProps>> = {
   'direction.creative_control': GuidanceDirectionEditor, 'direction.guidance': GuidanceDirectionEditor, 'direction.criterion': GuidanceDirectionEditor,
+  'direction.space_rule': ConstraintDirectionEditor, 'direction.continuity': ConstraintDirectionEditor, 'direction.fact': ConstraintDirectionEditor,
   'direction.narrative': NarrativeDirectionEditor, 'direction.beat': NarrativeDirectionEditor, 'direction.event': NarrativeDirectionEditor, 'direction.shot': NarrativeDirectionEditor,
   'direction.anchor': SpatialDirectionEditor,
   'direction.blocking': SpatialDirectionEditor,

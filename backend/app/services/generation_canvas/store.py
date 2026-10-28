@@ -168,6 +168,8 @@ class CanvasStore:
             from app.services.generation_canvas.narrative import validate_narrative_relations
             from app.services.generation_canvas.guidance import validate_guidance_relations
             validate_guidance_relations(document, published, canvas.document)
+            from app.services.generation_canvas.continuity import validate_constraint_relations
+            validate_constraint_relations(document, published)
             validate_narrative_relations(document, published, canvas.document)
             validate_spatial_relations(document, published, canvas.document)
             from app.services.generation_canvas.sound import validate_sound_relations

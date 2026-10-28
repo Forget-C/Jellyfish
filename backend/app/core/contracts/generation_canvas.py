@@ -322,6 +322,31 @@ class NarrativeDesignRelation(BaseModel):
     reference: ObjectReferencePayload | SpatialReferencePayload | NarrativeReferencePayload
 
 
+class SpaceRuleFields(BaseModel):
+    """空间规则是设计要求，不校验自然语言的几何真实性。"""
+    model_config = ConfigDict(extra='forbid')
+    spatial_basis: DesignField = Field(default_factory=lambda: DesignField(purpose='background'))
+    shootable_area: DesignField = Field(default_factory=lambda: DesignField(purpose='constraint'))
+    axis: DesignField = Field(default_factory=lambda: DesignField(purpose='constraint'))
+    scale: DesignField = Field(default_factory=lambda: DesignField(purpose='constraint'))
+
+
+class ContinuityFields(BaseModel):
+    """明确前后态是可定位状态，变化仍完整保留。"""
+    model_config = ConfigDict(extra='forbid')
+    before: DesignField = Field(default_factory=DesignField)
+    change: DesignField = Field(default_factory=DesignField)
+    after: DesignField = Field(default_factory=DesignField)
+    following_constraints: DesignField = Field(default_factory=lambda: DesignField(purpose='constraint'))
+
+
+class ImmutableFactFields(BaseModel):
+    """事实由创作者表述；来源定位不授权祖先正文读取。"""
+    model_config = ConfigDict(extra='forbid')
+    fact: DesignField = Field(default_factory=lambda: DesignField(purpose='constraint'))
+    source_basis: DesignField = Field(default_factory=lambda: DesignField(purpose='background'))
+
+
 class FrameState(BaseModel):
     """导演明确提供的画面状态，图片仅定位其稳定身份。"""
     model_config = ConfigDict(extra='forbid')
@@ -343,12 +368,12 @@ class DesignTextPayload(BaseModel):
     """本卡完整设计及直接采用的必要对象，不包含祖先正文或示例媒体。"""
     model_config = ConfigDict(extra='forbid')
     kind: Literal['design'] = Field(default='design', json_schema_extra={'enum': ['design']})
-    design_type: Literal['direction.style', 'direction.creative_control', 'direction.guidance', 'direction.criterion', 'direction.situation', 'direction.performance', 'direction.performance_rule', 'direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment', 'direction.narrative', 'direction.beat', 'direction.event', 'direction.shot', 'direction.dialogue', 'direction.sound']
+    design_type: Literal['direction.style', 'direction.space_rule', 'direction.continuity', 'direction.fact', 'direction.creative_control', 'direction.guidance', 'direction.criterion', 'direction.situation', 'direction.performance', 'direction.performance_rule', 'direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment', 'direction.narrative', 'direction.beat', 'direction.event', 'direction.shot', 'direction.dialogue', 'direction.sound']
     adoption: Literal['whole_card'] = Field(default='whole_card', json_schema_extra={'enum': ['whole_card']})
     text: str
     frame_states: list[FrameState] = Field(default_factory=list, exclude_if=lambda value: not value)
     requires_frame_target: bool = Field(default=False, exclude_if=lambda value: not value)
-    fields: StyleDesignFields | CreativeControlFields | GenerationGuidanceFields | AcceptanceCriterionFields | NarrativeOverviewFields | NarrativeBeatFields | NarrativeEventFields | ShotDesignFields | PerformanceDesignFields | AnchorDesignFields | BlockingDesignFields | ActivityDesignFields | EnvironmentDesignFields | SoundDesignFields
+    fields: StyleDesignFields | SpaceRuleFields | ContinuityFields | ImmutableFactFields | CreativeControlFields | GenerationGuidanceFields | AcceptanceCriterionFields | NarrativeOverviewFields | NarrativeBeatFields | NarrativeEventFields | ShotDesignFields | PerformanceDesignFields | AnchorDesignFields | BlockingDesignFields | ActivityDesignFields | EnvironmentDesignFields | SoundDesignFields
     scope: DesignScope
     objects: list[ObjectReferencePayload] = Field(default_factory=list)
     spatial_relations: SpatialDesignRelations | None = Field(default=None, exclude_if=lambda value: value is None)
