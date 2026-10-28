@@ -1,3 +1,4 @@
+import { openCanvasCard, closeCanvasDetails, closePrecheck } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -11,7 +12,7 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-target-')
 const api = 'http://127.0.0.1:8280', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_runtime_browser_server'], {
-  cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8280' }, stdio: ['ignore', 'pipe', 'pipe'],
+  cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8280' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
 captureBackend(backend, output)
 let server, browser, page
@@ -24,7 +25,7 @@ try {
     await delay(250)
   }
   assert.ok(ready, 'isolated backend ready')
-  server = await createServer({ root, server: { host: '127.0.0.1', port: 4280, strictPort: true, open: false, proxy: { '/api': api } } })
+  server = await createServer({ root, cacheDir: join(output, 'vite-cache'), server: { host: '127.0.0.1', port: 4280, strictPort: true, open: false, proxy: { '/api': api } } })
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
   page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
@@ -69,14 +70,17 @@ try {
   page.on('request', request => { if (/\/events(?:\?|$)/.test(request.url())) streamConnections++ })
   await page.goto(`http://127.0.0.1:4280/projects/canvas-project?tab=generation&canvas=${canvas.id}`)
   for (let attempt = 0; attempt < 4; attempt++) await page.getByRole('button', { name: '缩小', exact: true }).click()
-  const card = page.locator('[data-card-id="C"]')
+  const card = await openCanvasCard(page, 'C')
   await card.getByRole('button', { name: '运行到此处', exact: true }).click()
   const preview = page.getByRole('region', { name: '运行预检' })
   await preview.waitFor()
   assert.match(await preview.textContent(), /执行 B、C/)
   assert.match(await preview.textContent(), /复用已有结果 1 项/)
   await page.screenshot({ path: join(output, 'target-preview.png'), fullPage: true })
-  await preview.getByRole('button', { name: '确认执行', exact: true }).click()
+  await Promise.all([page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/runs')),
+    preview.getByRole('button', { name: '确认执行', exact: true }).click()])
+  await closePrecheck(page)
+  await closeCanvasDetails(page)
   await page.getByRole('button', { name: '运行历史', exact: true }).click()
   const active = (await request('/runtime', undefined, 'GET')).runs.find(run => run.lifecycle === 'active')
   await page.locator(`[data-history-run="${active.id}"] > summary`).click()
