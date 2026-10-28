@@ -4,6 +4,7 @@ from app.core.contracts.generation_canvas import (
     ObjectReferencePayload, OutputIdentity,
 )
 from app.schemas.generation_canvas import SpatialDirectionCard, SpatialAnchorCard, CanvasResolvedOutput
+from app.services.generation_canvas.formatting import scope_source_lines
 from app.services.generation_canvas.performance import STATE_LABELS, PURPOSE_LABELS
 from app.services.generation_canvas.errors import diagnostic
 
@@ -39,9 +40,7 @@ def publish_spatial(canvas_id, card, adopted_inputs):
         lines.append(f'反应延迟毫秒：{card.delay_ms}')
     if getattr(card, 'name', ''):
         lines.insert(0, '名称：' + card.name)
-    for label, value in [('适用范围', card.scope.description), ('制作阶段', card.scope.phase), ('适用条件', card.scope.condition), ('来源', card.source_locator)]:
-        if value:
-            lines.append(label + '：' + value)
+    lines.extend(scope_source_lines(card.scope, card.source_locator))
     exit_state = getattr(card, 'exit_state', None)
     frame_states = [FrameState(id='field:exit_state', label='结束状态')] if exit_state and exit_state.state not in ('empty', 'not_applicable') and (exit_state.text or exit_state.state == 'absent') else []
     outputs = []

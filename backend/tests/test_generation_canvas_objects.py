@@ -2,6 +2,7 @@
 import pytest
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
 from tests.test_generation_canvas_runs import runtime  # noqa: F401
+from tests.test_generation_canvas_images import image_storage  # noqa: F401
 
 
 @pytest.mark.asyncio
@@ -106,7 +107,7 @@ async def test_object_category_can_be_corrected_without_changing_identity(canvas
 
 
 @pytest.mark.asyncio
-async def test_adopted_description_executes_through_worker_without_object_metadata(runtime, monkeypatch):
+async def test_adopted_description_executes_with_its_own_identity_without_private_locator(runtime, monkeypatch):
     import asyncio
     from types import SimpleNamespace
     from app.task_worker import TaskWorker
@@ -135,8 +136,67 @@ async def test_adopted_description_executes_through_worker_without_object_metada
         await asyncio.gather(*worker.jobs.values())
     finally:
         worker.text_pool.shutdown(wait=False)
-    assert received == ['红衣，沉默。']
+    assert received == ['对象：张三（person-one，character）\n红衣，沉默。']
     snapshot = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
     node = next(run for run in snapshot['runs'] if run['id'] == accepted['run_id'])['nodes'][0]
     assert node['status'] == 'succeeded'
     assert node['text'] == '已完成描述创作'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('reverse, expected_descriptions', [
+    (False, '对象：小雪（alice，character）\n红衣，沉默。\n对象：小李（bob，character）\n蓝衣，微笑。'),
+    (True, '对象：小李（bob，character）\n蓝衣，微笑。\n对象：小雪（alice，character）\n红衣，沉默。'),
+])
+async def test_named_descriptions_keep_identity_in_actual_image_request(runtime, image_storage, reverse, expected_descriptions):
+    import asyncio
+    import json
+    import httpx
+    from tests.test_generation_canvas_images import image_card, accept
+    from app.models.studio_prompts_files_timeline import FileItem
+    from app.services.studio.file_usages import upsert_file_usage
+    from app.task_worker import TaskWorker
+    await image_card(runtime, 1)
+    for oid in ('alice', 'bob'):
+        key = 'references/' + oid
+        image_storage[key] = (oid.encode(), 'image/png', {})
+        async with runtime.sessions.begin() as db:
+            db.add(FileItem(id=oid, name=oid, type='image', storage_key=key, content_type='image/png'))
+            await db.flush()
+            await upsert_file_usage(db, file_id=oid, project_id=runtime.project_id, chapter_id=None, usage_kind='upload')
+    doc = runtime.document
+    model = doc['cards'][0]
+    model['prompt'] = {'segments': [{'id': 'body', 'kind': 'text', 'text': '画两人'}]}
+    model['input_bindings'] = []
+    doc['edges'] = []
+    doc['input_order'] = {'image': {'text': [], 'image': []}}
+    for oid, name, body in [('alice', '小雪', '红衣，沉默。'), ('bob', '小李', '蓝衣，微笑。')]:
+        doc['cards'].append({'id': oid + '-text', 'type': 'content.object', 'object_id': oid, 'name': name, 'text': body})
+        doc['cards'].append({'id': oid + '-ref', 'type': 'reference.character', 'input_bindings': [{'id': oid + '-name', 'input_port': 'name', 'source': {'canvas_id': runtime.canvas_id, 'card_id': oid + '-text', 'port_id': 'object', 'position': 0, 'object_id': oid}}], 'image_binding': {'file_id': oid}})
+        edge = oid + '-name'
+        doc['edges'].append({'id': edge, 'source_card': oid + '-text', 'source_port': 'object', 'target_card': oid + '-ref', 'target_port': 'name'})
+        doc['input_order'][oid + '-ref'] = {'name': [edge]}
+        for source, port in [(oid + '-text', 'text'), (oid + '-ref', 'image')]:
+            edge = source + '-model'
+            doc['edges'].append({'id': edge, 'source_card': source, 'source_port': port, 'target_card': 'image', 'target_port': port})
+            doc['input_order']['image'][port].append(edge)
+            model['input_bindings'].append({'id': edge, 'input_port': port, 'source': {'canvas_id': runtime.canvas_id, 'card_id': source, 'port_id': port, 'position': 0}})
+    text_bindings = [binding for binding in model['input_bindings'] if binding['input_port'] == 'text']
+    image_bindings = [binding for binding in model['input_bindings'] if binding['input_port'] == 'image']
+    model['input_bindings'] = (text_bindings[::-1] if reverse else text_bindings) + image_bindings
+    saved = await runtime.client.put(runtime.url, json={'request_id': 'descriptions', 'expected_revision': 2, 'document': doc})
+    assert saved.status_code == 200, saved.text
+    _, preview = await accept(runtime)
+    received = []
+    def provider(request):
+        received.append(request.content.decode(errors='replace'))
+        return httpx.Response(200, json={'data': [{'b64_json': 'eA=='}]})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as client:
+        worker = TaskWorker(runtime.sessions, client=client)
+        await worker.tick()
+        await asyncio.gather(*worker.jobs.values())
+        worker.text_pool.shutdown(wait=False)
+    assert len(received) == 1
+    assert json.loads(received[0])['prompt'] == ('画两人\n' + expected_descriptions
+        + '\n小雪 = image 1（正面）\n小李 = image 2（正面）')
+    assert len(preview['input']['media']) == 2

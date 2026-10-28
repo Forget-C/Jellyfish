@@ -4,6 +4,7 @@ from app.core.contracts.generation_canvas import (
     FrameState, ObjectReferencePayload, OutputIdentity,
 )
 from app.schemas.generation_canvas import CanvasResolvedOutput
+from app.services.generation_canvas.formatting import scope_source_lines
 from app.services.generation_canvas.narrative import direct_relations, relation_lines
 from app.services.generation_canvas.performance import STATE_LABELS, PURPOSE_LABELS
 
@@ -22,9 +23,7 @@ def publish_constraint(canvas_id, card, adopted_inputs):
         lines.append('连续性分类：' + CATEGORY_LABELS[card.category])
     active = {key: field for key in field_type.model_fields if (field := getattr(fields, key)).state not in ('empty', 'not_applicable') and (field.text or field.state == 'absent')}
     lines.extend(f'{PURPOSE_LABELS[field.purpose]} / {FIELD_LABELS[key]} [{STATE_LABELS[field.state]}]：{field.text}' + (f'（来源：{field.source_locator}）' if field.source_locator else '') for key, field in active.items())
-    for label, value in [('适用范围', card.scope.description), ('制作阶段', card.scope.phase), ('适用条件', card.scope.condition), ('来源', card.source_locator)]:
-        if value:
-            lines.append(label + '：' + value)
+    lines.extend(scope_source_lines(card.scope, card.source_locator))
     if not lines:
         return []
     states = [FrameState(id='field:' + key, label=FIELD_LABELS[key]) for key in ('before', 'after') if key in active]

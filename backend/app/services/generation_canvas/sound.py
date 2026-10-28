@@ -1,6 +1,7 @@
 """对白及声音安排只发布本卡设计；参考素材不进入出口。"""
 from app.core.contracts.generation_canvas import DialogueReferencePayload, DesignField, DesignTextPayload, SoundDesignFields, ObjectReferencePayload, OutputIdentity
 from app.schemas.generation_canvas import CanvasResolvedOutput, DialogueCard, SoundDirectionCard
+from app.services.generation_canvas.formatting import scope_source_lines
 from app.services.generation_canvas.errors import diagnostic
 from app.services.generation_canvas.performance import STATE_LABELS, PURPOSE_LABELS
 
@@ -25,9 +26,7 @@ def publish_sound(canvas_id, card, adopted_inputs):
         fields['production'] = card.production
         lines.append('制作安排：' + PRODUCTION_LABELS[card.production])
     lines.extend(f'{PURPOSE_LABELS[value.purpose]} / {FIELD_LABELS[key]} [{STATE_LABELS[value.state]}]：{value.text}' + (f'（来源：{value.source_locator}）' if value.source_locator else '') for key, value in active)
-    for label, value in [('适用范围', card.scope.description), ('制作阶段', card.scope.phase), ('适用条件', card.scope.condition), ('来源', card.source_locator)]:
-        if value:
-            lines.append(f'{label}：{value}')
+    lines.extend(scope_source_lines(card.scope, card.source_locator))
     payload = DesignTextPayload(design_type=card.type, text='\n'.join(lines), fields=SoundDesignFields(**fields), scope=card.scope,
                                 objects=objects, participant_id=speaker, source_locator=card.source_locator, **values)
     outputs = [CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id, port_id='text', position=0), modality='text', payload=payload)]

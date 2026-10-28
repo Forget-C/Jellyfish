@@ -1,6 +1,6 @@
 """公开引用解析与单次编译边界；候选关系不等于实际输入。"""
 import re
-from app.core.contracts.generation_canvas import SoundDesignFields
+from app.core.contracts.generation_canvas import DescriptionTextPayload, SoundDesignFields
 from app.core.contracts.media import MediaReference, VideoMediaInput, VideoSubjectMediaReference
 from app.schemas.generation_canvas import (
     CanvasDocument, CanvasResolvedOutput, CanvasCompiledInput, CanvasDiagnostic,
@@ -133,6 +133,11 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
         elif not source.available:
             issue('OUTPUT_MISSING', '引用的来源位置暂无实际输出', ref.id, path)
     def design_text(item):
+        # 描述归属只取本次直接采用的载荷，不从命名图片或同名卡片反查正文。
+        if isinstance(item.payload, DescriptionTextPayload) and item.payload.name:
+            description = item.payload
+            identity = '，'.join(value for value in (description.object_id, description.category) if value)
+            return f'对象：{description.name}（{identity}）\n{description.text}'
         if isinstance(item.payload, DesignTextPayload) and item.payload.design_type in ('direction.dialogue', 'direction.sound'):
             note = '仅表达可见声源或说话状态；图片不包含声音。' if card.type == 'model.image' else '声音要求按模型实际能力执行；制作安排不代表已生成声音。' if card.type == 'model.video' else ''
             return item.text + ('\n' + note if note else '')

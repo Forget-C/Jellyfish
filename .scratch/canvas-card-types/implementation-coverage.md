@@ -88,7 +88,7 @@
 | 规格输出 | 实际载荷／出口 | 边界核对 |
 | --- | --- | --- |
 | 通用文本、创作依据 | `TextOutputPayload`／`BasisTextOutputPayload`，text | 正文与只读来源／选区；定位不变成模型指令。 |
-| 人物／物件、场所描述 | `DescriptionTextPayload`，text | 本卡描述与元数据，模型仅展开直接采用的正文。 |
+| 人物／物件、场所描述 | `DescriptionTextPayload`，text | 本卡描述与元数据；模型为直接采用的正文标注同一载荷的名称／稳定身份／类别，不反查或改写正文。 |
 | 通用图片 | `MediaOutputPayload`，image | 一张有效文件；上传中／撤回保持不可用身份。 |
 | 四类命名图片参考 | `NamedImagePayload`，image | 固定主图、已绑定对象、角度及位置；无描述正文。 |
 | 通用视频 | `MediaOutputPayload`，video | 完整视频及原音轨，不隐式取帧。 |

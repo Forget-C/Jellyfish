@@ -36,3 +36,5 @@
 - MySQL缺环境与受控供应商／存储限制保留；结果不证明真实供应商质量、真实外部存储或MySQL竞争已验收。未推送、未改用户主区服务；最终集成与双轴审查由主代理继续。
 
 - 2026-10-29：主区无冲突合入 `1a2b350d`（merge `4da2f90e`），Completion为integrated，Status仍为分诊状态。合后API／Catalog／Compiler **42 passed／1 skipped**（3.63s）、Node24.22.1 typecheck及 `git diff --check`通过；产品树与验收分支一致，复用本票275／28、Pylint10及26个真实页面证据，selection隔离MySQL未执行限制不变。主区 `app.__file__`确认来自当前backend，生产导出、8000实际HTTP与提交schema精确一致；核对Catalog、BasisText、DialogueReference和四模态枚举后标准 `openapi:update`成功，440处证明仅尾空行／等价格式漂移还原。主区证据 `/private/tmp/canvas19-integrated-production.json`、`/private/tmp/canvas19-integrated-http.json`；未推送、未停止用户服务。最终双轴审查尚待执行，不预记审查通过。
+
+- 2026-10-29：最终双轴审查修复（待主区集成）：描述编译增加直接载荷自带的名称／稳定身份／类别标注，保持正文原样，避免多个描述与命名图在实际供应商请求中失去对应。公开HTTP→TaskWorker两个对象／反向采用顺序先红后绿；旧单描述Worker断言同步为必要身份，不暴露私有来源定位，未命名描述仍仅正文。可选格式化重复通过最小共享函数处理，五publisher输出不变。全画布 **277 passed／28 skipped**，Pylint **10.00/10**，生产schema与提交精确一致；前端未变，复用同状态26页证据。两个默认merge标题的安全规范化脚本已dry-run及隔离克隆apply验证，主区尚未apply，须合并全部修复后执行并记录最终HEAD；不把元数据待执行写成已完成。
