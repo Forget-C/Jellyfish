@@ -20,7 +20,7 @@
 
 
 
-**Completion:** implemented
+**Completion:** integrated
 
 ## Comments
 
@@ -35,3 +35,5 @@
 - 前端 Node 24.22.1 `pnpm --dir front run typecheck` 通过。共享工作台 `test:workbench-ui` 的 preflight／workbench-ui 通过；首次 workbench-style 因 4193 临时占用阻断，已与09协调只重试该项并通过（71.1s），证据 `front/test-results/browser-DyeaQB`，其他未受影响共享六套复用09／08同组件证据。普通字段使用 AntD，动作与详情复用既有 WorkbenchButton／WorkbenchDetails，无样式例外。
 
 - 最终收口：只简化已发布设计的主体诊断并使定位指向真实绑定身份，受影响设计／编译 HTTP `27 passed`（2.05s）、Pylint `10.00/10`（stats缓存路径权限提示不影响 exit 0）通过；前端 typecheck、工作区差异检查通过。
+
+- 2026-10-28 主区集成：无冲突合并 `7961350b`，显式合并提交 `f13e5ccd`。主区 `PYTHONPATH=. UV_CACHE_DIR=/private/tmp/canvas10-uv uv run --no-sync` 已核实导入当前 backend/app；本票 HTTP／真实 Worker 回归 `23 passed`（1.94s）、Node 24.22.1 typecheck 通过。8000 监听父进程 `73854` 的 cwd 为主区 backend，实际 HTTP schema 包含三类新导演卡与 `DesignTextPayload`，与本票生产 OpenAPI 精确一致；标准 `pnpm --dir front run openapi:update` 成功，379 处纯尾空行漂移经逐文件与 HEAD 核对后剔除，无契约漂移。复用上述同一实现的 Pylint、全画布与真实页面证据及其限制；未推送、未操作09工作树。
