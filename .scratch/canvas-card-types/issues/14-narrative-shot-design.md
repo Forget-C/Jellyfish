@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented
+**Completion:** integrated
 
 - [x] 四类工具保留观察视点、信息／人物关系变化、转折、行动目标、阻碍、可见结果、预计时长及待确定状态等完整字段。
 - [x] 节拍、事件与镜头提供各自稳定对象引用；普通文本提到的名称不自动变成这些业务身份。
@@ -31,3 +31,5 @@
 - 真实 Chrome 独立8293／4293：四类编辑、事件与节拍选择、双节拍重排、摄影所属镜头、图片可见结果目标及完整设计不穿透、约1秒自动保存和重开、1440／390px无横向溢出通过。桌面及窄屏截图已人工查看；最终证据路径在下一条记录。共享控件没有修改，复用 11／12 相同实现的工作台验收，新增业务交互由本票真实页覆盖。
 - 验证边界：供应商与对象存储使用替身，不评估真实供应商视觉质量；17尚未交付的验收来源不声称已验证。
 - 最终真实页面证据：`/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-generation-canvas-narrative-DuxOSI/`，`narrative-desktop.png`／`narrative-mobile.png` 已人工查看，包含双节拍顺序；同一次通过还覆盖摄影所属镜头和图片目标。公共工作台复用12六项最终证据 `/private/tmp/canvas12-workbench/`、`/private/tmp/canvas12-workbench-rest/`（workbench-ui／style／design-scope／unit-design／instruction-preparation／instruction-design均通过），公共控件未再改动。
+
+- 2026-10-29：主区依次集成14（`9678a1f0`）及18（`99659847`），仅README和浏览器套件列表冲突，保留双方新增记录及入口；Completion更新为integrated。合后叙事／混合／摄影／空间／声音／表演HTTP与真实Worker组合 **108 passed**（10.76s），Node24.22.1 typecheck通过，`git diff --check`通过；复用14全画布232 passed／28 MySQL skipped、Pylint10.00/10及两票真实页面证据。主区 `app.__file__` 已确认，当前生产app导出与提交OpenAPI精确一致（`/private/tmp/canvas14-18-integrated-production.json`）。8000父进程73854仍属当前主backend，但升级权限的urllib20／30秒与绕过代理curl10秒均无响应；未终止用户服务，标准 `openapi:update` 留待该服务恢复后复验，不从旧进程覆盖已同步契约。供应商／存储替身和MySQL缺环境边界保留。
