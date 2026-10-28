@@ -1,10 +1,11 @@
 import type { ComponentType, ReactNode } from 'react'
 import { Alert, Button, Select } from 'antd'
-import type { CanvasDocument, CanvasModelCapability, CanvasNodeRead, CanvasResolvedOutput, CreativeBasisCard, ImageModelCard, ModelRead, TextContentCard, TextModelCard, VideoModelCard } from '../../../services/generated'
+import type { CanvasDocument, CanvasModelCapability, CanvasNodeRead, CanvasResolvedOutput, CreativeBasisCard, ImageModelCard, ModelRead, ObjectDescriptionCard, PlaceDescriptionCard, TextContentCard, TextModelCard, VideoModelCard } from '../../../services/generated'
 import { ExperimentComposer } from '../experiment/components/ExperimentComposer'
 import { PromptEditor } from './PromptEditor'
 import { editorPrompt, withEditorPrompt } from './inputBindings'
 import { useCardCandidates } from './useCardCandidates'
+import { ObjectDescriptionEditor } from './ObjectDescriptionEditor'
 import { TextContentEditor } from './TextContentEditor'
 import { MediaContentEditor } from './MediaContentEditor'
 import { MediaResultsPreview } from './MediaResultsPreview'
@@ -70,6 +71,8 @@ function ModelRenderer({ card: raw, savedRevision, document, disabled, onChange,
 /** 显式类型入口，无供应商卡片族或通用表单引擎。 */
 export const rendererRegistry: Record<string, ComponentType<CardRendererProps>> = {
   'content.text': ({ card, onChange, disabled }) => <TextContentEditor card={card as TextContentCard} onChange={onChange} disabled={disabled} />,
+  'content.object': ({ card, onChange, disabled }) => <ObjectDescriptionEditor card={card as ObjectDescriptionCard} onChange={onChange} disabled={disabled} />,
+  'content.place': ({ card, onChange, disabled }) => <ObjectDescriptionEditor card={card as PlaceDescriptionCard} onChange={onChange} disabled={disabled} />,
   'content.basis': ({ card, onChange, disabled }) => <TextContentEditor card={card as CreativeBasisCard} onChange={onChange} disabled={disabled} />,
   'content.image': ({ card, onChange, projectId, disabled }) => <MediaContentEditor card={card as MediaCard} projectId={projectId} onChange={onChange} disabled={disabled} />,
   'content.video': ({ card, onChange, projectId, disabled }) => <MediaContentEditor card={card as MediaCard} projectId={projectId} onChange={onChange} disabled={disabled} />,

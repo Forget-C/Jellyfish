@@ -3,14 +3,14 @@ import type { CanvasDocument, CanvasModelCapability } from '../../../services/ge
 export type GenerationCard = NonNullable<CanvasDocument['cards']>[number]
 export type GenerationEdge = NonNullable<CanvasDocument['edges']>[number]
 export const cardTitles: Record<string, string> = {
-  'content.text': '文本内容卡', 'content.basis': '原文／创作依据卡', 'content.image': '图片内容卡', 'content.video': '视频内容卡', 'content.audio': '音频内容卡',
+  'content.object': '人物／物件描述卡', 'content.place': '场所描述卡', 'content.text': '文本内容卡', 'content.basis': '原文／创作依据卡', 'content.image': '图片内容卡', 'content.video': '视频内容卡', 'content.audio': '音频内容卡',
   'model.text': '文本模型卡', 'model.image': '图片模型卡', 'model.video': '视频模型卡',
 }
-export const portLabels: Record<string, string> = { text: '文本', image: '参考图片', video: '视频', audio: '音频',
+export const portLabels: Record<string, string> = { object: '对象引用', text: '文本', image: '参考图片', video: '视频', audio: '音频',
   first_frame: '首帧', last_frame: '尾帧', key_frame: '关键帧', subject_image: '主体图片', subject_video: '主体视频' }
-const modality: Record<string, string> = { text: 'text', image: 'image', video: 'video', audio: 'audio',
+const modality: Record<string, string> = { object: 'object_reference', text: 'text', image: 'image', video: 'video', audio: 'audio',
   first_frame: 'image', last_frame: 'image', key_frame: 'image', subject_image: 'image', subject_video: 'video' }
-const declaredOutputs: Record<string, string[]> = { 'content.text': ['text'], 'content.basis': ['text'], 'content.image': ['image'], 'content.video': ['video'], 'content.audio': ['audio'], 'model.text': ['text'], 'model.image': ['image'], 'model.video': ['video'] }
+const declaredOutputs: Record<string, string[]> = { 'content.object': ['text', 'object'], 'content.place': ['text', 'object'], 'content.text': ['text'], 'content.basis': ['text'], 'content.image': ['image'], 'content.video': ['video'], 'content.audio': ['audio'], 'model.text': ['text'], 'model.image': ['image'], 'model.video': ['video'] }
 export const outputPorts = (card: GenerationCard) => declaredOutputs[card.type || ''] || []
 export const inputPorts = (card: GenerationCard) => card.type === 'model.text' ? ['text'] : card.type === 'model.image' ? ['text', 'image']
   : card.type === 'model.video' ? ['text', 'first_frame', 'last_frame', 'key_frame', 'subject_image', 'subject_video'] : []
