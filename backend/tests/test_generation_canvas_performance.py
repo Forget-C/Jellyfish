@@ -259,3 +259,28 @@ async def test_example_rejects_invalid_or_nonvideo_intervals(canvas_client, port
         'source': {'canvas_id': canvas['id'], 'card_id': 'source', 'port_id': port, 'position': 0}, 'start_ms': start, 'end_ms': end}]}]
     result = await client.put(f"/canvases/p/{canvas['id']}", json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
     assert result.status_code == 422
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('source_type', ['content.object', 'reference.costume'])
+@pytest.mark.parametrize('target_type', ['direction.situation', 'direction.performance'])
+async def test_costume_object_can_participate_without_description_or_image(canvas_client, source_type, target_type):
+    client = canvas_client
+    canvas = (await client.post('/canvases/p', json={'name': '服装参与'})).json()['data']
+    url = f"/canvases/p/{canvas['id']}"
+    doc = canvas['document']
+    source = {'id': 'costume', 'type': source_type}
+    if source_type == 'content.object':
+        source.update(object_id='coat', name='蓝衣', category='costume', text='不应沿关系读取的正文')
+    else:
+        source['objects'] = [{'object_id': 'coat', 'name': '蓝衣', 'category': 'costume'}]
+    field = 'situation' if target_type == 'direction.situation' else 'physical_action'
+    doc.update(cards=[source, {'id': 'design', 'type': target_type, field: {'state': 'proposal', 'text': '在风中摆动'},
+        'input_bindings': [{'id': 'subject', 'input_port': 'participant', 'source': {'canvas_id': canvas['id'], 'card_id': 'costume', 'port_id': 'object', 'position': 0, 'object_id': 'coat'}}]}],
+        edges=[{'id': 'subject', 'source_card': 'costume', 'source_port': 'object', 'target_card': 'design', 'target_port': 'participant'}], input_order={'design': {'participant': ['subject']}})
+    saved = await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
+    assert saved.status_code == 200, saved.text
+    output = (await client.get(url + '/cards/design/outputs')).json()['data']['outputs'][0]
+    assert output['payload']['participant_id'] == 'coat'
+    assert output['payload']['objects'] == [{'kind': 'object_reference', 'object_id': 'coat', 'name': '蓝衣', 'category': 'costume'}]
+    assert '不应沿关系读取的正文' not in output['text'] and output['file_id'] is None
