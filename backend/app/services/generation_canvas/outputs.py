@@ -19,6 +19,10 @@ class ContentOutputHandler:
     def publish(self, canvas_id, card, adopted_inputs, published_results):
         """内容卡没有持续输入，描述来源只随明确描述出口提供。"""
         from app.schemas.generation_canvas import NarrativeDirectionCard
+        from app.schemas.generation_canvas import ConstraintDirectionCard
+        if isinstance(card, ConstraintDirectionCard):
+            from app.services.generation_canvas.continuity import publish_constraint
+            return publish_constraint(canvas_id, card, adopted_inputs)
         if isinstance(card, NarrativeDirectionCard):
             from app.services.generation_canvas.narrative import publish_narrative
             return publish_narrative(canvas_id, card, adopted_inputs)

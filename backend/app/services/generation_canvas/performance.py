@@ -1,6 +1,6 @@
 """独立表演卡输出与直接关系校验，不读取祖先设计或运行模型。"""
 from app.core.contracts.generation_canvas import FrameState, DialogueBasis, DesignField, DesignTextPayload, PerformanceDesignFields, ObjectReferencePayload, OutputIdentity
-from app.schemas.generation_canvas import CanvasResolvedOutput, PerformanceDirectionCard, SoundDirectionCard, SpatialDirectionCard, NarrativeDirectionCard
+from app.schemas.generation_canvas import CanvasResolvedOutput, PerformanceDirectionCard, SoundDirectionCard, SpatialDirectionCard, NarrativeDirectionCard, ConstraintDirectionCard
 from app.services.generation_canvas.errors import diagnostic
 
 FIELD_LABELS = {'situation': '当前处境', 'relationship': '人物关系', 'objective': '人物目标', 'obstacle': '阻碍',
@@ -47,7 +47,7 @@ def validate_design_relations(document, published):
     """只允许直接明确对象；多人参考逐身份选取，主体按真实身份至多一个。"""
     from app.services.generation_canvas.compiler import resolve_outputs, identity_key
     for card in document.cards:
-        if not isinstance(card, PerformanceDirectionCard) or isinstance(card, (SoundDirectionCard, SpatialDirectionCard, NarrativeDirectionCard)):
+        if not isinstance(card, PerformanceDirectionCard) or isinstance(card, (SoundDirectionCard, SpatialDirectionCard, NarrativeDirectionCard, ConstraintDirectionCard)):
             continue
         candidates = resolve_outputs(document, card.id, published)
         ids, participants, beats, shots = set(), set(), set(), set()
