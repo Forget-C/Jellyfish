@@ -104,6 +104,18 @@ class NamedImageMapping(NamedImageObject):
     """编译预览中可核对的对象到实际提交图片映射。"""
     media_position: int = Field(ge=1)
     angle: str
+    input_port: str | None = None
+    subject_name: str | None = None
+    purpose_position: int | None = Field(default=None, ge=1)
+
+    @model_serializer(mode='wrap')
+    def serialize_mapping(self, handler):
+        """图片旧映射不增加空字段，视频映射保留明确用途及用户分组。"""
+        value = handler(self)
+        for field in ('input_port', 'subject_name', 'purpose_position'):
+            if getattr(self, field) is None:
+                value.pop(field, None)
+        return value
 
 
 class DesignField(BaseModel):

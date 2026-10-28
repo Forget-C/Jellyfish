@@ -130,11 +130,16 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
                       ['input_bindings', binding_id])
         media_position = result.media.index(item) + 1 if item in result.media else None
         result.mapping.append(CanvasSourceMapping(token=item.token, source=item.source, media_position=media_position))
-    if card.type == 'model.image':
+    if card.type in ('model.image', 'model.video'):
         for position, item in enumerate(result.media, 1):
             if isinstance(item.payload, NamedImagePayload):
                 for obj in item.payload.objects:
-                    result.mapping.append(NamedImageMapping(**obj.model_dump(), media_position=position, angle=item.payload.angle))
+                    purposes = [binding for binding in card.input_bindings if identity_key(binding.source) == identity_key(item.source)] if card.type == 'model.video' else [None]
+                    for binding in purposes:
+                        group, ordinal = video_mapping_location(card, binding, result.media) if binding else (None, None)
+                        result.mapping.append(NamedImageMapping(**obj.model_dump(), media_position=position, angle=item.payload.angle,
+                            input_port=binding.input_port if binding else None,
+                            subject_name=group, purpose_position=ordinal))
     subjects = video_subjects(card, result.media) if card.type == 'model.video' else {}
     command_counts = {}
     for segment in card.prompt.segments:
@@ -197,10 +202,15 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
         if binding.id not in mentioned and item and item.available and item.modality == 'text':
             result.text += ('\n' if result.text else '') + item.text
 
-    if card.type == 'model.image':
-        lines = [f"{entry.name} = image {entry.media_position}（{entry.angle}" +
-                 (f"，{entry.position}" if entry.position else '') + '）'
-                 for entry in result.mapping if isinstance(entry, NamedImageMapping)]
+    if card.type in ('model.image', 'model.video'):
+        def mapping_line(entry):
+            label = f'image {entry.media_position}'
+            if entry.input_port == 'subject_image' and entry.subject_name:
+                label = f'@{entry.subject_name} 图片 {entry.purpose_position}'
+            elif entry.input_port in ('first_frame', 'last_frame', 'key_frame'):
+                label = {'first_frame': '首帧', 'last_frame': '尾帧', 'key_frame': f'关键帧 {entry.purpose_position}'}[entry.input_port]
+            return f"{entry.name} = {label}（{entry.angle}" + (f"，{entry.position}" if entry.position else '') + '）'
+        lines = [mapping_line(entry) for entry in result.mapping if isinstance(entry, NamedImageMapping)]
         if lines:
             result.text += ('\n' if result.text else '') + '\n'.join(lines)
     if card.type == 'model.video':
@@ -234,6 +244,23 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
         result.diagnostics.extend(CanvasDiagnostic.model_validate(item) for item in parameter_diagnostics(card, capability))
     result.can_run = not any('run' in item.blocks for item in result.diagnostics)
     return result
+
+
+def video_mapping_location(card, binding, media):
+    """视频映射按实际用途内的图片顺序定位，候选代号不代表主体组内顺序。"""
+    if binding.input_port in ('first_frame', 'last_frame'):
+        return None, 1
+    available = {identity_key(item.source) for item in media if item.modality == 'image'}
+    selected = [value for value in card.input_bindings if value.input_port == binding.input_port and identity_key(value.source) in available]
+    group = None
+    if binding.input_port == 'subject_image':
+        selected = [value for value in selected if (value.subject_name or '').strip().casefold() == (binding.subject_name or '').strip().casefold()]
+        group = next((value.subject_name or '').strip() for value in card.input_bindings
+            if value.input_port in ('subject_image', 'subject_video') and (value.subject_name or '').strip().casefold() == (binding.subject_name or '').strip().casefold()) or None
+    keys = [identity_key(value.source) for value in selected]
+    if binding.input_port == 'subject_image':
+        keys = list(dict.fromkeys(keys))
+    return group, (keys.index(identity_key(binding.source)) if binding.input_port == 'subject_image' else selected.index(binding)) + 1
 
 
 def video_subjects(card, media):

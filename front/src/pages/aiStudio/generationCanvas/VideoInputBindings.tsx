@@ -1,3 +1,4 @@
+import { NamedImageSummary } from './NamedImageSummary'
 import { useState } from 'react'
 import { Input, Space } from 'antd'
 import type { CanvasModelCapability, CanvasResolvedOutput, InputBinding, VideoModelCard } from '../../../services/generated'
@@ -29,6 +30,7 @@ export function VideoInputBindings({ card, candidates, capability, loading, disa
       const supported = ports.filter(port => capability?.input_ports.includes(port))
       return <div key={key}>
         <strong>{output.token} · {output.available ? '候选' : '来源输出缺失'}</strong>
+        <NamedImageSummary output={output} />
         {supported.some(port => port.startsWith('subject_')) && <Input aria-label={`主体分组 ${output.token}`} placeholder="明确填写主体分组名称" value={names[key] || ''}
           disabled={disabled} onChange={event => setNames({ ...names, [key]: event.target.value })} />}
         <Space wrap>{supported.map(port => {
