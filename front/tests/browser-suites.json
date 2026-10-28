@@ -2,6 +2,7 @@
   "preflight": "preflight.mjs",
   "cases": {
     "generation-canvas-narrative": { "file": "generationCanvasNarrative.browser.mjs", "ports": [4293, 8293], "timeoutMs": 180000 },
+    "generation-canvas-mixed": { "file": "generationCanvasMixed.browser.mjs", "ports": [4295, 8295], "timeoutMs": 180000 },
     "generation-canvas-spatial": { "file": "generationCanvasSpatial.browser.mjs", "ports": [4287, 8287], "timeoutMs": 180000 },
     "generation-canvas-sound": { "file": "generationCanvasSound.browser.mjs", "ports": [4291, 8291], "timeoutMs": 180000 },
     "generation-canvas-photography": { "file": "generationCanvasPhotography.browser.mjs", "ports": [4289, 8289], "timeoutMs": 180000 },

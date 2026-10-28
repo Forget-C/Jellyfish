@@ -169,6 +169,17 @@ class CanvasRuntime:
             compiled, _, fingerprint, _ = await self._basis(canvas, card_id, result)
             result[card_id] = [CanvasResolvedOutput.model_validate(item).model_copy(update={
                 "basis_current": compiled.can_run and fingerprint == stored[card_id].basis_hash, "result_set_id": stored[card_id].id}) for item in stored[card_id].outputs]
+            # 正式位置保留身份，但文件撤回后不能继续作为可用输入，也不以重跑承诺放行。
+            for index, output in enumerate(result[card_id]):
+                if not output.file_id:
+                    continue
+                try:
+                    await require_available_file(self.db, file_id=output.file_id,
+                        expected_type=output.modality, lock=False)
+                except HTTPException:
+                    result[card_id][index] = CanvasResolvedOutput(source=output.source,
+                        modality=output.modality, available=False, result_set_id=output.result_set_id,
+                        basis_current=output.basis_current)
             visiting.remove(card_id)
         for card_id in stored:
             await resolve(card_id)
