@@ -516,6 +516,46 @@ class ShotDesignCard(NarrativeDirectionCard):
     output_ports: ClassVar[tuple[str, ...]] = ('text', 'shot')
 
 
+class ConstraintMediaExample(DesignMediaExample):
+    """前后态与证据固定到直接媒体产物及对应字段。"""
+    purpose: Literal['positive', 'negative', 'before', 'after', 'evidence'] = 'evidence'
+    field_id: Literal['spatial_basis', 'shootable_area', 'axis', 'scale', 'before', 'change', 'after', 'following_constraints', 'fact', 'source_basis'] | None = None
+
+
+class ConstraintDirectionCard(PerformanceDirectionCard):
+    """空间、连续性和事实共享直接关系及固定证据机制。"""
+    examples: list[ConstraintMediaExample] = Field(default_factory=list)
+
+
+class SpaceRuleCard(ConstraintDirectionCard):
+    """空间规则可独立使用，所属空间只提供身份和名称。"""
+    type: Literal['direction.space_rule'] = Field(default='direction.space_rule', json_schema_extra={'enum': ['direction.space_rule']})
+    spatial_basis: DesignField = Field(default_factory=lambda: DesignField(purpose='background'))
+    shootable_area: DesignField = Field(default_factory=lambda: DesignField(purpose='constraint'))
+    axis: DesignField = Field(default_factory=lambda: DesignField(purpose='constraint'))
+    scale: DesignField = Field(default_factory=lambda: DesignField(purpose='constraint'))
+    input_ports: ClassVar[tuple[str, ...]] = ('space', 'effect_object', 'image_example', 'video_example')
+
+
+class ContinuityCard(ConstraintDirectionCard):
+    """可选主体及事件，前后态不会变成隐式首尾帧。"""
+    type: Literal['direction.continuity'] = Field(default='direction.continuity', json_schema_extra={'enum': ['direction.continuity']})
+    category: Literal['space', 'appearance', 'hands_props', 'environment', 'photography', 'dialogue_sound'] = 'space'
+    before: DesignField = Field(default_factory=DesignField)
+    change: DesignField = Field(default_factory=DesignField)
+    after: DesignField = Field(default_factory=DesignField)
+    following_constraints: DesignField = Field(default_factory=lambda: DesignField(purpose='constraint'))
+    input_ports: ClassVar[tuple[str, ...]] = ('participant', 'related_event', 'image_example', 'video_example', 'audio_example')
+
+
+class ImmutableFactCard(ConstraintDirectionCard):
+    """保留事实、来源与范围，不验证文本或图片真伪。"""
+    type: Literal['direction.fact'] = Field(default='direction.fact', json_schema_extra={'enum': ['direction.fact']})
+    fact: DesignField = Field(default_factory=lambda: DesignField(purpose='constraint'))
+    source_basis: DesignField = Field(default_factory=lambda: DesignField(purpose='background'))
+    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'image_example', 'video_example', 'audio_example')
+
+
 class PhotographyMediaExample(DesignMediaExample):
     """摄影示例可定位明确声明的字段，文件仍不随文本采用。"""
     field_id: PhotographyFieldKey | None = None
@@ -544,7 +584,7 @@ class CanvasDocument(BaseModel):
     project_id: str
     name: str = Field(min_length=1, max_length=255)
     schema_version: Literal[2] = 2
-    cards: list[VisualStyleCard | PhotographyCard | DialogueCard | SoundArrangementCard | NarrativeOverviewCard | NarrativeBeatCard | NarrativeEventCard | ShotDesignCard | SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | ObjectDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard] = Field(default_factory=list)
+    cards: list[VisualStyleCard | SpaceRuleCard | ContinuityCard | ImmutableFactCard | PhotographyCard | DialogueCard | SoundArrangementCard | NarrativeOverviewCard | NarrativeBeatCard | NarrativeEventCard | ShotDesignCard | SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | ObjectDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard] = Field(default_factory=list)
     edges: list[GenerationCanvasEdge] = Field(default_factory=list)
     input_order: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
     groups: list[GenerationCanvasGroup] = Field(default_factory=list)

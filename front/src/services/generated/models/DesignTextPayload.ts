@@ -5,10 +5,12 @@
 import type { ActivityDesignFields } from './ActivityDesignFields';
 import type { AnchorDesignFields } from './AnchorDesignFields';
 import type { BlockingDesignFields } from './BlockingDesignFields';
+import type { ContinuityFields } from './ContinuityFields';
 import type { DesignScope } from './DesignScope';
 import type { DialogueBasis } from './DialogueBasis';
 import type { EnvironmentDesignFields } from './EnvironmentDesignFields';
 import type { FrameState } from './FrameState';
+import type { ImmutableFactFields } from './ImmutableFactFields';
 import type { NarrativeBeatFields } from './NarrativeBeatFields';
 import type { NarrativeDesignRelation } from './NarrativeDesignRelation';
 import type { NarrativeEventFields } from './NarrativeEventFields';
@@ -18,6 +20,7 @@ import type { ObjectReferencePayload } from './ObjectReferencePayload';
 import type { PerformanceDesignFields } from './PerformanceDesignFields';
 import type { ShotDesignFields } from './ShotDesignFields';
 import type { SoundDesignFields } from './SoundDesignFields';
+import type { SpaceRuleFields } from './SpaceRuleFields';
 import type { SpatialDesignRelations } from './SpatialDesignRelations';
 import type { SpatialReferencePayload } from './SpatialReferencePayload';
 import type { StyleDesignFields } from './StyleDesignFields';
@@ -26,12 +29,12 @@ import type { StyleDesignFields } from './StyleDesignFields';
  */
 export type DesignTextPayload = {
     kind?: 'design';
-    design_type: 'direction.style' | 'direction.situation' | 'direction.performance' | 'direction.performance_rule' | 'direction.anchor' | 'direction.blocking' | 'direction.activity' | 'direction.environment' | 'direction.narrative' | 'direction.beat' | 'direction.event' | 'direction.shot' | 'direction.dialogue' | 'direction.sound';
+    design_type: 'direction.style' | 'direction.space_rule' | 'direction.continuity' | 'direction.fact' | 'direction.situation' | 'direction.performance' | 'direction.performance_rule' | 'direction.anchor' | 'direction.blocking' | 'direction.activity' | 'direction.environment' | 'direction.narrative' | 'direction.beat' | 'direction.event' | 'direction.shot' | 'direction.dialogue' | 'direction.sound';
     adoption?: 'whole_card';
     text: string;
     frame_states?: Array<FrameState>;
     requires_frame_target?: boolean;
-    fields: (StyleDesignFields | NarrativeOverviewFields | NarrativeBeatFields | NarrativeEventFields | ShotDesignFields | PerformanceDesignFields | AnchorDesignFields | BlockingDesignFields | ActivityDesignFields | EnvironmentDesignFields | SoundDesignFields);
+    fields: (StyleDesignFields | SpaceRuleFields | ContinuityFields | ImmutableFactFields | NarrativeOverviewFields | NarrativeBeatFields | NarrativeEventFields | ShotDesignFields | PerformanceDesignFields | AnchorDesignFields | BlockingDesignFields | ActivityDesignFields | EnvironmentDesignFields | SoundDesignFields);
     scope: DesignScope;
     objects?: Array<ObjectReferencePayload>;
     spatial_relations?: (SpatialDesignRelations | null);
