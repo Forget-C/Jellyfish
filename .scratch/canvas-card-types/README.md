@@ -196,3 +196,5 @@ flowchart TD
 - 后续主区复核：8000 已恢复响应，PID61721／73854 工作目录均为本工作区 backend；生产 OpenAPI 与集成 b64ce5e5 的 schema 精确一致（含 subject_name）。标准 openapi:update 已通过；生成器纯尾空行漂移已剔除，不引入无关文件变化。此前超时记录为当时事实，不再作为当前限制。
 
 - 2026-10-28：无冲突合并08（分支HEAD `d8fa8a69`，合并提交 `71a007c8`），Completion 更新为 integrated，分诊Status保持不变。主区Node24.22.1 typecheck及08／视频／API HTTP回归 `74 passed, 2 skipped`（6.84s）通过；合并前分支已含主区 `60dba6df`，复用同一实现全部画布 `123 passed, 27 skipped`、Pylint `10.00/10`、08／06真实页面和共享工作台1440px／390px布局证据。已核实主区app导入路径，8000实际HTTP、主区生产导出与提交OpenAPI精确一致，含命名参考卡和稳定 `object_id` 选择器；标准 `openapi:update` 成功，371处纯尾空行漂移已剔除。工作区差异检查通过，backend／front／site与08验收分支精确一致；主区证据 `/private/tmp/canvas08-integrated`；MySQL及受控供应商／存储限制保留。当前共八票集成，09／10可开始；未推送、未修改其他工作树。
+
+- 2026-10-28：09 在 `codex-canvas-types-09` 基于 `acdbf7be` 实施明确的另一角度参考动作与图／视频多参考名称映射；按所选对象类别创建新参考，直接复用 `object_id`，不复制图片或自动采用。视频映射使用实际用途和显式主体组内图片顺序，保留06绑定权威及旧图片映射序列化。全部画布后端126 passed／28 skipped、Pylint10.00/10、Node24 typecheck、真实多角度页面／Vidu请求顺序及共享工作台六项通过。隔离8283生产OpenAPI已同步generated client；09 Completion为implemented待集成，Status保持不变，详见09票据与 `/private/tmp/canvas09-page-ordered` 证据。MySQL与受控外部服务限制保留。

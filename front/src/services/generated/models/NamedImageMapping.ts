@@ -12,4 +12,7 @@ export type NamedImageMapping = {
     position?: string;
     media_position: number;
     angle: string;
+    input_port?: (string | null);
+    subject_name?: (string | null);
+    purpose_position?: (number | null);
 };

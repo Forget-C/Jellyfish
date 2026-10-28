@@ -1,3 +1,4 @@
+import { NamedImageSummary } from './NamedImageSummary'
 import type { ComponentType, ReactNode } from 'react'
 import { Alert, Button, Select, Space } from 'antd'
 import type { CanvasDocument, CanvasModelCapability, CanvasNodeRead, CanvasResolvedOutput, CreativeBasisCard, ImageModelCard, ModelRead, ObjectDescriptionCard, PlaceDescriptionCard, TextContentCard, TextModelCard, VideoModelCard } from '../../../services/generated'
@@ -19,7 +20,7 @@ import { sourceKey } from './promptRules'
 import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
 import { activeNode } from './useGenerationCanvasRuntime'
 
-export type CardRendererProps = { savedRevision?: number; savedCard?: GenerationCard; card: GenerationCard; document: CanvasDocument; projectId: string; onChange: (card: GenerationCard) => void;
+export type CardRendererProps = { savedRevision?: number; savedCard?: GenerationCard; card: GenerationCard; document: CanvasDocument; projectId: string; onChange: (card: GenerationCard) => void; onAddAngle?: (output: CanvasResolvedOutput) => void;
   models?: ModelRead[]; capability?: CanvasModelCapability; capabilityError?: string; references?: ReactNode; disabled?: boolean; modelOutputs?: Record<string, CanvasResolvedOutput[]>; node?: CanvasNodeRead; busy?: boolean; checking?: boolean; runDisabled?: boolean; onPrecheck?: () => void; onTargetPrecheck?: () => void }
 
 /** 模型卡共享受控 Composer 布局，参数由各模态组件表达。 */
@@ -73,6 +74,7 @@ function ModelRenderer({ card: raw, savedRevision, savedCard, document, disabled
           <strong>{output.token} · {savedBindings.some(value => sourceKey(value.source) === sourceKey(output.source)) ? '已采用' : '候选'}</strong>
           {output.available === false ? <small>来源输出缺失</small> : output.modality === 'text'
             ? <CanvasTextPreview text={output.text || ''} label="已保存来源" /> : <small>{output.modality} · {output.file_id}</small>}
+          <NamedImageSummary output={output} />
           {output.basis_current === false && <small>依据已变，需重新生成来源</small>}
           {card.type === 'model.image' && output.modality === 'image' && output.available !== false && output.file_id && <details><summary>预览 {output.token}</summary><MediaPreview fileId={output.file_id} type="image" /></details>}
           {card.type === 'model.image' && ['text', 'image'].includes(output.modality) && <Space wrap>

@@ -10,7 +10,7 @@ const objectReference = (payload: CanvasResolvedOutput['payload']): payload is O
 const categories = { character: '人物', place: '场所', prop: '道具', costume: '服装' }
 
 /** 名称列表只渲染对象引用；图片选择独立，不展开名称来源描述。 */
-export function NamedImageReferenceEditor({ card: raw, document, projectId, savedRevision, modelOutputs, references, onChange, disabled }: CardRendererProps) {
+export function NamedImageReferenceEditor({ card: raw, document, projectId, savedRevision, modelOutputs, references, onChange, onAddAngle, disabled }: CardRendererProps) {
   const card = raw as NamedImageReferenceCard
   const resolved = useCardCandidates(projectId, document.id, card.id, savedRevision, modelOutputs, false)
   const category = card.type.split('.')[1] as NamedImageObject['category']
@@ -24,6 +24,12 @@ export function NamedImageReferenceEditor({ card: raw, document, projectId, save
   return <Space direction="vertical" style={{ width: '100%' }}>
     <label>参考标题<Input aria-label="参考标题" disabled={disabled} value={card.title || ''} onChange={event => onChange({ ...card, title: event.target.value })} /></label>
     <label>参考角度<Input aria-label="参考角度" disabled={disabled} value={card.angle ?? '正面'} onChange={event => onChange({ ...card, angle: event.target.value })} /></label>
+    <small>参考角度描述这张主图；最终画面视角由生成要求决定。</small>
+    <section aria-label="添加另一角度参考">
+      {resolved.outputs.filter(item => objectReference(item.payload)).map(item => objectReference(item.payload) && <WorkbenchButton key={sourceKey(item.source)} disabled={disabled || !onAddAngle}
+        onClick={() => onAddAngle?.(item)}>添加另一角度参考 {item.payload.name}</WorkbenchButton>)}
+      <small>明确复用所选对象身份；新卡主图和角度独立选择。</small>
+    </section>
     {references}
     {resolved.error && <Alert type="error" message={resolved.error} />}
     <section aria-label="名称关联">
