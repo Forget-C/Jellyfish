@@ -1,6 +1,7 @@
 {
   "preflight": "preflight.mjs",
   "cases": {
+    "generation-canvas-narrative": { "file": "generationCanvasNarrative.browser.mjs", "ports": [4293, 8293], "timeoutMs": 180000 },
     "generation-canvas-spatial": { "file": "generationCanvasSpatial.browser.mjs", "ports": [4287, 8287], "timeoutMs": 180000 },
     "generation-canvas-sound": { "file": "generationCanvasSound.browser.mjs", "ports": [4291, 8291], "timeoutMs": 180000 },
     "generation-canvas-photography": { "file": "generationCanvasPhotography.browser.mjs", "ports": [4289, 8289], "timeoutMs": 180000 },
@@ -56,7 +57,7 @@
     "periodic-save": { "file": "scenePeriodicSave.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 }
   },
   "suites": {
-    "generation": ["generation-canvas-photography", "generation-canvas-sound", "legacy-labs", "generation-canvas-acceptance", "generation-canvas-selection", "generation-canvas-lifecycle", "generation-canvas-target", "generation-canvas-video", "generation-canvas-video-bindings", "generation-canvas-images", "generation-canvas-history", "generation-canvas-runtime", "generation-canvas-composer", "generation-canvas-graph", "generation-canvas", "generation-canvas-save", "generation-canvas-autosave", "generation-canvas-media", "generation-canvas-named-references", "generation-canvas-multi-view", "generation-canvas-spatial"],
+    "generation": ["generation-canvas-photography", "generation-canvas-sound", "legacy-labs", "generation-canvas-acceptance", "generation-canvas-selection", "generation-canvas-lifecycle", "generation-canvas-target", "generation-canvas-video", "generation-canvas-video-bindings", "generation-canvas-images", "generation-canvas-history", "generation-canvas-runtime", "generation-canvas-composer", "generation-canvas-graph", "generation-canvas", "generation-canvas-save", "generation-canvas-autosave", "generation-canvas-media", "generation-canvas-named-references", "generation-canvas-multi-view", "generation-canvas-spatial", "generation-canvas-narrative"],
     "instruction-video": ["instruction-card", "frame-inputs", "default-assets", "reference-source", "frame-dependencies", "instruction-inputs", "candidate-refresh", "scene-video"],
     "instructions": ["instruction-inputs", "instruction-design", "instruction-primary", "instruction-preparation", "instruction-suggestions", "instruction-evidence"],
     "references": ["frame-inputs", "default-assets", "reference-source"],

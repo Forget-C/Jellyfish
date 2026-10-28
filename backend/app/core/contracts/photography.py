@@ -1,7 +1,7 @@
 """摄影独立强类型契约：声明的范围是唯一可用的选择入口。"""
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
-from app.core.contracts.generation_canvas import DesignField, DesignScope, ObjectReferencePayload, FrameState
+from app.core.contracts.generation_canvas import DesignField, DesignScope, ObjectReferencePayload, FrameState, NarrativeReferencePayload
 
 
 PhotographyFieldKey = Literal['shot_size', 'composition', 'frame_position', 'depth_layers', 'negative_space', 'composition_requirements', 'viewpoint', 'position', 'height_angle', 'lens_effect', 'support', 'movement_type', 'movement_start', 'movement_trigger', 'movement_path', 'movement_speed', 'end_frame', 'light_sources', 'light_direction', 'light_regions', 'exposure_color', 'color_relationship', 'depth_focus', 'focus_change', 'optical_effects', 'motion_texture', 'technical_parameters', 'adjacent_requirements', 'prohibitions']
@@ -107,4 +107,5 @@ class PhotographyTextPayload(BaseModel):
     scope: DesignScope
     object_uses: list[PhotographyObjectUse] = Field(default_factory=list)
     objects: list[ObjectReferencePayload] = Field(default_factory=list)
+    shot: NarrativeReferencePayload | None = Field(default=None, exclude_if=lambda value: value is None)
     source_locator: str = ''

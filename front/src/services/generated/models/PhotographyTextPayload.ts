@@ -4,6 +4,7 @@
 /* eslint-disable */
 import type { DesignScope } from './DesignScope';
 import type { FrameState } from './FrameState';
+import type { NarrativeReferencePayload } from './NarrativeReferencePayload';
 import type { ObjectReferencePayload } from './ObjectReferencePayload';
 import type { PhotographyAdoptionScope } from './PhotographyAdoptionScope';
 import type { PhotographyEntry } from './PhotographyEntry';
@@ -23,5 +24,6 @@ export type PhotographyTextPayload = {
     scope: DesignScope;
     object_uses?: Array<PhotographyObjectUse>;
     objects?: Array<ObjectReferencePayload>;
+    shot?: (NarrativeReferencePayload | null);
     source_locator?: string;
 };

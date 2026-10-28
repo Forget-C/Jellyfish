@@ -1,5 +1,5 @@
 import { Alert, Input, InputNumber, Select, Space } from 'antd'
-import type { SpatialAnchorCard, BlockingDirectionCard, InFrameActivityCard, EnvironmentActivityCard, ObjectReferencePayload, SpatialReferencePayload } from '../../../services/generated'
+import type { SpatialAnchorCard, BlockingDirectionCard, InFrameActivityCard, EnvironmentActivityCard, ObjectReferencePayload, SpatialReferencePayload, NarrativeReferencePayload } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
 import { DesignFieldEditor as FieldEditor } from './DesignFieldEditor'
 import { useCardCandidates } from './useCardCandidates'
@@ -71,13 +71,13 @@ export function SpatialDirectionEditor({ card: raw, document, savedRevision, mod
     <section aria-label="空间关系"><h3>直接对象与空间关系</h3>
       {resolved.candidates.map(item => {
         const rawPayload = item.payload
-        if (rawPayload?.kind !== 'object_reference' && rawPayload?.kind !== 'spatial_reference') return null
-        const payload = rawPayload as ObjectReferencePayload | SpatialReferencePayload
+        if (rawPayload?.kind !== 'object_reference' && rawPayload?.kind !== 'spatial_reference' && rawPayload?.kind !== 'narrative_reference') return null
+        const payload = rawPayload as ObjectReferencePayload | SpatialReferencePayload | NarrativeReferencePayload
         return <div key={sourceKey(item.source)}><span>{payload.name}</span>{inputPorts(card).filter(port => document.edges?.some(edge => edge.source_card === item.source.card_id && edge.source_port === item.source.port_id && edge.target_card === card.id && edge.target_port === port)).map(port => {
           if (port === 'participant' && (payload.kind !== 'object_reference' || payload.category === 'place')) return null
           if (port === 'space' && (payload.kind !== 'object_reference' || payload.category !== 'place')) return null
           const binding = bindings.find(value => value.input_port === port && sourceKey(value.source) === sourceKey(item.source))
-          const single = ['participant', 'space', 'area_anchor'].includes(port)
+          const single = ['participant', 'space', 'area_anchor', 'change_event', 'trigger_event'].includes(port)
           return <WorkbenchButton key={port} disabled={disabled || !binding && single && bindings.some(value => value.input_port === port)} onClick={() => update({ ...card, input_bindings: binding ? bindings.filter(value => value.id !== binding.id) : [...bindings, { id: crypto.randomUUID(), input_port: port, source: item.source }] })}>{`${binding ? '取消' : '选择'}${portLabels[port]} ${payload.name}`}</WorkbenchButton>
         })}</div>
       })}

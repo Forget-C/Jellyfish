@@ -241,6 +241,55 @@ class DialogueBasis(BaseModel):
     speaker: ObjectReferencePayload | None = None
 
 
+class NarrativeOverviewFields(BaseModel):
+    """本卡强类型完整叙事字段，保留显式状态。"""
+    model_config = ConfigDict(extra='forbid')
+    viewpoint: DesignField
+    information_change: DesignField
+    relationship_change: DesignField
+    turning_point: DesignField
+    open_questions: DesignField
+
+
+class NarrativeBeatFields(BaseModel):
+    """本卡强类型完整叙事字段，保留显式状态。"""
+    model_config = ConfigDict(extra='forbid')
+    objective: DesignField
+    obstacle: DesignField
+    expected_change: DesignField
+    audience_must_see: DesignField
+
+
+class NarrativeEventFields(BaseModel):
+    """本卡强类型完整叙事字段，保留显式状态。"""
+    model_config = ConfigDict(extra='forbid')
+    action_change: DesignField
+
+
+class ShotDesignFields(BaseModel):
+    """本卡强类型完整叙事字段，保留显式状态。"""
+    model_config = ConfigDict(extra='forbid')
+    narrative_role: DesignField
+    visible_result: DesignField
+    estimated_duration: DesignField
+
+
+class NarrativeReferencePayload(BaseModel):
+    """稳定节拍、事件或镜头身份；不携带关联正文或媒体。"""
+    model_config = ConfigDict(extra='forbid')
+    kind: Literal['narrative_reference'] = Field(default='narrative_reference', json_schema_extra={'enum': ['narrative_reference']})
+    category: Literal['beat', 'event', 'shot']
+    reference_id: str
+    name: str
+
+
+class NarrativeDesignRelation(BaseModel):
+    """直接采用的用途与必要身份，保留多个不同用途。"""
+    model_config = ConfigDict(extra='forbid')
+    input_port: Literal['participant', 'effect_object', 'covered_beat', 'related_event', 'blocking_basis', 'beat', 'received_event', 'change_event', 'trigger_event', 'shot', 'space', 'position_anchor', 'area_anchor']
+    reference: ObjectReferencePayload | SpatialReferencePayload | NarrativeReferencePayload
+
+
 class FrameState(BaseModel):
     """导演明确提供的画面状态，图片仅定位其稳定身份。"""
     model_config = ConfigDict(extra='forbid')
@@ -252,16 +301,17 @@ class DesignTextPayload(BaseModel):
     """本卡完整设计及直接采用的必要对象，不包含祖先正文或示例媒体。"""
     model_config = ConfigDict(extra='forbid')
     kind: Literal['design'] = Field(default='design', json_schema_extra={'enum': ['design']})
-    design_type: Literal['direction.situation', 'direction.performance', 'direction.performance_rule', 'direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment', 'direction.dialogue', 'direction.sound']
+    design_type: Literal['direction.situation', 'direction.performance', 'direction.performance_rule', 'direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment', 'direction.narrative', 'direction.beat', 'direction.event', 'direction.shot', 'direction.dialogue', 'direction.sound']
     adoption: Literal['whole_card'] = Field(default='whole_card', json_schema_extra={'enum': ['whole_card']})
     text: str
     frame_states: list[FrameState] = Field(default_factory=list, exclude_if=lambda value: not value)
     requires_frame_target: bool = Field(default=False, exclude_if=lambda value: not value)
-    fields: PerformanceDesignFields | AnchorDesignFields | BlockingDesignFields | ActivityDesignFields | EnvironmentDesignFields | SoundDesignFields
+    fields: NarrativeOverviewFields | NarrativeBeatFields | NarrativeEventFields | ShotDesignFields | PerformanceDesignFields | AnchorDesignFields | BlockingDesignFields | ActivityDesignFields | EnvironmentDesignFields | SoundDesignFields
     scope: DesignScope
     objects: list[ObjectReferencePayload] = Field(default_factory=list)
     spatial_relations: SpatialDesignRelations | None = Field(default=None, exclude_if=lambda value: value is None)
-    references: list[SpatialReferencePayload] = Field(default_factory=list, exclude_if=lambda value: not value)
+    references: list[SpatialReferencePayload | NarrativeReferencePayload] = Field(default_factory=list, exclude_if=lambda value: not value)
+    narrative_relations: list[NarrativeDesignRelation] = Field(default_factory=list, exclude_if=lambda value: not value)
     participant_id: str | None = None
     dialogue_id: str | None = Field(default=None, exclude_if=lambda value: value is None)
     version: int | None = Field(default=None, exclude_if=lambda value: value is None)

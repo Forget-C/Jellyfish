@@ -1,3 +1,4 @@
+import { NarrativeDirectionEditor } from './NarrativeDirectionEditor'
 import { SpatialDirectionEditor } from './SpatialDirectionEditor'
 import { PhotographyEditor } from './PhotographyEditor'
 import { PhotographyInputScope } from './PhotographyInputScope'
@@ -123,6 +124,7 @@ function ModelRenderer({ card: raw, savedRevision, savedCard, document, disabled
 
 /** 显式类型入口，无供应商卡片族或通用表单引擎。 */
 export const rendererRegistry: Record<string, ComponentType<CardRendererProps>> = {
+  'direction.narrative': NarrativeDirectionEditor, 'direction.beat': NarrativeDirectionEditor, 'direction.event': NarrativeDirectionEditor, 'direction.shot': NarrativeDirectionEditor,
   'direction.anchor': SpatialDirectionEditor,
   'direction.blocking': SpatialDirectionEditor,
   'direction.activity': SpatialDirectionEditor,
