@@ -13,4 +13,3 @@ export type NamedImageMapping = {
     media_position: number;
     angle: string;
 };
-

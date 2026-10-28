@@ -11,4 +11,3 @@ export type CanvasSourceMapping = {
     source: OutputIdentity;
     media_position: (number | null);
 };
-

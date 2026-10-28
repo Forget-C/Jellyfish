@@ -11,4 +11,3 @@ export type NamedImageObject = {
     category: 'character' | 'prop' | 'costume' | 'place';
     position?: string;
 };
-

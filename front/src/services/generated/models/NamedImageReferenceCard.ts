@@ -19,4 +19,3 @@ export type NamedImageReferenceCard = {
     image_binding?: (ReferenceImageBinding | null);
     positions?: Record<string, string>;
 };
-

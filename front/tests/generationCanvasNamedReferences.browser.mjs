@@ -34,7 +34,6 @@ try {
   page.on('pageerror', error => console.log('PAGE ERROR', error.message))
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '命名图片参考' }) })).json()).data
-  const source = (card_id, port_id, position = 0) => ({ canvas_id: canvas.id, card_id, port_id, position })
   const document = { ...canvas.document, cards: [
     { id: 'm', type: 'model.image', model_id: 'canvas-image-model', prompt: { segments: [{ id: 'p', kind: 'text', text: '三张角色图片' }] }, config: { count: 3 } },
     { id: 'person', type: 'content.object', object_id: 'alice', name: '小雪', category: 'character', text: '秘密描述不应展示或自动采用' },

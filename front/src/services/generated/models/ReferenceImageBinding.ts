@@ -11,4 +11,3 @@ export type ReferenceImageBinding = {
     source?: (OutputIdentity | null);
     result_set_id?: (string | null);
 };
-

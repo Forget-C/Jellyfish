@@ -12,4 +12,3 @@ export type NamedImagePayload = {
     objects?: Array<NamedImageObject>;
     angle: string;
 };
-
