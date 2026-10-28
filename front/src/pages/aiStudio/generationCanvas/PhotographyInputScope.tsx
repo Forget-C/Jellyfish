@@ -11,10 +11,13 @@ export function PhotographyInputScope({card, output, binding, onChange, disabled
   const image = card as ImageModelCard
   const selected = isPhotography ? binding.photography_scope ?? ['whole'] : ['whole']
   const states = (payload.frame_states || []).filter(state => selected.includes('whole') || selected.includes(state.id) || selected.includes('region:movement'))
-  return <section aria-label={`摄影采用配置 ${output.token}`}>
+  const retainedTarget = image.frame_targets?.some(target => target.binding_id === binding.id)
+  const showTarget = card.type === 'model.image' && (states.length > 0 || retainedTarget)
+  if (!isPhotography && !showTarget) return null
+  return <section aria-label={`导演输入配置 ${output.token}`}>
     {isPhotography && <label>采用范围<Select aria-label={`摄影采用范围 ${output.token}`} mode="multiple" optionFilterProp="label" value={selected} disabled={disabled} style={{width:'100%'}} options={(photography.adoption_scopes || []).map(scope => ({value:scope.id,label:scope.label}))}
       onChange={photography_scope => onChange({...card,input_bindings:(card.input_bindings || []).map(value => value.id === binding.id ? {...value,photography_scope} : value)})} /></label>}
-    {card.type === 'model.image' && <label>本张图画面目标<Select aria-label={`画面目标 ${output.token}`} allowClear placeholder={states.length > 1 ? '请选择明确状态' : '已有明确状态时可选'} disabled={disabled} style={{width:'100%'}} value={image.frame_targets?.find(target => target.binding_id === binding.id)?.state_id}
+    {showTarget && <label>本张图画面目标<Select aria-label={`画面目标 ${output.token}`} allowClear placeholder={states.length > 1 ? '请选择明确状态' : '已有明确状态时可选'} disabled={disabled} style={{width:'100%'}} value={image.frame_targets?.find(target => target.binding_id === binding.id)?.state_id}
       options={states.map(state => ({value:state.id,label:state.label}))} onChange={state_id => onChange({...card,frame_targets:[...(image.frame_targets || []).filter(target => target.binding_id !== binding.id),...(state_id ? [{binding_id:binding.id,state_id}] : [])]})} /></label>}
   </section>
 }
