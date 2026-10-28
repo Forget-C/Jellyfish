@@ -34,3 +34,23 @@ class InputBinding(BaseModel):
     id: str = Field(min_length=1)
     source: OutputIdentity
     input_port: str
+
+
+class ObjectReferencePayload(BaseModel):
+    """关系出口只携带对象身份，不传递描述、媒体或祖先内容。"""
+    model_config = ConfigDict(extra='forbid')
+    kind: Literal['object_reference'] = 'object_reference'
+    object_id: str
+    name: str
+    category: Literal['character', 'prop', 'costume', 'place']
+
+
+class DescriptionTextPayload(BaseModel):
+    """描述出口保留本卡对象与来源信息；模型只展开正文。"""
+    model_config = ConfigDict(extra='forbid')
+    kind: Literal['description'] = 'description'
+    object_id: str | None
+    name: str
+    category: Literal['character', 'prop', 'costume', 'place']
+    text: str
+    source_locator: str

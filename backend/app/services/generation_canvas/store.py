@@ -89,6 +89,24 @@ class CanvasStore:
             raise diagnostic("RUN_SCOPE_BUSY", "活动模型卡不可删除", {"canvas_id": canvas_id}, status=409)
         # Provenance cannot be removed or rewritten by edits to independent content.
         previous_cards = {card['id']: card for card in canvas.document.get('cards', [])}
+        object_names = {}
+        object_ids = set()
+        from app.schemas.generation_canvas import ObjectDescriptionCard
+        for card in document.cards:
+            if not isinstance(card, ObjectDescriptionCard):
+                continue
+            previous = previous_cards.get(card.id)
+            if previous and previous.get('object_id') and previous['object_id'] != card.object_id:
+                raise diagnostic('IMMUTABLE_OBJECT_IDENTITY', '已建立对象的身份不可修改', {'card_id': card.id, 'path': ['object_id']})
+            if card.object_id:
+                if card.object_id in object_ids:
+                    raise diagnostic('DUPLICATE_OBJECT_IDENTITY', '独立描述卡不可复用同一对象身份', {'card_id': card.id, 'path': ['object_id']})
+                object_ids.add(card.object_id)
+            name = card.name.strip()
+            if name:
+                if name in object_names:
+                    raise diagnostic('DUPLICATE_OBJECT_NAME', '同一画布内独立对象名称必须唯一', {'card_id': card.id, 'path': ['name']})
+                object_names[name] = card.id
         for card in document.cards:
             origin = getattr(card, 'origin', None)
             previous = previous_cards.get(card.id)
