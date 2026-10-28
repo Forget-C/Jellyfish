@@ -275,3 +275,157 @@ def test_seed_outside_standard_video_dto_range_blocks_before_acceptance():
     cap = CanvasModelCapability(model_id='m', modality='video', input_ports=['text'], ratios=['16:9'], supports_seed=True)
     issues = parameter_diagnostics(doc.cards[-1], cap)
     assert [(item['code'], item['target']['path']) for item in issues] == [('INVALID_PARAMETER', ['config', 'seed'])]
+
+
+@pytest.mark.asyncio
+async def test_saved_video_bindings_alone_are_actual_ordered_frame_inputs(runtime, image_storage):
+    initial, _ = await setup_video(runtime)
+    doc = (await runtime.client.get(runtime.url)).json()['data']['document']
+    video = doc['cards'][-1]
+    sources = {binding['source']['card_id']: binding['source'] for binding in video['input_bindings']}
+    video['prompt'] = {'segments': [{'kind': 'text', 'id': 'body', 'text': 'Keep original motion.'}]}
+    video['input_bindings'] = [
+        {'id': 'key-b', 'source': sources['b'], 'input_port': 'key_frame'},
+        {'id': 'key-a', 'source': sources['a'], 'input_port': 'key_frame'},
+        {'id': 'first-a', 'source': sources['a'], 'input_port': 'first_frame'},
+    ]
+    saved = await runtime.client.put(runtime.url, json={'request_id': 'binding-frames', 'expected_revision': 2, 'document': doc})
+    assert saved.status_code == 200, saved.text
+    preview = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'v'})).json()['data']
+    assert preview['can_run'], preview
+    frames = preview['input']['video_media']['frames']
+    assert frames['first']['file_id'] == doc['cards'][0]['file_id']
+    assert [item['file_id'] for item in frames['keys']] == [doc['cards'][1]['file_id'], doc['cards'][0]['file_id']]
+    await runtime.client.post(runtime.url + f"/runs/{initial['run_id']}/cancel")
+    preview = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'v'})).json()['data']
+    accepted = await runtime.client.post(runtime.url + '/runs', json={'request_id': 'canonical-run', 'preview_token': preview['preview_token']})
+    assert accepted.status_code == 200, accepted.text
+    # Editing after acceptance must not change the actual provider request.
+    video['input_bindings'] = []
+    await runtime.client.put(runtime.url, json={'request_id': 'after-accept', 'expected_revision': 3, 'document': doc})
+    requests = []
+    def provider(request):
+        requests.append(json.loads(request.content))
+        return httpx.Response(200, json={'id': 'canonical-video'})
+    from app.task_worker import TaskWorker
+    async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as client:
+        worker = TaskWorker(runtime.sessions, client=client)
+        await worker.tick()
+        await asyncio.gather(*worker.jobs.values())
+        worker.text_pool.shutdown(wait=False)
+    assert [item.get('role') for item in requests[0]['content']] == [None, 'first_frame', 'key_frame', 'key_frame']
+    assert requests[0]['content'][0] == {'type': 'text', 'text': 'Keep original motion.'}
+    assert [item['image_url']['url'] for item in requests[0]['content'][1:]] == [
+        'data:image/png;base64,' + base64.b64encode(value).decode() for value in (b'first-image', b'last-image', b'first-image')]
+
+
+@pytest.mark.asyncio
+async def test_subject_binding_requires_explicit_group_and_preserves_video_usage(runtime, image_storage):
+    await setup_video(runtime, 'vidu', [instruction('主体参考', ['a'], '演员')])
+    doc = (await runtime.client.get(runtime.url)).json()['data']['document']
+    video = doc['cards'][-1]
+    video['prompt'] = {'segments': []}
+    video['input_bindings'] = [{'id': 'video-subject', 'source': {'canvas_id': runtime.canvas_id, 'card_id': 'clip', 'port_id': 'video', 'position': 0},
+        'input_port': 'subject_video', 'subject_name': '演员'}]
+    saved = await runtime.client.put(runtime.url, json={'request_id': 'binding-subject', 'expected_revision': 2, 'document': doc})
+    assert saved.status_code == 200, saved.text
+    preview = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'v'})).json()['data']
+    assert preview['can_run'], preview
+    assert preview['input']['video_media']['subjects'] == [{'name': '演员', 'media': [{'file_id': doc['cards'][2]['file_id'], 'media_kind': 'video', 'ordinal': 0}]}]
+    video['input_bindings'][0]['subject_name'] = ''
+    saved = await runtime.client.put(runtime.url, json={'request_id': 'missing-group', 'expected_revision': 3, 'document': doc})
+    assert saved.status_code == 200, saved.text
+    preview = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'v'})).json()['data']
+    assert not preview['can_run']
+    assert any(item['code'] == 'SUBJECT_NAME_REQUIRED' and item['target']['path'] == ['input_bindings', 'video-subject'] for item in preview['diagnostics'])
+
+
+@pytest.mark.asyncio
+async def test_duplicate_frame_bindings_and_subject_limits_locate_bindings(runtime, image_storage):
+    await setup_video(runtime, 'vidu', [instruction('主体参考', ['a'], '演员')])
+    doc = (await runtime.client.get(runtime.url)).json()['data']['document']
+    video = doc['cards'][-1]
+    video['prompt'] = {'segments': []}
+    image = {'canvas_id': runtime.canvas_id, 'card_id': 'a', 'port_id': 'image', 'position': 0}
+    video['input_bindings'] = [{'id': 'first', 'source': image, 'input_port': 'first_frame'},
+        {'id': 'duplicate', 'source': image, 'input_port': 'first_frame'},
+        {'id': 'subject', 'source': image, 'input_port': 'subject_image', 'subject_name': '演员'}]
+    saved = await runtime.client.put(runtime.url, json={'request_id': 'duplicate-bindings', 'expected_revision': 2, 'document': doc})
+    assert saved.status_code == 200, saved.text
+    preview = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'v'})).json()['data']
+    issues = {item['code']: item for item in preview['diagnostics']}
+    assert not preview['can_run']
+    assert issues['FRAME_COUNT_EXCEEDED']['target']['path'] == ['input_bindings', 'duplicate']
+    assert issues['UNSUPPORTED_REFERENCE_COMBINATION']['target']['path'] == ['input_bindings', 'subject']
+
+
+@pytest.mark.asyncio
+async def test_subject_usage_is_saved_on_binding_and_binding_name_is_authoritative(runtime, image_storage):
+    await setup_video(runtime, 'vidu', [instruction('主体参考', ['a'], '演员')])
+    doc = (await runtime.client.get(runtime.url)).json()['data']['document']
+    video = doc['cards'][-1]
+    assert video['input_bindings'][0]['subject_name'] == '演员'
+    video['input_bindings'][0]['subject_name'] = '替身'
+    saved = await runtime.client.put(runtime.url, json={'request_id': 'group-binding', 'expected_revision': 2, 'document': doc})
+    assert saved.status_code == 200, saved.text
+    compiled = (await runtime.client.get(runtime.url + '/cards/v/compile')).json()['data']
+    assert [subject['name'] for subject in compiled['video_media']['subjects']] == ['替身']
+    video['prompt']['segments'][0]['parameters']['name'] = ''
+    saved = await runtime.client.put(runtime.url, json={'request_id': 'legacy-empty-name', 'expected_revision': 3, 'document': doc})
+    assert saved.status_code == 200, saved.text
+    compiled = (await runtime.client.get(runtime.url + '/cards/v/compile')).json()['data']
+    assert compiled['can_run'], 'canonical group remains valid without a second name in prompt parameters'
+    video['input_bindings'][0]['subject_name'] = ''
+    saved = await runtime.client.put(runtime.url, json={'request_id': 'clear-group-binding', 'expected_revision': 4, 'document': doc})
+    assert saved.status_code == 200, saved.text
+    compiled = (await runtime.client.get(runtime.url + '/cards/v/compile')).json()['data']
+    assert not compiled['can_run'], 'legacy instruction name cannot replace a cleared canonical group'
+
+
+@pytest.mark.asyncio
+async def test_video_binding_cannot_implicitly_convert_clip_to_frame(runtime, image_storage):
+    await setup_video(runtime, 'vidu', [instruction('主体参考', ['a'], '演员')])
+    doc = (await runtime.client.get(runtime.url)).json()['data']['document']
+    video = doc['cards'][-1]
+    video['prompt'] = {'segments': []}
+    video['input_bindings'] = [{'id': 'clip-as-frame', 'source': {'canvas_id': runtime.canvas_id, 'card_id': 'clip', 'port_id': 'video', 'position': 0}, 'input_port': 'first_frame'}]
+    saved = await runtime.client.put(runtime.url, json={'request_id': 'no-conversion', 'expected_revision': 2, 'document': doc})
+    assert saved.status_code == 200, saved.text
+    preview = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'v'})).json()['data']
+    assert not preview['can_run']
+    assert any(item['code'] == 'INPUT_BINDING_TYPE' and item['target']['path'] == ['input_bindings', 'clip-as-frame'] for item in preview['diagnostics'])
+
+
+@pytest.mark.asyncio
+async def test_body_reference_to_adopted_frame_does_not_change_its_video_purpose(runtime, image_storage):
+    await setup_video(runtime)
+    doc = (await runtime.client.get(runtime.url)).json()['data']['document']
+    video = doc['cards'][-1]
+    first = next(binding for binding in video['input_bindings'] if binding['input_port'] == 'first_frame')
+    video['input_bindings'] = [first]
+    video['prompt'] = {'segments': [{'id': 'frame-in-body', 'kind': 'reference', 'binding_id': first['id']}]}
+    saved = await runtime.client.put(runtime.url, json={'request_id': 'body-frame', 'expected_revision': 2, 'document': doc})
+    assert saved.status_code == 200, saved.text
+    compiled = (await runtime.client.get(runtime.url + '/cards/v/compile')).json()['data']
+    assert compiled['can_run'], compiled
+    assert compiled['video_media']['subjects'] == []
+    assert compiled['video_media']['frames']['first']['file_id'] == doc['cards'][0]['file_id']
+
+
+@pytest.mark.asyncio
+async def test_legacy_shared_subject_binding_preserves_multiple_explicit_groups(runtime, image_storage):
+    await setup_video(runtime, 'vidu', [instruction('主体参考', ['a'], '甲')])
+    doc = (await runtime.client.get(runtime.url)).json()['data']['document']
+    video = doc['cards'][-1]
+    binding = video['input_bindings'][0]
+    binding.pop('subject_name')
+    # Old v2 coalesced the same source/purpose into one binding even across names.
+    video['prompt']['segments'] += [{'id': 'second-group', 'kind': 'instruction', 'command': '主体参考', 'parameters': {'name': '乙'},
+        'references': [{'id': 'second-ref', 'kind': 'reference', 'binding_id': binding['id']}]},
+        {'id': 'body-ref', 'kind': 'reference', 'binding_id': binding['id']}]
+    saved = await runtime.client.put(runtime.url, json={'request_id': 'legacy-shared-group', 'expected_revision': 2, 'document': doc})
+    assert saved.status_code == 200, saved.text
+    compiled = (await runtime.client.get(runtime.url + '/cards/v/compile')).json()['data']
+    assert compiled['can_run'], compiled
+    assert [group['name'] for group in compiled['video_media']['subjects']] == ['甲', '乙', 'media1']
+    assert compiled['text'] == '@media1'

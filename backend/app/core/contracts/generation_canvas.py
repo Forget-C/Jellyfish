@@ -43,6 +43,7 @@ class InputBinding(BaseModel):
     id: str = Field(min_length=1)
     source: OutputIdentity
     input_port: str
+    subject_name: str | None = None
 
 
 class ObjectReferencePayload(BaseModel):

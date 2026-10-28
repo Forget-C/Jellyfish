@@ -2,6 +2,7 @@ import type { ComponentType, ReactNode } from 'react'
 import { Alert, Button, Select, Space } from 'antd'
 import type { CanvasDocument, CanvasModelCapability, CanvasNodeRead, CanvasResolvedOutput, CreativeBasisCard, ImageModelCard, ModelRead, ObjectDescriptionCard, PlaceDescriptionCard, TextContentCard, TextModelCard, VideoModelCard } from '../../../services/generated'
 import { ExperimentComposer } from '../experiment/components/ExperimentComposer'
+import { VideoInputBindings } from './VideoInputBindings'
 import { PromptEditor } from './PromptEditor'
 import { editorPrompt, withEditorPrompt, withoutInputBinding } from './inputBindings'
 import { useCardCandidates } from './useCardCandidates'
@@ -88,6 +89,7 @@ function ModelRenderer({ card: raw, savedRevision, savedCard, document, disabled
       {(resolved.compiled?.diagnostics || []).map((diagnostic, index) => <Alert key={`${diagnostic.code}:${index}`} type={diagnostic.severity === 'warning' ? 'warning' : 'error'}
         message={`${diagnostic.code}: ${diagnostic.message}`} />)}
     </section>
+    {card.type === 'model.video' && <VideoInputBindings card={card as VideoModelCard} candidates={resolved.candidates} loading={resolved.loading} capability={capability} disabled={disabled} onChange={onChange} />}
     <Button disabled={disabled || busy || runDisabled} onClick={() => onTargetPrecheck?.()}>运行到此处</Button>
     <ExperimentComposer options={<><Select aria-label="选择模型" placeholder="选择模型" allowClear value={card.model_id || undefined} style={{ minWidth: 180 }}
       options={models?.filter(model => model.category === category).map(model => ({ value: model.id, label: model.name }))}
