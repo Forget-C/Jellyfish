@@ -20,7 +20,7 @@
 
 
 
-**Completion:** implemented
+**Completion:** integrated
 
 ## Comments
 
@@ -34,3 +34,5 @@
 - 最终集成复验：实现提交 `c82f1428`，合入06集成 `b64ce5e5`（合并 `1b391ff9`），再合最新集成 `60dba6df`（合并 `4000b84e`）。OpenAPI 与 browser manifest 的文本冲突已按合后代码重新生成并保留两套入口，06 `subject_name`、旧v2多主体兼容及05独立采用／排序完整保留。
 - 合后全部画布回归 `123 passed, 27 skipped`（14.40s），Pylint `10.00/10`、Node24 typecheck、工作区差异检查通过。08真实页面 `/private/tmp/canvas08-page-final` 15.4s、06真实视频绑定页面 `/private/tmp/canvas08-video-final` 12.2s 均通过，包含真实 TaskWorker（外部供应商／存储受控替身）；复用共享工作台 UI 4.3s 与已查看的1440px／390px布局证据。
 - 最终8281实际HTTP导出（仅移除测试控制端点）与已提交 `front/openapi.json` 精确一致，`CanvasCompiledInput.mapping` 为 `CanvasSourceMapping | NamedImageMapping` 强类型联合，客户端已重新生成。8000加载主区06契约而非本票代码，未从它拉旧schema；主区标准 `openapi:update` 由父任务合入08后核实执行。本分支无真实供应商／MySQL验收声明，不推送，不继续其他票据。
+
+- 主区集成：2026-10-28 无冲突合并 `codex-canvas-types-08` HEAD `d8fa8a69`，合并提交 `71a007c8`。分支已包含主区 `60dba6df`，合并结果与已验收代码一致，复用全部画布 `123 passed, 27 skipped`、Pylint `10.00/10`、08／06真实页面及共享工作台布局证据。主区 `PYTHONPATH=. uv run --no-sync` 已核实导入本工作区 app；8000实际HTTP、主区生产导出与提交OpenAPI精确一致，含 `NamedImageReferenceCard` 与 `OutputIdentity.object_id`，Node24标准 `openapi:update` 成功，371处仅尾空行变化已剔除。主区 Node24 typecheck 通过；HTTP与最终差异检查另见任务索引集成记录。MySQL及受控外部服务验证限制继续保留，未推送、未操作其他工作树。
