@@ -20,7 +20,7 @@
 
 ## Completion
 
-implemented — 等待集成分支合并。保持原分诊 Status，不将 ready-for-agent 当完成状态。
+integrated — 已合并到 codex-generation-canvas。保持原分诊 Status，不将 ready-for-agent 当完成状态。
 
 ## 实施与验证
 
@@ -30,7 +30,9 @@ implemented — 等待集成分支合并。保持原分诊 Status，不将 ready
 - 后端：`UV_CACHE_DIR=/tmp/jellyfish-uv-cache uv run --no-sync pytest tests/test_generation_canvas_api.py tests/test_generation_canvas_compiler.py tests/test_generation_canvas_lifecycle.py tests/test_generation_canvas_runs.py -q` → 59 passed、14 skipped；追加 images/video/journey/dag/selection → 32 passed、13 skipped。跳过的是需独立 MySQL 测试环境的参数，SQLite HTTP 验证不替代竞争证据。`uv run --no-sync pylint app` → 10.00/10，退出 0（默认缓存目录不可写提示不影响检查）。显式 `PYTHONPATH=.` 核实 app 来自本工作树。
 - 前端：Node 24 `pnpm --dir front run typecheck` 通过。真实浏览器 `PLAYWRIGHT_CHANNEL=chrome node front/tests/generationCanvasMedia.browser.mjs` 通过；使用隔离 8275/4275，外部对象存储替身，真实路由、服务、数据库和页面。覆盖上传失败／替换失败保留旧文件、保存失败后项目库重新选择、迟到上传不复活删除卡片、三类媒体保存重开／强类型出口、音视频项目库选择与实际播放、视频保留 controls 与音轨、桌面和 390px 页面无横向溢出。
 - 页面证据：`/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-generation-canvas-media-IVed1t/` 的 `media-content.png`、`media-content-narrow.png` 与 `backend.log`。已目视检查桌面／窄屏播放器与详情布局。新 Playwright bundled 浏览器缺失，复用本机 Chrome；未安装额外依赖。
-- 独立后端公开 `openapi.json` 已导出并运行客户端生成到 `/private/tmp/canvas-media-04-generated`；JSON 与仓库 OpenAPI 完全相同，生成类型除既有尾空行外无差异，因此不提交无关生成漂移。主区 8000 未修改／停止；集成后由 parent 执行标准 openapi:update。
+- 独立后端公开 `openapi.json` 已导出并运行客户端生成到 `/private/tmp/canvas-media-04-generated`；JSON 与仓库 OpenAPI 完全相同，生成类型除既有尾空行外无差异，因此不提交无关生成漂移。主区 8000 未修改／停止；集成后未重复执行标准 openapi:update：8000 请求超时无响应，且工作进程启动早于本次合并，不能确认加载新代码。04 修复既定可用性契约、公开 schema 精确一致，复用 01 集成后已通过的完整生成结果；不把此次请求视作生成通过。
 - 保存的跨项目／缺失／类型错误文件拒绝与原内容保护、删卡／删画布仅释放自身内容 usage、历史独立来源和运行文件保护复用相关 HTTP 回归；没有新增模型采用、音频生成、图片理解或视频取帧。
 
 - 最终显式 `PYTHONPATH=.` 合并运行上述 9 个后端测试文件：91 passed、27 skipped；页面测试子进程也显式指定本工作树 backend 路径后复核通过。
+
+- 集成提交 `436691a2` 无冲突；主区显式 `PYTHONPATH=.` 确认 app 来自主区 backend。Node 24 `pnpm --dir front run typecheck`、`git diff --check` 和 `git diff --cached --check` 通过；复用同一实现的 91 passed／27 skipped、Pylint 10.00/10 与真实 Chrome 页面证据。
