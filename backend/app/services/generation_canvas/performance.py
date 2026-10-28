@@ -1,5 +1,5 @@
 """独立表演卡输出与直接关系校验，不读取祖先设计或运行模型。"""
-from app.core.contracts.generation_canvas import DialogueBasis, DesignField, DesignTextPayload, PerformanceDesignFields, ObjectReferencePayload, OutputIdentity
+from app.core.contracts.generation_canvas import FrameState, DialogueBasis, DesignField, DesignTextPayload, PerformanceDesignFields, ObjectReferencePayload, OutputIdentity
 from app.schemas.generation_canvas import CanvasResolvedOutput, SoundDirectionCard, SpatialDirectionCard, PerformanceDirectionCard
 from app.services.generation_canvas.errors import diagnostic
 
@@ -36,7 +36,8 @@ def publish_design(canvas_id, card, adopted_inputs):
     lines.extend('对白依据：' + item.text for item in dialogues)
     basis = [DialogueBasis(dialogue_id=item.dialogue_id, version=item.version, content=item.fields.content, speaker=next((obj for obj in item.objects if obj.object_id == item.participant_id), None)) for item in dialogues]
     payload = DesignTextPayload(design_type=card.type, text='\n'.join(lines), fields=PerformanceDesignFields(**fields),
-                                scope=card.scope, objects=objects, participant_id=participant, source_locator=card.source_locator, dialogue_basis=basis)
+                                scope=card.scope, objects=objects, participant_id=participant, source_locator=card.source_locator, dialogue_basis=basis,
+                                frame_states=[FrameState(id='field:exit_state', label='结束状态')] if any(key == 'exit_state' for key, _ in active) else [])
     return [CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id, port_id='text', position=0), modality='text', payload=payload)]
 
 
@@ -50,7 +51,7 @@ def validate_design_relations(document, published):
         ids, participants = set(), set()
         for binding in card.input_bindings:
             target = {'card_id': card.id, 'path': ['input_bindings', binding.id]}
-            if binding.id in ids or binding.input_port not in ('participant', 'effect_object', 'dialogue_basis') or binding.input_port not in card.input_ports:
+            if binding.id in ids or binding.input_port not in ('participant', 'effect_object', 'attention_object', 'focus_object', 'dialogue_basis') or binding.input_port not in card.input_ports:
                 raise diagnostic('INVALID_DESIGN_BINDING', '请选择已接入的明确关系用途', target)
             ids.add(binding.id)
             item = next((item for item in candidates if identity_key(item.source) == identity_key(binding.source)), None)

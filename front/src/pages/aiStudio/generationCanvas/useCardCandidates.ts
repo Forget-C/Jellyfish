@@ -4,8 +4,9 @@ import type { CanvasCompiledInput, CanvasResolvedOutput } from '../../../service
 
 /** 候选只取已保存修订的直接出口，旧响应不能覆盖新的查询范围。 */
 export function useCardCandidates(projectId: string, canvasId: string, cardId: string, revision?: number, published?: Record<string, CanvasResolvedOutput[]>, compile = true) {
-  const [value, setValue] = useState<{ scope: string; candidates: CanvasResolvedOutput[]; outputs: CanvasResolvedOutput[]; revision: number; compiled?: CanvasCompiledInput; error: string }>()
+  const [value, setValue] = useState<{ entity: string; scope: string; candidates: CanvasResolvedOutput[]; outputs: CanvasResolvedOutput[]; revision: number; compiled?: CanvasCompiledInput; error: string }>()
   const publishedKey = Object.entries(published || {}).filter(([, outputs]) => outputs.length > 0).sort(([a], [b]) => a.localeCompare(b))
+  const entity = JSON.stringify([projectId, canvasId, cardId, compile])
   const scope = JSON.stringify([projectId, canvasId, cardId, revision, publishedKey, compile])
   const latest = useRef(scope); latest.current = scope
   useEffect(() => {
@@ -19,10 +20,11 @@ export function useCardCandidates(projectId: string, canvasId: string, cardId: s
       const input = compiled.status === 'fulfilled' ? compiled.value?.data : undefined
       if (!data) throw new Error('missing outputs')
       if (revision !== undefined && (data.revision !== revision || input && input.revision !== revision)) return
-      setValue({ scope, candidates: data.candidates, outputs: data.outputs, revision: data.revision, compiled: input || undefined,
+      setValue({ entity, scope, candidates: data.candidates, outputs: data.outputs, revision: data.revision, compiled: input || undefined,
         error: input || !compile ? '' : '已保存输入诊断读取失败，请保存或重开后重试' })
-    }).catch(() => { if (active && latest.current === scope) setValue({ scope, candidates: [], outputs: [], revision: revision || 0, error: '已保存输入读取失败，请保存或重开后重试' }) })
+    }).catch(() => { if (active && latest.current === scope) setValue(previous => ({ ...(previous?.entity === entity ? previous : {entity, candidates: [], outputs: [], revision: revision || 0}), scope, error: '已保存输入读取失败，请保存或重开后重试' })) })
     return () => { active = false }
   }, [projectId, canvasId, cardId, revision, scope, compile])
-  return value?.scope === scope ? { ...value, loading: false } : { candidates: [], outputs: [], revision, compiled: undefined, error: '', loading: true }
+  if (value?.entity === entity) return { ...value, loading: value.scope !== scope }
+  return { candidates: [], outputs: [], revision, compiled: undefined, error: '', loading: true }
 }
