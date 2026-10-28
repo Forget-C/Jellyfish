@@ -15,7 +15,7 @@ HTTP 边界为 `/api/v1/studio/generation-canvases/{project_id}` 的列表／创
 
 迁移 `d6a0b4c8e957` 建立文档和保存回执表，`473ab089b58f` 增加独立运行、节点、预检、执行回执、占用、成果、当前输出指向及事件表；`8a10d04c631e` 增加等待节点私有执行快照和预检范围意图。MySQL 验证使用显式隔离测试库与独立 HTTP 请求事务，覆盖 CAS、同请求竞争及迁移／模型一致性；SQLite 用于功能持久化与真实页面旅程，不能代替 MySQL 竞争证据。
 
-媒体内容卡使用 `content.image`、`content.video`、`content.audio`，只有各自模态的一个输出位置，没有输入。`file_id` 可为空；`uploading=true` 时即使保留旧文件也不发布有效输出。替换与清空引用保留卡片身份。保存通过真实文件记录核实类型、可用性和项目归属，以 `canvas_content` usage（`canvas_id:card_id`）保护引用，删卡／删画布只释放自己的内容引用。
+媒体内容卡使用 `content.image`、`content.video`、`content.audio`，只有各自模态的一个输出位置，没有输入。`file_id` 可为空；`uploading=true` 时即使保留旧文件也不发布有效输出。上传中保留稳定出口身份并标记 `available=false`，不携带有效 payload 或 file_id。读取出口和编译时重新核实文件类型、可用性及项目归属；文件后来失效时同样只保留不可用身份，实际采用处返回可定位的 `OUTPUT_MISSING`。替换与清空引用保留卡片身份。保存通过真实文件记录核实类型、可用性和项目归属，以 `canvas_content` usage（`canvas_id:card_id`）保护引用，删卡／删画布只释放自己的内容引用。
 
 上传使用项目文件接口，以 `generation_upload` usage 独立保留项目文件，文件及使用关系在数据库提交后才返回 201，成功后不随画布保存失败或放弃编辑回滚。迟到上传不会重建已删除的卡片，文件仍可在项目库选择。图片、完整视频和音频通过既有文件下载接口预览，音频支持 MP3、WAV、OGG、M4A、AAC、FLAC、OPUS。`DELETE /api/v1/studio/files/{file_id}/upload-retention?project_id=...` 显式释放本项目的画布上传保留，有其他真实使用关系时返回 409；清除其他引用后可重试，再按需调用已有文件删除接口，释放本身不删除字节。
 
@@ -30,7 +30,7 @@ HTTP 边界为 `/api/v1/studio/generation-canvases/{project_id}` 的列表／创
 
 共用编辑器支持按分类选择、完整代号确认、中文组合输入、转义及结构化剪贴载荷 `application/x-jellyfish-prompt+json`。输入 `@` 打开候选列表；输入过程中只匹配，在选择、Enter／Tab、明确分隔符或失焦时才绑定完整代号。组合输入期间不转换。同画布粘贴保留来源，未连接时要求手工连接；跨画布载荷保留外来身份并诊断，不自动复制卡片或按同名代号换绑。外部纯文本按目标当前代号确认。添加入口创建可见内容卡并连接，选择已有卡只新增候选边。
 
-`services/generation_canvas/compiler.py` 的公开 `compile_card` 与 `resolve_outputs` 解析实际引用。内容输出来自真实内容卡；运行层通过独立的 `model_outputs` 参数提供已发布的模型当前结果，不把结果写入编辑文档或虚构未来输出。编译仅在结构化引用处展开文本一次，实际媒体按接收端顺序选出使用子集，并提供本地代号、稳定来源与实际媒体位置映射。通用 `[media:N]` 表达用于无模型能力的基础编译；图片预检在结构化引用处写出 `image N`，对应实际提交图片数组的第 N 项。普通文字中的 `图片3` 或 `[media:1]` 均保持原样，展开内容不再次解释。
+`services/generation_canvas/compiler.py` 的公开 `compile_card` 与 `resolve_outputs` 解析实际引用。内容输出来自真实内容卡；运行层通过独立的 `model_outputs` 参数提供已核验的媒体出口和已发布的模型当前结果，不把结果写入编辑文档或虚构未来输出。编译仅在结构化引用处展开文本一次，实际媒体按接收端顺序选出使用子集，并提供本地代号、稳定来源与实际媒体位置映射。通用 `[media:N]` 表达用于无模型能力的基础编译；图片预检在结构化引用处写出 `image N`，对应实际提交图片数组的第 N 项。普通文字中的 `图片3` 或 `[media:1]` 均保持原样，展开内容不再次解释。
 
 `content.basis` 保存创作依据的正文、来源定位和可选选取起止位置，无章节绑定或持续输入。通用文本和创作依据可通过明确选择文本文件导入形成自身内容。来源定位不成为隐式读取授权。
 
