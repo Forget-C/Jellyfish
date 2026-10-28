@@ -3,7 +3,7 @@ from typing import Annotated, Any, ClassVar, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.schemas.common import ApiResponse
 from app.core.contracts.media import VideoMediaInput
-from app.core.contracts.generation_canvas import OutputIdentity, InputBinding, TextOutputPayload, MediaOutputPayload, ObjectReferencePayload, DescriptionTextPayload
+from app.core.contracts.generation_canvas import OutputIdentity, InputBinding, TextOutputPayload, MediaOutputPayload, ObjectReferencePayload, DescriptionTextPayload, NamedImageObject, ReferenceImageBinding, NamedImagePayload, CanvasSourceMapping, NamedImageMapping
 
 
 class CardDefinition(BaseModel):
@@ -259,6 +259,19 @@ class AudioContentCard(MediaContentCard):
     output_ports: ClassVar[tuple[str, ...]] = ('audio',)
 
 
+class NamedImageReferenceCard(CardDefinition):
+    """单张主图的本地命名和明确名称绑定，标题与对象名相互独立。"""
+    type: Literal['reference.character', 'reference.place', 'reference.prop', 'reference.costume']
+    title: str = ''
+    angle: str = '正面'
+    objects: list[NamedImageObject] = Field(default_factory=list)
+    input_bindings: list[InputBinding] = Field(default_factory=list)
+    image_binding: ReferenceImageBinding | None = None
+    positions: dict[str, str] = Field(default_factory=dict)
+    input_ports: ClassVar[tuple[str, ...]] = ('name', 'image_source')
+    output_ports: ClassVar[tuple[str, ...]] = ('image', 'object')
+
+
 class CanvasDocument(BaseModel):
     """完整编辑文档；位置、尺寸和视角由浏览器另存。"""
     model_config = ConfigDict(extra='forbid')
@@ -266,7 +279,7 @@ class CanvasDocument(BaseModel):
     project_id: str
     name: str = Field(min_length=1, max_length=255)
     schema_version: Literal[2] = 2
-    cards: list[TextContentCard | CreativeBasisCard | ObjectDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard] = Field(default_factory=list)
+    cards: list[NamedImageReferenceCard | TextContentCard | CreativeBasisCard | ObjectDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard] = Field(default_factory=list)
     edges: list[GenerationCanvasEdge] = Field(default_factory=list)
     input_order: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
     groups: list[GenerationCanvasGroup] = Field(default_factory=list)
@@ -327,7 +340,7 @@ class CanvasResolvedOutput(BaseModel):
     """已发布的实际输出，运行层可注入模型当前输出而无需虚构未来结果。"""
     source: OutputIdentity
     modality: str
-    payload: Annotated[TextOutputPayload | MediaOutputPayload | ObjectReferencePayload | DescriptionTextPayload, Field(discriminator='kind')] | None = None
+    payload: Annotated[TextOutputPayload | MediaOutputPayload | ObjectReferencePayload | DescriptionTextPayload | NamedImagePayload, Field(discriminator='kind')] | None = None
     text: str | None = None
     file_id: str | None = None
     token: str = ''
@@ -345,7 +358,7 @@ class CanvasResolvedOutput(BaseModel):
             elif self.modality in ('image', 'video', 'audio') and self.file_id:
                 self.payload = MediaOutputPayload(kind=self.modality, file_id=self.file_id)
         if self.payload is not None:
-            self.modality = 'text' if isinstance(self.payload, (ObjectReferencePayload, DescriptionTextPayload)) else self.payload.kind
+            self.modality = 'text' if isinstance(self.payload, (ObjectReferencePayload, DescriptionTextPayload)) else 'image' if isinstance(self.payload, NamedImagePayload) else self.payload.kind
             self.text = getattr(self.payload, 'text', None)
             self.file_id = getattr(self.payload, 'file_id', None)
         return self
@@ -367,7 +380,7 @@ class CanvasCompiledInput(BaseModel):
     used: list[CanvasResolvedOutput] = Field(default_factory=list)
     media: list[CanvasResolvedOutput] = Field(default_factory=list)
     video_media: VideoMediaInput | None = None
-    mapping: list[dict[str, Any]] = Field(default_factory=list)
+    mapping: list[CanvasSourceMapping | NamedImageMapping] = Field(default_factory=list)
     diagnostics: list[CanvasDiagnostic] = Field(default_factory=list)
     can_run: bool = True
 

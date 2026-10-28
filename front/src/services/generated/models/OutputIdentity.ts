@@ -10,4 +10,5 @@ export type OutputIdentity = {
     card_id: string;
     port_id: string;
     position: number;
+    object_id?: (string | null);
 };

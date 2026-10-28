@@ -3,7 +3,7 @@ import re
 from app.core.contracts.media import MediaReference, VideoMediaInput, VideoSubjectMediaReference
 from app.schemas.generation_canvas import (
     CanvasDocument, CanvasResolvedOutput, CanvasCompiledInput, CanvasDiagnostic,
-    ModelCard, PromptReference, PromptInstruction,
+    ModelCard, NamedImageReferenceCard, NamedImagePayload, CanvasSourceMapping, NamedImageMapping, PromptReference, PromptInstruction,
     CanvasModelCapability, OutputIdentity,
 )
 from app.services.generation_canvas.capabilities import parameter_diagnostics
@@ -16,7 +16,7 @@ LABELS = {'text': '文本', 'image': '图片', 'video': '视频', 'audio': '音�
 
 def identity_key(source: OutputIdentity) -> tuple:
     """身份包含来源卡和结果位置，文件 ID 不参与身份。"""
-    return source.canvas_id, source.card_id, source.port_id, source.position
+    return source.canvas_id, source.card_id, source.port_id, source.object_id or source.position
 
 
 def prompt_references(card: ModelCard):
@@ -35,6 +35,20 @@ def prompt_references(card: ModelCard):
             yield PromptReference(id=binding.id, kind='reference', binding_id=binding.id, source=binding.source), ['input_bindings', binding.id]
 
 
+def published_card_outputs(document, card_id, model_outputs=None):
+    """仅把已采用的直接对象出口交给本卡处理器，按 DAG 逐层解析。"""
+    card = next(card for card in document.cards if card.id == card_id)
+    adopted = []
+    if isinstance(card, NamedImageReferenceCard):
+        for binding in card.input_bindings:
+            if any(edge.source_card == binding.source.card_id and edge.source_port == binding.source.port_id
+                   and edge.target_card == card_id and edge.target_port == binding.input_port for edge in document.edges):
+                adopted.extend(item for item in published_card_outputs(document, binding.source.card_id, model_outputs)
+                    if identity_key(item.source) == identity_key(binding.source))
+    return card_outputs(document.id, card, adopted_inputs=tuple(adopted),
+                        published_results=tuple((model_outputs or {}).get(card_id, [])))
+
+
 def resolve_outputs(document: CanvasDocument, card_id: str,
                     model_outputs: dict[str, list[CanvasResolvedOutput]] | None = None) -> list[CanvasResolvedOutput]:
     """按目标端口顺序发布真实候选；模型当前结果由运行层显式提供。缺失位置仅为已有引用保留。"""
@@ -47,7 +61,7 @@ def resolve_outputs(document: CanvasDocument, card_id: str,
         for edge_id in order:
             edge = edges[edge_id]
             source = cards[edge.source_card]
-            outputs = card_outputs(document.id, source, published_results=tuple((model_outputs or {}).get(source.id, [])))
+            outputs = [item for item in published_card_outputs(document, source.id, model_outputs) if item.source.port_id == edge.source_port]
             positions = {item.source.position for item in outputs}
             outputs = list(outputs) + [CanvasResolvedOutput(source=ref, modality=edge.source_port, available=False)
                 for ref in retained if ref.canvas_id == document.id and ref.card_id == source.id and ref.port_id == edge.source_port and ref.position not in positions]
@@ -108,7 +122,12 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
             issue('OUTPUT_MISSING', '引用的来源位置暂无实际输出', ref.id, path)
     for item in result.used:
         media_position = result.media.index(item) + 1 if item in result.media else None
-        result.mapping.append({'token': item.token, 'source': item.source.model_dump(), 'media_position': media_position})
+        result.mapping.append(CanvasSourceMapping(token=item.token, source=item.source, media_position=media_position))
+    if card.type == 'model.image':
+        for position, item in enumerate(result.media, 1):
+            if isinstance(item.payload, NamedImagePayload):
+                for obj in item.payload.objects:
+                    result.mapping.append(NamedImageMapping(**obj.model_dump(), media_position=position, angle=item.payload.angle))
     subjects = video_subjects(card, result.media) if card.type == 'model.video' else {}
     command_counts = {}
     for segment in card.prompt.segments:
@@ -159,6 +178,12 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
         if binding.id not in mentioned and item and item.available and item.modality == 'text':
             result.text += ('\n' if result.text else '') + item.text
 
+    if card.type == 'model.image':
+        lines = [f"{entry.name} = image {entry.media_position}（{entry.angle}" +
+                 (f"，{entry.position}" if entry.position else '') + '）'
+                 for entry in result.mapping if isinstance(entry, NamedImageMapping)]
+        if lines:
+            result.text += ('\n' if result.text else '') + '\n'.join(lines)
     if card.type == 'model.video':
         result.video_media = compile_video_media(card, result)
         if capability:

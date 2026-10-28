@@ -2,7 +2,7 @@
 from typing import Protocol
 from app.schemas.generation_canvas import (
     CardDefinition, CanvasResolvedOutput, CreativeBasisCard, MediaContentCard,
-    ObjectDescriptionCard, ObjectReferencePayload, DescriptionTextPayload, ModelCard, OutputIdentity, TextContentCard, TextOutputPayload, MediaOutputPayload,
+    NamedImageReferenceCard, NamedImagePayload, NamedImageObject, ObjectDescriptionCard, ObjectReferencePayload, DescriptionTextPayload, ModelCard, OutputIdentity, TextContentCard, TextOutputPayload, MediaOutputPayload,
 )
 
 
@@ -18,14 +18,29 @@ class ContentOutputHandler:
     """普通内容只发布自己的正文或具体文件。"""
     def publish(self, canvas_id, card, adopted_inputs, published_results):
         """内容卡没有持续输入，描述来源只随明确描述出口提供。"""
-        del adopted_inputs
+        if isinstance(card, NamedImageReferenceCard):
+            objects = [item.model_copy(update={'name': item.name.strip()}) for item in card.objects if item.name.strip()]
+            for item in adopted_inputs:
+                if isinstance(item.payload, ObjectReferencePayload) and item.available:
+                    objects.append(NamedImageObject(object_id=item.payload.object_id, name=item.payload.name,
+                        category=item.payload.category, position=card.positions.get(item.payload.object_id, '')))
+            objects = list({item.object_id: item for item in objects}.values())
+            outputs = [CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id,
+                port_id='object', position=0, object_id=item.object_id), modality='text',
+                payload=ObjectReferencePayload(object_id=item.object_id, name=item.name.strip(), category=item.category)) for item in objects]
+            if card.image_binding and any(item.category == card.type.split('.')[1] for item in objects):
+                image = next((item for item in published_results if item.source.port_id == 'image'), None)
+                outputs.insert(0, image or CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id,
+                    port_id='image', position=0), modality='image', payload=NamedImagePayload(
+                    file_id=card.image_binding.file_id, objects=objects, angle=card.angle)))
+            return outputs
         if isinstance(card, ObjectDescriptionCard):
             outputs = []
             if card.text:
                 outputs.append(CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id, port_id='text', position=0),
                     modality='text', payload=DescriptionTextPayload(text=card.text, object_id=card.object_id, name=card.name.strip(), category=card.category, source_locator=card.source_locator)))
             if card.object_id and card.name.strip():
-                outputs.append(CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id, port_id='object', position=0),
+                outputs.append(CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id, port_id='object', position=0, object_id=card.object_id),
                     modality='text', payload=ObjectReferencePayload(object_id=card.object_id, name=card.name.strip(), category=card.category)))
             return outputs
         if isinstance(card, (TextContentCard, CreativeBasisCard)):

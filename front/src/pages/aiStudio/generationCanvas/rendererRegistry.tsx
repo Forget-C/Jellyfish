@@ -5,6 +5,7 @@ import { ExperimentComposer } from '../experiment/components/ExperimentComposer'
 import { PromptEditor } from './PromptEditor'
 import { editorPrompt, withEditorPrompt, withoutInputBinding } from './inputBindings'
 import { useCardCandidates } from './useCardCandidates'
+import { NamedImageReferenceEditor } from './NamedImageReferenceEditor'
 import { ObjectDescriptionEditor } from './ObjectDescriptionEditor'
 import { TextContentEditor } from './TextContentEditor'
 import { MediaContentEditor, MediaPreview } from './MediaContentEditor'
@@ -111,6 +112,10 @@ function ModelRenderer({ card: raw, savedRevision, savedCard, document, disabled
 
 /** 显式类型入口，无供应商卡片族或通用表单引擎。 */
 export const rendererRegistry: Record<string, ComponentType<CardRendererProps>> = {
+  'reference.character': NamedImageReferenceEditor,
+  'reference.place': NamedImageReferenceEditor,
+  'reference.prop': NamedImageReferenceEditor,
+  'reference.costume': NamedImageReferenceEditor,
   'content.text': ({ card, onChange, disabled }) => <TextContentEditor card={card as TextContentCard} onChange={onChange} disabled={disabled} />,
   'content.object': ({ card, onChange, disabled }) => <ObjectDescriptionEditor card={card as ObjectDescriptionCard} onChange={onChange} disabled={disabled} />,
   'content.place': ({ card, onChange, disabled }) => <ObjectDescriptionEditor card={card as PlaceDescriptionCard} onChange={onChange} disabled={disabled} />,

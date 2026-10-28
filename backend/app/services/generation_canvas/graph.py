@@ -2,7 +2,7 @@
 from app.schemas.generation_canvas import CanvasDocument
 from app.services.generation_canvas.errors import diagnostic
 
-PORT_MODALITIES = {'object': 'object_reference', 'text': 'text', 'image': 'image', 'video': 'video', 'audio': 'audio',
+PORT_MODALITIES = {'name': 'object_reference', 'image_source': 'image', 'object': 'object_reference', 'text': 'text', 'image': 'image', 'video': 'video', 'audio': 'audio',
                    'first_frame': 'image', 'last_frame': 'image', 'key_frame': 'image',
                    'subject_image': 'image', 'subject_video': 'video'}
 

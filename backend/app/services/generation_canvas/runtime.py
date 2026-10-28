@@ -138,21 +138,27 @@ class CanvasRuntime:
         from app.services.generation_canvas.outputs import card_outputs
         from app.services.studio.files import require_available_file
         from app.models.studio import FileUsage
+        from app.schemas.generation_canvas import NamedImageReferenceCard
         for card in document.cards:
-            if not isinstance(card, MediaContentCard) or not card.file_id:
+            named = isinstance(card, NamedImageReferenceCard)
+            file_id = card.image_binding.file_id if named and card.image_binding else card.file_id if isinstance(card, MediaContentCard) else None
+            if not file_id:
                 continue
             outputs = card_outputs(canvas.id, card)
             try:
-                await require_available_file(self.db, file_id=card.file_id,
+                await require_available_file(self.db, file_id=file_id,
                     expected_type=card.output_ports[0], lock=False)
                 belongs = await self.db.scalar(select(FileUsage.id).where(
-                    FileUsage.file_id == card.file_id, FileUsage.project_id == self.project_id).limit(1))
+                    FileUsage.file_id == file_id, FileUsage.project_id == self.project_id).limit(1))
                 if not belongs:
                     raise HTTPException(404, 'File not in project')
             except HTTPException:
                 outputs = [CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas.id, card_id=card.id,
                     port_id=card.output_ports[0], position=0), modality=card.output_ports[0], available=False)]
-            result[card.id] = outputs
+                result[card.id] = outputs
+            else:
+                if not named:
+                    result[card.id] = outputs
         async def resolve(card_id):
             if card_id in result or card_id in visiting or card_id not in stored or card_id not in cards:
                 return

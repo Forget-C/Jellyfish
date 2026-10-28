@@ -91,7 +91,7 @@ class CanvasStore:
         previous_cards = {card['id']: card for card in canvas.document.get('cards', [])}
         object_names = {}
         object_ids = set()
-        from app.schemas.generation_canvas import ObjectDescriptionCard
+        from app.schemas.generation_canvas import ObjectDescriptionCard, NamedImageReferenceCard
         for card in document.cards:
             if not isinstance(card, ObjectDescriptionCard):
                 continue
@@ -126,17 +126,20 @@ class CanvasStore:
         # 最终文档中的实际引用决定保护；同一次保存清理引用即可断线或删来源。
         from app.services.generation_canvas.compiler import prompt_references
         for receiver in document.cards:
-            if not isinstance(receiver, ModelCard):
+            if not isinstance(receiver, (ModelCard, NamedImageReferenceCard)):
                 continue
-            for reference, path in prompt_references(receiver):
-                source = reference.source
+            references = [(reference.source, reference.id, path) for reference, path in prompt_references(receiver)] if isinstance(receiver, ModelCard) else [
+                (binding.source, binding.id, ['input_bindings', binding.id]) for binding in receiver.input_bindings]
+            if isinstance(receiver, NamedImageReferenceCard) and receiver.image_binding and receiver.image_binding.source:
+                references.append((receiver.image_binding.source, 'image', ['image_binding']))
+            for source, reference_id, path in references:
                 was_connected = any(edge['source_card'] == source.card_id and edge['source_port'] == source.port_id
                                     and edge['target_card'] == receiver.id for edge in canvas.document.get('edges', []))
                 connected = any(edge.source_card == source.card_id and edge.source_port == source.port_id
                                 and edge.target_card == receiver.id for edge in document.edges)
                 if source.canvas_id == canvas_id and was_connected and not connected:
                     raise diagnostic('REFERENCE_IN_USE', '请先清理实际引用再断开或删除来源',
-                                     {'card_id': receiver.id, 'segment_id': reference.id, 'path': path})
+                                     {'card_id': receiver.id, 'segment_id': reference_id, 'path': path})
         previous_edges = {(edge['source_card'], edge['source_port'], edge['target_card'], edge['target_port'])
                           for edge in canvas.document.get('edges', [])}
         by_id = {card.id: card for card in document.cards}
@@ -152,6 +155,8 @@ class CanvasStore:
                 if edge.target_port not in cap.input_ports or card.type != 'model.' + cap.modality:
                     raise diagnostic('UNSUPPORTED_INPUT', '所选模型未接入该输入用途',
                                      {'edge_id': edge.id, 'card_id': card.id, 'port_id': edge.target_port})
+        from app.services.generation_canvas.references import validate_references
+        await validate_references(self.db, document, canvas.document, self.project_id)
         # Validate all replacements before releasing existing protection in this transaction.
         for card in document.cards:
             if isinstance(card, MediaContentCard) and card.file_id:
@@ -166,6 +171,9 @@ class CanvasStore:
             FileUsage.project_id == self.project_id, FileUsage.usage_kind == 'canvas_content',
             FileUsage.source_ref.like(f'{canvas_id}:%')))
         for card in document.cards:
+            if isinstance(card, NamedImageReferenceCard) and card.image_binding:
+                await upsert_file_usage(self.db, file_id=card.image_binding.file_id, project_id=self.project_id,
+                                        chapter_id=None, usage_kind='canvas_content', source_ref=f'{canvas_id}:{card.id}')
             if isinstance(card, MediaContentCard) and card.file_id:
                 await upsert_file_usage(self.db, file_id=card.file_id, project_id=self.project_id,
                                         chapter_id=None, usage_kind='canvas_content', source_ref=f'{canvas_id}:{card.id}')
@@ -182,8 +190,7 @@ class CanvasStore:
     async def card_outputs(self, canvas_id: str, card_id: str):
         """返回已保存修订的单卡出口和直接候选，不形成实际采用。"""
         from app.schemas.generation_canvas import CanvasCardOutputs
-        from app.services.generation_canvas.compiler import resolve_outputs
-        from app.services.generation_canvas.outputs import card_outputs
+        from app.services.generation_canvas.compiler import resolve_outputs, published_card_outputs
         from app.services.generation_canvas.runtime import CanvasRuntime
         canvas = await self.get(canvas_id)
         document = CanvasDocument.model_validate(canvas.document)
@@ -192,7 +199,7 @@ class CanvasStore:
             raise HTTPException(404, 'Card not found')
         published = await CanvasRuntime(self.db, self.project_id).current_outputs(canvas)
         return CanvasCardOutputs(revision=canvas.revision, card_id=card_id,
-            outputs=card_outputs(canvas_id, card, published_results=tuple(published.get(card_id, []))),
+            outputs=published_card_outputs(document, card.id, published),
             candidates=resolve_outputs(document, card_id, published))
 
     async def compile_input(self, canvas_id: str, card_id: str) -> CanvasCompiledInput:
