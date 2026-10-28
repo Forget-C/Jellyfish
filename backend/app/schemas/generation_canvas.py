@@ -125,6 +125,7 @@ class ModelCard(CardDefinition):
             port = {'首帧参考': 'first_frame', '尾帧参考': 'last_frame', '关键帧参考': 'key_frame', '主体参考': 'subject_image'}.get(
                 getattr(segment, 'command', ''), None)
             for ref in refs:
+                subject_name = segment.parameters.get('name', '').strip() if isinstance(segment, PromptInstruction) and segment.command == '主体参考' else None
                 if ref.binding_id is None:
                     if ref.source is None:
                         raise ValueError('引用缺少输入绑定')
@@ -134,8 +135,8 @@ class ModelCard(CardDefinition):
                     if actual_port == 'subject_image' and ref.source.port_id == 'video':
                         actual_port = 'subject_video'
                     existing = next((binding for binding in bindings.values()
-                        if binding.source == ref.source and binding.input_port == actual_port), None)
-                    binding = existing or InputBinding(id='input-' + ref.id, source=ref.source, input_port=actual_port)
+                        if binding.source == ref.source and binding.input_port == actual_port and binding.subject_name == subject_name), None)
+                    binding = existing or InputBinding(id='input-' + ref.id, source=ref.source, input_port=actual_port, subject_name=subject_name)
                     bindings[binding.id] = binding
                     ref.binding_id = binding.id
                 binding = bindings.get(ref.binding_id)
@@ -143,6 +144,8 @@ class ModelCard(CardDefinition):
                     raise ValueError('引用的输入绑定不存在')
                 if ref.source is not None and ref.source != binding.source:
                     raise ValueError('引用来源与输入绑定不一致')
+                if subject_name is not None and binding.subject_name is None:
+                    binding.subject_name = subject_name
                 ref.source = binding.source
         self.input_bindings = list(bindings.values())
         return self

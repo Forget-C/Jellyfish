@@ -10,4 +10,5 @@ export type InputBinding = {
     id: string;
     source: OutputIdentity;
     input_port: string;
+    subject_name?: (string | null);
 };

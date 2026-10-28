@@ -17,7 +17,7 @@ export function editorPrompt(card: GenerationCard): EditorPromptDocument {
     return { ...reference, source }
   }
   return { segments: (card.prompt?.segments || []).map(segment => segment.kind === 'reference' ? hydrate(segment)
-    : segment.kind === 'instruction' ? { ...segment, references: segment.references?.map(hydrate) } : segment) }
+    : segment.kind === 'instruction' ? { ...segment, parameters: segment.command === '主体参考' ? { ...segment.parameters, name: bindings.get(segment.references?.[0]?.binding_id || '')?.subject_name ?? segment.parameters?.name ?? '' } : segment.parameters, references: segment.references?.map(hydrate) } : segment) }
 }
 
 export function withEditorPrompt(card: GenerationCard, prompt: EditorPromptDocument): GenerationCard {
@@ -26,19 +26,23 @@ export function withEditorPrompt(card: GenerationCard, prompt: EditorPromptDocum
     : segment.kind === 'instruction' ? (segment.references || []).map(reference => reference.binding_id) : []))
   // 正文只移除它原先引用而本次取消的绑定，保留输入区独立采用的记录。
   const bindings: InputBinding[] = (card.input_bindings || []).filter(binding => !mentioned.has(binding.id))
-  const bind = (reference: EditorPromptReference, command?: string): PromptReference => {
+  const bind = (reference: EditorPromptReference, command?: string, subject_name?: string): PromptReference => {
     let input_port = command ? commandPorts[command] || reference.source.port_id : reference.source.port_id
     if (card.type === 'model.video' && ['image', 'video'].includes(input_port)) input_port = 'subject_' + input_port
     if (input_port === 'subject_image' && reference.source.port_id === 'video') input_port = 'subject_video'
-    let binding = bindings.find(value => key(value.source) === key(reference.source) && value.input_port === input_port)
+    let binding = bindings.find(value => key(value.source) === key(reference.source) && value.input_port === input_port && (value.subject_name || '') === (subject_name || ''))
     if (!binding) {
-      const existing = card.input_bindings?.find(value => key(value.source) === key(reference.source) && value.input_port === input_port)
-      binding = { id: existing?.id || crypto.randomUUID(), source: reference.source, input_port }
+      const existing = card.input_bindings?.find(value => key(value.source) === key(reference.source) && value.input_port === input_port && (value.subject_name || '') === (subject_name || ''))
+      binding = { id: existing?.id || crypto.randomUUID(), source: reference.source, input_port, subject_name }
       bindings.push(binding)
     }
     return { id: reference.id, kind: 'reference', binding_id: binding.id }
   }
   const next: PromptDocument = { segments: (prompt.segments || []).map(segment => segment.kind === 'reference' ? bind(segment)
-    : segment.kind === 'instruction' ? { ...segment, references: segment.references?.map(reference => bind(reference, segment.command)) } : segment) }
+    : segment.kind === 'instruction' ? { ...segment, references: segment.references?.map(reference => bind(reference, segment.command, segment.command === '主体参考' ? String(segment.parameters?.name || '').trim() : undefined)) } : segment) }
+  if (card.type === 'model.video') {
+    const order = new Map((card.input_bindings || []).map((binding, index) => [binding.id, index]))
+    bindings.sort((left, right) => (order.get(left.id) ?? Infinity) - (order.get(right.id) ?? Infinity))
+  }
   return { ...card, prompt: next, input_bindings: bindings }
 }
