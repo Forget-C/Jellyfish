@@ -13,4 +13,3 @@ export type DialogueBasis = {
     content: DesignField;
     speaker?: (ObjectReferencePayload | null);
 };
-

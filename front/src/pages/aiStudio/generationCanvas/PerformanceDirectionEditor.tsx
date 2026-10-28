@@ -55,13 +55,13 @@ export function PerformanceDirectionEditor({ card: raw, document, savedRevision,
       {resolved.candidates.filter(item => item.payload?.kind === 'object_reference' || item.payload?.kind === 'narrative_reference').map(item => {
         const object = item.payload as ObjectReferencePayload | NarrativeReferencePayload
         if (object.kind !== 'object_reference' && object.kind !== 'narrative_reference') return null
-        return <div key={sourceKey(item.source)}><span>{object.name} · {object.category}</span>{inputPorts(card).filter(port => ['participant', 'effect_object', 'beat', 'received_event'].includes(port)).map(port => {
+        return <div key={sourceKey(item.source)}><span>{object.name} · {{ character: '人物', prop: '物件', costume: '服装', place: '场所', beat: '节拍', event: '事件', shot: '镜头' }[object.category]}</span>{inputPorts(card).filter(port => ['participant', 'effect_object', 'beat', 'received_event'].includes(port)).map(port => {
           if (port === 'participant' && (card.type === 'direction.performance_rule' || object.kind !== 'object_reference' || !['character', 'prop', 'costume'].includes(object.category))) return null
           if (!document.edges?.some(edge => edge.target_card === card.id && edge.target_port === port && edge.source_card === item.source.card_id && edge.source_port === item.source.port_id)) return null
           const binding = bindings.find(value => value.input_port === port && sourceKey(value.source) === sourceKey(item.source))
           const label = portLabels[port]
           const single = port === 'participant' || port === 'beat'
-          return <WorkbenchButton key={port} disabled={disabled || !binding && single && bindings.some(value => value.input_port === port)} onClick={() => update({ ...card, input_bindings: binding ? bindings.filter(value => value.id !== binding.id) : [...bindings, { id: crypto.randomUUID(), source: item.source, input_port: port }] })}>{`${binding ? '取消' : '选择'}${label} ${object.name}`}</WorkbenchButton>
+          return <WorkbenchButton key={port} disabled={disabled || !binding && single && bindings.some(value => value.input_port === port && value.source.object_id !== item.source.object_id)} onClick={() => update({ ...card, input_bindings: binding ? bindings.filter(value => value.id !== binding.id) : [...bindings, { id: crypto.randomUUID(), source: item.source, input_port: port }] })}>{`${binding ? '取消' : '选择'}${label} ${object.name}`}</WorkbenchButton>
         })}</div>
       })}
       {!bindings.length && <small>尚未选择对象。文本分析可完善不完整设计；视觉生成所需主体须明确。</small>}

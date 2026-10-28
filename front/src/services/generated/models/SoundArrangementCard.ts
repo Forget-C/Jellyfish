@@ -23,4 +23,3 @@ export type SoundArrangementCard = {
     music?: DesignField;
     production?: 'synchronous' | 'postproduction' | 'undecided';
 };
-

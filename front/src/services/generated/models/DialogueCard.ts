@@ -21,4 +21,3 @@ export type DialogueCard = {
     version?: number;
     content?: DesignField;
 };
-

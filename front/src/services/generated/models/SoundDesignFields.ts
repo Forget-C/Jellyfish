@@ -14,4 +14,3 @@ export type SoundDesignFields = {
     music?: (DesignField | null);
     production?: ('synchronous' | 'postproduction' | 'undecided' | null);
 };
-
