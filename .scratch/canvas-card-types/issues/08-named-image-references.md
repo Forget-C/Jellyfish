@@ -30,3 +30,7 @@
 - 真实 Chrome 页面证据：`/private/tmp/canvas08-page-5`，预检通过，命名参考旅程 16.0s 通过。完成直接人物＋服装采用、生成结果2固定主图、模型自动映射、真实 Worker 的单图片请求、来源重跑不换图、重开、390px 截图，以及场所／道具／服装独立命名和上传。复用 `MediaContentEditor` 的上传／项目文件选择与工作台现有控件；`/private/tmp/canvas08-workbench` 共享工作台 UI 4.3s 通过，桌面及窄屏截图已查看。
 - 合并前全部画布 HTTP／Worker 回归 `116 passed, 27 skipped`；13项本票 HTTP 单独通过，Pylint `10.00/10`，Node 24.22.1 typecheck 通过。MySQL 专用27项跳过，SQLite 不作为 MySQL 并发证据；供应商 HTTP 与外部存储使用受控替身，不宣称真实供应商质量或外部存储验收。
 - 8000 已响应，但其 schema 含06 `subject_name`、未含本票类型，未从该进程生成也未操作它。使用本工作树真实8281 HTTP导出（去除 `/test` 控制端点）核对，生成客户端仅保留契约变化并清理纯尾空行漂移；最终合并后的复验另记。
+
+- 最终集成复验：实现提交 `c82f1428`，合入06集成 `b64ce5e5`（合并 `1b391ff9`），再合最新集成 `60dba6df`（合并 `4000b84e`）。OpenAPI 与 browser manifest 的文本冲突已按合后代码重新生成并保留两套入口，06 `subject_name`、旧v2多主体兼容及05独立采用／排序完整保留。
+- 合后全部画布回归 `123 passed, 27 skipped`（14.40s），Pylint `10.00/10`、Node24 typecheck、工作区差异检查通过。08真实页面 `/private/tmp/canvas08-page-final` 15.4s、06真实视频绑定页面 `/private/tmp/canvas08-video-final` 12.2s 均通过，包含真实 TaskWorker（外部供应商／存储受控替身）；复用共享工作台 UI 4.3s 与已查看的1440px／390px布局证据。
+- 最终8281实际HTTP导出（仅移除测试控制端点）与已提交 `front/openapi.json` 精确一致，`CanvasCompiledInput.mapping` 为 `CanvasSourceMapping | NamedImageMapping` 强类型联合，客户端已重新生成。8000加载主区06契约而非本票代码，未从它拉旧schema；主区标准 `openapi:update` 由父任务合入08后核实执行。本分支无真实供应商／MySQL验收声明，不推送，不继续其他票据。
