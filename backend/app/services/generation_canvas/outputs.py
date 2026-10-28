@@ -21,6 +21,10 @@ class ContentOutputHandler:
         if isinstance(card, VisualStyleCard):
             from app.services.generation_canvas.visual_style import publish_style
             return publish_style(canvas_id, card)
+        from app.schemas.generation_canvas import NarrativeDirectionCard
+        if isinstance(card, NarrativeDirectionCard):
+            from app.services.generation_canvas.narrative import publish_narrative
+            return publish_narrative(canvas_id, card, adopted_inputs)
         if isinstance(card, PhotographyCard):
             from app.services.generation_canvas.photography import publish_photography
             return publish_photography(canvas_id, card, adopted_inputs)

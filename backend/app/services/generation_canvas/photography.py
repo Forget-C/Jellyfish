@@ -1,5 +1,5 @@
 """摄影范围投影只使用显式声明；候选全卡不成为采用依据。"""
-from app.core.contracts.generation_canvas import ObjectReferencePayload, OutputIdentity
+from app.core.contracts.generation_canvas import NarrativeReferencePayload, ObjectReferencePayload, OutputIdentity
 from app.core.contracts.photography import PhotographyObjectUse, PhotographyEntry, PhotographyAdoptionScope, PhotographyTextPayload, PhotographyRequirement, FrameState
 from app.schemas.generation_canvas import CanvasResolvedOutput
 from app.services.generation_canvas.performance import STATE_LABELS, PURPOSE_LABELS
@@ -11,6 +11,8 @@ def render_photography(payload):
     """空和不适用不生成要求，否定与开放状态保留原意。"""
     roles = {'effect_object': '作用对象', 'attention_object': '关注对象', 'focus_object': '焦点对象'}
     lines = [f'{roles[use.input_port]}：{use.object.name}（{use.object.object_id}，{use.object.category}）' for use in payload.object_uses]
+    if payload.shot:
+        lines.append(f'所属镜头：{payload.shot.name}（{payload.shot.reference_id}）')
     lines.extend(f'{PURPOSE_LABELS[entry.value.purpose]} / {entry.label} [{STATE_LABELS[entry.value.state]}]：{entry.value.text}' +
                  (f'（来源：{entry.value.source_locator}）' if entry.value.source_locator else '')
                  for entry in payload.entries if entry.value.state not in ('empty', 'not_applicable') and (entry.value.text or entry.value.state == 'absent'))
@@ -46,7 +48,8 @@ def publish_photography(canvas_id, card, adopted_inputs):
     uses = [PhotographyObjectUse(input_port=binding.input_port, object=objects[binding.source.object_id]) for binding in card.input_bindings if binding.source.object_id in objects]
     payload = PhotographyTextPayload(text='', entries=entries, requirements=[PhotographyRequirement(entry_id='field:shot_size', field=card.fields.shot_size)], adoption_scopes=scopes, frame_states=frames,
         requires_frame_target=len(frames) > 1, scope=card.scope, source_locator=card.source_locator,
-        objects=list(objects.values()), object_uses=uses)
+        objects=list(objects.values()), object_uses=uses,
+        shot=next((item.payload for item in adopted_inputs if isinstance(item.payload, NarrativeReferencePayload) and item.payload.category == 'shot' and item.available), None))
     payload.text = render_photography(payload)
     return [CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id, port_id='text', position=0), modality='text', payload=payload)]
 

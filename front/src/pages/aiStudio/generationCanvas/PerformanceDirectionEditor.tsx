@@ -1,8 +1,8 @@
-import { inputPorts } from './graphRules'
 import { Alert, Input, Select } from 'antd'
-import type { CharacterPerformanceCard, CharacterSituationCard, DesignTextPayload, PerformanceRuleCard, ObjectReferencePayload } from '../../../services/generated'
+import type { CharacterPerformanceCard, CharacterSituationCard, DesignTextPayload, PerformanceRuleCard, ObjectReferencePayload, NarrativeReferencePayload } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
 import { useCardCandidates } from './useCardCandidates'
+import { inputPorts, portLabels } from './graphRules'
 import { sourceKey } from './promptRules'
 import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
@@ -48,20 +48,20 @@ export function PerformanceDirectionEditor({ card: raw, document, savedRevision,
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs, false)
   const bindings = card.input_bindings || [], examples = card.examples || []
   const update = (next: PerformanceCard) => onChange(next)
-  const participantIds = new Set(bindings.filter(binding => binding.input_port === 'participant').map(binding => binding.source.object_id))
   return <>
     <p>按完整设计采用；背景解释情境，设计表达呈现，约束保留限制。对象关系仅提供身份和名称；描述或图片须在模型端另行直接采用。</p>
     {resolved.error && <Alert type="warning" message={resolved.error} />}
     <section aria-label="对象关系"><h3>对象关系</h3>
-      {resolved.candidates.filter(item => item.payload?.kind === 'object_reference').map(item => {
-        const object = item.payload as ObjectReferencePayload
-        if (object?.kind !== 'object_reference') return null
-        return <div key={sourceKey(item.source)}><span>{object.name} · {{ character: '人物', prop: '物件', costume: '服装', place: '场所' }[object.category]}</span>{(['participant', 'effect_object'] as const).map(port => {
-          if (port === 'participant' && (card.type === 'direction.performance_rule' || !['character', 'prop', 'costume'].includes(object.category))) return null
+      {resolved.candidates.filter(item => item.payload?.kind === 'object_reference' || item.payload?.kind === 'narrative_reference').map(item => {
+        const object = item.payload as ObjectReferencePayload | NarrativeReferencePayload
+        if (object.kind !== 'object_reference' && object.kind !== 'narrative_reference') return null
+        return <div key={sourceKey(item.source)}><span>{object.name} · {{ character: '人物', prop: '物件', costume: '服装', place: '场所', beat: '节拍', event: '事件', shot: '镜头' }[object.category]}</span>{inputPorts(card).filter(port => ['participant', 'effect_object', 'beat', 'received_event'].includes(port)).map(port => {
+          if (port === 'participant' && (card.type === 'direction.performance_rule' || object.kind !== 'object_reference' || !['character', 'prop', 'costume'].includes(object.category))) return null
           if (!document.edges?.some(edge => edge.target_card === card.id && edge.target_port === port && edge.source_card === item.source.card_id && edge.source_port === item.source.port_id)) return null
           const binding = bindings.find(value => value.input_port === port && sourceKey(value.source) === sourceKey(item.source))
-          const label = port === 'participant' ? '参与对象' : '作用对象'
-          return <WorkbenchButton key={port} disabled={disabled || !binding && port === 'participant' && participantIds.size > 0 && !participantIds.has(object.object_id)} onClick={() => update({ ...card, input_bindings: binding ? bindings.filter(value => value.id !== binding.id) : [...bindings, { id: crypto.randomUUID(), source: item.source, input_port: port }] })}>{`${binding ? '取消' : '选择'}${label} ${object.name}`}</WorkbenchButton>
+          const label = portLabels[port]
+          const single = port === 'participant' || port === 'beat'
+          return <WorkbenchButton key={port} disabled={disabled || !binding && single && bindings.some(value => value.input_port === port && value.source.object_id !== item.source.object_id)} onClick={() => update({ ...card, input_bindings: binding ? bindings.filter(value => value.id !== binding.id) : [...bindings, { id: crypto.randomUUID(), source: item.source, input_port: port }] })}>{`${binding ? '取消' : '选择'}${label} ${object.name}`}</WorkbenchButton>
         })}</div>
       })}
       {!bindings.length && <small>尚未选择对象。文本分析可完善不完整设计；视觉生成所需主体须明确。</small>}

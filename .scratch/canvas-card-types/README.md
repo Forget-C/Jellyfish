@@ -8,7 +8,7 @@
 
 ## 任务与阻塞关系
 
-编号表示依赖顺序，不要求严格串行执行。01、02、03、04、05、06、07、08、09、10、11、12、15 共十三票已实现并集成；13 可开始，14／18 进行中，验证证据在下方实施记录及相应票据中维护。
+编号表示依赖顺序，不要求严格串行执行。01–12、14、15、18 共十五票已实现并集成；13／16／17 进行中，19 等待这三票完成，验证证据在下方实施记录及相应票据中维护。
 
 | 票据 | Blocked by | 目录负责内容 |
 | --- | --- | --- |
@@ -214,6 +214,12 @@ flowchart TD
 
 - 2026-10-28：合并15（分支 HEAD `f5d07353`，显式合并提交 `101b99f9`）。共享契约、编译、关系校验、前端注册及生成类型冲突已保留11空间与15声音双方：`DesignTextPayload` 同时提供空间字段／关系／引用和声音字段／对白身份／版本／对白依据；空间与声音关系校验均执行，表演服装参与资格及09名称映射三字段继续保留。15 Completion 更新为 integrated，分诊 Status 不变；01–11及15共十二票集成，12／14进行中，18可开始。主区空间／声音／表演 HTTP及真实文本／视频Worker **72 passed**（6.47s），扩大至全部画布 **198 passed／28 skipped**（23.29s）；Pylint **10.00/10**（stats缓存写入受限，exit0）、Node24.22.1 typecheck及工作区／暂存区差异检查通过。已核实 `PYTHONPATH=. uv run --no-sync` 导入主区app及8000父进程73854的backend cwd；主区生产导出、8000实际HTTP与提交OpenAPI精确一致，核对双方设计契约及09映射字段后标准 `openapi:update` 成功，剔除纯尾空行漂移。证据 `/private/tmp/canvas15-integrated-production.json`、`/private/tmp/canvas15-integrated-http.json`。真实声音／受影响表演页面与1440px／390px截图复用15同一实现证据；空间编辑字段改为直接使用已验收的共享 `DesignFieldEditor`，控件行为不变，公共工作台按实际影响范围复用10／11检查。28项MySQL／可选环境跳过及受控供应商／存储限制保留，不证明真实供应商质量或生成声音。未推送、未操作12／14工作树或接续其他票据。
 
+- 2026-10-29：18 在 `codex-canvas-types-18` 完成混合管道生命周期核对，新增真实图片→固定命名参考→表演→视频 HTTP／TaskWorker 与真实页面验证；修复撤回模型媒体仍被预检当作可用输出的问题，保留原位置及绑定并阻断未来输出承诺。后端200 passed／28 skipped、Pylint10、Node24 typecheck、mixed真实Chrome／桌面及窄屏截图通过；独立8295生产OpenAPI精确一致，generated无实质差异。18 Completion为implemented待主区集成，分诊Status不变；证据和边界见18票据，不操作其他票据或主区服务。
 - 2026-10-28：12在独立分支 `codex-canvas-types-12` 完成摄影单卡五区、声明范围投影与图片画面目标，Completion 为 implemented 待集成，Status 保持不变。工作树已依次合入最新10服装修正、11空间与15对白声音集成事实。最终全部画布HTTP／真实Worker `215 passed, 28 skipped`，Pylint10.00/10、Node24 typecheck、摄影／表演／声音真实页面及规定工作台六项通过；生产8289 OpenAPI精确核对并同步generated client，09映射optional兼容保留。详情与限制见12 Comments；MySQL跳过及外部供应商／存储替身不扩大为生产验收。
 
 - 2026-10-29：无冲突合并12（分支 HEAD `3ec454a0`，显式合并提交 `e8b55d61`），Completion 更新为 integrated，分诊 Status 保持不变。分支已包含主区 `1b353bf7`；主区摄影／空间／声音／表演 HTTP 与真实文本／图片／视频 Worker **89 passed**（7.97s），Node24.22.1 typecheck 通过。复用相同实现全部画布 **215 passed／28 skipped**、Pylint **10.00/10**、摄影／表演／声音三项真实页面及共享工作台六项证据；合并无冲突，产品代码与验收分支精确一致。已核实主区 app 导入路径、8000父进程73854的backend cwd；生产导出、8000实际HTTP与提交OpenAPI精确一致，含摄影、图片目标、空间、声音及09可选名称映射字段。标准 `openapi:update` 成功，406处纯尾空行漂移经精确核对后剔除；证据 `/private/tmp/canvas12-integrated-production.json`、`/private/tmp/canvas12-integrated-http.json`。28项MySQL／可选环境跳过及受控供应商／存储限制保留。01–12及15共十三票集成，13可开始，14／18进行中；未推送、未操作其他工作树或接续其他票据。
+
+- 2026-10-29：14在独立 `codex-canvas-types-14` 实现叙事概览、节拍、事件与刺激、镜头设计，Completion为implemented待主区集成，Status保持不变。已合入11／15与12最终提交核对共享强类型字段；节拍／事件四种接收用途、镜头→摄影所属镜头、镜头可见结果→图片明确目标、覆盖节拍实际采用顺序上下移动均通过HTTP与真实页面验证。全画布232 passed／28 MySQL skipped，Pylint10.00/10、Node24 typecheck通过；文本／图片／视频真实Worker验证整卡且不穿透正文／媒体；独立8293／4293的Chrome桌面／窄屏、保存重开与组合交互通过。生产schema与generated同步，主区8000标准更新在集成后执行；复用未改共享控件的12六项工作台证据。具体路径、红绿记录与受控供应商／存储边界见14 Comments，不声称17验收来源或真实供应商视觉质量已验收。
+- 18完成前已合入12集成 `e00192ac`，保留双方README实施记录，合后mixed／摄影scope真实HTTP与Worker **19 passed**、Node24 typecheck及mixed真实Chrome **8.1s**通过；独立8295最新生产OpenAPI精确一致。18仍为implemented等待主区集成，具体证据见18 Comments。
+
+- 2026-10-29：主区依次集成14（`9678a1f0`）及18（`99659847`），仅README和浏览器套件列表冲突，保留双方新增记录及入口；Completion更新为integrated。合后叙事／混合／摄影／空间／声音／表演HTTP与真实Worker组合 **108 passed**（10.76s），Node24.22.1 typecheck通过，`git diff --check`通过；复用14全画布232 passed／28 MySQL skipped、Pylint10.00/10及两票真实页面证据。主区 `app.__file__` 已确认，当前生产app导出与提交OpenAPI精确一致（`/private/tmp/canvas14-18-integrated-production.json`）。8000父进程73854仍属当前主backend，但升级权限的urllib20／30秒与绕过代理curl10秒均无响应；未终止用户服务，标准 `openapi:update` 留待该服务恢复后复验，不从旧进程覆盖已同步契约。供应商／存储替身和MySQL缺环境边界保留。 当前01–12、14、15、18共十五票已集成，13／16／17可按依赖推进；未推送。

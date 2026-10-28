@@ -42,6 +42,11 @@ export function PhotographyEditor({ card: raw, document, savedRevision, modelOut
         <WorkbenchButton disabled={disabled} onClick={() => update({ ...card, phases: [...phases, { id: crypto.randomUUID(), name: '新阶段', frame: {} }] })}>新增明确阶段</WorkbenchButton>
       </section>}
     </section>
+    <section aria-label="摄影所属镜头"><h3>所属镜头（可选）</h3>{resolved.candidates.filter(item => item.payload?.kind === 'narrative_reference' && 'category' in item.payload && item.payload.category === 'shot').map(item => {
+      const bound = bindings.find(binding => binding.input_port === 'shot' && sourceKey(binding.source) === sourceKey(item.source))
+      const name = item.payload && 'name' in item.payload ? item.payload.name : item.source.object_id
+      return <WorkbenchButton key={sourceKey(item.source)} disabled={disabled || !item.available || !bound && bindings.some(binding => binding.input_port === 'shot')} onClick={() => update({ ...card, input_bindings: bound ? bindings.filter(binding => binding.id !== bound.id) : [...bindings, { id: crypto.randomUUID(), source: item.source, input_port: 'shot' }] })}>{`${bound ? '取消' : '选择'}所属镜头 ${name}`}</WorkbenchButton>
+    })}</section>
     <details><summary>共享对象、范围与来源</summary>
       {resolved.candidates.filter(item => item.payload?.kind === 'object_reference').map(item => <div key={sourceKey(item.source)}><span>{(item.payload as ObjectReferencePayload).name}</span>{(['effect_object','attention_object','focus_object'] as const).map(port => {
         if (!document.edges?.some(edge => edge.target_card === card.id && edge.target_port === port && edge.source_card === item.source.card_id && edge.source_port === item.source.port_id)) return null
