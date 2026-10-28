@@ -159,6 +159,69 @@ class PerformanceDesignFields(BaseModel):
     applicability: DesignField | None = None
 
 
+class AnchorDesignFields(BaseModel):
+    """可引用空间位置的完整设计。"""
+    model_config = ConfigDict(extra='forbid')
+    position: DesignField
+    orientation: DesignField
+    spatial_relation: DesignField
+    scale: DesignField
+
+
+class BlockingDesignFields(BaseModel):
+    """调度状态与切换依据，完整采用。"""
+    model_config = ConfigDict(extra='forbid')
+    position: DesignField
+    orientation: DesignField
+    initiative: DesignField
+    path: DesignField
+    transition_reason: DesignField
+
+
+class ActivityDesignFields(BaseModel):
+    """镜内活动完整过程和明确时序。"""
+    model_config = ConfigDict(extra='forbid')
+    task: DesignField
+    attention: DesignField
+    main_action_effect: DesignField
+    path: DesignField
+    delay_basis: DesignField
+    delay_ms: int | None = Field(default=None, ge=0)
+    entry_exit: DesignField
+    exit_state: DesignField
+    depth: DesignField
+    intensity: DesignField
+
+
+class EnvironmentDesignFields(BaseModel):
+    """环境活动与刻意留白分别表达。"""
+    model_config = ConfigDict(extra='forbid')
+    activity: DesignField
+    empty_space: DesignField
+    reason: DesignField
+
+
+class SpatialReferencePayload(BaseModel):
+    """空间对象只提供稳定身份和名称，不带设计正文或祖先。"""
+    model_config = ConfigDict(extra='forbid')
+    kind: Literal['spatial_reference'] = Field(default='spatial_reference', json_schema_extra={'enum': ['spatial_reference']})
+    category: Literal['anchor', 'blocking']
+    reference_id: str
+    name: str
+
+
+class SpatialDesignRelations(BaseModel):
+    """各空间关系用途保持独立；名称不授予读取正文的许可。"""
+    model_config = ConfigDict(extra='forbid')
+    space_id: str | None = None
+    participant_id: str | None = None
+    effect_object_ids: list[str] = Field(default_factory=list)
+    position_anchor_ids: list[str] = Field(default_factory=list)
+    area_anchor_id: str | None = None
+    change_event_id: str | None = None
+    trigger_event_id: str | None = None
+
+
 class FrameState(BaseModel):
     """导演明确提供的画面状态，图片仅定位其稳定身份。"""
     model_config = ConfigDict(extra='forbid')
@@ -170,13 +233,15 @@ class DesignTextPayload(BaseModel):
     """本卡完整设计及直接采用的必要对象，不包含祖先正文或示例媒体。"""
     model_config = ConfigDict(extra='forbid')
     kind: Literal['design'] = Field(default='design', json_schema_extra={'enum': ['design']})
-    design_type: Literal['direction.situation', 'direction.performance', 'direction.performance_rule']
+    design_type: Literal['direction.situation', 'direction.performance', 'direction.performance_rule', 'direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment']
     adoption: Literal['whole_card'] = Field(default='whole_card', json_schema_extra={'enum': ['whole_card']})
     text: str
     frame_states: list[FrameState] = Field(default_factory=list, exclude_if=lambda value: not value)
     requires_frame_target: bool = Field(default=False, exclude_if=lambda value: not value)
-    fields: PerformanceDesignFields
+    fields: PerformanceDesignFields | AnchorDesignFields | BlockingDesignFields | ActivityDesignFields | EnvironmentDesignFields
     scope: DesignScope
     objects: list[ObjectReferencePayload] = Field(default_factory=list)
+    spatial_relations: SpatialDesignRelations | None = Field(default=None, exclude_if=lambda value: value is None)
+    references: list[SpatialReferencePayload] = Field(default_factory=list, exclude_if=lambda value: not value)
     participant_id: str | None = None
     source_locator: str = ''

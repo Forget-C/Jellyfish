@@ -3,18 +3,22 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { AudioContentCard } from './AudioContentCard';
+import type { BlockingDirectionCard } from './BlockingDirectionCard';
 import type { CharacterPerformanceCard } from './CharacterPerformanceCard';
 import type { CharacterSituationCard } from './CharacterSituationCard';
 import type { CreativeBasisCard } from './CreativeBasisCard';
+import type { EnvironmentActivityCard } from './EnvironmentActivityCard';
 import type { GenerationCanvasEdge } from './GenerationCanvasEdge';
 import type { GenerationCanvasGroup } from './GenerationCanvasGroup';
 import type { ImageContentCard } from './ImageContentCard';
 import type { ImageModelCard } from './ImageModelCard';
+import type { InFrameActivityCard } from './InFrameActivityCard';
 import type { NamedImageReferenceCard } from './NamedImageReferenceCard';
 import type { ObjectDescriptionCard } from './ObjectDescriptionCard';
 import type { PerformanceRuleCard } from './PerformanceRuleCard';
 import type { PhotographyCard } from './PhotographyCard';
 import type { PlaceDescriptionCard } from './PlaceDescriptionCard';
+import type { SpatialAnchorCard } from './SpatialAnchorCard';
 import type { TextContentCard } from './TextContentCard';
 import type { TextModelCard } from './TextModelCard';
 import type { VideoContentCard } from './VideoContentCard';
@@ -27,7 +31,7 @@ export type CanvasDocument = {
     project_id: string;
     name: string;
     schema_version?: number;
-    cards?: Array<(PhotographyCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | ObjectDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard)>;
+    cards?: Array<(PhotographyCard | SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | ObjectDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard)>;
     edges?: Array<GenerationCanvasEdge>;
     input_order?: Record<string, Record<string, Array<string>>>;
     groups?: Array<GenerationCanvasGroup>;

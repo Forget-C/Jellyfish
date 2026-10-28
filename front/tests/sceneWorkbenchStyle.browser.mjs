@@ -84,7 +84,8 @@ try {
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
   const context = await browser.newContext({ viewport: { width: 1440, height: 960 } })
   page = await context.newPage()
-  page.on('pageerror', error => errors.push(error.message))
+  page.on('pageerror', error => { errors.push(error.message); console.error('PAGE ERROR', error.message) })
+  page.on('response', response => { if (response.status() >= 400) console.error('HTTP ERROR', response.status(), response.url()) })
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   const url = `http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}`
   await page.goto(url)

@@ -116,13 +116,14 @@ async def test_undeclared_photography_scope_never_becomes_an_arbitrary_path(canv
 
 
 @pytest.mark.asyncio
-async def test_performance_existing_exit_state_is_optional_target_with_complete_adoption(canvas_client):
+@pytest.mark.parametrize("design_type", ["direction.performance", "direction.activity"])
+async def test_performance_existing_exit_state_is_optional_target_with_complete_adoption(canvas_client, design_type):
     client = canvas_client
     canvas = (await client.post('/canvases/p', json={'name': '完整表演目标'})).json()['data']
     url = f"/canvases/p/{canvas['id']}"
     doc = canvas['document']
     source = {'canvas_id': canvas['id'], 'card_id': 'performance', 'port_id': 'text', 'position': 0}
-    doc.update(cards=[{'id': 'performance', 'type': 'direction.performance', 'physical_action': {'text': '先举手后坐下', 'state': 'proposal'}, 'exit_state': {'text': '坐在窗边', 'state': 'fact'}}, {'id': 'image', 'type': 'model.image', 'frame_targets': [{'binding_id': 'use', 'state_id': 'field:exit_state'}], 'input_bindings': [{'id': 'use', 'source': source, 'input_port': 'text'}]}], edges=[{'id': 'e', 'source_card': 'performance', 'source_port': 'text', 'target_card': 'image', 'target_port': 'text'}], input_order={'image': {'text': ['e']}})
+    doc.update(cards=[{'id': 'performance', 'type': design_type, ('physical_action' if design_type == 'direction.performance' else 'task'): {'text': '先举手后坐下', 'state': 'proposal'}, 'exit_state': {'text': '坐在窗边', 'state': 'fact'}}, {'id': 'image', 'type': 'model.image', 'frame_targets': [{'binding_id': 'use', 'state_id': 'field:exit_state'}], 'input_bindings': [{'id': 'use', 'source': source, 'input_port': 'text'}]}], edges=[{'id': 'e', 'source_card': 'performance', 'source_port': 'text', 'target_card': 'image', 'target_port': 'text'}], input_order={'image': {'text': ['e']}})
     assert (await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': doc})).status_code == 200
     compiled = (await client.get(url + '/cards/image/compile')).json()['data']
     assert 'FRAME_TARGET_MISSING' not in [row['code'] for row in compiled['diagnostics']]
