@@ -641,6 +641,7 @@ export type { Staging_Input } from './models/Staging_Input';
 export type { Staging_Output } from './models/Staging_Output';
 export type { StagingActivity_Input } from './models/StagingActivity_Input';
 export type { StagingActivity_Output } from './models/StagingActivity_Output';
+export type { StyleDesignFields } from './models/StyleDesignFields';
 export type { StyleOption } from './models/StyleOption';
 export type { StyleRule_Input } from './models/StyleRule_Input';
 export type { StyleRule_Output } from './models/StyleRule_Output';
@@ -700,6 +701,7 @@ export type { VideoModelConfig } from './models/VideoModelConfig';
 export type { VideoReferenceCapabilities } from './models/VideoReferenceCapabilities';
 export type { VideoSubjectMediaReference } from './models/VideoSubjectMediaReference';
 export type { VisualRequest } from './models/VisualRequest';
+export type { VisualStyleCard } from './models/VisualStyleCard';
 export type { WorkspaceRead } from './models/WorkspaceRead';
 
 export { DefaultService } from './services/DefaultService';

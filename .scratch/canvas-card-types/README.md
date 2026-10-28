@@ -8,7 +8,7 @@
 
 ## 任务与阻塞关系
 
-编号表示依赖顺序，不要求严格串行执行。01、02、03、04、05、06、07、08、09、10、11、12、15 共十三票已实现并集成；13 可开始，14／18 进行中，验证证据在下方实施记录及相应票据中维护。
+编号表示依赖顺序，不要求严格串行执行。01–15、18 共十六票已实现并集成；16／17 进行中，19 等待这两票完成，验证证据在下方实施记录及相应票据中维护。
 
 | 票据 | Blocked by | 目录负责内容 |
 | --- | --- | --- |
@@ -228,3 +228,7 @@ flowchart TD
 
 - 已实现三类要求卡、默认完整设计输出、稳定验收引用及镜头／表演／摄影的明确验收关联。验收只读使用记录按实际绑定统计；关系只传身份名称，标准正文必须由模型直接采用。合法作用对象按字段资格选取，验收禁止反向绑定使用方；示例固定文件与区间不随设计输出传递。
 - 独立验证：15项HTTP含三模态真实Worker，全画布249 passed／28 MySQL skipped，Pylint10、Node24typecheck；统一真实Chrome入口15.5s通过，覆盖真实拖拽候选、三使用方采用与取消、只读使用记录、完整标准直接采用、保存重开及390px窄屏。证据 `/private/tmp/canvas17-guidance-final`。implemented 等待主区集成；详情见17票 Comments。
+
+- 2026-10-29：13在 `codex-canvas-types-13` 实现独立风格整卡输出、图库／对比／大图和摄影五入口可视化预设，应用后成为本卡可编辑字段，示例与媒体输入／模型采用分离；原创 SVG／三秒 MP4 均标为几何示意。合入最新 `8e94c579` 后全画布239 passed／28 skipped、Pylint10、Node24 typecheck，真实预设与摄影页面分别11.7秒／11.4秒通过，生产schema与committed OpenAPI精确一致。Completion implemented待集成，Status不变；详细证据及边界见13票据。
+
+- 2026-10-29：无冲突集成13（分支HEAD `eda252d1`，显式合并 `7a8c0b4f`），Completion更新为integrated，分诊Status不变。合后摄影／风格HTTP与真实Worker组合 **22 passed**（2.92s）、Node24.22.1 typecheck通过；复用同一实现全部画布239 passed／28 skipped、Pylint10及真实预设／摄影页面证据。主区生产app导出、8000实际HTTP与提交OpenAPI精确一致；8000本次已恢复，标准 `openapi:update` 成功，418处纯尾空行生成差异经精确核对后剔除。证据 `/private/tmp/canvas13-integrated-production.json`、`/private/tmp/canvas13-integrated-http.json`。此前14／18标准更新的环境阻塞为历史记录，本次最新主区契约已完成标准同步；MySQL和受控供应商／存储限制保留。01–15及18共十六票集成，16／17进行中，19待其完成；未推送、未操作其他工作树。

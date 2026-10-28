@@ -1,4 +1,6 @@
 import { AcceptanceBasisSelector } from './AcceptanceBasisSelector'
+import { VisualPresetPicker } from './VisualPresetPicker'
+import { applyPreset, photographyPresets } from './visualPresets'
 import { inputPorts } from './graphRules'
 import { Alert, Input, Select, Space } from 'antd'
 import { useState } from 'react'
@@ -25,6 +27,7 @@ export function PhotographyEditor({ card: raw, document, savedRevision, modelOut
     <p>一张摄影设计 · 五个编辑入口。另一套独立方案请明确新建或复制；所属镜头可选，不自动合并。</p>
     <Space wrap>{Object.entries(photographyRegions).map(([key, value]) => <WorkbenchButton key={key} aria-pressed={region === key} onClick={() => setRegion(key as keyof typeof photographyRegions)}>编辑{value.label}</WorkbenchButton>)}</Space>
     <section aria-label={photographyRegions[region].label}>
+      <VisualPresetPicker key={region} label={photographyRegions[region].label} presets={photographyPresets[region]} disabled={disabled} onApply={preset => update({ ...card, fields: applyPreset(fields, preset) })} />
       {Object.entries(photographyRegions[region].fields).map(([key, label]) => <DesignFieldEditor key={key} label={label} value={fields[key as keyof PhotographyFields]} onChange={value => update({ ...card, fields: { ...fields, [key]: { ...fields[key as keyof PhotographyFields], ...value } } })} />)}
       {region === 'composition' && <details><summary>明确景别硬要求</summary><p>只比较同一显式目标和状态的事实要求；开放提议和自由正文保留。</p>
         <Select aria-label="结构化景别" allowClear value={fields.shot_size?.size || undefined} options={[{value:'extreme_close_up',label:'大特写'},{value:'close_up',label:'特写'},{value:'medium',label:'中景'},{value:'full',label:'全景'},{value:'wide',label:'远景'},{value:'extreme_wide',label:'大远景'}]} onChange={size => update({ ...card, fields: { ...fields, shot_size: { ...fields.shot_size, size: size ?? null } } })} />
