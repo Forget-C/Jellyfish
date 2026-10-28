@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
+import { writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
 import { createServer } from 'vite'
@@ -24,6 +25,7 @@ try {
     await delay(250)
   }
   assert.ok(ready, 'isolated backend ready')
+  writeFileSync(join(output, 'openapi.json'), JSON.stringify(await (await fetch(`${api}/openapi.json`)).json()))
   server = await createServer({ root, server: { host: '127.0.0.1', port: 4277, strictPort: true, open: false, proxy: { '/api': api } } })
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
@@ -40,7 +42,7 @@ try {
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
   assert.ok(seeded.ok, await seeded.text())
   await page.goto(`http://127.0.0.1:4277/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
-  const open = async id => { await page.locator(`[data-card-id="${id}"]`).press('Enter'); await page.getByRole('complementary').waitFor() }
+  const open = async id => { await page.locator(`[data-card-id="${id}"]`).press('Enter'); await page.locator('.wb-details').waitFor() }
   await open('m')
   const card = page.getByRole('complementary'), consumer = card
   const preview = page.getByRole('region', { name: '运行预检', exact: true })
@@ -78,9 +80,13 @@ try {
   await consumer.getByRole('button', { name: '预检运行', exact: true }).click()
   await preview.waitFor()
   assert.equal(await preview.getByRole('region', { name: '实际提交文本', exact: true }).textContent(), 'Literal 图片3 [media:1]')
-  let selected = (await (await fetch(`${base}/${canvas.id}`)).json()).data.document.cards.find(item => item.id === 'consumer')
+  const selected = (await (await fetch(`${base}/${canvas.id}`)).json()).data.document.cards.find(item => item.id === 'consumer')
   assert.deepEqual(selected.input_bindings.map(item => item.source.position), [0, 2, 0])
   assert.equal(selected.prompt.segments.length, 0, 'independent adoption does not rewrite prompt')
+  const actualImages = preview.getByRole('region', { name: '实际参考图片', exact: true })
+  await actualImages.getByRole('img', { name: '图片预览', exact: true }).nth(1).waitFor()
+  assert.equal(await actualImages.getByRole('img', { name: '图片预览', exact: true }).count(), 2)
+  assert.match(await actualImages.textContent(), /参考图片 1.*参考图片 2/s)
   await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click()
   await inputs.getByRole('button', { name: '取消采用 @图片1', exact: true }).click()
   await inputs.getByRole('button', { name: '取消采用 @文本1', exact: true }).click()
@@ -118,7 +124,10 @@ try {
   await consumer.getByRole('button', { name: '预检运行', exact: true }).click()
   await preview.waitFor()
   assert.equal(await preview.getByRole('region', { name: '实际提交文本', exact: true }).textContent(), '')
-  await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click()
+  await preview.getByRole('alert').filter({ hasText: 'TEXT_REQUIRED' }).waitFor()
+  await page.screenshot({ path: join(output, 'ordered-references-and-diagnostic.png'), fullPage: true })
+  await preview.getByRole('button', { name: '定位问题', exact: true }).click()
+  await preview.waitFor({ state: 'hidden' })
   assert.equal((await control()).calls.length, 2, 'preview, save and reference never generate')
   assert.equal((await control()).stream_connections, 1, 'all runs share one canvas SSE')
   await page.screenshot({ path: join(output, 'multi-image-history-content.png'), fullPage: true })
@@ -127,5 +136,13 @@ try {
   await page.getByText('未完成成果副本', { exact: false }).waitFor()
   assert.deepEqual((await runtime()).current_outputs.m, original)
   assert.equal((await control()).calls.length, 2)
+  await page.getByRole('button', { name: '关闭详情', exact: true }).click()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await open('consumer')
+  await inputs.getByRole('button', { name: '取消采用 @图片3', exact: true }).waitFor()
+  const detail = page.locator('.wb-details')
+  const box = await detail.boundingBox()
+  assert.ok(box.x >= 0 && box.x + box.width <= 391, 'mobile detail stays inside viewport')
+  await page.screenshot({ path: join(output, 'mobile-independent-adoption.png'), fullPage: true })
   console.log('PASS actual multi-image output selection/history/partial/save/independent reference/one SSE', output)
 } finally { await cleanup() }
