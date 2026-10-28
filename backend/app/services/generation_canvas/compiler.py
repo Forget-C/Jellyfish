@@ -90,6 +90,10 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
     refs = list(prompt_references(card))
     used_keys = {identity_key(ref.source) for ref, _ in refs}
     result.used = [item for item in candidates if identity_key(item.source) in used_keys and item.available]
+    if card.type == 'model.image':
+        # 图片接收端采用顺序独立于候选连线顺序；同一输出身份仅提交一次。
+        order = list(dict.fromkeys(identity_key(binding.source) for binding in card.input_bindings))
+        result.used.sort(key=lambda item: order.index(identity_key(item.source)))
     result.media = [item for item in result.used if item.modality != 'text']
     def issue(code, message, segment_id, path=None, warning=False):
         result.diagnostics.append(CanvasDiagnostic(code=code, message=message, severity='warning' if warning else 'error',

@@ -46,3 +46,11 @@ export function withEditorPrompt(card: GenerationCard, prompt: EditorPromptDocum
   }
   return { ...card, prompt: next, input_bindings: bindings }
 }
+
+/** 取消采用同时移除正文中的同一绑定引用，不保留第二份选择状态。 */
+export function withoutInputBinding(card: GenerationCard, id: string): GenerationCard {
+  if (!('prompt' in card)) return card
+  return { ...card, input_bindings: card.input_bindings?.filter(binding => binding.id !== id),
+    prompt: { segments: card.prompt?.segments?.filter(segment => segment.kind !== 'reference' || segment.binding_id !== id)
+      .map(segment => segment.kind === 'instruction' ? { ...segment, references: segment.references?.filter(reference => reference.binding_id !== id) } : segment) } }
+}

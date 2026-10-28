@@ -1,6 +1,7 @@
 import { Alert, Space } from 'antd'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
 import type { CanvasPrecheck } from '../../../services/generated'
+import { MediaPreview } from './MediaContentEditor'
 import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 
 /** Preview is bound to the current edit generation; diagnostics use stable targets. */
@@ -20,6 +21,12 @@ export function RunPreview({ preview, submitting, disabled, onSubmit, onLocate }
     <p>执行 {preview.execution_nodes.join('、')} · 复用已有结果 {preview.reused_results?.length || 0} 项</p>
     {awaitingUpstream && <p>本轮上游完成后将使用新结果，下方为受理时已有输入。</p>}
     <section aria-label={inputLabel}><CanvasTextPreview text={preview.input.text || ''} label={inputLabel} /></section>
+    {!preview.input.video_media && !!preview.input.media?.length && <section aria-label="实际参考图片">
+      {preview.input.media.filter(output => output.modality === 'image').map((output, index) => <div key={`${output.source.card_id}:${output.source.position}`}>
+        <p>参考图片 {index + 1} · {output.token} · 来源 {output.source.card_id} / 输出 {output.source.position + 1}</p>
+        {output.file_id && <MediaPreview fileId={output.file_id} type="image" />}
+      </div>)}
+    </section>}
     <p>模型：{preview.model?.name || preview.model?.id || '未选择'}</p>
     <details><summary>有效模型参数</summary><pre>{JSON.stringify(preview.model?.params || {}, null, 2)}</pre></details>
     {preview.input.video_media && <details open><summary>实际视频用途</summary><pre>{JSON.stringify(preview.input.video_media, null, 2)}</pre></details>}

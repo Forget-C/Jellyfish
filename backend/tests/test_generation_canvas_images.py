@@ -333,3 +333,126 @@ async def test_downstream_image_three_request_contains_only_the_third_model_resu
     assert len(calls) == 2
     assert calls[1]['prompt'] == preview['input']['text'] == '图片3 [media:1] image 1image 1'
     assert [base64.b64decode(item['image_url'].split(',')[1]) for item in calls[1]['images']] == [b'third']
+
+
+@pytest.mark.asyncio
+async def test_image_v2_independent_adoption_freezes_text_and_selected_image_order(runtime, image_storage):
+    """Only explicitly adopted v2 bindings reach the image provider, in receiver order."""
+    from app.models.studio_prompts_files_timeline import FileItem
+    from app.services.studio.file_usages import upsert_file_usage
+    from app.task_worker import TaskWorker
+    await image_card(runtime, 1)
+    async with runtime.sessions.begin() as db:
+        for name in ('a', 'b', 'unused'):
+            image_storage[name] = (name.encode(), 'image/png', {})
+            db.add(FileItem(id=name, name=name, type='image', storage_key=name, content_type='image/png'))
+        await db.flush()
+        for name in ('a', 'b', 'unused'):
+            await upsert_file_usage(db, file_id=name, project_id=runtime.project_id, chapter_id=None, usage_kind='upload')
+    document = runtime.document
+    document['cards'] += [{'id': name, 'type': 'content.image', 'file_id': name} for name in ('a', 'b', 'unused')]
+    document['cards'].append({'id': 'text', 'type': 'content.text', 'text': 'Literal 图片3 [media:1]'})
+    document['edges'] = [{'id': name, 'source_card': name, 'source_port': 'text' if name == 'text' else 'image',
+        'target_card': 'image', 'target_port': 'text' if name == 'text' else 'image'} for name in ('a', 'b', 'unused', 'text')]
+    document['input_order'] = {'image': {'image': ['a', 'b', 'unused'], 'text': ['text']}}
+    document['cards'][0]['input_bindings'] = [{'id': name, 'input_port': 'text' if name == 'text' else 'image',
+        'source': {'canvas_id': runtime.canvas_id, 'card_id': name, 'port_id': 'text' if name == 'text' else 'image', 'position': 0}}
+        for name in ('b', 'text', 'a')]
+    saved = await runtime.client.put(runtime.url, json={'request_id': 'v2-inputs', 'expected_revision': 2, 'document': document})
+    assert saved.status_code == 200, saved.text
+    accepted, preview = await accept(runtime)
+    assert [item['file_id'] for item in preview['input']['media']] == ['b', 'a']
+    assert preview['input']['text'] == 'Frozen prompt\nLiteral 图片3 [media:1]'
+    assert [item['source']['card_id'] for item in preview['input']['used']] == ['b', 'text', 'a']
+    calls = []
+    def provider(request):
+        calls.append(json.loads(request.content))
+        return httpx.Response(200, json={'data': [{'b64_json': 'eA=='}]})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as client:
+        worker = TaskWorker(runtime.sessions, client=client)
+        await worker.tick()
+        await asyncio.gather(*worker.jobs.values())
+        worker.text_pool.shutdown(wait=False)
+    assert calls[0]['prompt'] == preview['input']['text']
+    assert [base64.b64decode(item['image_url'].split(',')[1]) for item in calls[0]['images']] == [b'b', b'a']
+    state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+    assert state['runs'][0]['nodes'][0]['status'] == 'succeeded'
+    assert state['runs'][0]['id'] == accepted['run_id']
+
+
+@pytest.mark.asyncio
+async def test_image_cancel_reopen_keeps_prior_outputs_and_never_adopts_late_results(runtime, image_storage):
+    """Image cancellation remains observable through runtime after leaving the request."""
+    from app.task_worker import TaskWorker
+    await image_card(runtime, 1)
+    started, release = asyncio.Event(), asyncio.Event()
+    calls = []
+    async def provider(request):
+        calls.append(request)
+        if len(calls) == 2:
+            started.set()
+            await release.wait()
+        return httpx.Response(200, json={'data': [{'b64_json': 'eA=='}]})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as client:
+        worker = TaskWorker(runtime.sessions, client=client)
+        await accept(runtime)
+        await worker.tick()
+        await asyncio.gather(*worker.jobs.values())
+        before = (await runtime.client.get(runtime.url + '/runtime')).json()['data']['current_outputs']
+        second, _ = await accept(runtime, 'cancel-image')
+        await worker.tick()
+        try:
+            await asyncio.wait_for(started.wait(), 5)
+            response = await runtime.client.post(runtime.url + f"/runs/{second['run_id']}/cancel")
+            assert response.status_code == 200, response.text
+            reopened = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+            node = next(run['nodes'][0] for run in reopened['runs'] if run['id'] == second['run_id'])
+            assert node['stage'] == 'cancelling'
+            assert reopened['current_outputs'] == before
+        finally:
+            release.set()
+            await asyncio.gather(*worker.jobs.values())
+            await worker.tick()
+            worker.text_pool.shutdown(wait=False)
+    state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+    node = next(run['nodes'][0] for run in state['runs'] if run['id'] == second['run_id'])
+    assert node['status'] == 'cancelled' and not node['current_output_updated']
+    assert state['current_outputs'] == before
+    assert len(calls) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('runtime', ['app-handler'], indirect=True)
+async def test_image_current_position_missing_does_not_fallback_and_saved_product_stays_fixed(runtime, image_storage):
+    from app.task_worker import TaskWorker
+    await image_card(runtime)
+    def provider(request):
+        count = json.loads(request.content)['n']
+        return httpx.Response(200, json={'data': [{'b64_json': base64.b64encode(str(i).encode()).decode()} for i in range(count)]})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as client:
+        worker = TaskWorker(runtime.sessions, client=client)
+        first, _ = await accept(runtime)
+        await worker.tick()
+        await asyncio.gather(*worker.jobs.values())
+        original = (await runtime.client.get(runtime.url + '/runtime')).json()['data']['runs'][0]['nodes'][0]
+        copy = (await runtime.client.get(runtime.url + f"/runs/{first['run_id']}/nodes/{original['id']}/outputs/2/content")).json()['data']
+        document = runtime.document
+        document['cards'] += [copy, {'id': 'consumer', 'type': 'model.image', 'model_id': runtime.model_id,
+            'input_bindings': [{'id': 'third', 'input_port': 'image', 'source': {'canvas_id': runtime.canvas_id, 'card_id': 'image', 'port_id': 'image', 'position': 2}}]}]
+        document['edges'] = [{'id': 'candidate', 'source_card': 'image', 'source_port': 'image', 'target_card': 'consumer', 'target_port': 'image'}]
+        document['input_order'] = {'consumer': {'image': ['candidate']}}
+        document['cards'][0]['config']['count'] = 1
+        assert (await runtime.client.put(runtime.url, json={'request_id': 'save-fixed-and-consumer', 'expected_revision': 2, 'document': document})).status_code == 200
+        await accept(runtime, 'shorter-result')
+        await worker.tick()
+        await asyncio.gather(*worker.jobs.values())
+        worker.text_pool.shutdown(wait=False)
+    compiled = (await runtime.client.get(runtime.url + '/cards/consumer/compile')).json()['data']
+    assert not compiled['can_run'] and not compiled['media']
+    assert any(issue['code'] == 'OUTPUT_MISSING' and issue['target']['path'] == ['input_bindings', 'third'] for issue in compiled['diagnostics'])
+    reopened = (await runtime.client.get(runtime.url)).json()['data']['document']
+    selected = next(card for card in reopened['cards'] if card['id'] == 'consumer')
+    assert selected['input_bindings'][0]['source']['position'] == 2
+    fixed = (await runtime.client.get(runtime.url + '/cards/' + copy['id'] + '/outputs')).json()['data']['outputs'][0]
+    assert fixed['file_id'] == original['outputs'][2]['file_id']
+    assert (await runtime.client.delete('/api/v1/studio/files/' + fixed['file_id'])).status_code == 409
