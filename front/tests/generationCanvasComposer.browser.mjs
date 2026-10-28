@@ -47,12 +47,16 @@ try {
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: doc }) })
   assert.ok(seeded.ok, await seeded.text())
   await page.goto(`http://127.0.0.1:4275/projects/canvas-project?tab=generation&canvas=${canvas.id}`)
-  const card = id => page.locator(`[data-card-id="${id}"]`)
-  const editor = card('m').getByRole('textbox', { name: '模型正文', exact: true })
+  const detail = () => page.getByRole('complementary')
+  const open = async id => { const summary = page.locator(`[data-card-id="${id}"]`); await summary.focus(); await summary.press('Enter'); await detail().waitFor() }
+  await open('m')
+  const editor = detail().getByRole('textbox', { name: '模型正文', exact: true })
   await editor.waitFor()
   await editor.fill('@图片10')
+  await detail().getByRole('button', { name: '@图片10', exact: true }).waitFor()
   assert.equal(await editor.locator('[data-segment]').count(), 0, 'no prefix binding while typing')
   await editor.press('Tab')
+  await editor.locator('[data-segment]').first().waitFor()
   assert.equal(await editor.locator('[data-segment]').count(), 1)
   assert.equal(JSON.parse(await editor.locator('[data-segment]').getAttribute('data-segment')).source.card_id, 's10')
   // Composition never converts/intercepts, then a real boundary confirms the exact complete token.
@@ -63,44 +67,55 @@ try {
   assert.equal(await editor.locator('[data-segment]').count(), 0)
   await editor.dispatchEvent('compositionend')
   await editor.press('Tab')
+  await editor.locator('[data-segment]').first().waitFor()
   assert.equal(await editor.locator('[data-segment]').count(), 1)
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   let saved = (await (await fetch(`${base}/${canvas.id}`)).json()).data
-  assert.equal(saved.document.cards[0].prompt.segments.find(segment => segment.kind === 'reference').source.card_id, 's10')
+  const savedReference = saved.document.cards[0].prompt.segments.find(segment => segment.kind === 'reference')
+  assert.equal(saved.document.cards[0].input_bindings.find(binding => binding.id === savedReference.binding_id).source.card_id, 's10')
+  assert.equal(savedReference.source, undefined, 'source has one persisted authority in input bindings')
   // Reordering changes display only; the bound source stays s10.
-  await card('m').getByRole('button', { name: '前移输入 e-s10', exact: true }).click()
+  await detail().getByRole('button', { name: '前移输入 e-s10', exact: true }).click()
+  await page.getByRole('button', { name: '保存画布', exact: true }).click()
+  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.waitForFunction(() => [...document.querySelectorAll('[data-segment]')].some(node => node.textContent === '@图片9'))
   assert.equal((await editor.locator('[data-segment]').textContent()).trim(), '@图片9')
   assert.equal(JSON.parse(await editor.locator('[data-segment]').getAttribute('data-segment')).source.card_id, 's10')
-  await card('m').getByRole('button', { name: '前移输入 e-s9', exact: true }).click()
+  await detail().getByRole('button', { name: '前移输入 e-s9', exact: true }).click()
+  await page.getByRole('button', { name: '保存画布', exact: true }).click()
+  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.waitForFunction(() => [...document.querySelectorAll('[data-segment]')].some(node => node.textContent === '@图片10'))
   assert.equal((await editor.locator('[data-segment]').textContent()).trim(), '@图片10')
   const countBeforeAdding = await page.locator('[data-card-id]').count()
-  await card('m').getByRole('button', { name: '添加文本参考', exact: true }).click()
+  await detail().getByRole('button', { name: '添加文本参考', exact: true }).click()
   assert.equal(await page.locator('[data-card-id]').count(), countBeforeAdding + 1, 'add creates a visible connected content card')
-  await card('m').getByRole('combobox', { name: '连接已有卡', exact: true }).locator('..').locator('..').click()
+  await detail().getByRole('combobox', { name: '连接已有卡', exact: true }).locator('..').locator('..').click()
   await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText('empty → 参考图片', { exact: true }).click()
   assert.equal(await page.locator('[data-card-id]').count(), countBeforeAdding + 1, 'choose existing only adds connection')
-  assert.equal(await card('m').getByRole('button', { name: '@图片11', exact: true }).count(), 0, 'empty connected output cannot be referenced')
+  assert.equal(await detail().getByRole('button', { name: '@图片11', exact: true }).count(), 0, 'empty connected output cannot be referenced')
   // Copy carries stable source separately from the human token label.
   const copied = await editor.evaluate(element => {
     const range = document.createRange(); range.selectNodeContents(element); const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range)
     const clipboardData = new DataTransfer(); element.dispatchEvent(new ClipboardEvent('copy', { bubbles: true, clipboardData })); return { structured: clipboardData.getData('application/x-jellyfish-prompt+json'), plain: clipboardData.getData('text/plain') }
   })
   assert.equal(copied.plain.trim(), '@图片10')
-  const other = card('other').getByRole('textbox', { name: '模型正文', exact: true })
+  await open('other')
+  const other = detail().getByRole('textbox', { name: '模型正文', exact: true })
   await other.evaluate((element, payload) => {
     element.focus(); const range = document.createRange(); range.selectNodeContents(element); range.collapse(false); const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range)
     const clipboardData = new DataTransfer(); clipboardData.setData('application/x-jellyfish-prompt+json', payload); element.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, clipboardData }))
   }, copied.structured)
-  await card('other').getByRole('alert').filter({ hasText: '来源未连接' }).waitFor()
+  await detail().getByRole('alert').filter({ hasText: '来源未连接' }).waitFor()
   assert.equal(JSON.parse(await other.locator('[data-segment]').getAttribute('data-segment')).source.card_id, 's10')
+  await open('m')
   // Foreign structured payload remains foreign even when the target has a local token of that name.
   await editor.fill('')
   const foreign = JSON.parse(copied.structured); foreign.segments[0].source.canvas_id = 'foreign'
   await editor.evaluate((element, payload) => {
     element.focus(); const clipboardData = new DataTransfer(); clipboardData.setData('application/x-jellyfish-prompt+json', payload); element.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, clipboardData }))
   }, JSON.stringify(foreign))
-  await card('m').getByRole('alert').filter({ hasText: '来源属于其他画布' }).waitFor()
+  await detail().getByRole('alert').filter({ hasText: '来源属于其他画布' }).waitFor()
   // Plain external text is confirmed against current target candidates; escapes stay literal.
   await editor.fill('')
   await editor.evaluate(element => {
@@ -116,20 +131,22 @@ try {
   assert.equal(await editor.textContent(), '前缀 @图片10 后缀')
   assert.equal(JSON.parse(await editor.locator('[data-segment]').getAttribute('data-segment')).source.card_id, 's10')
   // Inline chooser is opened by @ and confirms a selected real output.
-  await card('m').getByRole('combobox', { name: '引用分类', exact: true }).locator('..').locator('..').click()
+  await detail().getByRole('combobox', { name: '引用分类', exact: true }).locator('..').locator('..').click()
   const categoryDropdown = await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').elementHandle()
   await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText('图片', { exact: true }).click()
   // rc-select restores focus after an option click; finish closing that popup
   // before typing, so its delayed focus does not blur the new @ chooser.
   await categoryDropdown.waitForElementState('hidden')
   await editor.fill('@')
-  await card('m').getByRole('listbox', { name: '引用候选' }).waitFor()
+  await detail().getByRole('listbox', { name: '引用候选' }).waitFor()
   await editor.press('Enter')
+  await editor.locator('[data-segment]').first().waitFor()
   assert.equal(await editor.locator('[data-segment]').count(), 1)
   await editor.fill('前缀 ')
   await editor.pressSequentially('@图片')
-  await card('m').getByRole('listbox', { name: '引用候选' }).getByRole('option', { name: '@图片10', exact: true }).click()
+  await detail().getByRole('listbox', { name: '引用候选' }).getByRole('option', { name: '@图片10', exact: true }).click()
   assert.equal(await editor.textContent(), '前缀 @图片10', 'picker replaces the complete typed query without a dangling @')
+  await editor.locator('[data-segment]').first().waitFor()
   assert.equal(await editor.locator('[data-segment]').count(), 1)
   assert.equal(JSON.parse(await editor.locator('[data-segment]').getAttribute('data-segment')).source.card_id, 's10')
   // Canonical instruction fragments retain their nested source identities on paste.
@@ -157,15 +174,44 @@ try {
   assert.equal(escaped.text, '@图片10 /首帧参考')
   // Re-establish a reference for the final guarded disconnect check.
   await editor.fill('@图片10 '); await editor.press('Tab')
-  await card('m').getByRole('button', { name: '断开连接 e-s10', exact: true }).click()
+  await detail().getByRole('button', { name: '断开连接 e-s10', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '请先清理' }).waitFor()
   await editor.fill('清理后只保留普通文字')
-  await card('m').getByRole('button', { name: '断开连接 e-s10', exact: true }).click()
+  await detail().getByRole('button', { name: '断开连接 e-s10', exact: true }).click()
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   saved = (await (await fetch(`${base}/${canvas.id}`)).json()).data
   assert.ok(!saved.document.edges.some(edge => edge.id === 'e-s10'))
   assert.equal(saved.document.cards[0].prompt.segments[0].text, '清理后只保留普通文字')
+  // New protocol tracer: explicitly import creative basis, save, adopt and reopen.
+  const basisDocument = { ...saved.document, cards: [
+    { id: 'basis', type: 'content.basis', text: '' },
+    { id: 'text-model', type: 'model.text', model_id: 'graph-text', prompt: { segments: [] } },
+  ], groups: [], edges: [{ id: 'basis-edge', source_card: 'basis', source_port: 'text', target_card: 'text-model', target_port: 'text' }],
+  input_order: { 'text-model': { text: ['basis-edge'] } } }
+  const basisSaved = await fetch(base + '/' + canvas.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ request_id: 'basis-tracer', expected_revision: saved.revision, document: basisDocument }) })
+  assert.ok(basisSaved.ok, await basisSaved.text())
+  await page.reload()
+  const basis = detail()
+  await basis.getByLabel('导入文本文件', { exact: true }).setInputFiles({ name: '剧本.txt', mimeType: 'text/plain', buffer: Buffer.from('张三望向门口。') })
+  await page.waitForFunction(() => document.querySelector('[aria-label="创作依据正文"]')?.value === '张三望向门口。')
+  assert.equal(await basis.getByRole('textbox', { name: '依据来源定位', exact: true }).inputValue(), '剧本.txt')
+  await page.getByRole('button', { name: '保存画布', exact: true }).click()
+  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await open('text-model')
+  const textModel = detail()
+  await textModel.getByRole('button', { name: '@文本1', exact: true }).click()
+  await page.getByRole('button', { name: '保存画布', exact: true }).click()
+  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  const basisCompiled = (await (await fetch(base + '/' + canvas.id + '/cards/text-model/compile')).json()).data
+  assert.equal(basisCompiled.text, '张三望向门口。 ')
+  await page.reload()
+  await detail().getByRole('textbox', { name: '创作依据正文', exact: true }).waitFor()
+  assert.equal(await detail().getByRole('textbox', { name: '创作依据正文', exact: true }).inputValue(), '张三望向门口。')
+  await open('text-model')
+  await detail().getByRole('button', { name: '@文本1', exact: true }).waitFor()
+  assert.equal(await detail().getByRole('textbox', { name: '模型正文', exact: true }).textContent(), '@文本1 ')
   await page.screenshot({ path: join(output, 'composer.png'), fullPage: true })
   console.log(`composer passed: ${output}`)
 } finally { await cleanup() }

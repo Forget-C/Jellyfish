@@ -116,10 +116,11 @@ class CanvasRuntime:
                       'provider_id': provider.id, 'api_key': config.api_key, 'base_url': config.base_url}
         # Display nicknames and segment IDs do not change the actual request. Inserting
         # an unused candidate may renumber tokens without invalidating a publication.
+        # payload 是既有 text/file_id 的强类型传输投影，不改变旧成果的实际依据哈希。
         actual = {'card_id': card.id, 'type': card.type, 'model_id': card.model_id,
                   'config': card.config.model_dump(), 'text': compiled.text,
-                  'used': [item.model_dump(exclude={'token', 'basis_current'}) for item in compiled.used],
-                  'media': [item.model_dump(exclude={'token', 'basis_current'}) for item in compiled.media]}
+                  'used': [item.model_dump(exclude={'token', 'basis_current', 'payload'}) for item in compiled.used],
+                  'media': [item.model_dump(exclude={'token', 'basis_current', 'payload'}) for item in compiled.media]}
         if card.type == 'model.video':
             actual['video_media'] = compiled.video_media.model_dump()
         return compiled, public, digest({'basis': actual, 'execution': frozen}), frozen

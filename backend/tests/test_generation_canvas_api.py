@@ -458,3 +458,91 @@ async def test_duplicate_prompt_segment_identity_cannot_save(canvas_client):
         {'id': 'same', 'kind': 'text', 'text': 'first'}, {'id': 'same', 'kind': 'text', 'text': 'second'}]}}]}
     response = await canvas_client.put(f"/canvases/p/{canvas['id']}", json={'request_id': 'duplicate', 'expected_revision': 0, 'document': doc})
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_creative_basis_is_saved_and_exposes_only_its_declared_text(canvas_client):
+    """创作依据不依赖章节，直接出口与编译使用同一份已保存文本。"""
+    client = canvas_client
+    canvas = (await client.post('/canvases/p', json={'name': '创作依据'})).json()['data']
+    document = canvas['document']
+    document['cards'] = [
+        {'id': 'basis', 'type': 'content.basis', 'text': '张三望向门口',
+         'source_locator': '用户导入的段落', 'selection_start': 2, 'selection_end': 9},
+        {'id': 'model', 'type': 'model.text'},
+    ]
+    document['edges'] = [{'id': 'edge', 'source_card': 'basis', 'source_port': 'text',
+                          'target_card': 'model', 'target_port': 'text'}]
+    document['input_order'] = {'model': {'text': ['edge']}}
+    saved = await client.put(f"/canvases/p/{canvas['id']}", json={
+        'request_id': 'save-basis', 'expected_revision': 0, 'document': document})
+    assert saved.status_code == 200, saved.text
+    reopened = (await client.get(f"/canvases/p/{canvas['id']}")).json()['data']
+    assert reopened['document']['cards'][0]['source_locator'] == '用户导入的段落'
+    outputs = await client.get(f"/canvases/p/{canvas['id']}/cards/basis/outputs")
+    assert outputs.status_code == 200, outputs.text
+    result = outputs.json()['data']
+    assert result['revision'] == 1
+    assert result['outputs'][0]['payload'] == {'kind': 'text', 'text': '张三望向门口'}
+    assert result['outputs'][0]['source']['port_id'] == 'text'
+    candidates = await client.get(f"/canvases/p/{canvas['id']}/cards/model/outputs")
+    assert candidates.json()['data']['candidates'][0]['payload']['text'] == '张三望向门口'
+    compiled = (await client.get(f"/canvases/p/{canvas['id']}/cards/model/compile")).json()['data']
+    assert compiled['text'] == ''
+    assert compiled['used'] == []
+
+
+@pytest.mark.asyncio
+async def test_input_binding_owns_source_and_prompt_only_references_binding(canvas_client):
+    """提示词与选择区共享同一采用记录，不再保存第二份来源。"""
+    client = canvas_client
+    canvas = (await client.post('/canvases/p', json={'name': '统一采用'})).json()['data']
+    document = canvas['document']
+    source = {'canvas_id': canvas['id'], 'card_id': 'text', 'port_id': 'text', 'position': 0}
+    document['cards'] = [
+        {'id': 'text', 'type': 'content.text', 'text': '直接上游正文'},
+        {'id': 'model', 'type': 'model.text',
+         'input_bindings': [{'id': 'selected-text', 'source': source, 'input_port': 'text'}],
+         'prompt': {'segments': [{'id': 'mention', 'kind': 'reference', 'binding_id': 'selected-text'}]}},
+    ]
+    document['edges'] = [{'id': 'edge', 'source_card': 'text', 'source_port': 'text',
+                          'target_card': 'model', 'target_port': 'text'}]
+    document['input_order'] = {'model': {'text': ['edge']}}
+    saved = await client.put(f"/canvases/p/{canvas['id']}", json={
+        'request_id': 'save-binding', 'expected_revision': 0, 'document': document})
+    assert saved.status_code == 200, saved.text
+    reopened = (await client.get(f"/canvases/p/{canvas['id']}")).json()['data']
+    model = reopened['document']['cards'][1]
+    assert model['input_bindings'][0]['source'] == source
+    assert model['prompt']['segments'][0] == {'id': 'mention', 'kind': 'reference', 'binding_id': 'selected-text'}
+    compiled = (await client.get(f"/canvases/p/{canvas['id']}/cards/model/compile")).json()['data']
+    assert compiled['text'] == '直接上游正文'
+    assert compiled['used'][0]['source'] == source
+    model['prompt']['segments'] = []
+    model['input_bindings'] = []
+    document['cards'][1] = model
+    saved = await client.put(f"/canvases/p/{canvas['id']}", json={
+        'request_id': 'remove-binding', 'expected_revision': 1, 'document': document})
+    assert saved.status_code == 200, saved.text
+    compiled = (await client.get(f"/canvases/p/{canvas['id']}/cards/model/compile")).json()['data']
+    assert compiled['used'] == []
+
+
+@pytest.mark.asyncio
+async def test_legacy_prompt_document_is_read_as_version_two_without_duplicate_sources(canvas_client):
+    client = canvas_client
+    canvas = (await client.post('/canvases/p', json={'name': '旧文档读取'})).json()['data']
+    document = canvas['document']
+    source = {'canvas_id': canvas['id'], 'card_id': 'text', 'port_id': 'text', 'position': 0}
+    document.update(schema_version=1, cards=[{'id': 'text', 'type': 'content.text', 'text': '原始依据'},
+        {'id': 'model', 'type': 'model.text', 'prompt': {'segments': [{'id': 'r', 'kind': 'reference', 'source': source}]}}],
+        edges=[{'id': 'e', 'source_card': 'text', 'source_port': 'text', 'target_card': 'model', 'target_port': 'text'}],
+        input_order={'model': {'text': ['e']}})
+    response = await client.put(f"/canvases/p/{canvas['id']}", json={'request_id': 'legacy', 'expected_revision': 0, 'document': document})
+    assert response.status_code == 200, response.text
+    reopened = (await client.get(f"/canvases/p/{canvas['id']}")).json()['data']['document']
+    assert reopened['schema_version'] == 2
+    model = reopened['cards'][1]
+    assert model['input_bindings'][0]['source'] == source
+    assert model['prompt']['segments'][0]['binding_id'] == model['input_bindings'][0]['id']
+    assert 'source' not in model['prompt']['segments'][0]

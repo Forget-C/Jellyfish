@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ApiResponse_CanvasCardOutputs_ } from '../models/ApiResponse_CanvasCardOutputs_';
 import type { ApiResponse_CanvasCompiledInput_ } from '../models/ApiResponse_CanvasCompiledInput_';
 import type { ApiResponse_CanvasModelCapability_ } from '../models/ApiResponse_CanvasModelCapability_';
 import type { ApiResponse_CanvasPrecheck_ } from '../models/ApiResponse_CanvasPrecheck_';
@@ -432,6 +433,34 @@ export class StudioGenerationCanvasesService {
                 'run_id': runId,
                 'node_id': nodeId,
                 'position': position,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Card Outputs
+     * 展示已保存修订的明确出口及直接候选，不修改绑定。
+     * @returns ApiResponse_CanvasCardOutputs_ Successful Response
+     * @throws ApiError
+     */
+    public static canvasCardOutputs({
+        projectId,
+        canvasId,
+        cardId,
+    }: {
+        projectId: string,
+        canvasId: string,
+        cardId: string,
+    }): CancelablePromise<ApiResponse_CanvasCardOutputs_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/studio/generation-canvases/{project_id}/{canvas_id}/cards/{card_id}/outputs',
+            path: {
+                'project_id': projectId,
+                'canvas_id': canvasId,
+                'card_id': cardId,
             },
             errors: {
                 422: `Validation Error`,

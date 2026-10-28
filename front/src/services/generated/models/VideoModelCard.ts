@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { InputBinding } from './InputBinding';
 import type { PromptDocument } from './PromptDocument';
 import type { VideoModelConfig } from './VideoModelConfig';
 /**
@@ -12,6 +13,7 @@ export type VideoModelCard = {
     type_version?: number;
     model_id?: (string | null);
     prompt?: PromptDocument;
+    input_bindings?: Array<InputBinding>;
     type?: string;
     config?: VideoModelConfig;
 };

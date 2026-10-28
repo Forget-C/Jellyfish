@@ -122,3 +122,14 @@ from app.schemas.generation_canvas import TextContentCard, ImageContentCard, Vid
 async def canvas_output_content(project_id: str, canvas_id: str, run_id: str, node_id: str, position: int, db: AsyncSession = Depends(get_db, scope='function')):
     """准备独立内容卡；调用方通过已有文档保存队列显式持久化。"""
     return success_response(await CanvasRuntime(db, project_id).content(canvas_id, run_id, node_id, position))
+
+
+from app.schemas.generation_canvas import CanvasCardOutputs
+
+
+@router.get('/{project_id}/{canvas_id}/cards/{card_id}/outputs', response_model=ApiResponse[CanvasCardOutputs],
+            operation_id='canvas_card_outputs')
+async def get_card_outputs(project_id: str, canvas_id: str, card_id: str,
+                           db: AsyncSession = Depends(get_db, scope='function')):
+    """展示已保存修订的明确出口及直接候选，不修改绑定。"""
+    return success_response(await CanvasStore(db, project_id).card_outputs(canvas_id, card_id))

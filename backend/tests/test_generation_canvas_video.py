@@ -250,7 +250,13 @@ async def test_invalid_video_instructions_save_but_precheck_blocks_with_stable_t
     assert issue['target']['card_id'] == 'v' and issue['target']['segment_id'] == target
     assert issue['blocks'] == ['run'] and not preview['preview_token']
     reopened = (await runtime.client.get(runtime.url)).json()['data']['document']
-    assert reopened['cards'][-1]['prompt']['segments'] == runtime.document['cards'][-1]['prompt']['segments']
+    actual = reopened['cards'][-1]
+    expected = runtime.document['cards'][-1]
+    assert [(item['id'], item['command'], item['parameters']) for item in actual['prompt']['segments']] == [
+        (item['id'], item['command'], item['parameters']) for item in expected['prompt']['segments']]
+    bindings = {binding['id']: binding for binding in actual['input_bindings']}
+    assert [bindings[ref['binding_id']]['source'] for item in actual['prompt']['segments'] for ref in item['references']] == [
+        ref['source'] for item in expected['prompt']['segments'] for ref in item['references']]
 
 
 @pytest.mark.asyncio

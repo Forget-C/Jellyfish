@@ -1,8 +1,11 @@
 import type { ComponentType, ReactNode } from 'react'
-import { Alert, Button, Input, Select } from 'antd'
-import type { CanvasDocument, CanvasModelCapability, CanvasNodeRead, CanvasResolvedOutput, ImageModelCard, ModelRead, TextContentCard, TextModelCard, VideoModelCard } from '../../../services/generated'
+import { Alert, Button, Select } from 'antd'
+import type { CanvasDocument, CanvasModelCapability, CanvasNodeRead, CanvasResolvedOutput, CreativeBasisCard, ImageModelCard, ModelRead, TextContentCard, TextModelCard, VideoModelCard } from '../../../services/generated'
 import { ExperimentComposer } from '../experiment/components/ExperimentComposer'
 import { PromptEditor } from './PromptEditor'
+import { editorPrompt, withEditorPrompt } from './inputBindings'
+import { useCardCandidates } from './useCardCandidates'
+import { TextContentEditor } from './TextContentEditor'
 import { MediaContentEditor } from './MediaContentEditor'
 import { MediaResultsPreview } from './MediaResultsPreview'
 import type { MediaCard } from './MediaContentEditor'
@@ -11,12 +14,13 @@ import type { GenerationCard } from './graphRules'
 import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 import { activeNode } from './useGenerationCanvasRuntime'
 
-export type CardRendererProps = { card: GenerationCard; document: CanvasDocument; projectId: string; onChange: (card: GenerationCard) => void;
+export type CardRendererProps = { savedRevision?: number; card: GenerationCard; document: CanvasDocument; projectId: string; onChange: (card: GenerationCard) => void;
   models?: ModelRead[]; capability?: CanvasModelCapability; capabilityError?: string; references?: ReactNode; disabled?: boolean; modelOutputs?: Record<string, CanvasResolvedOutput[]>; node?: CanvasNodeRead; busy?: boolean; checking?: boolean; runDisabled?: boolean; onPrecheck?: () => void; onTargetPrecheck?: () => void }
 
 /** 模型卡共享受控 Composer 布局，参数由各模态组件表达。 */
-function ModelRenderer({ card: raw, document, disabled, onChange, models, capability, capabilityError, references, modelOutputs, node, busy, checking, runDisabled, onPrecheck, onTargetPrecheck }: CardRendererProps) {
+function ModelRenderer({ card: raw, savedRevision, document, disabled, onChange, models, capability, capabilityError, references, modelOutputs, node, busy, checking, runDisabled, onPrecheck, onTargetPrecheck }: CardRendererProps) {
   const card = raw as TextModelCard | ImageModelCard | VideoModelCard
+  const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs)
   const category = card.type?.split('.')[1]
   let parameters: ReactNode = <span>使用模型管理中的文本参数 · 仅接收文本</span>
   if (card.type === 'model.image') parameters = <ImageModelParameters card={card as ImageModelCard} capability={capability} onChange={onChange} />
@@ -46,7 +50,9 @@ function ModelRenderer({ card: raw, document, disabled, onChange, models, capabi
       options={models?.filter(model => model.category === category).map(model => ({ value: model.id, label: model.name }))}
       onChange={id => onChange({ ...card, model_id: id ?? null })} />{parameters}</>}
       onSubmit={() => onPrecheck?.()} submitting={checking} submitDisabled={disabled || busy || runDisabled} submitLabel={busy ? '运行中' : '预检运行'}>
-      <PromptEditor document={document} card={card} value={card.prompt || { segments: [] }} modelOutputs={modelOutputs} disabled={disabled} onChange={prompt => onChange({ ...card, prompt })} />
+      {resolved.loading && <small role="status">正在读取直接候选</small>}
+      {resolved.error && <Alert type="warning" message={resolved.error} />}
+      <PromptEditor document={document} card={card} value={editorPrompt(card)} candidates={resolved.candidates.map(item => ({ source: item.source, token: item.token || '', available: item.available !== false }))} disabled={disabled} onChange={prompt => onChange(withEditorPrompt(card, prompt))} />
     </ExperimentComposer>
     {node && <section aria-label="本次运行" data-run-id={node.run_id}>
       <p role="status">{({ waiting: '等待上游', queued: '排队中', running: '运行中', succeeded: '已完成', failed: '失败 · 未完成', cancelled: '已取消 · 未完成', blocked: '已阻止 · 未完成' } as Record<string, string>)[node.status] || node.status} · {({ queued: '等待执行', generating: '生成中', archiving: '归档中', cancelling: '取消中，等待任务终态', finished: '已结束' } as Record<string, string>)[node.stage] || node.stage}{node.progress !== undefined && node.progress !== null && ` · ${node.progress}%`}</p>
@@ -63,11 +69,8 @@ function ModelRenderer({ card: raw, document, disabled, onChange, models, capabi
 
 /** 显式类型入口，无供应商卡片族或通用表单引擎。 */
 export const rendererRegistry: Record<string, ComponentType<CardRendererProps>> = {
-  'content.text': ({ card: raw, onChange }) => {
-    const card = raw as TextContentCard
-    return <>{card.origin && <p>来自运行 {card.origin.run_id} · {card.origin.incomplete ? '未完成成果副本' : '完整成果副本'}</p>}
-      <Input.TextArea aria-label="文本内容" value={card.text} rows={6} onChange={event => onChange({ ...card, text: event.target.value })} /></>
-  },
+  'content.text': ({ card, onChange, disabled }) => <TextContentEditor card={card as TextContentCard} onChange={onChange} disabled={disabled} />,
+  'content.basis': ({ card, onChange, disabled }) => <TextContentEditor card={card as CreativeBasisCard} onChange={onChange} disabled={disabled} />,
   'content.image': ({ card, onChange, projectId, disabled }) => <MediaContentEditor card={card as MediaCard} projectId={projectId} onChange={onChange} disabled={disabled} />,
   'content.video': ({ card, onChange, projectId, disabled }) => <MediaContentEditor card={card as MediaCard} projectId={projectId} onChange={onChange} disabled={disabled} />,
   'content.audio': ({ card, onChange, projectId, disabled }) => <MediaContentEditor card={card as MediaCard} projectId={projectId} onChange={onChange} disabled={disabled} />,

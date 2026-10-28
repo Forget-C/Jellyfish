@@ -606,3 +606,38 @@ async def test_terminal_canonical_text_replay_converges_and_stream_observes_next
         assert snapshot['current_outputs']['m'][0]['text'] == 'Canonical final body'
     finally:
         await stream.aclose()
+
+
+@pytest.mark.asyncio
+async def test_bound_creative_basis_runs_through_worker_and_publishes_typed_output(runtime, monkeypatch):
+    """公开保存、预检、执行和结果读取共享同一输入绑定。"""
+    source = {'canvas_id': runtime.canvas_id, 'card_id': 'basis', 'port_id': 'text', 'position': 0}
+    runtime.document['cards'] = [
+        {'id': 'basis', 'type': 'content.basis', 'text': '张三望向门口', 'source_locator': '导入段落'},
+        {'id': 'm', 'type': 'model.text', 'model_id': runtime.model_id,
+         'input_bindings': [{'id': 'selected', 'source': source, 'input_port': 'text'}],
+         'prompt': {'segments': [{'id': 'mention', 'kind': 'reference', 'binding_id': 'selected'}]}},
+    ]
+    runtime.document['edges'] = [{'id': 'edge', 'source_card': 'basis', 'source_port': 'text',
+                                  'target_card': 'm', 'target_port': 'text'}]
+    runtime.document['input_order'] = {'m': {'text': ['edge']}}
+    response = await runtime.client.put(runtime.url, json={'request_id': 'basis', 'expected_revision': 1, 'document': runtime.document})
+    assert response.status_code == 200, response.text
+    accepted, preview = await accept(runtime, 'bound-run')
+    assert preview['input']['text'] == '张三望向门口'
+    class FakeModel:
+        def __init__(self, **_params):
+            pass
+        async def astream(self, messages):
+            assert messages[0].content == '张三望向门口'
+            yield SimpleNamespace(content='门口传来敲门声')
+    monkeypatch.setattr('app.task_worker.ChatOpenAI', FakeModel)
+    worker = TaskWorker(runtime.sessions)
+    await worker.tick()
+    await asyncio.gather(*worker.jobs.values())
+    worker.text_pool.shutdown(wait=False)
+    state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+    run = next(item for item in state['runs'] if item['id'] == accepted['run_id'])
+    assert run['nodes'][0]['status'] == 'succeeded'
+    outputs = (await runtime.client.get(runtime.url + '/cards/m/outputs')).json()['data']
+    assert outputs['outputs'][0]['payload'] == {'kind': 'text', 'text': '门口传来敲门声'}

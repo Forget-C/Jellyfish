@@ -52,6 +52,7 @@ def test_instruction_structure_is_located_and_used_in_capability_validation():
     assert not result.can_run
     assert any(item.code == 'UNSUPPORTED_INPUT' for item in result.diagnostics)
     document.cards[1].prompt.segments = []
+    document.cards[1].input_bindings = []
     result = compile_card(document, 'target', capability=unsupported)
     assert result.can_run
     assert [(item.code, item.severity, item.blocks) for item in result.diagnostics] == [('UNUSED_INCOMPATIBLE_INPUT', 'warning', [])]

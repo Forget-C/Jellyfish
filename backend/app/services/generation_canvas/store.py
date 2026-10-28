@@ -161,6 +161,22 @@ class CanvasStore:
         await self.db.flush()
         return response
 
+    async def card_outputs(self, canvas_id: str, card_id: str):
+        """返回已保存修订的单卡出口和直接候选，不形成实际采用。"""
+        from app.schemas.generation_canvas import CanvasCardOutputs
+        from app.services.generation_canvas.compiler import resolve_outputs
+        from app.services.generation_canvas.outputs import card_outputs
+        from app.services.generation_canvas.runtime import CanvasRuntime
+        canvas = await self.get(canvas_id)
+        document = CanvasDocument.model_validate(canvas.document)
+        card = next((item for item in document.cards if item.id == card_id), None)
+        if card is None:
+            raise HTTPException(404, 'Card not found')
+        published = await CanvasRuntime(self.db, self.project_id).current_outputs(canvas)
+        return CanvasCardOutputs(revision=canvas.revision, card_id=card_id,
+            outputs=card_outputs(canvas_id, card, published_results=tuple(published.get(card_id, []))),
+            candidates=resolve_outputs(document, card_id, published))
+
     async def compile_input(self, canvas_id: str, card_id: str) -> CanvasCompiledInput:
         """编译已保存内容；不受理任务，不发布尚未存在的模型输出。"""
         from app.services.generation_canvas.compiler import compile_card
