@@ -33,3 +33,5 @@
 - 最终自动化真实页面三项全部通过：摄影 **10.1s**、表演 **13.0s**、对白声音 **11.8s**。证据目录 `/private/tmp/canvas12-page-merge/`，摄影包含 `photography-preview.png`、`photography-results.png`、`photography-desktop.png`、`photography-mobile.png` 与 `submitted-text.txt`；桌面1440px、窄屏390px无详情横向溢出。注册 `generation-canvas-photography` 浏览器用例并加入 generation 套件。手动验收图片供应商固定返回3张，最初 count1触发真实数量拒绝，改用fixture所需count3后完整成功；不将该fixture限制当作产品缺陷或真实供应商质量证据。
 - 共享工作台规定检查已串行完成：workbench-ui **4.6s**、workbench-style **72.2s**、design-scope **15.4s**、unit-design **29.3s**、instruction-preparation **10.5s**、instruction-design **17.0s**。证据 `/private/tmp/canvas12-workbench/` 与 `/private/tmp/canvas12-workbench-rest/`。首次style因我在测试期间重新生成客户端而被HMR导航打断，不计通过；固定生成文件后重跑上述受影响及未完成五项均通过。各例沿11相同的独立Vite缓存隔离；不将缓存隔离当成根因证明。结束后已释放全部共享端口。
 - 范围边界：`shot`／`acceptance_basis` 仅声明可选接收端点，14／17来源的真实组合由对应后续票据接入，19核对；未伪造镜头或验收对象，不以缺少镜头阻止独立摄影。可视化预设与独立画面风格由13实现，本票无占位预设。未推送、未编辑主工作区、未开展后续票据。
+
+- 截图取景补验：最后仅调整摄影浏览器测试的截图动画与滚动，不改产品代码。`generation-canvas-photography` 再次 **10.3s 通过**；最终直接可读的预检与图片证据在 `/private/tmp/canvas12-photo-proof/generation-canvas-photography/`，截图已实际打开检查。旧目录保留原始验收记录，不覆盖失败或早期证据。
