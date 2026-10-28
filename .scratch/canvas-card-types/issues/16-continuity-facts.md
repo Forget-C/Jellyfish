@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented
+**Completion:** integrated
 
 - [x] 空间规则保留可拍区域、轴线、尺度与范围；连续性保留类别、前态、变化、后态和后续约束；不可改事实保留事实、来源、范围、阶段与条件。
 - [x] 所属空间、参与对象、关联事件及作用对象按具体字段限制直接选择，不按名称或素材相同推断身份。
@@ -17,7 +17,7 @@
 - [x] 同一明确目标下的已知互斥硬要求可定位处理，不建立全场／镜头自动适用性或完整性系统。
 - [x] 替换或删除被采用来源须明确处理绑定，固定证据不豁免直接关系；运行及历史保留原依据和文件保护。
 
-规格依据：[总体规格](../spec.md)。共同约束与验证边界见[任务索引](../README.md)；本票已在独立工作树实现，完成条件的实际验证与限制见 Comments；等待集成。
+规格依据：[总体规格](../spec.md)。共同约束与验证边界见[任务索引](../README.md)；本票已集成，完成条件的实际验证与限制见 Comments。
 
 
 ## Comments
@@ -31,3 +31,5 @@
 - 28项可选MySQL环境跳过，外部供应商／存储使用已确认替身，不宣称真实供应商质量、真实MySQL并发或外部存储生产验收。未新增章节绑定、场次生产、音频生成或素材实际审查／剪辑流程；未推送。
 
 - 交付前继续合入13最新实现 `7a8c0b4f` 及集成验证文档 `b12275a1`；显式合并 `20cc467e` 保留风格及三类约束的强类型字段／联合类型、renderer、目录和测试入口，重新从当前生产app生成OpenAPI。合后连续性／风格／摄影 **39 passed**（4.13s）、Pylint10.00/10及Node24 typecheck通过；重新执行真实Chrome完整连续性页面（含实际拖线、固定图片证据／键盘用途与前态定位、图片后态、重开、390px）通过，最终证据 `/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-generation-canvas-continuity-6GLjBt`，HTTP生产schema与当前提交精确一致。合并共享目录时纠正风格归“画面设计”，真实页面明确断言；本票三卡归“连续性与约束”。仅文档变化不重跑全量回归，249／28证据复用范围及外部服务限制不变。
+
+- 2026-10-29：独立交付 `758cb145` 无冲突合入主区 `codex-generation-canvas`（显式合并 `263fc51e`），Completion 更新为 integrated，分诊 Status 保持不变。主区连续性／风格／摄影／叙事 HTTP 与真实 Worker 组合 **56 passed**（6.66s）、Node24.22.1 typecheck、`git diff --check` 通过；产品实现与已验收分支一致，复用全画布249 passed／28 skipped、Pylint10及真实页面证据。已核实导入当前主区 app；生产导出、8000实际HTTP与提交OpenAPI精确一致，标准 `openapi:update` 成功，425处仅尾空行的generated漂移经字节比较剔除，schema内容不变的JSON格式漂移恢复。证据 `/private/tmp/canvas16-integrated-production.json`、`/private/tmp/canvas16-integrated-http.json`。限定空间规则／事实的结构引用兼容、风格及所有联合类型保留；外部服务替身与MySQL未运行边界不变，未推送。
