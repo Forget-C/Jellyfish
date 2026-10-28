@@ -17,3 +17,17 @@
 
 规格依据：[总体规格](../spec.md)。共同约束与验证边界见[任务索引](../README.md)；本票未开始实现，勾选项不代表已通过验收。
 
+
+## Comments
+
+- 2026-10-28：在独立 `codex-canvas-types-15` 工作树从 `c8e88301` 实施，复用用户确认的公开 HTTP／真实页面接缝及供应商／存储替身，不操作主区服务。
+- 新增强类型 `DialogueCard`／`SoundArrangementCard`、`SoundDesignFields` 和专用 `SoundDirectionEditor`。对白身份在画布内唯一且保存后不可替换，显式版本不可倒退；说话对象仅允许直接人物／物件身份且至多一个，声音作用对象单独选择。正文和图片均不推断身份、不携带上游媒体。
+- `text` 完整输出保留字段状态、用途、来源、范围、制作安排；`dialogue` 为同属文本模态的业务关系出口。表演通过 `dialogue_basis` 明确采用多条对白，结构保留身份、正文、版本与说话对象；不是反向表演依赖。明确没有对白不要求虚构说话对象。
+- 直接视频／音频示例固定具体文件、直接输出身份、正向／反例用途、说明与可选递增毫秒区间；复用文件归属、不可用校验、保留和删源／断线保护。素材不随设计输出，音频参考不成为模型输入，图片编译明确仅表达可见声源／说话状态，视频保留真实能力边界和待后期安排。
+- 红绿记录：公开保存最初以 `INVALID_DOCUMENT` 拒绝新卡，支持契约后转绿；表演对白依据最初 `INVALID_DESIGN_BINDING`，接入后转绿；图片编译缺少画面语义说明、仅制作安排时没有出口、明确无对白误要求主体分别红灯，逐项实现后转绿。页面最初没有声音专用编辑器，接入后真实 Chrome 路径转绿。回归未引入内部服务替身。
+- 验证：`UV_CACHE_DIR=/private/tmp/uv-cache PYTHONPATH=. uv run --no-sync pytest tests/test_generation_canvas*.py -q`：**178 passed／28 skipped**；本票 HTTP 25 项覆盖说话对象类别／人数、对白身份／版本、状态与用途、直接对白采用与删源保护、音频／视频固定参考和区间、文件保留及真实 TaskWorker 文本／视频执行。
+- `uv run --no-sync pylint app`：**10.00/10，exit 0**（本机缓存 stats 写入受限不影响检查）；Node 24.22.1 `pnpm --dir front run typecheck`：通过。OpenAPI 从本工作树 app 导出并生成客户端；独立 8291 服务公开 schema 去除 `/test/*` 后与提交契约比较，无测试路径进入生产 schema；生成器纯尾空行漂移已剔除。
+- 真实页面命令：`PATH=/Users/extreme/.nvm/versions/node/v24.22.1/bin:$PATH PLAYWRIGHT_CHANNEL=chrome node front/tests/generationCanvasSound.browser.mjs`。验证对白正文、直接说话对象、声音待后期、直接音频播放参考及100–900ms区间、一秒保存／重开、对白依据采用、图片预检和真实 Worker 生成、音频不进入供应商请求；1440px／390px布局截图已检查。字段控件与摄影票协调复用 `DesignFieldEditor`，音频参考保持声音专用布局。
+- 限制：28 个原有 MySQL／其他可选环境用例跳过，不算通过；SQLite 功能与页面持久化不证明 MySQL 竞争行为。外部供应商和对象存储为受控替身，不证明真实供应商质量，不宣称生成了声音。
+
+- 最终页面证据：`/private/var/folders/7l/9qr93fss507b4cg9dvmf19000000gn/T/jellyfish-generation-canvas-sound-vqubxZ`（含独立服务 OpenAPI、后端日志及桌面／窄屏截图）；去除测试控制路径后公开 schema 精确一致。

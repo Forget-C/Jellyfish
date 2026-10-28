@@ -3,6 +3,7 @@ import type { ComponentType, ReactNode } from 'react'
 import { Alert, Button, Select, Space } from 'antd'
 import type { CanvasDocument, CanvasModelCapability, CanvasNodeRead, CanvasResolvedOutput, CreativeBasisCard, ImageModelCard, ModelRead, ObjectDescriptionCard, PlaceDescriptionCard, TextContentCard, TextModelCard, VideoModelCard } from '../../../services/generated'
 import { ExperimentComposer } from '../experiment/components/ExperimentComposer'
+import { SoundDirectionEditor } from './SoundDirectionEditor'
 import { PerformanceDirectionEditor } from './PerformanceDirectionEditor'
 import { VideoInputBindings } from './VideoInputBindings'
 import { PromptEditor } from './PromptEditor'
@@ -118,6 +119,8 @@ function ModelRenderer({ card: raw, savedRevision, savedCard, document, disabled
 /** 显式类型入口，无供应商卡片族或通用表单引擎。 */
 export const rendererRegistry: Record<string, ComponentType<CardRendererProps>> = {
   'direction.situation': PerformanceDirectionEditor,
+  'direction.dialogue': SoundDirectionEditor,
+  'direction.sound': SoundDirectionEditor,
   'direction.performance': PerformanceDirectionEditor,
   'direction.performance_rule': PerformanceDirectionEditor,
   'reference.character': NamedImageReferenceEditor,

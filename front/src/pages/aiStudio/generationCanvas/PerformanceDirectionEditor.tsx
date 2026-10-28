@@ -1,26 +1,14 @@
 import { Alert, Input, InputNumber, Select, Space } from 'antd'
-import type { CharacterPerformanceCard, CharacterSituationCard, DesignField, PerformanceRuleCard, ObjectReferencePayload } from '../../../services/generated'
+import type { CharacterPerformanceCard, CharacterSituationCard, DesignTextPayload, PerformanceRuleCard, ObjectReferencePayload } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
 import { useCardCandidates } from './useCardCandidates'
 import { sourceKey } from './promptRules'
 import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
+import { DesignFieldEditor as FieldEditor } from './DesignFieldEditor'
 import { MediaPreview } from './MediaContentEditor'
 
 export type PerformanceCard = CharacterPerformanceCard | CharacterSituationCard | PerformanceRuleCard
-const states = [{ value: 'empty', label: '未填写' }, { value: 'not_applicable', label: '不适用' }, { value: 'absent', label: '明确没有' }, { value: 'undecided', label: '待确定' }, { value: 'proposal', label: '提议' }, { value: 'fact', label: '事实' }]
-
-/** 同语义字段共享状态控件；各类设计保留自己的编辑布局。 */
-function FieldEditor({ label, value, purpose = 'design', onChange }: { label: string; value?: DesignField; purpose?: DesignField['purpose']; onChange: (field: DesignField) => void }) {
-  const field = value || { state: 'empty', text: '', purpose }
-  return <section aria-label={label}><strong>{label}</strong><Space wrap>
-    <Select aria-label={`${label}状态`} value={field.state} options={states} style={{ width: 110 }} onChange={state => onChange({ ...field, state })} />
-    <Select aria-label={`${label}用途`} value={field.purpose} options={[{ value: 'background', label: '背景' }, { value: 'design', label: '设计' }, { value: 'constraint', label: '约束' }]} style={{ width: 100 }} onChange={next => onChange({ ...field, purpose: next })} />
-  </Space><Input.TextArea aria-label={`${label}内容`} value={field.text} autoSize={{ minRows: 2, maxRows: 7 }} onChange={event => onChange({ ...field, text: event.target.value, state: field.state === 'empty' ? 'proposal' : field.state })} />
-    <Input aria-label={`${label}来源`} placeholder="来源定位（可选）" value={field.source_locator} onChange={event => onChange({ ...field, source_locator: event.target.value })} />
-  </section>
-}
-
 function SituationFields({ card, onChange }: { card: CharacterSituationCard; onChange: (card: PerformanceCard) => void }) {
   return <><FieldEditor label="当前处境" purpose="background" value={card.situation} onChange={situation => onChange({ ...card, situation })} />
     <FieldEditor label="人物关系" purpose="background" value={card.relationship} onChange={relationship => onChange({ ...card, relationship })} /></>
@@ -78,6 +66,11 @@ export function PerformanceDirectionEditor({ card: raw, document, savedRevision,
       {!bindings.length && <small>尚未选择对象。文本分析可完善不完整设计；视觉生成所需主体须明确。</small>}
       {bindings.filter(binding => !resolved.candidates.some(item => sourceKey(item.source) === sourceKey(binding.source) && item.available)).map(binding => <div key={binding.id}><small role="alert">已采用对象缺失，请替换或取消</small><WorkbenchButton disabled={disabled} onClick={() => update({ ...card, input_bindings: bindings.filter(value => value.id !== binding.id) })}>取消失效对象关系</WorkbenchButton></div>)}
     </section>
+    {card.type === 'direction.performance' && <section aria-label="对白依据"><h3>对白依据</h3>{resolved.candidates.filter(item => item.source.port_id === 'dialogue' && item.payload?.kind === 'design').map(item => {
+      const binding = bindings.find(value => value.input_port === 'dialogue_basis' && sourceKey(value.source) === sourceKey(item.source))
+      const payload = item.payload as DesignTextPayload
+      return <div key={sourceKey(item.source)}><WorkbenchButton disabled={disabled || !item.available} onClick={() => update({ ...card, input_bindings: binding ? bindings.filter(value => value.id !== binding.id) : [...bindings, { id: crypto.randomUUID(), source: item.source, input_port: 'dialogue_basis' }] })}>{`${binding ? '取消' : '采用'}对白 ${payload?.dialogue_id} · 版本 ${payload?.version}`}</WorkbenchButton><CanvasTextPreview text={item.text || ''} label="对白依据" /></div>
+    })}</section>}
     {card.type === 'direction.situation' ? <SituationFields card={card} onChange={update} /> : card.type === 'direction.performance' ? <PerformanceFields card={card} onChange={update} /> : <FieldEditor label="表演适用说明" purpose="constraint" value={(card as PerformanceRuleCard).applicability} onChange={applicability => update({ ...(card as PerformanceRuleCard), applicability })} />}
     <details><summary>适用范围、阶段与来源</summary>
       <Input aria-label="适用范围" value={card.scope?.description} onChange={event => update({ ...card, scope: { ...card.scope, description: event.target.value } })} />
