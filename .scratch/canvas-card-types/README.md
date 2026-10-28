@@ -8,7 +8,7 @@
 
 ## 任务与阻塞关系
 
-编号表示依赖顺序，不要求严格串行执行。01–12、14、15、18 共十五票已实现并集成；13／16／17 进行中，19 等待这三票完成，验证证据在下方实施记录及相应票据中维护。
+编号表示依赖顺序，不要求严格串行执行。01–15、18 共十六票已实现并集成；16／17 进行中，19 等待这两票完成，验证证据在下方实施记录及相应票据中维护。
 
 | 票据 | Blocked by | 目录负责内容 |
 | --- | --- | --- |
@@ -228,3 +228,5 @@ flowchart TD
 - 2026-10-29：16在独立 `codex-canvas-types-16` 完成空间规则、连续性、不可改事实三类专用卡及强类型完整输出、直接关系、固定证据／前后态、图片目标。实现 `7a5fc1e0`，已合最新集成 `8e94c579`，Completion为implemented待集成，Status不变。本票HTTP17 passed，全部画布249 passed／28 MySQL skipped；Pylint10.00/10、Node24 typecheck及真实Chrome桌面／390px窄屏通过。合18后相关连续性／混合／摄影36 passed；HTTP生产schema与generated精确同步。实际拖线仍仅候选、证据不隐式传媒体、图片目标不截断整卡，图兼容仅补本票space_rule/fact稳定作用对象并与17协调。详情、红绿记录、证据目录和受控供应商／存储限制见16 Comments；共享组件未改，按影响复用12公共验收，主区标准OpenAPI更新待集成执行。
 
 - 2026-10-29：13在 `codex-canvas-types-13` 实现独立风格整卡输出、图库／对比／大图和摄影五入口可视化预设，应用后成为本卡可编辑字段，示例与媒体输入／模型采用分离；原创 SVG／三秒 MP4 均标为几何示意。合入最新 `8e94c579` 后全画布239 passed／28 skipped、Pylint10、Node24 typecheck，真实预设与摄影页面分别11.7秒／11.4秒通过，生产schema与committed OpenAPI精确一致。Completion implemented待集成，Status不变；详细证据及边界见13票据。
+
+- 2026-10-29：无冲突集成13（分支HEAD `eda252d1`，显式合并 `7a8c0b4f`），Completion更新为integrated，分诊Status不变。合后摄影／风格HTTP与真实Worker组合 **22 passed**（2.92s）、Node24.22.1 typecheck通过；复用同一实现全部画布239 passed／28 skipped、Pylint10及真实预设／摄影页面证据。主区生产app导出、8000实际HTTP与提交OpenAPI精确一致；8000本次已恢复，标准 `openapi:update` 成功，418处纯尾空行生成差异经精确核对后剔除。证据 `/private/tmp/canvas13-integrated-production.json`、`/private/tmp/canvas13-integrated-http.json`。此前14／18标准更新的环境阻塞为历史记录，本次最新主区契约已完成标准同步；MySQL和受控供应商／存储限制保留。01–15及18共十六票集成，16／17进行中，19待其完成；未推送、未操作其他工作树。

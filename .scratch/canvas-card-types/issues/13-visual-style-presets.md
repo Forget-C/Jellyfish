@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented
+**Completion:** integrated
 
 - [x] 独立画面风格卡保留风格方向、视觉特征、材质、色彩及自定义说明，支持图库、对比、大图预览和已选摘要，默认完整采用。
 - [x] 摄影各入口提供与内容相符的展示：景别／构图示意、机位视角对比、运镜短视频、光影与焦点效果预览，沿用同一摄影内容所有者。
@@ -29,3 +29,4 @@
 - 受影响既有摄影真实页面回归 11.4 秒通过，包含声明范围、图片目标状态、保存重开和独立摄影方案复制，证据 `/private/tmp/canvas13-photo-regression/generation-canvas-photography/`。仅复用共享工作台组件，不修改其代码／样式／示例，沿用12已通过的共享六套验收，不重复运行无关场次套件。
 - 合后完整画布后端 `PYTHONPATH=. .venv/bin/pytest tests/test_generation_canvas*.py -q`：239 passed／28 skipped（MySQL等可选环境）；`uv run --no-sync pylint app`：10.00/10，缓存写入警告不影响校验；Node24 `pnpm --dir front run typecheck` 通过。当前 `app.main` 生产 schema 与 committed OpenAPI 精确一致，generated client 已同步并剔除无关纯尾空行差异，证据 `/private/tmp/canvas13-schema-evidence.json`。主区合并后仍由 merger 对已加载最新代码的8000执行标准 `openapi:update`。
 - 边界：没有音频生成、未接入专用摄影控制、外部素材自动采用、全局通用表单引擎或跨卡隐藏设计；没有迁移场次工作台或章节，未推送。最终工具箱大类由19统一协议／目录收口。
+- 2026-10-29：主区无冲突集成 `7a8c0b4f`，产品代码与已验证分支一致；摄影／风格 HTTP 与真实 Worker 组合 **22 passed**（2.92s）、Node24.22.1 typecheck 通过。复用同一实现全部画布239 passed／28 skipped、Pylint10及两项真实页面证据。已核实主区 `app.__file__`、生产导出、8000实际HTTP与提交OpenAPI精确一致；8000本次恢复后标准 `openapi:update` 成功，418处仅尾空行生成差异经精确核对后剔除。生产导出证据 `/private/tmp/canvas13-integrated-production.json`，HTTP证据 `/private/tmp/canvas13-integrated-http.json`；MySQL缺环境及受控供应商／存储边界保持不变，不将示意素材当作真实供应商质量验收。Completion更新为integrated，分诊Status不变。
