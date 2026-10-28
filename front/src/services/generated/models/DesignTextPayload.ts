@@ -20,17 +20,18 @@ import type { ShotDesignFields } from './ShotDesignFields';
 import type { SoundDesignFields } from './SoundDesignFields';
 import type { SpatialDesignRelations } from './SpatialDesignRelations';
 import type { SpatialReferencePayload } from './SpatialReferencePayload';
+import type { StyleDesignFields } from './StyleDesignFields';
 /**
  * 本卡完整设计及直接采用的必要对象，不包含祖先正文或示例媒体。
  */
 export type DesignTextPayload = {
     kind?: 'design';
-    design_type: 'direction.situation' | 'direction.performance' | 'direction.performance_rule' | 'direction.anchor' | 'direction.blocking' | 'direction.activity' | 'direction.environment' | 'direction.narrative' | 'direction.beat' | 'direction.event' | 'direction.shot' | 'direction.dialogue' | 'direction.sound';
+    design_type: 'direction.style' | 'direction.situation' | 'direction.performance' | 'direction.performance_rule' | 'direction.anchor' | 'direction.blocking' | 'direction.activity' | 'direction.environment' | 'direction.narrative' | 'direction.beat' | 'direction.event' | 'direction.shot' | 'direction.dialogue' | 'direction.sound';
     adoption?: 'whole_card';
     text: string;
     frame_states?: Array<FrameState>;
     requires_frame_target?: boolean;
-    fields: (NarrativeOverviewFields | NarrativeBeatFields | NarrativeEventFields | ShotDesignFields | PerformanceDesignFields | AnchorDesignFields | BlockingDesignFields | ActivityDesignFields | EnvironmentDesignFields | SoundDesignFields);
+    fields: (StyleDesignFields | NarrativeOverviewFields | NarrativeBeatFields | NarrativeEventFields | ShotDesignFields | PerformanceDesignFields | AnchorDesignFields | BlockingDesignFields | ActivityDesignFields | EnvironmentDesignFields | SoundDesignFields);
     scope: DesignScope;
     objects?: Array<ObjectReferencePayload>;
     spatial_relations?: (SpatialDesignRelations | null);

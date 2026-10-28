@@ -1,3 +1,4 @@
+import { VisualStyleEditor } from './VisualStyleEditor'
 import { NarrativeDirectionEditor } from './NarrativeDirectionEditor'
 import { SpatialDirectionEditor } from './SpatialDirectionEditor'
 import { PhotographyEditor } from './PhotographyEditor'
@@ -129,6 +130,7 @@ export const rendererRegistry: Record<string, ComponentType<CardRendererProps>> 
   'direction.blocking': SpatialDirectionEditor,
   'direction.activity': SpatialDirectionEditor,
   'direction.environment': SpatialDirectionEditor,
+  'direction.style': VisualStyleEditor,
   'direction.photography': PhotographyEditor,
   'direction.situation': PerformanceDirectionEditor,
   'direction.dialogue': SoundDirectionEditor,

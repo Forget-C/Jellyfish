@@ -29,6 +29,7 @@ import type { TextContentCard } from './TextContentCard';
 import type { TextModelCard } from './TextModelCard';
 import type { VideoContentCard } from './VideoContentCard';
 import type { VideoModelCard } from './VideoModelCard';
+import type { VisualStyleCard } from './VisualStyleCard';
 /**
  * 完整编辑文档；位置、尺寸和视角由浏览器另存。
  */
@@ -37,7 +38,7 @@ export type CanvasDocument = {
     project_id: string;
     name: string;
     schema_version?: number;
-    cards?: Array<(PhotographyCard | DialogueCard | SoundArrangementCard | NarrativeOverviewCard | NarrativeBeatCard | NarrativeEventCard | ShotDesignCard | SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | ObjectDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard)>;
+    cards?: Array<(VisualStyleCard | PhotographyCard | DialogueCard | SoundArrangementCard | NarrativeOverviewCard | NarrativeBeatCard | NarrativeEventCard | ShotDesignCard | SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | ObjectDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard)>;
     edges?: Array<GenerationCanvasEdge>;
     input_order?: Record<string, Record<string, Array<string>>>;
     groups?: Array<GenerationCanvasGroup>;
