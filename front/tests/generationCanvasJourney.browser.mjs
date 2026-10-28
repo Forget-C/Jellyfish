@@ -40,6 +40,10 @@ try {
   await page.unroute('**/catalog')
   await page.getByRole('button', { name: '重试卡片目录', exact: true }).click()
   await page.getByRole('button', { name: '添加人物表演卡', exact: true }).waitFor()
+  const catalog=(await (await fetch(`${base}/${canvas.id}/catalog`)).json()).data
+  writeFileSync(join(output,'catalog.json'),JSON.stringify(catalog,null,2))
+  assert.equal(catalog.cards.reduce((count,card)=>count+(card.entries.length||1),0),39)
+  assert.equal(await page.getByRole('navigation',{name:'添加卡片',exact:true}).getByRole('button').count(),35)
   const source = {canvas_id:canvas.id,card_id:'person',port_id:'object',position:0,object_id:'alice'}
   const document = {...canvas.document,cards:[{id:'person',type:'content.object',object_id:'alice',name:'小雪',text:'仅模型直接采用的外貌'},
     {id:'performance',type:'direction.performance',physical_action:{state:'proposal',text:'伸手'},input_bindings:[{id:'actor',source,input_port:'participant'}]}],
@@ -115,6 +119,7 @@ try {
   await poll(state=>state.document.cards.find(card=>card.id===image).file_id)
   const reference=await add('添加角色参考卡','reference.character')
   await connectExisting(reference,person,'名称关联')
+  await detail.getByText(`小雨 · ${person.slice(0,8)}`,{exact:true}).waitFor()
   await detail.getByRole('button',{name:'关联名称 小雨',exact:true}).click()
   await poll(state=>state.document.cards.find(card=>card.id===reference).input_bindings?.length===1)
   assert.equal(await detail.getByText('未直接采用的外貌秘密',{exact:false}).count(),0)
@@ -218,11 +223,15 @@ try {
   assert.equal(await detail.getByRole('textbox',{name:'模型正文',exact:true}).evaluate(element=>{
     for(let current=element;current;current=current.parentElement){const color=getComputedStyle(current).backgroundColor;if(color!=='rgba(0, 0, 0, 0)'&&color!=='transparent')return color}
   }),'rgb(27, 27, 27)')
-  assert.equal(await detail.evaluate(element=>element.scrollWidth<=element.clientWidth),true)
+  const narrowLayout = await detail.evaluate(element=>({panel:[element.scrollWidth,element.clientWidth],body:[element.querySelector('.wb-details-body').scrollWidth,element.querySelector('.wb-details-body').clientWidth],page:[document.documentElement.scrollWidth,innerWidth]}))
+  writeFileSync(join(output,'narrow-layout.json'),JSON.stringify(narrowLayout))
+  assert.ok(narrowLayout.body[0]<=narrowLayout.body[1] && narrowLayout.page[0]<=narrowLayout.page[1])
   await page.screenshot({path:join(output,'journey-model-narrow.png'),fullPage:true})
   await open(performance)
   await detail.getByRole('textbox',{name:'身体动作内容',exact:true}).waitFor()
-  assert.equal(await detail.evaluate(element=>element.scrollWidth<=element.clientWidth),true)
+  const performanceLayout=await detail.evaluate(element=>({panel:[element.scrollWidth,element.clientWidth],body:[element.querySelector('.wb-details-body').scrollWidth,element.querySelector('.wb-details-body').clientWidth],page:[document.documentElement.scrollWidth,innerWidth]}))
+  writeFileSync(join(output,'performance-narrow-layout.json'),JSON.stringify(performanceLayout))
+  assert.ok(performanceLayout.body[0]<=performanceLayout.body[1] && performanceLayout.page[0]<=performanceLayout.page[1])
   await page.screenshot({path:join(output,'journey-narrow.png'),fullPage:true})
   await page.keyboard.press('Escape')
   assert.ok(!await detail.isVisible())

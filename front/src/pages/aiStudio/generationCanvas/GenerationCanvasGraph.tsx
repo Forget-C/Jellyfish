@@ -35,7 +35,7 @@ const arrange: GraphArrange = (nodes, _sizes, _width, _anchor, retained = {}) =>
   [node.id, retained[node.id] || { x: 200 + index % 3 * 440, y: Math.floor(index / 3) * 560 }]))
 
 /** 独立画布编辑适配：候选关系与文档持久化，几何沿用公共布局缓存。 */
-function GenerationCanvasGraphContent({ document, onChange, readonly = false, runtime, inspectTarget, editingStatus, savedRevision, savedDocument }: { savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; inspectTarget?: { cardId: string; serial: number }; editingStatus?: string; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string, kind?: 'single' | 'target' | 'selection', cardIds?: string[]) => void } }) {
+function GenerationCanvasGraphContent({ document, onChange, readonly = false, runtime, inspectTarget, editingStatus, savedRevision, savedDocument }: { savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; inspectTarget?: { cardId: string; serial: number; segmentId?: string }; editingStatus?: string; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string, kind?: 'single' | 'target' | 'selection', cardIds?: string[]) => void } }) {
   const { catalog, cardDefinitions, cardTitles, connectionReason, inputPorts, outputPorts, portLabels } = useGraphRules()
   const cards = document.cards || emptyCards, edges = document.edges || [], groups = document.groups || emptyGroups
   const cardLabel = (id: string) => {
@@ -62,6 +62,19 @@ function GenerationCanvasGraphContent({ document, onChange, readonly = false, ru
   useEffect(() => {
     if (inspectTarget) setDetailId(inspectTarget.cardId)
   }, [inspectTarget?.cardId, inspectTarget?.serial])
+  useEffect(() => {
+    if (!inspectTarget?.segmentId || inspectTarget.cardId !== detailId) return
+    const frame = requestAnimationFrame(() => {
+      const editor = window.document.querySelector<HTMLElement>(`[data-canvas-details="${CSS.escape(document.id)}"][data-card-details="${CSS.escape(inspectTarget.cardId)}"]`)
+      const segment = editor?.querySelector<HTMLElement>(`[data-segment-id="${CSS.escape(inspectTarget.segmentId!)}"]`)
+      if (segment && !segment.closest('[inert]')) {
+        segment.tabIndex = -1
+        segment.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+        segment.focus({ preventScroll: true })
+      }
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [inspectTarget?.serial, detailId, document.id])
   const latest = useRef(document); latest.current = document
   const container = useRef<HTMLDivElement>(null)
   const hidden = useMemo(() => new Set(groups.filter(group => group.collapsed).flatMap(group => group.card_ids || [])), [groups])
@@ -349,7 +362,7 @@ function GenerationCanvasGraphContent({ document, onChange, readonly = false, ru
           input_order: { ...latest.current.input_order, [copy.id]: Object.fromEntries(Object.entries(document.input_order?.[detailCard.id] || {}).map(([port, ids]) => [port, ids.map(id => edgeIds.get(id)!)])) } })
         setDetailId(copy.id)
       }}>复制为独立摄影方案</Button>}
-      {detailCard && DetailRenderer && <ConfigProvider componentDisabled={readonly}><fieldset disabled={readonly} className="generation-card-body"><DetailRenderer savedCard={savedDocument?.cards?.find(card => card.id === detailCard.id)} savedRevision={savedRevision} key={detailCard.id} card={detailCard} document={document} projectId={document.project_id} onChange={updateCard} onAddAngle={output => {
+      {detailCard && DetailRenderer && <ConfigProvider componentDisabled={readonly}><fieldset disabled={readonly} className="generation-card-body" data-canvas-details={document.id} data-card-details={detailCard.id}><DetailRenderer savedCard={savedDocument?.cards?.find(card => card.id === detailCard.id)} savedRevision={savedRevision} key={detailCard.id} card={detailCard} document={document} projectId={document.project_id} onChange={updateCard} onAddAngle={output => {
         if (output.payload?.kind !== 'object_reference' || !('category' in output.payload)) return
         const id = crypto.randomUUID(), edgeId = crypto.randomUUID()
         const card = { id, type: `reference.${output.payload.category}`, title: `${output.payload.name} · 另一角度`, angle: '正面', objects: [],

@@ -24,7 +24,7 @@ def validate_graph(document: CanvasDocument) -> None:
         if edge.source_card == edge.target_card:
             raise diagnostic('SELF_CONNECTION', '卡片不能连接自身', target)
         if not ports_compatible(edge.source_port, receiver.type, edge.target_port):
-            raise diagnostic('INCOMPATIBLE_PORT', '端口模态不匹配，不提供隐式转换', target)
+            raise diagnostic('INCOMPATIBLE_PORT', '端口值种类不匹配，不提供隐式转换', target)
         successors[edge.source_card].add(edge.target_card)
         expected.setdefault(edge.target_card, {}).setdefault(edge.target_port, []).append(edge.id)
     # Kahn 排序避免深图递归溢出；候选关系自身也不允许循环。

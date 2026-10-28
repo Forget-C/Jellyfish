@@ -160,7 +160,7 @@ try {
   await dragPort('j', 'image', 'v', 'subject_image')
   await page.getByRole('status').filter({ hasText: '所选模型未接入该输入用途' }).waitFor()
   await dragPort('i', 'image', 'v', 'text')
-  await page.getByRole('status').filter({ hasText: '端口模态不匹配' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '端口值种类不匹配' }).waitFor()
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
   await page.getByRole('status').filter({ hasText: 'revision 2 · 已保存' }).waitFor()
   const switched = (await (await fetch(`${base}/${second.id}`)).json()).data.document
