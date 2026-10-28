@@ -19,6 +19,7 @@ type ExperimentComposerProps = {
  * 将输入、上下文附件、模型配置与提交动作收纳为单个实验输入框。
  *
  * 选项始终位于底部工具栏，避免模型或提示词选择与当前输入内容脱节。
+ * workbench 外观只消费宿主工作台 tokens；默认实验页面仍使用原浅色样式。
  */
 export function ExperimentComposer({
   options,

@@ -9,4 +9,3 @@ export type CanvasDesignFieldDefinition = {
     id: string;
     label: string;
 };
-

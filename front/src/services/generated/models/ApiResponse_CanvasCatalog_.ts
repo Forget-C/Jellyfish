@@ -21,4 +21,3 @@ export type ApiResponse_CanvasCatalog_ = {
      */
     meta?: (Record<string, any> | null);
 };
-

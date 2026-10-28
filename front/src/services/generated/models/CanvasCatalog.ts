@@ -10,4 +10,3 @@ export type CanvasCatalog = {
     version?: number;
     cards: Array<CanvasCardTypeDefinition>;
 };
-

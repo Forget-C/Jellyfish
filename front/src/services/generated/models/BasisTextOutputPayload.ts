@@ -12,4 +12,3 @@ export type BasisTextOutputPayload = {
     selection_start?: (number | null);
     selection_end?: (number | null);
 };
-

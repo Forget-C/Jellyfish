@@ -83,3 +83,5 @@
 .generation-minimap .generation-minimap-viewport { fill: none; stroke: var(--wb-text); stroke-width: 2; vector-effect: non-scaling-stroke; pointer-events: none; }
 
 .generation-catalog-state { position: absolute; inset: 72px 16px auto; max-width: 520px; margin-inline: auto; z-index: 7; }
+
+.generation-candidate-management { overflow-wrap: anywhere; }

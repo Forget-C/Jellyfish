@@ -29,4 +29,3 @@ export type CanvasResolvedOutput = {
     basis_current?: boolean;
     result_set_id?: (string | null);
 };
-

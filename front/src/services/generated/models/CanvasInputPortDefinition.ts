@@ -11,4 +11,3 @@ export type CanvasInputPortDefinition = {
     relation: 'generation_input' | 'business_reference' | 'material_association';
     accepts: Array<'text' | 'image' | 'video' | 'audio' | 'object_reference' | 'anchor' | 'blocking' | 'beat' | 'event' | 'shot' | 'dialogue' | 'criterion'>;
 };
-

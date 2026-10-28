@@ -36,8 +36,14 @@ const arrange: GraphArrange = (nodes, _sizes, _width, _anchor, retained = {}) =>
 
 /** 独立画布编辑适配：候选关系与文档持久化，几何沿用公共布局缓存。 */
 function GenerationCanvasGraphContent({ document, onChange, readonly = false, runtime, inspectTarget, editingStatus, savedRevision, savedDocument }: { savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; inspectTarget?: { cardId: string; serial: number }; editingStatus?: string; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string, kind?: 'single' | 'target' | 'selection', cardIds?: string[]) => void } }) {
-  const { catalog, cardTitles, connectionReason, inputPorts, outputPorts, portLabels } = useGraphRules()
+  const { catalog, cardDefinitions, cardTitles, connectionReason, inputPorts, outputPorts, portLabels } = useGraphRules()
   const cards = document.cards || emptyCards, edges = document.edges || [], groups = document.groups || emptyGroups
+  const cardLabel = (id: string) => {
+    const source = cards.find(card => card.id === id)
+    const name = source && ('name' in source && source.name || 'title' in source && source.title)
+    return `${name || cardTitles[source?.type || ''] || '未知卡片'} · ${id.slice(0, 8)}`
+  }
+  const inputLabel = (card: GenerationCard, port: string) => cardDefinitions[card.type || '']?.inputs.find(item => item.id === port)?.label || portLabels[port]
   const [selected, setSelected] = useState<string[]>([])
   const [detailId, setDetailId] = useState<string | undefined>(cards[0]?.id)
   const [detailTrigger, setDetailTrigger] = useState<HTMLElement>()
@@ -156,7 +162,7 @@ function GenerationCanvasGraphContent({ document, onChange, readonly = false, ru
   const port = (card: GenerationCard, name: string, input: boolean) => {
     const issue = input && drag ? check({ id: 'preview', source_card: drag.card, source_port: drag.port, target_card: card.id, target_port: name }) : undefined
     return <button key={name} type="button" disabled={readonly} data-card={card.id} data-input-port={input ? name : undefined} data-output-port={!input ? name : undefined}
-      data-compatible={input && drag ? !issue : undefined} title={issue || `${input ? '输入' : '输出'}：${portLabels[name]}`} aria-label={`${input ? '输入' : '输出'}端口 ${name}`}
+      data-compatible={input && drag ? !issue : undefined} title={issue || `${input ? '输入' : '输出'}：${input ? inputLabel(card, name) : cardDefinitions[card.type || '']?.outputs.find(item => item.id === name)?.label}`} aria-label={`${input ? '输入' : '输出'}端口 ${name}`}
       onPointerDown={!input ? event => {
         if (readonly || event.button !== 0) return
         event.stopPropagation(); event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId)
@@ -164,7 +170,7 @@ function GenerationCanvasGraphContent({ document, onChange, readonly = false, ru
       } : undefined}
       onPointerMove={!input ? event => { if (drag) setDrag({ ...drag, x: event.clientX, y: event.clientY }) } : undefined}
       onPointerUp={!input ? finishDrag : undefined} onPointerCancel={() => setDrag(undefined)}>
-      {input ? '○' : '●'} {portLabels[name]}
+      {input ? '○' : '●'} {input ? inputLabel(card, name) : cardDefinitions[card.type || '']?.outputs.find(item => item.id === name)?.label}
     </button>
   }
   const references = (card: GenerationCard) => <>
@@ -174,7 +180,7 @@ function GenerationCanvasGraphContent({ document, onChange, readonly = false, ru
       edit(connect(next, { id: crypto.randomUUID(), source_card: source.id, source_port: 'text', target_card: card.id, target_port: 'text' }))
     }}>添加文本参考</Button>
     <Select<string> aria-label="添加媒体参考" placeholder="添加媒体参考" value={undefined} disabled={readonly} style={{ width: 150 }}
-      options={inputPorts(card).filter(port => port !== 'text').map(port => ({ value: port, label: `新建${portLabels[port]}内容卡` }))}
+      options={inputPorts(card).filter(port => port !== 'text').map(port => ({ value: port, label: `新建${inputLabel(card, port)}内容卡` }))}
       onChange={targetPort => {
         if (!targetPort) return
         const sourcePort = ['first_frame', 'last_frame', 'key_frame', 'subject_image'].includes(targetPort) ? 'image' : targetPort === 'subject_video' ? 'video' : targetPort
@@ -182,18 +188,18 @@ function GenerationCanvasGraphContent({ document, onChange, readonly = false, ru
         edit(connect({ ...latest.current, cards: [...(latest.current.cards || []), source] }, { id: crypto.randomUUID(), source_card: source.id, source_port: sourcePort, target_card: card.id, target_port: targetPort }))
       }} />
     </>}<Select<string> aria-label="连接已有卡" placeholder="选择已有卡" value={undefined} disabled={readonly} style={{ width: 160 }}
-      options={cards.flatMap(source => outputPorts(source).flatMap(sourcePort => inputPorts(card).filter(targetPort => !connectionReason(document, { id: 'candidate', source_card: source.id, source_port: sourcePort, target_card: card.id, target_port: targetPort }, capability(card))).map(targetPort => ({ value: `${source.id}|${sourcePort}|${targetPort}`, label: `${source.id.slice(0, 8)} → ${portLabels[targetPort]}` }))))}
+      options={cards.flatMap(source => outputPorts(source).flatMap(sourcePort => inputPorts(card).filter(targetPort => !connectionReason(document, { id: 'candidate', source_card: source.id, source_port: sourcePort, target_card: card.id, target_port: targetPort }, capability(card))).map(targetPort => ({ value: `${source.id}|${sourcePort}|${targetPort}`, label: `${cardLabel(source.id)} → ${inputLabel(card, targetPort)}` }))))}
       onChange={value => { if (!value) return; const [source_card, source_port, target_port] = value.split('|'); edit(connect(latest.current, { id: crypto.randomUUID(), source_card, source_port, target_card: card.id, target_port })) }} />
     </Space>
     {inputPorts(card).map(name => {
     const order = document.input_order?.[card.id]?.[name] || []
     if (!order.length) return null
-    return <div key={name}><strong>{portLabels[name]}</strong><ol>{order.map((id, index) => {
+    return <div key={name}><strong>{inputLabel(card, name)}</strong><ol>{order.map((id, index) => {
       const edge = edges.find(item => item.id === id)
       if (!edge) return null
       const unsupported = capability(card) && !capability(card)?.input_ports.includes(name)
       return <li key={id} data-edge-id={id}>
-        {edge.source_card.slice(0, 8)} {unsupported && <span>当前模型不支持，候选保留</span>}
+        <span title={edge.source_card}>{cardLabel(edge.source_card)}</span> {unsupported && <span>当前模型不支持，候选保留</span>}
         <Button size="small" disabled={readonly || index === 0} aria-label={`前移输入 ${id}`} onClick={() => {
           const next = [...order]; [next[index - 1], next[index]] = [next[index], next[index - 1]]
           edit({ ...document, input_order: { ...document.input_order, [card.id]: { ...document.input_order?.[card.id], [name]: next } } })
@@ -334,7 +340,7 @@ function GenerationCanvasGraphContent({ document, onChange, readonly = false, ru
       <rect className="generation-minimap-viewport" x={visibleWorld.x} y={visibleWorld.y} width={visibleWorld.width} height={visibleWorld.height} />
     </svg>}
     <WorkbenchDetails title={detailCard ? cardTitles[detailCard.type || 'content.text'] || '卡片详情' : '卡片详情'} status={readonly ? '只读' : editingStatus} open={!!detailCard} onClose={() => setDetailId(undefined)} trigger={detailTrigger}>
-      {detailCard?.type?.startsWith('direction.') && <details><summary>候选连接管理</summary>{references(detailCard)}</details>}
+      {detailCard?.type?.startsWith('direction.') && <details className="generation-candidate-management"><summary>候选连接管理</summary>{references(detailCard)}</details>}
       {detailCard?.type === 'direction.photography' && <Button disabled={readonly} onClick={() => {
         const copy = { ...structuredClone(detailCard), id: crypto.randomUUID() }
         const incoming = (document.edges || []).filter(edge => edge.target_card === detailCard.id)

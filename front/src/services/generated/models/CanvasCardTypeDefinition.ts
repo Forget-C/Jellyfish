@@ -20,4 +20,3 @@ export type CanvasCardTypeDefinition = {
     fields: Array<CanvasDesignFieldDefinition>;
     entries: Array<CanvasDesignFieldDefinition>;
 };
-

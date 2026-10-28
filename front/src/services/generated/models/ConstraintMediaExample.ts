@@ -16,4 +16,3 @@ export type ConstraintMediaExample = {
     start_ms?: (number | null);
     end_ms?: (number | null);
 };
-

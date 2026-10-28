@@ -11,4 +11,3 @@ export type DialogueBasis = {
     version: number;
     speaker?: (ObjectReferencePayload | null);
 };
-

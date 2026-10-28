@@ -12,4 +12,3 @@ export type DialogueReferencePayload = {
     speaker?: (ObjectReferencePayload | null);
     kind?: 'dialogue_reference';
 };
-

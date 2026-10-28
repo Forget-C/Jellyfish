@@ -81,7 +81,7 @@ try {
     await open(target)
     const chooser=detail.getByRole('combobox',{name:'连接已有卡',exact:true})
     if(!await chooser.isVisible())await detail.getByText('候选连接管理',{exact:true}).click()
-    await selectOption(chooser,`${sourceId.slice(0,8)} → ${inputLabel}`)
+    await selectOption(chooser,new RegExp(`${sourceId.slice(0,8)} → ${inputLabel}$`))
     await poll(state=>state.document.edges.some(edge=>edge.source_card===sourceId&&edge.target_card===target))
   }
   const selectOption=async(chooser,label)=>{
@@ -89,7 +89,7 @@ try {
     for(let i=0;i<40;i++){
       const listId=await chooser.getAttribute('aria-controls')
       const active=page.locator(`.ant-select-dropdown:has([id="${listId}"]) .ant-select-item-option-active`)
-      if(await active.count() && (await active.innerText()).trim()===label){await chooser.press('Enter');return}
+      if(await active.count() && (typeof label==='string'?(await active.innerText()).trim()===label:label.test((await active.innerText()).trim()))){await chooser.press('Enter');return}
       await chooser.press('ArrowDown');await delay(30)
     }
     throw Error(`keyboard option not reachable: ${label}`)
