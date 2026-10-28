@@ -8,6 +8,7 @@ import type { MediaOutputPayload } from './MediaOutputPayload';
 import type { NamedImagePayload } from './NamedImagePayload';
 import type { ObjectReferencePayload } from './ObjectReferencePayload';
 import type { OutputIdentity } from './OutputIdentity';
+import type { PhotographyTextPayload } from './PhotographyTextPayload';
 import type { SpatialReferencePayload } from './SpatialReferencePayload';
 import type { TextOutputPayload } from './TextOutputPayload';
 /**
@@ -16,7 +17,7 @@ import type { TextOutputPayload } from './TextOutputPayload';
 export type CanvasResolvedOutput = {
     source: OutputIdentity;
     modality: string;
-    payload?: ((TextOutputPayload | MediaOutputPayload | ObjectReferencePayload | DescriptionTextPayload | NamedImagePayload | DesignTextPayload | SpatialReferencePayload) | null);
+    payload?: ((TextOutputPayload | MediaOutputPayload | ObjectReferencePayload | DescriptionTextPayload | NamedImagePayload | DesignTextPayload | SpatialReferencePayload | PhotographyTextPayload) | null);
     text?: (string | null);
     file_id?: (string | null);
     token?: string;

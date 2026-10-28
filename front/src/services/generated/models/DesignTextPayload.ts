@@ -8,6 +8,7 @@ import type { BlockingDesignFields } from './BlockingDesignFields';
 import type { DesignScope } from './DesignScope';
 import type { DialogueBasis } from './DialogueBasis';
 import type { EnvironmentDesignFields } from './EnvironmentDesignFields';
+import type { FrameState } from './FrameState';
 import type { ObjectReferencePayload } from './ObjectReferencePayload';
 import type { PerformanceDesignFields } from './PerformanceDesignFields';
 import type { SoundDesignFields } from './SoundDesignFields';
@@ -21,6 +22,8 @@ export type DesignTextPayload = {
     design_type: 'direction.situation' | 'direction.performance' | 'direction.performance_rule' | 'direction.anchor' | 'direction.blocking' | 'direction.activity' | 'direction.environment' | 'direction.dialogue' | 'direction.sound';
     adoption?: 'whole_card';
     text: string;
+    frame_states?: Array<FrameState>;
+    requires_frame_target?: boolean;
     fields: (PerformanceDesignFields | AnchorDesignFields | BlockingDesignFields | ActivityDesignFields | EnvironmentDesignFields | SoundDesignFields);
     scope: DesignScope;
     objects?: Array<ObjectReferencePayload>;

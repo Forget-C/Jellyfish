@@ -17,6 +17,7 @@ import type { InFrameActivityCard } from './InFrameActivityCard';
 import type { NamedImageReferenceCard } from './NamedImageReferenceCard';
 import type { ObjectDescriptionCard } from './ObjectDescriptionCard';
 import type { PerformanceRuleCard } from './PerformanceRuleCard';
+import type { PhotographyCard } from './PhotographyCard';
 import type { PlaceDescriptionCard } from './PlaceDescriptionCard';
 import type { SoundArrangementCard } from './SoundArrangementCard';
 import type { SpatialAnchorCard } from './SpatialAnchorCard';
@@ -32,7 +33,7 @@ export type CanvasDocument = {
     project_id: string;
     name: string;
     schema_version?: number;
-    cards?: Array<(DialogueCard | SoundArrangementCard | SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | ObjectDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard)>;
+    cards?: Array<(PhotographyCard | DialogueCard | SoundArrangementCard | SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | ObjectDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard)>;
     edges?: Array<GenerationCanvasEdge>;
     input_order?: Record<string, Record<string, Array<string>>>;
     groups?: Array<GenerationCanvasGroup>;
