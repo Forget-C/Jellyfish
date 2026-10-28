@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented
+**Completion:** integrated
 
 - [x] 图片模型使用统一输入绑定消费文本依据与参考图片，支持明确顺序和子集；未选候选不进入请求、不扩大运行依赖。
 - [x] 可选参数、参考数量、重复素材及组合限制来自已接入模型能力，前端提示与后端预检一致，不因卡片目录新增而虚构控制能力。
@@ -40,3 +40,8 @@
 - 页面证据：`/private/tmp/canvas05-verified-browser/generation-canvas-images/`，含 `formal-third-selected.png`、`complete-and-unfinished-history.png`、`ordered-references-and-diagnostic.png`、`multi-image-history-content.png`、`mobile-independent-adoption.png`、backend/run日志与OpenAPI。已人工查看1440px预检与390px详情截图，未发现横向越界或按钮重叠。
 - 契约核对：从本工作树隔离8277服务导出OpenAPI，去除仅测试控制的 `/test/` 路径后与已提交生产schema JSON精确相同；运行现有 `pnpm --dir front run openapi:gen`，只有生成器尾空行和测试控制路由噪音，已恢复无关输出。未读取或停止主区8000；本次没有新增schema字段或HTTP路径，不声称标准8000 `openapi:update` 已执行。
 - 限制：受控外部供应商与存储不证明真实供应商质量或真实外部存储可靠性；27项MySQL场景未运行。命名参考、视频用途及后续跨票行为不作为本票已验证能力。
+
+### 2026-10-28：集成验收
+
+- 分支 `a3e454ae` 已包含主区 `8c67ef51`，主区以 `2e1e93e9` 无冲突合并；集成代码复用上方完整后端、Pylint及真实图片页面验证。主区Node24.22.1 typecheck、工作区／暂存区及合并差异检查通过。
+- 复核隔离8277导出（去除测试控制路径）与当前提交schema JSON精确一致，无公开schema或generated client变化。8000无响应，未停止或重载；复用01标准OpenAPI更新和07独立导出结果，本次未重复执行标准openapi:update。原有外部替身与27项MySQL跳过限制继续保留。
