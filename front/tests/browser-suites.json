@@ -1,6 +1,7 @@
 {
   "preflight": "preflight.mjs",
   "cases": {
+    "generation-canvas-mixed": { "file": "generationCanvasMixed.browser.mjs", "ports": [4295, 8295], "timeoutMs": 180000 },
     "generation-canvas-spatial": { "file": "generationCanvasSpatial.browser.mjs", "ports": [4287, 8287], "timeoutMs": 180000 },
     "generation-canvas-sound": { "file": "generationCanvasSound.browser.mjs", "ports": [4291, 8291], "timeoutMs": 180000 },
     "generation-canvas-performance": { "file": "generationCanvasPerformance.browser.mjs", "ports": [4285, 8285], "timeoutMs": 180000 },
