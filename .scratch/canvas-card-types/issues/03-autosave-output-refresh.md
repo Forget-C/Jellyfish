@@ -43,3 +43,7 @@
 - `test:browser workbench` 六个用例全部通过，证据 /private/tmp/canvas03-workbench：workbench-ui、workbench-style、design-scope、unit-design、instruction-preparation、instruction-design。
 - `pnpm --dir front run typecheck` 与 `git diff --check` 通过。未改变 Python 或对外契约，无需本票 Pylint／OpenAPI 重生成。浏览器预检最初遇到沙箱监听限制及未安装捆绑 Chromium；获得执行权限后改用已安装 Chrome，最终完整通过，未将环境失败计作业务红测。
 - 限制：SQLite 真实页面不证明 MySQL 竞争或真实供应商质量；一秒是保存合并周期，不保证下游总延迟一秒。新增展示复用现有主题与正文控件；既有 Composer 浅色表面未在本票改动。
+
+### 集成基线复验
+
+- 以 `[chore] 同步画布集成基线` 合并集成 436691a2（含04），合并提交 f5427046，无冲突。03 真实页面 autosave 再次通过（19.5s），证据 /private/tmp/canvas03-merged；合并后 typecheck、git diff --check 通过。04 带入的 Python 与输出契约变更复用04票据验证，本票未额外修改。
