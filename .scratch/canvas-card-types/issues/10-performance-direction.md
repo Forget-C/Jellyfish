@@ -20,7 +20,7 @@
 
 
 
-**Completion:** implemented
+**Completion:** integrated
 
 ## Comments
 
@@ -36,4 +36,9 @@
 
 - 最终收口：只简化已发布设计的主体诊断并使定位指向真实绑定身份，受影响设计／编译 HTTP `27 passed`（2.05s）、Pylint `10.00/10`（stats缓存路径权限提示不影响 exit 0）通过；前端 typecheck、工作区差异检查通过。
 
+- 2026-10-28 主区集成：无冲突合并 `7961350b`，显式合并提交 `f13e5ccd`。主区 `PYTHONPATH=. UV_CACHE_DIR=/private/tmp/canvas10-uv uv run --no-sync` 已核实导入当前 backend/app；本票 HTTP／真实 Worker 回归 `23 passed`（1.94s）、Node 24.22.1 typecheck 通过。8000 监听父进程 `73854` 的 cwd 为主区 backend，实际 HTTP schema 包含三类新导演卡与 `DesignTextPayload`，与本票生产 OpenAPI 精确一致；标准 `pnpm --dir front run openapi:update` 成功，379 处纯尾空行漂移经逐文件与 HEAD 核对后剔除，无契约漂移。复用上述同一实现的 Pylint、全画布与真实页面证据及其限制；未推送、未操作09工作树。
+
+- 2026-10-28接续09后的组合验证：`d20271fb` 保留本票完整设计发布、主体诊断及所有字段，与09实际视频用途映射共同通过相关HTTP／Worker `64 passed, 2 skipped`（7.32s）、Pylint `10.00/10`、标准OpenAPI更新后的Node24.22.1 typecheck；当前生产导出与8000 HTTP精确一致。
+
 - 2026-10-28规格审查修正：`participant` 资格包含人物、服装、道具。新增直接服装文本／独立服装参考 × 情境／表演四个 HTTP 用例，先均因 `INVALID_DESIGN_CATEGORY` 失败，再只补后端资格与前端对应过滤后通过；完整本票 `27 passed`（2.40s），继续覆盖场所拒绝和人数上限，服装只传身份／名称不读取描述或图片。Pylint `10.00/10`（stats缓存写入提示不影响exit0）、Node24.22.1 typecheck及差异检查通过。未改变公开schema，不重新生成接口。
+
