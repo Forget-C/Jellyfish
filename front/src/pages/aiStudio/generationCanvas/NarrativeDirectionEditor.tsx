@@ -6,7 +6,7 @@ import { DesignMediaExamples } from './DesignMediaExamples'
 import { DesignFieldEditor as FieldEditor } from './DesignFieldEditor'
 import { useCardCandidates } from './useCardCandidates'
 import { sourceKey } from './promptRules'
-import { inputPorts, portLabels } from './graphRules'
+import { useGraphRules } from './CanvasCatalogContext'
 import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
 import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 
@@ -14,6 +14,7 @@ export type NarrativeCard = NarrativeOverviewCard | NarrativeBeatCard | Narrativ
 
 /** 四种叙事卡保留自己的字段；关系只选择直接候选身份。 */
 export function NarrativeDirectionEditor({ card: raw, document, savedRevision, modelOutputs, onChange, disabled }: CardRendererProps) {
+  const { cardDefinitions, inputPorts, portLabels } = useGraphRules()
   const card = raw as NarrativeCard
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs, false)
   const bindings = card.input_bindings || []
@@ -54,7 +55,7 @@ export function NarrativeDirectionEditor({ card: raw, document, savedRevision, m
       })}
       {bindings.filter(binding => !resolved.candidates.some(item => item.available && sourceKey(item.source) === sourceKey(binding.source))).map(binding => <div key={binding.id}><small role="alert">已选关系失效</small><WorkbenchButton disabled={disabled} onClick={() => onChange({ ...card, input_bindings: bindings.filter(value => value.id !== binding.id) })}>取消失效关系</WorkbenchButton></div>)}
     </section>
-    {card.type === 'direction.shot' && <DesignMediaExamples ports={inputPorts(card)} examples={card.examples || []} candidates={resolved.candidates} disabled={disabled} onChange={examples => onChange({ ...card, examples })} />}
+    {card.type === 'direction.shot' && <DesignMediaExamples fieldOptions={cardDefinitions[card.type!].fields.map(field => ({value:field.id,label:field.label}))} ports={inputPorts(card)} examples={card.examples || []} candidates={resolved.candidates} disabled={disabled} onChange={examples => onChange({ ...card, examples })} />}
     <details><summary>适用范围与来源</summary><Input aria-label="适用范围" value={card.scope?.description} onChange={event => onChange({ ...card, scope: { ...card.scope, description: event.target.value } })} /><Select aria-label="制作阶段" allowClear value={card.scope?.phase || undefined} options={[{ value: 'video', label: '画面／视频' }, { value: 'sound', label: '声音' }, { value: 'postproduction', label: '后期' }]} onChange={phase => onChange({ ...card, scope: { ...card.scope, phase: phase ?? null } })} /><Input aria-label="适用条件" value={card.scope?.condition} onChange={event => onChange({ ...card, scope: { ...card.scope, condition: event.target.value } })} /><Input aria-label="设计来源" value={card.source_locator} onChange={event => onChange({ ...card, source_locator: event.target.value })} /></details>
     <section aria-label="完整叙事设计输出"><h3>已保存完整设计 · revision {resolved.revision}</h3>{resolved.outputs.filter(item => item.source.port_id === 'text').map(item => <CanvasTextPreview key={sourceKey(item.source)} text={item.text || ''} label="完整叙事设计" />)}</section>
   </>

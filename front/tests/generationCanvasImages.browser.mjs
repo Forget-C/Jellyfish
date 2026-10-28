@@ -119,7 +119,7 @@ try {
   await page.getByRole('button', { name: '运行历史', exact: true }).click()
   await open('consumer')
   await consumer.getByRole('combobox', { name: '连接已有卡', exact: true }).locator('..').locator('..').click()
-  await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText(`${copy.id.slice(0, 8)} → 参考图片`, { exact: true }).click()
+  await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText(`图片内容卡 · ${copy.id.slice(0, 8)} → 参考图片`, { exact: true }).click()
   await inputs.getByRole('button', { name: '采用 @图片4', exact: true }).click()
   await consumer.getByRole('button', { name: '预检运行', exact: true }).click()
   await preview.waitFor()

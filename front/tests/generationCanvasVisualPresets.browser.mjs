@@ -48,6 +48,7 @@ try {
   await dialog.screenshot({path:join(output,'style-compare.png'),animations:'disabled'})
   assert.equal((await read()).document.cards.find(c=>c.id==='style').fields.direction.text,'')
   await dialog.getByRole('button',{name:'应用到当前卡片',exact:true}).click()
+    await dialog.waitFor({state:'hidden'})
   await poll(s=>s.document.cards.find(c=>c.id==='style').fields.direction.text==='手绘水彩')
   await detail.getByRole('textbox',{name:'自定义说明内容',exact:true}).fill('我自己的视觉说明')
   await poll(s=>s.document.cards.find(c=>c.id==='style').fields.notes.text==='我自己的视觉说明')
@@ -60,6 +61,7 @@ try {
     assert.equal(await dialog.locator('svg').count()>0,true)
     if(entry==='运镜') {const video=dialog.locator('video');await video.evaluate(v=>v.play());await page.waitForFunction(()=>document.querySelector('video')?.readyState>=2);await dialog.screenshot({path:join(output,'photography-motion.png'),animations:'disabled'})}
     await dialog.getByRole('button',{name:'应用到当前卡片',exact:true}).click()
+    await dialog.waitFor({state:'hidden'})
     if(entry==='景别与构图') { await poll(s=>s.document.cards.find(c=>c.id==='photo').fields.shot_size.text==='特写');assert.equal((await read()).document.cards.find(c=>c.id==='photo').fields.light_sources.text,'保留自定义灯光') }
   }
   await poll(s=>s.document.cards.find(c=>c.id==='photo').fields.depth_focus.text.includes('浅景深'))

@@ -104,7 +104,7 @@ function ModelRenderer({ card: raw, savedRevision, savedCard, document, disabled
     {card.type !== 'model.image' && resolved.candidates.map(output => <PhotographyInputScope key={sourceKey(output.source)} card={card} output={output} binding={bindings.find(value => sourceKey(value.source) === sourceKey(output.source))} onChange={onChange} disabled={disabled} />)}
     {card.type === 'model.video' && <VideoInputBindings card={card as VideoModelCard} candidates={resolved.candidates} loading={resolved.loading} capability={capability} disabled={disabled} onChange={onChange} />}
     <Button disabled={disabled || busy || runDisabled} onClick={() => onTargetPrecheck?.()}>运行到此处</Button>
-    <ExperimentComposer options={<><Select aria-label="选择模型" placeholder="选择模型" allowClear value={card.model_id || undefined} style={{ minWidth: 180 }}
+    <ExperimentComposer appearance="workbench" options={<><Select aria-label="选择模型" placeholder="选择模型" allowClear value={card.model_id || undefined} style={{ minWidth: 180 }}
       options={models?.filter(model => model.category === category).map(model => ({ value: model.id, label: model.name }))}
       onChange={id => onChange({ ...card, model_id: id ?? null })} />{parameters}</>}
       onSubmit={() => onPrecheck?.()} submitting={checking} submitDisabled={disabled || busy || runDisabled} submitLabel={busy ? '运行中' : '预检运行'}>

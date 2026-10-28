@@ -490,7 +490,7 @@ async def test_creative_basis_is_saved_and_exposes_only_its_declared_text(canvas
     assert outputs.status_code == 200, outputs.text
     result = outputs.json()['data']
     assert result['revision'] == 1
-    assert result['outputs'][0]['payload'] == {'kind': 'text', 'text': '张三望向门口'}
+    assert result['outputs'][0]['payload'] == {'kind': 'basis', 'text': '张三望向门口', 'source_locator': '用户导入的段落', 'selection_start': 2, 'selection_end': 9}
     assert result['outputs'][0]['source']['port_id'] == 'text'
     candidates = await client.get(f"/canvases/p/{canvas['id']}/cards/model/outputs")
     assert candidates.json()['data']['candidates'][0]['payload']['text'] == '张三望向门口'

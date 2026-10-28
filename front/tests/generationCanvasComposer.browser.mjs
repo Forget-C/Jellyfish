@@ -52,6 +52,12 @@ try {
   await open('m')
   const editor = detail().getByRole('textbox', { name: '模型正文', exact: true })
   await editor.waitFor()
+  assert.equal(await editor.evaluate(element => {
+    for (let current = element; current; current = current.parentElement) {
+      const color = getComputedStyle(current).backgroundColor
+      if (color !== 'rgba(0, 0, 0, 0)' && color !== 'transparent') return color
+    }
+  }), 'rgb(27, 27, 27)', 'model composer inherits workbench surface instead of the default white experiment frame')
   await editor.fill('@图片10')
   await detail().getByRole('button', { name: '@图片10', exact: true }).waitFor()
   assert.equal(await editor.locator('[data-segment]').count(), 0, 'no prefix binding while typing')
@@ -91,7 +97,7 @@ try {
   await detail().getByRole('button', { name: '添加文本参考', exact: true }).click()
   assert.equal(await page.locator('[data-card-id]').count(), countBeforeAdding + 1, 'add creates a visible connected content card')
   await detail().getByRole('combobox', { name: '连接已有卡', exact: true }).locator('..').locator('..').click()
-  await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText('empty → 参考图片', { exact: true }).click()
+  await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText('图片内容卡 · empty → 参考图片', { exact: true }).click()
   assert.equal(await page.locator('[data-card-id]').count(), countBeforeAdding + 1, 'choose existing only adds connection')
   assert.equal(await detail().getByRole('button', { name: '@图片11', exact: true }).count(), 0, 'empty connected output cannot be referenced')
   // Copy carries stable source separately from the human token label.

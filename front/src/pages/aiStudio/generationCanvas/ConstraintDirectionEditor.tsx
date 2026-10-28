@@ -4,7 +4,7 @@ import type { CardRendererProps } from './rendererRegistry'
 import { DesignFieldEditor } from './DesignFieldEditor'
 import { useCardCandidates } from './useCardCandidates'
 import { sourceKey } from './promptRules'
-import { inputPorts, portLabels } from './graphRules'
+import { useGraphRules } from './CanvasCatalogContext'
 import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
 import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 import { MediaPreview } from './MediaContentEditor'
@@ -22,6 +22,7 @@ function eligible(port: string, item: CanvasResolvedOutput) {
 
 /** 约束卡分别编辑本卡设计、直接身份及固定证据；没有跨级正文或媒体采用。 */
 export function ConstraintDirectionEditor({ card: raw, document, savedRevision, modelOutputs, onChange, disabled }: CardRendererProps) {
+  const { inputPorts, portLabels } = useGraphRules()
   const card = raw as ConstraintCard
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs, false)
   const bindings = card.input_bindings || [], examples = card.examples || []

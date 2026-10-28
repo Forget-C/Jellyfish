@@ -4,7 +4,7 @@ import type { CardRendererProps } from './rendererRegistry'
 import { DesignFieldEditor as FieldEditor } from './DesignFieldEditor'
 import { useCardCandidates } from './useCardCandidates'
 import { sourceKey } from './promptRules'
-import { inputPorts, portLabels } from './graphRules'
+import { useGraphRules } from './CanvasCatalogContext'
 import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
 import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 import { MediaPreview } from './MediaContentEditor'
@@ -61,6 +61,7 @@ function EnvironmentFields({ card, onChange }: { card: EnvironmentActivityCard; 
 
 /** 四种空间设计专用布局；候选只选择身份，不展开祖先设计。 */
 export function SpatialDirectionEditor({ card: raw, document, savedRevision, modelOutputs, onChange, disabled }: CardRendererProps) {
+  const { cardDefinitions, inputPorts, portLabels } = useGraphRules()
   const card = raw as SpatialCard
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs, false)
   const bindings = card.input_bindings || [], examples = card.examples || []
@@ -97,6 +98,8 @@ export function SpatialDirectionEditor({ card: raw, document, savedRevision, mod
         const anchor = card.type === 'direction.anchor' ? card as SpatialAnchorCard : undefined
         const marker = anchor?.markers?.find(value => value.example_id === example.id)
         return <section key={example.id}><div style={{ position: 'relative', display: 'inline-block', maxWidth: '100%' }}><MediaPreview fileId={example.file_id} type={example.source.port_id === 'video' ? 'video' : 'image'} />{marker && <span aria-label={`锚点图片标记 ${anchor?.name || ''}`} style={{ position: 'absolute', left: `${marker.x * 100}%`, top: `${marker.y * 100}%`, transform: 'translate(-50%, -50%)', pointerEvents: 'none' }}>⊕</span>}</div>
+          <Select aria-label="素材用途" disabled={disabled} value={example.purpose} options={[{value:'positive',label:'正向示例'},{value:'negative',label:'反例'}]} onChange={purpose=>change({purpose})}/>
+          <Select aria-label="素材定位字段" placeholder="选择定位字段" style={{width:180,maxWidth:'100%'}} disabled={disabled} allowClear value={example.field_id || undefined} options={cardDefinitions[card.type!].fields.map(field=>({value:field.id,label:field.label}))} onChange={field_id=>change({field_id:field_id??null})}/>
           <Input aria-label="素材说明" value={example.description} onChange={event => change({ description: event.target.value })} />
           {anchor && example.source.port_id === 'image' && <Space wrap><span>归一化图片标记</span><InputNumber aria-label="标记横坐标" min={0} max={1} step={0.01} value={marker?.x} onChange={x => update({ ...anchor, markers: [...(anchor.markers || []).filter(value => value.example_id !== example.id), { example_id: example.id, x: x ?? 0.5, y: marker?.y ?? 0.5 }] })} /><InputNumber aria-label="标记纵坐标" min={0} max={1} step={0.01} value={marker?.y} onChange={y => update({ ...anchor, markers: [...(anchor.markers || []).filter(value => value.example_id !== example.id), { example_id: example.id, x: marker?.x ?? 0.5, y: y ?? 0.5 }] })} /></Space>}
           {example.source.port_id === 'video' && <Space wrap><InputNumber aria-label="素材起点毫秒" min={0} value={example.start_ms} onChange={start => change(start === null ? { start_ms: null, end_ms: null } : { start_ms: start, end_ms: Math.max(example.end_ms || 0, start + 1) })} /><InputNumber aria-label="素材终点毫秒" min={(example.start_ms || 0) + 1} value={example.end_ms} onChange={end => change(end === null ? { start_ms: null, end_ms: null } : { start_ms: example.start_ms || 0, end_ms: end })} /></Space>}

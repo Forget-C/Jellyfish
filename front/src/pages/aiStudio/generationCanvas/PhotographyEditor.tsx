@@ -1,7 +1,7 @@
 import { AcceptanceBasisSelector } from './AcceptanceBasisSelector'
 import { VisualPresetPicker } from './VisualPresetPicker'
 import { applyPreset, photographyPresets } from './visualPresets'
-import { inputPorts } from './graphRules'
+import { useGraphRules } from './CanvasCatalogContext'
 import { Alert, Input, Select, Space } from 'antd'
 import { useState } from 'react'
 import type { PhotographyCard, PhotographyFields, PhotographyMediaExample, ObjectReferencePayload } from '../../../services/generated'
@@ -17,6 +17,7 @@ export const photographyRegions = {"composition": {"label": "景别与构图", "
 
 /** 五个入口只编辑当前摄影卡；切换区域不新建或同步隐藏对象。 */
 export function PhotographyEditor({ card: raw, document, savedRevision, modelOutputs, onChange, disabled }: CardRendererProps) {
+  const { inputPorts } = useGraphRules()
   const card = raw as PhotographyCard
   const [region, setRegion] = useState<keyof typeof photographyRegions>('composition')
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs, false)

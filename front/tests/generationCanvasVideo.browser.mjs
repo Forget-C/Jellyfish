@@ -1,9 +1,11 @@
+import { closeCanvasDetails, closePrecheck, openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn, execFileSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { writeFileSync } from 'node:fs'
 import { setTimeout as delay } from 'node:timers/promises'
 import { createServer } from 'vite'
 const { chromium } = createRequire(import.meta.url)('playwright')
@@ -47,14 +49,22 @@ try {
   assert.ok((await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })).ok)
   await page.addInitScript(id => localStorage.setItem(`jellyfish:generation-layout:canvas-project:${id}:view:canvas`, JSON.stringify({ schema: 1, transform: { x: 40, y: 104, scale: 1 }, positions: { m: { x: 0, y: 0 }, s0: { x: 900, y: 0 }, s1: { x: 1400, y: 0 }, 'text-source': { x: 1900, y: 0 } }, sizes: {} })), canvas.id)
   await page.goto(`http://127.0.0.1:4279/projects/canvas-project?tab=generation&canvas=${canvas.id}`)
-  const card = page.locator('[data-card-id="m"]'), editor = card.getByRole('textbox', { name: '模型正文', exact: true })
+  await page.locator('[data-card-id="m"]').press('Enter')
+  const card = page.locator('.wb-details:not([hidden])'), editor = card.getByRole('textbox', { name: '模型正文', exact: true })
   const preview = page.getByRole('region', { name: '运行预检', exact: true })
   const save = async () => { await page.getByRole('button', { name: '保存画布', exact: true }).click(); await page.getByRole('status').filter({ hasText: '已保存' }).waitFor(); return (await (await fetch(`${base}/${canvas.id}`)).json()).data.document.cards[0] }
+  const closePreview = () => closePrecheck(page)
   const check = async () => { await card.getByRole('button', { name: '预检运行', exact: true }).click(); await preview.waitFor() }
+  await editor.pressSequentially('开头 @图片1 结尾', { delay: 1 })
+  writeFileSync(join(output,'reference-caret-dom.txt'),await editor.innerText())
+  assert.equal(await editor.innerText(),'开头 @图片1 结尾')
+  await editor.fill('')
   // Type real keystrokes: the space after command/name must not finalize an empty instruction.
   await editor.pressSequentially('/首帧参考 @图片1 正文 /尾帧参考 @图片2 /关键帧参考 @图片2 @图片1 /主体参考 "张三" @图片1 同行正文', { delay: 1 })
   await editor.press('Tab')
+  writeFileSync(join(output,'directives-dom.txt'),await editor.innerText())
   let persisted = await save()
+  writeFileSync(join(output,'directives-saved.json'),JSON.stringify(persisted,null,2))
   const instructions = persisted.prompt.segments.filter(segment => segment.kind === 'instruction')
   assert.deepEqual(instructions.map(item => [item.command, item.references.length]), [['首帧参考', 1], ['尾帧参考', 1], ['关键帧参考', 2], ['主体参考', 1]])
   assert.ok(persisted.prompt.segments.filter(segment => segment.kind === 'text').map(segment => segment.text).join('').includes('同行正文'))
@@ -63,6 +73,8 @@ try {
   await preview.getByRole('alert').filter({ hasText: 'UNSUPPORTED_REFERENCE_COMBINATION' }).waitFor()
   assert.equal(await preview.getByRole('button', { name: '确认执行', exact: true }).isDisabled(), true)
   await preview.getByRole('alert').filter({ hasText: 'UNSUPPORTED_REFERENCE_COMBINATION' }).getByRole('button', { name: '定位问题' }).click()
+  await preview.waitFor({state:'hidden'})
+  await card.locator('[data-segment-id]:focus').waitFor()
   assert.ok(await card.locator('[data-segment-id]:focus').count())
   await page.screenshot({ path: join(output, 'four-directives-diagnostic.png'), fullPage: true })
   // Four selected commands share the canonical structure with handwritten commands.
@@ -76,13 +88,17 @@ try {
   await preview.getByRole('alert').filter({ hasText: 'INSTRUCTION_REFERENCE_REQUIRED' }).first().waitFor()
   await preview.getByRole('alert').filter({ hasText: 'INSTRUCTION_PARAMETER_REQUIRED' }).first().waitFor()
   assert.deepEqual(persisted.prompt.segments.filter(segment => segment.kind === 'instruction').slice(4).map(item => item.command), instructions.map(item => item.command))
+  await closePreview()
   while (await card.getByRole('button', { name: '删除指令', exact: true }).count()) await card.getByRole('button', { name: '删除指令', exact: true }).first().click()
   await editor.fill('/首帧参考 @图片1 /首帧参考 @图片2')
   await editor.press('Tab'); await check()
   await preview.getByRole('alert').filter({ hasText: 'INSTRUCTION_COUNT_EXCEEDED' }).waitFor()
+  await closePreview()
   while (await card.getByRole('button', { name: '删除指令', exact: true }).count()) await card.getByRole('button', { name: '删除指令', exact: true }).first().click()
   await editor.fill('/首帧参考 @文本1 同行正文'); await editor.press('Tab'); await check()
   await preview.getByRole('alert').filter({ hasText: 'INSTRUCTION_REFERENCE_TYPE' }).getByRole('button', { name: '定位问题' }).click()
+  await preview.waitFor({state:'hidden'})
+  await card.locator('[data-segment-id]:focus').waitFor()
   assert.ok(await card.locator('[data-segment-id]:focus').count())
   // Actual subject modes through the public page; surrounding prose survives all cases.
   while (await card.getByRole('button', { name: '删除指令', exact: true }).count()) await card.getByRole('button', { name: '删除指令', exact: true }).first().click()
@@ -93,6 +109,7 @@ try {
     ['让 @图片1 中的人物转身 /主体参考 "张三" @图片1', '让 @张三 中的人物转身 '],
     ['让 @图片1 中的人物转身 /主体参考 "张三" @图片1 /主体参考 "李四" @图片1', '让 @media1 中的人物转身  '],
   ]) {
+    await closePreview()
     while (await card.getByRole('button', { name: '删除指令', exact: true }).count()) await card.getByRole('button', { name: '删除指令', exact: true }).first().click()
     await editor.fill(body); await editor.press('Tab'); await check()
     assert.equal(await preview.getByRole('region', { name: '实际提交文本', exact: true }).textContent(), expected)
@@ -110,12 +127,24 @@ try {
   assert.equal(state.runs.find(item => item.id === run.run_id).nodes[0].outputs.length, 1)
   const calls = (await (await fetch(`${api}/test/video-controls`)).json()).calls
   assert.equal(calls.filter(call => call.method === 'POST').length, 1)
+  await closeCanvasDetails(page)
   await page.getByRole('button', { name: '运行历史', exact: true }).click()
   const history = page.getByRole('region', { name: '画布运行历史', exact: true })
   await history.locator('summary').filter({ hasText: '运行 ' }).first().click()
   await history.getByRole('button', { name: '另存为视频内容卡', exact: true }).click()
-  await page.locator('[data-card-id]').filter({ hasText: '完整成果副本' }).waitFor()
+  let copy
+  for(let i=0;i<80;i++){
+    const saved=(await(await fetch(`${base}/${canvas.id}`)).json()).data
+    copy=saved.document.cards.find(item=>item.type==='content.video'&&item.origin?.run_id===run.run_id)
+    if(copy)break
+    await delay(100)
+  }
+  assert.ok(copy)
+  assert.equal(copy.origin.incomplete,false)
+  await page.getByRole('button',{name:'运行历史',exact:true}).click()
+  const copyDetails=await openCanvasCard(page,copy.id)
+  await copyDetails.getByText(/完整成果副本/).waitFor()
   await save()
   await page.screenshot({ path: join(output, 'video-audio-history.png'), fullPage: true })
   console.log(`video passed: ${output}`)
-} finally { await cleanup() }
+} catch(error){writeFileSync(join(output,'failed-body.txt'),await page.locator('body').innerText());await page.screenshot({path:join(output,'failed.png'),fullPage:true});throw error} finally { await cleanup() }

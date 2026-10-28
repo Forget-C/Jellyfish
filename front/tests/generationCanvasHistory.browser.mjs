@@ -1,3 +1,4 @@
+import { openCanvasCard, closeCanvasDetails, closePrecheck } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -11,7 +12,7 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-history-')
 const api = 'http://127.0.0.1:8277', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_runtime_browser_server'], {
-  cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8277' }, stdio: ['ignore', 'pipe', 'pipe'],
+  cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8277' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
 captureBackend(backend, output)
 let server, browser, page
@@ -24,7 +25,7 @@ try {
     await delay(250)
   }
   assert.ok(ready, 'isolated backend ready')
-  server = await createServer({ root, server: { host: '127.0.0.1', port: 4277, strictPort: true, open: false, proxy: { '/api': api } } })
+  server = await createServer({ root, cacheDir: join(output, 'vite-cache'), server: { host: '127.0.0.1', port: 4277, strictPort: true, open: false, proxy: { '/api': api } } })
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
   page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
@@ -36,14 +37,17 @@ try {
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
   assert.ok(seeded.ok, await seeded.text())
   await page.goto(`http://127.0.0.1:4277/projects/canvas-project?tab=generation&canvas=${canvas.id}`)
-  const card = page.locator('[data-card-id="m"]'), consumer = page.locator('[data-card-id="consumer"]')
+  const sourceSummary = page.locator('[data-card-id="m"]')
+  const card = await openCanvasCard(page, 'm')
   const historyToggle = page.getByRole('button', { name: '运行历史', exact: true })
   const history = page.getByRole('region', { name: '画布运行历史', exact: true })
+  const toggleHistory = async () => { await closeCanvasDetails(page); await historyToggle.click() }
   const control = async body => (await fetch(`${api}/test/runtime-controls`, body && { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json()
   const runtime = async () => (await (await fetch(`${base}/${canvas.id}/runtime`)).json()).data
   const waitText = async (locator, text) => { await locator.filter({ hasText: new RegExp(`^${text}$`) }).waitFor(); assert.equal(await locator.textContent(), text) }
   const startRun = async () => {
-    if (await history.count()) await historyToggle.click()
+    if (await history.count()) await toggleHistory()
+    await openCanvasCard(page, 'm')
     await card.getByRole('button', { name: '预检运行', exact: true }).click()
     const accepted = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/runs'))
     await page.getByRole('region', { name: '运行预检' }).getByRole('button', { name: '确认执行', exact: true }).click()
@@ -52,12 +56,14 @@ try {
     return (await runtime()).runs.find(run => run.id === receipt.run_id)
   }
   const showRun = async run => {
-    if (!await history.count()) await historyToggle.click()
+    await closePrecheck(page)
+    await closeCanvasDetails(page)
+    if (!await history.count()) await toggleHistory()
     const record = history.locator(`[data-history-run="${run.id}"]`)
     if (!await record.evaluate(element => element.open)) await record.locator('summary').first().click()
     return record
   }
-  await historyToggle.click(); await history.waitFor()
+  await toggleHistory(); await history.waitFor()
   await page.getByText('尚无运行记录', { exact: true }).waitFor()
   // Observe duplicate text envelopes, disconnect, expire the replay log and finish
   // while disconnected. Recovery must replace from the real authoritative snapshot.
@@ -98,9 +104,10 @@ try {
   await record.getByRole('status').filter({ hasText: '取消中，等待任务终态' }).waitFor()
   await page.getByRole('alert').filter({ hasText: '取消请求结果未知' }).waitFor()
   assert.equal((await runtime()).runs.at(-1).lifecycle, 'active')
-  assert.equal(await card.getByRole('button', { name: '删除卡片', exact: true }).isDisabled(), true)
+  assert.equal(await sourceSummary.getByRole('button', { name: '删除卡片', exact: true }).isDisabled(), true)
   assert.equal(await record.getByText('已取消 · 未完成', { exact: true }).count(), 0)
   await page.reload()
+  await openCanvasCard(page, 'm')
   record = await showRun(second)
   await record.getByRole('status').filter({ hasText: '取消中，等待任务终态' }).waitFor()
   assert.equal((await control()).calls.length, 2)
@@ -117,6 +124,7 @@ try {
   await control({ release: 2 })
   await record.getByRole('status').filter({ hasText: '已取消 · 未完成' }).waitFor()
   assert.equal((await control()).calls.length, 3)
+  await openCanvasCard(page, 'm')
   await waitText(card.getByRole('region', { name: '当前正式输出', exact: true }), '第一段第二段第三段')
   // Save a validated independent copy while editing continues during DTO loading.
   record = await showRun(second)
@@ -130,6 +138,7 @@ try {
     await new Promise(resolve => { releaseCopy = resolve }); await route.fulfill({ response })
   })
   await record.getByRole('button', { name: '另存为文本内容卡', exact: true }).click(); await entered
+  await openCanvasCard(page, 'm')
   await card.getByRole('textbox', { name: '模型正文', exact: true }).fill('请求期间的后续编辑')
   releaseCopy()
   await history.getByRole('status').filter({ hasText: '已另存为独立内容卡' }).waitFor()
@@ -139,29 +148,31 @@ try {
   assert.equal(copy.text, '第一段')
   assert.deepEqual(copy.origin, { canvas_id: canvas.id, run_id: second.id, node_id: second.nodes[0].id, position: 0, incomplete: true })
   assert.equal((await runtime()).current_outputs.m[0].text, '第一段第二段第三段')
-  await historyToggle.click()
-  await consumer.getByRole('combobox', { name: '连接已有卡', exact: true }).locator('..').locator('..').click()
-  await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText(`${copy.id.slice(0, 8)} → 文本`, { exact: true }).click()
-  await consumer.getByRole('button', { name: '@文本2', exact: true }).click()
-  const prompt = consumer.getByRole('textbox', { name: '模型正文', exact: true })
+  await toggleHistory()
+  await openCanvasCard(page, 'consumer')
+  await card.getByRole('combobox', { name: '连接已有卡', exact: true }).locator('..').locator('..').click()
+  await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText(`文本内容卡 · ${copy.id.slice(0, 8)} → 文本`, { exact: true }).click()
+  await card.getByRole('button', { name: '@文本2', exact: true }).click()
+  const prompt = card.getByRole('textbox', { name: '模型正文', exact: true })
   assert.equal(JSON.parse(await prompt.locator('[data-segment]').getAttribute('data-segment')).source.card_id, copy.id)
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   // Removed editable source cards do not remove history or the task's historical target.
-  await card.getByRole('button', { name: '删除卡片', exact: true }).click()
+  await sourceSummary.getByRole('button', { name: '删除卡片', exact: true }).click()
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
-  assert.equal(await card.count(), 0)
+  assert.equal(await sourceSummary.count(), 0)
   await page.goto('http://127.0.0.1:4277/projects/canvas-project?tab=dashboard')
   await page.getByRole('button', { name: '任务中心', exact: true }).click()
   await page.locator('.app-task-card').filter({ hasText: '流式文本' }).first().getByRole('button', { name: /查看/ }).click()
   await page.waitForURL(url => url.searchParams.get('canvas') === canvas.id && url.searchParams.get('run') === third.id && url.searchParams.get('node') === third.nodes[0].id)
   const targeted = history.locator(`[data-history-node="${third.nodes[0].id}"]`)
   await targeted.getByRole('status').filter({ hasText: '已取消 · 未完成' }).waitFor()
-  assert.equal(await card.count(), 0)
+  assert.equal(await sourceSummary.count(), 0)
   assert.equal(await page.evaluate(() => document.activeElement.dataset.historyNode), third.nodes[0].id)
   assert.equal((await control()).calls.length, 3)
   await page.getByRole('dialog', { name: '任务中心', exact: true }).waitFor({ state: 'hidden' })
+  await closeCanvasDetails(page)
   await targeted.getByText('本次实际输入与模型参数', { exact: true }).click()
   await page.screenshot({ path: join(output, 'removed-source-history.png'), fullPage: true })
   console.log(JSON.stringify({ output, success: true, providerCalls: 3 }))

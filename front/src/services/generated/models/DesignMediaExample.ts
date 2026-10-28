@@ -11,6 +11,7 @@ export type DesignMediaExample = {
     source: OutputIdentity;
     file_id: string;
     purpose?: 'positive' | 'negative';
+    field_id?: (string | null);
     description?: string;
     start_ms?: (number | null);
     end_ms?: (number | null);

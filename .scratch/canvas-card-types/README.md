@@ -8,7 +8,7 @@
 
 ## 任务与阻塞关系
 
-编号表示依赖顺序，不要求严格串行执行。01–18 共十八票已实现并集成；19 已解除阻塞，可开始完整旅程与统一契约收口，验证证据在下方实施记录及相应票据中维护。
+编号表示依赖顺序，不要求严格串行执行。01–18 共十八票已实现并集成；19已实现并完成下述验证，等待主区集成及最终双轴审查。实际覆盖见[实现核对](implementation-coverage.md)，验证证据在下方及相应票据维护。
 
 | 票据 | Blocked by | 目录负责内容 |
 | --- | --- | --- |
@@ -243,3 +243,7 @@ flowchart TD
 - 17交付前已合主区最终 `fb1f95d2`，13风格与16连续性字段／编辑／预设／固定示例全部保留；合后全画布271 passed／28 skipped、Pylint10、Node24typecheck，真实Chrome要求卡统一入口15.7s再次通过，当前WT生产schema精确等提交OpenAPI。证据 `/private/tmp/canvas17-after16-guidance`；implemented待主区merger复验，未推送。
 
 - 2026-10-29：无冲突合并17（分支 HEAD `3f84c01b`，显式合并提交 `d860ad66`），Completion 更新为 integrated，分诊 Status 不变；01–18共十八票集成，19解除阻塞。合后指导／连续性／叙事／摄影 HTTP 与真实 Worker **66 passed**（6.91s）、Node24.22.1 typecheck、差异检查通过；代码与实现分支一致，复用271 passed／28 MySQL skipped、Pylint10及真实Chrome要求卡证据。主区 app导入路径已确认，生产导出、8000实际HTTP、提交schema精确一致，含验收新契约；标准 `openapi:update` 成功，432处已证明仅尾空行的生成漂移及schema等价JSON格式差异已还原。证据 `/private/tmp/canvas17-integrated-production.json`、`/private/tmp/canvas17-integrated-http.json`，真实页面 `/private/tmp/canvas17-after16-guidance`。受控供应商／存储和MySQL缺环境限制保留；未推送。
+
+
+- 2026-10-29：19在独立 `codex-canvas-types-19` 完成完整旅程与统一契约收口，合入主区最新 `4267b04c`，Completion为implemented待集成，Status不变。权威HTTP目录由真实卡类提供，前端generated Context消费，35物理类型／39入口、28逻辑端点、9输出、19规则及19接收矩阵逐项见[实现核对](implementation-coverage.md)。修复对白关系全文跨级、纯候选精确断边、通用素材字段定位及创作依据来源输出；补导演候选管理、四模态强类型、工作台Composer外观及可读来源。实际键盘red还定位并修复binding_id回填导致的光标前移及预检关闭后的稳定片段聚焦。
+- 19验证：全部画布275 passed／28 skipped、诊断用词同步后相关42 passed／1 skipped、Pylint10、Node24 typecheck、生产／提交／真实8303HTTP schema精确一致。现行20页＋迁移5页＋新完整旅程共26个真实用例通过；selection隔离MySQL未配置，仅静态迁移，不宣称浏览器通过。完整旅程47.5s，证据 `/private/tmp/canvas19-journey-release/generation-canvas-journey`；其余执行、红灯修正、迁移和环境限制详见19 Comments。主8000标准更新留待集成后执行；未修改共享Details／Theme／Modal及既有场次职责，不开展章节、导演试点、音频生成或Take／剪辑改造。01–18仍十八票集成，19等待最终合并审查；未推送。

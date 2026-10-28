@@ -21,9 +21,15 @@ function validClipboardSegment(segment: unknown): boolean {
 function copyClipboardSegment(segment: NonNullable<PromptDocument['segments']>[number]): NonNullable<PromptDocument['segments']>[number] {
   return segment.kind === 'instruction' ? { ...segment, id: crypto.randomUUID(), references: segment.references?.map(reference => ({ ...reference, id: crypto.randomUUID() })) } : { ...segment, id: crypto.randomUUID() }
 }
+/** 绑定身份回填不改变编辑内容；避免仅元数据变化时重建 DOM、清空活动光标。 */
+function contentKey(document: PromptDocument) {
+  const reference = (item: PromptReference) => ({ id: item.id, kind: item.kind, source: item.source })
+  return JSON.stringify((document.segments || []).map(segment => segment.kind === 'reference' ? reference(segment) : segment.kind === 'instruction' ? { ...segment, references: (segment.references || []).map(reference) } : segment))
+}
+
 /** DOM 仅作为输入表面；持久值是有稳定身份的片段，组合输入期间不重建 DOM。 */
 export function PromptEditor({ document, card, value, onChange, disabled, candidates = [] }: { document: CanvasDocument; card: GenerationCard; value: PromptDocument; onChange: (value: PromptDocument) => void; disabled?: boolean; candidates?: Candidate[] }) {
-  const root = useRef<HTMLDivElement>(null), composing = useRef(false), local = useRef(value), last = useRef('')
+  const root = useRef<HTMLDivElement>(null), composing = useRef(false), local = useRef(value), renderedContent = useRef('')
   const [category, setCategory] = useState('text'), [query, setQuery] = useState(''), [activeIndex, setActiveIndex] = useState(0)
   local.current = value
   const matches = candidates.filter(item => item.available && item.source.port_id === category && (query === '@' || item.token.startsWith(query)))
@@ -38,13 +44,17 @@ export function PromptEditor({ document, card, value, onChange, disabled, candid
       if (segment.kind === 'reference') { node.title = referenceIssue(document, card, segment.source, candidates); node.dataset.invalid = String(!!node.title) }
       return node
     }))
-    last.current = JSON.stringify(next)
+    renderedContent.current = contentKey(next)
   }
   useLayoutEffect(() => {
-    if (!composing.current && JSON.stringify(value) !== last.current) draw(value)
+    if (!composing.current && contentKey(value) !== renderedContent.current) draw(value)
+    const segments = new Map((value.segments || []).map(segment => [segment.id, segment]))
     root.current?.querySelectorAll<HTMLElement>('[data-segment]').forEach(node => {
-      const segment = JSON.parse(node.dataset.segment!)
-      if (segment.kind === 'reference') { node.textContent = label(segment); node.title = referenceIssue(document, card, segment.source, candidates); node.dataset.invalid = String(!!node.title) }
+      const previous = JSON.parse(node.dataset.segment!)
+      const segment = segments.get(previous.id) || previous
+      node.dataset.segment = JSON.stringify(segment)
+      node.dataset.segmentId = segment.id
+      if (segment.kind === 'reference') { const text = label(segment); if (node.textContent !== text) node.textContent = text; node.title = referenceIssue(document, card, segment.source, candidates); node.dataset.invalid = String(!!node.title) }
     })
   })
   const textIds = useRef(new WeakMap<Node, string>())
@@ -68,7 +78,7 @@ export function PromptEditor({ document, card, value, onChange, disabled, candid
     return { segments }
   }
   const read = () => root.current ? readNodes(root.current) : { segments: [] }
-  const publish = (next: PromptDocument, redraw = false) => { local.current = next; last.current = JSON.stringify(next); onChange(next); if (redraw) draw(next) }
+  const publish = (next: PromptDocument, redraw = false) => { local.current = next; renderedContent.current = contentKey(next); onChange(next); if (redraw) draw(next) }
   const confirm = (finalize = false) => {
     if (composing.current) return false
     const selection = window.getSelection()

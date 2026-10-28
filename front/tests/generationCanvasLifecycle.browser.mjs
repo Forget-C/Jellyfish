@@ -1,3 +1,4 @@
+import { openCanvasCard, closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -11,7 +12,7 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 const output = await browserOutput('jellyfish-generation-canvas-lifecycle-')
 const api = 'http://127.0.0.1:8282', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_images_browser_server'], {
-  cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8282' }, stdio: ['ignore', 'pipe', 'pipe'],
+  cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8282' }, stdio: ['ignore', 'pipe', 'pipe'],
 })
 captureBackend(backend, output)
 let server, browser, page
@@ -24,7 +25,7 @@ try {
     await delay(250)
   }
   assert.ok(ready, 'isolated backend ready')
-  server = await createServer({ root, server: { host: '127.0.0.1', port: 4282, strictPort: true, open: false, proxy: { '/api': api } } })
+  server = await createServer({ root, cacheDir: join(output, 'vite-cache'), server: { host: '127.0.0.1', port: 4282, strictPort: true, open: false, proxy: { '/api': api } } })
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
   page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
@@ -40,7 +41,8 @@ try {
     edges: [{ id: 'edge', source_card: 'm', source_port: 'image', target_card: 'consumer', target_port: 'image' }], input_order: { consumer: { image: ['edge'] } } }
   assert.ok((await fetch(url, { method: 'PUT', headers: json, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })).ok)
   await page.goto(`http://127.0.0.1:4282/projects/canvas-project?tab=generation&canvas=${canvas.id}`)
-  const card = page.locator('[data-card-id="m"]'), consumer = page.locator('[data-card-id="consumer"]')
+  const source = page.locator('[data-card-id="m"]')
+  const card = await openCanvasCard(page, 'm')
   await card.getByRole('button', { name: '预检运行', exact: true }).click()
   await page.getByRole('region', { name: '运行预检', exact: true }).getByRole('button', { name: '确认执行', exact: true }).click()
   await card.getByRole('region', { name: '当前正式输出', exact: true }).getByRole('button', { name: '预览输出 3', exact: true }).waitFor()
@@ -49,20 +51,21 @@ try {
   const other = (await (await fetch(base, { method: 'POST', headers: json, body: JSON.stringify({ name: '独立使用者' }) })).json()).data
   other.document.cards = [{ id: 'independent', type: 'content.image', file_id: fileId }]
   assert.ok((await fetch(`${base}/${other.id}`, { method: 'PUT', headers: json, body: JSON.stringify({ request_id: 'retain', expected_revision: 0, document: other.document }) })).ok)
-  const prompt = consumer.getByRole('textbox', { name: '模型正文', exact: true })
-  await prompt.fill('@图片1'); await prompt.press('Tab')
+  await openCanvasCard(page, 'consumer')
+  const inputs = card.getByRole('region', { name: '已保存直接输入', exact: true })
+  await inputs.getByRole('button', { name: '采用 @图片1', exact: true }).click()
   let response = page.waitForResponse(response => response.request().method() === 'PUT' && response.url().endsWith('/' + canvas.id))
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
   assert.equal((await response).status(), 200)
-  await card.getByRole('button', { name: '删除卡片', exact: true }).click()
+  await source.getByRole('button', { name: '删除卡片', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '先清理' }).waitFor()
-  assert.equal(await card.count(), 1)
+  assert.equal(await source.count(), 1)
   await page.screenshot({ path: join(output, 'reference-blocks-deletion.png'), fullPage: true })
   const writes = []
   const onRequest = request => { if (request.method() === 'PUT' && request.url().endsWith('/' + canvas.id)) writes.push(request.postDataJSON()) }
   page.on('request', onRequest)
-  await prompt.fill(''); await prompt.press('Tab')
-  await card.getByRole('button', { name: '删除卡片', exact: true }).click()
+  await inputs.getByRole('button', { name: '取消采用 @图片1', exact: true }).click()
+  await source.getByRole('button', { name: '删除卡片', exact: true }).click()
   response = page.waitForResponse(response => response.request().method() === 'PUT' && response.url().endsWith('/' + canvas.id))
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
   assert.equal((await response).status(), 200)
@@ -71,6 +74,7 @@ try {
   const saved = (await (await fetch(url)).json()).data
   assert.deepEqual(saved.document.cards.map(card => card.id), ['consumer'])
   assert.deepEqual(saved.document.edges, [])
+  await closeCanvasDetails(page)
   await page.getByRole('button', { name: '运行历史', exact: true }).click()
   const history = page.getByRole('region', { name: '画布运行历史', exact: true })
   await history.locator('summary').first().click()
@@ -103,13 +107,15 @@ try {
   assert.deepEqual(details.usages.map(usage => usage.usage_kind), ['canvas_content'])
   assert.equal((await fetch(`${api}/api/v1/studio/files/${fileId}`, { method: 'DELETE' })).status, 409)
   await page.goto(`http://127.0.0.1:4282/projects/canvas-project?tab=generation&canvas=${other.id}`)
-  const retained = page.locator('[data-card-id="independent"]').getByRole('img', { name: '图片预览', exact: true })
+  await openCanvasCard(page, 'independent')
+  const retained = card.getByRole('img', { name: '图片预览', exact: true })
   await retained.waitFor()
   assert.equal(await retained.evaluate(image => image.complete && image.naturalWidth === 240), true)
   await page.screenshot({ path: join(output, 'other-canvas-file-retained.png'), fullPage: true })
   // Upload retention survives deleting its card; explicit cleanup checks the saved content first.
   await page.getByRole('button', { name: '添加图片卡', exact: true }).click()
-  const uploadedCard = page.locator('[data-card-id]').last()
+  const uploadedSummary = page.locator('[data-card-id]').last()
+  const uploadedCard = card
   const uploadResponse = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/files/upload'))
   await uploadedCard.getByLabel('上传媒体文件').setInputFiles({ name: 'cleanup.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jV4kAAAAASUVORK5CYII=', 'base64') })
   const uploadedId = (await (await uploadResponse).json()).data.id
@@ -120,14 +126,16 @@ try {
     assert.equal((await response).status(), 200)
   }
   await saveOther()
-  const independent = page.locator('[data-card-id="independent"]')
+  await openCanvasCard(page, 'independent')
+  const independent = card
   await independent.getByRole('button', { name: '从项目文件选择', exact: true }).click()
   let modal = page.getByRole('dialog', { name: '项目文件库', exact: true })
   let cleanupRow = modal.getByText('cleanup', { exact: true }).locator('../..')
   await cleanupRow.getByRole('button', { name: '释放上传保留', exact: true }).click()
   await modal.getByRole('alert').filter({ hasText: '素材仍被业务使用' }).waitFor()
   await modal.getByRole('button', { name: 'Close', exact: true }).click()
-  await uploadedCard.getByRole('button', { name: '删除卡片', exact: true }).click()
+  await modal.waitFor({ state: 'hidden' })
+  await uploadedSummary.getByRole('button', { name: '删除卡片', exact: true }).click()
   await saveOther()
   await independent.getByRole('button', { name: '从项目文件选择', exact: true }).click()
   modal = page.getByRole('dialog', { name: '项目文件库', exact: true })

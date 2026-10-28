@@ -1,3 +1,4 @@
+import { openCanvasCard, closeCanvasDetails, closePrecheck } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -13,7 +14,7 @@ const projectId = `canvas-selection-${Date.now()}`, modelId = `${projectId}-text
 const api = 'http://127.0.0.1:8281', base = `${api}/api/v1/studio/generation-canvases/${projectId}`
 assert.ok(process.env.JELLYFISH_TEST_MYSQL_URL, 'parallel browser requires explicit isolated MySQL')
 const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_runtime_browser_server'], {
-  cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8281', CANVAS_BROWSER_DATABASE_URL: process.env.JELLYFISH_TEST_MYSQL_URL, CANVAS_BROWSER_PROJECT_ID: projectId }, stdio: ['ignore', 'pipe', 'pipe'],
+  cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8281', CANVAS_BROWSER_DATABASE_URL: process.env.JELLYFISH_TEST_MYSQL_URL, CANVAS_BROWSER_PROJECT_ID: projectId }, stdio: ['ignore', 'pipe', 'pipe'],
 })
 captureBackend(backend, output)
 let server, browser, page
@@ -26,7 +27,7 @@ try {
     await delay(250)
   }
   assert.ok(ready, 'isolated backend ready')
-  server = await createServer({ root, server: { host: '127.0.0.1', port: 4281, strictPort: true, open: false, proxy: { '/api': api } } })
+  server = await createServer({ root, cacheDir: join(output, 'vite-cache'), server: { host: '127.0.0.1', port: 4281, strictPort: true, open: false, proxy: { '/api': api } } })
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
   page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
@@ -76,6 +77,7 @@ try {
   for (let attempt = 0; attempt < 4; attempt++) await page.getByRole('button', { name: '缩小', exact: true }).click()
   const a = page.locator('[data-card-id="A"]'), b = page.locator('[data-card-id="B"]'), c = page.locator('[data-card-id="C"]')
   await a.waitFor()
+  await closeCanvasDetails(page)
   await page.getByRole('button', { name: '框选', exact: true }).click()
   const ab = await a.boundingBox(), cb = await c.boundingBox()
   await page.mouse.move(ab.x - 3, ab.y - 3)
@@ -93,6 +95,7 @@ try {
   assert.equal(await preview.getByRole('button', { name: '确认执行', exact: true }).isEnabled(), false)
   assert.equal((await request('/runtime', undefined, 'GET')).runs.length, 3, 'omitted B creates no run')
   await page.screenshot({ path: join(output, 'selection-omitted-middle.png'), fullPage: true })
+  await closePrecheck(page)
   await b.getByRole('checkbox').check()
   await page.locator('[data-card-id="X"]').getByRole('checkbox').check()
   await page.locator('[data-card-id="note"]').getByRole('checkbox').check()
@@ -103,11 +106,15 @@ try {
     preview.getByRole('button', { name: '确认执行', exact: true }).click()])
   const selectedRun = (await request('/runtime', undefined, 'GET')).runs.find(run => run.nodes.length === 4)
   assert.ok(selectedRun)
+  await preview.waitFor({ state: 'hidden' })
   // A disjoint single run is accepted while the selected producer is still streaming.
-  await page.locator('[data-card-id="Y"]').getByRole('button', { name: '预检运行', exact: true }).click()
+  const details = await openCanvasCard(page, 'Y')
+  await details.getByRole('button', { name: '预检运行', exact: true }).click()
   await preview.waitFor()
   await Promise.all([page.waitForResponse(response => response.url().endsWith('/runs') && response.request().method() === 'POST'),
     preview.getByRole('button', { name: '确认执行', exact: true }).click()])
+  await closePrecheck(page)
+  await closeCanvasDetails(page)
   await page.getByRole('button', { name: '运行历史', exact: true }).click()
   const siblingRun = (await request('/runtime', undefined, 'GET')).runs.find(run => run.nodes.some(node => node.card_id === 'Y'))
   await page.locator(`[data-history-run="${siblingRun.id}"] > summary`).click()
@@ -139,7 +146,8 @@ try {
   assert.equal(observed.calls.length, 8, 'only A/B/C/X/Y once after three seeds, no content or reconnect tasks')
   assert.ok(observed.stream_connections >= 2, 'real SSE reconnect')
   await page.screenshot({ path: join(output, 'selection-parallel-reconnected.png'), fullPage: true })
-  await a.getByRole('button', { name: '预检运行', exact: true }).click()
+  await openCanvasCard(page, 'A')
+  await details.getByRole('button', { name: '预检运行', exact: true }).click()
   await preview.waitFor()
   const [publicationResponse] = await Promise.all([
     page.waitForResponse(response => response.url().endsWith('/runs') && response.request().method() === 'POST'),
@@ -147,8 +155,11 @@ try {
   ])
   const publication = (await publicationResponse.json()).data
   await waitRun(publication.run_id)
-  await b.getByText('依据已变，旧正式输出仍保留', { exact: true }).waitFor()
-  await c.getByText('依据已变，旧正式输出仍保留', { exact: true }).waitFor()
+  await preview.waitFor({ state: 'hidden' })
+  await openCanvasCard(page, 'B')
+  await details.getByText('依据已变，旧正式输出仍保留', { exact: true }).waitFor()
+  await openCanvasCard(page, 'C')
+  await details.getByText('依据已变，旧正式输出仍保留', { exact: true }).waitFor()
   assert.equal((await (await fetch(`${api}/test/runtime-controls`)).json()).calls.length, 9,
     'out-of-scope downstream cards become stale without executing')
   await page.screenshot({ path: join(output, 'selection-downstream-stale.png'), fullPage: true })
