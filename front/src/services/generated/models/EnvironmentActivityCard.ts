@@ -21,4 +21,3 @@ export type EnvironmentActivityCard = {
     empty_space?: DesignField;
     reason?: DesignField;
 };
-

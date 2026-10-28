@@ -26,4 +26,3 @@ export type SpatialAnchorCard = {
     spatial_relation?: DesignField;
     scale?: DesignField;
 };
-

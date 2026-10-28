@@ -18,4 +18,3 @@ export type ActivityDesignFields = {
     depth: DesignField;
     intensity: DesignField;
 };
-

@@ -11,4 +11,3 @@ export type EnvironmentDesignFields = {
     empty_space: DesignField;
     reason: DesignField;
 };
-

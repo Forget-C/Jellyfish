@@ -124,7 +124,7 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
         if card.type in ('model.image', 'model.video') and isinstance(item.payload, DesignTextPayload):
             design = item.payload
             # 只在实际采用需要主体的情境／动作设计时阻止视觉生成；文本分析允许不完整设计。
-            if design.design_type in ('direction.situation', 'direction.performance') and not design.participant_id:
+            if design.design_type in ('direction.situation', 'direction.performance', 'direction.blocking', 'direction.activity') and not design.participant_id:
                 binding_id = next(binding.id for binding in card.input_bindings if identity_key(binding.source) == identity_key(item.source))
                 issue('DESIGN_SUBJECT_REQUIRED', '本次视觉生成所用情境或表演须明确参与对象', binding_id,
                       ['input_bindings', binding_id])

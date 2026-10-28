@@ -206,3 +206,5 @@ flowchart TD
 - 2026-10-28：接续合并09（分支 HEAD `228cab72`，显式合并提交 `d20271fb`）。README、共享契约、OpenAPI、浏览器注册及当前架构的冲突已保留双方：10三类完整导演设计、09 `NamedImageMapping` 用途／分组／用途内序号及空值兼容 serializer、实际视频媒体组内顺序均保留。09 Completion 更新为 integrated；01–10共十票完成集成，11／12／15／18可开始。主区设计／命名参考／视频 HTTP 与真实 Worker回归 `64 passed, 2 skipped`（7.32s）、合后标准生成后的Node24.22.1 typecheck、Pylint `10.00/10`（缓存stats权限提示，exit0）及差异检查通过。主区生产导出与8000实际HTTP schema精确一致，核对同时包含09映射字段与10设计契约后标准 `openapi:update` 成功，379处纯尾空行漂移已剔除。真实09／10页面与共享工作台验证复用各票相同实现证据；受控供应商／存储与MySQL跳过限制保留。未推送、未触碰其他工作树或开展后续票据。
 
 - 2026-10-28：无冲突合入10服装参与资格修正（分支 HEAD `9be95e5a`，显式合并提交 `6fc0eac2`）。参与对象允许直接人物／服装／道具，后端资格与前端过滤一致；四项 HTTP 回归先红后绿，本票 `27 passed`，合入前已包含主区 `567b3e04`，合后代码与已验证分支一致。复用组合 HTTP／Worker `68 passed, 2 skipped`、Pylint `10.00/10` 和 Node24.22.1 typecheck；主区合并差异检查通过。09 映射三字段及 serializer 保留；无公开 schema 变化，无需重新生成 OpenAPI。01–10 仍共十票集成，其他票据进度不变；未推送、未操作11／12工作树。
+
+- 2026-10-28：11在 `codex-canvas-types-11` 实现四类完整空间设计、稳定锚点／调度引用、直接关系与固定媒体标记保护；已合入集成 `c8e88301`，Completion为implemented待主区集成，分诊Status不变。全部画布173 passed／28 skipped（MySQL未运行）、Pylint10、Node24 typecheck、真实空间Chrome页面及工作台六例通过。首轮工作台环境失败与独立缓存复验记录、截图及外部服务限制见11票据；未自动开展14或操作主区8000。

@@ -11,4 +11,3 @@ export type SpatialReferencePayload = {
     reference_id: string;
     name: string;
 };
-

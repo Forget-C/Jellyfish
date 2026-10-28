@@ -7,6 +7,8 @@ from app.schemas.generation_canvas import SpatialDirectionCard, SpatialAnchorCar
 from app.services.generation_canvas.performance import STATE_LABELS, PURPOSE_LABELS
 from app.services.generation_canvas.errors import diagnostic
 
+RELATION_LABELS = {'space': '所属空间', 'participant': '参与对象', 'effect_object': '作用对象', 'position_anchor': '位置锚点', 'area_anchor': '区域锚点', 'change_event': '变化事件', 'trigger_event': '触发事件'}
+
 FIELD_LABELS = {'position': '位置', 'orientation': '方位与朝向', 'spatial_relation': '空间关系', 'scale': '尺度依据',
                 'initiative': '主动权', 'path': '路径', 'transition_reason': '状态切换原因', 'task': '持续任务', 'attention': '注意对象说明', 'main_action_effect': '对主戏的作用', 'delay_basis': '反应延迟依据', 'entry_exit': '入出画', 'exit_state': '结束状态', 'depth': '景深层次', 'intensity': '活动强度', 'activity': '环境活动', 'empty_space': '刻意留白', 'reason': '留白理由'}
 
@@ -23,8 +25,12 @@ def publish_spatial(canvas_id, card, adopted_inputs):
             setattr(relations, binding.input_port + '_id', binding.source.object_id)
         elif binding.input_port in ('effect_object', 'position_anchor'):
             getattr(relations, binding.input_port + '_ids').append(binding.source.object_id)
-    lines = [f'对象：{obj.name}（{obj.object_id}，{obj.category}）' for obj in objects]
-    lines.extend(f'锚点：{ref.name}（{ref.reference_id}）' for ref in references)
+    lines = []
+    for binding in card.input_bindings:
+        item = next((item for item in adopted_inputs if item.source == binding.source and item.available), None)
+        if item and isinstance(item.payload, (ObjectReferencePayload, SpatialReferencePayload)):
+            identifier = item.payload.object_id if isinstance(item.payload, ObjectReferencePayload) else item.payload.reference_id
+            lines.append(f'{RELATION_LABELS[binding.input_port]}：{item.payload.name}（{identifier}）')
     lines.extend(f'{PURPOSE_LABELS[field.purpose]} / {FIELD_LABELS[key]} [{STATE_LABELS[field.state]}]：{field.text}' + (f'（来源：{field.source_locator}）' if field.source_locator else '')
                  for key in field_type.model_fields if isinstance((field := getattr(fields, key)), DesignField) and field.state not in ('empty', 'not_applicable') and (field.text or field.state == 'absent'))
     if getattr(card, 'delay_ms', None) is not None:

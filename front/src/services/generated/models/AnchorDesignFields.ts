@@ -12,4 +12,3 @@ export type AnchorDesignFields = {
     spatial_relation: DesignField;
     scale: DesignField;
 };
-

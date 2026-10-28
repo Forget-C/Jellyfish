@@ -79,12 +79,13 @@ try {
   assert.ok(chapter, backendOutput)
   const sequenceId = chapter.sequences[0].id
   const versionsUrl = `${api}/api/v1/studio/projects/canvas-project/directing/sequences/${sequenceId}/versions`
-  server = await createServer({ root, server: { host: '127.0.0.1', port: 4193, strictPort: true, open: false, proxy: { '/api': api } } })
+  server = await createServer({ root, cacheDir: join(output, 'vite-cache'), server: { host: '127.0.0.1', port: 4193, strictPort: true, open: false, proxy: { '/api': api } } })
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
   const context = await browser.newContext({ viewport: { width: 1440, height: 960 } })
   page = await context.newPage()
-  page.on('pageerror', error => errors.push(error.message))
+  page.on('pageerror', error => { errors.push(error.message); console.error('PAGE ERROR', error.message) })
+  page.on('response', response => { if (response.status() >= 400) console.error('HTTP ERROR', response.status(), response.url()) })
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   const url = `http://127.0.0.1:4193/projects/canvas-project/chapters/canvas-chapter/sequences/${sequenceId}`
   await page.goto(url)

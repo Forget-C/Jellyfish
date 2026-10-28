@@ -30,6 +30,8 @@ async def test_text_anchor_and_blocking_keep_identity_and_do_not_read_ancestors(
     assert '从门边走向窗前' in compiled['text'] and '门边' in compiled['text']
     assert '不应穿透' not in compiled['text'] and '东墙' not in compiled['text']
     assert not compiled['media']
+    blocking_output = (await client.get(url + '/cards/blocking/outputs')).json()['data']['outputs'][0]
+    assert blocking_output['payload']['spatial_relations']['position_anchor_ids'] == ['door']
     reopened = (await client.get(url)).json()['data']['document']
     assert reopened['cards'][2]['blocking_id'] == 'cross'
 
@@ -216,3 +218,20 @@ async def test_spatial_media_rejects_invalid_intervals(canvas_client, port, star
     doc['cards'] = [{'id': 'anchor', 'type': 'direction.anchor', 'examples': [{'id': 'media', 'file_id': 'file', 'source': {'canvas_id': canvas['id'], 'card_id': 'source', 'port_id': port, 'position': 0}, 'start_ms': start, 'end_ms': end}]}]
     response = await canvas_client.put(f"/canvases/p/{canvas['id']}", json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
     assert response.status_code == 422 and response.json()['detail']['code'] == 'INVALID_DOCUMENT'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind,field', [('blocking', 'path'), ('activity', 'task')])
+async def test_visual_spatial_action_requires_explicit_participant_but_text_can_analyze(canvas_client, kind, field):
+    canvas = (await canvas_client.post('/canvases/p', json={'name': '主体'})).json()['data']
+    doc = canvas['document']
+    source = {'canvas_id': canvas['id'], 'card_id': 'design', 'port_id': 'text', 'position': 0}
+    doc.update(cards=[{'id': 'design', 'type': 'direction.' + kind, field: {'state': 'proposal', 'text': '走到门口'}},
+        *[{'id': model, 'type': 'model.' + model, 'input_bindings': [{'id': 'design', 'input_port': 'text', 'source': source}]} for model in ('text', 'video')]],
+        edges=[{'id': model, 'source_card': 'design', 'source_port': 'text', 'target_card': model, 'target_port': 'text'} for model in ('text', 'video')],
+        input_order={model: {'text': [model]} for model in ('text', 'video')})
+    url = f"/canvases/p/{canvas['id']}"
+    assert (await canvas_client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': doc})).status_code == 200
+    for model in ('text', 'video'):
+        compiled = (await canvas_client.get(url + f'/cards/{model}/compile')).json()['data']
+        assert ('DESIGN_SUBJECT_REQUIRED' in [row['code'] for row in compiled['diagnostics']]) == (model == 'video')

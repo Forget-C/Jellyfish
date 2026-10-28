@@ -10,4 +10,3 @@ export type AnchorImageMarker = {
     'x': number;
     'y': number;
 };
-

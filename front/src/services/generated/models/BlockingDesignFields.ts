@@ -13,4 +13,3 @@ export type BlockingDesignFields = {
     path: DesignField;
     transition_reason: DesignField;
 };
-

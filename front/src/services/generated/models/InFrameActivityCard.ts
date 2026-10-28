@@ -28,4 +28,3 @@ export type InFrameActivityCard = {
     depth?: DesignField;
     intensity?: DesignField;
 };
-

@@ -25,4 +25,3 @@ export type BlockingDirectionCard = {
     path?: DesignField;
     transition_reason?: DesignField;
 };
-

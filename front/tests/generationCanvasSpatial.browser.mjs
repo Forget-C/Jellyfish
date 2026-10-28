@@ -26,7 +26,7 @@ try {
   }
   assert.ok(ready, 'isolated backend ready')
   writeFileSync(join(output, 'openapi.json'), JSON.stringify(await (await fetch(`${api}/openapi.json`)).json()))
-  server = await createServer({ root, server: { host: '127.0.0.1', port: 4287, strictPort: true, open: false, proxy: { '/api': api } } })
+  server = await createServer({ root, cacheDir: join(output, 'vite-cache'), server: { host: '127.0.0.1', port: 4287, strictPort: true, open: false, proxy: { '/api': api } } })
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
   page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
@@ -35,17 +35,26 @@ try {
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '命名图片参考' }) })).json()).data
 
+  const upload = new FormData()
+  upload.append('project_id', 'canvas-project')
+  upload.append('usage_kind', 'generation_upload')
+  upload.append('file', new Blob([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=', 'base64')], { type: 'image/png' }), 'anchor.png')
+  const uploaded = await fetch(`${api}/api/v1/studio/files/upload`, { method: 'POST', body: upload })
+  assert.ok(uploaded.ok, await uploaded.clone().text())
+  const file = (await uploaded.json()).data
   const document = { ...canvas.document, cards: [
+    { id: 'image', type: 'content.image', file_id: file.id },
     { id: 'place', type: 'content.place', object_id: 'hall', name: '大厅', text: '秘密场所正文' },
     { id: 'anchor', type: 'direction.anchor', anchor_id: 'door', name: '门边' },
     { id: 'blocking', type: 'direction.blocking', blocking_id: 'cross', name: '穿过大厅' },
     { id: 'activity', type: 'direction.activity' }, { id: 'environment', type: 'direction.environment' },
     { id: 'consumer', type: 'model.image', model_id: 'canvas-image-model' }],
     edges: [
+      { id: 'image', source_card: 'image', source_port: 'image', target_card: 'anchor', target_port: 'image_example' },
       { id: 'space', source_card: 'place', source_port: 'object', target_card: 'anchor', target_port: 'space' },
       { id: 'position', source_card: 'anchor', source_port: 'anchor', target_card: 'blocking', target_port: 'position_anchor' },
       { id: 'design', source_card: 'blocking', source_port: 'text', target_card: 'consumer', target_port: 'text' }],
-    input_order: { anchor: { space: ['space'] }, blocking: { position_anchor: ['position'] }, consumer: { text: ['design'] } } }
+    input_order: { anchor: { space: ['space'], image_example: ['image'] }, blocking: { position_anchor: ['position'] }, consumer: { text: ['design'] } } }
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
   assert.ok(seeded.ok, await seeded.text())
   await page.goto(`http://127.0.0.1:4287/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
@@ -57,6 +66,13 @@ try {
   await card.getByRole('button', { name: '选择所属空间 大厅', exact: true }).click()
   await card.getByRole('textbox', { name: '位置内容', exact: true }).fill('东墙门口')
   await poll(state => state.document.cards.find(item => item.id === 'anchor').position?.text === '东墙门口')
+  await card.getByText('参考素材与图片标记', { exact: true }).click()
+  await card.getByRole('button', { name: '关联素材 @图片1', exact: true }).click()
+  await card.getByRole('spinbutton', { name: '标记横坐标', exact: true }).fill('0.25')
+  await card.getByRole('spinbutton', { name: '标记纵坐标', exact: true }).fill('0.75')
+  await poll(state => state.document.cards.find(item => item.id === 'anchor').markers?.[0]?.y === 0.75)
+  await card.getByLabel('锚点图片标记 门边', { exact: true }).waitFor()
+  await page.screenshot({ path: join(output, 'anchor-marker.png'), fullPage: true })
   await open('blocking')
   await card.getByRole('button', { name: '选择位置锚点 门边', exact: true }).click()
   await card.getByRole('textbox', { name: '路径内容', exact: true }).fill('从门边走向窗前')

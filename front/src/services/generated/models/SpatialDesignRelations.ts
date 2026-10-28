@@ -14,4 +14,3 @@ export type SpatialDesignRelations = {
     change_event_id?: (string | null);
     trigger_event_id?: (string | null);
 };
-
