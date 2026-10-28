@@ -220,6 +220,25 @@ class SpatialDesignRelations(BaseModel):
     change_event_id: str | None = None
     trigger_event_id: str | None = None
 
+class SoundDesignFields(BaseModel):
+    """对白正文与声音安排的具体字段；制作安排不代表生成成果。"""
+    model_config = ConfigDict(extra='forbid')
+    content: DesignField | None = None
+    source_description: DesignField | None = None
+    environment: DesignField | None = None
+    action_sound: DesignField | None = None
+    music: DesignField | None = None
+    production: Literal['synchronous', 'postproduction', 'undecided'] | None = None
+
+
+class DialogueBasis(BaseModel):
+    """表演明确采用的对白依据；不携带参考素材或祖先内容。"""
+    model_config = ConfigDict(extra='forbid')
+    dialogue_id: str
+    version: int
+    content: DesignField
+    speaker: ObjectReferencePayload | None = None
+
 
 class NarrativeOverviewFields(BaseModel):
     """本卡强类型完整叙事字段，保留显式状态。"""
@@ -274,14 +293,17 @@ class DesignTextPayload(BaseModel):
     """本卡完整设计及直接采用的必要对象，不包含祖先正文或示例媒体。"""
     model_config = ConfigDict(extra='forbid')
     kind: Literal['design'] = Field(default='design', json_schema_extra={'enum': ['design']})
-    design_type: Literal['direction.situation', 'direction.performance', 'direction.performance_rule', 'direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment', 'direction.narrative', 'direction.beat', 'direction.event', 'direction.shot']
+    design_type: Literal['direction.situation', 'direction.performance', 'direction.performance_rule', 'direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment', 'direction.narrative', 'direction.beat', 'direction.event', 'direction.shot', 'direction.dialogue', 'direction.sound']
     adoption: Literal['whole_card'] = Field(default='whole_card', json_schema_extra={'enum': ['whole_card']})
     text: str
-    fields: NarrativeOverviewFields | NarrativeBeatFields | NarrativeEventFields | ShotDesignFields | PerformanceDesignFields | AnchorDesignFields | BlockingDesignFields | ActivityDesignFields | EnvironmentDesignFields
+    fields: NarrativeOverviewFields | NarrativeBeatFields | NarrativeEventFields | ShotDesignFields | PerformanceDesignFields | AnchorDesignFields | BlockingDesignFields | ActivityDesignFields | EnvironmentDesignFields | SoundDesignFields
     scope: DesignScope
     objects: list[ObjectReferencePayload] = Field(default_factory=list)
     spatial_relations: SpatialDesignRelations | None = Field(default=None, exclude_if=lambda value: value is None)
     references: list[SpatialReferencePayload | NarrativeReferencePayload] = Field(default_factory=list, exclude_if=lambda value: not value)
     narrative_relations: list[NarrativeDesignRelation] = Field(default_factory=list, exclude_if=lambda value: not value)
     participant_id: str | None = None
+    dialogue_id: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    version: int | None = Field(default=None, exclude_if=lambda value: value is None)
     source_locator: str = ''
+    dialogue_basis: list[DialogueBasis] = Field(default_factory=list, exclude_if=lambda value: not value)

@@ -1,7 +1,7 @@
 import { Alert, Input, InputNumber, Select, Space } from 'antd'
 import type { SpatialAnchorCard, BlockingDirectionCard, InFrameActivityCard, EnvironmentActivityCard, ObjectReferencePayload, SpatialReferencePayload, NarrativeReferencePayload } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
-import { FieldEditor } from './PerformanceDirectionEditor'
+import { DesignFieldEditor as FieldEditor } from './DesignFieldEditor'
 import { useCardCandidates } from './useCardCandidates'
 import { sourceKey } from './promptRules'
 import { inputPorts, portLabels } from './graphRules'

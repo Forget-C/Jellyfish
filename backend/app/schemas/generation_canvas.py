@@ -289,7 +289,7 @@ class NamedImageReferenceCard(CardDefinition):
 
 
 class DesignMediaExample(BaseModel):
-    """示例只关联直接媒体，正反用途和视频有效区间不成为生成输入。"""
+    """示例只关联直接媒体，正反用途及视频／音频有效区间不成为生成输入。"""
     model_config = ConfigDict(extra='forbid')
     id: str = Field(min_length=1)
     source: OutputIdentity
@@ -301,11 +301,11 @@ class DesignMediaExample(BaseModel):
 
     @model_validator(mode='after')
     def validate_interval(self):
-        """图片无时间区间，视频起止必须完整且递增。"""
+        """图片无时间区间，视频与音频起止必须完整且递增。"""
         if (self.start_ms is None) != (self.end_ms is None):
             raise ValueError('有效区间须同时填写起点和终点')
-        if self.end_ms is not None and (self.source.port_id != 'video' or self.end_ms <= self.start_ms):
-            raise ValueError('仅视频可以使用递增有效区间')
+        if self.end_ms is not None and (self.source.port_id not in ('video', 'audio') or self.end_ms <= self.start_ms):
+            raise ValueError('仅视频或音频可以使用递增有效区间')
         return self
 
 
@@ -426,6 +426,35 @@ class EnvironmentActivityCard(SpatialDirectionCard):
     reason: DesignField = Field(default_factory=DesignField)
     input_ports: ClassVar[tuple[str, ...]] = ('image_example', 'video_example')
 
+class SoundDirectionCard(CardDefinition):
+    """声音设计仅关联直接对象与固定素材，不新增模型音频输入。"""
+    scope: DesignScope = Field(default_factory=DesignScope)
+    source_locator: str = ''
+    input_bindings: list[InputBinding] = Field(default_factory=list)
+    examples: list[DesignMediaExample] = Field(default_factory=list)
+    output_ports: ClassVar[tuple[str, ...]] = ('text',)
+
+
+class DialogueCard(SoundDirectionCard):
+    """一条稳定对白，正文修订由创作者显式记录版本。"""
+    type: Literal['direction.dialogue'] = Field(default='direction.dialogue', json_schema_extra={'enum': ['direction.dialogue']})
+    dialogue_id: str = Field(min_length=1, max_length=64)
+    version: int = Field(default=1, ge=1)
+    content: DesignField = Field(default_factory=DesignField)
+    input_ports: ClassVar[tuple[str, ...]] = ('speaker', 'video_example', 'audio_example')
+    output_ports: ClassVar[tuple[str, ...]] = ('text', 'dialogue')
+
+
+class SoundArrangementCard(SoundDirectionCard):
+    """声源、环境声、动作声和音乐约束保持各自用途及制作安排。"""
+    type: Literal['direction.sound'] = Field(default='direction.sound', json_schema_extra={'enum': ['direction.sound']})
+    source_description: DesignField = Field(default_factory=DesignField)
+    environment: DesignField = Field(default_factory=DesignField)
+    action_sound: DesignField = Field(default_factory=DesignField)
+    music: DesignField = Field(default_factory=lambda: DesignField(purpose='constraint'))
+    production: Literal['synchronous', 'postproduction', 'undecided'] = 'undecided'
+    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'audio_example')
+
 
 class NarrativeDirectionCard(PerformanceDirectionCard):
     """独立叙事设计，不要求完整场次计划。"""
@@ -482,7 +511,7 @@ class CanvasDocument(BaseModel):
     project_id: str
     name: str = Field(min_length=1, max_length=255)
     schema_version: Literal[2] = 2
-    cards: list[NarrativeOverviewCard | NarrativeBeatCard | NarrativeEventCard | ShotDesignCard | SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | ObjectDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard] = Field(default_factory=list)
+    cards: list[DialogueCard | SoundArrangementCard | NarrativeOverviewCard | NarrativeBeatCard | NarrativeEventCard | ShotDesignCard | SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | ObjectDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard] = Field(default_factory=list)
     edges: list[GenerationCanvasEdge] = Field(default_factory=list)
     input_order: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
     groups: list[GenerationCanvasGroup] = Field(default_factory=list)

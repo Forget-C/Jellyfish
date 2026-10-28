@@ -2,7 +2,7 @@
 from app.schemas.generation_canvas import CanvasDocument
 from app.services.generation_canvas.errors import diagnostic
 
-PORT_MODALITIES = {'shot': 'shot', 'event': 'event', 'covered_beat': 'beat', 'related_event': 'event', 'blocking_basis': 'blocking', 'space': 'object_reference', 'anchor': 'anchor', 'position_anchor': 'anchor', 'area_anchor': 'anchor', 'blocking': 'blocking', 'change_event': 'event', 'trigger_event': 'event', 'participant': 'object_reference', 'effect_object': 'object_reference', 'beat': 'beat', 'received_event': 'event', 'dialogue_basis': 'dialogue', 'acceptance_basis': 'criterion', 'image_example': 'image', 'video_example': 'video', 'name': 'object_reference', 'image_source': 'image', 'object': 'object_reference', 'text': 'text', 'image': 'image', 'video': 'video', 'audio': 'audio',
+PORT_MODALITIES = {'speaker': 'object_reference', 'audio_example': 'audio', 'dialogue': 'dialogue', 'shot': 'shot', 'event': 'event', 'covered_beat': 'beat', 'related_event': 'event', 'blocking_basis': 'blocking', 'space': 'object_reference', 'anchor': 'anchor', 'position_anchor': 'anchor', 'area_anchor': 'anchor', 'blocking': 'blocking', 'change_event': 'event', 'trigger_event': 'event', 'participant': 'object_reference', 'effect_object': 'object_reference', 'beat': 'beat', 'received_event': 'event', 'dialogue_basis': 'dialogue', 'acceptance_basis': 'criterion', 'image_example': 'image', 'video_example': 'video', 'name': 'object_reference', 'image_source': 'image', 'object': 'object_reference', 'text': 'text', 'image': 'image', 'video': 'video', 'audio': 'audio',
                    'first_frame': 'image', 'last_frame': 'image', 'key_frame': 'image',
                    'subject_image': 'image', 'subject_video': 'video'}
 

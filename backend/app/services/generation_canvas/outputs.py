@@ -1,7 +1,7 @@
 """单卡输出行为：处理器没有整张画布或数据库读取能力。"""
 from typing import Protocol
 from app.schemas.generation_canvas import (
-    SpatialDirectionCard, PerformanceDirectionCard, CardDefinition, CanvasResolvedOutput, CreativeBasisCard, MediaContentCard,
+    SoundDirectionCard, SpatialDirectionCard, PerformanceDirectionCard, CardDefinition, CanvasResolvedOutput, CreativeBasisCard, MediaContentCard,
     NamedImageReferenceCard, NamedImagePayload, NamedImageObject, ObjectDescriptionCard, ObjectReferencePayload, DescriptionTextPayload, ModelCard, OutputIdentity, TextContentCard, TextOutputPayload, MediaOutputPayload,
 )
 
@@ -25,6 +25,9 @@ class ContentOutputHandler:
         if isinstance(card, SpatialDirectionCard):
             from app.services.generation_canvas.spatial import publish_spatial
             return publish_spatial(canvas_id, card, adopted_inputs)
+        if isinstance(card, SoundDirectionCard):
+            from app.services.generation_canvas.sound import publish_sound
+            return publish_sound(canvas_id, card, adopted_inputs)
         if isinstance(card, PerformanceDirectionCard):
             from app.services.generation_canvas.performance import publish_design
             return publish_design(canvas_id, card, adopted_inputs)
