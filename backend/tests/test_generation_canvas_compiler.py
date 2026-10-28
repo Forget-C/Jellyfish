@@ -18,7 +18,7 @@ def test_text_expands_only_at_stable_reference_and_never_recursively():
     assert [item.source.card_id for item in result.used] == ['source']
 
 
-def test_reorder_preserves_identity_and_same_file_is_two_inputs_with_missing_placeholder():
+def test_binding_order_preserves_identity_and_same_file_is_two_inputs_with_missing_placeholder():
     document = CanvasDocument.model_validate({'id': 'canvas', 'project_id': 'p', 'name': 'Test', 'cards': [
         {'id': 'a', 'type': 'content.image', 'file_id': 'same'}, {'id': 'b', 'type': 'content.image', 'file_id': 'same'},
         {'id': 'target', 'type': 'model.image', 'prompt': {'segments': [
@@ -27,8 +27,8 @@ def test_reorder_preserves_identity_and_same_file_is_two_inputs_with_missing_pla
         'edges': [{'id': source, 'source_card': source, 'source_port': 'image', 'target_card': 'target', 'target_port': 'image'} for source in ['a', 'b']],
         'input_order': {'target': {'image': ['b', 'a']}}})
     result = compile_card(document, 'target')
-    assert result.text == '[media:2][media:2][media:1]'
-    assert [item.source.card_id for item in result.media] == ['b', 'a']
+    assert result.text == '[media:1][media:1][media:2]'
+    assert [item.source.card_id for item in result.media] == ['a', 'b']
     document.cards[0].file_id = None
     missing = compile_card(document, 'target')
     assert [(item.code, item.target['segment_id']) for item in missing.diagnostics] == [('OUTPUT_MISSING', 'one'), ('OUTPUT_MISSING', 'again')]
