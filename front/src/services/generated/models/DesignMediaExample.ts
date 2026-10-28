@@ -4,7 +4,7 @@
 /* eslint-disable */
 import type { OutputIdentity } from './OutputIdentity';
 /**
- * 示例只关联直接媒体，正反用途和视频有效区间不成为生成输入。
+ * 示例只关联直接媒体，正反用途及视频／音频有效区间不成为生成输入。
  */
 export type DesignMediaExample = {
     id: string;

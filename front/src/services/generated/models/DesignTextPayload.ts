@@ -6,9 +6,11 @@ import type { ActivityDesignFields } from './ActivityDesignFields';
 import type { AnchorDesignFields } from './AnchorDesignFields';
 import type { BlockingDesignFields } from './BlockingDesignFields';
 import type { DesignScope } from './DesignScope';
+import type { DialogueBasis } from './DialogueBasis';
 import type { EnvironmentDesignFields } from './EnvironmentDesignFields';
 import type { ObjectReferencePayload } from './ObjectReferencePayload';
 import type { PerformanceDesignFields } from './PerformanceDesignFields';
+import type { SoundDesignFields } from './SoundDesignFields';
 import type { SpatialDesignRelations } from './SpatialDesignRelations';
 import type { SpatialReferencePayload } from './SpatialReferencePayload';
 /**
@@ -16,14 +18,17 @@ import type { SpatialReferencePayload } from './SpatialReferencePayload';
  */
 export type DesignTextPayload = {
     kind?: 'design';
-    design_type: 'direction.situation' | 'direction.performance' | 'direction.performance_rule' | 'direction.anchor' | 'direction.blocking' | 'direction.activity' | 'direction.environment';
+    design_type: 'direction.situation' | 'direction.performance' | 'direction.performance_rule' | 'direction.anchor' | 'direction.blocking' | 'direction.activity' | 'direction.environment' | 'direction.dialogue' | 'direction.sound';
     adoption?: 'whole_card';
     text: string;
-    fields: (PerformanceDesignFields | AnchorDesignFields | BlockingDesignFields | ActivityDesignFields | EnvironmentDesignFields);
+    fields: (PerformanceDesignFields | AnchorDesignFields | BlockingDesignFields | ActivityDesignFields | EnvironmentDesignFields | SoundDesignFields);
     scope: DesignScope;
     objects?: Array<ObjectReferencePayload>;
     spatial_relations?: (SpatialDesignRelations | null);
     references?: Array<SpatialReferencePayload>;
     participant_id?: (string | null);
+    dialogue_id?: (string | null);
+    version?: (number | null);
     source_locator?: string;
+    dialogue_basis?: Array<DialogueBasis>;
 };
