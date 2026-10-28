@@ -18,7 +18,7 @@
 
 
 
-**Completion:** implemented
+**Completion:** integrated
 
 ## Comments
 
@@ -30,3 +30,5 @@
 - 验证：`PYTHONPATH=. UV_CACHE_DIR=/tmp/jellyfish-uv-cache uv run --no-sync pytest tests/test_generation_canvas*.py -q` 为 **126 passed, 28 skipped**（18.24s）；`uv run --no-sync pylint app` 为 **10.00/10**（exit 0，仅缓存 stats 写入提示）；Node 24.22.1 `pnpm --dir front run typecheck` 通过。`PLAYWRIGHT_CHANNEL=chrome pnpm --dir front run test:workbench-ui` 六项及 preflight 全通过，证据 `front/test-results/browser-uAixjh`。截图已检查桌面和390px布局。
 - 已核实 `app.__file__` 指向本工作树；隔离8283生产 `app.main:app`（仅关闭 lifespan，无测试路由）导出 OpenAPI 后生成 client，新增仅 `NamedImageMapping` 的可选用途／分组／用途内序号。空新增字段由 serializer 省略，保持已有图片映射序列化；普通文本和媒体输出协议未改动。370处生成器纯尾空行漂移已剔除。主区8000没有作为本工作树新契约的生成来源，标准8000更新留待集成。
 - 限制：28项 MySQL 专用场景未运行，数据库验证使用 SQLite；供应商响应和外部存储为受控替身，不代表真实供应商质量或真实对象存储集成。未启动其他票据，未推送。
+
+- 2026-10-28主区集成：显式合并提交 `d20271fb`，保留已集成10设计契约及本票三项映射字段／空值兼容序列化、真实组内顺序。设计／命名参考／视频 HTTP与真实Worker回归 `64 passed, 2 skipped`（7.32s），Pylint `10.00/10`（缓存stats权限提示，exit0）、Node24.22.1 typecheck通过。8000实际HTTP与当前主区生产导出精确一致，同时包含09／10新契约；标准 `openapi:update` 成功，379处纯尾空行漂移经逐文件核对后剔除。真实页面及共享工作台复用本票证据与既有限制；未推送。
