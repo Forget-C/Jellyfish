@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent } from 'react'
-import { Alert, Button, Input, Select, Space } from 'antd'
+import { Alert, ConfigProvider, Input, Select, Space } from 'antd'
 import { StudioGenerationCanvasesService as Canvases, LlmService } from '../../../services/generated'
 import type { CanvasDocument, CanvasModelCapability, CanvasNodeRead, CanvasResolvedOutput, ModelRead } from '../../../services/generated'
 import { CanvasDragHandle, CanvasEdge, useCanvasViewport } from '../../../components/canvas/Canvas'
@@ -11,18 +11,24 @@ import { CardShell } from './CardShell'
 import { rendererRegistry } from './rendererRegistry'
 import { cardTitles, connect, connectionReason, disconnect, inputPorts, outputPorts, portLabels } from './graphRules'
 import type { GenerationCard, GenerationEdge } from './graphRules'
+import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
+import { WorkbenchDetails } from '../directing/ui/WorkbenchDetails'
 import './generationCanvas.css'
 
 const emptyCards: NonNullable<CanvasDocument['cards']> = []
 const emptyGroups: NonNullable<CanvasDocument['groups']> = []
 
 const arrange: GraphArrange = (nodes, _sizes, _width, _anchor, retained = {}) => Object.fromEntries(nodes.map((node, index) =>
-  [node.id, retained[node.id] || { x: index % 3 * 440, y: Math.floor(index / 3) * 560 }]))
+  [node.id, retained[node.id] || { x: 200 + index % 3 * 440, y: Math.floor(index / 3) * 560 }]))
 
 /** 独立画布编辑适配：候选关系与文档持久化，几何沿用公共布局缓存。 */
-export function GenerationCanvasGraph({ document, onChange, readonly = false, runtime }: { document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string, kind?: 'single' | 'target' | 'selection', cardIds?: string[]) => void } }) {
+export function GenerationCanvasGraph({ document, onChange, readonly = false, runtime, inspectTarget, editingStatus }: { document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; inspectTarget?: { cardId: string; serial: number }; editingStatus?: string; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string, kind?: 'single' | 'target' | 'selection', cardIds?: string[]) => void } }) {
   const cards = document.cards || emptyCards, edges = document.edges || [], groups = document.groups || emptyGroups
   const [selected, setSelected] = useState<string[]>([])
+  const [detailId, setDetailId] = useState<string | undefined>(cards[0]?.id)
+  const [detailTrigger, setDetailTrigger] = useState<HTMLElement>()
+  const [minimapOpen, setMinimapOpen] = useState(false)
+  const [toolboxOpen, setToolboxOpen] = useState(true)
   const [reason, setReason] = useState('')
   const [selecting, setSelecting] = useState(false)
   const [selectionBox, setSelectionBox] = useState<{ x: number; y: number; width: number; height: number }>()
@@ -33,6 +39,9 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false, ru
   const [capabilityErrors, setCapabilityErrors] = useState<Record<string, string>>({})
   const [measured, setMeasured] = useState<Record<string, GraphSize>>({})
   const [drag, setDrag] = useState<{ card: string; port: string; x: number; y: number }>()
+  useEffect(() => {
+    if (inspectTarget) setDetailId(inspectTarget.cardId)
+  }, [inspectTarget?.cardId, inspectTarget?.serial])
   const latest = useRef(document); latest.current = document
   const container = useRef<HTMLDivElement>(null)
   const hidden = useMemo(() => new Set(groups.filter(group => group.collapsed).flatMap(group => group.card_ids || [])), [groups])
@@ -42,7 +51,7 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false, ru
   const layoutMeasurements = useMemo(() => ({ ...Object.fromEntries([...hidden].map(id => [id, { width: 400, height: 350 }])), ...measured }), [measured, hidden])
   const nodes = useMemo(() => cards.map(card => ({ id: card.id })), [cards])
   const layout = useGraphLayout({ storageKey: `jellyfish:generation-layout:${document.project_id}:${document.id}`, viewId: 'canvas',
-    initialTop: 104, anchorId: cards[0]?.id || '', validIds: [...cards.map(card => card.id), ...groups.map(group => group.id)], arrange,
+    initialTop: 104, initialLeft: window.innerWidth > 700 ? 200 : 16, anchorId: cards[0]?.id || '', validIds: [...cards.map(card => card.id), ...groups.map(group => group.id)], arrange,
     onStorageError: setStorageError }, nodes, layoutMeasurements, container.current?.clientWidth || 1200)
   const transform = layout.view.transform
   const viewport = useCanvasViewport(document.id, transform, update => layout.setView(previous => ({ ...previous,
@@ -81,7 +90,7 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false, ru
   const edit = (next: CanvasDocument) => { if (!readonly) onChange(next) }
   const updateCard = (next: GenerationCard) => edit({ ...latest.current, cards: latest.current.cards?.map(card => card.id === next.id ? next : card) })
   const showProtection = (protection: NonNullable<ReturnType<typeof referenceProtection>>) => {
-    setReason(protection.message)
+    setReason(protection.message); setDetailId(protection.cardId)
     const card = window.document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(protection.cardId)}"]`)
     const segment = card?.querySelector<HTMLElement>(`[data-segment-id="${CSS.escape(protection.segmentId)}"]`)
     if (segment) { segment.tabIndex = -1; segment.focus(); segment.scrollIntoView({ block: 'nearest', inline: 'nearest' }) }
@@ -101,6 +110,7 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false, ru
       : type.startsWith('model.') ? { id: crypto.randomUUID(), type, type_version: 1, model_id: null, prompt: { segments: [] }, config: {} }
       : { id: crypto.randomUUID(), type, type_version: 1, file_id: null, uploading: false }
     edit({ ...latest.current, cards: [...(latest.current.cards || []), card] })
+    setDetailId(card.id)
   }
   const capability = (card: GenerationCard) => 'model_id' in card && card.model_id ? capabilities[card.model_id] : undefined
   const check = (edge: GenerationEdge) => {
@@ -184,17 +194,42 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false, ru
     setSelected(ids); selectionStart.current = undefined; setSelectionBox(undefined)
   }
   const point = (id: string) => layout.view.positions[id] || { x: 0, y: 0 }
+  const width = viewport.surface.current?.clientWidth || 1200, height = viewport.surface.current?.clientHeight || 800
+  const visibleWorld = { x: -transform.x / transform.scale, y: -transform.y / transform.scale, width: width / transform.scale, height: height / transform.scale }
+  const mapLeft = Math.min(0, visibleWorld.x, ...cards.map(card => point(card.id).x))
+  const mapTop = Math.min(0, visibleWorld.y, ...cards.map(card => point(card.id).y))
+  const mapWidth = Math.max(visibleWorld.x + visibleWorld.width, ...cards.map(card => point(card.id).x + (layout.view.sizes[card.id]?.width || 400))) - mapLeft
+  const mapHeight = Math.max(visibleWorld.y + visibleWorld.height, ...cards.map(card => point(card.id).y + (layout.view.sizes[card.id]?.height || 160))) - mapTop
+  const panMap = (event: PointerEvent<SVGSVGElement>) => {
+    const box = event.currentTarget.getBoundingClientRect()
+    const x = mapLeft + (event.clientX - box.left) / box.width * mapWidth
+    const y = mapTop + (event.clientY - box.top) / box.height * mapHeight
+    layout.setView(previous => ({ ...previous, transform: { ...previous.transform, x: width / 2 - x * previous.transform.scale, y: height / 2 - y * previous.transform.scale } }))
+  }
+  const detailCard = cards.find(card => card.id === detailId)
+  const DetailRenderer = detailCard && rendererRegistry[detailCard.type || 'content.text']
   return <div className="generation-graph" ref={container}>
+    <nav hidden={!toolboxOpen} className="generation-toolbox" aria-label="添加卡片">
+      {(['基础内容', '模型生成'] as const).map(group => <section key={group}><h2>{group}</h2>
+        {Object.entries(cardTitles).filter(([type]) => group === '模型生成' ? type.startsWith('model.') : !type.startsWith('model.')).map(([type, title]) => <Button key={type} disabled={readonly} onClick={() => add(type)}>添加{title.replace('内容', '')}</Button>)}
+      </section>)}
+      <section><h2>导演工具箱</h2><small>暂无可用工具</small></section>
+    </nav>
     <Space wrap className="generation-toolbar">
-      {Object.entries(cardTitles).map(([type, title]) => <Button key={type} disabled={readonly} onClick={() => add(type)}>添加{title.replace('内容', '')}</Button>)}
+      <Button aria-label={toolboxOpen ? '收起工具箱' : '展开工具箱'} aria-expanded={toolboxOpen} onClick={() => setToolboxOpen(value => !value)}>{toolboxOpen ? '收起工具箱' : '展开工具箱'}</Button>
+      <Button aria-label={minimapOpen ? '收起小地图' : '展开小地图'} aria-expanded={minimapOpen} onClick={() => setMinimapOpen(value => !value)}>{minimapOpen ? '收起小地图' : '展开小地图'}</Button>
+
       <Button disabled={readonly || !selected.length} onClick={() => {
         const members = selected.filter(id => !groups.some(group => group.card_ids?.includes(id)))
         if (!members.length) { setReason('所选卡片已经属于分组'); return }
         edit({ ...document, groups: [...groups, { id: crypto.randomUUID(), name: '新分组', card_ids: members, collapsed: false }] }); setSelected([])
       }}>将所选卡片分组</Button>
-      <Button aria-label="框选" type={selecting ? 'primary' : 'default'} aria-pressed={selecting} onClick={() => setSelecting(value => !value)}>框选</Button>
+      <Button aria-label="框选" variant={selecting ? 'primary' : 'secondary'} aria-pressed={selecting} onClick={() => setSelecting(value => !value)}>框选</Button>
       <Button aria-label={`运行所选模型（${selectedModels.length}）`} disabled={readonly || !selectedModels.length || !runtime || runtime.disabled || selectedModels.some(card => runtime.busyCards.has(card.id))}
         onClick={() => runtime?.precheck(selectedModels[0].id, 'selection', selected)}>运行所选模型（{selectedModels.length}）</Button>
+      <Button onClick={() => viewport.fit()}>适应画布</Button>
+      <Button disabled={!selected.length} onClick={() => { const id = selected[0], p = point(id); layout.setView(previous => ({ ...previous, transform: { ...previous.transform, x: (container.current?.clientWidth || 1200) / 2 - p.x * previous.transform.scale, y: (container.current?.clientHeight || 800) / 2 - p.y * previous.transform.scale } })) }}>定位所选</Button>
+      <Button onClick={() => layout.rearrange()}>整理布局</Button><Button disabled={!layout.canUndo} onClick={layout.undo}>撤销布局整理</Button>
       <Button aria-label="放大" onClick={() => viewport.zoom(.1)}>放大</Button><Button aria-label="缩小" onClick={() => viewport.zoom(-.1)}>缩小</Button>
     </Space>
     {storageError && <Alert type="warning" message={`布局本地保存失败：${storageError}`} />}
@@ -251,21 +286,32 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false, ru
           </section>
         })}
         {cards.filter(card => !hidden.has(card.id)).map(card => {
-          const Renderer = rendererRegistry[card.type || 'content.text']
           const size = layout.view.sizes[card.id]
           return <CardShell key={`${document.id}:${card.id}`} id={card.id} title={cardTitles[card.type || 'content.text']} contextKey={document.id} point={point(card.id)}
             scale={transform.scale} width={size?.width || 400} height={size?.height} selected={selected.includes(card.id)} readonly={readonly} removeDisabled={runtime?.busyCards.has(card.id)}
-            onSelect={checked => setSelected(previous => checked ? [...previous, card.id] : previous.filter(id => id !== card.id))}
+            onOpen={trigger => { setDetailTrigger(trigger); setDetailId(card.id) }} onSelect={checked => setSelected(previous => checked ? [...previous, card.id] : previous.filter(id => id !== card.id))}
             onMove={position => layout.move(card.id, position)} onResize={(width, height) => {
               if (Math.abs(width - (size?.width || 400)) > 2 || Math.abs(height - (size?.height || measured[card.id]?.height || height)) > 2)
                 layout.setView(previous => ({ ...previous, sizes: { ...previous.sizes, [card.id]: { width, height } } }))
             }} onRemove={() => removeCard(card.id)} inputs={inputPorts(card).map(name => port(card, name, true))} outputs={outputPorts(card).map(name => port(card, name, false))}>
-            {Renderer ? <Renderer card={card} document={document} projectId={document.project_id} onChange={updateCard} models={models} capability={capability(card)}
-              capabilityError={'model_id' in card && card.model_id ? capabilityErrors[card.model_id] : undefined} references={references(card)} disabled={readonly} modelOutputs={runtime?.outputs} node={runtime?.nodes[card.id]} busy={runtime?.busyCards.has(card.id)} checking={runtime?.checking === card.id} runDisabled={runtime?.disabled} onPrecheck={() => runtime?.precheck(card.id)} onTargetPrecheck={() => runtime?.precheck(card.id, 'target')} /> : <Alert type="error" message="卡片编辑器尚未接入" />}
+            <p className="canvas-card-summary">{'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '模型配置、输入采用与运行记录' : 'file_id' in card && card.file_id ? '已选择媒体，打开详情预览' : '未选择媒体'}</p>
           </CardShell>
         })}
       </div>
       {drag && <div className="generation-drag-hint" style={{ left: drag.x - (viewport.surface.current?.getBoundingClientRect().left || 0) + 12, top: drag.y - (viewport.surface.current?.getBoundingClientRect().top || 0) }}>正在连接{portLabels[drag.port]}</div>}
     </div>
+    {minimapOpen && <svg className="generation-minimap" role="img" tabIndex={0} aria-label="小地图导航" viewBox={`${mapLeft} ${mapTop} ${mapWidth} ${mapHeight}`} preserveAspectRatio="none"
+      onPointerDown={event => { event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); panMap(event) }}
+      onPointerMove={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) panMap(event) }}
+      onPointerUp={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId) }}
+      onKeyDown={event => { if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) { event.preventDefault(); layout.setView(previous => ({ ...previous, transform: { ...previous.transform, x: previous.transform.x + (event.key === 'ArrowLeft' ? 40 : event.key === 'ArrowRight' ? -40 : 0), y: previous.transform.y + (event.key === 'ArrowUp' ? 40 : event.key === 'ArrowDown' ? -40 : 0) } })) } }}>
+      <title>小地图导航；方向键平移画布</title>
+      {cards.filter(card => !hidden.has(card.id)).map(card => <rect key={card.id} x={point(card.id).x} y={point(card.id).y} width={layout.view.sizes[card.id]?.width || 400} height={layout.view.sizes[card.id]?.height || 160} />)}
+      <rect className="generation-minimap-viewport" x={visibleWorld.x} y={visibleWorld.y} width={visibleWorld.width} height={visibleWorld.height} />
+    </svg>}
+    <WorkbenchDetails title={detailCard ? cardTitles[detailCard.type || 'content.text'] || '卡片详情' : '卡片详情'} status={readonly ? '只读' : editingStatus} open={!!detailCard} onClose={() => setDetailId(undefined)} trigger={detailTrigger}>
+      {detailCard && DetailRenderer && <ConfigProvider componentDisabled={readonly}><fieldset disabled={readonly} className="generation-card-body"><DetailRenderer key={detailCard.id} card={detailCard} document={document} projectId={document.project_id} onChange={updateCard} models={models} capability={capability(detailCard)}
+        capabilityError={'model_id' in detailCard && detailCard.model_id ? capabilityErrors[detailCard.model_id] : undefined} references={references(detailCard)} disabled={readonly} modelOutputs={runtime?.outputs} node={runtime?.nodes[detailCard.id]} busy={runtime?.busyCards.has(detailCard.id)} checking={runtime?.checking === detailCard.id} runDisabled={runtime?.disabled} onPrecheck={() => runtime?.precheck(detailCard.id)} onTargetPrecheck={() => runtime?.precheck(detailCard.id, 'target')} /></fieldset></ConfigProvider>}
+    </WorkbenchDetails>
   </div>
 }

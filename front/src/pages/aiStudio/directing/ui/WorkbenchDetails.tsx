@@ -48,7 +48,7 @@ export function WorkbenchDetails({ title, status, open, onClose, trigger, childr
     if (!trigger) opener.current = document.activeElement as HTMLElement
     const node = panel.current
     const workbench = document.querySelector<HTMLElement>('.canvas-workbench')
-    const toolbar = workbench?.querySelector<HTMLElement>('.canvas-workbench-toolbar')
+    const toolbar = workbench?.querySelector<HTMLElement>('.canvas-workbench-toolbar, .workbench-toolbar')
     const position = () => { if (!modal && node && toolbar) node.style.top = `${Math.max(88, toolbar.getBoundingClientRect().bottom + 8)}px` }
     const toolbarObserver = new ResizeObserver(position)
     if (toolbar && !modal) { toolbarObserver.observe(toolbar); position() }

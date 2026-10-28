@@ -9,7 +9,7 @@ import {
 } from '@ant-design/icons'
 import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { TAB_CONFIG, type TabKey, isTabKey, DEFAULT_TAB } from './constants'
-import { GenerationCanvasPage } from '../../generationCanvas/GenerationCanvasPage'
+import { generationCanvasLocation } from '../../generationCanvas/navigation'
 import { DashboardTab } from './tabs/DashboardTab'
 import { ChaptersTab } from './tabs/ChaptersTab'
 import { ActorsTab } from './tabs/ActorsTab'
@@ -82,6 +82,7 @@ const ProjectWorkbench: React.FC = () => {
   }, [tabFromUrl, setSearchParams])
 
   const setTabInUrl = (tab: TabKey) => {
+    if (tab === 'generation' && projectId) { navigate(generationCanvasLocation(projectId)); return }
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev)
@@ -157,7 +158,6 @@ const ProjectWorkbench: React.FC = () => {
         className="app-page-content animate-fadeIn"
         style={{ animation: 'fadeIn 0.25s ease-out' }}
       >
-        {activeTab === 'generation' && projectId && <GenerationCanvasPage projectId={projectId} />}
         {activeTab === 'dashboard' && <DashboardTab onSelectTab={setTabInUrl} />}
 
         {activeTab === 'chapters' && <ChaptersTab />}

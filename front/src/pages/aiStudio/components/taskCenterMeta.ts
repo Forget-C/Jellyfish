@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, type NavigateFunction } from 'react-router-dom'
 import { StudioChaptersService, type TaskSourceRead } from '../../../services/generated'
+import { generationCanvasLocation } from '../generationCanvas/navigation'
 import { StudioEntitiesApi } from '../../../services/studioEntities'
 import type { TaskUiItem } from './taskUiStore'
 
@@ -38,10 +39,10 @@ function sourceMeta(source: TaskSourceRead | null | undefined, task: TaskUiItem)
   else if (kind === 'project') navigateTo = `/projects/${id}`
   else if (kind === 'character' && projectId) navigateTo = `/projects/${projectId}/roles/${id}/edit`
   else if (kind === 'generation_canvas' && projectId && source.canvas_id) {
-    const query = new URLSearchParams({ tab: 'generation', canvas: source.canvas_id })
+    const query = new URLSearchParams({ canvas: source.canvas_id })
     if (source.run_id) query.set('run', source.run_id)
     if (source.node_id) query.set('node', source.node_id)
-    navigateTo = `/projects/${projectId}?${query}`
+    navigateTo = generationCanvasLocation(projectId, query)
   }
   else if (kind === 'experiment_session') navigateTo = `/lab?session=${encodeURIComponent(id)}`
   else navigateTo = ASSET_EDIT_PATH_BUILDERS[`${kind}_image`]?.(id) ?? null
