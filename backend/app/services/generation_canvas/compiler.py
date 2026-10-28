@@ -117,9 +117,8 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
             if re.search(r'(?<!\\)@(?:文本|图片|视频|音频)\d*', segment.text):
                 issue('UNCONFIRMED_REFERENCE', '代号尚未确认或不存在，请选择实际输出', segment.id)
         elif isinstance(segment, PromptReference):
-            port = segment.source.port_id
-            if card.type == 'model.video' and port in ('image', 'video'):
-                port = 'subject_' + port
+            binding = next((binding for binding in card.input_bindings if binding.id == segment.binding_id), None)
+            port = binding.input_port if binding else segment.source.port_id
             if capability and port not in capability.input_ports:
                 issue('UNSUPPORTED_INPUT', '当前模型不支持实际使用的输入', segment.id)
             item = by_source.get(identity_key(segment.source))
@@ -128,7 +127,7 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
                     result.text += item.text
                 elif card.type == 'model.video':
                     names = subjects.get(identity_key(item.source), [])
-                    result.text += '@' + names[0]
+                    result.text += '@' + names[0] if port in ('subject_image', 'subject_video') else f'[media:{result.media.index(item) + 1}]'
                 else:
                     position = result.media.index(item) + 1
                     result.text += f'image {position}' if capability and capability.modality == 'image' else f'[media:{position}]'
@@ -141,7 +140,9 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
                 issue('INSTRUCTION_REFERENCE_REQUIRED', '指令缺少实际引用', segment.id)
             if segment.command in ('首帧参考', '尾帧参考') and (command_counts[segment.command] > 1 or len(segment.references) > 1):
                 issue('INSTRUCTION_COUNT_EXCEEDED', '首尾帧指令各至多一项', segment.id)
-            if segment.command == '主体参考' and not segment.parameters.get('name', '').strip():
+            group_names = {binding.id: (binding.subject_name or '').strip() for binding in card.input_bindings}
+            if segment.command == '主体参考' and (any(not group_names.get(ref.binding_id) for ref in segment.references)
+                    or not segment.references and not segment.parameters.get('name', '').strip()):
                 issue('INSTRUCTION_PARAMETER_REQUIRED', '主体参考缺少主体名称', segment.id)
             for reference in segment.references:
                 actual_port = 'subject_video' if port == 'subject_image' and reference.source.port_id == 'video' else port
@@ -152,10 +153,21 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
 
     mentioned = {reference.binding_id for segment in card.prompt.segments
         for reference in ([segment] if isinstance(segment, PromptReference) else segment.references if isinstance(segment, PromptInstruction) else [])}
+    frame_counts = {}
     for binding in card.input_bindings:
+        if card.type == 'model.video' and binding.input_port in ('first_frame', 'last_frame'):
+            frame_counts[binding.input_port] = frame_counts.get(binding.input_port, 0) + 1
+            if frame_counts[binding.input_port] > 1:
+                issue('FRAME_COUNT_EXCEEDED', '首尾帧各至多一项', binding.id, ['input_bindings', binding.id])
         if capability and binding.input_port not in capability.input_ports:
             issue('UNSUPPORTED_INPUT', '当前模型不支持实际使用的输入', binding.id, ['input_bindings', binding.id])
         item = by_source.get(identity_key(binding.source))
+        expected = {'text': 'text', 'first_frame': 'image', 'last_frame': 'image', 'key_frame': 'image', 'subject_image': 'image', 'subject_video': 'video'}
+        if card.type == 'model.video' and expected.get(binding.input_port) != binding.source.port_id:
+            issue('INPUT_BINDING_TYPE', '输入用途与来源类型不匹配，不提供隐式转换', binding.id, ['input_bindings', binding.id])
+        if (card.type == 'model.video' and (binding.id not in mentioned or binding.subject_name is not None)
+                and binding.input_port in ('subject_image', 'subject_video') and not (binding.subject_name or '').strip()):
+            issue('SUBJECT_NAME_REQUIRED', '请选择主体分组名称，不自动归组', binding.id, ['input_bindings', binding.id])
         if binding.id not in mentioned and item and item.available and item.modality == 'text':
             result.text += ('\n' if result.text else '') + item.text
 
@@ -167,17 +179,19 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
             for group in media.subjects:
                 segment = next((segment for segment in card.prompt.segments if isinstance(segment, PromptInstruction)
                     and segment.parameters.get('name', '').strip().casefold() == group.name.casefold()), None)
-                target_id = segment.id if segment else next((segment.id for segment in card.prompt.segments
+                binding = next((binding for binding in card.input_bindings if (binding.subject_name or '').strip().casefold() == group.name.casefold()), None)
+                target_id = segment.id if segment else binding.id if binding else next((segment.id for segment in card.prompt.segments
                     if isinstance(segment, PromptReference) and segment.source.port_id in ('image', 'video')), '')
+                target_path = ['input_bindings', binding.id] if binding and not segment else None
                 if (media.frames.first or media.frames.last or media.frames.keys) and not capability.supports_subject_reference_with_frame_reference:
-                    issue('UNSUPPORTED_REFERENCE_COMBINATION', '当前模型不支持主体与帧参考组合', target_id)
+                    issue('UNSUPPORTED_REFERENCE_COMBINATION', '当前模型不支持主体与帧参考组合', target_id, target_path)
                 images = sum(ref.media_kind == 'image' for ref in group.media)
                 videos = sum(ref.media_kind == 'video' for ref in group.media)
                 limits = ((capability.max_subjects, len(media.subjects)), (capability.max_images_per_subject, images),
                           (capability.max_videos_per_subject, videos), (capability.max_media_per_subject, len(group.media)),
                           (capability.max_total_subject_videos, total_videos))
                 if any(limit is not None and count > limit for limit, count in limits):
-                    issue('SUBJECT_LIMIT_EXCEEDED', '主体参考数量超出模型限制', target_id)
+                    issue('SUBJECT_LIMIT_EXCEEDED', '主体参考数量超出模型限制', target_id, target_path)
     if capability:
         if card.type == 'model.image':
             if capability.max_reference_images is not None and len(result.media) > capability.max_reference_images:
@@ -193,17 +207,16 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
 def video_subjects(card, media):
     """显式主体按名称合并；普通引用的自动代指避开全部显式名称及其他自动代指。"""
     result, names = {}, {}
-    for segment in card.prompt.segments:
-        if isinstance(segment, PromptInstruction) and segment.command == '主体参考':
-            name = segment.parameters.get('name', '').strip()
-            if not name:
-                continue
-            name = names.setdefault(name.casefold(), name)
-            for reference in segment.references:
-                groups = result.setdefault(identity_key(reference.source), [])
-                if name not in groups:
-                    groups.append(name)
-    body_sources = {identity_key(segment.source) for segment in card.prompt.segments if isinstance(segment, PromptReference)}
+    for binding in card.input_bindings:
+        name = (binding.subject_name or '').strip()
+        if binding.input_port not in ('subject_image', 'subject_video') or not name:
+            continue
+        name = names.setdefault(name.casefold(), name)
+        groups = result.setdefault(identity_key(binding.source), [])
+        if name not in groups:
+            groups.append(name)
+    subject_ids = {binding.id for binding in card.input_bindings if binding.input_port in ('subject_image', 'subject_video')}
+    body_sources = {identity_key(segment.source) for segment in card.prompt.segments if isinstance(segment, PromptReference) and segment.binding_id in subject_ids}
     for position, item in enumerate(media, 1):
         key = identity_key(item.source)
         if key not in body_sources or len(result.get(key, [])) == 1:
@@ -235,27 +248,21 @@ def compile_video_media(card: ModelCard, compiled: CanvasCompiledInput) -> Video
             media = reference(ref, len(group['media']))
             if media:
                 group['media'].append(media)
-    for segment in card.prompt.segments:
-        if not isinstance(segment, PromptInstruction):
-            continue
-        refs = segment.references
-        if segment.command == '主体参考':
-            name = segment.parameters.get('name', '').strip()
-            if name:
-                add_subject(name, refs)
-        elif segment.command in ('首帧参考', '尾帧参考') and refs:
-            media = reference(refs[0], 0)
-            if media and media.media_kind == 'image':
-                setattr(result.frames, 'first' if segment.command == '首帧参考' else 'last', media)
-        elif segment.command == '关键帧参考':
-            for ref in refs:
-                media = reference(ref, len(result.frames.keys))
-                if media and media.media_kind == 'image':
-                    result.frames.keys.append(media)
+    for binding in card.input_bindings:
+        ref = PromptReference(kind='reference', id=binding.id, source=binding.source)
+        media = reference(ref, len(result.frames.keys) if binding.input_port == 'key_frame' else 0)
+        if binding.input_port in ('subject_image', 'subject_video') and (binding.subject_name or '').strip():
+            add_subject(binding.subject_name.strip(), [ref])
+        if media and media.media_kind == 'image':
+            if binding.input_port in ('first_frame', 'last_frame'):
+                setattr(result.frames, 'first' if binding.input_port == 'first_frame' else 'last', media)
+            elif binding.input_port == 'key_frame':
+                result.frames.keys.append(media)
     named = video_subjects(card, compiled.media)
     for item in compiled.media:
         key = identity_key(item.source)
-        if any(isinstance(segment, PromptReference) and identity_key(segment.source) == key for segment in card.prompt.segments):
+        if key in named and any(isinstance(segment, PromptReference) and identity_key(segment.source) == key
+                and any(binding.id == segment.binding_id and binding.input_port in ('subject_image', 'subject_video') for binding in card.input_bindings) for segment in card.prompt.segments):
             add_subject(named[key][0], [PromptReference(kind='reference', id='implicit', source=item.source)])
     result.subjects = [VideoSubjectMediaReference(**group) for group in groups.values() if group['media']]
     return result

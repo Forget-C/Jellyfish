@@ -53,6 +53,7 @@ export function RunHistory({ runs, targetRun, targetNode, disabled, onSave, onCa
             <section aria-label="历史实际输入"><CanvasTextPreview text={node.basis?.input?.text || ''} label="历史输入" /></section>
             <p>模型：{node.basis?.model?.name || node.basis?.model?.id || '未记录'}</p>
             <pre>{JSON.stringify(node.basis?.model?.params || {}, null, 2)}</pre>
+            {node.basis?.input?.video_media && <section aria-label="历史视频用途"><pre>{JSON.stringify(node.basis.input.video_media, null, 2)}</pre></section>}
             {!!node.basis?.input?.mapping?.length && <pre>{JSON.stringify(node.basis.input.mapping, null, 2)}</pre>}
           </details>
           {node.text && <section aria-label="历史累计正文"><CanvasTextPreview text={node.text} label="历史正文" /><Button onClick={() => void copy(node.text)}>复制正文</Button></section>}
