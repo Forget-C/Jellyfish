@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented
+**Completion:** integrated
 
 - [x] 四类工具按规格保留稳定身份、位置方位、空间关系、尺度、朝向、路径、主动权、延迟、入出画、结束状态及活动／留白说明等适用字段。
 - [x] 锚点位于导演工具箱的表演与调度，可先用文字建立再关联图片标记；替换参考素材不改变锚点身份。
@@ -34,3 +34,5 @@
 - 真实Chrome：`generationCanvasSpatial.browser.mjs` 在独立8287／4287及case专属Vite缓存运行通过；文字锚点、所属空间／位置锚点选择、四类设计编辑、图片关联与坐标标记、约每秒自动保存、下游整卡采用与不穿透编译、重开及1440px／390px无横向溢出。证据 `/private/tmp/canvas11-browser-final`（`anchor-marker.png`、`spatial-desktop.png`、`spatial-mobile.png`），已人工查看截图。
 - 工作台六例均通过：workbench-ui4.8s（`/private/tmp/canvas11-workbench`）、workbench-style71.4s（`/private/tmp/canvas11-style-isolated`）、design-scope15.1s（`/private/tmp/canvas11-scope-isolated`）、unit-design28.7s／instruction-preparation10.8s／instruction-design16.4s（`/private/tmp/canvas11-workbench-remaining`）。首轮style纯白页、scope tooltip等待失败；独立集成基线style通过71.8s（`/private/tmp/canvas11-baseline-style`），本工作树在安静环境及独立Vite缓存中有界复验通过，日志无pageerror或优化依赖404。共享node_modules缓存与当时HMR是环境疑点，未确认根因；失败证据保留，不冒充首轮通过。为受影响case增加独立cacheDir及失败日志，未修改业务逻辑规避检查。
 - 验证限制：不评估真实供应商视觉质量或外部对象存储；14事件来源、镜头调度采用及12图片明确多阶段目标的组合由后续票据接入，本票不新增猜测阶段。
+
+- 主区集成：2026-10-28 无冲突显式合并 `58f19865` 得 `9cb75002`，主区空间／表演 HTTP及真实文本／视频Worker **47 passed**（4.14s）、Node24.22.1 typecheck通过。主区app导入已核实，生产导出／8000 HTTP／提交schema精确一致并含空间引用字段后，标准 `openapi:update` 成功；390处纯尾空行漂移已剔除。全部画布173／28、Pylint10及空间真实页面／共享六例复用同一实现上述证据和失败复测限制；未操作其他票据工作树或共享浏览器验证环境。
