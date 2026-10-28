@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Empty, Space } from 'antd'
+import { Alert, Empty, Space } from 'antd'
+import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
 import type { CanvasNodeRead, CanvasRunRead } from '../../../services/generated'
 import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 import { MediaPreview } from './MediaContentEditor'

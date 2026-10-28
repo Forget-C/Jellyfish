@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Empty, Input, Popconfirm, Select, Space, Typography } from 'antd'
-import { useSearchParams } from 'react-router-dom'
+import { Alert, Empty, Input, Popconfirm, Select, Space, Typography } from 'antd'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasRead, TextContentCard, ImageContentCard, VideoContentCard } from '../../../services/generated'
 import { useGenerationCanvasEditor } from './useGenerationCanvasEditor'
@@ -8,15 +8,26 @@ import { GenerationCanvasGraph } from './GenerationCanvasGraph'
 import { useGenerationCanvasRuntime } from './useGenerationCanvasRuntime'
 import { RunPreview } from './RunPreview'
 import { RunHistory } from './RunHistory'
+import { WorkbenchTheme } from '../directing/ui/WorkbenchTheme'
+import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
+import { WorkbenchDetailsProvider } from '../directing/ui/WorkbenchDetails'
+import { WorkbenchModal } from '../directing/ui/WorkbenchModal'
+import { WorkbenchToolbar } from '../directing/WorkbenchChrome'
+import { TaskCenter } from '../components/TaskCenter'
+import './generationCanvas.css'
 
 /** 项目级文档编辑；运行、结果和浏览器布局有独立生命周期。 */
 export function GenerationCanvasPage({ projectId }: { projectId: string }) {
   const [search, setSearch] = useSearchParams()
+  const navigate = useNavigate()
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [inspectTarget, setInspectTarget] = useState<{ cardId: string; serial: number }>()
   const canvasId = search.get('canvas')
   const [canvases, setCanvases] = useState<CanvasRead[]>([])
   const editor = useGenerationCanvasEditor(projectId, canvasId)
   const { current, document, edit, save, saving, dirty, ownership } = editor
   const runtime = useGenerationCanvasRuntime(projectId, canvasId, save, ownership.canEdit)
+  useEffect(() => { if (runtime.preview) setPreviewOpen(true) }, [runtime.preview])
   const change: typeof edit = next => { runtime.invalidate(); edit(next) }
   const [error, setError] = useState('')
   const [deleting, setDeleting] = useState(false)
@@ -93,35 +104,49 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
     return saved
   }
 
-  return <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+  return <WorkbenchTheme><WorkbenchDetailsProvider><section className="canvas-workbench generation-workbench" aria-label="生成画布工作台">
+    <WorkbenchToolbar className="generation-workbench-header">
     <Space wrap>
+      <Button onClick={async () => { if (await editor.requestLeave()) navigate(`/projects/${encodeURIComponent(projectId)}`) }}>返回项目</Button>
       <Typography.Title level={4} style={{ margin: 0 }}>画布生成</Typography.Title>
       <Select aria-label="选择画布" placeholder="选择画布" value={canvasId || undefined} style={{ width: 220 }}
-        disabled={saving || deleting || !!deletePending} options={canvases.map(item => ({ value: item.id, label: item.document.name }))} onChange={select} />
+        disabled={saving || deleting || !!deletePending} options={canvases.map(item => ({ value: item.id, label: item.document.name }))} onChange={async id => { if (await editor.requestLeave()) select(id) }} />
       <Button onClick={create} disabled={saving || deleting || !!deletePending}>新建画布</Button>
+      <TaskCenter workbench />
     </Space>
+    {document && current && <Space wrap className="generation-document-controls">
+      <Input aria-label="画布名称" value={document.name} maxLength={255} disabled={!ownership.editable || !!editor.recovery}
+        onChange={event => change({ ...document, name: event.target.value })} />
+      <Button variant="primary" onClick={() => void save()} loading={saving} disabled={!ownership.editable || !!editor.recovery || editor.conflict}>保存画布</Button>
+      <Popconfirm title="删除画布及其运行历史？文件的其他使用关系会保留。" onConfirm={remove}><Button variant="danger" loading={deleting} disabled={saving || !!deletePending || !ownership.editable || !!runtime.busyCards.size}>删除画布</Button></Popconfirm>
+      <Button disabled={!ownership.editable || !!editor.recovery || !editor.canUndo} onClick={() => { runtime.invalidate(); editor.undo() }}>撤销内容</Button>
+      <Button disabled={!ownership.editable || !!editor.recovery || !editor.canRedo} onClick={() => { runtime.invalidate(); editor.redo() }}>重做内容</Button>
+      <span role="status" aria-label="画布保存状态">revision {current.revision} · {saving ? '保存中' : !dirty ? '已保存' : '待保存'}</span>
+    </Space>}
+    </WorkbenchToolbar>
+    <div className="generation-feedback">
     {(error || editor.error) && <Alert type="error" showIcon message={error || editor.error} action={deletePending === canvasId ? <Button loading={deleting} onClick={() => void verifyDeletion()}>核实画布状态</Button> : undefined} />}
     {editor.storageError && <Alert type="warning" message={editor.storageError} />}
-    {editor.recovery && <Alert type="warning" message="发现本地未保存内容；恢复前将核实服务器及未明请求" action={<Space><Button onClick={editor.restore} disabled={!ownership.editable || saving}>恢复本地内容</Button><Button onClick={() => editor.reload()} disabled={!ownership.editable || saving}>使用服务器内容</Button></Space>} />}
-    {editor.conflict && <Alert type="warning" message="修订冲突，本地内容已保留。核对后选择处理方式" action={<Space><Button onClick={() => editor.reload(true)}>保留本地并以最新修订保存</Button><Button onClick={() => editor.reload()}>使用服务器内容</Button></Space>} />}
     {canvasId && !ownership.editable && <Alert type="warning" message={ownership.message || (ownership.state === 'unsupported' ? '浏览器不支持编辑所有权保护，当前只读' : '此画布当前只读')} action={<Space><Button onClick={ownership.takeEditing}>取得编辑权</Button>{ownership.state === 'choice' && <><Button onClick={() => ownership.chooseHandoff('save')}>保存后交接</Button><Button onClick={() => ownership.chooseHandoff('discard')}>放弃后交接</Button></>}</Space>} />}
-    {!document || !current ? <Empty description="创建或选择一张画布" /> : <>
-      <Space wrap>
-        <Input aria-label="画布名称" value={document.name} maxLength={255} disabled={!ownership.editable || !!editor.recovery}
-          onChange={event => change({ ...document, name: event.target.value })} />
-        <Button type="primary" onClick={() => void save()} loading={saving} disabled={!ownership.editable || !!editor.recovery || editor.conflict}>保存画布</Button>
-        <Popconfirm title="删除画布及其运行历史？文件的其他使用关系会保留。" onConfirm={remove}><Button danger loading={deleting} disabled={saving || !!deletePending || !ownership.editable || !!runtime.busyCards.size}>删除画布</Button></Popconfirm>
-        <span role="status">revision {current.revision} · {saving ? '保存中' : !dirty ? '已保存' : '待保存'}</span>
-      </Space>
       <span role="status" aria-label="运行连接">{runtime.connection === 'connected' ? '运行事件已连接' : runtime.connection === 'connecting' ? '正在连接运行事件' : '运行连接恢复中，保留已接收内容'}</span>
       {runtime.error && <Alert type="error" message={runtime.error} />}
       {runtime.pending && <Alert type="warning" message="运行请求结果待核实；将使用原请求身份取得回执" action={<Button loading={runtime.submitting} disabled={!ownership.editable} onClick={() => void runtime.submit()}>核实运行请求</Button>} />}
-      {runtime.preview && <RunPreview preview={runtime.preview} submitting={runtime.submitting} disabled={!ownership.editable || !!runtime.pending || runtime.busyCards.has(runtime.preview.card_id)} onSubmit={() => void runtime.submit()} />}
+    </div>
+      <WorkbenchModal title="核对画布内容" open={!!editor.recovery || editor.conflict} closable={false} footer={null}>
+    {editor.recovery && <Alert type="warning" message="发现本地未保存内容；恢复前将核实服务器及未明请求" action={<Space><Button onClick={editor.restore} disabled={!ownership.editable || saving}>恢复本地内容</Button><Button onClick={() => editor.reload()} disabled={!ownership.editable || saving}>使用服务器内容</Button></Space>} />}
+    {editor.conflict && <Alert type="warning" message="修订冲突，本地内容已保留。核对后选择处理方式" action={<Space><Button onClick={() => editor.reload(true)}>保留本地并以最新修订保存</Button><Button onClick={() => editor.reload()}>使用服务器内容</Button></Space>} />}
+      </WorkbenchModal>
+      <WorkbenchModal title="运行预检" open={previewOpen && !!runtime.preview && !editor.recovery && !editor.conflict} onCancel={() => setPreviewOpen(false)} footer={null}>
+        {runtime.preview && <RunPreview preview={runtime.preview} submitting={runtime.submitting} disabled={!ownership.editable || !!runtime.pending || runtime.busyCards.has(runtime.preview.card_id)} onSubmit={() => void runtime.submit()} onLocate={target => { setInspectTarget({ cardId: String(target.card_id || runtime.preview!.card_id), serial: Date.now() }); setPreviewOpen(false) }} />}
+      </WorkbenchModal>
+    {!document || !current ? <Empty className="generation-empty" description="创建或选择一张画布" /> : <div className="generation-stage">
+      <div className="generation-history-host">
       <RunHistory key={document.id} runs={runtime.snapshot.runs} targetRun={search.get('run')} targetNode={search.get('node')}
         disabled={!ownership.editable || !!editor.recovery || editor.conflict} onSave={saveOutput} onCancel={runtime.cancel} cancelling={runtime.cancelling} />
-      <GenerationCanvasGraph savedRevision={current.revision} key={document.id} document={document} onChange={next => change(next)} readonly={!ownership.editable || !!editor.recovery}
+      </div>
+      <GenerationCanvasGraph savedRevision={current.revision} key={document.id} document={document} onChange={next => change(next)} inspectTarget={inspectTarget} editingStatus={editor.conflict ? '修订冲突，请关闭详情处理' : saving ? '正在保存修改' : dirty ? '修改尚未保存' : '修改已同步'} readonly={!ownership.editable || !!editor.recovery}
         runtime={{ outputs: runtime.snapshot.current_outputs, nodes: runtime.latestNodes, busyCards: runtime.busyCards, checking: runtime.checking,
           disabled: runtime.storageBlocked || !!runtime.pending || !!runtime.checking || runtime.submitting || editor.conflict, precheck: (cardId, kind, cardIds) => void runtime.precheck(cardId, kind, cardIds) }} />
-    </>}
-  </Space>
+    </div>}
+  </section></WorkbenchDetailsProvider></WorkbenchTheme>
 }

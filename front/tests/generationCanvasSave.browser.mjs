@@ -51,7 +51,7 @@ try {
   await page.getByRole('textbox', { name: '画布名称' }).fill('第一张独立画布 B')
   await page.getByRole('textbox', { name: '文本内容', exact: true }).fill('保存中继续输入 B')
   releaseSave()
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '已保存' }).waitFor()
   await page.unroute('**/generation-canvases/canvas-project/*')
   await page.getByRole('status').filter({ hasText: 'revision 2 · 已保存' }).waitFor()
   const firstId = new URL(page.url()).searchParams.get('canvas')
@@ -97,7 +97,7 @@ try {
   assert.equal(await page.getByRole('textbox', { name: '文本内容', exact: true }).inputValue(), '回执之后输入 B')
   assert.equal((await (await fetch(`${base}/${firstId}`)).json()).data.document.cards[0].text, '回执丢失 A')
   await page.getByRole('button', { name: '保存画布' }).click()
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '已保存' }).waitFor()
   assert.equal((await (await fetch(`${base}/${firstId}`)).json()).data.revision, 4)
   assert.equal(unknownRequest.expected_revision, 2)
 
@@ -111,7 +111,7 @@ try {
   assert.equal(await page.getByRole('textbox', { name: '文本内容', exact: true }).inputValue(), '冲突仍保留')
   await page.getByRole('button', { name: '保留本地并以最新修订保存' }).click()
   await page.getByRole('button', { name: '保存画布' }).click()
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '已保存' }).waitFor()
 
   // One owner per canvas; a second canvas can be edited in the same browser context.
   const other = await page.context().newPage()
@@ -126,7 +126,7 @@ try {
   await page.goto(`http://127.0.0.1:4271/projects/canvas-project?tab=generation&canvas=${secondId}`)
   await page.waitForFunction(() => document.querySelector('[aria-label="画布名称"]') && !document.querySelector('[aria-label="画布名称"]').disabled)
   await page.getByRole('textbox', { name: '文本内容', exact: true }).fill('五秒自动保存')
-  await page.getByRole('status').filter({ hasText: '待保存' }).waitFor()
+  await page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '待保存' }).waitFor()
   await page.getByRole('status').filter({ hasText: 'revision 2 · 已保存' }).waitFor()
   assert.equal((await (await fetch(`${base}/${secondId}`)).json()).data.document.cards[0].text, '五秒自动保存')
   // Storage failures are visible without blocking a server save or claiming recovery protection.
@@ -134,7 +134,7 @@ try {
   await page.getByRole('textbox', { name: '文本内容', exact: true }).fill('存储不可用')
   await page.getByText('浏览器存储不可用，本地恢复保护失败；请保存后再离开').waitFor()
   await page.getByRole('button', { name: '保存画布' }).click()
-  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
+  await page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '已保存' }).waitFor()
   await page.getByRole('textbox', { name: '文本内容', exact: true }).fill('离开前保护保存')
   await page.getByRole('combobox', { name: '选择画布' }).press('ArrowDown')
   await page.getByText('第一张独立画布 B', { exact: true }).last().click()

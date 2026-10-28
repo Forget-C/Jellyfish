@@ -5,7 +5,7 @@ description: "独立项目画布当前已实现的文档、保存及页面边界
 
 # 生成画布文档存储
 
-项目工作台的“画布生成”入口无需章节或场次。一个项目可创建多张命名画布，通过 URL 的 `tab=generation&canvas=<id>` 重开。当前支持四种基础模态内容、独立原文／创作依据、三类模型卡、候选连接、分组、独立布局以及自动保存和恢复保护。文本模型卡提供保存、预检、后台执行和持久文本流；图片模型卡沿用同一入口执行并发布完整有序图片结果。视频模型卡在同一运行入口按固定用途生成一段完整视频，保留文件自带音轨。完整设计决策见 [独立生成画布](adr/0001-independent-generation-canvas.md) 与 [协议边界](adr/0002-generation-canvas-protocol-boundaries.md)。
+项目工作台的“画布生成”入口无需章节或场次。一个项目可创建多张命名画布，通过独立页面 `/projects/{project_id}/generation-canvas?canvas=<id>` 重开；旧 `tab=generation&canvas=<id>` 链接保留画布、运行和节点参数后跳转，不实例化项目页及其章节加载。页面使用完整工作台视口、局部暗色主题、左侧类型目录、摘要卡与单一浮动详情；编辑在详情中进行，展开／关闭不改变画布几何。内容撤销／重做与布局整理撤销分别维护，小地图与定位仅改变浏览位置。当前支持四种基础模态内容、独立原文／创作依据、三类模型卡、候选连接、分组、独立布局以及自动保存和恢复保护。文本模型卡提供保存、预检、后台执行和持久文本流；图片模型卡沿用同一入口执行并发布完整有序图片结果。视频模型卡在同一运行入口按固定用途生成一段完整视频，保留文件自带音轨。完整设计决策见 [独立生成画布](adr/0001-independent-generation-canvas.md) 与 [协议边界](adr/0002-generation-canvas-protocol-boundaries.md)。
 
 `generation_canvases` 保存项目归属、当前完整文档、内容 revision 和已登记卡片身份／类型。文档包含画布身份、项目身份、名称、schema_version、卡片、候选连接、每目标端口独立输入顺序和分组。文本卡使用 `content.text`、type_version 1、不可变 ID 和一份 text，允许空字符串。后端轻量 `CardDefinition` 使用具体卡类型，前端显式 `rendererRegistry` 和 `CardShell` 消费同一文档。布局、运行状态与运行结果不进入此文档。
 

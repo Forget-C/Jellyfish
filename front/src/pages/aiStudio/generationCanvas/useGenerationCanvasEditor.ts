@@ -23,6 +23,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   const [conflict, setConflict] = useState(false)
   const state = useRef<{ scope: string; current?: CanvasRead; document?: CanvasDocument; pending?: CanvasSave; recovery?: Recovery; conflict: boolean }>({ scope: key, conflict: false })
   const inFlight = useRef<Promise<boolean>>()
+  const history = useRef<{ scope: string; past: CanvasDocument[]; future: CanvasDocument[] }>({ scope: key, past: [], future: [] })
   const dirty = !!document && !!current && !same(document, current.document)
   const persist = () => {
     const s = state.current
@@ -36,6 +37,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   useEffect(() => {
     let active = true
     state.current = { scope: key, conflict: false }; inFlight.current = undefined
+    history.current = { scope: key, past: [], future: [] }
     setCurrent(undefined); setDocument(undefined); setError(''); setConflict(false); setRecovery(undefined); setSaving(false)
     if (canvasId) void Canvases.canvasGet({ projectId, canvasId }).then(response => {
       if (!active || !response.data) return
@@ -56,8 +58,20 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   const edit = (next: CanvasDocument | ((previous: CanvasDocument) => CanvasDocument)) => {
     const s = state.current
     if (!ownership.canEdit() || !s.document || s.recovery || s.scope !== key) return
-    s.document = typeof next === 'function' ? next(s.document) : next
+    const value = typeof next === 'function' ? next(s.document) : next
+    if (same(value, s.document)) return
+    history.current = { scope: key, past: [...history.current.past.slice(-49), s.document], future: [] }
+    s.document = value
     setDocument(s.document); persist()
+  }
+  // 内容历史只存文档编辑，不包含视口、布局或运行状态。
+  const travel = (direction: 'past' | 'future') => {
+    const s = state.current, h = history.current
+    if (!ownership.canEdit() || !s.document || s.recovery || s.scope !== key || h.scope !== key) return
+    const next = h[direction].pop()
+    if (!next) return
+    h[direction === 'past' ? 'future' : 'past'].push(s.document)
+    s.document = next; setDocument(next); persist()
   }
   const save = (): Promise<boolean> => {
     if (inFlight.current) return inFlight.current
@@ -105,6 +119,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
         s.conflict = true; setConflict(true); setError('REVISION_CONFLICT: 服务器已有更新，本地恢复内容保留，请核对后选择')
       }
       s.current = response.data; s.document = saved.document; s.pending = undefined; s.recovery = undefined
+      history.current = { scope: key, past: [], future: [] }
       setCurrent(s.current); setDocument(s.document); setRecovery(undefined); persist()
     } catch (reason) {
       if (s === state.current) {
@@ -123,7 +138,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     try {
       const response = await Canvases.canvasGet({ projectId, canvasId: canvasId! })
       if (!response.data || s !== state.current) return false
-      s.current = response.data; if (!keepLocal) s.document = response.data.document
+      s.current = response.data; if (!keepLocal) { s.document = response.data.document; history.current = { scope: key, past: [], future: [] } }
       s.conflict = false; s.recovery = undefined
       setCurrent(s.current); setDocument(s.document); setRecovery(undefined); setConflict(false); setError(''); persist(); return true
     } catch (reason) { setError(describe(reason)); return false }
@@ -155,5 +170,6 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   }, [key])
   const blocker = useBlocker(({ currentLocation, nextLocation }) => currentLocation.key !== nextLocation.key && (!!state.current.pending || !!state.current.recovery || (!!state.current.current && !same(state.current.document, state.current.current.document))))
   useEffect(() => { if (blocker.state === 'blocked') void latest.current.requestLeave().then(ok => { if (ok) blocker.proceed(); else blocker.reset() }) }, [blocker])
-  return { current, document, edit, save, saving, dirty, error, storageError, recovery, conflict, restore, reload, ownership, requestLeave }
+  return { current, document, edit, save, saving, dirty, error, storageError, recovery, conflict, restore, reload, ownership, requestLeave,
+    undo: () => travel('past'), redo: () => travel('future'), canUndo: history.current.scope === key && !!history.current.past.length, canRedo: history.current.scope === key && !!history.current.future.length }
 }

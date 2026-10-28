@@ -5,7 +5,7 @@ import type { CanvasPoint } from '../../../components/canvas/geometry'
 
 export type GraphLayoutScope = {
   storageKey: string; viewId: string; anchorId: string; validIds: string[]; validViewIds?: string[]
-  initialTop?: number; identityAliases?: Record<string, string>; onInvalidTarget?: () => void
+  initialTop?: number; initialLeft?: number; identityAliases?: Record<string, string>; onInvalidTarget?: () => void
   onStorageError?: (message: string) => void
   arrange: GraphArrange
   parseView?: (raw: string | null) => GraphView | undefined
@@ -56,7 +56,7 @@ export function useGraphLayout(scope: GraphLayoutScope | undefined, nodes: Graph
       let transform = prepared.transform
       if (!previous.ready || migration) {
         const anchor = positions[scope.anchorId] || { x: 0, y: 0 }
-        const screen = !migration && previous.anchorScreen || { x: viewportWidth > 700 ? 96 : 16, y: scope.initialTop || 64 }
+        const screen = !migration && previous.anchorScreen || { x: scope.initialLeft ?? (viewportWidth > 700 ? 96 : 16), y: scope.initialTop || 64 }
         transform = { ...transform, x: screen.x - anchor.x * transform.scale, y: screen.y - anchor.y * transform.scale }
       }
       const view = { ...prepared, transform, positions, sizes }
@@ -104,7 +104,7 @@ export function useGraphLayout(scope: GraphLayoutScope | undefined, nodes: Graph
       const sizes = Object.fromEntries(nodes.map(node => [node.id, node.size || measured[node.id]]))
       const positions = scope.arrange(nodes, sizes, viewportWidth, scope.anchorId)
       const anchor = positions[scope.anchorId] || { x: 0, y: 0 }
-      const transform = { ...previous.view.transform, x: (viewportWidth > 700 ? 96 : 16) - anchor.x * previous.view.transform.scale, y: (scope.initialTop || 64) - anchor.y * previous.view.transform.scale }
+      const transform = { ...previous.view.transform, x: (scope.initialLeft ?? (viewportWidth > 700 ? 96 : 16)) - anchor.x * previous.view.transform.scale, y: (scope.initialTop || 64) - anchor.y * previous.view.transform.scale }
       return { ...previous, undo: previous.view, view: { ...previous.view, sizes, positions, transform, manuallyPlaced: [] }, ready: true }
     })
   }
