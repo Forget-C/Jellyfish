@@ -100,6 +100,8 @@ try {
   await uses.getByText('关键帧 · @图片2', { exact: true }).waitFor()
   await page.screenshot({ path: join(output, 'video-inputs-desktop.png'), fullPage: true })
   await page.setViewportSize({ width: 390, height: 844 })
+  await page.getByRole('dialog', { name: '视频模型卡', exact: true }).waitFor()
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
   await page.screenshot({ path: join(output, 'video-inputs-narrow.png'), fullPage: true })
   const fixed = result.cards.find(card => card.type === 'content.video' && card.origin?.run_id === run.run_id)
   const subjectCanvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '主体视频采用' }) })).json()).data

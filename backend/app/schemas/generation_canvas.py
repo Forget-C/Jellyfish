@@ -117,6 +117,7 @@ class ModelCard(CardDefinition):
     def resolve_prompt_bindings(self):
         """读取旧文档时规范化来源；写出的提示词只保留绑定身份。"""
         bindings = {binding.id: binding for binding in self.input_bindings}
+        legacy_groups = {binding.id for binding in self.input_bindings if 'subject_name' not in binding.model_fields_set}
         if len(bindings) != len(self.input_bindings):
             raise ValueError('输入绑定身份必须唯一')
         # after 校验器收到的是 PromptDocument；Pylint 误将默认工厂推断为 FieldInfo。
@@ -144,6 +145,18 @@ class ModelCard(CardDefinition):
                     raise ValueError('引用的输入绑定不存在')
                 if ref.source is not None and ref.source != binding.source:
                     raise ValueError('引用来源与输入绑定不一致')
+                # 旧 v2 跨主体复用绑定；规范化时拆开用途，不能静默任选第一个主体。
+                if subject_name is not None and binding.id in legacy_groups and binding.subject_name not in (None, subject_name):
+                    grouped = next((value for value in bindings.values() if value.source == binding.source
+                        and value.input_port == binding.input_port and value.subject_name == subject_name), None)
+                    if grouped is None:
+                        identifier = 'input-' + ref.id
+                        while identifier in bindings:
+                            identifier += '-group'
+                        grouped = binding.model_copy(update={'id': identifier, 'subject_name': subject_name})
+                        bindings[grouped.id] = grouped
+                    binding = grouped
+                    ref.binding_id = binding.id
                 if subject_name is not None and binding.subject_name is None:
                     binding.subject_name = subject_name
                 ref.source = binding.source

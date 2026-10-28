@@ -410,3 +410,22 @@ async def test_body_reference_to_adopted_frame_does_not_change_its_video_purpose
     assert compiled['can_run'], compiled
     assert compiled['video_media']['subjects'] == []
     assert compiled['video_media']['frames']['first']['file_id'] == doc['cards'][0]['file_id']
+
+
+@pytest.mark.asyncio
+async def test_legacy_shared_subject_binding_preserves_multiple_explicit_groups(runtime, image_storage):
+    await setup_video(runtime, 'vidu', [instruction('主体参考', ['a'], '甲')])
+    doc = (await runtime.client.get(runtime.url)).json()['data']['document']
+    video = doc['cards'][-1]
+    binding = video['input_bindings'][0]
+    binding.pop('subject_name')
+    # Old v2 coalesced the same source/purpose into one binding even across names.
+    video['prompt']['segments'] += [{'id': 'second-group', 'kind': 'instruction', 'command': '主体参考', 'parameters': {'name': '乙'},
+        'references': [{'id': 'second-ref', 'kind': 'reference', 'binding_id': binding['id']}]},
+        {'id': 'body-ref', 'kind': 'reference', 'binding_id': binding['id']}]
+    saved = await runtime.client.put(runtime.url, json={'request_id': 'legacy-shared-group', 'expected_revision': 2, 'document': doc})
+    assert saved.status_code == 200, saved.text
+    compiled = (await runtime.client.get(runtime.url + '/cards/v/compile')).json()['data']
+    assert compiled['can_run'], compiled
+    assert [group['name'] for group in compiled['video_media']['subjects']] == ['甲', '乙', 'media1']
+    assert compiled['text'] == '@media1'
