@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented
+**Completion:** integrated
 
 - [x] 文本依据、首帧、尾帧、关键帧、主体图片参考和主体视频参考按真实能力提供；普通拖线不选择用途或自动采用。
 - [x] 首尾帧单值、关键帧顺序、主体分组及各层数量限制按能力校验；当前不支持的主体参考与首尾／关键帧混用返回定位诊断。
@@ -39,3 +39,10 @@
 - 旧结果跨版本兼容：将提交 `07e7ab7e` 后端归档到 `/private/tmp/canvas06-legacy-code`，旧版公开HTTP＋真实Worker生成含普通文本binding的文本／图片成果（2 passed），再由06公开HTTP读取同一SQLite，二者outputs精确一致且basis_current=true。原始结果证据 `/private/tmp/canvas06-legacy-text.json`、`/private/tmp/canvas06-legacy-image.json`，读取脚本 `/private/tmp/canvas06_compat_read.py`；不是同版本重算对比。runtime依据哈希不包含整个binding dump，未改写旧算法。
 - 新增可空InputBinding.subject_name已同步OpenAPI与generated client；从06 app导出后执行 `pnpm --dir front run openapi:gen`，纯尾空行漂移已剔除。真实8279服务导出（仅去掉fixture `/test/video-controls`）与提交OpenAPI精确一致，证据最终视频目录内 `openapi-8279.json`。未停止、重载或使用无响应的主区8000，不声称本次标准 `openapi:update` 成功。
 - 限制：27项MySQL专用测试未运行；供应商HTTP和外部对象存储为受控替身，不证明真实供应商质量、真实外部存储或MySQL并发。页面保留既有Composer和工作台主题，未改共享主题／四画布布局。
+
+### 2026-10-28：主区集成验收
+
+- 无冲突合并 `codex-canvas-types-06` HEAD `39800559`，集成提交 `63a028ac`；源分支已含主区 `07e7ab7e`，合并后代码与已验收实现一致。Completion 更新为 integrated，分诊 Status 保持不变。
+- 主区 `PYTHONPATH=. uv run --no-sync` 核实 app 导入来自当前工作区；视频及公开 API 回归 **61 passed / 2 skipped**，Node24.22.1 typecheck 与差异检查通过。复用同一代码的全部画布 **110 passed / 27 skipped**、Pylint **10.00/10**、图片／视频真实页面及旧版文本／图片实际成果跨版本依据兼容证据，未重复扩大验证。
+- 主区生产 app 在隔离 `8286` 导出 OpenAPI，与已提交 schema 精确一致且不包含测试控制路由，证据 `/private/tmp/canvas06-integrated/openapi-8286.json`。重新生成 client 仅365处纯尾空行漂移，核对后全部剔除；8000 在隔离环境内探测无响应，提升权限复核健康检查已响应，但未核实其代码归属；未停止、重载或从其拉取 schema，不声称本次标准 `openapi:update` 成功。
+- 继续保留 MySQL 专用测试未运行、供应商与外部存储使用受控替身的限制；08 独立工作树未触碰，后续接入需保留可空 `InputBinding.subject_name` 及新绑定权威语义。
