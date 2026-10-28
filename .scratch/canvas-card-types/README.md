@@ -8,7 +8,7 @@
 
 ## 任务与阻塞关系
 
-编号表示依赖顺序，不要求严格串行执行。01–19 共十九票已实现并集成；最终双轴审查待执行，尚不宣称审查通过。实际覆盖见[实现核对](implementation-coverage.md)，验证证据在下方及相应票据维护。
+编号表示依赖顺序，不要求严格串行执行。01–19 共十九票已实现并集成；最终双轴审查已执行，发现修复待集成及提交标题规范化，尚不宣称最终审查通过。实际覆盖见[实现核对](implementation-coverage.md)，验证证据在下方及相应票据维护。
 
 | 票据 | Blocked by | 目录负责内容 |
 | --- | --- | --- |
@@ -249,3 +249,6 @@ flowchart TD
 - 19验证：全部画布275 passed／28 skipped、诊断用词同步后相关42 passed／1 skipped、Pylint10、Node24 typecheck、生产／提交／真实8303HTTP schema精确一致。现行20页＋迁移5页＋新完整旅程共26个真实用例通过；selection隔离MySQL未配置，仅静态迁移，不宣称浏览器通过。完整旅程47.5s，证据 `/private/tmp/canvas19-journey-release/generation-canvas-journey`；其余执行、红灯修正、迁移和环境限制详见19 Comments。主8000标准更新留待集成后执行；未修改共享Details／Theme／Modal及既有场次职责，不开展章节、导演试点、音频生成或Take／剪辑改造。01–18仍十八票集成，19等待最终合并审查；未推送。
 
 - 2026-10-29：无冲突集成19（分支HEAD `1a2b350d`，显式合并 `4da2f90e`），Completion更新为integrated，分诊Status保持不变。01–19共十九票已集成，待最终规范／规格双轴审查。合后API／Catalog／Compiler **42 passed／1 skipped**（3.63s）、Node24.22.1 typecheck及差异检查通过；无冲突产品树与实现分支一致，复用275 passed／28 skipped、Pylint10及26个真实页面通过的同代码证据，selection缺隔离MySQL仍明确未执行。已核实主区app导入路径；当前生产app导出、8000实际HTTP与提交OpenAPI精确一致，包含Catalog、BasisText、DialogueReference及四模态枚举。标准 `pnpm --dir front run openapi:update` 成功，440处仅纯尾空行／等价格式漂移经字节或JSON精确核对还原；证据 `/private/tmp/canvas19-integrated-production.json`、`/private/tmp/canvas19-integrated-http.json`。供应商／外部存储受控替身、MySQL缺环境与未证明真实供应商质量的边界保留。未推送、未终止用户8000服务；最终双轴审查尚待主代理执行。
+
+- 2026-10-29：最终双轴审查以 `66f32c19` → `0d9d5c4d` 为固定范围。Spec发现一个P2：描述进入模型时仅匿名正文，两个描述与独立命名图片缺少对应；已在独立审查修复分支先用HTTP→实际图片TaskWorker复现，再使每份直接采用的描述正文前带自身名称、稳定身份与类别，原正文不变，不反查参考卡或自动采用图片。两个对象及反向描述顺序的请求均红→绿；描述单独采用、未命名正文与纯文本保持原行为。可选重复格式化建议以一个 `scope_source_lines` 小函数收敛五个publisher，标签、顺序及空值行为不变。全画布 **277 passed／28 skipped**（30.98s），Pylint **10.00/10**，生产OpenAPI与提交schema精确一致；无前端或schema字段变化，复用26真实页面／Node24typecheck证据，不重复同状态UI。MySQL／外部服务替身限制不变。
+- Standards另有两个早期自动merge标题不符合 `[类型] 摘要`：`c92bc274`、`6639d43a`。安全脚本 `/private/tmp/canvas-card-types-normalize-merge-subjects.py` 已在主区只读dry-run，并在独立临时克隆中验证apply：只改这两个标题，保留树、父拓扑、作者／提交者／日期及其他消息；109个必要后继重算ID，源树哈希不变。原主区HEAD未改；元数据规范化须在本修复合入后由merger执行，不能预记已完成。审计 `/private/tmp/canvas-card-types-merge-subject-normalization-dry-run.json`、`/private/tmp/canvas-card-types-normalization-isolated-apply.json`；后续实际主区apply审计另记。

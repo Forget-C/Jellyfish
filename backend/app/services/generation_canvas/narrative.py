@@ -5,6 +5,7 @@ from app.core.contracts.generation_canvas import (
     NarrativeDesignRelation, ObjectReferencePayload, SpatialReferencePayload, OutputIdentity,
 )
 from app.schemas.generation_canvas import NarrativeDirectionCard, CanvasResolvedOutput
+from app.services.generation_canvas.formatting import scope_source_lines
 from app.services.generation_canvas.performance import STATE_LABELS, PURPOSE_LABELS
 from app.services.generation_canvas.errors import diagnostic
 
@@ -45,9 +46,7 @@ def publish_narrative(canvas_id, card, adopted_inputs):
     lines.extend(acceptance_lines(acceptance))
     lines.extend(f'{PURPOSE_LABELS[field.purpose]} / {FIELD_LABELS[key]} [{STATE_LABELS[field.state]}]：{field.text}' + (f'（来源：{field.source_locator}）' if field.source_locator else '')
                  for key in field_type.model_fields if isinstance((field := getattr(fields, key)), DesignField) and field.state not in ('empty', 'not_applicable') and (field.text or field.state == 'absent'))
-    for label, value in [('适用范围', card.scope.description), ('制作阶段', card.scope.phase), ('适用条件', card.scope.condition), ('来源', card.source_locator)]:
-        if value:
-            lines.append(label + '：' + value)
+    lines.extend(scope_source_lines(card.scope, card.source_locator))
     outputs = []
     if lines:
         outputs.append(CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id, port_id='text', position=0), modality='text',
