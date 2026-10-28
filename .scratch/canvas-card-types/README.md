@@ -196,3 +196,6 @@ flowchart TD
 - 后续主区复核：8000 已恢复响应，PID61721／73854 工作目录均为本工作区 backend；生产 OpenAPI 与集成 b64ce5e5 的 schema 精确一致（含 subject_name）。标准 openapi:update 已通过；生成器纯尾空行漂移已剔除，不引入无关文件变化。此前超时记录为当时事实，不再作为当前限制。
 
 - 2026-10-28：无冲突合并08（分支HEAD `d8fa8a69`，合并提交 `71a007c8`），Completion 更新为 integrated，分诊Status保持不变。主区Node24.22.1 typecheck及08／视频／API HTTP回归 `74 passed, 2 skipped`（6.84s）通过；合并前分支已含主区 `60dba6df`，复用同一实现全部画布 `123 passed, 27 skipped`、Pylint `10.00/10`、08／06真实页面和共享工作台1440px／390px布局证据。已核实主区app导入路径，8000实际HTTP、主区生产导出与提交OpenAPI精确一致，含命名参考卡和稳定 `object_id` 选择器；标准 `openapi:update` 成功，371处纯尾空行漂移已剔除。工作区差异检查通过，backend／front／site与08验收分支精确一致；主区证据 `/private/tmp/canvas08-integrated`；MySQL及受控供应商／存储限制保留。当前共八票集成，09／10可开始；未推送、未修改其他工作树。
+
+
+- 2026-10-28：10 在 `codex-canvas-types-10` 实现角色情境、人物表演与表演规则三类专用编辑及强类型完整设计输出；直接对象按身份／资格选择，示例文件／区间与模型输入分离，空与不适用／否定／开放提议／事实保留含义。HTTP 与真实 Worker／Chrome 证据、公开契约同步及验证限制见10票据；Completion 为 implemented 待主区集成，分诊 Status 保持不变。不接后续票据来源或摄影图片目标选择。

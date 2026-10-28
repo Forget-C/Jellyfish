@@ -104,3 +104,57 @@ class NamedImageMapping(NamedImageObject):
     """编译预览中可核对的对象到实际提交图片映射。"""
     media_position: int = Field(ge=1)
     angle: str
+
+
+class DesignField(BaseModel):
+    """显式创作状态及用途；不从正文猜测事实或强制可见动作。"""
+    model_config = ConfigDict(extra='forbid')
+    text: str = ''
+    state: Literal['empty', 'not_applicable', 'absent', 'undecided', 'proposal', 'fact'] = 'empty'
+    purpose: Literal['background', 'design', 'constraint'] = 'design'
+    source_locator: str = ''
+
+
+class DesignScope(BaseModel):
+    """创作者声明的范围与制作阶段，不自动推断镜头适用性。"""
+    model_config = ConfigDict(extra='forbid')
+    description: str = ''
+    phase: Literal['video', 'sound', 'postproduction'] | None = None
+    condition: str = ''
+
+
+class PerformanceDesignFields(BaseModel):
+    """导演表演的具体业务字段；字段编辑不开放局部采用。"""
+    model_config = ConfigDict(extra='forbid')
+    situation: DesignField | None = None
+    relationship: DesignField | None = None
+    objective: DesignField | None = None
+    obstacle: DesignField | None = None
+    subtext: DesignField | None = None
+    attention: DesignField | None = None
+    internal_adjustment: DesignField | None = None
+    physical_action: DesignField | None = None
+    gaze: DesignField | None = None
+    breath: DesignField | None = None
+    weight: DesignField | None = None
+    hands: DesignField | None = None
+    voice: DesignField | None = None
+    delivery: DesignField | None = None
+    reaction_order: DesignField | None = None
+    exit_state: DesignField | None = None
+    avoid: DesignField | None = None
+    applicability: DesignField | None = None
+
+
+class DesignTextPayload(BaseModel):
+    """本卡完整设计及直接采用的必要对象，不包含祖先正文或示例媒体。"""
+    model_config = ConfigDict(extra='forbid')
+    kind: Literal['design'] = Field(default='design', json_schema_extra={'enum': ['design']})
+    design_type: Literal['direction.situation', 'direction.performance', 'direction.performance_rule']
+    adoption: Literal['whole_card'] = Field(default='whole_card', json_schema_extra={'enum': ['whole_card']})
+    text: str
+    fields: PerformanceDesignFields
+    scope: DesignScope
+    objects: list[ObjectReferencePayload] = Field(default_factory=list)
+    participant_id: str | None = None
+    source_locator: str = ''

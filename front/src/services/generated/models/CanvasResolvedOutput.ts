@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { DescriptionTextPayload } from './DescriptionTextPayload';
+import type { DesignTextPayload } from './DesignTextPayload';
 import type { MediaOutputPayload } from './MediaOutputPayload';
 import type { NamedImagePayload } from './NamedImagePayload';
 import type { ObjectReferencePayload } from './ObjectReferencePayload';
@@ -14,7 +15,7 @@ import type { TextOutputPayload } from './TextOutputPayload';
 export type CanvasResolvedOutput = {
     source: OutputIdentity;
     modality: string;
-    payload?: ((TextOutputPayload | MediaOutputPayload | ObjectReferencePayload | DescriptionTextPayload | NamedImagePayload) | null);
+    payload?: ((TextOutputPayload | MediaOutputPayload | ObjectReferencePayload | DescriptionTextPayload | NamedImagePayload | DesignTextPayload) | null);
     text?: (string | null);
     file_id?: (string | null);
     token?: string;

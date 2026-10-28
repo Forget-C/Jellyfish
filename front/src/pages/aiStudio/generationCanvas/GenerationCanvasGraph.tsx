@@ -1,3 +1,5 @@
+import { performanceSummary } from './PerformanceDirectionEditor'
+import type { PerformanceCard } from './PerformanceDirectionEditor'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent } from 'react'
 import { Alert, ConfigProvider, Input, Select, Space } from 'antd'
@@ -108,6 +110,7 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false, ru
   const add = (type: string) => {
     const card = (type === 'content.text' || type === 'content.basis') ? { id: crypto.randomUUID(), type, type_version: 1, text: '' }
       : (type === 'content.object' || type === 'content.place') ? { id: crypto.randomUUID(), type, type_version: 1, object_id: null, name: '', category: type === 'content.place' ? 'place' : 'character', text: '', source_locator: '' }
+      : type.startsWith('direction.') ? { id: crypto.randomUUID(), type, type_version: 1, input_bindings: [], examples: [], scope: {} }
       : type.startsWith('reference.') ? { id: crypto.randomUUID(), type, type_version: 1, title: '', angle: '正面', objects: [], input_bindings: [] }
       : type.startsWith('model.') ? { id: crypto.randomUUID(), type, type_version: 1, model_id: null, prompt: { segments: [] }, config: {} }
       : { id: crypto.randomUUID(), type, type_version: 1, file_id: null, uploading: false }
@@ -213,9 +216,9 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false, ru
   return <div className="generation-graph" ref={container}>
     <nav hidden={!toolboxOpen} className="generation-toolbox" aria-label="添加卡片">
       {(['基础内容', '模型生成'] as const).map(group => <section key={group}><h2>{group}</h2>
-        {Object.entries(cardTitles).filter(([type]) => group === '模型生成' ? type.startsWith('model.') : !type.startsWith('model.')).map(([type, title]) => <Button key={type} disabled={readonly} onClick={() => add(type)}>添加{title.replace('内容', '')}</Button>)}
+        {Object.entries(cardTitles).filter(([type]) => group === '模型生成' ? type.startsWith('model.') : !type.startsWith('model.') && !type.startsWith('direction.')).map(([type, title]) => <Button key={type} disabled={readonly} onClick={() => add(type)}>添加{title.replace('内容', '')}</Button>)}
       </section>)}
-      <section><h2>导演工具箱</h2><small>暂无可用工具</small></section>
+      <section><h2>导演工具箱</h2>{Object.entries(cardTitles).filter(([type]) => type.startsWith('direction.')).map(([type, title]) => <Button key={type} disabled={readonly} onClick={() => add(type)}>添加{title}</Button>)}</section>
     </nav>
     <Space wrap className="generation-toolbar">
       <Button aria-label={toolboxOpen ? '收起工具箱' : '展开工具箱'} aria-expanded={toolboxOpen} onClick={() => setToolboxOpen(value => !value)}>{toolboxOpen ? '收起工具箱' : '展开工具箱'}</Button>
@@ -296,7 +299,7 @@ export function GenerationCanvasGraph({ document, onChange, readonly = false, ru
               if (Math.abs(width - (size?.width || 400)) > 2 || Math.abs(height - (size?.height || measured[card.id]?.height || height)) > 2)
                 layout.setView(previous => ({ ...previous, sizes: { ...previous.sizes, [card.id]: { width, height } } }))
             }} onRemove={() => removeCard(card.id)} inputs={inputPorts(card).map(name => port(card, name, true))} outputs={outputPorts(card).map(name => port(card, name, false))}>
-            <p className="canvas-card-summary">{'title' in card ? `${card.title || '命名图片参考'} · ${card.angle || '正面'} · ${card.image_binding ? '已选主图' : '缺少主图'}` : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '模型配置、输入采用与运行记录' : 'file_id' in card && card.file_id ? '已选择媒体，打开详情预览' : '未选择媒体'}</p>
+            <p className="canvas-card-summary">{card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard) : 'title' in card ? `${card.title || '命名图片参考'} · ${card.angle || '正面'} · ${card.image_binding ? '已选主图' : '缺少主图'}` : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '模型配置、输入采用与运行记录' : 'file_id' in card && card.file_id ? '已选择媒体，打开详情预览' : '未选择媒体'}</p>
           </CardShell>
         })}
       </div>
