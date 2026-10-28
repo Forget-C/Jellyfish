@@ -18,7 +18,7 @@ from app.models.generation_canvas import (
 from app.models.llm import Model, ModelCategoryKey, Provider
 from app.schemas.generation_canvas import (
     CanvasDocument, CanvasDiagnostic, CanvasNodeRead, CanvasPrecheck, CanvasPrecheckRequest,
-    CanvasResolvedOutput, CanvasRunRead, CanvasRunSubmit, CanvasSnapshot, ModelCard, OutputIdentity,
+    CanvasResolvedOutput, CanvasRunRead, CanvasRunSubmit, CanvasSnapshot, MediaContentCard, ModelCard, OutputIdentity,
 )
 from app.services.generation_canvas.capabilities import model_capability
 from app.services.generation_canvas.compiler import compile_card
@@ -134,6 +134,25 @@ class CanvasRuntime:
         result, visiting = {}, set()
         document = CanvasDocument.model_validate(canvas.document)
         cards = {card.id: card for card in document.cards}
+        # 文件可在保存后失效；读取和编译统一使用已核验的媒体出口。
+        from app.services.generation_canvas.outputs import card_outputs
+        from app.services.studio.files import require_available_file
+        from app.models.studio import FileUsage
+        for card in document.cards:
+            if not isinstance(card, MediaContentCard) or not card.file_id:
+                continue
+            outputs = card_outputs(canvas.id, card)
+            try:
+                await require_available_file(self.db, file_id=card.file_id,
+                    expected_type=card.output_ports[0], lock=False)
+                belongs = await self.db.scalar(select(FileUsage.id).where(
+                    FileUsage.file_id == card.file_id, FileUsage.project_id == self.project_id).limit(1))
+                if not belongs:
+                    raise HTTPException(404, 'File not in project')
+            except HTTPException:
+                outputs = [CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas.id, card_id=card.id,
+                    port_id=card.output_ports[0], position=0), modality=card.output_ports[0], available=False)]
+            result[card.id] = outputs
         async def resolve(card_id):
             if card_id in result or card_id in visiting or card_id not in stored or card_id not in cards:
                 return
