@@ -130,13 +130,11 @@
 .generation-card-menu { position: absolute; top: 32px; right: 0; z-index: 25; padding: 8px; display: grid; gap: 4px; background: var(--wb-raised); border: 1px solid var(--wb-border); border-radius: var(--wb-radius); }
 
 /* 四边几何点不代表逻辑字段；命中区大于可见圆点。 */
-.generation-connection-point { position: absolute; z-index: 5; width: 28px; height: 28px; padding: 8px; border: 0; background: transparent; cursor: crosshair; opacity: 0; touch-action: none; }
+.generation-connection-point { position: absolute; z-index: 5; width: 28px; height: 28px; padding: 8px; border: 0; background: transparent; cursor: pointer; opacity: 0; touch-action: none; }
 .generation-connection-point i { display: block; width: 10px; height: 10px; border-radius: 50%; border: 1px solid var(--wb-muted); background: var(--wb-surface); }
-.generation-connection-point[data-connection-side="top"] { left: 50%; top: 0; transform: translate(-50%, -50%); }
 .generation-connection-point[data-connection-side="right"] { right: 0; top: 50%; transform: translate(50%, -50%); }
-.generation-connection-point[data-connection-side="bottom"] { left: 50%; bottom: 0; transform: translate(-50%, 50%); }
 .generation-connection-point[data-connection-side="left"] { left: 0; top: 50%; transform: translate(-50%, -50%); }
-.generation-card:hover .generation-connection-point, .generation-card:focus-within .generation-connection-point, .generation-card[data-selected="true"] .generation-connection-point, .generation-connection-point[data-connected="true"], .generation-connection-point[data-connecting="true"] { opacity: 1; }
+.generation-card:hover .generation-connection-point, .generation-card:focus-within .generation-connection-point, .generation-card[data-selected="true"] .generation-connection-point, .generation-connection-point[data-connecting="true"] { opacity: 1; }
 .generation-connection-point[data-compatible="true"] i { border-color: var(--wb-focus); background: var(--wb-selected); }
 .generation-connection-point[data-compatible="false"] i { border-style: dashed; }
 .generation-temporary-connection { position: absolute; inset: 0; pointer-events: none; z-index: 10; overflow: visible; }
@@ -175,3 +173,6 @@
 .generation-group { pointer-events: auto; }
 
 .generation-edges { z-index: 2; }
+.generation-edges [data-edge-active="true"] .canvas-edge-line { stroke: var(--wb-focus); stroke-width: 3px; stroke-dasharray: 12 6; animation: generation-edge-flow 1s linear infinite; }
+@keyframes generation-edge-flow { to { stroke-dashoffset: -36; } }
+@media (prefers-reduced-motion: reduce) { .generation-edges [data-edge-active="true"] .canvas-edge-line { animation: none; } }
