@@ -30,7 +30,6 @@
 
 .generation-material-submit svg { width: 20px; height: 20px; }
 .generation-material-results { font-size: 12px; min-width: 0; }
-.generation-material-error { color: var(--ant-color-error); margin: 0; font-size: 12px; }
 @media (max-width: 700px) {
   .generation-material-composer { grid-template-columns: minmax(0, 1fr); }
   .generation-material-basis { border-right: 0; border-bottom: 1px solid var(--wb-border); }

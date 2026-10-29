@@ -84,7 +84,7 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
     {diagnostics.length > 0 && <Alert type="warning" message={<ul>{diagnostics.map(message => <li key={message}>{message}</li>)}</ul>} />}
     {capabilityError && <Alert type="warning" message={capabilityError} />}
     {card.model_id && !models?.some(model => model.id === card.model_id) && <Alert type="warning" message="已选模型当前不可用，原配置和连线已保留" />}
-    {node?.error_message && <p role="alert" className="generation-material-error">{node.error_message} · 详见运行状态</p>}
+    {node?.error_message && <Alert type="error" message={`${node.error_message} · 详见运行状态`} />}
     {(resolved.compiled?.diagnostics || []).some(item => item.severity !== 'warning') && <small role="alert">输入需要核对，请打开管理候选与采用查看诊断</small>}
     <div className="generation-material-tools">{sourceActions}<details className="generation-material-candidates"><summary>管理候选与采用</summary>
     <section aria-label="候选参考区">{references || <small>连接仅提供候选，正文或用途配置决定实际使用</small>}</section>

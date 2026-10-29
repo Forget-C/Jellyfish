@@ -31,3 +31,5 @@
 - 原 `single-submit`、`composer`、`images`、`video`、`video-bindings`、`runtime`、`acceptance` 公开旅程通过：证据依次 `/private/tmp/canvas-b43-single`、`/private/tmp/canvas-b43-composer`、`/private/tmp/canvas-b43-images`、`/private/tmp/canvas-b43-video`、`/private/tmp/canvas-b43-video-bindings3`、`/private/tmp/canvas-b43-runtime`、`/private/tmp/canvas-b43-acceptance`。旧用例改为通过真实折叠入口进入候选／输出，不删除业务断言；视频两用例共用端口，先前并发失败已顺序重跑通过。
 - 已实际查看 B 原型、正式默认／展开／窄屏及局部放大图。最终图 `/private/tmp/canvas-b43-final/material-adopted-detail.png`、`material-expanded.png`、`material-mobile.png`、`material-large.png` 显示文本＋真实上传图片依据、1:3主体、可达圆提交；合法原创图示、实际支持参数及窄屏已有添加／连接入口属于明确差异。完整图片对照由48组合收口，不使用01–42旧通过证明B视觉。
 - Node24 typecheck与变更组件ESLint通过，`git diff --check`通过；后端及公开协议未改，不再生客户端或机械重跑后端检查。供应商／外部存储使用受控替身，不证明真实供应商质量；01–42未修改。等待集成及最终双轴审查。
+
+- 最新集成tip（含45／46）的无冲突合并后，新旅程 `/private/tmp/canvas-b43-integrated` 与 Node24 typecheck／变更组件ESLint通过；实际重新查看带图片模态图标的默认、展开、窄屏与大屏图。错误摘要改用已有主题化 Alert 后，`/private/tmp/canvas-b43-images-final` 完整失败恢复／多图／独立采用旅程再次通过。窄屏截图在响应式稳定后采集，未再出现视口切换中的截图拼接。
