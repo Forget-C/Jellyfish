@@ -42,9 +42,9 @@ try {
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
   assert.ok(seeded.ok, await seeded.text())
   await page.goto(`http://127.0.0.1:4277/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
-  const open = async id => { await page.locator(`[data-card-id="${id}"]`).press('Enter'); await page.locator('.wb-details').waitFor() }
+  const open = async id => { await page.locator(`[data-card-id="${id}"]`).press('Enter'); await page.locator('.wb-details:not([hidden])').waitFor() }
   await open('m')
-  const card = page.getByRole('complementary'), consumer = card
+  const card = page.locator('.wb-details:not([hidden])'), consumer = card
   const preview = page.getByRole('region', { name: '运行预检', exact: true })
   const control = async body => (await fetch(`${api}/test/image-controls`, body && { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json()
   const runtime = async () => (await (await fetch(`${base}/${canvas.id}/runtime`)).json()).data
@@ -140,7 +140,7 @@ try {
   await page.setViewportSize({ width: 390, height: 844 })
   await open('consumer')
   await inputs.getByRole('button', { name: '取消采用 @图片3', exact: true }).waitFor()
-  const detail = page.locator('.wb-details')
+  const detail = page.locator('.wb-details:not([hidden])')
   const box = await detail.boundingBox()
   assert.ok(box.x >= 0 && box.x + box.width <= 391, 'mobile detail stays inside viewport')
   await page.screenshot({ path: join(output, 'mobile-independent-adoption.png'), fullPage: true })

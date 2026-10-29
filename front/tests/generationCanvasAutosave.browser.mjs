@@ -1,3 +1,4 @@
+import { openCanvasManagement, openCardList } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -37,6 +38,7 @@ try {
   const read = async id => (await (await fetch(`${base}/${id}`)).json()).data
   const canvas = await create('持续编辑')
   await page.goto(`http://127.0.0.1:4271/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  await openCardList(page)
   await page.getByRole('button', { name: '添加文本卡' }).click()
   const text = page.getByRole('textbox', { name: '文本内容', exact: true })
   // Input never pauses for a second: a saved intermediate value proves periodic coalescing.
@@ -55,11 +57,13 @@ try {
   let rejected = 0
   page.on('response', response => { if (response.request().method() === 'PUT' && response.status() === 422) rejected++ })
   const invalid = page.waitForResponse(response => response.request().method() === 'PUT' && response.status() === 422)
+  await openCanvasManagement(page)
   await page.getByRole('textbox', { name: '画布名称' }).fill('')
   await invalid
   await delay(2300)
   assert.equal(rejected, 1, 'same invalid document is attempted only once automatically')
   assert.equal(await text.inputValue(), '持续输入 6')
+  await openCanvasManagement(page)
   await page.getByRole('textbox', { name: '画布名称' }).fill('已纠正')
   await page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '已保存' }).waitFor()
   // A delayed save keeps one network request active and coalesces B/C into latest C.
@@ -118,7 +122,7 @@ try {
   const seed = await fetch(`${base}/${downstream.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
   assert.ok(seed.ok, await seed.text())
   await page.goto(`http://127.0.0.1:4271/projects/canvas-project/generation-canvas?canvas=${downstream.id}`)
-  const open = async id => { await page.locator(`[data-card-id="${id}"]`).press('Enter'); await page.getByRole('complementary').waitFor() }
+  const open = async id => { await page.locator(`[data-card-id="${id}"]`).press('Enter'); await page.locator('.wb-details:not([hidden])').waitFor() }
   await open('m')
   const adopted = page.getByRole('region', { name: '已保存直接输入' })
   await adopted.getByText('原已保存来源', { exact: true }).waitFor()
@@ -147,6 +151,7 @@ try {
   await open('source'); await text.fill('旧响应中的正文')
   await page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '已保存' }).waitFor()
   await open('m'); await outputStarted
+  await openCanvasManagement(page)
   await page.getByRole('textbox', { name: '画布名称' }).fill('触发较新修订')
   await page.getByRole('button', { name: '保存画布' }).click()
   await page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '已保存' }).waitFor()

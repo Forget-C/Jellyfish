@@ -1,3 +1,4 @@
+import { openCardMenu } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { openCanvasCard, closeCanvasDetails, closePrecheck } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -84,10 +85,10 @@ try {
   await page.mouse.down()
   await page.mouse.move(cb.x + cb.width + 3, ab.y + 45, { steps: 8 })
   await page.mouse.up()
-  assert.ok(await a.getByRole('checkbox').isChecked(), 'box selects A')
-  assert.ok(await b.getByRole('checkbox').isChecked(), 'box selects B')
-  assert.ok(await c.getByRole('checkbox').isChecked(), 'box selects C')
-  await b.getByRole('checkbox').uncheck()
+  assert.ok((await a.getAttribute('data-selected')) === 'true', 'box selects A')
+  assert.ok((await b.getAttribute('data-selected')) === 'true', 'box selects B')
+  assert.ok((await c.getAttribute('data-selected')) === 'true', 'box selects C')
+  await b.getByRole('button', { name: '卡片操作', exact: true }).click(); await b.getByRole('button', { name: /^(?:取消选择卡片|选择卡片)$/, exact: true }).click()
   await page.getByRole('button', { name: '运行所选模型（2）', exact: true }).click()
   const preview = page.getByRole('region', { name: '运行预检' })
   await preview.waitFor()
@@ -96,9 +97,9 @@ try {
   assert.equal((await request('/runtime', undefined, 'GET')).runs.length, 3, 'omitted B creates no run')
   await page.screenshot({ path: join(output, 'selection-omitted-middle.png'), fullPage: true })
   await closePrecheck(page)
-  await b.getByRole('checkbox').check()
-  await page.locator('[data-card-id="X"]').getByRole('checkbox').check()
-  await page.locator('[data-card-id="note"]').getByRole('checkbox').check()
+  await b.getByRole('button', { name: '卡片操作', exact: true }).click(); await b.getByRole('button', { name: /^(?:取消选择卡片|选择卡片)$/, exact: true }).click()
+  await openCardMenu(page, 'X'); await page.locator('[data-card-id="X"]').getByRole('button', { name: '选择卡片', exact: true }).click()
+  await openCardMenu(page, 'note'); await page.locator('[data-card-id="note"]').getByRole('button', { name: '选择卡片', exact: true }).click()
   await page.getByRole('button', { name: '运行所选模型（4）', exact: true }).click()
   await preview.waitFor()
   assert.match(await preview.textContent(), /执行 A、B、C、X/)

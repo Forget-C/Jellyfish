@@ -36,3 +36,39 @@ export async function assertVisibleInDetails(locator) {
   })
   assert.equal(visible, true, 'content is exposed within the floating detail and viewport')
 }
+
+/** 使用真实菜单和目录入口，避免依赖旧的常驻控件。 */
+export async function openCanvasManagement(page) {
+  const trigger = page.getByRole('button', { name: '画布管理', exact: true })
+  if (await trigger.getAttribute('aria-expanded') !== 'true') await trigger.press('Enter')
+}
+export async function openCardList(page) {
+  const trigger = page.getByRole('button', { name: '添加卡片', exact: true })
+  if (await trigger.getAttribute('aria-expanded') !== 'true') await trigger.press('Enter')
+}
+export async function closeCardList(page) {
+  const trigger = page.getByRole('button', { name: '添加卡片', exact: true })
+  if (await trigger.getAttribute('aria-expanded') === 'true') await trigger.click()
+}
+export async function openCardMenu(page, id) {
+  const card = page.locator(`[data-card-id="${id}"]`)
+  const trigger = card.getByRole('button', { name: '卡片操作', exact: true })
+  if (await trigger.getAttribute('aria-expanded') !== 'true') await trigger.press('Enter')
+}
+
+export async function openSummaryMenu(summary) {
+  const trigger = summary.getByRole('button', { name: '卡片操作', exact: true })
+  if (await trigger.getAttribute('aria-expanded') !== 'true') await trigger.press('Enter')
+}
+
+export async function selectCanvasByName(page, name) {
+  await openCanvasManagement(page)
+  const chooser = page.getByRole('combobox', { name: '选择画布', exact: true })
+  await chooser.press('ArrowDown')
+  for (let index = 0; index < 30; index++) {
+    const active = page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option-active')
+    if (await active.count() && (await active.innerText()).trim() === name) { await chooser.press('Enter'); return }
+    await chooser.press('ArrowDown')
+  }
+  throw new Error(`画布选项不可达：${name}`)
+}
