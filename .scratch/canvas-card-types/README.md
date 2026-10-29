@@ -470,3 +470,8 @@ flowchart TD
 - 共46项独立真实浏览器用例有通过证据：39项本轮画布／旧实验室、1项新增导演摘要／键盘焦点、6项未受影响的共享工作台基线。修复后11项定向回归通过，规格审查者另独立执行新增公开页面用例6.3s通过并查看截图。三种视口、逐case证据和失败／复用说明见[交互验收](interactions-acceptance.md)。
 - 主区typecheck、差异及01–26字节校验通过，单元检查通过；原3条hooks lint告警、隔离MySQL selection未执行及受控外部供应商／存储限制如实保留，不宣称全局lint或MySQL竞争通过。未改公开schema或应用后端。
 - 本次八个实现／修复工作树已清理，另两份33测试迁移子工作树已由实现者清理；分支与外部截图、日志和审查证据保留。审计 `/private/tmp/canvas-interaction-cleanup.json`。从工作区外导入backend仍指向主工作区，当前只保留原工作区；未推送。
+
+### 2026-10-29：34 集成
+
+- 34（实现产品 `8bbcf8cf`，同步后分支 `dcc7d166`）已无冲突集成；距离拖动、普通单选／线选择与 Space 手势形成自身真实页面闭环。主区 Node24 typecheck、差异检查及01–33字节校验通过，合后产品和测试树等同源分支，复用正式 cards 9.4s（`/private/tmp/canvas34-release`）及 ports 10.6s（`/private/tmp/canvas34-ports`）证据。
+- 34 Completion 为 integrated，Status 保持 ready-for-agent；当前前沿35、36、38。下方编辑／左右点等下游改版与最终视觉验收尚待完成，不预填通过。原01–33及历史验收记录未修改。

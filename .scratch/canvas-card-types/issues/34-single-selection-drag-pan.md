@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented
+**Completion:** integrated
 
 - [x] 卡片内容区上方展示对应图标与名称，主要区域展示输出，底部弱化状态；使用有限尺寸，不新增卡面表单或字段级端点。
 - [x] 普通状态仅有一个选中操作对象。点击卡片替换单选与编辑目标，点击线取消卡片选择并收起旧编辑展示；普通空白点击或 Escape 清除选择和编辑展示，输入与保存状态保留。内层控件和进行中的手势优先处理 Escape。
@@ -30,3 +30,5 @@
 - 迁移既有 cards 用例的旧长按／默认未选中预期，并增加普通单选替换、复杂卡仅选中、Escape、空白清选、Space 提前释放继续平移与仅改变视口断言。正式 `/private/tmp/canvas34-release/generation-canvas-cards` **9.4s passed**；受影响原 ports 真页面→HTTP→受控Worker 回归 `/private/tmp/canvas34-ports/generation-canvas-ports` **10.6s passed**。先期 green1／green2 为旧测试选择语义及空白坐标落入详情浮层的失败记录，未掩盖或记为通过；最终用例显式操作可见空白区域。
 - Node24.22.1 typecheck 通过，定向 ESLint 0 errors，仅 Graph 两条既有 inspectTarget hooks 依赖告警；差异检查通过。实际查看 `cards-dragging.png`、`cards-desktop.png`、`cards-mobile.png`：图标标题、输出卡、拖动反馈、窄屏编辑输入可读；四边点与右侧详情仍为下游35／36待替换部分，不宣称整轮视觉完成。
 - 持续输入、同卡拖动会话、取消、真实触摸、媒体事件、键盘移动及HTTP保存重开均由真实用例覆盖；供应商／外部存储仍受控替身，无公开schema或后端应用变化。01–33未修改，不推送；本票为implemented，待merger集成。
+
+- 2026-10-29 集成：分支 `dcc7d166` 已含最新集成基线 `c20d9556`，无冲突合入当前 codex-generation-canvas（合并提交 `6d4294e3`）。主区 Node24 typecheck、差异检查及01–33哈希保护通过；合后产品与测试树和已验证源分支完全相同，复用 cards 9.4s 与 ports 10.6s 真实页面证据。35、36、38解除依赖；不代表本轮最终视觉验收完成，既有告警／受控外部服务限制保持。
