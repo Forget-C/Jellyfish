@@ -480,3 +480,8 @@ flowchart TD
 
 - 35（`1f75a14d`）已无冲突集成；左右几何点、动态高亮、仅当前线选中及精确剪刀保护形成页面到HTTP闭环。主区Node24 typecheck、差异检查和01–33字节保护通过，产品／测试树与源分支一致，复用最终 edge-management 12.1s（`/private/tmp/canvas35-release-final`）和 ports 10.6s（`/private/tmp/canvas35-ports-release`）证据。
 - 34、35均integrated；36、38正在推进，37／39仍待36，40等待全部前置。未预记最终视觉验收或全局lint通过，受控供应商／存储与原环境限制保留。
+
+### 2026-10-29：36 集成
+
+- 36（`7728319e`，已同步35）无冲突集成，下方锚定编辑、同会话居中展开、空间避让、出屏恢复及适用上传动作形成页面闭环。主区Node24 typecheck、差异与01–33哈希通过；合后产品／测试树与最终源分支相同，复用 all-types 10.8s（`/private/tmp/canvas36-all-types`）、sessions 9.8s及media 9.9s证据，具体范围和限制见36票据。
+- 当前34–36均integrated，37、39解除依赖，38继续推进；未预记复杂导演Modal、单模型提交或本轮整体视觉验收。历史票据与原验收记录保持原样。

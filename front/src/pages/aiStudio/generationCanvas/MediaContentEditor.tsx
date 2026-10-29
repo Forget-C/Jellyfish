@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Empty, Modal, Pagination, Space } from 'antd'
+import { Alert, Button, Dropdown, Empty, Modal, Pagination, Space } from 'antd'
+import { PlusOutlined } from '@ant-design/icons'
+import { WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
 import { ApiError, StudioFilesService } from '../../../services/generated'
 import type { AudioContentCard, FileRead, ImageContentCard, VideoContentCard } from '../../../services/generated'
 import { buildFileDownloadUrl } from '../assets/utils'
@@ -22,6 +24,7 @@ export function MediaPreview({ fileId, type }: { fileId: string; type: string })
 
 /** 上传与画布保存分别提交；回调只更新原卡，调用方须按现有 ID 合并编辑。 */
 export function MediaContentEditor({ card, projectId, onChange, disabled }: MediaContentEditorProps) {
+  const input = useRef<HTMLInputElement>(null)
   const [error, setError] = useState('')
   const [library, setLibrary] = useState(false)
   const [files, setFiles] = useState<FileRead[]>([])
@@ -77,14 +80,12 @@ export function MediaContentEditor({ card, projectId, onChange, disabled }: Medi
     {card.file_id ? <MediaPreview fileId={card.file_id} type={type} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚未选择文件" />}
     {error && <Alert type="error" message={error} />}
     {(uploading || card.uploading) && <Alert type="info" message={uploading ? '上传中，暂不发布有效输出' : '上次上传未完成，请重新上传或从项目文件选择'} />}
-    <Space wrap>
-      <label>
-        <span>{card.file_id ? '替换文件' : '上传文件'}</span>
-        <input aria-label="上传媒体文件" type="file" accept={`${type}/*`} disabled={disabled}
-          onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void upload(file) }} />
-      </label>
-      <Button disabled={disabled || uploading} onClick={() => { setPage(1); setLibrary(true) }}>从项目文件选择</Button>
-    </Space>
+    <Dropdown trigger={['click']} menu={{ items: [{ key: 'upload', label: card.file_id ? '替换文件' : '上传文件' }, { key: 'library', label: '从项目文件选择' }],
+      onClick: ({ key }) => { if (key === 'upload') input.current?.click(); else { setPage(1); setLibrary(true) } } }} disabled={disabled || uploading}>
+      <WorkbenchIconButton label="添加媒体" icon={<PlusOutlined />} disabled={disabled || uploading} />
+    </Dropdown>
+    <input ref={input} hidden aria-label="上传媒体文件" type="file" accept={`${type}/*`} disabled={disabled}
+      onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void upload(file) }} />
     <Modal title="项目文件库" open={library} onCancel={() => setLibrary(false)} footer={null} destroyOnClose>
       {error && <Alert type="error" message={error} />}
       <Button loading={loading} onClick={() => setRefresh(value => value + 1)}>刷新项目文件</Button>
