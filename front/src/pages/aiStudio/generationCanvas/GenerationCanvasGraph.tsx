@@ -113,7 +113,16 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
   }, [selected, detailId, selectedEdgeId, multiSelectMode])
   const selectGroup = (id: string) => { clearSelection(); setSelectedGroupId(id); setGroupPanel(undefined) }
   const [edgeActionPoint, setEdgeActionPoint] = useState<{ x: number; y: number }>()
-  const selectEdge = (id?: string, position?: { x: number; y: number }) => { setMultiSelectMode(false); setSelected([]); setDetailId(undefined); setSelectedEdgeId(id); setEdgeActionPoint(position) }
+  const selectEdge = (id?: string, position?: { x: number; y: number }) => {
+    // Keyboard and relation-picker activation use the visible path midpoint; mouse activation supplies its click.
+    const path = id ? container.current?.querySelector<SVGPathElement>(`[data-generation-edge-id="${CSS.escape(id)}"] .canvas-edge-hit`) : undefined
+    if (!position && path) {
+      const point = path.getPointAtLength(path.getTotalLength() / 2)
+      const matrix = path.getScreenCTM(), bounds = container.current?.getBoundingClientRect()
+      if (matrix && bounds) { const screen = new DOMPoint(point.x, point.y).matrixTransform(matrix); position = { x: screen.x - bounds.left, y: screen.y - bounds.top } }
+    }
+    setMultiSelectMode(false); setSelected([]); setDetailId(undefined); setSelectedEdgeId(id); setEdgeActionPoint(position)
+  }
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       const target = event.target as Element
@@ -638,11 +647,10 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
           options={edges.map(edge => ({ value: edge.id, label: edgeLabel(edge) }))} onChange={id => selectEdge(id)} />
       </CanvasToolbarMenu>
     </nav>
-    {inspectedEdge && <section className="generation-edge-inspector" aria-label="所选候选连接" style={edgeActionPoint ? { left: Math.max(8, Math.min(edgeActionPoint.x, (container.current?.clientWidth || window.innerWidth) - 280)), top: Math.max(8, Math.min(edgeActionPoint.y, (container.current?.clientHeight || window.innerHeight) - 130)), bottom: 'auto' } : undefined} onPointerDown={event => event.stopPropagation()}>
-      <strong>{edgePurpose(inspectedEdge)}</strong>
-      <p>{cardLabel(inspectedEdge.source_card)} → {cardLabel(inspectedEdge.target_card)}</p>
-      <Button disabled={readonly} icon={<ScissorOutlined />} aria-label="删除此候选连接" onClick={() => removeEdge(inspectedEdge)}>剪断连接</Button>
-      <Button variant="quiet" onClick={() => setSelectedEdgeId(undefined)}>关闭连接详情</Button>
+    {inspectedEdge && <section className="generation-edge-inspector" aria-label="所选候选连接" style={{ left: Math.max(20, Math.min(edgeActionPoint?.x ?? 40, (container.current?.clientWidth || window.innerWidth) - 20)), top: Math.max(20, Math.min(edgeActionPoint?.y ?? 40, (container.current?.clientHeight || window.innerHeight) - 20)) }} onPointerDown={event => event.stopPropagation()}>
+      <Tooltip trigger={['hover', 'focus']} title={<span className="generation-edge-hint"><strong>{edgePurpose(inspectedEdge)}</strong><span>{cardLabel(inspectedEdge.source_card)} → {cardLabel(inspectedEdge.target_card)}{readonly ? ' · 只读，无法删除' : ''}</span></span>}>
+        <span><Button aria-label="删除此候选连接" disabled={readonly} icon={<ScissorOutlined style={{ fontSize: 'calc(var(--wb-icon) * 1.5)' }} />} variant="quiet" onClick={() => removeEdge(inspectedEdge)} /></span>
+      </Tooltip>
     </section>}
     {(selected.length > 1 || multiSelectMode) && <div className="generation-selection-actions" role="toolbar" aria-label="所选卡片操作" style={(() => {
       const chosen = selected.map(id => ({ point: point(id), size: measured[id] || { width: 400, height: 200 } }))
@@ -724,9 +732,9 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
             const parallel = edges.filter(item => item.source_card === edge.source_card && item.target_card === edge.target_card)
             const lane = (parallel.findIndex(item => item.id === edge.id) - (parallel.length - 1) / 2) * 36
             const active = selectedEdgeId ? selectedEdgeId === edge.id : hoveredEdgeId === edge.id || selected.includes(edge.source_card) || selected.includes(edge.target_card)
-            return <g key={edge.id} data-edge-active={active} onFocus={() => setHoveredEdgeId(edge.id)} onBlur={() => setHoveredEdgeId(undefined)} onClick={event => {
+            return <g key={edge.id} data-generation-edge-id={edge.id} data-edge-active={active} onFocus={() => setHoveredEdgeId(edge.id)} onBlur={() => setHoveredEdgeId(undefined)} onClick={event => {
               const bounds = container.current?.getBoundingClientRect()
-              if (bounds) selectEdge(edge.id, { x: Math.max(8, Math.min(event.clientX - bounds.left, bounds.width - 280)), y: Math.max(8, Math.min(event.clientY - bounds.top, bounds.height - 130)) })
+              if (bounds) selectEdge(edge.id, { x: event.clientX - bounds.left, y: event.clientY - bounds.top })
             }} onMouseEnter={() => setHoveredEdgeId(edge.id)} onMouseLeave={() => setHoveredEdgeId(undefined)}>
               <CanvasEdge selected={selectedEdgeId === edge.id} d={connectionPath(from, to, sides.source, sides.target, lane)} className={adopted ? 'generation-edge-adopted' : 'generation-edge-candidate'}
                 label={edgeLabel(edge)} onInspect={() => selectEdge(edge.id)}
