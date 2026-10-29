@@ -158,10 +158,12 @@
 .generation-target-menu { width: min(320px, calc(100vw - 104px)); left: 88px; top: 180px; max-height: calc(100vh - 260px); overflow: auto; }
 .generation-edges [data-selected="true"] .canvas-edge-line { stroke: var(--wb-focus); stroke-width: 3px; }
 
-.generation-edges .canvas-edge-hit { pointer-events: stroke; cursor: pointer; }
+.generation-edges .canvas-edge-hit { pointer-events: stroke; cursor: pointer; outline: none; }
 .generation-edges .canvas-edge-hit:focus-visible { outline: none; stroke: var(--wb-focus); stroke-opacity: .35; }
-.generation-edge-inspector { position: absolute; z-index: 45; bottom: 100px; left: 16px; max-width: min(360px, calc(100% - 32px)); padding: 12px; background: var(--wb-surface); border: 1px solid var(--wb-border); border-radius: var(--wb-radius); color: var(--wb-text); }
-.generation-edge-inspector p { font-size: 12px; overflow-wrap: anywhere; }
+.generation-edge-inspector { position: absolute; z-index: 45; width: 36px; height: 36px; transform: translate(-50%, -50%); color: var(--wb-text); }
+.generation-edge-inspector button { width: 36px; height: 36px; min-height: 36px; padding: 4px; color: var(--wb-text); font-size: 24px; filter: drop-shadow(0 1px 3px var(--wb-surface)); }
+.generation-edge-hint { display: grid; max-width: 260px; font-size: 11px; overflow-wrap: anywhere; }
+
 
 @media(max-width: 700px) {
   .generation-bottom-right .canvas-status-host { position: absolute; right: 0; bottom: calc(100% + 8px); width: max-content; max-width: calc(100vw - 24px); box-sizing: border-box; }
