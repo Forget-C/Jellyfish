@@ -12,6 +12,10 @@ from app.services.generation_canvas.compiler import prompt_references
 async def plan(runtime, canvas, command, *, lock_config=False):
     """只沿实际引用展开；即使生产者在范围内也不准许缺失位置。"""
     from app.services.generation_canvas.runtime import digest
+    if command.kind != 'single' or command.card_ids:
+        from app.services.generation_canvas.errors import diagnostic
+        raise diagnostic('SINGLE_MODEL_ONLY', '仅支持从模型编辑区提交当前模型，不支持批量或自动执行上游',
+            {'card_id': command.card_id}, blocks=['run'])
     document = CanvasDocument.model_validate(canvas.document)
     cards = {card.id: card for card in document.cards}
     outputs = await runtime.current_outputs(canvas)

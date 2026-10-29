@@ -7,7 +7,7 @@ import { PhotographyEditor } from './PhotographyEditor'
 import { PhotographyInputScope } from './PhotographyInputScope'
 import { NamedImageSummary } from './NamedImageSummary'
 import type { ComponentType, ReactNode } from 'react'
-import { Alert, Button, Select, Space } from 'antd'
+import { Alert, Select, Space } from 'antd'
 import type { CanvasDocument, CanvasModelCapability, CanvasNodeRead, CanvasResolvedOutput, CreativeBasisCard, ImageModelCard, ModelRead, ObjectDescriptionCard, PlaceDescriptionCard, TextContentCard, TextModelCard, VideoModelCard } from '../../../services/generated'
 import { ExperimentComposer } from '../experiment/components/ExperimentComposer'
 import { SoundDirectionEditor } from './SoundDirectionEditor'
@@ -30,10 +30,10 @@ import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
 import { activeNode, canvasNodeStatusLabels } from './useGenerationCanvasRuntime'
 
 export type CardRendererProps = { initialEntry?: string; savedRevision?: number; savedCard?: GenerationCard; card: GenerationCard; document: CanvasDocument; projectId: string; onChange: (card: GenerationCard) => void; onAddAngle?: (output: CanvasResolvedOutput) => void;
-  models?: ModelRead[]; capability?: CanvasModelCapability; capabilityError?: string; references?: ReactNode; disabled?: boolean; modelOutputs?: Record<string, CanvasResolvedOutput[]>; node?: CanvasNodeRead; busy?: boolean; checking?: boolean; runDisabled?: boolean; onPrecheck?: () => void; onTargetPrecheck?: () => void }
+  models?: ModelRead[]; capability?: CanvasModelCapability; capabilityError?: string; references?: ReactNode; disabled?: boolean; modelOutputs?: Record<string, CanvasResolvedOutput[]>; node?: CanvasNodeRead; busy?: boolean; checking?: boolean; runDisabled?: boolean; onPrecheck?: () => void; sourceActions?: ReactNode }
 
 /** 模型卡共享受控 Composer 布局，参数由各模态组件表达。 */
-function ModelRenderer({ card: raw, savedRevision, savedCard, document, disabled, onChange, models, capability, capabilityError, references, modelOutputs, node, busy, checking, runDisabled, onPrecheck, onTargetPrecheck }: CardRendererProps) {
+function ModelRenderer({ card: raw, savedRevision, savedCard, document, disabled, onChange, models, capability, capabilityError, references, modelOutputs, node, busy, checking, runDisabled, onPrecheck, sourceActions }: CardRendererProps) {
   const card = raw as TextModelCard | ImageModelCard | VideoModelCard
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs)
   const savedBindings = savedCard && 'input_bindings' in savedCard ? savedCard.input_bindings || [] : []
@@ -103,8 +103,7 @@ function ModelRenderer({ card: raw, savedRevision, savedCard, document, disabled
     </section>
     {card.type !== 'model.image' && resolved.candidates.map(output => <PhotographyInputScope key={sourceKey(output.source)} card={card} output={output} binding={bindings.find(value => sourceKey(value.source) === sourceKey(output.source))} onChange={onChange} disabled={disabled} />)}
     {card.type === 'model.video' && <VideoInputBindings card={card as VideoModelCard} candidates={resolved.candidates} loading={resolved.loading} capability={capability} disabled={disabled} onChange={onChange} />}
-    <Button disabled={disabled || busy || runDisabled} onClick={() => onTargetPrecheck?.()}>运行到此处</Button>
-    <ExperimentComposer appearance="workbench" options={<><Select aria-label="选择模型" placeholder="选择模型" allowClear value={card.model_id || undefined} style={{ minWidth: 180 }}
+    <ExperimentComposer appearance="workbench" contextActions={sourceActions} options={<><Select aria-label="选择模型" placeholder="选择模型" allowClear value={card.model_id || undefined} style={{ minWidth: 180 }}
       options={models?.filter(model => model.category === category).map(model => ({ value: model.id, label: model.name }))}
       onChange={id => onChange({ ...card, model_id: id ?? null })} />{parameters}</>}
       onSubmit={() => onPrecheck?.()} submitting={checking} submitDisabled={disabled || busy || runDisabled} submitLabel={busy ? '运行中' : '预检运行'}>

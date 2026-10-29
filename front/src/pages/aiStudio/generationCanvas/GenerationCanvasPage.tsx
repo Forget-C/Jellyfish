@@ -163,7 +163,7 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
     {editor.recovery && <Alert type="warning" message="发现本地未保存内容；恢复前将核实服务器及未明请求" action={<Space><Button onClick={editor.restore} disabled={!ownership.editable || saving}>恢复本地内容</Button><Button onClick={() => editor.reload()} disabled={!ownership.editable || saving}>使用服务器内容</Button></Space>} />}
     {editor.conflict && <Alert type="warning" message="修订冲突，本地内容已保留。核对后选择处理方式" action={<Space><Button onClick={() => editor.reload(true)}>保留本地并以最新修订保存</Button><Button onClick={() => editor.reload()}>使用服务器内容</Button></Space>} />}
       </WorkbenchModal>
-      <WorkbenchModal title="运行预检" afterClose={() => {
+      <WorkbenchModal zIndex={1200} title="运行预检" afterClose={() => {
         // 预检操作容器解除底层 inert 后，再由详情定位真实编辑片段。
         if (pendingInspect.current) { setInspectTarget(pendingInspect.current); pendingInspect.current = undefined }
       }} open={previewOpen && !!runtime.preview && !editor.recovery && !editor.conflict} onCancel={() => setPreviewOpen(false)} footer={null}>
@@ -175,7 +175,7 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
         <WorkbenchIconButton label="重做内容" variant="quiet" icon={<RedoOutlined />} disabled={!ownership.editable || !!editor.recovery || !editor.canRedo} onClick={() => { runtime.invalidate(); editor.redo() }} />
       </div>} primaryHost={primaryHost} savedDocument={current.document} savedRevision={current.revision} key={document.id} document={document} onChange={next => change(next)} inspectTarget={inspectTarget} editingStatus={editor.conflict ? '修订冲突，请关闭详情处理' : saving ? '正在保存修改' : dirty ? '修改尚未保存' : '修改已同步'} readonly={!ownership.editable || !!editor.recovery}
         runtime={{ outputs: runtime.snapshot.current_outputs, nodes: runtime.latestNodes, busyCards: runtime.busyCards, checking: runtime.checking,
-          disabled: runtime.storageBlocked || !!runtime.pending || !!runtime.checking || runtime.submitting || editor.conflict, precheck: (cardId, kind, cardIds) => void runtime.precheck(cardId, kind, cardIds) }} />
+          disabled: runtime.storageBlocked || !!runtime.pending || !!runtime.checking || runtime.submitting || editor.conflict, precheck: cardId => void runtime.precheck(cardId) }} />
     </div>}
   </section></WorkbenchDetailsProvider></WorkbenchTheme>
 }
