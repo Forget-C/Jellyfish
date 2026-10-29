@@ -1,0 +1,95 @@
+import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { spawn, execFileSync } from 'node:child_process'
+import { createRequire } from 'node:module'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { setTimeout as delay } from 'node:timers/promises'
+import { createServer } from 'vite'
+
+const { chromium } = createRequire(import.meta.url)('playwright')
+const root = fileURLToPath(new URL('..', import.meta.url))
+const output = await browserOutput('jellyfish-generation-canvas-')
+const api = 'http://127.0.0.1:8423'
+const base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_browser_server'], {
+  cwd: join(root, '../backend'), env: { ...process.env, UV_CACHE_DIR: '/tmp/jellyfish-uv-cache',
+    PYTHONPATH: join(root, '../backend'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_PORT: '8423' }, stdio: ['ignore', 'pipe', 'pipe'],
+})
+captureBackend(backend, output)
+let server, browser
+const cleanup = browserCleanup(() => ({ browser, server, backend }))
+try {
+  let ready = false
+  for (let attempt = 0; attempt < 80; attempt++) {
+    if (backend.exitCode !== null) throw new Error('isolated backend exited')
+    try { if ((await fetch(base)).ok) { ready = true; break } } catch { /* waiting for isolated server */ }
+    await delay(250)
+  }
+  assert.ok(ready, 'isolated backend ready')
+  server = await createServer({ root, server: { host: '127.0.0.1', port: 4423, strictPort: true, open: false, proxy: { '/api': api } } })
+  await server.listen()
+  browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
+  const page = await browser.newPage({ viewport: { width: 1440, height: 960 } })
+  page.setDefaultTimeout(8000)
+  await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
+  const created = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '卡片阅读验证' }) })).json()).data
+  const id = created.id
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jV4kAAAAASUVORK5CYII=', 'base64')
+  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', join(output, 'voice.wav')])
+  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=blue:s=64x64:d=1', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', join(output, 'clip.mp4')])
+  const media = []
+  for (const [type, filename, mime, buffer] of [['image', 'portrait.png', 'image/png', png], ['video', 'clip.mp4', 'video/mp4', readFileSync(join(output, 'clip.mp4'))], ['audio', 'voice.wav', 'audio/wav', readFileSync(join(output, 'voice.wav'))]]) {
+    const form = new FormData(); form.set('file', new Blob([buffer], { type: mime }), filename); form.set('project_id', 'canvas-project'); form.set('usage_kind', 'generation_upload')
+    const response = await fetch(`${api}/api/v1/studio/files/upload`, { method: 'POST', body: form })
+    const file = (await response.json()).data; assert.ok(response.ok)
+    media.push({ id: `${type}-card`, type: `content.${type}`, file_id: file.id })
+  }
+  const cards = [{ id: 'text-one', type: 'content.object', name: '张三', category: 'character', object_id: 'character-one', text: '三十岁的人物描述' }, { id: 'text-two', type: 'content.text', text: '第二张正文' }, ...media, { id: 'model-card', type: 'model.text', model_id: null, prompt: { segments: [] }, config: {} }, { id: 'director-card', type: 'direction.fact', input_bindings: [], examples: [], scope: {} }]
+  cards.push({ id: 'reference-card', type: 'reference.character', title: '正面角色参考', angle: '正面', objects: [], image_binding: { file_id: media[0].file_id } })
+  const saved = await fetch(`${base}/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: created.revision, document: { ...created.document, cards } }) })
+  assert.ok(saved.ok, await saved.text())
+  await page.goto(`http://127.0.0.1:4423/projects/canvas-project/generation-canvas?canvas=${id}`)
+  const card = page.locator('[data-card-id="text-one"]')
+  await card.waitFor()
+  if (await page.getByRole('button', { name: '关闭详情', exact: true }).isVisible()) await page.getByRole('button', { name: '关闭详情', exact: true }).click()
+  assert.equal(await card.getByRole('button', { name: '删除卡片', exact: true }).count(), 0, 'danger action belongs in card menu')
+  assert.equal(await card.getByRole('checkbox').count(), 0, 'selection is not a persistent checkbox')
+  await card.getByText('张三', { exact: true }).waitFor()
+  const transform = await page.locator('.generation-world').getAttribute('style')
+  await card.press('Enter')
+  const details = page.locator('.wb-details:visible')
+  await details.waitFor()
+  await details.getByRole('textbox', { name: '对象描述正文', exact: true }).fill('自动保存期间的连续输入')
+  await page.getByRole('button', { name: '展开详情', exact: true }).click()
+  await page.waitForTimeout(1300)
+  assert.equal(await details.getByRole('textbox', { name: '对象描述正文', exact: true }).inputValue(), '自动保存期间的连续输入')
+  await page.getByRole('button', { name: '关闭详情', exact: true }).click()
+  assert.equal(await page.locator('.generation-world').getAttribute('style'), transform)
+  await card.getByRole('button', { name: '卡片操作', exact: true }).click()
+  await card.getByRole('button', { name: '选择卡片', exact: true }).click()
+  assert.equal(await card.getAttribute('data-selected'), 'true')
+  for (const [type, selector] of [['image', 'img'], ['video', 'video'], ['audio', 'audio']]) {
+    const mediaCard = page.locator(`[data-card-id="${type}-card"]`)
+    assert.equal(await mediaCard.locator(selector).count(), 1, `${type} has a direct card preview`)
+  }
+  assert.equal(await page.locator('[data-card-id="model-card"]').getByLabel('模型状态摘要').count(), 1)
+  assert.equal(await page.locator('[data-card-id="reference-card"]').locator('img').count(), 1, 'named reference previews its own fixed main image')
+  const audio = page.locator('[data-card-id="audio-card"] audio')
+  await audio.evaluate(element => element.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+  assert.equal(await page.locator('.wb-details:visible').count(), 0, 'media click does not activate editing')
+  const move = card.getByRole('button', { name: '移动布局：张三', exact: true })
+  const beforeMove = await card.getAttribute('style')
+  await move.press('ArrowRight')
+  assert.notEqual(await card.getAttribute('style'), beforeMove)
+  assert.equal(await page.locator('.wb-details:visible').count(), 0, 'moving does not open details')
+  await page.screenshot({ path: join(output, 'cards-desktop.png'), animations: 'disabled' })
+  await page.reload()
+  await card.press('Enter')
+  assert.equal(await page.locator('.wb-details:visible').getByRole('textbox', { name: '对象描述正文', exact: true }).inputValue(), '自动保存期间的连续输入')
+  await page.setViewportSize({ width: 390, height: 844 })
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
+  await page.screenshot({ path: join(output, 'cards-mobile.png'), animations: 'disabled' })
+  console.log('named card, menu selection, continuous details editing and save/reopen verified')
+} finally { await cleanup() }

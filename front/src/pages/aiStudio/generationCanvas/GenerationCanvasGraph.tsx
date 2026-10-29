@@ -22,6 +22,8 @@ import type { GraphArrange, GraphSize } from '../directing/graphLayout'
 import { referenceProtection } from './promptRules'
 import { CardList, cardDragType } from './CardList'
 import { CardShell } from './CardShell'
+import { MediaPreview } from './MediaContentEditor'
+import { MediaResultsPreview } from './MediaResultsPreview'
 import { rendererRegistry } from './rendererRegistry'
 import { connect, disconnect } from './graphRules'
 import { CanvasCatalogProvider, useGraphRules } from './CanvasCatalogContext'
@@ -49,7 +51,7 @@ function GenerationCanvasGraphContent({ primaryHost, document, onChange, readonl
   const inputLabel = (card: GenerationCard, port: string) => cardDefinitions[card.type || '']?.inputs.find(item => item.id === port)?.label || portLabels[port]
   const [displayFilter, setDisplayFilter] = useState<CanvasDisplayFilter>({ group: '', modality: '', problems: false })
   const [selected, setSelected] = useState<string[]>([])
-  const [detailId, setDetailId] = useState<string | undefined>(cards[0]?.id)
+  const [detailId, setDetailId] = useState<string | undefined>()
   const [detailTrigger, setDetailTrigger] = useState<HTMLElement>()
   const [minimapOpen, setMinimapOpen] = useState(false)
   const [reason, setReason] = useState('')
@@ -345,14 +347,19 @@ function GenerationCanvasGraphContent({ primaryHost, document, onChange, readonl
         })}
         {cards.filter(card => !hidden.has(card.id) && !filtered.has(card.id)).map(card => {
           const size = layout.view.sizes[card.id]
-          return <CardShell key={`${document.id}:${card.id}`} id={card.id} title={cardTitles[card.type || 'content.text']} contextKey={document.id} point={point(card.id)}
+          const referenceImage = 'image_binding' in card ? card.image_binding?.file_id : undefined
+          return <CardShell key={`${document.id}:${card.id}`} id={card.id} name={'name' in card ? card.name : 'title' in card ? card.title : undefined} title={cardTitles[card.type || 'content.text']} contextKey={document.id} point={point(card.id)}
             scale={transform.scale} width={size?.width || 400} height={size?.height} selected={selected.includes(card.id)} readonly={readonly} removeDisabled={runtime?.busyCards.has(card.id)}
             onOpen={trigger => { setDetailTrigger(trigger); setDetailId(card.id) }} onSelect={checked => setSelected(previous => checked ? [...previous, card.id] : previous.filter(id => id !== card.id))}
-            onMove={position => layout.move(card.id, position)} onResize={(width, height) => {
-              if (Math.abs(width - (size?.width || 400)) > 2 || Math.abs(height - (size?.height || measured[card.id]?.height || height)) > 2)
-                layout.setView(previous => ({ ...previous, sizes: { ...previous.sizes, [card.id]: { width, height } } }))
-            }} onRemove={() => removeCard(card.id)} inputs={inputPorts(card).map(name => port(card, name, true))} outputs={outputPorts(card).map(name => port(card, name, false))}>
-            <p className="canvas-card-summary">{['direction.creative_control', 'direction.guidance', 'direction.criterion'].includes(card.type || '') ? guidanceSummary(card as GuidanceCard) : card.type === 'direction.style' ? Object.values((card as VisualStyleCard).fields || {}).map(value => value.text).filter(Boolean).join(' · ') || '风格方向、视觉特征、材质与色彩待编辑' : ['direction.space_rule', 'direction.continuity', 'direction.fact'].includes(card.type || '') ? constraintSummary(card as ConstraintCard) : card.type === 'direction.photography' ? photographySummary(card as PhotographyCard) : ['direction.dialogue', 'direction.sound'].includes(card.type || '') ? soundSummary(card as SoundCard) : ['direction.narrative', 'direction.beat', 'direction.event', 'direction.shot'].includes(card.type || '') ? narrativeSummary(card as NarrativeCard) : ['direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'].includes(card.type || '') ? spatialSummary(card as SpatialCard) : card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard) : 'title' in card ? `${card.title || '命名图片参考'} · ${card.angle || '正面'} · ${card.image_binding ? '已选主图' : '缺少主图'}` : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '模型配置、输入采用与运行记录' : 'file_id' in card && card.file_id ? '已选择媒体，打开详情预览' : '未选择媒体'}</p>
+            onMove={position => layout.move(card.id, position)} onRemove={() => removeCard(card.id)} inputs={inputPorts(card).map(name => port(card, name, true))} outputs={outputPorts(card).map(name => port(card, name, false))}>
+            <p className="canvas-card-summary">{['direction.creative_control', 'direction.guidance', 'direction.criterion'].includes(card.type || '') ? guidanceSummary(card as GuidanceCard) : card.type === 'direction.style' ? Object.values((card as VisualStyleCard).fields || {}).map(value => value.text).filter(Boolean).join(' · ') || '风格方向、视觉特征、材质与色彩待编辑' : ['direction.space_rule', 'direction.continuity', 'direction.fact'].includes(card.type || '') ? constraintSummary(card as ConstraintCard) : card.type === 'direction.photography' ? photographySummary(card as PhotographyCard) : ['direction.dialogue', 'direction.sound'].includes(card.type || '') ? soundSummary(card as SoundCard) : ['direction.narrative', 'direction.beat', 'direction.event', 'direction.shot'].includes(card.type || '') ? narrativeSummary(card as NarrativeCard) : ['direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'].includes(card.type || '') ? spatialSummary(card as SpatialCard) : card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard) : 'title' in card ? `${card.title || '命名图片参考'} · ${card.angle || '正面'} · ${card.image_binding ? '已选主图' : '缺少主图'}` : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '模型配置、输入采用与运行记录' : 'file_id' in card && card.file_id ? '固定媒体' : '未选择媒体'}</p>
+            {'file_id' in card && card.file_id && <MediaPreview fileId={card.file_id} type={card.type?.split('.')[1] || 'image'} />}
+            {referenceImage && <MediaPreview fileId={referenceImage} type="image" />}
+            {'model_id' in card && <section aria-label="模型状态摘要"><strong>{models.find(model => model.id === card.model_id)?.name || '尚未选择模型'}</strong><p>已采用 {card.input_bindings?.length || 0} 项输入 · {runtime?.nodes[card.id]?.status || '尚未运行'}</p>
+              {!!runtime?.outputs[card.id]?.some(output => output.file_id) && <MediaResultsPreview outputs={runtime.outputs[card.id].filter(output => output.file_id)} />}
+              {runtime?.outputs[card.id]?.find(output => output.text)?.text && <p className="canvas-card-summary">{runtime.outputs[card.id].find(output => output.text)!.text}</p>}
+            </section>}
+
           </CardShell>
         })}
       </div>
