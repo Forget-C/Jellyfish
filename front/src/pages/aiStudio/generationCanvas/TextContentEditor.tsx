@@ -1,26 +1,36 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Alert, Input, InputNumber, Space } from 'antd'
+import { UploadOutlined } from '@ant-design/icons'
+import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
 import type { CreativeBasisCard, TextContentCard } from '../../../services/generated'
 
 type TextCard = TextContentCard | CreativeBasisCard
 
 /** 正文导入是一次明确编辑，来源定位保留在本卡，不建立持续输入。 */
 export function TextContentEditor({ card, disabled, onChange }: { card: TextCard; disabled?: boolean; onChange: (card: TextCard) => void }) {
+  const input = useRef<HTMLInputElement>(null)
   const [error, setError] = useState('')
+  const [importedName, setImportedName] = useState('')
+  const [reading, setReading] = useState(false)
   const basis = card.type === 'content.basis' ? card as CreativeBasisCard : undefined
   const origin = 'origin' in card ? card.origin : undefined
   return <>
     {origin && <p>来自运行 {origin.run_id} · {origin.incomplete ? '未完成成果副本' : '完整成果副本'}</p>}
-    <label>导入文本文件<input type="file" aria-label="导入文本文件" accept="text/plain,text/markdown,.txt,.md" disabled={disabled}
+    <Space wrap><WorkbenchButton icon={<UploadOutlined />} disabled={disabled || reading} loading={reading} onClick={() => input.current?.click()}>导入文本文件</WorkbenchButton>
+      <small className="generation-import-status" role="status">{reading ? '正在读取文本文件…' : importedName ? `已导入：${importedName}` : '支持 TXT、Markdown'}</small>
+    </Space>
+    <input ref={input} hidden type="file" aria-label="文本文件选择" accept="text/plain,text/markdown,.txt,.md" disabled={disabled || reading}
       onChange={event => {
         const file = event.target.files?.[0]
         event.target.value = ''
         if (!file) return
+        setReading(true); setError('')
         void file.text().then(text => {
+          setImportedName(file.name)
           setError('')
           onChange(basis ? { ...basis, text, source_locator: file.name, selection_start: 0, selection_end: text.length } : { ...card, text })
-        }).catch(() => setError('文本文件读取失败，原内容已保留'))
-      }} /></label>
+        }).catch(() => setError('文本文件读取失败，原内容已保留')).finally(() => setReading(false))
+      }} />
     {error && <Alert type="error" message={error} />}
     {basis && <Space direction="vertical">
       <Input aria-label="依据来源定位" value={basis.source_locator || ''} disabled={disabled} onChange={event => onChange({ ...basis, source_locator: event.target.value })} />
