@@ -174,10 +174,13 @@
 
 .generation-edges { z-index: 2; }
 /* Generation editors are anchored to content; shared workbench details retain their own positioning. */
-.generation-card-editor.wb-details { position: fixed; right: auto; bottom: auto; width: min(680px, calc(100vw - 32px)); max-height: min(360px, calc(100vh - 160px)); z-index: 1050; }
+.generation-card-editor.wb-details { position: fixed; right: auto; bottom: auto; width: min(680px, calc(100vw - 32px)); max-height: min(360px, calc(100vh - 160px)); z-index: 900; }
 .generation-card-editor.wb-details[data-expanded="true"] { left: 50%; top: 50%; right: auto; bottom: auto; transform: translate(-50%, -50%); width: min(1000px, calc(100vw - 32px)); height: min(760px, calc(100dvh - 32px)); max-height: calc(100dvh - 32px); }
-.generation-editor-mask { position: fixed; inset: 0; background: #0009; z-index: 1049; }
+.generation-editor-mask { position: fixed; inset: 0; background: #0009; z-index: 899; }
 @media (max-width: 700px) { .generation-card-editor.wb-details[data-expanded="true"] { width: calc(100vw - 16px); height: calc(100dvh - 16px); max-height: calc(100dvh - 16px); } }
 .generation-edges [data-edge-active="true"] .canvas-edge-line { stroke: var(--wb-focus); stroke-width: 3px; stroke-dasharray: 12 6; animation: generation-edge-flow 1s linear infinite; }
 @keyframes generation-edge-flow { to { stroke-dashoffset: -36; } }
 @media (prefers-reduced-motion: reduce) { .generation-edges [data-edge-active="true"] .canvas-edge-line { animation: none; } }
+
+.generation-card-edit { position: absolute; right: 12px; top: 52px; z-index: 2; visibility: hidden; }
+.generation-card[data-selected="true"] .generation-card-edit, .generation-card:focus-within .generation-card-edit { visibility: visible; }

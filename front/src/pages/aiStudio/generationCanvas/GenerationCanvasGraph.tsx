@@ -40,7 +40,6 @@ import type { GenerationCard, GenerationEdge } from './graphRules'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
 import { useWorkbenchDesktop } from '../directing/useWorkbenchDesktop'
 import { CanvasCardEditor } from './CanvasCardEditor'
-import { WorkbenchDetails } from '../directing/ui/WorkbenchDetails'
 import './generationCanvas.css'
 
 const emptyCards: NonNullable<CanvasDocument['cards']> = []
@@ -146,7 +145,7 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
     connectionMenu.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus({ preventScroll: true })
   }, [accessibleConnection, pendingConnection])
   useEffect(() => {
-    if (inspectTarget) setDetailId(inspectTarget.cardId)
+    if (inspectTarget) { setSelected([inspectTarget.cardId]); setSelectedEdgeId(undefined); setDetailAllowPan(false); setDetailId(inspectTarget.cardId) }
   }, [inspectTarget?.cardId, inspectTarget?.serial])
   useEffect(() => {
     if (!inspectTarget?.segmentId || inspectTarget.cardId !== detailId) return
@@ -311,7 +310,7 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
     if (point) layout.move(card.id, point)
     setSelected([card.id])
     if (entry) setNewPhotographyEntry({ cardId: card.id, entry })
-    setDetailId(card.id)
+    setDetailId(card.type?.startsWith('direction.') ? undefined : card.id)
   }
   const capability = (card: GenerationCard) => 'model_id' in card && card.model_id ? capabilities[card.model_id] : undefined
   const check = (edge: GenerationEdge) => {
@@ -681,6 +680,7 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
           const isModel = 'model_id' in card
           return <CardShell key={`${document.id}:${card.id}`} id={card.id} type={card.type} name={'name' in card ? card.name : 'title' in card ? card.title : undefined} title={cardTitles[card.type || 'content.text']} contextKey={document.id} point={point(card.id)}
             scale={transform.scale} width={size?.width || 400} height={size?.height} selected={selected.includes(card.id)} readonly={readonly} removeDisabled={runtime?.busyCards.has(card.id)}
+            onEdit={card.type?.startsWith('direction.') ? trigger => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailAllowPan(false); setDetailId(card.id) } : undefined}
             onExpand={trigger => { setDetailAllowPan(false); setDetailTrigger(trigger); setDetailId(card.id); setExpandRequest({id:card.id,serial:Date.now()}) }}
             onOpen={(trigger, dragged) => { setDetailAllowPan(!dragged); if (accessibleConnection) chooseAccessibleTarget(card.id); else { setMultiSelectMode(false); setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.type?.startsWith('direction.') ? undefined : card.id) } }} onSelect={checked => { setDetailId(undefined); setSelectedEdgeId(undefined); setSelected(previous => checked ? [...new Set([...previous, card.id])] : previous.filter(id => id !== card.id)) }}
             multiSelectMode={multiSelectMode} onStartMultiSelect={() => { setMultiSelectMode(true); setSelected([card.id]); setDetailId(undefined); setSelectedEdgeId(undefined) }} onDragStart={() => { setMultiSelectMode(false); setSelected([card.id]); setSelectedEdgeId(undefined) }}
@@ -729,9 +729,9 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
       <rect className="director-minimap-viewport generation-minimap-viewport" x={visibleWorld.x} y={visibleWorld.y} width={visibleWorld.width} height={visibleWorld.height} />
     </svg>}
     {cards.filter(card => detailSessions.includes(card.id) || card.id === detailId).map(detailCard => {
-      const EditorContainer = detailCard.type?.startsWith('direction.') ? WorkbenchDetails : CanvasCardEditor
+      const EditorContainer = CanvasCardEditor
       const DetailRenderer = rendererRegistry[detailCard.type || 'content.text']
-      return <EditorContainer key={detailCard.id} anchor={window.document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(detailCard.id)}"]`)} layoutKey={`${transform.x}:${transform.y}:${transform.scale}:${JSON.stringify(point(detailCard.id))}`} allowPan={detailAllowPan} expandRequest={expandRequest?.id === detailCard.id ? expandRequest.serial : undefined} onFit={delta => layout.setView(previous => ({...previous,transform:{...previous.transform,x:previous.transform.x+delta.x,y:previous.transform.y+delta.y}}))} title={cardTitles[detailCard.type || 'content.text'] || '卡片详情'} status={readonly ? '只读' : editingStatus} open={detailCard.id === detailId && !detailsSuppressed} onClose={() => setDetailId(current => current === detailCard.id ? undefined : current)} trigger={detailTrigger}>
+      return <EditorContainer forceModal={detailCard.type?.startsWith('direction.')} key={detailCard.id} anchor={window.document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(detailCard.id)}"]`)} layoutKey={`${transform.x}:${transform.y}:${transform.scale}:${JSON.stringify(point(detailCard.id))}`} allowPan={detailAllowPan} expandRequest={expandRequest?.id === detailCard.id ? expandRequest.serial : undefined} onFit={delta => layout.setView(previous => ({...previous,transform:{...previous.transform,x:previous.transform.x+delta.x,y:previous.transform.y+delta.y}}))} title={cardTitles[detailCard.type || 'content.text'] || '卡片详情'} status={readonly ? '只读' : editingStatus} open={detailCard.id === detailId && !detailsSuppressed} onClose={() => setDetailId(current => current === detailCard.id ? undefined : current)} trigger={detailTrigger}>
         {!desktop && <Space wrap><Button onClick={() => setActiveCategory('基础卡')}>添加卡片</Button><Button disabled={readonly} onClick={event => startAccessibleConnection(detailCard.id, 'right', event.currentTarget)}>连接到…</Button></Space>}
         {detailCard?.type?.startsWith('direction.') && <details className="generation-candidate-management"><summary>候选连接管理</summary>{references(detailCard)}</details>}
         {detailCard?.type === 'direction.photography' && <Button disabled={readonly} onClick={() => {
