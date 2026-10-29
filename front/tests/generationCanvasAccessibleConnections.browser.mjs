@@ -30,10 +30,11 @@ try {
   server = await createServer({ root, server: { host: '127.0.0.1', port: 4482, strictPort: true, open: false, proxy: { '/api': api } } })
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
-  const page = await browser.newPage({ viewport: { width: 1440, height: 960 }, hasTouch: true })
+  const context = await browser.newContext({ viewport: { width: 1440, height: 960 }, hasTouch: true })
+  const page = await context.newPage()
   page.on('pageerror',error=>console.error(error))
   page.setDefaultTimeout(15000)
-  await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
+  await context.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   const response = await fetch(base, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'筛选保持采用'})})
   const canvas=(await response.json()).data
   const document={...canvas.document,cards:[{id:'source',type:'content.text',text:'用于候选的正文'}, {id:'model',type:'model.text',model_id:'canvas-runtime-text',prompt:{segments:[]},config:{}}, {id:'other',type:'model.text',model_id:'canvas-runtime-text',prompt:{segments:[]},config:{}}, {id:'person',type:'content.object',object_id:'actor',name:'张三',category:'character',text:'人物描述'}, {id:'photo',type:'direction.photography',input_bindings:[],examples:[],scope:{}}],edges:[],input_order:{}}
@@ -117,5 +118,12 @@ try {
   await page.reload()
   await source.press('Enter')
   assert.equal(await details.getByRole('textbox',{name:'文本内容',exact:true}).inputValue(),'连接期间保留输入')
-  console.log('mouse, keyboard, touch, purposes, zero-input refusal, mobile session and creation restoration verified')
+  const observer=await page.context().newPage()
+  await observer.goto(page.url())
+  await observer.getByText('此画布当前只读',{exact:true}).waitFor()
+  const readonlySource=observer.locator('[data-card-id="source"]')
+  await readonlySource.getByRole('button',{name:'卡片操作',exact:true}).click()
+  assert.equal(await readonlySource.getByRole('button',{name:'连接到…',exact:true}).isDisabled(),true)
+  await observer.close()
+  console.log('mouse, keyboard, touch, purposes, zero-input refusal, readonly, mobile session and creation restoration verified')
 } finally { await cleanup() }

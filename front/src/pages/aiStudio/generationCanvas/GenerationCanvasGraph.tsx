@@ -270,6 +270,7 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
     setPendingConnection(undefined); setDrag(undefined)
   }
   const commitConnection = (option: GenerationEdge, targetSide: ConnectionSide) => {
+    if (readonly) { setReason('当前只读，不能新建连接'); cancelConnection(); return }
     const issue = check(option)
     if (issue) { setReason(issue); cancelConnection(); return }
     const edge = { ...option, id: crypto.randomUUID() }
@@ -408,7 +409,7 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
     {accessibleConnection && !pendingConnection && <div ref={connectionMenu} role="dialog" aria-label="选择连接目标" className="generation-connection-menu generation-target-menu">
       <strong>选择连接目标</strong>
       <p>连接只提供候选，实际使用仍需明确选择。</p>
-      {cards.filter(card => card.id !== accessibleConnection.card && !filtered.has(card.id) && !hidden.has(card.id)).map(card => <Button key={card.id} onClick={() => chooseAccessibleTarget(card.id)}>连接到{'name' in card && card.name || 'title' in card && card.title || cardTitles[card.type || '']} · 卡片 {cards.indexOf(card) + 1}</Button>)}
+      {cards.filter(card => card.id !== accessibleConnection.card && !filtered.has(card.id) && !hidden.has(card.id)).map(card => <Button key={card.id} disabled={readonly} onClick={() => chooseAccessibleTarget(card.id)}>连接到{'name' in card && card.name || 'title' in card && card.title || cardTitles[card.type || '']} · 卡片 {cards.indexOf(card) + 1}</Button>)}
       <Button onClick={cancelConnection}>取消连接</Button>
     </div>}
     {pendingConnection && (drag || accessibleConnection) && <div ref={connectionMenu} role="menu" aria-label="选择连接用途" className="generation-connection-menu" style={{ left: Math.max(8, Math.min(pendingConnection.x, window.innerWidth - 328)), top: Math.max(8, Math.min(pendingConnection.y, window.innerHeight - 320)) }}>
