@@ -475,3 +475,8 @@ flowchart TD
 
 - 34（实现产品 `8bbcf8cf`，同步后分支 `dcc7d166`）已无冲突集成；距离拖动、普通单选／线选择与 Space 手势形成自身真实页面闭环。主区 Node24 typecheck、差异检查及01–33字节校验通过，合后产品和测试树等同源分支，复用正式 cards 9.4s（`/private/tmp/canvas34-release`）及 ports 10.6s（`/private/tmp/canvas34-ports`）证据。
 - 34 Completion 为 integrated，Status 保持 ready-for-agent；当前前沿35、36、38。下方编辑／左右点等下游改版与最终视觉验收尚待完成，不预填通过。原01–33及历史验收记录未修改。
+
+### 2026-10-29：35 集成
+
+- 35（`1f75a14d`）已无冲突集成；左右几何点、动态高亮、仅当前线选中及精确剪刀保护形成页面到HTTP闭环。主区Node24 typecheck、差异检查和01–33字节保护通过，产品／测试树与源分支一致，复用最终 edge-management 12.1s（`/private/tmp/canvas35-release-final`）和 ports 10.6s（`/private/tmp/canvas35-ports-release`）证据。
+- 34、35均integrated；36、38正在推进，37／39仍待36，40等待全部前置。未预记最终视觉验收或全局lint通过，受控供应商／存储与原环境限制保留。
