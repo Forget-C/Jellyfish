@@ -17,7 +17,7 @@ import type { PointerEvent, ReactNode } from 'react'
 import { AimOutlined, MinusOutlined, PlusOutlined, CloseOutlined } from '@ant-design/icons'
 import { WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
 import { CanvasToolbarMenu } from '../directing/CanvasToolbarMenu'
-import { ConfigProvider, Input, Select, Space } from 'antd'
+import { ConfigProvider, Input, Select, Space, Tooltip } from 'antd'
 import { StudioGenerationCanvasesService as Canvases, LlmService } from '../../../services/generated'
 import type { CanvasDocument, CanvasModelCapability, CanvasNodeRead, CanvasResolvedOutput, ModelRead } from '../../../services/generated'
 import { CanvasDragHandle, CanvasEdge, useCanvasViewport } from '../../../components/canvas/Canvas'
@@ -26,6 +26,7 @@ import type { GraphArrange, GraphSize } from '../directing/graphLayout'
 import { referenceProtection } from './promptRules'
 import { CardList, cardDragType, cardDragEntry } from './CardList'
 import { CardShell } from './CardShell'
+import { connectionSides, sideLabels, sidePoint, defaultSides, connectionPath, useConnectionSides, type ConnectionSide } from './connectionGeometry'
 import { MediaPreview } from './MediaContentEditor'
 import { MediaResultsPreview } from './MediaResultsPreview'
 import { rendererRegistry } from './rendererRegistry'
@@ -39,6 +40,7 @@ import './generationCanvas.css'
 
 const emptyCards: NonNullable<CanvasDocument['cards']> = []
 const emptyGroups: NonNullable<CanvasDocument['groups']> = []
+const emptyEdges: NonNullable<CanvasDocument['edges']> = []
 
 const arrange: GraphArrange = (nodes, _sizes, _width, _anchor, retained = {}) => Object.fromEntries(nodes.map((node, index) =>
   [node.id, retained[node.id] || { x: 200 + index % 3 * 440, y: Math.floor(index / 3) * 560 }]))
@@ -46,7 +48,7 @@ const arrange: GraphArrange = (nodes, _sizes, _width, _anchor, retained = {}) =>
 /** 独立画布编辑适配：候选关系与文档持久化，几何沿用公共布局缓存。 */
 function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, onChange, readonly = false, runtime, inspectTarget, editingStatus, savedRevision, savedDocument }: { primaryHost?: HTMLElement | null; contentHistory?: ReactNode; savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; inspectTarget?: { cardId: string; serial: number; segmentId?: string }; editingStatus?: string; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string, kind?: 'single' | 'target' | 'selection', cardIds?: string[]) => void } }) {
   const { catalog, cardDefinitions, cardTitles, connectionReason, inputPorts, outputPorts, portLabels } = useGraphRules()
-  const cards = document.cards || emptyCards, edges = document.edges || [], groups = document.groups || emptyGroups
+  const cards = document.cards || emptyCards, edges = document.edges || emptyEdges, groups = document.groups || emptyGroups
   const cardLabel = (id: string) => {
     const source = cards.find(card => card.id === id)
     const name = source && ('name' in source && source.name || 'title' in source && source.title)
@@ -83,7 +85,17 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
     return !!(displayFilter.group && definition?.group !== displayFilter.group || displayFilter.modality && definition?.modality !== displayFilter.modality || displayFilter.problems && !problem)
   }).map(card => card.id))
   const [measured, setMeasured] = useState<Record<string, GraphSize>>({})
-  const [drag, setDrag] = useState<{ card: string; port: string; x: number; y: number }>()
+  const [drag, setDrag] = useState<{ card: string; side: ConnectionSide; x: number; y: number }>()
+  const connectionPointer = useRef(false)
+  const [pendingConnection, setPendingConnection] = useState<{ target: string; side: ConnectionSide; x: number; y: number }>()
+  const connectionLayout = useConnectionSides(`jellyfish:generation-connection-sides:${document.project_id}:${document.id}`, edges.map(edge => edge.id))
+  useEffect(() => {
+    const cancel = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && (drag || pendingConnection)) { event.preventDefault(); event.stopPropagation(); connectionPointer.current = false; setDrag(undefined); setPendingConnection(undefined) }
+    }
+    window.addEventListener('keydown', cancel, true)
+    return () => window.removeEventListener('keydown', cancel, true)
+  }, [drag, pendingConnection])
   useEffect(() => {
     if (inspectTarget) setDetailId(inspectTarget.cardId)
   }, [inspectTarget?.cardId, inspectTarget?.serial])
@@ -119,6 +131,12 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
     creationView.current = undefined
     layout.setView(previous => ({ ...previous, transform: retained }))
   }, [layout, measured])
+  useEffect(() => {
+    if (!layout.ready) return
+    const missing = edges.filter(edge => !connectionLayout.sides[edge.id])
+    if (!missing.length) return
+    connectionLayout.setSides(previous => ({ ...previous, ...Object.fromEntries(missing.map(edge => [edge.id, defaultSides(layout.view.positions[edge.source_card] || { x: 0, y: 0 }, layout.view.positions[edge.target_card] || { x: 0, y: 0 })])) }))
+  }, [edges, layout, connectionLayout])
   const transform = layout.view.transform
   const viewport = useCanvasViewport(document.id, transform, update => layout.setView(previous => ({ ...previous,
     transform: typeof update === 'function' ? update(previous.transform) : update })), { x: 2000, y: 1800 })
@@ -216,19 +234,35 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
   const capability = (card: GenerationCard) => 'model_id' in card && card.model_id ? capabilities[card.model_id] : undefined
   const check = (edge: GenerationEdge) => {
     const target = cards.find(card => card.id === edge.target_card)
-    if (target && 'model_id' in target && target.model_id && !capability(target)) return '模型能力尚未核实，暂不能新建连接'
+    if (target && 'model_id' in target && !capability(target)) return '模型能力尚未核实，暂不能新建连接'
     return connectionReason(latest.current, edge, target ? capability(target) : undefined)
   }
+  const connectionOptions = (sourceId: string, targetId: string) => {
+    const source = cards.find(card => card.id === sourceId), target = cards.find(card => card.id === targetId)
+    return source && target ? outputPorts(source).flatMap(source_port => inputPorts(target).map(target_port => ({ id: 'preview', source_card: sourceId, source_port, target_card: targetId, target_port }))) : []
+  }
+  const compatibleOptions = (sourceId: string, targetId: string) => connectionOptions(sourceId, targetId).filter(edge => !check(edge))
+  const cancelConnection = () => { connectionPointer.current = false; setDrag(undefined); setPendingConnection(undefined) }
+  const commitConnection = (option: GenerationEdge, targetSide: ConnectionSide) => {
+    const issue = check(option)
+    if (issue) { setReason(issue); cancelConnection(); return }
+    const edge = { ...option, id: crypto.randomUUID() }
+    if (drag) connectionLayout.setSides(previous => ({ ...previous, [edge.id]: { source: drag.side, target: targetSide } }))
+    edit(connect(latest.current, edge)); setReason('已连接候选输入；接收端明确选择后才实际使用')
+    cancelConnection()
+  }
   const finishDrag = (event: PointerEvent) => {
-    if (!drag) return
-    const target = window.document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('[data-input-port]')
-    if (target) {
-      const edge = { id: crypto.randomUUID(), source_card: drag.card, source_port: drag.port, target_card: target.dataset.card!, target_port: target.dataset.inputPort! }
-      const issue = check(edge)
-      if (issue) setReason(issue)
-      else { edit(connect(latest.current, edge)); setReason('已连接候选输入；正文或用途配置决定实际使用') }
-    } else setReason('请拖到接收卡的输入端口')
-    setDrag(undefined)
+    if (!drag || pendingConnection) return
+    connectionPointer.current = false
+    const target = window.document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('[data-connection-side]')
+    if (!target) { setReason('连接已取消，请拖到目标连接点'); cancelConnection(); return }
+    const targetId = target.dataset.card!, side = target.dataset.connectionSide as ConnectionSide
+    const options = compatibleOptions(drag.card, targetId)
+    if (!options.length) {
+      const first = connectionOptions(drag.card, targetId)[0]
+      setReason(first ? check(first) || '没有兼容的接收用途' : '此卡没有兼容的接收用途'); cancelConnection()
+    } else if (options.length === 1) commitConnection(options[0], side)
+    else setPendingConnection({ target: targetId, side, x: event.clientX, y: event.clientY })
   }
   // Counts reflect canonical explicit selections, including fixed media associations.
   const edgeAdoptions = (edge: GenerationEdge) => {
@@ -240,21 +274,26 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
     const examples = 'examples' in target && edge.target_port === `${edge.source_port}_example` ? (target.examples || []).filter(example => matches(example.source)).length : 0
     return bindings + mainImage + examples
   }
-  const port = (card: GenerationCard, name: string, input: boolean) => {
-    const issue = input && drag ? check({ id: 'preview', source_card: drag.card, source_port: drag.port, target_card: card.id, target_port: name }) : undefined
-    const candidates = edges.filter(edge => input ? edge.target_card === card.id && edge.target_port === name : edge.source_card === card.id && edge.source_port === name)
-    const adopted = candidates.reduce((count, edge) => count + edgeAdoptions(edge), 0)
-    return <button key={name} type="button" disabled={readonly} data-card={card.id} data-input-port={input ? name : undefined} data-output-port={!input ? name : undefined}
-      data-compatible={input && drag ? !issue : undefined} title={issue || `${input ? '输入' : '输出'}：${input ? inputLabel(card, name) : cardDefinitions[card.type || '']?.outputs.find(item => item.id === name)?.label}`} aria-label={`${input ? '输入' : '输出'}端口 ${name}`}
-      onPointerDown={!input ? event => {
-        if (readonly || event.button !== 0) return
-        event.stopPropagation(); event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId)
-        setDrag({ card: card.id, port: name, x: event.clientX, y: event.clientY }); setReason('拖到兼容输入端口；绿色端口可连接')
-      } : undefined}
-      onPointerMove={!input ? event => { if (drag) setDrag({ ...drag, x: event.clientX, y: event.clientY }) } : undefined}
-      onPointerUp={!input ? finishDrag : undefined} onPointerCancel={() => setDrag(undefined)}>
-      <i aria-hidden="true" /><span>{input ? inputLabel(card, name) : cardDefinitions[card.type || '']?.outputs.find(item => item.id === name)?.label}</span><small>候选 {candidates.length} · 已采用 {adopted}</small>
-    </button>
+  const geometricPorts = (card: GenerationCard) => {
+    const definition = cardDefinitions[card.type || '']
+    const options = drag && card.id !== drag.card ? compatibleOptions(drag.card, card.id) : []
+    const outputName = ({ text: '文本', image: '图片', video: '视频', audio: '音频' })[definition?.modality || 'text']
+    const hoveredPoint = drag && !pendingConnection ? window.document.elementFromPoint(drag.x, drag.y)?.closest<HTMLElement>('[data-connection-side]') : undefined
+    const summary = drag && card.id !== drag.card ? options.length ? `可作为${[...new Set(options.map(edge => inputLabel(card, edge.target_port)))].join('／')}候选` : connectionOptions(drag.card, card.id).map(check).find(Boolean) || '此卡没有兼容的接收用途' : `${outputName}${(runtime?.outputs[card.id]?.length || 0) > 1 ? ` · ${runtime?.outputs[card.id]?.length} 项` : ''}`
+    return connectionSides.map(side => {
+      const connected = edges.some(edge => {
+        const sides = connectionLayout.sides[edge.id] || defaultSides(point(edge.source_card), point(edge.target_card))
+        return edge.source_card === card.id && sides.source === side || edge.target_card === card.id && sides.target === side
+      })
+      return <Tooltip key={side} title={summary} open={drag ? !!hoveredPoint && hoveredPoint.dataset.card === card.id && hoveredPoint.dataset.connectionSide === side : undefined}>
+        <button type="button" disabled={readonly} className="generation-connection-point" data-card={card.id} data-connection-side={side} data-connected={connected} data-connecting={!!drag} data-compatible={drag ? options.length > 0 : undefined} aria-label={`${sideLabels[side]}侧连接点`} onPointerDown={event => {
+          if (readonly || event.button !== 0 || pendingConnection) return
+          event.stopPropagation(); event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId)
+          connectionPointer.current = true
+          setDrag({ card: card.id, side, x: event.clientX, y: event.clientY }); setReason('拖到目标连接点，仅提供候选')
+        }} onPointerMove={event => { if (drag && !pendingConnection) setDrag({ ...drag, x: event.clientX, y: event.clientY }) }} onPointerUp={finishDrag} onPointerCancel={cancelConnection} onLostPointerCapture={() => { if (connectionPointer.current) cancelConnection() }}><i aria-hidden /></button>
+      </Tooltip>
+    })
   }
   const references = (card: GenerationCard) => <>
     <Space wrap>{card.type?.startsWith('model.') && <><Button disabled={readonly} size="small" onClick={() => {
@@ -271,8 +310,8 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
         edit(connect({ ...latest.current, cards: [...(latest.current.cards || []), source] }, { id: crypto.randomUUID(), source_card: source.id, source_port: sourcePort, target_card: card.id, target_port: targetPort }))
       }} />
     </>}<Select<string> aria-label="连接已有卡" placeholder="选择已有卡" value={undefined} disabled={readonly} style={{ width: 160 }}
-      options={cards.flatMap(source => outputPorts(source).flatMap(sourcePort => inputPorts(card).filter(targetPort => !connectionReason(document, { id: 'candidate', source_card: source.id, source_port: sourcePort, target_card: card.id, target_port: targetPort }, capability(card))).map(targetPort => ({ value: `${source.id}|${sourcePort}|${targetPort}`, label: `${cardLabel(source.id)} → ${inputLabel(card, targetPort)}` }))))}
-      onChange={value => { if (!value) return; const [source_card, source_port, target_port] = value.split('|'); edit(connect(latest.current, { id: crypto.randomUUID(), source_card, source_port, target_card: card.id, target_port })) }} />
+      options={cards.flatMap(source => outputPorts(source).flatMap(sourcePort => inputPorts(card).filter(targetPort => !check({ id: 'candidate', source_card: source.id, source_port: sourcePort, target_card: card.id, target_port: targetPort })).map(targetPort => ({ value: `${source.id}|${sourcePort}|${targetPort}`, label: `${cardLabel(source.id)} → ${inputLabel(card, targetPort)}` }))))}
+      onChange={value => { if (!value) return; const [source_card, source_port, target_port] = value.split('|'); commitConnection({ id: 'candidate', source_card, source_port, target_card: card.id, target_port }, 'left') }} />
     </Space>
     {inputPorts(card).map(name => {
     const order = document.input_order?.[card.id]?.[name] || []
@@ -307,6 +346,7 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
     setSelected(ids); selectionStart.current = undefined; setSelectionBox(undefined)
   }
   const point = (id: string) => layout.view.positions[id] || { x: 0, y: 0 }
+  const anchor = (id: string, side: ConnectionSide) => sidePoint(point(id), measured[id]?.width || layout.view.sizes[id]?.width || 400, measured[id]?.height || layout.view.sizes[id]?.height || 172, side)
   const width = viewport.surface.current?.clientWidth || 1200, height = viewport.surface.current?.clientHeight || 800
   const visibleWorld = { x: -transform.x / transform.scale, y: -transform.y / transform.scale, width: width / transform.scale, height: height / transform.scale }
   const mapLeft = Math.min(0, visibleWorld.x, ...cards.map(card => point(card.id).x))
@@ -322,6 +362,12 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
   const runSelection = <Button aria-label={`运行所选模型（${selectedModels.length}）`} disabled={readonly || !selectedModels.length || !runtime || runtime.disabled || selectedModels.some(card => runtime.busyCards.has(card.id))}
         onClick={() => runtime?.precheck(selectedModels[0].id, 'selection', selected)}>运行所选模型（{selectedModels.length}）</Button>
   return <div className="generation-graph" ref={container}>
+    {connectionLayout.error && <span role="status">{connectionLayout.error}</span>}
+    {pendingConnection && drag && <div role="menu" aria-label="选择连接用途" className="generation-connection-menu" style={{ left: Math.max(8, Math.min(pendingConnection.x, window.innerWidth - 328)), top: Math.max(8, Math.min(pendingConnection.y, window.innerHeight - 320)) }}>
+      <strong>选择连接用途</strong>
+      {compatibleOptions(drag.card, pendingConnection.target).map(option => <Button key={`${option.source_port}:${option.target_port}`} role="menuitem" onClick={() => commitConnection(option, pendingConnection.side)}>{cardDefinitions[cards.find(card => card.id === drag.card)?.type || '']?.outputs.find(output => output.id === option.source_port)?.label} → 作为{inputLabel(cards.find(card => card.id === pendingConnection.target)!, option.target_port)}候选</Button>)}
+      <Button role="menuitem" onClick={cancelConnection}>取消连接</Button>
+    </div>}
     <GenerationCanvasBrowse value={displayFilter} onChange={setDisplayFilter} />
     {primaryHost ? createPortal(runSelection, primaryHost) : runSelection}
     <CardList catalog={catalog} readonly={readonly} onAdd={(type, entry) => add(type, undefined, entry)} />
@@ -379,12 +425,10 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
       <div className="generation-world" style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }}>
         <svg className="generation-edges" width={12000} height={12000}>
           {edges.filter(edge => !hidden.has(edge.source_card) && !hidden.has(edge.target_card) && !filtered.has(edge.source_card) && !filtered.has(edge.target_card)).map(edge => {
-            const from = point(edge.source_card), to = point(edge.target_card), width = layout.view.sizes[edge.source_card]?.width || 400
-            const source = cards.find(card => card.id === edge.source_card), target = cards.find(card => card.id === edge.target_card)
-            const sourceY = from.y + 56 + Math.max(0, source ? outputPorts(source).indexOf(edge.source_port) : 0) * 44
-            const targetY = to.y + 56 + Math.max(0, target ? inputPorts(target).indexOf(edge.target_port) : 0) * 44
+            const sides = connectionLayout.sides[edge.id] || defaultSides(point(edge.source_card), point(edge.target_card))
+            const from = anchor(edge.source_card, sides.source), to = anchor(edge.target_card, sides.target)
             const adopted = edgeAdoptions(edge) > 0
-            return <CanvasEdge key={edge.id} d={`M ${from.x + width} ${sourceY} C ${from.x + width + 80} ${sourceY}, ${to.x - 80} ${targetY}, ${to.x} ${targetY}`} className={adopted ? 'generation-edge-adopted' : 'generation-edge-candidate'} caption={{ x: (from.x + width + to.x) / 2, y: (sourceY + targetY) / 2 - 8, text: adopted ? '已明确选择' : '候选' }}
+            return <CanvasEdge key={edge.id} d={connectionPath(from, to, sides.source, sides.target)} className={adopted ? 'generation-edge-adopted' : 'generation-edge-candidate'}
               label={`${edge.source_card} → ${edge.target_card} ${portLabels[edge.target_port]}`} />
           })}
         </svg>
@@ -420,7 +464,7 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
           return <CardShell key={`${document.id}:${card.id}`} id={card.id} name={'name' in card ? card.name : 'title' in card ? card.title : undefined} title={cardTitles[card.type || 'content.text']} contextKey={document.id} point={point(card.id)}
             scale={transform.scale} width={size?.width || 400} height={size?.height} selected={selected.includes(card.id)} readonly={readonly} removeDisabled={runtime?.busyCards.has(card.id)}
             onOpen={trigger => { setDetailTrigger(trigger); setDetailId(card.id) }} onSelect={checked => setSelected(previous => checked ? [...previous, card.id] : previous.filter(id => id !== card.id))}
-            onMove={position => layout.move(card.id, position)} onRemove={() => removeCard(card.id)} inputs={inputPorts(card).map(name => port(card, name, true))} outputs={outputPorts(card).map(name => port(card, name, false))}
+            onMove={position => layout.move(card.id, position)} onRemove={() => removeCard(card.id)} connections={geometricPorts(card)}
             footer={<>{isModel && <section aria-label="模型状态摘要">
               <span>{models.find(model => model.id === card.model_id)?.name || '尚未选择模型'} · {canvasNodeStatusLabels[node?.status || ''] || '尚未运行'}</span>
               {node?.error_message && <p data-problem="true">生成失败：{node.error_message}{outputs.length > 0 ? ' · 保留上次成果' : ''}</p>}
@@ -443,7 +487,16 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
           </CardShell>
         })}
       </div>
-      {drag && <div className="generation-drag-hint" style={{ left: drag.x - (viewport.surface.current?.getBoundingClientRect().left || 0) + 12, top: drag.y - (viewport.surface.current?.getBoundingClientRect().top || 0) }}>正在连接{portLabels[drag.port]}</div>}
+      {drag && <svg className="generation-temporary-connection" aria-label="正在连接候选" width="100%" height="100%"><path d={(() => {
+        const origin = anchor(drag.card, drag.side), rect = viewport.surface.current?.getBoundingClientRect()
+        const from = { x: origin.x * transform.scale + transform.x, y: origin.y * transform.scale + transform.y }
+        const target = window.document.elementFromPoint(drag.x, drag.y)?.closest<HTMLElement>('[data-connection-side]')
+        const targetCard = target?.dataset.card, side = target?.dataset.connectionSide as ConnectionSide | undefined
+        const snapped = pendingConnection ? anchor(pendingConnection.target, pendingConnection.side) : targetCard && side && compatibleOptions(drag.card, targetCard).length ? anchor(targetCard, side) : undefined
+        const to = snapped ? { x: snapped.x * transform.scale + transform.x, y: snapped.y * transform.scale + transform.y } : { x: drag.x - (rect?.left || 0), y: drag.y - (rect?.top || 0) }
+        return connectionPath(from, to, drag.side, pendingConnection?.side || side)
+      })()} fill="none" stroke="var(--wb-focus)" strokeWidth="2" markerEnd="url(#generation-preview-arrow)" /><defs><marker id="generation-preview-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 Z" fill="var(--wb-focus)" /></marker></defs></svg>}
+
     </div>
     {minimapOpen && <WorkbenchIconButton className="director-minimap-toggle director-minimap-toggle-open" label="关闭小地图" variant="quiet" icon={<CloseOutlined />} onClick={() => setMinimapOpen(false)} />}
     {minimapOpen && <svg className="director-minimap generation-minimap" width="200" height="132" role="img" tabIndex={0} aria-label="小地图导航" viewBox={`${mapLeft} ${mapTop} ${mapWidth} ${mapHeight}`} preserveAspectRatio="none"

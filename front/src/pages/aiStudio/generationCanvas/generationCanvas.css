@@ -8,12 +8,6 @@
 .generation-card header { display: flex; gap: 8px; align-items: center; padding: 8px; background: #e2e8f0; }
 .generation-card header strong { flex: 1; }
 .generation-card button:focus-visible, .generation-group button:focus-visible { outline: 2px solid #1677ff; outline-offset: 2px; }
-.generation-ports { display: flex; align-items: flex-start; gap: 4px; flex-wrap: wrap; padding: 8px; border-bottom: 1px solid #e2e8f0; }
-.generation-ports button { border: 1px solid #94a3b8; border-radius: 4px; background: #f8fafc; padding: 4px; cursor: crosshair; }
-.generation-ports button small { display: block; max-width: 160px; font-size: 11px; }
-.generation-ports [data-output-port] { margin-left: auto; }
-.generation-ports [data-compatible=true] { background: #dcfce7; border-color: #15803d; }
-.generation-ports [data-compatible=false] { background: #fef2f2; border-color: #b91c1c; }
 .generation-card-body { margin: 0; padding: 12px; border: 0; min-width: 0; }
 .generation-card-body ol { padding-left: 24px; }
 .generation-card-body li { margin-block: 4px; overflow-wrap: anywhere; }
@@ -54,8 +48,6 @@
 .generation-empty { margin: auto; }
 .generation-workbench .generation-card { min-height: 140px; resize: both; overflow: hidden; background: var(--wb-surface); border-color: var(--wb-border); color: var(--wb-text); }
 .generation-workbench .generation-card header { background: var(--wb-raised); }
-.generation-workbench .generation-ports { border-color: var(--wb-border); }
-.generation-workbench .generation-ports button { background: var(--wb-inset); color: var(--wb-text); border-color: var(--wb-border); }
 .generation-workbench .generation-group { background: var(--wb-surface); border-color: var(--wb-strongBorder); }
 .generation-workbench .generation-drag-hint { background: var(--wb-raised); color: var(--wb-text); border-color: var(--wb-border); }
 .generation-workbench .generation-prompt-editor { border-color: var(--wb-border); }
@@ -137,22 +129,23 @@
 .generation-card-body :is(img, video) { display: block; height: 160px; object-fit: contain; margin-inline: auto; }
 .generation-card-menu { position: absolute; top: 32px; right: 0; z-index: 25; padding: 8px; display: grid; gap: 4px; background: var(--wb-raised); border: 1px solid var(--wb-border); border-radius: var(--wb-radius); }
 
-/* Each logical port keeps a separate row and matching edge anchor. */
-.generation-workbench .generation-ports { position: absolute; top: 36px; z-index: 4; display: flex; flex-direction: column; gap: 4px; padding: 0; border: 0; width: 112px; }
-.generation-workbench .generation-input-ports { left: 0; }
-.generation-workbench .generation-output-ports { right: 0; }
-.generation-workbench .generation-ports button { width: 112px; height: 40px; padding: 2px 4px; border-radius: 8px; font-size: 11px; cursor: crosshair; margin: 0; }
-.generation-ports button span { display: block; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
-.generation-ports button small { display: block; font-size: 10px; }
-.generation-workbench .generation-ports [data-compatible=true] { border-color: var(--wb-focus); outline: 1px solid var(--wb-focus); }
-.generation-workbench .generation-ports [data-compatible=false] { border-style: dashed; opacity: .65; }
+/* 四边几何点不代表逻辑字段；命中区大于可见圆点。 */
+.generation-connection-point { position: absolute; z-index: 5; width: 28px; height: 28px; padding: 8px; border: 0; background: transparent; cursor: crosshair; opacity: 0; touch-action: none; }
+.generation-connection-point i { display: block; width: 10px; height: 10px; border-radius: 50%; border: 1px solid var(--wb-muted); background: var(--wb-surface); }
+.generation-connection-point[data-connection-side="top"] { left: 50%; top: 0; transform: translate(-50%, -50%); }
+.generation-connection-point[data-connection-side="right"] { right: 0; top: 50%; transform: translate(50%, -50%); }
+.generation-connection-point[data-connection-side="bottom"] { left: 50%; bottom: 0; transform: translate(-50%, 50%); }
+.generation-connection-point[data-connection-side="left"] { left: 0; top: 50%; transform: translate(-50%, -50%); }
+.generation-card:hover .generation-connection-point, .generation-card:focus-within .generation-connection-point, .generation-card[data-selected="true"] .generation-connection-point, .generation-connection-point[data-connected="true"], .generation-connection-point[data-connecting="true"] { opacity: 1; }
+.generation-connection-point[data-compatible="true"] i { border-color: var(--wb-focus); background: var(--wb-selected); }
+.generation-connection-point[data-compatible="false"] i { border-style: dashed; }
+.generation-temporary-connection { position: absolute; inset: 0; pointer-events: none; z-index: 10; overflow: visible; }
+.generation-connection-menu { position: fixed; z-index: 80; width: 320px; max-height: min(300px, calc(100dvh - 16px)); overflow: auto; display: grid; gap: 8px; padding: 12px; box-sizing: border-box; background: var(--wb-surface); color: var(--wb-text); border: 1px solid var(--wb-border); border-radius: var(--wb-radius); }
 .generation-edge-candidate .canvas-edge-line { stroke-dasharray: 5 4; }
 .generation-edge-adopted .canvas-edge-line { stroke-width: 2.5px; }
 
 .generation-workbench .generation-card .generation-card-body { max-height: none; }
 
-.generation-ports button { position: relative; }
-.generation-ports button i { position: absolute; top: 16px; width: 8px; height: 8px; border: 1px solid currentColor; border-radius: 50%; background: var(--wb-surface); box-sizing: border-box; }
 .generation-input-ports button i { left: -4px; }
 .generation-output-ports button i { right: -4px; background: currentColor; }
 
@@ -161,6 +154,3 @@
 .generation-card-holding > .generation-card-body { outline: 2px solid var(--wb-focus); cursor: grabbing; }
 .generation-card .generation-card-footer { margin-top: 12px; font-size: 11px; color: var(--wb-muted); }
 .generation-card .generation-card-footer [data-problem="true"] { color: var(--wb-text); }
-.generation-card .generation-ports small { display: none; }
-.generation-card .generation-ports button:hover small,
-.generation-card .generation-ports button:focus-visible small { display: block; }
