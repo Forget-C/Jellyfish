@@ -7,12 +7,12 @@ const options = (values: string[] = []) => values.map(value => ({ value, label: 
 export function ImageModelParameters({ card, capability, disabled, onChange }: Props<ImageModelCard>) {
   const config = card.config || {}
   return <>
-    <Select disabled={disabled} aria-label="图片画幅" placeholder="画幅" allowClear value={config.target_ratio || undefined} style={{ width: 100 }}
+    <Select size="small" bordered={false} disabled={disabled} aria-label="图片画幅" placeholder="画幅" allowClear value={config.target_ratio || undefined} style={{ width: 100 }}
       options={options(capability?.ratios)} onChange={value => onChange({ ...card, config: { ...config, target_ratio: value ?? null } })} />
-    <Select disabled={disabled} aria-label="图片分辨率" placeholder="分辨率" allowClear value={config.resolution_profile || undefined} style={{ width: 110 }}
+    <Select size="small" bordered={false} disabled={disabled} aria-label="图片分辨率" placeholder="分辨率" allowClear value={config.resolution_profile || undefined} style={{ width: 110 }}
       options={options(Object.keys(capability?.resolution_profiles?.[config.target_ratio || ''] || {}))}
       onChange={value => onChange({ ...card, config: { ...config, resolution_profile: value ?? null } })} />
-    <InputNumber disabled={disabled} aria-label="图片数量" value={config.count ?? 1} min={capability?.min_count} max={capability?.max_count}
+    <InputNumber size="small" bordered={false} disabled={disabled} aria-label="图片数量" value={config.count ?? 1} min={capability?.min_count} max={capability?.max_count}
       onChange={value => onChange({ ...card, config: { ...config, count: value ?? 1 } })} />
   </>
 }
@@ -20,9 +20,9 @@ export function ImageModelParameters({ card, capability, disabled, onChange }: P
 export function VideoModelParameters({ card, capability, disabled, onChange }: Props<VideoModelCard>) {
   const config = card.config || {}
   return <>
-    <Select disabled={disabled} aria-label="视频画幅" placeholder="画幅" allowClear value={config.ratio || undefined} style={{ width: 100 }} options={options(capability?.ratios)}
+    <Select size="small" bordered={false} disabled={disabled} aria-label="视频画幅" placeholder="画幅" allowClear value={config.ratio || undefined} style={{ width: 100 }} options={options(capability?.ratios)}
       onChange={value => onChange({ ...card, config: { ...config, ratio: value ?? null } })} />
-    <InputNumber disabled={disabled} aria-label="视频时长（秒）" placeholder="时长（秒）" value={config.seconds} min={capability?.min_seconds ?? 1} max={capability?.max_seconds ?? undefined}
+    <InputNumber size="small" bordered={false} disabled={disabled} aria-label="视频时长（秒）" placeholder="时长（秒）" value={config.seconds} min={capability?.min_seconds ?? 1} max={capability?.max_seconds ?? undefined}
       onChange={value => onChange({ ...card, config: { ...config, seconds: value } })} />
     <details><summary>高级设置</summary><label>随机种子 <InputNumber aria-label="随机种子" value={config.seed} disabled={disabled || !capability?.supports_seed}
       onChange={value => onChange({ ...card, config: { ...config, seed: value } })} /></label>

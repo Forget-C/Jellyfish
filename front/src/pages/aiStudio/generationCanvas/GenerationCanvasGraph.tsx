@@ -556,7 +556,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
     const y = mapTop + (event.clientY - box.top) / box.height * mapHeight
     layout.setView(previous => ({ ...previous, transform: { ...previous.transform, x: width / 2 - x * previous.transform.scale, y: height / 2 - y * previous.transform.scale } }))
   }
-  const modelSources = (card: GenerationCard) => <Dropdown trigger={['click']} disabled={readonly} menu={{ items: [
+  const modelSources = (card: GenerationCard) => <Dropdown trigger={['click']} placement="topRight" disabled={readonly} menu={{ items: [
     { key: 'canvas', label: '从当前画布选择' },
     ...(capability(card)?.input_ports || []).filter(port => port !== 'text').map(port => ({ key: port, label: `上传${inputLabel(card, port)}素材` })),
   ], onClick: ({ key }) => {
