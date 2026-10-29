@@ -1,3 +1,4 @@
+import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { readFile, writeFile } from 'node:fs/promises'
@@ -54,6 +55,7 @@ try {
   await page.addInitScript(id => localStorage.setItem(`jellyfish:generation-layout:canvas-project:${id}:view:canvas`, JSON.stringify({ schema: 1, transform: { x: 40, y: 104, scale: 1 }, positions: { m: { x: 0, y: 0 }, s0: { x: 900, y: 0 }, s1: { x: 1400, y: 0 }, 'text-source': { x: 1900, y: 0 } }, sizes: {} })), canvas.id)
   await page.goto(`http://127.0.0.1:4279/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   await page.locator('[data-card-id="m"]').click()
+  await page.locator('.generation-material-composer').waitFor(); await openModelInspection(page)
   const details = page.getByRole('complementary', { name: '视频模型卡' })
   const uses = details.getByRole('region', { name: '视频实际输入' })
   await uses.waitFor()
@@ -68,6 +70,7 @@ try {
   await page.getByRole('status', { name: '画布保存状态' }).filter({ hasText: '已保存' }).waitFor()
   await page.reload()
   await page.locator('[data-card-id="m"]').click()
+  await page.locator('.generation-material-composer').waitFor(); await openModelInspection(page)
   await uses.getByText('首帧 · @图片1', { exact: true }).waitFor()
   await uses.getByText('关键帧 · @图片2', { exact: true }).waitFor()
   await uses.getByRole('button', { name: '取消首帧 @图片1', exact: true }).click()
@@ -97,6 +100,7 @@ try {
   assert.equal(result.cards.filter(card => card.type === 'content.video' && card.origin?.run_id === run.run_id).length, 1)
   await page.getByRole('button', { name: '运行历史', exact: true }).click()
   await page.locator('[data-card-id="m"]').press('Enter')
+  await page.locator('.generation-material-composer').waitFor(); await openModelInspection(page)
   await uses.getByText('关键帧 · @图片2', { exact: true }).waitFor()
   await page.screenshot({ path: join(output, 'video-inputs-desktop.png'), fullPage: true })
   await page.setViewportSize({ width: 390, height: 844 })
@@ -114,6 +118,7 @@ try {
   await page.setViewportSize({ width: 1440, height: 1000 })
   await page.goto(`http://127.0.0.1:4279/projects/canvas-project/generation-canvas?canvas=${subjectCanvas.id}`)
   await page.locator('[data-card-id="subject-model"]').press('Enter')
+  await page.locator('.generation-material-composer').waitFor(); await openModelInspection(page)
   const subjectUses = page.getByRole('region', { name: '视频实际输入' })
   const adopt = subjectUses.getByRole('button', { name: '采用 @视频1 为主体视频', exact: true })
   assert.equal(await adopt.isDisabled(), true, 'multi-subject media is not assigned without an explicit group')

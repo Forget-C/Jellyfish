@@ -1,3 +1,4 @@
+import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { closeCanvasDetails, closePrecheck, openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -50,6 +51,7 @@ try {
   await page.addInitScript(id => localStorage.setItem(`jellyfish:generation-layout:canvas-project:${id}:view:canvas`, JSON.stringify({ schema: 1, transform: { x: 40, y: 104, scale: 1 }, positions: { m: { x: 0, y: 0 }, s0: { x: 900, y: 0 }, s1: { x: 1400, y: 0 }, 'text-source': { x: 1900, y: 0 } }, sizes: {} })), canvas.id)
   await page.goto(`http://127.0.0.1:4279/projects/canvas-project?tab=generation&canvas=${canvas.id}`)
   await page.locator('[data-card-id="m"]').press('Enter')
+  await page.locator('.generation-material-composer').waitFor(); await openModelInspection(page)
   const card = page.locator('.wb-details:not([hidden])'), editor = card.getByRole('textbox', { name: '模型正文', exact: true })
   const preview = page.getByRole('region', { name: '运行预检', exact: true })
   const save = async () => { await page.getByRole('button', { name: '保存画布', exact: true }).click(); await page.getByRole('status').filter({ hasText: '已保存' }).waitFor(); return (await (await fetch(`${base}/${canvas.id}`)).json()).data.document.cards[0] }
