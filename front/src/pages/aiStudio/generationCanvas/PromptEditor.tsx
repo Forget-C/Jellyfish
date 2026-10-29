@@ -175,7 +175,7 @@ export function PromptEditor({ compact = false, document, card, value, onChange,
       {matches.map((item, index) => <button type="button" key={sourceKey(item.source)} role="option" aria-selected={index === activeIndex % Math.max(1, matches.length)} onClick={() => insert({ id: crypto.randomUUID(), kind: 'reference', source: item.source })}>{item.token}</button>)}
       {!matches.length && <small>没有匹配的实际输出；可切换引用分类</small>}
     </div>}
-    <div ref={root} role="textbox" aria-label="模型正文" aria-multiline="true" contentEditable={!disabled} suppressContentEditableWarning className="generation-prompt-editor"
+    <div ref={root} role="textbox" aria-label="模型正文" aria-multiline="true" contentEditable={!disabled} suppressContentEditableWarning className="generation-prompt-editor" aria-placeholder={compact ? '描述你想生成的内容，或通过引用与指令使用已连接的候选。' : undefined} data-placeholder="描述你想生成的内容，或通过引用与指令使用已连接的候选。" data-empty={!(value.segments || []).some(segment => segment.kind !== 'text' || segment.text?.trim())}
       onCompositionStart={() => { composing.current = true }} onCompositionEnd={() => { composing.current = false; publish(read()); if (/[\s,;:()，。；：、（）!?！？]$/.test(root.current?.textContent || '')) confirm() }}
       onInput={() => {
         const next = read(); publish(next)

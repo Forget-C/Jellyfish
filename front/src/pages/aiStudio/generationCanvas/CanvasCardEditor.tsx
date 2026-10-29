@@ -42,19 +42,23 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
     }
     const box = position()
     // Fit once on deliberate activation, never on typing, saving, dragging or media resize.
-    if (!previousOpen.current && allowPan && desktop && !expanded) {
-      const height = Math.min(Math.max(node.scrollHeight, 240), material ? 480 : 360, window.innerHeight - 160)
-      let y = Math.min(0, window.innerHeight - 72 - (box.bottom + 16 + height))
-      if (box.height + height + 16 <= window.innerHeight - 152) y = Math.max(y, 80 - box.top)
-      const x = box.left < 16 ? 16 - box.left : box.right > window.innerWidth - 16 ? window.innerWidth - 16 - box.right : 0
-      if (x || y) fit.current({x,y})
+    let activationFrame: number | undefined
+    if (!previousOpen.current && allowPan && desktop && !expanded && !node.hidden) {
+      // Measure after the visible editor and its retained footer have settled.
+      activationFrame = requestAnimationFrame(() => {
+        const height = Math.min(Math.max(node.scrollHeight, 240), material ? 480 : 360, window.innerHeight - 160)
+        let y = Math.min(0, window.innerHeight - 72 - (box.bottom + 16 + height))
+        if (box.height + height + 16 <= window.innerHeight - 152) y = Math.max(y, 80 - box.top)
+        const x = box.left < 16 ? 16 - box.left : box.right > window.innerWidth - 16 ? window.innerWidth - 16 - box.right : 0
+        if (x || y) fit.current({x,y})
+      })
     }
-    previousOpen.current = true
+    previousOpen.current = !node.hidden
     const observer = new ResizeObserver(position)
     observer.observe(anchor)
     window.addEventListener('resize', position)
-    return () => { observer.disconnect(); window.removeEventListener('resize', position) }
-  }, [open, anchor, layoutKey, allowPan, desktop, expanded, material])
+    return () => { if (activationFrame !== undefined) cancelAnimationFrame(activationFrame); observer.disconnect(); window.removeEventListener('resize', position) }
+  }, [open, anchor, layoutKey, allowPan, desktop, expanded, material, slot?.active])
   useEffect(() => {
     if (!open) { activated.current = false; return }
     if (slot?.active === slotId) activated.current = true
