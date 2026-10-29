@@ -19,6 +19,7 @@ import { CanvasDragHandle, CanvasEdge, useCanvasViewport } from '../../../compon
 import { useGraphLayout } from '../directing/useGraphLayout'
 import type { GraphArrange, GraphSize } from '../directing/graphLayout'
 import { referenceProtection } from './promptRules'
+import { CardList, cardDragType } from './CardList'
 import { CardShell } from './CardShell'
 import { rendererRegistry } from './rendererRegistry'
 import { connect, disconnect } from './graphRules'
@@ -49,7 +50,6 @@ function GenerationCanvasGraphContent({ primaryHost, document, onChange, readonl
   const [detailId, setDetailId] = useState<string | undefined>(cards[0]?.id)
   const [detailTrigger, setDetailTrigger] = useState<HTMLElement>()
   const [minimapOpen, setMinimapOpen] = useState(false)
-  const [toolboxOpen, setToolboxOpen] = useState(true)
   const [reason, setReason] = useState('')
   const [selecting, setSelecting] = useState(false)
   const [selectionBox, setSelectionBox] = useState<{ x: number; y: number; width: number; height: number }>()
@@ -139,7 +139,8 @@ function GenerationCanvasGraphContent({ primaryHost, document, onChange, readonl
     edit({ ...next, cards: next.cards?.filter(card => card.id !== id), input_order: order,
       groups: next.groups?.map(group => ({ ...group, card_ids: group.card_ids?.filter(card => card !== id) })) })
   }
-  const add = (type: string) => {
+  const add = (type: string, position?: { x: number; y: number }) => {
+    if (readonly || !catalog.cards.some(card => card.type === type)) return
     const card = (type === 'content.text' || type === 'content.basis') ? { id: crypto.randomUUID(), type, type_version: 1, text: '' }
       : (type === 'content.object' || type === 'content.place') ? { id: crypto.randomUUID(), type, type_version: 1, object_id: null, name: '', category: type === 'content.place' ? 'place' : 'character', text: '', source_locator: '' }
       : ['direction.beat', 'direction.event', 'direction.shot'].includes(type) ? { id: crypto.randomUUID(), type, [type.slice(10) + '_id']: crypto.randomUUID(), name: '', input_bindings: [], examples: [], scope: {} }
@@ -154,6 +155,7 @@ function GenerationCanvasGraphContent({ primaryHost, document, onChange, readonl
       : type.startsWith('model.') ? { id: crypto.randomUUID(), type, type_version: 1, model_id: null, prompt: { segments: [] }, config: {} }
       : { id: crypto.randomUUID(), type, type_version: 1, file_id: null, uploading: false }
     edit({ ...latest.current, cards: [...(latest.current.cards || []), card] })
+    if (position) layout.move(card.id, position)
     setDetailId(card.id)
   }
   const capability = (card: GenerationCard) => 'model_id' in card && card.model_id ? capabilities[card.model_id] : undefined
@@ -256,14 +258,8 @@ function GenerationCanvasGraphContent({ primaryHost, document, onChange, readonl
         onClick={() => runtime?.precheck(selectedModels[0].id, 'selection', selected)}>运行所选模型（{selectedModels.length}）</Button>
   return <div className="generation-graph" ref={container}>
     {primaryHost ? createPortal(runSelection, primaryHost) : runSelection}
-    <nav hidden={!toolboxOpen} className="generation-toolbox" aria-label="添加卡片">
-      {(['基础内容', '模型生成'] as const).map(group => <section key={group}><h2>{group}</h2>
-        {catalog.cards.filter(card => card.group === group).map(card => <Button key={card.type} disabled={readonly} onClick={() => add(card.type)}>添加{card.title.replace('内容', '')}</Button>)}
-      </section>)}
-      <section><h2>导演工具箱</h2>{[...new Set(catalog.cards.filter(card => card.group === '导演工具箱').map(card => card.category))].map(group => <div key={group}><h3>{group}</h3>{catalog.cards.filter(card => card.category === group).map(card => <Button key={card.type} disabled={readonly} onClick={() => add(card.type)}>添加{card.title}</Button>)}</div>)}</section>
-    </nav>
+    <CardList catalog={catalog} readonly={readonly} onAdd={add} />
     <Space wrap className="generation-toolbar">
-      <Button aria-label={toolboxOpen ? '收起工具箱' : '展开工具箱'} aria-expanded={toolboxOpen} onClick={() => setToolboxOpen(value => !value)}>{toolboxOpen ? '收起工具箱' : '展开工具箱'}</Button>
       <Button aria-label={minimapOpen ? '收起小地图' : '展开小地图'} aria-expanded={minimapOpen} onClick={() => setMinimapOpen(value => !value)}>{minimapOpen ? '收起小地图' : '展开小地图'}</Button>
 
       <Button disabled={readonly || !selected.length} onClick={() => {
@@ -280,6 +276,13 @@ function GenerationCanvasGraphContent({ primaryHost, document, onChange, readonl
     {storageError && <Alert type="warning" message={`布局本地保存失败：${storageError}`} />}
     <div role="status" className="generation-connection-reason">{reason || '拖动输出端口建立连接；按住 Shift 或启用框选后拖动空白选择卡片'}</div>
     <div ref={viewport.surface} {...viewport.surfaceProps} className="generation-surface" aria-label="生成画布视口"
+      onDragOver={event => { if (!readonly && event.dataTransfer.types.includes(cardDragType)) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy' } }}
+      onDrop={event => {
+        if (readonly || !event.dataTransfer.types.includes(cardDragType)) return
+        event.preventDefault()
+        const box = event.currentTarget.getBoundingClientRect()
+        add(event.dataTransfer.getData(cardDragType), { x: (event.clientX - box.left - transform.x) / transform.scale, y: (event.clientY - box.top - transform.y) / transform.scale })
+      }}
       onPointerDown={event => {
         if ((selecting || event.shiftKey) && event.button === 0 && event.currentTarget.contains(event.target as Node)
           && !(event.target as Element).closest('[data-card-id], .generation-group, button, input, select, textarea')) {
