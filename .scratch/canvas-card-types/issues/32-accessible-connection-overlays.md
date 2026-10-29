@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented
+**Completion:** integrated
 
 - [x] 卡片菜单提供连接到…进入明确连接状态并显示目标；键盘可从连接点启动等价流程，触摸不必先打开详情或精确拖线。选择目标不触发普通卡片详情，退出后恢复普通点击行为。
 - [x] 目标选择沿 29 的零／一／多种用途与取消规则，只建候选；替代入口不绕过兼容、权限、无环或明确采用。使用可访问名称、可见焦点和可达关闭／取消动作。
@@ -32,3 +32,5 @@
 - 受影响原回归 `generation-canvas-card-list` **11.6s passed**（`/private/tmp/canvas32-card-list`），`generation-canvas-ports` **11.5s passed**（`/private/tmp/canvas32-ports`，含真实 TaskWorker 受控请求）。Node24 typecheck 通过；定向 ESLint 仅 Graph 原有两条 inspectTarget 依赖警告；差异检查通过。供应商／存储为原受控替身，无后端或公开 schema 变化，不宣称真实供应商质量。
 
 - 集成基线同步：先合入 30（`bdf995f3`），再合入 31（`397c8d0e`），最终产品 `f8084376` 保留 CandidateOutputStatus／同源重选清空、重复候选定位、多用途独立侧别及全部新用例。只读保护在提交点再次核实，目标选择期间不移动卡片；目标列表同名项补画布序号。最终正式 32 **10.8s passed**（`/private/tmp/canvas32-with31`，含只读另页门禁）、31 edge-management **11.7s passed**（`/private/tmp/canvas32-edges31`）；Node24 typecheck、定向 ESLint（仅原两警告）、差异和 01–26 哈希通过。Sessions **9.7s passed**（`/private/tmp/canvas32-sessions`）。已实际查看合后窄屏目标截图；未经新改动影响的 CardList／Ports 结果复用。最终集成会话保留及全部旧入口迁移由 33 补组合覆盖，不冒充整体完成。
+
+- 2026-10-29 集成：32最终tip `51020f9b` 已同步31后无冲突集成。主区Node24 typecheck、差异与01–26哈希核对通过；合后产品树一致，复用32正式case10.8s（`/private/tmp/canvas32-with31`）、31多用途11.7s（`/private/tmp/canvas32-edges31`）及Sessions9.7s（`/private/tmp/canvas32-sessions`）。33前置满足，最终视觉／组合验收尚待33。
