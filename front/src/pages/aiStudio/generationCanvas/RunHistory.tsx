@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Alert, Empty, Space } from 'antd'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
 import type { CanvasNodeRead, CanvasRunRead } from '../../../services/generated'
+import { WorkbenchDetails } from '../directing/ui/WorkbenchDetails'
 import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 import { MediaPreview } from './MediaContentEditor'
 import { activeNode } from './useGenerationCanvasRuntime'
@@ -36,9 +37,9 @@ export function RunHistory({ runs, targetRun, targetNode, disabled, onSave, onCa
     catch { setError('另存失败，当前编辑已保留，请重试') }
     finally { setSaving('') }
   }
-  return <section ref={root}>
+  return <>
     <Button aria-expanded={open} onClick={() => setOpen(previous => !previous)}>运行历史</Button>
-    {open && <section aria-label="画布运行历史" className="generation-run-history">
+    <WorkbenchDetails title="运行历史" open={open} onClose={() => setOpen(false)}><section ref={root} aria-label="画布运行历史" className="generation-run-history">
       {message && <p role="status">{message}</p>}{error && <Alert type="error" message={error} />}
       {!runs.length && <Empty description="尚无运行记录" />}
       {targetRun && !targetExists && <p role="status">正在恢复目标运行记录；若记录不存在，请核实画布来源</p>}
@@ -67,6 +68,6 @@ export function RunHistory({ runs, targetRun, targetNode, disabled, onSave, onCa
           {node.error_message && <Alert type="error" message={`${node.error_code || '运行失败'}: ${node.error_message}`} />}
         </section>)}
       </details>)}
-    </section>}
-  </section>
+    </section></WorkbenchDetails>
+  </>
 }
