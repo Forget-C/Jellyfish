@@ -28,7 +28,7 @@ function contentKey(document: PromptDocument) {
 }
 
 /** DOM 仅作为输入表面；持久值是有稳定身份的片段，组合输入期间不重建 DOM。 */
-export function PromptEditor({ document, card, value, onChange, disabled, candidates = [] }: { document: CanvasDocument; card: GenerationCard; value: PromptDocument; onChange: (value: PromptDocument) => void; disabled?: boolean; candidates?: Candidate[] }) {
+export function PromptEditor({ compact = false, document, card, value, onChange, disabled, candidates = [] }: { compact?: boolean; document: CanvasDocument; card: GenerationCard; value: PromptDocument; onChange: (value: PromptDocument) => void; disabled?: boolean; candidates?: Candidate[] }) {
   const root = useRef<HTMLDivElement>(null), composing = useRef(false), local = useRef(value), renderedContent = useRef('')
   const [category, setCategory] = useState('text'), [query, setQuery] = useState(''), [activeIndex, setActiveIndex] = useState(0)
   local.current = value
@@ -153,14 +153,15 @@ export function PromptEditor({ document, card, value, onChange, disabled, candid
       range.insertNode(node); range.setStartAfter(node); range.collapse(true); selection?.removeAllRanges(); selection?.addRange(range); publish(read()); root.current?.focus()
     } else { const next = read(); next.segments = [...(next.segments || []), reference, { id: crypto.randomUUID(), kind: 'text', text: ' ' }]; publish(next, true); root.current?.focus() }
   }
-  return <>
-    <Space wrap>
+  const tools = <Space wrap>
       {card.type === 'model.video' && <Select<string> disabled={disabled} aria-label="系统指令" placeholder="添加系统指令" value={undefined} options={['首帧参考', '尾帧参考', '关键帧参考', '主体参考'].map(command => ({ value: command, label: `/${command}` }))}
         onChange={command => { if (command) publish({ segments: [...(read().segments || []), { id: crypto.randomUUID(), kind: 'instruction', command, parameters: {}, references: [] }] }, true) }} />}
       <Select aria-label="引用分类" value={category} onChange={setCategory} options={Object.entries({ text: '文本', image: '图片', video: '视频', audio: '音频' }).map(([value, label]) => ({ value, label }))} />
       {candidates.filter(item => item.source.port_id === category).map(item => <Button key={sourceKey(item.source)} size="small" disabled={disabled || !item.available} onClick={() => insert({ id: crypto.randomUUID(), kind: 'reference', source: item.source })}>{item.token}{!item.available && ' 缺失'}</Button>)}
       {query && <small role="status">匹配 {query}；完整代号确认后绑定</small>}
     </Space>
+  return <>
+    {compact ? <details className="generation-material-reference-tools"><summary>＠ 引用与指令</summary>{tools}</details> : tools}
     {(value.segments || []).filter((segment): segment is PromptInstruction => segment.kind === 'instruction').map(instruction => <section key={instruction.id} aria-label={`指令 ${instruction.command}`} data-instruction-id={instruction.id} data-segment-id={instruction.id}>
       <strong>/{instruction.command}</strong>
       {instruction.command === '主体参考' && <Input disabled={disabled} aria-label="主体名称" value={instruction.parameters?.name || ''} onChange={event => publish({ segments: (value.segments || []).map(segment => segment.id === instruction.id ? { ...instruction, parameters: { ...instruction.parameters, name: event.target.value } } : segment) }, true)} />}

@@ -1,3 +1,4 @@
+import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -48,7 +49,7 @@ try {
   assert.ok(seeded.ok, await seeded.text())
   await page.goto(`http://127.0.0.1:4275/projects/canvas-project?tab=generation&canvas=${canvas.id}`)
   const detail = () => page.locator('.wb-details:not([hidden])')
-  const open = async id => { const summary = page.locator(`[data-card-id="${id}"]`); await summary.focus(); await summary.press('Enter'); await detail().waitFor() }
+  const open = async id => { const summary = page.locator(`[data-card-id="${id}"]`); await summary.focus(); await summary.press('Enter'); await detail().waitFor(); await openModelInspection(page) }
   await open('m')
   const editor = detail().getByRole('textbox', { name: '模型正文', exact: true })
   await editor.waitFor()
