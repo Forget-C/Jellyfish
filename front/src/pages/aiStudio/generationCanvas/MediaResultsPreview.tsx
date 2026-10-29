@@ -4,7 +4,7 @@ import type { CanvasResolvedOutput } from '../../../services/generated'
 import { MediaPreview } from './MediaContentEditor'
 
 /** Preview selection is local display state; the complete ordered output stays published. */
-export function MediaResultsPreview({ outputs }: { outputs: CanvasResolvedOutput[] }) {
+export function MediaResultsPreview({ outputs, showBasisStatus = true }: { outputs: CanvasResolvedOutput[]; showBasisStatus?: boolean }) {
   const [position, setPosition] = useState(0)
   const selected = outputs[Math.min(position, outputs.length - 1)]
   if (!selected?.file_id) return null
@@ -13,6 +13,6 @@ export function MediaResultsPreview({ outputs }: { outputs: CanvasResolvedOutput
       aria-pressed={output === selected} onClick={() => setPosition(index)}>{index + 1}</Button>)}</Space>
     <p>输出 {selected.source.position + 1} / {outputs.length}</p>
     <MediaPreview fileId={selected.file_id} type={selected.modality} />
-    {selected.basis_current === false && <small>依据已变，旧正式输出仍保留</small>}
+    {showBasisStatus && selected.basis_current === false && <small>依据已变，旧正式输出仍保留</small>}
   </section>
 }
