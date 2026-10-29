@@ -1,3 +1,4 @@
+import { openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -50,12 +51,7 @@ try {
   assert.ok(seeded.ok, await seeded.text())
   await page.goto(`http://127.0.0.1:4281/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   const card = page.locator('.wb-details:not([hidden])')
-  const open = async id => {
-    const details = page.locator('.wb-details:visible')
-    if (await details.count() && await details.getAttribute('aria-modal') === 'true') await details.getByRole('button', { name: '关闭详情', exact: true }).click()
-    await page.locator(`[data-card-id="${id}"]`).press('Enter')
-    await page.locator(`.wb-details:visible [data-card-details="${id}"]`).waitFor()
-  }
+  const open = id => openCanvasCard(page, id)
   const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
   const poll = async predicate => { for (let i = 0; i < 80; i++) { const state = await read(); if (predicate(state)) return state; await delay(150) } throw Error('saved document did not reach expected state') }
   const preview = page.getByRole('region', { name: '运行预检', exact: true })
