@@ -76,6 +76,8 @@ class CanvasStore:
             raise diagnostic('INVALID_DOCUMENT', error['msg'], {'canvas_id': canvas_id, 'path': list(error['loc'])}) from exc
         if document.id != canvas_id or document.project_id != self.project_id:
             raise diagnostic('INVALID_IDENTITY', '画布身份不可修改', {'canvas_id': canvas_id})
+        from app.services.generation_canvas.stacks import validate_stack_edit
+        validate_stack_edit(canvas.document, document)
         identities = dict(canvas.card_types)
         seen = set()
         for card in document.cards:

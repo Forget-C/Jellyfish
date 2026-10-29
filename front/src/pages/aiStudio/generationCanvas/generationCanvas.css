@@ -184,3 +184,14 @@
 
 .generation-card-edit { position: absolute; right: 12px; top: 52px; z-index: 2; visibility: hidden; }
 .generation-card[data-selected="true"] .generation-card-edit, .generation-card:focus-within .generation-card-edit { visibility: visible; }
+
+.generation-stack { position:absolute; width:400px; height:300px; cursor:grab; z-index:2; }
+.generation-stack:focus-visible { outline:2px solid var(--wb-focus); }
+.generation-stack-face { position:absolute; inset:0; border:1px solid var(--wb-border); background:var(--wb-panel-bg,#202020); border-radius:16px; padding:24px; box-shadow:-10px 10px 0 #252525,-20px 20px 0 #1c1c1c; }
+.generation-stack-face>span { position:absolute; right:20px; bottom:20px; border:1px solid var(--wb-border); border-radius:50%; padding:12px; }
+.generation-stack-actions { position:absolute; bottom:calc(100% + 16px); display:flex; align-items:center; gap:12px; padding:8px; background:#252525; border-radius:12px; visibility:hidden; }
+.generation-stack:hover .generation-stack-actions,.generation-stack:focus-within .generation-stack-actions { visibility:visible; }
+.generation-stack-reading { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:24px; padding:24px; min-height:300px; }
+.generation-stack-reading article { border:1px solid var(--wb-border); border-radius:12px; padding:20px; white-space:pre-wrap; }
+.generation-stack-face>img { width:100%; max-height:180px; object-fit:contain; }
+.generation-stack-face .canvas-card-summary { display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical; overflow:hidden; }

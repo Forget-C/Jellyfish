@@ -225,11 +225,12 @@ class GenerationCanvasEdge(BaseModel):
 
 
 class GenerationCanvasGroup(BaseModel):
-    """分组仅组织独立成员，不提供聚合输出。"""
+    """编组与只读堆叠组织独立成员，不提供聚合输出。"""
     model_config = ConfigDict(extra='forbid')
     id: str = Field(min_length=1, max_length=64)
     name: str = Field(min_length=1, max_length=255)
     card_ids: list[str] = Field(default_factory=list)
+    kind: Literal['group', 'stack'] = 'group'
     collapsed: bool = False
 
 

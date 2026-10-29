@@ -1,3 +1,4 @@
+import { buildFileDownloadUrl } from '../assets/utils'
 import { designSummary } from './designSummary'
 import { ReferenceCardSummary } from './ReferenceCardSummary'
 import { canvasNodeStatusLabels } from './useGenerationCanvasRuntime'
@@ -18,7 +19,7 @@ import type { PointerEvent, ReactNode } from 'react'
 import { AimOutlined, MinusOutlined, PlusOutlined, CloseOutlined, ScissorOutlined } from '@ant-design/icons'
 import { WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
 import { CanvasToolbarMenu } from '../directing/CanvasToolbarMenu'
-import { ConfigProvider, Dropdown, Modal, Input, Select, Space, Tooltip } from 'antd'
+import { ConfigProvider, Dropdown, Modal, Input, Select, Space, Tooltip, Image } from 'antd'
 import { StudioGenerationCanvasesService as Canvases, LlmService } from '../../../services/generated'
 import type { CanvasDocument, CanvasModelCapability, CanvasNodeRead, CanvasResolvedOutput, ModelRead } from '../../../services/generated'
 import { CanvasDragHandle, CanvasEdge, useCanvasViewport } from '../../../components/canvas/Canvas'
@@ -52,6 +53,17 @@ const arrange: GraphArrange = (nodes, _sizes, _width, _anchor, retained = {}) =>
 function GenerationCanvasGraphContent({ contentHistory, document, onChange, readonly = false, runtime, inspectTarget, editingStatus, savedRevision, savedDocument }: { primaryHost?: HTMLElement | null; contentHistory?: ReactNode; savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; inspectTarget?: { cardId: string; serial: number; segmentId?: string }; editingStatus?: string; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string) => void } }) {
   const { catalog, cardDefinitions, cardTitles, connectionReason, inputPorts, outputPorts, portLabels } = useGraphRules()
   const cards = document.cards || emptyCards, edges = document.edges || emptyEdges, groups = document.groups || emptyGroups
+  const stacks = groups.filter(group => group.kind === 'stack')
+  const stackFor = (id: string) => stacks.find(group => group.card_ids?.includes(id))
+  const [viewStackId, setViewStackId] = useState<string>()
+  useEffect(() => {
+    if (!viewStackId) return
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !(event.target as Element).closest('.ant-image-preview')) { event.preventDefault(); event.stopPropagation(); setViewStackId(undefined) }
+    }
+    window.addEventListener('keydown', escape, true)
+    return () => window.removeEventListener('keydown', escape, true)
+  }, [viewStackId])
   const cardLabel = (id: string) => {
     const source = cards.find(card => card.id === id)
     const name = source && ('name' in source && source.name || 'title' in source && source.title)
@@ -60,6 +72,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
   const inputLabel = (card: GenerationCard, port: string) => cardDefinitions[card.type || '']?.inputs.find(item => item.id === port)?.label || portLabels[port]
   const [displayFilter, setDisplayFilter] = useState<CanvasDisplayFilter>({ group: '', modality: '', problems: false })
   const [multiSelectMode, setMultiSelectMode] = useState(false)
+  const stackMoved = useRef(false)
   const groupDrag = useRef<{ pointer: number; x: number; y: number; positions: Record<string, { x: number; y: number }> }>()
   const retainedPositions = useRef<Record<string, { x: number; y: number }>>({})
   const [selected, setSelected] = useState<string[]>([])
@@ -146,6 +159,16 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
     connectionMenu.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus({ preventScroll: true })
   }, [accessibleConnection, pendingConnection])
   useEffect(() => {
+    if (inspectTarget && stackFor(inspectTarget.cardId)) {
+      setReason('请先解除堆叠后编辑'); setDetailId(undefined); setSelected([])
+      requestAnimationFrame(() => {
+        const stack = window.document.querySelector<HTMLElement>(`[data-stack-id="${CSS.escape(stackFor(inspectTarget.cardId)!.id)}"]`)
+        if (!stack) return
+        const box = stack.getBoundingClientRect()
+        layout.setView(previous => ({...previous,transform:{...previous.transform,x:previous.transform.x+window.innerWidth/2-box.x-box.width/2,y:previous.transform.y+window.innerHeight/2-box.y-box.height/2}}))
+        stack.focus({preventScroll:true})
+      }); return
+    }
     if (inspectTarget) { setSelected([inspectTarget.cardId]); setSelectedEdgeId(undefined); setDetailAllowPan(false); setDetailId(inspectTarget.cardId) }
   }, [inspectTarget?.cardId, inspectTarget?.serial])
   useEffect(() => {
@@ -163,10 +186,10 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
   }, [inspectTarget?.serial, detailId, document.id])
   const latest = useRef(document); latest.current = document
   const container = useRef<HTMLDivElement>(null)
-  const hidden = useMemo(() => new Set(groups.filter(group => group.collapsed).flatMap(group => group.card_ids || [])), [groups])
+  const hidden = useMemo(() => new Set(groups.filter(group => group.kind === 'stack' || group.collapsed).flatMap(group => group.card_ids || [])), [groups])
   const cardIdentity = cards.map(card => card.id).join('|')
   const filterIdentity = [...filtered].join('|')
-  const groupIdentity = groups.map(group => `${group.id}:${group.collapsed}`).join('|')
+  const groupIdentity = groups.map(group => `${group.id}:${group.kind}:${group.collapsed}`).join('|')
   // 折叠成员在新浏览器没有本地测量；保留几何占位，不能让整个布局永远等待隐藏 DOM。
   const layoutMeasurements = useMemo(() => ({ ...Object.fromEntries([...hidden].map(id => [id, { width: 400, height: 350 }])), ...measured }), [measured, hidden])
   // 整理把编组当一个布局单元，成员仅平移，避免公共网格排布打散组内位置。
@@ -254,7 +277,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
     return () => observer.disconnect()
   }, [cardIdentity, groupIdentity, filterIdentity])
   const edit = (next: CanvasDocument) => { if (!readonly) onChange(next) }
-  const updateCard = (next: GenerationCard) => edit({ ...latest.current, cards: latest.current.cards?.map(card => card.id === next.id ? next : card) })
+  const updateCard = (next: GenerationCard) => { if (stackFor(next.id)) { setReason('请先解除堆叠后编辑'); return } edit({ ...latest.current, cards: latest.current.cards?.map(card => card.id === next.id ? next : card) }) }
   const showProtection = (protection: NonNullable<ReturnType<typeof referenceProtection>>) => {
     setReason(protection.message); setDetailId(protection.cardId)
     const card = window.document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(protection.cardId)}"]`)
@@ -262,6 +285,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
     if (segment) { segment.tabIndex = -1; segment.focus(); segment.scrollIntoView({ block: 'nearest', inline: 'nearest' }) }
   }
   const removeCard = (id: string) => {
+    if (stackFor(id) || edges.some(edge => edge.source_card === id && stackFor(edge.target_card))) { setReason('请先解除相关堆叠后删除'); return }
     if (runtime?.busyCards.has(id)) { setReason('卡片正在运行，结束前不可删除'); return }
     const protection = referenceProtection(latest.current, id)
     if (protection) { showProtection(protection); return }
@@ -404,6 +428,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
     })
   }
   const removeEdge = (edge: GenerationEdge) => {
+    if (stackFor(edge.target_card)) { setReason('请先解除堆叠后删除输入连线'); return }
     const protection = referenceProtection(latest.current, edge.source_card, edge.target_card, edge.source_port, edge.target_port)
     if (protection) { setReason('此连线仍有输入被引用，请先取消引用后再删除'); return }
     edit(disconnect(latest.current, edge.id))
@@ -474,13 +499,15 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
     const surface = viewport.surface.current
     const visible = cards.filter(card => !hidden.has(card.id) && !filtered.has(card.id))
     if (!surface || !visible.length && !groups.length) { viewport.fit(); return }
+    // Focus/scrollIntoView can scroll an overflow-hidden surface independently of the saved transform.
+    surface.scrollTo(0, 0)
     const bounds = visible.map(card => {
       const origin = point(card.id), size = measured[card.id] || { width: 400, height: 200 }
       return { left: origin.x, top: origin.y - 36, right: origin.x + size.width, bottom: origin.y + size.height }
     })
     // 分组标题高于成员卡；收起组也需参与适应范围，避免操作落在顶部导航后。
     const surfaceBox = surface.getBoundingClientRect()
-    container.current?.querySelectorAll<HTMLElement>('[data-group-id]').forEach(group => {
+    container.current?.querySelectorAll<HTMLElement>('[data-group-id], [data-stack-id]').forEach(group => {
       const box = group.getBoundingClientRect()
       bounds.push({ left: (box.left - surfaceBox.left - transform.x) / transform.scale, top: (box.top - surfaceBox.top - transform.y) / transform.scale,
         right: (box.right - surfaceBox.left - transform.x) / transform.scale, bottom: (box.bottom - surfaceBox.top - transform.y) / transform.scale })
@@ -495,7 +522,8 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
     layout.setView(previous => ({ ...previous, transform: { scale, x: paddingLeft + (availableWidth - width * scale) / 2 - left * scale, y: paddingTop + (availableHeight - height * scale) / 2 - top * scale } }))
   }
 
-  const anchor = (id: string, side: ConnectionSide) => sidePoint(point(id), measured[id]?.width || layout.view.sizes[id]?.width || 400, measured[id]?.height || layout.view.sizes[id]?.height || 172, side)
+  const stackOrigin = (ids: string[]) => ({ x: Math.min(...ids.map(id => point(id).x)), y: Math.min(...ids.map(id => point(id).y)) })
+  const anchor = (id: string, side: ConnectionSide) => stackFor(id) ? sidePoint(stackOrigin(stackFor(id)!.card_ids || []), 400, 300, side) : sidePoint(point(id), measured[id]?.width || layout.view.sizes[id]?.width || 400, measured[id]?.height || layout.view.sizes[id]?.height || 172, side)
   const width = viewport.surface.current?.clientWidth || 1200, height = viewport.surface.current?.clientHeight || 800
   const visibleWorld = { x: -transform.x / transform.scale, y: -transform.y / transform.scale, width: width / transform.scale, height: height / transform.scale }
   const mapLeft = Math.min(0, visibleWorld.x, ...cards.map(card => point(card.id).x))
@@ -532,9 +560,27 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
     if (target.closest('.generation-selection-actions, .generation-browse') || modifier || multiSelectMode && target.closest('[data-card-id]')) return
     clearSelection()
   }}>
+    <Modal title="堆叠内容（只读）" open={!!stacks.find(group => group.id === viewStackId)} onCancel={() => setViewStackId(undefined)} footer={null} width={1100} maskClosable destroyOnClose>
+      <div className="generation-stack-reading" onClick={event => { if (event.target === event.currentTarget) setViewStackId(undefined) }}>
+        {(stacks.find(group => group.id === viewStackId)?.card_ids || []).map(id => {
+          const card = cards.find(item => item.id === id)!
+          const file = 'file_id' in card ? card.file_id : 'image_binding' in card ? card.image_binding?.file_id : undefined
+          const fields = 'fields' in card ? Object.values(card.fields || {}) : []
+          return <article key={id} aria-label={`只读成员 ${cardLabel(id)}`}><h3>{cardLabel(id)}</h3>
+            {'text' in card && <p>{card.text || '未填写正文'}</p>}
+            {'objects' in card && <p>{card.objects?.map(object => object.name).join('、')} · {card.angle || '正面'}</p>}
+            {fields.map((field, index) => <p key={index}>{designSummary([field], [])}</p>)}
+            {file && (card.type?.startsWith('reference.') || card.type === 'content.image' ? <Image alt="图片预览" src={buildFileDownloadUrl(file)} /> : <MediaPreview fileId={file} type={card.type?.split('.')[1] || 'image'} />)}
+            {runtime?.outputs[id]?.filter(output => output.text).map(output => <p key={output.source.position}>{output.text}</p>)}
+            {runtime?.outputs[id]?.filter(output => output.file_id).map(output => output.modality === 'image' ? <Image key={output.source.position} alt={`输出图片 ${output.source.position + 1}`} src={buildFileDownloadUrl(output.file_id!)} /> : <MediaPreview key={output.source.position} fileId={output.file_id!} type={output.modality} />)}
+            {runtime?.nodes[id]?.text && runtime.nodes[id].status !== 'succeeded' && <p>{runtime.nodes[id].text}</p>}
+          </article>
+        })}
+      </div>
+    </Modal>
     <Modal title="选择画布来源" open={!!sourceTargetCard} onCancel={() => setSourceTarget(undefined)} footer={null}>
       <p>选择只建立候选，实际使用仍需明确采用。</p>
-      {sourceTargetCard && cards.flatMap(source => compatibleOptions(source.id, sourceTargetCard.id).map(option => <Button key={`${source.id}:${option.source_port}:${option.target_port}`} disabled={readonly} onClick={() => {
+      {sourceTargetCard && cards.filter(source => !stackFor(source.id)).flatMap(source => compatibleOptions(source.id, sourceTargetCard.id).map(option => <Button key={`${source.id}:${option.source_port}:${option.target_port}`} disabled={readonly} onClick={() => {
         commitConnection(option, 'left'); setSourceTarget(undefined)
       }}>{cardLabel(source.id)} → {inputLabel(sourceTargetCard, option.target_port)}</Button>))}
     </Modal>
@@ -585,6 +631,10 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
       return { left: Math.max(12, Math.min(left, width - 300)), top: Math.max(160, top), transform: 'translateY(-100%)' }
     })()}>
       <span>{selected.length} 张卡片</span>
+      <Button disabled={readonly || selected.length < 2} onClick={() => {
+        if (selected.some(id => groups.some(group => group.card_ids?.includes(id)))) { setReason('请先解除已有编组或堆叠，再重新选择'); return }
+        edit({ ...document, groups: [...groups, { id: crypto.randomUUID(), name: '新堆叠', kind: 'stack', card_ids: selected, collapsed: false }] }); clearSelection()
+      }}>堆叠</Button>
       <Button disabled={readonly || selected.length < 2} onClick={() => {
         if (selected.some(id => groups.some(group => group.card_ids?.includes(id)))) { setReason('请先解除已有编组，再重新选择'); return }
         edit({ ...document, groups: [...groups, { id: crypto.randomUUID(), name: '新编组', card_ids: selected, collapsed: false }] }); clearSelection()
@@ -645,7 +695,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
       {selectionBox && <div className="generation-selection-box" aria-hidden="true" style={{ left: selectionBox.x, top: selectionBox.y, width: selectionBox.width, height: selectionBox.height }} />}
       <div className="generation-world" style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }}>
         <svg className="generation-edges" width={12000} height={12000}>
-          {edges.filter(edge => !hidden.has(edge.source_card) && !hidden.has(edge.target_card) && !filtered.has(edge.source_card) && !filtered.has(edge.target_card)).map(edge => {
+          {edges.filter(edge => !(stackFor(edge.source_card) && stackFor(edge.source_card)?.id === stackFor(edge.target_card)?.id) && (!hidden.has(edge.source_card) || stackFor(edge.source_card)) && (!hidden.has(edge.target_card) || stackFor(edge.target_card)) && !filtered.has(edge.source_card) && !filtered.has(edge.target_card)).map(edge => {
             const sides = connectionLayout.sides[edge.id] || defaultSides(point(edge.source_card), point(edge.target_card))
             const from = anchor(edge.source_card, sides.source), to = anchor(edge.target_card, sides.target)
             const adopted = edgeAdoptions(edge) > 0
@@ -662,7 +712,38 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
             </g>
           })}
         </svg>
-        {groups.map(group => {
+        {stacks.map(group => {
+          const members = group.card_ids || []
+          if (!members.length) return null
+          const origin = stackOrigin(members)
+          const cover = cards.find(card => card.id === members[0])!
+          const coverImage = 'image_binding' in cover ? cover.image_binding?.file_id : cover.type === 'content.image' && 'file_id' in cover ? cover.file_id : runtime?.outputs[cover.id]?.find(output => output.modality === 'image')?.file_id
+          const coverText = 'text' in cover ? cover.text : runtime?.outputs[cover.id]?.find(output => output.text)?.text
+          return <section key={group.id} data-stack-id={group.id} className="generation-stack" tabIndex={0} role="button" aria-label={`查看堆叠 ${group.name}`} style={{left:origin.x,top:origin.y}}
+            onClick={event => { if ((event.target as Element).closest('button')) return; event.stopPropagation(); if (!stackMoved.current) setViewStackId(group.id); stackMoved.current = false }}
+            onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); setViewStackId(group.id) } }}
+            onPointerDown={event => {
+              if (event.button !== 0 || (event.target as Element).closest('button')) return
+              event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId)
+              stackMoved.current = false
+              groupDrag.current = {pointer:event.pointerId,x:event.clientX,y:event.clientY,positions:Object.fromEntries(members.map(id => [id,point(id)]))}
+            }} onPointerMove={event => {
+              const current=groupDrag.current
+              if (!current || current.pointer!==event.pointerId) return
+              event.stopPropagation()
+              if (Math.hypot(event.clientX-current.x,event.clientY-current.y)<6) return
+              layout.setView(previous => ({...previous,positions:{...previous.positions,...Object.fromEntries(Object.entries(current.positions).map(([id,position])=>[id,{x:position.x+(event.clientX-current.x)/transform.scale,y:position.y+(event.clientY-current.y)/transform.scale}]))}}))
+            }} onPointerUp={event => {
+              const current=groupDrag.current; groupDrag.current=undefined; event.stopPropagation()
+              stackMoved.current = !!current && Math.hypot(event.clientX-current.x,event.clientY-current.y)>=6
+            }} onPointerCancel={cancelGroupDrag} onLostPointerCapture={cancelGroupDrag}>
+            <div className="generation-stack-actions"><span>{members.length} 张卡片</span><Button disabled={readonly} onClick={event => {
+              event.stopPropagation(); edit({...document,groups:groups.filter(item=>item.id!==group.id)});setViewStackId(undefined);setSelected(members);setSelectedEdgeId(undefined);setDetailId(undefined)
+            }}>解除堆叠</Button></div>
+            <div className="generation-stack-face"><strong>{group.name}</strong><p>{cardLabel(members[0])}</p>{coverImage && <img alt="堆叠封面" src={buildFileDownloadUrl(coverImage)} />}{coverText && <p className="canvas-card-summary">{coverText}</p>}<span>{members.length}</span></div>
+          </section>
+        })}
+        {groups.filter(group => group.kind !== 'stack').map(group => {
           const members = (group.card_ids || []).filter(id => cards.some(card => card.id === id))
           const positions = members.map(point)
           const origin = { x: positions.length ? Math.min(...positions.map(pos => pos.x)) - 16 : 0,
@@ -756,7 +837,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
     {cards.filter(card => detailSessions.includes(card.id) || card.id === detailId).map(detailCard => {
       const EditorContainer = CanvasCardEditor
       const DetailRenderer = rendererRegistry[detailCard.type || 'content.text']
-      return <EditorContainer forceModal={detailCard.type?.startsWith('direction.')} key={detailCard.id} anchor={window.document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(detailCard.id)}"]`)} layoutKey={`${transform.x}:${transform.y}:${transform.scale}:${JSON.stringify(point(detailCard.id))}`} allowPan={detailAllowPan} expandRequest={expandRequest?.id === detailCard.id ? expandRequest.serial : undefined} onFit={delta => layout.setView(previous => ({...previous,transform:{...previous.transform,x:previous.transform.x+delta.x,y:previous.transform.y+delta.y}}))} title={cardTitles[detailCard.type || 'content.text'] || '卡片详情'} status={readonly ? '只读' : editingStatus} open={detailCard.id === detailId && !detailsSuppressed} onClose={() => setDetailId(current => current === detailCard.id ? undefined : current)} trigger={detailTrigger}>
+      return <EditorContainer forceModal={detailCard.type?.startsWith('direction.')} key={detailCard.id} anchor={window.document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(detailCard.id)}"]`)} layoutKey={`${transform.x}:${transform.y}:${transform.scale}:${JSON.stringify(point(detailCard.id))}`} allowPan={detailAllowPan} expandRequest={expandRequest?.id === detailCard.id ? expandRequest.serial : undefined} onFit={delta => layout.setView(previous => ({...previous,transform:{...previous.transform,x:previous.transform.x+delta.x,y:previous.transform.y+delta.y}}))} title={cardTitles[detailCard.type || 'content.text'] || '卡片详情'} status={readonly ? '只读' : editingStatus} open={detailCard.id === detailId && !detailsSuppressed && !stackFor(detailCard.id)} onClose={() => setDetailId(current => current === detailCard.id ? undefined : current)} trigger={detailTrigger}>
         {!desktop && <Space wrap><Button onClick={() => setActiveCategory('基础卡')}>添加卡片</Button><Button disabled={readonly} onClick={event => startAccessibleConnection(detailCard.id, 'right', event.currentTarget)}>连接到…</Button></Space>}
         {detailCard?.type?.startsWith('direction.') && <details className="generation-candidate-management"><summary>候选连接管理</summary>{references(detailCard)}</details>}
         {detailCard?.type === 'direction.photography' && <Button disabled={readonly} onClick={() => {
