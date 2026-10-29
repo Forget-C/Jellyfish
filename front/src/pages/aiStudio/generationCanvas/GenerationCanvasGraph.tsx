@@ -26,6 +26,7 @@ import type { GraphArrange, GraphSize } from '../directing/graphLayout'
 import { referenceProtection } from './promptRules'
 import { CardList, cardDragType, cardDragEntry } from './CardList'
 import { CardShell } from './CardShell'
+import { CandidateOutputStatus } from './CandidateOutputStatus'
 import { connectionSides, sideLabels, sidePoint, defaultSides, connectionPath, useConnectionSides, type ConnectionSide } from './connectionGeometry'
 import { MediaPreview } from './MediaContentEditor'
 import { MediaResultsPreview } from './MediaResultsPreview'
@@ -336,6 +337,7 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
     })
   }
   const references = (card: GenerationCard) => <>
+    <CandidateOutputStatus document={document} savedDocument={savedDocument} cardId={card.id} savedRevision={savedRevision} published={runtime?.outputs} />
     <Space wrap>{card.type?.startsWith('model.') && <><Button disabled={readonly} size="small" onClick={() => {
       const source = { id: crypto.randomUUID(), type: 'content.text' as const, type_version: 1 as const, text: '' }
       const next = { ...latest.current, cards: [...(latest.current.cards || []), source] }
@@ -349,7 +351,7 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
         const source = { id: crypto.randomUUID(), type: `content.${sourcePort}`, type_version: 1, file_id: null, uploading: false }
         edit(connect({ ...latest.current, cards: [...(latest.current.cards || []), source] }, { id: crypto.randomUUID(), source_card: source.id, source_port: sourcePort, target_card: card.id, target_port: targetPort }))
       }} />
-    </>}<Select<string> aria-label="连接已有卡" placeholder="选择已有卡" value={undefined} disabled={readonly} style={{ width: 160 }}
+    </>}<Select<string> aria-label="连接已有卡" placeholder="选择已有卡" value={null} disabled={readonly} style={{ width: 160 }}
       options={cards.flatMap(source => outputPorts(source).flatMap(sourcePort => inputPorts(card).filter(targetPort => !check({ id: 'candidate', source_card: source.id, source_port: sourcePort, target_card: card.id, target_port: targetPort })).map(targetPort => ({ value: `${source.id}|${sourcePort}|${targetPort}`, label: `${cardLabel(source.id)} → ${inputLabel(card, targetPort)}` }))))}
       onChange={value => { if (!value) return; const [source_card, source_port, target_port] = value.split('|'); commitConnection({ id: 'candidate', source_card, source_port, target_card: card.id, target_port }, 'left') }} />
     </Space>
