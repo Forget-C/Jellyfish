@@ -407,3 +407,9 @@ flowchart TD
 - 33原分支tip `8b07d5bc` 整体squash为规范提交 `96ddb7fb` 集成，原分支／子分支和外部红绿证据保留；27–33全部integrated，暂无待实施前沿，最终双轴审查尚未完成。
 - 主区Node24 typecheck、差异与01–26哈希校验通过，历史layout验收字节不变。产品及测试树与33最终验证一致，复用39项画布／旧实验室真实case及6项共享工作台基线；逐case、三视口截图、差异和限制见[本轮交互验收](interactions-acceptance.md)。
 - 前端单元已在33通过；lint:check仍为3条既有hooks依赖警告，未记通过。MySQL selection因隔离环境守卫未执行；供应商和外部存储为受控替身，公开schema及应用后端未改。等待最终Standards／Spec复核，不预填发现清零。
+
+### 2026-10-29：最终审查修复集成，待定向复核
+
+- 统一修复 `972a0e07` 已以标准merge集成，补齐导演卡设计字段输出摘要与键盘连接点提示的失焦收起；修复源分支已同步集成基线。新增摘要覆盖21样例、即时编辑和Tab／blur真实用例，保留各样例的完整输出及采用语义。
+- 主区Node24 typecheck、差异与01–26哈希校验通过，合后产品／测试树等同修复分支；复用11项定向真实回归（`/private/tmp/canvas-review-fixes-release`）及摘要／焦点最终6.2s（`/private/tmp/canvas-review-director-final`）。实际红绿和截图追加至[交互验收记录](interactions-acceptance.md)。
+- 最终Standards／Spec定向复核尚待执行，不预填发现清零。原MySQL selection环境未执行及受控供应商／外部存储限制保留。
