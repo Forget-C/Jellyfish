@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented — 待合入与最终双轴审查。
+**Completion:** integrated — 已合入 codex-generation-canvas，最终双轴复核通过。
 
 - [x] 建立 C01–C08 覆盖矩阵，逐条关联前置票、真实页面动作、HTTP证据及图片；各前票先交付自己的完整行为和局部验收，本票只补跨票组合与覆盖缺口，不承接前票未完成实现。
 - [x] 在1440×960、390×844、3830×1688固定同主题、同画布缩放及相近内容密度，对照用户原图／C最终一体化图／正式页面；紧凑化中间图仅作沿革，局部A/B不能替代已确认C。摄影／编组继续以原B及用户图为准。
@@ -41,3 +41,5 @@
 - 公开material最终15.3s通过（`/private/tmp/c-review-escape-green2`），覆盖普通与展开编辑：第一次Escape仅收素材、焦点回入口、正文保留；再次退出／收起。模型Select的ArrowDown→Escape不关闭素材或外层。既有HTTP采用、生成、重开、三视口断言全部保留；实际查看 `material-escape-expanded.png`，输入与统一表面保持。
 - Node24 typecheck、定向CanvasCardEditor ESLint与差异检查通过；无后端或接口变化，复用相关既有检查，不宣称重跑全部后端。01–48与原验收不改写。
 - Standards P3仅为同步合并提交标题。已拟定精确脚本 `/private/tmp/c-focus-implementation/fix-merge-message.py`，待集成此修复后由主代理执行；脚本备份原tip、仅改56b2364c消息并验证所有树与其余消息及55历史文件不变。此处不提前记为已完成历史修正或独立复核通过。
+
+2026-10-29：49–54最终集成与双轴定向复核完成，原两轴发现均已解决、剩余0。最新产品审查头 `cdac0fff`，实际检查、图片与限制见[C组合验收](../visual-c54-acceptance.md)。01–48及旧验收不改写；本轮实现工作树清理后保留提交与外部证据，未推送。

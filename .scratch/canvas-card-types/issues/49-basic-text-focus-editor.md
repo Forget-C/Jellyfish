@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented — 独立工作树已完成，待集成与最终审查。
+**Completion:** integrated — 已合入 codex-generation-canvas，最终双轴复核通过。
 
 - [x] 采用 C 一体化暗色圆角编辑面，保留外框、可见“正文”标签和描述性占位；内容为空仍显示输入区，不照抄原型的固定正文或超大空白。
 - [x] 正文选择、复制、中文输入法、清空和现有合法文本导入可用；底部低强调显示字数及必要状态，不出现采用依据侧栏、模型参数或运行提交。导入修改本卡内容，不新增持续输入。
@@ -28,3 +28,5 @@
 - 复用公开 `generation-canvas-input-controls` 做TDD：`/private/tmp/c49-red-chrome` 在旧页找不到“正文”标签而失败；最终 `/private/tmp/c49-native-final` 预检通过、真实页面＋HTTP用例9.3秒通过，验证清空并保存、中文输入、展开／收起内容保持、文件导入／取消、字数、重开、三视口和第二标签只读。既有可见加号、真实拖线只建立候选与采用不变断言保留。
 - 实际查看桌面空正文与390px只读截图：`text-empty-c.png`、`text-readonly-mobile-c.png`；导入／展开和三视口截图同目录。正文使用原生textarea承载相同受控内容，避免工作台AntD表单!important黑底造成分区，不增加全局CSS优先级；本卡正文保持统一底色，聚焦仍清晰可辨。窄屏已有添加／连接入口属于既有页面能力，未移除。
 - Node24 `pnpm --dir front run typecheck`、变更组件ESLint与 `git diff --check` 通过。默认Playwright浏览器缓存缺失，设置 `PLAYWRIGHT_CHANNEL=chrome` 使用本机Chrome；首次沙箱监听失败不算产品红例。供应商／存储仍为受控测试环境，没有真实付费调用；截图／页面验收不宣称生成艺术质量。本票未修改后端或公开契约，不机械重跑Pylint或再生客户端。
+
+2026-10-29：49–54最终集成与双轴定向复核完成，原两轴发现均已解决、剩余0。最新产品审查头 `cdac0fff`，实际检查、图片与限制见[C组合验收](../visual-c54-acceptance.md)。01–48及旧验收不改写；本轮实现工作树清理后保留提交与外部证据，未推送。

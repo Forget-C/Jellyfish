@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented — 独立工作树已完成，待集成及最终审查。
+**Completion:** integrated — 已合入 codex-generation-canvas，最终双轴复核通过。
 
 - [x] 鼠标悬浮／键盘聚焦沿路径高亮，点击清除卡片选择、收起其编辑区并仅选择当前线；无整条SVG包围盒矩形 outline，不通过移除键盘可达性来消除外框。减少动态效果时使用静态路径反馈。
 - [x] 原点击附近在线上固定显示白色小剪刀并做边界避让，不显示大型“连接详情／剪断连接”面板；用途／来源提示仅在剪刀悬浮或聚焦时出现。移向剪刀不会使其消失，命中区与焦点可辨。
@@ -33,3 +33,5 @@
 
 - 同步集成7ad9af6e（含49–51）无冲突后，Node24 typecheck再次通过；本票公开旅程改为仅打开当前需要的素材／成果区域，不同时展开全部管理层。最新 `/private/tmp/c52-integrated-verified` edge-management13.1s通过，HTTP/实际视频请求/触摸/只读断言均保留。
 - 集成时发现51素材浮层可覆盖编辑标题关闭按钮：证据 `/private/tmp/c52-integrated-release/generation-canvas-edge-management/candidate-panel-close-overlap.png` 与 `candidate-panel-close-bounds.json`，关闭按钮中心落入面板。已报告主代理由54或统一审查修复；本票通过先收素材面板再关详情继续验证52，不宣称全局关闭可达已通过。此问题不由剪刀实现引入。
+
+2026-10-29：49–54最终集成与双轴定向复核完成，原两轴发现均已解决、剩余0。最新产品审查头 `cdac0fff`，实际检查、图片与限制见[C组合验收](../visual-c54-acceptance.md)。01–48及旧验收不改写；本轮实现工作树清理后保留提交与外部证据，未推送。

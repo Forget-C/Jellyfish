@@ -1,6 +1,6 @@
 # C「焦点编辑」组合验收
 
-日期：2026-10-29。基线为已集成49–53的 `caaf154c`；本记录只描述54实际执行与仍有效的局部证据，不改写01–48的完成记录。实现待合入及最终双轴审查，不预记审查结论。
+日期：2026-10-29。基线为已集成49–53的 `caaf154c`；本记录只描述54实际执行与仍有效的局部证据，不改写01–48的完成记录。实现已集成并完成最终双轴定向复核；原始证据和限制继续保留。
 
 ## 组合发现与修复
 
@@ -46,3 +46,9 @@
 - 公开material最终15.3s通过（`/private/tmp/c-review-escape-green2`），覆盖普通与展开编辑：第一次Escape仅收素材、焦点回入口、正文保留；再次退出／收起。模型Select的ArrowDown→Escape不关闭素材或外层。既有HTTP采用、生成、重开、三视口断言全部保留；实际查看 `material-escape-expanded.png`，输入与统一表面保持。
 - Node24 typecheck、定向CanvasCardEditor ESLint与差异检查通过；无后端或接口变化，复用相关既有检查，不宣称重跑全部后端。01–48与原验收不改写。
 - Standards P3仅为同步合并提交标题。已拟定精确脚本 `/private/tmp/c-focus-implementation/fix-merge-message.py`，待集成此修复后由主代理执行；脚本备份原tip、仅改56b2364c消息并验证所有树与其余消息及55历史文件不变。此处不提前记为已完成历史修正或独立复核通过。
+
+## 最终审查与交付
+
+- Standards原1项P3（合并提交标题）已更正；Spec原1项P2（素材Escape未优先）已由统一修复代理红绿处理。两位原审查者独立定向复核，剩余均0；未冒称重复执行全部浏览器／后端用例。报告及复核：`/private/tmp/c-focus-implementation/review-standards.md`、`review-spec.md`。
+- 提交消息修正前后产品树相同，原tip保留备份，20条本轮提交全部格式合规；最终产品头 `cdac0fff`，精确审计 `/private/tmp/c-focus-implementation/merge-message-fix-audit.json`。纯消息调整不重复运行相同代码的已绿检查。
+- 01–48及旧验收55文件校验值不变。7个本轮实施／统一修复工作树在确认干净与产品树可追溯后清理，原型保留；清理审计见 `/private/tmp/c-focus-implementation/cleanup-audit.json`。上述lint、MySQL条件、历史排序及受控外部服务限制不因审查清零消失。
