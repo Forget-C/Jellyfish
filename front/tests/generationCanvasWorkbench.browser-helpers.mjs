@@ -85,7 +85,7 @@ export async function selectCanvasByName(page, name) {
 export async function openModelInspection(page) {
   const editor = page.locator('.wb-details:visible')
   for (const label of ['管理候选与采用', '＠ 引用与指令', '运行状态与正式输出']) {
-    const summary = editor.locator('summary').filter({ hasText: label }).first()
+    const summary = label === '管理候选与采用' ? editor.getByLabel(label,{exact:true}) : editor.locator('summary').filter({ hasText: label }).first()
     if (await summary.count() && await summary.locator('..').getAttribute('open') === null) await summary.click()
   }
 }
