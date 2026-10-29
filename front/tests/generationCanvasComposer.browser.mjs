@@ -47,7 +47,7 @@ try {
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: doc }) })
   assert.ok(seeded.ok, await seeded.text())
   await page.goto(`http://127.0.0.1:4275/projects/canvas-project?tab=generation&canvas=${canvas.id}`)
-  const detail = () => page.getByRole('complementary')
+  const detail = () => page.locator('.wb-details:not([hidden])')
   const open = async id => { const summary = page.locator(`[data-card-id="${id}"]`); await summary.focus(); await summary.press('Enter'); await detail().waitFor() }
   await open('m')
   const editor = detail().getByRole('textbox', { name: '模型正文', exact: true })
@@ -169,7 +169,7 @@ try {
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   saved = (await (await fetch(`${base}/${canvas.id}`)).json()).data
   assert.equal(saved.document.cards[0].prompt.segments.map(segment => segment.text || '').join(''), '第一行\nsecond line')
-  await page.reload(); await editor.waitFor()
+  await page.reload(); await open('m'); await editor.waitFor()
   assert.equal(await editor.textContent(), '第一行\nsecond line')
   await editor.fill(String.raw`\@图片10 \/首帧参考`)
   await editor.press('Tab')
@@ -199,6 +199,7 @@ try {
     body: JSON.stringify({ request_id: 'basis-tracer', expected_revision: saved.revision, document: basisDocument }) })
   assert.ok(basisSaved.ok, await basisSaved.text())
   await page.reload()
+  await open('basis')
   const basis = detail()
   await basis.getByLabel('导入文本文件', { exact: true }).setInputFiles({ name: '剧本.txt', mimeType: 'text/plain', buffer: Buffer.from('张三望向门口。') })
   await page.waitForFunction(() => document.querySelector('[aria-label="创作依据正文"]')?.value === '张三望向门口。')
@@ -213,6 +214,7 @@ try {
   const basisCompiled = (await (await fetch(base + '/' + canvas.id + '/cards/text-model/compile')).json()).data
   assert.equal(basisCompiled.text, '张三望向门口。 ')
   await page.reload()
+  await open('basis')
   await detail().getByRole('textbox', { name: '创作依据正文', exact: true }).waitFor()
   assert.equal(await detail().getByRole('textbox', { name: '创作依据正文', exact: true }).inputValue(), '张三望向门口。')
   await open('text-model')

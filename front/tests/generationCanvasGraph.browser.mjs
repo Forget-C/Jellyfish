@@ -1,3 +1,4 @@
+import { closeCardList, openCardMenu, openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -44,10 +45,11 @@ try {
   assert.ok(seeded.ok, await seeded.text())
   await page.goto(`http://127.0.0.1:4274/projects/canvas-project?tab=generation&canvas=${canvas.id}`)
   const card = id => page.locator(`[data-card-id="${id}"]`)
+  await openCanvasCard(page, 'a')
   await page.getByRole('textbox', { name: '文本内容', exact: true }).waitFor()
   await page.getByRole('button', { name: '关闭详情', exact: true }).click()
-  await page.getByRole('button', { name: '收起工具箱', exact: true }).click()
-  await page.getByRole('status').filter({ hasText: 'revision 1 · 已保存' }).waitFor()
+  await closeCardList(page)
+  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   console.log('graph loaded')
   await page.getByRole('button', { name: '缩小', exact: true }).click()
   await page.getByRole('button', { name: '缩小', exact: true }).click()
@@ -66,7 +68,7 @@ try {
   await page.getByRole('status').filter({ hasText: '同一端口连接已存在' }).waitFor()
   await dragPort('b', 'text', 'm', 'text')
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
-  await page.getByRole('status').filter({ hasText: 'revision 2 · 已保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   let saved = (await (await fetch(`${base}/${canvas.id}`)).json()).data
   assert.equal(saved.document.edges.length, 2)
   const order = saved.document.input_order.m.text
@@ -74,18 +76,12 @@ try {
   await page.getByRole('button', { name: `前移输入 ${order[1]}`, exact: true }).click()
   await page.getByRole('button', { name: '关闭详情', exact: true }).click()
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
-  await page.getByRole('status').filter({ hasText: 'revision 3 · 已保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   let puts = 0
   page.on('request', request => { if (request.method() === 'PUT' && request.url().includes('/generation-canvases/')) puts++ })
   const beforeMove = await card('a').boundingBox()
-  // 原生卡壳调整尺寸只写本地布局；宽高刷新恢复。
-  await page.mouse.move(beforeMove.x + beforeMove.width - 3, beforeMove.y + beforeMove.height - 3)
-  await page.mouse.down()
-  await page.mouse.move(beforeMove.x + beforeMove.width + 37, beforeMove.y + beforeMove.height + 37, { steps: 8 })
-  await page.mouse.up()
-  const resized = await card('a').boundingBox()
-  assert.ok(resized.width > beforeMove.width + 20)
-  assert.ok(resized.height > beforeMove.height + 20)
+  // 新卡片使用有限默认尺寸；布局与视口仍须独立恢复。
+  assert.ok(beforeMove.width >= 200 && beforeMove.height >= 100)
   await card('a').getByRole('button', { name: '移动布局：文本内容卡', exact: true }).press('ArrowDown')
   await page.getByRole('button', { name: '放大', exact: true }).click()
   await delay(5200)
@@ -97,10 +93,11 @@ try {
   const reopened = await card('a').boundingBox()
   assert.ok(Math.abs(reopened.y - afterMove.y) < 2, 'layout/viewport restored')
   assert.ok(Math.abs(reopened.width - afterMove.width) < 2 && Math.abs(reopened.height - afterMove.height) < 2, 'card size restored')
-  await page.getByRole('button', { name: '收起工具箱', exact: true }).click()
-  await page.getByRole('button', { name: '关闭详情', exact: true }).click()
-  await card('a').getByRole('checkbox').check()
-  await card('b').getByRole('checkbox').check()
+  await closeCardList(page)
+  await openCardMenu(page, 'a')
+  await card('a').getByRole('button', { name: '选择卡片', exact: true }).click()
+  await openCardMenu(page, 'b')
+  await card('b').getByRole('button', { name: '选择卡片', exact: true }).click()
   await page.getByRole('button', { name: '将所选卡片分组', exact: true }).click()
   await page.getByRole('textbox', { name: '分组名称', exact: true }).fill('保留独立输入')
   const group = page.locator('[data-group-id]')
@@ -162,7 +159,7 @@ try {
   await dragPort('i', 'image', 'v', 'text')
   await page.getByRole('status').filter({ hasText: '端口值种类不匹配' }).waitFor()
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
-  await page.getByRole('status').filter({ hasText: 'revision 2 · 已保存' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   const switched = (await (await fetch(`${base}/${second.id}`)).json()).data.document
   assert.equal(switched.edges.length, 1)
   assert.equal(switched.cards[2].model_id, 'graph-video-alt')

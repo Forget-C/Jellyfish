@@ -1,3 +1,4 @@
+import { openCanvasManagement, openCardList, openSummaryMenu } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { openCanvasCard, closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -57,7 +58,8 @@ try {
   let response = page.waitForResponse(response => response.request().method() === 'PUT' && response.url().endsWith('/' + canvas.id))
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
   assert.equal((await response).status(), 200)
-  await source.getByRole('button', { name: '删除卡片', exact: true }).click()
+  await openSummaryMenu(source)
+  await source.getByRole('button', { name: '删除卡片', exact: true }).press('Enter')
   await page.getByRole('status').filter({ hasText: '先清理' }).waitFor()
   assert.equal(await source.count(), 1)
   await page.screenshot({ path: join(output, 'reference-blocks-deletion.png'), fullPage: true })
@@ -65,7 +67,8 @@ try {
   const onRequest = request => { if (request.method() === 'PUT' && request.url().endsWith('/' + canvas.id)) writes.push(request.postDataJSON()) }
   page.on('request', onRequest)
   await inputs.getByRole('button', { name: '取消采用 @图片1', exact: true }).click()
-  await source.getByRole('button', { name: '删除卡片', exact: true }).click()
+  await openSummaryMenu(source)
+  await source.getByRole('button', { name: '删除卡片', exact: true }).press('Enter')
   response = page.waitForResponse(response => response.request().method() === 'PUT' && response.url().endsWith('/' + canvas.id))
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
   assert.equal((await response).status(), 200)
@@ -82,6 +85,8 @@ try {
   assert.equal(await history.getByRole('img', { name: '图片预览', exact: true }).first().evaluate(image => image.complete && image.naturalWidth === 240), true)
   await page.screenshot({ path: join(output, 'deleted-card-history-readable.png'), fullPage: true })
   const deleteCanvas = async () => {
+    await closeCanvasDetails(page)
+    await openCanvasManagement(page)
     await page.getByRole('button', { name: '删除画布', exact: true }).click()
     await page.getByRole('button', { name: /确\s*定/ }).click()
   }
@@ -113,6 +118,7 @@ try {
   assert.equal(await retained.evaluate(image => image.complete && image.naturalWidth === 240), true)
   await page.screenshot({ path: join(output, 'other-canvas-file-retained.png'), fullPage: true })
   // Upload retention survives deleting its card; explicit cleanup checks the saved content first.
+  await openCardList(page)
   await page.getByRole('button', { name: '添加图片卡', exact: true }).click()
   const uploadedSummary = page.locator('[data-card-id]').last()
   const uploadedCard = card
@@ -135,7 +141,8 @@ try {
   await modal.getByRole('alert').filter({ hasText: '素材仍被业务使用' }).waitFor()
   await modal.getByRole('button', { name: 'Close', exact: true }).click()
   await modal.waitFor({ state: 'hidden' })
-  await uploadedSummary.getByRole('button', { name: '删除卡片', exact: true }).click()
+  await openSummaryMenu(uploadedSummary)
+  await uploadedSummary.getByRole('button', { name: '删除卡片', exact: true }).press('Enter')
   await saveOther()
   await independent.getByRole('button', { name: '从项目文件选择', exact: true }).click()
   modal = page.getByRole('dialog', { name: '项目文件库', exact: true })
