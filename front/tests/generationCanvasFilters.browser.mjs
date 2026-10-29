@@ -36,7 +36,7 @@ try {
   const response = await fetch(base, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'筛选保持采用'})})
   const canvas=(await response.json()).data
   const source={canvas_id:canvas.id,card_id:'source',port_id:'text',position:0}
-  const document={...canvas.document,cards:[{id:'source',type:'content.text',text:'被隐藏但明确采用的内容'},
+  const document={...canvas.document,cards:[{id:'source',type:'content.text',text:'未匹配但明确采用的内容'},
     {id:'model',type:'model.text',model_id:'canvas-runtime-text',prompt:{segments:[{id:'reference',kind:'reference',source}]},config:{}}],
     edges:[{id:'candidate',source_card:'source',source_port:'text',target_card:'model',target_port:'text'}],input_order:{model:{text:['candidate']}}}
   const seed=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})})
@@ -45,7 +45,7 @@ try {
   const before=await read()
   const precheck=async()=>(await(await fetch(`${base}/${canvas.id}/precheck`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({card_id:'model'})})).json()).data
   const initialPreview=await precheck()
-  assert.match(initialPreview.input.text,/被隐藏但明确采用的内容/)
+  assert.match(initialPreview.input.text,/未匹配但明确采用的内容/)
   await page.goto(`http://127.0.0.1:4421/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   await page.getByRole('navigation',{name:'生成画布位置',exact:true}).getByRole('button',{name:'总览',exact:true}).waitFor()
   if(await page.getByRole('button',{name:'关闭详情',exact:true}).isVisible())await page.getByRole('button',{name:'关闭详情',exact:true}).click()
@@ -54,8 +54,10 @@ try {
   const select=page.getByRole('combobox',{name:'卡片分类',exact:true})
   await select.press('ArrowDown')
   await page.locator('.ant-select-dropdown:visible').getByText('模型生成',{exact:true}).click()
-  await page.locator('[data-card-id="source"]').waitFor({state:'hidden'})
-  await page.locator('[data-card-id="model"]').waitFor({state:'visible'})
+  await page.locator('[data-card-id="source"]').waitFor({state:'visible'})
+  await page.locator('[data-card-id="model"][data-filter-match="true"]').waitFor({state:'visible'})
+  assert.equal(await page.locator('[data-card-id="source"]').getAttribute('data-filter-match'),'false')
+  assert.equal(await page.locator('[data-edge-active]').count(),1,'unmatched source and candidate line remain visible')
   await page.getByRole('button',{name:'收起筛选',exact:true}).click()
   await page.getByLabel('筛选已生效',{exact:true}).waitFor()
   assert.equal(await world(),originalView)
@@ -64,20 +66,22 @@ try {
   const afterPreview=await precheck()
   assert.deepEqual(afterPreview.input,initialPreview.input)
   await page.locator('[data-card-id="model"]').press('Enter')
-  await page.getByRole('complementary').filter({has:page.getByText('被隐藏但明确采用的内容',{exact:false})}).waitFor()
+  await page.locator('.wb-details:not([hidden])').filter({has:page.getByText('未匹配但明确采用的内容',{exact:false})}).waitFor()
   await page.getByRole('button',{name:'关闭详情',exact:true}).click()
   await page.screenshot({path:join(output,'filters-desktop.png'),animations:'disabled'})
   await page.getByRole('button',{name:'展开筛选',exact:true}).click()
   await select.press('ArrowDown')
   await page.locator('.ant-select-dropdown:visible').getByText('全部分类',{exact:true}).click()
   await page.locator('[data-card-id="source"]').waitFor({state:'visible'})
-  await page.getByRole('switch',{name:'仅显示问题卡片',exact:true}).click()
-  await page.locator('[data-card-id="source"]').waitFor({state:'hidden'})
-  await page.getByRole('switch',{name:'仅显示问题卡片',exact:true}).click()
+  await page.getByRole('switch',{name:'高亮问题卡片',exact:true}).click()
+  assert.equal(await page.locator('[data-card-id][data-filter-match="true"]').count(),0)
+  assert.equal(await page.locator('[data-card-id]').count(),2)
+  await page.getByRole('switch',{name:'高亮问题卡片',exact:true}).click()
   const modality=page.getByRole('combobox',{name:'卡片模态',exact:true})
   await modality.press('ArrowDown')
   await page.locator('.ant-select-dropdown:visible').getByText('图片',{exact:true}).click()
-  assert.equal(await page.locator('[data-card-id]').count(),0)
+  assert.equal(await page.locator('[data-card-id]').count(),2)
+  assert.equal(await page.locator('[data-card-id][data-filter-match="true"]').count(),0)
   await modality.press('ArrowDown')
   await page.locator('.ant-select-dropdown:visible').getByText('全部模态',{exact:true}).click()
   await page.locator('[data-card-id="source"]').waitFor({state:'visible'})

@@ -6,8 +6,8 @@ import { WorkbenchButton, WorkbenchIconButton } from '../directing/ui/WorkbenchB
 import type { CanvasPoint } from '../../../components/canvas/geometry'
 
 /** 卡片仅管理阅读、布局和选择；编辑及采用仍由业务详情负责。 */
-export function CardShell({ id, title, name, type, contextKey, point, scale, width, height, selected, readonly, removeDisabled, onSelect, onMove, onRemove, connections, children, footer, onOpen, onExpand, onEdit, onConnect, multiSelectMode, onStartMultiSelect, onDragStart }:
-  { id: string; type?: string; title: string; name?: string; contextKey: string; point: CanvasPoint; scale: number; width: number; height?: number; selected: boolean; readonly?: boolean; removeDisabled?: boolean;
+export function CardShell({ id, title, name, type, contextKey, point, scale, width, height, selected, filterMatch, readonly, removeDisabled, onSelect, onMove, onRemove, connections, children, footer, onOpen, onExpand, onEdit, onConnect, multiSelectMode, onStartMultiSelect, onDragStart }:
+  { id: string; type?: string; title: string; name?: string; contextKey: string; point: CanvasPoint; scale: number; width: number; height?: number; selected: boolean; filterMatch?: boolean; readonly?: boolean; removeDisabled?: boolean;
     multiSelectMode?: boolean; onStartMultiSelect: () => void; onDragStart: () => void; onConnect: (trigger: HTMLElement) => void; onSelect: (selected: boolean) => void; onMove: (point: CanvasPoint) => void; onRemove: () => void;
     connections: ReactNode; children: ReactNode; footer?: ReactNode; onExpand?: (trigger: HTMLElement) => void; onEdit?: (trigger: HTMLElement) => void; onOpen: (trigger: HTMLElement, dragged?: boolean) => void }) {
   const [menu, setMenu] = useState(false)
@@ -54,7 +54,7 @@ export function CardShell({ id, title, name, type, contextKey, point, scale, wid
   }} onPointerCancel={cancel} onLostPointerCapture={cancel} onKeyDown={event => {
     if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); if (multiSelectMode) onSelect(!selected); else onOpen(event.currentTarget) }
     if (event.key === 'Escape' && menu) { event.stopPropagation(); setMenu(false); event.currentTarget.querySelector<HTMLButtonElement>('[aria-expanded]')?.focus() }
-  }} data-card-id={id} data-canvas-node={id} data-selected={selected} className={`generation-card${holding ? ' generation-card-holding' : ''}`} style={{ left: point.x, top: point.y, width, minHeight: height }}>
+  }} data-card-id={id} data-canvas-node={id} data-selected={selected} data-filter-match={filterMatch} aria-description={filterMatch ? '符合筛选' : undefined} className={`generation-card${holding ? ' generation-card-holding' : ''}`} style={{ left: point.x, top: point.y, width, minHeight: height }}>
     <header><button type="button" data-keyboard-move aria-label={`移动布局：${name || title}`} title="拖动卡片，或用方向键移动" onKeyDown={event => {
         if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
         event.preventDefault(); event.stopPropagation()

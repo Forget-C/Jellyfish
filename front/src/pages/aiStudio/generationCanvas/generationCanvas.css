@@ -195,3 +195,7 @@
 .generation-stack-reading article { border:1px solid var(--wb-border); border-radius:12px; padding:20px; white-space:pre-wrap; }
 .generation-stack-face>img { width:100%; max-height:180px; object-fit:contain; }
 .generation-stack-face .canvas-card-summary { display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical; overflow:hidden; }
+
+.generation-card[data-filter-match="true"] .generation-card-body, .generation-stack-reading article[data-filter-match="true"] { border-color: #8581ff; box-shadow: 0 0 0 1px #8581ff; }
+.generation-stack[data-filter-match="true"] .generation-stack-face { border-color: #8581ff; outline: 1px solid #8581ff; }
+.generation-card[data-filter-match="true"][data-selected="true"] .generation-card-body { outline-offset: 4px; }

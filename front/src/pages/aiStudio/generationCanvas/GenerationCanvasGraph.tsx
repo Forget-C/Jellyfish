@@ -128,11 +128,12 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
   const [models, setModels] = useState<ModelRead[]>([])
   const [capabilities, setCapabilities] = useState<Record<string, CanvasModelCapability>>({})
   const [capabilityErrors, setCapabilityErrors] = useState<Record<string, string>>({})
-  const filtered = new Set(cards.filter(card => {
+  const filterActive = !!(displayFilter.group || displayFilter.modality || displayFilter.problems)
+  const matched = new Set(cards.filter(card => {
     const definition = cardDefinitions[card.type || '']
     const node = runtime?.nodes[card.id]
     const problem = !!runtime?.outputs[card.id]?.some(output => output.basis_current === false) || !!(node && ['failed', 'blocked', 'cancelled'].includes(node.status)) || !!('model_id' in card && card.model_id && capabilityErrors[card.model_id])
-    return !!(displayFilter.group && definition?.group !== displayFilter.group || displayFilter.modality && definition?.modality !== displayFilter.modality || displayFilter.problems && !problem)
+    return filterActive && (!displayFilter.group || definition?.group === displayFilter.group) && (!displayFilter.modality || definition?.modality === displayFilter.modality) && (!displayFilter.problems || problem)
   }).map(card => card.id))
   const [measured, setMeasured] = useState<Record<string, GraphSize>>({})
   const [drag, setDrag] = useState<{ card: string; side: ConnectionSide; x: number; y: number }>()
@@ -188,7 +189,6 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
   const container = useRef<HTMLDivElement>(null)
   const hidden = useMemo(() => new Set(groups.filter(group => group.kind === 'stack' || group.collapsed).flatMap(group => group.card_ids || [])), [groups])
   const cardIdentity = cards.map(card => card.id).join('|')
-  const filterIdentity = [...filtered].join('|')
   const groupIdentity = groups.map(group => `${group.id}:${group.kind}:${group.collapsed}`).join('|')
   // 折叠成员在新浏览器没有本地测量；保留几何占位，不能让整个布局永远等待隐藏 DOM。
   const layoutMeasurements = useMemo(() => ({ ...Object.fromEntries([...hidden].map(id => [id, { width: 400, height: 350 }])), ...measured }), [measured, hidden])
@@ -275,7 +275,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
     }))
     root.querySelectorAll('[data-card-id]').forEach(card => observer.observe(card))
     return () => observer.disconnect()
-  }, [cardIdentity, groupIdentity, filterIdentity])
+  }, [cardIdentity, groupIdentity])
   const edit = (next: CanvasDocument) => { if (!readonly) onChange(next) }
   const updateCard = (next: GenerationCard) => { if (stackFor(next.id)) { setReason('请先解除堆叠后编辑'); return } edit({ ...latest.current, cards: latest.current.cards?.map(card => card.id === next.id ? next : card) }) }
   const showProtection = (protection: NonNullable<ReturnType<typeof referenceProtection>>) => {
@@ -497,7 +497,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
   /** 显式适应全部按实际可见卡片及悬浮导航留白计算，不改保存或生成依据。 */
   const fitVisibleCards = () => {
     const surface = viewport.surface.current
-    const visible = cards.filter(card => !hidden.has(card.id) && !filtered.has(card.id))
+    const visible = cards.filter(card => !hidden.has(card.id))
     if (!surface || !visible.length && !groups.length) { viewport.fit(); return }
     // Focus/scrollIntoView can scroll an overflow-hidden surface independently of the saved transform.
     surface.scrollTo(0, 0)
@@ -566,7 +566,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
           const card = cards.find(item => item.id === id)!
           const file = 'file_id' in card ? card.file_id : 'image_binding' in card ? card.image_binding?.file_id : undefined
           const fields = 'fields' in card ? Object.values(card.fields || {}) : []
-          return <article key={id} aria-label={`只读成员 ${cardLabel(id)}`}><h3>{cardLabel(id)}</h3>
+          return <article key={id} data-filter-match={matched.has(id)} aria-description={matched.has(id) ? '符合筛选' : undefined} aria-label={`只读成员 ${cardLabel(id)}`}><h3>{cardLabel(id)}</h3>
             {'text' in card && <p>{card.text || '未填写正文'}</p>}
             {'objects' in card && <p>{card.objects?.map(object => object.name).join('、')} · {card.angle || '正面'}</p>}
             {fields.map((field, index) => <p key={index}>{designSummary([field], [])}</p>)}
@@ -593,7 +593,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
     {accessibleConnection && !pendingConnection && <div ref={connectionMenu} role="dialog" aria-label="选择连接目标" className="generation-connection-menu generation-target-menu">
       <strong>选择连接目标</strong>
       <p>连接只提供候选，实际使用仍需明确选择。</p>
-      {cards.filter(card => card.id !== accessibleConnection.card && !filtered.has(card.id) && !hidden.has(card.id)).map(card => <Button key={card.id} disabled={readonly} onClick={() => chooseAccessibleTarget(card.id)}>连接到{'name' in card && card.name || 'title' in card && card.title || cardTitles[card.type || '']} · 卡片 {cards.indexOf(card) + 1}</Button>)}
+      {cards.filter(card => card.id !== accessibleConnection.card && !hidden.has(card.id)).map(card => <Button key={card.id} disabled={readonly} onClick={() => chooseAccessibleTarget(card.id)}>连接到{'name' in card && card.name || 'title' in card && card.title || cardTitles[card.type || '']} · 卡片 {cards.indexOf(card) + 1}</Button>)}
       <Button onClick={cancelConnection}>取消连接</Button>
     </div>}
     {pendingConnection && (drag || accessibleConnection) && <div ref={connectionMenu} role="menu" aria-label="选择连接用途" className="generation-connection-menu" style={{ left: Math.max(8, Math.min(pendingConnection.x, window.innerWidth - 328)), top: Math.max(8, Math.min(pendingConnection.y, window.innerHeight - 320)) }}>
@@ -695,7 +695,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
       {selectionBox && <div className="generation-selection-box" aria-hidden="true" style={{ left: selectionBox.x, top: selectionBox.y, width: selectionBox.width, height: selectionBox.height }} />}
       <div className="generation-world" style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }}>
         <svg className="generation-edges" width={12000} height={12000}>
-          {edges.filter(edge => !(stackFor(edge.source_card) && stackFor(edge.source_card)?.id === stackFor(edge.target_card)?.id) && (!hidden.has(edge.source_card) || stackFor(edge.source_card)) && (!hidden.has(edge.target_card) || stackFor(edge.target_card)) && !filtered.has(edge.source_card) && !filtered.has(edge.target_card)).map(edge => {
+          {edges.filter(edge => !(stackFor(edge.source_card) && stackFor(edge.source_card)?.id === stackFor(edge.target_card)?.id) && (!hidden.has(edge.source_card) || stackFor(edge.source_card)) && (!hidden.has(edge.target_card) || stackFor(edge.target_card))).map(edge => {
             const sides = connectionLayout.sides[edge.id] || defaultSides(point(edge.source_card), point(edge.target_card))
             const from = anchor(edge.source_card, sides.source), to = anchor(edge.target_card, sides.target)
             const adopted = edgeAdoptions(edge) > 0
@@ -719,7 +719,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
           const cover = cards.find(card => card.id === members[0])!
           const coverImage = 'image_binding' in cover ? cover.image_binding?.file_id : cover.type === 'content.image' && 'file_id' in cover ? cover.file_id : runtime?.outputs[cover.id]?.find(output => output.modality === 'image')?.file_id
           const coverText = 'text' in cover ? cover.text : runtime?.outputs[cover.id]?.find(output => output.text)?.text
-          return <section key={group.id} data-stack-id={group.id} className="generation-stack" tabIndex={0} role="button" aria-label={`查看堆叠 ${group.name}`} style={{left:origin.x,top:origin.y}}
+          return <section key={group.id} data-stack-id={group.id} data-filter-match={members.some(id => matched.has(id))} className="generation-stack" tabIndex={0} role="button" aria-label={`查看堆叠 ${group.name}`} style={{left:origin.x,top:origin.y}}
             onClick={event => { if ((event.target as Element).closest('button')) return; event.stopPropagation(); if (!stackMoved.current) setViewStackId(group.id); stackMoved.current = false }}
             onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); setViewStackId(group.id) } }}
             onPointerDown={event => {
@@ -737,10 +737,10 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
               const current=groupDrag.current; groupDrag.current=undefined; event.stopPropagation()
               stackMoved.current = !!current && Math.hypot(event.clientX-current.x,event.clientY-current.y)>=6
             }} onPointerCancel={cancelGroupDrag} onLostPointerCapture={cancelGroupDrag}>
-            <div className="generation-stack-actions"><span>{members.length} 张卡片</span><Button disabled={readonly} onClick={event => {
+            <div className="generation-stack-actions"><span>{members.length} 张卡片{filterActive && ` · 匹配 ${members.filter(id => matched.has(id)).length}`}</span><Button disabled={readonly} onClick={event => {
               event.stopPropagation(); edit({...document,groups:groups.filter(item=>item.id!==group.id)});setViewStackId(undefined);setSelected(members);setSelectedEdgeId(undefined);setDetailId(undefined)
             }}>解除堆叠</Button></div>
-            <div className="generation-stack-face"><strong>{group.name}</strong><p>{cardLabel(members[0])}</p>{coverImage && <img alt="堆叠封面" src={buildFileDownloadUrl(coverImage)} />}{coverText && <p className="canvas-card-summary">{coverText}</p>}<span>{members.length}</span></div>
+            <div className="generation-stack-face"><strong>{group.name}</strong><p>{cardLabel(members[0])}</p>{coverImage && <img alt="堆叠封面" src={buildFileDownloadUrl(coverImage)} />}{coverText && <p className="canvas-card-summary">{coverText}</p>}<span>{filterActive ? `匹配 ${members.filter(id => matched.has(id)).length}／${members.length}` : members.length}</span></div>
           </section>
         })}
         {groups.filter(group => group.kind !== 'stack').map(group => {
@@ -777,7 +777,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
             {group.collapsed && <span>{members.length} 张独立卡片 · 无集合输出</span>}
           </section>
         })}
-        {cards.filter(card => !hidden.has(card.id) && !filtered.has(card.id)).map(card => {
+        {cards.filter(card => !hidden.has(card.id)).map(card => {
           const size = layout.view.sizes[card.id]
           const referenceImage = 'image_binding' in card ? card.image_binding?.file_id : undefined
           const outputs = runtime?.outputs[card.id] || []
@@ -785,7 +785,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
           const stale = outputs.some(output => output.basis_current === false)
           const isModel = 'model_id' in card
           return <CardShell key={`${document.id}:${card.id}`} id={card.id} type={card.type} name={'name' in card ? card.name : 'title' in card ? card.title : undefined} title={cardTitles[card.type || 'content.text']} contextKey={document.id} point={point(card.id)}
-            scale={transform.scale} width={size?.width || 400} height={size?.height} selected={selected.includes(card.id)} readonly={readonly} removeDisabled={runtime?.busyCards.has(card.id)}
+            scale={transform.scale} width={size?.width || 400} height={size?.height} selected={selected.includes(card.id)} filterMatch={matched.has(card.id)} readonly={readonly} removeDisabled={runtime?.busyCards.has(card.id)}
             onEdit={card.type?.startsWith('direction.') ? trigger => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailAllowPan(false); setDetailId(card.id) } : undefined}
             onExpand={trigger => { setDetailAllowPan(false); setDetailTrigger(trigger); setDetailId(card.id); setExpandRequest({id:card.id,serial:Date.now()}) }}
             onOpen={(trigger, dragged) => { setDetailAllowPan(!dragged); if (accessibleConnection) chooseAccessibleTarget(card.id); else { setMultiSelectMode(false); setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.type?.startsWith('direction.') ? undefined : card.id) } }} onSelect={checked => { setDetailId(undefined); setSelectedEdgeId(undefined); setSelected(previous => checked ? [...new Set([...previous, card.id])] : previous.filter(id => id !== card.id)) }}
@@ -831,7 +831,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
       onPointerUp={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId) }}
       onKeyDown={event => { if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) { event.preventDefault(); layout.setView(previous => ({ ...previous, transform: { ...previous.transform, x: previous.transform.x + (event.key === 'ArrowLeft' ? 40 : event.key === 'ArrowRight' ? -40 : 0), y: previous.transform.y + (event.key === 'ArrowUp' ? 40 : event.key === 'ArrowDown' ? -40 : 0) } })) } }}>
       <title>小地图导航；方向键平移画布</title>
-      {cards.filter(card => !hidden.has(card.id) && !filtered.has(card.id)).map(card => <rect key={card.id} data-minimap-node={card.id} x={point(card.id).x} y={point(card.id).y} width={layout.view.sizes[card.id]?.width || 400} height={layout.view.sizes[card.id]?.height || 160} />)}
+      {cards.filter(card => !hidden.has(card.id)).map(card => <rect key={card.id} data-minimap-node={card.id} x={point(card.id).x} y={point(card.id).y} width={layout.view.sizes[card.id]?.width || 400} height={layout.view.sizes[card.id]?.height || 160} />)}
       <rect className="director-minimap-viewport generation-minimap-viewport" x={visibleWorld.x} y={visibleWorld.y} width={visibleWorld.width} height={visibleWorld.height} />
     </svg>}
     {cards.filter(card => detailSessions.includes(card.id) || card.id === detailId).map(detailCard => {
