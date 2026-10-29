@@ -1,0 +1,8 @@
+.generation-text-content-editor { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.generation-text-content-editor > label { color: var(--wb-muted); font-size: 12px; }
+.generation-text-content-editor > textarea { width: 100%; box-sizing: border-box; font: inherit; color: var(--wb-text); border: 1px solid transparent; border-radius: var(--wb-radius); min-height: 160px; max-height: 360px; resize: vertical; background: transparent; border-color: transparent; box-shadow: none; line-height: 1.8; padding: 4px 0; }
+.generation-text-content-editor > textarea:focus { border-color: var(--wb-border); }
+.generation-text-content-editor > footer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; color: var(--wb-muted); font-size: 12px; }
+.generation-text-content-editor > footer > .ant-space { margin-left: auto; }
+.generation-text-count { white-space: nowrap; }
+@media (max-width: 700px) { .generation-text-content-editor > textarea { min-height: 180px; max-height: 50dvh; } .generation-text-content-editor > footer > .ant-space { margin-left: 0; } }
