@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented
+**Completion:** integrated
 
 - [x] 每卡上右下左中点各一个几何连接点，与逻辑输出／输入用途分离，任一边可发出或接收合法连接；不固定左入右出、不按字段数撑高卡片、不为无输入卡赋予输入能力。
 - [x] 默认隐藏逻辑标签与字段列表，已连接位置可辨；卡片悬浮／聚焦／选中显示连接点。平常连接点提示主要输出，拖线目标提示接收用途；身份输出仍可按协议使用，不新增第五模态。
@@ -34,3 +34,5 @@
 - 中间绿例 `/private/tmp/canvas29-green5`、正式注册 `/private/tmp/canvas29-release` 均通过；release **preflight 0.9s／真实页面10.0s passed**。最终捕获取消保护复测 `/private/tmp/canvas29-final`：**preflight 0.9s／真实页面11.1s passed**。已实际查看拖线中、落点菜单、桌面及窄屏截图，目录均在工作树外。
 - Node24 typecheck、受影响TSX定向ESLint与Python fixture编译／差异检查完成；ESLint 0 errors，仅Graph两条既有inspectTarget hooks警告。未新增警告。未改共享工作台组件，可复用主区6项工作台真实回归；01–26及历史证据未修改。
 - 29只交付已有输出连接与采用闭环；30继续空输出接收展示、31去重高亮及多线管理、32替代连接与浮层协作。映射、导演采用粒度等核心契约未改，33继续完整既有生成回归，不以本票替代整体覆盖。现有“适应全部”可能把顶排置于顶部工具栏后，当前验收通过真实画布平移避让，已报告33做整体视图可达性检查。
+
+- 2026-10-29 集成：实现 `a9b247ce` 已无冲突合入 codex-generation-canvas。主区Node24 typecheck、差异与01–26哈希核对通过；合后产品树与实现树一致，复用正式 ports 11.1s（`/private/tmp/canvas29-final`）及未受影响的workbench六项（`/private/tmp/canvas27-33-workbench-baseline`）。30／31／32解阻塞，33仍待其前置，不预记最终验收通过。
