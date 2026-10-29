@@ -1,3 +1,4 @@
+import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -39,6 +40,7 @@ try {
   assert.ok(seeded.ok, await seeded.text())
   await page.goto(`http://127.0.0.1:4439/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   await page.locator('[data-card-id="m"]').press('Enter')
+  await page.locator('.generation-material-composer').waitFor(); await openModelInspection(page)
   const editor = page.locator('.wb-details:not([hidden])')
   await editor.waitFor()
   assert.equal(await page.getByRole('button',{name:/运行到此处|运行所选模型/}).count(),0)
