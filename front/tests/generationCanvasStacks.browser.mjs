@@ -76,6 +76,8 @@ try {
   assert.equal(await card('a').count(), 0)
   assert.equal(await card('b').count(), 0)
   assert.equal(await page.locator('[data-edge-active]').count(), 1, 'internal edge hidden, external edge retained')
+  await page.getByRole('button',{name:'适应全部',exact:true}).click()
+  await page.screenshot({path:join(output,'stack-default.png'),fullPage:true})
   await stack.hover()
   await page.screenshot({path:join(output,'stack-hover.png'),fullPage:true})
   await stack.click()
