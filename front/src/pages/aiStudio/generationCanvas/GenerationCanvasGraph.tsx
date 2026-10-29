@@ -56,6 +56,15 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
   const [displayFilter, setDisplayFilter] = useState<CanvasDisplayFilter>({ group: '', modality: '', problems: false })
   const [selected, setSelected] = useState<string[]>([])
   const [detailId, setDetailId] = useState<string | undefined>()
+  // Retain visited editors by card identity; unvisited cards stay unmounted.
+  const [detailSessions, setDetailSessions] = useState<string[]>([])
+  useEffect(() => {
+    if (detailId) setDetailSessions(previous => previous.includes(detailId) ? previous : [...previous, detailId])
+    // Hidden editors keep their preview position, but must not keep playing.
+    window.document.querySelectorAll<HTMLElement>(`[data-canvas-details="${CSS.escape(document.id)}"]`).forEach(editor => {
+      if (editor.getAttribute('data-card-details') !== detailId) editor.querySelectorAll<HTMLMediaElement>('audio, video').forEach(media => media.pause())
+    })
+  }, [detailId, document.id])
   const [detailTrigger, setDetailTrigger] = useState<HTMLElement>()
   const [minimapOpen, setMinimapOpen] = useState(false)
   const [reason, setReason] = useState('')
@@ -69,7 +78,7 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
   const filtered = new Set(cards.filter(card => {
     const definition = cardDefinitions[card.type || '']
     const node = runtime?.nodes[card.id]
-    const problem = !!(node && ['failed', 'blocked', 'cancelled'].includes(node.status)) || !!('model_id' in card && card.model_id && capabilityErrors[card.model_id])
+    const problem = !!runtime?.outputs[card.id]?.some(output => output.basis_current === false) || !!(node && ['failed', 'blocked', 'cancelled'].includes(node.status)) || !!('model_id' in card && card.model_id && capabilityErrors[card.model_id])
     return !!(displayFilter.group && definition?.group !== displayFilter.group || displayFilter.modality && definition?.modality !== displayFilter.modality || displayFilter.problems && !problem)
   }).map(card => card.id))
   const [measured, setMeasured] = useState<Record<string, GraphSize>>({})
@@ -279,8 +288,6 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
     const y = mapTop + (event.clientY - box.top) / box.height * mapHeight
     layout.setView(previous => ({ ...previous, transform: { ...previous.transform, x: width / 2 - x * previous.transform.scale, y: height / 2 - y * previous.transform.scale } }))
   }
-  const detailCard = cards.find(card => card.id === detailId)
-  const DetailRenderer = detailCard && rendererRegistry[detailCard.type || 'content.text']
   const runSelection = <Button aria-label={`运行所选模型（${selectedModels.length}）`} disabled={readonly || !selectedModels.length || !runtime || runtime.disabled || selectedModels.some(card => runtime.busyCards.has(card.id))}
         onClick={() => runtime?.precheck(selectedModels[0].id, 'selection', selected)}>运行所选模型（{selectedModels.length}）</Button>
   return <div className="generation-graph" ref={container}>
@@ -402,27 +409,30 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
       {cards.filter(card => !hidden.has(card.id) && !filtered.has(card.id)).map(card => <rect key={card.id} data-minimap-node={card.id} x={point(card.id).x} y={point(card.id).y} width={layout.view.sizes[card.id]?.width || 400} height={layout.view.sizes[card.id]?.height || 160} />)}
       <rect className="director-minimap-viewport generation-minimap-viewport" x={visibleWorld.x} y={visibleWorld.y} width={visibleWorld.width} height={visibleWorld.height} />
     </svg>}
-    <WorkbenchDetails title={detailCard ? cardTitles[detailCard.type || 'content.text'] || '卡片详情' : '卡片详情'} status={readonly ? '只读' : editingStatus} open={!!detailCard} onClose={() => setDetailId(undefined)} trigger={detailTrigger}>
-      {detailCard?.type?.startsWith('direction.') && <details className="generation-candidate-management"><summary>候选连接管理</summary>{references(detailCard)}</details>}
-      {detailCard?.type === 'direction.photography' && <Button disabled={readonly} onClick={() => {
-        const copy = { ...structuredClone(detailCard), id: crypto.randomUUID() }
-        const incoming = (document.edges || []).filter(edge => edge.target_card === detailCard.id)
-        const edgeIds = new Map(incoming.map(edge => [edge.id, crypto.randomUUID()]))
-        edit({ ...latest.current, cards: [...(latest.current.cards || []), copy], edges: [...(latest.current.edges || []), ...incoming.map(edge => ({ ...edge, id: edgeIds.get(edge.id)!, target_card: copy.id }))],
-          input_order: { ...latest.current.input_order, [copy.id]: Object.fromEntries(Object.entries(document.input_order?.[detailCard.id] || {}).map(([port, ids]) => [port, ids.map(id => edgeIds.get(id)!)])) } })
-        setDetailId(copy.id)
-      }}>复制为独立摄影方案</Button>}
-      {detailCard && DetailRenderer && <ConfigProvider componentDisabled={readonly}><fieldset disabled={readonly} className="generation-card-body" data-canvas-details={document.id} data-card-details={detailCard.id}><DetailRenderer savedCard={savedDocument?.cards?.find(card => card.id === detailCard.id)} savedRevision={savedRevision} key={detailCard.id} card={detailCard} document={document} projectId={document.project_id} onChange={updateCard} onAddAngle={output => {
-        if (output.payload?.kind !== 'object_reference' || !('category' in output.payload)) return
-        const id = crypto.randomUUID(), edgeId = crypto.randomUUID()
-        const card = { id, type: `reference.${output.payload.category}`, title: `${output.payload.name} · 另一角度`, angle: '正面', objects: [],
-          input_bindings: [{ id: crypto.randomUUID(), input_port: 'name', source: output.source }] } as GenerationCard
-        edit(connect({ ...latest.current, cards: [...(latest.current.cards || []), card] },
-          { id: edgeId, source_card: output.source.card_id, source_port: 'object', target_card: id, target_port: 'name' }))
-        setDetailId(id)
-      }} models={models} capability={capability(detailCard)}
-        capabilityError={'model_id' in detailCard && detailCard.model_id ? capabilityErrors[detailCard.model_id] : undefined} references={references(detailCard)} disabled={readonly} modelOutputs={runtime?.outputs} node={runtime?.nodes[detailCard.id]} busy={runtime?.busyCards.has(detailCard.id)} checking={runtime?.checking === detailCard.id} runDisabled={runtime?.disabled} onPrecheck={() => runtime?.precheck(detailCard.id)} onTargetPrecheck={() => runtime?.precheck(detailCard.id, 'target')} /></fieldset></ConfigProvider>}
-    </WorkbenchDetails>
+    {cards.filter(card => detailSessions.includes(card.id) || card.id === detailId).map(detailCard => {
+      const DetailRenderer = rendererRegistry[detailCard.type || 'content.text']
+      return <WorkbenchDetails key={detailCard.id} title={cardTitles[detailCard.type || 'content.text'] || '卡片详情'} status={readonly ? '只读' : editingStatus} open={detailCard.id === detailId} onClose={() => setDetailId(current => current === detailCard.id ? undefined : current)} trigger={detailTrigger}>
+        {detailCard?.type?.startsWith('direction.') && <details className="generation-candidate-management"><summary>候选连接管理</summary>{references(detailCard)}</details>}
+        {detailCard?.type === 'direction.photography' && <Button disabled={readonly} onClick={() => {
+          const copy = { ...structuredClone(detailCard), id: crypto.randomUUID() }
+          const incoming = (document.edges || []).filter(edge => edge.target_card === detailCard.id)
+          const edgeIds = new Map(incoming.map(edge => [edge.id, crypto.randomUUID()]))
+          edit({ ...latest.current, cards: [...(latest.current.cards || []), copy], edges: [...(latest.current.edges || []), ...incoming.map(edge => ({ ...edge, id: edgeIds.get(edge.id)!, target_card: copy.id }))],
+            input_order: { ...latest.current.input_order, [copy.id]: Object.fromEntries(Object.entries(document.input_order?.[detailCard.id] || {}).map(([port, ids]) => [port, ids.map(id => edgeIds.get(id)!)])) } })
+          setDetailId(copy.id)
+        }}>复制为独立摄影方案</Button>}
+        {DetailRenderer && <ConfigProvider componentDisabled={readonly}><fieldset disabled={readonly} className="generation-card-body" data-canvas-details={document.id} data-card-details={detailCard.id}><DetailRenderer savedCard={savedDocument?.cards?.find(card => card.id === detailCard.id)} savedRevision={savedRevision} key={detailCard.id} card={detailCard} document={document} projectId={document.project_id} onChange={updateCard} onAddAngle={output => {
+          if (output.payload?.kind !== 'object_reference' || !('category' in output.payload)) return
+          const id = crypto.randomUUID(), edgeId = crypto.randomUUID()
+          const card = { id, type: `reference.${output.payload.category}`, title: `${output.payload.name} · 另一角度`, angle: '正面', objects: [],
+            input_bindings: [{ id: crypto.randomUUID(), input_port: 'name', source: output.source }] } as GenerationCard
+          edit(connect({ ...latest.current, cards: [...(latest.current.cards || []), card] },
+            { id: edgeId, source_card: output.source.card_id, source_port: 'object', target_card: id, target_port: 'name' }))
+          setDetailId(id)
+        }} models={models} capability={capability(detailCard)}
+          capabilityError={'model_id' in detailCard && detailCard.model_id ? capabilityErrors[detailCard.model_id] : undefined} references={references(detailCard)} disabled={readonly} modelOutputs={runtime?.outputs} node={runtime?.nodes[detailCard.id]} busy={runtime?.busyCards.has(detailCard.id)} checking={runtime?.checking === detailCard.id} runDisabled={runtime?.disabled} onPrecheck={() => runtime?.precheck(detailCard.id)} onTargetPrecheck={() => runtime?.precheck(detailCard.id, 'target')} /></fieldset></ConfigProvider>}
+      </WorkbenchDetails>
+    })}
   </div>
 }
 

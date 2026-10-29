@@ -45,7 +45,7 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
   const [canvases, setCanvases] = useState<CanvasRead[]>([])
   const editor = useGenerationCanvasEditor(projectId, canvasId)
   const { current, document, edit, save, saving, dirty, ownership } = editor
-  const runtime = useGenerationCanvasRuntime(projectId, canvasId, save, ownership.canEdit)
+  const runtime = useGenerationCanvasRuntime(projectId, canvasId, save, ownership.canEdit, current?.revision)
   useEffect(() => { if (runtime.preview) setPreviewOpen(true) }, [runtime.preview])
   const change: typeof edit = next => { runtime.invalidate(); edit(next) }
   const [error, setError] = useState('')

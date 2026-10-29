@@ -44,3 +44,13 @@
 最终生成端视觉证据 `/private/tmp/layout26-map-final2/generation-canvas-alignment`，真实导演成对基准 `/private/tmp/layout26-paired-release/generation-canvas-alignment-baseline`；正文与实际Worker旅程 `/private/tmp/layout26-journey-release/generation-canvas-journey`。其他票据的自身验收继续以各自记录为准，本票不覆盖其历史证据。
 
 - 2026-10-29 集成：26（分支 `39308b1d`，已同步全部20–25）无冲突合入当前集成分支。主区Node24 typecheck、差异检查及01–19哈希核对通过；产品代码与验收分支一致，复用本票39项真实浏览器、成对截图及最终小地图相关复测证据。20–26已全部integrated，最终双轴审查尚待后续记录；未清理工作树、未推送。
+
+
+### 2026-10-29：最终 Spec 审查修复
+
+- 两项 P2 均通过已确认的真实页面／HTTP 接缝先红后绿：关闭或切换详情后第 3 个结果重置（`/private/tmp/layout-review-session-red2`）；生成后修改依据，公开 runtime 已返回 `basis_current=false` 但问题筛选隐藏模型（`/private/tmp/layout-review-stale-red`）。
+- 仅已访问卡片按稳定身份保留各自的隐藏详情／编辑会话，未访问卡片不挂载。仍由共享详情 provider 保证只有一个可见详情；隐藏内容不参与可访问选择，隐藏音视频暂停并保留当前位置，关闭及对象切换不重置预览结果。未修改共享详情组件、原票或采用规则。
+- 问题筛选纳入已有失效输出；保存修订成功后通过现有 generated client 刷新运行投影，带 scope、编辑 generation、请求清理及 cursor 守卫，避免旧读取覆盖新范围／运行事件。未改变 schema、生成执行或自动采用。
+- 新 `generation-canvas-sessions` 已注册布局套件，验证第 3 个结果在关闭／切换后保持、真实上传的 10 秒音频播放到 3 秒后关闭／切换暂停且保留 currentTime，以及保存后失效模型仍可筛出；最终 **8.9s passed**。截图 `/private/tmp/layout-review-final2/generation-canvas-sessions/stale-model-session.png` 已实际查看，后续冻结代码下新用例结果见 `/private/tmp/layout-review-layout-final`。
+- 最终布局套件 **10 个真实用例全部通过**，其中原完整 Journey **50.8s**；原 Journey 及引用泄露／实际 Worker 输入断言均未修改。证据 `/private/tmp/layout-review-layout-final`。多结果图片回归见 `/private/tmp/layout-review-images-final`；运行 **10.3s**、自动保存 **18.6s**、保存恢复 **9.0s**，证据分别 `/private/tmp/layout-review-generation-canvas-runtime`、`/private/tmp/layout-review-generation-canvas-autosave`、`/private/tmp/layout-review-generation-canvas-save`。
+- Node24 typecheck、差异检查通过。lint:check 仍仅原有三条 hooks 依赖警告（Graph inspectTarget 两条、useCardCandidates entity 一条），未新增且未修改基线来掩盖；不称 lint 通过。供应商及存储仍为受控替身，MySQL selection 未执行限制保留。历史 01–19 文件哈希保持不变。

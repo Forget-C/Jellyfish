@@ -15,7 +15,7 @@ type Pending = { cardId: string; command: CanvasRunSubmit }
 
 /** Runtime is an observation projection, never an editable CanvasDocument. Unknown
  * submission outcomes keep the exact durable command until its receipt is known. */
-export function useGenerationCanvasRuntime(projectId: string, canvasId: string | null, save: () => Promise<boolean>, canEdit: () => boolean) {
+export function useGenerationCanvasRuntime(projectId: string, canvasId: string | null, save: () => Promise<boolean>, canEdit: () => boolean, savedRevision?: number) {
   const scope = `${projectId}:${canvasId}`, key = `jellyfish:generation-run:${scope}`
   const [snapshot, setSnapshot] = useState<CanvasSnapshot>(empty)
   const [connection, setConnection] = useState<StreamConnection>('connecting')
@@ -77,6 +77,18 @@ export function useGenerationCanvasRuntime(projectId: string, canvasId: string |
     })
     return () => { stream.close(); if (s === state.current) state.current = { ...s, scope: '' } }
   }, [scope, canvasId, key, projectId])
+  // Saving can invalidate formal outputs without emitting a new task event.
+  useEffect(() => {
+    if (!canvasId || savedRevision === undefined) return
+    let active = true
+    const current = state.current, generation = current.generation
+    void Canvases.canvasRuntime({ projectId, canvasId }).then(response => {
+      if (!active || state.current !== current || generation !== current.generation || !response.data) return
+      const next = response.data
+      setSnapshot(previous => next.cursor >= previous.cursor ? next : previous)
+    }).catch(() => { if (active && state.current === current && generation === current.generation) setError('已保存输出状态读取失败，请重开后重试') })
+    return () => { active = false }
+  }, [projectId, canvasId, savedRevision])
   const invalidate = () => { state.current.generation++; setPreview(undefined) }
   const precheck = async (cardId: string, kind: 'single' | 'target' | 'selection' = 'single', cardIds?: string[]) => {
     const s = state.current, generation = s.generation
