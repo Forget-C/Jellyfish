@@ -148,3 +148,12 @@
 .generation-ports button i { position: absolute; top: 16px; width: 8px; height: 8px; border: 1px solid currentColor; border-radius: 50%; background: var(--wb-surface); box-sizing: border-box; }
 .generation-input-ports button i { left: -4px; }
 .generation-output-ports button i { right: -4px; background: currentColor; }
+
+/* 独立生成画布按规格使用松开激活与整卡长按；不改变场次工作台手势。 */
+.generation-card { user-select: none; touch-action: none; }
+.generation-card-holding > .generation-card-body { outline: 2px solid var(--wb-focus); cursor: grabbing; }
+.generation-card .generation-card-footer { margin-top: 12px; font-size: 11px; color: var(--wb-muted); }
+.generation-card .generation-card-footer [data-problem="true"] { color: var(--wb-text); }
+.generation-card .generation-ports small { display: none; }
+.generation-card .generation-ports button:hover small,
+.generation-card .generation-ports button:focus-visible small { display: block; }
