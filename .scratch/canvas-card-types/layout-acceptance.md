@@ -39,3 +39,6 @@
 证据：`/private/tmp/layout-review-layout-final` 的最终 10 例全部通过，含新增会话／失效筛选例和原完整 Journey；实际查看失效筛选与第 3 项详情截图 `/private/tmp/layout-review-final2/generation-canvas-sessions/stale-model-session.png`。原运行、自动保存和保存恢复回归分别见 `/private/tmp/layout-review-generation-canvas-runtime`、`/private/tmp/layout-review-generation-canvas-autosave`、`/private/tmp/layout-review-generation-canvas-save`。初版同容器隐藏兄弟导致 Journey 文本定位歧义，最终改为复用独立 WorkbenchDetails 原生隐藏并恢复原测试断言，完整 Journey 50.8 秒通过；未以削弱断言规避。
 
 新增用例使本期独立真实浏览器覆盖由 39 增为 40，以上定向复测不重复累加独立用例数。lint 检查仍报告与实施基线相同的三条 hooks 依赖警告，不称通过。其他已记录的受控外部服务与 MySQL 未运行边界不变。
+
+
+保存／SSE 乱序补验：真实页面在保存后收到延迟的保存前同 cursor 快照，原实现会把失效模型从问题筛选中隐藏（`/private/tmp/layout-review-stream-red`）。统一权威读取与请求代次协调后，增强 sessions 9.6 秒通过，且恢复原始依据的合法同 cursor 更新仍生效；证据 `/private/tmp/layout-review-stream-release`，已查看截图。实时运行、自动保存与保存恢复分别10.4、18.4、8.9秒通过，见 `/private/tmp/layout-review-stream-generation-canvas-*`。该补验扩展原用例，独立真实用例数仍为40；未修改其他原有行为断言。

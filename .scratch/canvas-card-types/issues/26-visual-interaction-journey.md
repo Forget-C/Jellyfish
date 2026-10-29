@@ -54,3 +54,11 @@
 - 新 `generation-canvas-sessions` 已注册布局套件，验证第 3 个结果在关闭／切换后保持、真实上传的 10 秒音频播放到 3 秒后关闭／切换暂停且保留 currentTime，以及保存后失效模型仍可筛出；最终 **8.9s passed**。截图 `/private/tmp/layout-review-final2/generation-canvas-sessions/stale-model-session.png` 已实际查看，后续冻结代码下新用例结果见 `/private/tmp/layout-review-layout-final`。
 - 最终布局套件 **10 个真实用例全部通过**，其中原完整 Journey **50.8s**；原 Journey 及引用泄露／实际 Worker 输入断言均未修改。证据 `/private/tmp/layout-review-layout-final`。多结果图片回归见 `/private/tmp/layout-review-images-final`；运行 **10.3s**、自动保存 **18.6s**、保存恢复 **9.0s**，证据分别 `/private/tmp/layout-review-generation-canvas-runtime`、`/private/tmp/layout-review-generation-canvas-autosave`、`/private/tmp/layout-review-generation-canvas-save`。
 - Node24 typecheck、差异检查通过。lint:check 仍仅原有三条 hooks 依赖警告（Graph inspectTarget 两条、useCardCandidates entity 一条），未新增且未修改基线来掩盖；不称 lint 通过。供应商及存储仍为受控替身，MySQL selection 未执行限制保留。历史 01–19 文件哈希保持不变。
+
+
+### 2026-10-29：保存与 SSE 快照乱序补验
+
+- 规格定向复核发现：任务 cursor 不表示保存修订。保存前的 SSE snapshot 延迟到达时，可把保存后 HTTP 已确认的 `basis_current=false` 覆盖为 true。新真实页面用例先捕获已有输出的公开 runtime 快照，再通过受控 SSE 传输延迟，在保存并确认失效后发送原同 cursor 快照；红例明确复现模型从问题筛选中消失，证据 `/private/tmp/layout-review-stream-red`。
+- 保存与 SSE snapshot 现共用现有 generated runtime 读取，不直接采用缺乏保存修订标识的流快照载荷；所有读取按请求代次、画布 scope、编辑 generation 与任务 cursor 协调。旧读取不能覆盖后发读取或其他画布，实时 node／run 增量合并保持原行为；没有忽略合法的同 cursor 更新。
+- 增强的 sessions 用例 **9.6s passed**：延迟旧快照后失效模型保持可见；恢复原始依据后，在同一 cursor 下 `basis_current=true` 仍更新，模型从问题筛选移除。证据 `/private/tmp/layout-review-stream-release`，截图已实际查看。复用同用例中的媒体暂停／时间及预览序号检查，不新增独立用例计数。
+- 相关真实回归：runtime **10.4s**、autosave **18.4s**、save **8.9s**，目录 `/private/tmp/layout-review-stream-generation-canvas-runtime`、`/private/tmp/layout-review-stream-generation-canvas-autosave`、`/private/tmp/layout-review-stream-generation-canvas-save`；typecheck／差异检查通过，lint 仍只有既有 3 条警告。未改变公开 schema、供应商执行、候选采用或01–19记录。

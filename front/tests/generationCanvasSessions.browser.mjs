@@ -86,6 +86,13 @@ try {
   await open('audio')
   assert.ok((await audio.evaluate(element=>element.currentTime))>=3,'switching retains media time')
   await open('m')
+  const beforeSaveSnapshot = await runtime()
+  assert.equal(beforeSaveSnapshot.current_outputs.m[0].basis_current,true)
+  let heldStream, acceptStream
+  const streamHeld = new Promise(resolve => { acceptStream = resolve })
+  await page.route(url => url.pathname.endsWith('/events'), async route => { heldStream = route; acceptStream() })
+  await page.reload(); await streamHeld
+  await open('m')
   await card.getByRole('textbox',{name:'模型正文',exact:true}).fill('修改生成依据但保留旧成果')
   await page.getByLabel('画布保存状态').getByText('已保存', {exact:true}).waitFor()
   for(let i=0;i<40;i++){if((await runtime()).current_outputs.m[0].basis_current===false)break;await delay(100)}
@@ -93,6 +100,16 @@ try {
   await page.getByRole('switch',{name:'仅显示问题卡片',exact:true}).click()
   await page.locator('[data-card-id="m"]').waitFor()
   assert.equal(await page.locator('[data-card-id="text"]').count(),0,'unproblematic content hidden')
+  assert.equal((await runtime()).cursor,beforeSaveSnapshot.cursor,'saving does not advance the task cursor')
+  const lateSnapshot = {version:1,cursor:beforeSaveSnapshot.cursor,type:'snapshot',canvas_id:canvas.id,run_id:null,node_id:null,payload:beforeSaveSnapshot}
+  await heldStream.fulfill({status:200,contentType:'text/event-stream',body:`data: ${JSON.stringify(lateSnapshot)}\n\n`})
+  await page.evaluate(async()=>{await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame)})
+  assert.equal(await page.locator('[data-card-id="m"]').count(),1,'late pre-save SSE snapshot cannot hide the stale model')
   await page.screenshot({path:join(output,'stale-model-session.png'),animations:'disabled'})
-  console.log('PASS preview/media sessions and stale output filtering')
+  await card.getByRole('textbox',{name:'模型正文',exact:true}).fill('三张完整图片')
+  for(let i=0;i<40;i++){if((await runtime()).current_outputs.m[0].basis_current===true)break;await delay(100)}
+  assert.equal((await runtime()).current_outputs.m[0].basis_current,true,'returning to the original basis is a legitimate same-cursor update')
+  assert.equal((await runtime()).cursor,beforeSaveSnapshot.cursor)
+  await page.locator('[data-card-id="m"]').waitFor({state:'detached'})
+  console.log('PASS preview/media sessions and same-cursor save/SSE reconciliation')
 } finally { await cleanup() }
