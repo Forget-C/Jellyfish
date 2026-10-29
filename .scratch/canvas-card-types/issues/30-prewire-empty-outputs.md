@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented
+**Completion:** integrated
 
 - [x] 根据声明输出类型、目标用途、类别资格和已知模型能力允许无实际结果时先连候选；尚未生成模型和未选图图片均覆盖，三类候选统一检查无环。
 - [x] 接收端明确显示暂无可用输出，不伪造可采用产物、未来输出引用、对象身份或默认绑定；类型／类别与能力不足以确定用途时不给猜测用途。
@@ -31,3 +31,5 @@
 - 新注册 `generation-canvas-prewire`（4480／8480，加入generation与canvas-layout套件）：真实页面先布线、保存重开、空图片／名称关联、上传后主图仍未选、明确主图采用后的断线保护、取消采用后断开、纯候选删除重连、命名后名称不自动绑定、上游真实执行发布、下游不自动采用／运行、明确采用后真实TaskWorker受控请求。HTTP同时核对输出候选为空、绑定、边、预检及供应商实际文本；覆盖取消、未知模型能力、未采用边回环过滤和缺失身份。
 - 正式验收 `PLAYWRIGHT_CHANNEL=chrome pnpm --dir front run test:browser generation-canvas-prewire --output /private/tmp/canvas30-release2`：**preflight 0.8s／真实页面18.1s passed**。截图包含桌面／窄屏空输出、已发布未采用、采用后状态；已实际查看，证据保存在工作树外。窄屏等待模态详情稳定，确认仅一份详情可见，未用截图代替时序验证。
 - Node24 typecheck、定向ESLint与差异检查通过；ESLint仅Graph两条既有inspectTarget依赖警告，新增组件无警告。未改后端应用、公开schema或生成参数，无需OpenAPI重生成。供应商／存储使用既定受控替身，不宣称真实供应商质量。01–26及历史证据未修改。
+
+- 2026-10-29 集成：实现 `96b1c019` 无冲突合入当前分支，主区Node24 typecheck、差异与01–26哈希检查通过。产品树与实现验证一致，复用正式 prewire 18.1s（`/private/tmp/canvas30-release2`）；31／32仍在验证，33尚未开始，不预记最终验收通过。
