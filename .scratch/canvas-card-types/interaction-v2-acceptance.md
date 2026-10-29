@@ -111,3 +111,5 @@ HTTP 首轮真实红例 8 failed／281 passed／28 skipped；迁移后全画布 
 - 局部位移收敛后，组织旅程 `/private/tmp/canvas-v2-fix-organization` **6.9s**、堆叠完整旅程 `/private/tmp/canvas-v2-fix-stacks` **8.5s** 通过。已实际查看重复选线、窄屏多选组织与堆叠只读截图，原选择未残留且组织／只读层保持可达。
 - Node24 typecheck、差异检查及 01–33 哈希校验通过；定向 ESLint 只有原 `inspectTarget.cardId/segmentId` hook 警告，未新增告警。应用后端与公开 schema 未变，复用此前 HTTP／Pylint／OpenAPI 证据，不重跑相同状态全量检查。供应商与存储替身及 MySQL 未执行边界保留。
 - 三项已实施修复，等待主区集成及原审查者定向复核；本记录不自行宣称两轴发现清零。
+
+- 主区集成：统一修复 `eed37c0c` 已无冲突合入（合并 `85e6ee6d`），主区typecheck、差异及01–33哈希通过；合后产品／测试树等同修复源分支，复用edge11.3s、organization6.9s、stacks8.5s证据。当前等待原Standards／Spec审查者定向复核，不修改原报告发现、不预记清零。
