@@ -30,3 +30,6 @@
 - `generation-canvas-accessible-connections` `/private/tmp/c52-accessible-native` 10.9s通过，键盘／触摸候选连接、窄屏浮层与会话保持回归。堆叠保护仍复用原removeEdge检查，本票未改该业务；跨票组合及堆叠回归由54核对。
 - 实际查看用户原始剪刀图与最终 `purposes-selected.png`、`purposes-keyboard-focus.png`、`purposes-narrow.png`、`purposes-readonly.png`。图标读得清、线无包围盒、无大面板；正式候选仍按既有业务使用虚线／方向箭头，用户图仅作为线旁图标与高亮表达，不修改关系契约。Tooltip悬浮时可见为按需差异，移走即隐藏；窄屏命中区不随画布缩放缩小。
 - Node24 typecheck、diff check通过；定向ESLint无错误，保留Graph原有useEffect依赖警告（不冒称零告警）。后端与公开协议未改，不重生成客户端。受控外部服务不证明真实供应商艺术质量，01–48未修改。
+
+- 同步集成7ad9af6e（含49–51）无冲突后，Node24 typecheck再次通过；本票公开旅程改为仅打开当前需要的素材／成果区域，不同时展开全部管理层。最新 `/private/tmp/c52-integrated-verified` edge-management13.1s通过，HTTP/实际视频请求/触摸/只读断言均保留。
+- 集成时发现51素材浮层可覆盖编辑标题关闭按钮：证据 `/private/tmp/c52-integrated-release/generation-canvas-edge-management/candidate-panel-close-overlap.png` 与 `candidate-panel-close-bounds.json`，关闭按钮中心落入面板。已报告主代理由54或统一审查修复；本票通过先收素材面板再关详情继续验证52，不宣称全局关闭可达已通过。此问题不由剪刀实现引入。

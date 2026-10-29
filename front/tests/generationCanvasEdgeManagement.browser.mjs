@@ -1,4 +1,3 @@
-import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { readFile, writeFile } from 'node:fs/promises'
@@ -137,7 +136,8 @@ try {
   await page.keyboard.press('Escape')
   await target.press('Enter')
   await page.locator('.wb-details:visible').waitFor()
-  await openModelInspection(page)
+  const candidateMenu = page.locator('.wb-details:visible').getByLabel('管理候选与采用',{exact:true})
+  if (await candidateMenu.locator('..').getAttribute('open') === null) await candidateMenu.click()
   const details = page.locator('.wb-details:visible')
   const uses = details.getByRole('region', { name: '视频实际输入', exact: true })
   await uses.getByRole('button', { name: '采用 @图片1 为首帧', exact: true }).click()
@@ -148,6 +148,9 @@ try {
   const compiled = (await (await fetch(`${base}/${canvas.id}/cards/m/compile`)).json()).data
   assert.equal(compiled.video_media.frames.first.file_id, fileIds[0])
   assert.equal(compiled.video_media.frames.last.file_id, fileIds[0])
+  await page.screenshot({path:join(output,'candidate-panel-close-overlap.png'),animations:'disabled'})
+  await writeFile(join(output,'candidate-panel-close-bounds.json'),JSON.stringify(await page.evaluate(()=>{const close=document.querySelector('.wb-details:not([hidden]) [aria-label="关闭详情"]'),panel=document.querySelector('.generation-material-candidates[open]');const rect=e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height}};return {close:rect(close),panel:rect(panel)}}),null,2))
+  await details.getByLabel('管理候选与采用',{exact:true}).click()
   await details.getByRole('button', { name: '关闭详情', exact: true }).click()
   // Repeating a selected relation on other geometric sides preserves both uses.
   await drag('left', 'right')
@@ -160,9 +163,10 @@ try {
   assert.equal(await page.locator('.wb-details:visible').count(), 0, 'protected scissors do not open editor')
   await target.press('Enter')
   await page.locator('.wb-details:visible').waitFor()
-  await openModelInspection(page)
+  if (await page.locator('.wb-details:visible').getByLabel('管理候选与采用',{exact:true}).locator('..').getAttribute('open') === null) await page.locator('.wb-details:visible').getByLabel('管理候选与采用',{exact:true}).click()
   await page.locator('.wb-details:visible').getByRole('button', { name: '取消首帧 @图片1', exact: true }).click()
   await page.getByLabel('画布保存状态').getByText('已保存', { exact: true }).waitFor()
+  await page.locator('.wb-details:visible').getByLabel('管理候选与采用',{exact:true}).click()
   await page.locator('.wb-details:visible').getByRole('button', { name: '关闭详情', exact: true }).click()
   await firstLine.press('Enter')
   assert.equal(await firstLine.evaluate(el => getComputedStyle(el).outlineStyle), 'none', 'keyboard focus follows the path without a box')
@@ -176,17 +180,19 @@ try {
   await page.reload()
   await target.press('Enter')
   await page.locator('.wb-details:visible').waitFor()
-  await openModelInspection(page)
   await page.locator('.wb-details:visible').getByRole('button', { name: '预检运行', exact: true }).click()
   const preview = page.getByRole('region', { name: '运行预检', exact: true })
   const accepted = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/runs'))
   await preview.getByRole('button', { name: '确认执行', exact: true }).click()
   await accepted
   await fetch(`${api}/test/video-controls`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ release: true }) })
+  const resultMenu = page.locator('.wb-details:visible').locator('summary').filter({hasText:'运行状态与正式输出'})
+  if (await resultMenu.locator('..').getAttribute('open') === null) await resultMenu.click()
   await page.locator('.wb-details:visible').getByRole('region', { name: '当前正式输出', exact: true }).locator('video').waitFor({ timeout: 20000 })
   const calls = (await (await fetch(`${api}/test/video-controls`)).json()).calls.filter(call => call.method === 'POST')
   assert.equal(calls.length, 1)
   assert.deepEqual(calls[0].body.content.filter(item => item.type === 'image_url').map(item => item.role), ['last_frame'])
+  await page.locator('.wb-details:visible').getByLabel('管理候选与采用',{exact:true}).click()
   await page.locator('.wb-details:visible').getByRole('button', { name: '关闭详情', exact: true }).click()
   // Re-add the cancelled first-frame candidate: the remaining last-frame binding stays adopted.
   await drag('right', 'left')
