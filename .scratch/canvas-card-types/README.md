@@ -505,3 +505,9 @@ flowchart TD
 
 - 40（`3193fbc5`）无冲突集成；堆叠三态、只读成员与关系保护、整体移动／解除恢复及已受理任务更新形成页面／HTTP闭环，公开group.kind与生成客户端已同步。主区typecheck、差异、01–33哈希及主区生产OpenAPI与提交schema精确一致检查通过；产品／测试树等同源分支，复用stack8.4s（`/private/tmp/canvas40-visual-final2`）、organization7.2s、edge11.3s、HTTP61 passed／8 skipped和Pylint10证据。
 - 当前34–40全部integrated，41可推进、42待41；8000旧schema未用于生成，标准openapi:update须在确认当前服务契约后接续，不终止用户旧进程。原MySQL隔离守卫、外部替身及lint告警限制保留，不预填整体视觉验收。
+
+### 2026-10-29：41 集成
+
+- 41（`d14365d6`）无冲突集成，筛选只高亮并保留全部卡片／可见线，编组与堆叠匹配计数、全员只读查看及选择／会话状态形成页面／HTTP闭环。主区Node24 typecheck、差异及01–33字节校验通过，产品／测试树与源分支一致；复用highlights13.6s（`/private/tmp/canvas41-highlights-release4`）、basic6.7s及sessions9.2s证据。
+- 主代理已确认8000加载当前group.kind后标准openapi:update通过，440个纯尾空行漂移经核对还原，证据 `/private/tmp/canvas34-42-standard-openapi-update.json`；此前40的标准更新待办已接续完成。
+- 当前34–41全部integrated，42前置满足；已知堆叠origin虚拟左上角重叠待最终统一修复，组合旅程、三视口和最终审查仍待执行，不预记整体通过。原历史记录及环境限制保留。
