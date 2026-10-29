@@ -66,14 +66,9 @@
   .generation-document-controls .ant-input { width: 140px; }
 }
 .generation-stage .generation-toolbar { position: absolute; z-index: 5; top: auto; left: auto; bottom: 8px; right: 12px; max-width: calc(100% - 24px); justify-content: flex-end; padding: 4px; background: var(--wb-surface); border-radius: var(--wb-radius); }
-.generation-toolbox { position: absolute; z-index: 5; top: 12px; left: 12px; width: 152px; max-height: calc(100% - 120px); overflow-y: auto; padding: 8px; border: 1px solid var(--wb-border); border-radius: var(--wb-radius); background: var(--wb-surface); }
-.generation-toolbox section + section { margin-top: 16px; }
-.generation-toolbox h2 { font-size: 12px; color: var(--wb-muted); margin: 0 0 8px; }
-.generation-toolbox .wb-action { width: 100%; margin-bottom: 4px; }
 .generation-card-summary { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .generation-card .generation-card-body { cursor: pointer; }
 @media(max-width: 600px) {
-  .generation-toolbox { width: 120px; }
   .generation-stage .generation-toolbar { max-height: 104px; overflow-y: auto; }
   .generation-stage .generation-connection-reason { bottom: 116px; font-size: 12px; }
 }
@@ -93,15 +88,22 @@
 .generation-workbench .generation-workbench-header { z-index: 60; }
 .generation-workbench .generation-feedback { position: absolute; z-index: 50; top: var(--workbench-toolbar-bottom, 64px); left: 16px; right: 16px; }
 .generation-workbench .generation-empty { position: absolute; top: 45%; left: 50%; transform: translateX(-50%); }
-.generation-workbench .generation-toolbox { top: 76px; }
 .generation-workbench .generation-toolbar-center { min-width: 0; }
 .generation-workbench .canvas-toolbar-actions > section { display: contents; }
 @media(max-width: 700px) {
   .generation-workbench .generation-toolbar-center { display: none; }
-  .generation-workbench .generation-toolbox { top: 120px; }
   .generation-workbench .generation-feedback { top: 108px; }
 }
 
+.generation-card-list-host { z-index: 45; }
+.generation-card-list { position: absolute; left: 60px; top: 0; transform: translateY(-40%); width: 280px; max-height: min(620px, calc(100dvh - 180px)); overflow: auto; padding: 12px; box-sizing: border-box; background: var(--wb-surface); border: 1px solid var(--wb-border); border-radius: 12px; scrollbar-gutter: stable; }
+.generation-card-list header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.generation-card-list h2 { font-size: 12px; color: var(--wb-muted); margin: 16px 0 8px; }
+.generation-card-list section .wb-action { width: 100%; margin-bottom: 4px; }
+.generation-card-list small { display: block; color: var(--wb-muted); margin-block: 4px; }
+@media(max-width: 600px) {
+  .generation-card-list { position: fixed; left: 72px; right: 12px; top: 150px; transform: none; width: auto; max-height: calc(100dvh - 240px); }
+}
 .generation-browse { position: absolute; z-index: 35; left: 16px; width: calc(100% - 32px); display: flex; flex-direction: column; align-items: flex-start; gap: 8px; pointer-events: none; }
 .generation-browse > * { pointer-events: auto; }
 .generation-browse .canvas-filter-fields { max-width: 100%; }
@@ -115,10 +117,21 @@
 .generation-bottom-right { z-index: 30; }
 .generation-workbench .generation-minimap { bottom: 80px; right: 16px; }
 @media(max-width: 700px) {
-  .generation-view-tools { bottom: 72px; left: 12px; gap: 0; }
+  .generation-view-tools { bottom: 12px; left: 12px; gap: 0; max-width: calc(100% - 108px); }
   .generation-view-tools .canvas-toolbar-popover { position: absolute; top: auto; left: 0 !important; right: auto !important; bottom: calc(100% + 8px); width: 260px; }
   .generation-bottom-right { bottom: 12px; right: 12px; flex-wrap: wrap; justify-content: flex-end; }
   .generation-bottom-right .canvas-status-host { flex: 1 1 100%; }
   .generation-workbench .generation-minimap { bottom: 128px; width: 140px; height: 92px; }
   .generation-selection-actions { bottom: 124px; left: 12px; }
 }
+/* 工作台卡片保持标题、有限摘要和独立动作，完整字段留在悬浮详情。 */
+.generation-workbench .generation-card { resize: none; overflow: visible; min-height: 0; border: 0; background: transparent; }
+.generation-workbench .generation-card header { position: relative; background: transparent; padding: 0 8px; height: 32px; color: var(--wb-muted); }
+.generation-card header strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; }
+.generation-card header small { font-size: 11px; flex-shrink: 0; }
+.generation-card header > button:first-child { background: transparent; border: 0; color: var(--wb-muted); cursor: grab; }
+.generation-workbench .generation-card .generation-card-body { padding: 20px; background: var(--wb-surface); border: 1px solid var(--wb-border); border-radius: 12px; min-height: 140px; max-height: 340px; overflow: hidden; }
+.generation-card[data-selected="true"] .generation-card-body { outline: 1px solid var(--wb-focus); }
+.generation-card .canvas-card-summary { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; margin: 0 0 8px; }
+.generation-card-body :is(img, video) { display: block; height: 160px; object-fit: contain; margin-inline: auto; }
+.generation-card-menu { position: absolute; top: 32px; right: 0; z-index: 25; padding: 8px; display: grid; gap: 4px; background: var(--wb-raised); border: 1px solid var(--wb-border); border-radius: var(--wb-radius); }
