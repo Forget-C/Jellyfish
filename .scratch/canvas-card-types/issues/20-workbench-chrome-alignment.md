@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented
+**Completion:** integrated
 
 - [x] 画布铺满独立页面，顶部菜单与状态浮层不挤占画布空间；背景、留边、区域层级和按钮样式对齐场次工作台，移除独立画布外框及常驻连接状态行造成的布局差异。
 - [x] 顶部左侧提供返回项目、画布名称／管理菜单、保存状态、带可访问名称的保存图标及浏览前进／后退；右侧提供适用的生成操作、运行记录、任务与更多菜单。中央无对应业务时留白，不新增场次版本或四画布切换。
@@ -35,3 +35,5 @@
 - 统一浏览器入口增加 generation-canvas-chrome 与 generation-canvas-chrome-baseline；两者使用独立4420／8420和4520／8520端口。供应商及外部存储仍用原受控替身，不调用真实供应商，不宣称真实质量或MySQL竞争覆盖。
 
 - 最终复验 `/private/tmp/layout20-final3`：统一入口preflight通过，generation-canvas-chrome **6.1s通过**，包含无可用历史时前进／后退禁用、管理保存重开、模型预检诊断与1440／390截图；最终Node24 typecheck及差异检查通过。
+
+- 2026-10-29 集成：无冲突合入 codex-layout20 `b613ae71`；合并后的产品代码与已验收分支相同，复用真实菜单／保存／预检浏览器6.1s及真实场次基准5.3s证据。主区Node24 typecheck与差异检查通过，01–19原票字节哈希不变；未改后端或schema，不重复接口生成。
