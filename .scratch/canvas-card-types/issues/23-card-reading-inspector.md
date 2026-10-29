@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented
+**Completion:** integrated
 
 - [x] 卡片标题、拖动柄、卡面、边框、圆角和文字层级对齐场次工作台；优先用户命名、类型为辅助信息，删除收进可访问菜单，不常驻危险按钮或复选框，保留清楚的选择状态。
 - [x] 文本与导演卡提供有限字段摘要，不铺完整表单或卡内滚动全文；摘要不裁剪实际输出，全部既有目录仍能进入对应专用编辑器。
@@ -34,3 +34,5 @@
 - 统一真实页面入口 `generation-canvas-cards` 最终证据 `/private/tmp/layout23-final2/generation-canvas-cards`，**7.1s passed**，覆盖命名、菜单选择、方向键布局移动不打开详情、媒体点击不激活、图片／视频／音频／命名参考主图及模型摘要、约1秒保存期间展开详情、关闭视角不变、重开正文及390px无页面溢出。Node24 `pnpm --dir front run typecheck`、`git diff --check` 通过。
 - 真实场次工作台基准复用20的基准脚本，临时仅改专用端口为4523/8523执行，**6.0s passed**，证据 `/private/tmp/layout23-baseline/generation-canvas-cards-baseline`。已实际查看导演桌面与生成桌面／窄屏截图，核对标题、暗色卡面、圆角、有限摘要和共享悬浮详情；生成端口／目录／底部当前差异归后续24／22／25。临时基准脚本不另复制入仓库，避免重复维护。
 - 限制：本票新用例用真实HTTP与真实页面，媒体经受控本地存储；不声明真实模型供应商质量。运行中／错误状态沿用节点公开状态展示，跨区域多状态组合及整体成对核对由26补齐；不改写01–19原始验收记录。
+
+- 2026-10-29 集成：23（实现 `d01a9413`）合入21后的当前集成分支，保留双方CSS及浏览器注册；主区Node24 typecheck、差异检查、01–19哈希核对及真实卡片回归 **6.9s passed**，证据 `/private/tmp/layout23-integrated/generation-canvas-cards`。复用本票成对导演视觉证据；无后端或接口变化。
