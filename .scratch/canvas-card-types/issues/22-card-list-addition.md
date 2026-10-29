@@ -32,3 +32,5 @@
 - Node24 `pnpm --dir front run typecheck`、`git diff --check` 通过。未修改后端或公开接口，无需重新生成OpenAPI；未运行真实供应商或外部存储。原01–19票据和索引未修改。
 
 - 提交实现后同步最新集成 `ef4142ce`，保留21筛选与22列表双方样式／测试注册。合后真实页面9.2s及Node24 typecheck、差异检查通过；成对图片已更新为合后页面，01–19未改。
+
+- 最终同步23集成 `00978106` 后真实页面 **9.4s PASS**（`/private/tmp/layout22-with23/generation-canvas-card-list`），Node24 typecheck通过；无冲突，删除原生resize后的卡片拖入坐标和保存重开仍正确。
