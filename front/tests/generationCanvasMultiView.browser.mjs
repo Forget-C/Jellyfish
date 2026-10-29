@@ -1,3 +1,4 @@
+import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -78,6 +79,7 @@ try {
   assert.ok((await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'video-fixture', expected_revision: current.revision, document: doc }) })).ok)
   await page.reload()
   await page.locator('[data-card-id="v"]').press('Enter')
+  await page.locator('.generation-material-composer').waitFor(); await openModelInspection(page)
   const inputs = card.getByRole('region', { name: '视频实际输入', exact: true })
   await inputs.getByRole('textbox', { name: '主体分组 @图片1', exact: true }).fill('小李组')
   await inputs.getByRole('button', { name: '采用 @图片1 为主体图片', exact: true }).click()
@@ -104,6 +106,7 @@ try {
   await inputs.getByRole('button', { name: '取消主体图片 @图片2', exact: true }).click()
   await poll(state => state.document.cards[2].input_bindings?.length === 1)
   await page.reload(); await page.locator('[data-card-id="v"]').press('Enter')
+  await page.locator('.generation-material-composer').waitFor(); await openModelInspection(page)
   assert.equal(await card.getByRole('textbox', { name: '已采用主体分组 @图片1', exact: true }).inputValue(), '小李组')
   const categoryState = await read()
   categoryState.document.cards[0].objects.push({ object_id: 'coat', name: '蓝衣', category: 'costume' }, { object_id: 'sword', name: '长剑', category: 'prop' })

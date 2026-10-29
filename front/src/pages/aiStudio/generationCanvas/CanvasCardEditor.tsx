@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import { createContext, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { CloseOutlined, ExpandOutlined, ShrinkOutlined } from '@ant-design/icons'
@@ -6,6 +6,9 @@ import { WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
 import { useWorkbenchDetailsSlot } from '../directing/ui/WorkbenchDetails'
 import { WorkbenchReadingContext } from '../directing/ui/WorkbenchReadingContext'
 import { useWorkbenchDesktop } from '../directing/useWorkbenchDesktop'
+
+/** 操作条位于滚动正文之外；复杂设计编辑器仍保留同一实例。 */
+export const CanvasEditorFooter = createContext<HTMLElement | null>(null)
 
 /** A single retained editor moves between its card anchor and a modal without remounting fields. */
 export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor, layoutKey, allowPan, onFit, expandRequest, forceModal = false, material = false, children }: {
@@ -20,6 +23,7 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
   const [expanded, setExpanded] = useState(false)
   const [placement, setPlacement] = useState({ left: 16, top: 100, visible: true })
   const panel = useRef<HTMLElement>(null)
+  const [footer, setFooter] = useState<HTMLDivElement | null>(null)
   const close = useRef(onClose); close.current = onClose
   const opener = useRef(trigger); opener.current = trigger
   const modal = forceModal || expanded || !desktop
@@ -97,7 +101,8 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
         {!forceModal && <WorkbenchIconButton variant="quiet" label={expanded ? '收起详情' : '展开详情'} icon={expanded ? <ShrinkOutlined /> : <ExpandOutlined />} onClick={() => setExpanded(value=>!value)} />}
         <WorkbenchIconButton variant="quiet" label="关闭详情" icon={<CloseOutlined />} onClick={() => expanded && !forceModal ? setExpanded(false) : onClose()} />
       </header>
-      <div className="wb-details-body"><WorkbenchReadingContext.Provider value>{children}</WorkbenchReadingContext.Provider></div>
+      <div className="wb-details-body"><CanvasEditorFooter.Provider value={visible ? footer : null}><WorkbenchReadingContext.Provider value>{children}</WorkbenchReadingContext.Provider></CanvasEditorFooter.Provider></div>
+      <div ref={setFooter} className="generation-editor-actions" />
     </section>
   </>, document.body)
 }

@@ -19,7 +19,7 @@
 .canvas-motion-endpoints { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px 16px; }
 .canvas-motion-endpoints figure { margin: 0; min-width: 0; }
 .canvas-motion-endpoints figcaption { font-size: 12px; color: var(--wb-muted); padding-top: 4px; }
-.canvas-effect-apply { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 8px 0 16px; border-bottom: 1px solid var(--wb-border); }
+.canvas-effect-apply { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 0; }
 .canvas-effect-key-settings { margin-top: 16px; }
 .canvas-effect-key-settings label { display: block; color: var(--wb-muted); font-size: 12px; margin: 12px 0; }
 .canvas-effect-key-settings textarea { margin-top: 8px; }
@@ -27,3 +27,6 @@
 .canvas-effect-professional > summary { cursor: pointer; color: var(--wb-muted); }
 .canvas-effect-professional[open] > summary { margin-bottom: 16px; }
 @media (max-width: 700px) { .canvas-effect-editor { grid-template-columns: minmax(0, 1fr); gap: 16px; } .canvas-effect-preview { position: static; } }
+
+.generation-editor-actions { flex: none; padding: 12px 16px; border-top: 1px solid var(--wb-border); background: var(--wb-surface); }
+.generation-editor-actions:empty { display: none; }

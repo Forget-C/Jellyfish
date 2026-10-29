@@ -1,6 +1,6 @@
 import { Alert, Select, Space } from 'antd'
 import { FileTextOutlined, PictureOutlined, VideoCameraOutlined, SoundOutlined, ArrowUpOutlined } from '@ant-design/icons'
-import type { CanvasResolvedOutput, ImageModelCard, TextModelCard, VideoModelCard } from '../../../services/generated'
+import type { CanvasResolvedOutput, InputBinding, ImageModelCard, TextModelCard, VideoModelCard } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
 import { useGraphRules } from './CanvasCatalogContext'
 import { PhotographyInputScope } from './PhotographyInputScope'
@@ -12,6 +12,7 @@ import { useCardCandidates } from './useCardCandidates'
 import { MediaPreview } from './MediaContentEditor'
 import { MediaResultsPreview } from './MediaResultsPreview'
 import { ImageModelParameters, VideoModelParameters } from './ModelParameters'
+import { designSummary } from './designSummary'
 import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 import { sourceKey } from './promptRules'
 import { WorkbenchButton, WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
@@ -23,7 +24,7 @@ import './materialComposer.css'
 export function ModelRenderer({ card: raw, savedRevision, document, disabled, onChange, models, capability, capabilityError, references, modelOutputs, node, busy, checking, runDisabled, onPrecheck, sourceActions }: CardRendererProps) {
   const card = raw as TextModelCard | ImageModelCard | VideoModelCard
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs)
-  const { portLabels } = useGraphRules()
+  const { portLabels, cardTitles } = useGraphRules()
   const adopted = card.input_bindings || []
   const formalOutputs = resolved.loading ? modelOutputs?.[card.id] || [] : resolved.outputs
   const category = card.type?.split('.')[1]
@@ -58,13 +59,27 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
   const labelFor = (output: CanvasResolvedOutput) => {
     const source = document.cards?.find(item => item.id === output.source.card_id)
     const name = source && ('name' in source ? source.name : 'title' in source ? source.title : undefined)
-    return name || output.token || '来源'
+    const named = output.payload?.kind === 'named_image' && 'objects' in output.payload ? output.payload.objects?.map(object => object.name).join('、') : ''
+    return name || named || cardTitles[source?.type || ''] || output.token || '来源'
   }
+  // 派生短摘要只取本次明确输出的结构化内容；canonical全文仍在按需来源中。
+  const excerptFor = (output: CanvasResolvedOutput, binding: InputBinding) => {
+    const payload = output.payload
+    if (payload?.kind === 'design' && 'fields' in payload) return designSummary([],Object.values(payload.fields))
+    if (payload?.kind === 'photography' && 'entries' in payload) {
+      const scopes = binding.photography_scope || ['whole']
+      return payload.entries.filter(entry => scopes.includes('whole') || scopes.includes(entry.id) || scopes.includes(`region:${entry.region}`)).map(entry => `${entry.label}：${designSummary([],[entry.value])}`).join('；')
+    }
+    return output.text || ''
+  }
+  // 图像先行仅组织展示；采用顺序仍按绑定原序标注，不改实际编译顺序。
+  const basisBindings = [...adopted].sort((left, right) => Number(!resolved.candidates.find(item => sourceKey(item.source) === sourceKey(left.source))?.file_id) - Number(!resolved.candidates.find(item => sourceKey(item.source) === sourceKey(right.source))?.file_id))
   return <div className="generation-material-composer">
     <aside aria-label="本次创作依据" role="region" className="generation-material-basis">
       <h3>创作依据</h3>
       {!adopted.length && <p className="generation-material-empty">尚未采用来源<br /><small>通过加号添加候选，再明确采用</small></p>}
-      {adopted.map((binding, index) => {
+      {basisBindings.map(binding => {
+        const index = adopted.indexOf(binding)
         const output = resolved.candidates.find(item => sourceKey(item.source) === sourceKey(binding.source))
         const payload = output?.payload
         return <article key={binding.id} className="generation-material-source">
@@ -75,7 +90,7 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
           {binding.photography_scope?.length ? <small>摄影范围：{binding.photography_scope.map(scope => payload?.kind === 'photography' && 'adoption_scopes' in payload ? payload.adoption_scopes?.find(item => item.id === scope)?.label || scope : scope).join('、')}</small> : null}
           {!output?.available && !resolved.loading && <small role="alert">来源输出缺失，请检查候选</small>}
           {output?.basis_current === false && <small role="alert">依据已变</small>}
-          {output?.text && <p className="generation-material-excerpt">{output.text}</p>}
+          {output?.text && <p className="generation-material-excerpt">{excerptFor(output,binding)}</p>}
           {output && <details><summary>查看来源</summary><CanvasTextPreview text={output.text || ''} label="来源正文" /><NamedImageSummary output={output} /><small>直接来源：{output.source.card_id} · 保存版本 {resolved.revision ?? savedRevision}</small></details>}
         </article>
       })}

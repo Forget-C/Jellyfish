@@ -1,3 +1,4 @@
+import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { openCardList } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import { writeFile } from 'node:fs/promises'
@@ -102,6 +103,7 @@ try {
   await page.setViewportSize({width:1440,height:960})
   await fetch(`${api}/test/runtime-controls`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fail_next:true,release:0})})
   await page.locator('[data-card-id="model"]').press('Enter')
+  await page.locator('.generation-material-composer').waitFor(); await openModelInspection(page)
   const details=page.locator('.wb-details:visible')
   await details.getByRole('textbox',{name:'模型正文',exact:true}).fill('视觉验收运行与失败状态')
   await details.getByRole('button',{name:'预检运行',exact:true}).click()
@@ -118,6 +120,7 @@ try {
   await waitStatus('failed')
   await page.locator('[data-card-id="model"] [aria-label="模型状态摘要"]').getByText('controlled-text · 失败 · 未完成',{exact:true}).waitFor()
   await page.locator('[data-card-id="model"]').press('Enter')
+  await page.locator('.generation-material-composer').waitFor(); await openModelInspection(page)
   await details.getByText('失败 · 未完成',{exact:false}).waitFor()
   for(const [name,width,height] of [['desktop',1440,960],['mobile',390,844],['wide',3830,1688]]){await page.setViewportSize({width,height});await snapshot(`generation-failed-${name}`)}
 } finally { await cleanup() }
