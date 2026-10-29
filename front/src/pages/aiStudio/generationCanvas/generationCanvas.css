@@ -101,3 +101,9 @@
   .generation-workbench .generation-toolbox { top: 120px; }
   .generation-workbench .generation-feedback { top: 108px; }
 }
+
+.generation-browse { position: absolute; z-index: 35; left: 16px; width: calc(100% - 32px); display: flex; flex-direction: column; align-items: flex-start; gap: 8px; pointer-events: none; }
+.generation-browse > * { pointer-events: auto; }
+.generation-browse .canvas-filter-fields { max-width: 100%; }
+.generation-browse .canvas-filters { box-sizing: border-box; }
+.generation-browse .canvas-filter-fields { flex: 1 1 auto; }
