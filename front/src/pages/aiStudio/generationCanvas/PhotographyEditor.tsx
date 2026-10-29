@@ -28,11 +28,13 @@ export function PhotographyEditor({ card: raw, document, savedRevision, modelOut
   const update = (next: PhotographyCard) => onChange(next)
   const fields = card.fields || {}
   return <>
-    <p>一张摄影设计 · 五个编辑入口。另一套独立方案请明确新建或复制；所属镜头可选，不自动合并。</p>
+
     <Space wrap>{Object.entries(photographyRegions).map(([key, value]) => <WorkbenchButton key={key} aria-pressed={region === key} onClick={() => setRegion(key as keyof typeof photographyRegions)}>编辑{value.label}</WorkbenchButton>)}</Space>
     <section aria-label={photographyRegions[region].label}>
-      <VisualPresetPicker key={region} label={photographyRegions[region].label} presets={photographyPresets[region]} disabled={disabled} onApply={preset => update({ ...card, fields: applyPreset(fields, preset) })} />
-      {Object.entries(photographyRegions[region].fields).map(([key, label]) => <DesignFieldEditor key={key} label={label} value={fields[key as keyof PhotographyFields]} onChange={value => update({ ...card, fields: { ...fields, [key]: { ...fields[key as keyof PhotographyFields], ...value } } })} />)}
+      <VisualPresetPicker key={region} label={photographyRegions[region].label} presets={photographyPresets[region]} currentName={Object.keys(photographyRegions[region].fields).map(key => fields[key as keyof PhotographyFields]?.text).find(Boolean)} disabled={disabled} onApply={preset => update({ ...card, fields: applyPreset(fields, preset) })}>
+        <section className="canvas-effect-key-settings" aria-label="关键设置"><h3>关键设置</h3>{Object.entries(photographyRegions[region].fields).slice(0,2).map(([key,label]) => <DesignFieldEditor compact key={key} label={label} value={fields[key as keyof PhotographyFields]} onChange={value => update({...card,fields:{...fields,[key]:{...fields[key as keyof PhotographyFields],...value}}})}/>)}</section>
+      <details className="canvas-effect-professional"><summary>专业字段与来源</summary>
+      {Object.entries(photographyRegions[region].fields).slice(2).map(([key, label]) => <DesignFieldEditor key={key} label={label} value={fields[key as keyof PhotographyFields]} onChange={value => update({ ...card, fields: { ...fields, [key]: { ...fields[key as keyof PhotographyFields], ...value } } })} />)}
       {region === 'composition' && <details><summary>明确景别硬要求</summary><p>只比较同一显式目标和状态的事实要求；开放提议和自由正文保留。</p>
         <Select aria-label="结构化景别" allowClear value={fields.shot_size?.size || undefined} options={Object.entries(shotSizeLabels).map(([value, label]) => ({ value, label }))} onChange={size => update({ ...card, fields: { ...fields, shot_size: { ...fields.shot_size, size: size ?? null } } })} />
         <Input aria-label="景别明确目标身份" placeholder="目标身份（可选）" value={fields.shot_size?.target_id} onChange={event => update({ ...card, fields: { ...fields, shot_size: { ...fields.shot_size, target_id: event.target.value } } })} />
@@ -46,7 +48,8 @@ export function PhotographyEditor({ card: raw, document, savedRevision, modelOut
         </section>)}
         <WorkbenchButton disabled={disabled} onClick={() => update({ ...card, phases: [...phases, { id: crypto.randomUUID(), name: '新阶段', frame: {} }] })}>新增明确阶段</WorkbenchButton>
       </section>}
-    </section>
+      </details>
+    <details className="canvas-effect-professional"><summary>对象关系、素材与已保存输出</summary>
     <section aria-label="摄影所属镜头"><h3>所属镜头（可选）</h3>{resolved.candidates.filter(item => item.payload?.kind === 'narrative_reference' && 'category' in item.payload && item.payload.category === 'shot').map(item => {
       const bound = bindings.find(binding => binding.input_port === 'shot' && sourceKey(binding.source) === sourceKey(item.source))
       const name = item.payload && 'name' in item.payload ? item.payload.name : item.source.object_id
@@ -67,6 +70,9 @@ export function PhotographyEditor({ card: raw, document, savedRevision, modelOut
     </details>
     <DesignMediaExamples ports={inputPorts(card)} fieldOptions={Object.values(photographyRegions).flatMap(region => Object.entries(region.fields).map(([value,label]) => ({value:value as NonNullable<PhotographyMediaExample["field_id"]>,label})))} examples={card.examples || []} candidates={resolved.candidates} disabled={disabled} onChange={examples => update({ ...card, examples })} />
     <section aria-label="摄影已保存输出"><h3>已保存摄影设计 · revision {resolved.revision}</h3>{resolved.outputs.map(item => <CanvasTextPreview key={sourceKey(item.source)} text={item.text || ''} label="摄影设计" />)}</section>
+    </details>
+      </VisualPresetPicker>
+    </section>
   </>
 }
 

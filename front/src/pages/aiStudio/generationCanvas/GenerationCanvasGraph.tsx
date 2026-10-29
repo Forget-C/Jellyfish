@@ -15,8 +15,8 @@ import type { SoundCard } from './SoundDirectionEditor'
 import { performanceSummary } from './PerformanceDirectionEditor'
 import type { PerformanceCard } from './PerformanceDirectionEditor'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { PointerEvent, ReactNode } from 'react'
-import { AimOutlined, MinusOutlined, PlusOutlined, CloseOutlined, ScissorOutlined } from '@ant-design/icons'
+import type { CSSProperties, PointerEvent, ReactNode } from 'react'
+import { AimOutlined, MinusOutlined, PlusOutlined, CloseOutlined, ScissorOutlined, GroupOutlined, MoreOutlined } from '@ant-design/icons'
 import { WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
 import { CanvasToolbarMenu } from '../directing/CanvasToolbarMenu'
 import { ConfigProvider, Dropdown, Modal, Input, Select, Space, Tooltip, Image } from 'antd'
@@ -100,12 +100,18 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
   const [sourceTarget, setSourceTarget] = useState<string>()
   const [uploadSource, setUploadSource] = useState<string>()
   const [selectedEdgeId, setSelectedEdgeId] = useState<string>()
+  const [selectedGroupId, setSelectedGroupId] = useState<string>()
+  const [groupPanel, setGroupPanel] = useState<'name' | 'members'>()
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string>()
   const [spaceHeld, setSpaceHeld] = useState(false)
   const blankPointer = useRef(false)
   const panGesture = useRef<{ surface: HTMLDivElement; pointer: number; x: number; y: number; left: number; top: number }>()
   const blankPress = useRef<{ x: number; y: number }>()
-  const clearSelection = useCallback(() => { setMultiSelectMode(false); setSelected([]); setSelectedEdgeId(undefined); setDetailId(undefined) }, [])
+  const clearSelection = useCallback(() => { setMultiSelectMode(false); setSelected([]); setSelectedEdgeId(undefined); setDetailId(undefined); setSelectedGroupId(undefined); setGroupPanel(undefined) }, [])
+  useEffect(() => {
+    if (selected.length || detailId || selectedEdgeId || multiSelectMode) { setSelectedGroupId(undefined); setGroupPanel(undefined) }
+  }, [selected, detailId, selectedEdgeId, multiSelectMode])
+  const selectGroup = (id: string) => { clearSelection(); setSelectedGroupId(id); setGroupPanel(undefined) }
   const [edgeActionPoint, setEdgeActionPoint] = useState<{ x: number; y: number }>()
   const selectEdge = (id?: string, position?: { x: number; y: number }) => { setMultiSelectMode(false); setSelected([]); setDetailId(undefined); setSelectedEdgeId(id); setEdgeActionPoint(position) }
   useEffect(() => {
@@ -521,7 +527,8 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
     const surfaceBox = surface.getBoundingClientRect()
     container.current?.querySelectorAll<HTMLElement>('[data-group-id], [data-stack-id]').forEach(group => {
       const box = group.getBoundingClientRect()
-      bounds.push({ left: (box.left - surfaceBox.left - transform.x) / transform.scale, top: (box.top - surfaceBox.top - transform.y) / transform.scale,
+      const title = group.querySelector('.generation-group-header')?.getBoundingClientRect()
+      bounds.push({ left: (box.left - surfaceBox.left - transform.x) / transform.scale, top: (Math.min(box.top, title?.top ?? box.top) - surfaceBox.top - transform.y) / transform.scale,
         right: (box.right - surfaceBox.left - transform.x) / transform.scale, bottom: (box.bottom - surfaceBox.top - transform.y) / transform.scale })
     })
     const left = Math.min(...bounds.map(box => box.left)), top = Math.min(...bounds.map(box => box.top))
@@ -669,6 +676,8 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
       onPointerOver={event => { blankPointer.current = !(event.target as Element).closest('[data-card-id], button, input, select, textarea, audio, video') }}
       onPointerLeave={() => { blankPointer.current = false }}
       onPointerDown={event => {
+        // Portal 菜单属于编辑操作，不是画布空白手势。
+        if (!event.currentTarget.contains(event.target as Node)) return
         if (spaceHeld && event.button === 0 && event.currentTarget.contains(event.target as Node)
           && !(event.target as Element).closest('[data-card-id], button, input, select, textarea, audio, video')) {
           event.preventDefault(); event.currentTarget.focus({ preventScroll: true }); event.currentTarget.setPointerCapture(event.pointerId)
@@ -733,8 +742,8 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
           const coverImage = 'image_binding' in cover ? cover.image_binding?.file_id : cover.type === 'content.image' && 'file_id' in cover ? cover.file_id : runtime?.outputs[cover.id]?.find(output => output.modality === 'image')?.file_id
           const coverText = 'text' in cover ? cover.text : runtime?.outputs[cover.id]?.find(output => output.text)?.text
           return <section key={group.id} data-stack-id={group.id} data-filter-match={members.some(id => matched.has(id))} className="generation-stack" tabIndex={0} role="button" aria-label={`查看堆叠 ${group.name}`} style={{left:origin.x,top:origin.y}}
-            onClick={event => { if ((event.target as Element).closest('button')) return; event.stopPropagation(); if (!stackMoved.current) setViewStackId(group.id); stackMoved.current = false }}
-            onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); setViewStackId(group.id) } }}
+            onClick={event => { if ((event.target as Element).closest('button')) return; event.stopPropagation(); if (!stackMoved.current) { clearSelection(); setViewStackId(group.id) } stackMoved.current = false }}
+            onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); clearSelection(); setViewStackId(group.id) } }}
             onPointerDown={event => {
               if (event.button !== 0 || (event.target as Element).closest('button')) return
               event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId)
@@ -760,10 +769,10 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
           const members = (group.card_ids || []).filter(id => cards.some(card => card.id === id))
           const positions = members.map(point)
           const origin = { x: positions.length ? Math.min(...positions.map(pos => pos.x)) - 16 : 0,
-            y: positions.length ? Math.min(...positions.map(pos => pos.y)) - 96 : 0 }
+            y: positions.length ? Math.min(...positions.map(pos => pos.y)) - 48 : 0 }
           const width = group.collapsed ? 300 : Math.max(400, ...members.map(id => point(id).x + (layout.view.sizes[id]?.width || 400) - origin.x + 16))
           const height = group.collapsed ? 110 : Math.max(140, ...members.map(id => point(id).y + (layout.view.sizes[id]?.height || 350) - origin.y + 16))
-          return <section key={group.id} data-group-id={group.id} className="generation-group" onPointerDown={event => {
+          return <section key={group.id} data-group-id={group.id} className="generation-group" data-selected={selectedGroupId === group.id} onPointerDown={event => {
             if (!event.currentTarget.contains(event.target as Node)) return
             if (event.button !== 0 || (event.target as Element).closest('button, input, select, [role="combobox"], [data-card-id]')) return
             const modifier = navigator.platform.includes('Mac') ? event.metaKey : event.ctrlKey
@@ -775,17 +784,39 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
             if (!current || current.pointer !== event.pointerId) return
             event.stopPropagation()
             moveGroupDrag(event.clientX, event.clientY)
-          }} onPointerUp={event => { if (groupDrag.current) { event.stopPropagation(); groupDrag.current = undefined } }} onPointerCancel={cancelGroupDrag} onLostPointerCapture={cancelGroupDrag} style={{ left: origin.x, top: origin.y, width, height }}>
-            <div className="generation-group-header"><CanvasDragHandle contextKey={document.id} label={`分组 ${group.name}`} offset={origin} scale={transform.scale} onMove={next => {
-              const delta = { x: next.x - origin.x, y: next.y - origin.y }
-              layout.setView(previous => ({ ...previous, positions: { ...previous.positions, ...Object.fromEntries(members.map(id => [id,
-                { x: (previous.positions[id]?.x || 0) + delta.x, y: (previous.positions[id]?.y || 0) + delta.y }])) } }))
-            }} /><Input aria-label="分组名称" value={group.name} disabled={readonly} onChange={event => edit({ ...document, groups: groups.map(item => item.id === group.id ? { ...item, name: event.target.value } : item) })} />
-              {group.collapsed && <Button size="small" disabled={readonly} onClick={() => edit({ ...document, groups: groups.map(item => item.id === group.id ? { ...item, collapsed: false } : item) })}>展开组</Button>}
-              <Button size="small" disabled={readonly} onClick={() => edit({ ...document, groups: groups.filter(item => item.id !== group.id) })}>解散组</Button>
-              <Select aria-label={`分组成员 ${group.name}`} mode="multiple" value={members} disabled={readonly} style={{ width: 180 }}
-                options={cards.filter(card => members.includes(card.id) || !groups.some(item => item.card_ids?.includes(card.id))).map(card => ({ value: card.id, label: `${cardTitles[card.type || '']} ${card.id.slice(0, 4)}` }))}
-                onChange={ids => edit({ ...document, groups: groups.map(item => item.id === group.id ? { ...item, card_ids: ids } : item) })} />
+          }} onPointerUp={event => {
+            const current = groupDrag.current
+            if (current) {
+              event.stopPropagation(); groupDrag.current = undefined
+              if (Math.hypot(event.clientX - current.x, event.clientY - current.y) < 6) selectGroup(group.id)
+            }
+          }} onPointerCancel={cancelGroupDrag} onLostPointerCapture={cancelGroupDrag} style={{ left: origin.x, top: origin.y, width, height, '--generation-group-controls-scale': 1 / Math.min(transform.scale, 1) } as CSSProperties}>
+            <div className="generation-group-header">
+              <button type="button" className="generation-group-title" aria-label={`选择编组 ${group.name}`} aria-pressed={selectedGroupId === group.id} onClick={() => selectGroup(group.id)}><GroupOutlined aria-hidden /><span>{group.name}</span></button>
+              {selectedGroupId === group.id && <div className="generation-group-actions" role="toolbar" aria-label={`编组操作 ${group.name}`}>
+                <CanvasDragHandle className="generation-group-move" contextKey={document.id} label={`分组 ${group.name}`} offset={origin} scale={transform.scale} onMove={next => {
+                  const delta = { x: next.x - origin.x, y: next.y - origin.y }
+                  layout.setView(previous => ({ ...previous, positions: { ...previous.positions, ...Object.fromEntries(members.map(id => [id,
+                    { x: (previous.positions[id]?.x || 0) + delta.x, y: (previous.positions[id]?.y || 0) + delta.y }])) } }))
+                }} />
+                <Dropdown trigger={['click']} placement="topLeft" dropdownRender={menu => <div onPointerDown={event => event.stopPropagation()} onPointerUp={event => event.stopPropagation()}>{menu}</div>} menu={{ items: [
+                  { key: 'name', label: '重命名', disabled: readonly },
+                  { key: 'members', label: '管理成员', disabled: readonly },
+                  ...(group.collapsed ? [{ key: 'expand', label: '展开组', disabled: readonly }] : []),
+                  { key: 'remove', label: '解散组', disabled: readonly },
+                ], onClick: ({ key }) => {
+                  if (key === 'remove') { edit({ ...document, groups: groups.filter(item => item.id !== group.id) }); clearSelection() }
+                  else if (key === 'expand') edit({ ...document, groups: groups.map(item => item.id === group.id ? { ...item, collapsed: false } : item) })
+                  else setGroupPanel(key as 'name' | 'members')
+                } }}><Button aria-label="管理编组" title="管理编组" className="wb-icon-action" icon={<MoreOutlined />} /></Dropdown>
+                {groupPanel && <div className="generation-group-management">
+                  {groupPanel === 'name' ? <Input autoFocus aria-label="分组名称" value={group.name} disabled={readonly} onChange={event => edit({ ...document, groups: groups.map(item => item.id === group.id ? { ...item, name: event.target.value } : item) })} />
+                    : <Select aria-label={`分组成员 ${group.name}`} mode="multiple" value={members} disabled={readonly}
+                      options={cards.filter(card => members.includes(card.id) || !groups.some(item => item.card_ids?.includes(card.id))).map(card => ({ value: card.id, label: `${cardTitles[card.type || '']} ${card.id.slice(0, 4)}` }))}
+                      onChange={ids => edit({ ...document, groups: groups.map(item => item.id === group.id ? { ...item, card_ids: ids } : item) })} />}
+                  <WorkbenchIconButton label="完成编组管理" icon={<CloseOutlined />} onClick={event => { setGroupPanel(undefined); event.currentTarget.closest('.generation-group-actions')?.querySelector<HTMLButtonElement>('button[aria-label="管理编组"]')?.focus() }} />
+                </div>}
+              </div>}
             </div>
             {group.collapsed && <span>{members.length} 张独立卡片 · 无集合输出</span>}
           </section>

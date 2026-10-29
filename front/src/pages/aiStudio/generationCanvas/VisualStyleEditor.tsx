@@ -13,10 +13,14 @@ export function VisualStyleEditor({card:raw,document,savedRevision,modelOutputs,
   const { cardDefinitions } = useGraphRules()
   const card=raw as VisualStyleCard,fields=card.fields||{}
   const resolved=useCardCandidates(document.project_id,document.id,card.id,savedRevision,modelOutputs,false)
-  return <><VisualPresetPicker label="风格" presets={stylePresets} disabled={disabled} onApply={preset=>onChange({...card,fields:applyPreset(fields,preset)})}/>
+  return <><VisualPresetPicker label="风格" presets={stylePresets} currentName={fields.direction?.text} disabled={disabled} onApply={preset=>onChange({...card,fields:applyPreset(fields,preset)})}>
+      <section className="canvas-effect-key-settings" aria-label="关键设置"><h3>关键设置</h3>{(["direction","colors"] as const).map(key=><DesignFieldEditor compact key={key} label={styleLabels[key]} value={fields[key]} onChange={value=>onChange({...card,fields:{...fields,[key]:value}})}/>)}</section>
+    <details className="canvas-effect-professional"><summary>专业字段与来源</summary>
     <section aria-label="已选风格摘要"><CanvasTextPreview text={Object.values(fields).map(value=>value.text).filter(Boolean).join(' · ')||'尚未填写风格设计'} label="风格摘要"/></section>
-    {Object.entries(styleLabels).map(([key,label])=><DesignFieldEditor key={key} label={label} value={fields[key as keyof typeof fields]} onChange={value=>onChange({...card,fields:{...fields,[key]:value}})}/>)}
+    {Object.entries(styleLabels).filter(([key])=>key!=='direction'&&key!=='colors').map(([key,label])=><DesignFieldEditor key={key} label={label} value={fields[key as keyof typeof fields]} onChange={value=>onChange({...card,fields:{...fields,[key]:value}})}/>)}
     <DesignMediaExamples fieldOptions={cardDefinitions[card.type!].fields.map(field => ({value:field.id,label:field.label}))} ports={['image_example','video_example']} examples={card.examples||[]} candidates={resolved.candidates} disabled={disabled} onChange={examples=>onChange({...card,examples})}/>
     <section aria-label="已保存风格输出">{resolved.outputs.map(item=><CanvasTextPreview key={item.source.card_id} text={item.text||''} label="完整风格设计"/>)}</section>
+    </details>
+    </VisualPresetPicker>
   </>
 }
