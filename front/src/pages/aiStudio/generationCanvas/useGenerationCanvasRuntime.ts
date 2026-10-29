@@ -4,6 +4,9 @@ import type { CanvasNodeRead, CanvasPrecheck, CanvasRunSubmit, CanvasRuntimeEven
 import { connectEventStream } from '../../../services/eventStream'
 import type { StreamConnection } from '../../../services/eventStream'
 
+/** 画布各阅读入口使用同一可读运行状态，不向用户暴露传输枚举。 */
+export const canvasNodeStatusLabels: Record<string, string> = { waiting: '等待上游', queued: '排队中', running: '运行中', succeeded: '已完成', failed: '失败 · 未完成', cancelled: '已取消 · 未完成', blocked: '已阻止 · 未完成' }
+
 export const activeNode = (node?: CanvasNodeRead) => !!node && ['waiting', 'queued', 'running'].includes(node.status)
 const empty = (): CanvasSnapshot => ({ cursor: 0, runs: [], current_outputs: {} })
 const describe = (reason: unknown) => reason instanceof ApiError && reason.body?.data?.code

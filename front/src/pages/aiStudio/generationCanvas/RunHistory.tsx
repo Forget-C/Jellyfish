@@ -5,7 +5,7 @@ import type { CanvasNodeRead, CanvasRunRead } from '../../../services/generated'
 import { WorkbenchDetails } from '../directing/ui/WorkbenchDetails'
 import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 import { MediaPreview } from './MediaContentEditor'
-import { activeNode } from './useGenerationCanvasRuntime'
+import { activeNode, canvasNodeStatusLabels } from './useGenerationCanvasRuntime'
 
 /** Canvas-level records remain accessible even after the editable source card is removed. */
 export function RunHistory({ runs, targetRun, targetNode, disabled, onSave, onCancel, cancelling }: {
@@ -48,7 +48,7 @@ export function RunHistory({ runs, targetRun, targetNode, disabled, onSave, onCa
         <Button disabled={disabled || run.lifecycle !== 'active' || cancelling.has(run.id) || run.nodes.filter(activeNode).every(node => node.stage === 'cancelling')} onClick={() => void onCancel(run.id)}>取消本轮运行</Button>
         {run.nodes.map(node => <section key={node.id} data-history-node={node.id} tabIndex={-1} aria-label={`运行节点 ${node.id}`}>
           <strong>卡片 {node.card_id}</strong>
-          <p role="status">{node.stage === 'cancelling' ? '取消中，等待任务终态' : ({ waiting: '等待上游', queued: '排队中', running: '运行中', succeeded: '已完成', failed: '失败 · 未完成', cancelled: '已取消 · 未完成', blocked: '已阻止 · 未完成' } as Record<string, string>)[node.status] || node.status}</p>
+          <p role="status">{node.stage === 'cancelling' ? '取消中，等待任务终态' : canvasNodeStatusLabels[node.status] || node.status}</p>
           <Button disabled={disabled || !activeNode(node) || node.stage === 'cancelling' || cancelling.has(node.id)} onClick={() => void onCancel(run.id, node.id)}>取消此节点</Button>
           <details><summary>本次实际输入与模型参数</summary>
             <section aria-label="历史实际输入"><CanvasTextPreview text={node.basis?.input?.text || ''} label="历史输入" /></section>
