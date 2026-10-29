@@ -52,3 +52,12 @@
 - 统一入口：`PLAYWRIGHT_CHANNEL=chrome node front/tests/run-browser.mjs generation-canvas-journey --output /private/tmp/canvas-b48-official-journey`；其他直接脚本、统一批次results和日志目录见上文。`/private/tmp/canvas-b48-final/results.json`为五项最终定向批次，`canvas-b48-remaining/results.json`为九项其余覆盖；重复运行按唯一行为计，不用数字替代逐项判断。
 - Node24 `pnpm --dir front run typecheck`、变更TSX定向ESLint、`git diff --check`通过。主代理在82f61422执行的workbench六项（`/private/tmp/canvas-b-workbench`）及单元全绿可复用：本票只改生成画布局部编辑容器／模型展示，公共工作台及画布基元未改。全量lint仍有既有Graph/useCardCandidates两条hook告警，不记录为lint通过。
 - 公开接口和后端未改，不机械再生OpenAPI或执行无关Pylint。01–42与历史验收46个保护文件SHA256核对不变。真实供应商质量、MySQL专属环境与未配置的真实外部对象存储不在此次受控验收结论内。
+
+## 集成后统一审查修复
+
+基于 `18039faa` 定向处理规范轴两项 P3；规格轴原结论为 0 项，原始发现与上述验收证据均保留。
+
+- 固定预设操作区改用现有 `WorkbenchDialogActions`：次动作在左、主动作在右，沿共享窄屏规则达到至少 36px；局部 CSS 仅避免宿主重复分隔线与内边距，没有改共享工作台尺寸。真实页面先失败于 390px 的“暂不应用”高度 32px，再通过两个动作高度至少 36px 的断言。修复前后 `narrow-fixed-actions.png` 均实际查看，操作条没有覆盖正文或横向溢出。
+- 摄影卡摘要直接复用 `PhotographyEditor` 已有 `shotSizeLabels`，移除六项重复映射；未新建抽象模块或改变结构化字段、采用与输出协议。
+- 新证据目录 `/private/tmp/canvas-b-review-fix`：`red` 保存 32px 复现；`green` 的正式 `generation-canvas-visual-presets` 通过（14.7s），保留原触摸应用、Tab／Shift+Tab 焦点循环、只读触摸不写入、切换／关闭／Escape 不留旧动作及三视口断言；`photography` 的正式 `generation-canvas-photography-card` 通过（7.1s），摄影默认／选中／窄屏与编辑回存维持。实际查看修复后的窄屏固定动作图和摄影默认区域图。
+- Node24 typecheck、三处改动 TSX 定向 ESLint、`git diff --check` 通过。提交前同步集成分支已是最新；46个受保护的历史票据／旧验收文件 SHA256 未变。未修改规格、01–42 或旧验收；本段是本次新增48验收的追加说明。既有全量 lint 两条 hooks 告警仍沿原记录，不改其代码，也不称全量 lint 通过。

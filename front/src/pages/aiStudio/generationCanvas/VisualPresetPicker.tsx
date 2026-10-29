@@ -1,6 +1,7 @@
 import { useState, useId, useContext, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { CanvasEditorFooter } from './CanvasCardEditor'
+import { WorkbenchDialogActions } from '../directing/ui/WorkbenchModal'
 import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
 import type { VisualPreset } from './visualPresets'
 import './visualPresets.css'
@@ -63,7 +64,7 @@ export function VisualPresetPicker({label,presets,disabled,onApply,children,curr
   const [selected,setSelected]=useState(presets[0]),[compare,setCompare]=useState<VisualPreset>(),[pending,setPending]=useState(false)
   const footer=useContext(CanvasEditorFooter)
   const reset=()=>{setSelected(presets[0]);setCompare(undefined);setPending(false)}
-  const actions=<div className="canvas-effect-apply"><WorkbenchButton variant="quiet" onClick={reset}>暂不应用</WorkbenchButton><WorkbenchButton variant="primary" disabled={disabled} onClick={()=>{onApply(selected);setPending(false)}}>应用到当前卡片</WorkbenchButton></div>
+  const actions=<WorkbenchDialogActions className="canvas-effect-apply" secondary={<WorkbenchButton variant="quiet" onClick={reset}>暂不应用</WorkbenchButton>}><WorkbenchButton variant="primary" disabled={disabled} onClick={()=>{onApply(selected);setPending(false)}}>应用到当前卡片</WorkbenchButton></WorkbenchDialogActions>
   return <section className="canvas-effect-editor" aria-label={label+'效果选择'}>
     <div className="canvas-effect-preview">
       <div className="canvas-effect-heading"><span>{pending?'待应用方案':'方案示意'}</span><h3>{selected.name}</h3><p className="canvas-effect-caption">当前设计：{currentName||'尚未填写'}</p></div>

@@ -89,6 +89,11 @@ try {
     if(width===390){
       const bounds=await detail.getByRole('button',{name:'应用到当前卡片',exact:true}).boundingBox()
       const viewport=await detail.locator('.wb-details-body').boundingBox()
+      await detail.screenshot({path:join(output,'narrow-fixed-actions.png'),animations:'disabled'})
+      for (const name of ['暂不应用','应用到当前卡片']) {
+        const action=await detail.getByRole('button',{name,exact:true}).boundingBox()
+        assert.ok(action.height>=36,`${name} narrow fixed action must be at least 36px, got ${action.height}`)
+      }
       assert.ok(bounds.y>=viewport.y+viewport.height&&bounds.y+bounds.height<=844,'preset apply stays in the fixed footer outside scrolling content')
       await detail.getByRole('button',{name:'应用到当前卡片',exact:true}).focus()
       assert.equal(await detail.getByRole('button',{name:'应用到当前卡片',exact:true}).evaluate(element=>element===document.activeElement),true,'footer action participates in the existing dialog focus order')
