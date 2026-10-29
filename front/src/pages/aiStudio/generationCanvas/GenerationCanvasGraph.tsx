@@ -60,6 +60,9 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
   }
   const inputLabel = (card: GenerationCard, port: string) => cardDefinitions[card.type || '']?.inputs.find(item => item.id === port)?.label || portLabels[port]
   const [displayFilter, setDisplayFilter] = useState<CanvasDisplayFilter>({ group: '', modality: '', problems: false })
+  const [multiSelectMode, setMultiSelectMode] = useState(false)
+  const groupDrag = useRef<{ pointer: number; x: number; y: number; positions: Record<string, { x: number; y: number }> }>()
+  const retainedPositions = useRef<Record<string, { x: number; y: number }>>({})
   const [selected, setSelected] = useState<string[]>([])
   const [detailAllowPan, setDetailAllowPan] = useState(true)
   const [expandRequest, setExpandRequest] = useState<{id:string;serial:number}>()
@@ -90,9 +93,9 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
   const blankPointer = useRef(false)
   const panGesture = useRef<{ surface: HTMLDivElement; pointer: number; x: number; y: number; left: number; top: number }>()
   const blankPress = useRef<{ x: number; y: number }>()
-  const clearSelection = useCallback(() => { setSelected([]); setSelectedEdgeId(undefined); setDetailId(undefined) }, [])
+  const clearSelection = useCallback(() => { setMultiSelectMode(false); setSelected([]); setSelectedEdgeId(undefined); setDetailId(undefined) }, [])
   const [edgeActionPoint, setEdgeActionPoint] = useState<{ x: number; y: number }>()
-  const selectEdge = (id?: string, position?: { x: number; y: number }) => { setSelected([]); setDetailId(undefined); setSelectedEdgeId(id); setEdgeActionPoint(position) }
+  const selectEdge = (id?: string, position?: { x: number; y: number }) => { setMultiSelectMode(false); setSelected([]); setDetailId(undefined); setSelectedEdgeId(id); setEdgeActionPoint(position) }
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       const target = event.target as Element
@@ -167,10 +170,42 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
   const groupIdentity = groups.map(group => `${group.id}:${group.collapsed}`).join('|')
   // 折叠成员在新浏览器没有本地测量；保留几何占位，不能让整个布局永远等待隐藏 DOM。
   const layoutMeasurements = useMemo(() => ({ ...Object.fromEntries([...hidden].map(id => [id, { width: 400, height: 350 }])), ...measured }), [measured, hidden])
+  // 整理把编组当一个布局单元，成员仅平移，避免公共网格排布打散组内位置。
+  const arrangeGroups: GraphArrange = (items, sizes, width, anchorId, retained) => {
+    if (retained || !groups.length) return arrange(items, sizes, width, anchorId, retained)
+    const owned = new Set(groups.flatMap(group => group.card_ids || []))
+    const units = [...groups.map(group => group.card_ids || []), ...items.filter(item => !owned.has(item.id)).map(item => [item.id])]
+    const positions: Record<string, { x: number; y: number }> = {}
+    let row = 0
+    for (const members of units) {
+      const left = Math.min(...members.map(id => retainedPositions.current[id]?.x || 0))
+      const top = Math.min(...members.map(id => retainedPositions.current[id]?.y || 0))
+      for (const id of members) {
+        const origin = retainedPositions.current[id] || { x: 0, y: 0 }
+        positions[id] = { x: 200 + origin.x - left, y: row + origin.y - top }
+      }
+      row += Math.max(0, ...members.map(id => positions[id].y + (sizes[id]?.height || 350) - row)) + 140
+    }
+    return positions
+  }
   const nodes = useMemo(() => cards.map(card => ({ id: card.id })), [cards])
   const layout = useGraphLayout({ storageKey: `jellyfish:generation-layout:${document.project_id}:${document.id}`, viewId: 'canvas',
-    initialTop: window.innerWidth > 700 ? 180 : 300, initialLeft: window.innerWidth > 700 ? 200 : 80, anchorId: cards[0]?.id || '', validIds: [...cards.map(card => card.id), ...groups.map(group => group.id)], arrange,
+    initialTop: window.innerWidth > 700 ? 180 : 300, initialLeft: window.innerWidth > 700 ? 200 : 80, anchorId: cards[0]?.id || '', validIds: [...cards.map(card => card.id), ...groups.map(group => group.id)], arrange: arrangeGroups,
     onStorageError: setStorageError }, nodes, layoutMeasurements, container.current?.clientWidth || 1200)
+  const cancelGroupDrag = useCallback(() => {
+    const current = groupDrag.current
+    if (!current) return
+    layout.setView(previous => ({ ...previous, positions: { ...previous.positions, ...current.positions } }))
+    groupDrag.current = undefined
+  }, [layout])
+  useEffect(() => {
+    const cancel = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && groupDrag.current) { event.preventDefault(); event.stopPropagation(); cancelGroupDrag() }
+    }
+    window.addEventListener('keydown', cancel, true); window.addEventListener('blur', cancelGroupDrag)
+    return () => { window.removeEventListener('keydown', cancel, true); window.removeEventListener('blur', cancelGroupDrag) }
+  }, [cancelGroupDrag])
+  retainedPositions.current = layout.view.positions
   const connectionLayout = useConnectionSides(`jellyfish:generation-connection-sides:${document.project_id}:${document.id}`, edges.map(edge => edge.id), Object.fromEntries(edges.map(edge => [edge.id, defaultSides(layout.view.positions[edge.source_card] || { x: 0, y: 0 }, layout.view.positions[edge.target_card] || { x: 0, y: 0 })])))
   const creationView = useRef<{ cardId: string; transform: typeof layout.view.transform }>()
   useLayoutEffect(() => {
@@ -423,13 +458,16 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
   const finishSelection = (event: PointerEvent<HTMLDivElement>) => {
     const start = selectionStart.current
     if (!start) return
+    if (Math.hypot(event.clientX - start.x, event.clientY - start.y) <= 6) {
+      clearSelection(); selectionStart.current = undefined; setSelectionBox(undefined); return
+    }
     const left = Math.min(start.x, event.clientX), right = Math.max(start.x, event.clientX)
     const top = Math.min(start.y, event.clientY), bottom = Math.max(start.y, event.clientY)
     const ids = [...event.currentTarget.querySelectorAll<HTMLElement>('[data-card-id]')].filter(card => {
       const box = card.getBoundingClientRect()
       return box.left < right && box.right > left && box.top < bottom && box.bottom > top
     }).map(card => card.dataset.cardId!)
-    setSelected(ids); selectionStart.current = undefined; setSelectionBox(undefined)
+    setSelected(ids); setDetailId(undefined); setSelectedEdgeId(undefined); selectionStart.current = undefined; setSelectionBox(undefined)
   }
   const point = (id: string) => layout.view.positions[id] || { x: 0, y: 0 }
   /** 显式适应全部按实际可见卡片及悬浮导航留白计算，不改保存或生成依据。 */
@@ -487,7 +525,14 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
   } }}><WorkbenchIconButton label="添加模型来源" icon={<PlusOutlined />} disabled={readonly} /></Dropdown>
   const sourceTargetCard = cards.find(card => card.id === sourceTarget)
   const uploadSourceCard = cards.find(card => card.id === uploadSource) as MediaCard | undefined
-  return <div className="generation-graph" ref={container}>
+  return <div className="generation-graph" ref={container} onPointerDownCapture={event => {
+    if (selected.length < 2 && !multiSelectMode) return
+    const target = event.target as Element
+    if (!event.currentTarget.contains(target)) return
+    const modifier = navigator.platform.includes('Mac') ? event.metaKey : event.ctrlKey
+    if (target.closest('.generation-selection-actions, .generation-browse') || modifier || multiSelectMode && target.closest('[data-card-id]')) return
+    clearSelection()
+  }}>
     <Modal zIndex={1200} title="选择画布来源" open={!!sourceTargetCard} onCancel={() => setSourceTarget(undefined)} footer={null}>
       <p>选择只建立候选，实际使用仍需明确采用。</p>
       {sourceTargetCard && cards.flatMap(source => compatibleOptions(source.id, sourceTargetCard.id).map(option => <Button key={`${source.id}:${option.source_port}:${option.target_port}`} disabled={readonly} onClick={() => {
@@ -534,12 +579,19 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
       <Button disabled={readonly} icon={<ScissorOutlined />} aria-label="删除此候选连接" onClick={() => removeEdge(inspectedEdge)}>剪断连接</Button>
       <Button variant="quiet" onClick={() => setSelectedEdgeId(undefined)}>关闭连接详情</Button>
     </section>}
-    {selected.length > 0 && <div className="generation-selection-actions" aria-label="所选卡片操作">      <Button disabled={readonly} onClick={() => {
-        const members = selected.filter(id => !groups.some(group => group.card_ids?.includes(id)))
-        if (!members.length) { setReason('所选卡片已经属于分组'); return }
-        edit({ ...document, groups: [...groups, { id: crypto.randomUUID(), name: '新分组', card_ids: members, collapsed: false }] }); setSelected([])
-      }}>将所选卡片分组</Button>
-</div>}
+    {(selected.length > 1 || multiSelectMode) && <div className="generation-selection-actions" role="toolbar" aria-label="所选卡片操作" style={(() => {
+      const chosen = selected.map(id => ({ point: point(id), size: measured[id] || { width: 400, height: 200 } }))
+      const left = (chosen.length ? Math.min(...chosen.map(item => item.point.x)) : 0) * transform.scale + transform.x
+      const top = (chosen.length ? Math.min(...chosen.map(item => item.point.y)) : 0) * transform.scale + transform.y - 16
+      return { left: Math.max(12, Math.min(left, width - 300)), top: Math.max(160, top), transform: 'translateY(-100%)' }
+    })()}>
+      <span>{selected.length} 张卡片</span>
+      <Button disabled={readonly || selected.length < 2} onClick={() => {
+        if (selected.some(id => groups.some(group => group.card_ids?.includes(id)))) { setReason('请先解除已有编组，再重新选择'); return }
+        edit({ ...document, groups: [...groups, { id: crypto.randomUUID(), name: '新编组', card_ids: selected, collapsed: false }] }); clearSelection()
+      }}>编组</Button>
+      {multiSelectMode && <><Button onClick={() => setMultiSelectMode(false)}>完成选择</Button><Button onClick={clearSelection}>退出多选</Button></>}
+    </div>}
     <div className="canvas-bottom-right generation-bottom-right">
       {(reason || storageError) && <div role="status" className="canvas-status-host">{storageError ? `布局本地保存失败：${storageError}` : reason}</div>}
       {contentHistory}
@@ -563,8 +615,8 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
           return
         }
         if (event.button === 0 && !(event.target as Element).closest('[data-card-id], .generation-group, button, input, select, textarea, .canvas-edge-hit')) blankPress.current = { x: event.clientX, y: event.clientY }
-        if ((selecting || event.shiftKey) && event.button === 0 && event.currentTarget.contains(event.target as Node)
-          && !(event.target as Element).closest('[data-card-id], .generation-group, button, input, select, textarea')) {
+        if (event.button === 0 && event.currentTarget.contains(event.target as Node)
+          && !(event.target as Element).closest('[data-card-id], button, input, select, textarea, .canvas-edge-hit')) {
           event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId)
           selectionStart.current = { x: event.clientX, y: event.clientY }
           const box = event.currentTarget.getBoundingClientRect()
@@ -618,13 +670,25 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
             y: positions.length ? Math.min(...positions.map(pos => pos.y)) - 96 : 0 }
           const width = group.collapsed ? 300 : Math.max(400, ...members.map(id => point(id).x + (layout.view.sizes[id]?.width || 400) - origin.x + 16))
           const height = group.collapsed ? 110 : Math.max(140, ...members.map(id => point(id).y + (layout.view.sizes[id]?.height || 350) - origin.y + 16))
-          return <section key={group.id} data-group-id={group.id} className="generation-group" style={{ left: origin.x, top: origin.y, width, height }}>
+          return <section key={group.id} data-group-id={group.id} className="generation-group" onPointerDown={event => {
+            if (!event.currentTarget.contains(event.target as Node)) return
+            if (event.button !== 0 || (event.target as Element).closest('button, input, select, [role="combobox"], [data-card-id]')) return
+            const modifier = navigator.platform.includes('Mac') ? event.metaKey : event.ctrlKey
+            if (spaceHeld || modifier) return
+            event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId)
+            groupDrag.current = { pointer: event.pointerId, x: event.clientX, y: event.clientY, positions: Object.fromEntries(members.map(id => [id, point(id)])) }
+          }} onPointerMove={event => {
+            const current = groupDrag.current
+            if (!current || current.pointer !== event.pointerId) return
+            event.stopPropagation()
+            layout.setView(previous => ({ ...previous, positions: { ...previous.positions, ...Object.fromEntries(Object.entries(current.positions).map(([id, origin]) => [id, { x: origin.x + (event.clientX - current.x) / transform.scale, y: origin.y + (event.clientY - current.y) / transform.scale }])) } }))
+          }} onPointerUp={event => { if (groupDrag.current) { event.stopPropagation(); groupDrag.current = undefined } }} onPointerCancel={cancelGroupDrag} onLostPointerCapture={cancelGroupDrag} style={{ left: origin.x, top: origin.y, width, height }}>
             <div className="generation-group-header"><CanvasDragHandle contextKey={document.id} label={`分组 ${group.name}`} offset={origin} scale={transform.scale} onMove={next => {
               const delta = { x: next.x - origin.x, y: next.y - origin.y }
               layout.setView(previous => ({ ...previous, positions: { ...previous.positions, ...Object.fromEntries(members.map(id => [id,
                 { x: (previous.positions[id]?.x || 0) + delta.x, y: (previous.positions[id]?.y || 0) + delta.y }])) } }))
             }} /><Input aria-label="分组名称" value={group.name} disabled={readonly} onChange={event => edit({ ...document, groups: groups.map(item => item.id === group.id ? { ...item, name: event.target.value } : item) })} />
-              <Button size="small" disabled={readonly} onClick={() => edit({ ...document, groups: groups.map(item => item.id === group.id ? { ...item, collapsed: !item.collapsed } : item) })}>{group.collapsed ? '展开组' : '折叠组'}</Button>
+              {group.collapsed && <Button size="small" disabled={readonly} onClick={() => edit({ ...document, groups: groups.map(item => item.id === group.id ? { ...item, collapsed: false } : item) })}>展开组</Button>}
               <Button size="small" disabled={readonly} onClick={() => edit({ ...document, groups: groups.filter(item => item.id !== group.id) })}>解散组</Button>
               <Select aria-label={`分组成员 ${group.name}`} mode="multiple" value={members} disabled={readonly} style={{ width: 180 }}
                 options={cards.filter(card => members.includes(card.id) || !groups.some(item => item.card_ids?.includes(card.id))).map(card => ({ value: card.id, label: `${cardTitles[card.type || '']} ${card.id.slice(0, 4)}` }))}
@@ -643,7 +707,8 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
           return <CardShell key={`${document.id}:${card.id}`} id={card.id} type={card.type} name={'name' in card ? card.name : 'title' in card ? card.title : undefined} title={cardTitles[card.type || 'content.text']} contextKey={document.id} point={point(card.id)}
             scale={transform.scale} width={size?.width || 400} height={size?.height} selected={selected.includes(card.id)} readonly={readonly} removeDisabled={runtime?.busyCards.has(card.id)}
             onExpand={trigger => { setDetailAllowPan(false); setDetailTrigger(trigger); setDetailId(card.id); setExpandRequest({id:card.id,serial:Date.now()}) }}
-            onOpen={(trigger, dragged) => { setDetailAllowPan(!dragged); if (accessibleConnection) chooseAccessibleTarget(card.id); else { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.type?.startsWith('direction.') ? undefined : card.id) } }} onSelect={checked => setSelected(previous => checked ? [...previous, card.id] : previous.filter(id => id !== card.id))}
+            onOpen={(trigger, dragged) => { setDetailAllowPan(!dragged); if (accessibleConnection) chooseAccessibleTarget(card.id); else { setMultiSelectMode(false); setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.type?.startsWith('direction.') ? undefined : card.id) } }} onSelect={checked => { setDetailId(undefined); setSelectedEdgeId(undefined); setSelected(previous => checked ? [...new Set([...previous, card.id])] : previous.filter(id => id !== card.id)) }}
+            multiSelectMode={multiSelectMode} onStartMultiSelect={() => { setMultiSelectMode(true); setSelected([card.id]); setDetailId(undefined); setSelectedEdgeId(undefined) }} onDragStart={() => { setMultiSelectMode(false); setSelected([card.id]); setSelectedEdgeId(undefined) }}
             onConnect={trigger => startAccessibleConnection(card.id, 'right', trigger)} onMove={position => { if (!accessibleConnection) layout.move(card.id, position) }} onRemove={() => removeCard(card.id)} connections={geometricPorts(card)}
             footer={<>{isModel && <section aria-label="模型状态摘要">
               <span>{models.find(model => model.id === card.model_id)?.name || '尚未选择模型'} · {canvasNodeStatusLabels[node?.status || ''] || '尚未运行'}</span>
