@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Dropdown, Empty, Modal, Pagination, Space } from 'antd'
-import { PlusOutlined } from '@ant-design/icons'
+import { PictureOutlined, PlusOutlined } from '@ant-design/icons'
 import { WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
 import { ApiError, StudioFilesService } from '../../../services/generated'
 import type { AudioContentCard, FileRead, ImageContentCard, VideoContentCard } from '../../../services/generated'
 import { buildFileDownloadUrl } from '../assets/utils'
+import './imageContentEditor.css'
 
 export type MediaCard = ImageContentCard | VideoContentCard | AudioContentCard
 export type MediaContentEditorProps = {
@@ -34,12 +35,28 @@ export function MediaContentEditor({ card, projectId, onChange, disabled }: Medi
   const [refresh, setRefresh] = useState(0)
   const [releasing, setReleasing] = useState<string>()
   const [uploading, setUploading] = useState(false)
+  const [fileInfo, setFileInfo] = useState<FileRead>()
+  const [readingFile, setReadingFile] = useState(false)
+  const [imageSize, setImageSize] = useState<{ id: string; width: number; height: number }>()
+  const [imageState, setImageState] = useState<{ id: string; state: 'loaded' | 'failed' }>()
   const latest = useRef({ card, onChange })
   latest.current = { card, onChange }
   const operation = useRef(0)
   const libraryRequest = useRef(0)
   const type = card.type?.split('.')[1] || 'image'
   useEffect(() => () => { operation.current++; libraryRequest.current++ }, [projectId, card.id])
+
+  // Read current file identity through the existing API; dimensions come from the loaded image.
+  useEffect(() => {
+    if (type !== 'image' || !card.file_id) return
+    let active = true
+    setReadingFile(true)
+    StudioFilesService.getFileDetailApiV1StudioFilesFileIdGet({ fileId: card.file_id })
+      .then(response => { if (active) setFileInfo(response.data || undefined) })
+      .catch(() => { if (active) setFileInfo(undefined) })
+      .finally(() => { if (active) setReadingFile(false) })
+    return () => { active = false }
+  }, [type, card.file_id])
 
   const upload = async (file: File) => {
     const token = ++operation.current
@@ -75,15 +92,44 @@ export function MediaContentEditor({ card, projectId, onChange, disabled }: Medi
     return () => { requestCounter.current++ }
   }, [library, page, projectId, refresh])
 
+  const actions = <Dropdown trigger={['click']} menu={{ items: [{ key: 'upload', label: card.file_id ? '替换文件' : '上传文件' }, { key: 'library', label: '从项目文件选择' }],
+    onClick: ({ key }) => { if (key === 'upload') input.current?.click(); else { setPage(1); setLibrary(true) } } }} disabled={disabled || uploading}>
+    <WorkbenchIconButton label="添加媒体" icon={<PlusOutlined />} disabled={disabled || uploading} />
+  </Dropdown>
+  const currentInfo = fileInfo?.id === card.file_id ? fileInfo : undefined
+  const currentSize = imageSize?.id === card.file_id ? imageSize : undefined
+  const currentImage = imageState?.id === card.file_id ? imageState?.state : undefined
   return <Space direction="vertical" style={{ width: '100%' }}>
-    {card.origin && <p>来自运行 {card.origin.run_id} · {card.origin.incomplete ? '未完成成果副本' : '完整成果副本'}</p>}
-    {card.file_id ? <MediaPreview fileId={card.file_id} type={type} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚未选择文件" />}
+    {type === 'image' ? <section className="generation-image-content" aria-label="图片内容编辑">
+      <div className="generation-image-preview">
+        {card.file_id ? <>
+          <img alt="图片预览" src={buildFileDownloadUrl(card.file_id)} onLoad={event => {
+            const image = event.currentTarget
+            setImageSize({ id: card.file_id!, width: image.naturalWidth, height: image.naturalHeight })
+            setImageState({ id: card.file_id!, state: 'loaded' })
+          }} onError={() => setImageState({ id: card.file_id!, state: 'failed' })} />
+          {!currentImage && <small role="status">图片加载中</small>}
+          {currentImage === 'failed' && <small role="status">图片暂不可预览，文件仍保留</small>}
+        </> : <div className="generation-image-empty"><PictureOutlined /><strong>添加一张图片</strong><p>上传图片或从项目文件中选择。</p></div>}
+      </div>
+      <div className="generation-image-file-info">
+        <strong title={currentInfo?.name}>{currentInfo?.name || (card.file_id ? readingFile ? '读取文件信息…' : '文件信息不可用' : '尚未选择图片')}</strong>
+        {card.file_id && <dl>
+          <dt>尺寸</dt><dd>{currentSize?.width && currentSize.height ? `${currentSize.width} × ${currentSize.height}` : '未知'}</dd>
+          <dt>类型</dt><dd>图片</dd>
+          <dt>来源</dt><dd>{card.origin ? '运行成果副本' : '项目文件'}</dd>
+        </dl>}
+        {card.origin && <small>来自运行 {card.origin.run_id} · {card.origin.incomplete ? '未完成成果副本' : '完整成果副本'}</small>}
+        <div className="generation-image-actions">{actions}<span>{card.file_id ? '替换图片／选择素材' : '上传图片／选择素材'}</span></div>
+        {disabled && <small>只读，无法上传或替换图片</small>}
+      </div>
+    </section> : <>
+      {card.origin && <p>来自运行 {card.origin.run_id} · {card.origin.incomplete ? '未完成成果副本' : '完整成果副本'}</p>}
+      {card.file_id ? <MediaPreview fileId={card.file_id} type={type} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚未选择文件" />}
+      {actions}
+    </>}
     {error && <Alert type="error" message={error} />}
     {(uploading || card.uploading) && <Alert type="info" message={uploading ? '上传中，暂不发布有效输出' : '上次上传未完成，请重新上传或从项目文件选择'} />}
-    <Dropdown trigger={['click']} menu={{ items: [{ key: 'upload', label: card.file_id ? '替换文件' : '上传文件' }, { key: 'library', label: '从项目文件选择' }],
-      onClick: ({ key }) => { if (key === 'upload') input.current?.click(); else { setPage(1); setLibrary(true) } } }} disabled={disabled || uploading}>
-      <WorkbenchIconButton label="添加媒体" icon={<PlusOutlined />} disabled={disabled || uploading} />
-    </Dropdown>
     <input ref={input} hidden aria-label="上传媒体文件" type="file" accept={`${type}/*`} disabled={disabled}
       onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void upload(file) }} />
     <Modal title="项目文件库" open={library} onCancel={() => setLibrary(false)} footer={null} destroyOnClose>
