@@ -1,7 +1,7 @@
 import { buildFileDownloadUrl } from '../assets/utils'
 import { designSummary } from './designSummary'
 import { ReferenceCardSummary } from './ReferenceCardSummary'
-import { canvasNodeStatusLabels } from './useGenerationCanvasRuntime'
+import { CardStatusSummary } from './CardStatusSummary'
 import { GenerationCanvasBrowse, type CanvasDisplayFilter } from './GenerationCanvasBrowse'
 import { guidanceSummary, type GuidanceCard } from './GuidanceDirectionEditor'
 import { constraintSummary, type ConstraintCard } from './ConstraintDirectionEditor'
@@ -826,7 +826,6 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
           const referenceImage = 'image_binding' in card ? card.image_binding?.file_id : undefined
           const outputs = runtime?.outputs[card.id] || []
           const node = runtime?.nodes[card.id]
-          const stale = outputs.some(output => output.basis_current === false)
           const isModel = 'model_id' in card
           return <CardShell key={`${document.id}:${card.id}`} id={card.id} type={card.type} name={'name' in card ? card.name : 'title' in card ? card.title : undefined} title={cardTitles[card.type || 'content.text']} contextKey={document.id} point={point(card.id)}
             scale={transform.scale} width={size?.width || 400} height={size?.height} selected={selected.includes(card.id)} filterMatch={matched.has(card.id)} readonly={readonly} removeDisabled={runtime?.busyCards.has(card.id)}
@@ -835,14 +834,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
             onOpen={(trigger, dragged) => { setDetailAllowPan(!dragged); if (accessibleConnection) chooseAccessibleTarget(card.id); else { setMultiSelectMode(false); setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.type?.startsWith('direction.') ? undefined : card.id) } }} onSelect={checked => { setDetailId(undefined); setSelectedEdgeId(undefined); setSelected(previous => checked ? [...new Set([...previous, card.id])] : previous.filter(id => id !== card.id)) }}
             multiSelectMode={multiSelectMode} onStartMultiSelect={() => { setMultiSelectMode(true); setSelected([card.id]); setDetailId(undefined); setSelectedEdgeId(undefined) }} onDragStart={() => { setMultiSelectMode(false); setSelected([card.id]); setSelectedEdgeId(undefined) }}
             onConnect={trigger => startAccessibleConnection(card.id, 'right', trigger)} onMove={position => { if (!accessibleConnection) layout.move(card.id, position) }} onRemove={() => removeCard(card.id)} connections={geometricPorts(card)}
-            footer={<>{isModel && <section aria-label="模型状态摘要">
-              <span>{models.find(model => model.id === card.model_id)?.name || '尚未选择模型'} · {canvasNodeStatusLabels[node?.status || ''] || '尚未运行'}</span>
-              {node?.error_message && <p data-problem="true">生成失败：{node.error_message}{outputs.length > 0 ? ' · 保留上次成果' : ''}</p>}
-              {node?.status === 'succeeded' && !node.current_output_updated && <p>配置已变，本次结果未替换正式输出</p>}
-            </section>}{stale && <p data-problem="true">依据已变，旧正式输出仍保留</p>}
-              {'image_binding' in card && <span>{!referenceImage && '缺少主图'}</span>}
-              {'uploading' in card && card.uploading && <span>上传尚未完成</span>}
-            </>}>
+            footer={<CardStatusSummary card={card} node={node} outputs={outputs} readonly={readonly} missingImage={'image_binding' in card && !referenceImage} />}>
 
             {!isModel && <>            {card.type === 'direction.photography' ? <PhotographyCardSummary card={card as PhotographyCard} /> : 'image_binding' in card ? <ReferenceCardSummary card={card} projectId={document.project_id} canvasId={document.id} revision={savedRevision} published={runtime?.outputs} /> : <p className="canvas-card-summary">{['direction.creative_control', 'direction.guidance', 'direction.criterion'].includes(card.type || '') ? guidanceSummary(card as GuidanceCard) : card.type === 'direction.style' ? designSummary([], Object.values((card as VisualStyleCard).fields || {})) || '风格方向、视觉特征、材质与色彩待编辑' : ['direction.space_rule', 'direction.continuity', 'direction.fact'].includes(card.type || '') ? constraintSummary(card as ConstraintCard) : ['direction.dialogue', 'direction.sound'].includes(card.type || '') ? soundSummary(card as SoundCard) : ['direction.narrative', 'direction.beat', 'direction.event', 'direction.shot'].includes(card.type || '') ? narrativeSummary(card as NarrativeCard) : ['direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'].includes(card.type || '') ? spatialSummary(card as SpatialCard) : card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard) : 'title' in card ? `${card.objects?.map(object => object.name).filter(Boolean).join('、') || '未绑定名称'} · ${card.angle || '正面'}` : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '尚未生成' : 'file_id' in card && card.file_id ? '固定媒体' : '未选择媒体'}</p>}
               {'file_id' in card && card.file_id && <MediaPreview fileId={card.file_id} type={card.type?.split('.')[1] || 'image'} />}

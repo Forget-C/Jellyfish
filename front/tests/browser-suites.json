@@ -1,6 +1,7 @@
 {
   "preflight": "preflight.mjs",
   "cases": {
+    "generation-canvas-card-status": { "file": "generationCanvasCardStatus.browser.mjs", "ports": [4573, 8573], "timeoutMs": 120000 },
     "generation-canvas-image-editor": { "file": "generationCanvasImageEditor.browser.mjs", "ports": [4560, 8560], "timeoutMs": 120000 },
     "generation-canvas-visual-b-states": { "file": "generationCanvasVisualBStates.browser.mjs", "ports": [4599, 8599], "timeoutMs": 120000 },
     "generation-canvas-photography-card": { "file": "generationCanvasPhotographyCard.browser.mjs", "ports": [4494, 8494], "timeoutMs": 120000 },
