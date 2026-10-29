@@ -102,3 +102,12 @@ HTTP 首轮真实红例 8 failed／281 passed／28 skipped；迁移后全画布 
 - 标准 `pnpm --dir front run openapi:update` 已由主代理在确认 8000 当前契约后执行，导出／真实 HTTP／提交 schema 一致，440 处仅尾空行生成漂移逐文件核对后恢复，证据 `/private/tmp/canvas34-42-standard-openapi-update.json`。42 未改公开 schema。
 - 隔离 MySQL selection 守卫保留，未配置 `JELLYFISH_TEST_MYSQL_URL`，页面及对应竞争测试未执行；静态迁移不宣称浏览器或 MySQL通过。供应商与存储替身不证明真实生成质量。
 - 42 两个辅助工作树已清理，分支及全部外部红绿证据保留。01–33、旧 layout/interactions acceptance 与实现覆盖记录字节不变；最终审查及主区集成由后续实际记录接续。
+
+### 2026-10-29：最终审查统一修复，待定向复核
+
+- 规范轴原 P2：术语表的画布运行改为当前单模型执行范围，移除已取消的框选运行定义；不改历史 ADR 或票据。
+- 规范轴原 P3：仅提取本地 `moveGroupDrag`，堆叠与编组从手势起始成员位置应用相同位移，保留各自阈值、释放和取消状态，不引入通用拖动框架。
+- 规格轴原 P2：重复连接命中原线时复用统一线选择，退出原卡片选择并收起编辑；新增真实页面断言同时核对零已选卡、零可见编辑器、唯一已选线及整个文档／修订不变。红例 `/private/tmp/canvas-v2-fix-red` 以已选卡 1 失败；绿例 `/private/tmp/canvas-v2-fix-green` **11.3s**。
+- 局部位移收敛后，组织旅程 `/private/tmp/canvas-v2-fix-organization` **6.9s**、堆叠完整旅程 `/private/tmp/canvas-v2-fix-stacks` **8.5s** 通过。已实际查看重复选线、窄屏多选组织与堆叠只读截图，原选择未残留且组织／只读层保持可达。
+- Node24 typecheck、差异检查及 01–33 哈希校验通过；定向 ESLint 只有原 `inspectTarget.cardId/segmentId` hook 警告，未新增告警。应用后端与公开 schema 未变，复用此前 HTTP／Pylint／OpenAPI 证据，不重跑相同状态全量检查。供应商与存储替身及 MySQL 未执行边界保留。
+- 三项已实施修复，等待主区集成及原审查者定向复核；本记录不自行宣称两轴发现清零。

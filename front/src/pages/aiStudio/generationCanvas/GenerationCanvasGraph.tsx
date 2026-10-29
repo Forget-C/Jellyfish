@@ -218,6 +218,14 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
     }
     { setSelected([cardId]); setSelectedEdgeId(undefined); setDetailAllowPan(false); setDetailId(cardId) }
   }
+  /** 始终从手势起始位置平移成员，堆叠与编组共用同一位移语义。 */
+  const moveGroupDrag = (clientX: number, clientY: number) => {
+    const current = groupDrag.current
+    if (!current) return
+    const delta = { x: (clientX - current.x) / transform.scale, y: (clientY - current.y) / transform.scale }
+    layout.setView(previous => ({ ...previous, positions: { ...previous.positions,
+      ...Object.fromEntries(Object.entries(current.positions).map(([id, origin]) => [id, { x: origin.x + delta.x, y: origin.y + delta.y }])) } }))
+  }
   const cancelGroupDrag = useCallback(() => {
     const current = groupDrag.current
     if (!current) return
@@ -364,7 +372,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
   const commitConnection = (option: GenerationEdge, targetSide: ConnectionSide) => {
     if (readonly) { setReason('当前只读，不能新建连接'); cancelConnection(); return }
     const existing = findConnection(latest.current, option)
-    if (existing) { setSelectedEdgeId(existing.id); setReason('该候选连接已存在'); cancelConnection(); return }
+    if (existing) { selectEdge(existing.id); setReason('该候选连接已存在'); cancelConnection(); return }
     const issue = check(option)
     if (issue) { setReason(issue); cancelConnection(); return }
     const edge = { ...option, id: crypto.randomUUID() }
@@ -737,7 +745,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
               if (!current || current.pointer!==event.pointerId) return
               event.stopPropagation()
               if (Math.hypot(event.clientX-current.x,event.clientY-current.y)<6) return
-              layout.setView(previous => ({...previous,positions:{...previous.positions,...Object.fromEntries(Object.entries(current.positions).map(([id,position])=>[id,{x:position.x+(event.clientX-current.x)/transform.scale,y:position.y+(event.clientY-current.y)/transform.scale}]))}}))
+              moveGroupDrag(event.clientX, event.clientY)
             }} onPointerUp={event => {
               const current=groupDrag.current; groupDrag.current=undefined; event.stopPropagation()
               stackMoved.current = !!current && Math.hypot(event.clientX-current.x,event.clientY-current.y)>=6
@@ -766,7 +774,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
             const current = groupDrag.current
             if (!current || current.pointer !== event.pointerId) return
             event.stopPropagation()
-            layout.setView(previous => ({ ...previous, positions: { ...previous.positions, ...Object.fromEntries(Object.entries(current.positions).map(([id, origin]) => [id, { x: origin.x + (event.clientX - current.x) / transform.scale, y: origin.y + (event.clientY - current.y) / transform.scale }])) } }))
+            moveGroupDrag(event.clientX, event.clientY)
           }} onPointerUp={event => { if (groupDrag.current) { event.stopPropagation(); groupDrag.current = undefined } }} onPointerCancel={cancelGroupDrag} onLostPointerCapture={cancelGroupDrag} style={{ left: origin.x, top: origin.y, width, height }}>
             <div className="generation-group-header"><CanvasDragHandle contextKey={document.id} label={`分组 ${group.name}`} offset={origin} scale={transform.scale} onMove={next => {
               const delta = { x: next.x - origin.x, y: next.y - origin.y }
