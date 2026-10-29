@@ -39,7 +39,7 @@ try {
   const poll = async predicate => { for (let i=0;i<80;i++) {const state=await read(); if(predicate(state)) return state;await delay(100)} throw Error('preset save did not arrive') }
   await page.goto(`http://127.0.0.1:4297/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   const detail=page.locator('.wb-details:not([hidden])')
-  const open=async id=>{await page.locator(`[data-card-id="${id}"]`).press('Enter');await detail.waitFor()}
+  const open=async id=>{if(await detail.count()) await detail.getByRole('button',{name:'关闭详情',exact:true}).click();const card=page.locator(`[data-card-id="${id}"]`);await card.press('Enter');if(['style','photo'].includes(id)) await card.getByRole('button',{name:'编辑卡片',exact:true}).click();await detail.waitFor()}
   await open('style')
   await detail.getByRole('button',{name:'浏览风格预设',exact:true}).click()
   let dialog=page.getByRole('dialog',{name:'风格预设',exact:true})

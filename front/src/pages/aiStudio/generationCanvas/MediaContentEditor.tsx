@@ -86,7 +86,7 @@ export function MediaContentEditor({ card, projectId, onChange, disabled }: Medi
     </Dropdown>
     <input ref={input} hidden aria-label="上传媒体文件" type="file" accept={`${type}/*`} disabled={disabled}
       onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void upload(file) }} />
-    <Modal zIndex={1200} title="项目文件库" open={library} onCancel={() => setLibrary(false)} footer={null} destroyOnClose>
+    <Modal title="项目文件库" open={library} onCancel={() => setLibrary(false)} footer={null} destroyOnClose>
       {error && <Alert type="error" message={error} />}
       <Button loading={loading} onClick={() => setRefresh(value => value + 1)}>刷新项目文件</Button>
       {files.filter(file => file.type === type).map(file => <div key={file.id} style={{ marginBottom: 16 }}>

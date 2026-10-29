@@ -7,10 +7,10 @@ import { WorkbenchReadingContext } from '../directing/ui/WorkbenchReadingContext
 import { useWorkbenchDesktop } from '../directing/useWorkbenchDesktop'
 
 /** A single retained editor moves between its card anchor and a modal without remounting fields. */
-export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor, layoutKey, allowPan, onFit, expandRequest, children }: {
+export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor, layoutKey, allowPan, onFit, expandRequest, forceModal = false, children }: {
   title: string; status?: ReactNode; open: boolean; onClose: () => void; trigger?: HTMLElement;
   anchor?: HTMLElement | null; layoutKey: string; allowPan: boolean; onFit: (delta: {x:number;y:number}) => void;
-  expandRequest?: number; children: ReactNode;
+  expandRequest?: number; forceModal?: boolean; children: ReactNode;
 }) {
   const desktop = useWorkbenchDesktop()
   const [expanded, setExpanded] = useState(false)
@@ -18,7 +18,7 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
   const panel = useRef<HTMLElement>(null)
   const close = useRef(onClose); close.current = onClose
   const opener = useRef(trigger); opener.current = trigger
-  const modal = expanded || !desktop
+  const modal = forceModal || expanded || !desktop
   const previousOpen = useRef(false)
   const fit = useRef(onFit); fit.current = onFit
   useEffect(() => { if (expandRequest) setExpanded(true) }, [expandRequest])
@@ -57,10 +57,19 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
     const workbench = document.querySelector<HTMLElement>('.canvas-workbench')
     const prior = workbench?.inert
     if (modal && workbench) { workbench.inert = true; node?.focus() }
+    // Operation dialogs own focus while the retained card editor stays mounted below them.
+    const syncBlocked = () => {
+      if (node) node.inert = [...document.querySelectorAll<HTMLElement>('.ant-modal-wrap, .ant-drawer-content-wrapper')]
+        .some(element => element.getClientRects().length && getComputedStyle(element).visibility !== 'hidden' && getComputedStyle(element).display !== 'none')
+      if (node?.inert) node.querySelectorAll<HTMLMediaElement>('audio, video').forEach(media => media.pause())
+    }
+    syncBlocked()
+    const observer = new MutationObserver(syncBlocked)
+    observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['style', 'class'] })
     const keyboard = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || document.querySelector('.ant-modal-wrap:not([style*="display: none"])')) return
+      if (node?.inert || event.defaultPrevented || document.querySelector('.ant-modal-wrap:not([style*="display: none"])')) return
       if ([...document.querySelectorAll<HTMLElement>('[role="menu"]')].some(menu => menu.getClientRects().length && getComputedStyle(menu).visibility !== 'hidden') || node?.querySelector('[role="combobox"][aria-expanded="true"]')) return
-      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if (expanded) setExpanded(false); else close.current() }
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if (expanded && !forceModal) setExpanded(false); else close.current() }
       if (modal && event.key === 'Tab' && node) {
         const items = [...node.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex="0"], summary, a[href]')].filter(item => item.getClientRects().length)
         const first = items[0], last = items[items.length-1]
@@ -69,15 +78,15 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
       }
     }
     document.addEventListener('keydown', keyboard)
-    return () => { document.removeEventListener('keydown', keyboard); if (modal && workbench) workbench.inert = !!prior; if (node?.contains(document.activeElement)) opener.current?.focus({preventScroll:true}) }
-  }, [visible, modal, expanded])
+    return () => { observer.disconnect(); if (node) node.inert = false; document.removeEventListener('keydown', keyboard); if (modal && workbench) workbench.inert = !!prior; if (node?.contains(document.activeElement)) opener.current?.focus({preventScroll:true}) }
+  }, [visible, modal, expanded, forceModal])
   return createPortal(<>
-    {visible && modal && <div className="generation-editor-mask" onClick={() => expanded ? setExpanded(false) : onClose()} />}
+    {visible && modal && <div className="generation-editor-mask" onClick={() => expanded && !forceModal ? setExpanded(false) : onClose()} />}
     <section ref={panel} hidden={!visible} tabIndex={-1} role={modal ? 'dialog' : 'complementary'} aria-modal={modal || undefined} aria-label={title}
       className="canvas-workbench-dialog wb-details generation-card-editor" data-expanded={modal} style={!modal ? {left:placement.left, top:placement.top, maxHeight:Math.min(360, Math.max(100, window.innerHeight - placement.top - 72))} : undefined}>
       <header className="wb-details-header"><div><h2>{title}</h2>{status && <small role="status">{status}</small>}</div>
-        <WorkbenchIconButton variant="quiet" label={expanded ? '收起详情' : '展开详情'} icon={expanded ? <ShrinkOutlined /> : <ExpandOutlined />} onClick={() => setExpanded(value=>!value)} />
-        <WorkbenchIconButton variant="quiet" label="关闭详情" icon={<CloseOutlined />} onClick={() => expanded ? setExpanded(false) : onClose()} />
+        {!forceModal && <WorkbenchIconButton variant="quiet" label={expanded ? '收起详情' : '展开详情'} icon={expanded ? <ShrinkOutlined /> : <ExpandOutlined />} onClick={() => setExpanded(value=>!value)} />}
+        <WorkbenchIconButton variant="quiet" label="关闭详情" icon={<CloseOutlined />} onClick={() => expanded && !forceModal ? setExpanded(false) : onClose()} />
       </header>
       <div className="wb-details-body"><WorkbenchReadingContext.Provider value>{children}</WorkbenchReadingContext.Provider></div>
     </section>

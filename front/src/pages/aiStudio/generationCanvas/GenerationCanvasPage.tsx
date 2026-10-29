@@ -163,7 +163,7 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
     {editor.recovery && <Alert type="warning" message="发现本地未保存内容；恢复前将核实服务器及未明请求" action={<Space><Button onClick={editor.restore} disabled={!ownership.editable || saving}>恢复本地内容</Button><Button onClick={() => editor.reload()} disabled={!ownership.editable || saving}>使用服务器内容</Button></Space>} />}
     {editor.conflict && <Alert type="warning" message="修订冲突，本地内容已保留。核对后选择处理方式" action={<Space><Button onClick={() => editor.reload(true)}>保留本地并以最新修订保存</Button><Button onClick={() => editor.reload()}>使用服务器内容</Button></Space>} />}
       </WorkbenchModal>
-      <WorkbenchModal zIndex={1200} title="运行预检" afterClose={() => {
+      <WorkbenchModal title="运行预检" afterClose={() => {
         // 预检操作容器解除底层 inert 后，再由详情定位真实编辑片段。
         if (pendingInspect.current) { setInspectTarget(pendingInspect.current); pendingInspect.current = undefined }
       }} open={previewOpen && !!runtime.preview && !editor.recovery && !editor.conflict} onCancel={() => setPreviewOpen(false)} footer={null}>
