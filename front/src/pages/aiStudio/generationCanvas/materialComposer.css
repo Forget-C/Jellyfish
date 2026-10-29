@@ -3,7 +3,7 @@
 .generation-card-editor.wb-details[data-material="true"] .wb-details-body { padding: 0; }
 .generation-card-editor.wb-details[data-material="true"] .wb-details-header { padding: 8px 16px; }
 .generation-material-composer { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 3fr); min-width: 0; }
-.generation-material-basis { min-width: 0; padding: 16px; border-right: 1px solid var(--wb-border); background: var(--wb-inset); }
+.generation-material-basis { max-height: 360px; overflow-y: auto; box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--wb-primary) transparent; min-width: 0; padding: 16px; border-right: 1px solid var(--wb-border); background: var(--wb-inset); }
 .generation-material-basis h3 { font-size: 12px; color: var(--wb-muted); margin: 0 0 16px; font-weight: 500; }
 .generation-material-empty { color: var(--wb-muted); font-size: 12px; line-height: 1.7; }
 .generation-material-source { display: flex; flex-direction: column; gap: 4px; min-width: 0; margin-bottom: 16px; font-size: 12px; }
@@ -15,12 +15,12 @@
 .generation-material-input { padding: 16px; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .generation-material-tools { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 8px; }
 .generation-material-candidates { min-width: 0; flex: 1; font-size: 12px; }
-.generation-material-candidates > summary, .generation-material-reference-tools > summary, .generation-material-results > summary { cursor: pointer; color: var(--wb-muted); font-size: 12px; padding-block: 8px; }
+.generation-material-candidates > summary, .generation-material-reference-tools > summary, .generation-material-results > summary { cursor: pointer; color: var(--wb-muted); font-size: 12px; padding-block: 4px; }
 .generation-material-candidates[open] { flex-basis: 100%; }
 .generation-material-candidates section { min-width: 0; overflow-wrap: anywhere; }
 .generation-material-candidates [aria-label="已保存直接输入"] > div { padding: 8px 0; border-bottom: 1px solid var(--wb-border); }
 .generation-material-prompt { min-width: 0; flex: 1; }
-.generation-material-prompt .generation-prompt-editor { border: 0; border-radius: 0; padding: 8px 0; min-height: 112px; outline-offset: 4px; overflow-wrap: anywhere; }
+.generation-material-prompt .generation-prompt-editor { border: 0; border-radius: 0; padding: 8px 0; min-height: 64px; max-height: 160px; overflow-y: auto; outline-offset: 4px; overflow-wrap: anywhere; }
 .generation-material-footer { display: flex; align-items: flex-end; gap: 8px; margin-top: auto; }
 .generation-material-parameters { display: flex; flex: 1; min-width: 0; flex-wrap: wrap; align-items: center; gap: 8px; }
 .generation-material-parameters > .ant-select { flex: 0 1 90px; min-width: 80px; max-width: 100%; }
@@ -32,7 +32,7 @@
 .generation-material-results { font-size: 12px; min-width: 0; }
 @media (max-width: 700px) {
   .generation-material-composer { grid-template-columns: minmax(0, 1fr); }
-  .generation-material-basis { border-right: 0; border-bottom: 1px solid var(--wb-border); }
+  .generation-material-basis { max-height: 200px; border-right: 0; border-bottom: 1px solid var(--wb-border); }
   .generation-material-basis h3 { margin-bottom: 8px; }
   .generation-material-basis .generation-material-source > img, .generation-material-basis .generation-material-source > video { width: 72px; height: 56px; }
   .generation-material-source { margin-bottom: 8px; display: grid; grid-template-columns: 72px minmax(0, 1fr); column-gap: 8px; }
@@ -41,8 +41,8 @@
   .generation-material-parameters > .ant-select { min-width: 110px; }
 }
 
-.generation-material-reference-strip { display: flex; gap: 4px; flex-direction: column; }
-.generation-material-reference-strip > span { padding: 4px 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; border: 1px solid var(--wb-border); border-radius: var(--wb-radius); background: var(--wb-selected); font-size: 11px; }
+.generation-material-reference-strip { max-height: 56px; overflow-y: auto; flex: none; display: flex; gap: 4px; flex-direction: column; }
+.generation-material-reference-strip > span { flex: none; line-height: 16px; padding: 4px 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; border: 1px solid var(--wb-border); border-radius: var(--wb-radius); background: var(--wb-selected); font-size: 11px; }
 
 .canvas-workbench-dialog .generation-material-submit.wb-action[data-variant="primary"] { width: 40px; height: 40px; min-width: 40px; border-radius: 50%; padding: 0; flex: none; }
 .generation-card-editor.wb-details[data-material="true"] .generation-card-body { padding: 0; }

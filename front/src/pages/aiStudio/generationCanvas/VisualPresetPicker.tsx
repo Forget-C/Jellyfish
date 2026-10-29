@@ -1,4 +1,6 @@
-import { useState, useId, type ReactNode } from 'react'
+import { useState, useId, useContext, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
+import { CanvasEditorFooter } from './CanvasCardEditor'
 import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
 import type { VisualPreset } from './visualPresets'
 import './visualPresets.css'
@@ -59,7 +61,9 @@ function PresetIllustration({ preset }: {preset: VisualPreset}) {
 /** 选择仅为本地预览；应用才写入当前卡片，取消不撤销已自动保存的专业字段。 */
 export function VisualPresetPicker({label,presets,disabled,onApply,children,currentName}:{label:string;presets:VisualPreset[];disabled?:boolean;onApply:(preset:VisualPreset)=>void;children?:ReactNode;currentName?:string}) {
   const [selected,setSelected]=useState(presets[0]),[compare,setCompare]=useState<VisualPreset>(),[pending,setPending]=useState(false)
+  const footer=useContext(CanvasEditorFooter)
   const reset=()=>{setSelected(presets[0]);setCompare(undefined);setPending(false)}
+  const actions=<div className="canvas-effect-apply"><WorkbenchButton variant="quiet" onClick={reset}>暂不应用</WorkbenchButton><WorkbenchButton variant="primary" disabled={disabled} onClick={()=>{onApply(selected);setPending(false)}}>应用到当前卡片</WorkbenchButton></div>
   return <section className="canvas-effect-editor" aria-label={label+'效果选择'}>
     <div className="canvas-effect-preview">
       <div className="canvas-effect-heading"><span>{pending?'待应用方案':'方案示意'}</span><h3>{selected.name}</h3><p className="canvas-effect-caption">当前设计：{currentName||'尚未填写'}</p></div>
@@ -76,7 +80,7 @@ export function VisualPresetPicker({label,presets,disabled,onApply,children,curr
         <button type="button" className="canvas-preset-choice" aria-label={'预览 '+preset.name} aria-pressed={selected.id===preset.id} onClick={()=>{setSelected(preset);setPending(true)}}><PresetIllustration preset={preset}/><span>{preset.name}</span><span aria-hidden="true">{selected.id===preset.id?'✓':''}</span></button>
         <WorkbenchButton variant="quiet" aria-label={'对比 '+preset.name} aria-pressed={compare?.id===preset.id} onClick={()=>setCompare(compare?.id===preset.id?undefined:preset)}>对比</WorkbenchButton>
       </section>)}</div>
-      <div className="canvas-effect-apply"><WorkbenchButton variant="quiet" onClick={reset}>暂不应用</WorkbenchButton><WorkbenchButton variant="primary" disabled={disabled} onClick={()=>{onApply(selected);setPending(false)}}>应用到当前卡片</WorkbenchButton></div>
+      {footer ? createPortal(actions,footer) : actions}
       {children}
     </div>
   </section>

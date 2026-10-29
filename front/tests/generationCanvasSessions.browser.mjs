@@ -1,3 +1,4 @@
+import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn, execFileSync } from 'node:child_process'
@@ -47,7 +48,7 @@ try {
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
   assert.ok(seeded.ok, await seeded.text())
   await page.goto(`http://127.0.0.1:4427/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
-  const open = async id => { await page.locator(`[data-card-id="${id}"]`).press('Enter'); await page.locator('.wb-details:not([hidden])').waitFor() }
+  const open = async id => { await page.locator(`[data-card-id="${id}"]`).press('Enter'); await page.locator('.wb-details:not([hidden])').waitFor(); await openModelInspection(page) }
   await open('m')
   const card = page.locator('.wb-details:not([hidden])'), consumer = card
   const preview = page.getByRole('region', { name: '运行预检', exact: true })

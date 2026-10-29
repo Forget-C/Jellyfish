@@ -1,3 +1,4 @@
+import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { openCanvasManagement, openCardList } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -122,7 +123,7 @@ try {
   const seed = await fetch(`${base}/${downstream.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
   assert.ok(seed.ok, await seed.text())
   await page.goto(`http://127.0.0.1:4271/projects/canvas-project/generation-canvas?canvas=${downstream.id}`)
-  const open = async id => { await page.locator(`[data-card-id="${id}"]`).press('Enter'); await page.locator('.wb-details:not([hidden])').waitFor() }
+  const open = async id => { await page.locator(`[data-card-id="${id}"]`).press('Enter'); await page.locator('.wb-details:not([hidden])').waitFor(); await openModelInspection(page) }
   await open('m')
   const adopted = page.getByRole('region', { name: '已保存直接输入' })
   await adopted.getByText('原已保存来源', { exact: true }).waitFor()
