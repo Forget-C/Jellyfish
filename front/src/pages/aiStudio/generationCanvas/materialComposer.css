@@ -45,7 +45,7 @@
 .generation-material-candidates[open] { position: static; }
 .generation-material-candidates[open] > section { position: relative; padding: 8px 12px; }
 .generation-material-candidates section { min-width: 0; overflow-wrap: anywhere; }
-.generation-material-candidates[open] { position: absolute; bottom: 44px; left: 12px; right: 12px; max-height: 280px; overflow-y: auto; background: var(--wb-surface); border: 1px solid var(--wb-border); border-radius: var(--wb-radius); z-index: 4; padding: 8px; }
+.generation-material-candidates[open] { position: absolute; bottom: 44px; left: 12px; right: 12px; max-height: min(280px, var(--generation-candidate-height, 200px)); overflow-y: auto; background: var(--wb-surface); border: 1px solid var(--wb-border); border-radius: var(--wb-radius); z-index: 4; padding: 8px; }
 .generation-material-candidates[open] > summary { position: sticky; top: 0; background: var(--wb-surface); z-index: 1; }
 .generation-material-candidates [aria-label="已保存直接输入"] > div { padding: 8px 0; border-bottom: 1px solid var(--wb-border); }
 .canvas-workbench-dialog .generation-material-submit.wb-action.ant-btn[data-variant="primary"] { width: 32px; height: 32px; min-width: 32px; border-radius: 50%; padding: 0; flex: none; }

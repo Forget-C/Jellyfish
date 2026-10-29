@@ -65,6 +65,17 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
     else if (activated.current) { activated.current = false; close.current() }
   }, [open, slot?.active, slotId])
   const visible = open && (!slot || slot.active === slotId) && (modal || placement.visible)
+  useLayoutEffect(() => {
+    const node = panel.current
+    const body = node?.querySelector<HTMLElement>('.wb-details-body')
+    if (!visible || !material || !node || !body) return
+    // Candidate management may cover the composer body, never its title or fixed toolbar.
+    const measure = () => node.style.setProperty('--generation-candidate-height', `${Math.max(0, body.getBoundingClientRect().height - 8)}px`)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(body)
+    return () => observer.disconnect()
+  }, [visible, material])
   useEffect(() => {
     if (!visible) panel.current?.querySelectorAll<HTMLMediaElement>('audio, video').forEach(media => media.pause())
   }, [visible])

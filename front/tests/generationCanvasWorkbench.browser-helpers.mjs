@@ -84,7 +84,9 @@ export async function selectCanvasByName(page, name) {
 /** Older behavior journeys explicitly open the now on-demand model management surfaces. */
 export async function openModelInspection(page) {
   const editor = page.locator('.wb-details:visible')
-  for (const label of ['管理候选与采用', '＠ 引用与指令', '运行状态与正式输出']) {
+  const candidates=editor.getByLabel('管理候选与采用',{exact:true})
+  if (await candidates.count() && await candidates.locator('..').getAttribute('open') !== null) await candidates.click()
+  for (const label of ['＠ 引用与指令', '运行状态与正式输出', '管理候选与采用']) {
     const summary = label === '管理候选与采用' ? editor.getByLabel(label,{exact:true}) : editor.locator('summary').filter({ hasText: label }).first()
     if (await summary.count() && await summary.locator('..').getAttribute('open') === null) await summary.click()
   }

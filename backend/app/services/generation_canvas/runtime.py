@@ -9,7 +9,7 @@ from datetime import timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 from fastapi import HTTPException
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.generation_canvas import (
     CanvasCurrentOutput, CanvasEvent, CanvasEventHead, CanvasPreview, CanvasResultSet,
@@ -239,6 +239,8 @@ class CanvasRuntime:
         for card_id, item in prepared['nodes'].items():
             private = item['private']
             private['dependencies'] = item['dependencies']
+            # Private admission order survives timestamp ties and event-log pruning.
+            private['admitted_cursor'] = head.cursor + 1
             node = CanvasRunNode(id=uuid4().hex, run_id=run.id, canvas_id=canvas_id, card_id=card_id,
                 status='waiting', stage='waiting', basis=item['basis'], basis_hash=item['hash'], execution_snapshot=private)
             self.db.add(node)
@@ -334,6 +336,17 @@ class CanvasRuntime:
         canvas = await self.db.get(GenerationCanvas, canvas_id, populate_existing=True)
         runs = list(await self.db.scalars(select(CanvasRun).where(CanvasRun.canvas_id == canvas_id).order_by(CanvasRun.created_at, CanvasRun.id)))
         nodes = list(await self.db.scalars(select(CanvasRunNode).where(CanvasRunNode.canvas_id == canvas_id).execution_options(populate_existing=True)))
+        admission = {node.run_id: node.execution_snapshot['admitted_cursor'] for node in nodes
+                     if node.execution_snapshot and 'admitted_cursor' in node.execution_snapshot}
+        if len(admission) < len(runs):
+            # Legacy runs can recover their order from retained events; fully pruned legacy
+            # history has only the old timestamp/ID fallback and precedes known admissions.
+            legacy_ids = [run.id for run in runs if run.id not in admission]
+            event_run = CanvasEvent.envelope['run_id'].as_string()
+            events = await self.db.execute(select(event_run, func.min(CanvasEvent.cursor)).where(
+                CanvasEvent.canvas_id == canvas_id, event_run.in_(legacy_ids)).group_by(event_run))
+            admission.update(events.all())
+        runs.sort(key=lambda run: (admission.get(run.id, 0), run.created_at, run.id))
         return CanvasSnapshot(cursor=head.cursor, runs=[CanvasRunRead(id=run.id, canvas_id=canvas_id, lifecycle=run.lifecycle,
             nodes=[CanvasNodeRead.model_validate(node) for node in nodes if node.run_id == run.id]) for run in runs],
             current_outputs=await self.current_outputs(canvas))

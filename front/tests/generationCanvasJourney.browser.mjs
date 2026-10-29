@@ -261,7 +261,7 @@ try {
     await plainOpen(model)
     await detail.getByRole('region',{name:'本次创作依据',exact:true}).getByRole('img',{name:'图片预览',exact:true}).waitFor()
     assert.equal(await detail.getByRole('region',{name:'已保存直接输入',exact:true}).isVisible(),false)
-    const submitBounds=await detail.getByRole('button',{name:'预检运行',exact:true}).boundingBox(), editorBody=await detail.locator('.wb-details-body').boundingBox()
+    const submitBounds=await detail.getByRole('button',{name:'预检运行',exact:true}).boundingBox(), editorBody=await detail.boundingBox()
     assert.ok(submitBounds.y>=editorBody.y&&submitBounds.y+submitBounds.height<=editorBody.y+editorBody.height,'multi-source submit stays visible before any scrolling')
     assert.doesNotMatch(await detail.getByRole('region',{name:'本次创作依据',exact:true}).innerText(),new RegExp(beforeVisual.document.cards.find(card=>card.id===person).object_id),'default design summary uses human fields')
     await page.screenshot({path:join(output,`b-canvas-${width}.png`),animations:'disabled'})
