@@ -34,7 +34,7 @@ try {
   page.on('pageerror', error => console.log('PAGE ERROR', error.message))
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '多图与未完成成果' }) })).json()).data
-  const document = { ...canvas.document, cards: [{ id: 'text', type: 'content.text', text: '下方编辑内容' }, { id: 'm', type: 'model.image', model_id: 'canvas-image-model', prompt: { segments: [] }, config: {} }, { id: 'image', type: 'content.image' }, { id: 'ref', type: 'reference.character', title: '参考人物', angle: '正面', objects: [] }], edges: [] }
+  const document = { ...canvas.document, cards: [{ id: 'text', type: 'content.text', text: '下方编辑内容' }, { id: 'm', type: 'model.image', model_id: 'canvas-image-model', prompt: { segments: [] }, config: {} }, { id: 'image', type: 'content.image' }, { id: 'ref', type: 'reference.character', title: '参考人物', angle: '正面', objects: [] }, ...['content.basis','content.object','content.place','content.video','content.audio','reference.place','reference.prop','reference.costume','model.text','model.video'].map((type,index)=>({id:`kind-${index}`,type}))], edges: [] }
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
   assert.ok(seeded.ok, await seeded.text())
   await page.goto(`http://127.0.0.1:4436/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
@@ -55,7 +55,7 @@ try {
   await editor.getByRole('button', {name:'收起详情',exact:true}).click()
   assert.equal(await input.inputValue(), '保留会话及保存内容')
   await page.getByLabel('画布保存状态').getByText('已保存',{exact:true}).waitFor()
-  for (const id of ['image','ref','m','text']) { await page.locator(`[data-card-id="${id}"]`).press('Enter'); await editor.waitFor() }
+  for (const id of ['image','ref','m', ...Array.from({length:10},(_,index)=>`kind-${index}`), 'text']) { await page.locator(`[data-card-id="${id}"]`).press('Enter'); await editor.waitFor() }
   assert.equal(await input.inputValue(), '保留会话及保存内容')
   await page.locator('[data-card-id="image"]').press('Enter')
   await editor.getByRole('button', {name:'添加媒体',exact:true}).click()

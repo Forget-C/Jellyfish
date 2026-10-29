@@ -59,7 +59,7 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
     if (modal && workbench) { workbench.inert = true; node?.focus() }
     const keyboard = (event: KeyboardEvent) => {
       if (event.defaultPrevented || document.querySelector('.ant-modal-wrap:not([style*="display: none"])')) return
-      if (document.querySelector('[role="menu"]') || node?.querySelector('[role="combobox"][aria-expanded="true"]')) return
+      if ([...document.querySelectorAll<HTMLElement>('[role="menu"]')].some(menu => menu.getClientRects().length && getComputedStyle(menu).visibility !== 'hidden') || node?.querySelector('[role="combobox"][aria-expanded="true"]')) return
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if (expanded) setExpanded(false); else close.current() }
       if (modal && event.key === 'Tab' && node) {
         const items = [...node.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex="0"], summary, a[href]')].filter(item => item.getClientRects().length)
@@ -74,7 +74,7 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
   return createPortal(<>
     {visible && modal && <div className="generation-editor-mask" onClick={() => expanded ? setExpanded(false) : onClose()} />}
     <section ref={panel} hidden={!visible} tabIndex={-1} role={modal ? 'dialog' : 'complementary'} aria-modal={modal || undefined} aria-label={title}
-      className="canvas-workbench-dialog wb-details generation-card-editor" data-expanded={modal} style={!modal ? {left:placement.left, top:placement.top} : undefined}>
+      className="canvas-workbench-dialog wb-details generation-card-editor" data-expanded={modal} style={!modal ? {left:placement.left, top:placement.top, maxHeight:Math.min(360, Math.max(100, window.innerHeight - placement.top - 72))} : undefined}>
       <header className="wb-details-header"><div><h2>{title}</h2>{status && <small role="status">{status}</small>}</div>
         <WorkbenchIconButton variant="quiet" label={expanded ? '收起详情' : '展开详情'} icon={expanded ? <ShrinkOutlined /> : <ExpandOutlined />} onClick={() => setExpanded(value=>!value)} />
         <WorkbenchIconButton variant="quiet" label="关闭详情" icon={<CloseOutlined />} onClick={() => expanded ? setExpanded(false) : onClose()} />
