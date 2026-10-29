@@ -12,7 +12,7 @@ import type { SoundCard } from './SoundDirectionEditor'
 import { performanceSummary } from './PerformanceDirectionEditor'
 import type { PerformanceCard } from './PerformanceDirectionEditor'
 import { createPortal } from 'react-dom'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent, ReactNode } from 'react'
 import { AimOutlined, MinusOutlined, PlusOutlined, CloseOutlined } from '@ant-design/icons'
 import { WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
@@ -24,7 +24,7 @@ import { CanvasDragHandle, CanvasEdge, useCanvasViewport } from '../../../compon
 import { useGraphLayout } from '../directing/useGraphLayout'
 import type { GraphArrange, GraphSize } from '../directing/graphLayout'
 import { referenceProtection } from './promptRules'
-import { CardList, cardDragType } from './CardList'
+import { CardList, cardDragType, cardDragEntry } from './CardList'
 import { CardShell } from './CardShell'
 import { MediaPreview } from './MediaContentEditor'
 import { MediaResultsPreview } from './MediaResultsPreview'
@@ -56,6 +56,7 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
   const [displayFilter, setDisplayFilter] = useState<CanvasDisplayFilter>({ group: '', modality: '', problems: false })
   const [selected, setSelected] = useState<string[]>([])
   const [detailId, setDetailId] = useState<string | undefined>()
+  const [newPhotographyEntry, setNewPhotographyEntry] = useState<{ cardId: string; entry: string }>()
   // Retain visited editors by card identity; unvisited cards stay unmounted.
   const [detailSessions, setDetailSessions] = useState<string[]>([])
   useEffect(() => {
@@ -111,6 +112,13 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
   const layout = useGraphLayout({ storageKey: `jellyfish:generation-layout:${document.project_id}:${document.id}`, viewId: 'canvas',
     initialTop: 104, initialLeft: window.innerWidth > 700 ? 200 : 16, anchorId: cards[0]?.id || '', validIds: [...cards.map(card => card.id), ...groups.map(group => group.id)], arrange,
     onStorageError: setStorageError }, nodes, layoutMeasurements, container.current?.clientWidth || 1200)
+  const creationView = useRef<{ cardId: string; transform: typeof layout.view.transform }>()
+  useLayoutEffect(() => {
+    if (!creationView.current || !layout.ready || !measured[creationView.current.cardId]) return
+    const retained = creationView.current.transform
+    creationView.current = undefined
+    layout.setView(previous => ({ ...previous, transform: retained }))
+  }, [layout, measured])
   const transform = layout.view.transform
   const viewport = useCanvasViewport(document.id, transform, update => layout.setView(previous => ({ ...previous,
     transform: typeof update === 'function' ? update(previous.transform) : update })), { x: 2000, y: 1800 })
@@ -163,7 +171,7 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
     edit({ ...next, cards: next.cards?.filter(card => card.id !== id), input_order: order,
       groups: next.groups?.map(group => ({ ...group, card_ids: group.card_ids?.filter(card => card !== id) })) })
   }
-  const add = (type: string, position?: { x: number; y: number }) => {
+  const add = (type: string, position?: { x: number; y: number }, entry?: string) => {
     if (readonly || !catalog.cards.some(card => card.type === type)) return
     const card = (type === 'content.text' || type === 'content.basis') ? { id: crypto.randomUUID(), type, type_version: 1, text: '' }
       : (type === 'content.object' || type === 'content.place') ? { id: crypto.randomUUID(), type, type_version: 1, object_id: null, name: '', category: type === 'content.place' ? 'place' : 'character', text: '', source_locator: '' }
@@ -178,8 +186,31 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
       : type.startsWith('reference.') ? { id: crypto.randomUUID(), type, type_version: 1, title: '', angle: '正面', objects: [], input_bindings: [] }
       : type.startsWith('model.') ? { id: crypto.randomUUID(), type, type_version: 1, model_id: null, prompt: { segments: [] }, config: {} }
       : { id: crypto.randomUUID(), type, type_version: 1, file_id: null, uploading: false }
+    creationView.current = { cardId: card.id, transform: { ...transform } }
     edit({ ...latest.current, cards: [...(latest.current.cards || []), card] })
-    if (position) layout.move(card.id, position)
+    const box = container.current?.getBoundingClientRect()
+    let point = position
+    if (!point && box) {
+      const left = ((box.width > 700 ? 120 : 88) - transform.x) / transform.scale
+      const top = ((box.width > 700 ? 180 : 300) - transform.y) / transform.scale
+      const availableWidth = Math.max(320, (box.width - (box.width > 700 ? 600 : 140)) / transform.scale)
+      const availableHeight = Math.max(250, (box.height - 320) / transform.scale)
+      point = { x: left, y: top }
+      for (let y = top; y < top + availableHeight; y += 40) {
+        let found = false
+        for (let x = left; x < left + availableWidth; x += 40) {
+          if (!cards.some(existing => {
+            const occupied = layout.view.positions[existing.id]
+            const size = measured[existing.id] || { width: 400, height: 350 }
+            return occupied && x < occupied.x + size.width + 16 && x + 400 + 16 > occupied.x && y < occupied.y + size.height + 16 && y + 350 + 16 > occupied.y
+          })) { point = { x, y }; found = true; break }
+        }
+        if (found) break
+      }
+    }
+    if (point) layout.move(card.id, point)
+    setSelected([card.id])
+    if (entry) setNewPhotographyEntry({ cardId: card.id, entry })
     setDetailId(card.id)
   }
   const capability = (card: GenerationCard) => 'model_id' in card && card.model_id ? capabilities[card.model_id] : undefined
@@ -293,7 +324,7 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
   return <div className="generation-graph" ref={container}>
     <GenerationCanvasBrowse value={displayFilter} onChange={setDisplayFilter} />
     {primaryHost ? createPortal(runSelection, primaryHost) : runSelection}
-    <CardList catalog={catalog} readonly={readonly} onAdd={add} />
+    <CardList catalog={catalog} readonly={readonly} onAdd={(type, entry) => add(type, undefined, entry)} />
     <nav className="director-canvas-bottom generation-view-tools" aria-label="画布视图工具">
       <WorkbenchIconButton label="定位所选" variant="quiet" icon={<AimOutlined />} disabled={!selected.length} onClick={() => { const p = point(selected[0]); layout.setView(previous => ({ ...previous, transform: { ...previous.transform, x: (container.current?.clientWidth || 1200) / 2 - p.x * previous.transform.scale, y: (container.current?.clientHeight || 800) / 2 - p.y * previous.transform.scale } })) }} />
       <WorkbenchIconButton label="缩小" variant="quiet" icon={<MinusOutlined />} onClick={() => viewport.zoom(-.1)} />
@@ -323,7 +354,7 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
         if (readonly || !event.dataTransfer.types.includes(cardDragType)) return
         event.preventDefault()
         const box = event.currentTarget.getBoundingClientRect()
-        add(event.dataTransfer.getData(cardDragType), { x: (event.clientX - box.left - transform.x) / transform.scale, y: (event.clientY - box.top - transform.y) / transform.scale })
+        add(event.dataTransfer.getData(cardDragType), { x: (event.clientX - box.left - transform.x) / transform.scale, y: (event.clientY - box.top - transform.y) / transform.scale }, event.dataTransfer.getData(cardDragEntry) || undefined)
       }}
       onPointerDown={event => {
         if ((selecting || event.shiftKey) && event.button === 0 && event.currentTarget.contains(event.target as Node)
@@ -421,7 +452,7 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
             input_order: { ...latest.current.input_order, [copy.id]: Object.fromEntries(Object.entries(document.input_order?.[detailCard.id] || {}).map(([port, ids]) => [port, ids.map(id => edgeIds.get(id)!)])) } })
           setDetailId(copy.id)
         }}>复制为独立摄影方案</Button>}
-        {DetailRenderer && <ConfigProvider componentDisabled={readonly}><fieldset disabled={readonly} className="generation-card-body" data-canvas-details={document.id} data-card-details={detailCard.id}><DetailRenderer savedCard={savedDocument?.cards?.find(card => card.id === detailCard.id)} savedRevision={savedRevision} key={detailCard.id} card={detailCard} document={document} projectId={document.project_id} onChange={updateCard} onAddAngle={output => {
+        {DetailRenderer && <ConfigProvider componentDisabled={readonly}><fieldset disabled={readonly} className="generation-card-body" data-canvas-details={document.id} data-card-details={detailCard.id}><DetailRenderer initialEntry={newPhotographyEntry?.cardId === detailCard.id ? newPhotographyEntry.entry : undefined} savedCard={savedDocument?.cards?.find(card => card.id === detailCard.id)} savedRevision={savedRevision} key={detailCard.id} card={detailCard} document={document} projectId={document.project_id} onChange={updateCard} onAddAngle={output => {
           if (output.payload?.kind !== 'object_reference' || !('category' in output.payload)) return
           const id = crypto.randomUUID(), edgeId = crypto.randomUUID()
           const card = { id, type: `reference.${output.payload.category}`, title: `${output.payload.name} · 另一角度`, angle: '正面', objects: [],
