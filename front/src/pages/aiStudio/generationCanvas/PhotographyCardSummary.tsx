@@ -1,10 +1,8 @@
 import { useId } from 'react'
 import type { DesignField, PhotographyCard, PhotographyFields } from '../../../services/generated'
 import { designSummary } from './designSummary'
-import { photographyRegions } from './PhotographyEditor'
+import { photographyRegions, shotSizeLabels } from './PhotographyEditor'
 import './photographyCard.css'
-
-const framingLabels = { extreme_close_up: '大特写', close_up: '特写', medium: '中景', full: '全景', wide: '远景', extreme_wide: '大远景' } as const
 
 /** 原创光学图解只解释卡片身份，不表示真实器材、生成结果或可采用素材。 */
 function OpticalIllustration() {
@@ -42,7 +40,7 @@ export function PhotographyCardSummary({ card }: { card: PhotographyCard }) {
     const values = Object.keys(photographyRegions[region].fields).map(key => {
       const field = fields[key as keyof PhotographyFields]
       if (!field) return undefined
-      const text = key === 'shot_size' && fields.shot_size?.size ? field.text || framingLabels[fields.shot_size.size] : field.text
+      const text = key === 'shot_size' && fields.shot_size?.size ? field.text || shotSizeLabels[fields.shot_size.size] : field.text
       return { ...field, text: text || '', state: field.state || 'proposal' } as DesignField
     })
     const text = designSummary([], values)
