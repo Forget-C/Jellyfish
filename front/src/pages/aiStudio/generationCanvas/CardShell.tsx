@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Children, useState } from 'react'
 import type { ReactNode } from 'react'
 import { CanvasCard, CanvasDragHandle } from '../../../components/canvas/Canvas'
 import { MoreOutlined } from '@ant-design/icons'
@@ -14,7 +14,7 @@ export function CardShell({ id, title, name, contextKey, point, scale, width, he
   return <article tabIndex={0} onKeyDown={event => {
     if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onOpen(event.currentTarget) }
     if (event.key === 'Escape' && menu) { event.stopPropagation(); setMenu(false); event.currentTarget.querySelector<HTMLButtonElement>('[aria-expanded]')?.focus() }
-  }} data-card-id={id} data-canvas-node={id} data-selected={selected} className="generation-card" style={{ left: point.x, top: point.y, width, height }}>
+  }} data-card-id={id} data-canvas-node={id} data-selected={selected} className="generation-card" style={{ left: point.x, top: point.y, width, minHeight: Math.max(height || 0, 72 + Math.max(Children.count(inputs), Children.count(outputs)) * 44) }}>
     <header><CanvasDragHandle contextKey={contextKey} label={name || title} offset={point} scale={scale} onMove={onMove} />
       <strong title={name || title}>{name || title}</strong>{name && <small>{title}</small>}
       <WorkbenchIconButton label="卡片操作" icon={<MoreOutlined />} variant="quiet" aria-expanded={menu} onClick={() => setMenu(value => !value)} />
@@ -23,7 +23,7 @@ export function CardShell({ id, title, name, contextKey, point, scale, width, he
         <WorkbenchButton variant="danger" disabled={readonly || removeDisabled} onClick={() => { onRemove(); setMenu(false) }}>删除卡片</WorkbenchButton>
       </div>}
     </header>
-    <div className="generation-ports">{inputs}{outputs}</div>
-    <CanvasCard className="generation-card-body" aria-label={`${name || title}详情`} onActivate={onOpen}>{children}</CanvasCard>
+    <div className="generation-ports generation-input-ports">{inputs}</div><div className="generation-ports generation-output-ports">{outputs}</div>
+    <CanvasCard className="generation-card-body" style={{ paddingTop: 20 + Math.max(Children.count(inputs), Children.count(outputs)) * 44 }} aria-label={`${name || title}详情`} onActivate={onOpen}>{children}</CanvasCard>
   </article>
 }

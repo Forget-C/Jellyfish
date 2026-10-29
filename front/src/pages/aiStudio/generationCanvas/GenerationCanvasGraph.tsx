@@ -189,8 +189,20 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
     } else setReason('请拖到接收卡的输入端口')
     setDrag(undefined)
   }
+  // Counts reflect canonical explicit selections, including fixed media associations.
+  const edgeAdoptions = (edge: GenerationEdge) => {
+    const target = cards.find(card => card.id === edge.target_card)
+    if (!target) return 0
+    const matches = (source: { card_id: string; port_id: string } | null | undefined) => source?.card_id === edge.source_card && source.port_id === edge.source_port
+    const bindings = ('input_bindings' in target ? target.input_bindings || [] : []).filter(binding => binding.input_port === edge.target_port && matches(binding.source)).length
+    const mainImage = 'image_binding' in target && edge.target_port === 'image_source' && matches(target.image_binding?.source) ? 1 : 0
+    const examples = 'examples' in target && edge.target_port === `${edge.source_port}_example` ? (target.examples || []).filter(example => matches(example.source)).length : 0
+    return bindings + mainImage + examples
+  }
   const port = (card: GenerationCard, name: string, input: boolean) => {
     const issue = input && drag ? check({ id: 'preview', source_card: drag.card, source_port: drag.port, target_card: card.id, target_port: name }) : undefined
+    const candidates = edges.filter(edge => input ? edge.target_card === card.id && edge.target_port === name : edge.source_card === card.id && edge.source_port === name)
+    const adopted = candidates.reduce((count, edge) => count + edgeAdoptions(edge), 0)
     return <button key={name} type="button" disabled={readonly} data-card={card.id} data-input-port={input ? name : undefined} data-output-port={!input ? name : undefined}
       data-compatible={input && drag ? !issue : undefined} title={issue || `${input ? '输入' : '输出'}：${input ? inputLabel(card, name) : cardDefinitions[card.type || '']?.outputs.find(item => item.id === name)?.label}`} aria-label={`${input ? '输入' : '输出'}端口 ${name}`}
       onPointerDown={!input ? event => {
@@ -200,7 +212,7 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
       } : undefined}
       onPointerMove={!input ? event => { if (drag) setDrag({ ...drag, x: event.clientX, y: event.clientY }) } : undefined}
       onPointerUp={!input ? finishDrag : undefined} onPointerCancel={() => setDrag(undefined)}>
-      {input ? '○' : '●'} {input ? inputLabel(card, name) : cardDefinitions[card.type || '']?.outputs.find(item => item.id === name)?.label}
+      <i aria-hidden="true" /><span>{input ? inputLabel(card, name) : cardDefinitions[card.type || '']?.outputs.find(item => item.id === name)?.label}</span><small>候选 {candidates.length} · 已采用 {adopted}</small>
     </button>
   }
   const references = (card: GenerationCard) => <>
@@ -329,7 +341,11 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
         <svg className="generation-edges" width={12000} height={12000}>
           {edges.filter(edge => !hidden.has(edge.source_card) && !hidden.has(edge.target_card) && !filtered.has(edge.source_card) && !filtered.has(edge.target_card)).map(edge => {
             const from = point(edge.source_card), to = point(edge.target_card), width = layout.view.sizes[edge.source_card]?.width || 400
-            return <CanvasEdge key={edge.id} d={`M ${from.x + width} ${from.y + 80} C ${from.x + width + 80} ${from.y + 80}, ${to.x - 80} ${to.y + 80}, ${to.x} ${to.y + 80}`}
+            const source = cards.find(card => card.id === edge.source_card), target = cards.find(card => card.id === edge.target_card)
+            const sourceY = from.y + 56 + Math.max(0, source ? outputPorts(source).indexOf(edge.source_port) : 0) * 44
+            const targetY = to.y + 56 + Math.max(0, target ? inputPorts(target).indexOf(edge.target_port) : 0) * 44
+            const adopted = edgeAdoptions(edge) > 0
+            return <CanvasEdge key={edge.id} d={`M ${from.x + width} ${sourceY} C ${from.x + width + 80} ${sourceY}, ${to.x - 80} ${targetY}, ${to.x} ${targetY}`} className={adopted ? 'generation-edge-adopted' : 'generation-edge-candidate'} caption={{ x: (from.x + width + to.x) / 2, y: (sourceY + targetY) / 2 - 8, text: adopted ? '已明确选择' : '候选' }}
               label={`${edge.source_card} → ${edge.target_card} ${portLabels[edge.target_port]}`} />
           })}
         </svg>

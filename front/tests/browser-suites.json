@@ -1,6 +1,7 @@
 {
   "preflight": "preflight.mjs",
   "cases": {
+    "generation-canvas-ports": { "file": "generationCanvasPorts.browser.mjs", "ports": [4424, 8424], "timeoutMs": 120000 },
     "generation-canvas-tools-baseline": { "file": "generationCanvasToolsBaseline.browser.mjs", "ports": [4525, 8525], "timeoutMs": 120000 },
     "generation-canvas-tools": { "file": "generationCanvasTools.browser.mjs", "ports": [4425, 8425], "timeoutMs": 120000 },
     "generation-canvas-card-list": { "file": "generationCanvasCardList.browser.mjs", "ports": [4422, 8422], "timeoutMs": 180000 },
