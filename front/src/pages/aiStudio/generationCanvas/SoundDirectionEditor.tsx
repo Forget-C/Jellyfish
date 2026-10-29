@@ -1,3 +1,4 @@
+import { designSummary } from './designSummary'
 import { Alert, Input, InputNumber, Select, Space } from 'antd'
 import type { DialogueCard, SoundArrangementCard, ObjectReferencePayload } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
@@ -67,7 +68,7 @@ export function SoundDirectionEditor({ card: raw, document, savedRevision, model
 }
 
 export function soundSummary(card: SoundCard) {
-  if (card.type === 'direction.dialogue') return `${card.content?.text || '未填写对白'} · 版本 ${card.version || 1}`
+  if (card.type === 'direction.dialogue') return `${designSummary([card.content], Object.values(card)) || '未填写对白'} · 版本 ${card.version || 1}`
   const sound = card as SoundArrangementCard
-  return `${sound.source_description?.text || sound.environment?.text || '未填写声音安排'} · ${{ synchronous: '同期生成意图', postproduction: '待后期', undecided: '待确定' }[sound.production || 'undecided']}`
+  return `${designSummary([sound.source_description, sound.environment], Object.values(card)) || '未填写声音安排'} · ${{ synchronous: '同期生成意图', postproduction: '待后期', undecided: '待确定' }[sound.production || 'undecided']}`
 }

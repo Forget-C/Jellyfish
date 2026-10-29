@@ -1,3 +1,4 @@
+import { designSummary } from './designSummary'
 import { Alert, Input, InputNumber, Select, Space } from 'antd'
 import type { SpatialAnchorCard, BlockingDirectionCard, InFrameActivityCard, EnvironmentActivityCard, ObjectReferencePayload, SpatialReferencePayload, NarrativeReferencePayload } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
@@ -112,9 +113,11 @@ export function SpatialDirectionEditor({ card: raw, document, savedRevision, mod
 }
 
 export function spatialSummary(card: SpatialCard) {
-  if (card.type === 'direction.anchor') { const anchor = card as SpatialAnchorCard; return `${anchor.name || '未命名锚点'} · ${anchor.position?.text || '位置待定'}` }
-  if (card.type === 'direction.blocking') { const blocking = card as BlockingDirectionCard; return `${blocking.name || '未命名调度'} · ${blocking.position?.text || '位置待定'} → ${blocking.path?.text || '路径待定'}` }
-  if (card.type === 'direction.activity') { const activity = card as InFrameActivityCard; return `${activity.task?.text || '持续任务待定'} → ${activity.exit_state?.text || '结束状态待定'}` }
-  const environment = card as EnvironmentActivityCard
-  return `${environment.activity?.text || '活动待定'} · ${environment.empty_space?.text || '留白待定'}`
+  const preferred = card.type === 'direction.anchor' ? [(card as SpatialAnchorCard).position]
+    : card.type === 'direction.blocking' ? [(card as BlockingDirectionCard).position, (card as BlockingDirectionCard).path]
+    : card.type === 'direction.activity' ? [(card as InFrameActivityCard).task, (card as InFrameActivityCard).exit_state]
+    : [(card as EnvironmentActivityCard).activity, (card as EnvironmentActivityCard).empty_space]
+  const summary = designSummary(preferred, Object.values(card))
+  if (summary) return summary
+  return card.type === 'direction.anchor' ? `${card.name || '未命名锚点'} · 位置待定` : card.type === 'direction.blocking' ? `${card.name || '未命名调度'} · 位置待定 → 路径待定` : card.type === 'direction.activity' ? '持续任务待定 → 结束状态待定' : '活动待定 · 留白待定'
 }
