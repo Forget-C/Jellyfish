@@ -33,3 +33,6 @@
 - 会话与乱序回归 `/private/tmp/canvas28-final-sessions` 覆盖多结果索引、隐藏音频暂停与位置保持、保存后失效刷新及延迟旧SSE；运行回归 `/private/tmp/canvas28-runtime` **10.8s passed**，覆盖临时流式内容、正式输出、失败、预检及受控请求。此前手势版本8.8s、最终截图版本9.4s、会话9.9s均通过。
 - 实际查看了桌面、窄屏详情／画布总览、流式临时结果与失效旧成果截图。窄屏截图在视口改变后等待绘制，且断言唯一可见详情，避免抓取响应式切换中间帧。截图／日志均在工作树外上述目录，33负责整体跨票／宽屏视觉收口。
 - Node24 typecheck、前端单元检查、差异检查通过。lint:check未通过，仅报告与ea9706c1相同的三条既有hooks依赖问题（Graph inspectTarget两条、useCardCandidates entity一条），未更改基线或修复无关规则。仅改前端及本票记录，未改公开schema／后端，不需OpenAPI生成；供应商及存储受控替身，不宣称真实生成质量。01–26票据与历史验收保持不变。
+
+- 最终28独立验证：Cards **9.1s**（`/private/tmp/canvas28-release`），Sessions **9.6s**（`/private/tmp/canvas28-final-sessions`）。实际查看最终成果截图并移除卡面重复的依据失效状态，预览组件在详情保留原状态表达。
+- 报告前已合入最新集成分支27（合并 `5302f4ad`），无冲突且保留二级入口、摄影字段定位和创建时transform保护。合后Node24 typecheck、差异及01–26原始字节哈希通过；真实Cards **9.3s**（`/private/tmp/canvas28-with27-cards`）、CardList **11.6s**（`/private/tmp/canvas28-with27-list`）通过。产品变动限定28，27新增行为同时回归，未改旧票记录。
