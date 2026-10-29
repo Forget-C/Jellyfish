@@ -641,3 +641,45 @@ async def test_bound_creative_basis_runs_through_worker_and_publishes_typed_outp
     assert run['nodes'][0]['status'] == 'succeeded'
     outputs = (await runtime.client.get(runtime.url + '/cards/m/outputs')).json()['data']
     assert outputs['outputs'][0]['payload'] == {'kind': 'text', 'text': '门口传来敲门声'}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('legacy', [False, True])
+async def test_snapshot_keeps_admission_order_when_run_timestamps_tie_and_events_are_pruned(runtime, monkeypatch, legacy):
+    """Public snapshots retain accepted order, independently of clock precision or UUID order."""
+    from datetime import datetime
+    from itertools import count
+    from sqlalchemy import delete, select, update
+    from app.models.generation_canvas import CanvasEvent, CanvasRun, CanvasRunNode
+    ids = count(2**128 - 1, -1)
+    monkeypatch.setattr('app.services.generation_canvas.runtime.uuid4', lambda: SimpleNamespace(hex=f'{next(ids):032x}'))
+    class FakeModel:
+        def __init__(self, **_params):
+            pass
+        async def astream(self, _messages):
+            yield SimpleNamespace(content='first result')
+    monkeypatch.setattr('app.task_worker.ChatOpenAI', FakeModel)
+    first, _ = await accept(runtime, 'first-in-same-second')
+    worker = TaskWorker(runtime.sessions)
+    await worker.tick()
+    await asyncio.gather(*worker.jobs.values())
+    worker.text_pool.shutdown(wait=False)
+    second, _ = await accept(runtime, 'second-in-same-second')
+    assert first['run_id'] > second['run_id'], 'UUID order deliberately opposes admission order'
+    # Control the database clock boundary to reproduce second-precision production timestamps.
+    async with runtime.sessions.begin() as db:
+        await db.execute(update(CanvasRun).where(CanvasRun.canvas_id == runtime.canvas_id)
+                         .values(created_at=datetime(2026, 10, 29, 12, 0, 0)))
+        if legacy:
+            for node in await db.scalars(select(CanvasRunNode).where(CanvasRunNode.canvas_id == runtime.canvas_id)):
+                node.execution_snapshot = {key: value for key, value in node.execution_snapshot.items() if key != 'admitted_cursor'}
+    state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+    assert [run['id'] for run in state['runs']] == [first['run_id'], second['run_id']]
+    assert state['runs'][-1]['nodes'][0]['status'] == 'queued'
+    if legacy:
+        return  # Legacy admission order is recoverable only while its events remain.
+    async with runtime.sessions.begin() as db:
+        await db.execute(delete(CanvasEvent).where(CanvasEvent.canvas_id == runtime.canvas_id))
+    recovered = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+    assert [run['id'] for run in recovered['runs']] == [first['run_id'], second['run_id']]
+    assert recovered['current_outputs'] == state['current_outputs']

@@ -69,8 +69,6 @@ try {
   await shell.screenshot({path:join(output,'status-succeeded.png')})
   const formal=(await (await fetch(`${base}/${canvas.id}/runtime`)).json()).data.current_outputs.m
   assert.ok(formal.length)
-  // Isolated SQLite stores run timestamps at second precision; keep the two accepted runs ordered.
-  await delay(1100)
   await fetch(`${api}/test/image-controls`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fail_next:true})})
   await shell.press('Enter')
   await editor.getByRole('button',{name:'预检运行',exact:true}).click()
@@ -98,5 +96,31 @@ try {
   await observer.goto(page.url())
   await observer.locator('[data-card-id="m"]').getByRole('region',{name:'模型状态摘要',exact:true}).getByText('只读',{exact:true}).waitFor()
   await observer.close()
+  // A downstream adopted output becoming stale remains visible and blocks only its consumer.
+  const before=(await (await fetch(`${base}/${canvas.id}`)).json()).data
+  const consumer={id:'consumer',type:'model.image',model_id:'canvas-image-model',prompt:{segments:[{id:'consumer-body',kind:'text',text:'采用当前画面'}]},input_bindings:[{id:'use-produced-image',input_port:'image',source:formal[0].source}]}
+  const edge={id:'produced-reference',source_card:'m',source_port:formal[0].source.port_id,target_card:'consumer',target_port:'image'}
+  const downstream={...before.document,cards:[...before.document.cards,consumer],edges:[...before.document.edges,edge],input_order:{...before.document.input_order,consumer:{image:[edge.id]}}}
+  const attached=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'attach-consumer',expected_revision:before.revision,document:downstream})})
+  assert.ok(attached.ok,await attached.clone().text())
+  const connected=(await (await fetch(`${base}/${canvas.id}`)).json()).data
+  const changed={...connected.document,cards:connected.document.cards.map(card=>card.id==='m'?{...card,prompt:{segments:[{id:'changed',kind:'text',text:'改变上游创作要求'}]}}:card)}
+  const invalidated=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'invalidate-consumer-source',expected_revision:connected.revision,document:changed})})
+  assert.ok(invalidated.ok,await invalidated.text())
+  await page.setViewportSize({width:1440,height:960})
+  await page.reload()
+  await page.locator('[data-card-id="consumer"]').press('Enter')
+  await editor.getByRole('region',{name:'本次创作依据',exact:true}).waitFor()
+  await editor.getByRole('region',{name:'本次创作依据',exact:true}).getByRole('alert').filter({hasText:'依据已变'}).waitFor()
+  await editor.screenshot({path:join(output,'stale-source-editor.png'),animations:'disabled'})
+  await editor.getByRole('button',{name:'预检运行',exact:true}).click()
+  const precheck=page.getByRole('dialog',{name:'运行预检',exact:true})
+  await precheck.waitFor()
+  assert.equal(await precheck.getByRole('button',{name:'确认执行',exact:true}).isEnabled(),false)
+  await precheck.getByText('请修正阻塞问题并重新预检',{exact:true}).waitFor()
+  await precheck.getByRole('button',{name:'Close',exact:true}).hover()
+  await precheck.screenshot({path:join(output,'stale-precheck-dialog.png'),animations:'disabled'})
+  await page.screenshot({path:join(output,'stale-adopted-source.png'),animations:'disabled'})
+  assert.equal((await (await fetch(`${base}/${canvas.id}/runtime`)).json()).data.runs.length,2,'source invalidation does not run either model')
   console.log('PASS compact adopted count, real success/failure/retained output/readonly',output)
 } catch (error) { if (page) await page.screenshot({path:join(output,'failure.png')}); throw error } finally { await cleanup() }
