@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented
+**Completion:** integrated — 已合入 codex-generation-canvas，等待最终双轴审查。
 
 - [x] 文本、图片、视频模型均采用 B 式整合面：桌面参考宽约700px、左约1/4右约3/4，随可用视口调整；左侧依据与右侧输入属于同一编辑区，不拆成两个浮窗，不退回纵向全量候选表单。
 - [x] 左栏只显示实际已采用的来源，按模态提供缩略图／图标、名称、用途、必要角度及短摘要；未采用、无素材、多来源和长名状态清楚。完整描述和来源按需只读查看，不能用固定示例填充依据。
@@ -33,3 +33,5 @@
 - Node24 typecheck与变更组件ESLint通过，`git diff --check`通过；后端及公开协议未改，不再生客户端或机械重跑后端检查。供应商／外部存储使用受控替身，不证明真实供应商质量；01–42未修改。等待集成及最终双轴审查。
 
 - 最新集成tip（含45／46）的无冲突合并后，新旅程 `/private/tmp/canvas-b43-integrated` 与 Node24 typecheck／变更组件ESLint通过；实际重新查看带图片模态图标的默认、展开、窄屏与大屏图。错误摘要改用已有主题化 Alert 后，`/private/tmp/canvas-b43-images-final` 完整失败恢复／多图／独立采用旅程再次通过。窄屏截图在响应式稳定后采集，未再出现视口切换中的截图拼接。
+
+2026-10-29：43–48 已全部合入 `codex-generation-canvas`，48 集成提交 `8da68bb1`；各票独立证据与[组合验收](../visual-b48-acceptance.md)已记录，主区typecheck、差异及历史哈希校验通过。此处 integrated 不预记最终双轴审查通过，01–42及旧验收保持原样。

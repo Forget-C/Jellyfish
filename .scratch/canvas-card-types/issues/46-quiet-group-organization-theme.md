@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented
+**Completion:** integrated — 已合入 codex-generation-canvas，等待最终双轴审查。
 
 - [x] 未选中的编组仅显示低强调实线外框、轻背景及框外图标／名称，成员保持独立卡面；不常驻名称输入、解组按钮、成员多选器或白色拖动柄。
 - [x] 明确选择组后出现紧凑管理动作，重命名、解组、成员加入／移出进入菜单或局部编辑，退出后恢复简洁标题；菜单不遮成员、不抢多选上方菜单，不新增布局／下载动作。
@@ -30,3 +30,5 @@
 - 成员仍独立编辑／移动，空白拖整组、修饰键框选、Space平移、取消、整理撤销及明确归属继续保留。补齐Portal菜单不应冒泡画布手势的边界；stack表面／叠层／操作条改用既有语义token，未改输出或采用。
 - 公开HTTP＋真实页面：Organization、Stacks、Graph、Tools通过；Organization最后运行证据为 `/private/tmp/canvas-b46/org-release`，另有 `/private/tmp/canvas-b46/stack-release`、`graph-final`、`tools-final`。原产品红灯及逐项图片差异见[本票验收记录](/private/tmp/canvas-b46/acceptance.md)。实际查看桌面／390／3830原图、局部放大、B及用户参考；全体跨票图片对照留给48，不以本票代替。
 - Node24 typecheck、差异检查通过；定向eslint 0错误、1条既有inspectTarget依赖告警。无后端或公开协议变化，不再生OpenAPI。01–42票据及历史验收未修改，Completion表示本票实施通过，待主分支集成和最终审查。
+
+2026-10-29：43–48 已全部合入 `codex-generation-canvas`，48 集成提交 `8da68bb1`；各票独立证据与[组合验收](../visual-b48-acceptance.md)已记录，主区typecheck、差异及历史哈希校验通过。此处 integrated 不预记最终双轴审查通过，01–42及旧验收保持原样。

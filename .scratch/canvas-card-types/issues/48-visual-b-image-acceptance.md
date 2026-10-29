@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented
+**Completion:** integrated — 已合入 codex-generation-canvas，等待最终双轴审查。
 
 - [x] 逐项建立B视觉要求覆盖矩阵，串联模型双栏、摄影图解卡／效果优先Modal、简洁编组与主题化导入／连接；标明各项通过、合理差异或未完成及对应证据，不仅报告功能通过数。
 - [x] 在1440×960、390×844、3830×1688下固定同主题、同画布缩放和相近内容密度，保存用户参考／B原型／正式页面对照；A／C不能代替B，不能靠空数据、隐藏管理项或大量留白获得表面相似。
@@ -34,3 +34,5 @@
 - 新公开状态回归正式登记generation-canvas-visual-b-states；最新 `/private/tmp/canvas-b48-states-release` 实际通过长名称、长正文、预检加载、供应商503错误及第二标签页只读禁用；不把旧6.9秒基础multi记录冒算新增状态。摄影／风格 `/private/tmp/canvas-b48-presets-final` 通过五区播放／比较／取消／应用、专业字段保存、固定footer、触摸应用／只读无变更、正反Tab循环、关闭／切换无残留和受控生成。
 - Sessions／Autosave／MultiView／Photography在最终定向批次再次通过；其他本轮实际通过NamedReferences／Stacks／FilterHighlights／Alignment／AnchoredEditor／Performance／Continuity／Mixed／DirectorModal／MaterialComposer／Composer／Images。只迁移旧按需入口，不删旧语义断言。已有效且相同业务代码的无环、剪刀、键盘／触摸、导入／文件生命周期、组管理证据按覆盖矩阵复用，不机械重跑全部50多例。
 - Node24 typecheck、变更组件ESLint及差异检查通过；主代理workbench六项／单元绿灯按共享代码未变复用，全量lint原两条hook告警如实保留。详细三方图片、覆盖、命令、证据及限制见[本轮验收记录](../visual-b48-acceptance.md)。Completion为implemented，等待集成与最终双轴审查，不预记发现清零。
+
+2026-10-29：43–48 已全部合入 `codex-generation-canvas`，48 集成提交 `8da68bb1`；各票独立证据与[组合验收](../visual-b48-acceptance.md)已记录，主区typecheck、差异及历史哈希校验通过。此处 integrated 不预记最终双轴审查通过，01–42及旧验收保持原样。
