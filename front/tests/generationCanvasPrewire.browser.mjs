@@ -1,3 +1,4 @@
+import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -46,7 +47,7 @@ try {
   const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
   const poll = async predicate => { for(let i=0;i<90;i++){const value=await read();if(predicate(value))return value;await delay(100)}throw Error('saved state not reached') }
   const controls = async () => (await (await fetch(`${api}/test/runtime-controls`)).json())
-  const open = async id => { const close=page.getByRole('button',{name:'关闭详情',exact:true});if(await close.isVisible())await close.click();await page.locator(`[data-card-id="${id}"]`).press('Enter');await page.locator('.wb-details:visible').waitFor();return page.locator('.wb-details:visible') }
+  const open = async id => { const close=page.getByRole('button',{name:'关闭详情',exact:true});if(await close.isVisible())await close.click();await page.locator(`[data-card-id="${id}"]`).press('Enter');await page.locator('.wb-details:visible').waitFor();await openModelInspection(page);return page.locator('.wb-details:visible') }
   const connect = async (target,source,port) => {
     const detail=await open(target)
     await detail.getByRole('combobox',{name:'连接已有卡',exact:true}).press('ArrowDown')
