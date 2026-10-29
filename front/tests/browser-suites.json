@@ -7,7 +7,7 @@
     "generation-canvas-ports": { "file": "generationCanvasPorts.browser.mjs", "ports": [4424, 8424], "timeoutMs": 120000 },
     "generation-canvas-tools-baseline": { "file": "generationCanvasToolsBaseline.browser.mjs", "ports": [4525, 8525], "timeoutMs": 120000 },
     "generation-canvas-tools": { "file": "generationCanvasTools.browser.mjs", "ports": [4425, 8425], "timeoutMs": 120000 },
-    "generation-canvas-card-list": { "file": "generationCanvasCardList.browser.mjs", "ports": [4422, 8422], "timeoutMs": 180000 },
+    "generation-canvas-card-list": { "file": "generationCanvasCardList.browser.mjs", "ports": [4477, 8477], "timeoutMs": 180000 },
     "generation-canvas-filters": { "file": "generationCanvasFilters.browser.mjs", "ports": [4421, 8421], "timeoutMs": 180000 },
     "generation-canvas-filters-baseline": { "file": "generationCanvasFiltersBaseline.browser.mjs", "ports": [4521, 8521], "timeoutMs": 180000 },
     "generation-canvas-cards": { "file": "generationCanvasCards.browser.mjs", "ports": [4423, 8423], "timeoutMs": 180000 },
