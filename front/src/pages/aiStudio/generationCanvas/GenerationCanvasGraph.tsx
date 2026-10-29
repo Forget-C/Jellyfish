@@ -13,13 +13,12 @@ import { soundSummary } from './SoundDirectionEditor'
 import type { SoundCard } from './SoundDirectionEditor'
 import { performanceSummary } from './PerformanceDirectionEditor'
 import type { PerformanceCard } from './PerformanceDirectionEditor'
-import { createPortal } from 'react-dom'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent, ReactNode } from 'react'
 import { AimOutlined, MinusOutlined, PlusOutlined, CloseOutlined, ScissorOutlined } from '@ant-design/icons'
 import { WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
 import { CanvasToolbarMenu } from '../directing/CanvasToolbarMenu'
-import { ConfigProvider, Input, Select, Space, Tooltip } from 'antd'
+import { ConfigProvider, Dropdown, Modal, Input, Select, Space, Tooltip } from 'antd'
 import { StudioGenerationCanvasesService as Canvases, LlmService } from '../../../services/generated'
 import type { CanvasDocument, CanvasModelCapability, CanvasNodeRead, CanvasResolvedOutput, ModelRead } from '../../../services/generated'
 import { CanvasDragHandle, CanvasEdge, useCanvasViewport } from '../../../components/canvas/Canvas'
@@ -30,7 +29,7 @@ import { CardList, cardDragType, cardDragEntry } from './CardList'
 import { CardShell } from './CardShell'
 import { CandidateOutputStatus } from './CandidateOutputStatus'
 import { connectionSides, sideLabels, sidePoint, defaultSides, connectionPath, useConnectionSides, type ConnectionSide } from './connectionGeometry'
-import { MediaPreview } from './MediaContentEditor'
+import { MediaContentEditor, MediaPreview, type MediaCard } from './MediaContentEditor'
 import { MediaResultsPreview } from './MediaResultsPreview'
 import { rendererRegistry } from './rendererRegistry'
 import { connect, disconnect, findConnection } from './graphRules'
@@ -50,7 +49,7 @@ const arrange: GraphArrange = (nodes, _sizes, _width, _anchor, retained = {}) =>
   [node.id, retained[node.id] || { x: 200 + index % 3 * 440, y: Math.floor(index / 3) * 560 }]))
 
 /** 独立画布编辑适配：候选关系与文档持久化，几何沿用公共布局缓存。 */
-function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, onChange, readonly = false, runtime, inspectTarget, editingStatus, savedRevision, savedDocument }: { primaryHost?: HTMLElement | null; contentHistory?: ReactNode; savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; inspectTarget?: { cardId: string; serial: number; segmentId?: string }; editingStatus?: string; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string, kind?: 'single' | 'target' | 'selection', cardIds?: string[]) => void } }) {
+function GenerationCanvasGraphContent({ contentHistory, document, onChange, readonly = false, runtime, inspectTarget, editingStatus, savedRevision, savedDocument }: { primaryHost?: HTMLElement | null; contentHistory?: ReactNode; savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; inspectTarget?: { cardId: string; serial: number; segmentId?: string }; editingStatus?: string; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string) => void } }) {
   const { catalog, cardDefinitions, cardTitles, connectionReason, inputPorts, outputPorts, portLabels } = useGraphRules()
   const cards = document.cards || emptyCards, edges = document.edges || emptyEdges, groups = document.groups || emptyGroups
   const cardLabel = (id: string) => {
@@ -85,6 +84,8 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
   const [detailTrigger, setDetailTrigger] = useState<HTMLElement>()
   const [minimapOpen, setMinimapOpen] = useState(false)
   const [reason, setReason] = useState('')
+  const [sourceTarget, setSourceTarget] = useState<string>()
+  const [uploadSource, setUploadSource] = useState<string>()
   const [selectedEdgeId, setSelectedEdgeId] = useState<string>()
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string>()
   const [spaceHeld, setSpaceHeld] = useState(false)
@@ -452,7 +453,7 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
       </li>
     })}</ol></div>
   })}</>
-  const selectedModels = cards.filter(card => selected.includes(card.id) && card.type?.startsWith('model.'))
+
   const finishSelection = (event: PointerEvent<HTMLDivElement>) => {
     const start = selectionStart.current
     if (!start) return
@@ -507,8 +508,22 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
     const y = mapTop + (event.clientY - box.top) / box.height * mapHeight
     layout.setView(previous => ({ ...previous, transform: { ...previous.transform, x: width / 2 - x * previous.transform.scale, y: height / 2 - y * previous.transform.scale } }))
   }
-  const runSelection = <Button aria-label={`运行所选模型（${selectedModels.length}）`} disabled={readonly || !selectedModels.length || !runtime || runtime.disabled || selectedModels.some(card => runtime.busyCards.has(card.id))}
-        onClick={() => runtime?.precheck(selectedModels[0].id, 'selection', selected)}>运行所选模型（{selectedModels.length}）</Button>
+  const modelSources = (card: GenerationCard) => <Dropdown trigger={['click']} disabled={readonly} menu={{ items: [
+    { key: 'canvas', label: '从当前画布选择' },
+    ...(capability(card)?.input_ports || []).filter(port => port !== 'text').map(port => ({ key: port, label: `上传${inputLabel(card, port)}素材` })),
+  ], onClick: ({ key }) => {
+    if (readonly) return
+    if (key === 'canvas') { setSourceTarget(card.id); return }
+    const sourcePort = ['first_frame', 'last_frame', 'key_frame', 'subject_image'].includes(key) ? 'image' : key === 'subject_video' ? 'video' : key
+    const source = { id: crypto.randomUUID(), type: `content.${sourcePort}`, type_version: 1, file_id: null, uploading: false } as MediaCard
+    const next = { ...latest.current, cards: [...(latest.current.cards || []), source] }
+    const edge = { id: crypto.randomUUID(), source_card: source.id, source_port: sourcePort, target_card: card.id, target_port: key }
+    const issue = connectionReason(next, edge, capability(card))
+    if (issue) { setReason(issue); return }
+    edit(connect(next, edge)); setUploadSource(source.id)
+  } }}><WorkbenchIconButton label="添加模型来源" icon={<PlusOutlined />} disabled={readonly} /></Dropdown>
+  const sourceTargetCard = cards.find(card => card.id === sourceTarget)
+  const uploadSourceCard = cards.find(card => card.id === uploadSource) as MediaCard | undefined
   return <div className="generation-graph" ref={container} onPointerDownCapture={event => {
     if (selected.length < 2 && !multiSelectMode) return
     const target = event.target as Element
@@ -517,6 +532,17 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
     if (target.closest('.generation-selection-actions, .generation-browse') || modifier || multiSelectMode && target.closest('[data-card-id]')) return
     clearSelection()
   }}>
+    <Modal title="选择画布来源" open={!!sourceTargetCard} onCancel={() => setSourceTarget(undefined)} footer={null}>
+      <p>选择只建立候选，实际使用仍需明确采用。</p>
+      {sourceTargetCard && cards.flatMap(source => compatibleOptions(source.id, sourceTargetCard.id).map(option => <Button key={`${source.id}:${option.source_port}:${option.target_port}`} disabled={readonly} onClick={() => {
+        commitConnection(option, 'left'); setSourceTarget(undefined)
+      }}>{cardLabel(source.id)} → {inputLabel(sourceTargetCard, option.target_port)}</Button>))}
+    </Modal>
+    <Modal title="上传模型来源" open={!!uploadSourceCard} onCancel={() => setUploadSource(undefined)} footer={null}>
+      {uploadSourceCard && <MediaContentEditor card={uploadSourceCard} projectId={document.project_id} disabled={readonly} onChange={next => {
+        if ((latest.current.cards || []).some(card => card.id === next.id)) edit({ ...latest.current, cards: (latest.current.cards || []).map(card => card.id === next.id ? next : card) })
+      }} />}
+    </Modal>
     {connectionLayout.error && <span role="status">{connectionLayout.error}</span>}
     {accessibleConnection && !pendingConnection && <div ref={connectionMenu} role="dialog" aria-label="选择连接目标" className="generation-connection-menu generation-target-menu">
       <strong>选择连接目标</strong>
@@ -530,7 +556,6 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
       <Button role="menuitem" onClick={cancelConnection}>取消连接</Button>
     </div>}
     <GenerationCanvasBrowse value={displayFilter} onChange={setDisplayFilter} />
-    {primaryHost ? createPortal(runSelection, primaryHost) : runSelection}
     <CardList catalog={catalog} readonly={readonly} active={activeCategory} onActiveChange={category => { cancelConnection(); setActiveCategory(category) }} onAdd={(type, entry) => add(type, undefined, entry)} />
     <nav className="director-canvas-bottom generation-view-tools" aria-label="画布视图工具">
       <WorkbenchIconButton label="定位所选" variant="quiet" icon={<AimOutlined />} disabled={!selected.length} onClick={() => { const p = point(selected[0]); layout.setView(previous => ({ ...previous, transform: { ...previous.transform, x: (container.current?.clientWidth || 1200) / 2 - p.x * previous.transform.scale, y: (container.current?.clientHeight || 800) / 2 - p.y * previous.transform.scale } })) }} />
@@ -751,7 +776,7 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
             { id: edgeId, source_card: output.source.card_id, source_port: 'object', target_card: id, target_port: 'name' }))
           setDetailId(id)
         }} models={models} capability={capability(detailCard)}
-          capabilityError={'model_id' in detailCard && detailCard.model_id ? capabilityErrors[detailCard.model_id] : undefined} references={references(detailCard)} disabled={readonly} modelOutputs={runtime?.outputs} node={runtime?.nodes[detailCard.id]} busy={runtime?.busyCards.has(detailCard.id)} checking={runtime?.checking === detailCard.id} runDisabled={runtime?.disabled} onPrecheck={() => runtime?.precheck(detailCard.id)} onTargetPrecheck={() => runtime?.precheck(detailCard.id, 'target')} /></fieldset></ConfigProvider>}
+          capabilityError={'model_id' in detailCard && detailCard.model_id ? capabilityErrors[detailCard.model_id] : undefined} references={references(detailCard)} disabled={readonly} modelOutputs={runtime?.outputs} node={runtime?.nodes[detailCard.id]} busy={runtime?.busyCards.has(detailCard.id)} checking={runtime?.checking === detailCard.id} runDisabled={runtime?.disabled} onPrecheck={() => runtime?.precheck(detailCard.id)} sourceActions={modelSources(detailCard)} /></fieldset></ConfigProvider>}
       </EditorContainer>
     })}
   </div>

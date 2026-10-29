@@ -1,6 +1,7 @@
 {
   "preflight": "preflight.mjs",
   "cases": {
+    "generation-canvas-single-submit": { "file": "generationCanvasSingleSubmit.browser.mjs", "ports": [4439, 8439], "timeoutMs": 120000 },
     "generation-canvas-director-modal": {"file":"generationCanvasDirectorModal.browser.mjs","ports":[4437,8437],"timeoutMs":120000},
     "generation-canvas-organization": { "file": "generationCanvasOrganization.browser.mjs", "ports": [4458, 8458], "timeoutMs": 90000 },
     "generation-canvas-anchored-editor": {"file":"generationCanvasAnchoredEditor.browser.mjs","ports":[4436,8436],"timeoutMs":120000},
