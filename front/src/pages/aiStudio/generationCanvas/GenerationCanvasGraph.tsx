@@ -9,6 +9,7 @@ import { soundSummary } from './SoundDirectionEditor'
 import type { SoundCard } from './SoundDirectionEditor'
 import { performanceSummary } from './PerformanceDirectionEditor'
 import type { PerformanceCard } from './PerformanceDirectionEditor'
+import { createPortal } from 'react-dom'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent } from 'react'
 import { Alert, ConfigProvider, Input, Select, Space } from 'antd'
@@ -35,7 +36,7 @@ const arrange: GraphArrange = (nodes, _sizes, _width, _anchor, retained = {}) =>
   [node.id, retained[node.id] || { x: 200 + index % 3 * 440, y: Math.floor(index / 3) * 560 }]))
 
 /** 独立画布编辑适配：候选关系与文档持久化，几何沿用公共布局缓存。 */
-function GenerationCanvasGraphContent({ document, onChange, readonly = false, runtime, inspectTarget, editingStatus, savedRevision, savedDocument }: { savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; inspectTarget?: { cardId: string; serial: number; segmentId?: string }; editingStatus?: string; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string, kind?: 'single' | 'target' | 'selection', cardIds?: string[]) => void } }) {
+function GenerationCanvasGraphContent({ primaryHost, document, onChange, readonly = false, runtime, inspectTarget, editingStatus, savedRevision, savedDocument }: { primaryHost?: HTMLElement | null; savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; inspectTarget?: { cardId: string; serial: number; segmentId?: string }; editingStatus?: string; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string, kind?: 'single' | 'target' | 'selection', cardIds?: string[]) => void } }) {
   const { catalog, cardDefinitions, cardTitles, connectionReason, inputPorts, outputPorts, portLabels } = useGraphRules()
   const cards = document.cards || emptyCards, edges = document.edges || [], groups = document.groups || emptyGroups
   const cardLabel = (id: string) => {
@@ -251,7 +252,10 @@ function GenerationCanvasGraphContent({ document, onChange, readonly = false, ru
   }
   const detailCard = cards.find(card => card.id === detailId)
   const DetailRenderer = detailCard && rendererRegistry[detailCard.type || 'content.text']
+  const runSelection = <Button aria-label={`运行所选模型（${selectedModels.length}）`} disabled={readonly || !selectedModels.length || !runtime || runtime.disabled || selectedModels.some(card => runtime.busyCards.has(card.id))}
+        onClick={() => runtime?.precheck(selectedModels[0].id, 'selection', selected)}>运行所选模型（{selectedModels.length}）</Button>
   return <div className="generation-graph" ref={container}>
+    {primaryHost ? createPortal(runSelection, primaryHost) : runSelection}
     <nav hidden={!toolboxOpen} className="generation-toolbox" aria-label="添加卡片">
       {(['基础内容', '模型生成'] as const).map(group => <section key={group}><h2>{group}</h2>
         {catalog.cards.filter(card => card.group === group).map(card => <Button key={card.type} disabled={readonly} onClick={() => add(card.type)}>添加{card.title.replace('内容', '')}</Button>)}
@@ -268,8 +272,6 @@ function GenerationCanvasGraphContent({ document, onChange, readonly = false, ru
         edit({ ...document, groups: [...groups, { id: crypto.randomUUID(), name: '新分组', card_ids: members, collapsed: false }] }); setSelected([])
       }}>将所选卡片分组</Button>
       <Button aria-label="框选" variant={selecting ? 'primary' : 'secondary'} aria-pressed={selecting} onClick={() => setSelecting(value => !value)}>框选</Button>
-      <Button aria-label={`运行所选模型（${selectedModels.length}）`} disabled={readonly || !selectedModels.length || !runtime || runtime.disabled || selectedModels.some(card => runtime.busyCards.has(card.id))}
-        onClick={() => runtime?.precheck(selectedModels[0].id, 'selection', selected)}>运行所选模型（{selectedModels.length}）</Button>
       <Button onClick={() => viewport.fit()}>适应画布</Button>
       <Button disabled={!selected.length} onClick={() => { const id = selected[0], p = point(id); layout.setView(previous => ({ ...previous, transform: { ...previous.transform, x: (container.current?.clientWidth || 1200) / 2 - p.x * previous.transform.scale, y: (container.current?.clientHeight || 800) / 2 - p.y * previous.transform.scale } })) }}>定位所选</Button>
       <Button onClick={() => layout.rearrange()}>整理布局</Button><Button disabled={!layout.canUndo} onClick={layout.undo}>撤销布局整理</Button>

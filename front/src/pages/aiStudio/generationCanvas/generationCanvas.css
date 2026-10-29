@@ -85,3 +85,19 @@
 .generation-catalog-state { position: absolute; inset: 72px 16px auto; max-width: 520px; margin-inline: auto; z-index: 7; }
 
 .generation-candidate-management { overflow-wrap: anywhere; }
+
+/* 生成画布的菜单覆盖完整视口；业务与运行控制器仍由页面管理。 */
+.generation-workbench { position: relative; padding: 0; display: block; height: 100dvh; }
+.generation-workbench .generation-stage { position: absolute; inset: 0; margin: 0; }
+.generation-workbench .generation-surface { border: 0; border-radius: 0; }
+.generation-workbench .generation-workbench-header { z-index: 60; }
+.generation-workbench .generation-feedback { position: absolute; z-index: 50; top: var(--workbench-toolbar-bottom, 64px); left: 16px; right: 16px; }
+.generation-workbench .generation-empty { position: absolute; top: 45%; left: 50%; transform: translateX(-50%); }
+.generation-workbench .generation-toolbox { top: 76px; }
+.generation-workbench .generation-toolbar-center { min-width: 0; }
+.generation-workbench .canvas-toolbar-actions > section { display: contents; }
+@media(max-width: 700px) {
+  .generation-workbench .generation-toolbar-center { display: none; }
+  .generation-workbench .generation-toolbox { top: 120px; }
+  .generation-workbench .generation-feedback { top: 108px; }
+}
