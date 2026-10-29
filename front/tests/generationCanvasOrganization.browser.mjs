@@ -63,6 +63,19 @@ try {
   await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
   const saved = (await (await fetch(`${base}/${canvas.id}`)).json()).data
   assert.deepEqual(saved.document.groups[0].card_ids, ['a', 'b'])
+  const members = group.getByRole('combobox', { name: '分组成员 新编组', exact: true })
+  await members.click()
+  await page.locator('.ant-select-item-option').filter({ hasText: '文本模型卡 m' }).click()
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: '保存画布', exact: true }).click()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
+  const added = (await (await fetch(`${base}/${canvas.id}`)).json()).data.document
+  assert.deepEqual(added.groups[0].card_ids, ['a', 'b', 'm'], 'membership is explicitly saved')
+  await members.press('Backspace')
+  await page.getByRole('button', { name: '保存画布', exact: true }).click()
+  await page.getByRole('status').filter({ hasText: '已保存' }).first().waitFor()
+  const removed = (await (await fetch(`${base}/${canvas.id}`)).json()).data.document
+  assert.deepEqual(removed.groups[0].card_ids, ['a', 'b'], 'explicit member removal preserves other owners')
   await page.getByRole('button', { name: '适应全部', exact: true }).click()
   const beforeA = await card('a').boundingBox(), beforeB = await card('b').boundingBox(), groupBox = await group.boundingBox()
   await page.mouse.move(groupBox.x + 7, groupBox.y + groupBox.height - 7)
@@ -163,6 +176,7 @@ try {
   await card('a').getByRole('button', { name: '选择多个', exact: true }).click()
   await card('b').tap()
   const mobileMenu = await menu.boundingBox()
+  assert.ok(mobileMenu.y + mobileMenu.height <= Math.min((await card('a').boundingBox()).y, (await card('b').boundingBox()).y), 'mobile wrapped menu stays above selection')
   assert.ok(mobileMenu.x >= 0 && mobileMenu.x + mobileMenu.width <= 390)
   await page.screenshot({ path: join(output, 'multi-group-mobile.png'), fullPage: true })
   console.log('PASS explicit multiselection and visual group saved through HTTP')

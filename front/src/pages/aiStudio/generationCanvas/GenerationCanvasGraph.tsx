@@ -554,8 +554,8 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
     {(selected.length > 1 || multiSelectMode) && <div className="generation-selection-actions" role="toolbar" aria-label="所选卡片操作" style={(() => {
       const chosen = selected.map(id => ({ point: point(id), size: measured[id] || { width: 400, height: 200 } }))
       const left = (chosen.length ? Math.min(...chosen.map(item => item.point.x)) : 0) * transform.scale + transform.x
-      const top = (chosen.length ? Math.min(...chosen.map(item => item.point.y)) : 0) * transform.scale + transform.y - 64
-      return { left: Math.max(12, Math.min(left, width - 300)), top: Math.max(76, top) }
+      const top = (chosen.length ? Math.min(...chosen.map(item => item.point.y)) : 0) * transform.scale + transform.y - 16
+      return { left: Math.max(12, Math.min(left, width - 300)), top: Math.max(160, top), transform: 'translateY(-100%)' }
     })()}>
       <span>{selected.length} 张卡片</span>
       <Button disabled={readonly || selected.length < 2} onClick={() => {
@@ -643,6 +643,7 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
           const width = group.collapsed ? 300 : Math.max(400, ...members.map(id => point(id).x + (layout.view.sizes[id]?.width || 400) - origin.x + 16))
           const height = group.collapsed ? 110 : Math.max(140, ...members.map(id => point(id).y + (layout.view.sizes[id]?.height || 350) - origin.y + 16))
           return <section key={group.id} data-group-id={group.id} className="generation-group" onPointerDown={event => {
+            if (!event.currentTarget.contains(event.target as Node)) return
             if (event.button !== 0 || (event.target as Element).closest('button, input, select, [role="combobox"], [data-card-id]')) return
             const modifier = navigator.platform.includes('Mac') ? event.metaKey : event.ctrlKey
             if (spaceHeld || modifier) return
