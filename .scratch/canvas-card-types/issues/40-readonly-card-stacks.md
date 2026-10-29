@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented
+**Completion:** integrated
 
 - [x] 多选上方菜单可创建堆叠；只直接收纳普通卡，不嵌套容器，不与编组或其他堆叠重复归属，混合已有归属时不隐式拆组或跳过部分成员。
 - [x] 默认显示重叠卡面与成员数量，悬浮及键盘／触摸等价入口显示数量和解除动作；点击打开覆盖画布的只读查看层，不改变画布视角，全部成员可读、图片可放大、媒体可播放。
@@ -34,3 +34,5 @@
 - 最终堆叠页面 `/private/tmp/canvas40-visual-final2` **8.4s passed**；实际查看默认、悬浮、桌面只读及390×844窄屏只读截图。受影响 organization **7.2s**、edge-management **11.3s** 通过；typecheck 通过。定向 ESLint 为既有两个 inspectTarget hooks 依赖告警（同位置，无错误），不宣称全局 lint 清洁。
 - 从本工作树生产 app 导出 OpenAPI，运行真实生产只读服务8461，核对 HTTP schema 与导出及前端提交 schema 精确一致，再执行 openapi:gen；新增仅 group.kind，已剔除等价 JSON 格式及生成器纯尾空行漂移。证据 `/private/tmp/canvas40-openapi-http.json`。标准8000当前未加载kind，未从旧服务生成或终止用户服务；集成后须在验证当前8000契约后执行标准 openapi:update。
 - 01–33 哈希不变。共享 editable 安装已恢复用户主工作区，并在 /private/tmp 外部导入验证为主区 app；测试后均使用 --no-sync。供应商／外部存储仍是受控替身，8项隔离MySQL条件跳过沿用守卫，不宣称真实供应商质量或MySQL竞争验证。
+
+- 2026-10-29 集成：`3193fbc5` 基于最新集成 `a10b93a5`，无冲突合入（合并 `93c52ede`）。主区typecheck、差异及01–33哈希保护通过；主区生产app导出OpenAPI与提交schema精确一致，产品／测试树等同已验证源分支，复用stack8.4s、organization7.2s、edge11.3s、HTTP61 passed／8 skipped及Pylint10证据。已同步kind的schema／客户端；标准openapi:update仍待8000确认加载当前schema后执行，未接触用户旧进程或从旧schema生成。41前置解除，最终整体视觉验收仍待42。

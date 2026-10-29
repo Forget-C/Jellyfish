@@ -500,3 +500,8 @@ flowchart TD
 
 - 39（`e4f3bb68`，已含37／38）无冲突集成；模型编辑区来源快捷选择、候选不自动采用、右下保存预检确认单模型提交及服务侧多模型范围拒绝形成真实页面／HTTP／受控Worker闭环。主区typecheck、差异、01–33哈希及生产OpenAPI等于提交schema检查通过；产品／测试树与最终源分支相同，复用single9.5s（`/private/tmp/canvas39-final-single`）、images13.1s（`/private/tmp/canvas39-final-images`）、HTTP58 passed／10 skipped及Pylint10证据。
 - 当前34–39全部integrated，40全部前置满足；41／42仍待推进。42需迁移旧target／selection旅程而保留输入、历史及恢复断言，不以skip掩盖新单模型语义。原lint告警、隔离MySQL与受控外部服务限制保持，未预记整体视觉验收。
+
+### 2026-10-29：40 集成
+
+- 40（`3193fbc5`）无冲突集成；堆叠三态、只读成员与关系保护、整体移动／解除恢复及已受理任务更新形成页面／HTTP闭环，公开group.kind与生成客户端已同步。主区typecheck、差异、01–33哈希及主区生产OpenAPI与提交schema精确一致检查通过；产品／测试树等同源分支，复用stack8.4s（`/private/tmp/canvas40-visual-final2`）、organization7.2s、edge11.3s、HTTP61 passed／8 skipped和Pylint10证据。
+- 当前34–40全部integrated，41可推进、42待41；8000旧schema未用于生成，标准openapi:update须在确认当前服务契约后接续，不终止用户旧进程。原MySQL隔离守卫、外部替身及lint告警限制保留，不预填整体视觉验收。
