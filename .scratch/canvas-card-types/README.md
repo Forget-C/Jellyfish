@@ -523,3 +523,10 @@ flowchart TD
 - 统一修复 `eed37c0c` 无冲突合入：同步单模型术语，收敛本地组位移逻辑，修复重复连线命中原线时残留卡片选择／编辑器的规格问题。原两轴报告中的三项发现与首次证据保留，尚未预记清零。
 - 主区typecheck、差异和01–33字节保护通过；产品／测试树等于已验证修复分支，复用edge红绿11.3s（`/private/tmp/canvas-v2-fix-green`）、organization6.9s和stacks8.5s。应用后端及公开schema未变，沿用此前HTTP／Pylint／OpenAPI证据；外部替身、MySQL未执行与原lint告警限制保持。
 - 下一步由原Standards／Spec审查者执行定向复核；34–42的integrated状态不等于最终审查已经通过，实施工作树待实际最终完成后清理。
+
+### 2026-10-29：34–42 最终收口
+
+- 34–42 全部 integrated。最终产品审查头 `5bf2a55d`：Standards 原 P2／P3 两项、Spec 原 P2 一项均已解决，两轴独立定向复核剩余 **0**。原报告及首次发现保留在 `/private/tmp/canvas-v2-standards-review.md`、`/private/tmp/canvas-v2-spec-review.md`。规格审查者独立重跑原失败重复连线页面用例 6.2s，通过卡选择 0／线选择 1／编辑区 0 的公开行为断言。
+- 本轮有 54 个独立真实浏览器用例通过证据（42 新执行 45 个＋当前票同产品复用 9 个），含六个共享工作台；最终三视口 23 张截图实际核对。全画布 HTTP **289 passed／28 skipped**，相关应用后端 Pylint **10.00/10**，前端 typecheck、单元检查通过；统一修复后 edge 11.3s、organization 6.9s、stacks 8.5s 及主区 typecheck 通过。完整矩阵、复用范围与限制见[本轮验收](interaction-v2-acceptance.md)。
+- lint 未全通过：两条旧 hooks 依赖警告保留；本轮新增告警已消除。隔离 MySQL selection 页面及相关竞争测试未配置，守卫保留且未执行；供应商与外部存储为受控替身，不证明真实生成质量。标准 OpenAPI 更新在确认 8000 加载当前契约后成功，440 处纯尾空行生成漂移逐文件证明后恢复，公开契约／提交 schema／generated 一致。
+- 十个实施／统一修复工作树已清理；42 两个测试辅助工作树此前已清理，分支与工作树外红绿、截图、日志及审查证据保留。清理审计 `/private/tmp/canvas34-42-cleanup.json`。共享 backend editable 已恢复主区，并在工作区外导入验证。01–33 票据字节及历史验收保持原样；未推送。
