@@ -1,3 +1,4 @@
+import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -85,6 +86,7 @@ try {
   await savedEdges(1)
   assert.doesNotMatch((await precheck()).input.text,/被隐藏但明确采用的内容/)
   await modelCard.press('Enter')
+  await openModelInspection(page)
   const details=page.locator('.wb-details:visible')
   await details.getByRole('button',{name:'@文本1',exact:true}).click()
   await page.getByRole('button',{name:'关闭详情',exact:true}).click()
@@ -92,6 +94,7 @@ try {
   for(let i=0;i<40 && !(await read()).document.cards.find(card=>card.id==='model').input_bindings?.length;i++) await delay(100)
   assert.match((await precheck()).input.text,/被隐藏但明确采用的内容/)
   await modelCard.press('Enter')
+  await openModelInspection(page)
   await details.getByRole('button',{name:'预检运行',exact:true}).click()
   const runPreview = page.getByRole('region',{name:'运行预检',exact:true})
   await runPreview.waitFor()

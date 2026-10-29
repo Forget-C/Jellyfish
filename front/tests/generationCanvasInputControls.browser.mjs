@@ -65,7 +65,7 @@ try {
   assert.equal((await right.innerText()).trim(),'+','plus is visible within circular connector')
   const visual=await right.locator('i').boundingBox();assert.ok(visual.width>=28&&visual.width<=32)
   await captureSource('hover-plus-100.png')
-  await right.focus();await captureSource('focus-plus-100.png')
+  await page.keyboard.press('Tab');await right.focus();await captureSource('focus-plus-100.png')
   const target=page.locator('[data-card-id="target"]'),left=target.getByRole('button',{name:'左侧连接点',exact:true})
   const start=await right.boundingBox(),end=await left.boundingBox()
   await page.mouse.move(start.x+start.width/2,start.y+start.height/2);await page.mouse.down()

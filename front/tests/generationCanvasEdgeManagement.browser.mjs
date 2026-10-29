@@ -1,3 +1,4 @@
+import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { readFile, writeFile } from 'node:fs/promises'
@@ -124,6 +125,7 @@ try {
   await page.screenshot({ path: join(output, 'purposes-selected.png'), animations: 'disabled' })
   await inspector.getByRole('button', { name: '关闭连接详情', exact: true }).click()
   await target.press('Enter')
+  await openModelInspection(page)
   const details = page.locator('.wb-details:visible')
   const uses = details.getByRole('region', { name: '视频实际输入', exact: true })
   await uses.getByRole('button', { name: '采用 @图片1 为首帧', exact: true }).click()
@@ -145,6 +147,7 @@ try {
   assert.equal((await read()).document.edges.length, 2, 'adopted edge cannot be removed silently')
   assert.equal(await page.locator('.wb-details:visible').count(), 0, 'protected scissors do not open editor')
   await target.press('Enter')
+  await openModelInspection(page)
   await page.locator('.wb-details:visible').getByRole('button', { name: '取消首帧 @图片1', exact: true }).click()
   await page.getByLabel('画布保存状态').getByText('已保存', { exact: true }).waitFor()
   await page.locator('.wb-details:visible').getByRole('button', { name: '关闭详情', exact: true }).click()
@@ -157,6 +160,7 @@ try {
   assert.deepEqual(adopted.document.cards.find(card => card.id === 'm').input_bindings.map(binding => binding.input_port), ['last_frame'])
   await page.reload()
   await target.press('Enter')
+  await openModelInspection(page)
   await page.locator('.wb-details:visible').getByRole('button', { name: '预检运行', exact: true }).click()
   const preview = page.getByRole('region', { name: '运行预检', exact: true })
   const accepted = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/runs'))

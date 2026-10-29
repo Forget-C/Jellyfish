@@ -124,7 +124,7 @@ try {
   await page.getByRole('textbox',{name:'画布名称',exact:true}).fill('小雨的清晨探索')
   await page.getByRole('button',{name:'画布管理',exact:true}).click()
   const basis=await add('添加原文／创作依据卡','content.basis')
-  await detail.getByLabel('导入文本文件',{exact:true}).setInputFiles({name:'清晨.txt',mimeType:'text/plain',buffer:Buffer.from('清晨，小雨在门边停下。')})
+  await detail.getByLabel('文本文件选择',{exact:true}).setInputFiles({name:'清晨.txt',mimeType:'text/plain',buffer:Buffer.from('清晨，小雨在门边停下。')})
   await poll(state=>state.document.cards.find(card=>card.id===basis).text==='清晨，小雨在门边停下。')
   const person=await add('添加人物／物件描述卡','content.object')
   await detail.getByRole('textbox',{name:'对象名称',exact:true}).fill('小雨')

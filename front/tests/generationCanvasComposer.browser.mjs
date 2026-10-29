@@ -148,8 +148,10 @@ try {
   assert.equal(JSON.parse(await editor.locator('[data-segment]').getAttribute('data-segment')).source.card_id, 's10')
   // Inline chooser is opened by @ and confirms a selected real output.
   await detail().getByRole('combobox', { name: '引用分类', exact: true }).locator('..').locator('..').click()
-  const categoryDropdown = await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').elementHandle()
-  await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText('图片', { exact: true }).click()
+  const categoryListId = await detail().getByRole('combobox', { name: '引用分类', exact: true }).getAttribute('aria-controls')
+  const categoryPopup = page.locator(`.ant-select-dropdown:has([id="${categoryListId}"])`)
+  const categoryDropdown = await categoryPopup.elementHandle()
+  await categoryPopup.getByText('图片', { exact: true }).click()
   // rc-select restores focus after an option click; finish closing that popup
   // before typing, so its delayed focus does not blur the new @ chooser.
   await categoryDropdown.waitForElementState('hidden')
@@ -211,7 +213,7 @@ try {
   await page.reload()
   await open('basis')
   const basis = detail()
-  await basis.getByLabel('导入文本文件', { exact: true }).setInputFiles({ name: '剧本.txt', mimeType: 'text/plain', buffer: Buffer.from('张三望向门口。') })
+  await basis.getByLabel('文本文件选择', { exact: true }).setInputFiles({ name: '剧本.txt', mimeType: 'text/plain', buffer: Buffer.from('张三望向门口。') })
   await page.waitForFunction(() => document.querySelector('[aria-label="创作依据正文"]')?.value === '张三望向门口。')
   assert.equal(await basis.getByRole('textbox', { name: '依据来源定位', exact: true }).inputValue(), '剧本.txt')
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
