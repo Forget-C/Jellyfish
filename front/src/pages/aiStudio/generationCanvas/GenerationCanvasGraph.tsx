@@ -12,7 +12,7 @@ import type { SoundCard } from './SoundDirectionEditor'
 import { performanceSummary } from './PerformanceDirectionEditor'
 import type { PerformanceCard } from './PerformanceDirectionEditor'
 import { createPortal } from 'react-dom'
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent, ReactNode } from 'react'
 import { AimOutlined, MinusOutlined, PlusOutlined, CloseOutlined } from '@ant-design/icons'
 import { WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
@@ -36,6 +36,7 @@ import { CanvasCatalogProvider, useGraphRules } from './CanvasCatalogContext'
 import type { ComponentProps } from 'react'
 import type { GenerationCard, GenerationEdge } from './graphRules'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
+import { useWorkbenchDesktop } from '../directing/useWorkbenchDesktop'
 import { WorkbenchDetails } from '../directing/ui/WorkbenchDetails'
 import './generationCanvas.css'
 
@@ -69,6 +70,11 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
       if (editor.getAttribute('data-card-details') !== detailId) editor.querySelectorAll<HTMLMediaElement>('audio, video').forEach(media => media.pause())
     })
   }, [detailId, document.id])
+  const desktop = useWorkbenchDesktop()
+  const [activeCategory, setActiveCategory] = useState<string>()
+  const [accessibleConnection, setAccessibleConnection] = useState<{ card: string; side: ConnectionSide }>()
+  const connectionTrigger = useRef<HTMLElement>()
+  const connectionMenu = useRef<HTMLDivElement>(null)
   const [detailTrigger, setDetailTrigger] = useState<HTMLElement>()
   const [minimapOpen, setMinimapOpen] = useState(false)
   const [reason, setReason] = useState('')
@@ -92,13 +98,26 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
   const connectionPointer = useRef(false)
   const [pendingConnection, setPendingConnection] = useState<{ target: string; side: ConnectionSide; x: number; y: number }>()
   const connectionLayout = useConnectionSides(`jellyfish:generation-connection-sides:${document.project_id}:${document.id}`, edges.map(edge => edge.id))
+  const cancelConnection = useCallback(() => {
+    connectionPointer.current = false; setDrag(undefined); setPendingConnection(undefined); setAccessibleConnection(undefined)
+    if (connectionTrigger.current?.isConnected && (desktop || !detailId)) connectionTrigger.current.focus({ preventScroll: true })
+  }, [desktop, detailId])
   useEffect(() => {
     const cancel = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && (drag || pendingConnection)) { event.preventDefault(); event.stopPropagation(); connectionPointer.current = false; setDrag(undefined); setPendingConnection(undefined) }
+      if (event.key === 'Escape' && (drag || pendingConnection || accessibleConnection)) { event.preventDefault(); event.stopPropagation(); cancelConnection() }
     }
     window.addEventListener('keydown', cancel, true)
     return () => window.removeEventListener('keydown', cancel, true)
-  }, [drag, pendingConnection])
+  }, [drag, pendingConnection, accessibleConnection, cancelConnection])
+  // 仅隐藏详情外壳，编辑器会话仍挂载；连接期间为所有目标让出空间。
+  const detailsSuppressed = !!(drag || accessibleConnection || !desktop && activeCategory)
+  useEffect(() => {
+    if (detailsSuppressed) window.document.querySelectorAll<HTMLMediaElement>(`[data-canvas-details="${CSS.escape(document.id)}"] audio, [data-canvas-details="${CSS.escape(document.id)}"] video`).forEach(media => media.pause())
+  }, [detailsSuppressed, document.id])
+  useEffect(() => {
+    if (!accessibleConnection && !pendingConnection) return
+    connectionMenu.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus({ preventScroll: true })
+  }, [accessibleConnection, pendingConnection])
   useEffect(() => {
     if (inspectTarget) setDetailId(inspectTarget.cardId)
   }, [inspectTarget?.cardId, inspectTarget?.serial])
@@ -247,14 +266,22 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
     return source && target ? outputPorts(source).flatMap(source_port => inputPorts(target).map(target_port => ({ id: 'preview', source_card: sourceId, source_port, target_card: targetId, target_port }))) : []
   }
   const compatibleOptions = (sourceId: string, targetId: string) => connectionOptions(sourceId, targetId).filter(edge => !check(edge))
-  const cancelConnection = () => { connectionPointer.current = false; setDrag(undefined); setPendingConnection(undefined) }
+  /** 替代拖线的入口，仍复用同一用途、能力与候选校验，不建立实际采用。 */
+  const startAccessibleConnection = (card: string, side: ConnectionSide, trigger: HTMLElement) => {
+    if (readonly) return
+    setActiveCategory(undefined); connectionTrigger.current = trigger
+    setAccessibleConnection({ card, side }); setReason('选择目标，仅提供候选')
+    setPendingConnection(undefined); setDrag(undefined)
+  }
   const commitConnection = (option: GenerationEdge, targetSide: ConnectionSide) => {
+    if (readonly) { setReason('当前只读，不能新建连接'); cancelConnection(); return }
     const existing = findConnection(latest.current, option)
     if (existing) { setSelectedEdgeId(existing.id); setReason('该候选连接已存在'); cancelConnection(); return }
     const issue = check(option)
     if (issue) { setReason(issue); cancelConnection(); return }
     const edge = { ...option, id: crypto.randomUUID() }
-    if (drag) connectionLayout.setSides(previous => ({ ...previous, [edge.id]: { source: drag.side, target: targetSide } }))
+    const sourceSide = drag?.side || accessibleConnection?.side
+    if (sourceSide) connectionLayout.setSides(previous => ({ ...previous, [edge.id]: { source: sourceSide, target: targetSide } }))
     edit(connect(latest.current, edge)); setReason('已连接候选输入；接收端明确选择后才实际使用')
     cancelConnection()
   }
@@ -271,6 +298,13 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
     } else if (options.length === 1) commitConnection(options[0], side)
     else setPendingConnection({ target: targetId, side, x: event.clientX, y: event.clientY })
   }
+  const chooseAccessibleTarget = (targetId: string, side: ConnectionSide = 'left') => {
+    if (!accessibleConnection) return
+    const options = compatibleOptions(accessibleConnection.card, targetId)
+    if (!options.length) { const first = connectionOptions(accessibleConnection.card, targetId)[0]; setReason(first ? check(first) || '没有兼容的接收用途' : '此卡没有兼容的接收用途'); return }
+    if (options.length === 1) commitConnection(options[0], side)
+    else setPendingConnection({ target: targetId, side, x: 88, y: 180 })
+  }
   // Counts reflect canonical explicit selections, including fixed media associations.
   const edgeAdoptions = (edge: GenerationEdge) => {
     const target = cards.find(card => card.id === edge.target_card)
@@ -283,20 +317,27 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
   }
   const geometricPorts = (card: GenerationCard) => {
     const definition = cardDefinitions[card.type || '']
-    const options = drag && card.id !== drag.card ? compatibleOptions(drag.card, card.id) : []
+    const sourceConnection = drag || accessibleConnection
+    const options = sourceConnection && card.id !== sourceConnection.card ? compatibleOptions(sourceConnection.card, card.id) : []
     const outputName = ({ text: '文本', image: '图片', video: '视频', audio: '音频' })[definition?.modality || 'text']
     const hoveredPoint = drag && !pendingConnection ? window.document.elementFromPoint(drag.x, drag.y)?.closest<HTMLElement>('[data-connection-side]') : undefined
-    const summary = drag && card.id !== drag.card ? options.length ? `可作为${[...new Set(options.map(edge => inputLabel(card, edge.target_port)))].join('／')}候选` : connectionOptions(drag.card, card.id).map(check).find(Boolean) || '此卡没有兼容的接收用途' : `${outputName}${(runtime?.outputs[card.id]?.length || 0) > 1 ? ` · ${runtime?.outputs[card.id]?.length} 项` : ''}`
+    const summary = sourceConnection && card.id !== sourceConnection.card ? options.length ? `可作为${[...new Set(options.map(edge => inputLabel(card, edge.target_port)))].join('／')}候选` : connectionOptions(sourceConnection.card, card.id).map(check).find(Boolean) || '此卡没有兼容的接收用途' : `${outputName}${(runtime?.outputs[card.id]?.length || 0) > 1 ? ` · ${runtime?.outputs[card.id]?.length} 项` : ''}`
     return connectionSides.map(side => {
       const connected = edges.some(edge => {
         const sides = connectionLayout.sides[edge.id] || defaultSides(point(edge.source_card), point(edge.target_card))
         return edge.source_card === card.id && sides.source === side || edge.target_card === card.id && sides.target === side
       })
       return <Tooltip key={side} title={summary} open={drag ? !!hoveredPoint && hoveredPoint.dataset.card === card.id && hoveredPoint.dataset.connectionSide === side : undefined}>
-        <button type="button" disabled={readonly} className="generation-connection-point" data-card={card.id} data-connection-side={side} data-connected={connected} data-connecting={!!drag} data-compatible={drag ? options.length > 0 : undefined} aria-label={`${sideLabels[side]}侧连接点`} onPointerDown={event => {
+        <button type="button" disabled={readonly} className="generation-connection-point" data-card={card.id} data-connection-side={side} data-connected={connected} data-connecting={!!drag || !!accessibleConnection} data-compatible={sourceConnection ? options.length > 0 : undefined} aria-label={`${sideLabels[side]}侧连接点`} onKeyDown={event => {
+          if (event.key !== 'Enter' && event.key !== ' ') return
+          event.preventDefault(); event.stopPropagation()
+          if (accessibleConnection) chooseAccessibleTarget(card.id, side)
+          else startAccessibleConnection(card.id, side, event.currentTarget)
+        }} onPointerDown={event => {
           if (readonly || event.button !== 0 || pendingConnection) return
+          if (accessibleConnection) { event.preventDefault(); event.stopPropagation(); chooseAccessibleTarget(card.id, side); return }
           event.stopPropagation(); event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId)
-          connectionPointer.current = true
+          connectionPointer.current = true; setActiveCategory(undefined); connectionTrigger.current = event.currentTarget
           setDrag({ card: card.id, side, x: event.clientX, y: event.clientY }); setReason('拖到目标连接点，仅提供候选')
         }} onPointerMove={event => { if (drag && !pendingConnection) setDrag({ ...drag, x: event.clientX, y: event.clientY }) }} onPointerUp={finishDrag} onPointerCancel={cancelConnection} onLostPointerCapture={() => { if (connectionPointer.current) cancelConnection() }}><i aria-hidden /></button>
       </Tooltip>
@@ -381,14 +422,20 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
         onClick={() => runtime?.precheck(selectedModels[0].id, 'selection', selected)}>运行所选模型（{selectedModels.length}）</Button>
   return <div className="generation-graph" ref={container}>
     {connectionLayout.error && <span role="status">{connectionLayout.error}</span>}
-    {pendingConnection && drag && <div role="menu" aria-label="选择连接用途" className="generation-connection-menu" style={{ left: Math.max(8, Math.min(pendingConnection.x, window.innerWidth - 328)), top: Math.max(8, Math.min(pendingConnection.y, window.innerHeight - 320)) }}>
+    {accessibleConnection && !pendingConnection && <div ref={connectionMenu} role="dialog" aria-label="选择连接目标" className="generation-connection-menu generation-target-menu">
+      <strong>选择连接目标</strong>
+      <p>连接只提供候选，实际使用仍需明确选择。</p>
+      {cards.filter(card => card.id !== accessibleConnection.card && !filtered.has(card.id) && !hidden.has(card.id)).map(card => <Button key={card.id} disabled={readonly} onClick={() => chooseAccessibleTarget(card.id)}>连接到{'name' in card && card.name || 'title' in card && card.title || cardTitles[card.type || '']} · 卡片 {cards.indexOf(card) + 1}</Button>)}
+      <Button onClick={cancelConnection}>取消连接</Button>
+    </div>}
+    {pendingConnection && (drag || accessibleConnection) && <div ref={connectionMenu} role="menu" aria-label="选择连接用途" className="generation-connection-menu" style={{ left: Math.max(8, Math.min(pendingConnection.x, window.innerWidth - 328)), top: Math.max(8, Math.min(pendingConnection.y, window.innerHeight - 320)) }}>
       <strong>选择连接用途</strong>
-      {compatibleOptions(drag.card, pendingConnection.target).map(option => <Button key={`${option.source_port}:${option.target_port}`} role="menuitem" onClick={() => commitConnection(option, pendingConnection.side)}>{cardDefinitions[cards.find(card => card.id === drag.card)?.type || '']?.outputs.find(output => output.id === option.source_port)?.label} → 作为{inputLabel(cards.find(card => card.id === pendingConnection.target)!, option.target_port)}候选</Button>)}
+      {compatibleOptions((drag || accessibleConnection)!.card, pendingConnection.target).map(option => <Button key={`${option.source_port}:${option.target_port}`} role="menuitem" onClick={() => commitConnection(option, pendingConnection.side)}>{cardDefinitions[cards.find(card => card.id === (drag || accessibleConnection)!.card)?.type || '']?.outputs.find(output => output.id === option.source_port)?.label} → 作为{inputLabel(cards.find(card => card.id === pendingConnection.target)!, option.target_port)}候选</Button>)}
       <Button role="menuitem" onClick={cancelConnection}>取消连接</Button>
     </div>}
     <GenerationCanvasBrowse value={displayFilter} onChange={setDisplayFilter} />
     {primaryHost ? createPortal(runSelection, primaryHost) : runSelection}
-    <CardList catalog={catalog} readonly={readonly} onAdd={(type, entry) => add(type, undefined, entry)} />
+    <CardList catalog={catalog} readonly={readonly} active={activeCategory} onActiveChange={category => { cancelConnection(); setActiveCategory(category) }} onAdd={(type, entry) => add(type, undefined, entry)} />
     <nav className="director-canvas-bottom generation-view-tools" aria-label="画布视图工具">
       <WorkbenchIconButton label="定位所选" variant="quiet" icon={<AimOutlined />} disabled={!selected.length} onClick={() => { const p = point(selected[0]); layout.setView(previous => ({ ...previous, transform: { ...previous.transform, x: (container.current?.clientWidth || 1200) / 2 - p.x * previous.transform.scale, y: (container.current?.clientHeight || 800) / 2 - p.y * previous.transform.scale } })) }} />
       <WorkbenchIconButton label="缩小" variant="quiet" icon={<MinusOutlined />} onClick={() => viewport.zoom(-.1)} />
@@ -495,8 +542,8 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
           const isModel = 'model_id' in card
           return <CardShell key={`${document.id}:${card.id}`} id={card.id} name={'name' in card ? card.name : 'title' in card ? card.title : undefined} title={cardTitles[card.type || 'content.text']} contextKey={document.id} point={point(card.id)}
             scale={transform.scale} width={size?.width || 400} height={size?.height} selected={selected.includes(card.id)} readonly={readonly} removeDisabled={runtime?.busyCards.has(card.id)}
-            onOpen={trigger => { setDetailTrigger(trigger); setDetailId(card.id) }} onSelect={checked => setSelected(previous => checked ? [...previous, card.id] : previous.filter(id => id !== card.id))}
-            onMove={position => layout.move(card.id, position)} onRemove={() => removeCard(card.id)} connections={geometricPorts(card)}
+            onOpen={trigger => { if (accessibleConnection) chooseAccessibleTarget(card.id); else { setDetailTrigger(trigger); setDetailId(card.id) } }} onSelect={checked => setSelected(previous => checked ? [...previous, card.id] : previous.filter(id => id !== card.id))}
+            onConnect={trigger => startAccessibleConnection(card.id, 'right', trigger)} onMove={position => { if (!accessibleConnection) layout.move(card.id, position) }} onRemove={() => removeCard(card.id)} connections={geometricPorts(card)}
             footer={<>{isModel && <section aria-label="模型状态摘要">
               <span>{models.find(model => model.id === card.model_id)?.name || '尚未选择模型'} · {canvasNodeStatusLabels[node?.status || ''] || '尚未运行'}</span>
               {node?.error_message && <p data-problem="true">生成失败：{node.error_message}{outputs.length > 0 ? ' · 保留上次成果' : ''}</p>}
@@ -542,7 +589,8 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
     </svg>}
     {cards.filter(card => detailSessions.includes(card.id) || card.id === detailId).map(detailCard => {
       const DetailRenderer = rendererRegistry[detailCard.type || 'content.text']
-      return <WorkbenchDetails key={detailCard.id} title={cardTitles[detailCard.type || 'content.text'] || '卡片详情'} status={readonly ? '只读' : editingStatus} open={detailCard.id === detailId} onClose={() => setDetailId(current => current === detailCard.id ? undefined : current)} trigger={detailTrigger}>
+      return <WorkbenchDetails key={detailCard.id} title={cardTitles[detailCard.type || 'content.text'] || '卡片详情'} status={readonly ? '只读' : editingStatus} open={detailCard.id === detailId && !detailsSuppressed} onClose={() => setDetailId(current => current === detailCard.id ? undefined : current)} trigger={detailTrigger}>
+        {!desktop && <Space wrap><Button onClick={() => setActiveCategory('基础卡')}>添加卡片</Button><Button disabled={readonly} onClick={event => startAccessibleConnection(detailCard.id, 'right', event.currentTarget)}>连接到…</Button></Space>}
         {detailCard?.type?.startsWith('direction.') && <details className="generation-candidate-management"><summary>候选连接管理</summary>{references(detailCard)}</details>}
         {detailCard?.type === 'direction.photography' && <Button disabled={readonly} onClick={() => {
           const copy = { ...structuredClone(detailCard), id: crypto.randomUUID() }
