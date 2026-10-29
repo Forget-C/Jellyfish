@@ -90,6 +90,7 @@ try {
   await reading.getByText('第一段第二段第三段',{exact:true}).first().waitFor()
   assert.equal(await reading.getByRole('textbox').count(),0)
   assert.equal(await reading.getByRole('button',{name:'提交生成',exact:true}).count(),0)
+  await page.waitForFunction(modal => Number(getComputedStyle(modal).opacity) > .99, await reading.elementHandle())
   await page.screenshot({path:join(output,'stack-reading.png'),fullPage:true})
   await page.keyboard.press('Escape')
   await reading.waitFor({state:'hidden'})

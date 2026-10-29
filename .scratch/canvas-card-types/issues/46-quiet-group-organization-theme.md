@@ -28,5 +28,5 @@
 
 - 基于 85cb6026 的独立工作树完成；已合入当前集成分支 44aa41ca。编组默认只显示框外图标名称及轻背景实线框，明确选择后才出现主题移动柄和管理菜单；名称／成员按需管理，关闭恢复管理入口焦点，长名省略。缩小画布时管理控件保持32px命中；菜单向上避免遮成员。
 - 成员仍独立编辑／移动，空白拖整组、修饰键框选、Space平移、取消、整理撤销及明确归属继续保留。补齐Portal菜单不应冒泡画布手势的边界；stack表面／叠层／操作条改用既有语义token，未改输出或采用。
-- 公开HTTP＋真实页面：Organization、Stacks、Graph、Tools通过；Organization最后运行证据为 `/private/tmp/canvas-b46/org-release`，另有 `/private/tmp/canvas-b46/stack-final`、`graph-final`、`tools-final`。原产品红灯及逐项图片差异见[本票验收记录](/private/tmp/canvas-b46/acceptance.md)。实际查看桌面／390／3830原图、局部放大、B及用户参考；全体跨票图片对照留给48，不以本票代替。
+- 公开HTTP＋真实页面：Organization、Stacks、Graph、Tools通过；Organization最后运行证据为 `/private/tmp/canvas-b46/org-release`，另有 `/private/tmp/canvas-b46/stack-release`、`graph-final`、`tools-final`。原产品红灯及逐项图片差异见[本票验收记录](/private/tmp/canvas-b46/acceptance.md)。实际查看桌面／390／3830原图、局部放大、B及用户参考；全体跨票图片对照留给48，不以本票代替。
 - Node24 typecheck、差异检查通过；定向eslint 0错误、1条既有inspectTarget依赖告警。无后端或公开协议变化，不再生OpenAPI。01–42票据及历史验收未修改，Completion表示本票实施通过，待主分支集成和最终审查。
