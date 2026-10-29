@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented
+**Completion:** integrated
 
 - [x] 按来源卡、来源输出、目标卡、目标输入用途判定相同候选；同点或不同侧边重复拖线均提示已存在并高亮原线，不新增关系、不更改已有绑定／采用。
 - [x] 同一对卡不同合法用途允许独立关系，不按卡片对一概去重；仍遵守类型、模型能力、统一无环和实际采用数量规则。
@@ -33,3 +33,5 @@
 - 页面改动仅生成画布：默认不常驻连线文字符合本次规格；共享场次CanvasEdge不改，几何函数新增可选车道偏移的默认值为0，临时拖线保持原路由。README及01–26记录未改。
 
 - 报告前同步 integration 的30号能力（合并 `ae5a3e0a`，包含主区 `bdf995f3`）；Graph无冲突保留CandidateOutputStatus与连接已有卡的value=null，manifest冲突仅合并双方case及套件项。合后Node24 typecheck、差异及01–26哈希通过；31完整旅程 **12.0s passed**（`/private/tmp/canvas31-with30-edges`），30预布线旅程 **18.7s passed**（`/private/tmp/canvas31-with30-prewire`）。没有把预布线、重复定位或显示选择变成自动采用。
+
+- 2026-10-29 集成：31实现 `d5901154`、同步30后最终tip `774a7f68` 已无冲突集成。主区Node24 typecheck、差异及01–26哈希通过；产品树相同，复用合后31全旅程12.0s（`/private/tmp/canvas31-with30-edges`）及30预布线18.7s（`/private/tmp/canvas31-with30-prewire`）。32仍待完成，33未开始，不预记最终通过。
