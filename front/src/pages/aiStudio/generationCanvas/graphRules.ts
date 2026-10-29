@@ -2,6 +2,10 @@ import type { CanvasCatalog, CanvasDocument, CanvasModelCapability } from '../..
 
 export type GenerationCard = NonNullable<CanvasDocument['cards']>[number]
 export type GenerationEdge = NonNullable<CanvasDocument['edges']>[number]
+/** 候选四元组身份与几何侧边无关，用于校验去重和定位已有关系。 */
+export function findConnection(document: CanvasDocument, edge: GenerationEdge) {
+  return document.edges?.find(item => item.source_card === edge.source_card && item.source_port === edge.source_port && item.target_card === edge.target_card && item.target_port === edge.target_port)
+}
 /** 静态端点来自后端公开目录；这里只组织显示与即时无环提示。 */
 export function createGraphRules(catalog: CanvasCatalog) {
   const cardDefinitions = Object.fromEntries(catalog.cards.map(card => [card.type, card]))
@@ -19,7 +23,7 @@ function connectionReason(document: CanvasDocument, edge: GenerationEdge, capabi
   if (!output || !input?.accepts.includes(output.value_kind)) return '端口值种类不匹配，不提供隐式转换'
   if (capability && (!capability.input_ports.includes(edge.target_port) || target.type !== `model.${capability.modality}`)) return '所选模型未接入该输入用途'
   const edges = document.edges || []
-  if (edges.some(item => item.source_card === edge.source_card && item.source_port === edge.source_port && item.target_card === edge.target_card && item.target_port === edge.target_port)) return '同一端口连接已存在'
+  if (findConnection(document, edge)) return '同一端口连接已存在'
   const pending = [edge.target_card], seen = new Set<string>()
   while (pending.length) {
     const id = pending.pop()!

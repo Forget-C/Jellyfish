@@ -154,3 +154,14 @@
 .generation-card-holding > .generation-card-body { outline: 2px solid var(--wb-focus); cursor: grabbing; }
 .generation-card .generation-card-footer { margin-top: 12px; font-size: 11px; color: var(--wb-muted); }
 .generation-card .generation-card-footer [data-problem="true"] { color: var(--wb-text); }
+
+.generation-edges [data-selected="true"] .canvas-edge-line { stroke: var(--wb-focus); stroke-width: 3px; }
+
+.generation-edges .canvas-edge-hit { pointer-events: stroke; cursor: pointer; }
+.generation-edges .canvas-edge-hit:focus-visible { outline: none; stroke: var(--wb-focus); stroke-opacity: .35; }
+.generation-edge-inspector { position: absolute; z-index: 45; bottom: 100px; left: 16px; max-width: min(360px, calc(100% - 32px)); padding: 12px; background: var(--wb-surface); border: 1px solid var(--wb-border); border-radius: var(--wb-radius); color: var(--wb-text); }
+.generation-edge-inspector p { font-size: 12px; overflow-wrap: anywhere; }
+
+@media(max-width: 700px) {
+  .generation-bottom-right .canvas-status-host { position: absolute; right: 0; bottom: calc(100% + 8px); width: max-content; max-width: calc(100vw - 24px); box-sizing: border-box; }
+}
