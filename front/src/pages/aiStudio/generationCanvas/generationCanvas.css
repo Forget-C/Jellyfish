@@ -101,3 +101,15 @@
   .generation-workbench .generation-toolbox { top: 120px; }
   .generation-workbench .generation-feedback { top: 108px; }
 }
+
+/* 工作台卡片保持标题、有限摘要和独立动作，完整字段留在悬浮详情。 */
+.generation-workbench .generation-card { resize: none; overflow: visible; min-height: 0; border: 0; background: transparent; }
+.generation-workbench .generation-card header { position: relative; background: transparent; padding: 0 8px; height: 32px; color: var(--wb-muted); }
+.generation-card header strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; }
+.generation-card header small { font-size: 11px; flex-shrink: 0; }
+.generation-card header > button:first-child { background: transparent; border: 0; color: var(--wb-muted); cursor: grab; }
+.generation-workbench .generation-card .generation-card-body { padding: 20px; background: var(--wb-surface); border: 1px solid var(--wb-border); border-radius: 12px; min-height: 140px; max-height: 340px; overflow: hidden; }
+.generation-card[data-selected="true"] .generation-card-body { outline: 1px solid var(--wb-focus); }
+.generation-card .canvas-card-summary { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; margin: 0 0 8px; }
+.generation-card-body :is(img, video) { display: block; height: 160px; object-fit: contain; margin-inline: auto; }
+.generation-card-menu { position: absolute; top: 32px; right: 0; z-index: 25; padding: 8px; display: grid; gap: 4px; background: var(--wb-raised); border: 1px solid var(--wb-border); border-radius: var(--wb-radius); }
