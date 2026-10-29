@@ -108,7 +108,7 @@
 /* 视图工具与内容历史使用工作台同一位置，业务历史保持独立。 */
 .generation-view-tools { font-size: 12px; color: var(--wb-muted); gap: 4px; }
 .generation-view-tools .canvas-toolbar-popover { top: auto; bottom: calc(100% + 8px); }
-.generation-selection-actions { position: absolute; z-index: 30; bottom: 72px; left: 16px; }
+.generation-selection-actions { position: absolute; z-index: 30; bottom: auto; left: 16px; }
 .generation-bottom-right { z-index: 30; }
 @media(max-width: 700px) {
   .generation-view-tools { bottom: 12px; left: 12px; gap: 0; max-width: calc(100% - 108px); }
@@ -167,3 +167,11 @@
 @media(max-width: 700px) {
   .generation-bottom-right .canvas-status-host { position: absolute; right: 0; bottom: calc(100% + 8px); width: max-content; max-width: calc(100vw - 24px); box-sizing: border-box; }
 }
+
+/* 多选组织动作锚定选区上方，菜单本身不参与画布手势。 */
+.generation-selection-actions { z-index: 80; bottom: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--wb-border); border-radius: 12px; background: var(--wb-surface); max-width: calc(100% - 24px); }
+.generation-group { cursor: grab; border-style: solid; border-width: 1px; border-radius: 8px; }
+.generation-group:active { cursor: grabbing; }
+.generation-group { pointer-events: auto; }
+
+.generation-edges { z-index: 2; }
