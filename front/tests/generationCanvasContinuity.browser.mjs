@@ -1,3 +1,4 @@
+import { openCardList } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -56,13 +57,15 @@ try {
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
   assert.ok(seeded.ok, await seeded.text())
   await page.goto(`http://127.0.0.1:4299/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
-  await page.getByRole('heading', { name: '画面设计', exact: true }).locator('..').getByRole('button', { name: '添加画面风格卡', exact: true }).waitFor()
+  await openCardList(page)
+  await page.getByRole('button', { name: '添加画面风格卡', exact: true }).waitFor()
+  await page.getByRole('button', { name: '关闭卡片列表', exact: true }).click()
   const card = page.locator('.wb-details:not([hidden])')
   const open = async id => { await page.locator(`[data-card-id="${id}"]`).press('Enter'); await card.waitFor() }
   const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
   const poll = async predicate => { for (let i = 0; i < 80; i++) { const state = await read(); if (predicate(state)) return state; await delay(150) } throw Error('saved document did not reach expected state') }
   if (await page.getByRole('button', { name: '关闭详情', exact: true }).isVisible()) await page.getByRole('button', { name: '关闭详情', exact: true }).click()
-  await page.getByRole('button', { name: '适应画布', exact: true }).click()
+  await page.getByRole('button', { name: '适应全部', exact: true }).click()
   const from = await page.locator('[data-card-id="anchor"]').getByRole('button', { name: '输出端口 anchor', exact: true }).boundingBox()
   const to = await page.locator('[data-card-id="fact"]').getByRole('button', { name: '输入端口 effect_object', exact: true }).boundingBox()
   assert.ok(from && to)

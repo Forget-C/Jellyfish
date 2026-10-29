@@ -1,3 +1,4 @@
+import { openCanvasManagement, openSummaryMenu } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { openCanvasCard, closeCanvasDetails, closePrecheck, assertVisibleInDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -107,7 +108,9 @@ try {
   await page.getByRole('button', { name: '核实运行请求', exact: true }).waitFor()
   await waitText(card.getByRole('region', { name: '运行正文', exact: true }), '第一段')
   assert.equal(await card.getByRole('region', { name: '当前正式输出' }).count(), 0)
+  await openSummaryMenu(sourceSummary)
   assert.equal(await sourceSummary.getByRole('button', { name: '删除卡片', exact: true }).isDisabled(), true)
+  await openCanvasManagement(page)
   assert.equal(await page.getByRole('button', { name: '删除画布', exact: true }).isDisabled(), true)
   assert.equal((await control()).calls.length, 1)
   assert.equal((await control()).calls[0].text, '固定输入正文')
@@ -157,7 +160,9 @@ try {
   await waitText(card.getByRole('region', { name: '运行正文', exact: true }), '第一段第二段')
   await waitText(card.getByRole('region', { name: '当前正式输出', exact: true }).locator('.canvas-text-preview > p'), '第一段第二段第三段')
   assert.equal((await control()).calls.length, 2)
+  await openSummaryMenu(sourceSummary)
   assert.equal(await sourceSummary.getByRole('button', { name: '删除卡片', exact: true }).isEnabled(), true, 'terminal failure releases card activity guard')
+  await openCanvasManagement(page)
   assert.equal(await page.getByRole('button', { name: '删除画布', exact: true }).isEnabled(), true, 'terminal failure releases canvas activity guard')
   assert.equal(await prompt.textContent(), '运行期间的后续编辑')
   assert.equal((await control()).calls[1].text, '固定输入正文', 'accepted run keeps the frozen input')

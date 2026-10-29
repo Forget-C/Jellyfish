@@ -1,3 +1,4 @@
+import { openSummaryMenu } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { openCanvasCard, closeCanvasDetails, closePrecheck } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -41,7 +42,7 @@ try {
   const card = await openCanvasCard(page, 'm')
   const historyToggle = page.getByRole('button', { name: '运行历史', exact: true })
   const history = page.getByRole('region', { name: '画布运行历史', exact: true })
-  const toggleHistory = async () => { await closeCanvasDetails(page); await historyToggle.click() }
+  const toggleHistory = async () => { await historyToggle.click() }
   const control = async body => (await fetch(`${api}/test/runtime-controls`, body && { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json()
   const runtime = async () => (await (await fetch(`${base}/${canvas.id}/runtime`)).json()).data
   const waitText = async (locator, text) => { await locator.filter({ hasText: new RegExp(`^${text}$`) }).waitFor(); assert.equal(await locator.textContent(), text) }
@@ -73,7 +74,9 @@ try {
   await waitText(card.getByRole('region', { name: '运行正文', exact: true }), '第一段第二段')
   await page.route(`**/generation-canvases/canvas-project/${canvas.id}/events/connection`, route => blockedReconnect ? route.abort('failed') : route.continue())
   await control({ disconnect: true })
+  await page.getByRole('button', { name: '更多操作', exact: true }).click()
   await page.getByRole('status', { name: '运行连接', exact: true }).filter({ hasText: '运行连接恢复中' }).waitFor()
+  await page.getByRole('button', { name: '更多操作', exact: true }).click()
   await waitText(card.getByRole('region', { name: '运行正文', exact: true }), '第一段第二段')
   await control({ release: 2 })
   let completed
@@ -104,6 +107,7 @@ try {
   await record.getByRole('status').filter({ hasText: '取消中，等待任务终态' }).waitFor()
   await page.getByRole('alert').filter({ hasText: '取消请求结果未知' }).waitFor()
   assert.equal((await runtime()).runs.at(-1).lifecycle, 'active')
+  await openSummaryMenu(sourceSummary)
   assert.equal(await sourceSummary.getByRole('button', { name: '删除卡片', exact: true }).isDisabled(), true)
   assert.equal(await record.getByText('已取消 · 未完成', { exact: true }).count(), 0)
   await page.reload()
@@ -141,6 +145,7 @@ try {
   await openCanvasCard(page, 'm')
   await card.getByRole('textbox', { name: '模型正文', exact: true }).fill('请求期间的后续编辑')
   releaseCopy()
+  await toggleHistory()
   await history.getByRole('status').filter({ hasText: '已另存为独立内容卡' }).waitFor()
   const saved = (await (await fetch(`${base}/${canvas.id}`)).json()).data
   const copy = saved.document.cards.find(item => item.origin)
@@ -158,7 +163,8 @@ try {
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   // Removed editable source cards do not remove history or the task's historical target.
-  await sourceSummary.getByRole('button', { name: '删除卡片', exact: true }).click()
+  await openSummaryMenu(sourceSummary)
+  await sourceSummary.getByRole('button', { name: '删除卡片', exact: true }).press('Enter')
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   assert.equal(await sourceSummary.count(), 0)
@@ -172,7 +178,6 @@ try {
   assert.equal(await page.evaluate(() => document.activeElement.dataset.historyNode), third.nodes[0].id)
   assert.equal((await control()).calls.length, 3)
   await page.getByRole('dialog', { name: '任务中心', exact: true }).waitFor({ state: 'hidden' })
-  await closeCanvasDetails(page)
   await targeted.getByText('本次实际输入与模型参数', { exact: true }).click()
   await page.screenshot({ path: join(output, 'removed-source-history.png'), fullPage: true })
   console.log(JSON.stringify({ output, success: true, providerCalls: 3 }))

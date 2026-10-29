@@ -14,7 +14,7 @@ export function GenerationCanvasBrowse({ value, onChange }: { value: CanvasDispl
   useLayoutEffect(() => {
     const toolbar = root.current?.closest('.generation-workbench')?.querySelector('.generation-workbench-header')
     if (!toolbar) return
-    const measure = () => setTop(toolbar.getBoundingClientRect().bottom + 8)
+    const measure = () => setTop(toolbar.getBoundingClientRect().bottom + 12)
     const observer = new ResizeObserver(measure)
     observer.observe(toolbar); measure()
     return () => observer.disconnect()

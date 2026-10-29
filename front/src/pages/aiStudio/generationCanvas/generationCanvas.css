@@ -73,10 +73,6 @@
   .generation-stage .generation-connection-reason { bottom: 116px; font-size: 12px; }
 }
 
-.generation-minimap { position: absolute; z-index: 5; right: 12px; bottom: 112px; width: 180px; height: 120px; background: var(--wb-inset); border: 1px solid var(--wb-border); border-radius: var(--wb-radius); touch-action: none; }
-.generation-minimap rect { fill: var(--wb-strongBorder); }
-.generation-minimap .generation-minimap-viewport { fill: none; stroke: var(--wb-text); stroke-width: 2; vector-effect: non-scaling-stroke; pointer-events: none; }
-
 .generation-catalog-state { position: absolute; inset: 72px 16px auto; max-width: 520px; margin-inline: auto; z-index: 7; }
 
 .generation-candidate-management { overflow-wrap: anywhere; }
@@ -115,13 +111,11 @@
 .generation-view-tools .canvas-toolbar-popover { top: auto; bottom: calc(100% + 8px); }
 .generation-selection-actions { position: absolute; z-index: 30; bottom: 72px; left: 16px; }
 .generation-bottom-right { z-index: 30; }
-.generation-workbench .generation-minimap { bottom: 80px; right: 16px; }
 @media(max-width: 700px) {
   .generation-view-tools { bottom: 12px; left: 12px; gap: 0; max-width: calc(100% - 108px); }
   .generation-view-tools .canvas-toolbar-popover { position: absolute; top: auto; left: 0 !important; right: auto !important; bottom: calc(100% + 8px); width: 260px; }
   .generation-bottom-right { bottom: 12px; right: 12px; flex-wrap: wrap; justify-content: flex-end; }
   .generation-bottom-right .canvas-status-host { flex: 1 1 100%; }
-  .generation-workbench .generation-minimap { bottom: 128px; width: 140px; height: 92px; }
   .generation-selection-actions { bottom: 124px; left: 12px; }
 }
 /* 工作台卡片保持标题、有限摘要和独立动作，完整字段留在悬浮详情。 */

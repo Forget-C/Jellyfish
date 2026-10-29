@@ -1,3 +1,4 @@
+import { openCanvasManagement, openCardList, openSummaryMenu } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn, execFileSync } from 'node:child_process'
@@ -35,8 +36,10 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 960 } })
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   await page.goto('http://127.0.0.1:4275/projects/canvas-project/generation-canvas')
+  await openCanvasManagement(page)
   await page.getByRole('button', { name: '新建画布', exact: true }).click()
 
+  await openCardList(page)
   await page.getByRole('button', { name: '添加图片卡', exact: true }).click()
   const card = page.locator('[data-card-id]').first()
   const detail = page.getByRole('complementary', { name: '图片内容卡', exact: true })
@@ -75,7 +78,8 @@ try {
   }, { times: 1 })
   await input.setInputFiles({ ...png, name: 'late.png' })
   await reached
-  await card.getByRole('button', { name: '删除卡片', exact: true }).click()
+  await openSummaryMenu(card)
+  await card.getByRole('button', { name: '删除卡片', exact: true }).press('Enter')
   release()
   await delay(250)
   assert.equal(await page.locator('[data-card-id]').count(), 0, 'late upload cannot revive removed card')
@@ -105,6 +109,7 @@ try {
     await page.getByRole('button', { name: `选用 ${filename.split('.')[0]}`, exact: true }).click()
     assert.equal(await mediaCard.locator(preview).getAttribute('src'), src)
   }
+  await openCardList(page)
   await page.getByRole('button', { name: '添加图片卡', exact: true }).click()
   await detail.getByLabel('上传媒体文件').setInputFiles(png)
   await detail.locator('img[alt="图片预览"]').waitFor()
@@ -117,7 +122,7 @@ try {
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   for (const { id, file_id, type } of savedSources) {
     await page.locator(`[data-card-id="${id}"]`).press('Enter')
-    const preview = page.getByRole('complementary').locator(type === 'content.image' ? 'img' : type.split('.')[1])
+    const preview = page.locator('.wb-details:not([hidden])').locator(type === 'content.image' ? 'img' : type.split('.')[1])
     await preview.waitFor()
     assert.ok((await preview.getAttribute('src')).includes(file_id), 'reopened card keeps actual file')
     const outputValue = (await (await fetch(`${base}/${canvasId}/cards/${id}/outputs`)).json()).data.outputs[0]
