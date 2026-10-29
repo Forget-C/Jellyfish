@@ -1,0 +1,7 @@
+.generation-card-status { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 24px; font-size: 11px; color: var(--wb-muted); white-space: nowrap; }
+.generation-card-status > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.generation-card-status .generation-card-adopted { flex: none; }
+.generation-card-status .generation-card-specification { margin-left: auto; }
+.generation-card-status > button { flex: none; }
+.generation-card-status-reasons { max-width: min(320px, calc(100vw - 48px)); overflow-wrap: anywhere; }
+.generation-card-status-reasons p { margin: 0 0 4px; }
