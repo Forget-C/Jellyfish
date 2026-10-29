@@ -1,3 +1,4 @@
+import { designSummary } from './designSummary'
 import { AcceptanceBasisSelector } from './AcceptanceBasisSelector'
 import { Alert, Input, Select } from 'antd'
 import type { NarrativeOverviewCard, NarrativeBeatCard, NarrativeEventCard, ShotDesignCard, DesignField } from '../../../services/generated'
@@ -63,5 +64,5 @@ export function NarrativeDirectionEditor({ card: raw, document, savedRevision, m
 
 export function narrativeSummary(card: NarrativeCard) {
   const value = card.type === 'direction.narrative' ? (card as NarrativeOverviewCard).information_change : card.type === 'direction.beat' ? (card as NarrativeBeatCard).expected_change : card.type === 'direction.event' ? (card as NarrativeEventCard).action_change : (card as ShotDesignCard).visible_result
-  return `${card.name || '未命名设计'} · ${value?.text || '内容待定'} · ${({ empty: '未填写', not_applicable: '不适用', absent: '明确没有', undecided: '待确定', proposal: '提议', fact: '事实' } as const)[value?.state || 'empty']}`
+  return `${card.name || '未命名设计'} · ${designSummary([value], Object.values(card)) || '内容待定 · 未填写'}`
 }

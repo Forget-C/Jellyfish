@@ -146,8 +146,6 @@
 
 .generation-workbench .generation-card .generation-card-body { max-height: none; }
 
-.generation-input-ports button i { left: -4px; }
-.generation-output-ports button i { right: -4px; background: currentColor; }
 
 /* 独立生成画布按规格使用松开激活与整卡长按；不改变场次工作台手势。 */
 .generation-card { user-select: none; touch-action: none; }

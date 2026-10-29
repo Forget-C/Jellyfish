@@ -104,3 +104,31 @@
 - `legacy-labs` 首次在旧实验室跳转 URL mode 断言偶发失败；主区基线独立重跑 36.2s 通过（`/private/tmp/canvas33-legacy-baseline`），33 最终独立重跑 35.8s 通过（`/private/tmp/canvas33-legacy-final`）。本轮未修改实验室业务或该用例，不隐去首次失败。
 - 27–32 各票的自身红绿与验收证据仍保留。33 中上述 39 项均为本轮再次执行，不将前票通过直接充作新组合验收；仅未受影响的共享工作台六项复用。
 - 本次两份测试迁移子工作树已经清理，分支及工作树外截图／日志保留；33 主工作树由集成流程最后清理。01–26 内容哈希与实施前逐字节一致。
+
+## 双轴审查修复与定向验证
+
+本轮审查发现的两项规格 P2 和一项规范 P3 已在独立修复分支处理；这里记录修复和验证，不预记审查者复核结论。
+
+- 导演摘要保留主字段优先，主字段无内容时回退到本卡其他明确 DesignField；摄影也覆盖阶段画面及只有结构化景别的字段。摘要最多三项，忽略空状态，不把适用范围、来源或身份等元数据当设计正文；否定、不适用、待确定和提议保留状态语义，不改变完整输出或采用粒度。
+- 连接点 Tooltip 同时响应 hover 和 focus；真实 Tab 聚焦显示主要输出，Shift+Tab 离开后消失；拖线期间目标提示仍沿原受控逻辑。
+- 清理旧输入／输出端点 DOM 删除后遗留的两条 CSS，无未使用的旧端点选择器。
+- 真实红例：`/private/tmp/canvas-review-summary-red2` 为光源有内容而卡面空态；`/private/tmp/canvas-review-summary-green-focus-red` 通过摘要后在键盘焦点提示失败；`/private/tmp/canvas-review-framing-red` 为结构化景别无文本的摘要缺失。首次 `/private/tmp/canvas-review-summary-red` 是测试夹具使用无效锚点字段而被 HTTP 422 拒绝，修正夹具后才作为有效业务红例，不混淆两者。
+- 最终新公开页面用例 `generation-canvas-director-summaries` 在 `/private/tmp/canvas-review-director-final` **6.2s passed**；覆盖 21 组非主要字段、阶段／结构化景别、否定与开放状态、元数据排除，以及右侧编辑即时回显、键盘焦点与失焦。桌面焦点提示及窄屏截图已实际查看。
+
+以下受影响回归使用原公开 HTTP＋真实页面入口，供应商与外部存储仍为受控替身，证据统一位于 `/private/tmp/canvas-review-fixes-release/<case>/`：
+
+| case | 实际结果 |
+| --- | --- |
+| generation-canvas-director-summaries | passed · 5.4s |
+| generation-canvas-performance | passed · 14.1s |
+| generation-canvas-photography | passed · 12.4s |
+| generation-canvas-spatial | passed · 13.0s |
+| generation-canvas-narrative | passed · 14.8s |
+| generation-canvas-sound | passed · 12.8s |
+| generation-canvas-continuity | passed · 14.1s |
+| generation-canvas-guidance | passed · 16.2s |
+| generation-canvas-visual-presets | passed · 12.0s |
+| generation-canvas-ports | passed · 11.5s |
+| generation-canvas-accessible-connections | passed · 11.0s |
+
+前端 typecheck、差异检查及 01–26 字节校验通过；定向 ESLint 只有原 Graph 的两条 inspectTarget hooks 告警，无新增错误。没有应用后端或公开接口变更。除摄影结构化景别补充外的十项既有行为回归均不受该局部标签映射影响；最终新增用例再次覆盖该补充。原 39 项画布／旧实验室与 6 项共享工作台证据继续有效，新独立用例加入后共 46 项有通过证据；MySQL selection 未配置和原全局 lint 三条告警限制不变。

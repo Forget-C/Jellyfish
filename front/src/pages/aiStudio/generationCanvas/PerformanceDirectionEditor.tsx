@@ -1,3 +1,4 @@
+import { designSummary } from './designSummary'
 import { AcceptanceBasisSelector } from './AcceptanceBasisSelector'
 import { Alert, Input, Select } from 'antd'
 import type { CharacterPerformanceCard, CharacterSituationCard, DialogueReferencePayload, PerformanceRuleCard, ObjectReferencePayload, NarrativeReferencePayload } from '../../../services/generated'
@@ -88,8 +89,8 @@ export function PerformanceDirectionEditor({ card: raw, document, savedRevision,
 }
 
 export function performanceSummary(card: PerformanceCard) {
-  if (card.type === 'direction.situation') { const situation = card as CharacterSituationCard; return `${situation.situation?.text || '未填写处境'} · ${situation.relationship?.text || '未填写关系'}` }
-  if (card.type === 'direction.performance_rule') return (card as PerformanceRuleCard).applicability?.text || '未填写表演适用规则'
-  const performance = card as CharacterPerformanceCard
-  return `触发 → ${performance.reaction_order?.text || '反应待定'} → ${performance.physical_action?.text || '动作待定'} → ${performance.exit_state?.text || '结束状态待定'}`
+  const preferred = card.type === 'direction.situation' ? [(card as CharacterSituationCard).situation, (card as CharacterSituationCard).relationship]
+    : card.type === 'direction.performance_rule' ? [(card as PerformanceRuleCard).applicability]
+    : [(card as CharacterPerformanceCard).reaction_order, (card as CharacterPerformanceCard).physical_action, (card as CharacterPerformanceCard).exit_state]
+  return designSummary(preferred, Object.values(card)) || (card.type === 'direction.situation' ? '未填写处境 · 未填写关系' : card.type === 'direction.performance_rule' ? '未填写表演适用规则' : '触发 → 反应待定 → 动作待定 → 结束状态待定')
 }

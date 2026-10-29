@@ -1,3 +1,4 @@
+import { designSummary } from './designSummary'
 import { Alert, Input, InputNumber, Select, Space } from 'antd'
 import type { SpaceRuleCard, ContinuityCard, ImmutableFactCard, ConstraintMediaExample, DesignField, CanvasResolvedOutput } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
@@ -54,5 +55,6 @@ export function ConstraintDirectionEditor({ card: raw, document, savedRevision, 
 }
 
 export function constraintSummary(card: ConstraintCard) {
-  return card.type === 'direction.space_rule' ? card.shootable_area?.text || '可拍区域待定' : card.type === 'direction.continuity' ? `${card.before?.text || '前态待定'} → ${card.after?.text || '后态待定'}` : (card as ImmutableFactCard).fact?.text || '事实待填写'
+  const preferred = card.type === 'direction.space_rule' ? [card.shootable_area] : card.type === 'direction.continuity' ? [card.before, card.after] : [(card as ImmutableFactCard).fact]
+  return designSummary(preferred, Object.values(card)) || (card.type === 'direction.space_rule' ? '可拍区域待定' : card.type === 'direction.continuity' ? '前态待定 → 后态待定' : '事实待填写')
 }

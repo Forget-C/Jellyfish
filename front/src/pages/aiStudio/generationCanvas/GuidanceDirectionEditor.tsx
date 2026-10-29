@@ -1,3 +1,4 @@
+import { designSummary } from './designSummary'
 import { Alert, Input, Select } from 'antd'
 import type { AcceptanceCriterionCard, CreativeControlCard, GenerationGuidanceCard, DesignField } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
@@ -42,5 +43,5 @@ export function GuidanceDirectionEditor({ card: raw, document, savedRevision, mo
 
 export function guidanceSummary(card: GuidanceCard) {
   const field = card.type === 'direction.criterion' ? card.standard : card.type === 'direction.guidance' ? card.priority : (card as CreativeControlCard).freedom
-  return `${card.name || '未命名要求'} · ${field?.text || '内容待定'}`
+  return `${card.name || '未命名要求'} · ${designSummary([field], Object.values(card)) || '内容待定'}`
 }
