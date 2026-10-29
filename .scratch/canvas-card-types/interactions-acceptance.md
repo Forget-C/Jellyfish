@@ -37,7 +37,6 @@
 
 | 独立 case | 最终结果 | 证据目录 |
 | --- | --- | --- |
-
 | generation-canvas | passed · 7.9s | /private/tmp/canvas33-generation-tail6/generation-canvas |
 | generation-canvas-acceptance | passed · 6.9s | /private/tmp/canvas33-generation-tail2/generation-canvas-acceptance |
 | generation-canvas-accessible-connections | passed · 10.6s | /private/tmp/canvas33-layout-rest/generation-canvas-accessible-connections |
