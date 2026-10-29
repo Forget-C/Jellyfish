@@ -1,3 +1,4 @@
+import { GenerationCanvasBrowse, type CanvasDisplayFilter } from './GenerationCanvasBrowse'
 import { guidanceSummary, type GuidanceCard } from './GuidanceDirectionEditor'
 import { constraintSummary, type ConstraintCard } from './ConstraintDirectionEditor'
 import type { VisualStyleCard } from '../../../services/generated'
@@ -46,6 +47,7 @@ function GenerationCanvasGraphContent({ primaryHost, document, onChange, readonl
     return `${name || cardTitles[source?.type || ''] || '未知卡片'} · ${id.slice(0, 8)}`
   }
   const inputLabel = (card: GenerationCard, port: string) => cardDefinitions[card.type || '']?.inputs.find(item => item.id === port)?.label || portLabels[port]
+  const [displayFilter, setDisplayFilter] = useState<CanvasDisplayFilter>({ group: '', modality: '', problems: false })
   const [selected, setSelected] = useState<string[]>([])
   const [detailId, setDetailId] = useState<string | undefined>(cards[0]?.id)
   const [detailTrigger, setDetailTrigger] = useState<HTMLElement>()
@@ -58,6 +60,12 @@ function GenerationCanvasGraphContent({ primaryHost, document, onChange, readonl
   const [models, setModels] = useState<ModelRead[]>([])
   const [capabilities, setCapabilities] = useState<Record<string, CanvasModelCapability>>({})
   const [capabilityErrors, setCapabilityErrors] = useState<Record<string, string>>({})
+  const filtered = new Set(cards.filter(card => {
+    const definition = cardDefinitions[card.type || '']
+    const node = runtime?.nodes[card.id]
+    const problem = !!(node && ['failed', 'blocked', 'cancelled'].includes(node.status)) || !!('model_id' in card && card.model_id && capabilityErrors[card.model_id])
+    return !!(displayFilter.group && definition?.group !== displayFilter.group || displayFilter.modality && definition?.modality !== displayFilter.modality || displayFilter.problems && !problem)
+  }).map(card => card.id))
   const [measured, setMeasured] = useState<Record<string, GraphSize>>({})
   const [drag, setDrag] = useState<{ card: string; port: string; x: number; y: number }>()
   useEffect(() => {
@@ -80,6 +88,7 @@ function GenerationCanvasGraphContent({ primaryHost, document, onChange, readonl
   const container = useRef<HTMLDivElement>(null)
   const hidden = useMemo(() => new Set(groups.filter(group => group.collapsed).flatMap(group => group.card_ids || [])), [groups])
   const cardIdentity = cards.map(card => card.id).join('|')
+  const filterIdentity = [...filtered].join('|')
   const groupIdentity = groups.map(group => `${group.id}:${group.collapsed}`).join('|')
   // 折叠成员在新浏览器没有本地测量；保留几何占位，不能让整个布局永远等待隐藏 DOM。
   const layoutMeasurements = useMemo(() => ({ ...Object.fromEntries([...hidden].map(id => [id, { width: 400, height: 350 }])), ...measured }), [measured, hidden])
@@ -120,7 +129,7 @@ function GenerationCanvasGraphContent({ primaryHost, document, onChange, readonl
     }))
     root.querySelectorAll('[data-card-id]').forEach(card => observer.observe(card))
     return () => observer.disconnect()
-  }, [cardIdentity, groupIdentity])
+  }, [cardIdentity, groupIdentity, filterIdentity])
   const edit = (next: CanvasDocument) => { if (!readonly) onChange(next) }
   const updateCard = (next: GenerationCard) => edit({ ...latest.current, cards: latest.current.cards?.map(card => card.id === next.id ? next : card) })
   const showProtection = (protection: NonNullable<ReturnType<typeof referenceProtection>>) => {
@@ -257,6 +266,7 @@ function GenerationCanvasGraphContent({ primaryHost, document, onChange, readonl
   const runSelection = <Button aria-label={`运行所选模型（${selectedModels.length}）`} disabled={readonly || !selectedModels.length || !runtime || runtime.disabled || selectedModels.some(card => runtime.busyCards.has(card.id))}
         onClick={() => runtime?.precheck(selectedModels[0].id, 'selection', selected)}>运行所选模型（{selectedModels.length}）</Button>
   return <div className="generation-graph" ref={container}>
+    <GenerationCanvasBrowse value={displayFilter} onChange={setDisplayFilter} />
     {primaryHost ? createPortal(runSelection, primaryHost) : runSelection}
     <CardList catalog={catalog} readonly={readonly} onAdd={add} />
     <Space wrap className="generation-toolbar">
@@ -305,7 +315,7 @@ function GenerationCanvasGraphContent({ primaryHost, document, onChange, readonl
       {selectionBox && <div className="generation-selection-box" aria-hidden="true" style={{ left: selectionBox.x, top: selectionBox.y, width: selectionBox.width, height: selectionBox.height }} />}
       <div className="generation-world" style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }}>
         <svg className="generation-edges" width={12000} height={12000}>
-          {edges.filter(edge => !hidden.has(edge.source_card) && !hidden.has(edge.target_card)).map(edge => {
+          {edges.filter(edge => !hidden.has(edge.source_card) && !hidden.has(edge.target_card) && !filtered.has(edge.source_card) && !filtered.has(edge.target_card)).map(edge => {
             const from = point(edge.source_card), to = point(edge.target_card), width = layout.view.sizes[edge.source_card]?.width || 400
             return <CanvasEdge key={edge.id} d={`M ${from.x + width} ${from.y + 80} C ${from.x + width + 80} ${from.y + 80}, ${to.x - 80} ${to.y + 80}, ${to.x} ${to.y + 80}`}
               label={`${edge.source_card} → ${edge.target_card} ${portLabels[edge.target_port]}`} />
@@ -333,7 +343,7 @@ function GenerationCanvasGraphContent({ primaryHost, document, onChange, readonl
             {group.collapsed && <span>{members.length} 张独立卡片 · 无集合输出</span>}
           </section>
         })}
-        {cards.filter(card => !hidden.has(card.id)).map(card => {
+        {cards.filter(card => !hidden.has(card.id) && !filtered.has(card.id)).map(card => {
           const size = layout.view.sizes[card.id]
           return <CardShell key={`${document.id}:${card.id}`} id={card.id} title={cardTitles[card.type || 'content.text']} contextKey={document.id} point={point(card.id)}
             scale={transform.scale} width={size?.width || 400} height={size?.height} selected={selected.includes(card.id)} readonly={readonly} removeDisabled={runtime?.busyCards.has(card.id)}
@@ -354,7 +364,7 @@ function GenerationCanvasGraphContent({ primaryHost, document, onChange, readonl
       onPointerUp={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId) }}
       onKeyDown={event => { if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) { event.preventDefault(); layout.setView(previous => ({ ...previous, transform: { ...previous.transform, x: previous.transform.x + (event.key === 'ArrowLeft' ? 40 : event.key === 'ArrowRight' ? -40 : 0), y: previous.transform.y + (event.key === 'ArrowUp' ? 40 : event.key === 'ArrowDown' ? -40 : 0) } })) } }}>
       <title>小地图导航；方向键平移画布</title>
-      {cards.filter(card => !hidden.has(card.id)).map(card => <rect key={card.id} x={point(card.id).x} y={point(card.id).y} width={layout.view.sizes[card.id]?.width || 400} height={layout.view.sizes[card.id]?.height || 160} />)}
+      {cards.filter(card => !hidden.has(card.id) && !filtered.has(card.id)).map(card => <rect key={card.id} x={point(card.id).x} y={point(card.id).y} width={layout.view.sizes[card.id]?.width || 400} height={layout.view.sizes[card.id]?.height || 160} />)}
       <rect className="generation-minimap-viewport" x={visibleWorld.x} y={visibleWorld.y} width={visibleWorld.width} height={visibleWorld.height} />
     </svg>}
     <WorkbenchDetails title={detailCard ? cardTitles[detailCard.type || 'content.text'] || '卡片详情' : '卡片详情'} status={readonly ? '只读' : editingStatus} open={!!detailCard} onClose={() => setDetailId(undefined)} trigger={detailTrigger}>
