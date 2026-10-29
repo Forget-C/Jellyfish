@@ -485,3 +485,8 @@ flowchart TD
 
 - 36（`7728319e`，已同步35）无冲突集成，下方锚定编辑、同会话居中展开、空间避让、出屏恢复及适用上传动作形成页面闭环。主区Node24 typecheck、差异与01–33哈希通过；合后产品／测试树与最终源分支相同，复用 all-types 10.8s（`/private/tmp/canvas36-all-types`）、sessions 9.8s及media 9.9s证据，具体范围和限制见36票据。
 - 当前34–36均integrated，37、39解除依赖，38继续推进；未预记复杂导演Modal、单模型提交或本轮整体视觉验收。历史票据与原验收记录保持原样。
+
+### 2026-10-29：38 集成
+
+- 38（最终 `8b41b72d`，产品 `78f0d9bc`，已含35／36）无冲突集成。系统多选、上方菜单、视觉编组与组内手势、成员管理及整体整理撤销形成真实页面／HTTP闭环。主区Node24 typecheck、差异和01–33字节保护通过；产品／测试树与源分支一致，复用 organization 7.3s（`/private/tmp/canvas38-with36-organization`）、anchored-editor 10.7s（`/private/tmp/canvas38-with36-editor`）及tools 5.8s／graph 14.2s证据。
+- 当前34–36、38为integrated，37／39继续推进；40待其全部前置，41／42仍未开始。原旧票、历史证据及受控外部服务限制保留，不预填堆叠或整体视觉验收。

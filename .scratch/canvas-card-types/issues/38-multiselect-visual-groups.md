@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented
+**Completion:** integrated
 
 - [x] macOS Command、Windows／Linux Ctrl 点击卡片加入或移出集合；普通画布空白拖动无需按键即可框选并替换集合，松开鼠标或修饰键保留选择。多选期间收起单卡编辑展示并保留会话。
 - [x] 普通点击非上方菜单区域或 Escape 退出多选；点击卡／线接续普通单选，直接拖成员退出多选仅拖该卡。修饰键成员切换、触摸多选和仅调整筛选高亮的动作不先清空集合。
@@ -34,3 +34,5 @@
 - 受影响旧工具与 graph 用例迁移至新组织入口，保留撤销／重做、候选排序、模型切换及保存重开覆盖：`/private/tmp/canvas38-final-tools` **5.8s passed**，`/private/tmp/canvas38-final-graph` **14.2s passed**。36 合入未改相关组织／关系行为，另以新组织及 anchored-editor 覆盖合并接口变化；不将其他已废弃旧交互预期继续作为验收。
 - 实际查看桌面／390px 窄屏组织截图及最终换行菜单截图，菜单保持选区上方，编组保留成员边框。相关工作台标准例外为新多选菜单、组内空白拖动和无修饰框选，范围仅生成画布；未改其他工作台交互。
 - Node24 typecheck、定向 ESLint（0 errors，仅原 Graph inspectTarget 两条 hooks 依赖警告）、差异及 01–33 哈希核对通过。未新增内部测试接缝，未改应用后端／公共 schema；供应商与存储沿原受控替身。待 merger 验证后标记 integrated，不宣称 42 总体验收已完成。
+
+- 2026-10-29 集成：最终分支 `8b41b72d` 已含最新集成 `2b1f5c1a`，无冲突合入当前分支（合并 `f96709ca`）。主区Node24 typecheck、差异及01–33哈希保护通过，合后产品／测试树等同源分支；复用合35／36后 organization 7.3s、anchored-editor 10.7s及同实现 tools 5.8s／graph 14.2s 证据。37／39继续推进，40仍待全部前置；未改写旧验收或预记总体验收。
