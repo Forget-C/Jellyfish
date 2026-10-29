@@ -36,7 +36,7 @@ try {
   const response = await fetch(base, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'筛选保持采用'})})
   const canvas=(await response.json()).data
   const document={...canvas.document,cards:[{id:'source',type:'content.text',text:'被隐藏但明确采用的内容'},
-    {id:'model',type:'model.text',model_id:'canvas-runtime-text',prompt:{segments:[]},config:{}},{id:'dense',type:'direction.performance',input_bindings:[],examples:[],scope:{}}],
+    {id:'model',type:'model.text',model_id:'canvas-runtime-text',prompt:{segments:[]},config:{}},{id:'dense',type:'direction.performance',input_bindings:[],examples:[],scope:{}},{id:'other',type:'model.text',model_id:'canvas-runtime-text',prompt:{segments:[]},config:{}}],
     edges:[],input_order:{}}
   const seed=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document})})
   assert.ok(seed.ok,await seed.clone().text())
@@ -68,15 +68,22 @@ try {
   await page.getByRole('status').filter({hasText:'卡片不能连接自身'}).waitFor()
   assert.equal((await read()).document.edges.length,1)
   assert.equal((await read()).document.cards.find(card=>card.id==='model').input_bindings.length,1)
+  const other=page.locator('[data-card-id="other"]')
+  await modelCard.locator('[data-output-port="text"]').dragTo(other.locator('[data-input-port="text"]'))
+  await page.getByRole('status').filter({hasText:'已连接候选输入'}).waitFor()
+  await other.locator('[data-output-port="text"]').dragTo(input)
+  await page.getByRole('status').filter({hasText:'候选连接不能形成循环'}).waitFor()
   const box=await modelCard.boundingBox(), portBox=await input.boundingBox()
   assert.ok(portBox.x < box.x+30,'input is positioned on the left card edge')
   await page.screenshot({path:join(output,'ports-desktop.png'),animations:'disabled'})
   await page.setViewportSize({width:390,height:844})
-  await page.getByRole('button',{name:'适应画布',exact:true}).click()
+  await page.getByRole('button',{name:'适应全部',exact:true}).click()
   const dense=page.locator('[data-card-id="dense"]')
   const bounds=await dense.boundingBox()
   const ports=await dense.locator('[data-input-port]').all()
   for(let i=0;i<ports.length;i++){const b=await ports[i].boundingBox();assert.ok(b.y+b.height<=bounds.y+bounds.height);if(i)assert.ok(b.y>=(await ports[i-1].boundingBox()).y+(await ports[i-1].boundingBox()).height)}
+  await outputPort.dragTo(dense.locator('[data-input-port="participant"]'))
+  await page.getByRole('status').filter({hasText:'端口值种类不匹配'}).waitFor()
   await page.screenshot({path:join(output,'ports-mobile.png'),animations:'disabled'})
   console.log('edge ports expose candidate and adoption separately')
 } finally { await cleanup() }

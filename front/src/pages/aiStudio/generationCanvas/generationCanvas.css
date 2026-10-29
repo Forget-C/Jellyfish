@@ -149,3 +149,8 @@
 .generation-edge-adopted .canvas-edge-line { stroke-width: 2.5px; }
 
 .generation-workbench .generation-card .generation-card-body { max-height: none; }
+
+.generation-ports button { position: relative; }
+.generation-ports button i { position: absolute; top: 16px; width: 8px; height: 8px; border: 1px solid currentColor; border-radius: 50%; background: var(--wb-surface); box-sizing: border-box; }
+.generation-input-ports button i { left: -4px; }
+.generation-output-ports button i { right: -4px; background: currentColor; }

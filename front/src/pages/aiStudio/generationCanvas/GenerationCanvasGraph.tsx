@@ -212,7 +212,7 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
       } : undefined}
       onPointerMove={!input ? event => { if (drag) setDrag({ ...drag, x: event.clientX, y: event.clientY }) } : undefined}
       onPointerUp={!input ? finishDrag : undefined} onPointerCancel={() => setDrag(undefined)}>
-      <span>{input ? '○' : '●'} {input ? inputLabel(card, name) : cardDefinitions[card.type || '']?.outputs.find(item => item.id === name)?.label}</span><small>候选 {candidates.length} · 已采用 {adopted}</small>
+      <i aria-hidden="true" /><span>{input ? inputLabel(card, name) : cardDefinitions[card.type || '']?.outputs.find(item => item.id === name)?.label}</span><small>候选 {candidates.length} · 已采用 {adopted}</small>
     </button>
   }
   const references = (card: GenerationCard) => <>
