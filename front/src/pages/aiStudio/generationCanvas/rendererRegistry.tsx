@@ -29,7 +29,7 @@ import { sourceKey } from './promptRules'
 import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
 import { activeNode, canvasNodeStatusLabels } from './useGenerationCanvasRuntime'
 
-export type CardRendererProps = { savedRevision?: number; savedCard?: GenerationCard; card: GenerationCard; document: CanvasDocument; projectId: string; onChange: (card: GenerationCard) => void; onAddAngle?: (output: CanvasResolvedOutput) => void;
+export type CardRendererProps = { initialEntry?: string; savedRevision?: number; savedCard?: GenerationCard; card: GenerationCard; document: CanvasDocument; projectId: string; onChange: (card: GenerationCard) => void; onAddAngle?: (output: CanvasResolvedOutput) => void;
   models?: ModelRead[]; capability?: CanvasModelCapability; capabilityError?: string; references?: ReactNode; disabled?: boolean; modelOutputs?: Record<string, CanvasResolvedOutput[]>; node?: CanvasNodeRead; busy?: boolean; checking?: boolean; runDisabled?: boolean; onPrecheck?: () => void; onTargetPrecheck?: () => void }
 
 /** 模型卡共享受控 Composer 布局，参数由各模态组件表达。 */

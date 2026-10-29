@@ -16,10 +16,10 @@ import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
 export const photographyRegions = {"composition": {"label": "景别与构图", "fields": {"shot_size": "景别", "composition": "构图重心", "frame_position": "画面位置", "depth_layers": "空间层次", "negative_space": "留白", "composition_requirements": "构图要求"}}, "camera": {"label": "机位与视角", "fields": {"viewpoint": "观察视点", "position": "机位位置", "height_angle": "高度与角度", "lens_effect": "焦段与透视意图", "support": "支撑方式"}}, "movement": {"label": "运镜", "fields": {"movement_type": "运动方式", "movement_start": "起始画面", "movement_trigger": "触发条件", "movement_path": "运动路径", "movement_speed": "运动速度", "end_frame": "结束画面"}}, "lighting": {"label": "光影与色彩", "fields": {"light_sources": "光源", "light_direction": "光线方向", "light_regions": "明暗区域", "exposure_color": "曝光与色温", "color_relationship": "色彩关系"}}, "focus": {"label": "焦点与成像", "fields": {"depth_focus": "景深与焦点", "focus_change": "焦点变化", "optical_effects": "光学效果", "motion_texture": "运动质感", "technical_parameters": "技术意图", "adjacent_requirements": "相邻镜头衔接", "prohibitions": "禁止项"}}} as const
 
 /** 五个入口只编辑当前摄影卡；切换区域不新建或同步隐藏对象。 */
-export function PhotographyEditor({ card: raw, document, savedRevision, modelOutputs, onChange, disabled }: CardRendererProps) {
+export function PhotographyEditor({ card: raw, document, savedRevision, modelOutputs, onChange, initialEntry, disabled }: CardRendererProps) {
   const { inputPorts } = useGraphRules()
   const card = raw as PhotographyCard
-  const [region, setRegion] = useState<keyof typeof photographyRegions>('composition')
+  const [region, setRegion] = useState<keyof typeof photographyRegions>(initialEntry && initialEntry in photographyRegions ? initialEntry as keyof typeof photographyRegions : 'composition')
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs, false)
   const bindings = card.input_bindings || [], phases = card.phases || []
   const update = (next: PhotographyCard) => onChange(next)
