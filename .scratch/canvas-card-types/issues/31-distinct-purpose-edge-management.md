@@ -31,3 +31,5 @@
 - 新增用例使用4481／8481独占端口；最终证据含默认、悬浮、选中、移动、窄屏实际截图，均已实际查看。SVG曲线按实际路径中点触发悬浮，避免把曲线包围盒中心当作可点击线段；不使用force操作。窄屏通过现有布局菜单可访问选线，长状态条移到撤销工具上方，避免遮住适应全部。
 - 29真实端点回归 `/private/tmp/canvas31-ports-regression` **11.6s passed**，包含兼容用途、候选到实际采用、自连／循环及类型拒绝、身份／媒体组合与侧边保存。Node24 typecheck、差异及01–26字节哈希通过；lint:check仍仅三条既有hooks问题（inspectTarget两条、entity一条），未修改基线。供应商与存储受控替身，不声明真实质量。
 - 页面改动仅生成画布：默认不常驻连线文字符合本次规格；共享场次CanvasEdge不改，几何函数新增可选车道偏移的默认值为0，临时拖线保持原路由。README及01–26记录未改。
+
+- 报告前同步 integration 的30号能力（合并 `ae5a3e0a`，包含主区 `bdf995f3`）；Graph无冲突保留CandidateOutputStatus与连接已有卡的value=null，manifest冲突仅合并双方case及套件项。合后Node24 typecheck、差异及01–26哈希通过；31完整旅程 **12.0s passed**（`/private/tmp/canvas31-with30-edges`），30预布线旅程 **18.7s passed**（`/private/tmp/canvas31-with30-prewire`）。没有把预布线、重复定位或显示选择变成自动采用。
