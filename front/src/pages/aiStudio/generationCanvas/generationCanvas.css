@@ -83,7 +83,7 @@
   .generation-workbench .generation-feedback { top: 108px; }
 }
 
-.generation-card-list-host { position: fixed; left: 16px; z-index: 45; top: 190px; bottom: 90px; width: 56px; display: flex; align-items: center; pointer-events: none; }
+.generation-card-list-host { position: fixed; left: 16px; z-index: 950; top: 190px; bottom: 90px; width: 56px; display: flex; align-items: center; pointer-events: none; }
 .generation-card-list-host > * { pointer-events: auto; }
 .generation-card-categories { display: flex; flex-direction: column; gap: 4px; padding: 8px; border: 1px solid var(--wb-border); border-radius: 16px; background: var(--wb-surface); max-height: 100%; overflow-y: auto; }
 .generation-card-categories .wb-action { flex-shrink: 0; }
@@ -176,7 +176,7 @@
 /* Generation editors are anchored to content; shared workbench details retain their own positioning. */
 .generation-card-editor.wb-details { position: fixed; right: auto; bottom: auto; width: min(680px, calc(100vw - 32px)); max-height: min(360px, calc(100vh - 160px)); z-index: 900; }
 .generation-card-editor.wb-details[data-expanded="true"] { left: 50%; top: 50%; right: auto; bottom: auto; transform: translate(-50%, -50%); width: min(1000px, calc(100vw - 32px)); height: min(760px, calc(100dvh - 32px)); max-height: calc(100dvh - 32px); }
-.generation-editor-mask { position: fixed; inset: 0; background: #0009; z-index: 899; }
+.generation-editor-mask { position: fixed; inset: 0; background: #0009; z-index: 979; }
 @media (max-width: 700px) { .generation-card-editor.wb-details[data-expanded="true"] { width: calc(100vw - 16px); height: calc(100dvh - 16px); max-height: calc(100dvh - 16px); } }
 .generation-edges [data-edge-active="true"] .canvas-edge-line { stroke: var(--wb-focus); stroke-width: 3px; stroke-dasharray: 12 6; animation: generation-edge-flow 1s linear infinite; }
 @keyframes generation-edge-flow { to { stroke-dashoffset: -36; } }
@@ -199,3 +199,6 @@
 .generation-card[data-filter-match="true"] .generation-card-body, .generation-stack-reading article[data-filter-match="true"] { border-color: #8581ff; box-shadow: 0 0 0 1px #8581ff; }
 .generation-stack[data-filter-match="true"] .generation-stack-face { border-color: #8581ff; outline: 1px solid #8581ff; }
 .generation-card[data-filter-match="true"][data-selected="true"] .generation-card-body { outline-offset: 4px; }
+
+/* Modal editors cover canvas chrome while AntD operation dialogs retain their higher layer. */
+.generation-card-editor[data-expanded="true"] { z-index: 980; }

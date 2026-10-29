@@ -4,7 +4,10 @@ import assert from 'node:assert/strict'
 export async function openCanvasCard(page, id) {
   const details = page.locator('.wb-details:visible')
   if (await details.count() && await details.getAttribute('aria-modal') === 'true') await closeCanvasDetails(page)
-  await page.locator(`[data-card-id="${id}"]`).press('Enter')
+  const card = page.locator(`[data-card-id="${id}"]`)
+  await card.press('Enter')
+  const edit = card.locator('button[aria-label="编辑卡片"]')
+  if (await edit.count()) { await edit.waitFor({state:'visible'}); await edit.press('Enter') }
   await page.locator('.wb-details:visible').waitFor()
   return page.locator('.wb-details:visible')
 }
@@ -14,6 +17,7 @@ export async function closeCanvasDetails(page) {
   if (await details.count()) {
     await details.getByRole('button', { name: '关闭详情', exact: true }).click()
     await details.waitFor({ state: 'hidden' })
+    await page.waitForFunction(() => !document.querySelector('.canvas-workbench')?.inert)
   }
 }
 

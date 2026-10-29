@@ -159,19 +159,10 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
     if (!accessibleConnection && !pendingConnection) return
     connectionMenu.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus({ preventScroll: true })
   }, [accessibleConnection, pendingConnection])
-  useEffect(() => {
-    if (inspectTarget && stackFor(inspectTarget.cardId)) {
-      setReason('请先解除堆叠后编辑'); setDetailId(undefined); setSelected([])
-      requestAnimationFrame(() => {
-        const stack = window.document.querySelector<HTMLElement>(`[data-stack-id="${CSS.escape(stackFor(inspectTarget.cardId)!.id)}"]`)
-        if (!stack) return
-        const box = stack.getBoundingClientRect()
-        layout.setView(previous => ({...previous,transform:{...previous.transform,x:previous.transform.x+window.innerWidth/2-box.x-box.width/2,y:previous.transform.y+window.innerHeight/2-box.y-box.height/2}}))
-        stack.focus({preventScroll:true})
-      }); return
-    }
-    if (inspectTarget) { setSelected([inspectTarget.cardId]); setSelectedEdgeId(undefined); setDetailAllowPan(false); setDetailId(inspectTarget.cardId) }
-  }, [inspectTarget?.cardId, inspectTarget?.serial])
+  const inspectCardId = inspectTarget?.cardId, inspectSerial = inspectTarget?.serial
+  const navigateInspection = useRef<(cardId: string) => void>(() => undefined)
+  // Diagnostics navigate once per explicit request, using current stack/layout data without re-centering on every render.
+  useEffect(() => { if (inspectCardId) navigateInspection.current(inspectCardId) }, [inspectCardId, inspectSerial])
   useEffect(() => {
     if (!inspectTarget?.segmentId || inspectTarget.cardId !== detailId) return
     const frame = requestAnimationFrame(() => {
@@ -214,6 +205,19 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
   const layout = useGraphLayout({ storageKey: `jellyfish:generation-layout:${document.project_id}:${document.id}`, viewId: 'canvas',
     initialTop: window.innerWidth > 700 ? 180 : 300, initialLeft: window.innerWidth > 700 ? 200 : 80, anchorId: cards[0]?.id || '', validIds: [...cards.map(card => card.id), ...groups.map(group => group.id)], arrange: arrangeGroups,
     onStorageError: setStorageError }, nodes, layoutMeasurements, container.current?.clientWidth || 1200)
+  navigateInspection.current = (cardId: string) => {
+    if (stackFor(cardId)) {
+      setReason('请先解除堆叠后编辑'); setDetailId(undefined); setSelected([])
+      requestAnimationFrame(() => {
+        const stack = window.document.querySelector<HTMLElement>(`[data-stack-id="${CSS.escape(stackFor(cardId)!.id)}"]`)
+        if (!stack) return
+        const box = stack.getBoundingClientRect()
+        layout.setView(previous => ({...previous,transform:{...previous.transform,x:previous.transform.x+window.innerWidth/2-box.x-box.width/2,y:previous.transform.y+window.innerHeight/2-box.y-box.height/2}}))
+        stack.focus({preventScroll:true})
+      }); return
+    }
+    { setSelected([cardId]); setSelectedEdgeId(undefined); setDetailAllowPan(false); setDetailId(cardId) }
+  }
   const cancelGroupDrag = useCallback(() => {
     const current = groupDrag.current
     if (!current) return
@@ -522,7 +526,8 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
     layout.setView(previous => ({ ...previous, transform: { scale, x: paddingLeft + (availableWidth - width * scale) / 2 - left * scale, y: paddingTop + (availableHeight - height * scale) / 2 - top * scale } }))
   }
 
-  const stackOrigin = (ids: string[]) => ({ x: Math.min(...ids.map(id => point(id).x)), y: Math.min(...ids.map(id => point(id).y)) })
+  // Use a real member position so cross-row selections do not occupy an unrelated empty corner.
+  const stackOrigin = (ids: string[]) => point(ids[0])
   const anchor = (id: string, side: ConnectionSide) => stackFor(id) ? sidePoint(stackOrigin(stackFor(id)!.card_ids || []), 400, 300, side) : sidePoint(point(id), measured[id]?.width || layout.view.sizes[id]?.width || 400, measured[id]?.height || layout.view.sizes[id]?.height || 172, side)
   const width = viewport.surface.current?.clientWidth || 1200, height = viewport.surface.current?.clientHeight || 800
   const visibleWorld = { x: -transform.x / transform.scale, y: -transform.y / transform.scale, width: width / transform.scale, height: height / transform.scale }

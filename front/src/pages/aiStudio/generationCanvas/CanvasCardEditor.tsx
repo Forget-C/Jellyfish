@@ -1,8 +1,9 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { CloseOutlined, ExpandOutlined, ShrinkOutlined } from '@ant-design/icons'
 import { WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
+import { useWorkbenchDetailsSlot } from '../directing/ui/WorkbenchDetails'
 import { WorkbenchReadingContext } from '../directing/ui/WorkbenchReadingContext'
 import { useWorkbenchDesktop } from '../directing/useWorkbenchDesktop'
 
@@ -13,6 +14,9 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
   expandRequest?: number; forceModal?: boolean; children: ReactNode;
 }) {
   const desktop = useWorkbenchDesktop()
+  const slot = useWorkbenchDetailsSlot(), slotId = useId(), selectSlot = slot?.select
+  const activated = useRef(false)
+  useEffect(() => { if (open) selectSlot?.(slotId) }, [open, selectSlot, slotId])
   const [expanded, setExpanded] = useState(false)
   const [placement, setPlacement] = useState({ left: 16, top: 100, visible: true })
   const panel = useRef<HTMLElement>(null)
@@ -47,7 +51,12 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
     window.addEventListener('resize', position)
     return () => { observer.disconnect(); window.removeEventListener('resize', position) }
   }, [open, anchor, layoutKey, allowPan, desktop, expanded])
-  const visible = open && (modal || placement.visible)
+  useEffect(() => {
+    if (!open) { activated.current = false; return }
+    if (slot?.active === slotId) activated.current = true
+    else if (activated.current) { activated.current = false; close.current() }
+  }, [open, slot?.active, slotId])
+  const visible = open && (!slot || slot.active === slotId) && (modal || placement.visible)
   useEffect(() => {
     if (!visible) panel.current?.querySelectorAll<HTMLMediaElement>('audio, video').forEach(media => media.pause())
   }, [visible])

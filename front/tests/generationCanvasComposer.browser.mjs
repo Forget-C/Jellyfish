@@ -190,7 +190,7 @@ try {
   // Re-establish a reference for the final guarded disconnect check.
   await editor.fill('@图片10 '); await editor.press('Tab')
   await detail().getByRole('button', { name: '断开连接 e-s10', exact: true }).click()
-  await page.getByRole('status').filter({ hasText: '请先清理' }).waitFor()
+  await page.getByRole('status').filter({ hasText: '请先取消引用' }).waitFor()
   await editor.fill('清理后只保留普通文字')
   await detail().getByRole('button', { name: '断开连接 e-s10', exact: true }).click()
   await page.getByRole('button', { name: '保存画布', exact: true }).click()

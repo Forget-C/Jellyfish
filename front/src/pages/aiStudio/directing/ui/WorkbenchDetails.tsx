@@ -10,6 +10,9 @@ const DetailsContext = createContext<{ active?: string; select: Dispatch<SetStat
 
 export function useWorkbenchDetailsAvailable() { return !!useContext(DetailsContext) }
 
+/** Share the single active detail slot with specialized workbench editor containers. */
+export function useWorkbenchDetailsSlot() { return useContext(DetailsContext) }
+
 /** 一个工作台只有一个详情位置；替换展示目标不销毁业务组件持有的输入。 */
 export function WorkbenchDetailsProvider({ children }: { children: ReactNode }) {
   const [active, select] = useState<string>()

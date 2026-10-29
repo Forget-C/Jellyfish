@@ -52,7 +52,7 @@ try {
   const saved=(await(await fetch(`${base}/${canvas.id}`)).json()).data
   assert.equal(saved.document.edges.length,1)
   assert.equal(saved.document.cards.find(c=>c.id==='model').input_bindings?.length||0,0)
-  await source.getByRole('button',{name:'上侧连接点',exact:true}).press('Enter')
+  await source.getByRole('button',{name:'左侧连接点',exact:true}).press('Enter')
   await page.getByRole('dialog',{name:'选择连接目标',exact:true}).waitFor()
   await page.locator('[data-card-id="other"]').press('Enter')
   await page.getByRole('status').filter({hasText:'已连接候选输入'}).waitFor()
