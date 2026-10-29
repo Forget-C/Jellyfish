@@ -31,7 +31,7 @@ import { connectionSides, sideLabels, sidePoint, defaultSides, connectionPath, u
 import { MediaPreview } from './MediaContentEditor'
 import { MediaResultsPreview } from './MediaResultsPreview'
 import { rendererRegistry } from './rendererRegistry'
-import { connect, disconnect } from './graphRules'
+import { connect, disconnect, findConnection } from './graphRules'
 import { CanvasCatalogProvider, useGraphRules } from './CanvasCatalogContext'
 import type { ComponentProps } from 'react'
 import type { GenerationCard, GenerationEdge } from './graphRules'
@@ -78,6 +78,8 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
   const [detailTrigger, setDetailTrigger] = useState<HTMLElement>()
   const [minimapOpen, setMinimapOpen] = useState(false)
   const [reason, setReason] = useState('')
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string>()
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<string>()
   const [selecting, setSelecting] = useState(false)
   const [selectionBox, setSelectionBox] = useState<{ x: number; y: number; width: number; height: number }>()
   const selectionStart = useRef<{ x: number; y: number }>()
@@ -253,6 +255,8 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
   }
   const capability = (card: GenerationCard) => 'model_id' in card && card.model_id ? capabilities[card.model_id] : undefined
   const check = (edge: GenerationEdge) => {
+    // 重复拖线只定位已存关系，不创建新输入，也不因能力切换改变原绑定。
+    if (findConnection(latest.current, edge)) return undefined
     const target = cards.find(card => card.id === edge.target_card)
     if (target && 'model_id' in target && !capability(target)) return '模型能力尚未核实，暂不能新建连接'
     return connectionReason(latest.current, edge, target ? capability(target) : undefined)
@@ -271,6 +275,8 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
   }
   const commitConnection = (option: GenerationEdge, targetSide: ConnectionSide) => {
     if (readonly) { setReason('当前只读，不能新建连接'); cancelConnection(); return }
+    const existing = findConnection(latest.current, option)
+    if (existing) { setSelectedEdgeId(existing.id); setReason('该候选连接已存在'); cancelConnection(); return }
     const issue = check(option)
     if (issue) { setReason(issue); cancelConnection(); return }
     const edge = { ...option, id: crypto.randomUUID() }
@@ -337,6 +343,18 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
       </Tooltip>
     })
   }
+  const removeEdge = (edge: GenerationEdge) => {
+    const protection = referenceProtection(latest.current, edge.source_card, edge.target_card, edge.source_port, edge.target_port)
+    if (protection) { showProtection(protection); return }
+    edit(disconnect(latest.current, edge.id))
+    if (selectedEdgeId === edge.id) setSelectedEdgeId(undefined)
+  }
+  const edgePurpose = (edge: GenerationEdge) => {
+    const target = cards.find(card => card.id === edge.target_card)
+    return `${target ? inputLabel(target, edge.target_port) : edge.target_port} · ${edgeAdoptions(edge) ? '已明确选择' : '候选'}`
+  }
+  const edgeLabel = (edge: GenerationEdge) => `${cardLabel(edge.source_card)} → ${cardLabel(edge.target_card)} · ${edgePurpose(edge)}`
+  const inspectedEdge = edges.find(edge => edge.id === selectedEdgeId)
   const references = (card: GenerationCard) => <>
     <CandidateOutputStatus document={document} savedDocument={savedDocument} cardId={card.id} savedRevision={savedRevision} published={runtime?.outputs} />
     <Space wrap>{card.type?.startsWith('model.') && <><Button disabled={readonly} size="small" onClick={() => {
@@ -369,9 +387,7 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
           const next = [...order]; [next[index - 1], next[index]] = [next[index], next[index - 1]]
           edit({ ...document, input_order: { ...document.input_order, [card.id]: { ...document.input_order?.[card.id], [name]: next } } })
         }}>↑</Button><Button size="small" disabled={readonly} aria-label={`断开连接 ${id}`} onClick={() => {
-          const protection = referenceProtection(latest.current, edge.source_card, edge.target_card, edge.source_port, edge.target_port)
-          if (protection) { showProtection(protection); return }
-          edit(disconnect(latest.current, id))
+          removeEdge(edge)
         }}>断开</Button>
       </li>
     })}</ol></div>
@@ -431,8 +447,16 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
         <Button disabled={!layout.canUndo} onClick={layout.undo}>撤销布局整理</Button>
         <Button aria-label={minimapOpen ? '收起小地图' : '展开小地图'} aria-expanded={minimapOpen} onClick={() => setMinimapOpen(value => !value)}>{minimapOpen ? '收起小地图' : '展开小地图'}</Button>
         <Button aria-label="框选" variant="quiet" aria-pressed={selecting} onClick={() => setSelecting(value => !value)}>框选</Button>
+        <Select aria-label="选择候选连线" placeholder="选择候选连线" value={inspectedEdge?.id} allowClear showSearch optionFilterProp="label" style={{ width: '100%' }}
+          options={edges.map(edge => ({ value: edge.id, label: edgeLabel(edge) }))} onChange={setSelectedEdgeId} />
       </CanvasToolbarMenu>
     </nav>
+    {inspectedEdge && <section className="generation-edge-inspector" aria-label="所选候选连接">
+      <strong>{edgePurpose(inspectedEdge)}</strong>
+      <p>{cardLabel(inspectedEdge.source_card)} → {cardLabel(inspectedEdge.target_card)}</p>
+      <Button disabled={readonly} onClick={() => removeEdge(inspectedEdge)}>断开所选连接</Button>
+      <Button variant="quiet" onClick={() => setSelectedEdgeId(undefined)}>关闭连接详情</Button>
+    </section>}
     {selected.length > 0 && <div className="generation-selection-actions" aria-label="所选卡片操作">      <Button disabled={readonly} onClick={() => {
         const members = selected.filter(id => !groups.some(group => group.card_ids?.includes(id)))
         if (!members.length) { setReason('所选卡片已经属于分组'); return }
@@ -477,8 +501,14 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
             const sides = connectionLayout.sides[edge.id] || defaultSides(point(edge.source_card), point(edge.target_card))
             const from = anchor(edge.source_card, sides.source), to = anchor(edge.target_card, sides.target)
             const adopted = edgeAdoptions(edge) > 0
-            return <CanvasEdge key={edge.id} d={connectionPath(from, to, sides.source, sides.target)} className={adopted ? 'generation-edge-adopted' : 'generation-edge-candidate'}
-              label={`${edge.source_card} → ${edge.target_card} ${portLabels[edge.target_port]}`} />
+            const parallel = edges.filter(item => item.source_card === edge.source_card && item.target_card === edge.target_card)
+            const lane = (parallel.findIndex(item => item.id === edge.id) - (parallel.length - 1) / 2) * 36
+            const active = selectedEdgeId === edge.id || hoveredEdgeId === edge.id
+            return <g key={edge.id} onMouseEnter={() => setHoveredEdgeId(edge.id)} onMouseLeave={() => setHoveredEdgeId(undefined)}>
+              <CanvasEdge selected={selectedEdgeId === edge.id} d={connectionPath(from, to, sides.source, sides.target, lane)} className={adopted ? 'generation-edge-adopted' : 'generation-edge-candidate'}
+                label={edgeLabel(edge)} onInspect={() => setSelectedEdgeId(edge.id)}
+                caption={active ? { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 + lane * .75 - 12, text: edgePurpose(edge) } : undefined} />
+            </g>
           })}
         </svg>
         {groups.map(group => {

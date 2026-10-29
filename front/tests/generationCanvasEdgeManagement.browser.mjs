@@ -1,0 +1,169 @@
+import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
+import assert from 'node:assert/strict'
+import { readFile, writeFile } from 'node:fs/promises'
+import { spawn, execFileSync } from 'node:child_process'
+import { createRequire } from 'node:module'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { setTimeout as delay } from 'node:timers/promises'
+import { createServer } from 'vite'
+const { chromium } = createRequire(import.meta.url)('playwright')
+const root = fileURLToPath(new URL('..', import.meta.url))
+const output = await browserOutput('jellyfish-generation-canvas-video-')
+const fixture = join(output, 'audio-video.mp4')
+execFileSync('/opt/homebrew/bin/ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=blue:s=160x90:d=1', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-c:v', 'libx264', '-c:a', 'aac', '-shortest', '-y', fixture])
+const api = 'http://127.0.0.1:8481', base = `${api}/api/v1/studio/generation-canvases/canvas-project`
+const backend = spawn('uv', ['run', '--no-sync', 'python', '-m', 'tests.generation_canvas_video_browser_server'], {
+  cwd: join(root, '../backend'), env: { ...process.env, PYTHONPATH: join(root, '../backend'), UV_CACHE_DIR: '/tmp/jellyfish-uv-cache', CANVAS_BROWSER_DATABASE: join(output, 'browser.sqlite'), CANVAS_BROWSER_MEDIA_STORAGE: join(output, 'media'), CANVAS_BROWSER_PORT: '8481', CANVAS_VIDEO_FIXTURE: fixture }, stdio: ['ignore', 'pipe', 'pipe'],
+})
+captureBackend(backend, output)
+let server, browser, page
+const cleanup = browserCleanup(() => ({ browser, server, backend }))
+try {
+  let ready = false
+  for (let attempt = 0; attempt < 80; attempt++) {
+    if (backend.exitCode !== null) throw new Error('isolated backend exited')
+    try { if ((await fetch(base)).ok) { ready = true; break } } catch {}
+    await delay(250)
+  }
+  assert.ok(ready, 'isolated backend ready')
+  const schema = await (await fetch(`${api}/openapi.json`)).json()
+  assert.ok(schema.components.schemas.InputBinding.properties.subject_name, 'running backend exposes binding group contract')
+  await writeFile(join(output, 'openapi-8481.json'), JSON.stringify(schema))
+  const productionSchema = { ...schema, paths: Object.fromEntries(Object.entries(schema.paths).filter(([path]) => !path.startsWith('/test/'))) }
+  assert.deepEqual(productionSchema, JSON.parse(await readFile(join(root, 'openapi.json'), 'utf8')), 'independent backend production routes match committed OpenAPI')
+  server = await createServer({ root, server: { host: '127.0.0.1', port: 4481, strictPort: true, open: false, proxy: { '/api': api } } })
+  await server.listen()
+  browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
+  page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
+  page.setDefaultTimeout(12000)
+  page.on('pageerror', error => console.log('PAGE ERROR', error.message))
+  await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
+  const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '视频用途' }) })).json()).data
+  const fileIds = []
+  for (let i = 0; i < 2; i++) {
+    const form = new FormData()
+    form.append('file', new Blob([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jV4kAAAAASUVORK5CYII=', 'base64')], { type: 'image/png' }), `reference${i}.png`)
+    form.append('project_id', 'canvas-project'); form.append('usage_kind', 'generation_upload')
+    fileIds.push((await (await fetch(`${api}/api/v1/studio/files/upload`, { method: 'POST', body: form })).json()).data.id)
+  }
+  const document = { ...canvas.document, cards: [
+    { id: 'm', type: 'model.video', model_id: 'video-frames', prompt: { segments: [] }, config: { ratio: '16:9', seconds: 5 } },
+    { id: 's', type: 'content.image', file_id: fileIds[0] },
+    { id: 't', type: 'content.text', text: '明确拍摄要求' }],
+    edges: [{ id: 'first', source_card: 's', source_port: 'image', target_card: 'm', target_port: 'first_frame' }],
+    input_order: { m: { first_frame: ['first'] } } }
+  const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
+  assert.ok(seeded.ok, await seeded.text())
+  await page.addInitScript(id => localStorage.setItem(`jellyfish:generation-layout:canvas-project:${id}:view:canvas`, JSON.stringify({ schema: 1, transform: { x: 40, y: 230, scale: .85 }, positions: { s: { x: 30, y: 0 }, m: { x: 800, y: 0 }, t: { x: 30, y: 400 } }, sizes: {} })), canvas.id)
+  await page.goto(`http://127.0.0.1:4481/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  const source = page.locator('[data-card-id="s"]'), target = page.locator('[data-card-id="m"]')
+  await source.waitFor()
+  const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
+  const drag = async (sourceSide, targetSide) => {
+    await source.hover()
+    const from = await source.locator(`[data-connection-side="${sourceSide}"]`).boundingBox()
+    const to = await target.locator(`[data-connection-side="${targetSide}"]`).boundingBox()
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 6 })
+    await page.mouse.up()
+    await page.getByRole('menu', { name: '选择连接用途', exact: true }).waitFor()
+  }
+  // A duplicate must remain a valid menu choice so it can locate the existing edge.
+  const before = await read()
+  await drag('bottom', 'top')
+  await page.getByRole('menuitem').filter({ hasText: '首帧' }).click()
+  await page.getByRole('status').filter({ hasText: '该候选连接已存在' }).waitFor()
+  assert.equal((await read()).revision, before.revision, 'duplicate is navigation, not a document edit')
+  assert.equal((await read()).document.edges.length, 1)
+  assert.equal(await page.locator('.generation-edges [data-selected="true"]').count(), 1)
+  await drag('right', 'left')
+  await page.getByRole('menuitem').filter({ hasText: '尾帧' }).click()
+  for (let i = 0; i < 50 && (await read()).document.edges.length !== 2; i++) await delay(100)
+  assert.equal((await read()).document.edges.length, 2)
+  assert.deepEqual((await read()).document.cards.find(card => card.id === 'm').input_bindings || [], [])
+  const paths = await page.locator('.generation-edges .canvas-edge-line').evaluateAll(elements => elements.map(element => element.getAttribute('d')))
+  assert.notEqual(paths[0], paths[1], 'different uses sharing anchors have independent curves')
+  await page.getByRole('button', { name: '关闭连接详情', exact: true }).click()
+  await page.mouse.move(1300, 800)
+  assert.equal(await page.locator('.generation-edges text').count(), 0, 'line text is only shown on demand')
+  await page.screenshot({ path: join(output, 'purposes-default.png'), animations: 'disabled' })
+  const firstLine = page.getByRole('button', { name: /→.*首帧 · 候选$/ })
+  const lastLine = page.getByRole('button', { name: /→.*尾帧 · 候选$/ })
+  const hoverPoint = await firstLine.evaluate(element => {
+    const point = element.getPointAtLength(element.getTotalLength() / 2)
+    const screen = new DOMPoint(point.x, point.y).matrixTransform(element.getScreenCTM())
+    return { x: screen.x, y: screen.y }
+  })
+  await page.mouse.move(hoverPoint.x, hoverPoint.y)
+  await page.locator('.generation-edges text').filter({ hasText: '首帧' }).waitFor()
+  await page.screenshot({ path: join(output, 'purposes-hover.png'), animations: 'disabled' })
+  await firstLine.press('Enter')
+  const inspector = page.getByRole('region', { name: '所选候选连接', exact: true })
+  await inspector.getByText('首帧 · 候选', { exact: true }).waitFor()
+  await page.screenshot({ path: join(output, 'purposes-selected.png'), animations: 'disabled' })
+  await inspector.getByRole('button', { name: '关闭连接详情', exact: true }).click()
+  await target.press('Enter')
+  const details = page.locator('.wb-details:visible')
+  const uses = details.getByRole('region', { name: '视频实际输入', exact: true })
+  await uses.getByRole('button', { name: '采用 @图片1 为首帧', exact: true }).click()
+  await uses.getByRole('button', { name: '采用 @图片1 为尾帧', exact: true }).click()
+  await page.getByLabel('画布保存状态').getByText('已保存', { exact: true }).waitFor()
+  let adopted = await read()
+  assert.deepEqual(adopted.document.cards.find(card => card.id === 'm').input_bindings.map(binding => binding.input_port).sort(), ['first_frame', 'last_frame'])
+  const compiled = (await (await fetch(`${base}/${canvas.id}/cards/m/compile`)).json()).data
+  assert.equal(compiled.video_media.frames.first.file_id, fileIds[0])
+  assert.equal(compiled.video_media.frames.last.file_id, fileIds[0])
+  await details.getByRole('button', { name: '关闭详情', exact: true }).click()
+  // Repeating a selected relation on other geometric sides preserves both uses.
+  await drag('top', 'bottom')
+  await page.getByRole('menuitem').filter({ hasText: '首帧' }).click()
+  assert.equal((await read()).revision, adopted.revision)
+  assert.deepEqual((await read()).document, adopted.document)
+  await inspector.getByRole('button', { name: '断开所选连接', exact: true }).click()
+  await page.getByRole('status').filter({ hasText: '请先清理' }).waitFor()
+  assert.equal((await read()).document.edges.length, 2, 'adopted edge cannot be removed silently')
+  await page.locator('.wb-details:visible').getByRole('button', { name: '取消首帧 @图片1', exact: true }).click()
+  await page.getByLabel('画布保存状态').getByText('已保存', { exact: true }).waitFor()
+  await page.locator('.wb-details:visible').getByRole('button', { name: '关闭详情', exact: true }).click()
+  await inspector.getByRole('button', { name: '断开所选连接', exact: true }).click()
+  for (let i = 0; i < 50 && (await read()).document.edges.length !== 1; i++) await delay(100)
+  adopted = await read()
+  assert.equal(adopted.document.edges[0].target_port, 'last_frame')
+  assert.deepEqual(adopted.document.cards.find(card => card.id === 'm').input_bindings.map(binding => binding.input_port), ['last_frame'])
+  await page.reload()
+  await target.press('Enter')
+  await page.locator('.wb-details:visible').getByRole('button', { name: '预检运行', exact: true }).click()
+  const preview = page.getByRole('region', { name: '运行预检', exact: true })
+  const accepted = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/runs'))
+  await preview.getByRole('button', { name: '确认执行', exact: true }).click()
+  await accepted
+  await fetch(`${api}/test/video-controls`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ release: true }) })
+  await page.locator('.wb-details:visible').getByRole('region', { name: '当前正式输出', exact: true }).locator('video').waitFor({ timeout: 20000 })
+  const calls = (await (await fetch(`${api}/test/video-controls`)).json()).calls.filter(call => call.method === 'POST')
+  assert.equal(calls.length, 1)
+  assert.deepEqual(calls[0].body.content.filter(item => item.type === 'image_url').map(item => item.role), ['last_frame'])
+  await page.locator('.wb-details:visible').getByRole('button', { name: '关闭详情', exact: true }).click()
+  // Re-add the cancelled first-frame candidate: the remaining last-frame binding stays adopted.
+  await drag('right', 'left')
+  await page.getByRole('menuitem').filter({ hasText: '首帧' }).click()
+  for (let i = 0; i < 50 && (await read()).document.edges.length !== 2; i++) await delay(100)
+  await source.getByRole('button', { name: '移动布局：图片内容卡', exact: true }).press('ArrowDown')
+  const movedPaths = await page.locator('.generation-edges .canvas-edge-line').evaluateAll(elements => elements.map(element => element.getAttribute('d')))
+  assert.notEqual(movedPaths[0], movedPaths[1])
+  await page.screenshot({ path: join(output, 'purposes-moved.png'), animations: 'disabled' })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.getByRole('button', { name: '适应全部', exact: true }).click()
+  await page.getByRole('button', { name: '布局', exact: true }).click()
+  const chooser = page.getByRole('combobox', { name: '选择候选连线', exact: true })
+  await chooser.fill('首帧')
+  await chooser.press('ArrowDown')
+  await chooser.press('Enter')
+  await chooser.press('Escape')
+  await page.getByRole('button', { name: '布局', exact: true }).press('Escape')
+  await inspector.waitFor()
+  await page.screenshot({ path: join(output, 'purposes-narrow.png'), animations: 'disabled' })
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
+  console.log('duplicate candidate, distinct-purpose adoption, protected deletion and actual video request verified')
+} finally { await cleanup() }

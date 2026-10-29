@@ -13,9 +13,13 @@ export function defaultSides(from: CanvasPoint, to: CanvasPoint): EdgeSides {
     ? to.x >= from.x ? { source: 'right', target: 'left' } : { source: 'left', target: 'right' }
     : to.y >= from.y ? { source: 'bottom', target: 'top' } : { source: 'top', target: 'bottom' }
 }
-export function connectionPath(from: CanvasPoint, to: CanvasPoint, source: ConnectionSide, target?: ConnectionSide) {
+export function connectionPath(from: CanvasPoint, to: CanvasPoint, source: ConnectionSide, target?: ConnectionSide, lane = 0) {
   const offset = (point: CanvasPoint, side?: ConnectionSide) => ({ x: point.x + (side === 'left' ? -80 : side === 'right' ? 80 : 0), y: point.y + (side === 'top' ? -80 : side === 'bottom' ? 80 : 0) })
   const first = offset(from, source), last = offset(to, target)
+  // 平行用途只偏移控制点，共享的几何端点仍精确落在卡片侧边。
+  const horizontal = Math.abs(to.x - from.x) >= Math.abs(to.y - from.y)
+  if (horizontal) { first.y += lane; last.y += lane }
+  else { first.x += lane; last.x += lane }
   return `M ${from.x} ${from.y} C ${first.x} ${first.y}, ${last.x} ${last.y}, ${to.x} ${to.y}`
 }
 /** 几何侧别仅存本浏览器布局，不进入业务文档、修订或生成依据；宿主按项目与画布身份重挂载。 */
