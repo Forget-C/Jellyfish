@@ -97,9 +97,11 @@ try {
   await page.getByLabel('画布保存状态').getByText('已保存', {exact:true}).waitFor()
   for(let i=0;i<40;i++){if((await runtime()).current_outputs.m[0].basis_current===false)break;await delay(100)}
   assert.equal((await runtime()).current_outputs.m[0].basis_current,false)
-  await page.getByRole('switch',{name:'仅显示问题卡片',exact:true}).click()
+  await page.getByRole('switch',{name:'高亮问题卡片',exact:true}).click()
   await page.locator('[data-card-id="m"]').waitFor()
-  assert.equal(await page.locator('[data-card-id="text"]').count(),0,'unproblematic content hidden')
+  assert.equal(await page.locator('[data-card-id="text"]').count(),1,'unproblematic content stays visible')
+  assert.equal(await page.locator('[data-card-id="text"]').getAttribute('data-filter-match'),'false')
+  assert.equal(await page.locator('[data-card-id="m"]').getAttribute('data-filter-match'),'true')
   assert.equal((await runtime()).cursor,beforeSaveSnapshot.cursor,'saving does not advance the task cursor')
   const lateSnapshot = {version:1,cursor:beforeSaveSnapshot.cursor,type:'snapshot',canvas_id:canvas.id,run_id:null,node_id:null,payload:beforeSaveSnapshot}
   await heldStream.fulfill({status:200,contentType:'text/event-stream',body:`data: ${JSON.stringify(lateSnapshot)}\n\n`})
@@ -110,6 +112,7 @@ try {
   for(let i=0;i<40;i++){if((await runtime()).current_outputs.m[0].basis_current===true)break;await delay(100)}
   assert.equal((await runtime()).current_outputs.m[0].basis_current,true,'returning to the original basis is a legitimate same-cursor update')
   assert.equal((await runtime()).cursor,beforeSaveSnapshot.cursor)
-  await page.locator('[data-card-id="m"]').waitFor({state:'detached'})
+  await page.locator('[data-card-id="m"][data-filter-match="false"]').waitFor()
+  assert.equal(await page.locator('[data-card-id="m"]').count(),1,'basis restored removes problem highlight, not content')
   console.log('PASS preview/media sessions and same-cursor save/SSE reconciliation')
 } finally { await cleanup() }
