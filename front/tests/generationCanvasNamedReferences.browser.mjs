@@ -50,7 +50,7 @@ try {
   assert.ok(seeded.ok, await seeded.text())
   await page.goto(`http://127.0.0.1:4281/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   const card = page.locator('.wb-details:not([hidden])')
-  const open = async id => { await page.locator(`[data-card-id="${id}"]`).press('Enter'); await page.locator('.wb-details').waitFor() }
+  const open = async id => { await page.locator(`[data-card-id="${id}"]`).press('Enter'); await page.locator('.wb-details:visible').waitFor() }
   const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
   const poll = async predicate => { for (let i = 0; i < 80; i++) { const state = await read(); if (predicate(state)) return state; await delay(150) } throw Error('saved document did not reach expected state') }
   const preview = page.getByRole('region', { name: '运行预检', exact: true })
@@ -68,6 +68,7 @@ try {
   await poll(state => state.document.cards.find(item => item.id === 'ref').input_bindings.length === 1)
   await card.getByRole('button', { name: '关联名称 蓝衣', exact: true }).click()
   await poll(state => state.document.cards.find(item => item.id === 'ref').input_bindings.length === 2)
+  assert.match(await page.locator('[data-card-id="ref"] [data-input-port="name"]').innerText(), /候选 2.*已采用 2/)
   await card.getByRole('textbox', { name: '参考标题', exact: true }).fill('小雪与蓝衣·侧面')
   await card.getByRole('textbox', { name: '参考角度', exact: true }).fill('侧面')
   await card.getByRole('textbox', { name: '图内位置 小雪', exact: true }).fill('左侧')
@@ -79,6 +80,7 @@ try {
   const selectedState = await poll(state => !!state.document.cards.find(item => item.id === 'ref').image_binding)
   const fixed = selectedState.document.cards.find(item => item.id === 'ref').image_binding
   assert.equal(fixed.source.position, 1)
+  assert.match(await page.locator('[data-card-id="ref"] [data-input-port="image_source"]').innerText(), /候选 1.*已采用 1/)
   assert.equal(await card.getByRole('img', { name: '图片预览', exact: true }).first().evaluate(img => img.complete && img.naturalWidth === 240), true)
   await page.screenshot({ path: join(output, 'named-reference-desktop.png'), fullPage: true })
   await open('consumer')
@@ -114,6 +116,7 @@ try {
   const bytes = Buffer.from(await (await fetch(`${api}/api/v1/studio/files/${fixed.file_id}/download`)).arrayBuffer())
   for (const [kind, title, objectName] of [['place', '场所', '空屋'], ['prop', '道具', '长剑'], ['costume', '服装', '礼服']]) {
     await page.getByRole('button', { name: '关闭详情', exact: true }).click()
+    if(await page.getByRole('button', { name: '添加卡片', exact: true }).getAttribute('aria-expanded')!=='true') await page.getByRole('button', { name: '添加卡片', exact: true }).click()
     await page.getByRole('button', { name: `添加${title}参考卡`, exact: true }).click()
     await card.getByRole('button', { name: `独立命名${title}`, exact: true }).click()
     await card.getByRole('textbox', { name: '独立对象名称', exact: true }).fill(objectName)
