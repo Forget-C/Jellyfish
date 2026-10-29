@@ -1,3 +1,4 @@
+import { openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -40,7 +41,7 @@ try {
   const poll = async predicate => { for (let i = 0; i < 80; i++) { const state = await read(); if (predicate(state)) return state; await delay(100) } throw Error('saved photography state did not arrive') }
   await page.goto(`http://127.0.0.1:4289/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   const detail = page.locator('.wb-details:not([hidden])')
-  const open = async id => { await page.locator(`[data-card-id="${id}"]`).press('Enter'); await detail.waitFor() }
+  const open = id => openCanvasCard(page, id)
   await open('consumer')
   await detail.getByRole('button', { name: '采用 @文本1', exact: true }).click()
   await poll(state => state.document.cards.find(card => card.id === 'consumer').input_bindings?.length === 1)

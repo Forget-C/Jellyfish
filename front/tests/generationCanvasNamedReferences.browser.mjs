@@ -1,3 +1,4 @@
+import { openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -50,12 +51,7 @@ try {
   assert.ok(seeded.ok, await seeded.text())
   await page.goto(`http://127.0.0.1:4281/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   const card = page.locator('.wb-details:not([hidden])')
-  const open = async id => {
-    const details = page.locator('.wb-details:visible')
-    if (await details.count() && await details.getAttribute('aria-modal') === 'true') await details.getByRole('button', { name: '关闭详情', exact: true }).click()
-    await page.locator(`[data-card-id="${id}"]`).press('Enter')
-    await page.locator(`.wb-details:visible [data-card-details="${id}"]`).waitFor()
-  }
+  const open = id => openCanvasCard(page, id)
   const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
   const poll = async predicate => { for (let i = 0; i < 80; i++) { const state = await read(); if (predicate(state)) return state; await delay(150) } throw Error('saved document did not reach expected state') }
   const preview = page.getByRole('region', { name: '运行预检', exact: true })
@@ -126,9 +122,13 @@ try {
   assert.equal(await card.getByText('换图后请核对角度与图内位置；名称绑定会保留。').count(), 1)
   const bytes = Buffer.from(await (await fetch(`${api}/api/v1/studio/files/${fixed.file_id}/download`)).arrayBuffer())
   for (const [kind, title, objectName] of [['place', '场所', '空屋'], ['prop', '道具', '长剑'], ['costume', '服装', '礼服']]) {
-    await page.getByRole('button', { name: '关闭详情', exact: true }).click()
+    const shrink = card.getByRole('button', { name: '收起详情', exact: true })
+    if (await shrink.count()) await shrink.press('Enter')
+    await page.getByRole('button', { name: '关闭详情', exact: true }).press('Enter')
+    await page.waitForFunction(() => !document.querySelector('.canvas-workbench')?.inert)
     await page.getByRole('button', { name: '参考卡', exact: true }).click()
     await page.getByRole('button', { name: `添加${title}参考卡`, exact: true }).click()
+    await card.getByRole('button', { name: '展开详情', exact: true }).press('Enter')
     await card.getByRole('button', { name: `独立命名${title}`, exact: true }).click()
     await card.getByRole('textbox', { name: '独立对象名称', exact: true }).fill(objectName)
     await card.getByLabel('上传媒体文件', { exact: true }).setInputFiles({ name: `${kind}.png`, mimeType: 'image/png', buffer: bytes })

@@ -1,4 +1,4 @@
-import { openCardList, closeCardList, openCanvasManagement, closePrecheck } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { openCardList, closeCardList, openCanvasManagement, closePrecheck, openCanvasCard, closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -60,7 +60,7 @@ try {
   const seeded=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed-delete',expected_revision:0,document})})
   assert.ok(seeded.ok,await seeded.text())
   await page.reload()
-  await page.locator('[data-card-id="performance"]').press('Enter')
+  await openCanvasCard(page, 'performance')
   await page.getByText('候选连接管理',{exact:true}).click()
   await page.getByRole('button',{name:'断开连接 unused-edge',exact:true}).click()
   for(let i=0;i<30;i++) {
@@ -85,13 +85,15 @@ try {
   const read=async()=>(await (await fetch(`${base}/${journeyId}`)).json()).data
   const poll=async predicate=>{for(let i=0;i<80;i++){const state=await read();if(predicate(state))return state;await delay(150)}throw Error('journey saved state did not match')}
   const detail=page.locator('.wb-details:not([hidden])')
-  const open=async id=>{if(page.viewportSize().width<700&&await detail.isVisible())await detail.getByRole('button',{name:'关闭详情',exact:true}).click();await page.locator(`[data-card-id="${id}"]`).press('Enter');await detail.waitFor()}
+  const open=async id=>openCanvasCard(page,id)
   const add=async(label,type)=>{
     await openCardList(page, type.startsWith('model.') ? '模型生成' : type.startsWith('reference.') ? '参考卡' : type === 'direction.dialogue' ? '声音设计' : type.startsWith('direction.') ? '表演与调度' : '基础卡')
     const before=(await read()).document.cards.map(card=>card.id)
     await page.getByRole('button',{name:label,exact:true}).click()
     const state=await poll(state=>state.document.cards.some(card=>card.type===type&&!before.includes(card.id)))
-    return state.document.cards.find(card=>card.type===type&&!before.includes(card.id)).id
+    const id = state.document.cards.find(card=>card.type===type&&!before.includes(card.id)).id
+    if(type.startsWith('direction.'))await open(id)
+    return id
   }
   const connectExisting=async(target,sourceId,inputLabel)=>{
     await open(target)
@@ -195,7 +197,8 @@ try {
   const category=page.getByRole('combobox',{name:'卡片分类',exact:true})
   await category.press('ArrowDown')
   await page.locator('.ant-select-dropdown:visible').getByText('模型生成',{exact:true}).click()
-  await page.locator(`[data-card-id="${reference}"]`).waitFor({state:'hidden'})
+  await page.locator(`[data-card-id="${reference}"]`).waitFor({state:'visible'})
+  assert.equal(await page.locator(`[data-card-id="${reference}"]`).getAttribute('data-filter-match'),'false')
   assert.equal(await page.locator('.generation-world').getAttribute('style'),unchangedView)
   await page.screenshot({path:join(output,'journey-model-desktop.png'),fullPage:true})
   await detail.getByRole('button',{name:'预检运行',exact:true}).click()

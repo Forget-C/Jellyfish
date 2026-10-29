@@ -83,11 +83,13 @@ try {
     await snapshot(`generation-details-${name}`)
     const field=details.getByRole('textbox',{name:'文本内容',exact:true})
     await field.fill(`连续编辑-${name}`)
+    const editorView=await page.locator('.generation-world').getAttribute('style')
     await details.getByRole('button',{name:'展开详情',exact:true}).click()
     await snapshot(`generation-expanded-${name}`)
     assert.equal(await field.inputValue(),`连续编辑-${name}`)
     await page.keyboard.press('Escape')
-    assert.equal(await page.locator('.generation-world').getAttribute('style'),transform)
+    assert.equal(await page.locator('.generation-world').getAttribute('style'),editorView)
+    if(await details.isVisible())await details.getByRole('button',{name:'关闭详情',exact:true}).click()
     assert.equal(await page.locator('[data-card-id="source"]').evaluate(n=>n.contains(document.activeElement)),true)
   }
   const beforeMapClose=await page.locator('.generation-world').getAttribute('style')
@@ -115,6 +117,7 @@ try {
   await fetch(`${api}/test/runtime-controls`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({release:2})})
   await waitStatus('failed')
   await page.locator('[data-card-id="model"] [aria-label="模型状态摘要"]').getByText('controlled-text · 失败 · 未完成',{exact:true}).waitFor()
+  await page.locator('[data-card-id="model"]').press('Enter')
   await details.getByText('失败 · 未完成',{exact:false}).waitFor()
   for(const [name,width,height] of [['desktop',1440,960],['mobile',390,844],['wide',3830,1688]]){await page.setViewportSize({width,height});await snapshot(`generation-failed-${name}`)}
 } finally { await cleanup() }

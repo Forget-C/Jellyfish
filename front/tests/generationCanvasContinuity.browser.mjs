@@ -1,3 +1,4 @@
+import { openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { openCardList } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -61,7 +62,7 @@ try {
   await page.getByRole('button', { name: '添加画面风格卡', exact: true }).waitFor()
   await page.getByRole('button', { name: '关闭卡片列表', exact: true }).click()
   const card = page.locator('.wb-details:not([hidden])')
-  const open = async id => { await page.locator(`[data-card-id="${id}"]`).press('Enter'); await card.waitFor() }
+  const open = id => openCanvasCard(page, id)
   const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
   const poll = async predicate => { for (let i = 0; i < 80; i++) { const state = await read(); if (predicate(state)) return state; await delay(150) } throw Error('saved document did not reach expected state') }
   if (await page.getByRole('button', { name: '关闭详情', exact: true }).isVisible()) await page.getByRole('button', { name: '关闭详情', exact: true }).click()

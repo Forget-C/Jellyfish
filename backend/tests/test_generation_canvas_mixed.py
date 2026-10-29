@@ -61,7 +61,7 @@ async def test_fixed_model_image_and_named_performance_run_only_adopted_video(ru
         doc['cards'][0]['prompt']['segments'][0]['text'] = 'new portrait'
         await save(runtime, doc)
         calls.clear()
-        accepted, preview = await run(runtime, 'video', 'target')
+        accepted, preview = await run(runtime, 'video')
         assert preview['execution_nodes'] == ['video']
         assert len(accepted['task_ids']) == 1
         doc['cards'][1]['text'] = '年龄八十岁'
@@ -102,13 +102,13 @@ async def test_fixed_model_image_and_named_performance_run_only_adopted_video(ru
         doc['cards'][0]['prompt']['segments'][0]['text'] = 'planned portrait'
         await save(runtime, doc)
         outside = (await runtime.client.post(runtime.url + '/precheck', json={
-            'card_id': 'video', 'kind': 'selection', 'card_ids': ['video', 'ref', 'act']})).json()['data']
+            'card_id': 'video', 'kind': 'single'})).json()['data']
         assert not outside['can_run'] and any(item['code'] == 'INPUT_STALE' for item in outside['diagnostics'])
-        preview = (await runtime.client.post(runtime.url + '/precheck', json={
-            'card_id': 'video', 'kind': 'selection', 'card_ids': ['image', 'ref', 'act', 'video']})).json()['data']
-        assert preview['can_run'] and set(preview['execution_nodes']) == {'image', 'video'}
-        accepted = (await runtime.client.post(runtime.url + '/runs', json={
-            'request_id': 'mixed-selection', 'preview_token': preview['preview_token']})).json()['data']
+        # Explicitly refresh the source, then separately admit the consumer.
+        await run(runtime, 'image')
+        await drain(worker)
+        accepted, preview = await run(runtime, 'video')
+        assert preview['execution_nodes'] == ['video']
         assert len(accepted['task_ids']) == 1
         # Accepted requests retain old identity and design even while current edits change.
         doc['cards'][1]['name'] = '再改名字'
@@ -122,7 +122,7 @@ async def test_fixed_model_image_and_named_performance_run_only_adopted_video(ru
         assert '再改名字' not in video_post['content'][0]['text']
         assert '伸手拿钥匙' in video_post['content'][0]['text'] and '转身离开' not in video_post['content'][0]['text']
         assert 'cG9ydHJhaXQ=' in str(video_post)  # original fixed portrait bytes
-        assert 'bmV3LXBvcnRyYWl0' in str(video_post)  # this run's new current output
+        assert 'bmV3LXBvcnRyYWl0' in str(video_post)  # explicitly refreshed current output
         reopened = (await runtime.client.get(runtime.url)).json()['data']['document']
         assert reopened['cards'][2]['image_binding']['file_id'] == output['file_id']
         # Adopted fixed sources must be explicitly copied and rebound before deletion.
@@ -150,7 +150,7 @@ async def test_fixed_model_image_and_named_performance_run_only_adopted_video(ru
 
 
 @pytest.mark.asyncio
-async def test_withdrawn_current_model_media_keeps_identity_and_blocks_target_admission(runtime, image_storage):
+async def test_withdrawn_current_model_media_keeps_identity_and_blocks_single_admission(runtime, image_storage):
     from app.models.studio import FileItem
     from app.services.task_service import utcnow
     from tests.test_generation_canvas_images import image_card
@@ -173,7 +173,7 @@ async def test_withdrawn_current_model_media_keeps_identity_and_blocks_target_ad
     async with runtime.sessions.begin() as db:
         file = await db.get(FileItem, output['file_id'])
         file.delete_requested_at = utcnow()
-    preview = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'consumer', 'kind': 'target'})).json()['data']
+    preview = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'consumer', 'kind': 'single'})).json()['data']
     assert not preview['can_run']
     assert any(item['code'] == 'OUTPUT_MISSING' for item in preview['diagnostics'])
     assert preview['execution_nodes'] == ['consumer']

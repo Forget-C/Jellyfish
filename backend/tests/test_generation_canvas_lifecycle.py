@@ -86,7 +86,7 @@ async def test_project_deletion_cleans_canvas_history_but_keeps_other_project_co
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('runtime', [None, 'mysql'], indirect=True)
-async def test_waiting_actual_image_chain_retains_uploaded_input_until_canvas_history_removed(runtime, image_storage):
+async def test_single_consumer_retains_uploaded_input_until_canvas_history_removed(runtime, image_storage):
     from copy import deepcopy
     from app.api.v1.routes.studio.files import router
     from app.task_worker import TaskWorker
@@ -114,12 +114,14 @@ async def test_waiting_actual_image_chain_retains_uploaded_input_until_canvas_hi
         doc['edges'] = [{'id': source + '-B', 'source_card': source, 'source_port': 'image', 'target_card': 'B', 'target_port': 'image'} for source in ('image', 'known')]
         doc['input_order'] = {'B': {'image': ['image-B', 'known-B']}}
         await save(runtime, doc)
-        accepted, _ = await run(runtime, 'B', 'target')
+        await run(runtime, 'image')
+        await drain(worker)
+        accepted, _ = await run(runtime, 'B')
         state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
         nodes = next(item for item in state['runs'] if item['id'] == accepted['run_id'])['nodes']
         waiting = next(item for item in nodes if item['card_id'] == 'B')
-        assert waiting['status'] == 'waiting' and waiting['task_id'] is None
-        # A real accepted dependency chain protects B before its TaskInput exists.
+        assert waiting['status'] == 'queued' and waiting['task_id']
+        # The explicitly admitted consumer pins its actual uploaded input.
         detail = (await runtime.client.get('/files/' + file_id)).json()['data']
         assert {'generation_upload', 'canvas_content', 'canvas_run'} <= {usage['usage_kind'] for usage in detail['usages']}
         assert (await runtime.client.delete('/files/' + file_id)).status_code == 409

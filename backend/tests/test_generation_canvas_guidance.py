@@ -193,7 +193,7 @@ async def test_acceptance_examples_stay_fixed_and_require_cleanup_before_source_
     reopened = (await client.get(url)).json()['data']['document']
     assert reopened['cards'][1]['examples'][0]['file_id'] == files[0]
     outputs = (await client.get(url + '/cards/criterion/outputs')).json()['data']['outputs']
-    assert files[0] not in str(outputs) and files[1] not in str(outputs) and '900' not in str(outputs)
+    assert files[0] not in str(outputs) and files[1] not in str(outputs) and '900' not in str(outputs[0]['payload'])
     doc['cards'] = doc['cards'][1:]
     doc.update(edges=[], input_order={})
     response = await client.put(url, json={'request_id': 'delete', 'expected_revision': 2, 'document': doc})

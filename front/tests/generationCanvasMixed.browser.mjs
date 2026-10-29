@@ -1,3 +1,4 @@
+import { openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -63,11 +64,11 @@ try {
   await request('', { request_id: 'mixed', expected_revision: (await read()).revision, document }, 'PUT')
   await page.goto(`http://127.0.0.1:4295/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   const card = page.locator('.wb-details:not([hidden])')
-  const open = async id => { await page.locator(`[data-card-id="${id}"]`).press('Enter'); await card.waitFor() }
+  const open = id => openCanvasCard(page, id)
   await open('consumer')
   await card.getByRole('button', { name: '采用 @文本1', exact: true }).click()
   await card.getByRole('button', { name: '采用 @图片1', exact: true }).click()
-  await card.getByRole('button', { name: '运行到此处', exact: true }).click()
+  await card.getByRole('button', { name: '预检运行', exact: true }).click()
   const preview = page.getByRole('region', { name: '运行预检', exact: true })
   await preview.waitFor()
   assert.match(await preview.textContent(), /执行 consumer/)

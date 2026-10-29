@@ -1,56 +1,49 @@
-"""Strict selected scope through HTTP and the real Task execution boundary."""
+"""Explicit single-model scope through HTTP and the real Task execution boundary."""
 import pytest
 from tests.test_generation_canvas_runs import runtime  # noqa: F401
 from tests.test_generation_canvas_dag import chain, save, drain, run
 
 
-async def selection(state, ids):
+async def single_preview(state, card_id):
     response = await state.client.post(state.url + '/precheck', json={
-        'card_id': ids[0], 'kind': 'selection', 'card_ids': ids})
+        'card_id': card_id, 'kind': 'single'})
     assert response.status_code == 200, response.text
     return response.json()['data']
 
 
 @pytest.mark.asyncio
-async def test_selection_requires_omitted_middle_and_executes_every_selected_model_once(runtime, monkeypatch):
+async def test_explicit_stages_execute_each_model_without_expanding_organization(runtime, monkeypatch):
     doc, calls, worker = await chain(runtime, monkeypatch)
-    for name in ['B', 'C']:
-        await run(runtime, name)
-        await drain(worker)
-    calls.clear()
-    missing = await selection(runtime, ['A', 'C'])
-    assert missing['execution_nodes'] == ['A', 'C']
-    assert not missing['can_run'] and missing['preview_token'] is None
-    assert any(issue['code'] == 'SELECTION_INCOMPLETE' and issue['target']['card_id'] == 'B'
-               for issue in missing['diagnostics'])
     doc['cards'].append({'id': 'note', 'type': 'content.text', 'text': 'not executable'})
     doc['groups'] = [{'id': 'group', 'name': 'organize', 'card_ids': ['A', 'B', 'C']}]
     await save(runtime, doc)
-    preview = await selection(runtime, ['C', 'A', 'note', 'group', 'B', 'X', 'X'])
-    assert preview['can_run'], preview
-    assert preview['execution_nodes'] == ['A', 'B', 'C', 'X']
-    accepted = await runtime.client.post(runtime.url + '/runs', json={
-        'request_id': 'strict-selection', 'preview_token': preview['preview_token']})
-    assert accepted.status_code == 200, accepted.text
-    await drain(worker)
-    assert sorted(text for text, _ in calls) == ['A', 'X', 'out(A)', 'out(out(A))']
+    calls.clear()
+    for name in ['A', 'B', 'C', 'X']:
+        accepted, preview = await run(runtime, name)
+        assert preview['execution_nodes'] == [name]
+        assert len(accepted['task_ids']) == 1
+        await drain(worker)
+    assert [text for text, _ in calls] == ['A', 'out(A)', 'out(out(A))', 'X']
     state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
-    active = next(item for item in state['runs'] if item['id'] == accepted.json()['data']['run_id'])
-    assert len(active['nodes']) == 4 and all(item['status'] == 'succeeded' for item in active['nodes'])
     assert not state['current_outputs']['Y'][0]['basis_current']
+    assert state['current_outputs']['C'][0]['text'] == 'out(out(out(A)))'
+    assert all(len(entry['nodes']) == 1 for entry in state['runs'])
+    rejected = await runtime.client.post(runtime.url + '/precheck', json={
+        'card_id': 'C', 'kind': 'selection', 'card_ids': ['A', 'C']})
+    assert rejected.status_code == 422 and 'SINGLE_MODEL_ONLY' in rejected.text
     worker.text_pool.shutdown(wait=False)
 
 
 @pytest.mark.asyncio
-async def test_selection_keeps_external_stale_or_missing_inputs_blocked(runtime, monkeypatch):
+async def test_single_keeps_stale_or_missing_inputs_blocked(runtime, monkeypatch):
     doc, calls, worker = await chain(runtime, monkeypatch)
-    stale = await selection(runtime, ['C'])
+    stale = await single_preview(runtime, 'C')
     assert not stale['can_run'] and stale['execution_nodes'] == ['C']
-    assert any(issue['code'] == 'INPUT_STALE' and issue['target']['card_id'] == 'B'
+    assert any(issue['code'] == 'INPUT_STALE' and issue['target']['card_id'] == 'C'
                for issue in stale['diagnostics'])
     doc['cards'][2]['prompt']['segments'][0]['source']['position'] = 3
     await save(runtime, doc)
-    missing = await selection(runtime, ['A', 'B', 'C'])
+    missing = await single_preview(runtime, 'C')
     assert not missing['can_run'] and missing['preview_token'] is None
     assert any(issue['code'] == 'OUTPUT_MISSING' for issue in missing['diagnostics'])
     assert calls == []
@@ -62,7 +55,7 @@ async def test_selection_keeps_external_stale_or_missing_inputs_blocked(runtime,
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('runtime', ['mysql'], indirect=True)
-async def test_mysql_atomic_selection_conflict_shared_reads_parallel_and_cancel_hold(runtime, monkeypatch):
+async def test_mysql_single_scope_conflict_shared_reads_parallel_and_cancel_hold(runtime, monkeypatch):
     import asyncio
     from copy import deepcopy
     from types import SimpleNamespace
@@ -77,7 +70,7 @@ async def test_mysql_atomic_selection_conflict_shared_reads_parallel_and_cancel_
     doc['input_order']['D'] = {'text': ['AD']}
     await save(runtime, doc)
     worker.text_pool.shutdown(wait=False)
-    first_preview, sibling_preview = await asyncio.gather(selection(runtime, ['B']), selection(runtime, ['D']))
+    first_preview, sibling_preview = await asyncio.gather(single_preview(runtime, 'B'), single_preview(runtime, 'D'))
     assert first_preview['can_run'] and sibling_preview['can_run']
     async def submit(preview, request_id):
         return await runtime.client.post(runtime.url + '/runs', json={
@@ -119,10 +112,10 @@ async def test_mysql_atomic_selection_conflict_shared_reads_parallel_and_cancel_
         held = await submit(first_preview, 'after-intent')
         assert held.status_code == 409
         assert (held.json().get('data') or held.json()['detail'])['code'] == 'RUN_SCOPE_BUSY'
-        independent = await selection(runtime, ['A', 'X'])
+        independent = await single_preview(runtime, 'X')
         assert independent['can_run']
         other = await submit(independent, 'independent')
-        assert other.status_code == 200 and len(other.json()['data']['task_ids']) == 2
+        assert other.status_code == 200 and len(other.json()['data']['task_ids']) == 1
     finally:
         release.set()
         await asyncio.gather(*worker.jobs.values())
@@ -145,7 +138,7 @@ async def test_mysql_atomic_selection_conflict_shared_reads_parallel_and_cancel_
     assert cursors == sorted(set(cursors))
     assert {event['run_id'] for event in events if event['type'] == 'run.finished'} == {
         accepted['run_id'], sibling_run['run_id'], other.json()['data']['run_id']}
-    fresh = await selection(runtime, ['B'])
+    fresh = await single_preview(runtime, 'B')
     assert fresh['can_run']
     again = await submit(fresh, 'explicit-after-terminal')
     assert again.status_code == 200
@@ -153,7 +146,7 @@ async def test_mysql_atomic_selection_conflict_shared_reads_parallel_and_cancel_
 
 
 @pytest.mark.asyncio
-async def test_selection_publication_stream_marks_unexecuted_downstream_stale(runtime, monkeypatch):
+async def test_single_publication_stream_marks_unexecuted_downstream_stale(runtime, monkeypatch):
     import json
     from app.services.generation_canvas.stream import stream_events
     doc, calls, worker = await chain(runtime, monkeypatch)
@@ -163,7 +156,7 @@ async def test_selection_publication_stream_marks_unexecuted_downstream_stale(ru
     before = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
     assert before['current_outputs']['C'][0]['basis_current']
     calls.clear()
-    preview = await selection(runtime, ['A'])
+    preview = await single_preview(runtime, 'A')
     accepted = (await runtime.client.post(runtime.url + '/runs', json={
         'request_id': 'source-only', 'preview_token': preview['preview_token']})).json()['data']
     await drain(worker)
