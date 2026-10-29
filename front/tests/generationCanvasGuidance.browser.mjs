@@ -52,9 +52,17 @@ try {
   await page.goto(`http://127.0.0.1:4301/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   const card = page.locator('.wb-details:not([hidden])')
   const open = async id => {
-    const details = page.locator('.wb-details:visible')
-    if (await details.count() && await details.getAttribute('aria-modal') === 'true') await details.getByRole('button', { name: '关闭详情', exact: true }).click()
-    await page.locator(`[data-card-id="${id}"]`).press('Enter')
+    const active = page.locator('.wb-details:visible')
+    if (await active.count() && await active.getAttribute('aria-modal') === 'true') {
+      await active.getByRole('button', { name: '关闭详情', exact: true }).click()
+      await active.waitFor({ state: 'hidden' })
+      await page.waitForFunction(() => !document.querySelector('.canvas-workbench')?.inert)
+    }
+    const summary = page.locator(`[data-card-id="${id}"]`)
+    await summary.press('Enter')
+    await page.waitForFunction(id => document.querySelector(`[data-card-id="${id}"]`)?.getAttribute('data-selected') === 'true', id)
+    const edit = summary.locator('button[aria-label="编辑卡片"]')
+    if (await edit.count()) { await edit.waitFor({ state: 'visible' }); await edit.press('Enter') }
     await page.locator(`.wb-details:visible [data-card-details="${id}"]`).waitFor()
   }
   const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data

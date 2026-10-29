@@ -61,7 +61,20 @@ try {
   await page.getByRole('button', { name: '添加画面风格卡', exact: true }).waitFor()
   await page.getByRole('button', { name: '关闭卡片列表', exact: true }).click()
   const card = page.locator('.wb-details:not([hidden])')
-  const open = async id => { await page.locator(`[data-card-id="${id}"]`).press('Enter'); await card.waitFor() }
+  const open = async id => {
+    const active = page.locator('.wb-details:visible')
+    if (await active.count() && await active.getAttribute('aria-modal') === 'true') {
+      await active.getByRole('button', { name: '关闭详情', exact: true }).click()
+      await active.waitFor({ state: 'hidden' })
+      await page.waitForFunction(() => !document.querySelector('.canvas-workbench')?.inert)
+    }
+    const summary = page.locator(`[data-card-id="${id}"]`)
+    await summary.press('Enter')
+    await page.waitForFunction(id => document.querySelector(`[data-card-id="${id}"]`)?.getAttribute('data-selected') === 'true', id)
+    const edit = summary.locator('button[aria-label="编辑卡片"]')
+    if (await edit.count()) { await edit.waitFor({ state: 'visible' }); await edit.press('Enter') }
+    await page.locator(`.wb-details:visible [data-card-details="${id}"]`).waitFor()
+  }
   const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
   const poll = async predicate => { for (let i = 0; i < 80; i++) { const state = await read(); if (predicate(state)) return state; await delay(150) } throw Error('saved document did not reach expected state') }
   if (await page.getByRole('button', { name: '关闭详情', exact: true }).isVisible()) await page.getByRole('button', { name: '关闭详情', exact: true }).click()

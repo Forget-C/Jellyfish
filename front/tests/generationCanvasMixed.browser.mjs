@@ -63,11 +63,24 @@ try {
   await request('', { request_id: 'mixed', expected_revision: (await read()).revision, document }, 'PUT')
   await page.goto(`http://127.0.0.1:4295/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   const card = page.locator('.wb-details:not([hidden])')
-  const open = async id => { await page.locator(`[data-card-id="${id}"]`).press('Enter'); await card.waitFor() }
+  const open = async id => {
+    const active = page.locator('.wb-details:visible')
+    if (await active.count() && await active.getAttribute('aria-modal') === 'true') {
+      await active.getByRole('button', { name: '关闭详情', exact: true }).click()
+      await active.waitFor({ state: 'hidden' })
+      await page.waitForFunction(() => !document.querySelector('.canvas-workbench')?.inert)
+    }
+    const summary = page.locator(`[data-card-id="${id}"]`)
+    await summary.press('Enter')
+    await page.waitForFunction(id => document.querySelector(`[data-card-id="${id}"]`)?.getAttribute('data-selected') === 'true', id)
+    const edit = summary.locator('button[aria-label="编辑卡片"]')
+    if (await edit.count()) { await edit.waitFor({ state: 'visible' }); await edit.press('Enter') }
+    await page.locator(`.wb-details:visible [data-card-details="${id}"]`).waitFor()
+  }
   await open('consumer')
   await card.getByRole('button', { name: '采用 @文本1', exact: true }).click()
   await card.getByRole('button', { name: '采用 @图片1', exact: true }).click()
-  await card.getByRole('button', { name: '运行到此处', exact: true }).click()
+  await card.getByRole('button', { name: '预检运行', exact: true }).click()
   const preview = page.getByRole('region', { name: '运行预检', exact: true })
   await preview.waitFor()
   assert.match(await preview.textContent(), /执行 consumer/)
