@@ -147,8 +147,11 @@
 .generation-workbench .generation-card .generation-card-body { max-height: none; }
 
 
-/* 独立生成画布按规格使用松开激活与整卡长按；不改变场次工作台手势。 */
-.generation-card { user-select: none; touch-action: none; }
+/* 独立生成画布按规格使用松开激活与按距离拖动；不改变场次工作台手势。 */
+.generation-card { user-select: none; touch-action: none; cursor: grab; }
+.generation-card .generation-card-body { cursor: grab; }
+.generation-surface-pan-ready { cursor: grab; }
+.generation-surface[data-panning="true"] { cursor: grabbing; }
 .generation-card-holding > .generation-card-body { outline: 2px solid var(--wb-focus); cursor: grabbing; }
 .generation-card .generation-card-footer { margin-top: 12px; font-size: 11px; color: var(--wb-muted); }
 .generation-card .generation-card-footer [data-problem="true"] { color: var(--wb-text); }
