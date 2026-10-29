@@ -16,7 +16,7 @@ import type { PerformanceCard } from './PerformanceDirectionEditor'
 import { createPortal } from 'react-dom'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent, ReactNode } from 'react'
-import { AimOutlined, MinusOutlined, PlusOutlined, CloseOutlined } from '@ant-design/icons'
+import { AimOutlined, MinusOutlined, PlusOutlined, CloseOutlined, ScissorOutlined } from '@ant-design/icons'
 import { WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
 import { CanvasToolbarMenu } from '../directing/CanvasToolbarMenu'
 import { ConfigProvider, Input, Select, Space, Tooltip } from 'antd'
@@ -87,7 +87,8 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
   const panGesture = useRef<{ surface: HTMLDivElement; pointer: number; x: number; y: number; left: number; top: number }>()
   const blankPress = useRef<{ x: number; y: number }>()
   const clearSelection = useCallback(() => { setSelected([]); setSelectedEdgeId(undefined); setDetailId(undefined) }, [])
-  const selectEdge = (id?: string) => { setSelected([]); setDetailId(undefined); setSelectedEdgeId(id) }
+  const [edgeActionPoint, setEdgeActionPoint] = useState<{ x: number; y: number }>()
+  const selectEdge = (id?: string, position?: { x: number; y: number }) => { setSelected([]); setDetailId(undefined); setSelectedEdgeId(id); setEdgeActionPoint(position) }
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       const target = event.target as Element
@@ -118,7 +119,6 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
   const [drag, setDrag] = useState<{ card: string; side: ConnectionSide; x: number; y: number }>()
   const connectionPointer = useRef(false)
   const [pendingConnection, setPendingConnection] = useState<{ target: string; side: ConnectionSide; x: number; y: number }>()
-  const connectionLayout = useConnectionSides(`jellyfish:generation-connection-sides:${document.project_id}:${document.id}`, edges.map(edge => edge.id))
   const cancelConnection = useCallback(() => {
     connectionPointer.current = false; setDrag(undefined); setPendingConnection(undefined); setAccessibleConnection(undefined)
     if (connectionTrigger.current?.isConnected && (desktop || !detailId)) connectionTrigger.current.focus({ preventScroll: true })
@@ -167,6 +167,7 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
   const layout = useGraphLayout({ storageKey: `jellyfish:generation-layout:${document.project_id}:${document.id}`, viewId: 'canvas',
     initialTop: window.innerWidth > 700 ? 180 : 300, initialLeft: window.innerWidth > 700 ? 200 : 80, anchorId: cards[0]?.id || '', validIds: [...cards.map(card => card.id), ...groups.map(group => group.id)], arrange,
     onStorageError: setStorageError }, nodes, layoutMeasurements, container.current?.clientWidth || 1200)
+  const connectionLayout = useConnectionSides(`jellyfish:generation-connection-sides:${document.project_id}:${document.id}`, edges.map(edge => edge.id), Object.fromEntries(edges.map(edge => [edge.id, defaultSides(layout.view.positions[edge.source_card] || { x: 0, y: 0 }, layout.view.positions[edge.target_card] || { x: 0, y: 0 })])))
   const creationView = useRef<{ cardId: string; transform: typeof layout.view.transform }>()
   useLayoutEffect(() => {
     if (!creationView.current || !layout.ready || !measured[creationView.current.cardId]) return
@@ -366,9 +367,10 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
   }
   const removeEdge = (edge: GenerationEdge) => {
     const protection = referenceProtection(latest.current, edge.source_card, edge.target_card, edge.source_port, edge.target_port)
-    if (protection) { showProtection(protection); return }
+    if (protection) { setReason('此连线仍有输入被引用，请先取消引用后再删除'); return }
     edit(disconnect(latest.current, edge.id))
     if (selectedEdgeId === edge.id) setSelectedEdgeId(undefined)
+    requestAnimationFrame(() => container.current?.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(edge.target_card)}"]`)?.focus({ preventScroll: true }))
   }
   const edgePurpose = (edge: GenerationEdge) => {
     const target = cards.find(card => card.id === edge.target_card)
@@ -495,13 +497,13 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
         <Button aria-label={minimapOpen ? '收起小地图' : '展开小地图'} aria-expanded={minimapOpen} onClick={() => setMinimapOpen(value => !value)}>{minimapOpen ? '收起小地图' : '展开小地图'}</Button>
         <Button aria-label="框选" variant="quiet" aria-pressed={selecting} onClick={() => setSelecting(value => !value)}>框选</Button>
         <Select aria-label="选择候选连线" placeholder="选择候选连线" value={inspectedEdge?.id} allowClear showSearch optionFilterProp="label" style={{ width: '100%' }}
-          options={edges.map(edge => ({ value: edge.id, label: edgeLabel(edge) }))} onChange={selectEdge} />
+          options={edges.map(edge => ({ value: edge.id, label: edgeLabel(edge) }))} onChange={id => selectEdge(id)} />
       </CanvasToolbarMenu>
     </nav>
-    {inspectedEdge && <section className="generation-edge-inspector" aria-label="所选候选连接">
+    {inspectedEdge && <section className="generation-edge-inspector" aria-label="所选候选连接" style={edgeActionPoint ? { left: Math.max(8, Math.min(edgeActionPoint.x, (container.current?.clientWidth || window.innerWidth) - 280)), top: Math.max(8, Math.min(edgeActionPoint.y, (container.current?.clientHeight || window.innerHeight) - 130)), bottom: 'auto' } : undefined} onPointerDown={event => event.stopPropagation()}>
       <strong>{edgePurpose(inspectedEdge)}</strong>
       <p>{cardLabel(inspectedEdge.source_card)} → {cardLabel(inspectedEdge.target_card)}</p>
-      <Button disabled={readonly} onClick={() => removeEdge(inspectedEdge)}>断开所选连接</Button>
+      <Button disabled={readonly} icon={<ScissorOutlined />} aria-label="删除此候选连接" onClick={() => removeEdge(inspectedEdge)}>剪断连接</Button>
       <Button variant="quiet" onClick={() => setSelectedEdgeId(undefined)}>关闭连接详情</Button>
     </section>}
     {selected.length > 0 && <div className="generation-selection-actions" aria-label="所选卡片操作">      <Button disabled={readonly} onClick={() => {
@@ -570,8 +572,11 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
             const adopted = edgeAdoptions(edge) > 0
             const parallel = edges.filter(item => item.source_card === edge.source_card && item.target_card === edge.target_card)
             const lane = (parallel.findIndex(item => item.id === edge.id) - (parallel.length - 1) / 2) * 36
-            const active = selectedEdgeId === edge.id || hoveredEdgeId === edge.id
-            return <g key={edge.id} onMouseEnter={() => setHoveredEdgeId(edge.id)} onMouseLeave={() => setHoveredEdgeId(undefined)}>
+            const active = selectedEdgeId ? selectedEdgeId === edge.id : hoveredEdgeId === edge.id || selected.includes(edge.source_card) || selected.includes(edge.target_card)
+            return <g key={edge.id} data-edge-active={active} onFocus={() => setHoveredEdgeId(edge.id)} onBlur={() => setHoveredEdgeId(undefined)} onClick={event => {
+              const bounds = container.current?.getBoundingClientRect()
+              if (bounds) selectEdge(edge.id, { x: Math.max(8, Math.min(event.clientX - bounds.left, bounds.width - 280)), y: Math.max(8, Math.min(event.clientY - bounds.top, bounds.height - 130)) })
+            }} onMouseEnter={() => setHoveredEdgeId(edge.id)} onMouseLeave={() => setHoveredEdgeId(undefined)}>
               <CanvasEdge selected={selectedEdgeId === edge.id} d={connectionPath(from, to, sides.source, sides.target, lane)} className={adopted ? 'generation-edge-adopted' : 'generation-edge-candidate'}
                 label={edgeLabel(edge)} onInspect={() => selectEdge(edge.id)}
                 caption={active ? { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 + lane * .75 - 12, text: edgePurpose(edge) } : undefined} />
