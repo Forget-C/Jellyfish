@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented
+**Completion:** integrated
 
 - [x] 仅保留左右中点各一个几何连接点，悬浮／聚焦／选中时显示；平时无字段标签，提示仅显示声明输出摘要。点位不代表固定左入右出，也不为无输入基础卡增加接收能力。
 - [x] 按下连接点立即显示随指针移动的临时线；兼容吸附、零用途拒绝、唯一用途直接建立候选、多用途落点菜单选择及取消均保持。唯一结果或唯一用途也不自动采用。
@@ -32,3 +32,5 @@
 - generation-canvas-ports **10.6s passed**：/private/tmp/canvas35-ports-release，保留文本／图片／对象引用、零／一／多用途、环路、明确采用、持续线及保存重开覆盖。水平 SVG 路径的零高包围盒不适合 Playwright visible 判断，改为等挂载并核对路径几何，没有删去持久化断言。
 - Node24.22.1 typecheck、git diff --check 通过；定向 ESLint 仅 Graph 原有两条 inspectTarget hooks 依赖警告，0 errors，不宣称全局 lint 通过。已实际查看正式桌面 selected 与窄屏关系操作截图，页面无横向溢出；后续编辑区／单模型入口由对应票替换，不以本票旧侧栏截图声称全改版已验收。
 - 01–33 字节保护通过；无应用后端／公开 schema 改动，不要求重新生成客户端。供应商／外部存储继续受控替身，不宣称真实供应商质量。集成前同步最新 integration，Completion 仍为 implemented，未推送。
+
+- 2026-10-29 集成：`1f75a14d` 已基于最新集成 `ae72f44a`，无冲突合入当前分支（合并 `16ab3ba7`）。主区 Node24 typecheck、差异与01–33哈希保护通过；合后产品／测试树等同已验证源分支，复用最终 edge-management 12.1s 与 ports 10.6s 证据，不重复相同代码浏览器运行。36／38继续实施，40仍待其全部前置；原告警和外部替身限制保持。
