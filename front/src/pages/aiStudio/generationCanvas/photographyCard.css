@@ -1,0 +1,9 @@
+/* 光学图解的色彩属于原创示意；卡片表面与文字沿用工作台语义主题。 */
+.photography-card-summary { display: grid; grid-template-columns: minmax(0, 44fr) minmax(0, 56fr); align-items: center; gap: 16px; min-height: 232px; }
+.photography-card-summary figure { margin: 0; min-width: 0; }
+.photography-card-summary svg { display: block; width: 100%; height: auto; }
+.photography-card-summary figcaption { margin-top: 8px; color: var(--wb-muted); font-size: 10px; text-align: center; }
+.photography-card-summary dl { margin: 0; display: grid; gap: 16px; min-width: 0; padding-right: 16px; }
+.photography-card-summary dt { font-size: 11px; color: var(--wb-muted); margin-bottom: 4px; }
+.photography-card-summary dd { margin: 0; font-size: 14px; line-height: 1.5; font-weight: 500; color: var(--wb-text); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.photography-card-empty { margin: 0; font-size: 13px; color: var(--wb-muted); }
