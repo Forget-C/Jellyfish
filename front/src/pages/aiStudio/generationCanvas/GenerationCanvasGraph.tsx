@@ -39,6 +39,7 @@ import type { ComponentProps } from 'react'
 import type { GenerationCard, GenerationEdge } from './graphRules'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
 import { useWorkbenchDesktop } from '../directing/useWorkbenchDesktop'
+import { CanvasCardEditor } from './CanvasCardEditor'
 import { WorkbenchDetails } from '../directing/ui/WorkbenchDetails'
 import './generationCanvas.css'
 
@@ -61,6 +62,8 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
   const inputLabel = (card: GenerationCard, port: string) => cardDefinitions[card.type || '']?.inputs.find(item => item.id === port)?.label || portLabels[port]
   const [displayFilter, setDisplayFilter] = useState<CanvasDisplayFilter>({ group: '', modality: '', problems: false })
   const [selected, setSelected] = useState<string[]>([])
+  const [detailAllowPan, setDetailAllowPan] = useState(true)
+  const [expandRequest, setExpandRequest] = useState<{id:string;serial:number}>()
   const [detailId, setDetailId] = useState<string | undefined>()
   const [newPhotographyEntry, setNewPhotographyEntry] = useState<{ cardId: string; entry: string }>()
   // Retain visited editors by card identity; unvisited cards stay unmounted.
@@ -609,7 +612,8 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
           const isModel = 'model_id' in card
           return <CardShell key={`${document.id}:${card.id}`} id={card.id} type={card.type} name={'name' in card ? card.name : 'title' in card ? card.title : undefined} title={cardTitles[card.type || 'content.text']} contextKey={document.id} point={point(card.id)}
             scale={transform.scale} width={size?.width || 400} height={size?.height} selected={selected.includes(card.id)} readonly={readonly} removeDisabled={runtime?.busyCards.has(card.id)}
-            onOpen={trigger => { if (accessibleConnection) chooseAccessibleTarget(card.id); else { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.type?.startsWith('direction.') ? undefined : card.id) } }} onSelect={checked => setSelected(previous => checked ? [...previous, card.id] : previous.filter(id => id !== card.id))}
+            onExpand={trigger => { setDetailAllowPan(false); setDetailTrigger(trigger); setDetailId(card.id); setExpandRequest({id:card.id,serial:Date.now()}) }}
+            onOpen={(trigger, dragged) => { setDetailAllowPan(!dragged); if (accessibleConnection) chooseAccessibleTarget(card.id); else { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.type?.startsWith('direction.') ? undefined : card.id) } }} onSelect={checked => setSelected(previous => checked ? [...previous, card.id] : previous.filter(id => id !== card.id))}
             onConnect={trigger => startAccessibleConnection(card.id, 'right', trigger)} onMove={position => { if (!accessibleConnection) layout.move(card.id, position) }} onRemove={() => removeCard(card.id)} connections={geometricPorts(card)}
             footer={<>{isModel && <section aria-label="模型状态摘要">
               <span>{models.find(model => model.id === card.model_id)?.name || '尚未选择模型'} · {canvasNodeStatusLabels[node?.status || ''] || '尚未运行'}</span>
@@ -625,7 +629,7 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
               {referenceImage && <MediaPreview fileId={referenceImage} type="image" />}
             </>}
             {isModel && <section aria-label="模型输出预览">
-              {outputs.length === 0 && <><p className="canvas-card-summary">尚未生成</p><small>输入与模型配置在右侧编辑</small></>}
+              {outputs.length === 0 && <><p className="canvas-card-summary">尚未生成</p><small>输入与模型配置在下方编辑区</small></>}
               {outputs.some(output => output.file_id) && <MediaResultsPreview outputs={outputs.filter(output => output.file_id)} showBasisStatus={false} />}
               {outputs.filter(output => output.text).map(output => <p key={output.source.position} className="canvas-card-summary">{output.text}</p>)}
               {node?.text && node.status !== 'succeeded' && <section aria-label="临时生成预览"><small>临时生成内容 · 未成为正式输出</small><p className="canvas-card-summary">{node.text}</p></section>}
@@ -655,8 +659,9 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
       <rect className="director-minimap-viewport generation-minimap-viewport" x={visibleWorld.x} y={visibleWorld.y} width={visibleWorld.width} height={visibleWorld.height} />
     </svg>}
     {cards.filter(card => detailSessions.includes(card.id) || card.id === detailId).map(detailCard => {
+      const EditorContainer = detailCard.type?.startsWith('direction.') ? WorkbenchDetails : CanvasCardEditor
       const DetailRenderer = rendererRegistry[detailCard.type || 'content.text']
-      return <WorkbenchDetails key={detailCard.id} title={cardTitles[detailCard.type || 'content.text'] || '卡片详情'} status={readonly ? '只读' : editingStatus} open={detailCard.id === detailId && !detailsSuppressed} onClose={() => setDetailId(current => current === detailCard.id ? undefined : current)} trigger={detailTrigger}>
+      return <EditorContainer key={detailCard.id} anchor={window.document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(detailCard.id)}"]`)} layoutKey={`${transform.x}:${transform.y}:${transform.scale}:${JSON.stringify(point(detailCard.id))}`} allowPan={detailAllowPan} expandRequest={expandRequest?.id === detailCard.id ? expandRequest.serial : undefined} onFit={delta => layout.setView(previous => ({...previous,transform:{...previous.transform,x:previous.transform.x+delta.x,y:previous.transform.y+delta.y}}))} title={cardTitles[detailCard.type || 'content.text'] || '卡片详情'} status={readonly ? '只读' : editingStatus} open={detailCard.id === detailId && !detailsSuppressed} onClose={() => setDetailId(current => current === detailCard.id ? undefined : current)} trigger={detailTrigger}>
         {!desktop && <Space wrap><Button onClick={() => setActiveCategory('基础卡')}>添加卡片</Button><Button disabled={readonly} onClick={event => startAccessibleConnection(detailCard.id, 'right', event.currentTarget)}>连接到…</Button></Space>}
         {detailCard?.type?.startsWith('direction.') && <details className="generation-candidate-management"><summary>候选连接管理</summary>{references(detailCard)}</details>}
         {detailCard?.type === 'direction.photography' && <Button disabled={readonly} onClick={() => {
@@ -677,7 +682,7 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
           setDetailId(id)
         }} models={models} capability={capability(detailCard)}
           capabilityError={'model_id' in detailCard && detailCard.model_id ? capabilityErrors[detailCard.model_id] : undefined} references={references(detailCard)} disabled={readonly} modelOutputs={runtime?.outputs} node={runtime?.nodes[detailCard.id]} busy={runtime?.busyCards.has(detailCard.id)} checking={runtime?.checking === detailCard.id} runDisabled={runtime?.disabled} onPrecheck={() => runtime?.precheck(detailCard.id)} onTargetPrecheck={() => runtime?.precheck(detailCard.id, 'target')} /></fieldset></ConfigProvider>}
-      </WorkbenchDetails>
+      </EditorContainer>
     })}
   </div>
 }
