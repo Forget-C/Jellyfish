@@ -87,7 +87,7 @@ try {
   await page.setViewportSize({width:390,height:844})
   await delay(300)
   const toolbar=await page.getByRole('navigation',{name:'画布视图工具'}).boundingBox()
-  const addButton=await page.getByRole('button',{name:'添加卡片',exact:true}).boundingBox()
+  const addButton=await page.getByRole('toolbar',{name:'卡片分类',exact:true}).boundingBox()
   assert.ok(toolbar.y+toolbar.height<=addButton.y || addButton.y+addButton.height<=toolbar.y,'mobile addition and view tools do not overlap')
   await page.screenshot({path:join(output,'tools-mobile.png'),animations:'disabled'})
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true)

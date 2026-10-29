@@ -1,3 +1,4 @@
+import { ReferenceCardSummary } from './ReferenceCardSummary'
 import { canvasNodeStatusLabels } from './useGenerationCanvasRuntime'
 import { GenerationCanvasBrowse, type CanvasDisplayFilter } from './GenerationCanvasBrowse'
 import { guidanceSummary, type GuidanceCard } from './GuidanceDirectionEditor'
@@ -144,7 +145,7 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
   const layoutMeasurements = useMemo(() => ({ ...Object.fromEntries([...hidden].map(id => [id, { width: 400, height: 350 }])), ...measured }), [measured, hidden])
   const nodes = useMemo(() => cards.map(card => ({ id: card.id })), [cards])
   const layout = useGraphLayout({ storageKey: `jellyfish:generation-layout:${document.project_id}:${document.id}`, viewId: 'canvas',
-    initialTop: 104, initialLeft: window.innerWidth > 700 ? 200 : 16, anchorId: cards[0]?.id || '', validIds: [...cards.map(card => card.id), ...groups.map(group => group.id)], arrange,
+    initialTop: window.innerWidth > 700 ? 180 : 300, initialLeft: window.innerWidth > 700 ? 200 : 80, anchorId: cards[0]?.id || '', validIds: [...cards.map(card => card.id), ...groups.map(group => group.id)], arrange,
     onStorageError: setStorageError }, nodes, layoutMeasurements, container.current?.clientWidth || 1200)
   const creationView = useRef<{ cardId: string; transform: typeof layout.view.transform }>()
   useLayoutEffect(() => {
@@ -405,6 +406,32 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
     setSelected(ids); selectionStart.current = undefined; setSelectionBox(undefined)
   }
   const point = (id: string) => layout.view.positions[id] || { x: 0, y: 0 }
+  /** 显式适应全部按实际可见卡片及悬浮导航留白计算，不改保存或生成依据。 */
+  const fitVisibleCards = () => {
+    const surface = viewport.surface.current
+    const visible = cards.filter(card => !hidden.has(card.id) && !filtered.has(card.id))
+    if (!surface || !visible.length && !groups.length) { viewport.fit(); return }
+    const bounds = visible.map(card => {
+      const origin = point(card.id), size = measured[card.id] || { width: 400, height: 200 }
+      return { left: origin.x, top: origin.y - 36, right: origin.x + size.width, bottom: origin.y + size.height }
+    })
+    // 分组标题高于成员卡；收起组也需参与适应范围，避免操作落在顶部导航后。
+    const surfaceBox = surface.getBoundingClientRect()
+    container.current?.querySelectorAll<HTMLElement>('[data-group-id]').forEach(group => {
+      const box = group.getBoundingClientRect()
+      bounds.push({ left: (box.left - surfaceBox.left - transform.x) / transform.scale, top: (box.top - surfaceBox.top - transform.y) / transform.scale,
+        right: (box.right - surfaceBox.left - transform.x) / transform.scale, bottom: (box.bottom - surfaceBox.top - transform.y) / transform.scale })
+    })
+    const left = Math.min(...bounds.map(box => box.left)), top = Math.min(...bounds.map(box => box.top))
+    const width = Math.max(...bounds.map(box => box.right)) - left, height = Math.max(...bounds.map(box => box.bottom)) - top
+    const surfaceTop = surface.getBoundingClientRect().top
+    const browseBottom = container.current?.querySelector('.generation-browse')?.getBoundingClientRect().bottom || surfaceTop + 140
+    const paddingTop = Math.max(80, browseBottom - surfaceTop + 24), paddingLeft = 80, paddingBottom = 80
+    const availableWidth = Math.max(1, surface.clientWidth - paddingLeft - 24), availableHeight = Math.max(1, surface.clientHeight - paddingTop - paddingBottom)
+    const scale = Math.min(1, availableWidth / Math.max(width, 1), availableHeight / Math.max(height, 1))
+    layout.setView(previous => ({ ...previous, transform: { scale, x: paddingLeft + (availableWidth - width * scale) / 2 - left * scale, y: paddingTop + (availableHeight - height * scale) / 2 - top * scale } }))
+  }
+
   const anchor = (id: string, side: ConnectionSide) => sidePoint(point(id), measured[id]?.width || layout.view.sizes[id]?.width || 400, measured[id]?.height || layout.view.sizes[id]?.height || 172, side)
   const width = viewport.surface.current?.clientWidth || 1200, height = viewport.surface.current?.clientHeight || 800
   const visibleWorld = { x: -transform.x / transform.scale, y: -transform.y / transform.scale, width: width / transform.scale, height: height / transform.scale }
@@ -441,7 +468,7 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
       <WorkbenchIconButton label="缩小" variant="quiet" icon={<MinusOutlined />} onClick={() => viewport.zoom(-.1)} />
       <span aria-label="画布缩放比例">{Math.round(transform.scale * 100)}%</span>
       <WorkbenchIconButton label="放大" variant="quiet" icon={<PlusOutlined />} onClick={() => viewport.zoom(.1)} />
-      <Button variant="quiet" onClick={() => viewport.fit()}>适应全部</Button>
+      <Button variant="quiet" onClick={fitVisibleCards}>适应全部</Button>
       <CanvasToolbarMenu label="布局" caption="布局">
         <Button onClick={() => layout.rearrange()}>整理布局</Button>
         <Button disabled={!layout.canUndo} onClick={layout.undo}>撤销布局整理</Button>
@@ -549,11 +576,11 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
               {node?.error_message && <p data-problem="true">生成失败：{node.error_message}{outputs.length > 0 ? ' · 保留上次成果' : ''}</p>}
               {node?.status === 'succeeded' && !node.current_output_updated && <p>配置已变，本次结果未替换正式输出</p>}
             </section>}{stale && <p data-problem="true">依据已变，旧正式输出仍保留</p>}
-              {'image_binding' in card && <span>{!referenceImage && '缺少主图 · '}{!card.objects?.length && '尚未绑定名称'}</span>}
+              {'image_binding' in card && <span>{!referenceImage && '缺少主图'}</span>}
               {'uploading' in card && card.uploading && <span>上传尚未完成</span>}
             </>}>
 
-            {!isModel && <>            <p className="canvas-card-summary">{['direction.creative_control', 'direction.guidance', 'direction.criterion'].includes(card.type || '') ? guidanceSummary(card as GuidanceCard) : card.type === 'direction.style' ? Object.values((card as VisualStyleCard).fields || {}).map(value => value.text).filter(Boolean).join(' · ') || '风格方向、视觉特征、材质与色彩待编辑' : ['direction.space_rule', 'direction.continuity', 'direction.fact'].includes(card.type || '') ? constraintSummary(card as ConstraintCard) : card.type === 'direction.photography' ? photographySummary(card as PhotographyCard) : ['direction.dialogue', 'direction.sound'].includes(card.type || '') ? soundSummary(card as SoundCard) : ['direction.narrative', 'direction.beat', 'direction.event', 'direction.shot'].includes(card.type || '') ? narrativeSummary(card as NarrativeCard) : ['direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'].includes(card.type || '') ? spatialSummary(card as SpatialCard) : card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard) : 'title' in card ? `${card.objects?.map(object => object.name).filter(Boolean).join('、') || '未绑定名称'} · ${card.angle || '正面'}` : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '尚未生成' : 'file_id' in card && card.file_id ? '固定媒体' : '未选择媒体'}</p>
+            {!isModel && <>            {'image_binding' in card ? <ReferenceCardSummary card={card} projectId={document.project_id} canvasId={document.id} revision={savedRevision} published={runtime?.outputs} /> : <p className="canvas-card-summary">{['direction.creative_control', 'direction.guidance', 'direction.criterion'].includes(card.type || '') ? guidanceSummary(card as GuidanceCard) : card.type === 'direction.style' ? Object.values((card as VisualStyleCard).fields || {}).map(value => value.text).filter(Boolean).join(' · ') || '风格方向、视觉特征、材质与色彩待编辑' : ['direction.space_rule', 'direction.continuity', 'direction.fact'].includes(card.type || '') ? constraintSummary(card as ConstraintCard) : card.type === 'direction.photography' ? photographySummary(card as PhotographyCard) : ['direction.dialogue', 'direction.sound'].includes(card.type || '') ? soundSummary(card as SoundCard) : ['direction.narrative', 'direction.beat', 'direction.event', 'direction.shot'].includes(card.type || '') ? narrativeSummary(card as NarrativeCard) : ['direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'].includes(card.type || '') ? spatialSummary(card as SpatialCard) : card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard) : 'title' in card ? `${card.objects?.map(object => object.name).filter(Boolean).join('、') || '未绑定名称'} · ${card.angle || '正面'}` : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '尚未生成' : 'file_id' in card && card.file_id ? '固定媒体' : '未选择媒体'}</p>}
               {'file_id' in card && card.file_id && <MediaPreview fileId={card.file_id} type={card.type?.split('.')[1] || 'image'} />}
               {referenceImage && <MediaPreview fileId={referenceImage} type="image" />}
             </>}

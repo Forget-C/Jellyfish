@@ -90,6 +90,7 @@ try {
   for (const [label, filename, mimeType, preview] of [
     ['添加音频卡', 'voice.wav', 'audio/wav', 'audio'], ['添加视频卡', 'clip.mp4', 'video/mp4', 'video'],
   ]) {
+    await openCardList(page)
     await page.getByRole('button', { name: label, exact: true }).click()
     const mediaCard = page.getByRole('complementary', { name: label === '添加音频卡' ? '音频内容卡' : '视频内容卡', exact: true })
     await mediaCard.getByLabel('上传媒体文件').setInputFiles({ name: filename, mimeType, buffer: readFileSync(join(output, filename)) })

@@ -51,7 +51,12 @@ try {
   assert.ok(seeded.ok, await seeded.text())
   await page.goto(`http://127.0.0.1:4301/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   const card = page.locator('.wb-details:not([hidden])')
-  const open = async id => { await page.locator(`[data-card-id="${id}"]`).press('Enter'); await card.waitFor() }
+  const open = async id => {
+    const details = page.locator('.wb-details:visible')
+    if (await details.count() && await details.getAttribute('aria-modal') === 'true') await details.getByRole('button', { name: '关闭详情', exact: true }).click()
+    await page.locator(`[data-card-id="${id}"]`).press('Enter')
+    await page.locator(`.wb-details:visible [data-card-details="${id}"]`).waitFor()
+  }
   const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
   const poll = async predicate => { for (let i = 0; i < 80; i++) { const state = await read(); if (predicate(state)) return state; await delay(150) } throw Error('saved document did not reach expected state') }
   await open('criterion')
@@ -59,13 +64,16 @@ try {
   await poll(state => state.document.cards.find(item => item.id === 'criterion').standard?.text === '五指和钥匙清晰可见')
   await card.getByRole('region', { name: '被使用记录', exact: true }).getByText('尚未被采用').waitFor()
   await page.keyboard.press('Escape')
-  const out = await page.locator('[data-card="criterion"][data-output-port="criterion"]').boundingBox()
-  const input = await page.locator('[data-card="shot"][data-input-port="acceptance_basis"]').boundingBox()
+  await page.locator('[data-card-id="criterion"]').hover()
+  const out = await page.locator('[data-card-id="criterion"] [data-connection-side="right"]').boundingBox()
+  const input = await page.locator('[data-card-id="shot"] [data-connection-side="left"]').boundingBox()
   assert.ok(out && input)
   await page.mouse.move(out.x + out.width / 2, out.y + out.height / 2)
   await page.mouse.down()
   await page.mouse.move(input.x + input.width / 2, input.y + input.height / 2, { steps: 12 })
   await page.mouse.up()
+  const purposes = page.getByRole('menu', { name: '选择连接用途', exact: true })
+  if (await purposes.isVisible()) await purposes.getByRole('menuitem', { name: '验收要求 → 作为验收依据候选', exact: true }).click()
   await poll(state => state.document.edges.some(edge => edge.source_port === 'criterion' && edge.target_card === 'shot'))
   for (const id of ['shot', 'performance', 'photo']) {
     await open(id)

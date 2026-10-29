@@ -1,3 +1,4 @@
+import { openCardList } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import { writeFile } from 'node:fs/promises'
 import assert from 'node:assert/strict'
@@ -43,6 +44,13 @@ try {
   assert.ok(seed.ok,await seed.clone().text())
   await page.goto(`http://127.0.0.1:4426/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   await page.locator('[data-card-id="source"]').waitFor()
+  await page.getByRole('button', { name: '适应全部', exact: true }).click()
+  const safeFit = await page.evaluate(() => {
+    const browse = document.querySelector('.generation-browse').getBoundingClientRect()
+    const card = document.querySelector('[data-card-id="source"]').getBoundingClientRect()
+    return card.top >= browse.bottom + 8
+  })
+  assert.ok(safeFit, 'fit keeps the top card below floating navigation and filters')
   await page.getByRole('button',{name:'布局',exact:true}).click()
   await page.getByRole('button',{name:'展开小地图',exact:true}).click()
   await page.keyboard.press('Escape')
@@ -59,9 +67,10 @@ try {
   }
   for(const [name,width,height] of [['desktop',1440,960],['mobile',390,844],['wide',3830,1688]]){
     await page.setViewportSize({width,height})
+    await page.getByRole('button', { name: '适应全部', exact: true }).click()
     await snapshot(`generation-${name}`)
     const transform=await page.locator('.generation-world').getAttribute('style')
-    await page.getByRole('button',{name:'添加卡片',exact:true}).click()
+    await openCardList(page, '基础卡')
     await snapshot(`generation-list-${name}`)
     await page.getByRole('button',{name:'关闭卡片列表',exact:true}).click()
     await page.getByRole('button',{name:'画布管理',exact:true}).click()
@@ -105,7 +114,7 @@ try {
   for(const [name,width,height] of [['desktop',1440,960],['mobile',390,844],['wide',3830,1688]]){await page.setViewportSize({width,height});await snapshot(`generation-running-${name}`)}
   await fetch(`${api}/test/runtime-controls`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({release:2})})
   await waitStatus('failed')
-  await page.locator('[data-card-id="model"] [aria-label="模型状态摘要"]').getByText(/失败/).waitFor()
+  await page.locator('[data-card-id="model"] [aria-label="模型状态摘要"]').getByText('controlled-text · 失败 · 未完成',{exact:true}).waitFor()
   await details.getByText('失败 · 未完成',{exact:false}).waitFor()
   for(const [name,width,height] of [['desktop',1440,960],['mobile',390,844],['wide',3830,1688]]){await page.setViewportSize({width,height});await snapshot(`generation-failed-${name}`)}
 } finally { await cleanup() }

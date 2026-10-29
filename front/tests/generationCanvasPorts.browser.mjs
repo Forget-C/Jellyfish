@@ -68,7 +68,6 @@ try {
   }
   const fitForConnecting = async () => {
     await page.getByRole('button',{name:'适应全部',exact:true}).click()
-    await page.mouse.move(1100,650); await page.mouse.down(); await page.mouse.move(1100,830,{steps:5}); await page.mouse.up()
   }
   const savedEdges = async count => { for(let i=0;i<70;i++){const value=await read();if(value.document.edges.length===count)return value;await delay(100)}throw Error('edge count not saved') }
   assert.equal(await sourceCard.locator('[data-connection-side]').count(),4)

@@ -42,13 +42,16 @@ export async function openCanvasManagement(page) {
   const trigger = page.getByRole('button', { name: '画布管理', exact: true })
   if (await trigger.getAttribute('aria-expanded') !== 'true') await trigger.press('Enter')
 }
-export async function openCardList(page) {
-  const trigger = page.getByRole('button', { name: '添加卡片', exact: true })
+export async function openCardList(page, category = '基础卡') {
+  const details = page.locator('.wb-details:visible')
+  if (await details.count() && await details.getAttribute('aria-modal') === 'true') await closeCanvasDetails(page)
+  const trigger = page.getByRole('toolbar', { name: '卡片分类', exact: true }).getByRole('button', { name: category, exact: true })
   if (await trigger.getAttribute('aria-expanded') !== 'true') await trigger.press('Enter')
+  await page.getByRole('navigation', { name: '添加卡片', exact: true }).waitFor()
 }
 export async function closeCardList(page) {
-  const trigger = page.getByRole('button', { name: '添加卡片', exact: true })
-  if (await trigger.getAttribute('aria-expanded') === 'true') await trigger.click()
+  const close = page.getByRole('button', { name: '关闭卡片列表', exact: true })
+  if (await close.isVisible()) await close.click()
 }
 export async function openCardMenu(page, id) {
   const card = page.locator(`[data-card-id="${id}"]`)

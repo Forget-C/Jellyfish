@@ -1,3 +1,4 @@
+import { openCardList, closeCardList, openCanvasManagement, closePrecheck } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -39,12 +40,18 @@ try {
   await page.getByRole('alert').filter({ hasText: '卡片目录读取失败' }).waitFor()
   await page.unroute('**/catalog')
   await page.getByRole('button', { name: '重试卡片目录', exact: true }).click()
-  await page.getByRole('button', { name: '添加卡片', exact: true }).click()
+  await openCardList(page, '表演与调度')
   await page.getByRole('button', { name: '添加人物表演卡', exact: true }).waitFor()
   const catalog=(await (await fetch(`${base}/${canvas.id}/catalog`)).json()).data
   writeFileSync(join(output,'catalog.json'),JSON.stringify(catalog,null,2))
   assert.equal(catalog.cards.reduce((count,card)=>count+(card.entries.length||1),0),39)
-  assert.equal(await page.getByRole('navigation',{name:'添加卡片',exact:true}).getByRole('button', { name: /^添加/ }).count(),35)
+  let entryCount = 0
+  for (const category of ['基础卡', '参考卡', '模型生成', '画面设计', '表演与调度', '叙事与镜头', '声音设计', '连续性与约束']) {
+    await openCardList(page, category)
+    entryCount += await page.getByRole('navigation', { name: '添加卡片', exact: true }).getByRole('button', { name: /^添加/ }).count()
+  }
+  assert.equal(entryCount, 39)
+  await closeCardList(page)
   const source = {canvas_id:canvas.id,card_id:'person',port_id:'object',position:0,object_id:'alice'}
   const document = {...canvas.document,cards:[{id:'person',type:'content.object',object_id:'alice',name:'小雪',text:'仅模型直接采用的外貌'},
     {id:'performance',type:'direction.performance',physical_action:{state:'proposal',text:'伸手'},input_bindings:[{id:'actor',source,input_port:'participant'}]}],
@@ -71,7 +78,7 @@ try {
   await page.getByRole('button',{name:'画布管理',exact:true}).click()
   await page.getByRole('button',{name:'新建画布',exact:true}).click()
   await page.getByRole('button',{name:'画布管理',exact:true}).click()
-  await page.getByRole('button',{name:'添加卡片',exact:true}).click()
+  await openCardList(page)
   await page.getByRole('button',{name:'添加文本卡',exact:true}).waitFor()
   const journeyId=new URL(page.url()).searchParams.get('canvas')
   assert.notEqual(journeyId,canvas.id)
@@ -80,7 +87,7 @@ try {
   const detail=page.locator('.wb-details:not([hidden])')
   const open=async id=>{if(page.viewportSize().width<700&&await detail.isVisible())await detail.getByRole('button',{name:'关闭详情',exact:true}).click();await page.locator(`[data-card-id="${id}"]`).press('Enter');await detail.waitFor()}
   const add=async(label,type)=>{
-    if(await page.getByRole('button',{name:'添加卡片',exact:true}).getAttribute('aria-expanded')!=='true')await page.getByRole('button',{name:'添加卡片',exact:true}).click()
+    await openCardList(page, type.startsWith('model.') ? '模型生成' : type.startsWith('reference.') ? '参考卡' : type === 'direction.dialogue' ? '声音设计' : type.startsWith('direction.') ? '表演与调度' : '基础卡')
     const before=(await read()).document.cards.map(card=>card.id)
     await page.getByRole('button',{name:label,exact:true}).click()
     const state=await poll(state=>state.document.cards.some(card=>card.type===type&&!before.includes(card.id)))
@@ -111,7 +118,7 @@ try {
     await detail.getByRole('button',{name:`采用 ${candidate.token}`,exact:true}).click()
     await poll(state=>state.document.cards.find(card=>card.id===model).input_bindings?.some(binding=>binding.source.card_id===sourceId))
   }
-  await page.getByRole('button',{name:'画布管理',exact:true}).click()
+  await openCanvasManagement(page)
   await page.getByRole('textbox',{name:'画布名称',exact:true}).fill('小雨的清晨探索')
   await page.getByRole('button',{name:'画布管理',exact:true}).click()
   const basis=await add('添加原文／创作依据卡','content.basis')
@@ -227,7 +234,8 @@ try {
   assert.deepEqual(nextCheck.execution_nodes,[downstream])
   assert.equal(nextCheck.input.media[0].file_id,savedImage.file_id)
   assert.doesNotMatch(nextCheck.input.text,/今天会是晴天|轻轻伸手推开门|清晨，小雨/)
-  await page.keyboard.press('Escape')
+  await page.getByRole('dialog', { name: '运行预检', exact: true }).waitFor()
+  await closePrecheck(page)
   await category.press('ArrowDown')
   await page.locator('.ant-select-dropdown:visible').getByText('全部分类',{exact:true}).click()
   await page.reload()
