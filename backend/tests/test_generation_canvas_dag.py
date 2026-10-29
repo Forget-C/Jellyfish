@@ -1,4 +1,4 @@
-"""Target execution through HTTP, real submission and the actual Worker."""
+"""Explicit model stages through HTTP, real submission and the actual Worker."""
 from copy import deepcopy
 from types import SimpleNamespace
 import asyncio
@@ -62,16 +62,16 @@ async def chain(state, monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('runtime', ['mysql'], indirect=True)
-async def test_target_reuses_valid_upstream_and_freezes_waiting_actual_request(runtime, monkeypatch):
+async def test_single_reuses_valid_upstream_and_freezes_actual_request(runtime, monkeypatch):
     from app.models.llm import Model, Provider
     doc, calls, worker = await chain(runtime, monkeypatch)
-    accepted, preview = await run(runtime, 'C', 'target')
-    assert preview['execution_nodes'] == ['B', 'C']
+    accepted, preview = await run(runtime, 'B')
+    assert preview['execution_nodes'] == ['B']
     assert len(preview['reused_results']) == 1
     assert len(accepted['task_ids']) == 1
     state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
     nodes = next(item for item in state['runs'] if item['id'] == accepted['run_id'])['nodes']
-    assert {item['card_id']: item['status'] for item in nodes} == {'B': 'queued', 'C': 'waiting'}
+    assert {item['card_id']: item['status'] for item in nodes} == {'B': 'queued'}
     doc['cards'][2]['prompt'] = {'segments': [{'kind': 'text', 'id': 'later', 'text': 'later edit'}]}
     doc['cards'][0]['prompt']['segments'][0]['text'] = 'other run A'
     await save(runtime, doc)
@@ -84,7 +84,7 @@ async def test_target_reuses_valid_upstream_and_freezes_waiting_actual_request(r
         provider = await db.get(Provider, runtime.provider_id)
         provider.api_key, provider.base_url = 'changed', 'https://changed.test'
     await drain(worker)
-    assert sorted(item[0] for item in calls) == sorted(['out(A)', 'out(out(A))', 'other run A'])
+    assert sorted(item[0] for item in calls) == sorted(['out(A)', 'other run A'])
     assert all(item[1]['model'] == 'frozen-model' and item[1]['temperature'] == .3 and item[1]['api_key'] == 'private-secret' for item in calls)
     state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
     run_state = next(item for item in state['runs'] if item['id'] == accepted['run_id'])
@@ -96,36 +96,31 @@ async def test_target_reuses_valid_upstream_and_freezes_waiting_actual_request(r
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('runtime', ['mysql'], indirect=True)
-async def test_cancel_waiting_node_serializes_with_just_created_downstream_task(runtime, monkeypatch):
+async def test_cancel_serializes_with_single_node_completion(runtime, monkeypatch):
     from app.services.task_service import TaskService
-    doc, calls, worker = await chain(runtime, monkeypatch)
-    doc['cards'][0]['prompt']['segments'][0]['text'] = 'changed A'
-    await save(runtime, doc)
-    accepted, _ = await run(runtime, 'C', 'target')
+    _, calls, worker = await chain(runtime, monkeypatch)
+    accepted, _ = await run(runtime, 'B')
     state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
-    nodes = {item['card_id']: item for item in next(item for item in state['runs'] if item['id'] == accepted['run_id'])['nodes']}
+    node = next(item for item in state['runs'] if item['id'] == accepted['run_id'])['nodes'][0]
     writer = runtime.sessions()
-    await TaskService(writer).claim(nodes['A']['task_id'], worker_id='race')
-    await TaskService(writer).finish(nodes['A']['task_id'], result={'text': 'this run A'})
-    # B's new Task exists only in the uncommitted producer transaction. Cancel
-    # initially sees B waiting, then must cancel its now-authoritative queued Task.
-    cancelling = asyncio.create_task(runtime.client.post(runtime.url + f"/runs/{accepted['run_id']}/nodes/{nodes['B']['id']}/cancel"))
+    await TaskService(writer).claim(node['task_id'], worker_id='race')
+    await TaskService(writer).finish(node['task_id'], result={'text': 'this run B'})
+    cancelling = asyncio.create_task(runtime.client.post(runtime.url + f"/runs/{accepted['run_id']}/nodes/{node['id']}/cancel"))
     await asyncio.sleep(.1)
     assert not cancelling.done()
     await writer.commit()
     await writer.close()
     response = await asyncio.wait_for(cancelling, 5)
     assert response.status_code == 200, response.text
-    final = {item['card_id']: item for item in response.json()['data']['nodes']}
-    assert final['B']['status'] == 'cancelled' and final['B']['task_id']
-    assert final['C']['status'] == 'blocked' and final['C']['task_id'] is None
-    await drain(worker)
+    assert len(response.json()['data']['nodes']) == 1
+    assert response.json()['data']['nodes'][0]['status'] == 'succeeded'
+    assert (await runtime.client.get(runtime.url + '/runtime')).json()['data']['current_outputs']['C'][0]['text'] == 'out(C)'
     assert calls == []
     worker.text_pool.shutdown(wait=False)
 
 
 @pytest.mark.asyncio
-async def test_missing_positions_reject_admission_and_new_missing_result_fails_only_downstream(runtime, image_storage):
+async def test_missing_positions_block_consumer_and_admitted_files_remain_pinned(runtime, image_storage):
     import base64
     import httpx
     import json
@@ -167,16 +162,26 @@ async def test_missing_positions_reject_admission_and_new_missing_result_fails_o
         doc['cards'][1]['prompt']['segments'].append({'kind': 'reference', 'id': 'knownRef',
             'source': {'canvas_id': runtime.canvas_id, 'card_id': 'known', 'port_id': 'image', 'position': 0}})
         await save(runtime, doc)
-        accepted, preview = await run(runtime, 'C', 'target')
-        assert preview['execution_nodes'] == ['A', 'B', 'C']
-        # File ownership is visible through the real public file endpoint before B has a Task.
+        # Refresh the producer explicitly. Its new single image withdraws position 1.
+        await run(runtime, 'A')
+        await drain(worker)
+        missing = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'B'})).json()['data']
+        assert missing['execution_nodes'] == ['B'] and not missing['can_run']
+        assert any(item['code'] == 'OUTPUT_MISSING' for item in missing['diagnostics'])
+        state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
+        assert state['current_outputs']['B'][0]['file_id']
+        assert state['current_outputs']['C'][0]['file_id']
+        # Rebind a valid current position, then admit B alone. Its known file is
+        # pinned by the accepted request even if current edits remove the input.
+        doc['cards'][1]['prompt']['segments'][1]['source']['position'] = 0
+        await save(runtime, doc)
+        accepted, preview = await run(runtime, 'B')
+        assert preview['execution_nodes'] == ['B'] and len(accepted['task_ids']) == 1
         from app.api.v1.routes.studio.files import router as files_router
         runtime.app.include_router(files_router, prefix='/files')
         detail = (await runtime.client.get('/files/known')).json()['data']
         assert any(item['usage_kind'] == 'canvas_run' for item in detail['usages'])
         assert (await runtime.client.delete('/files/known')).status_code == 409
-        # The waiting B keeps its known file after subsequent edits remove the
-        # corresponding content and reference from the current document.
         doc['cards'][1]['prompt']['segments'] = [item for item in doc['cards'][1]['prompt']['segments'] if item['id'] != 'knownRef']
         doc['cards'] = [item for item in doc['cards'] if item['id'] != 'known']
         doc['edges'] = [item for item in doc['edges'] if item['id'] != 'knownB']
@@ -187,42 +192,27 @@ async def test_missing_positions_reject_admission_and_new_missing_result_fails_o
         calls.clear()
         await drain(worker)
         state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
-        nodes = {item['card_id']: item for item in next(item for item in state['runs'] if item['id'] == accepted['run_id'])['nodes']}
-        assert nodes['A']['status'] == 'succeeded'
-        assert nodes['B']['status'] == 'failed' and nodes['B']['task_id'] is None
-        assert nodes['C']['status'] == 'blocked' and nodes['C']['task_id'] is None
-        assert calls == ['A']
-        # The referenced missing position cannot be admitted even if A would execute.
-        doc['cards'][0]['prompt']['segments'][0]['text'] = 'changed A basis again'
-        doc['cards'][1]['prompt']['segments'].append({'kind': 'reference', 'id': 'existing0',
-            'source': {'canvas_id': runtime.canvas_id, 'card_id': 'A', 'port_id': 'image', 'position': 0}})
-        await save(runtime, doc)
-        missing = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'C', 'kind': 'target'})).json()['data']
-        assert missing['execution_nodes'] == ['A', 'B', 'C']
-        assert not missing['can_run'] and any(item['code'] == 'OUTPUT_MISSING' for item in missing['diagnostics'])
-        assert state['current_outputs']['B'][0]['file_id']
+        node = next(item for item in state['runs'] if item['id'] == accepted['run_id'])['nodes'][0]
+        assert node['card_id'] == 'B' and node['status'] == 'succeeded'
+        assert len(calls) == 1 and calls[0].startswith('B')
+        missing = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'C'})).json()['data']
+        assert not missing['can_run'] and any(item['code'] == 'INPUT_STALE' for item in missing['diagnostics'])
         worker.text_pool.shutdown(wait=False)
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('runtime', ['mysql'], indirect=True)
 @pytest.mark.parametrize('outcome', ['failure', 'node_cancel', 'run_cancel', 'interruption'])
-async def test_target_terminal_paths_end_waiting_without_old_output_fallback(runtime, monkeypatch, outcome):
+async def test_single_terminal_paths_do_not_run_downstream_or_fallback(runtime, monkeypatch, outcome):
     from app.services.task_service import TaskService
     doc, calls, worker = await chain(runtime, monkeypatch)
-    # Make both producers necessary; Y stays independent of the A→B branch.
     doc['cards'][0]['prompt']['segments'][0]['text'] = 'new A'
     doc['cards'][3]['prompt']['segments'][0]['text'] = 'new X'
-    doc['edges'].append({'id': 'YC', 'source_card': 'Y', 'source_port': 'text', 'target_card': 'C', 'target_port': 'text'})
-    doc['input_order']['C']['text'].append('YC')
-    doc['cards'][2]['prompt']['segments'].append({'kind': 'reference', 'id': 'Yref',
-        'source': {'canvas_id': runtime.canvas_id, 'card_id': 'Y', 'port_id': 'text', 'position': 0}})
     await save(runtime, doc)
-    accepted, preview = await run(runtime, 'C', 'target')
-    assert preview['execution_nodes'] == ['A', 'B', 'X', 'Y', 'C']
+    accepted, preview = await run(runtime, 'A')
+    assert preview['execution_nodes'] == ['A']
     state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
-    run_state = next(item for item in state['runs'] if item['id'] == accepted['run_id'])
-    nodes = {item['card_id']: item for item in run_state['nodes']}
+    node = next(item for item in state['runs'] if item['id'] == accepted['run_id'])['nodes'][0]
     class Model:
         def __init__(self, **params):
             pass
@@ -234,23 +224,24 @@ async def test_target_terminal_paths_end_waiting_without_old_output_fallback(run
             yield SimpleNamespace(content='out(' + text + ')')
     monkeypatch.setattr('app.task_worker.ChatOpenAI', Model)
     if outcome in ('node_cancel', 'run_cancel'):
-        suffix = f"/nodes/{nodes['A']['id']}" if outcome == 'node_cancel' else ''
+        suffix = f"/nodes/{node['id']}" if outcome == 'node_cancel' else ''
         response = await runtime.client.post(runtime.url + f"/runs/{accepted['run_id']}" + suffix + '/cancel')
         assert response.status_code == 200, response.text
     elif outcome == 'interruption':
         async with runtime.sessions.begin() as db:
-            await TaskService(db).claim(nodes['A']['task_id'], worker_id='old')
+            await TaskService(db).claim(node['task_id'], worker_id='old')
             await TaskService(db).interrupt_previous_workers(worker_id='new')
     await drain(worker)
+    for card in ['X', 'Y']:
+        await run(runtime, card)
+        await drain(worker)
+    blocked = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'B'})).json()['data']
+    assert not blocked['can_run'] and any(item['code'] == 'INPUT_STALE' for item in blocked['diagnostics'])
     state = (await runtime.client.get(runtime.url + '/runtime')).json()['data']
     run_state = next(item for item in state['runs'] if item['id'] == accepted['run_id'])
-    nodes = {item['card_id']: item for item in run_state['nodes']}
-    assert run_state['lifecycle'] == 'finished'
-    assert nodes['C']['status'] == 'blocked' and nodes['C']['task_id'] is None
-    assert nodes['B']['status'] in ('blocked', 'cancelled') and nodes['B']['task_id'] is None
-    if outcome in ('failure', 'node_cancel'):
-        assert nodes['X']['status'] == nodes['Y']['status'] == 'succeeded'
-        assert 'out(new X)' in calls
+    assert run_state['lifecycle'] == 'finished' and len(run_state['nodes']) == 1
+    assert run_state['nodes'][0]['status'] in ('failed', 'cancelled', 'interrupted')
     assert state['current_outputs']['C'][0]['text'] == 'out(C)'
+    assert state['current_outputs']['Y'][0]['text'] == 'out(out(new X))'
     assert not any(item.startswith('out(A)') for item in calls)
     worker.text_pool.shutdown(wait=False)
