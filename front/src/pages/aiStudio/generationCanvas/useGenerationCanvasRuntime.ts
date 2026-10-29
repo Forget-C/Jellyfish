@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../services/generated'
 import type { CanvasNodeRead, CanvasPrecheck, CanvasRunSubmit, CanvasRuntimeEvent, CanvasSnapshot } from '../../../services/generated'
 import { connectEventStream } from '../../../services/eventStream'
@@ -27,9 +27,23 @@ export function useGenerationCanvasRuntime(projectId: string, canvasId: string |
   const [storageBlocked, setStorageBlocked] = useState(false)
   const [cancelling, setCancelling] = useState<Set<string>>(new Set())
   const cancelRequests = useRef(new Set<string>())
-  const state = useRef({ scope, generation: 0, previewGeneration: -1, checking: false, submitting: false, pending: undefined as Pending | undefined })
+  const state = useRef({ scope, generation: 0, snapshotRequest: 0, previewGeneration: -1, checking: false, submitting: false, pending: undefined as Pending | undefined })
+  // A task cursor does not identify a saved document revision. Both save and
+  // stream snapshots reconcile through a fresh read, ordered by request epoch.
+  const refreshSnapshot = useCallback(() => {
+    const current = state.current
+    if (!canvasId || current.scope !== scope) return
+    const request = ++current.snapshotRequest, generation = current.generation
+    void Canvases.canvasRuntime({ projectId, canvasId }).then(response => {
+      if (state.current !== current || request !== current.snapshotRequest || generation !== current.generation || !response.data) return
+      const next = response.data
+      setSnapshot(previous => next.cursor >= previous.cursor ? next : previous)
+    }).catch(() => {
+      if (state.current === current && request === current.snapshotRequest && generation === current.generation) setError('输出状态读取失败，请重开后重试')
+    })
+  }, [projectId, canvasId, scope])
   useEffect(() => {
-    const s = { scope, generation: 0, previewGeneration: -1, checking: false, submitting: false, pending: undefined as Pending | undefined }
+    const s = { scope, generation: 0, snapshotRequest: 0, previewGeneration: -1, checking: false, submitting: false, pending: undefined as Pending | undefined }
     state.current = s
     cancelRequests.current = new Set(); setCancelling(new Set())
     setSnapshot(empty()); setPreview(undefined); setChecking(undefined); setSubmitting(false); setPending(undefined); setError(''); setStorageBlocked(false); setConnection('connecting')
@@ -51,7 +65,7 @@ export function useGenerationCanvasRuntime(projectId: string, canvasId: string |
       onConnection: next => { if (s === state.current) setConnection(next) },
       onEvent: event => {
         if (s !== state.current || event.canvas_id !== canvasId || event.version !== 1) return
-        if (event.type === 'snapshot') { setSnapshot(event.payload as CanvasSnapshot); return }
+        if (event.type === 'snapshot') { refreshSnapshot(); return }
         const node = event.type === 'run.finished' ? undefined : event.payload.node as CanvasNodeRead | undefined
         if (event.type !== 'run.finished' && !node) throw new Error('missing runtime node')
         setSnapshot(previous => {
@@ -76,19 +90,9 @@ export function useGenerationCanvasRuntime(projectId: string, canvasId: string |
       },
     })
     return () => { stream.close(); if (s === state.current) state.current = { ...s, scope: '' } }
-  }, [scope, canvasId, key, projectId])
-  // Saving can invalidate formal outputs without emitting a new task event.
-  useEffect(() => {
-    if (!canvasId || savedRevision === undefined) return
-    let active = true
-    const current = state.current, generation = current.generation
-    void Canvases.canvasRuntime({ projectId, canvasId }).then(response => {
-      if (!active || state.current !== current || generation !== current.generation || !response.data) return
-      const next = response.data
-      setSnapshot(previous => next.cursor >= previous.cursor ? next : previous)
-    }).catch(() => { if (active && state.current === current && generation === current.generation) setError('已保存输出状态读取失败，请重开后重试') })
-    return () => { active = false }
-  }, [projectId, canvasId, savedRevision])
+  }, [scope, canvasId, key, projectId, refreshSnapshot])
+  // Ordinary saves can invalidate outputs without producing task events.
+  useEffect(() => { if (savedRevision !== undefined) refreshSnapshot() }, [savedRevision, refreshSnapshot])
   const invalidate = () => { state.current.generation++; setPreview(undefined) }
   const precheck = async (cardId: string, kind: 'single' | 'target' | 'selection' = 'single', cardIds?: string[]) => {
     const s = state.current, generation = s.generation
