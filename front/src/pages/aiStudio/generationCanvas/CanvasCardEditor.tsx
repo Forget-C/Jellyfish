@@ -97,7 +97,13 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
     const keyboard = (event: KeyboardEvent) => {
       if (node?.inert || event.defaultPrevented || document.querySelector('.ant-modal-wrap:not([style*="display: none"])')) return
       if ([...document.querySelectorAll<HTMLElement>('[role="menu"]')].some(menu => menu.getClientRects().length && getComputedStyle(menu).visibility !== 'hidden') || node?.querySelector('[role="combobox"][aria-expanded="true"]')) return
-      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if (expanded && !forceModal) setExpanded(false); else close.current() }
+      if (event.key === 'Escape') {
+        event.preventDefault(); event.stopPropagation()
+        // The material picker is the innermost editor surface once native menus have closed.
+        const materials = node?.querySelector<HTMLDetailsElement>('.generation-material-candidates[open]')
+        if (materials) { materials.open = false; materials.querySelector('summary')?.focus(); return }
+        if (expanded && !forceModal) setExpanded(false); else close.current()
+      }
       if (modal && event.key === 'Tab' && node) {
         const items = [...node.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex="0"], summary, a[href]')].filter(item => item.getClientRects().length)
         const first = items[0], last = items[items.length-1]

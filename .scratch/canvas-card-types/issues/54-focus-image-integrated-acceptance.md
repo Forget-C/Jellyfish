@@ -33,3 +33,11 @@
 覆盖、逐区域差异、证据与限制见[本轮验收记录](../visual-c54-acceptance.md)。01–48及历史验收保持字节不变，未改变API/schema，未引入原型代码、示例参数或假任务。尚待集成与独立审查。
 
 - 最终来源失效／无delay卡底旅程11.5s通过：`/private/tmp/c54-status-final`，补充稳定预检对话框与编辑区原尺寸图。
+
+
+### 2026-10-29：最终审查统一修复
+
+- Spec P2“素材层Escape跳过内层”：公开material红例在普通编辑中打开素材后按Escape，外层直接隐藏，见 `/private/tmp/c-review-escape-red`。宿主已有按键栈先尊重原生菜单／combobox，再关闭打开的素材层并将焦点交回入口；再次Escape才执行原外层退出／收起。
+- 公开material最终15.3s通过（`/private/tmp/c-review-escape-green2`），覆盖普通与展开编辑：第一次Escape仅收素材、焦点回入口、正文保留；再次退出／收起。模型Select的ArrowDown→Escape不关闭素材或外层。既有HTTP采用、生成、重开、三视口断言全部保留；实际查看 `material-escape-expanded.png`，输入与统一表面保持。
+- Node24 typecheck、定向CanvasCardEditor ESLint与差异检查通过；无后端或接口变化，复用相关既有检查，不宣称重跑全部后端。01–48与原验收不改写。
+- Standards P3仅为同步合并提交标题。已拟定精确脚本 `/private/tmp/c-focus-implementation/fix-merge-message.py`，待集成此修复后由主代理执行；脚本备份原tip、仅改56b2364c消息并验证所有树与其余消息及55历史文件不变。此处不提前记为已完成历史修正或独立复核通过。
