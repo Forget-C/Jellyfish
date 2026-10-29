@@ -30,3 +30,12 @@
 - 旧浏览器用例按真实新交互迁移菜单、卡片目录、单详情和选择入口。保留保存、未知回执、冲突、所有权、取消、绑定、历史、文件保护及实际输入断言；移除原生 resize 后以有限卡片尺寸和布局恢复验证既有可用行为，不为旧测试恢复旧 UI。
 - MySQL selection 例需要隔离 MySQL 配置，未提供时只做入口迁移，保留原保护，不使用 SQLite 冒充并发验收。
 - 没有后端或公开 schema 变化，不重复生成 OpenAPI 或以无关后端测试代替本次页面验证。实际命令与最终通过用例清单见 26 号 Comments。
+
+
+## 最终审查修复补验
+
+问题筛选现覆盖已有 `basis_current=false` 失效输出；保存成功后同步刷新投影，避免服务端已经标记失效、列表仍只读旧运行投影。详情仅为已访问对象保留稳定会话，未访问对象不挂载；关闭、切换和展开后多结果第 3 项仍保留，隐藏音频停止播放并保留至少 3 秒的当前位置。只有当前详情可见及可访问，未改变输入采用或名称映射。
+
+证据：`/private/tmp/layout-review-layout-final` 的最终 10 例全部通过，含新增会话／失效筛选例和原完整 Journey；实际查看失效筛选与第 3 项详情截图 `/private/tmp/layout-review-final2/generation-canvas-sessions/stale-model-session.png`。原运行、自动保存和保存恢复回归分别见 `/private/tmp/layout-review-generation-canvas-runtime`、`/private/tmp/layout-review-generation-canvas-autosave`、`/private/tmp/layout-review-generation-canvas-save`。初版同容器隐藏兄弟导致 Journey 文本定位歧义，最终改为复用独立 WorkbenchDetails 原生隐藏并恢复原测试断言，完整 Journey 50.8 秒通过；未以削弱断言规避。
+
+新增用例使本期独立真实浏览器覆盖由 39 增为 40，以上定向复测不重复累加独立用例数。lint 检查仍报告与实施基线相同的三条 hooks 依赖警告，不称通过。其他已记录的受控外部服务与 MySQL 未运行边界不变。
