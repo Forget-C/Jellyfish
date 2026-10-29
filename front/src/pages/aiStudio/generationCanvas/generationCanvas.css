@@ -187,9 +187,9 @@
 
 .generation-stack { position:absolute; width:400px; height:300px; cursor:grab; z-index:2; }
 .generation-stack:focus-visible { outline:2px solid var(--wb-focus); }
-.generation-stack-face { position:absolute; inset:0; border:1px solid var(--wb-border); background:var(--wb-panel-bg,#202020); border-radius:16px; padding:24px; box-shadow:-10px 10px 0 #252525,-20px 20px 0 #1c1c1c; }
+.generation-stack-face { position:absolute; inset:0; border:1px solid var(--wb-border); background:var(--wb-surface); border-radius:16px; padding:24px; box-shadow:-10px 10px 0 var(--wb-raised),-20px 20px 0 var(--wb-inset); }
 .generation-stack-face>span { position:absolute; right:20px; bottom:20px; border:1px solid var(--wb-border); border-radius:50%; padding:12px; }
-.generation-stack-actions { position:absolute; bottom:calc(100% + 16px); display:flex; align-items:center; gap:12px; padding:8px; background:#252525; border-radius:12px; visibility:hidden; }
+.generation-stack-actions { position:absolute; bottom:calc(100% + 16px); display:flex; align-items:center; gap:12px; padding:8px; background:var(--wb-raised); border-radius:12px; visibility:hidden; }
 .generation-stack:hover .generation-stack-actions,.generation-stack:focus-within .generation-stack-actions { visibility:visible; }
 .generation-stack-reading { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:24px; padding:24px; min-height:300px; }
 .generation-stack-reading article { border:1px solid var(--wb-border); border-radius:12px; padding:20px; white-space:pre-wrap; }
@@ -202,3 +202,15 @@
 
 /* Modal editors cover canvas chrome while AntD operation dialogs retain their higher layer. */
 .generation-card-editor[data-expanded="true"] { z-index: 980; }
+
+/* 编组的管理状态独立于成员卡选择；默认只保留框外标题。 */
+.generation-workbench .generation-group { background: color-mix(in srgb, var(--wb-surface) 38%, transparent); border-color: var(--wb-border); }
+.generation-group[data-selected="true"] { border-color: var(--wb-strongBorder); }
+.generation-group-header { position: absolute; bottom: calc(100% + 8px); left: 0; max-width: 100%; flex-wrap: nowrap; gap: 8px; }
+.generation-group-title { display: flex; align-items: center; gap: 8px; max-width: 260px; padding: 0; border: 0; color: var(--wb-muted); background: transparent; font: inherit; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: pointer; }
+.generation-group-title > span:last-child { overflow: hidden; text-overflow: ellipsis; }
+.generation-group-title:hover { color: var(--wb-text); }
+.generation-group-actions { transform: scale(var(--generation-group-controls-scale)); transform-origin: left bottom; position: relative; display: flex; gap: 4px; align-items: center; padding: 4px; background: var(--wb-raised); border: 1px solid var(--wb-border); border-radius: var(--wb-radius); }
+.generation-group-move { width: 32px; height: 32px; border: 1px solid var(--wb-border); border-radius: var(--wb-radius); background: var(--wb-secondary); color: var(--wb-text); font-size: 20px; cursor: grab; }
+.generation-group-management { position: absolute; left: 0; bottom: calc(100% + 8px); display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--wb-border); border-radius: var(--wb-radius); background: var(--wb-raised); width: 280px; max-width: 80vw; box-sizing: border-box; }
+.generation-group-management .ant-select, .generation-group-management .ant-input { flex: 1; min-width: 0; width: 100%; }
