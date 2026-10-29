@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented
+**Completion:** integrated
 
 - [x] 八组入口、图标语义、顺序、前三组与导演五组分隔均按规格；二级目录覆盖既有全部类型，业务归属仍为三组，不新增模态、音频生成或第三级菜单。
 - [x] 一级悬浮显示名称、点击展开；分类切换、同入口关闭、Escape、焦点恢复、当前分类搜索及切换清空搜索行为明确，无匹配显示空态。面板有边界避让与内部滚动，窄屏关闭入口可达。
@@ -33,3 +33,5 @@
 - Node24 typecheck与差异检查通过。未改后端、公开schema或生成参数，不重新生成客户端；模型和存储边界保持受控替身，未声明整体33验收或真实供应商质量。01–26票据及历史证据未修改。
 
 - 受影响TSX定向ESLint：0 errors，Graph inspectTarget两条既有hooks依赖警告，与基线相同；未将旧警告写为无警告通过。
+
+- 2026-10-29 集成：本票已无冲突合入 codex-generation-canvas；27／28 合后 typecheck、差异检查和 01–26 哈希核对通过。合后产品树与28同步27的验证树一致，复用 `/private/tmp/canvas28-with27-cards`（Cards 9.3s）及 `/private/tmp/canvas28-with27-list`（CardList 11.6s），不预记29–33完成或最终视觉验收通过。

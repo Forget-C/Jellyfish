@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented
+**Completion:** integrated
 
 - [x] 基础文本、媒体、四类参考、导演及三类模型使用顶部名称与弱类型、中部主要输出、底部辅助状态；普通状态弱化但可读，失败／失效有文字语义，不常驻参数、候选计数、内部 ID 或完整字段列表。
 - [x] 模型优先最近已发布结果，多结果仅切换预览；无结果、临时流式生成、失败保留旧结果与依据变化可辨，预览不改变输出集合或采用。参考卡展示主图、已绑定名称与角度，不展示候选描述正文。
@@ -36,3 +36,5 @@
 
 - 最终28独立验证：Cards **9.1s**（`/private/tmp/canvas28-release`），Sessions **9.6s**（`/private/tmp/canvas28-final-sessions`）。实际查看最终成果截图并移除卡面重复的依据失效状态，预览组件在详情保留原状态表达。
 - 报告前已合入最新集成分支27（合并 `5302f4ad`），无冲突且保留二级入口、摄影字段定位和创建时transform保护。合后Node24 typecheck、差异及01–26原始字节哈希通过；真实Cards **9.3s**（`/private/tmp/canvas28-with27-cards`）、CardList **11.6s**（`/private/tmp/canvas28-with27-list`）通过。产品变动限定28，27新增行为同时回归，未改旧票记录。
+
+- 2026-10-29 集成：本票已无冲突合入 codex-generation-canvas；27／28 合后 typecheck、差异检查和 01–26 哈希核对通过。合后产品树与28同步27的验证树一致，复用 `/private/tmp/canvas28-with27-cards`（Cards 9.3s）及 `/private/tmp/canvas28-with27-list`（CardList 11.6s），不预记29–33完成或最终视觉验收通过。
