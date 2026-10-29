@@ -1,6 +1,7 @@
 {
   "preflight": "preflight.mjs",
   "cases": {
+    "generation-canvas-director-modal": {"file":"generationCanvasDirectorModal.browser.mjs","ports":[4437,8437],"timeoutMs":120000},
     "generation-canvas-anchored-editor": {"file":"generationCanvasAnchoredEditor.browser.mjs","ports":[4436,8436],"timeoutMs":120000},
     "generation-canvas-director-summaries": { "file": "generationCanvasDirectorSummaries.browser.mjs", "ports": [4484, 8484], "timeoutMs": 180000 },
     "generation-canvas-accessible-connections": { "file": "generationCanvasAccessibleConnections.browser.mjs", "ports": [4482, 8482], "timeoutMs": 120000 },

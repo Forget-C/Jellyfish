@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { CanvasCard } from '../../../components/canvas/Canvas'
-import { MoreOutlined, FileTextOutlined, PictureOutlined, VideoCameraOutlined, AudioOutlined, CameraOutlined } from '@ant-design/icons'
+import { MoreOutlined, FileTextOutlined, PictureOutlined, VideoCameraOutlined, AudioOutlined, CameraOutlined, SlidersOutlined } from '@ant-design/icons'
 import { WorkbenchButton, WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
 import type { CanvasPoint } from '../../../components/canvas/geometry'
 
 /** 卡片仅管理阅读、布局和选择；编辑及采用仍由业务详情负责。 */
-export function CardShell({ id, title, name, type, contextKey, point, scale, width, height, selected, readonly, removeDisabled, onSelect, onMove, onRemove, connections, children, footer, onOpen, onExpand, onConnect }:
+export function CardShell({ id, title, name, type, contextKey, point, scale, width, height, selected, readonly, removeDisabled, onSelect, onMove, onRemove, connections, children, footer, onOpen, onExpand, onEdit, onConnect }:
   { id: string; type?: string; title: string; name?: string; contextKey: string; point: CanvasPoint; scale: number; width: number; height?: number; selected: boolean; readonly?: boolean; removeDisabled?: boolean;
     onConnect: (trigger: HTMLElement) => void; onSelect: (selected: boolean) => void; onMove: (point: CanvasPoint) => void; onRemove: () => void;
-    connections: ReactNode; children: ReactNode; footer?: ReactNode; onExpand?: (trigger: HTMLElement) => void; onOpen: (trigger: HTMLElement, dragged?: boolean) => void }) {
+    connections: ReactNode; children: ReactNode; footer?: ReactNode; onExpand?: (trigger: HTMLElement) => void; onEdit?: (trigger: HTMLElement) => void; onOpen: (trigger: HTMLElement, dragged?: boolean) => void }) {
   const [menu, setMenu] = useState(false)
   const [holding, setHolding] = useState(false)
   const gesture = useRef<{ pointer: number; x: number; y: number; origin: CanvasPoint; ready: boolean; tolerance: number; restore: () => void }>()
@@ -70,6 +70,7 @@ export function CardShell({ id, title, name, type, contextKey, point, scale, wid
       </div>}
     </header>
     {connections}
+    {onEdit && <WorkbenchIconButton className="generation-card-edit" label="编辑卡片" icon={<SlidersOutlined />} variant="quiet" onClick={event => onEdit(event.currentTarget)} />}
     <CanvasCard className="generation-card-body" aria-label={`${name || title}详情`} >{children}{footer && <footer className="generation-card-footer">{footer}</footer>}</CanvasCard>
   </article>
 }
