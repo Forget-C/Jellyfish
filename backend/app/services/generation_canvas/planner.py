@@ -17,6 +17,11 @@ async def plan(runtime, canvas, command, *, lock_config=False):
         raise diagnostic('SINGLE_MODEL_ONLY', '仅支持从模型编辑区提交当前模型，不支持批量或自动执行上游',
             {'card_id': command.card_id}, blocks=['run'])
     document = CanvasDocument.model_validate(canvas.document)
+    for group in document.groups:
+        if group.kind == 'stack' and command.card_id in group.card_ids:
+            from app.services.generation_canvas.errors import diagnostic
+            raise diagnostic('STACK_READ_ONLY', '请先解除堆叠，再提交模型',
+                             {'group_id': group.id, 'card_id': command.card_id}, blocks=['run'])
     cards = {card.id: card for card in document.cards}
     outputs = await runtime.current_outputs(canvas)
     nodes, diagnostics, reused = {}, [], set()

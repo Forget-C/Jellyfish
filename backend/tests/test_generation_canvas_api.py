@@ -216,7 +216,7 @@ async def test_typed_graph_roundtrip_preserves_port_order_and_groups(canvas_clie
     assert saved.status_code == 200, saved.text
     reopened = (await client.get(url)).json()['data']['document']
     assert reopened['input_order'] == {'m': {'text': ['e2', 'e1']}}
-    assert reopened['groups'] == doc['groups']
+    assert reopened['groups'] == [{**group, 'kind': 'group'} for group in doc['groups']]
     assert reopened['cards'][2]['model_id'] is None
 
 @pytest.mark.asyncio
