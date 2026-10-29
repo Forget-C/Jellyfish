@@ -132,3 +132,10 @@
 | generation-canvas-accessible-connections | passed · 11.0s |
 
 前端 typecheck、差异检查及 01–26 字节校验通过；定向 ESLint 只有原 Graph 的两条 inspectTarget hooks 告警，无新增错误。没有应用后端或公开接口变更。除摄影结构化景别补充外的十项既有行为回归均不受该局部标签映射影响；最终新增用例再次覆盖该补充。原 39 项画布／旧实验室与 6 项共享工作台证据继续有效，新独立用例加入后共 46 项有通过证据；MySQL selection 未配置和原全局 lint 三条告警限制不变。
+
+
+## 最终独立复核与清理
+
+- Standards：原P3旧端点样式遗留已清理，定向复核剩余0项；报告 `/private/tmp/canvas-interaction-standards-review.md` 保留初次发现与解决记录。
+- Spec：原两P2导演摘要与连接点聚焦提示均解决，定向复核剩余0项；审查者独立运行新增公开HTTP／真实页面用例6.3s通过，覆盖21样例、即时编辑和Tab／blur，并实际查看截图。报告 `/private/tmp/canvas-interaction-spec-review.md`。
+- 修复集成后主区类型、差异与旧票哈希检查通过；未受影响的既有46项独立用例证据按上文复用，环境限制保持。八个实现／修复工作树及两份测试子工作树均已清理，分支与工作树外证据保留，详见 `/private/tmp/canvas-interaction-cleanup.json`。

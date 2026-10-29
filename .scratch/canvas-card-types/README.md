@@ -2,7 +2,7 @@
 
 日期：2026-10-29
 
-**当前规格增补：二级卡片入口与四边连接点（27–33 已集成，待最终双轴审查）。**本组按[依赖图](#二级入口与连接交互增补2733)推进；当前无待实施前沿，完整旅程与视觉验收已记录，待最终双轴审查。分诊 ready-for-agent 不表示完成，实际完成及证据以各票 Completion／Comments 为准。历史规格发布及拆票阶段的“不开始实现”由本次明确授权接续；01–26 文件、完成记录和历史证据保持原样，不预记本组最终验收通过。
+**当前规格增补：二级卡片入口与四边连接点（27–33 已集成，最终双轴复核通过）。**全部七票按[依赖图](#二级入口与连接交互增补2733)完成，无待实施前沿；实际结果见[交互验收](interactions-acceptance.md)。分诊 ready-for-agent 保持其原含义，完成状态以 Completion／Comments 为准。01–26 文件、完成记录和历史证据保持原样。
 
 依据[实现规格](spec.md)及已确认的 Q16–Q23 共识，用户已确认以下 19 张纵向票据和阻塞关系，并于 2026-10-28 授权使用 implement-spec 在 codex-generation-canvas 分支完成全部实现。ready-for-agent 表示分诊状态，不表示票据已完成。规格及票据中此前“本轮不开始实现”等表述记录规格发布阶段，现由本次实现授权接续；不扩大原有业务范围。
 
@@ -413,3 +413,11 @@ flowchart TD
 - 统一修复 `972a0e07` 已以标准merge集成，补齐导演卡设计字段输出摘要与键盘连接点提示的失焦收起；修复源分支已同步集成基线。新增摘要覆盖21样例、即时编辑和Tab／blur真实用例，保留各样例的完整输出及采用语义。
 - 主区Node24 typecheck、差异与01–26哈希校验通过，合后产品／测试树等同修复分支；复用11项定向真实回归（`/private/tmp/canvas-review-fixes-release`）及摘要／焦点最终6.2s（`/private/tmp/canvas-review-director-final`）。实际红绿和截图追加至[交互验收记录](interactions-acceptance.md)。
 - 最终Standards／Spec定向复核尚待执行，不预填发现清零。原MySQL selection环境未执行及受控供应商／外部存储限制保留。
+
+
+### 2026-10-29：27–33 最终收口
+
+- 27–33 全部 integrated，审查修复产品提交 `b4168839`（集成记录 `d6535aab`）。Standards 原一项 P3、Spec 原两项 P2 均已解决，两轴定向复核剩余 **0 项**；原报告保留首次发现及解决记录：`/private/tmp/canvas-interaction-standards-review.md`、`/private/tmp/canvas-interaction-spec-review.md`。
+- 共46项独立真实浏览器用例有通过证据：39项本轮画布／旧实验室、1项新增导演摘要／键盘焦点、6项未受影响的共享工作台基线。修复后11项定向回归通过，规格审查者另独立执行新增公开页面用例6.3s通过并查看截图。三种视口、逐case证据和失败／复用说明见[交互验收](interactions-acceptance.md)。
+- 主区typecheck、差异及01–26字节校验通过，单元检查通过；原3条hooks lint告警、隔离MySQL selection未执行及受控外部供应商／存储限制如实保留，不宣称全局lint或MySQL竞争通过。未改公开schema或应用后端。
+- 本次八个实现／修复工作树已清理，另两份33测试迁移子工作树已由实现者清理；分支与外部截图、日志和审查证据保留。审计 `/private/tmp/canvas-interaction-cleanup.json`。从工作区外导入backend仍指向主工作区，当前只保留原工作区；未推送。
