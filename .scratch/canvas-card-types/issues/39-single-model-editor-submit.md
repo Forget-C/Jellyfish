@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented
+**Completion:** integrated
 
 - [x] 文本、图片、视频模型编辑区右下角提供提交，展开为 Modal 后保持同一入口；卡面不放提交，基础内容和导演卡不增加生成能力，不引入参考图中的计费或未支持参数。
 - [x] 模型加号支持上传素材成为独立基础内容卡及选择当前画布兼容来源，包括尚未连线的卡片；建立直接候选前做兼容性、资格、无环和多用途确认，已有关系去重。
@@ -31,3 +31,5 @@
 - 真实图片回归发现预检定位按钮被下方编辑区遮挡；最初局部1200层补丁在同步37统一900/inert后移除。最终来源、上传与预检按统一层级实际通过，不保留冗余z-index。同步38后的组织回归 `/private/tmp/canvas39-with38-organization` **7.6s passed**；桌面、展开与窄屏截图实际查看。
 - 相关HTTP single／runs／images／video **58 passed／10 skipped**，保留原环境skip；Pylint **10.00/10**、Node24 typecheck及差异检查通过。定向ESLint仅原有两条Graph inspectTarget hooks警告。当前工作树生产app导出OpenAPI与提交JSON精确一致，证据 `/private/tmp/canvas39-production-openapi.json`，未改变schema字段或生成客户端类型。
 - 01–33字节保护通过；完成状态为implemented待集成。外部供应商／存储继续受控替身，不宣称真实质量。后续42须将已取消target／selection旧旅程改为显式逐模型提交并保留原输入／历史／恢复断言，不能用skip丢弃覆盖；具体清单及接续说明 `/private/tmp/canvas39-implementation-notes.md`。
+
+- 2026-10-29 集成：最终 `e4f3bb68` 已含37后的集成 `ed3f76c7`，无冲突合入（合并 `f7a2184b`）。主区Node24 typecheck、差异、01–33哈希及主区生产app导出OpenAPI与提交schema精确一致检查通过；后端／前端产品与测试树等同最终源分支，复用single 9.5s、images13.1s、HTTP58 passed／10 skipped及Pylint10证据。没有重复相同产品检查；原环境skip和外部替身限制保持，40全部前置解除。

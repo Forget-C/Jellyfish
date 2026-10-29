@@ -495,3 +495,8 @@ flowchart TD
 
 - 37（`f081ae48`，已含38）无冲突集成，21种导演类型通过明确按钮进入保留会话的Modal，支持遮罩关闭及摄影入口定位；操作Modal期间底层inert／媒体暂停，编辑层900／遮罩899避免覆盖预设选择。主区Node24 typecheck、差异及01–33哈希通过，合后产品／测试树与源分支一致。复用全类型／摄影入口16.8s（`/private/tmp/canvas37-with38`）、预设11.1s、摘要5.9s及组织6.9s证据，详细范围见37。
 - 当前34–38均integrated，39继续实施；40待39解除全部前置，41／42尚未开始。保留旧票、历史验收、原lint告警与外部替身限制，不预填本轮最终视觉验收。
+
+### 2026-10-29：39 集成
+
+- 39（`e4f3bb68`，已含37／38）无冲突集成；模型编辑区来源快捷选择、候选不自动采用、右下保存预检确认单模型提交及服务侧多模型范围拒绝形成真实页面／HTTP／受控Worker闭环。主区typecheck、差异、01–33哈希及生产OpenAPI等于提交schema检查通过；产品／测试树与最终源分支相同，复用single9.5s（`/private/tmp/canvas39-final-single`）、images13.1s（`/private/tmp/canvas39-final-images`）、HTTP58 passed／10 skipped及Pylint10证据。
+- 当前34–39全部integrated，40全部前置满足；41／42仍待推进。42需迁移旧target／selection旅程而保留输入、历史及恢复断言，不以skip掩盖新单模型语义。原lint告警、隔离MySQL与受控外部服务限制保持，未预记整体视觉验收。
