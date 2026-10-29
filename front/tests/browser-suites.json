@@ -1,6 +1,7 @@
 {
   "preflight": "preflight.mjs",
   "cases": {
+    "generation-canvas-edge-management": { "file": "generationCanvasEdgeManagement.browser.mjs", "ports": [4481, 8481], "timeoutMs": 180000 },
     "generation-canvas-sessions": {"file":"generationCanvasSessions.browser.mjs","ports":[4427,8427],"timeoutMs":90000},
     "generation-canvas-alignment": { "file": "generationCanvasAlignment.browser.mjs", "ports": [4426, 8426], "timeoutMs": 180000 },
     "generation-canvas-alignment-baseline": { "file": "generationCanvasAlignmentBaseline.browser.mjs", "ports": [4526, 8526], "timeoutMs": 180000 },
@@ -75,7 +76,7 @@
     "periodic-save": { "file": "scenePeriodicSave.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 }
   },
   "suites": {
-    "canvas-layout": ["generation-canvas-prewire", "generation-canvas-sessions", "generation-canvas-chrome", "generation-canvas-filters", "generation-canvas-card-list", "generation-canvas-cards", "generation-canvas-ports", "generation-canvas-tools", "generation-canvas-alignment", "generation-canvas-alignment-baseline", "generation-canvas-journey"],
+    "canvas-layout": ["generation-canvas-prewire", "generation-canvas-sessions", "generation-canvas-chrome", "generation-canvas-filters", "generation-canvas-card-list", "generation-canvas-cards", "generation-canvas-ports", "generation-canvas-tools", "generation-canvas-alignment", "generation-canvas-alignment-baseline", "generation-canvas-journey", "generation-canvas-edge-management"],
     "generation": ["generation-canvas-prewire", "generation-canvas-card-list", "generation-canvas-chrome", "generation-canvas-journey", "generation-canvas-performance", "generation-canvas-mixed", "generation-canvas-guidance", "generation-canvas-continuity", "generation-canvas-visual-presets", "generation-canvas-photography", "generation-canvas-sound", "legacy-labs", "generation-canvas-acceptance", "generation-canvas-selection", "generation-canvas-lifecycle", "generation-canvas-target", "generation-canvas-video", "generation-canvas-video-bindings", "generation-canvas-images", "generation-canvas-history", "generation-canvas-runtime", "generation-canvas-composer", "generation-canvas-graph", "generation-canvas", "generation-canvas-save", "generation-canvas-autosave", "generation-canvas-media", "generation-canvas-named-references", "generation-canvas-multi-view", "generation-canvas-spatial", "generation-canvas-narrative"],
     "instruction-video": ["instruction-card", "frame-inputs", "default-assets", "reference-source", "frame-dependencies", "instruction-inputs", "candidate-refresh", "scene-video"],
     "instructions": ["instruction-inputs", "instruction-design", "instruction-primary", "instruction-preparation", "instruction-suggestions", "instruction-evidence"],
