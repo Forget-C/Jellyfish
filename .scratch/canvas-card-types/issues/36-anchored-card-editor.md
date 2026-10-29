@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented
+**Completion:** integrated
 
 - [x] 通用文本、原文依据、人物／物件与场所描述、基础图片／视频／音频、四类参考及三类模型使用下方编辑区，原有自身字段、绑定、来源、预览、配置及适用媒体动作完整保留；不复制候选为自身字段。
 - [x] 编辑区以固定间隔锚定卡片下缘，浮于画布，不重排其他卡片；控件使用可读屏幕尺寸，不随画布缩放变为微小表单，宽度及高度受视口约束并避让必要工具。
@@ -33,3 +33,5 @@
 - 会话／媒体位置及结果索引回归 `generation-canvas-sessions` `/private/tmp/canvas36-sessions` **9.8s passed**。媒体生命周期回归原先因旧直接项目文件按钮入口失效，迁移为真实加号菜单后 `/private/tmp/canvas36-media2` **9.9s passed**，保留上传失败、替换保留、保存失败文件复用、迟到上传不能复活已删卡及原生音视频预览断言。
 - Node24 typecheck 通过；定向 ESLint 仅原 Graph 两条 inspectTarget hooks 依赖警告，无新增告警；差异检查与 01–33 哈希保护通过。无后端代码或公开 schema 改动，未生成客户端；供应商与存储仍受控替身，不宣称真实供应商质量。共享 WorkbenchDetails 未改，生成画布专用定位／展开为规格允许例外；当前真实边界同步至架构说明。
 - 本票 Completion 为 implemented，等待主区 merger 集成；未推送。后续编辑容器接口笔记位于 `/private/tmp/canvas36-editor-notes.md`。
+
+- 2026-10-29 集成：`7728319e` 已同步35后的集成基线 `43f47c4d`，无冲突合入当前分支（合并 `f6951110`）。主区Node24 typecheck、差异及01–33哈希保护通过；产品／测试树与最终源分支一致，复用 all-types 10.8s及受影响 sessions／media证据，未重复未变化代码验证。37、39解除36依赖；复杂Modal、单模型提交与最终组合验收由后续票接续。
