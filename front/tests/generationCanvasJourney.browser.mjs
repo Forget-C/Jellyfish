@@ -98,7 +98,7 @@ try {
     for(let i=0;i<40;i++){
       const listId=await chooser.getAttribute('aria-controls')
       const active=page.locator(`.ant-select-dropdown:has([id="${listId}"]) .ant-select-item-option-active`)
-      if(await active.count() && (typeof label==='string'?(await active.innerText()).trim()===label:label.test((await active.innerText()).trim()))){await chooser.press('Enter');return}
+      if(await active.count() && (typeof label==='string'?(await active.innerText()).trim()===label:label.test((await active.innerText()).trim()))){await active.click();return}
       await chooser.press('ArrowDown');await delay(30)
     }
     throw Error(`keyboard option not reachable: ${label}`)

@@ -14,7 +14,7 @@ import type { PerformanceCard } from './PerformanceDirectionEditor'
 import { createPortal } from 'react-dom'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent, ReactNode } from 'react'
-import { AimOutlined, MinusOutlined, PlusOutlined } from '@ant-design/icons'
+import { AimOutlined, MinusOutlined, PlusOutlined, CloseOutlined } from '@ant-design/icons'
 import { WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
 import { CanvasToolbarMenu } from '../directing/CanvasToolbarMenu'
 import { ConfigProvider, Input, Select, Space } from 'antd'
@@ -392,14 +392,15 @@ function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, o
       </div>
       {drag && <div className="generation-drag-hint" style={{ left: drag.x - (viewport.surface.current?.getBoundingClientRect().left || 0) + 12, top: drag.y - (viewport.surface.current?.getBoundingClientRect().top || 0) }}>正在连接{portLabels[drag.port]}</div>}
     </div>
-    {minimapOpen && <svg className="generation-minimap" role="img" tabIndex={0} aria-label="小地图导航" viewBox={`${mapLeft} ${mapTop} ${mapWidth} ${mapHeight}`} preserveAspectRatio="none"
+    {minimapOpen && <WorkbenchIconButton className="director-minimap-toggle director-minimap-toggle-open" label="关闭小地图" variant="quiet" icon={<CloseOutlined />} onClick={() => setMinimapOpen(false)} />}
+    {minimapOpen && <svg className="director-minimap generation-minimap" width="200" height="132" role="img" tabIndex={0} aria-label="小地图导航" viewBox={`${mapLeft} ${mapTop} ${mapWidth} ${mapHeight}`} preserveAspectRatio="none"
       onPointerDown={event => { event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); panMap(event) }}
       onPointerMove={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) panMap(event) }}
       onPointerUp={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId) }}
       onKeyDown={event => { if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) { event.preventDefault(); layout.setView(previous => ({ ...previous, transform: { ...previous.transform, x: previous.transform.x + (event.key === 'ArrowLeft' ? 40 : event.key === 'ArrowRight' ? -40 : 0), y: previous.transform.y + (event.key === 'ArrowUp' ? 40 : event.key === 'ArrowDown' ? -40 : 0) } })) } }}>
       <title>小地图导航；方向键平移画布</title>
-      {cards.filter(card => !hidden.has(card.id) && !filtered.has(card.id)).map(card => <rect key={card.id} x={point(card.id).x} y={point(card.id).y} width={layout.view.sizes[card.id]?.width || 400} height={layout.view.sizes[card.id]?.height || 160} />)}
-      <rect className="generation-minimap-viewport" x={visibleWorld.x} y={visibleWorld.y} width={visibleWorld.width} height={visibleWorld.height} />
+      {cards.filter(card => !hidden.has(card.id) && !filtered.has(card.id)).map(card => <rect key={card.id} data-minimap-node={card.id} x={point(card.id).x} y={point(card.id).y} width={layout.view.sizes[card.id]?.width || 400} height={layout.view.sizes[card.id]?.height || 160} />)}
+      <rect className="director-minimap-viewport generation-minimap-viewport" x={visibleWorld.x} y={visibleWorld.y} width={visibleWorld.width} height={visibleWorld.height} />
     </svg>}
     <WorkbenchDetails title={detailCard ? cardTitles[detailCard.type || 'content.text'] || '卡片详情' : '卡片详情'} status={readonly ? '只读' : editingStatus} open={!!detailCard} onClose={() => setDetailId(undefined)} trigger={detailTrigger}>
       {detailCard?.type?.startsWith('direction.') && <details className="generation-candidate-management"><summary>候选连接管理</summary>{references(detailCard)}</details>}
