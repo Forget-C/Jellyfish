@@ -152,7 +152,7 @@
 .generation-surface-pan-ready { cursor: grab; }
 .generation-surface[data-panning="true"] { cursor: grabbing; }
 .generation-card-holding > .generation-card-body { outline: 2px solid var(--wb-focus); cursor: grabbing; }
-.generation-card .generation-card-footer { margin-top: 12px; font-size: 11px; color: var(--wb-muted); }
+.generation-card .generation-card-footer { margin-top: 8px; font-size: 11px; color: var(--wb-muted); }
 .generation-card .generation-card-footer [data-problem="true"] { color: var(--wb-text); }
 
 .generation-target-menu { width: min(320px, calc(100vw - 104px)); left: 88px; top: 180px; max-height: calc(100vh - 260px); overflow: auto; }

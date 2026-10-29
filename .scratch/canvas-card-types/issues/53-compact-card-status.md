@@ -28,3 +28,5 @@
 - 公开统一runner新增 `generation-canvas-card-status`（4573/8573）。`/private/tmp/c53-status-verified` preflight及真实页面＋HTTP旅程13.5s通过；窄屏适应画布后的最终复验 `/private/tmp/c53-status-fit` 12.0s通过：未采用候选0→明确采用1→取消0，保存回读；受控Worker成功→失败，HTTP核对旧正式输出不变；完整错误查看／Escape、刷新和第二标签只读，以及桌面／390px卡底图片。实际查看成功、失败、完整原因与窄屏图；供应商和存储仅受控替身，不证明艺术质量。
 - 已发现既有运行排序缺陷：snapshot按created_at及随机UUID排序，秒精度同秒两个运行重开可能把旧成功作为latest。不是纯SQLite保证；生产TimestampMixin同样无显式小数精度。失败证据 `/private/tmp/c53-status-final2/generation-canvas-card-status/`，不分隔测试在重开“保留上次成果”处失败；前述局部绿用例临时分隔1.1秒仅保证状态栏视觉链路可验证，不代表根治排序。root已接收该发现，要求在最终统一修复阶段增加同秒HTTP红绿并修复，53不能单凭此局部绿宣称最终闭环。
 - Node24 typecheck通过，新组件ESLint通过；Graph定向ESLint只有原有inspectTarget依赖warning（0 errors），diff检查通过。未改后端或公开接口，不生成客户端；01–48和历史验收保持原样。最终集成、三视口组合及上述同秒缺陷修复由后续收口记录补充。
+
+- 与51集成tip `7ad9af6e` 无冲突同步后，Node24 typecheck通过；公开状态旅程 `/private/tmp/c53-status-integrated3` 12.2s通过。测试按已保存直接输入区域定位采用按钮，管理操作后显式收起素材弹层；同秒排序临时分隔与后续统一修复要求不变。卡底间距直接调整既有样式为8px，不通过叠加选择器优先级覆盖主题。

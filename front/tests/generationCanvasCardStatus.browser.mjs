@@ -56,11 +56,12 @@ try {
   await page.getByLabel('画布保存状态').getByText('已保存',{exact:true}).waitFor()
   let saved=(await (await fetch(`${base}/${canvas.id}`)).json()).data
   assert.equal(saved.document.cards.find(c=>c.id==='m').input_bindings.length,1)
-  await editor.getByRole('button',{name:'取消采用 @文本1',exact:true}).click()
+  await editor.getByRole('region',{name:'已保存直接输入',exact:true}).getByRole('button',{name:'取消采用 @文本1',exact:true}).click()
   await status.getByText('已采用 0',{exact:true}).waitFor()
   await page.getByLabel('画布保存状态').getByText('已保存',{exact:true}).waitFor()
   saved=(await (await fetch(`${base}/${canvas.id}`)).json()).data
   assert.equal(saved.document.cards.find(c=>c.id==='m').input_bindings.length,0)
+  await editor.locator('summary').filter({hasText:/管理候选与采用|素材/}).first().click()
   await editor.getByRole('button',{name:'预检运行',exact:true}).click()
   await page.getByRole('button',{name:'确认执行',exact:true}).click()
   await status.getByText('已完成',{exact:true}).waitFor()
