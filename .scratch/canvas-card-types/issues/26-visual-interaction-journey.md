@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented
+**Completion:** integrated
 
 - [x] 串联左侧添加文本／命名图片参考／导演及模型卡、编辑保存、建立直接候选、明确采用、筛选隐藏来源、预检和执行、查看历史及恢复重开，真实请求符合原协议且不因页面展示变化修改采用。
 - [x] 对照场次工作台真实页，在同视口、同主题及相同比例下保存成对截图和逐区域核对结果，覆盖顶部菜单与按钮、面包屑、筛选、添加入口、卡片、右侧详情、底部工具及小地图；业务内容与端点差异须对应规格。
@@ -42,3 +42,5 @@
 | 工作台 | workbench-ui 4.2；workbench-style 73.0；design-scope 15.8；unit-design 29.4；instruction-preparation 12.0；instruction-design 17.9 |
 
 最终生成端视觉证据 `/private/tmp/layout26-map-final2/generation-canvas-alignment`，真实导演成对基准 `/private/tmp/layout26-paired-release/generation-canvas-alignment-baseline`；正文与实际Worker旅程 `/private/tmp/layout26-journey-release/generation-canvas-journey`。其他票据的自身验收继续以各自记录为准，本票不覆盖其历史证据。
+
+- 2026-10-29 集成：26（分支 `39308b1d`，已同步全部20–25）无冲突合入当前集成分支。主区Node24 typecheck、差异检查及01–19哈希核对通过；产品代码与验收分支一致，复用本票39项真实浏览器、成对截图及最终小地图相关复测证据。20–26已全部integrated，最终双轴审查尚待后续记录；未清理工作树、未推送。
