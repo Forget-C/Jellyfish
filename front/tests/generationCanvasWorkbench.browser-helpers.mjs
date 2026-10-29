@@ -9,6 +9,7 @@ export async function openCanvasCard(page, id) {
   const edit = card.locator('button[aria-label="编辑卡片"]')
   if (await edit.count()) { await edit.waitFor({state:'visible'}); await edit.press('Enter') }
   await page.locator('.wb-details:visible').waitFor()
+  await openModelInspection(page)
   return page.locator('.wb-details:visible')
 }
 
@@ -78,4 +79,13 @@ export async function selectCanvasByName(page, name) {
     await chooser.press('ArrowDown')
   }
   throw new Error(`画布选项不可达：${name}`)
+}
+
+/** Older behavior journeys explicitly open the now on-demand model management surfaces. */
+export async function openModelInspection(page) {
+  const editor = page.locator('.wb-details:visible')
+  for (const label of ['管理候选与采用', '＠ 引用与指令', '运行状态与正式输出']) {
+    const summary = editor.locator('summary').filter({ hasText: label }).first()
+    if (await summary.count() && await summary.locator('..').getAttribute('open') === null) await summary.click()
+  }
 }
