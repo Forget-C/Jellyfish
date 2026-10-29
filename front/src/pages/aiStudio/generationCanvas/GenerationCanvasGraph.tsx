@@ -12,8 +12,11 @@ import { performanceSummary } from './PerformanceDirectionEditor'
 import type { PerformanceCard } from './PerformanceDirectionEditor'
 import { createPortal } from 'react-dom'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { PointerEvent } from 'react'
-import { Alert, ConfigProvider, Input, Select, Space } from 'antd'
+import type { PointerEvent, ReactNode } from 'react'
+import { AimOutlined, MinusOutlined, PlusOutlined } from '@ant-design/icons'
+import { WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
+import { CanvasToolbarMenu } from '../directing/CanvasToolbarMenu'
+import { ConfigProvider, Input, Select, Space } from 'antd'
 import { StudioGenerationCanvasesService as Canvases, LlmService } from '../../../services/generated'
 import type { CanvasDocument, CanvasModelCapability, CanvasNodeRead, CanvasResolvedOutput, ModelRead } from '../../../services/generated'
 import { CanvasDragHandle, CanvasEdge, useCanvasViewport } from '../../../components/canvas/Canvas'
@@ -37,7 +40,7 @@ const arrange: GraphArrange = (nodes, _sizes, _width, _anchor, retained = {}) =>
   [node.id, retained[node.id] || { x: 200 + index % 3 * 440, y: Math.floor(index / 3) * 560 }]))
 
 /** 独立画布编辑适配：候选关系与文档持久化，几何沿用公共布局缓存。 */
-function GenerationCanvasGraphContent({ primaryHost, document, onChange, readonly = false, runtime, inspectTarget, editingStatus, savedRevision, savedDocument }: { primaryHost?: HTMLElement | null; savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; inspectTarget?: { cardId: string; serial: number; segmentId?: string }; editingStatus?: string; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string, kind?: 'single' | 'target' | 'selection', cardIds?: string[]) => void } }) {
+function GenerationCanvasGraphContent({ primaryHost, contentHistory, document, onChange, readonly = false, runtime, inspectTarget, editingStatus, savedRevision, savedDocument }: { primaryHost?: HTMLElement | null; contentHistory?: ReactNode; savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; inspectTarget?: { cardId: string; serial: number; segmentId?: string }; editingStatus?: string; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string, kind?: 'single' | 'target' | 'selection', cardIds?: string[]) => void } }) {
   const { catalog, cardDefinitions, cardTitles, connectionReason, inputPorts, outputPorts, portLabels } = useGraphRules()
   const cards = document.cards || emptyCards, edges = document.edges || [], groups = document.groups || emptyGroups
   const cardLabel = (id: string) => {
@@ -51,7 +54,7 @@ function GenerationCanvasGraphContent({ primaryHost, document, onChange, readonl
   const [detailId, setDetailId] = useState<string | undefined>(cards[0]?.id)
   const [detailTrigger, setDetailTrigger] = useState<HTMLElement>()
   const [minimapOpen, setMinimapOpen] = useState(false)
-  const [toolboxOpen, setToolboxOpen] = useState(true)
+  const toolboxOpen = true
   const [reason, setReason] = useState('')
   const [selecting, setSelecting] = useState(false)
   const [selectionBox, setSelectionBox] = useState<{ x: number; y: number; width: number; height: number }>()
@@ -272,23 +275,29 @@ function GenerationCanvasGraphContent({ primaryHost, document, onChange, readonl
       </section>)}
       <section><h2>导演工具箱</h2>{[...new Set(catalog.cards.filter(card => card.group === '导演工具箱').map(card => card.category))].map(group => <div key={group}><h3>{group}</h3>{catalog.cards.filter(card => card.category === group).map(card => <Button key={card.type} disabled={readonly} onClick={() => add(card.type)}>添加{card.title}</Button>)}</div>)}</section>
     </nav>
-    <Space wrap className="generation-toolbar">
-      <Button aria-label={toolboxOpen ? '收起工具箱' : '展开工具箱'} aria-expanded={toolboxOpen} onClick={() => setToolboxOpen(value => !value)}>{toolboxOpen ? '收起工具箱' : '展开工具箱'}</Button>
-      <Button aria-label={minimapOpen ? '收起小地图' : '展开小地图'} aria-expanded={minimapOpen} onClick={() => setMinimapOpen(value => !value)}>{minimapOpen ? '收起小地图' : '展开小地图'}</Button>
-
-      <Button disabled={readonly || !selected.length} onClick={() => {
+    <nav className="director-canvas-bottom generation-view-tools" aria-label="画布视图工具">
+      <WorkbenchIconButton label="定位所选" variant="quiet" icon={<AimOutlined />} disabled={!selected.length} onClick={() => { const p = point(selected[0]); layout.setView(previous => ({ ...previous, transform: { ...previous.transform, x: (container.current?.clientWidth || 1200) / 2 - p.x * previous.transform.scale, y: (container.current?.clientHeight || 800) / 2 - p.y * previous.transform.scale } })) }} />
+      <WorkbenchIconButton label="缩小" variant="quiet" icon={<MinusOutlined />} onClick={() => viewport.zoom(-.1)} />
+      <span aria-label="画布缩放比例">{Math.round(transform.scale * 100)}%</span>
+      <WorkbenchIconButton label="放大" variant="quiet" icon={<PlusOutlined />} onClick={() => viewport.zoom(.1)} />
+      <Button variant="quiet" onClick={() => viewport.fit()}>适应全部</Button>
+      <CanvasToolbarMenu label="布局" caption="布局">
+        <Button onClick={() => layout.rearrange()}>整理布局</Button>
+        <Button disabled={!layout.canUndo} onClick={layout.undo}>撤销布局整理</Button>
+        <Button aria-label={minimapOpen ? '收起小地图' : '展开小地图'} aria-expanded={minimapOpen} onClick={() => setMinimapOpen(value => !value)}>{minimapOpen ? '收起小地图' : '展开小地图'}</Button>
+        <Button aria-label="框选" variant="quiet" aria-pressed={selecting} onClick={() => setSelecting(value => !value)}>框选</Button>
+      </CanvasToolbarMenu>
+    </nav>
+    {selected.length > 0 && <div className="generation-selection-actions" aria-label="所选卡片操作">      <Button disabled={readonly} onClick={() => {
         const members = selected.filter(id => !groups.some(group => group.card_ids?.includes(id)))
         if (!members.length) { setReason('所选卡片已经属于分组'); return }
         edit({ ...document, groups: [...groups, { id: crypto.randomUUID(), name: '新分组', card_ids: members, collapsed: false }] }); setSelected([])
       }}>将所选卡片分组</Button>
-      <Button aria-label="框选" variant={selecting ? 'primary' : 'secondary'} aria-pressed={selecting} onClick={() => setSelecting(value => !value)}>框选</Button>
-      <Button onClick={() => viewport.fit()}>适应画布</Button>
-      <Button disabled={!selected.length} onClick={() => { const id = selected[0], p = point(id); layout.setView(previous => ({ ...previous, transform: { ...previous.transform, x: (container.current?.clientWidth || 1200) / 2 - p.x * previous.transform.scale, y: (container.current?.clientHeight || 800) / 2 - p.y * previous.transform.scale } })) }}>定位所选</Button>
-      <Button onClick={() => layout.rearrange()}>整理布局</Button><Button disabled={!layout.canUndo} onClick={layout.undo}>撤销布局整理</Button>
-      <Button aria-label="放大" onClick={() => viewport.zoom(.1)}>放大</Button><Button aria-label="缩小" onClick={() => viewport.zoom(-.1)}>缩小</Button>
-    </Space>
-    {storageError && <Alert type="warning" message={`布局本地保存失败：${storageError}`} />}
-    <div role="status" className="generation-connection-reason">{reason || '拖动输出端口建立连接；按住 Shift 或启用框选后拖动空白选择卡片'}</div>
+</div>}
+    <div className="canvas-bottom-right generation-bottom-right">
+      {(reason || storageError) && <div role="status" className="canvas-status-host">{storageError ? `布局本地保存失败：${storageError}` : reason}</div>}
+      {contentHistory}
+    </div>
     <div ref={viewport.surface} {...viewport.surfaceProps} className="generation-surface" aria-label="生成画布视口"
       onPointerDown={event => {
         if ((selecting || event.shiftKey) && event.button === 0 && event.currentTarget.contains(event.target as Node)

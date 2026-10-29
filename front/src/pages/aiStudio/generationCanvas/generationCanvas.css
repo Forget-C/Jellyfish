@@ -107,3 +107,18 @@
 .generation-browse .canvas-filter-fields { max-width: 100%; }
 .generation-browse .canvas-filters { box-sizing: border-box; }
 .generation-browse .canvas-filter-fields { flex: 1 1 auto; }
+
+/* 视图工具与内容历史使用工作台同一位置，业务历史保持独立。 */
+.generation-view-tools { font-size: 12px; color: var(--wb-muted); gap: 4px; }
+.generation-view-tools .canvas-toolbar-popover { top: auto; bottom: calc(100% + 8px); }
+.generation-selection-actions { position: absolute; z-index: 30; bottom: 72px; left: 16px; }
+.generation-bottom-right { z-index: 30; }
+.generation-workbench .generation-minimap { bottom: 80px; right: 16px; }
+@media(max-width: 700px) {
+  .generation-view-tools { bottom: 72px; left: 12px; gap: 0; }
+  .generation-view-tools .canvas-toolbar-popover { position: absolute; top: auto; left: 0 !important; right: auto !important; bottom: calc(100% + 8px); width: 260px; }
+  .generation-bottom-right { bottom: 12px; right: 12px; flex-wrap: wrap; justify-content: flex-end; }
+  .generation-bottom-right .canvas-status-host { flex: 1 1 100%; }
+  .generation-workbench .generation-minimap { bottom: 128px; width: 140px; height: 92px; }
+  .generation-selection-actions { bottom: 124px; left: 12px; }
+}

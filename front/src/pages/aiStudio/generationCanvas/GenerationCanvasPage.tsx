@@ -15,7 +15,7 @@ import { WorkbenchModal } from '../directing/ui/WorkbenchModal'
 import { useGraphBrowse } from '../directing/useGraphBrowse'
 import { CanvasToolbarMenu } from '../directing/CanvasToolbarMenu'
 import { WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
-import { ArrowLeftOutlined, ArrowRightOutlined, DownOutlined, SaveOutlined, MoreOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, ArrowRightOutlined, DownOutlined, SaveOutlined, MoreOutlined, UndoOutlined, RedoOutlined } from '@ant-design/icons'
 import '../directing/canvasWorkbench.css'
 import { TaskCenter } from '../components/TaskCenter'
 import './generationCanvas.css'
@@ -147,8 +147,6 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
           disabled={!ownership.editable || !!editor.recovery || editor.conflict} onSave={saveOutput} onCancel={runtime.cancel} cancelling={runtime.cancelling} />}
         <TaskCenter workbench />
         <CanvasToolbarMenu label="更多操作" icon={<MoreOutlined />}>
-          <Button disabled={!ownership.editable || !!editor.recovery || !editor.canUndo} onClick={() => { runtime.invalidate(); editor.undo() }}>撤销内容</Button>
-          <Button disabled={!ownership.editable || !!editor.recovery || !editor.canRedo} onClick={() => { runtime.invalidate(); editor.redo() }}>重做内容</Button>
           <span role="status" aria-label="运行连接">{runtime.connection === 'connected' ? '运行事件已连接' : runtime.connection === 'connecting' ? '正在连接运行事件' : '运行连接恢复中，保留已接收内容'}</span>
         </CanvasToolbarMenu>
       </div>
@@ -172,7 +170,10 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
         {runtime.preview && <RunPreview preview={runtime.preview} submitting={runtime.submitting} disabled={!ownership.editable || !!runtime.pending || runtime.busyCards.has(runtime.preview.card_id)} onSubmit={() => void runtime.submit()} onLocate={target => { pendingInspect.current = { cardId: String(target.card_id || runtime.preview!.card_id), segmentId: target.segment_id || target.reference_id ? String(target.segment_id || target.reference_id) : undefined, serial: Date.now() }; setPreviewOpen(false) }} />}
       </WorkbenchModal>
     {!document || !current ? <Empty className="generation-empty" description="创建或选择一张画布" /> : <div className="generation-stage">
-      <GenerationCanvasGraph primaryHost={primaryHost} savedDocument={current.document} savedRevision={current.revision} key={document.id} document={document} onChange={next => change(next)} inspectTarget={inspectTarget} editingStatus={editor.conflict ? '修订冲突，请关闭详情处理' : saving ? '正在保存修改' : dirty ? '修改尚未保存' : '修改已同步'} readonly={!ownership.editable || !!editor.recovery}
+      <GenerationCanvasGraph contentHistory={<div className="canvas-history-controls" aria-label="画布内容历史">
+        <WorkbenchIconButton label="撤销内容" variant="quiet" icon={<UndoOutlined />} disabled={!ownership.editable || !!editor.recovery || !editor.canUndo} onClick={() => { runtime.invalidate(); editor.undo() }} />
+        <WorkbenchIconButton label="重做内容" variant="quiet" icon={<RedoOutlined />} disabled={!ownership.editable || !!editor.recovery || !editor.canRedo} onClick={() => { runtime.invalidate(); editor.redo() }} />
+      </div>} primaryHost={primaryHost} savedDocument={current.document} savedRevision={current.revision} key={document.id} document={document} onChange={next => change(next)} inspectTarget={inspectTarget} editingStatus={editor.conflict ? '修订冲突，请关闭详情处理' : saving ? '正在保存修改' : dirty ? '修改尚未保存' : '修改已同步'} readonly={!ownership.editable || !!editor.recovery}
         runtime={{ outputs: runtime.snapshot.current_outputs, nodes: runtime.latestNodes, busyCards: runtime.busyCards, checking: runtime.checking,
           disabled: runtime.storageBlocked || !!runtime.pending || !!runtime.checking || runtime.submitting || editor.conflict, precheck: (cardId, kind, cardIds) => void runtime.precheck(cardId, kind, cardIds) }} />
     </div>}
