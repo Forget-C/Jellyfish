@@ -41,6 +41,8 @@ jobs:
     needs: typecheck
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      C60_PROTOTYPE_MANIFEST: ${{ github.workspace }}/front/tests/visual-baselines/c-794ee4a0-v1/manifest.json
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -63,7 +65,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg
       - name: Workbench and graph browser regressions
-        run: pnpm --dir front run test:browser
+        run: pnpm --dir front run test:browser --output "${{ github.workspace }}/front/test-results/ci-browser"
+      - name: Verify four-card visual evidence
+        run: |
+          node front/scripts/visual-evidence.mjs \
+            --manifest "$C60_PROTOTYPE_MANIFEST" \
+            --matrix front/test-results/ci-browser/generation-canvas-four-card-acceptance/matrix.json \
+            --run front/test-results/ci-browser/generation-canvas-four-card-acceptance/visual-run.json \
+            --output front/test-results/ci-browser/generation-canvas-four-card-acceptance/ci-visual-result.json
       - name: Upload browser evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -71,6 +80,5 @@ jobs:
           name: workbench-browser-evidence
           if-no-files-found: ignore
           path: |
-            front/test-results/**/*.png
-            front/test-results/**/*.json
-            front/test-results/**/*.log
+            front/tests/visual-baselines/c-794ee4a0-v1/**
+            front/test-results/**
