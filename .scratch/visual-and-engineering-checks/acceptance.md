@@ -75,3 +75,7 @@ PLAYWRIGHT_CHANNEL=chrome node front/scripts/visual-review.mjs \
 原始最终证据未被负例修改。完整命令／工程结果与中间失败详见[07 handoff](07-handoff.md)，包括61 CLI、14临时Git、unit、lint275／0、typecheck、common-shell48.3s。CI配置／登记／严格传播及旧80文件哈希再次检查通过：`/private/tmp/checks07-config-and-preservation.log`；没有把本地配置检查冒称远程CI执行。
 
 主代理另实际补看最终F10桌面scrolled-source与390scrolled-parameters两张原图，确认第二来源查看入口、3张及固定提交可见；未声称主代理复看全部108张。
+
+## 最终审查修复的独立复核
+
+最终Spec审查发现的默认浏览器P2已在独立分支修复：未设置channel沿用Playwright Chromium，显式Chrome保留。公开CLI新增默认runtime回归取得真实RED→GREEN；Chrome完整CLI62项及默认Chromium evidence／review56项通过，typecheck通过。修复后原签收机械复核仍为passed／reviewable／passed（36组），没有重新采集或声称重新阅图。精确命令、日志、临时安装范围与验证局限见[review-fix](review-fix.md)；原执行来源及上述人工阅图结论保持原身份。

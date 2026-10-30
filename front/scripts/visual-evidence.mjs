@@ -104,7 +104,7 @@ export async function evaluateEvidence(options) {
         check(isDeepStrictEqual({ card: state.card, outputs: state.outputs }, { card: states[defaultKey]?.card, outputs: states[defaultKey]?.outputs }), `${key}: default/expanded content, file, adoption or output changed; must remain the same`)
       }
     }
-    browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || 'chrome' })
+    browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || undefined })
     const page = await browser.newPage()
     const images = new Map()
     async function image(root, name) {
