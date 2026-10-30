@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented (awaiting integration and final review)
+**Completion:** integrated (awaiting final review)
 
 - [x] 文本模型卡有正式文本时显示摘要，无输出时居中文本图标及“尚未生成”，无整段操作说明；约300×160px密度，真实运行、实际采用来源数和成果身份在底部单行表达。
 - [x] 默认左侧仅已采用依据，右侧可见“创作描述”标签及正文，长文和依据独立滚动；共用外壳及统一表面无贯穿分隔线、不重复常驻采用标签行。
@@ -28,3 +28,5 @@
 
 - 2026-10-30：58完成实现及自身验证，记录见[58验收](../visual-c58-model-acceptance.md)。F07–F09三视口真实Worker／HTTP与原尺寸对照、只读／长文、图片共用材料回归及文本完整运行回归通过；未将其扩大为59或60验收。Node24类型检查与差异检查通过，旧62历史文件SHA256不变。
 - 合入前已同步最新集成 `8aefba35`；合并后F07–F09及只读／长文／HTTP完整用例再次通过（`/private/tmp/c58-merged-verified`），Node24 typecheck、差异及62历史文件保护检查通过。待主区merger合入并最终审查。
+
+- 2026-10-30：已由合并代理以 `3d61caee` 无冲突集成至 `codex-generation-canvas`；源已同步55–57的 `8aefba35` 并完成合并后逐类与真实Worker复验。产品／测试树与已验证源完全一致，复用 `/private/tmp/c58-merged-verified`、`/private/tmp/c58-runtime-last`、`/private/tmp/c58-image-final` 证据；62历史文件SHA256不变，整体审查待60收口。
