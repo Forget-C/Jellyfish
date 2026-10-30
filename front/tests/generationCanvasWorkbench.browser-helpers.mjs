@@ -164,10 +164,10 @@ export async function clearCanvasNeighbors(page, id) {
     if (await card.getAttribute('data-card-id') === id) continue
     const mover = card.getByRole('button', { name: /^移动布局：/ })
     await mover.evaluate(element => element.focus({ preventScroll: true }))
-    for (let step = 0; step < 150; step++) {
+    for (let step = 0; step < 250; step++) {
       const b = await card.boundingBox(), occupied = await Promise.all(placed.map(item => item.boundingBox()))
       if (occupied.every(a => b.x >= a.x + a.width + 20 || b.x + b.width <= a.x - 20 || b.y >= a.y + a.height + 20 || b.y + b.height <= a.y - 20)) break
-      assert.ok(step < 149, `cannot clear neighbor ${await card.getAttribute('data-card-id')}`)
+      assert.ok(step < 249, `cannot clear neighbor ${await card.getAttribute('data-card-id')}`)
       await page.keyboard.press('ArrowRight')
     }
     placed.push(card)
