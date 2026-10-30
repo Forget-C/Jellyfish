@@ -1,3 +1,4 @@
+import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { readFile, writeFile } from 'node:fs/promises'
@@ -186,8 +187,7 @@ try {
   await preview.getByRole('button', { name: '确认执行', exact: true }).click()
   await accepted
   await fetch(`${api}/test/video-controls`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ release: true }) })
-  const resultMenu = page.locator('.wb-details:visible').locator('summary').filter({hasText:'运行状态与正式输出'})
-  if (await resultMenu.locator('..').getAttribute('open') === null) await resultMenu.click()
+  await openModelInspection(page)
   await page.locator('.wb-details:visible').getByRole('region', { name: '当前正式输出', exact: true }).locator('video').waitFor({ timeout: 20000 })
   const calls = (await (await fetch(`${api}/test/video-controls`)).json()).calls.filter(call => call.method === 'POST')
   assert.equal(calls.length, 1)
