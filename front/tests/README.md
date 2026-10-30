@@ -228,3 +228,22 @@ The three conclusions are independent: `behavior.status` is `passed`/`failed`; `
 An ordinary run without `C60_PROTOTYPE_MANIFEST` can pass its behavior assertions while reporting evidence `not-checked` and visual `not-reviewed`. The same explicit classification can be inspected independently with `node front/scripts/visual-evidence.mjs --behavior passed`. CLI failure exits nonzero, including a failed behavior result; a successful evidence check cannot promote visual status. Human signoff must bind reviewed image and contract content identities separately.
 
 Public CLI regression: `node --test front/tests/visualEvidence.test.mjs`. Controlled fixtures used there are deliberately synthetic evidence tests, not product acceptance or human review records.
+
+### Human visual review and invalidation
+
+Prepare a review against the current authoritative baseline and current original files:
+
+```bash
+node front/scripts/visual-review.mjs \
+  --manifest front/tests/visual-baselines/c-794ee4a0-v1/manifest.json \
+  --matrix /path/to/run/matrix.json --run /path/to/run/visual-run.json \
+  --output /path/to/run/review-prepared.json
+```
+
+This exits 1 with visual `not-reviewed` and a `reviewTemplate`; preparation never approves images. Copy `reviewTemplate` to a separate JSON review file. Supply `reviewer`, `reviewedAt` and the source result path. Actually open the target and actual originals (whole page, editor and titled card), then fill each applicable region with `status` (`passed`, `difference`, `unverified`), a concrete `observation`, and `allowedDifferences: [{difference, basis}]` when a documented contract permits a difference. Leave uninspected groups explicitly `unverified` with that observation. Required regions and their detailed visual criteria come from the versioned contract, including the mobile target omission rules. Static images alone cannot prove keyboard behavior: cite retained real-page behavioral evidence where appropriate and keep uncertainty unverified.
+
+Repeat the command with `--review /path/to/review.json --output /path/to/review-result.json`. The CLI rechecks the authoritative manifest, contract, capture state and actual image bytes through the evidence verifier; a saved result claiming `passed` is never accepted as authority. Review schema v1 binds baseline version, contract and manifest hashes, group keys, original target/actual image hashes, capture hashes and exact applicable regions. Missing/duplicate entries, invalid identity, missing reviewer/time/observation or an unexplained allowed difference cannot pass. Valid records with differences or unverified regions report `incomplete`. Exit zero requires behavior passed, current evidence reviewable and every required region explicitly passed. This validates a review declaration; it cannot prove the reviewer actually viewed the images.
+
+Content changes to the contract, target or actual originals invalidate prior signoff. Source commit/run identity or descriptive manifest metadata alone may be reused with explicit `--reuse-review` only when the current baseline version, contract, original images, capture state and regions still match. The output retains original and current identities in `visual.reuse` and does not claim new capture or new review. Relocated paths alone do not change content identity. Preserve the review JSON and result with the original evidence archive. CI continues to report its independent unreviewed status; it does not generate signed reviews.
+
+Public regressions: `node --test front/tests/visualReview.test.mjs front/tests/visualEvidence.test.mjs`. Their controlled review declarations test CLI validation only and are never product visual signoffs.
