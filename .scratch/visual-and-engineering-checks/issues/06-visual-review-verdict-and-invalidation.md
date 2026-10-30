@@ -6,6 +6,8 @@
 
 **Status:** ready-for-agent
 
+**Completion:** integrated
+
 - [x] 基于05的有效基线和证据索引，记录审阅身份／时间、契约与图片身份、逐区域通过／差异／未验证、具体差异及合理差异依据；不把结构核验成功当作实际阅图。
 - [x] 覆盖共同表面／标题／图标／弱状态、留白、图文比例、图片标签值与双动作、参数单位／单一素材／提交、空态、焦点与遮挡等原契约必须区域。
 - [x] 必须项缺审阅、差异未解决或未验证时，签收核验不能返回视觉已通过；证据齐全但尚未阅图准确保留待审状态，普通行为检查仍保留独立结果。
@@ -29,3 +31,5 @@
 - 2026-10-30：06 implementation complete, pending integration by merger. Added `front/scripts/visual-review.mjs`: current authoritative evidence is revalidated before review declaration checks; no review input produces an all-unverified template and nonzero exit. Complete explicit declarations only pass when all mandatory regions pass, with reviewer/time/source, image/capture/contract bindings and explained allowed differences. Missing, unresolved or stale records cannot approve visual status. SHA/run or descriptive manifest metadata changes require explicit same-content reuse, retaining provenance.
 - Validation: public CLI evidence 35 tests passed; review 20 tests passed. TDD recorded failing preparation/acceptance/negative/manifest-metadata slices before implementation. Typecheck passed; lint baseline passed (275 existing, 0 new). No application backend/API changes, no OpenAPI/Pylint needed. No hook installation/push/old ticket edits.
 - Real original inspection: six F01 1440 originals (target+actual whole page, editor, target titled card+actual card) opened independently with view_image at original detail. `/private/tmp/checks06-review/review-f01.json` and `review-f01-result.json` bind main-repo stable baseline and retained 05 original files; this reuses 05 capture rather than claiming a new page run. F01 all four applicable regions recorded; page/context is `difference` because neighboring card titles overlap near x415/y195. Other regions have concrete observations/allowed-difference bases; remaining 35 groups explicitly unverified. Overall behavior passed/evidence reviewable/visual incomplete, expected exit 1. No full visual acceptance claimed; 07 owns full matrix and combination review. See `../06-handoff.md`.
+
+- 2026-10-30（integration 整合）：票06实现分支提交 `b4813aef` 已通过合并提交 `bfade7d6` 整合到 `codex-visual-engineering-checks`；无冲突，复用以上55条公开CLI、typecheck与lint通过记录，未修改相关实现或重跑无变化检查。`Status` 保持分诊状态 `ready-for-agent`，以 `Completion: integrated` 标记交付状态；真实六张原图演示仍为 `visual incomplete`，邻卡标题重叠差异及其余35组未验证状态交由07修正采集并完整复核，不视为视觉通过。
