@@ -4,16 +4,21 @@ import type { CanvasModelCapability, ImageModelCard, VideoModelCard } from '../.
 type Props<T> = { card: T; capability?: CanvasModelCapability; disabled?: boolean; onChange: (next: T) => void }
 const options = (values: string[] = []) => values.map(value => ({ value, label: value }))
 
+/** 已核实的能力决定控件可见性；隐藏不支持参数时保留原配置供预检诊断。 */
 export function ImageModelParameters({ card, capability, disabled, onChange }: Props<ImageModelCard>) {
   const config = card.config || {}
+  const ratios = capability?.ratios || []
+  const profiles = capability?.resolution_profiles || {}
+  const resolutions = Object.keys(profiles[config.target_ratio || ''] || {})
+  const supportsResolution = Object.values(profiles).some(values => Object.keys(values).length > 0)
   return <>
-    <Select size="small" bordered={false} disabled={disabled} aria-label="图片画幅" placeholder="画幅" allowClear value={config.target_ratio || undefined} style={{ width: 100 }}
-      options={options(capability?.ratios)} onChange={value => onChange({ ...card, config: { ...config, target_ratio: value ?? null } })} />
-    <Select size="small" bordered={false} disabled={disabled} aria-label="图片分辨率" placeholder="分辨率" allowClear value={config.resolution_profile || undefined} style={{ width: 110 }}
-      options={options(Object.keys(capability?.resolution_profiles?.[config.target_ratio || ''] || {}))}
-      onChange={value => onChange({ ...card, config: { ...config, resolution_profile: value ?? null } })} />
-    <InputNumber size="small" bordered={false} disabled={disabled} aria-label="图片数量" value={config.count ?? 1} min={capability?.min_count} max={capability?.max_count}
-      onChange={value => onChange({ ...card, config: { ...config, count: value ?? 1 } })} />
+    {ratios.length > 0 && <Select size="small" bordered={false} disabled={disabled} aria-label="图片画幅" placeholder="画幅" allowClear value={config.target_ratio || undefined}
+      options={options(ratios)} onChange={value => onChange({ ...card, config: { ...config, target_ratio: value ?? null } })} />}
+    {supportsResolution && <Select size="small" bordered={false} disabled={disabled || !resolutions.length} aria-label="图片分辨率" placeholder="分辨率" title={!resolutions.length ? '先选择支持的画幅' : undefined} allowClear value={config.resolution_profile || undefined}
+      options={options(resolutions)} onChange={value => onChange({ ...card, config: { ...config, resolution_profile: value ?? null } })} />}
+    {typeof capability?.min_count === 'number' && typeof capability?.max_count === 'number' && <InputNumber size="small" bordered={false} disabled={disabled} aria-label="图片数量" value={config.count ?? 1} min={capability.min_count} max={capability.max_count}
+      formatter={value => `${value ?? ''} 张`} parser={value => Number(value?.replace(/[^\d]/g, ''))}
+      onChange={value => onChange({ ...card, config: { ...config, count: value ?? 1 } })} />}
   </>
 }
 

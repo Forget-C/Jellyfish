@@ -20,7 +20,7 @@ from app.task_worker import TaskWorker
 
 engine = create_async_engine('sqlite+aiosqlite:///' + os.environ['CANVAS_BROWSER_DATABASE'])
 sessions = async_sessionmaker(engine, expire_on_commit=False)
-control = {'calls': [], 'stream_connections': 0, 'fail_next': False}
+control = {'calls': [], 'stream_connections': 0, 'fail_next': False, 'response_delay': 0}
 objects = {}
 media_dir = Path(os.environ['CANVAS_BROWSER_MEDIA_STORAGE'])
 def image_bytes(index):
@@ -52,8 +52,9 @@ async def download(*, key):
     return objects[key][0]
 
 
-def external(request):
+async def external(request):
     if request.method == 'POST':
+        await asyncio.sleep(control['response_delay'])
         import json
         control['calls'].append(json.loads(request.content))
         failed = control['fail_next']
@@ -77,6 +78,7 @@ async def read_control():
 @app.post('/test/image-controls')
 async def set_control(body: dict = Body(...)):
     control['fail_next'] = body.get('fail_next', False)
+    control['response_delay'] = min(5, max(0, float(body.get('response_delay', 0))))
     return control
 
 
