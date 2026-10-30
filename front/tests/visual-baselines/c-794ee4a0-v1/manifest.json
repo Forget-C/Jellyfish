@@ -1,0 +1,2256 @@
+{
+  "source": {
+    "revision": "794ee4a0cc7f3ec7e549328ca190155d7f3bc94f",
+    "role": "design-target-only",
+    "variant": "C",
+    "confirmation": "Confirmed source and retained 36-group capture supplied for ticket 05."
+  },
+  "notes": [
+    "Prototype states are memory-only. No formal behavior/acceptance claims.",
+    "At390px prototype hides cards; card crop explicitly unavailable; formal mobile card requirements still apply per latest spec.",
+    "Latest spec overrides older prototype mobile dt/dd two-column styling with vertical label/value; omit prototype memory/debug content from product.",
+    "Expanded capture uses same input/state as its default pair; default capture closes expanded without altering content.",
+    "Prototype390px empty model basis has narrow-column vertical wrapping of 尚未采用素材; known target responsive defect, formal should use readable empty text per spec, not reproduce defect.",
+    "Prototype390px basic-image actions are horizontal and dt/dd pairs horizontal; latest spec explicitly requires stacked actions and vertical label/value, record this intentional correction.",
+    "Prototype text-model ready card uses centered icon plus generic summary; latest spec explicitly requires readable formal-text summary, not temporary/generic result.",
+    "Card body screenshots exclude external title; cardWithTitle supplements default/empty desktop and large viewport. Expanded card remains behind modal and dimmed intentionally.",
+    "Actual image inspection: all36 editor original-size screenshots; eight1440 default/empty cardbody screenshots; four1440 default card-title crops; four wholepage context samples across threeviewports. Additional stored wholepage/card crops are generated but not all independently viewed."
+  ],
+  "groups": [
+    {
+      "id": "F01",
+      "kind": "text",
+      "state": "default",
+      "viewport": {
+        "width": 1440,
+        "height": 960
+      },
+      "full": "F01-text-default-1440x960-full.png",
+      "editor": "F01-text-default-1440x960-editor.png",
+      "cardVisible": true,
+      "cardRect": {
+        "x": 200,
+        "y": 194,
+        "width": 300,
+        "height": 160
+      },
+      "card": "F01-text-default-1440x960-card.png",
+      "cardWithTitle": "F01-text-default-1440x960-card-title.png",
+      "editorRect": {
+        "x": 200,
+        "y": 376,
+        "width": 700,
+        "height": 359.046875
+      },
+      "content": "清晨，林夏走过安静的街道，回头望向镜头。保持人物身份、自然步态与柔和侧光。",
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions"
+      ],
+      "expectedState": {
+        "input": "present",
+        "output": "not-applicable",
+        "model": "not-applicable"
+      }
+    },
+    {
+      "id": "F02",
+      "kind": "text",
+      "state": "expanded",
+      "viewport": {
+        "width": 1440,
+        "height": 960
+      },
+      "full": "F02-text-expanded-1440x960-full.png",
+      "editor": "F02-text-expanded-1440x960-editor.png",
+      "cardVisible": true,
+      "cardRect": {
+        "x": 200,
+        "y": 194,
+        "width": 300,
+        "height": 160
+      },
+      "card": "F02-text-expanded-1440x960-card.png",
+      "editorRect": {
+        "x": 245,
+        "y": 300.46875,
+        "width": 950,
+        "height": 359.046875
+      },
+      "content": "清晨，林夏走过安静的街道，回头望向镜头。保持人物身份、自然步态与柔和侧光。",
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions"
+      ],
+      "expectedState": {
+        "input": "present",
+        "output": "not-applicable",
+        "model": "not-applicable"
+      }
+    },
+    {
+      "id": "F03",
+      "kind": "text",
+      "state": "empty",
+      "viewport": {
+        "width": 1440,
+        "height": 960
+      },
+      "full": "F03-text-empty-1440x960-full.png",
+      "editor": "F03-text-empty-1440x960-editor.png",
+      "cardVisible": true,
+      "cardRect": {
+        "x": 200,
+        "y": 194,
+        "width": 300,
+        "height": 160
+      },
+      "card": "F03-text-empty-1440x960-card.png",
+      "cardWithTitle": "F03-text-empty-1440x960-card-title.png",
+      "editorRect": {
+        "x": 200,
+        "y": 376,
+        "width": 700,
+        "height": 359.046875
+      },
+      "content": "",
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions",
+        "empty-state"
+      ],
+      "expectedState": {
+        "input": "empty",
+        "output": "not-applicable",
+        "model": "not-applicable"
+      }
+    },
+    {
+      "id": "F04",
+      "kind": "image",
+      "state": "default",
+      "viewport": {
+        "width": 1440,
+        "height": 960
+      },
+      "full": "F04-image-default-1440x960-full.png",
+      "editor": "F04-image-default-1440x960-editor.png",
+      "cardVisible": true,
+      "cardRect": {
+        "x": 200,
+        "y": 283,
+        "width": 300,
+        "height": 225
+      },
+      "card": "F04-image-default-1440x960-card.png",
+      "cardWithTitle": "F04-image-default-1440x960-card-title.png",
+      "editorRect": {
+        "x": 200,
+        "y": 530,
+        "width": 700,
+        "height": 318.421875
+      },
+      "content": null,
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions"
+      ],
+      "expectedState": {
+        "input": "present",
+        "output": "not-applicable",
+        "model": "not-applicable"
+      }
+    },
+    {
+      "id": "F05",
+      "kind": "image",
+      "state": "expanded",
+      "viewport": {
+        "width": 1440,
+        "height": 960
+      },
+      "full": "F05-image-expanded-1440x960-full.png",
+      "editor": "F05-image-expanded-1440x960-editor.png",
+      "cardVisible": true,
+      "cardRect": {
+        "x": 200,
+        "y": 283,
+        "width": 300,
+        "height": 225
+      },
+      "card": "F05-image-expanded-1440x960-card.png",
+      "editorRect": {
+        "x": 245,
+        "y": 320.78125,
+        "width": 950,
+        "height": 318.421875
+      },
+      "content": null,
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions"
+      ],
+      "expectedState": {
+        "input": "present",
+        "output": "not-applicable",
+        "model": "not-applicable"
+      }
+    },
+    {
+      "id": "F06",
+      "kind": "image",
+      "state": "empty",
+      "viewport": {
+        "width": 1440,
+        "height": 960
+      },
+      "full": "F06-image-empty-1440x960-full.png",
+      "editor": "F06-image-empty-1440x960-editor.png",
+      "cardVisible": true,
+      "cardRect": {
+        "x": 200,
+        "y": 283,
+        "width": 300,
+        "height": 225
+      },
+      "card": "F06-image-empty-1440x960-card.png",
+      "cardWithTitle": "F06-image-empty-1440x960-card-title.png",
+      "editorRect": {
+        "x": 200,
+        "y": 530,
+        "width": 700,
+        "height": 315
+      },
+      "content": null,
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions",
+        "empty-state"
+      ],
+      "expectedState": {
+        "input": "empty",
+        "output": "not-applicable",
+        "model": "not-applicable"
+      }
+    },
+    {
+      "id": "F07",
+      "kind": "model-text",
+      "state": "default",
+      "viewport": {
+        "width": 1440,
+        "height": 960
+      },
+      "full": "F07-model-text-default-1440x960-full.png",
+      "editor": "F07-model-text-default-1440x960-editor.png",
+      "cardVisible": true,
+      "cardRect": {
+        "x": 600,
+        "y": 194,
+        "width": 300,
+        "height": 180
+      },
+      "card": "F07-model-text-default-1440x960-card.png",
+      "cardWithTitle": "F07-model-text-default-1440x960-card-title.png",
+      "editorRect": {
+        "x": 600,
+        "y": 376,
+        "width": 700,
+        "height": 309
+      },
+      "content": "清晨，林夏走过安静的街道，回头望向镜头。保持人物身份、自然步态与柔和侧光。",
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions",
+        "editor/inputs",
+        "editor/parameters"
+      ],
+      "expectedState": {
+        "input": "present",
+        "output": "present",
+        "model": "selected"
+      }
+    },
+    {
+      "id": "F08",
+      "kind": "model-text",
+      "state": "expanded",
+      "viewport": {
+        "width": 1440,
+        "height": 960
+      },
+      "full": "F08-model-text-expanded-1440x960-full.png",
+      "editor": "F08-model-text-expanded-1440x960-editor.png",
+      "cardVisible": true,
+      "cardRect": {
+        "x": 600,
+        "y": 194,
+        "width": 300,
+        "height": 180
+      },
+      "card": "F08-model-text-expanded-1440x960-card.png",
+      "editorRect": {
+        "x": 245,
+        "y": 325.5,
+        "width": 950,
+        "height": 309
+      },
+      "content": "清晨，林夏走过安静的街道，回头望向镜头。保持人物身份、自然步态与柔和侧光。",
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions",
+        "editor/inputs",
+        "editor/parameters"
+      ],
+      "expectedState": {
+        "input": "present",
+        "output": "present",
+        "model": "selected"
+      }
+    },
+    {
+      "id": "F09",
+      "kind": "model-text",
+      "state": "empty",
+      "viewport": {
+        "width": 1440,
+        "height": 960
+      },
+      "full": "F09-model-text-empty-1440x960-full.png",
+      "editor": "F09-model-text-empty-1440x960-editor.png",
+      "cardVisible": true,
+      "cardRect": {
+        "x": 600,
+        "y": 194,
+        "width": 300,
+        "height": 180
+      },
+      "card": "F09-model-text-empty-1440x960-card.png",
+      "cardWithTitle": "F09-model-text-empty-1440x960-card-title.png",
+      "editorRect": {
+        "x": 600,
+        "y": 376,
+        "width": 700,
+        "height": 309
+      },
+      "content": "",
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions",
+        "editor/inputs",
+        "editor/parameters",
+        "empty-state"
+      ],
+      "expectedState": {
+        "input": "empty",
+        "output": "none",
+        "model": "selected"
+      }
+    },
+    {
+      "id": "F10",
+      "kind": "model-image",
+      "state": "default",
+      "viewport": {
+        "width": 1440,
+        "height": 960
+      },
+      "full": "F10-model-image-default-1440x960-full.png",
+      "editor": "F10-model-image-default-1440x960-editor.png",
+      "cardVisible": true,
+      "cardRect": {
+        "x": 980,
+        "y": 194,
+        "width": 340,
+        "height": 225
+      },
+      "card": "F10-model-image-default-1440x960-card.png",
+      "cardWithTitle": "F10-model-image-default-1440x960-card-title.png",
+      "editorRect": {
+        "x": 630,
+        "y": 441,
+        "width": 700,
+        "height": 309
+      },
+      "content": "清晨，林夏走过安静的街道，回头望向镜头。保持人物身份、自然步态与柔和侧光。",
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions",
+        "editor/inputs",
+        "editor/parameters"
+      ],
+      "expectedState": {
+        "input": "present",
+        "output": "present",
+        "model": "selected"
+      }
+    },
+    {
+      "id": "F11",
+      "kind": "model-image",
+      "state": "expanded",
+      "viewport": {
+        "width": 1440,
+        "height": 960
+      },
+      "full": "F11-model-image-expanded-1440x960-full.png",
+      "editor": "F11-model-image-expanded-1440x960-editor.png",
+      "cardVisible": true,
+      "cardRect": {
+        "x": 980,
+        "y": 194,
+        "width": 340,
+        "height": 225
+      },
+      "card": "F11-model-image-expanded-1440x960-card.png",
+      "editorRect": {
+        "x": 245,
+        "y": 325.5,
+        "width": 950,
+        "height": 309
+      },
+      "content": "清晨，林夏走过安静的街道，回头望向镜头。保持人物身份、自然步态与柔和侧光。",
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions",
+        "editor/inputs",
+        "editor/parameters"
+      ],
+      "expectedState": {
+        "input": "present",
+        "output": "present",
+        "model": "selected"
+      }
+    },
+    {
+      "id": "F12",
+      "kind": "model-image",
+      "state": "empty",
+      "viewport": {
+        "width": 1440,
+        "height": 960
+      },
+      "full": "F12-model-image-empty-1440x960-full.png",
+      "editor": "F12-model-image-empty-1440x960-editor.png",
+      "cardVisible": true,
+      "cardRect": {
+        "x": 980,
+        "y": 194,
+        "width": 340,
+        "height": 225
+      },
+      "card": "F12-model-image-empty-1440x960-card.png",
+      "cardWithTitle": "F12-model-image-empty-1440x960-card-title.png",
+      "editorRect": {
+        "x": 630,
+        "y": 441,
+        "width": 700,
+        "height": 309
+      },
+      "content": "",
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions",
+        "editor/inputs",
+        "editor/parameters",
+        "empty-state"
+      ],
+      "expectedState": {
+        "input": "empty",
+        "output": "none",
+        "model": "selected"
+      }
+    },
+    {
+      "id": "F01",
+      "kind": "text",
+      "state": "default",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "full": "F01-text-default-390x844-full.png",
+      "editor": "F01-text-default-390x844-editor.png",
+      "cardVisible": false,
+      "cardUnavailable": "Prototype responsive design hides all card nodes at390px; not a formal product exemption.",
+      "editorRect": {
+        "x": 10,
+        "y": 150,
+        "width": 370,
+        "height": 606
+      },
+      "content": "清晨，林夏走过安静的街道，回头望向镜头。保持人物身份、自然步态与柔和侧光。",
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions"
+      ],
+      "expectedState": {
+        "input": "present",
+        "output": "not-applicable",
+        "model": "not-applicable"
+      },
+      "cardOmission": {
+        "reason": "Prototype hides card at 390px; formal card remains mandatory.",
+        "basis": "contract.md#mobile-prototype-card-absence"
+      }
+    },
+    {
+      "id": "F02",
+      "kind": "text",
+      "state": "expanded",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "full": "F02-text-expanded-390x844-full.png",
+      "editor": "F02-text-expanded-390x844-editor.png",
+      "cardVisible": false,
+      "cardUnavailable": "Prototype responsive design hides all card nodes at390px; not a formal product exemption.",
+      "editorRect": {
+        "x": 10,
+        "y": 52.5,
+        "width": 370,
+        "height": 739
+      },
+      "content": "清晨，林夏走过安静的街道，回头望向镜头。保持人物身份、自然步态与柔和侧光。",
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions"
+      ],
+      "expectedState": {
+        "input": "present",
+        "output": "not-applicable",
+        "model": "not-applicable"
+      },
+      "cardOmission": {
+        "reason": "Prototype hides card at 390px; formal card remains mandatory.",
+        "basis": "contract.md#mobile-prototype-card-absence"
+      }
+    },
+    {
+      "id": "F03",
+      "kind": "text",
+      "state": "empty",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "full": "F03-text-empty-390x844-full.png",
+      "editor": "F03-text-empty-390x844-editor.png",
+      "cardVisible": false,
+      "cardUnavailable": "Prototype responsive design hides all card nodes at390px; not a formal product exemption.",
+      "editorRect": {
+        "x": 10,
+        "y": 150,
+        "width": 370,
+        "height": 606
+      },
+      "content": "",
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions",
+        "empty-state"
+      ],
+      "expectedState": {
+        "input": "empty",
+        "output": "not-applicable",
+        "model": "not-applicable"
+      },
+      "cardOmission": {
+        "reason": "Prototype hides card at 390px; formal card remains mandatory.",
+        "basis": "contract.md#mobile-prototype-card-absence"
+      }
+    },
+    {
+      "id": "F04",
+      "kind": "image",
+      "state": "default",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "full": "F04-image-default-390x844-full.png",
+      "editor": "F04-image-default-390x844-editor.png",
+      "cardVisible": false,
+      "cardUnavailable": "Prototype responsive design hides all card nodes at390px; not a formal product exemption.",
+      "editorRect": {
+        "x": 10,
+        "y": 150,
+        "width": 370,
+        "height": 606
+      },
+      "content": null,
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions"
+      ],
+      "expectedState": {
+        "input": "present",
+        "output": "not-applicable",
+        "model": "not-applicable"
+      },
+      "cardOmission": {
+        "reason": "Prototype hides card at 390px; formal card remains mandatory.",
+        "basis": "contract.md#mobile-prototype-card-absence"
+      }
+    },
+    {
+      "id": "F05",
+      "kind": "image",
+      "state": "expanded",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "full": "F05-image-expanded-390x844-full.png",
+      "editor": "F05-image-expanded-390x844-editor.png",
+      "cardVisible": false,
+      "cardUnavailable": "Prototype responsive design hides all card nodes at390px; not a formal product exemption.",
+      "editorRect": {
+        "x": 10,
+        "y": 52.5,
+        "width": 370,
+        "height": 739
+      },
+      "content": null,
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions"
+      ],
+      "expectedState": {
+        "input": "present",
+        "output": "not-applicable",
+        "model": "not-applicable"
+      },
+      "cardOmission": {
+        "reason": "Prototype hides card at 390px; formal card remains mandatory.",
+        "basis": "contract.md#mobile-prototype-card-absence"
+      }
+    },
+    {
+      "id": "F06",
+      "kind": "image",
+      "state": "empty",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "full": "F06-image-empty-390x844-full.png",
+      "editor": "F06-image-empty-390x844-editor.png",
+      "cardVisible": false,
+      "cardUnavailable": "Prototype responsive design hides all card nodes at390px; not a formal product exemption.",
+      "editorRect": {
+        "x": 10,
+        "y": 150,
+        "width": 370,
+        "height": 606
+      },
+      "content": null,
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions",
+        "empty-state"
+      ],
+      "expectedState": {
+        "input": "empty",
+        "output": "not-applicable",
+        "model": "not-applicable"
+      },
+      "cardOmission": {
+        "reason": "Prototype hides card at 390px; formal card remains mandatory.",
+        "basis": "contract.md#mobile-prototype-card-absence"
+      }
+    },
+    {
+      "id": "F07",
+      "kind": "model-text",
+      "state": "default",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "full": "F07-model-text-default-390x844-full.png",
+      "editor": "F07-model-text-default-390x844-editor.png",
+      "cardVisible": false,
+      "cardUnavailable": "Prototype responsive design hides all card nodes at390px; not a formal product exemption.",
+      "editorRect": {
+        "x": 10,
+        "y": 150,
+        "width": 370,
+        "height": 606
+      },
+      "content": "清晨，林夏走过安静的街道，回头望向镜头。保持人物身份、自然步态与柔和侧光。",
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions",
+        "editor/inputs",
+        "editor/parameters"
+      ],
+      "expectedState": {
+        "input": "present",
+        "output": "present",
+        "model": "selected"
+      },
+      "cardOmission": {
+        "reason": "Prototype hides card at 390px; formal card remains mandatory.",
+        "basis": "contract.md#mobile-prototype-card-absence"
+      }
+    },
+    {
+      "id": "F08",
+      "kind": "model-text",
+      "state": "expanded",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "full": "F08-model-text-expanded-390x844-full.png",
+      "editor": "F08-model-text-expanded-390x844-editor.png",
+      "cardVisible": false,
+      "cardUnavailable": "Prototype responsive design hides all card nodes at390px; not a formal product exemption.",
+      "editorRect": {
+        "x": 10,
+        "y": 52.5,
+        "width": 370,
+        "height": 739
+      },
+      "content": "清晨，林夏走过安静的街道，回头望向镜头。保持人物身份、自然步态与柔和侧光。",
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions",
+        "editor/inputs",
+        "editor/parameters"
+      ],
+      "expectedState": {
+        "input": "present",
+        "output": "present",
+        "model": "selected"
+      },
+      "cardOmission": {
+        "reason": "Prototype hides card at 390px; formal card remains mandatory.",
+        "basis": "contract.md#mobile-prototype-card-absence"
+      }
+    },
+    {
+      "id": "F09",
+      "kind": "model-text",
+      "state": "empty",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "full": "F09-model-text-empty-390x844-full.png",
+      "editor": "F09-model-text-empty-390x844-editor.png",
+      "cardVisible": false,
+      "cardUnavailable": "Prototype responsive design hides all card nodes at390px; not a formal product exemption.",
+      "editorRect": {
+        "x": 10,
+        "y": 150,
+        "width": 370,
+        "height": 606
+      },
+      "content": "",
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions",
+        "editor/inputs",
+        "editor/parameters",
+        "empty-state"
+      ],
+      "expectedState": {
+        "input": "empty",
+        "output": "none",
+        "model": "selected"
+      },
+      "cardOmission": {
+        "reason": "Prototype hides card at 390px; formal card remains mandatory.",
+        "basis": "contract.md#mobile-prototype-card-absence"
+      }
+    },
+    {
+      "id": "F10",
+      "kind": "model-image",
+      "state": "default",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "full": "F10-model-image-default-390x844-full.png",
+      "editor": "F10-model-image-default-390x844-editor.png",
+      "cardVisible": false,
+      "cardUnavailable": "Prototype responsive design hides all card nodes at390px; not a formal product exemption.",
+      "editorRect": {
+        "x": 10,
+        "y": 150,
+        "width": 370,
+        "height": 606
+      },
+      "content": "清晨，林夏走过安静的街道，回头望向镜头。保持人物身份、自然步态与柔和侧光。",
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions",
+        "editor/inputs",
+        "editor/parameters"
+      ],
+      "expectedState": {
+        "input": "present",
+        "output": "present",
+        "model": "selected"
+      },
+      "cardOmission": {
+        "reason": "Prototype hides card at 390px; formal card remains mandatory.",
+        "basis": "contract.md#mobile-prototype-card-absence"
+      }
+    },
+    {
+      "id": "F11",
+      "kind": "model-image",
+      "state": "expanded",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "full": "F11-model-image-expanded-390x844-full.png",
+      "editor": "F11-model-image-expanded-390x844-editor.png",
+      "cardVisible": false,
+      "cardUnavailable": "Prototype responsive design hides all card nodes at390px; not a formal product exemption.",
+      "editorRect": {
+        "x": 10,
+        "y": 52.5,
+        "width": 370,
+        "height": 739
+      },
+      "content": "清晨，林夏走过安静的街道，回头望向镜头。保持人物身份、自然步态与柔和侧光。",
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions",
+        "editor/inputs",
+        "editor/parameters"
+      ],
+      "expectedState": {
+        "input": "present",
+        "output": "present",
+        "model": "selected"
+      },
+      "cardOmission": {
+        "reason": "Prototype hides card at 390px; formal card remains mandatory.",
+        "basis": "contract.md#mobile-prototype-card-absence"
+      }
+    },
+    {
+      "id": "F12",
+      "kind": "model-image",
+      "state": "empty",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "full": "F12-model-image-empty-390x844-full.png",
+      "editor": "F12-model-image-empty-390x844-editor.png",
+      "cardVisible": false,
+      "cardUnavailable": "Prototype responsive design hides all card nodes at390px; not a formal product exemption.",
+      "editorRect": {
+        "x": 10,
+        "y": 150,
+        "width": 370,
+        "height": 606
+      },
+      "content": "",
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions",
+        "editor/inputs",
+        "editor/parameters",
+        "empty-state"
+      ],
+      "expectedState": {
+        "input": "empty",
+        "output": "none",
+        "model": "selected"
+      },
+      "cardOmission": {
+        "reason": "Prototype hides card at 390px; formal card remains mandatory.",
+        "basis": "contract.md#mobile-prototype-card-absence"
+      }
+    },
+    {
+      "id": "F01",
+      "kind": "text",
+      "state": "default",
+      "viewport": {
+        "width": 3830,
+        "height": 1688
+      },
+      "full": "F01-text-default-3830x1688-full.png",
+      "editor": "F01-text-default-3830x1688-editor.png",
+      "cardVisible": true,
+      "cardRect": {
+        "x": 1395,
+        "y": 194,
+        "width": 300,
+        "height": 160
+      },
+      "card": "F01-text-default-3830x1688-card.png",
+      "cardWithTitle": "F01-text-default-3830x1688-card-title.png",
+      "editorRect": {
+        "x": 1395,
+        "y": 376,
+        "width": 700,
+        "height": 359.046875
+      },
+      "content": "清晨，林夏走过安静的街道，回头望向镜头。保持人物身份、自然步态与柔和侧光。",
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions"
+      ],
+      "expectedState": {
+        "input": "present",
+        "output": "not-applicable",
+        "model": "not-applicable"
+      }
+    },
+    {
+      "id": "F02",
+      "kind": "text",
+      "state": "expanded",
+      "viewport": {
+        "width": 3830,
+        "height": 1688
+      },
+      "full": "F02-text-expanded-3830x1688-full.png",
+      "editor": "F02-text-expanded-3830x1688-editor.png",
+      "cardVisible": true,
+      "cardRect": {
+        "x": 1395,
+        "y": 194,
+        "width": 300,
+        "height": 160
+      },
+      "card": "F02-text-expanded-3830x1688-card.png",
+      "editorRect": {
+        "x": 1440,
+        "y": 664.46875,
+        "width": 950,
+        "height": 359.046875
+      },
+      "content": "清晨，林夏走过安静的街道，回头望向镜头。保持人物身份、自然步态与柔和侧光。",
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions"
+      ],
+      "expectedState": {
+        "input": "present",
+        "output": "not-applicable",
+        "model": "not-applicable"
+      }
+    },
+    {
+      "id": "F03",
+      "kind": "text",
+      "state": "empty",
+      "viewport": {
+        "width": 3830,
+        "height": 1688
+      },
+      "full": "F03-text-empty-3830x1688-full.png",
+      "editor": "F03-text-empty-3830x1688-editor.png",
+      "cardVisible": true,
+      "cardRect": {
+        "x": 1395,
+        "y": 194,
+        "width": 300,
+        "height": 160
+      },
+      "card": "F03-text-empty-3830x1688-card.png",
+      "cardWithTitle": "F03-text-empty-3830x1688-card-title.png",
+      "editorRect": {
+        "x": 1395,
+        "y": 376,
+        "width": 700,
+        "height": 359.046875
+      },
+      "content": "",
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions",
+        "empty-state"
+      ],
+      "expectedState": {
+        "input": "empty",
+        "output": "not-applicable",
+        "model": "not-applicable"
+      }
+    },
+    {
+      "id": "F04",
+      "kind": "image",
+      "state": "default",
+      "viewport": {
+        "width": 3830,
+        "height": 1688
+      },
+      "full": "F04-image-default-3830x1688-full.png",
+      "editor": "F04-image-default-3830x1688-editor.png",
+      "cardVisible": true,
+      "cardRect": {
+        "x": 1395,
+        "y": 474,
+        "width": 300,
+        "height": 225
+      },
+      "card": "F04-image-default-3830x1688-card.png",
+      "cardWithTitle": "F04-image-default-3830x1688-card-title.png",
+      "editorRect": {
+        "x": 1395,
+        "y": 721,
+        "width": 700,
+        "height": 318.421875
+      },
+      "content": null,
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions"
+      ],
+      "expectedState": {
+        "input": "present",
+        "output": "not-applicable",
+        "model": "not-applicable"
+      }
+    },
+    {
+      "id": "F05",
+      "kind": "image",
+      "state": "expanded",
+      "viewport": {
+        "width": 3830,
+        "height": 1688
+      },
+      "full": "F05-image-expanded-3830x1688-full.png",
+      "editor": "F05-image-expanded-3830x1688-editor.png",
+      "cardVisible": true,
+      "cardRect": {
+        "x": 1395,
+        "y": 474,
+        "width": 300,
+        "height": 225
+      },
+      "card": "F05-image-expanded-3830x1688-card.png",
+      "editorRect": {
+        "x": 1440,
+        "y": 684.78125,
+        "width": 950,
+        "height": 318.421875
+      },
+      "content": null,
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions"
+      ],
+      "expectedState": {
+        "input": "present",
+        "output": "not-applicable",
+        "model": "not-applicable"
+      }
+    },
+    {
+      "id": "F06",
+      "kind": "image",
+      "state": "empty",
+      "viewport": {
+        "width": 3830,
+        "height": 1688
+      },
+      "full": "F06-image-empty-3830x1688-full.png",
+      "editor": "F06-image-empty-3830x1688-editor.png",
+      "cardVisible": true,
+      "cardRect": {
+        "x": 1395,
+        "y": 474,
+        "width": 300,
+        "height": 225
+      },
+      "card": "F06-image-empty-3830x1688-card.png",
+      "cardWithTitle": "F06-image-empty-3830x1688-card-title.png",
+      "editorRect": {
+        "x": 1395,
+        "y": 721,
+        "width": 700,
+        "height": 315
+      },
+      "content": null,
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions",
+        "empty-state"
+      ],
+      "expectedState": {
+        "input": "empty",
+        "output": "not-applicable",
+        "model": "not-applicable"
+      }
+    },
+    {
+      "id": "F07",
+      "kind": "model-text",
+      "state": "default",
+      "viewport": {
+        "width": 3830,
+        "height": 1688
+      },
+      "full": "F07-model-text-default-3830x1688-full.png",
+      "editor": "F07-model-text-default-3830x1688-editor.png",
+      "cardVisible": true,
+      "cardRect": {
+        "x": 1795,
+        "y": 194,
+        "width": 300,
+        "height": 180
+      },
+      "card": "F07-model-text-default-3830x1688-card.png",
+      "cardWithTitle": "F07-model-text-default-3830x1688-card-title.png",
+      "editorRect": {
+        "x": 1795,
+        "y": 376,
+        "width": 700,
+        "height": 309
+      },
+      "content": "清晨，林夏走过安静的街道，回头望向镜头。保持人物身份、自然步态与柔和侧光。",
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions",
+        "editor/inputs",
+        "editor/parameters"
+      ],
+      "expectedState": {
+        "input": "present",
+        "output": "present",
+        "model": "selected"
+      }
+    },
+    {
+      "id": "F08",
+      "kind": "model-text",
+      "state": "expanded",
+      "viewport": {
+        "width": 3830,
+        "height": 1688
+      },
+      "full": "F08-model-text-expanded-3830x1688-full.png",
+      "editor": "F08-model-text-expanded-3830x1688-editor.png",
+      "cardVisible": true,
+      "cardRect": {
+        "x": 1795,
+        "y": 194,
+        "width": 300,
+        "height": 180
+      },
+      "card": "F08-model-text-expanded-3830x1688-card.png",
+      "editorRect": {
+        "x": 1440,
+        "y": 689.5,
+        "width": 950,
+        "height": 309
+      },
+      "content": "清晨，林夏走过安静的街道，回头望向镜头。保持人物身份、自然步态与柔和侧光。",
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions",
+        "editor/inputs",
+        "editor/parameters"
+      ],
+      "expectedState": {
+        "input": "present",
+        "output": "present",
+        "model": "selected"
+      }
+    },
+    {
+      "id": "F09",
+      "kind": "model-text",
+      "state": "empty",
+      "viewport": {
+        "width": 3830,
+        "height": 1688
+      },
+      "full": "F09-model-text-empty-3830x1688-full.png",
+      "editor": "F09-model-text-empty-3830x1688-editor.png",
+      "cardVisible": true,
+      "cardRect": {
+        "x": 1795,
+        "y": 194,
+        "width": 300,
+        "height": 180
+      },
+      "card": "F09-model-text-empty-3830x1688-card.png",
+      "cardWithTitle": "F09-model-text-empty-3830x1688-card-title.png",
+      "editorRect": {
+        "x": 1795,
+        "y": 376,
+        "width": 700,
+        "height": 309
+      },
+      "content": "",
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions",
+        "editor/inputs",
+        "editor/parameters",
+        "empty-state"
+      ],
+      "expectedState": {
+        "input": "empty",
+        "output": "none",
+        "model": "selected"
+      }
+    },
+    {
+      "id": "F10",
+      "kind": "model-image",
+      "state": "default",
+      "viewport": {
+        "width": 3830,
+        "height": 1688
+      },
+      "full": "F10-model-image-default-3830x1688-full.png",
+      "editor": "F10-model-image-default-3830x1688-editor.png",
+      "cardVisible": true,
+      "cardRect": {
+        "x": 2175,
+        "y": 194,
+        "width": 340,
+        "height": 225
+      },
+      "card": "F10-model-image-default-3830x1688-card.png",
+      "cardWithTitle": "F10-model-image-default-3830x1688-card-title.png",
+      "editorRect": {
+        "x": 1825,
+        "y": 441,
+        "width": 700,
+        "height": 309
+      },
+      "content": "清晨，林夏走过安静的街道，回头望向镜头。保持人物身份、自然步态与柔和侧光。",
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions",
+        "editor/inputs",
+        "editor/parameters"
+      ],
+      "expectedState": {
+        "input": "present",
+        "output": "present",
+        "model": "selected"
+      }
+    },
+    {
+      "id": "F11",
+      "kind": "model-image",
+      "state": "expanded",
+      "viewport": {
+        "width": 3830,
+        "height": 1688
+      },
+      "full": "F11-model-image-expanded-3830x1688-full.png",
+      "editor": "F11-model-image-expanded-3830x1688-editor.png",
+      "cardVisible": true,
+      "cardRect": {
+        "x": 2175,
+        "y": 194,
+        "width": 340,
+        "height": 225
+      },
+      "card": "F11-model-image-expanded-3830x1688-card.png",
+      "editorRect": {
+        "x": 1440,
+        "y": 689.5,
+        "width": 950,
+        "height": 309
+      },
+      "content": "清晨，林夏走过安静的街道，回头望向镜头。保持人物身份、自然步态与柔和侧光。",
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions",
+        "editor/inputs",
+        "editor/parameters"
+      ],
+      "expectedState": {
+        "input": "present",
+        "output": "present",
+        "model": "selected"
+      }
+    },
+    {
+      "id": "F12",
+      "kind": "model-image",
+      "state": "empty",
+      "viewport": {
+        "width": 3830,
+        "height": 1688
+      },
+      "full": "F12-model-image-empty-3830x1688-full.png",
+      "editor": "F12-model-image-empty-3830x1688-editor.png",
+      "cardVisible": true,
+      "cardRect": {
+        "x": 2175,
+        "y": 194,
+        "width": 340,
+        "height": 225
+      },
+      "card": "F12-model-image-empty-3830x1688-card.png",
+      "cardWithTitle": "F12-model-image-empty-3830x1688-card-title.png",
+      "editorRect": {
+        "x": 1825,
+        "y": 441,
+        "width": 700,
+        "height": 309
+      },
+      "content": "",
+      "inspection": {
+        "editorOriginal": "actually viewed with view_image; design target only",
+        "formalComparison": "not performed"
+      },
+      "zoom": 1,
+      "regions": [
+        "page/context",
+        "card/title",
+        "editor/body",
+        "editor/actions",
+        "editor/inputs",
+        "editor/parameters",
+        "empty-state"
+      ],
+      "expectedState": {
+        "input": "empty",
+        "output": "none",
+        "model": "selected"
+      }
+    }
+  ],
+  "fileHashes": {
+    "F09-model-text-empty-1440x960-editor.png": "189fddab3311ee1c3c2eea3b241b5c009813c9d80226201c2a868217d0f2b7ef",
+    "F06-image-empty-3830x1688-editor.png": "8664fe9eb276bc0837bc0adee6421fd55dd3ce4a28296ff5d9f93e127b2cc46a",
+    "F03-text-empty-3830x1688-full.png": "c4bcf11205c51f6b7423b4b674f1cc15731694f63dd3a7c53ed1d4ec8c9d42a2",
+    "F02-text-expanded-1440x960-editor.png": "295ac0599bcf646601a282c2e9b2cc298a33eb719b1a60c35c640fcb6506715d",
+    "F08-model-text-expanded-3830x1688-full.png": "5a5c3d44040b17ab39a575f75f0b29209c4f11aafb7754b0168a8d4be72192a6",
+    "F01-text-default-3830x1688-editor.png": "4715c68a6b3a4ecd7b8675251082a1457a913dc6486ce814c90f02565fe8659a",
+    "F11-model-image-expanded-390x844-full.png": "3c6983b1fb6e78c41112ac53f5a753273593718a308638a93ec51f1f56cfe631",
+    "F11-model-image-expanded-3830x1688-card.png": "d3e29afecc4bef708a9a1354900a30c62f8af112b86490eef0e478d0f861d973",
+    "F07-model-text-default-1440x960-full.png": "54cf6a9356b3a3d3cb3b9fe4c911b9b595974b83f802f8e952b5d43de51cf4f5",
+    "F12-model-image-empty-1440x960-card-title.png": "07737c0f27774783cf70afbff1b679dc6e792c300c135b72a404930da239b553",
+    "F12-model-image-empty-1440x960-editor.png": "0cdb9de197ac818be33e4f62212b0194e8128fb6eb33604afae257370b368877",
+    "F07-model-text-default-390x844-full.png": "a0aa8cac1dac216b5add7e6c8626544f8a5a6679ef6acd603860a199c20e0c8e",
+    "F06-image-empty-3830x1688-card-title.png": "973a5ddd50509ba08c4e76fe99d43aabd5e161092c08d0902bd8c06046c51dd3",
+    "F04-image-default-1440x960-card.png": "3a6863c11330e923b1310856ab9824cc28b5edca132376c342b3786416056154",
+    "F04-image-default-3830x1688-card.png": "69eb8df51ad92d35a610b1f103592961dfb41c7e164dea9899f6ac548ee1d136",
+    "F02-text-expanded-3830x1688-full.png": "6629a630934a87def4b96afdc6d75eeb273b6501b2df0566916e0040eb6f78ab",
+    "F04-image-default-390x844-editor.png": "c0e8b11cd5c63759957917af4bc94d45e77443f1f0c31f2e651749d5e1f41d3b",
+    "F01-text-default-3830x1688-full.png": "097757d258c9bcbfda79bf05ebd9cac63f0ac676f818d8efc1d229c76058c97f",
+    "F09-model-text-empty-3830x1688-editor.png": "fa14ba3a7d761489321c96f343d007f7b96b93ee3b43941c83cc7d43bd898fa3",
+    "F08-model-text-expanded-1440x960-card.png": "179e6ae6cff4c6670975cfe4dd159687c0b06c40d9e29bdbd12d4e62128713d8",
+    "F04-image-default-1440x960-editor.png": "11f894cfef00c6c29b31b9cced6a393ac2d0d849d1d14a30ae8e57a8528dde4f",
+    "F11-model-image-expanded-390x844-editor.png": "93159ffb0495fea4f8a079ef74a02a8cef6d8f9d84912c801c697a879588b774",
+    "F11-model-image-expanded-3830x1688-editor.png": "df1d551a7f06340c7a14f0eb03228f044bfa4402f7c7525e9229aaf5e2bfc11c",
+    "F02-text-expanded-390x844-full.png": "5b593cc052b5726c52216514fd012bf09359c1cea3f29e35c90609ab4be87ce7",
+    "F03-text-empty-1440x960-full.png": "122fc177e916394d6cd515bb6a66f1271877fcc4e105bd7cb97a9411bd000ef6",
+    "F08-model-text-expanded-390x844-full.png": "f38842e5e717abb81307647dd4aaa092fe2b5f2cc7f1d588c2fc683a16a037e6",
+    "F04-image-default-3830x1688-editor.png": "f0d189eca5cbe4f7bdc31bdcb128c524032a588b38197b6d3b91d7cc4f27b4cb",
+    "F01-text-default-1440x960-full.png": "586ed0603ca8f90ca4da1c0bc28b632304cb58efbf0565eaa8851cae7092187c",
+    "F01-text-default-1440x960-card-title.png": "191b196ca204a45ea0f4bf2686230d08a5a3b4b383bfd1728f1305a4ce9c95fb",
+    "F12-model-image-empty-3830x1688-editor.png": "0ef1d39df9577ef779e74828a041502623e1f54d551c218722b54141a6c5273f",
+    "F10-model-image-default-3830x1688-editor.png": "e27dc741f5701037cfbc87240cb14f7042c94e1d28dca032f5e84b2939b84b3c",
+    "F10-model-image-default-390x844-editor.png": "12ea495a4fa9793ce1732094faa1428df0957179dd9c712ce6586ceee8e2bbda",
+    "F10-model-image-default-1440x960-card.png": "edf340b36c741a83817b1de6ee4ede46da8eae9fa14d5d31e9e0ba837fe537c0",
+    "F06-image-empty-1440x960-full.png": "3d28efb70bf5e054c559f8b3bdfe7be4cd45f8dcf644183629a23a756d955cc9",
+    "F02-text-expanded-3830x1688-editor.png": "f0869ce782488530472036372ffbbd6904072eedce8123d93d83672d23e1163c",
+    "F09-model-text-empty-390x844-editor.png": "a47805b3b741e5f36ecaa68b411ac5031ae10fb75e308083b5eb33d422364b20",
+    "F07-model-text-default-390x844-editor.png": "b548eda041c35cc18e372f20dcfce7d89de35b2662f91e3249724f52440e4fd0",
+    "F09-model-text-empty-1440x960-card.png": "e1366a88a50bd8afd5991920c6a54e66ef0099c0498fa6ea75367d32868a144f",
+    "F03-text-empty-390x844-full.png": "6c56d2706b68637517c7f2ec953f90f9a5220928bbdd6b3bed0f49cc312842f3",
+    "F11-model-image-expanded-1440x960-card.png": "85b269348f4a41e4a54333a5ec60ff633f216ab8526c939a6caa9023c1d35045",
+    "F05-image-expanded-3830x1688-editor.png": "ca844675672acc5c5e33fcb67853508963a85541c8713f824a275cc87a3449b8",
+    "F12-model-image-empty-390x844-editor.png": "27d2f0bd096e750a20a530f125429ba72e2bb05ffb6c4dc86ce10b9937c62190",
+    "F08-model-text-expanded-3830x1688-editor.png": "239d5399d658f41e9343ac5827f27ee6f882289cbbf04c8f23ad888ffaaf7b8e",
+    "F09-model-text-empty-1440x960-card-title.png": "18882903a91eb9eea071207cc43edbcb048694b4bbd17c7da577584b54ec02ed",
+    "F10-model-image-default-3830x1688-card.png": "4a060b11f1088870caccc84c60aa8f80f41d617f1010a127ce58032e8c347264",
+    "F07-model-text-default-3830x1688-card.png": "ed7fa631f41d159c0210e39613a06bf1571c1b35588f057d7a51710abe76804c",
+    "F03-text-empty-1440x960-editor.png": "c423f16ca17e0feedd626c40b9a2f3695acc8ba525a7aef7701ad7d5091ffe37",
+    "F09-model-text-empty-3830x1688-card.png": "fe8528dc7b4070f5c5ee3e017533c991235e023d508bab30a01c94f29de18d68",
+    "F10-model-image-default-390x844-full.png": "2ac4960df9dd3e314eb64ea0b33cde541b35a33acdf6d8097969041531f6a838",
+    "F07-model-text-default-3830x1688-card-title.png": "361a1c944fcdaa3d1e4ae59ea0e8b64b44c47c57cacab21076e82f58f97517da",
+    "F12-model-image-empty-3830x1688-card.png": "bd27b294d79fc7716fa7747499b02a45cea7248b3966a02b7f655fdb66963622",
+    "F01-text-default-3830x1688-card-title.png": "cddd79295bb294480f5cc44714016f68bb02063608d6d4285a9395d3ad0274f4",
+    "F05-image-expanded-1440x960-card.png": "e7630aa7c140da44aab4e0e795d1ca4f621c820b82bcad3c60d6e322540c4adc",
+    "F02-text-expanded-1440x960-card.png": "826fab7b6c24d3f6478c0fdf4092139499a5820d16aa0f796e1a4dd38af4c451",
+    "F05-image-expanded-1440x960-editor.png": "465f107dab170367f07e854689382939f0a0041696971d370e051864e1c3cc10",
+    "F01-text-default-1440x960-editor.png": "88eeedf96a979192b6195d8ad95a462ec4ac6ddf1ec7aeb8e51b786fb0c2673b",
+    "F12-model-image-empty-1440x960-card.png": "e44d9a99c4fdc00fcfb0bf000c3b458f4b7605fda64894fdf4864797791acdfb",
+    "F07-model-text-default-1440x960-editor.png": "29af90bb4d74a83bb4a77ea19ad8dd032de17aface8f519405731b6dba213a63",
+    "F09-model-text-empty-390x844-full.png": "8b677d4ef00c6f656d7f4d3080722ae4296d11661ac72db467d8151cb0f11a5a",
+    "F05-image-expanded-3830x1688-full.png": "f3cb1f412dd6e38b05800de8addb4158e2f14c391c090c44f2d0f86e8d972e84",
+    "F06-image-empty-3830x1688-full.png": "2adcc9bf6b27dfb46e97b828e6afd12903047fe4380bfa5159c2e17d8897ce49",
+    "F03-text-empty-3830x1688-card-title.png": "cb26e095af6060e6036f490b1faf31d17284db3f017723011b5a99b573f6b8c0",
+    "F06-image-empty-3830x1688-card.png": "8ebdf4bfda89c64a750f7934660e951d4df830e271375a38dd0f4109938d6d92",
+    "F05-image-expanded-3830x1688-card.png": "2344ffb7e7099003b662ae1cafad6b570360b9e0f9652b1313eb2a269e3772fc",
+    "F09-model-text-empty-3830x1688-card-title.png": "856102807b72e935e645906fcf11a942b44e3ddc074cc05858e69845293669e5",
+    "F06-image-empty-390x844-full.png": "b5b67577fd5b402aa5eaefcdb15470b3ad354dabb02bb2a3fa321cad3904bb4a",
+    "F12-model-image-empty-1440x960-full.png": "e35c235ea664328dfdc43ccb0a278c8a4bee9d492ff5a2498de761e032daf102",
+    "F10-model-image-default-1440x960-card-title.png": "06afb9e0e9e8e58b917858bd32565c72f809e776b1d4bff3a67b9a4c3d44a89f",
+    "F12-model-image-empty-3830x1688-card-title.png": "49e3e347a9aecf646a200ea7c0e8e7a003c12f2fa3f48fba15e48b7035d010f1",
+    "F02-text-expanded-1440x960-full.png": "c46ca9465664c9c669209a98e5f6371d05996662e3c3e131771dc30a1474e8a1",
+    "F05-image-expanded-1440x960-full.png": "4b36fc5fc999b9c4ab98105c67eddfd3c6cbfe62d1c2cf5bde0ebfc1d241e51a",
+    "F12-model-image-empty-3830x1688-full.png": "a90fa42801a1d36695c7659bf7c2e1e750adb6d62e075b501df138b6ff28a9e4",
+    "F05-image-expanded-390x844-full.png": "a3b4e15e7c267776453f8132ea5b6625d761340b8be97aa7791d1fd17e01c15d",
+    "F11-model-image-expanded-1440x960-editor.png": "d1ff2906afc5a5f7dd52b920c4fda34208f45fb949e379d3fafe2caec6fbb597",
+    "F09-model-text-empty-3830x1688-full.png": "fa0c987bd7fa3394d5fdbd703faa8b96363b875bc1ff8e1cd89859e38b19a21f",
+    "F07-model-text-default-3830x1688-full.png": "fc33d90fbc81b1706819cf88337e5fdd5d45c973acea8730b2014b182f372c47",
+    "F10-model-image-default-3830x1688-full.png": "6ad8458aeb96aca58ce08d2eb42c48f00fe10f88b5fd389c9c8d40a1a8179b27",
+    "F01-text-default-390x844-full.png": "cf2aef0e0181a8031a5f5b2544bb6a5241fc7ebb24f679232a8e35440a4d9e87",
+    "F11-model-image-expanded-1440x960-full.png": "ececae3738881090745b0206b516d4c44f18820615abd51870ecd0464c7d2428",
+    "F03-text-empty-1440x960-card-title.png": "a3494749d2614d22e90e30f1ee09c247f539fb86de03b7f8f2260e648367229d",
+    "F03-text-empty-3830x1688-editor.png": "d91b70a213ba6a310d9cfa3b35d9924508c9ae04f5c43bf89446ddf71c9fafa3",
+    "F04-image-default-3830x1688-card-title.png": "02aad59a780c15e953b4bfec75998babc0c4eb027f758636a676b3a2180b3082",
+    "F09-model-text-empty-1440x960-full.png": "8f92dc79c92aaf82f08c6b1e565abfb757d7635b5599ef32f092646394215fed",
+    "F06-image-empty-1440x960-card.png": "be1676f001a2426da5bfc1d7532f180449c4a66df5d5d9d84abaaa7f9de9e604",
+    "F10-model-image-default-1440x960-full.png": "8b32ad54e15eed26b62077d9dfec1b8da946712613c38d7521c55beeaaf6ec7c",
+    "F05-image-expanded-390x844-editor.png": "ea7e2d133f9b2ee584bfd690e604ccc25303e0bff906009dbdc201bc56c7b89c",
+    "F06-image-empty-390x844-editor.png": "c937ab4c5b00925de8b98d76d62eb31b9a725c8dab10047b5e5235de13e88675",
+    "F10-model-image-default-3830x1688-card-title.png": "114744ef0c344ae2e59d0e01f4443c26fe326918adb419a9a426925dc7e7b5d8",
+    "F01-text-default-1440x960-card.png": "80dd556ec1c2c34d80b80a2045b695c470ab782ff77b4fcb78e47301c6fd3345",
+    "F04-image-default-1440x960-card-title.png": "63d6b49c8a3ff7e788b52e93cd5e392f9f5bfb0cee560da3533bb7895daf206e",
+    "F07-model-text-default-3830x1688-editor.png": "bdbd0e03cd81a5a83f4f0f468791f97a2699f106a58e8bab9c2c8e13437538fe",
+    "F03-text-empty-1440x960-card.png": "cdc1ab52fdbcc3c74568f1bb90d2ec4c4530de40af6c78a016201a883880a0d7",
+    "F08-model-text-expanded-390x844-editor.png": "b001445261217b1da2a0499f65b2924b59ee141acef78112b1e7ad670e83e9b1",
+    "F03-text-empty-390x844-editor.png": "beb4c617d31988d5efc778dc3f2abb090250932603b241866ea460afa8d32222",
+    "F12-model-image-empty-390x844-full.png": "0097c5459a94e58ca278f5da14ee1d5326605d00d13109ecf29efde72be42443",
+    "F06-image-empty-1440x960-card-title.png": "422529bd481fce0b4e9c39cb64767192d10bc50b75c2d80f5fba555e5b3f7f6e",
+    "F08-model-text-expanded-1440x960-editor.png": "7a089f8b6159f671fc43cb0dbe4e4b186efc1f3ec4a0932bbcb79064defab358",
+    "F08-model-text-expanded-1440x960-full.png": "6ea3b84a4820c469ad422d3ba4c04baa2a7c94c1d885b7d04e14aaa4db95f0aa",
+    "F02-text-expanded-390x844-editor.png": "da4b9c09fe61cdc689d120eec099760a7edd68e6b78845a5aec1b244fbe5940b",
+    "F01-text-default-3830x1688-card.png": "f6186c0dd7651ca5900cec17f49cb88ee4b55ab8afe8bb11bd19e7af3a4d667a",
+    "F06-image-empty-1440x960-editor.png": "ae96f141bb4cafc79622083a53e1da3dbc906a89b774a8dacc103a23209a2d9f",
+    "F02-text-expanded-3830x1688-card.png": "2c7a30a600e4fc426f58994012f7a756cee3d62f92ea761dce0ef1f02dade1f8",
+    "F10-model-image-default-1440x960-editor.png": "cfdac228cc57ec6e141b69e1db3dca479a0997e3d3fa3bdb2c4ac819fc213b4c",
+    "F04-image-default-3830x1688-full.png": "927911c2411c1aed756fbf25fa00d32b0878eef5491af32a7978fb5e13502cd3",
+    "F04-image-default-1440x960-full.png": "5414f93d4ed8a926368ee569214bb479c9c9b0ffdb25a7fc80fc9e807cbe60c4",
+    "F01-text-default-390x844-editor.png": "b003f07fdc7fa94541ac36bc61d4916e4181a90bdb8dffd8e75d96990e3e3eb6",
+    "F07-model-text-default-1440x960-card.png": "5e7fb32bb97339e8f0891796494f3dcdf2f626d7359c39b8957b6db48ef68129",
+    "F11-model-image-expanded-3830x1688-full.png": "61ef6c68ebbd3ceadbfa79ffea4e08ecca6207f417ac32135a37f78e363d775b",
+    "F04-image-default-390x844-full.png": "d5f24fd8c79c6ca95d1a8582a75f78b44b2ff0a85a6bf98a2118f1d0770bcbd3",
+    "F08-model-text-expanded-3830x1688-card.png": "fa14b6e79ef2e5b020d248e2e07b7d7837f6c8a54359d7753af09c27060382b5",
+    "F03-text-empty-3830x1688-card.png": "3d2295d3806fcf52adf588844ffac66a78ec7cc76f24601c19aa65300bf02921",
+    "F07-model-text-default-1440x960-card-title.png": "c12f2cc5e154ed060a298f050bad8cfd063f217826918b4b1023bc04fb86d7ba"
+  },
+  "schemaVersion": 1,
+  "version": "c-794ee4a0-v1",
+  "changeReason": "Initial retention of explicitly confirmed C prototype; no formal or negative screenshots accepted.",
+  "contract": {
+    "path": "contract.md",
+    "sha256": "71a9bf7c9963bedcb141075fa41a022e4e1ef261217698c14afdbe42db44c49f"
+  },
+  "files": {
+    "F01-text-default-1440x960-full.png": {
+      "sha256": "586ed0603ca8f90ca4da1c0bc28b632304cb58efbf0565eaa8851cae7092187c",
+      "width": 1440,
+      "height": 960
+    },
+    "F01-text-default-1440x960-editor.png": {
+      "sha256": "88eeedf96a979192b6195d8ad95a462ec4ac6ddf1ec7aeb8e51b786fb0c2673b",
+      "width": 700,
+      "height": 360
+    },
+    "F01-text-default-1440x960-card.png": {
+      "sha256": "80dd556ec1c2c34d80b80a2045b695c470ab782ff77b4fcb78e47301c6fd3345",
+      "width": 300,
+      "height": 160
+    },
+    "F01-text-default-1440x960-card-title.png": {
+      "sha256": "191b196ca204a45ea0f4bf2686230d08a5a3b4b383bfd1728f1305a4ce9c95fb",
+      "width": 344,
+      "height": 200
+    },
+    "F02-text-expanded-1440x960-full.png": {
+      "sha256": "c46ca9465664c9c669209a98e5f6371d05996662e3c3e131771dc30a1474e8a1",
+      "width": 1440,
+      "height": 960
+    },
+    "F02-text-expanded-1440x960-editor.png": {
+      "sha256": "295ac0599bcf646601a282c2e9b2cc298a33eb719b1a60c35c640fcb6506715d",
+      "width": 950,
+      "height": 360
+    },
+    "F02-text-expanded-1440x960-card.png": {
+      "sha256": "826fab7b6c24d3f6478c0fdf4092139499a5820d16aa0f796e1a4dd38af4c451",
+      "width": 300,
+      "height": 160
+    },
+    "F03-text-empty-1440x960-full.png": {
+      "sha256": "122fc177e916394d6cd515bb6a66f1271877fcc4e105bd7cb97a9411bd000ef6",
+      "width": 1440,
+      "height": 960
+    },
+    "F03-text-empty-1440x960-editor.png": {
+      "sha256": "c423f16ca17e0feedd626c40b9a2f3695acc8ba525a7aef7701ad7d5091ffe37",
+      "width": 700,
+      "height": 360
+    },
+    "F03-text-empty-1440x960-card.png": {
+      "sha256": "cdc1ab52fdbcc3c74568f1bb90d2ec4c4530de40af6c78a016201a883880a0d7",
+      "width": 300,
+      "height": 160
+    },
+    "F03-text-empty-1440x960-card-title.png": {
+      "sha256": "a3494749d2614d22e90e30f1ee09c247f539fb86de03b7f8f2260e648367229d",
+      "width": 344,
+      "height": 200
+    },
+    "F04-image-default-1440x960-full.png": {
+      "sha256": "5414f93d4ed8a926368ee569214bb479c9c9b0ffdb25a7fc80fc9e807cbe60c4",
+      "width": 1440,
+      "height": 960
+    },
+    "F04-image-default-1440x960-editor.png": {
+      "sha256": "11f894cfef00c6c29b31b9cced6a393ac2d0d849d1d14a30ae8e57a8528dde4f",
+      "width": 700,
+      "height": 319
+    },
+    "F04-image-default-1440x960-card.png": {
+      "sha256": "3a6863c11330e923b1310856ab9824cc28b5edca132376c342b3786416056154",
+      "width": 300,
+      "height": 225
+    },
+    "F04-image-default-1440x960-card-title.png": {
+      "sha256": "63d6b49c8a3ff7e788b52e93cd5e392f9f5bfb0cee560da3533bb7895daf206e",
+      "width": 344,
+      "height": 265
+    },
+    "F05-image-expanded-1440x960-full.png": {
+      "sha256": "4b36fc5fc999b9c4ab98105c67eddfd3c6cbfe62d1c2cf5bde0ebfc1d241e51a",
+      "width": 1440,
+      "height": 960
+    },
+    "F05-image-expanded-1440x960-editor.png": {
+      "sha256": "465f107dab170367f07e854689382939f0a0041696971d370e051864e1c3cc10",
+      "width": 950,
+      "height": 320
+    },
+    "F05-image-expanded-1440x960-card.png": {
+      "sha256": "e7630aa7c140da44aab4e0e795d1ca4f621c820b82bcad3c60d6e322540c4adc",
+      "width": 300,
+      "height": 225
+    },
+    "F06-image-empty-1440x960-full.png": {
+      "sha256": "3d28efb70bf5e054c559f8b3bdfe7be4cd45f8dcf644183629a23a756d955cc9",
+      "width": 1440,
+      "height": 960
+    },
+    "F06-image-empty-1440x960-editor.png": {
+      "sha256": "ae96f141bb4cafc79622083a53e1da3dbc906a89b774a8dacc103a23209a2d9f",
+      "width": 700,
+      "height": 315
+    },
+    "F06-image-empty-1440x960-card.png": {
+      "sha256": "be1676f001a2426da5bfc1d7532f180449c4a66df5d5d9d84abaaa7f9de9e604",
+      "width": 300,
+      "height": 225
+    },
+    "F06-image-empty-1440x960-card-title.png": {
+      "sha256": "422529bd481fce0b4e9c39cb64767192d10bc50b75c2d80f5fba555e5b3f7f6e",
+      "width": 344,
+      "height": 265
+    },
+    "F07-model-text-default-1440x960-full.png": {
+      "sha256": "54cf6a9356b3a3d3cb3b9fe4c911b9b595974b83f802f8e952b5d43de51cf4f5",
+      "width": 1440,
+      "height": 960
+    },
+    "F07-model-text-default-1440x960-editor.png": {
+      "sha256": "29af90bb4d74a83bb4a77ea19ad8dd032de17aface8f519405731b6dba213a63",
+      "width": 700,
+      "height": 309
+    },
+    "F07-model-text-default-1440x960-card.png": {
+      "sha256": "5e7fb32bb97339e8f0891796494f3dcdf2f626d7359c39b8957b6db48ef68129",
+      "width": 300,
+      "height": 180
+    },
+    "F07-model-text-default-1440x960-card-title.png": {
+      "sha256": "c12f2cc5e154ed060a298f050bad8cfd063f217826918b4b1023bc04fb86d7ba",
+      "width": 344,
+      "height": 220
+    },
+    "F08-model-text-expanded-1440x960-full.png": {
+      "sha256": "6ea3b84a4820c469ad422d3ba4c04baa2a7c94c1d885b7d04e14aaa4db95f0aa",
+      "width": 1440,
+      "height": 960
+    },
+    "F08-model-text-expanded-1440x960-editor.png": {
+      "sha256": "7a089f8b6159f671fc43cb0dbe4e4b186efc1f3ec4a0932bbcb79064defab358",
+      "width": 950,
+      "height": 310
+    },
+    "F08-model-text-expanded-1440x960-card.png": {
+      "sha256": "179e6ae6cff4c6670975cfe4dd159687c0b06c40d9e29bdbd12d4e62128713d8",
+      "width": 300,
+      "height": 180
+    },
+    "F09-model-text-empty-1440x960-full.png": {
+      "sha256": "8f92dc79c92aaf82f08c6b1e565abfb757d7635b5599ef32f092646394215fed",
+      "width": 1440,
+      "height": 960
+    },
+    "F09-model-text-empty-1440x960-editor.png": {
+      "sha256": "189fddab3311ee1c3c2eea3b241b5c009813c9d80226201c2a868217d0f2b7ef",
+      "width": 700,
+      "height": 309
+    },
+    "F09-model-text-empty-1440x960-card.png": {
+      "sha256": "e1366a88a50bd8afd5991920c6a54e66ef0099c0498fa6ea75367d32868a144f",
+      "width": 300,
+      "height": 180
+    },
+    "F09-model-text-empty-1440x960-card-title.png": {
+      "sha256": "18882903a91eb9eea071207cc43edbcb048694b4bbd17c7da577584b54ec02ed",
+      "width": 344,
+      "height": 220
+    },
+    "F10-model-image-default-1440x960-full.png": {
+      "sha256": "8b32ad54e15eed26b62077d9dfec1b8da946712613c38d7521c55beeaaf6ec7c",
+      "width": 1440,
+      "height": 960
+    },
+    "F10-model-image-default-1440x960-editor.png": {
+      "sha256": "cfdac228cc57ec6e141b69e1db3dca479a0997e3d3fa3bdb2c4ac819fc213b4c",
+      "width": 700,
+      "height": 309
+    },
+    "F10-model-image-default-1440x960-card.png": {
+      "sha256": "edf340b36c741a83817b1de6ee4ede46da8eae9fa14d5d31e9e0ba837fe537c0",
+      "width": 340,
+      "height": 225
+    },
+    "F10-model-image-default-1440x960-card-title.png": {
+      "sha256": "06afb9e0e9e8e58b917858bd32565c72f809e776b1d4bff3a67b9a4c3d44a89f",
+      "width": 384,
+      "height": 265
+    },
+    "F11-model-image-expanded-1440x960-full.png": {
+      "sha256": "ececae3738881090745b0206b516d4c44f18820615abd51870ecd0464c7d2428",
+      "width": 1440,
+      "height": 960
+    },
+    "F11-model-image-expanded-1440x960-editor.png": {
+      "sha256": "d1ff2906afc5a5f7dd52b920c4fda34208f45fb949e379d3fafe2caec6fbb597",
+      "width": 950,
+      "height": 310
+    },
+    "F11-model-image-expanded-1440x960-card.png": {
+      "sha256": "85b269348f4a41e4a54333a5ec60ff633f216ab8526c939a6caa9023c1d35045",
+      "width": 340,
+      "height": 225
+    },
+    "F12-model-image-empty-1440x960-full.png": {
+      "sha256": "e35c235ea664328dfdc43ccb0a278c8a4bee9d492ff5a2498de761e032daf102",
+      "width": 1440,
+      "height": 960
+    },
+    "F12-model-image-empty-1440x960-editor.png": {
+      "sha256": "0cdb9de197ac818be33e4f62212b0194e8128fb6eb33604afae257370b368877",
+      "width": 700,
+      "height": 309
+    },
+    "F12-model-image-empty-1440x960-card.png": {
+      "sha256": "e44d9a99c4fdc00fcfb0bf000c3b458f4b7605fda64894fdf4864797791acdfb",
+      "width": 340,
+      "height": 225
+    },
+    "F12-model-image-empty-1440x960-card-title.png": {
+      "sha256": "07737c0f27774783cf70afbff1b679dc6e792c300c135b72a404930da239b553",
+      "width": 384,
+      "height": 265
+    },
+    "F01-text-default-390x844-full.png": {
+      "sha256": "cf2aef0e0181a8031a5f5b2544bb6a5241fc7ebb24f679232a8e35440a4d9e87",
+      "width": 390,
+      "height": 844
+    },
+    "F01-text-default-390x844-editor.png": {
+      "sha256": "b003f07fdc7fa94541ac36bc61d4916e4181a90bdb8dffd8e75d96990e3e3eb6",
+      "width": 370,
+      "height": 606
+    },
+    "F02-text-expanded-390x844-full.png": {
+      "sha256": "5b593cc052b5726c52216514fd012bf09359c1cea3f29e35c90609ab4be87ce7",
+      "width": 390,
+      "height": 844
+    },
+    "F02-text-expanded-390x844-editor.png": {
+      "sha256": "da4b9c09fe61cdc689d120eec099760a7edd68e6b78845a5aec1b244fbe5940b",
+      "width": 370,
+      "height": 740
+    },
+    "F03-text-empty-390x844-full.png": {
+      "sha256": "6c56d2706b68637517c7f2ec953f90f9a5220928bbdd6b3bed0f49cc312842f3",
+      "width": 390,
+      "height": 844
+    },
+    "F03-text-empty-390x844-editor.png": {
+      "sha256": "beb4c617d31988d5efc778dc3f2abb090250932603b241866ea460afa8d32222",
+      "width": 370,
+      "height": 606
+    },
+    "F04-image-default-390x844-full.png": {
+      "sha256": "d5f24fd8c79c6ca95d1a8582a75f78b44b2ff0a85a6bf98a2118f1d0770bcbd3",
+      "width": 390,
+      "height": 844
+    },
+    "F04-image-default-390x844-editor.png": {
+      "sha256": "c0e8b11cd5c63759957917af4bc94d45e77443f1f0c31f2e651749d5e1f41d3b",
+      "width": 370,
+      "height": 606
+    },
+    "F05-image-expanded-390x844-full.png": {
+      "sha256": "a3b4e15e7c267776453f8132ea5b6625d761340b8be97aa7791d1fd17e01c15d",
+      "width": 390,
+      "height": 844
+    },
+    "F05-image-expanded-390x844-editor.png": {
+      "sha256": "ea7e2d133f9b2ee584bfd690e604ccc25303e0bff906009dbdc201bc56c7b89c",
+      "width": 370,
+      "height": 740
+    },
+    "F06-image-empty-390x844-full.png": {
+      "sha256": "b5b67577fd5b402aa5eaefcdb15470b3ad354dabb02bb2a3fa321cad3904bb4a",
+      "width": 390,
+      "height": 844
+    },
+    "F06-image-empty-390x844-editor.png": {
+      "sha256": "c937ab4c5b00925de8b98d76d62eb31b9a725c8dab10047b5e5235de13e88675",
+      "width": 370,
+      "height": 606
+    },
+    "F07-model-text-default-390x844-full.png": {
+      "sha256": "a0aa8cac1dac216b5add7e6c8626544f8a5a6679ef6acd603860a199c20e0c8e",
+      "width": 390,
+      "height": 844
+    },
+    "F07-model-text-default-390x844-editor.png": {
+      "sha256": "b548eda041c35cc18e372f20dcfce7d89de35b2662f91e3249724f52440e4fd0",
+      "width": 370,
+      "height": 606
+    },
+    "F08-model-text-expanded-390x844-full.png": {
+      "sha256": "f38842e5e717abb81307647dd4aaa092fe2b5f2cc7f1d588c2fc683a16a037e6",
+      "width": 390,
+      "height": 844
+    },
+    "F08-model-text-expanded-390x844-editor.png": {
+      "sha256": "b001445261217b1da2a0499f65b2924b59ee141acef78112b1e7ad670e83e9b1",
+      "width": 370,
+      "height": 740
+    },
+    "F09-model-text-empty-390x844-full.png": {
+      "sha256": "8b677d4ef00c6f656d7f4d3080722ae4296d11661ac72db467d8151cb0f11a5a",
+      "width": 390,
+      "height": 844
+    },
+    "F09-model-text-empty-390x844-editor.png": {
+      "sha256": "a47805b3b741e5f36ecaa68b411ac5031ae10fb75e308083b5eb33d422364b20",
+      "width": 370,
+      "height": 606
+    },
+    "F10-model-image-default-390x844-full.png": {
+      "sha256": "2ac4960df9dd3e314eb64ea0b33cde541b35a33acdf6d8097969041531f6a838",
+      "width": 390,
+      "height": 844
+    },
+    "F10-model-image-default-390x844-editor.png": {
+      "sha256": "12ea495a4fa9793ce1732094faa1428df0957179dd9c712ce6586ceee8e2bbda",
+      "width": 370,
+      "height": 606
+    },
+    "F11-model-image-expanded-390x844-full.png": {
+      "sha256": "3c6983b1fb6e78c41112ac53f5a753273593718a308638a93ec51f1f56cfe631",
+      "width": 390,
+      "height": 844
+    },
+    "F11-model-image-expanded-390x844-editor.png": {
+      "sha256": "93159ffb0495fea4f8a079ef74a02a8cef6d8f9d84912c801c697a879588b774",
+      "width": 370,
+      "height": 740
+    },
+    "F12-model-image-empty-390x844-full.png": {
+      "sha256": "0097c5459a94e58ca278f5da14ee1d5326605d00d13109ecf29efde72be42443",
+      "width": 390,
+      "height": 844
+    },
+    "F12-model-image-empty-390x844-editor.png": {
+      "sha256": "27d2f0bd096e750a20a530f125429ba72e2bb05ffb6c4dc86ce10b9937c62190",
+      "width": 370,
+      "height": 606
+    },
+    "F01-text-default-3830x1688-full.png": {
+      "sha256": "097757d258c9bcbfda79bf05ebd9cac63f0ac676f818d8efc1d229c76058c97f",
+      "width": 3830,
+      "height": 1688
+    },
+    "F01-text-default-3830x1688-editor.png": {
+      "sha256": "4715c68a6b3a4ecd7b8675251082a1457a913dc6486ce814c90f02565fe8659a",
+      "width": 700,
+      "height": 360
+    },
+    "F01-text-default-3830x1688-card.png": {
+      "sha256": "f6186c0dd7651ca5900cec17f49cb88ee4b55ab8afe8bb11bd19e7af3a4d667a",
+      "width": 300,
+      "height": 160
+    },
+    "F01-text-default-3830x1688-card-title.png": {
+      "sha256": "cddd79295bb294480f5cc44714016f68bb02063608d6d4285a9395d3ad0274f4",
+      "width": 344,
+      "height": 200
+    },
+    "F02-text-expanded-3830x1688-full.png": {
+      "sha256": "6629a630934a87def4b96afdc6d75eeb273b6501b2df0566916e0040eb6f78ab",
+      "width": 3830,
+      "height": 1688
+    },
+    "F02-text-expanded-3830x1688-editor.png": {
+      "sha256": "f0869ce782488530472036372ffbbd6904072eedce8123d93d83672d23e1163c",
+      "width": 950,
+      "height": 360
+    },
+    "F02-text-expanded-3830x1688-card.png": {
+      "sha256": "2c7a30a600e4fc426f58994012f7a756cee3d62f92ea761dce0ef1f02dade1f8",
+      "width": 300,
+      "height": 160
+    },
+    "F03-text-empty-3830x1688-full.png": {
+      "sha256": "c4bcf11205c51f6b7423b4b674f1cc15731694f63dd3a7c53ed1d4ec8c9d42a2",
+      "width": 3830,
+      "height": 1688
+    },
+    "F03-text-empty-3830x1688-editor.png": {
+      "sha256": "d91b70a213ba6a310d9cfa3b35d9924508c9ae04f5c43bf89446ddf71c9fafa3",
+      "width": 700,
+      "height": 360
+    },
+    "F03-text-empty-3830x1688-card.png": {
+      "sha256": "3d2295d3806fcf52adf588844ffac66a78ec7cc76f24601c19aa65300bf02921",
+      "width": 300,
+      "height": 160
+    },
+    "F03-text-empty-3830x1688-card-title.png": {
+      "sha256": "cb26e095af6060e6036f490b1faf31d17284db3f017723011b5a99b573f6b8c0",
+      "width": 344,
+      "height": 200
+    },
+    "F04-image-default-3830x1688-full.png": {
+      "sha256": "927911c2411c1aed756fbf25fa00d32b0878eef5491af32a7978fb5e13502cd3",
+      "width": 3830,
+      "height": 1688
+    },
+    "F04-image-default-3830x1688-editor.png": {
+      "sha256": "f0d189eca5cbe4f7bdc31bdcb128c524032a588b38197b6d3b91d7cc4f27b4cb",
+      "width": 700,
+      "height": 319
+    },
+    "F04-image-default-3830x1688-card.png": {
+      "sha256": "69eb8df51ad92d35a610b1f103592961dfb41c7e164dea9899f6ac548ee1d136",
+      "width": 300,
+      "height": 225
+    },
+    "F04-image-default-3830x1688-card-title.png": {
+      "sha256": "02aad59a780c15e953b4bfec75998babc0c4eb027f758636a676b3a2180b3082",
+      "width": 344,
+      "height": 265
+    },
+    "F05-image-expanded-3830x1688-full.png": {
+      "sha256": "f3cb1f412dd6e38b05800de8addb4158e2f14c391c090c44f2d0f86e8d972e84",
+      "width": 3830,
+      "height": 1688
+    },
+    "F05-image-expanded-3830x1688-editor.png": {
+      "sha256": "ca844675672acc5c5e33fcb67853508963a85541c8713f824a275cc87a3449b8",
+      "width": 950,
+      "height": 320
+    },
+    "F05-image-expanded-3830x1688-card.png": {
+      "sha256": "2344ffb7e7099003b662ae1cafad6b570360b9e0f9652b1313eb2a269e3772fc",
+      "width": 300,
+      "height": 225
+    },
+    "F06-image-empty-3830x1688-full.png": {
+      "sha256": "2adcc9bf6b27dfb46e97b828e6afd12903047fe4380bfa5159c2e17d8897ce49",
+      "width": 3830,
+      "height": 1688
+    },
+    "F06-image-empty-3830x1688-editor.png": {
+      "sha256": "8664fe9eb276bc0837bc0adee6421fd55dd3ce4a28296ff5d9f93e127b2cc46a",
+      "width": 700,
+      "height": 315
+    },
+    "F06-image-empty-3830x1688-card.png": {
+      "sha256": "8ebdf4bfda89c64a750f7934660e951d4df830e271375a38dd0f4109938d6d92",
+      "width": 300,
+      "height": 225
+    },
+    "F06-image-empty-3830x1688-card-title.png": {
+      "sha256": "973a5ddd50509ba08c4e76fe99d43aabd5e161092c08d0902bd8c06046c51dd3",
+      "width": 344,
+      "height": 265
+    },
+    "F07-model-text-default-3830x1688-full.png": {
+      "sha256": "fc33d90fbc81b1706819cf88337e5fdd5d45c973acea8730b2014b182f372c47",
+      "width": 3830,
+      "height": 1688
+    },
+    "F07-model-text-default-3830x1688-editor.png": {
+      "sha256": "bdbd0e03cd81a5a83f4f0f468791f97a2699f106a58e8bab9c2c8e13437538fe",
+      "width": 700,
+      "height": 309
+    },
+    "F07-model-text-default-3830x1688-card.png": {
+      "sha256": "ed7fa631f41d159c0210e39613a06bf1571c1b35588f057d7a51710abe76804c",
+      "width": 300,
+      "height": 180
+    },
+    "F07-model-text-default-3830x1688-card-title.png": {
+      "sha256": "361a1c944fcdaa3d1e4ae59ea0e8b64b44c47c57cacab21076e82f58f97517da",
+      "width": 344,
+      "height": 220
+    },
+    "F08-model-text-expanded-3830x1688-full.png": {
+      "sha256": "5a5c3d44040b17ab39a575f75f0b29209c4f11aafb7754b0168a8d4be72192a6",
+      "width": 3830,
+      "height": 1688
+    },
+    "F08-model-text-expanded-3830x1688-editor.png": {
+      "sha256": "239d5399d658f41e9343ac5827f27ee6f882289cbbf04c8f23ad888ffaaf7b8e",
+      "width": 950,
+      "height": 310
+    },
+    "F08-model-text-expanded-3830x1688-card.png": {
+      "sha256": "fa14b6e79ef2e5b020d248e2e07b7d7837f6c8a54359d7753af09c27060382b5",
+      "width": 300,
+      "height": 180
+    },
+    "F09-model-text-empty-3830x1688-full.png": {
+      "sha256": "fa0c987bd7fa3394d5fdbd703faa8b96363b875bc1ff8e1cd89859e38b19a21f",
+      "width": 3830,
+      "height": 1688
+    },
+    "F09-model-text-empty-3830x1688-editor.png": {
+      "sha256": "fa14ba3a7d761489321c96f343d007f7b96b93ee3b43941c83cc7d43bd898fa3",
+      "width": 700,
+      "height": 309
+    },
+    "F09-model-text-empty-3830x1688-card.png": {
+      "sha256": "fe8528dc7b4070f5c5ee3e017533c991235e023d508bab30a01c94f29de18d68",
+      "width": 300,
+      "height": 180
+    },
+    "F09-model-text-empty-3830x1688-card-title.png": {
+      "sha256": "856102807b72e935e645906fcf11a942b44e3ddc074cc05858e69845293669e5",
+      "width": 344,
+      "height": 220
+    },
+    "F10-model-image-default-3830x1688-full.png": {
+      "sha256": "6ad8458aeb96aca58ce08d2eb42c48f00fe10f88b5fd389c9c8d40a1a8179b27",
+      "width": 3830,
+      "height": 1688
+    },
+    "F10-model-image-default-3830x1688-editor.png": {
+      "sha256": "e27dc741f5701037cfbc87240cb14f7042c94e1d28dca032f5e84b2939b84b3c",
+      "width": 700,
+      "height": 309
+    },
+    "F10-model-image-default-3830x1688-card.png": {
+      "sha256": "4a060b11f1088870caccc84c60aa8f80f41d617f1010a127ce58032e8c347264",
+      "width": 340,
+      "height": 225
+    },
+    "F10-model-image-default-3830x1688-card-title.png": {
+      "sha256": "114744ef0c344ae2e59d0e01f4443c26fe326918adb419a9a426925dc7e7b5d8",
+      "width": 384,
+      "height": 265
+    },
+    "F11-model-image-expanded-3830x1688-full.png": {
+      "sha256": "61ef6c68ebbd3ceadbfa79ffea4e08ecca6207f417ac32135a37f78e363d775b",
+      "width": 3830,
+      "height": 1688
+    },
+    "F11-model-image-expanded-3830x1688-editor.png": {
+      "sha256": "df1d551a7f06340c7a14f0eb03228f044bfa4402f7c7525e9229aaf5e2bfc11c",
+      "width": 950,
+      "height": 310
+    },
+    "F11-model-image-expanded-3830x1688-card.png": {
+      "sha256": "d3e29afecc4bef708a9a1354900a30c62f8af112b86490eef0e478d0f861d973",
+      "width": 340,
+      "height": 225
+    },
+    "F12-model-image-empty-3830x1688-full.png": {
+      "sha256": "a90fa42801a1d36695c7659bf7c2e1e750adb6d62e075b501df138b6ff28a9e4",
+      "width": 3830,
+      "height": 1688
+    },
+    "F12-model-image-empty-3830x1688-editor.png": {
+      "sha256": "0ef1d39df9577ef779e74828a041502623e1f54d551c218722b54141a6c5273f",
+      "width": 700,
+      "height": 309
+    },
+    "F12-model-image-empty-3830x1688-card.png": {
+      "sha256": "bd27b294d79fc7716fa7747499b02a45cea7248b3966a02b7f655fdb66963622",
+      "width": 340,
+      "height": 225
+    },
+    "F12-model-image-empty-3830x1688-card-title.png": {
+      "sha256": "49e3e347a9aecf646a200ea7c0e8e7a003c12f2fa3f48fba15e48b7035d010f1",
+      "width": 384,
+      "height": 265
+    }
+  }
+}

@@ -199,3 +199,32 @@ node front/tests/workspaceShootSteps.browser.mjs
 应用壳的项目/资产/三类实验室交互通过注册用例运行：`PLAYWRIGHT_CHANNEL=chrome node front/tests/run-browser.mjs legacy-labs`（4184端口）。该入口明确设置`SHELL_INTERACTIONS_ONLY=1 SHELL_LAB_REGRESSION_ONLY=1`，默认完整壳脚本的原断言仍保持启用。此范围明确不含末段旧场次壳断言；当前场次工作台使用统一runner的`canvas-graph`单独回归。完整规格证据与实际限制见`.scratch/generation-canvas/acceptance.md`。
 
 `generation-canvas-guidance` 验证创作控制、生成指导、验收要求的真实编辑，拖拽建立验收候选、三类使用方明确关联及取消、只读采用记录、完整标准的模型直接采用、保存重开和窄屏。测试只替换供应商与媒体存储边界。
+
+## Four-card versioned visual evidence
+
+The confirmed C target is retained at `front/tests/visual-baselines/c-794ee4a0-v1/manifest.json` with original PNGs, SHA-256 identities, source revision, capture boundaries, applicable review regions and `contract.md`. The 36 combinations are F01–F12 at 1440×960, 390×844 and 3830×1688, zoom 1. Target mobile cards are explicitly absent in the prototype; actual mobile card evidence is still required. The contract records text overrides of prototype defects and placeholders. An update requires an explicitly reviewed new version directory and a reason; keep the previous version. This CLI never accepts actual screenshots as new targets.
+
+Use the existing runner to capture current behavior and evidence (Node 24 and the configured Playwright browser):
+
+```bash
+C60_PROTOTYPE_MANIFEST="$PWD/front/tests/visual-baselines/c-794ee4a0-v1/manifest.json" \
+  pnpm --dir front run test:browser generation-canvas-four-card-acceptance
+```
+
+Use the suite id from `browser-suites.json` if selecting by another supported alias. The runner's existing output/archive directory contains `matrix.json`, page/card/editor originals, `visual-states.json` (capture-time public HTTP card/output state, zoom/viewport and image identity), `visual-run.json` (actual source/fixture revision, fixture content hashes, dirty-worktree information and environment), `visual-result.json` and `visual-index.md`. Images retain original dimensions. The index links individual originals; per-group real model parameters, adopted structured references, output identity and material differences appear in the result. Card crops include external titles; retained prototype body crops are supplemented with title crops for desktop default/empty states.
+
+Recheck an archived run without starting the app or executing a model:
+
+```bash
+node front/scripts/visual-evidence.mjs \
+  --manifest front/tests/visual-baselines/c-794ee4a0-v1/manifest.json \
+  --matrix /path/to/evidence/matrix.json \
+  --run /path/to/evidence/visual-run.json \
+  --output /path/to/evidence/visual-result.json
+```
+
+The three conclusions are independent: `behavior.status` is `passed`/`failed`; `evidence.status` is `reviewable`, `failed` or `not-checked`; `visual.status` remains `not-reviewed`. Missing/mismatched groups, versions, state, images or original identities fail with the affected combination and reason. `reviewable` proves mechanical completeness, never visual agreement. Matrix-embedded legacy `target` fields are ignored; the supplied versioned manifest is authoritative. Actual image paths resolve against the matrix directory; target paths are relative to the versioned manifest. Result image entries include `relativePath` relative to the output file for archived actual evidence; the repository retains target originals. Rerun the CLI after relocating an archive to refresh absolute convenience links.
+
+An ordinary run without `C60_PROTOTYPE_MANIFEST` can pass its behavior assertions while reporting evidence `not-checked` and visual `not-reviewed`. The same explicit classification can be inspected independently with `node front/scripts/visual-evidence.mjs --behavior passed`. CLI failure exits nonzero, including a failed behavior result; a successful evidence check cannot promote visual status. Human signoff must bind reviewed image and contract content identities separately.
+
+Public CLI regression: `node --test front/tests/visualEvidence.test.mjs`. Controlled fixtures used there are deliberately synthetic evidence tests, not product acceptance or human review records.

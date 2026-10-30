@@ -1,3 +1,4 @@
+import { recordVisualState, writeVisualEvidence } from './visual-evidence-output.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { prepareCanvasCard, moveCanvasCard, clearCanvasNeighbors, pressCanvasControl, assertControlReachable, captureCanvasRegion, captureCanvasFailure } from './generationCanvasWorkbench.browser-helpers.mjs'
@@ -73,6 +74,7 @@ try{
     await page.screenshot({path:join(output,`${prefix}-page.png`),fullPage:true})
     const target=targets?.groups.find(g=>g.id===f&&g.viewport.width===width)
     matrix.push({id:f,kind,state,viewport:{width,height},formal:{page:`${prefix}-page.png`,editor:`${prefix}-editor.png`,card:`${prefix}-card.png`},target:target||'Use retained C prototype manifest by matching F and viewport'})
+    await recordVisualState(output,prefix,{viewport:page.viewportSize(),zoom:Number.parseFloat(await page.getByLabel('画布缩放比例').innerText())/100,card:(await read()).document.cards.find(c=>c.id===id),outputs:(await runtime()).current_outputs[id]||[],media:await editor.locator('img').evaluateAll(images=>images.map(image=>({src:image.getAttribute('src'),width:image.naturalWidth,height:image.naturalHeight})))})
     return prefix
   }
   for(const [width,height] of [[1440,960],[390,844],[3830,1688]]){
@@ -111,5 +113,5 @@ try{
       await editor.getByRole('button',{name:'展开详情',exact:true}).click();const expandedHit=await assertControlReachable(action,'initial expanded');await exercise(id,action);await page.screenshot({path:join(output,`${id}-${edge}-expanded.png`),fullPage:true});edgesEvidence.push({id,edge,positionBeforeOpen,positionAfterOpen,initialHit,expandedHit,action:'real file-picker cancel or material Enter/Escape, default/expanded'})
     }
   }
-  writeFileSync(join(output,'edge-evidence.json'),JSON.stringify(edgesEvidence,null,2));writeFileSync(join(output,'final-document.json'),JSON.stringify(await read(),null,2));console.log('PASS C60 same-canvas four-card F01–F12/three-viewports, real import/replace/adopt/generate/mapping/history/reopen and edge interaction',output)
-}catch(error){if(page)await captureCanvasFailure(page,output,error);throw error}finally{await cleanup()}
+  writeFileSync(join(output,'edge-evidence.json'),JSON.stringify(edgesEvidence,null,2));writeFileSync(join(output,'final-document.json'),JSON.stringify(await read(),null,2));await writeVisualEvidence(output,{behavior:'passed',manifest:process.env.C60_PROTOTYPE_MANIFEST,browserVersion:browser.version()});console.log('C60 behavior assertions passed: same-canvas four-card F01–F12/three-viewports, real import/replace/adopt/generate/mapping/history/reopen and edge interaction',output)
+}catch(error){if(!error.evidenceFailure)await writeVisualEvidence(output,{behavior:'failed',manifest:process.env.C60_PROTOTYPE_MANIFEST,browserVersion:browser?.version()}).catch(summaryError=>console.error('evidence summary unavailable:',summaryError.message));if(page)await captureCanvasFailure(page,output,error);throw error}finally{await cleanup()}
