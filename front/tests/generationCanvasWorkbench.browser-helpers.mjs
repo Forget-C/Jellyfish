@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 
 /** 摘要只负责定位；所有字段与运行动作都在唯一工作台详情中操作。 */
 export async function openCanvasCard(page, id) {
@@ -91,4 +93,127 @@ export async function openModelInspection(page) {
     const summary = editor.locator('summary').filter({ hasText: label }).first()
     if (await summary.count() && await summary.locator('..').getAttribute('open') === null) await summary.click()
   }
+}
+
+/** Check the current center hit before any focus or scroll; phase names keep initial and user-scrolled evidence distinct. */
+export async function assertControlReachable(control, phase = 'initial') {
+  const hit = await control.evaluate(element => {
+    const rect = element.getBoundingClientRect(), x = rect.x + rect.width / 2, y = rect.y + rect.height / 2
+    const target = document.elementFromPoint(x, y)
+    return { reachable: rect.width > 0 && rect.height > 0 && !element.closest('[inert]') && !!target && element.contains(target),
+      rect: rect.toJSON(), target: target?.outerHTML.slice(0, 500), scroll: { x: scrollX, y: scrollY } }
+  })
+  assert.ok(hit.reachable, `control not reachable (${phase}): ${JSON.stringify(hit)}`)
+  return { phase, ...hit }
+}
+
+/** Best-effort evidence must never replace the assertion or browser error that caused the failure. */
+export async function captureCanvasFailure(page, output, error, prefix = 'failure') {
+  const report = { error: { name: error.name, message: error.message, stack: error.stack }, diagnosticErrors: [] }
+  const attempt = async (name, action) => {
+    try { return await action() }
+    catch (failure) { report.diagnosticErrors.push({ name, message: failure.message }) }
+  }
+  report.geometry = await attempt('geometry', () => page.evaluate(() => {
+    const describe = element => {
+      const box = element.getBoundingClientRect(), target = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)
+      return { tag: element.tagName, label: element.getAttribute('aria-label'), rect: box.toJSON(),
+        clientHeight: element.clientHeight, scrollHeight: element.scrollHeight, clientWidth: element.clientWidth, scrollWidth: element.scrollWidth,
+        scrollTop: element.scrollTop, scrollLeft: element.scrollLeft, inert: !!element.closest('[inert]'), focused: element === document.activeElement,
+        hit: target?.outerHTML.slice(0, 500), centerHit: !!target && element.contains(target) }
+    }
+    const selectors = ['.generation-card-editor:not([hidden])', '.wb-details-body', '.wb-details-header', '.generation-editor-actions', '.generation-workbench-header', '.generation-browse', '.canvas-filters', '.generation-card-categories', '.generation-view-tools', '[data-card-id]', '.generation-card-editor:not([hidden]) button']
+    return { viewport: { width: innerWidth, height: innerHeight, devicePixelRatio }, scroll: { x: scrollX, y: scrollY },
+      zoom: getComputedStyle(document.querySelector('.generation-world') || document.body).transform,
+      focus: document.activeElement?.outerHTML.slice(0, 500),
+      elements: selectors.flatMap(selector => [...document.querySelectorAll(selector)].filter(element => element.getClientRects().length).map(element => ({ selector, ...describe(element) }))) }
+  }))
+  await attempt('page screenshot', () => page.screenshot({ path: join(output, `${prefix}-page.png`), fullPage: true, timeout: 2000 }))
+  await attempt('editor screenshot', async () => {
+    const box = await page.locator('.generation-card-editor:visible').boundingBox({ timeout: 1500 })
+    if (!box) throw new Error('no visible editor')
+    await page.screenshot({ path: join(output, `${prefix}-editor.png`), clip: box, timeout: 2000 })
+  })
+  await attempt('write diagnostics', () => writeFile(join(output, `${prefix}-diagnostics.json`), JSON.stringify(report, null, 2) + '\n'))
+  if (report.diagnosticErrors.length) console.error('Diagnostic gaps:', JSON.stringify(report.diagnosticErrors))
+  return report
+}
+
+/** Keep native page scroll fixed while sending real keys, including to cards outside the current viewport. */
+export async function pressCanvasControl(page, control, key) {
+  await control.evaluate(element => element.focus({ preventScroll: true }))
+  await page.keyboard.press(key)
+}
+
+/** Explicit coordinates are for scenario setup (including edge regressions), never silently made safe. */
+export async function moveCanvasCard(page, id, x, y) {
+  const card = page.locator(`[data-card-id="${id}"]`), mover = card.getByRole('button', { name: /^移动布局：/ })
+  await mover.evaluate(element => element.focus({ preventScroll: true }))
+  for (let step = 0; step < 250; step++) {
+    const box = await card.boundingBox()
+    if (Math.abs(box.x - x) <= 10 && Math.abs(box.y - y) <= 10) return
+    await page.keyboard.press(Math.abs(box.x - x) > 10 ? box.x < x ? 'ArrowRight' : 'ArrowLeft' : box.y < y ? 'ArrowDown' : 'ArrowUp')
+  }
+  throw new Error(`cannot move canvas card ${id} to ${x},${y}`)
+}
+
+/** Move intersecting neighbors through their public layout controls; do not hide cards or alter styles. */
+export async function clearCanvasNeighbors(page, id) {
+  const target = page.locator(`[data-card-id="${id}"]`)
+  for (const card of await page.locator('[data-card-id]').all()) {
+    if (await card.getAttribute('data-card-id') === id) continue
+    const mover = card.getByRole('button', { name: /^移动布局：/ })
+    await mover.evaluate(element => element.focus({ preventScroll: true }))
+    for (let step = 0; step < 150; step++) {
+      const a = await target.boundingBox(), b = await card.boundingBox()
+      if (b.x >= a.x + a.width + 20 || b.x + b.width <= a.x - 20 || b.y >= a.y + a.height + 20 || b.y + b.height <= a.y - 20) break
+      assert.ok(step < 149, `cannot clear neighbor ${await card.getAttribute('data-card-id')}`)
+      await page.keyboard.press('ArrowRight')
+    }
+  }
+}
+
+/** Ordinary evidence setup uses measured chrome bounds. Edge tests must use moveCanvasCard instead. */
+export async function prepareCanvasCard(page, id) {
+  await page.locator('.generation-browse').waitFor()
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+  const bounds = await page.evaluate(() => {
+    const surface = document.querySelector('.generation-surface').getBoundingClientRect()
+    let left = Math.max(0, surface.left), top = Math.max(0, surface.top)
+    for (const element of document.querySelectorAll('.generation-card-categories, .generation-workbench-header, .generation-browse, .canvas-filters, .canvas-breadcrumb')) {
+      if (!element.getClientRects().length) continue
+      const box = element.getBoundingClientRect()
+      if (element.matches('.generation-card-categories')) left = Math.max(left, box.right)
+      else top = Math.max(top, box.bottom)
+    }
+    return { x: left + 16, y: top + 24 }
+  })
+  await moveCanvasCard(page, id, bounds.x, bounds.y)
+  await clearCanvasNeighbors(page, id)
+  await assertControlReachable(page.locator(`[data-card-id="${id}"]`).getByRole('button', { name: /^移动布局：/ }), 'prepared')
+}
+
+/** Wait for fonts, actual media loading and stable geometry, then clip the page without locator auto-scroll. */
+export async function captureCanvasRegion(page, region, path) {
+  const handle = await region.elementHandle()
+  await page.waitForFunction(element => document.fonts.status === 'loaded' && [...element.querySelectorAll('img')].every(image => image.complete && image.naturalWidth > 0), handle, { timeout: 5000 })
+  await region.evaluate(element => new Promise((resolve, reject) => {
+    let previous, stable = 0
+    const deadline = performance.now() + 3000
+    const measure = () => {
+      const rect = element.getBoundingClientRect(), current = JSON.stringify(rect.toJSON())
+      stable = current === previous ? stable + 1 : 0
+      previous = current
+      if (stable >= 3) resolve()
+      else if (performance.now() > deadline) reject(new Error('capture region layout did not settle'))
+      else requestAnimationFrame(measure)
+    }
+    measure()
+  }))
+  const box = await region.boundingBox(), viewport = page.viewportSize()
+  assert.ok(box && box.x >= 0 && box.y >= 0 && box.x + box.width <= viewport.width + 1 && box.y + box.height <= viewport.height + 1, `capture region is outside viewport: ${JSON.stringify(box)}`)
+  const before = await page.evaluate(() => ({ x: scrollX, y: scrollY }))
+  await page.screenshot({ path, clip: box, scale: 'css', animations: 'disabled' })
+  assert.deepEqual(await page.evaluate(() => ({ x: scrollX, y: scrollY })), before, 'capture preserves native scroll')
+  return { viewport, region: box, scroll: before, zoom: await page.locator('.generation-world').evaluate(element => getComputedStyle(element).transform) }
 }

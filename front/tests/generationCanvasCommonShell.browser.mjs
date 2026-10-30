@@ -1,9 +1,10 @@
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
+import * as capture from './generationCanvasWorkbench.browser-helpers.mjs'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
-import { writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
 import { createServer } from 'vite'
@@ -43,22 +44,25 @@ try {
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({request_id:'seed',expected_revision:0,document}) })
   assert.ok(seeded.ok, await seeded.text())
   await page.goto(`http://127.0.0.1:4455/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
-  const pressWithoutScroll = async (control, key) => {
-    await control.evaluate(element => element.focus({ preventScroll: true }))
-    await page.keyboard.press(key)
-  }
-  const placeCardInView = async card => {
-    const mover = card.getByRole('button',{name:/^移动布局：/})
-    const browse = await page.locator('.generation-browse').boundingBox()
-    const x = page.viewportSize().width === 390 ? 74 : 200
-    const y = Math.max(180, (browse?.y || 0) + (browse?.height || 0) + 16)
-    for (let step=0;step<150;step++) {
-      const box = await card.boundingBox()
-      if (Math.abs(box.x-x)<=20 && Math.abs(box.y-y)<=20) return
-      await pressWithoutScroll(mover, Math.abs(box.x-x)>20 ? box.x<x?'ArrowRight':'ArrowLeft' : box.y<y?'ArrowDown':'ArrowUp')
+  // Explicit fault scenarios exercise the public runner's failing exit and retained original error.
+  if (process.env.CANVAS_CAPTURE_FAILURE) {
+    assert.ok(['blocked-control', 'closed-page'].includes(process.env.CANVAS_CAPTURE_FAILURE), 'unknown capture fault scenario')
+    await capture.pressCanvasControl(page, page.locator('[data-card-id="text"]'), 'Enter')
+    await page.locator('.generation-card-editor:visible').waitFor()
+    if (process.env.CANVAS_CAPTURE_FAILURE === 'closed-page') {
+      await page.close()
+      throw new Error('deliberate closed-page assertion remains original')
     }
-    throw Error('cannot place card in the visible canvas')
+    await page.getByRole('button', { name: '关闭详情', exact: true }).evaluate(button => {
+      const rect = button.getBoundingClientRect(), obstruction = document.createElement('div')
+      Object.assign(obstruction.style, { position: 'fixed', left: `${rect.x}px`, top: `${rect.y}px`, width: `${rect.width}px`, height: `${rect.height}px`, zIndex: '2147483647', background: 'red' })
+      document.body.append(obstruction)
+    })
+    await capture.assertControlReachable(page.getByRole('button', { name: '关闭详情', exact: true }), 'initial deliberate obstruction')
+    throw new Error('blocked control was incorrectly accepted')
   }
+  const pressWithoutScroll = (control, key) => capture.pressCanvasControl(page, control, key)
+  const placeCardInView = async card => capture.prepareCanvasCard(page, await card.getAttribute('data-card-id'))
   for (const viewport of [{width:1440,height:960},{width:3830,height:1688},{width:390,height:844}]) {
     await page.setViewportSize(viewport)
     for (const id of ['text','image','model-text','model-image']) {
@@ -70,6 +74,7 @@ try {
       const header=editor.locator('header').first()
       assert.ok(await header.locator('[aria-hidden="true"]').count(), 'editor has modality icon')
       assert.equal(await header.getByText('修改已同步',{exact:true}).count(),0,'normal saved state does not occupy header')
+      await capture.assertControlReachable(editor.getByRole('button',{name:'展开详情',exact:true}), 'initial')
       await editor.getByRole('button',{name:'展开详情',exact:true}).click({trial:true})
       await editor.getByRole('button',{name:'关闭详情',exact:true}).click({trial:true})
       if(viewport.width>700){
@@ -78,17 +83,15 @@ try {
         assert.ok(box.x >= rail.x+rail.width+8,'editor avoids permanent category rail')
       }
       await page.mouse.move(140,20)
-      await page.waitForTimeout(150)
+      await capture.captureCanvasRegion(page, editor, join(output,`${id}-${viewport.width}-default-editor.png`))
       await page.screenshot({path:join(output,`${id}-${viewport.width}-default.png`)})
-      await page.screenshot({path:join(output,`${id}-${viewport.width}-default-editor.png`),clip:await editor.boundingBox()})
       await editor.getByRole('button',{name:'展开详情',exact:true}).click()
-      await page.waitForFunction(()=>document.querySelector('.generation-card-editor:not([hidden])')?.getAttribute('data-expanded')==='true').catch(()=>{})
+      await page.waitForFunction(()=>document.querySelector('.generation-card-editor:not([hidden])')?.getAttribute('data-expanded')==='true')
       await editor.getByRole('button',{name:'收起详情',exact:true}).click({trial:true})
       await editor.getByRole('button',{name:'关闭详情',exact:true}).click({trial:true})
       await page.mouse.move(140,20)
-      await page.waitForTimeout(150)
+      await capture.captureCanvasRegion(page, editor, join(output,`${id}-${viewport.width}-expanded-editor.png`))
       await page.screenshot({path:join(output,`${id}-${viewport.width}-expanded.png`)})
-      await page.screenshot({path:join(output,`${id}-${viewport.width}-expanded-editor.png`),clip:await editor.boundingBox()})
       await editor.getByRole('button',{name:'收起详情',exact:true}).click()
       await editor.getByRole('button',{name:'关闭详情',exact:true}).click()
       if(viewport.width===390 && id==='text') {
@@ -126,6 +129,7 @@ try {
       const rail=await page.getByRole('toolbar',{name:'卡片分类',exact:true}).boundingBox()
       const box=await editor.boundingBox()
       assert.ok(box.x>=rail.x+rail.width+8 && box.x+box.width<=1440,'edge editor avoids rail and viewport')
+      await capture.assertControlReachable(editor.getByRole('button',{name:'展开详情',exact:true}), 'initial')
       await editor.getByRole('button',{name:'展开详情',exact:true}).click({trial:true})
       await editor.getByRole('button',{name:'关闭详情',exact:true}).click({trial:true})
       await page.screenshot({path:join(output,`${id}-${edge}-avoidance.png`)})
@@ -160,8 +164,63 @@ try {
   await page.reload()
   await page.locator('[data-card-id="text"]').press('Enter')
   assert.equal(await page.getByRole('textbox',{name:'文本内容',exact:true}).inputValue(),'会话与保存保持')
+  // A real overlay must fail initial hit testing, without scrolling the control into view.
+  const closeControl = page.getByRole('button', { name: '关闭详情', exact: true })
+  await closeControl.evaluate(button => {
+    const box = button.getBoundingClientRect(), overlay = document.createElement('div')
+    overlay.id = 'capture-obstruction'
+    Object.assign(overlay.style, { position: 'fixed', left: `${box.x}px`, top: `${box.y}px`, width: `${box.width}px`, height: `${box.height}px`, zIndex: '2147483647', background: 'red' })
+    document.body.append(overlay)
+  })
+  await assert.rejects(() => capture.assertControlReachable(closeControl, 'initial'), /not reachable.*initial/)
+  await page.locator('#capture-obstruction').evaluate(element => element.remove())
+  await capture.assertControlReachable(closeControl, 'initial')
+  const original = new Error('deliberate capture failure')
+  await capture.captureCanvasFailure(page, output, original, 'deliberate')
+  const diagnostic = JSON.parse(readFileSync(join(output, 'deliberate-diagnostics.json'), 'utf8'))
+  assert.equal(diagnostic.error.message, original.message)
+  assert.ok(diagnostic.geometry.elements.some(element => element.selector === '.wb-details-body'))
+  assert.ok(diagnostic.geometry.elements.some(element => element.selector === '.generation-browse'))
+  assert.ok(readFileSync(join(output, 'deliberate-page.png')).length > 100)
+  assert.ok(readFileSync(join(output, 'deliberate-editor.png')).length > 100)
+  const closedPage = await browser.newPage()
+  await closedPage.close()
+  await capture.captureCanvasFailure(closedPage, output, original, 'closed')
+  const closed = JSON.parse(readFileSync(join(output, 'closed-diagnostics.json'), 'utf8'))
+  assert.equal(closed.error.message, original.message)
+  assert.ok(closed.diagnosticErrors.length > 0, 'closed page diagnostic errors are recorded without replacing original')
+  await page.getByRole('button', { name: '关闭详情', exact: true }).click()
+  await page.setViewportSize({ width: 390, height: 844 })
+  const initialScroll = await page.evaluate(() => ({ x: scrollX, y: scrollY }))
+  const offscreen = await page.locator('[data-card-id="text"]').boundingBox()
+  assert.ok(offscreen.x + offscreen.width > 390 || offscreen.x < 0 || offscreen.y < 0 || offscreen.y + offscreen.height > 844, 'viewport switch actually leaves the card partly outside the screen')
+  await capture.moveCanvasCard(page, 'image', offscreen.x, offscreen.y)
+  const neighbor = await page.locator('[data-card-id="image"]').boundingBox()
+  assert.ok(neighbor.x < offscreen.x + offscreen.width && neighbor.x + neighbor.width > offscreen.x && neighbor.y < offscreen.y + offscreen.height && neighbor.y + neighbor.height > offscreen.y, 'ordinary evidence starts with a genuinely intersecting neighbor')
+  await capture.prepareCanvasCard(page, 'text')
+  const preparedTitle = page.locator('[data-card-id="text"]').getByRole('button', { name: /^移动布局：/ })
+  await capture.assertControlReachable(preparedTitle, 'initial')
+  const titleBox = await preparedTitle.boundingBox(), browseBox = await page.locator('.canvas-filters').boundingBox()
+  assert.ok(titleBox.y >= browseBox.y + browseBox.height, 'wrapped mobile filters leave the title exposed')
+  assert.deepEqual(await page.evaluate(() => ({ x: scrollX, y: scrollY })), initialScroll, 'offscreen preparation does not scroll the native page')
+  await capture.pressCanvasControl(page, page.locator('[data-card-id="text"]'), 'Enter')
+  const panel = page.locator('.generation-card-editor:visible')
+  await panel.waitFor()
+  const longInput = panel.getByRole('textbox', { name: '文本内容', exact: true })
+  await longInput.fill('明确内部滚动。\n'.repeat(100))
+  const initialReachability = await capture.assertControlReachable(longInput, 'initial')
+  await capture.pressCanvasControl(page, longInput, 'ControlOrMeta+End')
+  assert.ok(await longInput.evaluate(element => element.scrollTop > 0), 'explicit user key scrolls long text internally')
+  const scrolledReachability = await capture.assertControlReachable(longInput, 'after explicit ControlOrMeta+End')
+  writeFileSync(join(output, 'scroll-reachability.json'), JSON.stringify({ initial: initialReachability, afterUserScroll: scrolledReachability }, null, 2))
+  const beforeCapture = await panel.boundingBox()
+  await capture.captureCanvasRegion(page, panel, join(output, 'native-region.png'))
+  assert.deepEqual(await panel.boundingBox(), beforeCapture, 'region screenshot keeps the demonstrated position')
+  const png = readFileSync(join(output, 'native-region.png'))
+  assert.ok(Math.abs(png.readUInt32BE(16) - beforeCapture.width) <= 1, 'native region retains CSS pixel width')
+  assert.ok(Math.abs(png.readUInt32BE(20) - beforeCapture.height) <= 1, 'native region retains CSS pixel height')
   console.log('PASS four common shells, three viewports, retained session and HTTP reopen',output)
 } catch (error) {
-  if (page) await page.screenshot({path:join(output,'failed-page.png'),fullPage:true}).catch(()=>{})
+  if (page) await capture.captureCanvasFailure(page, output, error)
   throw error
 } finally { await cleanup() }
