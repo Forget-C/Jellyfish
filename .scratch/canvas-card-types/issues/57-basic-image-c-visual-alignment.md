@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented (awaiting integration and final review)
+**Completion:** integrated (awaiting final review)
 
 - [x] 卡面主体铺满图片，无“固定媒体”重复段落或通用20px内边距中的小图；100%比例参考约300px宽、225px总高和185px主体；缩略图可cover，编辑预览contain，不改变原文件。
 - [x] 默认编辑左侧约65%大预览、右侧窄信息列，先文件名，再单列纵向“尺寸标签→值→类型标签→值→来源标签→值”；未知／读取中如实显示，不能伪造元数据。
@@ -26,3 +26,5 @@
 - 2026-10-30：用户确认本拆分并授权发布票据与依赖图；本轮暂不开始实现。Status仅为分诊状态，所有验收尚未执行；01–54完成记录及旧证据保留。
 
 - 2026-10-30：57实现与逐类验收完成，三视口F04–F06、真实上传／选择／取消／失败重试、只读及HTTP重开见[本票验收](../visual-c57-image-acceptance.md)。原始分诊状态保留；尚待合入集成与最终审查，不冒称60已通过。
+
+- 2026-10-30：已由合并代理以 `bd67dc3c` 集成至 `codex-generation-canvas`。源分支先合入56基线，卡宽单处冲突合并为基础文本／图片均300px，保留56只读正文例外与57图片摘要；组合后Node24 typecheck和统一入口图片回归16.5s通过，证据 `/private/tmp/c57-merge-verified`。产品／测试树与该复验源完全一致，62历史文件SHA256不变，最终整体审查由60收口。
