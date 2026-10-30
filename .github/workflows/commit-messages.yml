@@ -21,7 +21,7 @@ jobs:
           node-version: '24'
 
       - name: Test commit validation with real Git repositories
-        run: node --test scripts/check-commit-subject.test.mjs
+        run: node --test scripts/check-commit-subject.test.mjs scripts/repository-hooks.test.mjs
 
       - name: Verify first line of each commit
         env:
