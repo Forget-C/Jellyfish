@@ -41,9 +41,8 @@ export function TextContentEditor({ card, disabled, onChange }: { card: TextCard
     <footer>
       <span className="generation-text-count">{(card.text || '').length} 字</span>
       {disabled && <small>只读 · 内容可查看，暂不可修改</small>}
-      <Space wrap><WorkbenchButton icon={<UploadOutlined />} disabled={disabled || reading} loading={reading} onClick={() => input.current?.click()}>导入文本文件</WorkbenchButton>
-        <small className="generation-import-status" role="status">{reading ? '正在读取文本文件…' : importedName ? `已导入：${importedName}` : '支持 TXT、Markdown'}</small>
-      </Space>
+      <WorkbenchButton variant="quiet" title={importedName ? `支持 TXT、Markdown · 已导入：${importedName}` : '支持 TXT、Markdown'} icon={<UploadOutlined />} disabled={disabled || reading} loading={reading} onClick={() => input.current?.click()}>导入文本</WorkbenchButton>
+      {reading && <small className="generation-import-status" role="status">正在读取文本文件…</small>}
     </footer>
   </div>
 }

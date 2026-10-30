@@ -8,8 +8,8 @@ import { WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
 import './cardStatusSummary.css'
 
 /** 状态只读取本卡的实际采用和运行快照；候选边不计入来源数。 */
-export function CardStatusSummary({ card, node, outputs, readonly, missingImage }: {
-  card: GenerationCard; node?: CanvasNodeRead; outputs: CanvasResolvedOutput[]; readonly: boolean; missingImage: boolean
+export function CardStatusSummary({ card, node, outputs, readonly, missingImage, imageDimensions }: {
+  card: GenerationCard; node?: CanvasNodeRead; outputs: CanvasResolvedOutput[]; readonly: boolean; missingImage: boolean; imageDimensions?: string
 }) {
   const [explaining, setExplaining] = useState(false)
   useEffect(() => {
@@ -27,6 +27,7 @@ export function CardStatusSummary({ card, node, outputs, readonly, missingImage 
   const specification = [config && 'target_ratio' in config && config.target_ratio, config && 'resolution_profile' in config && config.resolution_profile].filter(value => typeof value === 'string' && value).join(' · ')
   return <section className="generation-card-status" aria-label={model ? '模型状态摘要' : '卡片状态摘要'}>
     {model && <span data-problem={node?.status === 'failed' || stale || changed || undefined}>{canvasNodeStatusLabels[node?.status || ''] || '尚未运行'}</span>}
+    {card.type === 'content.image' && <><span>图片</span>{imageDimensions && <span>{imageDimensions}</span>}</>}
     {readonly && <span>只读</span>}
     {model && <span className="generation-card-adopted"><LinkOutlined aria-hidden /> 已采用 {card.input_bindings?.length || 0}</span>}
     {retained && <span>保留上次成果</span>}

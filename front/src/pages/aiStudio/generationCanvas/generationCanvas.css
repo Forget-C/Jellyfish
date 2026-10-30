@@ -253,3 +253,8 @@
 @media (max-width: 700px) {
   .generation-card-editor.wb-details[data-focus-layout="true"][data-expanded="true"] { width: calc(100vw - 16px); }
 }
+
+/* Basic text keeps its own four-line reading density without changing other card types. */
+.generation-workbench .generation-card[data-card-type="content.text"] .generation-card-body { display: flex; flex-direction: column; box-sizing: border-box; min-height: 128px; max-height: 180px; padding: 12px 14px; font-size: 13px; line-height: 1.8; }
+.generation-card[data-card-type="content.text"] .canvas-card-summary { -webkit-line-clamp: 4; margin: 0; }
+.generation-card[data-card-type="content.text"] .generation-card-footer { margin-top: auto; padding-top: 4px; }
