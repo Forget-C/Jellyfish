@@ -1,33 +1,4 @@
 #!/usr/bin/env sh
-# 提交说明首行须匹配：[枚举类型] 空格 + 摘要
-# 允许类型：feat fix docs style refactor perf test chore ci build revert
-
-msg_file=$1
-first_line=$(head -n1 "$msg_file")
-
-# 允许的 [type]（小写，与 Conventional Commits 常见类型对齐）
-PATTERN='^\[(feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert)\] .+'
-
-# Git 合并产生的默认说明
-case "$first_line" in
-  Merge\ *) exit 0 ;;
-  Revert\ *) exit 0 ;;
-esac
-
-# 合并过程中（含解决冲突后的提交）
-if [ -f "$(git rev-parse --git-path MERGE_HEAD 2>/dev/null)" ]; then
-  exit 0
-fi
-
-if ! printf '%s\n' "$first_line" | grep -qE "$PATTERN"; then
-  echo "提交说明格式错误：首行必须为 \"[类型] 摘要\"，且类型只能是以下枚举之一（小写）：" >&2
-  echo "  feat 新功能 | fix 缺陷修复 | docs 文档 | style 格式（不影响代码含义）" >&2
-  echo "  refactor 重构 | perf 性能 | test 测试 | chore 杂项/工具 | ci CI 配置 | build 构建/依赖 | revert 回滚" >&2
-  echo "示例：[feat] 新功能  /  [fix] 修复登录  /  [docs] 更新 README" >&2
-  echo "Invalid commit message: first line must be \"[type] summary\" where type is one of:" >&2
-  echo "  feat, fix, docs, style, refactor, perf, test, chore, ci, build, revert (lowercase only)." >&2
-  echo "Examples: [feat] new feature  /  [fix] fix login  /  [docs] update README" >&2
-  exit 1
-fi
-
-exit 0
+# Local commits and CI share the same first-line validator.
+repo_root=$(git rev-parse --show-toplevel) || exit 1
+exec node "$repo_root/scripts/check-commit-subject.mjs" --message-file "$1"

@@ -24,7 +24,7 @@ export function useCardCandidates(projectId: string, canvasId: string, cardId: s
         error: input || !compile ? '' : '已保存输入诊断读取失败，请保存或重开后重试' })
     }).catch(() => { if (active && latest.current === scope) setValue(previous => ({ ...(previous?.entity === entity ? previous : {entity, candidates: [], outputs: [], revision: revision || 0}), scope, error: '已保存输入读取失败，请保存或重开后重试' })) })
     return () => { active = false }
-  }, [projectId, canvasId, cardId, revision, scope, compile])
+  }, [projectId, canvasId, cardId, revision, scope, compile, entity])
   if (value?.entity === entity) return { ...value, loading: value.scope !== scope }
   return { candidates: [], outputs: [], revision, compiled: undefined, error: '', loading: true }
 }
