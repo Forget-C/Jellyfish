@@ -79,3 +79,11 @@ PLAYWRIGHT_CHANNEL=chrome node front/scripts/visual-review.mjs \
 ## 最终审查修复的独立复核
 
 最终Spec审查发现的默认浏览器P2已在独立分支修复：未设置channel沿用Playwright Chromium，显式Chrome保留。公开CLI新增默认runtime回归取得真实RED→GREEN；Chrome完整CLI62项及默认Chromium evidence／review56项通过，typecheck通过。修复后原签收机械复核仍为passed／reviewable／passed（36组），没有重新采集或声称重新阅图。精确命令、日志、临时安装范围与验证局限见[review-fix](review-fix.md)；原执行来源及上述人工阅图结论保持原身份。
+
+## 集成复核与清理
+
+最终代码头 `5ecfdf63`，比较基线 `cbf82d42`。Standards硬规则及判断性smell均0项；Spec原1项P2修复后未解决0项。独立报告保留在 `/private/tmp/checks-final-review/standards.md`、`/private/tmp/checks-final-review/spec.md`；审查者未冒称独立重跑全部检查或全量阅图。
+
+主代理在最终集成代码上使用临时缓存的默认Chromium再次调用公开review CLI，36组返回 `behavior=passed / evidence=reviewable / visual=passed`，结果 `/private/tmp/checks-final-review/root-chromium-signoff-recheck.json`。仅重读现有原图、契约与签收，不重采或重新阅图，运行来源仍为 `1c7769b9`。
+
+本轮8个干净、已提交的实现worktree已移除，分支和外部证据保留。票01原忽略证据另保存在 `/private/tmp/checks01-accepted/`；用户原型worktree及4197服务未动。清理后核对旧80份记录哈希完全一致；后端editable导入仍指向主工作区 `backend/app/__init__.py`。未推送、未安装实际开发仓库hook，远程CI未执行。
