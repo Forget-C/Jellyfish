@@ -86,17 +86,17 @@ try{
         // Verify permitted local scrolling explicitly, after retaining the untouched initial originals.
         const basis=editor.getByRole('region',{name:'本次创作依据',exact:true}), basisBox=await basis.boundingBox()
         await page.mouse.move(basisBox.x+basisBox.width/2,basisBox.y+basisBox.height/2);await page.mouse.wheel(0,500)
-        await page.waitForFunction(()=>document.querySelector('.generation-material-basis').scrollTop>0)
+        await page.waitForFunction(element=>element.scrollTop>0,await basis.elementHandle())
         const source=await assertControlReachable(basis.getByText('查看来源',{exact:true}).last(),'after explicit material wheel')
         const remove=await assertControlReachable(basis.getByRole('button',{name:/^取消采用/}).last(),'after explicit material wheel')
         await captureCanvasRegion(page,editor,join(output,`${p1}-scrolled-source-editor.png`))
         explicitScrollEvidence.push({group:p1,source,remove,scroll:await basis.evaluate(element=>({top:element.scrollTop,height:element.clientHeight,total:element.scrollHeight}))})
         await page.mouse.move(basisBox.x+basisBox.width/2,basisBox.y+basisBox.height/2);await page.mouse.wheel(0,-500)
-        await page.waitForFunction(()=>document.querySelector('.generation-material-basis').scrollTop===0)
+        await page.waitForFunction(element=>element.scrollTop===0,await basis.elementHandle())
         if(width===390){
           const parameters=editor.locator('.generation-material-parameters'), box=await parameters.boundingBox()
           await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.wheel(600,0)
-          await page.waitForFunction(()=>document.querySelector('.generation-material-parameters').scrollLeft>0)
+          await page.waitForFunction(element=>element.scrollLeft>0,await parameters.elementHandle())
           const quantity=await assertControlReachable(editor.getByRole('spinbutton',{name:'图片数量',exact:true}),'after explicit parameter wheel')
           assert.match(await editor.getByRole('spinbutton',{name:'图片数量',exact:true}).inputValue(),/3\s*张/)
           await assertControlReachable(editor.getByRole('button',{name:'预检运行',exact:true}),'fixed submit after parameter wheel')
@@ -104,7 +104,7 @@ try{
           await captureCanvasRegion(page,editor,join(output,`${p1}-scrolled-parameters-editor.png`))
           explicitScrollEvidence.push({group:p1,quantity,scroll:await parameters.evaluate(element=>({left:element.scrollLeft,width:element.clientWidth,total:element.scrollWidth}))})
           await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.wheel(-600,0)
-          await page.waitForFunction(()=>document.querySelector('.generation-material-parameters').scrollLeft===0)
+          await page.waitForFunction(element=>element.scrollLeft===0,await parameters.elementHandle())
         }
       }
       await editor.getByRole('button',{name:'展开详情',exact:true}).click();const p2=await capture(f2,kind,'expanded',id)
