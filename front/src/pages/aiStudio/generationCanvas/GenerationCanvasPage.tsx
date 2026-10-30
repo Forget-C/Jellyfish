@@ -173,7 +173,7 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
       <GenerationCanvasGraph contentHistory={<div className="canvas-history-controls" aria-label="画布内容历史">
         <WorkbenchIconButton label="撤销内容" variant="quiet" icon={<UndoOutlined />} disabled={!ownership.editable || !!editor.recovery || !editor.canUndo} onClick={() => { runtime.invalidate(); editor.undo() }} />
         <WorkbenchIconButton label="重做内容" variant="quiet" icon={<RedoOutlined />} disabled={!ownership.editable || !!editor.recovery || !editor.canRedo} onClick={() => { runtime.invalidate(); editor.redo() }} />
-      </div>} primaryHost={primaryHost} savedDocument={current.document} savedRevision={current.revision} key={document.id} document={document} onChange={next => change(next)} inspectTarget={inspectTarget} editingStatus={editor.conflict ? '修订冲突，请关闭详情处理' : saving ? '正在保存修改' : dirty ? '修改尚未保存' : '修改已同步'} readonly={!ownership.editable || !!editor.recovery}
+      </div>} primaryHost={primaryHost} savedDocument={current.document} savedRevision={current.revision} key={document.id} document={document} onChange={next => change(next)} inspectTarget={inspectTarget} editingStatus={editor.conflict ? '修订冲突，请关闭详情处理' : saving ? '正在保存修改' : dirty ? '修改尚未保存' : undefined} readonly={!ownership.editable || !!editor.recovery}
         runtime={{ outputs: runtime.snapshot.current_outputs, nodes: runtime.latestNodes, busyCards: runtime.busyCards, checking: runtime.checking,
           disabled: runtime.storageBlocked || !!runtime.pending || !!runtime.checking || runtime.submitting || editor.conflict, precheck: cardId => void runtime.precheck(cardId) }} />
     </div>}

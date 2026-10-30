@@ -219,3 +219,31 @@
 .generation-group-management .ant-select, .generation-group-management .ant-input { flex: 1; min-width: 0; width: 100%; }
 
 .generation-import-status { color: var(--wb-muted); font-size: 12px; overflow-wrap: anywhere; }
+
+/* The confirmed C surface belongs to the four editors, not only the model composer. */
+.generation-card-editor[data-focus-layout="true"] {
+  --wb-surface: #202427;
+  --wb-border: #435057;
+  --wb-text: #e8eaeb;
+  --wb-muted: #929b9f;
+  background: var(--wb-surface);
+  color: var(--wb-text);
+  border: 1px solid var(--wb-border);
+  border-radius: 17px;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.generation-card-editor.wb-details[data-focus-layout="true"] { width: min(700px, calc(100vw - 112px)); }
+.generation-card-editor[data-focus-layout="true"] .wb-details-header { min-height: 43px; box-sizing: border-box; padding: 5px 15px; border: 0; gap: 4px; }
+.generation-card-editor[data-focus-layout="true"] .generation-editor-heading { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.generation-card-editor[data-focus-layout="true"] .generation-editor-modality { font-size: 15px; line-height: 1; flex: none; color: var(--wb-muted); }
+.generation-card-editor[data-focus-layout="true"] .wb-details-header h2 { font-size: 12px; font-weight: 500; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+.generation-card-editor[data-focus-layout="true"] .wb-details-header small { font-size: 10px; white-space: nowrap; flex: none; }
+.generation-card-editor[data-focus-layout="true"] .wb-details-header .wb-action { flex: none; }
+.generation-card-editor[data-focus-layout="true"] .wb-details-body { padding: 0; }
+.generation-card-editor[data-focus-layout="true"] .generation-card-body { padding: 12px 15px; }
+.generation-card-editor[data-focus-layout="true"][data-material="true"] .generation-card-body { padding: 0; }
+.generation-card-editor.wb-details[data-focus-layout="true"][data-expanded="true"] { width: min(1000px, calc(100vw - 32px)); }
+@media (max-width: 700px) {
+  .generation-card-editor.wb-details[data-focus-layout="true"][data-expanded="true"] { width: calc(100vw - 16px); }
+}

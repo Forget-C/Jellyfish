@@ -1,9 +1,6 @@
 /* Generation-only C surface: one retained session, a shared surface and a fixed full-width toolbar. */
 .generation-card-editor.wb-details[data-material="true"] { width: min(700px, calc(100vw - 32px)); }
 .generation-card-editor.wb-details[data-material="true"] .wb-details-body { padding: 0; }
-.generation-card-editor.wb-details[data-material="true"] .wb-details-header { padding: 8px 16px; border-bottom: 0; }
-.generation-card-editor.wb-details[data-material="true"] .wb-details-header h2 { font-size: 12px; }
-.generation-card-editor.wb-details[data-material="true"] .wb-details-header small { font-size: 11px; }
 .generation-card-editor.wb-details[data-material="true"] .generation-card-body { padding: 0; }
 .generation-card-editor.wb-details[data-material="true"] .generation-editor-actions { padding: 0; border: 0; background: transparent; }
 .generation-card-editor.wb-details[data-expanded="true"][data-material="true"] { height: auto; }
