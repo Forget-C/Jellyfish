@@ -6,6 +6,8 @@
 
 **Status:** ready-for-agent
 
+**Completion:** integrated
+
 - [x] 以现有提交规范为唯一规则依据，hook和CI调用同一可验证校验实现；不继续维护两份正则、两套类型枚举或不同例外。
 - [x] 保留Git消息文件输入及既有CI提交范围入口；合法类型、分隔空格、非空摘要和合法中文内容正常通过，空标题、非法类型及缺摘要明确失败。
 - [x] 默认Merge／Revert标题不再豁免，合并中存在MERGE_HEAD或解决冲突后也不跳过首行检查；不依靠实施者手工检查标题替代确定性门禁。
@@ -30,3 +32,5 @@
 - TDD：先记录消息文件入口缺失失败，再实现合法标题；范围入口先失败后实现；真实 Git 默认合并先证明旧 hook 未阻断，再适配共享 hook。真实 Git 自动 revert 未调用 commit-msg，补 prepare-commit-msg 后非零阻断；该时点不存在 REVERT_HEAD，按 Git 提供的 message source 转交共享校验，不复制标题规则。正常回滚支持 `git revert --no-commit` 后合法 `[revert]` 提交，默认回滚失败后也可用合法标题提交已暂存变更。
 - 验证：Node 24.22.1 `node --test scripts/check-commit-subject.test.mjs` 5/5 通过，覆盖全部允许类型、中文、非法类型/分隔/空摘要/空首行/默认标题/缺失消息文件、无效引用/范围/合法空范围、多条失败身份、真实普通提交/默认合并/绕过 hook 的多父提交/默认回滚/合法回滚/冲突解决。`sh -n .githooks/commit-msg .githooks/prepare-commit-msg` 与 `git diff --check` 通过。既有 CI 已改为同一 CLI 并运行真实 Git 回归；仅完成本地验证与工作流配置核查，未声称远程 CI 执行。
 - 本票未修改应用前后端、公开业务契约或安装主仓库 hook，故无需 front typecheck、Pylint 或 OpenAPI 再生；安装与自检仍归03。保留其他票据、README及既有完成记录。
+
+- 2026-10-30（integration 整合）：票02实现分支提交 `7bc2a5d1` 已通过合并提交 `e62c6804` 整合到 `codex-visual-engineering-checks`；无冲突，复用以上已通过检查记录，未修改相关实现或重跑无变化检查。`Status` 保持分诊状态 `ready-for-agent`，以 `Completion: integrated` 标记交付状态。
