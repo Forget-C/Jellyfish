@@ -46,3 +46,11 @@
 ## 合入前同步
 
 产品提交 `3817601d`，已将最新集成分支 `8aefba35`（含56、57）合入本票分支，合并提交 `bd7c3b0b`。只在Graph默认宽度和浏览器清单发生冲突：语义保留基础文本／基础图片／文本模型各300px、图片专用summary、content.text只读fieldset例外、全部独立测试入口。合并后Node24 typecheck、差异检查和62历史哈希检查通过；真实F07–F09＋只读／长文／保存／引用完整用例再次通过，证据 `/private/tmp/c58-merged-verified`。集成后其他票据组合验收仍由60执行，不预记通过。
+
+## 58后续旧回归接缝适配
+
+同步集成 `a2d5a896` 后，主区原回归暴露两处旧预期：完整Journey仍断言旧工作台表面`rgb(27, 27, 27)`，连线管理直接点击已经移入素材管理的输出折叠行。分别按新规格的独立字面值`rgb(32, 36, 39)`更新视觉预期、复用现有`openModelInspection`公开导航先进入素材管理；保留原业务、单模型采用、视频结果和删除保护断言，没有产品代码变化。
+
+- Node24／Chrome统一入口 `test:browser generation-canvas-journey`：通过62.9s，结果 `/private/tmp/c58-followup-journey/results.json`。
+- 同入口 `generation-canvas-edge-management`：通过14.8s，结果 `/private/tmp/c58-followup-edge/results.json`。
+- 两文件Node语法检查、`git diff --check`和62历史文件SHA256保护检查通过；没有TypeScript产品变化，复用已通过类型检查，不修改旧验收文档或lint基线。原主区红测位于 `/private/tmp/c55-60-integration/regression` 和 `regression-rest`，不以导航适配掩盖实际产品回退。

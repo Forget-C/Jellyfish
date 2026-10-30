@@ -309,7 +309,7 @@ try {
   await open(model)
   assert.equal(await detail.getByRole('textbox',{name:'模型正文',exact:true}).evaluate(element=>{
     for(let current=element;current;current=current.parentElement){const color=getComputedStyle(current).backgroundColor;if(color!=='rgba(0, 0, 0, 0)'&&color!=='transparent')return color}
-  }),'rgb(27, 27, 27)')
+  }),'rgb(32, 36, 39)')
   const narrowLayout = await detail.evaluate(element=>({panel:[element.scrollWidth,element.clientWidth],body:[element.querySelector('.wb-details-body').scrollWidth,element.querySelector('.wb-details-body').clientWidth],page:[document.documentElement.scrollWidth,innerWidth]}))
   writeFileSync(join(output,'narrow-layout.json'),JSON.stringify(narrowLayout))
   assert.ok(narrowLayout.body[0]<=narrowLayout.body[1] && narrowLayout.page[0]<=narrowLayout.page[1])
