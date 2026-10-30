@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented (awaiting integration and final review)
+**Completion:** integrated (awaiting final review)
 
 - [x] 正式图片铺满卡面主体，约300–340px宽、225px总高；多结果切换／位置在紧凑角落浮层，不另起顶部按钮和“输出1/3”行。无结果为居中图片图标与“尚未生成”，临时／旧成果身份明确。
 - [x] 沿用58共同外壳、左已采用依据和右创作描述、全宽单行底栏；文本与图片分别明确采用，来源缩略图／名称／用途摘要及查看移除紧凑可达，不复制另一套素材绑定逻辑。
@@ -26,3 +26,5 @@
 - 2026-10-30：用户确认本拆分并授权发布票据与依赖图；本轮暂不开始实现。Status仅为分诊状态，所有验收尚未执行；01–54完成记录及旧证据保留。
 
 - 2026-10-30：完成图片真实能力参数、带单位数量、卡面大图／角落固定导航及完整图。已同步integration `942c6220`（`a5dc0c55`），F10–F12三视口与真实HTTP／Worker／采用／失败保留／只读／重开通过，详见[59验收](../visual-c59-image-model-acceptance.md)。产品提交`7940e2cf`，待merger集成与60统一收口；01–54及旧验收62文件哈希不变。
+
+- 2026-10-30：已由合并代理以 `42c5db2a` 无冲突集成至 `codex-generation-canvas`，源已同步最新 `942c6220`。产品及测试树与最终复验源一致，复用 `/private/tmp/c59-merged-verified` 的21.1s三视口F10–F12及状态验收、旧images13.9s证据；62历史文件SHA256不变。主区类型及差异检查通过，整体审查由60收口。
