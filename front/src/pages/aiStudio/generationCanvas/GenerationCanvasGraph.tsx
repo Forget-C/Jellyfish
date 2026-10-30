@@ -177,15 +177,15 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
     if (!accessibleConnection && !pendingConnection) return
     connectionMenu.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus({ preventScroll: true })
   }, [accessibleConnection, pendingConnection])
-  const inspectCardId = inspectTarget?.cardId, inspectSerial = inspectTarget?.serial
+  const inspectCardId = inspectTarget?.cardId, inspectSerial = inspectTarget?.serial, inspectSegmentId = inspectTarget?.segmentId
   const navigateInspection = useRef<(cardId: string) => void>(() => undefined)
   // Diagnostics navigate once per explicit request, using current stack/layout data without re-centering on every render.
   useEffect(() => { if (inspectCardId) navigateInspection.current(inspectCardId) }, [inspectCardId, inspectSerial])
   useEffect(() => {
-    if (!inspectTarget?.segmentId || inspectTarget.cardId !== detailId) return
+    if (!inspectCardId || !inspectSegmentId || inspectCardId !== detailId) return
     const frame = requestAnimationFrame(() => {
-      const editor = window.document.querySelector<HTMLElement>(`[data-canvas-details="${CSS.escape(document.id)}"][data-card-details="${CSS.escape(inspectTarget.cardId)}"]`)
-      const segment = editor?.querySelector<HTMLElement>(`[data-segment-id="${CSS.escape(inspectTarget.segmentId!)}"]`)
+      const editor = window.document.querySelector<HTMLElement>(`[data-canvas-details="${CSS.escape(document.id)}"][data-card-details="${CSS.escape(inspectCardId)}"]`)
+      const segment = editor?.querySelector<HTMLElement>(`[data-segment-id="${CSS.escape(inspectSegmentId)}"]`)
       if (segment && !segment.closest('[inert]')) {
         segment.tabIndex = -1
         segment.scrollIntoView({ block: 'nearest', inline: 'nearest' })
@@ -193,7 +193,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
       }
     })
     return () => cancelAnimationFrame(frame)
-  }, [inspectTarget?.serial, detailId, document.id])
+  }, [inspectSerial, inspectCardId, inspectSegmentId, detailId, document.id])
   const latest = useRef(document); latest.current = document
   const container = useRef<HTMLDivElement>(null)
   const hidden = useMemo(() => new Set(groups.filter(group => group.kind === 'stack' || group.collapsed).flatMap(group => group.card_ids || [])), [groups])
