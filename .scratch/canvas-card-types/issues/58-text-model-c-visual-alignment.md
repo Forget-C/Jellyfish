@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** integrated (awaiting final review)
+**Completion:** integrated
 
 - [x] 文本模型卡有正式文本时显示摘要，无输出时居中文本图标及“尚未生成”，无整段操作说明；约300×160px密度，真实运行、实际采用来源数和成果身份在底部单行表达。
 - [x] 默认左侧仅已采用依据，右侧可见“创作描述”标签及正文，长文和依据独立滚动；共用外壳及统一表面无贯穿分隔线、不重复常驻采用标签行。
@@ -30,3 +30,5 @@
 - 合入前已同步最新集成 `8aefba35`；合并后F07–F09及只读／长文／HTTP完整用例再次通过（`/private/tmp/c58-merged-verified`），Node24 typecheck、差异及62历史文件保护检查通过。待主区merger合入并最终审查。
 
 - 2026-10-30：已由合并代理以 `3d61caee` 无冲突集成至 `codex-generation-canvas`；源已同步55–57的 `8aefba35` 并完成合并后逐类与真实Worker复验。产品／测试树与已验证源完全一致，复用 `/private/tmp/c58-merged-verified`、`/private/tmp/c58-runtime-last`、`/private/tmp/c58-image-final` 证据；62历史文件SHA256不变，整体审查待60收口。
+
+- 2026-10-30最终复核：产品与统一审查修复已集成至 `22041998`；原Spec复核0项，Standards重复判断已解决且无新源码问题。仍保留 `5057c63f` 提交标题格式1项P3，历史改写被自动审批拒绝、待另获明确授权；不宣称该元数据已修复。产品验收及本票完成记录有效，01–54和旧验收62文件哈希不变。本轮实现／修复工作树已在确认干净及集成后清理，分支、原型及外部证据保留。
