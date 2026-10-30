@@ -52,3 +52,35 @@ git commit -m "[revert] 回滚原因"
 ```
 
 默认合并标题被拒绝后，可使用 `git commit -m "[chore] 合并说明"` 完成；也可以在合并命令中直接提供合法 `-m` 标题。hook 文件存在不代表当前仓库已经启用，CI 直接调用范围入口，不依赖本地 hook 安装状态。
+
+## 显式安装与只读自检
+
+从仓库根目录运行：
+
+```sh
+node scripts/repository-hooks.mjs check
+node scripts/repository-hooks.mjs install
+node scripts/repository-hooks.mjs check
+```
+
+`check` 只读核对当前检出的有效 `core.hooksPath`、两个 hook 文件的存在与可执行权限，以及共享校验器的存在与可读权限；未启用、配置冲突或文件问题均返回非零退出码，并给出修复入口。输出实际 Git 目录与共用 Git 目录，便于核对 worktree。它不会自动安装、复制或修改权限。
+
+`install` 显式将仓库共用的本地配置设为 `core.hooksPath=.githooks`。相对路径在各检出根目录解析，主检出与关联 worktree 各自使用所检出版本的 hook 和校验器。安装前会检查所有已登记、非 bare 的检出，缺文件或不可执行时先修复这些检出；重复安装安全。存在独立 worktree 配置时，同样检查其覆盖值。
+
+已有自定义 `hooksPath` 默认保留并报错；确认放弃当前仓库及关联 worktree 的自定义路径后，才显式选择替换：
+
+```sh
+node scripts/repository-hooks.mjs install --replace-custom-hooks-path
+```
+
+替换仅写当前仓库的共用本地配置及已有的 worktree 覆盖配置，不改全局配置、Git 身份或签名设置，也不删除自定义 hook 文件。全局自定义路径仍保留，但会被当前仓库的本地设置覆盖。
+
+在仓库子目录可通过脚本的相对或绝对路径调用；从仓库外运行时，使用脚本绝对路径和 `--repo` 指定检出目录（主检出或关联 worktree 均可）：
+
+```sh
+node /path/to/jellyfish/scripts/repository-hooks.mjs check --repo /path/to/jellyfish
+node /path/to/jellyfish/scripts/repository-hooks.mjs install --repo /path/to/jellyfish
+node --test scripts/check-commit-subject.test.mjs scripts/repository-hooks.test.mjs
+```
+
+依赖安装、业务启动和普通预检不会调用安装入口。实际开发仓库安装是单独的显式操作；CI 运行临时 Git 验证并直接使用共享标题校验器，不要求在 runner 中安装 hook。
