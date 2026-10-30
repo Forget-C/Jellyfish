@@ -121,8 +121,14 @@ try {
   await page.reload()
   await page.locator('[data-card-id="image"]').press('Enter')
   await detail.getByText('文件信息不可用',{exact:true}).waitFor()
-  await page.waitForTimeout(150)
-  assert.equal(await detail.getByRole('button',{name:'替换图片',exact:true}).evaluate(button=>{const r=button.getBoundingClientRect();const hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return !!hit&&button.contains(hit)}),true,'first reopen must leave replacement action actually reachable')
+  try {
+  await page.waitForFunction(()=>{const button=[...document.querySelectorAll('.generation-card-editor:not([hidden]) button')].find(element=>element.textContent?.trim()==='替换图片');if(!button)return false;const r=button.getBoundingClientRect();const hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return !!hit&&button.contains(hit)},{},{timeout:2000})
+  } catch(reason) {
+    await page.screenshot({path:join(output,'reopen-action-hidden.png'),fullPage:true})
+    writeFileSync(join(output,'reopen-action-geometry.json'),JSON.stringify(await detail.evaluate(element=>{const button=[...element.querySelectorAll('button')].find(e=>e.textContent?.trim()==='替换图片'),body=element.querySelector('.wb-details-body'),r=button.getBoundingClientRect();return {panel:element.getBoundingClientRect().toJSON(),body:body.getBoundingClientRect().toJSON(),scroll:body.scrollHeight,button:r.toJSON(),hit:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.outerHTML}}),null,2))
+    throw reason
+  }
+  assert.equal(await detail.getByRole('button',{name:'替换图片',exact:true}).evaluate(button=>{const r=button.getBoundingClientRect();const hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return !!hit&&button.contains(hit)}),true,'settled reopen must leave replacement action actually reachable')
   await detail.screenshot({path:join(output,'image-unknown-file-info.png')})
   assert.equal((await read()).document.cards[0].file_id,fileId)
   await page.unroute(infoPattern)
@@ -148,6 +154,9 @@ try {
   assert.equal((await read()).document.cards[0].file_id,fileId,'cancelled retry retains original identity')
   await detail.getByRole('button',{name:'展开详情',exact:true}).click()
   await detail.getByText('街道素材-原始图片',{exact:true}).waitFor()
+  await page.waitForTimeout(150)
+  const emptyExpandedSpace = await detail.evaluate(element => element.getBoundingClientRect().bottom - Math.max(element.querySelector('.generation-image-actions').getBoundingClientRect().bottom, ...[...element.querySelectorAll('.ant-alert')].map(alert => alert.getBoundingClientRect().bottom)))
+  assert.ok(emptyExpandedSpace < 64, 'expanded image keeps its file actions near the lower edge instead of a large unused panel')
   await detail.screenshot({path:join(output,'image-expanded.png')})
   await detail.getByRole('button',{name:'收起详情',exact:true}).click()
   await page.reload()
@@ -175,5 +184,23 @@ try {
     await page.screenshot({path:join(output,`image-${width}.png`),fullPage:true})
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth))
   }
+  await page.setViewportSize({width:1440,height:960})
+  await page.waitForFunction(()=>document.querySelector('.generation-card-editor:not([hidden])')?.getAttribute('data-expanded')==='false')
+  execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-f','lavfi','-i','color=c=silver:s=180x320','-vf','drawbox=x=0:y=0:w=180:h=20:color=green:t=fill,drawbox=x=0:y=300:w=180:h=20:color=purple:t=fill','-frames:v','1',join(output,'portrait.png')])
+  const portraitChooser=page.waitForEvent('filechooser')
+  await detail.getByRole('button',{name:'替换图片',exact:true}).click()
+  await(await portraitChooser).setFiles({name:'竖幅完整图片.png',mimeType:'image/png',buffer:readFileSync(join(output,'portrait.png'))})
+  await detail.getByText('180 × 320',{exact:true}).waitFor()
+  await page.getByLabel('画布保存状态').getByText('已保存',{exact:true}).waitFor()
+  const portraitFile=(await read()).document.cards[0].file_id
+  for(const expanded of [false,true]){
+    if(expanded)await detail.getByRole('button',{name:'展开详情',exact:true}).click()
+    await page.waitForTimeout(150)
+    await detail.screenshot({path:join(output,`portrait-${expanded?'expanded':'default'}.png`)})
+    assert.ok(await detail.locator('img[alt="图片预览"]').evaluate(image=>{const r=image.getBoundingClientRect(),body=image.closest('.wb-details-body').getBoundingClientRect();return r.height<=body.height&&r.top>=body.top&&r.bottom<=body.bottom}),'portrait preview is fully exposed inside the editor rather than extending into a clipped scroll area')
+    await detail.getByRole('button',{name:'替换图片',exact:true}).click({trial:true})
+    await detail.getByRole('button',{name:'选择素材',exact:true}).click({trial:true})
+  }
+  assert.equal((await read()).document.cards[0].file_id,portraitFile,'portrait expansion preserves the uploaded file identity')
   console.log('C57 F04–F06 three viewports; direct actions, metadata, replacement failure, selection, readonly and HTTP reopen passed:',output)
 } finally { await cleanup() }

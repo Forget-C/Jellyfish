@@ -105,7 +105,7 @@ export function MediaContentEditor({ card, projectId, onChange, disabled }: Medi
   const currentSize = imageSize?.id === card.file_id ? imageSize : undefined
   const currentImage = imageState?.id === card.file_id ? imageState?.state : undefined
   return <Space direction="vertical" style={{ width: '100%' }}>
-    {type === 'image' ? <section className="generation-image-content" data-empty={!card.file_id} aria-label="图片内容编辑">
+    {type === 'image' ? <section className="generation-image-content" data-empty={!card.file_id} data-portrait={!!currentSize && currentSize.height > currentSize.width} aria-label="图片内容编辑">
       <div className="generation-image-preview">
         {card.file_id ? <>
           <img alt="图片预览" src={buildFileDownloadUrl(card.file_id)} onLoad={event => {

@@ -25,3 +25,12 @@
 .generation-basic-image-empty{height:185px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--wb-muted);font-size:12px}
 .generation-basic-image-empty>.anticon{font-size:24px}
 @media(max-width:767px){.generation-image-content{flex-direction:column}.generation-image-preview{flex:none;width:100%;min-height:180px;max-height:35dvh}.generation-image-preview>img{max-height:35dvh}.generation-image-file-info{flex:none;width:100%}.generation-image-content[data-empty="true"] .generation-image-preview{flex:none;max-height:none;min-height:260px}.generation-card-editor[data-focus-layout="true"][data-expanded="true"] .generation-image-preview{min-height:180px}}
+
+/* Desktop image expansion follows its complete preview; other editor heights stay unchanged. */
+@media(min-width:768px){.generation-card-editor.wb-details[data-card-type="content.image"][data-expanded="true"]{height:auto}}
+
+@media(min-width:768px){
+  .generation-card-editor[data-card-type="content.image"] .generation-image-content[data-portrait="true"] .generation-image-preview{height:240px}
+  .generation-card-editor[data-card-type="content.image"] .generation-image-content[data-portrait="true"] .generation-image-preview>img{position:absolute;inset:0}
+  .generation-card-editor[data-card-type="content.image"][data-expanded="true"] .generation-image-content[data-portrait="true"] .generation-image-preview{height:min(520px,calc(100dvh - 160px))}
+}
