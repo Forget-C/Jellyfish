@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-**Completion:** implemented (awaiting integration and final review)
+**Completion:** integrated (awaiting final review)
 
 - [x] 汇总并补齐F01–F12在1440×960、390×844、3830×1688至少36组正式状态证据；每组有匹配的目标原型、正式整页上下文及原尺寸卡面／编辑区，不以另一卡类、旧验收或缩小联系图代验。
 - [x] 使用已确认 C 最终紧凑／一体化原型为目标；正式复审图片仅作负向证据。相同视口、画布比例、相近内容长度、来源数及输出／模型状态对照，缺图从保留 C 原型源生成或明确记缺失，不将当前实现升格为目标。
@@ -29,3 +29,5 @@
 - 2026-10-30：基于55–59集成头9bbc2588完成60，产品冻结94174bb3。真实同画布四类Worker＋F01–F12三视口36组＋命名映射／一级读取／DAG／历史重开／边缘操作117.5s通过，最终证据 `/private/tmp/c60-accepted`；36张editor、36张card及36张目标editor均已实际查看，不用旧被盖采图代验。
 - 本票补三项实际差异：基础图片桌面展开自然高、竖图有界完整contain、首次重开自然高反馈锁定。真实红测与失败几何保留；对应image-editor修后17.6s及连续两次17.8s通过。详见[60新验收](../visual-c60-four-card-acceptance.md)。
 - typecheck／语法／diff／62历史文件哈希通过；lint仍两项既有hooks告警，未改基线。未改应用后端或对外契约，不执行无关再生。分诊Status不替代Completion；待merger合入及最终双轴审查。
+
+- 2026-10-30：已由合并代理以 `cabd27e0` 无冲突集成至 `codex-generation-canvas`。产品／前后端测试树与最终复验源一致，复用 `/private/tmp/c60-accepted` 117.5s真实组合及36组原尺寸对照证据、图片编辑连续三次通过结果，不重复同环境验收。62历史文件SHA256未变；主区类型与差异检查通过，最终双轴审查待执行。
