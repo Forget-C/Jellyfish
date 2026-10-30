@@ -43,11 +43,28 @@ try {
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({request_id:'seed',expected_revision:0,document}) })
   assert.ok(seeded.ok, await seeded.text())
   await page.goto(`http://127.0.0.1:4455/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
+  const pressWithoutScroll = async (control, key) => {
+    await control.evaluate(element => element.focus({ preventScroll: true }))
+    await page.keyboard.press(key)
+  }
+  const placeCardInView = async card => {
+    const mover = card.getByRole('button',{name:/^移动布局：/})
+    const browse = await page.locator('.generation-browse').boundingBox()
+    const x = page.viewportSize().width === 390 ? 74 : 200
+    const y = Math.max(180, (browse?.y || 0) + (browse?.height || 0) + 16)
+    for (let step=0;step<150;step++) {
+      const box = await card.boundingBox()
+      if (Math.abs(box.x-x)<=20 && Math.abs(box.y-y)<=20) return
+      await pressWithoutScroll(mover, Math.abs(box.x-x)>20 ? box.x<x?'ArrowRight':'ArrowLeft' : box.y<y?'ArrowDown':'ArrowUp')
+    }
+    throw Error('cannot place card in the visible canvas')
+  }
   for (const viewport of [{width:1440,height:960},{width:3830,height:1688},{width:390,height:844}]) {
     await page.setViewportSize(viewport)
     for (const id of ['text','image','model-text','model-image']) {
       const card=page.locator(`[data-card-id="${id}"]`)
-      await card.press('Enter')
+      await placeCardInView(card)
+      await pressWithoutScroll(card, 'Enter')
       const editor=page.locator('.generation-card-editor:visible')
       await editor.waitFor()
       const header=editor.locator('header').first()
@@ -63,7 +80,7 @@ try {
       await page.mouse.move(140,20)
       await page.waitForTimeout(150)
       await page.screenshot({path:join(output,`${id}-${viewport.width}-default.png`)})
-      await editor.screenshot({path:join(output,`${id}-${viewport.width}-default-editor.png`)})
+      await page.screenshot({path:join(output,`${id}-${viewport.width}-default-editor.png`),clip:await editor.boundingBox()})
       await editor.getByRole('button',{name:'展开详情',exact:true}).click()
       await page.waitForFunction(()=>document.querySelector('.generation-card-editor:not([hidden])')?.getAttribute('data-expanded')==='true').catch(()=>{})
       await editor.getByRole('button',{name:'收起详情',exact:true}).click({trial:true})
@@ -71,7 +88,7 @@ try {
       await page.mouse.move(140,20)
       await page.waitForTimeout(150)
       await page.screenshot({path:join(output,`${id}-${viewport.width}-expanded.png`)})
-      await editor.screenshot({path:join(output,`${id}-${viewport.width}-expanded-editor.png`)})
+      await page.screenshot({path:join(output,`${id}-${viewport.width}-expanded-editor.png`),clip:await editor.boundingBox()})
       await editor.getByRole('button',{name:'收起详情',exact:true}).click()
       await editor.getByRole('button',{name:'关闭详情',exact:true}).click()
       if(viewport.width===390 && id==='text') {
@@ -94,16 +111,16 @@ try {
         const box=await card.boundingBox()
         if(Math.abs(box.x-200)<=20 && Math.abs(box.y-250)<=20)break
         const key=Math.abs(box.x-200)>20?(box.x<200?'ArrowRight':'ArrowLeft'):(box.y<250?'ArrowDown':'ArrowUp')
-        await mover.press(key)
+        await pressWithoutScroll(mover, key)
       }
       // Move through the public keyboard layout control, including positions under canvas chrome.
       for(let step=0;step<100;step++) {
         const box=await card.boundingBox()
         const done=edge==='left'?box.x<=24:edge==='right'?box.x>=1040:box.y+box.height>=900
         if(done)break
-        await mover.press(edge==='left'?'ArrowLeft':edge==='right'?'ArrowRight':'ArrowDown')
+        await pressWithoutScroll(mover, edge==='left'?'ArrowLeft':edge==='right'?'ArrowRight':'ArrowDown')
       }
-      await card.press('Enter')
+      await pressWithoutScroll(card, 'Enter')
       const editor=page.locator('.generation-card-editor:visible')
       await editor.waitFor()
       const rail=await page.getByRole('toolbar',{name:'卡片分类',exact:true}).boundingBox()
@@ -144,4 +161,7 @@ try {
   await page.locator('[data-card-id="text"]').press('Enter')
   assert.equal(await page.getByRole('textbox',{name:'文本内容',exact:true}).inputValue(),'会话与保存保持')
   console.log('PASS four common shells, three viewports, retained session and HTTP reopen',output)
+} catch (error) {
+  if (page) await page.screenshot({path:join(output,'failed-page.png'),fullPage:true}).catch(()=>{})
+  throw error
 } finally { await cleanup() }
