@@ -13,7 +13,7 @@ import { MediaPreview } from './MediaContentEditor'
 export type SpatialCard = SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard
 
 function AnchorFields({ card, onChange }: { card: SpatialAnchorCard; onChange: (card: SpatialCard) => void }) {
-  return <><p>文字可先于图片建立。参考图或标记的替换保留此锚点身份。</p>
+  return <>
     <Input aria-label="锚点名称" value={card.name} onChange={event => onChange({ ...card, name: event.target.value })} />
     <small>锚点身份：{card.anchor_id || '未建立'}</small>
     <FieldEditor label="位置" value={card.position} onChange={position => onChange({ ...card, position })} />
@@ -31,7 +31,7 @@ function BlockingFields({ card, onChange }: { card: BlockingDirectionCard; onCha
     <FieldEditor label="方位与朝向" value={card.orientation} onChange={orientation => onChange({ ...card, orientation })} />
     <FieldEditor label="主动权" value={card.initiative} onChange={initiative => onChange({ ...card, initiative })} />
     <FieldEditor label="状态切换原因" value={card.transition_reason} onChange={transition_reason => onChange({ ...card, transition_reason })} />
-    <p>变化事件是可选关系，事件来源接入后可选择；不从原因正文推断事件。</p>
+
   </>
 }
 
@@ -48,7 +48,7 @@ function ActivityFields({ card, onChange }: { card: InFrameActivityCard; onChang
       <FieldEditor label="入出画" value={card.entry_exit} onChange={entry_exit => onChange({ ...card, entry_exit })} />
       <FieldEditor label="景深层次" value={card.depth} onChange={depth => onChange({ ...card, depth })} />
       <FieldEditor label="活动强度" value={card.intensity} onChange={intensity => onChange({ ...card, intensity })} />
-      <p>触发事件是启动本活动的可选关系，不自动推导触发行为。</p>
+
     </details>
   </>
 }
@@ -68,7 +68,7 @@ export function SpatialDirectionEditor({ card: raw, document, savedRevision, mod
   const bindings = card.input_bindings || [], examples = card.examples || []
   const update = (next: SpatialCard) => onChange(next)
   return <>
-    <p>完整采用本卡设计。对象和锚点仅带身份名称；模型需要场所正文、锚点全文或图片时，须分别直接连接并采用。</p>
+
     {resolved.error && <Alert type="warning" message={resolved.error} />}
     <section aria-label="空间关系"><h3>直接对象与空间关系</h3>
       {resolved.candidates.map(item => {
@@ -92,7 +92,7 @@ export function SpatialDirectionEditor({ card: raw, document, savedRevision, mod
       <Input aria-label="适用条件" value={card.scope?.condition} onChange={event => update({ ...card, scope: { ...card.scope, condition: event.target.value } })} />
       <Input aria-label="设计来源" value={card.source_locator} onChange={event => update({ ...card, source_locator: event.target.value })} />
     </details>
-    <details><summary>参考素材与图片标记</summary><p>素材固定关联；不会自动成为生成首尾帧或随设计传入模型。</p>
+    <details><summary>参考素材与图片标记</summary>
       {resolved.candidates.filter(item => ['image', 'video'].includes(item.modality) && item.file_id).map(item => <WorkbenchButton key={sourceKey(item.source)} disabled={disabled || !item.available || examples.some(value => sourceKey(value.source) === sourceKey(item.source) && value.file_id === item.file_id)} onClick={() => update({ ...card, examples: [...examples, { id: crypto.randomUUID(), source: item.source, file_id: item.file_id! }] })}>关联素材 {item.token}</WorkbenchButton>)}
       {examples.map(example => {
         const change = (patch: Partial<typeof example>) => update({ ...card, examples: examples.map(value => value.id === example.id ? { ...value, ...patch } : value) })

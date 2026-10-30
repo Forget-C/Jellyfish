@@ -27,6 +27,7 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
   const close = useRef(onClose); close.current = onClose
   const opener = useRef(trigger); opener.current = trigger
   const modal = forceModal || expanded || !desktop
+  const anchoredHeightLimit = material ? 240 : 360
   const previousOpen = useRef(false)
   const fit = useRef(onFit); fit.current = onFit
   useEffect(() => { if (expandRequest) setExpanded(true) }, [expandRequest])
@@ -54,9 +55,10 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
       const box = anchor.getBoundingClientRect(), bounds = available()
       const visible = box.bottom > 64 && box.top < window.innerHeight && box.right > 0 && box.left < window.innerWidth
       const width = Math.min(focusLayout || material ? 700 : 680, bounds.right - bounds.left)
-      const height = Math.min(Math.max(cardType === 'content.image' ? imageHeight() : node.getBoundingClientRect().height, 240), material ? 480 : 360, bounds.bottom - bounds.top)
+      const height = Math.min(Math.max(cardType === 'content.image' ? imageHeight() : node.getBoundingClientRect().height, 240), anchoredHeightLimit, bounds.bottom - bounds.top)
       const top = Math.max(bounds.top, Math.min(box.bottom + 16, bounds.bottom - height))
-      setPlacement({ left: Math.max(bounds.left, Math.min(box.left, bounds.right - width)), top, maxHeight: Math.max(100, bounds.bottom - top), visible })
+      // 高度上限只取工作区总高度；不能随锚点位置变化，否则移出后返回会逐步撑高。
+      setPlacement({ left: Math.max(bounds.left, Math.min(box.left, bounds.right - width)), top, maxHeight: Math.max(100, bounds.bottom - bounds.top), visible })
       return box
     }
     const box = position()
@@ -65,7 +67,7 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
     if (!previousOpen.current && allowPan && desktop && !expanded && !node.hidden) {
       activationFrame = requestAnimationFrame(() => {
         const bounds = available()
-        const height = Math.min(Math.max(cardType === 'content.image' ? imageHeight() : node.scrollHeight, 240), material ? 480 : 360, bounds.bottom - bounds.top)
+        const height = Math.min(Math.max(cardType === 'content.image' ? imageHeight() : node.scrollHeight, 240), anchoredHeightLimit, bounds.bottom - bounds.top)
         let y = Math.min(0, bounds.bottom - (box.bottom + 16 + height))
         if (box.height + height + 16 <= bounds.bottom - bounds.top) y = Math.max(y, bounds.top - box.top)
         const x = box.left < bounds.left ? bounds.left - box.left : box.right > bounds.right ? bounds.right - box.right : 0
@@ -81,7 +83,7 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
     chrome.forEach(element => observer.observe(element))
     window.addEventListener('resize', position)
     return () => { if (activationFrame !== undefined) cancelAnimationFrame(activationFrame); observer.disconnect(); window.removeEventListener('resize', position) }
-  }, [open, anchor, layoutKey, allowPan, desktop, expanded, material, focusLayout, cardType, slot?.active])
+  }, [open, anchor, layoutKey, allowPan, desktop, expanded, material, focusLayout, cardType, slot?.active, anchoredHeightLimit])
   useEffect(() => {
     if (!open) { activated.current = false; return }
     if (slot?.active === slotId) activated.current = true
@@ -140,7 +142,7 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
   return createPortal(<>
     {visible && modal && <div className="generation-editor-mask" onClick={() => expanded && !forceModal ? setExpanded(false) : onClose()} />}
     <section ref={panel} hidden={!visible} tabIndex={-1} role={modal ? 'dialog' : 'complementary'} aria-modal={modal || undefined} aria-label={title}
-      className="canvas-workbench-dialog wb-details generation-card-editor" data-expanded={modal} data-material={material} data-focus-layout={focusLayout} data-card-type={cardType} style={!modal ? {left:placement.left, top:placement.top, maxHeight:Math.min(material ? 480 : 360, placement.maxHeight)} : undefined}>
+      className="canvas-workbench-dialog wb-details generation-card-editor" data-expanded={modal} data-material={material} data-focus-layout={focusLayout} data-card-type={cardType} style={!modal ? {left:placement.left, top:placement.top, maxHeight:Math.min(anchoredHeightLimit, placement.maxHeight)} : undefined}>
       <header className="wb-details-header"><div className="generation-editor-heading">{focusLayout && <span className="generation-editor-modality" aria-hidden="true">{modality === 'image' ? <PictureOutlined /> : <FileTextOutlined />}</span>}<h2 title={title}>{title}</h2>{status && <small role="status">{status}</small>}</div>
         {!forceModal && <WorkbenchIconButton variant="quiet" label={expanded ? '收起详情' : '展开详情'} icon={expanded ? <ShrinkOutlined /> : <ExpandOutlined />} onClick={() => setExpanded(value=>!value)} />}
         <WorkbenchIconButton variant="quiet" label="关闭详情" icon={<CloseOutlined />} onClick={() => expanded && !forceModal ? setExpanded(false) : onClose()} />

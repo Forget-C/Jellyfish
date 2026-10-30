@@ -30,7 +30,7 @@ export function CardList({ catalog, readonly, onAdd, active, onActiveChange: set
     event.dataTransfer.setData(cardDragType, entry.type)
     if (entry.entry) event.dataTransfer.setData(cardDragEntry, entry.entry)
     event.dataTransfer.effectAllowed = 'copy'
-  }} onDragEnd={event => { if (event.dataTransfer.dropEffect !== 'none') setActive(undefined) }} onClick={() => add(entry.type, entry.entry)}>添加{entry.title.replace('内容', '')}</WorkbenchButton>
+  }} onDragEnd={event => { if (event.dataTransfer.dropEffect !== 'none') setActive(undefined) }} onClick={() => add(entry.type, entry.entry)}>{entry.title.replace('内容', '')}</WorkbenchButton>
   return <div className="generation-card-list-host" onKeyDown={event => { if (event.key === 'Escape' && active) { event.stopPropagation(); close() } }}>
     <div className="generation-card-categories" role="toolbar" aria-label="卡片分类">
       {categories.map((category, index) => <WorkbenchIconButton key={category.title} ref={element => { triggers.current[category.title] = element }} variant="quiet" label={category.title} icon={category.icon} className={index === 3 ? 'generation-director-category' : undefined} aria-pressed={active === category.title} aria-expanded={active === category.title} onClick={() => { if (active === category.title) close(); else { setActive(category.title); setQuery('') } }} />)}

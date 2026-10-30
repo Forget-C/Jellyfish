@@ -79,7 +79,7 @@ try {
   await page.setViewportSize({width:1440,height:960})
   for (const entry of ['景别与构图','机位与视角','运镜','光影与色彩','焦点与成像']) {
     await openCardList(page,'画面设计')
-    await page.getByRole('navigation',{name:'添加卡片',exact:true}).getByRole('button',{name:'添加'+entry,exact:true}).click()
+    await page.getByRole('navigation',{name:'添加卡片',exact:true}).getByRole('button',{name:entry,exact:true}).click()
     assert.equal(await page.locator('.wb-details:visible').count(),0,'new director card is selected without opening modal')
     const added=page.locator('[data-card-id][data-selected="true"]')
     await added.getByRole('button',{name:'编辑卡片',exact:true}).click()

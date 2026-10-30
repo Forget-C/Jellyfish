@@ -115,7 +115,7 @@ export function MediaContentEditor({ card, projectId, onChange, disabled }: Medi
           }} onError={() => setImageState({ id: card.file_id!, state: 'failed' })} />
           {!currentImage && <small role="status">图片加载中</small>}
           {currentImage === 'failed' && <small role="status">图片暂不可预览，文件仍保留</small>}
-        </> : <div className="generation-image-empty"><PictureOutlined aria-hidden /><strong>添加一张图片</strong><p>上传图片或从素材中选择，作为独立图片内容。</p>{imageActions(true)}{disabled && <small>只读，无法上传或替换图片</small>}</div>}
+        </> : <div className="generation-image-empty"><PictureOutlined aria-hidden /><strong>添加一张图片</strong>{imageActions(true)}{disabled && <small>只读，无法上传或替换图片</small>}</div>}
       </div>
       {card.file_id && <div className="generation-image-file-info">
         <strong title={currentInfo?.name}>{currentInfo?.name || (card.file_id ? readingFile ? '读取文件信息…' : '文件信息不可用' : '尚未选择图片')}</strong>

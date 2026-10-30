@@ -20,7 +20,7 @@ function SituationFields({ card, onChange }: { card: CharacterSituationCard; onC
 
 function PerformanceFields({ card, onChange }: { card: CharacterPerformanceCard; onChange: (card: PerformanceCard) => void }) {
   return <>
-    <section aria-label="触发反应动作结束"><h3>触发 → 反应 → 动作 → 结束状态</h3><p>触发事件可在事件来源接入后关联；无节拍也可独立使用。</p>
+    <section aria-label="触发反应动作结束"><h3>触发 → 反应 → 动作 → 结束状态</h3>
       <FieldEditor label="反应顺序" value={card.reaction_order} onChange={reaction_order => onChange({ ...card, reaction_order })} />
       <FieldEditor label="身体动作" value={card.physical_action} onChange={physical_action => onChange({ ...card, physical_action })} />
       <FieldEditor label="结束状态" value={card.exit_state} onChange={exit_state => onChange({ ...card, exit_state })} />
@@ -52,7 +52,7 @@ export function PerformanceDirectionEditor({ card: raw, document, savedRevision,
   const bindings = card.input_bindings || [], examples = card.examples || []
   const update = (next: PerformanceCard) => onChange(next)
   return <>
-    <p>按完整设计采用；背景解释情境，设计表达呈现，约束保留限制。对象关系仅提供身份和名称；描述或图片须在模型端另行直接采用。</p>
+
     {resolved.error && <Alert type="warning" message={resolved.error} />}
     <section aria-label="对象关系"><h3>对象关系</h3>
       {resolved.candidates.filter(item => item.payload?.kind === 'object_reference' || item.payload?.kind === 'narrative_reference').map(item => {
@@ -67,14 +67,14 @@ export function PerformanceDirectionEditor({ card: raw, document, savedRevision,
           return <WorkbenchButton key={port} disabled={disabled || !binding && single && bindings.some(value => value.input_port === port && value.source.object_id !== item.source.object_id)} onClick={() => update({ ...card, input_bindings: binding ? bindings.filter(value => value.id !== binding.id) : [...bindings, { id: crypto.randomUUID(), source: item.source, input_port: port }] })}>{`${binding ? '取消' : '选择'}${label} ${object.name}`}</WorkbenchButton>
         })}</div>
       })}
-      {!bindings.length && <small>尚未选择对象。文本分析可完善不完整设计；视觉生成所需主体须明确。</small>}
+      {!bindings.length && <small>尚未选择对象</small>}
       {bindings.filter(binding => !resolved.candidates.some(item => sourceKey(item.source) === sourceKey(binding.source) && item.available)).map(binding => <div key={binding.id}><small role="alert">已采用对象缺失，请替换或取消</small><WorkbenchButton disabled={disabled} onClick={() => update({ ...card, input_bindings: bindings.filter(value => value.id !== binding.id) })}>取消失效对象关系</WorkbenchButton></div>)}
     </section>
     {card.type === 'direction.performance' && <AcceptanceBasisSelector card={card} document={document} candidates={resolved.candidates} disabled={disabled} onChange={onChange} />}
     {card.type === 'direction.performance' && <section aria-label="对白依据"><h3>对白依据</h3>{resolved.candidates.filter(item => item.source.port_id === 'dialogue' && item.payload?.kind === 'dialogue_reference').map(item => {
       const binding = bindings.find(value => value.input_port === 'dialogue_basis' && sourceKey(value.source) === sourceKey(item.source))
       const payload = item.payload as DialogueReferencePayload
-      return <div key={sourceKey(item.source)}><WorkbenchButton title={payload.dialogue_id} disabled={disabled || !item.available} onClick={() => update({ ...card, input_bindings: binding ? bindings.filter(value => value.id !== binding.id) : [...bindings, { id: crypto.randomUUID(), source: item.source, input_port: 'dialogue_basis' }] })}>{`${binding ? '取消' : '采用'}对白 ${payload.dialogue_id.slice(0, 8)} · 版本 ${payload?.version}`}</WorkbenchButton><p>说话对象：{payload.speaker?.name || '待确定'}；仅关联身份与版本，正文须由模型直接采用对白文本。</p></div>
+      return <div key={sourceKey(item.source)}><WorkbenchButton title={payload.dialogue_id} disabled={disabled || !item.available} onClick={() => update({ ...card, input_bindings: binding ? bindings.filter(value => value.id !== binding.id) : [...bindings, { id: crypto.randomUUID(), source: item.source, input_port: 'dialogue_basis' }] })}>{`${binding ? '取消' : '采用'}对白 ${payload.dialogue_id.slice(0, 8)} · 版本 ${payload?.version}`}</WorkbenchButton><p>说话对象：{payload.speaker?.name || '待确定'}</p></div>
     })}</section>}
     {card.type === 'direction.situation' ? <SituationFields card={card} onChange={update} /> : card.type === 'direction.performance' ? <PerformanceFields card={card} onChange={update} /> : <FieldEditor label="表演适用说明" purpose="constraint" value={(card as PerformanceRuleCard).applicability} onChange={applicability => update({ ...(card as PerformanceRuleCard), applicability })} />}
     <details><summary>适用范围、阶段与来源</summary>

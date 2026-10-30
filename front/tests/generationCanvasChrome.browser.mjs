@@ -55,7 +55,7 @@ try {
   assert.deepEqual(await page.getByLabel('生成画布视口').boundingBox(), surface)
   await page.getByRole('button', { name: '关闭详情', exact: true }).click()
   await openCardList(page, '模型生成')
-  await page.getByRole('button', { name: '添加文本模型卡', exact: true }).click()
+  await page.getByRole('button', { name: '文本模型卡', exact: true }).click()
   await page.getByRole('button', { name: '预检运行', exact: true }).click()
   await page.getByRole('dialog', { name: '运行预检', exact: true }).waitFor()
   await page.getByRole('button', { name: '定位问题', exact: true }).first().click()

@@ -2,12 +2,13 @@
 .generation-toolbar { padding-bottom: 8px; }
 .generation-connection-reason { min-height: 28px; color: #475569; }
 .generation-surface { position: relative; height: 720px; overflow: hidden; border: 1px solid #cbd5e1; border-radius: 8px; background: #f1f5f9; touch-action: none; }
+.generation-surface:focus { outline: none; }
 .generation-world { position: absolute; inset: 0; transform-origin: 0 0; }
 .generation-edges { position: absolute; overflow: visible; pointer-events: none; }
 .generation-card { position: absolute; z-index: 2; min-width: 300px; min-height: 240px; background: white; border: 1px solid #94a3b8; border-radius: 8px; box-sizing: border-box; resize: both; overflow: auto; }
 .generation-card header { display: flex; gap: 8px; align-items: center; padding: 8px; background: #e2e8f0; }
 .generation-card header strong { flex: 1; }
-.generation-card button:focus-visible, .generation-group button:focus-visible { outline: 2px solid #1677ff; outline-offset: 2px; }
+.generation-card button:not(.generation-connection-point):focus-visible, .generation-group button:focus-visible { outline: 2px solid #1677ff; outline-offset: 2px; }
 .generation-card-body { margin: 0; padding: 12px; border: 0; min-width: 0; }
 .generation-card-body ol { padding-left: 24px; }
 .generation-card-body li { margin-block: 4px; overflow-wrap: anywhere; }
@@ -89,15 +90,18 @@
 .generation-card-categories .wb-action { flex-shrink: 0; }
 .generation-card-categories .generation-director-category { margin-top: 12px; }
 .generation-card-categories [aria-pressed="true"] { background: var(--wb-selected); }
-.generation-card-list { position: absolute; left: 68px; top: 0; bottom: 0; margin-block: auto; height: fit-content; width: 280px; max-height: min(620px, calc(100dvh - 180px)); overflow: auto; padding: 12px; box-sizing: border-box; background: var(--wb-surface); border: 1px solid var(--wb-border); border-radius: 12px; scrollbar-gutter: stable; }
+.generation-card-list { position: absolute; left: 68px; top: 0; bottom: 0; margin-block: auto; height: fit-content; width: max-content; max-width: calc(100vw - 96px); max-height: min(620px, calc(100dvh - 180px)); display: grid; grid-template-columns: minmax(0, 1fr); overflow: auto; padding: 12px; box-sizing: border-box; background: var(--wb-surface); border: 1px solid var(--wb-border); border-radius: 12px; scrollbar-gutter: stable; }
+/* 搜索框跟随菜单宽度，不用原生输入框的默认字符宽度撑大菜单。 */
+.generation-card-list > .ant-input-affix-wrapper { min-width: 0; contain: inline-size; }
 .generation-card-list header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .generation-card-list h2 { margin: 0; font-size: 16px; }
 .generation-card-list h3 { font-size: 12px; color: var(--wb-muted); margin: 16px 0 8px; }
+.generation-card-list section { display: flex; flex-direction: column; }
 .generation-card-list section .wb-action { width: 100%; margin-bottom: 4px; text-align: left; }
 .generation-card-list small { display: block; color: var(--wb-muted); margin-block: 4px; }
 @media(max-width: 600px) {
   .generation-card-list-host { top: 280px; }
-  .generation-card-list { position: fixed; left: 80px; right: 12px; top: 190px; bottom: 90px; margin-block: auto; transform: none; width: auto; max-height: calc(100dvh - 240px); }
+  .generation-card-list { position: fixed; left: 80px; right: auto; top: 190px; bottom: 90px; margin-block: auto; transform: none; max-height: calc(100dvh - 240px); }
 }
 .generation-browse { position: absolute; z-index: 35; left: 16px; width: calc(100% - 32px); display: flex; flex-direction: column; align-items: flex-start; gap: 8px; pointer-events: none; }
 .generation-browse > * { pointer-events: auto; }
@@ -130,14 +134,16 @@
 .generation-card-menu { position: absolute; top: 32px; right: 0; z-index: 25; padding: 8px; display: grid; gap: 4px; background: var(--wb-raised); border: 1px solid var(--wb-border); border-radius: var(--wb-radius); }
 
 /* 左右几何点不代表逻辑字段；命中区大于可见圆形加号。 */
-.generation-connection-point { position: absolute; z-index: 5; width: 36px; height: 36px; padding: 3px; border: 0; background: transparent; cursor: pointer; opacity: 0; touch-action: none; }
-.generation-connection-point i { display: flex; align-items: center; justify-content: center; box-sizing: border-box; width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--wb-muted); background: var(--wb-surface); color: var(--wb-muted); font-size: 16px; font-style: normal; line-height: 1; }
+.generation-connection-point { position: absolute; z-index: 5; width: 32px; height: 32px; padding: 6px; border: 0; background: transparent; cursor: pointer; opacity: 0; touch-action: none; }
+.generation-connection-point i { display: flex; align-items: center; justify-content: center; box-sizing: border-box; width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--wb-border); background: var(--wb-surface); color: var(--wb-muted); font-size: 14px; font-style: normal; line-height: 1; }
 .generation-connection-point[data-connection-side="right"] { right: 0; top: 50%; transform: translate(50%, -50%); }
 .generation-connection-point[data-connection-side="left"] { left: 0; top: 50%; transform: translate(-50%, -50%); }
 .generation-card:hover .generation-connection-point, .generation-card:focus-within .generation-connection-point, .generation-card[data-selected="true"] .generation-connection-point, .generation-connection-point[data-connecting="true"] { opacity: 1; }
 .generation-connection-point[data-compatible="true"] i { border-color: var(--wb-focus); background: var(--wb-selected); }
 .generation-connection-point[data-compatible="false"] i { border-style: dashed; }
-.generation-connection-point:focus-visible { outline: 1px solid var(--wb-focus); outline-offset: 2px; border-radius: 50%; }
+.generation-connection-point:hover i { border-color: var(--wb-muted); color: var(--wb-text); }
+.generation-connection-point:focus-visible { outline: none; }
+.generation-connection-point:focus-visible i { outline: 1px solid var(--wb-focus); outline-offset: 2px; }
 .generation-temporary-connection { position: absolute; inset: 0; pointer-events: none; z-index: 10; overflow: visible; }
 .generation-connection-menu { position: fixed; z-index: 80; width: 320px; max-height: min(300px, calc(100dvh - 16px)); overflow: auto; display: grid; gap: 8px; padding: 12px; box-sizing: border-box; background: var(--wb-surface); color: var(--wb-text); border: 1px solid var(--wb-border); border-radius: var(--wb-radius); }
 .generation-edge-candidate .canvas-edge-line { stroke-dasharray: 5 4; }
@@ -178,6 +184,17 @@
 .generation-edges { z-index: 2; }
 /* Generation editors are anchored to content; shared workbench details retain their own positioning. */
 .generation-card-editor.wb-details { position: fixed; right: auto; bottom: auto; width: min(680px, calc(100vw - 32px)); max-height: min(360px, calc(100vh - 160px)); z-index: 900; }
+/* 编辑卡隐藏容器滚动条，保留长表单的滚轮与键盘访问；输入控件使用同一暗色细滚动条。 */
+.generation-card-editor, .generation-card-editor * { color-scheme: dark; scrollbar-color: var(--wb-primary) transparent; }
+.generation-card-editor, .generation-card-editor :not(textarea, [contenteditable]) { scrollbar-width: none; }
+.generation-card-editor ::-webkit-scrollbar { display: none; }
+.generation-card-editor :is(textarea, [contenteditable]) { scrollbar-width: thin; }
+.generation-card-editor :is(textarea, [contenteditable])::-webkit-scrollbar { display: block; width: 6px; height: 6px; }
+.generation-card-editor ::-webkit-scrollbar-track, .generation-card-editor ::-webkit-scrollbar-corner { background: transparent; }
+.generation-card-editor ::-webkit-scrollbar-thumb { background: var(--wb-primary); border-radius: 6px; }
+.generation-card-editor ::-webkit-scrollbar-thumb:hover { background: var(--wb-strongBorder); }
+.generation-card-editor .wb-details-body { scrollbar-gutter: auto; scrollbar-width: none; }
+.generation-card-editor .wb-details-body::-webkit-scrollbar { display: none; }
 .generation-card-editor.wb-details[data-expanded="true"] { left: 50%; top: 50%; right: auto; bottom: auto; transform: translate(-50%, -50%); width: min(1000px, calc(100vw - 32px)); height: min(760px, calc(100dvh - 32px)); max-height: calc(100dvh - 32px); }
 .generation-editor-mask { position: fixed; inset: 0; background: #0009; z-index: 979; }
 @media (max-width: 700px) { .generation-card-editor.wb-details[data-expanded="true"] { width: calc(100vw - 16px); height: calc(100dvh - 16px); max-height: calc(100dvh - 16px); } }

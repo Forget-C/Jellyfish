@@ -59,7 +59,7 @@ try {
   assert.ok(seeded.ok, await seeded.text())
   await page.goto(`http://127.0.0.1:4299/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   await openCardList(page, '画面设计')
-  await page.getByRole('button', { name: '添加画面风格卡', exact: true }).waitFor()
+  await page.getByRole('button', { name: '画面风格卡', exact: true }).waitFor()
   await page.getByRole('button', { name: '关闭卡片列表', exact: true }).click()
   const card = page.locator('.wb-details:not([hidden])')
   const open = id => openCanvasCard(page, id)

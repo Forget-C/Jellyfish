@@ -40,7 +40,7 @@ try {
   const canvas = await create('持续编辑')
   await page.goto(`http://127.0.0.1:4271/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   await openCardList(page)
-  await page.getByRole('button', { name: '添加文本卡' }).click()
+  await page.getByRole('button', { name: '文本卡' }).click()
   const text = page.getByRole('textbox', { name: '文本内容', exact: true })
   // Input never pauses for a second: a saved intermediate value proves periodic coalescing.
   for (let index = 0; index < 7; index++) {

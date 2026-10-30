@@ -119,7 +119,7 @@ try {
   await page.screenshot({ path: join(output, 'other-canvas-file-retained.png'), fullPage: true })
   // Upload retention survives deleting its card; explicit cleanup checks the saved content first.
   await openCardList(page)
-  await page.getByRole('button', { name: '添加图片卡', exact: true }).click()
+  await page.getByRole('button', { name: '图片卡', exact: true }).click()
   const uploadedSummary = page.locator('[data-card-id]').last()
   const uploadedCard = card
   const uploadResponse = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/files/upload'))

@@ -18,6 +18,6 @@ export function ObjectDescriptionEditor({ card, disabled, onChange }: {
       onChange={event => onChange({ ...card, source_locator: event.target.value })} />
     <Input.TextArea aria-label="对象描述正文" placeholder="描述正文" rows={6} value={card.text || ''} disabled={disabled}
       onChange={event => onChange({ ...card, text: event.target.value })} />
-    <small>正文通过文本出口独立采用；对象引用只提供身份、名称与类别。</small>
+
   </Space>
 }

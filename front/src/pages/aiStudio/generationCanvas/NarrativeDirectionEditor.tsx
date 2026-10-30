@@ -30,7 +30,7 @@ export function NarrativeDirectionEditor({ card: raw, document, savedRevision, m
   const field = (key: string, label: string) => <FieldEditor key={key} label={label} value={(card as unknown as Record<string, DesignField>)[key]} onChange={value => onChange({ ...card, [key]: value })} />
   const identity = 'beat_id' in card ? card.beat_id : 'event_id' in card ? card.event_id : 'shot_id' in card ? card.shot_id : undefined
   return <>
-    <p>完整采用本卡叙事设计。关联仅保留身份与名称；全文和媒体需在模型端分别直接采用。预计时长是设计信息，关系不代表实际覆盖或自动执行，生成不自动确认设计。</p>
+
     <Input aria-label="叙事名称" value={card.name} onChange={event => onChange({ ...card, name: event.target.value })} />
     {identity && <small>稳定身份：{identity}</small>}
     {card.type === 'direction.shot' && <AcceptanceBasisSelector card={card} document={document} candidates={resolved.candidates} disabled={disabled} onChange={onChange} />}
@@ -43,7 +43,7 @@ export function NarrativeDirectionEditor({ card: raw, document, savedRevision, m
       const item = resolved.candidates.find(candidate => sourceKey(candidate.source) === sourceKey(binding.source))
       const name = item?.payload && 'name' in item.payload ? item.payload.name : binding.source.object_id || '失效节拍'
       return <div key={binding.id}><span>{index + 1}. {name}</span><WorkbenchButton aria-label={`上移覆盖节拍 ${name}`} disabled={disabled || index === 0} onClick={() => moveBeat(binding.id, -1)}>上移</WorkbenchButton><WorkbenchButton aria-label={`下移覆盖节拍 ${name}`} disabled={disabled || index === beats.length - 1} onClick={() => moveBeat(binding.id, 1)}>下移</WorkbenchButton></div>
-    })}<small>顺序仅用于设计，不自动执行节拍。</small></section>}
+    })}</section>}
     <section aria-label="叙事关系"><h3>直接关系候选与已采用</h3>
       {resolved.candidates.map(item => {
         const payload = item.payload

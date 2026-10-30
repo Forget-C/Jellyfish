@@ -24,7 +24,7 @@ export function SoundDirectionEditor({ card: raw, document, savedRevision, model
   const label = relation === 'speaker' ? '说话对象' : '声源对象'
   const exampleUpdate = (id: string, patch: Partial<(typeof examples)[number]>) => update({ ...card, examples: examples.map(item => item.id === id ? { ...item, ...patch } : item) })
   return <>
-    <p>完整采用设计；声音文本不等于音频。图片仅表达可见声源或说话状态。同期意图按模型能力执行，待后期安排保留为待后期。</p>
+
     {resolved.error && <Alert type="warning" message={resolved.error} />}
     {card.type === 'direction.dialogue' ? <section aria-label="对白条目"><p>对白身份：{card.dialogue_id}</p>
       <strong>对白版本</strong><InputNumber aria-label="对白版本" min={1} value={card.version || 1} onChange={version => update({ ...card, version: version || 1 })} />
@@ -52,7 +52,7 @@ export function SoundDirectionEditor({ card: raw, document, savedRevision, model
       <Select aria-label="制作阶段" allowClear value={card.scope?.phase || undefined} options={[{ value: 'video', label: '画面／视频' }, { value: 'sound', label: '声音' }, { value: 'postproduction', label: '后期' }]} onChange={phase => update({ ...card, scope: { ...card.scope, phase: phase ?? null } })} />
       <Input aria-label="设计来源" value={card.source_locator} onChange={event => update({ ...card, source_locator: event.target.value })} />
     </details>
-    <details><summary>直接素材参考</summary><p>参考仅在当前卡播放。模型需要媒体时须另行直接采用；不传递上游内容、不替换音轨、不转写。</p>
+    <details><summary>直接素材参考</summary>
       {resolved.candidates.filter(item => item.file_id && (item.modality === 'audio' || card.type === 'direction.dialogue' && item.modality === 'video')).map(item => <WorkbenchButton key={sourceKey(item.source)} disabled={disabled || !item.available} onClick={() => update({ ...card, examples: [...examples, { id: crypto.randomUUID(), source: item.source, file_id: item.file_id!, purpose: 'positive' }] })}>关联参考 {item.token}</WorkbenchButton>)}
       {examples.map(example => <section key={example.id} aria-label={`参考 ${example.id}`}><MediaPreview fileId={example.file_id} type={example.source.port_id === 'audio' ? 'audio' : 'video'} />
         <Select aria-label="参考用途" value={example.purpose} options={[{ value: 'positive', label: '正向参考' }, { value: 'negative', label: '反例' }]} onChange={purpose => exampleUpdate(example.id, { purpose })} />

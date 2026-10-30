@@ -1,10 +1,11 @@
 /* Generation-only C surface: one retained session, a shared surface and a fixed full-width toolbar. */
-.generation-card-editor.wb-details[data-material="true"] { width: min(700px, calc(100vw - 32px)); }
-.generation-card-editor.wb-details[data-material="true"] .wb-details-body { padding: 0; }
-.generation-card-editor.wb-details[data-material="true"] .generation-card-body { padding: 0; }
+.generation-card-editor.wb-details[data-material="true"] { width: min(700px, calc(100vw - 32px)); height: min(240px, calc(100dvh - 160px)); }
+.generation-card-editor.wb-details[data-material="true"] .wb-details-body { padding: 0; overflow: hidden; display: flex; }
+.generation-card-editor.wb-details[data-material="true"] .generation-card-body { padding: 0; flex: 1; min-height: 0; display: flex; }
 .generation-card-editor.wb-details[data-material="true"] .generation-editor-actions { padding: 0; border: 0; background: transparent; }
-.generation-card-editor.wb-details[data-expanded="true"][data-material="true"] { height: auto; }
-.generation-material-composer { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 3fr); min-width: 0; }
+.generation-card-editor.wb-details[data-expanded="true"][data-material="true"] { height: min(760px, calc(100dvh - 32px)); }
+/* 正文逐层传递可用高度，长文本只在输入框内滚动，不撑开或裁切编辑卡。 */
+.generation-material-composer { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 3fr); grid-template-rows: minmax(0, 1fr); flex: 1; min-width: 0; min-height: 0; }
 .generation-material-basis { max-height: 260px; overflow-y: auto; box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--wb-primary) transparent; min-width: 0; padding: 12px; }
 .generation-material-basis h3 { display: flex; justify-content: space-between; font-size: 11px; color: var(--wb-muted); margin: 0 0 8px; font-weight: 500; }
 .generation-material-empty { color: var(--wb-muted); font-size: 11px; line-height: 1.6; }
@@ -19,10 +20,10 @@
 .generation-material-source summary { cursor: pointer; }
 .generation-material-source details[open] { overflow-wrap: anywhere; }
 .generation-material-source .generation-material-remove.wb-action.ant-btn { width: 24px; min-width: 24px; height: 32px; padding: 0; }
-.generation-material-input { padding: 12px 16px; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
-.generation-material-prompt { min-width: 0; flex: 1; }
+.generation-material-input { padding: 12px 16px; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.generation-material-prompt { min-width: 0; min-height: 0; flex: 1; display: flex; flex-direction: column; }
 .generation-material-prompt-label { display: block; color: var(--wb-muted); font-size: 11px; margin-bottom: 8px; }
-.generation-material-prompt .generation-prompt-editor { position: relative; border: 0; border-radius: 0; padding: 0; min-height: 160px; max-height: 220px; font-size: 13px; line-height: 1.8; overflow-y: auto; outline-offset: 4px; overflow-wrap: anywhere; }
+.generation-material-prompt .generation-prompt-editor { position: relative; border: 0; border-radius: 0; padding: 0; flex: 1; min-height: 0; font-size: 13px; line-height: 1.8; overflow-y: auto; outline-offset: 4px; overflow-wrap: anywhere; }
 .generation-material-prompt .generation-prompt-editor[data-empty="true"]::before { content: attr(data-placeholder); color: var(--wb-muted); pointer-events: none; position: absolute; inset: 0; }
 .generation-material-reference-tools { font-size: 11px; color: var(--wb-muted); margin-bottom: 8px; }
 .generation-material-reference-tools > summary { cursor: pointer; }
@@ -67,7 +68,6 @@
   .generation-material-footer { height: 48px; padding: 6px 8px; gap: 4px; }
   .canvas-workbench-dialog .generation-material-submit.wb-action.ant-btn[data-variant="primary"] { width: 36px; height: 36px; min-width: 36px; }
   .generation-material-input { padding: 12px; }
-  .generation-material-prompt .generation-prompt-editor { min-height: 130px; }
 }
 
 /* Text-model cards share C's quiet preview density; generated text stays read-only here. */

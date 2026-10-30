@@ -689,6 +689,11 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
       onPointerDown={event => {
         // Portal 菜单属于编辑操作，不是画布空白手势。
         if (!event.currentTarget.contains(event.target as Node)) return
+        // 空白画布接收焦点，释放连接点的焦点圈与提示；Escape 仍返回连接起点。
+        if (event.button === 0 && !(event.target as Element).closest('[data-card-id], .generation-group, button, input, select, textarea, audio, video, .canvas-edge-hit')) {
+          if (drag || pendingConnection || accessibleConnection) cancelConnection()
+          event.currentTarget.focus({ preventScroll: true })
+        }
         if (spaceHeld && event.button === 0 && event.currentTarget.contains(event.target as Node)
           && !(event.target as Element).closest('[data-card-id], button, input, select, textarea, audio, video')) {
           event.preventDefault(); event.currentTarget.focus({ preventScroll: true }); event.currentTarget.setPointerCapture(event.pointerId)
@@ -885,7 +890,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
       const EditorContainer = CanvasCardEditor
       const DetailRenderer = rendererRegistry[detailCard.type || 'content.text']
       return <EditorContainer cardType={detailCard.type} focusLayout={focusCardTypes.includes(detailCard.type || '')} modality={cardDefinitions[detailCard.type || '']?.modality} material={detailCard.type?.startsWith('model.')} forceModal={detailCard.type?.startsWith('direction.')} key={detailCard.id} anchor={window.document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(detailCard.id)}"]`)} layoutKey={`${transform.x}:${transform.y}:${transform.scale}:${JSON.stringify(point(detailCard.id))}`} allowPan={detailAllowPan} expandRequest={expandRequest?.id === detailCard.id ? expandRequest.serial : undefined} onFit={delta => layout.setView(previous => ({...previous,transform:{...previous.transform,x:previous.transform.x+delta.x,y:previous.transform.y+delta.y}}))} title={('name' in detailCard && detailCard.name) || ('title' in detailCard && detailCard.title) || cardTitles[detailCard.type || 'content.text'] || '卡片详情'} status={readonly ? '只读' : editingStatus} open={detailCard.id === detailId && !detailsSuppressed && !stackFor(detailCard.id)} onClose={() => setDetailId(current => current === detailCard.id ? undefined : current)} trigger={detailTrigger}>
-        {!desktop && !focusCardTypes.includes(detailCard.type || '') && <Space wrap><Button onClick={() => setActiveCategory('基础卡')}>添加卡片</Button><Button disabled={readonly} onClick={event => startAccessibleConnection(detailCard.id, 'right', event.currentTarget)}>连接到…</Button></Space>}
+        {!desktop && !focusCardTypes.includes(detailCard.type || '') && <Space wrap><Button onClick={() => setActiveCategory('基础卡')}>卡片</Button><Button disabled={readonly} onClick={event => startAccessibleConnection(detailCard.id, 'right', event.currentTarget)}>连接到…</Button></Space>}
         {detailCard?.type?.startsWith('direction.') && <details className="generation-candidate-management"><summary>候选连接管理</summary>{references(detailCard)}</details>}
         {detailCard?.type === 'direction.photography' && <Button disabled={readonly} onClick={() => {
           const copy = { ...structuredClone(detailCard), id: crypto.randomUUID() }

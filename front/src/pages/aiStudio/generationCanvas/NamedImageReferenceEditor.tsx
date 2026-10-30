@@ -24,11 +24,11 @@ export function NamedImageReferenceEditor({ card: raw, document, projectId, save
   return <Space direction="vertical" style={{ width: '100%' }}>
     <label>参考标题<Input aria-label="参考标题" disabled={disabled} value={card.title || ''} onChange={event => onChange({ ...card, title: event.target.value })} /></label>
     <label>参考角度<Input aria-label="参考角度" disabled={disabled} value={card.angle ?? '正面'} onChange={event => onChange({ ...card, angle: event.target.value })} /></label>
-    <small>参考角度描述这张主图；最终画面视角由生成要求决定。</small>
+
     <section aria-label="添加另一角度参考">
       {resolved.outputs.filter(item => objectReference(item.payload)).map(item => objectReference(item.payload) && <WorkbenchButton key={sourceKey(item.source)} disabled={disabled || !onAddAngle}
-        onClick={() => onAddAngle?.(item)}>添加另一角度参考 {item.payload.name}</WorkbenchButton>)}
-      <small>明确复用所选对象身份；新卡主图和角度独立选择。</small>
+        onClick={() => onAddAngle?.(item)}>另一角度参考 {item.payload.name}</WorkbenchButton>)}
+
     </section>
     {references}
     {resolved.error && <Alert type="error" message={resolved.error} />}
@@ -48,7 +48,6 @@ export function NamedImageReferenceEditor({ card: raw, document, projectId, save
             disabled={disabled} onChange={event => onChange({ ...card, positions: { ...card.positions, [payload.object_id]: event.target.value } })} />}
         </div>
       })}
-      {!names.length && <p>连接对象引用以选择名称；可直接独立命名。</p>}
       {objects.map(obj => <div key={obj.object_id}>
         <label>独立名称<Input aria-label="独立对象名称" value={obj.name} disabled={disabled} onChange={event => updateObject(obj.object_id, { name: event.target.value })} /></label>
         <Select aria-label="参考对象类别" value={obj.category} disabled={disabled} options={allowed.map(value => ({ value, label: categories[value as keyof typeof categories] }))}

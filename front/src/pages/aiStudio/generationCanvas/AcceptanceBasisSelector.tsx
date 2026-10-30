@@ -7,7 +7,7 @@ import { sourceKey } from './promptRules'
 export function AcceptanceBasisSelector({ card, document, candidates, disabled, onChange }: { card: GenerationCard; document: CanvasDocument; candidates: CanvasResolvedOutput[]; disabled?: boolean; onChange: (card: GenerationCard) => void }) {
   if (!('input_bindings' in card)) return null
   const bindings = card.input_bindings || []
-  return <section aria-label="验收依据"><h3>验收依据</h3><p>关联要求的身份与名称，不传递标准正文或示例，也不代表验收通过。模型要使用完整标准，请另行直接采用验收卡的设计文本。</p>
+  return <section aria-label="验收依据"><h3>验收依据</h3>
     {candidates.filter(item => item.payload?.kind === 'criterion_reference' && document.edges?.some(edge => edge.target_card === card.id && edge.target_port === 'acceptance_basis' && edge.source_card === item.source.card_id && edge.source_port === item.source.port_id)).map(item => {
       const binding = bindings.find(value => value.input_port === 'acceptance_basis' && sourceKey(value.source) === sourceKey(item.source))
       const name = item.payload && 'name' in item.payload ? item.payload.name : ''

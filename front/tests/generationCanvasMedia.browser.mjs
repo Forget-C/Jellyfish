@@ -40,7 +40,7 @@ try {
   await page.getByRole('button', { name: '新建画布', exact: true }).click()
 
   await openCardList(page)
-  await page.getByRole('button', { name: '添加图片卡', exact: true }).click()
+  await page.getByRole('button', { name: '图片卡', exact: true }).click()
   const card = page.locator('[data-card-id]').first()
   const detail = page.getByRole('complementary', { name: '图片内容卡', exact: true })
   const input = detail.getByLabel('上传媒体文件')
@@ -89,11 +89,11 @@ try {
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', join(output, 'voice.wav')])
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=blue:s=64x64:d=1', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', join(output, 'clip.mp4')])
   for (const [label, filename, mimeType, preview] of [
-    ['添加音频卡', 'voice.wav', 'audio/wav', 'audio'], ['添加视频卡', 'clip.mp4', 'video/mp4', 'video'],
+    ['音频卡', 'voice.wav', 'audio/wav', 'audio'], ['视频卡', 'clip.mp4', 'video/mp4', 'video'],
   ]) {
     await openCardList(page)
     await page.getByRole('button', { name: label, exact: true }).click()
-    const mediaCard = page.getByRole('complementary', { name: label === '添加音频卡' ? '音频内容卡' : '视频内容卡', exact: true })
+    const mediaCard = page.getByRole('complementary', { name: label === '音频卡' ? '音频内容卡' : '视频内容卡', exact: true })
     await mediaCard.getByLabel('上传媒体文件').setInputFiles({ name: filename, mimeType, buffer: readFileSync(join(output, filename)) })
     await mediaCard.locator(preview).waitFor()
     assert.equal(await mediaCard.locator(preview).getAttribute('controls'), '')
@@ -113,7 +113,7 @@ try {
     assert.equal(await mediaCard.locator(preview).getAttribute('src'), src)
   }
   await openCardList(page)
-  await page.getByRole('button', { name: '添加图片卡', exact: true }).click()
+  await page.getByRole('button', { name: '图片卡', exact: true }).click()
   await detail.getByLabel('上传媒体文件').setInputFiles(png)
   await detail.locator('img[alt="图片预览"]').waitFor()
   await page.getByRole('button', { name: '保存画布', exact: true }).click()

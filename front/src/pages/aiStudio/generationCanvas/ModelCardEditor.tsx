@@ -85,10 +85,9 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
       onChange={id => onChange({ ...card, model_id: id ?? null })} />{parameters}</div><div className="generation-material-tools"><details className="generation-material-candidates"><summary aria-label="管理候选与采用" title="管理候选与采用"><PlusOutlined /> 素材 {adopted.length}</summary>
     <section className="generation-material-add">{sourceActions}</section>
     <div ref={setReferenceTools} />
-    <section aria-label="候选参考区">{references || <small>连接仅提供候选，正文或用途配置决定实际使用</small>}</section>
+    <section aria-label="候选参考区">{references}</section>
     <section role="region" aria-label="已保存直接输入">
       <small>已保存 revision {resolved.revision ?? savedRevision} · 本地修改保存后更新</small>
-      {card.type === 'model.image' && <p>文本依据与参考图片分别采用；采用顺序决定图片提交顺序。当前输出位置随新结果更新，固定图片请在运行历史中明确另存。</p>}
       {card.type === 'model.image' && capability && <small>参考图片上限：{capability.max_reference_images ?? '未声明'} · {capability.supports_duplicate_reference_images ? '允许重复图片文件' : '不允许重复图片文件'}</small>}
       {resolved.candidates.map(output => {
         const binding = bindings.find(value => sourceKey(value.source) === sourceKey(output.source))
@@ -136,7 +135,7 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
   return <div className="generation-material-composer">
     <aside aria-label="本次创作依据" role="region" className="generation-material-basis">
       <h3>本次创作依据 <span>{adopted.length}</span></h3>
-      {!adopted.length && <p className="generation-material-empty">尚未采用来源<br /><small>通过加号添加候选，再明确采用</small></p>}
+      {!adopted.length && <p className="generation-material-empty">尚未采用来源</p>}
       {basisBindings.map(binding => {
         const index = adopted.indexOf(binding)
         const output = resolved.candidates.find(item => sourceKey(item.source) === sourceKey(binding.source))
@@ -160,15 +159,13 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
     {capabilityError && <Alert type="warning" message={capabilityError} />}
     {card.model_id && !models?.some(model => model.id === card.model_id) && <Alert type="warning" message="已选模型当前不可用，原配置和连线已保留" />}
     {node?.error_message && <Alert type="error" message={`${node.error_message} · 可在素材管理或运行历史查看详情`} />}
-    {(resolved.compiled?.diagnostics || []).some(item => item.severity !== 'warning') && <small role="alert">输入需要核对，请打开管理候选与采用查看诊断</small>}
 
     <div className="generation-material-prompt">
       <span className="generation-material-prompt-label">创作描述</span>
-      {resolved.loading && <small role="status">正在读取直接候选</small>}
       {resolved.error && <Alert type="warning" message={resolved.error} />}
       <PromptEditor compact toolsHost={referenceTools} document={document} card={card} value={editorPrompt(card)} candidates={resolved.candidates.map(item => ({ source: item.source, token: item.token || '', available: item.available !== false }))} disabled={disabled} onChange={prompt => onChange(withEditorPrompt(card, prompt))} />
     </div>
-    {(disabled || busy || runDisabled || !hasInput) && <small role="status">{!hasInput ? '输入创作描述或明确采用来源后可提交' : busy ? '当前模型运行中' : '当前不可提交，请核对保存与运行状态'}</small>}
+    {(disabled || busy || runDisabled) && <small role="status">{busy ? '当前模型运行中' : '当前不可提交，请核对保存与运行状态'}</small>}
     </div>
     {footerHost ? createPortal(footer, footerHost) : footer}
   </div>

@@ -46,7 +46,7 @@ try {
   const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
   const poll = async predicate => { for (let i = 0; i < 80; i++) { const state = await read(); if (predicate(state)) return state; await delay(150) } throw Error('save timed out') }
   await page.locator('[data-card-id="front"]').press('Enter')
-  await card.getByRole('button', { name: '添加另一角度参考 小李', exact: true }).click()
+  await card.getByRole('button', { name: '另一角度参考 小李', exact: true }).click()
   const state = await poll(state => state.document.cards.length === 2)
   const side = state.document.cards[1]
   assert.equal(side.objects.length, 0)
@@ -116,7 +116,7 @@ try {
   for (const [source, name, category, objectId] of [['front', '蓝衣', 'costume', 'coat'], ['front', '长剑', 'prop', 'sword'], ['place', '空屋', 'place', 'room']]) {
     const before = await read()
     await page.locator(`[data-card-id="${source}"]`).press('Enter')
-    await card.getByRole('button', { name: `添加另一角度参考 ${name}`, exact: true }).click()
+    await card.getByRole('button', { name: `另一角度参考 ${name}`, exact: true }).click()
     const created = await poll(state => state.document.cards.length === before.document.cards.length + 1)
     const reference = created.document.cards.at(-1)
     assert.equal(reference.type, `reference.${category}`)

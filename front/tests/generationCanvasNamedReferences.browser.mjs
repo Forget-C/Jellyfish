@@ -127,7 +127,7 @@ try {
     await page.getByRole('button', { name: '关闭详情', exact: true }).press('Enter')
     await page.waitForFunction(() => !document.querySelector('.canvas-workbench')?.inert)
     await page.getByRole('button', { name: '参考卡', exact: true }).click()
-    await page.getByRole('button', { name: `添加${title}参考卡`, exact: true }).click()
+    await page.getByRole('button', { name: `${title}参考卡`, exact: true }).click()
     await card.getByRole('button', { name: '展开详情', exact: true }).press('Enter')
     await card.getByRole('button', { name: `独立命名${title}`, exact: true }).click()
     await card.getByRole('textbox', { name: '独立对象名称', exact: true }).fill(objectName)

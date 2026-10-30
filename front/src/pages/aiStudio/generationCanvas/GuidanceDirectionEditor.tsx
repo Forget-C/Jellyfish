@@ -21,13 +21,13 @@ export function GuidanceDirectionEditor({ card: raw, document, savedRevision, mo
   const field = (key: string, label: string, purpose: DesignField['purpose'] = 'design') => <DesignFieldEditor key={key} label={label} purpose={purpose} value={(card as unknown as Record<string, DesignField>)[key]} onChange={value => onChange({ ...card, [key]: value })} />
   const users = document.cards?.filter(consumer => 'input_bindings' in consumer && consumer.input_bindings?.some(binding => binding.input_port === 'acceptance_basis' && binding.source.card_id === card.id && binding.source.port_id === 'criterion')) || []
   return <>
-    <p>完整采用本卡要求。参考绑定要求不自动选择素材；判断标准不代表生成结果已经通过验收。不对自由正文或图片内容纠错。</p>
+
     <Input aria-label="要求名称" value={card.name} onChange={event => onChange({ ...card, name: event.target.value })} />
     {card.type === 'direction.creative_control' && <>{field('freedom', '创作控制程度')}{field('allowed_range', '允许发挥范围')}{field('keep', '需要保持', 'constraint')}{field('undecided', '待确定事项')}</>}
     {card.type === 'direction.guidance' && <>{field('priority', '编译优先级')}{field('reference_requirements', '参考绑定要求')}{field('sound_strategy', '声音策略')}{field('prohibitions', '禁止项', 'constraint')}</>}
-    {card.type === 'direction.criterion' && <>{field('standard', '可观察判断标准', 'constraint')}<section role="region" aria-label="被使用记录"><h3>被使用记录 · 只读</h3><p>仅列出明确关联本要求的卡片，连接候选不计入；关联不代表素材审查通过。</p>{users.length ? users.map(consumer => <p key={consumer.id}>{'name' in consumer && consumer.name || cardTitles[consumer.type || ''] || consumer.type}</p>) : <small>尚未被采用</small>}</section></>}
+    {card.type === 'direction.criterion' && <>{field('standard', '可观察判断标准', 'constraint')}<section role="region" aria-label="被使用记录"><h3>被使用记录 · 只读</h3>{users.length ? users.map(consumer => <p key={consumer.id}>{'name' in consumer && consumer.name || cardTitles[consumer.type || ''] || consumer.type}</p>) : <small>尚未被采用</small>}</section></>}
     {resolved.error && <Alert type="warning" message={resolved.error} />}
-    <details><summary>作用对象</summary><p>只关联直接候选的身份和名称，不读取来源正文。验收要求不反向绑定镜头等使用方。</p>
+    <details><summary>作用对象</summary>
       {resolved.candidates.filter(item => ['object_reference', 'spatial_reference', 'narrative_reference'].includes(item.payload?.kind || '') && !(card.type === 'direction.criterion' && item.payload?.kind === 'narrative_reference' && 'category' in item.payload && item.payload.category === 'shot')).map(item => {
         const bound = bindings.find(binding => binding.input_port === 'effect_object' && sourceKey(binding.source) === sourceKey(item.source))
         const name = item.payload && 'name' in item.payload ? item.payload.name : ''

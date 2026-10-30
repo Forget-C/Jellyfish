@@ -41,7 +41,7 @@ try {
   await openCanvasManagement(page)
   await name.fill('第一张独立画布 A')
   await openCardList(page)
-  await page.getByRole('button', { name: '添加文本卡' }).click()
+  await page.getByRole('button', { name: '文本卡' }).click()
   await page.getByRole('textbox', { name: '文本内容', exact: true }).fill('快照 A')
   // The editor remains usable while snapshot A is in flight; response A cannot erase B.
   let releaseSave
@@ -69,7 +69,7 @@ try {
   await openCanvasManagement(page)
   await name.fill('第二张独立画布')
   await openCardList(page)
-  await page.getByRole('button', { name: '添加文本卡' }).click()
+  await page.getByRole('button', { name: '文本卡' }).click()
   await page.getByRole('button', { name: '保存画布' }).click()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   const secondId = new URL(page.url()).searchParams.get('canvas')

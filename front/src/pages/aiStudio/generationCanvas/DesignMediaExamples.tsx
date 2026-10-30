@@ -9,7 +9,7 @@ type MediaExample<FieldId extends string> = Omit<DesignMediaExample, 'field_id'>
 
 export function DesignMediaExamples<FieldId extends string>({ examples, candidates, disabled, onChange, fieldOptions, ports }: { ports: string[]; fieldOptions?: {value:FieldId;label:string}[]; examples: MediaExample<FieldId>[]; candidates: CanvasResolvedOutput[]; disabled?: boolean; onChange: (examples: MediaExample<FieldId>[]) => void }) {
   const update = (id: string, patch: Partial<MediaExample<FieldId>>) => onChange(examples.map(item => item.id === id ? { ...item, ...patch } : item))
-  return <details><summary>正向示例与反例</summary><p>示例不随设计文本传给模型；需要时请在模型端直接采用。</p>
+  return <details><summary>正向示例与反例</summary>
     {candidates.filter(item => ports.includes(item.modality + '_example') && item.file_id).map(item => <WorkbenchButton key={sourceKey(item.source)} disabled={disabled || item.available === false} onClick={() => onChange([...examples, { id: crypto.randomUUID(), source: item.source, file_id: item.file_id!, purpose: 'positive' }])}>关联示例 {item.token}</WorkbenchButton>)}
     {examples.map(example => <section key={example.id} aria-label={`示例 ${example.id}`}><MediaPreview fileId={example.file_id} type={example.source.port_id === 'audio' ? 'audio' : example.source.port_id === 'video' ? 'video' : 'image'} />
       <Select aria-label="示例用途" disabled={disabled} value={example.purpose} options={[{ value: 'positive', label: '正向示例' }, { value: 'negative', label: '反例' }]} onChange={purpose => update(example.id, { purpose })} />

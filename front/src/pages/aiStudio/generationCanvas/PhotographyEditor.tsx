@@ -35,12 +35,12 @@ export function PhotographyEditor({ card: raw, document, savedRevision, modelOut
         <section className="canvas-effect-key-settings" aria-label="关键设置"><h3>关键设置</h3>{Object.entries(photographyRegions[region].fields).slice(0,2).map(([key,label]) => <DesignFieldEditor compact key={key} label={label} value={fields[key as keyof PhotographyFields]} onChange={value => update({...card,fields:{...fields,[key]:{...fields[key as keyof PhotographyFields],...value}}})}/>)}</section>
       <details className="canvas-effect-professional"><summary>专业字段与来源</summary>
       {Object.entries(photographyRegions[region].fields).slice(2).map(([key, label]) => <DesignFieldEditor key={key} label={label} value={fields[key as keyof PhotographyFields]} onChange={value => update({ ...card, fields: { ...fields, [key]: { ...fields[key as keyof PhotographyFields], ...value } } })} />)}
-      {region === 'composition' && <details><summary>明确景别硬要求</summary><p>只比较同一显式目标和状态的事实要求；开放提议和自由正文保留。</p>
+      {region === 'composition' && <details><summary>明确景别硬要求</summary>
         <Select aria-label="结构化景别" allowClear value={fields.shot_size?.size || undefined} options={Object.entries(shotSizeLabels).map(([value, label]) => ({ value, label }))} onChange={size => update({ ...card, fields: { ...fields, shot_size: { ...fields.shot_size, size: size ?? null } } })} />
         <Input aria-label="景别明确目标身份" placeholder="目标身份（可选）" value={fields.shot_size?.target_id} onChange={event => update({ ...card, fields: { ...fields, shot_size: { ...fields.shot_size, target_id: event.target.value } } })} />
         <Select aria-label="景别目标状态" allowClear placeholder="同一静态画面（可选）" value={fields.shot_size?.state_id || undefined} options={[{value:'field:movement_start',label:'起始画面'},{value:'field:end_frame',label:'结束画面'},...phases.map(phase => ({value:'phase:'+phase.id,label:phase.name || phase.id}))]} onChange={state_id => update({ ...card, fields: { ...fields, shot_size: { ...fields.shot_size, state_id: state_id ?? null } } })} />
       </details>}
-      {region === 'movement' && <section aria-label="明确运镜阶段"><h3>明确运镜阶段</h3><p>仅明确创建的状态可作为图片目标，普通文字不推断阶段。</p>
+      {region === 'movement' && <section aria-label="明确运镜阶段"><h3>明确运镜阶段</h3>
         {phases.map((phase, index) => <section key={phase.id}><Input aria-label="阶段名称" value={phase.name} onChange={event => update({ ...card, phases: phases.map(value => value.id === phase.id ? { ...value, name: event.target.value } : value) })} />
           <DesignFieldEditor label="阶段画面" value={phase.frame} onChange={frame => update({ ...card, phases: phases.map(value => value.id === phase.id ? { ...value, frame } : value) })} />
           <WorkbenchButton disabled={disabled || index === 0} onClick={() => { const next = [...phases]; [next[index-1],next[index]] = [next[index],next[index-1]]; update({ ...card, phases: next }) }}>前移阶段</WorkbenchButton>
