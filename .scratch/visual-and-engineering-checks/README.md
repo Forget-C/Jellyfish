@@ -32,7 +32,7 @@
 | [04 共享浏览器采集准备与失败诊断](issues/04-shared-browser-capture-and-diagnostics.md) | 无 | 四类真实页面的可信采集、命中与失败根因证据 | ready-for-agent；Completion: integrated，详见各票保留验证与整合记录。 |
 | [05 持久化视觉基线并核验证据完整性](issues/05-versioned-visual-baseline-and-evidence.md) | 无 | 干净检出可读基线、36组配对与明确证据核验结果 | ready-for-agent；Completion: integrated，详见各票保留验证与整合记录。 |
 | [06 提供逐区域视觉签收与失效检查](issues/06-visual-review-verdict-and-invalidation.md) | 05 | 实际阅图签收、必须项阻断及证据变化后失效 | ready-for-agent；Completion: integrated，详见各票保留验证与整合记录。 |
-| [07 检查链接入与组合验收收口](issues/07-integrated-checks-and-acceptance.md) | 01、03、04、06 | 统一版本CI归档／检查链、36组签收及组合旅程 | ready-for-agent；Completion: verified；待merger整合及最终双轴审查。 |
+| [07 检查链接入与组合验收收口](issues/07-integrated-checks-and-acceptance.md) | 01、03、04、06 | 统一版本CI归档／检查链、36组签收及组合旅程 | ready-for-agent；Completion: integrated；待最终双轴审查。 |
 
 ```mermaid
 flowchart LR
@@ -65,4 +65,4 @@ flowchart LR
 
 ## 本轮组合验证当前结果
 
-2026-10-30：01–06已按各票完成记录整合；07在其统一版本完成CI目标与归档接入、邻卡采集小修及完整36组组合验收，当前为verified，尚未标integrated。实际执行来源 `1c7769b9`，behavior passed／evidence reviewable／visual passed（36组192区域实际原图签收）；F10来源与390参数局部滚动的初始裁切、公开操作补证和允许差异均明确记录。[独立组合验收](acceptance.md)列出原图范围、命令、有效签收和失效负例，[07 handoff](07-handoff.md)列出工程检查与中间失败。以上是当前实施状态；前文发布阶段的未实施表述为历史语境，不改写旧01–60或环境检查记录。最终Standards／Spec双轴审查、整合与清理由merger另行记录。
+2026-10-30：01–06已按各票完成记录整合；07在其统一版本完成CI目标与归档接入、邻卡采集小修及完整36组组合验收，已通过 `4c2cd706` 整合，Completion为integrated。实际执行来源 `1c7769b9`，behavior passed／evidence reviewable／visual passed（36组192区域实际原图签收）；F10来源与390参数局部滚动的初始裁切、公开操作补证和允许差异均明确记录。[独立组合验收](acceptance.md)列出原图范围、命令、有效签收和失效负例，[07 handoff](07-handoff.md)列出工程检查与中间失败。以上是当前实施状态；前文发布阶段的未实施表述为历史语境，不改写旧01–60或环境检查记录。最终Standards／Spec双轴审查与清理另行记录。
