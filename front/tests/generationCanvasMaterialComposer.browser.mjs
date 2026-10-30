@@ -90,6 +90,7 @@ try {
   assert.equal(await editor.getByRole('region',{name:'已保存直接输入',exact:true}).isVisible(),false)
   await editor.getByRole('textbox',{name:'模型正文',exact:true}).fill('保持雨夜氛围，以自然的光线表现人物。')
   await page.getByLabel('画布保存状态').getByText('已保存',{exact:true}).waitFor()
+  await editor.getByLabel('管理候选与采用',{exact:true}).click()
   await editor.getByRole('button',{name:'添加模型来源',exact:true}).click()
   await page.getByRole('menuitem',{name:'上传参考图片素材',exact:true}).click()
   const upload=page.getByRole('dialog',{name:'上传模型来源',exact:true})
@@ -105,7 +106,7 @@ try {
   await upload.getByRole('img',{name:'图片预览',exact:true}).waitFor()
   await upload.getByRole('button',{name:'Close',exact:true}).click()
   await page.getByLabel('画布保存状态').getByText('已保存',{exact:true}).waitFor()
-  await editor.getByLabel('管理候选与采用',{exact:true}).click()
+  if (!await editor.getByRole('region',{name:'候选参考区',exact:true}).isVisible()) await editor.getByLabel('管理候选与采用',{exact:true}).click()
   await editor.getByRole('button',{name:'采用 @图片1',exact:true}).click()
   await page.getByLabel('画布保存状态').getByText('已保存',{exact:true}).waitFor()
   await editor.getByLabel('管理候选与采用',{exact:true}).click()
@@ -162,6 +163,7 @@ try {
   const accepted=page.waitForResponse(r=>r.request().method()==='POST'&&r.url().endsWith('/runs'))
   await preview.getByRole('button',{name:'确认执行',exact:true}).click()
   const run=(await (await accepted).json()).data
+  await editor.getByLabel('管理候选与采用',{exact:true}).click()
   await editor.getByText('运行状态与正式输出',{exact:true}).click()
   await editor.getByRole('region',{name:'当前正式输出',exact:true}).waitFor()
   const snapshot=(await (await fetch(`${base}/${canvas.id}/runtime`)).json()).data

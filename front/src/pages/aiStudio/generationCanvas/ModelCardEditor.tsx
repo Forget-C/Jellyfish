@@ -1,5 +1,5 @@
 import { Alert, Select, Space } from 'antd'
-import { FileTextOutlined, PictureOutlined, VideoCameraOutlined, SoundOutlined, ArrowUpOutlined, CloseOutlined, LinkOutlined } from '@ant-design/icons'
+import { FileTextOutlined, PictureOutlined, VideoCameraOutlined, SoundOutlined, ArrowUpOutlined, CloseOutlined, PlusOutlined } from '@ant-design/icons'
 import type { CanvasResolvedOutput, InputBinding, ImageModelCard, TextModelCard, VideoModelCard } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
 import { useGraphRules } from './CanvasCatalogContext'
@@ -17,7 +17,7 @@ import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 import { sourceKey } from './promptRules'
 import { WorkbenchButton, WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
 import { activeNode, canvasNodeStatusLabels } from './useGenerationCanvasRuntime'
-import { useContext } from 'react'
+import { useContext, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { CanvasEditorFooter } from './CanvasCardEditor'
@@ -26,6 +26,7 @@ import './materialComposer.css'
 /** 模型卡共享受控 Composer 布局，参数由各模态组件表达。 */
 export function ModelRenderer({ card: raw, savedRevision, document, disabled, onChange, models, capability, capabilityError, references, modelOutputs, node, busy, checking, runDisabled, onPrecheck, sourceActions }: CardRendererProps) {
   const footerHost = useContext(CanvasEditorFooter)
+  const [referenceTools, setReferenceTools] = useState<HTMLDivElement | null>(null)
   const card = raw as TextModelCard | ImageModelCard | VideoModelCard
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs)
   const { portLabels, cardTitles } = useGraphRules()
@@ -79,9 +80,11 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
   // 图像先行仅组织展示；采用顺序仍按绑定原序标注，不改实际编译顺序。
   const basisBindings = [...adopted].sort((left, right) => Number(!resolved.candidates.find(item => sourceKey(item.source) === sourceKey(left.source))?.file_id) - Number(!resolved.candidates.find(item => sourceKey(item.source) === sourceKey(right.source))?.file_id))
   const hasInput = adopted.length > 0 || (editorPrompt(card).segments || []).some(segment => segment.kind !== 'text' || segment.text?.trim())
-  const footer = <footer className="generation-material-footer"><div className="generation-material-parameters"><Select size="small" bordered={false} aria-label="选择模型" placeholder="选择模型" allowClear disabled={disabled} value={card.model_id || undefined}
+  const footer = <footer className="generation-material-footer"><div className="generation-material-parameters"><Select className="generation-material-model" title={models?.find(model => model.id === card.model_id)?.name} size="small" bordered={false} aria-label="选择模型" placeholder="选择模型" allowClear disabled={disabled} value={card.model_id || undefined}
       options={models?.filter(model => model.category === category).map(model => ({ value: model.id, label: model.name }))}
-      onChange={id => onChange({ ...card, model_id: id ?? null })} />{parameters}</div><div className="generation-material-tools">{sourceActions}<details className="generation-material-candidates"><summary aria-label="管理候选与采用" title="管理候选与采用"><LinkOutlined /> 素材 {adopted.length}</summary>
+      onChange={id => onChange({ ...card, model_id: id ?? null })} />{parameters}</div><div className="generation-material-tools"><details className="generation-material-candidates"><summary aria-label="管理候选与采用" title="管理候选与采用"><PlusOutlined /> 素材 {adopted.length}</summary>
+    <section className="generation-material-add">{sourceActions}</section>
+    <div ref={setReferenceTools} />
     <section aria-label="候选参考区">{references || <small>连接仅提供候选，正文或用途配置决定实际使用</small>}</section>
     <section role="region" aria-label="已保存直接输入">
       <small>已保存 revision {resolved.revision ?? savedRevision} · 本地修改保存后更新</small>
@@ -114,6 +117,19 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
     </section>
     {card.type !== 'model.image' && resolved.candidates.map(output => <PhotographyInputScope key={sourceKey(output.source)} card={card} output={output} binding={bindings.find(value => sourceKey(value.source) === sourceKey(output.source))} onChange={onChange} disabled={disabled} />)}
     {card.type === 'model.video' && <VideoInputBindings card={card as VideoModelCard} candidates={resolved.candidates} loading={resolved.loading} capability={capability} disabled={disabled} onChange={onChange} />}
+    <details className="generation-material-results"><summary>运行状态与正式输出</summary>
+
+    {node && <section aria-label="本次运行" data-run-id={node.run_id}>
+      <p role="status">{canvasNodeStatusLabels[node.status] || node.status} · {({ queued: '等待执行', generating: '生成中', archiving: '归档中', cancelling: '取消中，等待任务终态', finished: '已结束' } as Record<string, string>)[node.stage] || node.stage}{node.progress !== undefined && node.progress !== null && ` · ${node.progress}%`}</p>
+      {node.text && <div role="region" aria-label="运行正文"><CanvasTextPreview text={node.text} label="生成正文" /></div>}
+      {node.error_message && <Alert type="error" message={`${node.error_code || '运行失败'}: ${node.error_message}`} />}
+      {node.status === 'succeeded' && !node.current_output_updated && <small>配置已改变，结果保留在本次运行，未替换当前输出</small>}
+      {!activeNode(node) && node.status !== 'succeeded' && node.text && <small>未完成正文保留；未成为正式输出</small>}
+    </section>}
+    {formalOutputs.length > 0 && <section aria-label="当前正式输出">{card.type === 'model.text'
+      ? formalOutputs.map(output => <div key={output.source.position}><CanvasTextPreview text={output.text || ''} label="正式输出" />{output.basis_current === false && <small>依据已变，旧正式输出仍保留</small>}</div>)
+      : <MediaResultsPreview outputs={formalOutputs} />}</section>}
+    </details>
     </details></div>
       <WorkbenchIconButton className="generation-material-submit" variant="primary" label={busy ? '运行中' : '预检运行'} icon={<ArrowUpOutlined />} loading={checking} disabled={disabled || busy || runDisabled || !hasInput} onClick={() => onPrecheck?.()} />
     </footer>
@@ -143,29 +159,17 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
     {diagnostics.length > 0 && <Alert type="warning" message={<ul>{diagnostics.map(message => <li key={message}>{message}</li>)}</ul>} />}
     {capabilityError && <Alert type="warning" message={capabilityError} />}
     {card.model_id && !models?.some(model => model.id === card.model_id) && <Alert type="warning" message="已选模型当前不可用，原配置和连线已保留" />}
-    {node?.error_message && <Alert type="error" message={`${node.error_message} · 详见运行状态`} />}
+    {node?.error_message && <Alert type="error" message={`${node.error_message} · 可在素材管理或运行历史查看详情`} />}
     {(resolved.compiled?.diagnostics || []).some(item => item.severity !== 'warning') && <small role="alert">输入需要核对，请打开管理候选与采用查看诊断</small>}
 
     <div className="generation-material-prompt">
       <span className="generation-material-prompt-label">创作描述</span>
       {resolved.loading && <small role="status">正在读取直接候选</small>}
       {resolved.error && <Alert type="warning" message={resolved.error} />}
-      <PromptEditor compact document={document} card={card} value={editorPrompt(card)} candidates={resolved.candidates.map(item => ({ source: item.source, token: item.token || '', available: item.available !== false }))} disabled={disabled} onChange={prompt => onChange(withEditorPrompt(card, prompt))} />
+      <PromptEditor compact toolsHost={referenceTools} document={document} card={card} value={editorPrompt(card)} candidates={resolved.candidates.map(item => ({ source: item.source, token: item.token || '', available: item.available !== false }))} disabled={disabled} onChange={prompt => onChange(withEditorPrompt(card, prompt))} />
     </div>
     {(disabled || busy || runDisabled || !hasInput) && <small role="status">{!hasInput ? '输入创作描述或明确采用来源后可提交' : busy ? '当前模型运行中' : '当前不可提交，请核对保存与运行状态'}</small>}
-    <details className="generation-material-results"><summary>运行状态与正式输出</summary>
-
-    {node && <section aria-label="本次运行" data-run-id={node.run_id}>
-      <p role="status">{canvasNodeStatusLabels[node.status] || node.status} · {({ queued: '等待执行', generating: '生成中', archiving: '归档中', cancelling: '取消中，等待任务终态', finished: '已结束' } as Record<string, string>)[node.stage] || node.stage}{node.progress !== undefined && node.progress !== null && ` · ${node.progress}%`}</p>
-      {node.text && <div role="region" aria-label="运行正文"><CanvasTextPreview text={node.text} label="生成正文" /></div>}
-      {node.error_message && <Alert type="error" message={`${node.error_code || '运行失败'}: ${node.error_message}`} />}
-      {node.status === 'succeeded' && !node.current_output_updated && <small>配置已改变，结果保留在本次运行，未替换当前输出</small>}
-      {!activeNode(node) && node.status !== 'succeeded' && node.text && <small>未完成正文保留；未成为正式输出</small>}
-    </section>}
-    {formalOutputs.length > 0 && <section aria-label="当前正式输出">{card.type === 'model.text'
-      ? formalOutputs.map(output => <div key={output.source.position}><CanvasTextPreview text={output.text || ''} label="正式输出" />{output.basis_current === false && <small>依据已变，旧正式输出仍保留</small>}</div>)
-      : <MediaResultsPreview outputs={formalOutputs} />}</section>}
-    </details></div>
+    </div>
     {footerHost ? createPortal(footer, footerHost) : footer}
   </div>
 }

@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Button, Input, Select, Space } from 'antd'
 import type { CanvasDocument, PromptText } from '../../../services/generated'
 import type { GenerationCard } from './graphRules'
@@ -28,7 +29,7 @@ function contentKey(document: PromptDocument) {
 }
 
 /** DOM 仅作为输入表面；持久值是有稳定身份的片段，组合输入期间不重建 DOM。 */
-export function PromptEditor({ compact = false, document, card, value, onChange, disabled, candidates = [] }: { compact?: boolean; document: CanvasDocument; card: GenerationCard; value: PromptDocument; onChange: (value: PromptDocument) => void; disabled?: boolean; candidates?: Candidate[] }) {
+export function PromptEditor({ compact = false, toolsHost, document, card, value, onChange, disabled, candidates = [] }: { compact?: boolean; toolsHost?: HTMLElement | null; document: CanvasDocument; card: GenerationCard; value: PromptDocument; onChange: (value: PromptDocument) => void; disabled?: boolean; candidates?: Candidate[] }) {
   const root = useRef<HTMLDivElement>(null), composing = useRef(false), local = useRef(value), renderedContent = useRef('')
   const [category, setCategory] = useState('text'), [query, setQuery] = useState(''), [activeIndex, setActiveIndex] = useState(0)
   local.current = value
@@ -161,7 +162,7 @@ export function PromptEditor({ compact = false, document, card, value, onChange,
       {query && <small role="status">匹配 {query}；完整代号确认后绑定</small>}
     </Space>
   return <>
-    {compact ? <details className="generation-material-reference-tools"><summary>＠ 引用与指令</summary>{tools}</details> : tools}
+    {compact ? toolsHost && createPortal(<details className="generation-material-reference-tools"><summary>＠ 引用与指令</summary>{tools}</details>, toolsHost) : tools}
     {(value.segments || []).filter((segment): segment is PromptInstruction => segment.kind === 'instruction').map(instruction => <section key={instruction.id} aria-label={`指令 ${instruction.command}`} data-instruction-id={instruction.id} data-segment-id={instruction.id}>
       <strong>/{instruction.command}</strong>
       {instruction.command === '主体参考' && <Input disabled={disabled} aria-label="主体名称" value={instruction.parameters?.name || ''} onChange={event => publish({ segments: (value.segments || []).map(segment => segment.id === instruction.id ? { ...instruction, parameters: { ...instruction.parameters, name: event.target.value } } : segment) }, true)} />}
