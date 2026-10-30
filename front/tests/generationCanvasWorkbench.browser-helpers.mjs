@@ -195,6 +195,8 @@ export async function prepareCanvasCard(page, id) {
 
 /** Wait for fonts, actual media loading and stable geometry, then clip the page without locator auto-scroll. */
 export async function captureCanvasRegion(page, region, path) {
+  await page.mouse.move(1, 1)
+  await page.waitForFunction(() => [...document.querySelectorAll('[role="tooltip"]')].every(element => !element.getClientRects().length || getComputedStyle(element).visibility === 'hidden'), undefined, { timeout: 2000 })
   const handle = await region.elementHandle()
   await page.waitForFunction(element => document.fonts.status === 'loaded' && [...element.querySelectorAll('img')].every(image => image.complete && image.naturalWidth > 0), handle, { timeout: 5000 })
   await region.evaluate(element => new Promise((resolve, reject) => {
