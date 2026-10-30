@@ -104,7 +104,7 @@ try{
           await captureCanvasRegion(page,editor,join(output,`${p1}-scrolled-parameters-editor.png`))
           explicitScrollEvidence.push({group:p1,action:'horizontal wheel plus explicit Tab from resolution to quantity',quantity,scroll:await parameters.evaluate(element=>({left:element.scrollLeft,width:element.clientWidth,total:element.scrollWidth}))})
           await page.keyboard.press('Shift+Tab');await page.keyboard.press('Shift+Tab');await page.keyboard.press('Shift+Tab')
-          await assertControlReachable(editor.getByRole('combobox',{name:'选择模型',exact:true}),'after keyboard return to first parameter')
+          await assertControlReachable(editor.locator('.generation-material-model'),'after keyboard return to first parameter')
         }
       }
       await editor.getByRole('button',{name:'展开详情',exact:true}).click();const p2=await capture(f2,kind,'expanded',id)
