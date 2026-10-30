@@ -6,6 +6,8 @@
 
 **Status:** ready-for-agent
 
+**Completion:** integrated
+
 - [x] 将已确认C的必要目标清单、原图及明确覆盖说明纳入可版本定位的仓库资料；记录来源版本、卡类／状态、视口／缩放、必要素材／模型状态和图片身份，不依赖机器绝对临时路径。
 - [x] 目标更新保留新旧版本和明确理由，不自动接受当前正式图或失败采图；既有负向复审图只作问题证据，不成为基线。
 - [x] 公开入口将行为断言、证据完整性、视觉审阅分别报告；无目标的普通行为运行可以成功，但必须明确视觉未审阅。视觉证据核验缺少有效清单必须失败，核验成功只表示证据可审阅。
@@ -35,3 +37,5 @@
 - 真实公开运行 `C60_PROTOTYPE_MANIFEST=<versioned manifest> PLAYWRIGHT_CHANNEL=chrome pnpm --dir front run test:browser generation-canvas-four-card-acceptance --output /private/tmp/checks05-four-card` 通过预检及完整页面/HTTP/受控Worker旅程（111.5s）。最终核验结果在case目录 `visual-result-rechecked.json`：behavior=passed，evidence=reviewable，36组，visual=not-reviewed；这是更新核验器后复用同一原图，并未重新采图或签收。
 - 实际打开6张代表原图：F01/1440目标与正式编辑区、目标含标题卡面与正式卡面、F04/390目标与正式编辑区；未查看整页样例，未声称完成36组视觉审阅。完整阅图/签收由06/07继续。
 - 接口、运行身份/内容哈希、复核命令、原图与已检查范围详见 [05交接](../05-handoff.md)。旧01–60与旧环境检查资料及旧spec未修改；无后端应用/API变化，不运行无关Pylint/OpenAPI。无推送、无真实仓库hook安装。
+
+- 2026-10-30（integration 整合）：票05实现分支提交 `38b3af14` 已通过合并提交 `86468ec1` 整合到 `codex-visual-engineering-checks`；无冲突，复用以上35条公开CLI、typecheck、lint及111.5s真实页面记录和最终契约对同一原图的机械复核，未修改相关实现或重跑无变化检查。`Status` 保持分诊状态 `ready-for-agent`，以 `Completion: integrated` 标记交付状态；证据可审阅不表示视觉签收，06沿用交接指定的 `visual-result-rechecked.json`。
