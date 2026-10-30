@@ -31,7 +31,8 @@
 .generation-material-parameters > .ant-select { flex: none; width: auto; min-width: 64px; max-width: 180px; }
 .generation-material-parameters > .generation-material-model { min-width: 90px; max-width: 180px; }
 .generation-material-parameters .ant-select-selection-item { font-size: 11px; }
-.generation-material-parameters .ant-input-number { width: 52px; flex: 0 0 52px; }
+.generation-material-parameters .ant-input-number { width: 56px; flex: 0 0 56px; }
+.generation-material-parameters .ant-input-number-input { font-size: 11px; }
 .generation-material-parameters > span { color: var(--wb-muted); font-size: 11px; white-space: nowrap; }
 .generation-material-parameters > details { flex: none; font-size: 11px; }
 .generation-material-parameters > details[open] { position: absolute; bottom: 44px; background: var(--wb-surface); border: 1px solid var(--wb-border); border-radius: var(--wb-radius); padding: 12px; z-index: 3; }
@@ -75,3 +76,17 @@
 .generation-card[data-card-type="model.text"] .generation-model-empty { min-height: 86px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--wb-muted); font-size: 12px; }
 .generation-model-empty > .anticon { font-size: 20px; }
 .generation-material-add .wb-action { width: auto; }
+
+/* Image results remain one local preview of the full published output set. */
+.generation-workbench .generation-card[data-card-type="model.image"] .generation-card-body { padding: 0; min-height: 0; max-height: none; overflow: hidden; }
+.generation-card[data-card-type="model.image"] .generation-card-footer { padding: 4px 10px; margin: 0; }
+.generation-card[data-card-type="model.image"] .generation-model-empty { height: 185px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--wb-muted); font-size: 12px; }
+.generation-image-result { position: relative; height: 185px; }
+.generation-image-result > img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.generation-image-result-actions { position: absolute; right: 4px; bottom: 4px; display: flex; gap: 4px; align-items: center; }
+.generation-image-result-actions .wb-action, .generation-image-result-switch { background: var(--wb-surface); border: 1px solid var(--wb-border); border-radius: var(--wb-radius); }
+.generation-image-result-switch { display: flex; align-items: center; gap: 2px; font-size: 10px; padding: 2px; }
+.generation-image-result-switch .wb-action.ant-btn { background: transparent; border: 0; min-width: 28px; width: 28px; height: 28px; padding: 0; }
+.generation-image-result-switch button:focus-visible { outline: 2px solid var(--wb-focus); outline-offset: 1px; }
+.generation-image-result-switch > span { padding: 0 4px; color: var(--wb-muted); white-space: nowrap; }
+@media (max-width: 700px) { .generation-image-result-actions .wb-action.ant-btn { min-width: 36px; width: 36px; height: 36px; } }

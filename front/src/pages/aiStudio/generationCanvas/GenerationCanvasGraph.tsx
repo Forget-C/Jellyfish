@@ -17,7 +17,7 @@ import { performanceSummary } from './PerformanceDirectionEditor'
 import type { PerformanceCard } from './PerformanceDirectionEditor'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, PointerEvent, ReactNode } from 'react'
-import { AimOutlined, MinusOutlined, PlusOutlined, CloseOutlined, ScissorOutlined, GroupOutlined, MoreOutlined, FileTextOutlined } from '@ant-design/icons'
+import { AimOutlined, MinusOutlined, PlusOutlined, CloseOutlined, ScissorOutlined, GroupOutlined, MoreOutlined, FileTextOutlined, PictureOutlined } from '@ant-design/icons'
 import { WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
 import { CanvasToolbarMenu } from '../directing/CanvasToolbarMenu'
 import { ConfigProvider, Dropdown, Modal, Input, Select, Space, Tooltip, Image } from 'antd'
@@ -837,7 +837,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
           const node = runtime?.nodes[card.id]
           const isModel = 'model_id' in card
           return <CardShell key={`${document.id}:${card.id}`} id={card.id} type={card.type} name={'name' in card ? card.name : 'title' in card ? card.title : undefined} title={cardTitles[card.type || 'content.text']} contextKey={document.id} point={point(card.id)}
-            scale={transform.scale} width={size?.width || (['content.text', 'content.image', 'model.text'].includes(card.type || '') ? 300 : 400)} height={size?.height} selected={selected.includes(card.id)} filterMatch={matched.has(card.id)} readonly={readonly} removeDisabled={runtime?.busyCards.has(card.id)}
+            scale={transform.scale} width={size?.width || (['content.text', 'content.image', 'model.text', 'model.image'].includes(card.type || '') ? 300 : 400)} height={size?.height} selected={selected.includes(card.id)} filterMatch={matched.has(card.id)} readonly={readonly} removeDisabled={runtime?.busyCards.has(card.id)}
             onEdit={card.type?.startsWith('direction.') ? trigger => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailAllowPan(false); setDetailId(card.id) } : undefined}
             onExpand={trigger => { setDetailAllowPan(false); setDetailTrigger(trigger); setDetailId(card.id); setExpandRequest({id:card.id,serial:Date.now()}) }}
             onOpen={(trigger, dragged) => { setDetailAllowPan(!dragged); if (accessibleConnection) chooseAccessibleTarget(card.id); else { setMultiSelectMode(false); setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.type?.startsWith('direction.') ? undefined : card.id) } }} onSelect={checked => { setDetailId(undefined); setSelectedEdgeId(undefined); setSelected(previous => checked ? [...new Set([...previous, card.id])] : previous.filter(id => id !== card.id)) }}
@@ -850,8 +850,8 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
               {referenceImage && <MediaPreview fileId={referenceImage} type="image" />}
             </>}
             {isModel && <section aria-label="模型输出预览">
-              {outputs.length === 0 && (card.type === 'model.text' ? <div className="generation-model-empty"><FileTextOutlined aria-hidden /><span>尚未生成</span></div> : <><p className="canvas-card-summary">尚未生成</p><small>输入与模型配置在下方编辑区</small></>)}
-              {outputs.some(output => output.file_id) && <MediaResultsPreview outputs={outputs.filter(output => output.file_id)} showBasisStatus={false} />}
+              {outputs.length === 0 && (['model.text', 'model.image'].includes(card.type || '') ? <div className="generation-model-empty">{card.type === 'model.image' ? <PictureOutlined aria-hidden /> : <FileTextOutlined aria-hidden />}<span>尚未生成</span></div> : <><p className="canvas-card-summary">尚未生成</p><small>输入与模型配置在下方编辑区</small></>)}
+              {outputs.some(output => output.file_id) && <MediaResultsPreview outputs={outputs.filter(output => output.file_id)} showBasisStatus={false} imageCard={card.type === 'model.image'} />}
               {outputs.filter(output => output.text).map(output => <p key={output.source.position} className="canvas-card-summary">{output.text}</p>)}
               {node?.text && node.status !== 'succeeded' && <section aria-label="临时生成预览"><small>临时生成内容 · 未成为正式输出</small><p className="canvas-card-summary">{node.text}</p></section>}
             </section>}
