@@ -3,8 +3,8 @@ import { test } from 'node:test'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 const cli = fileURLToPath(new URL('../scripts/visual-evidence.mjs', import.meta.url))
-const invoke = args => {
-  const result = spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8' })
+const invoke = (args, env = process.env) => {
+  const result = spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8', env })
   return { ...result, result: JSON.parse(result.stdout || '{}') }
 }
 test('ordinary behavior success explicitly leaves evidence unchecked and visual unreviewed', () => {
@@ -15,9 +15,24 @@ test('ordinary behavior success explicitly leaves evidence unchecked and visual 
   assert.equal(result.visual.status, 'not-reviewed')
 })
 
-import { readFileSync, writeFileSync, rmSync } from 'node:fs'
+import { readFileSync, writeFileSync, rmSync, mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { fixture } from './visualEvidenceFixture.mjs'
+test('evidence CLI uses the bundled browser runtime by default and reports a missing installation', t => {
+  const f = fixture(t)
+  const browsers = mkdtempSync(join(tmpdir(), 'visual-evidence-empty-browsers-'))
+  t.after(() => rmSync(browsers, { recursive: true, force: true }))
+  const env = { ...process.env, PLAYWRIGHT_BROWSERS_PATH: browsers }
+  delete env.PLAYWRIGHT_CHANNEL
+  const { status, result } = invoke(f.args, env)
+  assert.equal(status, 1, JSON.stringify(result))
+  assert.equal(result.evidence.status, 'failed')
+  assert.match(result.evidence.errors.join(' '), /Executable doesn't exist/)
+  assert.ok(result.evidence.errors.join(' ').includes(browsers))
+  assert.equal(result.visual.status, 'not-reviewed')
+})
+
 test('complete 36-group evidence is reviewable, with original file identities and independent visual status', t => {
   const f = fixture(t)
   f.manifest.groups.reverse(); f.matrix.reverse(); f.save()
