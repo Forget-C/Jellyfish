@@ -1,6 +1,7 @@
 import { recordVisualState, writeVisualEvidence } from './visual-evidence-output.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
+import { prepareCanvasCard, moveCanvasCard, clearCanvasNeighbors, pressCanvasControl, assertControlReachable, captureCanvasRegion, captureCanvasFailure } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { spawn, execFileSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
@@ -35,10 +36,10 @@ try{
   await page.goto(`http://127.0.0.1:4460/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   const editor=page.locator('.generation-card-editor:visible')
   const close=async()=>{if(await editor.isVisible()){if(await editor.getByRole('button',{name:'收起详情',exact:true}).isVisible())await editor.getByRole('button',{name:'收起详情',exact:true}).click();await editor.getByRole('button',{name:'关闭详情',exact:true}).click()}}
-  const move=async(id,x=200,y)=>{if(y===undefined){const browse=await page.locator('.generation-browse').boundingBox();y=Math.max(210,(browse?.y||0)+(browse?.height||0)+16)}const c=page.locator(`[data-card-id="${id}"]`),m=c.getByRole('button',{name:/^移动布局：/});await m.evaluate(button=>button.focus({preventScroll:true}));for(let i=0;i<250;i++){const b=await c.boundingBox();if(Math.abs(b.x-x)<=20&&Math.abs(b.y-y)<=20)return;await page.keyboard.press(Math.abs(b.x-x)>20?(b.x<x?'ArrowRight':'ArrowLeft'):(b.y<y?'ArrowDown':'ArrowUp'))}throw Error(`cannot move ${id}`)}
-  const clearNeighbors=async id=>{const target=page.locator(`[data-card-id="${id}"]`);for(const other of cards.filter(c=>c.id!==id)){const card=page.locator(`[data-card-id="${other.id}"]`),mover=card.getByRole('button',{name:/^移动布局：/});await mover.evaluate(button=>button.focus({preventScroll:true}));for(let step=0;step<100;step++){const a=await target.boundingBox(),b=await card.boundingBox();if(b.x>=a.x+a.width+20||b.x+b.width<=a.x-20||b.y>=a.y+a.height+20||b.y+b.height<=a.y-20)break;await page.keyboard.press('ArrowRight')}}}
-  const open=async id=>{await close();await move(id,page.viewportSize().width===390?74:200);await clearNeighbors(id);await page.locator(`[data-card-id="${id}"]`).evaluate(card=>card.focus({preventScroll:true}));await page.keyboard.press('Enter');await editor.waitFor();await delay(180)}
-  const captureCard=async(id,name)=>{const card=page.locator(`[data-card-id="${id}"]`),handle=card.getByRole('button',{name:/^移动布局：/});assert.ok(await handle.evaluate(button=>{const r=button.getBoundingClientRect(),hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return !!hit&&button.contains(hit)}),'card title is clear of persistent toolbar before capture');await page.screenshot({path:join(output,name),clip:await card.boundingBox()})}
+  const move=(id,x,y)=>moveCanvasCard(page,id,x,y)
+  const clearNeighbors=id=>clearCanvasNeighbors(page,id)
+  const open=async id=>{await close();await prepareCanvasCard(page,id);await pressCanvasControl(page,page.locator(`[data-card-id="${id}"]`),'Enter');await editor.waitFor()}
+  const captureCard=async(id,name)=>{const card=page.locator(`[data-card-id="${id}"]`);await assertControlReachable(card.getByRole('button',{name:/^移动布局：/}),'initial title');await captureCanvasRegion(page,card,join(output,name))}
   const saved=async()=>{await page.getByLabel('画布保存状态').getByText('已保存',{exact:true}).waitFor()}
   // Import and replace through visible actions before any model adopts these candidates.
   await open('text');const chooser=page.waitForEvent('filechooser');await editor.getByRole('button',{name:'导入文本',exact:true}).click();await(await chooser).setFiles({name:'街角创作笔记.md',mimeType:'text/markdown',buffer:Buffer.from(sample)});await waitFor(async()=>(await read()).document.cards.find(c=>c.id==='text').text===sample,'import saved');await saved();assert.equal((await read()).document.cards.find(c=>c.id==='text').text,sample)
@@ -57,17 +58,37 @@ try{
   const outputs=(await runtime()).current_outputs;assert.equal(outputs['model-text'][0].text,sample);assert.equal(outputs['model-image'].length,3)
   const targets=process.env.C60_PROTOTYPE_MANIFEST?JSON.parse(readFileSync(process.env.C60_PROTOTYPE_MANIFEST,'utf8')):undefined
   const matrix=[]
-  const capture=async(f,kind,state,id)=>{await saved();await page.mouse.move(page.viewportSize().width-3,15);await delay(220);await page.waitForFunction(()=>document.querySelector('.generation-card-editor:not([hidden])')?.getBoundingClientRect().height>200);const {width,height}=page.viewportSize(),prefix=`${f}-${kind}-${state}-${width}x${height}`;await page.screenshot({path:join(output,`${prefix}-page.png`),fullPage:true});await page.screenshot({path:join(output,`${prefix}-editor.png`),clip:await editor.boundingBox()});const target=targets?.groups.find(g=>g.id===f&&g.viewport.width===width);matrix.push({id:f,kind,state,viewport:{width,height},formal:{page:`${prefix}-page.png`,editor:`${prefix}-editor.png`,card:`${prefix}-card.png`},target:target||'Use retained C prototype manifest by matching F and viewport'});await recordVisualState(output,prefix,{viewport:page.viewportSize(),zoom:Number.parseFloat(await page.getByLabel('画布缩放比例').innerText())/100,card:(await read()).document.cards.find(c=>c.id===id),outputs:(await runtime()).current_outputs[id]||[],media:await editor.locator('img').evaluateAll(images=>images.map(image=>({src:image.getAttribute('src'),width:image.naturalWidth,height:image.naturalHeight})))});return prefix}
+  const captureBusinessState=async()=>({
+    cards:(await read()).document.cards.map(({id,file_id,input_bindings,model_id})=>({id,file_id,input_bindings,model_id})),
+    calls:{text:(await controls()).text_calls.length,image:(await controls()).calls.length},
+  })
+  const beforeEvidence=await captureBusinessState()
+
+  const captureContexts={}
+  const capture=async(f,kind,state,id)=>{
+    await saved();await page.mouse.move(page.viewportSize().width-3,15)
+    const {width,height}=page.viewportSize(),prefix=`${f}-${kind}-${state}-${width}x${height}`
+    await assertControlReachable(editor.getByRole('button',{name:'关闭详情',exact:true}),'initial')
+    await assertControlReachable(editor.getByRole('button',{name:state==='expanded'?'收起详情':'展开详情',exact:true}),'initial')
+    captureContexts[prefix]=await captureCanvasRegion(page,editor,join(output,`${prefix}-editor.png`))
+    await page.screenshot({path:join(output,`${prefix}-page.png`),fullPage:true})
+    const target=targets?.groups.find(g=>g.id===f&&g.viewport.width===width)
+    matrix.push({id:f,kind,state,viewport:{width,height},formal:{page:`${prefix}-page.png`,editor:`${prefix}-editor.png`,card:`${prefix}-card.png`},target:target||'Use retained C prototype manifest by matching F and viewport'})
+    await recordVisualState(output,prefix,{viewport:page.viewportSize(),zoom:Number.parseFloat(await page.getByLabel('画布缩放比例').innerText())/100,card:(await read()).document.cards.find(c=>c.id===id),outputs:(await runtime()).current_outputs[id]||[],media:await editor.locator('img').evaluateAll(images=>images.map(image=>({src:image.getAttribute('src'),width:image.naturalWidth,height:image.naturalHeight})))})
+    return prefix
+  }
   for(const [width,height] of [[1440,960],[390,844],[3830,1688]]){
     await close();await page.setViewportSize({width,height});await delay(180)
     for(const [kind,id,empty,f1,f2,f3] of [['text','text','text-empty','F01','F02','F03'],['image','image','image-empty','F04','F05','F06'],['model-text','model-text','model-text-empty','F07','F08','F09'],['model-image','model-image','model-image-empty','F10','F11','F12']]){
       await open(id);const p1=await capture(f1,kind,'default',id)
       await editor.getByRole('button',{name:'展开详情',exact:true}).click();const p2=await capture(f2,kind,'expanded',id)
-      await close();await move(id,width===390?74:200);await clearNeighbors(id);await captureCard(id,`${p1}-card.png`);await captureCard(id,`${p2}-card.png`)
-      await open(empty);const p3=await capture(f3,kind,'empty',empty);if(kind.startsWith('model'))assert.ok(await editor.getByRole('button',{name:'预检运行',exact:true}).isDisabled());await close();await move(empty,width===390?74:200);await clearNeighbors(empty);await captureCard(empty,`${p3}-card.png`)
+      await close();await prepareCanvasCard(page,id);await captureCard(id,`${p1}-card.png`);await captureCard(id,`${p2}-card.png`)
+      await open(empty);const p3=await capture(f3,kind,'empty',empty);if(kind.startsWith('model'))assert.ok(await editor.getByRole('button',{name:'预检运行',exact:true}).isDisabled());await close();await prepareCanvasCard(page,empty);await captureCard(empty,`${p3}-card.png`)
     }
   }
+  assert.deepEqual(await captureBusinessState(),beforeEvidence,'capturing the matrix does not adopt candidates, replace media or execute a model')
   writeFileSync(join(output,'matrix.json'),JSON.stringify(matrix,null,2))
+  writeFileSync(join(output,'capture-contexts.json'),JSON.stringify(captureContexts,null,2))
   // No-output-with-basis and unselected-model are separate states, never a substitute for ready.
   await page.setViewportSize({width:1440,height:960});await adopt('basis-no-output','@文本1');await open('basis-no-output');await page.screenshot({path:join(output,'text-model-basis-no-output.png'),fullPage:true});assert.equal((await runtime()).current_outputs['basis-no-output'],undefined)
   await open('unselected');await page.screenshot({path:join(output,'text-model-unselected.png'),fullPage:true})
@@ -79,15 +100,18 @@ try{
   const state=await read();const cyclic={...state.document,edges:[...state.document.edges,{id:'cycle',source_card:'model-image',source_port:'image',target_card:'reference',target_port:'image_source'}]};const cycle=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'cycle',expected_revision:state.revision,document:cyclic})});assert.ok(cycle.status>=400);assert.match(await cycle.text(),/GRAPH_CYCLE/);assert.equal((await read()).revision,state.revision)
   await close();await page.getByRole('button',{name:'运行历史',exact:true}).click();await page.getByRole('region',{name:'画布运行历史',exact:true}).waitFor();await page.screenshot({path:join(output,'integrated-history.png'),fullPage:true});await page.getByRole('button',{name:'运行历史',exact:true}).click();await page.reload();await open('model-image');assert.equal((await read()).document.cards.find(c=>c.id==='model-image').input_bindings.length,3);assert.equal((await runtime()).current_outputs['model-text'][0].text,sample)
   // The same four retained editors must remain usable near each persistent toolbar.
-  const exercise=async(id,action)=>{if(id==='text'||id==='image'){const choosing=page.waitForEvent('filechooser');await action.click();await(await choosing).setFiles([])}else{await action.press('Enter');await editor.getByRole('region',{name:'已保存直接输入',exact:true}).waitFor();await action.press('Escape')}await editor.getByRole('button',{name:'关闭详情',exact:true}).focus();await editor.getByRole('button',{name:'关闭详情',exact:true}).press('Tab');assert.equal(await editor.isVisible(),true)}
+  const exercise=async(id,action)=>{if(id==='text'||id==='image'){const choosing=page.waitForEvent('filechooser');await action.click();await(await choosing).setFiles([])}else{await action.press('Enter');await editor.getByRole('region',{name:'已保存直接输入',exact:true}).waitFor();await action.press('Escape')}await pressCanvasControl(page,editor.getByRole('button',{name:'关闭详情',exact:true}),'Tab');assert.equal(await editor.isVisible(),true)}
   const edgesEvidence=[]
   for(const id of ['text','image','model-text','model-image']){
     for(const edge of ['left','right','bottom']){
-      await close();await move(id,edge==='left'?20:edge==='right'?1100:200,edge==='bottom'?820:210);await clearNeighbors(id);await page.locator(`[data-card-id="${id}"]`).evaluate(card=>card.focus({preventScroll:true}));await page.keyboard.press('Enter');await editor.waitFor();await delay(200)
+      await close();await move(id,edge==='left'?20:edge==='right'?1100:200,edge==='bottom'?820:210);await clearNeighbors(id)
+      const positionBeforeOpen=await page.locator(`[data-card-id="${id}"]`).boundingBox()
+      await pressCanvasControl(page,page.locator(`[data-card-id="${id}"]`),'Enter');await editor.waitFor();await delay(200)
+      const positionAfterOpen=await page.locator(`[data-card-id="${id}"]`).boundingBox()
       const action=id==='text'?editor.getByRole('button',{name:'导入文本',exact:true}):id==='image'?editor.getByRole('button',{name:'替换图片',exact:true}):editor.getByLabel('管理候选与采用',{exact:true})
-      await exercise(id,action);await editor.getByRole('button',{name:'展开详情',exact:true}).click({trial:true});await page.screenshot({path:join(output,`${id}-${edge}-default.png`),fullPage:true})
-      await editor.getByRole('button',{name:'展开详情',exact:true}).click();await exercise(id,action);await page.screenshot({path:join(output,`${id}-${edge}-expanded.png`),fullPage:true});edgesEvidence.push({id,edge,action:'real file-picker cancel or material Enter/Escape, default/expanded'})
+      const initialHit=await assertControlReachable(action,'initial');await exercise(id,action);await editor.getByRole('button',{name:'展开详情',exact:true}).click({trial:true});await page.screenshot({path:join(output,`${id}-${edge}-default.png`),fullPage:true})
+      await editor.getByRole('button',{name:'展开详情',exact:true}).click();const expandedHit=await assertControlReachable(action,'initial expanded');await exercise(id,action);await page.screenshot({path:join(output,`${id}-${edge}-expanded.png`),fullPage:true});edgesEvidence.push({id,edge,positionBeforeOpen,positionAfterOpen,initialHit,expandedHit,action:'real file-picker cancel or material Enter/Escape, default/expanded'})
     }
   }
   writeFileSync(join(output,'edge-evidence.json'),JSON.stringify(edgesEvidence,null,2));writeFileSync(join(output,'final-document.json'),JSON.stringify(await read(),null,2));await writeVisualEvidence(output,{behavior:'passed',manifest:process.env.C60_PROTOTYPE_MANIFEST,browserVersion:browser.version()});console.log('C60 behavior assertions passed: same-canvas four-card F01–F12/three-viewports, real import/replace/adopt/generate/mapping/history/reopen and edge interaction',output)
-}catch(error){if(!error.evidenceFailure)await writeVisualEvidence(output,{behavior:'failed',manifest:process.env.C60_PROTOTYPE_MANIFEST,browserVersion:browser?.version()}).catch(summaryError=>console.error('evidence summary unavailable:',summaryError.message));if(page)await page.screenshot({path:join(output,'failure.png'),fullPage:true});throw error}finally{await cleanup()}
+}catch(error){if(!error.evidenceFailure)await writeVisualEvidence(output,{behavior:'failed',manifest:process.env.C60_PROTOTYPE_MANIFEST,browserVersion:browser?.version()}).catch(summaryError=>console.error('evidence summary unavailable:',summaryError.message));if(page)await captureCanvasFailure(page,output,error);throw error}finally{await cleanup()}
