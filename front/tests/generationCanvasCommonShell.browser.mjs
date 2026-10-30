@@ -61,6 +61,16 @@ try {
     await capture.assertControlReachable(page.getByRole('button', { name: '关闭详情', exact: true }), 'initial deliberate obstruction')
     throw new Error('blocked control was incorrectly accepted')
   }
+  // Ordinary capture must preserve a readable context even when several neighbors overlap.
+  for (const id of ['text', 'image', 'model-text', 'model-image']) await capture.moveCanvasCard(page, id, 200, 250)
+  await capture.prepareCanvasCard(page, 'text')
+  const preparedCards = await page.locator('[data-card-id]').all()
+  const preparedBoxes = await Promise.all(preparedCards.map(card => card.boundingBox()))
+  for (let i = 0; i < preparedBoxes.length; i++) for (let j = i + 1; j < preparedBoxes.length; j++) {
+    const a = preparedBoxes[i], b = preparedBoxes[j]
+    assert.ok(b.x >= a.x + a.width + 20 || b.x + b.width <= a.x - 20 || b.y >= a.y + a.height + 20 || b.y + b.height <= a.y - 20, 'ordinary capture leaves all neighboring cards separated')
+  }
+  writeFileSync(join(output, 'prepared-neighbors.json'), JSON.stringify(preparedBoxes, null, 2))
   const pressWithoutScroll = (control, key) => capture.pressCanvasControl(page, control, key)
   const placeCardInView = async card => capture.prepareCanvasCard(page, await card.getAttribute('data-card-id'))
   for (const viewport of [{width:1440,height:960},{width:3830,height:1688},{width:390,height:844}]) {

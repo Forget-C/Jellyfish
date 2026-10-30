@@ -65,6 +65,7 @@ try{
   const beforeEvidence=await captureBusinessState()
 
   const captureContexts={}
+  const explicitScrollEvidence=[]
   const capture=async(f,kind,state,id)=>{
     await saved();await page.mouse.move(page.viewportSize().width-3,15)
     const {width,height}=page.viewportSize(),prefix=`${f}-${kind}-${state}-${width}x${height}`
@@ -81,12 +82,38 @@ try{
     await close();await page.setViewportSize({width,height});await delay(180)
     for(const [kind,id,empty,f1,f2,f3] of [['text','text','text-empty','F01','F02','F03'],['image','image','image-empty','F04','F05','F06'],['model-text','model-text','model-text-empty','F07','F08','F09'],['model-image','model-image','model-image-empty','F10','F11','F12']]){
       await open(id);const p1=await capture(f1,kind,'default',id)
+      if(kind==='model-image'){
+        // Verify permitted local scrolling explicitly, after retaining the untouched initial originals.
+        const basis=editor.getByRole('region',{name:'本次创作依据',exact:true}), basisBox=await basis.boundingBox()
+        await page.mouse.move(basisBox.x+basisBox.width/2,basisBox.y+basisBox.height/2);await page.mouse.wheel(0,500)
+        await page.waitForFunction(element=>element.scrollTop>0,await basis.elementHandle())
+        const source=await assertControlReachable(basis.getByText('查看来源',{exact:true}).last(),'after explicit material wheel')
+        const remove=await assertControlReachable(basis.getByRole('button',{name:/^取消采用/}).last(),'after explicit material wheel')
+        await captureCanvasRegion(page,editor,join(output,`${p1}-scrolled-source-editor.png`))
+        explicitScrollEvidence.push({group:p1,source,remove,scroll:await basis.evaluate(element=>({top:element.scrollTop,height:element.clientHeight,total:element.scrollHeight}))})
+        await page.mouse.move(basisBox.x+basisBox.width/2,basisBox.y+basisBox.height/2);await page.mouse.wheel(0,-500)
+        await page.waitForFunction(element=>element.scrollTop===0,await basis.elementHandle())
+        if(width===390){
+          const parameters=editor.locator('.generation-material-parameters'), box=await parameters.boundingBox()
+          await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.wheel(600,0)
+          await pressCanvasControl(page,editor.getByRole('combobox',{name:'图片分辨率',exact:true}),'Tab')
+          const quantity=await assertControlReachable(editor.getByRole('spinbutton',{name:'图片数量',exact:true}),'after explicit parameter wheel')
+          assert.match(await editor.getByRole('spinbutton',{name:'图片数量',exact:true}).inputValue(),/3\s*张/)
+          await assertControlReachable(editor.getByRole('button',{name:'预检运行',exact:true}),'fixed submit after parameter wheel')
+          await assertControlReachable(editor.getByRole('button',{name:'关闭详情',exact:true}),'fixed close after parameter wheel')
+          await captureCanvasRegion(page,editor,join(output,`${p1}-scrolled-parameters-editor.png`))
+          explicitScrollEvidence.push({group:p1,action:'horizontal wheel plus explicit Tab from resolution to quantity',quantity,scroll:await parameters.evaluate(element=>({left:element.scrollLeft,width:element.clientWidth,total:element.scrollWidth}))})
+          await page.keyboard.press('Shift+Tab');await page.keyboard.press('Shift+Tab');await page.keyboard.press('Shift+Tab')
+          await assertControlReachable(editor.locator('.generation-material-model'),'after keyboard return to first parameter')
+        }
+      }
       await editor.getByRole('button',{name:'展开详情',exact:true}).click();const p2=await capture(f2,kind,'expanded',id)
       await close();await prepareCanvasCard(page,id);await captureCard(id,`${p1}-card.png`);await captureCard(id,`${p2}-card.png`)
       await open(empty);const p3=await capture(f3,kind,'empty',empty);if(kind.startsWith('model'))assert.ok(await editor.getByRole('button',{name:'预检运行',exact:true}).isDisabled());await close();await prepareCanvasCard(page,empty);await captureCard(empty,`${p3}-card.png`)
     }
   }
   assert.deepEqual(await captureBusinessState(),beforeEvidence,'capturing the matrix does not adopt candidates, replace media or execute a model')
+  writeFileSync(join(output,'explicit-scroll-evidence.json'),JSON.stringify(explicitScrollEvidence,null,2))
   writeFileSync(join(output,'matrix.json'),JSON.stringify(matrix,null,2))
   writeFileSync(join(output,'capture-contexts.json'),JSON.stringify(captureContexts,null,2))
   // No-output-with-basis and unselected-model are separate states, never a substitute for ready.

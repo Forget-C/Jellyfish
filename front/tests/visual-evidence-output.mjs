@@ -33,7 +33,7 @@ export async function writeVisualEvidence(output, { behavior, manifest, browserV
     }
     write(statesPath, states)
   }
-  const fixtureFiles = ['front/tests/generationCanvasFourCardAcceptance.browser.mjs', 'front/tests/visual-evidence-output.mjs', 'backend/tests/generation_canvas_four_card_browser_server.py']
+  const fixtureFiles = ['front/tests/generationCanvasWorkbench.browser-helpers.mjs', 'front/tests/generationCanvasFourCardAcceptance.browser.mjs', 'front/tests/visual-evidence-output.mjs', 'backend/tests/generation_canvas_four_card_browser_server.py']
   const run = { schemaVersion: 1, runId: basename(output), capturedAt: new Date().toISOString(), sourceRevision: git(['rev-parse', 'HEAD']), fixtureRevision: git(['log', '-1', '--format=%H', '--', ...fixtureFiles]), fixtureFiles: Object.fromEntries(fixtureFiles.map(path => [path, sha256(readFileSync(join(repository, path)))])), sourceChanges: git(['status', '--short']), environment: { node: process.version, browser: browserVersion || process.env.PLAYWRIGHT_CHANNEL || 'chromium', platform: `${process.platform}/${process.arch}` }, behavior, states: 'visual-states.json' }
   const runPath = join(output, 'visual-run.json'), resultPath = join(output, 'visual-result.json')
   write(runPath, run)

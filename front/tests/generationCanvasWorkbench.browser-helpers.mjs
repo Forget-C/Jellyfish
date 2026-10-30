@@ -157,19 +157,20 @@ export async function moveCanvasCard(page, id, x, y) {
   throw new Error(`cannot move canvas card ${id} to ${x},${y}`)
 }
 
-/** Move intersecting neighbors through their public layout controls; do not hide cards or alter styles. */
+/** Separate neighbors from the target and already placed cards through public layout controls. */
 export async function clearCanvasNeighbors(page, id) {
-  const target = page.locator(`[data-card-id="${id}"]`)
+  const placed = [page.locator(`[data-card-id="${id}"]`)]
   for (const card of await page.locator('[data-card-id]').all()) {
     if (await card.getAttribute('data-card-id') === id) continue
     const mover = card.getByRole('button', { name: /^移动布局：/ })
     await mover.evaluate(element => element.focus({ preventScroll: true }))
-    for (let step = 0; step < 150; step++) {
-      const a = await target.boundingBox(), b = await card.boundingBox()
-      if (b.x >= a.x + a.width + 20 || b.x + b.width <= a.x - 20 || b.y >= a.y + a.height + 20 || b.y + b.height <= a.y - 20) break
-      assert.ok(step < 149, `cannot clear neighbor ${await card.getAttribute('data-card-id')}`)
+    for (let step = 0; step < 250; step++) {
+      const b = await card.boundingBox(), occupied = await Promise.all(placed.map(item => item.boundingBox()))
+      if (occupied.every(a => b.x >= a.x + a.width + 20 || b.x + b.width <= a.x - 20 || b.y >= a.y + a.height + 20 || b.y + b.height <= a.y - 20)) break
+      assert.ok(step < 249, `cannot clear neighbor ${await card.getAttribute('data-card-id')}`)
       await page.keyboard.press('ArrowRight')
     }
+    placed.push(card)
   }
 }
 
