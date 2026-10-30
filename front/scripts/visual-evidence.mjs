@@ -1,4 +1,4 @@
-import { parseArgs } from 'node:util'
+import { parseArgs, isDeepStrictEqual } from 'node:util'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve, isAbsolute, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -85,7 +85,6 @@ export async function evaluateEvidence(options) {
     const contractPath = resolve(dirname(manifestPath), manifest.contract.path)
     result.contract = { path: contractPath, sha256: hash(readFileSync(contractPath)) }
     check(result.contract.sha256 === manifest.contract.sha256, 'contract content identity mismatch')
-    const stateIdentities = new Map()
     for (const target of manifest.groups) {
       const key = keyOf(target), state = states[key], model = target.kind.startsWith('model-'), empty = target.state === 'empty'
       check(state?.card && Array.isArray(state.outputs), `${key}: missing capture state/card/outputs`)
@@ -100,11 +99,9 @@ export async function evaluateEvidence(options) {
         check((state.outputs.length > 0) === !empty, `${key}: captured output is inconsistent with ${target.state}`)
         check(state.card.config && typeof state.card.config === 'object', `${key}: actual model parameters missing`)
       }
-      const identity = hash(JSON.stringify({ card: state.card, outputs: state.outputs }))
-      stateIdentities.set(key, identity)
       if (target.state === 'expanded') {
         const defaultKey = keyOf({ ...target, id: `F${String(Number(target.id.slice(1)) - 1).padStart(2, '0')}`, state: 'default' })
-        check(identity === stateIdentities.get(defaultKey), `${key}: default/expanded content, file, adoption or output changed; must remain the same`)
+        check(isDeepStrictEqual({ card: state.card, outputs: state.outputs }, { card: states[defaultKey]?.card, outputs: states[defaultKey]?.outputs }), `${key}: default/expanded content, file, adoption or output changed; must remain the same`)
       }
     }
     browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || 'chrome' })

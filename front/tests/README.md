@@ -208,7 +208,7 @@ Use the existing runner to capture current behavior and evidence (Node 24 and th
 
 ```bash
 C60_PROTOTYPE_MANIFEST="$PWD/front/tests/visual-baselines/c-794ee4a0-v1/manifest.json" \
-  pnpm --dir front run test:browser -- generation-canvas-four-card-acceptance
+  pnpm --dir front run test:browser generation-canvas-four-card-acceptance
 ```
 
 Use the suite id from `browser-suites.json` if selecting by another supported alias. The runner's existing output/archive directory contains `matrix.json`, page/card/editor originals, `visual-states.json` (capture-time public HTTP card/output state, zoom/viewport and image identity), `visual-run.json` (actual source/fixture revision, fixture content hashes, dirty-worktree information and environment), `visual-result.json` and `visual-index.md`. Images retain original dimensions. The index links individual originals; per-group real model parameters, adopted structured references, output identity and material differences appear in the result. Card crops include external titles; retained prototype body crops are supplemented with title crops for desktop default/empty states.

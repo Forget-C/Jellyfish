@@ -1689,7 +1689,7 @@
   "changeReason": "Initial retention of explicitly confirmed C prototype; no formal or negative screenshots accepted.",
   "contract": {
     "path": "contract.md",
-    "sha256": "41d7d952d219479950cd03afcb5941af5596400e3f2c7ff2e1dbb1b7c5a89b2e"
+    "sha256": "71a9bf7c9963bedcb141075fa41a022e4e1ef261217698c14afdbe42db44c49f"
   },
   "files": {
     "F01-text-default-1440x960-full.png": {

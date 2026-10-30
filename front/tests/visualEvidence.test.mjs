@@ -46,6 +46,7 @@ function fixture(t) {
 }
 test('complete 36-group evidence is reviewable, with original file identities and independent visual status', t => {
   const f = fixture(t)
+  f.manifest.groups.reverse(); f.matrix.reverse(); f.save()
   const { status, result } = invoke(f.args)
   assert.equal(status, 0, JSON.stringify(result))
   assert.equal(result.evidence.status, 'reviewable')
