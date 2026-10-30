@@ -6,6 +6,8 @@
 
 **Status:** ready-for-agent
 
+**Completion:** integrated
+
 - [x] 只读检查识别未启用、文件缺失、不可执行和配置不匹配，明确非零失败并给出修复入口；不能因仓库里存在hook文件就报告已经生效。
 - [x] 显式安装在正确的仓库作用域生效并可重复执行；正确解析实际Git目录和共用目录，主检出与关联worktree使用预期hook。
 - [x] 已有自定义hooksPath发生冲突时保留原配置并要求显式选择；不静默覆盖，不写全局配置，不改变用户Git身份或签名策略。
@@ -31,3 +33,5 @@
 - TDD：先验证入口缺失时未启用检查失败，再实现只读结果；显式安装先因不支持入口失败，逐步补安装、跨 cwd 与真实提交；自定义配置诊断与文件损坏用例分别先失败再补保护；独立 worktree 覆盖先证明共享配置写入仍可能留有未启用检出，再补全部检出预检与显式覆盖。公开 CLI 与真实临时 Git 仓库／worktree 为接缝，不检查内部函数。
 - 验证：Node 24.22.1 `node --test scripts/check-commit-subject.test.mjs scripts/repository-hooks.test.mjs` 14/14 通过（02原5项＋03新增9项），覆盖未启用只读、重复安装、真实合法／非法提交和默认合并拒绝、双 hook 缺失／不可执行、checker 缺失、自定义本地／全局／独立worktree配置、关联检出与空格路径、多cwd、非仓库及非法参数；全局／身份／签名配置保持及失败前不写共用配置均验证。`node --check scripts/repository-hooks.mjs`、`git diff --check` 通过。现有提交检查工作流已运行两组测试；只报告本地与配置核查，未执行远程 CI。
 - 未修改应用前后端或业务契约，无需 front typecheck、Pylint 或 OpenAPI 再生。全部安装仅发生在临时仓库；未安装主仓库 hook，未改写真实历史，未推送。保留其他票据、README与既有记录。
+
+- 2026-10-30（integration 整合）：票03实现分支提交 `e165bd44` 已通过合并提交 `521e3c85` 整合到 `codex-visual-engineering-checks`；无冲突，复用以上已通过检查记录，未修改相关实现或重跑无变化检查。`Status` 保持分诊状态 `ready-for-agent`，以 `Completion: integrated` 标记交付状态；未安装主仓库 hook。
