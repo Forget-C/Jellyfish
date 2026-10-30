@@ -220,14 +220,20 @@
 
 .generation-import-status { color: var(--wb-muted); font-size: 12px; overflow-wrap: anywhere; }
 
-/* The confirmed C surface belongs to the four editors, not only the model composer. */
-.generation-card-editor[data-focus-layout="true"] {
+/* The confirmed C surface is shared by the four cards and their editors. */
+.generation-card-editor[data-focus-layout="true"],
+.generation-card[data-card-type="content.text"],
+.generation-card[data-card-type="content.image"],
+.generation-card[data-card-type="model.text"],
+.generation-card[data-card-type="model.image"] {
   --wb-surface: #202427;
   --wb-border: #435057;
   --wb-text: #e8eaeb;
   --wb-muted: #929b9f;
-  background: var(--wb-surface);
   color: var(--wb-text);
+}
+.generation-card-editor[data-focus-layout="true"] {
+  background: var(--wb-surface);
   border: 1px solid var(--wb-border);
   border-radius: 17px;
   font-size: 13px;

@@ -35,7 +35,7 @@ export async function closePrecheck(page) {
 export async function assertVisibleInDetails(locator) {
   await locator.scrollIntoViewIfNeeded()
   const visible = await locator.evaluate(element => {
-    const box = element.getBoundingClientRect(), body = element.closest('.wb-details-body').getBoundingClientRect()
+    const box = element.getBoundingClientRect(), body = element.closest('.generation-material-candidates, .wb-details-body').getBoundingClientRect()
     return box.width > 0 && box.height > 0 && box.left >= Math.max(0, body.left) && box.right <= Math.min(innerWidth, body.right) + 1
       && box.top >= Math.max(0, body.top) - 1 && box.bottom <= Math.min(innerHeight, body.bottom) + 1
   })
@@ -84,10 +84,11 @@ export async function selectCanvasByName(page, name) {
 /** Older behavior journeys explicitly open the now on-demand model management surfaces. */
 export async function openModelInspection(page) {
   const editor = page.locator('.wb-details:visible')
+  if (await editor.locator('.generation-material-composer').count()) await editor.locator('.generation-editor-actions .generation-material-footer').waitFor()
   const candidates=editor.getByLabel('管理候选与采用',{exact:true})
-  if (await candidates.count() && await candidates.locator('..').getAttribute('open') !== null) await candidates.click()
-  for (const label of ['＠ 引用与指令', '运行状态与正式输出', '管理候选与采用']) {
-    const summary = label === '管理候选与采用' ? editor.getByLabel(label,{exact:true}) : editor.locator('summary').filter({ hasText: label }).first()
+  if (await candidates.count() && await candidates.locator('..').getAttribute('open') === null) await candidates.click()
+  for (const label of ['＠ 引用与指令', '运行状态与正式输出']) {
+    const summary = editor.locator('summary').filter({ hasText: label }).first()
     if (await summary.count() && await summary.locator('..').getAttribute('open') === null) await summary.click()
   }
 }
