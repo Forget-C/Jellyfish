@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+# Automatic reverts skip commit-msg and have no REVERT_HEAD at this point.
+# Check supplied messages here; editor-based messages are checked by commit-msg.
+if [ "$2" = message ]; then
+  repo_root=$(git rev-parse --show-toplevel) || exit 1
+  exec node "$repo_root/scripts/check-commit-subject.mjs" --message-file "$1"
+fi
