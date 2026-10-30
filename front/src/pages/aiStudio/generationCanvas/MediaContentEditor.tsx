@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Dropdown, Empty, Modal, Pagination, Space } from 'antd'
-import { PictureOutlined, PlusOutlined } from '@ant-design/icons'
-import { WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
+import { PictureOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons'
+import { WorkbenchButton, WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
 import { ApiError, StudioFilesService } from '../../../services/generated'
 import type { AudioContentCard, FileRead, ImageContentCard, VideoContentCard } from '../../../services/generated'
 import { buildFileDownloadUrl } from '../assets/utils'
@@ -96,11 +96,16 @@ export function MediaContentEditor({ card, projectId, onChange, disabled }: Medi
     onClick: ({ key }) => { if (key === 'upload') input.current?.click(); else { setPage(1); setLibrary(true) } } }} disabled={disabled || uploading}>
     <WorkbenchIconButton label="添加媒体" icon={<PlusOutlined />} disabled={disabled || uploading} />
   </Dropdown>
+  const openLibrary = () => { setPage(1); setLibrary(true) }
+  const imageActions = (empty = false) => <div className="generation-image-actions">
+    <WorkbenchButton icon={<UploadOutlined />} disabled={disabled || uploading} loading={uploading} onClick={() => input.current?.click()}>{empty ? '上传图片' : '替换图片'}</WorkbenchButton>
+    <WorkbenchButton variant="quiet" icon={<PlusOutlined />} disabled={disabled || uploading} onClick={openLibrary}>{empty ? '从素材中选择' : '选择素材'}</WorkbenchButton>
+  </div>
   const currentInfo = fileInfo?.id === card.file_id ? fileInfo : undefined
   const currentSize = imageSize?.id === card.file_id ? imageSize : undefined
   const currentImage = imageState?.id === card.file_id ? imageState?.state : undefined
   return <Space direction="vertical" style={{ width: '100%' }}>
-    {type === 'image' ? <section className="generation-image-content" aria-label="图片内容编辑">
+    {type === 'image' ? <section className="generation-image-content" data-empty={!card.file_id} aria-label="图片内容编辑">
       <div className="generation-image-preview">
         {card.file_id ? <>
           <img alt="图片预览" src={buildFileDownloadUrl(card.file_id)} onLoad={event => {
@@ -110,9 +115,9 @@ export function MediaContentEditor({ card, projectId, onChange, disabled }: Medi
           }} onError={() => setImageState({ id: card.file_id!, state: 'failed' })} />
           {!currentImage && <small role="status">图片加载中</small>}
           {currentImage === 'failed' && <small role="status">图片暂不可预览，文件仍保留</small>}
-        </> : <div className="generation-image-empty"><PictureOutlined /><strong>添加一张图片</strong><p>上传图片或从项目文件中选择。</p></div>}
+        </> : <div className="generation-image-empty"><PictureOutlined aria-hidden /><strong>添加一张图片</strong><p>上传图片或从素材中选择，作为独立图片内容。</p>{imageActions(true)}{disabled && <small>只读，无法上传或替换图片</small>}</div>}
       </div>
-      <div className="generation-image-file-info">
+      {card.file_id && <div className="generation-image-file-info">
         <strong title={currentInfo?.name}>{currentInfo?.name || (card.file_id ? readingFile ? '读取文件信息…' : '文件信息不可用' : '尚未选择图片')}</strong>
         {card.file_id && <dl>
           <dt>尺寸</dt><dd>{currentSize?.width && currentSize.height ? `${currentSize.width} × ${currentSize.height}` : '未知'}</dd>
@@ -120,9 +125,9 @@ export function MediaContentEditor({ card, projectId, onChange, disabled }: Medi
           <dt>来源</dt><dd>{card.origin ? '运行成果副本' : '项目文件'}</dd>
         </dl>}
         {card.origin && <small>来自运行 {card.origin.run_id} · {card.origin.incomplete ? '未完成成果副本' : '完整成果副本'}</small>}
-        <div className="generation-image-actions">{actions}<span>{card.file_id ? '替换图片／选择素材' : '上传图片／选择素材'}</span></div>
+        {imageActions()}
         {disabled && <small>只读，无法上传或替换图片</small>}
-      </div>
+      </div>}
     </section> : <>
       {card.origin && <p>来自运行 {card.origin.run_id} · {card.origin.incomplete ? '未完成成果副本' : '完整成果副本'}</p>}
       {card.file_id ? <MediaPreview fileId={card.file_id} type={type} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚未选择文件" />}
