@@ -662,10 +662,10 @@ flowchart LR
 
 | 票据 | Blocked by | 交付及主要验收 | 当前进展 |
 | --- | --- | --- | --- |
-| [55 统一四类编辑外壳与工具栏避让](issues/55-common-c-editor-shell-avoidance.md) | 无 | 四类共同外壳、默认／展开与工具栏避让 | ready-for-agent；未实施、未验收。 |
-| [56 基础文本卡面与编辑区对齐](issues/56-basic-text-c-visual-alignment.md) | 55 | 基础文本；F01–F03三视口及保存重开 | ready-for-agent；未实施、未验收。 |
-| [57 基础图片卡面与编辑区对齐](issues/57-basic-image-c-visual-alignment.md) | 55 | 基础图片；F04–F06三视口及真实文件动作 | ready-for-agent；未实施、未验收。 |
-| [58 文本模型与共用模型编辑布局对齐](issues/58-text-model-c-visual-alignment.md) | 55 | 文本模型及共用布局；F07–F09三视口及采用／提交 | ready-for-agent；未实施、未验收。 |
+| [55 统一四类编辑外壳与工具栏避让](issues/55-common-c-editor-shell-avoidance.md) | 无 | 四类共同外壳、默认／展开与工具栏避让 | 已集成；待60组合验收及最终审查。 |
+| [56 基础文本卡面与编辑区对齐](issues/56-basic-text-c-visual-alignment.md) | 55 | 基础文本；F01–F03三视口及保存重开 | 已集成；待60组合验收及最终审查。 |
+| [57 基础图片卡面与编辑区对齐](issues/57-basic-image-c-visual-alignment.md) | 55 | 基础图片；F04–F06三视口及真实文件动作 | 已集成；待60组合验收及最终审查。 |
+| [58 文本模型与共用模型编辑布局对齐](issues/58-text-model-c-visual-alignment.md) | 55 | 文本模型及共用布局；F07–F09三视口及采用／提交 | 已集成；待60组合验收及最终审查。 |
 | [59 图片模型参数、预览与编辑区对齐](issues/59-image-model-c-visual-alignment.md) | 58 | 图片模型；F10–F12三视口及真实参数／预览 | ready-for-agent；未实施、未验收。 |
 | [60 四类图片矩阵与组合验收收口](issues/60-four-card-c-image-acceptance.md) | 56、57、59 | F01–F12至少36组证据、组合旅程及B回归 | ready-for-agent；未实施、未验收。 |
 
@@ -689,3 +689,9 @@ flowchart LR
 ### 2026-10-30：55–60开始实施
 
 用户已明确授权 implement-spec 在当前 `codex-generation-canvas` 分支按依赖图实施55–60并执行逐类图片、视觉及交互验收；接续上方仅发布阶段的边界。实施审查起点固定为 `e5eca895`，01–54及旧验收共62文件已保存SHA256保护清单。本轮复用已确认HTTP＋真实页面接缝及受控供应商／存储，不将旧验收自动延伸为本轮通过。各票按实际验证再更新Completion，旧记录不改写。
+
+### 55–58集成进展
+
+共同外壳、基础文本、基础图片和共用模型布局已按依赖集成，当前产品头 `3d61caee`（记录头 `2b689cad`）；各票独立图片及真实页面／HTTP结果见[55](visual-c55-shell-acceptance.md)、[56](visual-c56-text-acceptance.md)、[57](visual-c57-image-acceptance.md)、[58](visual-c58-model-acceptance.md)。56／57先完成内容排布，58统一四类局部卡面色阶；最终统一头的F01–F12矩阵仍由60重新采集，当前不宣称整轮视觉通过。
+
+共享工作台六项及前端单元检查通过；lint仍由两条既有hooks依赖告警阻断，未放宽基线。59图片模型实施中，60尚未解除阻塞。01–54及旧验收62文件哈希保持不变。
