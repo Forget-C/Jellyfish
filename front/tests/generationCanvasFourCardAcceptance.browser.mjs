@@ -96,13 +96,14 @@ try{
         if(width===390){
           const parameters=editor.locator('.generation-material-parameters'), box=await parameters.boundingBox()
           await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.wheel(600,0)
+          await pressCanvasControl(page,editor.getByRole('combobox',{name:'图片分辨率',exact:true}),'Tab')
           await page.waitForFunction(element=>element.scrollLeft>0,await parameters.elementHandle())
           const quantity=await assertControlReachable(editor.getByRole('spinbutton',{name:'图片数量',exact:true}),'after explicit parameter wheel')
           assert.match(await editor.getByRole('spinbutton',{name:'图片数量',exact:true}).inputValue(),/3\s*张/)
           await assertControlReachable(editor.getByRole('button',{name:'预检运行',exact:true}),'fixed submit after parameter wheel')
           await assertControlReachable(editor.getByRole('button',{name:'关闭详情',exact:true}),'fixed close after parameter wheel')
           await captureCanvasRegion(page,editor,join(output,`${p1}-scrolled-parameters-editor.png`))
-          explicitScrollEvidence.push({group:p1,quantity,scroll:await parameters.evaluate(element=>({left:element.scrollLeft,width:element.clientWidth,total:element.scrollWidth}))})
+          explicitScrollEvidence.push({group:p1,action:'horizontal wheel plus explicit Tab from resolution to quantity',quantity,scroll:await parameters.evaluate(element=>({left:element.scrollLeft,width:element.clientWidth,total:element.scrollWidth}))})
           await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.wheel(-600,0)
           await page.waitForFunction(element=>element.scrollLeft===0,await parameters.elementHandle())
         }
