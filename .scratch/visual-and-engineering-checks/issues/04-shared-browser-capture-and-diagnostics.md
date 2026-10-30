@@ -6,6 +6,8 @@
 
 **Status:** ready-for-agent
 
+**Completion:** integrated
+
 - [x] 优先扩展现有helper和运行器输出，并在四类C视觉及共同外壳用例中实际复用；完成真实页面行为，不另建纯helper框架或机械改写全仓测试。
 - [x] 普通采图按可见工具栏／筛选实际边界，通过公开焦点、键盘和必要邻卡移动使标题与主体可读；跨视口后出屏卡片恢复可见，不用固定手机安全高度或私有状态注入。
 - [x] 靠左／右／底边回归保留待测位置，再执行真实产品打开、限位或最小平移；不能在遮挡断言前将待测卡片移到安全区。
@@ -34,3 +36,5 @@
 - 已通过：`pnpm --dir front run typecheck`、`pnpm --dir front run test:unit`（含 `checkCommands.test.mjs` 端口／外部进程保护、跨 cwd 串行、失败日志、超时与中断清理）、`pnpm --dir front run lint:check`（275 项存量、0 新增）、修改脚本 `node --check` 和 `git diff --check`。未改应用后端或公开契约，无需 Pylint 或 OpenAPI 再生；未执行远程 CI。
 - 本机证据：`/private/tmp/checks04-common-clean-pointer/generation-canvas-common-shell/`、`/private/tmp/checks04-four-card-final/generation-canvas-four-card-acceptance/`、`/private/tmp/checks04-negative-obstruction/generation-canvas-common-shell/`、`/private/tmp/checks04-negative-closed/generation-canvas-common-shell/`；其他回归位于 `/private/tmp/checks04-generation-canvas-{image-editor,editor-height,editor-scroll}/`。这些是可复核运行产物，不是目标基线或视觉签收。实际查阅范围包含手机共同外壳原尺寸图、手机图片默认整页图及采集位置；完整36组视觉审阅交由独立后续验收，不以产图或行为通过宣称视觉通过。
 - 最终复验：同步 integration `4f79cb19` 后，共同外壳真实 hover／出屏／相交／初始与主动滚动回归通过（39.6s）；最终无 hover 污染的四类矩阵与业务／边缘回归通过（111.5s）。该矩阵含36组、108份 PNG 原图及36份上下文记录，12项靠边记录保留打开前后坐标及初始／展开命中。实际查看最终 `F04-image-default-390x844-page.png`，确认先前“前进”tooltip已消失；该查看仅验证采集干净，不代替36组设计签收。
+
+- 2026-10-30（integration 整合）：票04实现分支提交 `bc393115` 已通过合并提交 `05f7bd20` 整合到 `codex-visual-engineering-checks`；无冲突，复用以上最终复验及负例检查记录，未修改相关实现或重跑无变化检查。`Status` 保持分诊状态 `ready-for-agent`，以 `Completion: integrated` 标记交付状态；视觉签收仍由后续独立验收完成。
