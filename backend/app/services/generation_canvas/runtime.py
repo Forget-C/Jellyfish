@@ -3,10 +3,7 @@
 锁顺序：既有 Task 行 → event head；受理只创建新 Task，不锁既有 Task。
 文档命令先锁 canvas，不能在 head 锁内等待 canvas 行锁。网络 I/O 不在此模块执行。
 """
-import hashlib
-import json
 from datetime import timedelta
-from types import SimpleNamespace
 from uuid import uuid4
 from fastapi import HTTPException
 from sqlalchemy import delete, func, select
@@ -21,28 +18,13 @@ from app.schemas.generation_canvas import (
     CanvasResolvedOutput, CanvasRunRead, CanvasRunSubmit, CanvasSnapshot, MediaContentCard, ModelCard, OutputIdentity,
 )
 from app.services.generation_canvas.capabilities import model_capability
-from app.services.generation_canvas.compiler import compile_card
+from app.services.generation_canvas.execution_basis import CanvasModelContext, build_basis, digest
 from app.services.generation_canvas.errors import diagnostic
 from app.services.generation_canvas.store import CanvasStore
 from app.services.llm.provider_resolver import resolve_provider_config_from_provider
 from app.services.task_service import utcnow
 
 TERMINAL = frozenset({'succeeded', 'failed', 'cancelled', 'blocked'})
-
-
-def public_parameters(value):
-    """Keep credentials private, including nested model options."""
-    if isinstance(value, dict):
-        sensitive = {'api_key', 'api_secret', 'openai_api_key', 'authorization', 'password', 'access_token'}
-        return {key: public_parameters(item) for key, item in value.items() if key.lower() not in sensitive}
-    if isinstance(value, list):
-        return [public_parameters(item) for item in value]
-    return value
-
-
-def digest(value) -> str:
-    """规范化 JSON 摘要用于依据比较及原请求核实。"""
-    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()).hexdigest()
 
 
 async def event_head(db: AsyncSession, canvas_id: str) -> CanvasEventHead:
@@ -69,7 +51,8 @@ class CanvasRuntime:
     def __init__(self, db: AsyncSession, project_id: str):
         self.db, self.project_id = db, project_id
 
-    async def _basis(self, canvas, card_id, outputs, *, lock_config=False, admission=None):
+    async def _current_basis(self, canvas, card_id, outputs, *, lock_config=False):
+        """读取当前配置及原有锁，再交给纯依据模块；已受理恢复不经过此入口。"""
         document = CanvasDocument.model_validate(canvas.document)
         card = next((card for card in document.cards if card.id == card_id), None)
         if not isinstance(card, ModelCard):
@@ -78,14 +61,7 @@ class CanvasRuntime:
         model, provider, config = None, None, None
         issues = []
         category = ModelCategoryKey(card.type.removeprefix('model.'))
-        if admission:
-            frozen = admission['execution_config']
-            model = SimpleNamespace(id=card.model_id, name=frozen['model_name'], params=frozen['model_params'])
-            provider = SimpleNamespace(id=frozen['provider_id'])
-            config = SimpleNamespace(**{key: frozen[key] for key in ('provider_key', 'api_key', 'base_url')})
-            from app.schemas.generation_canvas import CanvasModelCapability
-            cap = CanvasModelCapability.model_validate(admission['capability'])
-        elif card.model_id:
+        if card.model_id:
             try:
                 model = await self.db.get(Model, card.model_id, with_for_update=lock_config, populate_existing=True)
                 if model is None or model.category != category:
@@ -99,31 +75,14 @@ class CanvasRuntime:
                 issues.append(CanvasDiagnostic(code='MODEL_UNAVAILABLE', message='所选模型或供应商不可用', target={'card_id': card_id, 'path': ['model_id']}, blocks=['run']))
         else:
             issues.append(CanvasDiagnostic(code='MODEL_REQUIRED', message='请选择模型', target={'card_id': card_id, 'path': ['model_id']}, blocks=['run']))
-        compiled = compile_card(document, card_id, model_outputs=outputs, capability=cap)
-        compiled.revision = canvas.revision
-        if not compiled.text.strip() and not (card.type == 'model.video' and compiled.media):
-            issues.append(CanvasDiagnostic(code='TEXT_REQUIRED', message='请提供非空文本输入', target={'card_id': card_id, 'path': ['prompt']}, blocks=['run']))
-        if any(not item.basis_current for item in compiled.used):
-            issues.append(CanvasDiagnostic(code="INPUT_STALE", message="实际引用的模型输出依据已变，请先执行来源",
-                target={"card_id": card_id}, blocks=["run"]))
-        compiled.diagnostics += issues
-        compiled.can_run = compiled.can_run and not issues
-        public = {'card': card.model_dump(), 'input': compiled.model_dump(exclude={'revision', 'diagnostics', 'can_run'}),
-                  'model': {'id': model.id, 'name': model.name, 'params': public_parameters(model.params) if category == ModelCategoryKey.text else card.config.model_dump()} if model else {}}
         frozen = None
         if config and model and provider:
             frozen = {'model_name': model.name, 'model_params': model.params or {}, 'provider_key': config.provider_key,
                       'provider_id': provider.id, 'api_key': config.api_key, 'base_url': config.base_url}
-        # Display nicknames and segment IDs do not change the actual request. Inserting
-        # an unused candidate may renumber tokens without invalidating a publication.
-        # payload 是既有 text/file_id 的强类型传输投影，不改变旧成果的实际依据哈希。
-        actual = {'card_id': card.id, 'type': card.type, 'model_id': card.model_id,
-                  'config': card.config.model_dump(), 'text': compiled.text,
-                  'used': [item.model_dump(exclude={'token', 'basis_current', 'payload'}) for item in compiled.used],
-                  'media': [item.model_dump(exclude={'token', 'basis_current', 'payload'}) for item in compiled.media]}
-        if card.type == 'model.video':
-            actual['video_media'] = compiled.video_media.model_dump()
-        return compiled, public, digest({'basis': actual, 'execution': frozen}), frozen
+        context = CanvasModelContext(
+            model={'id': model.id, 'name': model.name, 'params': model.params} if model else None,
+            execution_config=frozen, capability=cap, diagnostics=issues)
+        return build_basis(document, card_id, outputs, revision=canvas.revision, model_context=context)
 
     async def current_outputs(self, canvas) -> dict[str, list[CanvasResolvedOutput]]:
         """保留当前正式结果指向，同时递归标明依据是否仍有效。"""
@@ -166,9 +125,9 @@ class CanvasRuntime:
             for edge in document.edges:
                 if edge.target_card == card_id and edge.source_card in stored:
                     await resolve(edge.source_card)
-            compiled, _, fingerprint, _ = await self._basis(canvas, card_id, result)
+            basis = await self._current_basis(canvas, card_id, result)
             result[card_id] = [CanvasResolvedOutput.model_validate(item).model_copy(update={
-                "basis_current": compiled.can_run and fingerprint == stored[card_id].basis_hash, "result_set_id": stored[card_id].id}) for item in stored[card_id].outputs]
+                "basis_current": basis.compiled.can_run and basis.basis_hash == stored[card_id].basis_hash, "result_set_id": stored[card_id].id}) for item in stored[card_id].outputs]
             # 正式位置保留身份，但文件撤回后不能继续作为可用输入，也不以重跑承诺放行。
             for index, output in enumerate(result[card_id]):
                 if not output.file_id:
@@ -396,8 +355,8 @@ async def sync_task_fact(db: AsyncSession, task, *, delta: str | None = None):
             canvas = await db.get(GenerationCanvas, node.canvas_id, populate_existing=True)
             runtime = CanvasRuntime(db, canvas.project_id)
             try:
-                compiled, _, fingerprint, _ = await runtime._basis(canvas, node.card_id, await runtime.current_outputs(canvas))
-                can_publish = compiled.can_run and fingerprint == node.basis_hash
+                basis = await runtime._current_basis(canvas, node.card_id, await runtime.current_outputs(canvas))
+                can_publish = basis.compiled.can_run and basis.basis_hash == node.basis_hash
             except HTTPException:
                 can_publish = False
             if can_publish:

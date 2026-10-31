@@ -1,17 +1,14 @@
 """单模型规划与历史运行推进：新请求固定当前模型，已受理依赖按快照执行。"""
-from types import SimpleNamespace
 from sqlalchemy import delete, select
 from fastapi import HTTPException
 from pydantic import ValidationError
 from app.models.generation_canvas import CanvasRun, CanvasRunNode, CanvasScopeOccupancy
-from app.schemas.generation_canvas import CanvasDocument, CanvasNodeRead, CanvasResolvedOutput
-from app.services.generation_canvas.capabilities import model_capability
-from app.services.generation_canvas.compiler import prompt_references
+from app.schemas.generation_canvas import CanvasDocument, CanvasNodeRead
+from app.services.generation_canvas.execution_basis import digest, restore_basis
 
 
 async def plan(runtime, canvas, command, *, lock_config=False):
     """只规划当前模型并固定直接输入；保留单节点计划结构供受理与快照消费。"""
-    from app.services.generation_canvas.runtime import digest
     if command.kind != 'single' or command.card_ids:
         from app.services.generation_canvas.errors import diagnostic
         raise diagnostic('SINGLE_MODEL_ONLY', '仅支持从模型编辑区提交当前模型，不支持批量或自动执行上游',
@@ -22,16 +19,12 @@ async def plan(runtime, canvas, command, *, lock_config=False):
             from app.services.generation_canvas.errors import diagnostic
             raise diagnostic('STACK_READ_ONLY', '请先解除堆叠，再提交模型',
                              {'group_id': group.id, 'card_id': command.card_id}, blocks=['run'])
-    cards = {card.id: card for card in document.cards}
     outputs = await runtime.current_outputs(canvas)
     card_id = command.card_id
-    compiled, basis, fingerprint, config = await runtime._basis(canvas, card_id, outputs, lock_config=lock_config)
-    used_sources = {ref.source.card_id for ref, _ in prompt_references(cards[card_id])}
-    nodes = {card_id: {'compiled': compiled, 'basis': basis, 'hash': fingerprint, 'dependencies': [],
-        'private': {'document': document.model_dump(), 'revision': canvas.revision,
-            'outputs': {key: [item.model_dump() for item in values] for key, values in outputs.items() if key in used_sources},
-            'execution_config': config,
-            'capability': (await model_capability(runtime.db, cards[card_id].model_id)).model_dump() if config else None}}}
+    basis = await runtime._current_basis(canvas, card_id, outputs, lock_config=lock_config)
+    compiled = basis.compiled
+    nodes = {card_id: {'compiled': compiled, 'basis': basis.public_basis, 'hash': basis.basis_hash,
+        'dependencies': [], 'private': basis.to_snapshot()}}
     reused = {item.result_set_id for item in compiled.used if item.result_set_id}
     return {'nodes': nodes, 'diagnostics': compiled.diagnostics,
         'can_run': compiled.can_run and not any('run' in issue.blocks for issue in compiled.diagnostics),
@@ -44,35 +37,29 @@ async def start_node(db, node, producers=None):
     from app.core.contracts.text_generation import TextChatInput, TextChatMessage
     from app.services.generation.gate import GenerationEntityGate
     from app.services.generation.submission.submitter import GenerationSubmitter
-    from app.services.generation_canvas.runtime import CanvasRuntime
     private = node.execution_snapshot
-    outputs = {key: [CanvasResolvedOutput.model_validate(item) for item in values] for key, values in private['outputs'].items()}
-    for card_id in private['dependencies']:
-        producer = producers[card_id]
-        # Replace the entire producer output, including missing positions. No old-output fallback.
-        outputs[card_id] = [CanvasResolvedOutput.model_validate(item) for item in producer.outputs]
-    canvas = SimpleNamespace(document=private['document'], revision=private['revision'])
-    compiled, basis, fingerprint, _ = await CanvasRuntime(db, private['document']['project_id'])._basis(
-        canvas, node.card_id, outputs, admission=private)
+    basis = restore_basis(private, node.card_id,
+        {card_id: producers[card_id].outputs for card_id in private['dependencies']})
+    compiled = basis.compiled
     if not compiled.can_run:
         raise HTTPException(422, {'code': 'INPUT_VALIDATION_FAILED', 'message': '固定上游结果不满足下游输入要求'})
-    node.basis, node.basis_hash = basis, fingerprint
+    node.basis, node.basis_hash = basis.public_basis, basis.basis_hash
     node.status, node.stage = 'queued', 'queued'
-    card = next(card for card in CanvasDocument.model_validate(private['document']).cards if card.id == node.card_id)
+    card = basis.card
     modality = card.type.removeprefix('model.')
     if modality == 'text':
-        request = GenerationSubmitRequest(model_id=basis['model']['id'], operation_input=TextChatInput(
+        request = GenerationSubmitRequest(model_id=basis.card.model_id, operation_input=TextChatInput(
             messages=[TextChatMessage(role='user', content=compiled.text, sequence=1)]))
     elif modality == 'image':
         from app.core.contracts.generation import ImageGenerationOperationInput
         from app.core.contracts.media import ImageMediaInput, MediaReference
-        request = GenerationSubmitRequest(model_id=basis['model']['id'], execution_prompt=compiled.text,
+        request = GenerationSubmitRequest(model_id=basis.card.model_id, execution_prompt=compiled.text,
             operation_input=ImageGenerationOperationInput(**card.config.model_dump()),
             media=ImageMediaInput(references=[MediaReference(file_id=item.file_id, media_kind='image', ordinal=index)
                 for index, item in enumerate(compiled.media)]))
     else:
         from app.core.contracts.generation import VideoGenerationOperationInput
-        request = GenerationSubmitRequest(model_id=basis['model']['id'], execution_prompt=compiled.text,
+        request = GenerationSubmitRequest(model_id=basis.card.model_id, execution_prompt=compiled.text,
             operation_input=VideoGenerationOperationInput(**card.config.model_dump()), media=compiled.video_media)
     command = GenerationCommand(modality=modality, operation='text_chat' if modality == 'text' else modality + '_generation',
         delivery='async_polling', target=GenerationTarget(kind='canvas_node', entity_id=node.id), request=request)
