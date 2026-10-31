@@ -1,4 +1,4 @@
-import { openCardList, closeCardList, openCanvasManagement, closePrecheck, openCanvasCard, closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { selectReferenceName, selectCanvasReferenceImage, openCardList, closeCardList, openCanvasManagement, closePrecheck, openCanvasCard, closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -97,8 +97,9 @@ try {
   }
   const connectExisting=async(target,sourceId,inputLabel)=>{
     await open(target)
-    const chooser=detail.getByRole('combobox',{name:'连接已有卡',exact:true})
-    if(!await chooser.isVisible())await detail.getByText('候选连接管理',{exact:true}).click()
+    const context=detail
+    const chooser=context.getByRole('combobox',{name:'连接已有卡',exact:true})
+    if(!await chooser.isVisible())await context.getByText('候选连接管理',{exact:true}).click()
     await selectOption(chooser,new RegExp(`${sourceId.slice(0,8)} → ${inputLabel}$`))
     await poll(state=>state.document.edges.some(edge=>edge.source_card===sourceId&&edge.target_card===target))
   }
@@ -126,7 +127,7 @@ try {
   const basis=await add('原文／创作依据卡','content.basis')
   await detail.getByLabel('文本文件选择',{exact:true}).setInputFiles({name:'清晨.txt',mimeType:'text/plain',buffer:Buffer.from('清晨，小雨在门边停下。')})
   await poll(state=>state.document.cards.find(card=>card.id===basis).text==='清晨，小雨在门边停下。')
-  const person=await add('人物／物件描述卡','content.object')
+  const person=await add('人物描述卡','content.character')
   await detail.getByRole('textbox',{name:'对象名称',exact:true}).fill('小雨')
   await detail.getByRole('textbox',{name:'对象描述正文',exact:true}).fill('未直接采用的外貌秘密')
   await poll(state=>state.document.cards.find(card=>card.id===person).text==='未直接采用的外貌秘密')
@@ -135,13 +136,10 @@ try {
   await detail.getByLabel('上传媒体文件',{exact:true}).setInputFiles({name:'原创街道构图.png',mimeType:'image/png',buffer:Buffer.from(street,'base64')})
   await poll(state=>state.document.cards.find(card=>card.id===image).file_id)
   const reference=await add('角色参考卡','reference.character')
-  await connectExisting(reference,person,'名称关联')
-  await detail.getByText(`小雨 · ${person.slice(0,8)}`,{exact:true}).waitFor()
-  await detail.getByRole('button',{name:'关联名称 小雨',exact:true}).click()
-  await poll(state=>state.document.cards.find(card=>card.id===reference).input_bindings?.length===1)
+  await selectReferenceName(page,'小雨')
+  await poll(state=>state.document.cards.find(card=>card.id===reference).name==='小雨')
   assert.equal(await detail.getByText('未直接采用的外貌秘密',{exact:false}).count(),0)
-  await connectExisting(reference,image,'图片来源')
-  await detail.getByRole('button',{name:'选为主图 @图片1',exact:true}).click()
+  await selectCanvasReferenceImage(page,/选择参考图/)
   await poll(state=>state.document.cards.find(card=>card.id===reference).image_binding?.file_id)
   const performance=await add('人物表演卡','direction.performance')
   await detail.getByRole('textbox',{name:'身体动作内容',exact:true}).fill('轻轻伸手推开门')

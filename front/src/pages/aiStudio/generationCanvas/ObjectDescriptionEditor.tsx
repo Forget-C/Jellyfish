@@ -1,23 +1,16 @@
-import { Input, Select, Space } from 'antd'
-import type { ObjectDescriptionCard, PlaceDescriptionCard } from '../../../services/generated'
+import { Input, Space } from 'antd'
+import type { CharacterDescriptionCard, PropDescriptionCard, CostumeDescriptionCard, PlaceDescriptionCard } from '../../../services/generated'
 
-type DescriptionCard = ObjectDescriptionCard | PlaceDescriptionCard
+export type DescriptionCard = CharacterDescriptionCard | PropDescriptionCard | CostumeDescriptionCard | PlaceDescriptionCard
 
-/** 描述与关系独立；名称编辑建立稳定身份，类别始终通过明确字段维护。 */
+/** 四类描述共用名称和正文；类别由卡片类型固定，内部稳定身份不作为编辑字段。 */
 export function ObjectDescriptionEditor({ card, disabled, onChange }: {
   card: DescriptionCard; disabled?: boolean; onChange: (card: DescriptionCard) => void
 }) {
   return <Space direction="vertical" style={{ width: '100%' }}>
-    {card.type === 'content.object' && <Select aria-label="对象类别" value={card.category || 'character'} disabled={disabled}
-      options={[{ value: 'character', label: '人物' }, { value: 'prop', label: '道具' }, { value: 'costume', label: '服装' }]}
-      onChange={category => onChange({ ...card, category })} />}
-    <Input aria-label="对象名称" placeholder="对象名称" value={card.name || ''} disabled={disabled}
+    <Input aria-label="对象名称" aria-required="true" placeholder="名称（同类型内唯一）" maxLength={255} value={card.name || ''} disabled={disabled}
       onChange={event => onChange({ ...card, name: event.target.value, object_id: card.object_id || (event.target.value.trim() ? crypto.randomUUID() : null) })} />
-    <small>{card.object_id ? `对象身份：${card.object_id}` : '未命名对象不提供对象引用'}</small>
-    <Input aria-label="描述来源定位" placeholder="描述来源定位（可选）" value={card.source_locator || ''} disabled={disabled}
-      onChange={event => onChange({ ...card, source_locator: event.target.value })} />
     <Input.TextArea aria-label="对象描述正文" placeholder="描述正文" rows={6} value={card.text || ''} disabled={disabled}
       onChange={event => onChange({ ...card, text: event.target.value })} />
-
   </Space>
 }

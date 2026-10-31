@@ -18,7 +18,7 @@ import { WorkbenchButton, WorkbenchIconButton } from '../directing/ui/WorkbenchB
 import { activeNode, canvasNodeStatusLabels } from './useGenerationCanvasRuntime'
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { ModelComposer } from './ModelComposer'
+import { CardComposer } from './CardComposer'
 import { buildFileDownloadUrl } from '../assets/utils'
 import './materialComposer.css'
 
@@ -68,7 +68,7 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
   }
   const labelFor = (output: CanvasResolvedOutput) => {
     const source = document.cards?.find(item => item.id === output.source.card_id)
-    const name = source && ('name' in source ? source.name : 'title' in source ? source.title : undefined)
+    const name = source && ('name' in source ? source.name : undefined)
     const named = output.payload?.kind === 'named_image' && 'objects' in output.payload ? output.payload.objects?.map(object => object.name).join('、') : ''
     return name || named || cardTitles[source?.type || ''] || output.token || '来源'
   }
@@ -146,7 +146,7 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
     })}
     <div className="generation-material-add">{sourceActions}</div>
   </div>
-  return <ModelComposer associations={associations} parameters={modelParameters} status={status}
+  return <CardComposer associations={associations} parameters={modelParameters} status={status}
     submit={<WorkbenchIconButton className="generation-material-submit" variant="primary" label={busy ? '运行中' : '预检运行'} icon={<ArrowUpOutlined />} loading={checking} disabled={submitDisabled} onClick={submit} />}>
     {diagnostics.length > 0 && <Alert type="warning" message={<ul>{diagnostics.map(message => <li key={message}>{message}</li>)}</ul>} />}
     {capabilityError && <Alert type="warning" message={capabilityError} />}
@@ -158,6 +158,6 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
       <PromptEditor compact onSubmit={submit} submitDisabled={submitDisabled} toolsHost={referenceTools} document={document} card={card} value={editorPrompt(card)} candidates={resolved.candidates.map(item => ({ source: item.source, token: item.token || '', available: item.available !== false }))} disabled={disabled} onChange={prompt => onChange(withEditorPrompt(card, prompt))} />
     </div>
     {(disabled || busy || runDisabled) && <small role="status">{busy ? '当前模型运行中' : '当前不可提交，请核对保存与运行状态'}</small>}
-  </ModelComposer>
+  </CardComposer>
 }
 

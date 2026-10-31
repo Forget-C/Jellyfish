@@ -98,6 +98,7 @@ class NamedImagePayload(BaseModel):
     """图片出口自含默认名称映射，无需接收端读取祖先。"""
     model_config = ConfigDict(extra='forbid')
     kind: Literal['named_image'] = 'named_image'
+    name: str = ''
     file_id: str
     objects: list[NamedImageObject] = Field(default_factory=list)
     angle: str

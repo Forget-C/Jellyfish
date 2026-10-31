@@ -5,10 +5,11 @@ from app.core.contracts.media import MediaReference, VideoMediaInput, VideoSubje
 from app.schemas.generation_canvas import (
     CanvasDocument, CanvasResolvedOutput, CanvasCompiledInput, CanvasDiagnostic,
     DesignTextPayload, ModelCard, SoundDirectionCard, PerformanceDirectionCard, NamedImageReferenceCard, NamedImagePayload, CanvasSourceMapping, NamedImageMapping, PromptReference, PromptInstruction,
-    CanvasModelCapability, OutputIdentity,
+    CanvasModelCapability, OutputIdentity, ObjectDescriptionCard,
 )
 from app.services.generation_canvas.capabilities import parameter_diagnostics
 from app.services.generation_canvas.outputs import card_outputs
+from app.services.generation_canvas.reference_rules import reference_name_issue
 
 COMMAND_PORTS = {'首帧参考': 'first_frame', '尾帧参考': 'last_frame', '关键帧参考': 'key_frame', '主体参考': 'subject_image'}
 
@@ -36,23 +37,29 @@ def prompt_references(card: ModelCard):
             yield PromptReference(id=binding.id, kind='reference', binding_id=binding.id, source=binding.source), ['input_bindings', binding.id]
 
 
-def published_card_outputs(document, card_id, model_outputs=None):
+def published_card_outputs(document, card_id, model_outputs=None, *, allow_reference_drafts=False):
     """仅把已采用的直接对象出口交给本卡处理器，按 DAG 逐层解析。"""
     card = next(card for card in document.cards if card.id == card_id)
+    if isinstance(card, NamedImageReferenceCard) and (issue := reference_name_issue(document, card)):
+        if not allow_reference_drafts or issue[0] not in ('DUPLICATE_REFERENCE_NAME', 'REFERENCE_NAME_REQUIRED'):
+            return []
     adopted = []
-    if isinstance(card, (NamedImageReferenceCard, PerformanceDirectionCard, SoundDirectionCard)):
+    if isinstance(card, (PerformanceDirectionCard, SoundDirectionCard)):
         for binding in card.input_bindings:
             if any(edge.source_card == binding.source.card_id and edge.source_port == binding.source.port_id
                    and edge.target_card == card_id and edge.target_port == binding.input_port for edge in document.edges):
-                adopted.extend(item for item in published_card_outputs(document, binding.source.card_id, model_outputs)
+                adopted.extend(item for item in published_card_outputs(document, binding.source.card_id, model_outputs, allow_reference_drafts=allow_reference_drafts)
                     if identity_key(item.source) == identity_key(binding.source))
-    return card_outputs(document.id, card, adopted_inputs=tuple(adopted),
-                        published_results=tuple((model_outputs or {}).get(card_id, [])))
+    outputs = card_outputs(document.id, card, adopted_inputs=tuple(adopted),
+                           published_results=tuple((model_outputs or {}).get(card_id, [])))
+    if isinstance(card, ObjectDescriptionCard) and not card.name.strip() and not allow_reference_drafts:
+        return [item for item in outputs if item.source.port_id != 'object']
+    return outputs
 
 
 def resolve_outputs(document: CanvasDocument, card_id: str,
-                    model_outputs: dict[str, list[CanvasResolvedOutput]] | None = None) -> list[CanvasResolvedOutput]:
-    """按目标端口顺序发布真实候选；模型当前结果由运行层显式提供。缺失位置仅为已有引用保留。"""
+                    model_outputs: dict[str, list[CanvasResolvedOutput]] | None = None, *, allow_reference_drafts=False) -> list[CanvasResolvedOutput]:
+    """按端口顺序解析候选；保存校验可核对草稿的稳定对象身份；公开候选和运行仍要求名称就绪。"""
     cards = {card.id: card for card in document.cards}
     receiver = cards.get(card_id)
     retained = [ref.source for ref, _ in prompt_references(receiver)] if isinstance(receiver, ModelCard) else []
@@ -62,7 +69,7 @@ def resolve_outputs(document: CanvasDocument, card_id: str,
         for edge_id in order:
             edge = edges[edge_id]
             source = cards[edge.source_card]
-            outputs = [item for item in published_card_outputs(document, source.id, model_outputs) if item.source.port_id == edge.source_port]
+            outputs = [item for item in published_card_outputs(document, source.id, model_outputs, allow_reference_drafts=allow_reference_drafts) if item.source.port_id == edge.source_port]
             positions = {item.source.position for item in outputs}
             outputs = list(outputs) + [CanvasResolvedOutput(source=ref, modality=edge.source_port if edge.source_port in ('image', 'video', 'audio') else 'text', available=False)
                 for ref in retained if ref.canvas_id == document.id and ref.card_id == source.id and ref.port_id == edge.source_port and ref.position not in positions]
@@ -84,6 +91,10 @@ def compile_card(document: CanvasDocument, card_id: str, *,
     if not isinstance(card, ModelCard):
         return CanvasCompiledInput(card_id=card_id)
     result = compile_inputs(document.id, card, resolve_outputs(document, card_id, model_outputs), capability)
+    for binding in card.input_bindings:
+        source = next((item for item in document.cards if item.id == binding.source.card_id), None)
+        if isinstance(source, NamedImageReferenceCard) and (problem := reference_name_issue(document, source)):
+            result.diagnostics.append(CanvasDiagnostic(code=problem[0], message=problem[1], severity='error', target={'card_id': source.id, 'path': ['name']}, blocks=['run']))
     if capability:
         used_ports = {(binding.source.card_id, binding.source.port_id, binding.input_port) for binding in card.input_bindings}
         for edge in document.edges:
@@ -232,7 +243,8 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
                 label = f'@{entry.subject_name} 图片 {entry.purpose_position}'
             elif entry.input_port in ('first_frame', 'last_frame', 'key_frame'):
                 label = {'first_frame': '首帧', 'last_frame': '尾帧', 'key_frame': f'关键帧 {entry.purpose_position}'}[entry.input_port]
-            return f"{entry.name} = {label}（{entry.angle}" + (f"，{entry.position}" if entry.position else '') + '）'
+            category = {'character': '人物', 'place': '场所', 'prop': '道具', 'costume': '服装'}[entry.category]
+            return f"{category}·{entry.name} = {label}（{entry.angle}" + (f"，{entry.position}" if entry.position else '') + '）'
         lines = [mapping_line(entry) for entry in result.mapping if isinstance(entry, NamedImageMapping)]
         if lines:
             result.text += ('\n' if result.text else '') + '\n'.join(lines)

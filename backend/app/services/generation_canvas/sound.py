@@ -50,7 +50,7 @@ def validate_sound_relations(document, published, previous):
             identities.add(card.dialogue_id)
             if old and card.version < old['version']:
                 raise diagnostic('INVALID_DIALOGUE_VERSION', '对白版本不可倒退', {'card_id': card.id, 'path': ['version']})
-        candidates = resolve_outputs(document, card.id, published)
+        candidates = resolve_outputs(document, card.id, published, allow_reference_drafts=True)
         ids, speakers = set(), set()
         for binding in card.input_bindings:
             target = {'card_id': card.id, 'path': ['input_bindings', binding.id]}

@@ -8,10 +8,10 @@
 export type PlaceDescriptionCard = {
     id: string;
     type_version?: number;
-    type?: string;
     object_id?: (string | null);
     name?: string;
     category?: string;
     text?: string;
     source_locator?: string;
+    type?: string;
 };

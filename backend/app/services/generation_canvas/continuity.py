@@ -51,7 +51,7 @@ def validate_constraint_relations(document, published):
     for card in document.cards:
         if not isinstance(card, ConstraintDirectionCard):
             continue
-        candidates = resolve_outputs(document, card.id, published)
+        candidates = resolve_outputs(document, card.id, published, allow_reference_drafts=True)
         ids, counts = set(), {}
         for binding in card.input_bindings:
             target = {'card_id': card.id, 'path': ['input_bindings', binding.id]}

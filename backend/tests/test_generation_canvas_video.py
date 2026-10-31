@@ -117,11 +117,8 @@ async def setup_video(runtime, provider='volcengine', segments=None, can_run=Tru
         doc['edges'] = doc['edges'][:2]
         doc['input_order'] = {'v': {'first_frame': ['a'], 'key_frame': ['b']}}
     if named:
-        doc['cards'][0] = {'id': 'a', 'type': 'reference.character', 'objects': [{'object_id': 'alice', 'name': '小雪', 'category': 'character'}], 'image_binding': {'file_id': files[0]}}
-        doc['cards'][1] = {'id': 'b', 'type': 'reference.character', 'angle': '侧面', 'input_bindings': [{'id': 'name', 'input_port': 'name',
-            'source': {'canvas_id': runtime.canvas_id, 'card_id': 'a', 'port_id': 'object', 'position': 0, 'object_id': 'alice'}}], 'image_binding': {'file_id': files[1]}}
-        doc['edges'].append({'id': 'name', 'source_card': 'a', 'source_port': 'object', 'target_card': 'b', 'target_port': 'name'})
-        doc['input_order']['b'] = {'name': ['name']}
+        doc['cards'][0] = {'id': 'a', 'type': 'reference.character', 'name': '小雪正面', 'object_id': 'alice', 'image_binding': {'file_id': files[0]}}
+        doc['cards'][1] = {'id': 'b', 'type': 'reference.character', 'name': '小雪侧面', 'object_id': 'alice', 'angle': '侧面', 'image_binding': {'file_id': files[1]}}
     response = await runtime.client.put(runtime.url, json={'request_id': 'video', 'expected_revision': 1, 'document': doc})
     assert response.status_code == 200, response.text
     preview = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'v'})).json()['data']
@@ -141,7 +138,7 @@ async def test_actual_worker_video_frame_fields_and_every_poll_keep_frozen_route
     assert preview['input']['video_media']['frames']['keys'][0]['file_id'] != preview['input']['video_media']['frames']['first']['file_id']
     if named:
         changed = (await runtime.client.get(runtime.url)).json()['data']['document']
-        changed['cards'][0]['objects'][0]['name'] = '新名字'
+        changed['cards'][0]['name'] = '新名字'
         changed['cards'][1]['angle'] = '背面'
         saved = await runtime.client.put(runtime.url, json={'request_id': 'edit-after-acceptance', 'expected_revision': 2, 'document': changed})
         assert saved.status_code == 200, saved.text
@@ -185,7 +182,7 @@ async def test_actual_worker_video_frame_fields_and_every_poll_keep_frozen_route
     assert [call.headers['authorization'] for call in calls[:3]] == ['Bearer private-secret'] * 3
     body = json.loads(calls[0].content)
     if named:
-        assert body['content'].pop(0) == {'type': 'text', 'text': '小雪 = 首帧（正面）\n小雪 = 关键帧 2（正面）\n小雪 = 尾帧（侧面）\n小雪 = 关键帧 1（侧面）'}
+        assert body['content'].pop(0) == {'type': 'text', 'text': '人物·小雪正面 = 首帧（正面）\n人物·小雪正面 = 关键帧 2（正面）\n人物·小雪侧面 = 尾帧（侧面）\n人物·小雪侧面 = 关键帧 1（侧面）'}
     assert body == {'model': 'doubao-seedance', 'ratio': '16:9', 'duration': 5, 'seed': 7, 'content': [
         {'type': 'image_url', 'role': role, 'image_url': {'url': 'data:image/png;base64,' + base64.b64encode(value).decode()}} for role, value in [('first_frame', b'first-image'), ('last_frame', b'last-image'), ('key_frame', b'last-image'), ('key_frame', b'first-image')]]}
     assert image_storage['generated/' + accepted['task_ids'][0] + '/0'][0] == video_bytes

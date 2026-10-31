@@ -48,10 +48,10 @@ async def test_design_relations_require_specific_eligible_direct_objects(canvas_
     client = canvas_client
     canvas = (await client.post('/canvases/p', json={'name': '选择对象'})).json()['data']
     doc = canvas['document']
-    doc.update(cards=[{'id': 'ref', 'type': 'reference.place' if objects[0][1] == 'place' else 'reference.character', 'objects': [{'object_id': ident, 'name': ident, 'category': category} for ident, category in objects]},
-                     {'id': 'act', 'type': 'direction.performance', 'input_bindings': [{'id': str(index), 'input_port': port,
-                      'source': {'canvas_id': canvas['id'], 'card_id': 'ref', 'port_id': 'object', 'position': 0, 'object_id': ident}} for index, ident in enumerate(selected)]}],
-               edges=[{'id': 'e', 'source_card': 'ref', 'source_port': 'object', 'target_card': 'act', 'target_port': port}], input_order={'act': {port: ['e']}})
+    doc.update(cards=[{'id': ident, 'type': 'reference.' + category, 'object_id': ident, 'name': ident} for ident, category in objects] +
+                     [{'id': 'act', 'type': 'direction.performance', 'input_bindings': [{'id': str(index), 'input_port': port,
+                      'source': {'canvas_id': canvas['id'], 'card_id': ident if ident in dict(objects) else objects[0][0], 'port_id': 'object', 'position': 0, 'object_id': ident}} for index, ident in enumerate(selected)]}],
+               edges=[{'id': ident, 'source_card': ident, 'source_port': 'object', 'target_card': 'act', 'target_port': port} for ident, _ in objects], input_order={'act': {port: [ident for ident, _ in objects]}})
     response = await client.put(f"/canvases/p/{canvas['id']}", json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
     assert response.status_code == 422, response.text
     assert response.json()['detail']['code'] == code

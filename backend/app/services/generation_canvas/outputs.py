@@ -1,9 +1,9 @@
 """单卡输出行为：处理器没有整张画布或数据库读取能力。"""
 from typing import Protocol
-from app.core.contracts.generation_canvas import BasisTextOutputPayload
+from app.core.contracts.generation_canvas import BasisTextOutputPayload, NamedImageObject
 from app.schemas.generation_canvas import (
     VisualStyleCard, PhotographyCard, SoundDirectionCard, SpatialDirectionCard, PerformanceDirectionCard, CardDefinition, CanvasResolvedOutput, CreativeBasisCard, MediaContentCard,
-    NamedImageReferenceCard, NamedImagePayload, NamedImageObject, ObjectDescriptionCard, ObjectReferencePayload, DescriptionTextPayload, ModelCard, OutputIdentity, TextContentCard, TextOutputPayload, MediaOutputPayload,
+    NamedImageReferenceCard, NamedImagePayload, ObjectDescriptionCard, ObjectReferencePayload, DescriptionTextPayload, ModelCard, OutputIdentity, TextContentCard, TextOutputPayload, MediaOutputPayload,
 )
 
 
@@ -46,27 +46,23 @@ class ContentOutputHandler:
             from app.services.generation_canvas.performance import publish_design
             return publish_design(canvas_id, card, adopted_inputs)
         if isinstance(card, NamedImageReferenceCard):
-            objects = [item.model_copy(update={'name': item.name.strip()}) for item in card.objects if item.name.strip()]
-            for item in adopted_inputs:
-                if isinstance(item.payload, ObjectReferencePayload) and item.available:
-                    objects.append(NamedImageObject(object_id=item.payload.object_id, name=item.payload.name,
-                        category=item.payload.category, position=card.positions.get(item.payload.object_id, '')))
-            objects = list({item.object_id: item for item in objects}.values())
+            # 图外围控制名称就绪；保存校验仍需核对草稿的稳定身份。
+            obj = NamedImageObject(object_id=card.name_binding.object_id if card.name_binding else card.object_id or card.id, name=card.name.strip(), category=card.type.split('.')[1])
             outputs = [CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id,
-                port_id='object', position=0, object_id=item.object_id), modality='text',
-                payload=ObjectReferencePayload(object_id=item.object_id, name=item.name.strip(), category=item.category)) for item in objects]
-            if card.image_binding and any(item.category == card.type.split('.')[1] for item in objects):
+                port_id='object', position=0, object_id=obj.object_id), modality='text',
+                payload=ObjectReferencePayload(object_id=obj.object_id, name=obj.name, category=obj.category))]
+            if card.image_binding:
                 image = next((item for item in published_results if item.source.port_id == 'image'), None)
                 outputs.insert(0, image or CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id,
                     port_id='image', position=0), modality='image', payload=NamedImagePayload(
-                    file_id=card.image_binding.file_id, objects=objects, angle=card.angle)))
+                    name=card.name.strip(), file_id=card.image_binding.file_id, objects=[obj], angle=card.angle)))
             return outputs
         if isinstance(card, ObjectDescriptionCard):
             outputs = []
             if card.text:
                 outputs.append(CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id, port_id='text', position=0),
                     modality='text', payload=DescriptionTextPayload(text=card.text, object_id=card.object_id, name=card.name.strip(), category=card.category, source_locator=card.source_locator)))
-            if card.object_id and card.name.strip():
+            if card.object_id:
                 outputs.append(CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id, port_id='object', position=0, object_id=card.object_id),
                     modality='text', payload=ObjectReferencePayload(object_id=card.object_id, name=card.name.strip(), category=card.category)))
             return outputs

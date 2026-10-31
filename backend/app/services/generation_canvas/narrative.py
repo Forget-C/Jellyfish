@@ -101,7 +101,7 @@ def validate_narrative_relations(document, published, previous):
             if key in names:
                 raise diagnostic('DUPLICATE_NARRATIVE_NAME', '同类故事对象名称必须唯一', {'card_id': card.id, 'path': ['name']})
             names.add(key)
-        candidates = resolve_outputs(document, card.id, published)
+        candidates = resolve_outputs(document, card.id, published, allow_reference_drafts=True)
         ids = set()
         for binding in card.input_bindings:
             item = next((item for item in candidates if identity_key(item.source) == identity_key(binding.source)), None)

@@ -90,7 +90,7 @@ async def test_structural_categories_and_description_binding_protection(canvas_c
 
 
 @pytest.mark.asyncio
-async def test_object_category_can_be_corrected_without_changing_identity(canvas_client):
+async def test_split_description_type_cannot_change_and_keeps_identity(canvas_client):
     client = canvas_client
     canvas = (await client.post('/canvases/p', json={'name': '类别修正'})).json()['data']
     url = f"/canvases/p/{canvas['id']}"
@@ -100,9 +100,9 @@ async def test_object_category_can_be_corrected_without_changing_identity(canvas
     assert (await client.put(url, json={'request_id': 'first', 'expected_revision': 0, 'document': doc})).status_code == 200
     item['category'] = 'costume'
     corrected = await client.put(url, json={'request_id': 'correct', 'expected_revision': 1, 'document': doc})
-    assert corrected.status_code == 200, corrected.text
+    assert corrected.status_code == 422 and corrected.json()['detail']['code'] == 'INVALID_CARD_IDENTITY'
     outputs = (await client.get(url + '/cards/item/outputs')).json()['data']['outputs']
-    assert outputs[1]['payload']['category'] == 'costume'
+    assert outputs[1]['payload']['category'] == 'prop'
     assert outputs[1]['payload']['object_id'] == 'item-one'
 
 
@@ -198,5 +198,5 @@ async def test_named_descriptions_keep_identity_in_actual_image_request(runtime,
         worker.text_pool.shutdown(wait=False)
     assert len(received) == 1
     assert json.loads(received[0])['prompt'] == ('画两人\n' + expected_descriptions
-        + '\n小雪 = image 1（正面）\n小李 = image 2（正面）')
+        + '\n人物·小雪 = image 1（正面）\n人物·小李 = image 2（正面）')
     assert len(preview['input']['media']) == 2

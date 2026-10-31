@@ -3,15 +3,15 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * 画布内独立描述对象；未完成名称或身份可以保存但不发布引用。
+ * 服装描述的类别由卡片类型固定。
  */
-export type ObjectDescriptionCard = {
+export type CostumeDescriptionCard = {
     id: string;
     type_version?: number;
-    type?: string;
     object_id?: (string | null);
     name?: string;
-    category?: 'character' | 'prop' | 'costume';
+    category?: string;
     text?: string;
     source_locator?: string;
+    type?: string;
 };

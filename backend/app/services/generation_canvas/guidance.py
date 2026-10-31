@@ -69,7 +69,7 @@ def validate_guidance_relations(document, published, previous):
         relevant = [binding for binding in bindings if isinstance(card, GuidanceDirectionCard) or binding.input_port == 'acceptance_basis']
         if not relevant:
             continue
-        candidates = resolve_outputs(document, card.id, published)
+        candidates = resolve_outputs(document, card.id, published, allow_reference_drafts=True)
         ids = set()
         for binding in relevant:
             item = next((item for item in candidates if identity_key(item.source) == identity_key(binding.source)), None)

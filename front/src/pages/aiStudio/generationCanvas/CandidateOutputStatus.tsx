@@ -17,7 +17,7 @@ export function CandidateOutputStatus({ document, savedDocument, cardId, savedRe
     {resolved.error && <p role="alert">{resolved.error}</p>}
     {edges.map(edge => {
       const source = document.cards?.find(card => card.id === edge.source_card)
-      const name = source && ('name' in source && source.name || 'title' in source && source.title)
+      const name = source && ('name' in source && source.name)
       const label = cardDefinitions[target?.type || '']?.inputs.find(port => port.id === edge.target_port)?.label || edge.target_port
       const saved = savedDocument?.edges?.some(value => value.id === edge.id)
       const count = resolved.candidates.filter(output => output.source.card_id === edge.source_card && output.source.port_id === edge.source_port && output.available !== false).length

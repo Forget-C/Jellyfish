@@ -17,6 +17,8 @@ export function createGraphRules(catalog: CanvasCatalog) {
 function connectionReason(document: CanvasDocument, edge: GenerationEdge, capability?: CanvasModelCapability): string | undefined {
   const source = document.cards?.find(card => card.id === edge.source_card), target = document.cards?.find(card => card.id === edge.target_card)
   if (!source || !target || !outputPorts(source).includes(edge.source_port) || !inputPorts(target).includes(edge.target_port)) return '连接端点不存在'
+  if (target.type?.startsWith('reference.') && source.type?.startsWith('reference.') && target.type !== source.type) return '参考图片类别与目标参考卡不匹配'
+  if (target.type?.startsWith('reference.') && edge.target_port === 'name' && source.type !== 'content.' + target.type.split('.')[1]) return '名称候选必须来自同类型描述卡'
   if (source.id === target.id) return '卡片不能连接自身'
   const output = cardDefinitions[source.type || '']?.outputs.find(port => port.id === edge.source_port)
   const input = cardDefinitions[target.type || '']?.inputs.find(port => port.id === edge.target_port)

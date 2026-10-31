@@ -1,0 +1,6 @@
+.generation-workbench .generation-card:is([data-card-type^="model."], [data-card-type^="reference."]) .generation-card-body { padding: 0; min-height: 0; max-height: none; overflow: hidden; }
+.generation-output-card { height: 217px; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.generation-output-preview { flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+.generation-output-card > .generation-card-footer { height: 32px; flex: none; box-sizing: border-box; margin-top: auto; padding: 0 10px; font-size: 11px; color: var(--wb-muted); overflow: hidden; display: flex; align-items: center; gap: 8px; }
+.generation-output-card .generation-card-status { height: 100%; min-height: 0; }
+.generation-output-card .generation-card-status > .wb-icon-trigger { flex: none; overflow: visible; }

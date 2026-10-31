@@ -23,8 +23,8 @@ export async function closeCanvasDetails(page) {
     else {
       const candidates = details.locator('.generation-material-candidates[open] > summary')
       if (await candidates.count()) await candidates.press('Escape')
-      await details.press('Escape')
-      if (await details.isVisible()) await details.press('Escape')
+      if (await details.isVisible()) await page.keyboard.press('Escape')
+      if (await details.isVisible()) await page.keyboard.press('Escape')
     }
     await details.waitFor({ state: 'hidden' })
     await page.waitForFunction(() => !document.querySelector('.canvas-workbench')?.inert)
@@ -226,4 +226,26 @@ export async function captureCanvasRegion(page, region, path) {
   await page.screenshot({ path, clip: box, scale: 'css', animations: 'disabled' })
   assert.deepEqual(await page.evaluate(() => ({ x: scrollX, y: scrollY })), before, 'capture preserves native scroll')
   return { viewport, region: box, scroll: before, zoom: await page.locator('.generation-world').evaluate(element => getComputedStyle(element).transform) }
+}
+
+/** 参考名称独立于图片来源，不再建立名称候选边。 */
+export async function selectReferenceName(page, name) {
+  await page.locator('.wb-details:visible').getByLabel('参考名称', { exact: true }).fill(name)
+}
+/** 参考卡候选关系通过已有画布连线交互建立。 */
+export async function connectCanvasCards(page, source, target, port) {
+  await closeCanvasDetails(page)
+  await page.getByRole('button', { name: '适应全部', exact: true }).click()
+  await openCardMenu(page, source)
+  await page.locator(`[data-card-id="${source}"]`).getByRole('button', { name: '连接到…', exact: true }).press('Enter')
+  await page.locator(`[data-card-id="${target}"]`).press('Enter')
+  if (await page.getByRole('menu', { name: '选择连接用途', exact: true }).count()) await page.getByRole('menuitem').filter({ hasText: `作为${port}候选` }).click()
+}
+export async function selectCanvasReferenceImage(page, label) {
+  const editor = page.locator('.wb-details:visible')
+  await editor.getByRole('button', { name: /^(添加参考图|更换参考图)$/ }).click()
+  await page.getByRole('menuitem', { name: '从当前画布选择', exact: true }).click()
+  const picker = page.getByRole('dialog', { name: '从当前画布选择参考图', exact: true })
+  await (typeof label === 'string' ? picker.locator(`[data-reference-source-card=${JSON.stringify(label)}]`) : picker.getByRole('button', { name: label })).click()
+  await picker.waitFor({ state: 'hidden' })
 }

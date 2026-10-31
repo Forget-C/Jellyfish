@@ -6,17 +6,17 @@ import { NarrativeDirectionEditor } from './NarrativeDirectionEditor'
 import { SpatialDirectionEditor } from './SpatialDirectionEditor'
 import { PhotographyEditor } from './PhotographyEditor'
 import type { ComponentType, ReactNode } from 'react'
-import type { CanvasDocument, CanvasModelCapability, CanvasNodeRead, CanvasResolvedOutput, CreativeBasisCard, ModelRead, ObjectDescriptionCard, PlaceDescriptionCard, TextContentCard } from '../../../services/generated'
+import type { CanvasDocument, CanvasModelCapability, CanvasNodeRead, CanvasResolvedOutput, CreativeBasisCard, ModelRead, TextContentCard } from '../../../services/generated'
 import { SoundDirectionEditor } from './SoundDirectionEditor'
 import { PerformanceDirectionEditor } from './PerformanceDirectionEditor'
 import { NamedImageReferenceEditor } from './NamedImageReferenceEditor'
-import { ObjectDescriptionEditor } from './ObjectDescriptionEditor'
+import { ObjectDescriptionEditor, type DescriptionCard } from './ObjectDescriptionEditor'
 import { TextContentEditor } from './TextContentEditor'
 import { MediaContentEditor } from './MediaContentEditor'
 import type { MediaCard } from './MediaContentEditor'
 import type { GenerationCard } from './graphRules'
 
-export type CardRendererProps = { initialEntry?: string; savedRevision?: number; savedCard?: GenerationCard; card: GenerationCard; document: CanvasDocument; projectId: string; onChange: (card: GenerationCard) => void; onAddAngle?: (output: CanvasResolvedOutput) => void;
+export type CardRendererProps = { initialEntry?: string; savedRevision?: number; savedCard?: GenerationCard; card: GenerationCard; document: CanvasDocument; projectId: string; onChange: (card: GenerationCard) => void;
   defaultModelId?: string | null; models?: ModelRead[]; capability?: CanvasModelCapability; capabilityError?: string; references?: ReactNode; disabled?: boolean; modelOutputs?: Record<string, CanvasResolvedOutput[]>; node?: CanvasNodeRead; busy?: boolean; checking?: boolean; runDisabled?: boolean; onPrecheck?: () => void; sourceActions?: ReactNode }
 
 /** 显式类型入口，无供应商卡片族或通用表单引擎。 */
@@ -40,8 +40,7 @@ export const rendererRegistry: Record<string, ComponentType<CardRendererProps>> 
   'reference.prop': NamedImageReferenceEditor,
   'reference.costume': NamedImageReferenceEditor,
   'content.text': ({ card, onChange, disabled }) => <TextContentEditor card={card as TextContentCard} onChange={onChange} disabled={disabled} />,
-  'content.object': ({ card, onChange, disabled }) => <ObjectDescriptionEditor card={card as ObjectDescriptionCard} onChange={onChange} disabled={disabled} />,
-  'content.place': ({ card, onChange, disabled }) => <ObjectDescriptionEditor card={card as PlaceDescriptionCard} onChange={onChange} disabled={disabled} />,
+  ...Object.fromEntries(['content.character', 'content.prop', 'content.costume', 'content.place'].map(type => [type, ({ card, onChange, disabled }: CardRendererProps) => <ObjectDescriptionEditor card={card as DescriptionCard} onChange={onChange} disabled={disabled} />])),
   'content.basis': ({ card, onChange, disabled }) => <TextContentEditor card={card as CreativeBasisCard} onChange={onChange} disabled={disabled} />,
   'content.image': ({ card, onChange, projectId, disabled }) => <MediaContentEditor card={card as MediaCard} projectId={projectId} onChange={onChange} disabled={disabled} />,
   'content.video': ({ card, onChange, projectId, disabled }) => <MediaContentEditor card={card as MediaCard} projectId={projectId} onChange={onChange} disabled={disabled} />,

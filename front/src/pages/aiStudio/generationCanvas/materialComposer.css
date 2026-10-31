@@ -1,4 +1,4 @@
-/* 生成模型的 A 紧凑排版；基础内容和导演卡继续使用原编辑容器。 */
+/* 生成模型与参考卡复用 A 紧凑容器；基础内容和导演卡继续使用原编辑容器。 */
 .generation-card-editor.wb-details[data-material="true"] { width: min(700px, calc(100vw - 32px)); height: min(320px, calc(100dvh - 160px)); border-radius: 24px; }
 .generation-card-editor.wb-details[data-material="true"] .wb-details-body { padding: 0; overflow: hidden; display: flex; }
 .generation-card-editor.wb-details[data-material="true"] .generation-card-body { padding: 0; flex: 1; min-height: 0; display: flex; }

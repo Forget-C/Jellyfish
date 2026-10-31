@@ -52,7 +52,7 @@ def validate_design_relations(document, published):
     for card in document.cards:
         if not isinstance(card, PerformanceDirectionCard) or isinstance(card, (SoundDirectionCard, SpatialDirectionCard, NarrativeDirectionCard, GuidanceDirectionCard, ConstraintDirectionCard)):
             continue
-        candidates = resolve_outputs(document, card.id, published)
+        candidates = resolve_outputs(document, card.id, published, allow_reference_drafts=True)
         ids, participants, beats, shots = set(), set(), set(), set()
         for binding in card.input_bindings:
             target = {'card_id': card.id, 'path': ['input_bindings', binding.id]}
@@ -105,7 +105,7 @@ async def validate_design_examples(db, document, published, project_id, previous
     for card in document.cards:
         if not isinstance(card, (PerformanceDirectionCard, SoundDirectionCard)):
             continue
-        candidates = resolve_outputs(document, card.id, published)
+        candidates = resolve_outputs(document, card.id, published, allow_reference_drafts=True)
         old_examples = next((row.get('examples', []) for row in previous.get('cards', []) if row['id'] == card.id), [])
         ids = set()
         for example in card.examples:

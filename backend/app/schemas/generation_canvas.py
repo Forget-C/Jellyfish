@@ -4,7 +4,7 @@ from typing import Annotated, Any, ClassVar, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.schemas.common import ApiResponse
 from app.core.contracts.media import VideoMediaInput
-from app.core.contracts.generation_canvas import BasisTextOutputPayload, DialogueReferencePayload, OutputIdentity, InputBinding, TextOutputPayload, MediaOutputPayload, ObjectReferencePayload, DescriptionTextPayload, NamedImageObject, ReferenceImageBinding, NamedImagePayload, CanvasSourceMapping, NamedImageMapping, DesignField, DesignScope, CriterionReferencePayload, DesignTextPayload, SpatialReferencePayload, NarrativeReferencePayload
+from app.core.contracts.generation_canvas import BasisTextOutputPayload, DialogueReferencePayload, OutputIdentity, InputBinding, TextOutputPayload, MediaOutputPayload, ObjectReferencePayload, DescriptionTextPayload, ReferenceImageBinding, NamedImagePayload, CanvasSourceMapping, NamedImageMapping, DesignField, DesignScope, CriterionReferencePayload, DesignTextPayload, SpatialReferencePayload, NarrativeReferencePayload
 
 
 from app.core.contracts.photography import PhotographyFieldKey, PhotographyFields, PhotographyPhase, PhotographyTextPayload, ImageFrameTarget
@@ -49,13 +49,30 @@ class CreativeBasisCard(CardDefinition):
 
 class ObjectDescriptionCard(CardDefinition):
     """画布内独立描述对象；未完成名称或身份可以保存但不发布引用。"""
-    type: Literal['content.object'] = 'content.object'
     object_id: str | None = Field(default=None, min_length=1, max_length=64, pattern=r'^[A-Za-z0-9_-]+$')
     name: str = Field(default='', max_length=255)
-    category: Literal['character', 'prop', 'costume'] = 'character'
+    category: Literal['character', 'prop', 'costume', 'place'] = 'character'
     text: str = ''
     source_locator: str = ''
     output_ports: ClassVar[tuple[str, ...]] = ('text', 'object')
+
+
+class CharacterDescriptionCard(ObjectDescriptionCard):
+    """人物描述的类别由卡片类型固定。"""
+    type: Literal['content.character'] = 'content.character'
+    category: Literal['character'] = 'character'
+
+
+class PropDescriptionCard(ObjectDescriptionCard):
+    """道具描述与人物、服装独立命名。"""
+    type: Literal['content.prop'] = 'content.prop'
+    category: Literal['prop'] = 'prop'
+
+
+class CostumeDescriptionCard(ObjectDescriptionCard):
+    """服装描述的类别由卡片类型固定。"""
+    type: Literal['content.costume'] = 'content.costume'
+    category: Literal['costume'] = 'costume'
 
 
 class PlaceDescriptionCard(ObjectDescriptionCard):
@@ -281,17 +298,42 @@ class AudioContentCard(MediaContentCard):
     output_ports: ClassVar[tuple[str, ...]] = ('audio',)
 
 
+def _legacy_reference(value, identities=None):
+    """旧参考只保留已选主对象；纯转换不改写保存正文或历史快照。"""
+    if not isinstance(value, dict) or 'name' in value or 'name_binding' in value:
+        return value
+    if not any(key in value for key in ('title', 'objects', 'input_bindings', 'positions')) and value.get('type_version', 2) != 1:
+        return value
+    category = value.get('type', '').split('.')[-1]
+    owned = next((item for item in value.get('objects', []) if item.get('category') == category), None)
+    selected = next((identities.get(binding.get('source', {}).get('object_id'))
+                     for binding in value.get('input_bindings', [])
+                     if identities and identities.get(binding.get('source', {}).get('object_id'), {}).get('category') == category), None)
+    primary = owned or selected or {}
+    identity = primary.get('object_id') or next((binding.get('source', {}).get('object_id')
+                    for binding in value.get('input_bindings', []) if binding.get('source', {}).get('object_id')), None)
+    return {**{key: item for key, item in value.items() if key not in ('title', 'objects', 'input_bindings', 'positions')},
+            'type_version': 2, 'name': primary.get('name') or value.get('title', ''),
+            'object_id': identity or value.get('object_id') or value.get('id')}
+
+
 class NamedImageReferenceCard(CardDefinition):
-    """单张主图的本地命名和明确名称绑定，标题与对象名相互独立。"""
+    """单张图片、单个映射名称；允许未完成草稿，名称有效后才发布输出。"""
+    type_version: Literal[2] = 2
     type: Literal['reference.character', 'reference.place', 'reference.prop', 'reference.costume']
-    title: str = ''
+    name: str = Field(default='', max_length=255)
     angle: str = '正面'
-    objects: list[NamedImageObject] = Field(default_factory=list)
-    input_bindings: list[InputBinding] = Field(default_factory=list)
+    object_id: str | None = Field(default=None, min_length=1, max_length=64, pattern=r'^[A-Za-z0-9_-]+$')
+    name_binding: OutputIdentity | None = None
     image_binding: ReferenceImageBinding | None = None
-    positions: dict[str, str] = Field(default_factory=dict)
     input_ports: ClassVar[tuple[str, ...]] = ('name', 'image_source')
     output_ports: ClassVar[tuple[str, ...]] = ('image', 'object')
+
+    @model_validator(mode='before')
+    @classmethod
+    def read_legacy_reference(cls, value):
+        """独立解析旧卡时，沿用其首个本类别对象及稳定身份。"""
+        return _legacy_reference(value)
 
 
 class DesignMediaExample(BaseModel):
@@ -618,7 +660,7 @@ class CanvasDocument(BaseModel):
     project_id: str
     name: str = Field(min_length=1, max_length=255)
     schema_version: Literal[2] = 2
-    cards: list[VisualStyleCard | SpaceRuleCard | ContinuityCard | ImmutableFactCard | CreativeControlCard | GenerationGuidanceCard | AcceptanceCriterionCard | PhotographyCard | DialogueCard | SoundArrangementCard | NarrativeOverviewCard | NarrativeBeatCard | NarrativeEventCard | ShotDesignCard | SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | ObjectDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard] = Field(default_factory=list)
+    cards: list[VisualStyleCard | SpaceRuleCard | ContinuityCard | ImmutableFactCard | CreativeControlCard | GenerationGuidanceCard | AcceptanceCriterionCard | PhotographyCard | DialogueCard | SoundArrangementCard | NarrativeOverviewCard | NarrativeBeatCard | NarrativeEventCard | ShotDesignCard | SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | CharacterDescriptionCard | PropDescriptionCard | CostumeDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard] = Field(default_factory=list)
     edges: list[GenerationCanvasEdge] = Field(default_factory=list)
     input_order: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
     groups: list[GenerationCanvasGroup] = Field(default_factory=list)
@@ -628,9 +670,53 @@ class CanvasDocument(BaseModel):
     @classmethod
     def read_legacy_document(cls, value):
         """只读解析旧格式；不原地重写原始幂等正文或历史快照。"""
-        if isinstance(value, dict) and value.get('schema_version', 1) == 1:
-            return {**value, 'schema_version': 2}
-        return value
+        if not isinstance(value, dict):
+            return value
+        cards = value.get('cards', [])
+        if not isinstance(cards, list) or any(not isinstance(card, dict) for card in cards):
+            return value
+        # 旧类别按原值拆分，保留卡片 ID、对象 ID、端口、连线和画布外的布局缓存。
+        cards = [{**card, 'type': 'content.' + card.get('category', 'character')} if card.get('type') == 'content.object' else card for card in cards]
+        identities = {}
+        for card in cards:
+            owned = card.get('objects', []) if card.get('type', '').startswith('reference.') else [card] if card.get('type') in ('content.character', 'content.prop', 'content.costume', 'content.place') else []
+            for obj in owned:
+                if obj.get('object_id'):
+                    identities[obj['object_id']] = {**obj, 'category': card['type'].split('.')[1] if not card['type'].startswith('reference.') else obj.get('category', 'character')}
+        normalized = []
+        retired = set()
+        for card in cards:
+            if card.get('type', '').startswith('reference.') and 'name' not in card and 'name_binding' not in card and (any(key in card for key in ('title', 'objects', 'input_bindings', 'positions')) or card.get('type_version') == 1):
+                legacy = _legacy_reference(card, identities)
+                binding = next((binding.get('source') for binding in card.get('input_bindings', [])
+                    if binding.get('input_port') == 'name' and any(source.get('id') == binding.get('source', {}).get('card_id')
+                    and source.get('type') == 'content.' + card['type'].split('.')[1]
+                    and source.get('object_id') == binding.get('source', {}).get('object_id') for source in cards)), None)
+                if binding:
+                    legacy['name_binding'] = binding
+                retired.add(card['id'])
+                card = legacy
+            normalized.append(card)
+        by_id = {card.get('id'): card for card in cards}
+        removed_edges = {edge.get('id') for edge in value.get('edges', []) if edge.get('target_card') in retired and edge.get('target_port') == 'name'
+            and by_id.get(edge.get('source_card'), {}).get('type') != 'content.' + by_id[edge['target_card']]['type'].split('.')[1]}
+        edges = [edge for edge in value.get('edges', []) if edge.get('id') not in removed_edges]
+        orders = {card_id: {port: [edge_id for edge_id in ids if edge_id not in removed_edges] for port, ids in ports.items()}
+                  for card_id, ports in value.get('input_order', {}).items()}
+        return {**value, 'schema_version': 2, 'cards': normalized, 'edges': edges, 'input_order': orders}
+
+    @model_validator(mode='after')
+    def synchronize_reference_names(self):
+        """关联名称由同类描述拥有；同步不复制正文，也不改写关联和本地对象身份。"""
+        cards = {card.id: card for card in self.cards}
+        for card in self.cards:
+            if not isinstance(card, NamedImageReferenceCard) or not card.name_binding:
+                continue
+            source = cards.get(card.name_binding.card_id)
+            if isinstance(source, ObjectDescriptionCard) and source.category == card.type.split('.')[1] and source.object_id == card.name_binding.object_id:
+                card.name = source.name
+        return self
+
 
 
 class CanvasCreate(BaseModel):

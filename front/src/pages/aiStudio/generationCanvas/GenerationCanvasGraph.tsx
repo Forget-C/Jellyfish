@@ -1,7 +1,6 @@
 import { buildFileDownloadUrl } from '../assets/utils'
 import { TextContentEditor } from './TextContentEditor'
 import { designSummary } from './designSummary'
-import { ReferenceCardSummary } from './ReferenceCardSummary'
 import { CardStatusSummary } from './CardStatusSummary'
 import { ImageContentCardSummary } from './ImageContentCardSummary'
 import { GenerationCanvasBrowse, type CanvasDisplayFilter } from './GenerationCanvasBrowse'
@@ -23,7 +22,7 @@ import { WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
 import { CanvasToolbarMenu } from '../directing/CanvasToolbarMenu'
 import { ConfigProvider, Dropdown, Modal, Input, Select, Space, Tooltip, Image } from 'antd'
 import { StudioGenerationCanvasesService as Canvases, LlmService } from '../../../services/generated'
-import type { CanvasDocument, CanvasModelCapability, CanvasNodeRead, CanvasResolvedOutput, ModelRead, ModelSettingsRead, TextContentCard } from '../../../services/generated'
+import type { CanvasDocument, NamedImageReferenceCard, CanvasModelCapability, CanvasNodeRead, CanvasResolvedOutput, ModelRead, ModelSettingsRead, TextContentCard } from '../../../services/generated'
 import { CanvasDragHandle, CanvasEdge, useCanvasViewport } from '../../../components/canvas/Canvas'
 import { useGraphLayout } from '../directing/useGraphLayout'
 import type { GraphArrange, GraphSize } from '../directing/graphLayout'
@@ -33,7 +32,10 @@ import { CardShell } from './CardShell'
 import { CandidateOutputStatus } from './CandidateOutputStatus'
 import { connectionSides, sideLabels, sidePoint, defaultSides, connectionPath, useConnectionSides, type ConnectionSide } from './connectionGeometry'
 import { MediaContentEditor, MediaPreview, type MediaCard } from './MediaContentEditor'
-import { ModelGenerationCard, MODEL_CARD_SIZE } from './ModelGenerationCard'
+import { referenceNameError } from './referenceCardRules'
+import { ReferenceCard } from './ReferenceCard'
+import { ModelGenerationCard } from './ModelGenerationCard'
+import { GENERATION_CARD_SIZE } from './GenerationCardFrame'
 import { rendererRegistry } from './rendererRegistry'
 import { connect, disconnect, findConnection } from './graphRules'
 import { CanvasCatalogProvider, useGraphRules } from './CanvasCatalogContext'
@@ -70,7 +72,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
   }, [viewStackId])
   const cardLabel = (id: string) => {
     const source = cards.find(card => card.id === id)
-    const name = source && ('name' in source && source.name || 'title' in source && source.title)
+    const name = source && ('name' in source && source.name)
     return `${name || cardTitles[source?.type || ''] || '未知卡片'} · ${id.slice(0, 8)}`
   }
   const inputLabel = (card: GenerationCard, port: string) => cardDefinitions[card.type || '']?.inputs.find(item => item.id === port)?.label || portLabels[port]
@@ -221,7 +223,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
     }
     return positions
   }
-  const nodes = useMemo(() => cards.map(card => ({ id: card.id, ...('model_id' in card ? { size: MODEL_CARD_SIZE } : {}) })), [cards])
+  const nodes = useMemo(() => cards.map(card => ({ id: card.id, ...('model_id' in card || card.type?.startsWith('reference.') ? { size: GENERATION_CARD_SIZE } : {}) })), [cards])
   const layout = useGraphLayout({ storageKey: `jellyfish:generation-layout:${document.project_id}:${document.id}`, viewId: 'canvas',
     initialTop: window.innerWidth > 700 ? 180 : 300, initialLeft: window.innerWidth > 700 ? 200 : 80, anchorId: cards[0]?.id || '', validIds: [...cards.map(card => card.id), ...groups.map(group => group.id)], arrange: arrangeGroups,
     onStorageError: setStorageError }, nodes, layoutMeasurements, container.current?.clientWidth || 1200)
@@ -310,7 +312,24 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
     return () => observer.disconnect()
   }, [cardIdentity, groupIdentity])
   const edit = (next: CanvasDocument) => { if (!readonly) onChange(next) }
-  const updateCard = (next: GenerationCard) => { if (stackFor(next.id)) { setReason('请先解除堆叠后编辑'); return } edit({ ...latest.current, cards: latest.current.cards?.map(card => card.id === next.id ? next : card) }) }
+  const updateCard = (next: GenerationCard) => {
+    if (stackFor(next.id)) { setReason('请先解除堆叠后编辑'); return }
+    let changed: CanvasDocument = { ...latest.current, cards: latest.current.cards?.map(card => card.id === next.id ? next : card) }
+    if ('name' in next) changed.cards = changed.cards?.map(card => card.type?.startsWith('reference.') && 'name_binding' in card && card.name_binding?.card_id === next.id ? { ...card, name: next.name } : card)
+    // 名称选择或画布选图同次保存直接来源边；既有候选、几何与采用身份不改写。
+    if (next.type?.startsWith('reference.')) {
+      const reference = next as NamedImageReferenceCard
+      const sources = [...(reference.name_binding ? [{ source: reference.name_binding, port: 'name' }] : []), ...(reference.image_binding?.source ? [{ source: reference.image_binding.source, port: 'image_source' }] : [])]
+      for (const { source, port } of sources) {
+        const edge = { id: crypto.randomUUID(), source_card: source.card_id, source_port: source.port_id, target_card: next.id, target_port: port }
+        if (findConnection(changed, edge)) continue
+        const reason = connectionReason(changed, edge)
+        if (reason) { setReason(reason); return }
+        changed = connect(changed, edge)
+      }
+    }
+    edit(changed)
+  }
   const showProtection = (protection: NonNullable<ReturnType<typeof referenceProtection>>) => {
     setReason(protection.message); setDetailId(protection.cardId)
     const card = window.document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(protection.cardId)}"]`)
@@ -331,7 +350,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
   const add = (type: string, position?: { x: number; y: number }, entry?: string) => {
     if (readonly || !catalog.cards.some(card => card.type === type)) return
     const card = (type === 'content.text' || type === 'content.basis') ? { id: crypto.randomUUID(), type, type_version: 1, text: '' }
-      : (type === 'content.object' || type === 'content.place') ? { id: crypto.randomUUID(), type, type_version: 1, object_id: null, name: '', category: type === 'content.place' ? 'place' : 'character', text: '', source_locator: '' }
+      : ['content.character', 'content.prop', 'content.costume', 'content.place'].includes(type) ? { id: crypto.randomUUID(), type, type_version: 1, object_id: null, name: '', category: type.split('.')[1], text: '', source_locator: '' }
       : ['direction.beat', 'direction.event', 'direction.shot'].includes(type) ? { id: crypto.randomUUID(), type, [type.slice(10) + '_id']: crypto.randomUUID(), name: '', input_bindings: [], examples: [], scope: {} }
       : type === 'direction.criterion' ? { id: crypto.randomUUID(), type, criterion_id: crypto.randomUUID(), name: '', input_bindings: [], examples: [], scope: {} }
       : ['direction.creative_control', 'direction.guidance'].includes(type) ? { id: crypto.randomUUID(), type, name: '', input_bindings: [], examples: [], scope: {} }
@@ -340,7 +359,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
       : type === 'direction.blocking' ? { id: crypto.randomUUID(), type, blocking_id: crypto.randomUUID(), name: '', input_bindings: [], examples: [], scope: {} }
       : type === 'direction.dialogue' ? { id: crypto.randomUUID(), type, type_version: 1, dialogue_id: crypto.randomUUID(), version: 1, input_bindings: [], examples: [], scope: {} }
       : type.startsWith('direction.') ? { id: crypto.randomUUID(), type, type_version: 1, input_bindings: [], examples: [], scope: {} }
-      : type.startsWith('reference.') ? { id: crypto.randomUUID(), type, type_version: 1, title: '', angle: '正面', objects: [], input_bindings: [] }
+      : type.startsWith('reference.') ? { id: crypto.randomUUID(), type, type_version: 2, name: '', angle: '正面' }
       : type.startsWith('model.') ? { id: crypto.randomUUID(), type, type_version: 1, model_id: null, prompt: { segments: [] }, config: {} }
       : { id: crypto.randomUUID(), type, type_version: 1, file_id: null, uploading: false }
     creationView.current = { cardId: card.id, transform: { ...transform } }
@@ -428,9 +447,10 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
     if (!target) return 0
     const matches = (source: { card_id: string; port_id: string } | null | undefined) => source?.card_id === edge.source_card && source.port_id === edge.source_port
     const bindings = ('input_bindings' in target ? target.input_bindings || [] : []).filter(binding => binding.input_port === edge.target_port && matches(binding.source)).length
+    const name = 'name_binding' in target && edge.target_port === 'name' && matches(target.name_binding) ? 1 : 0
     const mainImage = 'image_binding' in target && edge.target_port === 'image_source' && matches(target.image_binding?.source) ? 1 : 0
     const examples = 'examples' in target && edge.target_port === `${edge.source_port}_example` ? (target.examples || []).filter(example => matches(example.source)).length : 0
-    return bindings + mainImage + examples
+    return bindings + name + mainImage + examples
   }
   const geometricPorts = (card: GenerationCard) => {
     const definition = cardDefinitions[card.type || '']
@@ -617,7 +637,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
           const fields = 'fields' in card ? Object.values(card.fields || {}) : []
           return <article key={id} data-filter-match={matched.has(id)} aria-description={matched.has(id) ? '符合筛选' : undefined} aria-label={`只读成员 ${cardLabel(id)}`}><h3>{cardLabel(id)}</h3>
             {'text' in card && <p>{card.text || '未填写正文'}</p>}
-            {'objects' in card && <p>{card.objects?.map(object => object.name).join('、')} · {card.angle || '正面'}</p>}
+            {card.type?.startsWith('reference.') && <p>{(card as NamedImageReferenceCard).name} · {(card as NamedImageReferenceCard).angle || '正面'}</p>}
             {fields.map((field, index) => <p key={index}>{designSummary([field], [])}</p>)}
             {file && (card.type?.startsWith('reference.') || card.type === 'content.image' ? <Image alt="图片预览" src={buildFileDownloadUrl(file)} /> : <MediaPreview fileId={file} type={card.type?.split('.')[1] || 'image'} />)}
             {runtime?.outputs[id]?.filter(output => output.text).map(output => <p key={output.source.position}>{output.text}</p>)}
@@ -645,7 +665,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
     {accessibleConnection && !pendingConnection && <div ref={connectionMenu} role="dialog" aria-label="选择连接目标" className="generation-connection-menu generation-target-menu">
       <strong>选择连接目标</strong>
       <p>连接只提供候选，实际使用仍需明确选择。</p>
-      {cards.filter(card => card.id !== accessibleConnection.card && !hidden.has(card.id)).map(card => <Button key={card.id} disabled={readonly} onClick={() => chooseAccessibleTarget(card.id)}>连接到{'name' in card && card.name || 'title' in card && card.title || cardTitles[card.type || '']} · 卡片 {cards.indexOf(card) + 1}</Button>)}
+      {cards.filter(card => card.id !== accessibleConnection.card && !hidden.has(card.id)).map(card => <Button key={card.id} disabled={readonly} onClick={() => chooseAccessibleTarget(card.id)}>连接到{'name' in card && card.name || cardTitles[card.type || '']} · 卡片 {cards.indexOf(card) + 1}</Button>)}
       <Button onClick={cancelConnection}>取消连接</Button>
     </div>}
     {pendingConnection && (drag || accessibleConnection) && <div ref={connectionMenu} role="menu" aria-label="选择连接用途" className="generation-connection-menu" style={{ left: Math.max(8, Math.min(pendingConnection.x, window.innerWidth - 328)), top: Math.max(8, Math.min(pendingConnection.y, window.innerHeight - 320)) }}>
@@ -859,23 +879,23 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
         })}
         {cards.filter(card => !hidden.has(card.id)).map(card => {
           const size = layout.view.sizes[card.id]
-          const referenceImage = 'image_binding' in card ? card.image_binding?.file_id : undefined
+          const isReference = card.type?.startsWith('reference.')
           const outputs = runtime?.outputs[card.id] || []
           const node = runtime?.nodes[card.id]
           const isModel = 'model_id' in card
-          return <CardShell key={`${document.id}:${card.id}`} id={card.id} type={card.type} name={'name' in card ? card.name : 'title' in card ? card.title : undefined} title={cardTitles[card.type || 'content.text']} contextKey={document.id} point={point(card.id)}
-            scale={transform.scale} width={isModel ? MODEL_CARD_SIZE.width : size?.width || (focusCardTypes.includes(card.type || '') ? 300 : 400)} height={isModel ? MODEL_CARD_SIZE.height : size?.height} selected={selected.includes(card.id)} filterMatch={matched.has(card.id)} readonly={readonly} removeDisabled={runtime?.busyCards.has(card.id)}
+          return <CardShell key={`${document.id}:${card.id}`} id={card.id} type={card.type} name={'name' in card ? card.name : undefined} title={cardTitles[card.type || 'content.text']} contextKey={document.id} point={point(card.id)}
+            scale={transform.scale} width={isModel || isReference ? GENERATION_CARD_SIZE.width : size?.width || (focusCardTypes.includes(card.type || '') ? 300 : 400)} height={isModel || isReference ? GENERATION_CARD_SIZE.height : size?.height} selected={selected.includes(card.id)} filterMatch={matched.has(card.id)} readonly={readonly} removeDisabled={runtime?.busyCards.has(card.id)}
             onEdit={card.type?.startsWith('direction.') ? trigger => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailAllowPan(false); setDetailId(card.id) } : undefined}
             onExpand={trigger => { setDetailAllowPan(false); setDetailTrigger(trigger); setDetailId(card.id); setExpandRequest({id:card.id,serial:Date.now()}) }}
             onOpen={(trigger, dragged) => { setDetailAllowPan(!dragged); if (accessibleConnection) chooseAccessibleTarget(card.id); else { setMultiSelectMode(false); setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.type?.startsWith('direction.') ? undefined : card.id) } }} onSelect={checked => { setDetailId(undefined); setSelectedEdgeId(undefined); setSelected(previous => checked ? [...new Set([...previous, card.id])] : previous.filter(id => id !== card.id)) }}
             multiSelectMode={multiSelectMode} onStartMultiSelect={() => { setMultiSelectMode(true); setSelected([card.id]); setDetailId(undefined); setSelectedEdgeId(undefined) }} onDragStart={() => { setMultiSelectMode(false); setSelected([card.id]); setSelectedEdgeId(undefined) }}
             onConnect={trigger => startAccessibleConnection(card.id, 'right', trigger)} onMove={position => { if (!accessibleConnection) layout.move(card.id, position) }} onRemove={() => removeCard(card.id)} connections={geometricPorts(card)}
-            footer={isModel || card.type === 'content.image' ? undefined : <CardStatusSummary card={card} node={node} outputs={outputs} readonly={readonly} missingImage={'image_binding' in card && !referenceImage} />}>
+            footer={isModel || isReference || card.type === 'content.image' ? undefined : <CardStatusSummary card={card} node={node} outputs={outputs} readonly={readonly} missingImage={false} />}>
 
-            {!isModel && <>            {card.type === 'content.image' ? <ImageContentCardSummary card={card as ImageContentCard} readonly={readonly} /> : card.type === 'direction.photography' ? <PhotographyCardSummary card={card as PhotographyCard} /> : 'image_binding' in card ? <ReferenceCardSummary card={card} projectId={document.project_id} canvasId={document.id} revision={savedRevision} published={runtime?.outputs} /> : <p className="canvas-card-summary">{['direction.creative_control', 'direction.guidance', 'direction.criterion'].includes(card.type || '') ? guidanceSummary(card as GuidanceCard) : card.type === 'direction.style' ? designSummary([], Object.values((card as VisualStyleCard).fields || {})) || '风格方向、视觉特征、材质与色彩待编辑' : ['direction.space_rule', 'direction.continuity', 'direction.fact'].includes(card.type || '') ? constraintSummary(card as ConstraintCard) : ['direction.dialogue', 'direction.sound'].includes(card.type || '') ? soundSummary(card as SoundCard) : ['direction.narrative', 'direction.beat', 'direction.event', 'direction.shot'].includes(card.type || '') ? narrativeSummary(card as NarrativeCard) : ['direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'].includes(card.type || '') ? spatialSummary(card as SpatialCard) : card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard) : 'title' in card ? `${card.objects?.map(object => object.name).filter(Boolean).join('、') || '未绑定名称'} · ${card.angle || '正面'}` : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '尚未生成' : 'file_id' in card && card.file_id ? '固定媒体' : '未选择媒体'}</p>}
+            {!isModel && !isReference && <>            {card.type === 'content.image' ? <ImageContentCardSummary card={card as ImageContentCard} readonly={readonly} /> : card.type === 'direction.photography' ? <PhotographyCardSummary card={card as PhotographyCard} /> : <p className="canvas-card-summary">{['direction.creative_control', 'direction.guidance', 'direction.criterion'].includes(card.type || '') ? guidanceSummary(card as GuidanceCard) : card.type === 'direction.style' ? designSummary([], Object.values((card as VisualStyleCard).fields || {})) || '风格方向、视觉特征、材质与色彩待编辑' : ['direction.space_rule', 'direction.continuity', 'direction.fact'].includes(card.type || '') ? constraintSummary(card as ConstraintCard) : ['direction.dialogue', 'direction.sound'].includes(card.type || '') ? soundSummary(card as SoundCard) : ['direction.narrative', 'direction.beat', 'direction.event', 'direction.shot'].includes(card.type || '') ? narrativeSummary(card as NarrativeCard) : ['direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'].includes(card.type || '') ? spatialSummary(card as SpatialCard) : card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard)  : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '尚未生成' : 'file_id' in card && card.file_id ? '固定媒体' : '未选择媒体'}</p>}
               {card.type !== 'content.image' && 'file_id' in card && card.file_id && <MediaPreview fileId={card.file_id} type={card.type?.split('.')[1] || 'image'} />}
-              {referenceImage && <MediaPreview fileId={referenceImage} type="image" />}
             </>}
+            {isReference && <ReferenceCard card={card as NamedImageReferenceCard} readonly={readonly} error={referenceNameError(card as NamedImageReferenceCard, cards)} />}
             {isModel && <ModelGenerationCard card={card} node={node} outputs={outputs} readonly={readonly} />}
           </CardShell>
         })}
@@ -904,8 +924,8 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
     {cards.filter(card => detailSessions.includes(card.id) || card.id === detailId).map(detailCard => {
       const EditorContainer = CanvasCardEditor
       const DetailRenderer = rendererRegistry[detailCard.type || 'content.text']
-      return <EditorContainer cardType={detailCard.type} focusLayout={detailCard.type?.startsWith('model.') || focusCardTypes.includes(detailCard.type || '')} modality={cardDefinitions[detailCard.type || '']?.modality} material={detailCard.type?.startsWith('model.')} forceModal={detailCard.type?.startsWith('direction.')} key={detailCard.id} anchor={window.document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(detailCard.id)}"]`)} layoutKey={`${transform.x}:${transform.y}:${transform.scale}:${JSON.stringify(point(detailCard.id))}`} allowPan={detailAllowPan} expandRequest={expandRequest?.id === detailCard.id ? expandRequest.serial : undefined} onFit={delta => layout.setView(previous => ({...previous,transform:{...previous.transform,x:previous.transform.x+delta.x,y:previous.transform.y+delta.y}}))} title={('name' in detailCard && detailCard.name) || ('title' in detailCard && detailCard.title) || cardTitles[detailCard.type || 'content.text'] || '卡片详情'} status={readonly ? '只读' : editingStatus} open={detailCard.id === detailId && !detailsSuppressed && !stackFor(detailCard.id)} onClose={() => setDetailId(current => current === detailCard.id ? undefined : current)} trigger={detailTrigger}>
-        {!desktop && !detailCard.type?.startsWith('model.') && !focusCardTypes.includes(detailCard.type || '') && <Space wrap><Button onClick={() => setActiveCategory('基础卡')}>卡片</Button><Button disabled={readonly} onClick={event => startAccessibleConnection(detailCard.id, 'right', event.currentTarget)}>连接到…</Button></Space>}
+      return <EditorContainer cardType={detailCard.type} focusLayout={detailCard.type?.startsWith('reference.') || detailCard.type?.startsWith('model.') || focusCardTypes.includes(detailCard.type || '')} modality={cardDefinitions[detailCard.type || '']?.modality} material={detailCard.type?.startsWith('model.') || detailCard.type?.startsWith('reference.')} forceModal={detailCard.type?.startsWith('direction.')} key={detailCard.id} anchor={window.document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(detailCard.id)}"]`)} layoutKey={`${transform.x}:${transform.y}:${transform.scale}:${JSON.stringify(point(detailCard.id))}`} allowPan={detailAllowPan} expandRequest={expandRequest?.id === detailCard.id ? expandRequest.serial : undefined} onFit={delta => layout.setView(previous => ({...previous,transform:{...previous.transform,x:previous.transform.x+delta.x,y:previous.transform.y+delta.y}}))} title={('name' in detailCard && detailCard.name) || cardTitles[detailCard.type || 'content.text'] || '卡片详情'} status={readonly ? '只读' : editingStatus} open={detailCard.id === detailId && !detailsSuppressed && !stackFor(detailCard.id)} onClose={() => setDetailId(current => current === detailCard.id ? undefined : current)} trigger={detailTrigger}>
+        {!desktop && !detailCard.type?.startsWith('model.') && !detailCard.type?.startsWith('reference.') && !focusCardTypes.includes(detailCard.type || '') && <Space wrap><Button onClick={() => setActiveCategory('基础卡')}>卡片</Button><Button disabled={readonly} onClick={event => startAccessibleConnection(detailCard.id, 'right', event.currentTarget)}>连接到…</Button></Space>}
         {detailCard?.type?.startsWith('direction.') && <details className="generation-candidate-management"><summary>候选连接管理</summary>{references(detailCard)}</details>}
         {detailCard?.type === 'direction.photography' && <Button disabled={readonly} onClick={() => {
           const copy = { ...structuredClone(detailCard), id: crypto.randomUUID() }
@@ -916,15 +936,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
           setDetailId(copy.id)
         }}>复制为独立摄影方案</Button>}
         {/* 只读文本仍可聚焦选取；写入由正文readOnly和导入禁用保护。 */}
-        {DetailRenderer && <ConfigProvider componentDisabled={readonly}><fieldset disabled={readonly && detailCard.type !== 'content.text'} className="generation-card-body" data-canvas-details={document.id} data-card-details={detailCard.id}><DetailRenderer initialEntry={newPhotographyEntry?.cardId === detailCard.id ? newPhotographyEntry.entry : undefined} savedCard={savedDocument?.cards?.find(card => card.id === detailCard.id)} savedRevision={savedRevision} key={detailCard.id} card={detailCard} document={document} projectId={document.project_id} onChange={updateCard} onAddAngle={output => {
-          if (output.payload?.kind !== 'object_reference' || !('category' in output.payload)) return
-          const id = crypto.randomUUID(), edgeId = crypto.randomUUID()
-          const card = { id, type: `reference.${output.payload.category}`, title: `${output.payload.name} · 另一角度`, angle: '正面', objects: [],
-            input_bindings: [{ id: crypto.randomUUID(), input_port: 'name', source: output.source }] } as GenerationCard
-          edit(connect({ ...latest.current, cards: [...(latest.current.cards || []), card] },
-            { id: edgeId, source_card: output.source.card_id, source_port: 'object', target_card: id, target_port: 'name' }))
-          setDetailId(id)
-        }} defaultModelId={detailCard.type === 'model.text' ? modelDefaults?.default_text_model_id : detailCard.type === 'model.image' ? modelDefaults?.default_image_model_id : modelDefaults?.default_video_model_id} models={models} capability={capability(detailCard)}
+        {DetailRenderer && <ConfigProvider componentDisabled={readonly}><fieldset disabled={readonly && detailCard.type !== 'content.text'} className="generation-card-body" data-canvas-details={document.id} data-card-details={detailCard.id}><DetailRenderer initialEntry={newPhotographyEntry?.cardId === detailCard.id ? newPhotographyEntry.entry : undefined} savedCard={savedDocument?.cards?.find(card => card.id === detailCard.id)} savedRevision={savedRevision} key={detailCard.id} card={detailCard} document={document} projectId={document.project_id} onChange={updateCard} defaultModelId={detailCard.type === 'model.text' ? modelDefaults?.default_text_model_id : detailCard.type === 'model.image' ? modelDefaults?.default_image_model_id : modelDefaults?.default_video_model_id} models={models} capability={capability(detailCard)}
           capabilityError={'model_id' in detailCard && detailCard.model_id ? capabilityErrors[detailCard.model_id] : undefined} references={references(detailCard)} disabled={readonly} modelOutputs={runtime?.outputs} node={runtime?.nodes[detailCard.id]} busy={runtime?.busyCards.has(detailCard.id)} checking={runtime?.checking === detailCard.id} runDisabled={runtime?.disabled} onPrecheck={() => runtime?.precheck(detailCard.id)} sourceActions={modelSources(detailCard)} /></fieldset></ConfigProvider>}
       </EditorContainer>
     })}

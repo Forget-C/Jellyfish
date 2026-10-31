@@ -192,9 +192,9 @@ async def test_explicit_production_arrangement_alone_is_published(canvas_client)
 async def test_speaker_requires_one_direct_eligible_identity(canvas_client, category, ids, code):
     canvas = (await canvas_client.post('/canvases/p', json={'name': '说话对象资格'})).json()['data']
     doc = canvas['document']
-    doc.update(cards=[{'id': 'ref', 'type': 'reference.character', 'objects': [{'object_id': key, 'name': key, 'category': category} for key in ('a', 'b')]},
-        {'id': 'line', 'type': 'direction.dialogue', 'dialogue_id': 'l', 'input_bindings': [{'id': str(i), 'input_port': 'speaker', 'source': {'canvas_id': canvas['id'], 'card_id': 'ref', 'port_id': 'object', 'position': 0, 'object_id': key}} for i, key in enumerate(ids)]}],
-        edges=[{'id': 'e', 'source_card': 'ref', 'source_port': 'object', 'target_card': 'line', 'target_port': 'speaker'}], input_order={'line': {'speaker': ['e']}})
+    doc.update(cards=[{'id': key, 'type': 'reference.' + category, 'object_id': key, 'name': key} for key in ('a', 'b')] +
+        [{'id': 'line', 'type': 'direction.dialogue', 'dialogue_id': 'l', 'input_bindings': [{'id': str(i), 'input_port': 'speaker', 'source': {'canvas_id': canvas['id'], 'card_id': key or 'a', 'port_id': 'object', 'position': 0, 'object_id': key}} for i, key in enumerate(ids)]}],
+        edges=[{'id': key, 'source_card': key, 'source_port': 'object', 'target_card': 'line', 'target_port': 'speaker'} for key in ('a', 'b')], input_order={'line': {'speaker': ['a', 'b']}})
     result = await canvas_client.put(f"/canvases/p/{canvas['id']}", json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
     assert result.status_code == 422 and result.json()['detail']['code'] == code, result.text
 

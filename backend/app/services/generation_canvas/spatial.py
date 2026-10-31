@@ -76,7 +76,7 @@ def validate_spatial_relations(document, published, previous):
                 raise diagnostic('DUPLICATE_SPATIAL_IDENTITY', '独立空间对象身份必须唯一', {'card_id': card.id, 'path': [field]})
             if value:
                 identities.add((field, value))
-        candidates = resolve_outputs(document, card.id, published)
+        candidates = resolve_outputs(document, card.id, published, allow_reference_drafts=True)
         ids, counts = set(), {}
         for binding in card.input_bindings:
             target = {'card_id': card.id, 'path': ['input_bindings', binding.id]}

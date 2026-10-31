@@ -2,20 +2,18 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { InputBinding } from './InputBinding';
-import type { NamedImageObject } from './NamedImageObject';
+import type { OutputIdentity } from './OutputIdentity';
 import type { ReferenceImageBinding } from './ReferenceImageBinding';
 /**
- * 单张主图的本地命名和明确名称绑定，标题与对象名相互独立。
+ * 单张图片、单个映射名称；允许未完成草稿，名称有效后才发布输出。
  */
 export type NamedImageReferenceCard = {
     id: string;
     type_version?: number;
     type: 'reference.character' | 'reference.place' | 'reference.prop' | 'reference.costume';
-    title?: string;
+    name?: string;
     angle?: string;
-    objects?: Array<NamedImageObject>;
-    input_bindings?: Array<InputBinding>;
+    object_id?: (string | null);
+    name_binding?: (OutputIdentity | null);
     image_binding?: (ReferenceImageBinding | null);
-    positions?: Record<string, string>;
 };

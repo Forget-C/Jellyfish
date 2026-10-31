@@ -8,6 +8,7 @@ import type { NamedImageObject } from './NamedImageObject';
  */
 export type NamedImagePayload = {
     kind?: string;
+    name?: string;
     file_id: string;
     objects?: Array<NamedImageObject>;
     angle: string;

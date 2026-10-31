@@ -49,7 +49,7 @@ export function NarrativeDirectionEditor({ card: raw, document, savedRevision, m
         const payload = item.payload
         if (!payload || !['object_reference', 'spatial_reference', 'narrative_reference'].includes(payload.kind || '') || !('name' in payload)) return null
         return <div key={sourceKey(item.source)}><span>{payload.name} · {'category' in payload ? payload.category : ''}</span>{inputPorts(card).filter(port => document.edges?.some(edge => edge.target_card === card.id && edge.target_port === port && edge.source_card === item.source.card_id && edge.source_port === item.source.port_id)).map(port => {
-          if (port === 'participant' && (payload.kind !== 'object_reference' || payload.category === 'place')) return null
+          if (port === 'participant' && (payload.kind !== 'object_reference' || 'category' in payload && payload.category === 'place')) return null
           const binding = bindings.find(value => value.input_port === port && sourceKey(value.source) === sourceKey(item.source))
           return <WorkbenchButton key={port} disabled={disabled || !item.available} onClick={() => onChange({ ...card, input_bindings: binding ? bindings.filter(value => value.id !== binding.id) : [...bindings, { id: crypto.randomUUID(), input_port: port, source: item.source }] })}>{`${binding ? '取消' : '选择'}${portLabels[port]} ${payload.name}`}</WorkbenchButton>
         })}</div>

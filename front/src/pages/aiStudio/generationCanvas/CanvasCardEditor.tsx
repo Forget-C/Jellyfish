@@ -47,7 +47,7 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
       }
       return bounds
     }
-    // A bounded flex body can overflow without resizing the panel; use its natural image content.
+    // Measure the bounded image preview and metadata rather than intrinsic image dimensions.
     const imageHeight = () => (node.querySelector<HTMLElement>('.wb-details-header')?.offsetHeight || 0)
       + (node.querySelector<HTMLElement>('.wb-details-body')?.scrollHeight || 0)
       + (node.querySelector<HTMLElement>('.generation-editor-actions')?.offsetHeight || 0) + 2

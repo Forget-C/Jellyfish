@@ -1,4 +1,4 @@
-import { openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { closeCanvasDetails, openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -27,117 +27,132 @@ try {
   }
   assert.ok(ready, 'isolated backend ready')
   writeFileSync(join(output, 'openapi.json'), JSON.stringify(await (await fetch(`${api}/openapi.json`)).json()))
-  server = await createServer({ root, server: { host: '127.0.0.1', port: 4281, strictPort: true, open: false, proxy: { '/api': api } } })
+  server = await createServer({ root, cacheDir: join(output, 'vite-cache'), server: { host: '127.0.0.1', port: 4281, strictPort: true, open: false, proxy: { '/api': api } } })
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
   page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
   page.setDefaultTimeout(12000)
   page.on('pageerror', error => console.log('PAGE ERROR', error.message))
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
-  const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '命名图片参考' }) })).json()).data
-  const document = { ...canvas.document, cards: [
-    { id: 'm', type: 'model.image', model_id: 'canvas-image-model', prompt: { segments: [{ id: 'p', kind: 'text', text: '三张角色图片' }] }, config: { count: 3 } },
-    { id: 'person', type: 'content.object', object_id: 'alice', name: '小雪', category: 'character', text: '秘密描述不应展示或自动采用' },
-    { id: 'coat', type: 'content.object', object_id: 'coat-object', name: '蓝衣', category: 'costume', text: '服装秘密描述' },
-    { id: 'ref', type: 'reference.character', title: '', angle: '正面', input_bindings: [], objects: [] },
-    { id: 'consumer', type: 'model.image', model_id: 'canvas-image-model', prompt: { segments: [{ id: 'literal', kind: 'text', text: '原样保留创作要求' }] }, config: { count: 3 } }],
-    edges: [
-      { id: 'name', source_card: 'person', source_port: 'object', target_card: 'ref', target_port: 'name' },
-      { id: 'costume', source_card: 'coat', source_port: 'object', target_card: 'ref', target_port: 'name' },
-      { id: 'main', source_card: 'm', source_port: 'image', target_card: 'ref', target_port: 'image_source' },
-      { id: 'adopt', source_card: 'ref', source_port: 'image', target_card: 'consumer', target_port: 'image' }],
-    input_order: { ref: { name: ['name', 'costume'], image_source: ['main'] }, consumer: { image: ['adopt'] } } }
-  const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
-  assert.ok(seeded.ok, await seeded.text())
-  await page.goto(`http://127.0.0.1:4281/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
-  const card = page.locator('.wb-details:not([hidden])')
-  const open = id => openCanvasCard(page, id)
-  const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
-  const poll = async predicate => { for (let i = 0; i < 80; i++) { const state = await read(); if (predicate(state)) return state; await delay(150) } throw Error('saved document did not reach expected state') }
-  const preview = page.getByRole('region', { name: '运行预检', exact: true })
-  const start = async () => {
-    await card.getByRole('button', { name: '预检运行', exact: true }).click()
-    await preview.waitFor()
-    await preview.getByRole('button', { name: '确认执行', exact: true }).click()
-    await card.getByRole('region', { name: '当前正式输出', exact: true }).getByRole('button', { name: '预览输出 3', exact: true }).waitFor()
+  const json = async (path, method = 'GET', body) => {
+    const response = await fetch(api + path, { method, headers: { 'Content-Type': 'application/json' }, body: body && JSON.stringify(body) })
+    assert.ok(response.ok, await response.clone().text()); return (await response.json()).data
   }
-  await open('ref')
-  await card.getByRole('button', { name: '关联名称 小雪', exact: true }).waitFor()
-  assert.equal(await card.getByText('秘密描述不应展示或自动采用').count(), 0)
-  assert.equal(await card.getByText('服装秘密描述').count(), 0)
-  await card.getByRole('button', { name: '关联名称 小雪', exact: true }).click()
-  await poll(state => state.document.cards.find(item => item.id === 'ref').input_bindings.length === 1)
-  await card.getByRole('button', { name: '关联名称 蓝衣', exact: true }).click()
-  await poll(state => state.document.cards.find(item => item.id === 'ref').input_bindings.length === 2)
-  const namesState = await read()
-  assert.equal(namesState.document.edges.filter(edge => edge.target_card === 'ref' && edge.target_port === 'name').length, 2, 'both direct names remain candidates')
-  assert.equal(namesState.document.cards.find(item => item.id === 'ref').input_bindings.filter(binding => binding.input_port === 'name').length, 2, 'both names were explicitly bound')
-  await card.getByRole('textbox', { name: '参考标题', exact: true }).fill('小雪与蓝衣·侧面')
-  await card.getByRole('textbox', { name: '参考角度', exact: true }).fill('侧面')
-  await card.getByRole('textbox', { name: '图内位置 小雪', exact: true }).fill('左侧')
-  await poll(state => state.document.cards.find(item => item.id === 'ref').positions?.alice === '左侧')
-  await open('m')
-  await start()
-  await open('ref')
-  await card.getByRole('button', { name: '选为主图 @图片2', exact: true }).click()
-  const selectedState = await poll(state => !!state.document.cards.find(item => item.id === 'ref').image_binding)
-  const fixed = selectedState.document.cards.find(item => item.id === 'ref').image_binding
-  assert.equal(fixed.source.position, 1)
-  assert.equal(selectedState.document.edges.filter(edge => edge.target_card === 'ref' && edge.target_port === 'image_source').length, 1, 'one direct image candidate edge')
-  assert.equal(fixed.source.card_id, 'm', 'main image remains explicitly bound to the generated source')
-  assert.equal(fixed.source.port_id, 'image')
-  await page.locator('[data-card-id="ref"] .canvas-card-summary').filter({ hasText: '小雪、蓝衣 · 侧面' }).waitFor()
-  assert.equal(await page.locator('[data-card-id="ref"] .generation-card-footer').getByText('尚未绑定名称', { exact: true }).count(), 0, 'card summary reflects explicitly bound names')
-  assert.equal(await card.getByRole('img', { name: '图片预览', exact: true }).first().evaluate(img => img.complete && img.naturalWidth === 240), true)
-  await page.screenshot({ path: join(output, 'named-reference-desktop.png'), fullPage: true })
-  await open('consumer')
-  await card.getByRole('button', { name: '采用 @图片1', exact: true }).click()
-  await poll(state => state.document.cards.find(item => item.id === 'consumer').input_bindings.length === 1)
-  await card.getByRole('button', { name: '预检运行', exact: true }).click()
-  await preview.waitFor()
-  assert.equal(await preview.getByRole('region', { name: '实际提交文本', exact: true }).textContent(), '原样保留创作要求\n小雪 = image 1（侧面，左侧）\n蓝衣 = image 1（侧面）')
-  assert.equal(await preview.getByRole('region', { name: '实际参考图片', exact: true }).getByRole('img').count(), 1)
-  await preview.getByRole('button', { name: '确认执行', exact: true }).click()
-  await card.getByRole('region', { name: '当前正式输出', exact: true }).getByRole('button', { name: '预览输出 3', exact: true }).waitFor()
-  const calls = (await (await fetch(`${api}/test/image-controls`)).json()).calls
-  assert.equal(calls.length, 2)
-  assert.equal(calls[1].images.length, 1)
-  assert.equal(calls[1].prompt, '原样保留创作要求\n小雪 = image 1（侧面，左侧）\n蓝衣 = image 1（侧面）')
-  await open('m')
-  const oldCurrent = (await (await fetch(`${base}/${canvas.id}/runtime`)).json()).data.current_outputs.m[1].file_id
-  await start()
-  for (let i = 0; i < 80; i++) { const current = (await (await fetch(`${base}/${canvas.id}/runtime`)).json()).data.current_outputs.m[1].file_id; if (current !== oldCurrent) break; if (i === 79) throw Error('source rerun did not finish'); await delay(150) }
-  await open('ref')
-  await card.getByText(`固定文件 ${fixed.file_id}`, { exact: false }).waitFor()
-  await page.reload(); await open('ref')
-  assert.equal((await read()).document.cards.find(item => item.id === 'ref').image_binding.file_id, fixed.file_id)
-  await page.setViewportSize({ width: 390, height: 844 })
-  await card.getByRole('textbox', { name: '参考角度', exact: true }).waitFor()
-  await page.screenshot({ path: join(output, 'named-reference-narrow.png'), fullPage: true })
-  await page.setViewportSize({ width: 1440, height: 1000 })
-  await card.getByRole('button', { name: '取消主图', exact: true }).click()
-  await poll(state => !state.document.cards.find(item => item.id === 'ref').image_binding)
-  const outputs = (await (await fetch(`${base}/${canvas.id}/cards/ref/outputs`)).json()).data.outputs
-  assert.deepEqual(outputs.map(item => item.source.port_id), ['object', 'object'])
-  assert.equal(await card.getByText('换图后请核对角度与图内位置；名称绑定会保留。').count(), 1)
-  const bytes = Buffer.from(await (await fetch(`${api}/api/v1/studio/files/${fixed.file_id}/download`)).arrayBuffer())
-  for (const [kind, title, objectName] of [['place', '场所', '空屋'], ['prop', '道具', '长剑'], ['costume', '服装', '礼服']]) {
-    const shrink = card.getByRole('button', { name: '收起详情', exact: true })
-    if (await shrink.count()) await shrink.press('Enter')
-    await page.getByRole('button', { name: '关闭详情', exact: true }).press('Enter')
-    await page.waitForFunction(() => !document.querySelector('.canvas-workbench')?.inert)
-    await page.getByRole('button', { name: '参考卡', exact: true }).click()
-    await page.getByRole('button', { name: `${title}参考卡`, exact: true }).click()
-    await card.getByRole('button', { name: '展开详情', exact: true }).press('Enter')
-    await card.getByRole('button', { name: `独立命名${title}`, exact: true }).click()
-    await card.getByRole('textbox', { name: '独立对象名称', exact: true }).fill(objectName)
-    await card.getByLabel('上传媒体文件', { exact: true }).setInputFiles({ name: `${kind}.png`, mimeType: 'image/png', buffer: bytes })
-    const state = await poll(state => state.document.cards.some(item => item.type === `reference.${kind}` && item.image_binding && item.objects?.[0]?.name === objectName))
-    const reference = state.document.cards.find(item => item.type === `reference.${kind}`)
-    const out = (await (await fetch(`${base}/${canvas.id}/cards/${reference.id}/outputs`)).json()).data.outputs
-    assert.equal(out[0].payload.objects[0].category, kind)
-    assert.equal(out[0].payload.objects[0].name, objectName)
+  const canvas = await json('/api/v1/studio/generation-canvases/canvas-project', 'POST', { name: '统一参考卡 A' })
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64')
+  const upload = async name => { const form = new FormData(); form.set('file', new Blob([Buffer.concat([png, Buffer.from(name)])], { type: 'image/png' }), name); form.set('project_id','canvas-project'); form.set('usage_kind','generation_upload'); const response = await fetch(api+'/api/v1/studio/files/upload',{method:'POST',body:form});assert.ok(response.ok);return (await response.json()).data.id }
+  const image = await upload('reference-main.png'), secondImage = await upload('reference-side.png')
+  const kinds = ['character','place','prop','costume']
+  const cards = [...kinds.map(type => ({id:type,type:`reference.${type}`,type_version:2,name:'',angle:'正面'})),
+    {id:'named',type:'reference.character',type_version:2,name:'小雪',image_binding:{file_id:secondImage}},
+    {id:'other',type:'reference.prop',type_version:2,name:'长剑',image_binding:{file_id:secondImage}},
+    {id:'picture',type:'content.image',file_id:image},{id:'free',type:'content.image',file_id:secondImage},
+    {id:'model',type:'model.image',model_id:'canvas-image-model',prompt:{segments:[{id:'prompt',kind:'text',text:'三张参考图'}]},config:{count:3}}]
+  await json(`/api/v1/studio/generation-canvases/canvas-project/${canvas.id}`,'PUT',{request_id:'seed',expected_revision:0,document:{...canvas.document,cards,edges:[{id:'linked',source_card:'picture',source_port:'image',target_card:'character',target_port:'image_source'}],input_order:{character:{image_source:['linked']}}}})
+  const layoutKey = `jellyfish:generation-layout:canvas-project:${canvas.id}:view:canvas`
+  const positions = Object.fromEntries(cards.map((card,index)=>[card.id,{x:100+(index%4)*360,y:180+Math.floor(index/4)*320}]))
+  const sizes = Object.fromEntries(cards.map(card=>[card.id,{width:420,height:370}]))
+  await page.addInitScript(({layoutKey,positions,sizes})=>{if(!sessionStorage.getItem('seeded')){localStorage.setItem(layoutKey,JSON.stringify({schema:1,positions,sizes,transform:{x:0,y:0,scale:.8},manuallyPlaced:['character','prop']}));sessionStorage.setItem('seeded','1')}},{layoutKey,positions,sizes})
+  const url=`http://127.0.0.1:4281/projects/canvas-project/generation-canvas?canvas=${canvas.id}`
+  await page.goto(url)
+  await page.locator('[data-card-id="costume"] .generation-output-card').waitFor()
+  for(const kind of [...kinds,'model']) {
+    const card = page.locator(`[data-card-id="${kind}"]`), box=await card.boundingBox(), footer=await card.locator('.generation-card-footer').boundingBox()
+    assert.ok(Math.abs(box.width-240)<1);assert.ok(Math.abs(box.height-200.8)<1)
+    assert.ok(Math.abs(box.y+box.height-footer.y-footer.height-.8)<1)
+    assert.equal(await card.evaluate(e=>e.style.left),positions[kind].x+'px');assert.equal(await card.evaluate(e=>e.style.top),positions[kind].y+'px')
   }
-  writeFileSync(join(output, 'assertions.json'), JSON.stringify({ fixed, mappings: calls[1].prompt, calls: calls.length, viewport: [1440, 390] }, null, 2))
-  console.log('Named image references: direct identities, fixed result, mapping, Worker, reload and narrow page passed')
-} finally { await cleanup() }
+  await page.waitForFunction(key=>JSON.parse(localStorage.getItem(key)).sizes.character.width===300,layoutKey)
+  const cached=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)),layoutKey)
+  assert.deepEqual(cached.positions,positions);assert.deepEqual(cached.manuallyPlaced,['character','prop']);assert.deepEqual(cached.transform,{x:0,y:0,scale:.8});assert.deepEqual(cached.sizes.picture,sizes.picture)
+  const editor = page.locator('.wb-details:visible')
+  const read=()=>json(`/api/v1/studio/generation-canvases/canvas-project/${canvas.id}`)
+  const poll=async predicate=>{for(let i=0;i<80;i++){const state=await read();if(predicate(state))return state;await delay(100)}throw Error('save not observed')}
+  const open=async id=>{await closeCanvasDetails(page);await page.getByRole('button',{name:'适应全部',exact:true}).click();await openCanvasCard(page,id)}
+  const chooseAngle=async text=>{const field=editor.getByRole('combobox',{name:'参考角度',exact:true});await field.fill(text);await field.press('Enter')}
+  const fillName=async text=>{await editor.getByLabel('参考名称',{exact:true}).fill(text);return poll(state=>state.document.cards.find(card=>card.id==='character').name===text)}
+  const imageMenu=async()=>{await editor.getByRole('button',{name:/^(添加|更换)参考图$/,exact:true}).click();await page.getByRole('menuitem',{name:'从当前画布选择',exact:true}).click();return page.getByRole('dialog',{name:'从当前画布选择参考图',exact:true})}
+  const outputFor=async id=>(await json(`/api/v1/studio/generation-canvases/canvas-project/${canvas.id}/cards/${id}/outputs`)).outputs
+  await open('character')
+  assert.equal(await editor.getByRole('button',{name:'更多参考设置',exact:true}).count(),0)
+  assert.equal(await editor.getByRole('button',{name:'预检运行',exact:true}).count(),0)
+  assert.equal(await editor.getByLabel('参考名称',{exact:true}).getAttribute('aria-required'),'true')
+  await page.screenshot({path:join(output,'reference-empty.png')})
+  const selector=editor.getByRole('combobox',{name:'关联图片',exact:true})
+  await selector.press('ArrowDown')
+  const options=page.locator('.ant-select-dropdown:visible .ant-select-item-option')
+  assert.equal(await options.count(),1,'only connected images appear in select')
+  assert.equal(await options.locator('img').count(),1,'each select option has a thumbnail')
+  await options.first().click()
+  let state=await poll(state=>state.document.cards.find(card=>card.id==='character').image_binding?.file_id===image&&state.document.cards.find(card=>card.id==='character').name)
+  assert.ok(state.document.cards.find(card=>card.id==='character').name.startsWith('reference-main'))
+  assert.equal(state.document.edges.length,1,'select adopts without adding a connection')
+  await fillName('手工人物')
+  const picker=await imageMenu()
+  assert.equal(await picker.locator('[data-reference-source-card="picture"]').count(),0)
+  assert.equal(await picker.locator('[data-reference-source-card="other"]').count(),0,'incompatible reference type is excluded')
+  await picker.locator('[data-reference-source-card="free"]').click()
+  state=await poll(state=>state.document.cards.find(card=>card.id==='character').image_binding?.source?.card_id==='free')
+  assert.equal(state.document.cards.find(card=>card.id==='character').name,'手工人物')
+  assert.equal(state.document.edges.filter(edge=>edge.source_card==='free'&&edge.target_card==='character').length,1)
+  await fillName('')
+  assert.deepEqual(await outputFor('character'),[],'empty name is a saved draft without effective outputs')
+  await editor.getByText('请填写参考名称',{exact:false}).waitFor()
+  await imageMenu();await picker.locator('[data-reference-source-card="named"]').click()
+  state=await poll(state=>state.document.cards.find(card=>card.id==='character').name==='小雪')
+  await editor.getByText('同类型、同名称、同角度的参考已存在',{exact:false}).waitFor()
+  assert.deepEqual(await outputFor('character'),[])
+  assert.deepEqual(await outputFor('named'),[],'same-type duplicate invalidates both references')
+  await fillName('人物重命名')
+  assert.equal((await outputFor('character'))[0].payload.objects.length,1)
+  await chooseAngle('低机位斜侧面');await poll(state=>state.document.cards.find(card=>card.id==='character').angle==='低机位斜侧面')
+  await editor.getByRole('button',{name:'更换参考图',exact:true}).hover()
+  await page.getByRole('tooltip',{name:'更换参考图',exact:true}).waitFor()
+  assert.equal(await editor.getByRole('button',{name:'更换参考图',exact:true}).innerText(),'')
+  await editor.getByRole('button',{name:'更换参考图',exact:true}).click();await page.getByRole('menuitem',{name:'从素材库选择',exact:true}).click()
+  const library=page.getByRole('dialog',{name:'项目文件库',exact:true})
+  await library.getByRole('button',{name:'选用 reference-side',exact:true}).click();await library.waitFor({state:'hidden'})
+  state=await poll(state=>state.document.cards.find(card=>card.id==='character').image_binding?.source==null)
+  assert.equal(state.document.cards.find(card=>card.id==='character').name,'人物重命名')
+  const runModel=async()=>{
+    const preview=await json(`/api/v1/studio/generation-canvases/canvas-project/${canvas.id}/precheck`,'POST',{card_id:'model'})
+    assert.ok(preview.can_run,JSON.stringify(preview.diagnostics))
+    const accepted=await json(`/api/v1/studio/generation-canvases/canvas-project/${canvas.id}/runs`,'POST',{request_id:crypto.randomUUID(),preview_token:preview.preview_token})
+    for(let i=0;i<100;i++){const runtime=await json(`/api/v1/studio/generation-canvases/canvas-project/${canvas.id}/runtime`);if(runtime.runs.some(run=>run.id===accepted.run_id&&run.nodes.every(node=>node.status==='succeeded')))return runtime.current_outputs.model;await delay(100)}throw Error('model did not publish')
+  }
+  const modelOutputs=await runModel()
+  await imageMenu();await picker.locator('[data-reference-source-card="model"][data-reference-source-position="1"]').click()
+  state=await poll(state=>state.document.cards.find(card=>card.id==='character').image_binding?.source?.card_id==='model')
+  const fixed=state.document.cards.find(card=>card.id==='character').image_binding
+  assert.equal(fixed.file_id,modelOutputs[1].file_id);assert.equal(fixed.result_set_id,modelOutputs[1].result_set_id)
+  const nextOutputs=await runModel()
+  assert.deepEqual((await read()).document.cards.find(card=>card.id==='character').image_binding,fixed)
+  await selector.press('ArrowDown');await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({has:page.locator(`img[src*="${nextOutputs[1].file_id}"]`)}).click()
+  await poll(state=>state.document.cards.find(card=>card.id==='character').image_binding?.file_id===nextOutputs[1].file_id)
+  await editor.getByRole('button',{name:'移除参考图',exact:true}).click()
+  await poll(state=>!state.document.cards.find(card=>card.id==='character').image_binding)
+  const zone=editor.locator('.generation-reference-upload')
+  const invalid=await page.evaluateHandle(()=>{const data=new DataTransfer();data.items.add(new File(['text'],'notes.txt',{type:'text/plain'}));return data})
+  await zone.dispatchEvent('drop',{dataTransfer:invalid});await editor.getByText('仅支持上传图片文件',{exact:true}).waitFor()
+  const data=await page.evaluateHandle(bytes=>{const transfer=new DataTransfer();transfer.items.add(new File([new Uint8Array(bytes)],'dropped.png',{type:'image/png'}));return transfer},[...png])
+  await zone.dispatchEvent('drop',{dataTransfer:data})
+  await poll(state=>state.document.cards.find(card=>card.id==='character').image_binding?.file_id)
+  for(const kind of ['place','prop','costume']) {
+    await open(kind);await editor.getByLabel('参考名称',{exact:true}).fill('人物重命名')
+    await editor.getByLabel('上传媒体文件',{exact:true}).setInputFiles({name:kind+'.png',mimeType:'image/png',buffer:png})
+    await poll(state=>state.document.cards.find(card=>card.id===kind).image_binding?.file_id&&state.document.cards.find(card=>card.id===kind).name==='人物重命名')
+    const outputs=await outputFor(kind)
+    assert.equal(outputs[0].payload.objects.length,1);assert.equal(outputs[0].payload.objects[0].category,kind)
+    assert.equal(await editor.getByRole('button',{name:'更多参考设置',exact:true}).count(),0)
+  }
+  await page.setViewportSize({width:390,height:844})
+  const footer=await editor.locator('.generation-material-footer').boundingBox();assert.ok(footer.y+footer.height<=844)
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
+  await page.screenshot({path:join(output,'reference-mobile.png')})
+  await page.setViewportSize({width:1440,height:1000});await closeCanvasDetails(page)
+  const before=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)),layoutKey)
+  await page.reload();await page.locator('[data-card-id="costume"] .generation-output-card').waitFor()
+  const after=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)),layoutKey)
+  assert.deepEqual(after.positions,before.positions);assert.deepEqual(after.transform,before.transform)
+  console.log('PASS reference cards: shared four types, connected thumbnail select, unconnected canvas picker, naming drafts, stable fixed outputs, sources, mobile and geometry')
+} catch(error) { if(page) await page.screenshot({path:join(output,'failure.png'),fullPage:true});throw error } finally { await cleanup() }

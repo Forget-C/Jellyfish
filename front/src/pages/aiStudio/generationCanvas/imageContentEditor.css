@@ -1,6 +1,6 @@
 .generation-image-content{display:flex;gap:12px;width:100%;min-width:0;color:var(--wb-text)}
-.generation-image-preview{position:relative;flex:0 0 65%;min-width:0;min-height:240px;display:grid;place-items:center;background:var(--wb-inset);border-radius:10px;overflow:hidden}
-.generation-image-preview>img{display:block;width:100%;height:100%;max-height:100%;object-fit:contain}
+.generation-image-preview{position:relative;flex:0 0 65%;min-width:0;height:240px;min-height:0;display:grid;place-items:center;background:var(--wb-inset);border-radius:10px;overflow:hidden}
+.generation-image-preview>img{position:absolute;inset:0;display:block;width:100%;height:100%;max-height:100%;object-fit:contain}
 .generation-image-preview>small{position:absolute;bottom:8px;left:8px;color:var(--wb-muted);font-size:11px}
 .generation-image-content[data-empty="true"] .generation-image-preview{flex:1;min-height:260px;background:transparent;border:1px dashed var(--wb-border)}
 .generation-image-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:16px;text-align:center}
@@ -18,19 +18,13 @@
 .generation-image-actions .wb-action{width:100%;font-size:12px}
 .generation-image-empty .generation-image-actions{width:auto;margin-top:8px}
 .generation-image-empty .generation-image-actions .wb-action{width:auto;align-self:center}
-.generation-card-editor[data-focus-layout="true"][data-expanded="true"] .generation-image-preview{min-height:320px}
+.generation-card-editor[data-focus-layout="true"][data-expanded="true"] .generation-image-preview{height:min(520px,calc(100dvh - 240px));min-height:0}
 .generation-workbench .generation-card[data-card-type="content.image"] .generation-card-body{padding:0;min-height:0;max-height:none;overflow:hidden}
-.generation-card[data-card-type="content.image"] .generation-basic-image-preview{display:block;width:100%;height:185px;max-height:none;object-fit:cover;margin:0}
+.generation-card[data-card-type="content.image"] .generation-basic-image-preview{display:block;width:100%;height:185px;max-height:none;object-fit:contain;margin:0}
 .generation-card[data-card-type="content.image"] .generation-card-footer{padding:4px 10px;margin:0}
 .generation-basic-image-empty{height:185px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--wb-muted);font-size:12px}
 .generation-basic-image-empty>.anticon{font-size:24px}
-@media(max-width:767px){.generation-image-content{flex-direction:column}.generation-image-preview{flex:none;width:100%;min-height:180px;max-height:35dvh}.generation-image-preview>img{max-height:35dvh}.generation-image-file-info{flex:none;width:100%}.generation-image-content[data-empty="true"] .generation-image-preview{flex:none;max-height:none;min-height:260px}.generation-card-editor[data-focus-layout="true"][data-expanded="true"] .generation-image-preview{min-height:180px}}
+@media(max-width:767px){.generation-image-content{flex-direction:column}.generation-image-preview{flex:none;width:100%;height:min(240px,35dvh);min-height:0;max-height:35dvh}.generation-image-preview>img{max-height:35dvh}.generation-image-file-info{flex:none;width:100%}.generation-image-content[data-empty="true"] .generation-image-preview{flex:none;max-height:none;min-height:260px}.generation-card-editor[data-focus-layout="true"][data-expanded="true"] .generation-image-preview{height:min(280px,35dvh);min-height:0}}
 
-/* Desktop image expansion follows its complete preview; other editor heights stay unchanged. */
+/* Desktop expansion measures the bounded preview and metadata, independent of the original image dimensions. */
 @media(min-width:768px){.generation-card-editor.wb-details[data-card-type="content.image"][data-expanded="true"]{height:auto}}
-
-@media(min-width:768px){
-  .generation-card-editor[data-card-type="content.image"] .generation-image-content[data-portrait="true"] .generation-image-preview{height:240px}
-  .generation-card-editor[data-card-type="content.image"] .generation-image-content[data-portrait="true"] .generation-image-preview>img{position:absolute;inset:0}
-  .generation-card-editor[data-card-type="content.image"][data-expanded="true"] .generation-image-content[data-portrait="true"] .generation-image-preview{height:min(520px,calc(100dvh - 160px))}
-}

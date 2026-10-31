@@ -1,7 +1,7 @@
 import { recordVisualState, writeVisualEvidence } from './visual-evidence-output.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
-import { prepareCanvasCard, moveCanvasCard, clearCanvasNeighbors, pressCanvasControl, assertControlReachable, captureCanvasRegion, captureCanvasFailure } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { selectReferenceName, selectCanvasReferenceImage, prepareCanvasCard, moveCanvasCard, clearCanvasNeighbors, pressCanvasControl, assertControlReachable, captureCanvasRegion, captureCanvasFailure } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { spawn, execFileSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
@@ -120,7 +120,7 @@ try{
   await page.setViewportSize({width:1440,height:960});await adopt('basis-no-output','@文本1');await open('basis-no-output');await page.screenshot({path:join(output,'text-model-basis-no-output.png'),fullPage:true});assert.equal((await runtime()).current_outputs['basis-no-output'],undefined)
   await open('unselected');await page.screenshot({path:join(output,'text-model-unselected.png'),fullPage:true})
   // Bind a name and image, then explicitly adopt at the model: mapping is one-level only.
-  await open('reference');await editor.getByRole('button',{name:'关联名称 林夏',exact:true}).click();await saved();await editor.getByRole('button',{name:'选为主图 @图片1',exact:true}).click();await saved()
+  await open('reference');await selectReferenceName(page,'林夏');await saved();await selectCanvasReferenceImage(page,'image');await saved()
   await adopt('model-image','@图片2');await open('model-image');await editor.getByRole('button',{name:'预检运行',exact:true}).click();const precheck=page.getByRole('dialog',{name:'运行预检',exact:true});await precheck.waitFor();const compiled=await precheck.getByRole('region',{name:'实际提交文本',exact:true}).textContent();assert.match(compiled,/林夏 = image 2/);assert.doesNotMatch(compiled,/保密正文/);await precheck.getByRole('button',{name:'确认执行',exact:true}).click();await waitFor(async()=>(await controls()).calls.length===2,'named image submitted');assert.equal((await controls()).text_calls.length,1,'only current image model runs')
   await waitFor(async()=>(await runtime()).runs.every(r=>r.nodes.every(n=>['succeeded','failed','cancelled','abandoned'].includes(n.status))),'runs settled')
   // Saving a cycle is rejected at the same public seam, without mutating the document.

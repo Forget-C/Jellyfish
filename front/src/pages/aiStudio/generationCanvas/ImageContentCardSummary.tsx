@@ -4,7 +4,7 @@ import type { ImageContentCard } from '../../../services/generated'
 import { buildFileDownloadUrl } from '../assets/utils'
 import { CardStatusSummary } from './CardStatusSummary'
 
-/** 卡面只裁切预览，尺寸取自实际加载的原图，不改写文件或发布输出。 */
+/** 卡面在固定区域完整等比预览；尺寸仍取自原图，不改写文件或发布输出。 */
 export function ImageContentCardSummary({ card, readonly }: { card: ImageContentCard; readonly: boolean }) {
   const [size, setSize] = useState<{ fileId: string; width: number; height: number }>()
   const dimensions = size && size.fileId === card.file_id ? `${size.width} × ${size.height}` : undefined

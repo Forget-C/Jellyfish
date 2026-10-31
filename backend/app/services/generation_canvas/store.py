@@ -78,7 +78,9 @@ class CanvasStore:
             raise diagnostic('INVALID_IDENTITY', '画布身份不可修改', {'canvas_id': canvas_id})
         from app.services.generation_canvas.stacks import validate_stack_edit
         validate_stack_edit(canvas.document, document)
-        identities = dict(canvas.card_types)
+        previous_document = CanvasDocument.model_validate(canvas.document)
+        previous_types = {card.id: card.type for card in previous_document.cards}
+        identities = {key: previous_types.get(key, value) if value == 'content.object' else value for key, value in canvas.card_types.items()}
         seen = set()
         for card in document.cards:
             if card.id in seen or (card.id in identities and identities[card.id] != card.type):
@@ -106,9 +108,9 @@ class CanvasStore:
                 object_ids.add(card.object_id)
             name = card.name.strip()
             if name:
-                if name in object_names:
-                    raise diagnostic('DUPLICATE_OBJECT_NAME', '同一画布内独立对象名称必须唯一', {'card_id': card.id, 'path': ['name']})
-                object_names[name] = card.id
+                if (card.type, name) in object_names:
+                    raise diagnostic('DUPLICATE_OBJECT_NAME', '同一画布内同类型描述名称必须唯一', {'card_id': card.id, 'path': ['name']})
+                object_names[(card.type, name)] = card.id
         for card in document.cards:
             origin = getattr(card, 'origin', None)
             previous = previous_cards.get(card.id)
@@ -131,7 +133,9 @@ class CanvasStore:
             if not isinstance(receiver, (ModelCard, NamedImageReferenceCard, PerformanceDirectionCard, SoundDirectionCard)):
                 continue
             references = [(reference.source, reference.id, path) for reference, path in prompt_references(receiver)] if isinstance(receiver, ModelCard) else [
-                (binding.source, binding.id, ['input_bindings', binding.id]) for binding in receiver.input_bindings]
+                (binding.source, binding.id, ['input_bindings', binding.id]) for binding in getattr(receiver, 'input_bindings', [])]
+            if isinstance(receiver, NamedImageReferenceCard) and receiver.name_binding:
+                references.append((receiver.name_binding, 'name', ['name_binding']))
             if isinstance(receiver, NamedImageReferenceCard) and receiver.image_binding and receiver.image_binding.source:
                 references.append((receiver.image_binding.source, 'image', ['image_binding']))
             if isinstance(receiver, (PerformanceDirectionCard, SoundDirectionCard)):
@@ -160,6 +164,7 @@ class CanvasStore:
                     raise diagnostic('UNSUPPORTED_INPUT', '所选模型未接入该输入用途',
                                      {'edge_id': edge.id, 'card_id': card.id, 'port_id': edge.target_port})
         from app.services.generation_canvas.references import validate_references
+        await validate_references(self.db, document, canvas.document, self.project_id)
         if any(isinstance(card, (PerformanceDirectionCard, SoundDirectionCard)) for card in document.cards):
             from app.services.generation_canvas.runtime import CanvasRuntime
             from app.services.generation_canvas.performance import validate_design_relations, validate_design_examples
@@ -178,7 +183,6 @@ class CanvasStore:
             validate_sound_relations(document, published, canvas.document)
             validate_design_relations(document, published)
             await validate_design_examples(self.db, document, published, self.project_id, canvas.document)
-        await validate_references(self.db, document, canvas.document, self.project_id)
         # Validate all replacements before releasing existing protection in this transaction.
         for card in document.cards:
             if isinstance(card, MediaContentCard) and card.file_id:

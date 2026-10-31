@@ -1,4 +1,4 @@
-import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { openModelInspection, closeCanvasDetails, connectCanvasCards } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -47,9 +47,11 @@ try {
   const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
   const poll = async predicate => { for(let i=0;i<90;i++){const value=await read();if(predicate(value))return value;await delay(100)}throw Error('saved state not reached') }
   const controls = async () => (await (await fetch(`${api}/test/runtime-controls`)).json())
-  const open = async id => { const close=page.getByRole('button',{name:'关闭详情',exact:true});if(await close.isVisible())await close.click();await page.locator(`[data-card-id="${id}"]`).press('Enter');await page.locator('.wb-details:visible').waitFor();await openModelInspection(page);return page.locator('.wb-details:visible') }
+  const open = async id => { await closeCanvasDetails(page);await page.getByRole('button',{name:'适应全部',exact:true}).click();await page.locator(`[data-card-id="${id}"]`).press('Enter');await page.locator('.wb-details:visible').waitFor();await openModelInspection(page);return page.locator('.wb-details:visible') }
   const connect = async (target,source,port) => {
-    const detail=await open(target)
+    const editor=await open(target)
+    if(target==='ref'){await connectCanvasCards(page,source,target,port);await open(target);return}
+    const detail=editor
     await detail.getByRole('combobox',{name:'连接已有卡',exact:true}).press('ArrowDown')
     await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option').filter({hasText:new RegExp(`· ${source} → ${port}$`)}).click()
   }
@@ -80,11 +82,10 @@ try {
   await details.getByRole('region',{name:'候选输出状态',exact:true}).getByText('暂无可用输出',{exact:true}).waitFor()
   await connect('ref','image','图片来源')
   await poll(value=>value.document.edges.length===2)
-  await details.getByRole('region',{name:'候选输出状态',exact:true}).getByText('暂无可用输出',{exact:true}).waitFor()
-  assert.equal(await details.getByRole('button',{name:/选为主图/}).count(),0)
-  await connect('ref','person','名称关联')
-  await poll(value=>value.document.edges.length===3)
-  assert.equal(await details.getByRole('button',{name:/关联名称 /}).count(),0,'empty identity is not fabricated')
+  await details.getByRole('combobox',{name:'关联图片',exact:true}).press('ArrowDown')
+  await page.getByText('暂无已连线图片，请先连线或添加来源',{exact:true}).waitFor()
+  await page.keyboard.press('Escape')
+  assert.equal((await read()).document.cards.find(card=>card.id==='ref').image_binding ?? null,null)
   assert.equal((await controls()).calls.length,0)
   await open('unknown')
   await details.getByRole('combobox',{name:'连接已有卡',exact:true}).press('ArrowDown')
@@ -99,30 +100,23 @@ try {
   await details.getByLabel('上传媒体文件',{exact:true}).setInputFiles({name:'reference.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jV4kAAAAASUVORK5CYII=', 'base64')})
   await poll(value=>!!value.document.cards.find(card=>card.id==='image').file_id)
   await open('ref')
-  await details.getByRole('button',{name:'选为主图 @图片1',exact:true}).waitFor()
   assert.equal((await read()).document.cards.find(card=>card.id==='ref').image_binding ?? null,null)
-  await details.getByRole('button',{name:'选为主图 @图片1',exact:true}).click()
+  await details.getByRole('combobox',{name:'关联图片',exact:true}).press('ArrowDown')
+  await page.locator('.ant-select-dropdown:visible .ant-select-item-option').first().click()
   await poll(value=>!!value.document.cards.find(card=>card.id==='ref').image_binding)
   const imageEdge=(await read()).document.edges.find(edge=>edge.source_card==='image')
-  await details.getByRole('button',{name:`断开连接 ${imageEdge.id}`,exact:true}).click()
-  await page.getByRole('status').filter({hasText:/先取消|仍被|已被|采用/}).waitFor()
-  assert.equal((await read()).document.edges.length,3,'adopted source cannot silently disconnect')
-  await details.getByRole('button',{name:'取消主图',exact:true}).click()
+  const disconnect=async()=>{
+    await closeCanvasDetails(page)
+    await page.getByRole('button',{name:'适应全部',exact:true}).click()
+    await page.locator(`[data-generation-edge-id="${imageEdge.id}"]`).getByRole('button').press('Enter')
+    await page.getByRole('button',{name:'删除此候选连接',exact:true}).click()
+  }
+  await disconnect()
+  await page.getByRole('status').filter({hasText:/先取消|仍被|已被|采用|引用/}).waitFor()
+  assert.equal((await read()).document.edges.length,2,'adopted source cannot silently disconnect')
+  await open('ref');await details.getByRole('button',{name:'移除参考图',exact:true}).click()
   await poll(value=>!value.document.cards.find(card=>card.id==='ref').image_binding)
-  await details.getByRole('button',{name:`断开连接 ${imageEdge.id}`,exact:true}).click()
-  await poll(value=>value.document.edges.length===2)
-  const personEdge=(await read()).document.edges.find(edge=>edge.source_card==='person')
-  await details.getByRole('button',{name:`断开连接 ${personEdge.id}`,exact:true}).click()
-  await poll(value=>value.document.edges.length===1)
-  await connect('ref','person','名称关联')
-  await poll(value=>value.document.edges.length===2)
-  // Declare a real identity only when the user names it; body remains independent.
-  await open('person')
-  await details.getByRole('textbox',{name:'对象名称',exact:true}).fill('张三')
-  await poll(value=>!!value.document.cards.find(card=>card.id==='person').object_id)
-  await open('ref')
-  await details.getByRole('button',{name:'关联名称 张三',exact:true}).waitFor()
-  assert.equal((await read()).document.cards.find(card=>card.id==='ref').input_bindings.length,0)
+  await disconnect();await poll(value=>value.document.edges.length===1)
   // Explicitly execute upstream, then verify downstream stays unadopted until chosen.
   await fetch(`${api}/test/runtime-controls`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({release:2})})
   const execute = async id => {

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { Alert, Button, Dropdown, Empty, Modal, Pagination, Space } from 'antd'
 import { PictureOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons'
 import { WorkbenchButton, WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
@@ -11,8 +12,10 @@ export type MediaCard = ImageContentCard | VideoContentCard | AudioContentCard
 export type MediaContentEditorProps = {
   card: MediaCard
   projectId: string
-  onChange: (card: MediaCard) => void
+  onChange: (card: MediaCard, file?: FileRead) => void
   disabled?: boolean
+  /** 复用同一上传、素材库、错误与异步保护流程，自定义图片主体与操作入口。 */
+  renderContent?: (actions: { upload: () => void; uploadFile: (file: File) => void; openLibrary: () => void; uploading: boolean; fileName?: string }) => ReactNode
   initialLibrary?: boolean
 }
 
@@ -25,7 +28,7 @@ export function MediaPreview({ fileId, type }: { fileId: string; type: string })
 }
 
 /** 上传与画布保存分别提交；回调只更新原卡，调用方须按现有 ID 合并编辑。 */
-export function MediaContentEditor({ card, projectId, onChange, disabled, initialLibrary = false }: MediaContentEditorProps) {
+export function MediaContentEditor({ card, projectId, onChange, disabled, initialLibrary = false, renderContent }: MediaContentEditorProps) {
   const input = useRef<HTMLInputElement>(null)
   const [error, setError] = useState('')
   const [library, setLibrary] = useState(initialLibrary)
@@ -60,6 +63,8 @@ export function MediaContentEditor({ card, projectId, onChange, disabled, initia
   }, [type, card.file_id])
 
   const upload = async (file: File) => {
+    if (disabled || uploading) return
+    if (type === 'image' && file.type && !file.type.startsWith('image/')) { setError('仅支持上传图片文件'); return }
     const token = ++operation.current
     setError(''); setUploading(true)
     latest.current.onChange({ ...latest.current.card, uploading: true })
@@ -69,7 +74,7 @@ export function MediaContentEditor({ card, projectId, onChange, disabled, initia
       } })
       if (!response.data || response.data.type !== type) throw new Error('文件类型不匹配')
       if (token === operation.current) {
-        latest.current.onChange({ ...latest.current.card, file_id: response.data.id, uploading: false })
+        latest.current.onChange({ ...latest.current.card, file_id: response.data.id, uploading: false }, response.data)
       }
     } catch {
       if (token === operation.current) {
@@ -105,8 +110,8 @@ export function MediaContentEditor({ card, projectId, onChange, disabled, initia
   const currentInfo = fileInfo?.id === card.file_id ? fileInfo : undefined
   const currentSize = imageSize?.id === card.file_id ? imageSize : undefined
   const currentImage = imageState?.id === card.file_id ? imageState?.state : undefined
-  return <Space direction="vertical" style={{ width: '100%' }}>
-    {type === 'image' ? <section className="generation-image-content" data-empty={!card.file_id} data-portrait={!!currentSize && currentSize.height > currentSize.width} aria-label="图片内容编辑">
+  return <Space direction="vertical" className={renderContent ? 'generation-media-picker-layout' : undefined} style={{ width: '100%' }}>
+    {renderContent ? renderContent({ upload: () => input.current?.click(), uploadFile: file => { void upload(file) }, openLibrary, uploading, fileName: currentInfo?.name }) : type === 'image' ? <section className="generation-image-content" data-empty={!card.file_id} data-portrait={!!currentSize && currentSize.height > currentSize.width} aria-label="图片内容编辑">
       <div className="generation-image-preview">
         {card.file_id ? <>
           <img alt="图片预览" src={buildFileDownloadUrl(card.file_id)} onLoad={event => {
@@ -146,7 +151,7 @@ export function MediaContentEditor({ card, projectId, onChange, disabled, initia
         <Space wrap>
           <span>{file.name}</span>
           <Button disabled={disabled || uploading} onClick={() => {
-            latest.current.onChange({ ...latest.current.card, file_id: file.id, uploading: false }); setLibrary(false)
+            latest.current.onChange({ ...latest.current.card, file_id: file.id, uploading: false }, file); setLibrary(false)
           }}>选用 {file.name}</Button>
           <Button danger loading={releasing === file.id} disabled={loading || disabled || !!releasing} onClick={async () => {
             setReleasing(file.id); setError('')

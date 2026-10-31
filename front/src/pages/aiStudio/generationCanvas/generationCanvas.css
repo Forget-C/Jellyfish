@@ -130,7 +130,7 @@
 .generation-workbench .generation-card .generation-card-body { padding: 20px; background: var(--wb-surface); border: 1px solid var(--wb-border); border-radius: 12px; min-height: 140px; max-height: 340px; overflow: hidden; }
 .generation-card[data-selected="true"] .generation-card-body { outline: 1px solid var(--wb-focus); }
 .generation-card .canvas-card-summary { display: -webkit-box; -webkit-line-clamp: var(--generation-card-summary-lines, 2); -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; margin: 0 0 8px; }
-.generation-card:not([data-card-type^="model."]) .generation-card-body :is(img, video) { display: block; height: 160px; object-fit: contain; margin-inline: auto; }
+.generation-card:not([data-card-type^="model."]):not([data-card-type^="reference."]):not([data-card-type="content.image"]) .generation-card-body :is(img, video) { display: block; height: 160px; object-fit: contain; margin-inline: auto; }
 .generation-card-menu { position: absolute; top: 32px; right: 0; z-index: 25; padding: 8px; display: grid; gap: 4px; background: var(--wb-raised); border: 1px solid var(--wb-border); border-radius: var(--wb-radius); }
 
 /* 左右几何点不代表逻辑字段；命中区大于可见圆形加号。 */
@@ -158,7 +158,7 @@
 .generation-surface-pan-ready { cursor: grab; }
 .generation-surface[data-panning="true"] { cursor: grabbing; }
 .generation-card-holding > .generation-card-body { outline: 2px solid var(--wb-focus); cursor: grabbing; }
-.generation-card:not([data-card-type^="model."]) .generation-card-footer { margin-top: 8px; font-size: 11px; color: var(--wb-muted); }
+.generation-card:not([data-card-type^="model."]):not([data-card-type^="reference."]) .generation-card-footer { margin-top: 8px; font-size: 11px; color: var(--wb-muted); }
 .generation-card .generation-card-footer [data-problem="true"] { color: var(--wb-text); }
 
 .generation-target-menu { width: min(320px, calc(100vw - 104px)); left: 88px; top: 180px; max-height: calc(100vh - 260px); overflow: auto; }
