@@ -49,7 +49,7 @@ def acceptance_lines(references):
 
 def validate_guidance_relations(document, published, previous):
     """要求身份稳定；采用和对象资格由明确直接候选决定。"""
-    from app.services.generation_canvas.compiler import resolve_outputs, identity_key
+    from app.services.generation_canvas.design_bindings import inspect_design_bindings
     identities, names = set(), set()
     for card in document.cards:
         if isinstance(card, GuidanceDirectionCard):
@@ -69,13 +69,9 @@ def validate_guidance_relations(document, published, previous):
         relevant = [binding for binding in bindings if isinstance(card, GuidanceDirectionCard) or binding.input_port == 'acceptance_basis']
         if not relevant:
             continue
-        candidates = resolve_outputs(document, card.id, published, allow_reference_drafts=True)
-        ids = set()
-        for binding in relevant:
-            item = next((item for item in candidates if identity_key(item.source) == identity_key(binding.source)), None)
-            connected = any(edge.source_card == binding.source.card_id and edge.source_port == binding.source.port_id and edge.target_card == card.id and edge.target_port == binding.input_port for edge in document.edges)
+        for check in inspect_design_bindings(document, card, relevant, published):
+            binding, item = check.binding, check.output
             valid = isinstance(item.payload, CriterionReferencePayload) if item and binding.input_port == 'acceptance_basis' else bool(item and binding.input_port == 'effect_object' and isinstance(item.payload, (ObjectReferencePayload, SpatialReferencePayload, NarrativeReferencePayload)) and not (card.type == 'direction.criterion' and isinstance(item.payload, NarrativeReferencePayload) and item.payload.category == 'shot'))
-            if binding.id in ids or not connected or not item or not item.available or not valid or binding.input_port not in card.input_ports:
+            if not check.binding_valid or not item or not valid:
                 raise diagnostic('INVALID_REQUIREMENT_BINDING', '请选择直接候选中适用的对象或验收要求', {'card_id': card.id, 'path': ['input_bindings', binding.id]})
-            ids.add(binding.id)
 

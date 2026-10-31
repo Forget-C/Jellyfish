@@ -46,20 +46,17 @@ def constraint_binding_allowed(port, payload):
 def validate_constraint_relations(document, published):
     """关系与示例独立校验，候选未采用时不要求绑定完整。"""
     from app.schemas.generation_canvas import ConstraintDirectionCard
-    from app.services.generation_canvas.compiler import resolve_outputs, identity_key
+    from app.services.generation_canvas.design_bindings import inspect_design_bindings
     from app.services.generation_canvas.errors import diagnostic
     for card in document.cards:
         if not isinstance(card, ConstraintDirectionCard):
             continue
-        candidates = resolve_outputs(document, card.id, published, allow_reference_drafts=True)
-        ids, counts = set(), {}
-        for binding in card.input_bindings:
+        counts = {}
+        for check in inspect_design_bindings(document, card, card.input_bindings, published):
+            binding, item = check.binding, check.output
             target = {'card_id': card.id, 'path': ['input_bindings', binding.id]}
-            item = next((item for item in candidates if identity_key(item.source) == identity_key(binding.source)), None)
-            connected = any(edge.target_card == card.id and edge.target_port == binding.input_port and edge.source_card == binding.source.card_id and edge.source_port == binding.source.port_id for edge in document.edges)
-            if binding.id in ids or binding.input_port not in card.input_ports or not connected or not item or not item.available:
+            if not check.binding_valid or not item:
                 raise diagnostic('INVALID_CONSTRAINT_BINDING', '请选择直接候选中的明确关系', target)
-            ids.add(binding.id)
             if not constraint_binding_allowed(binding.input_port, item.payload):
                 raise diagnostic('INVALID_CONSTRAINT_CATEGORY', '对象类别不适用于此约束关系', target)
             counts.setdefault(binding.input_port, set()).add(binding.source.object_id)

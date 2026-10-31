@@ -38,7 +38,7 @@ def publish_sound(canvas_id, card, adopted_inputs):
 
 def validate_sound_relations(document, published, previous):
     """对白身份不可替换；说话对象至多一个，声源允许直接明确对象。"""
-    from app.services.generation_canvas.compiler import resolve_outputs, identity_key
+    from app.services.generation_canvas.design_bindings import inspect_design_bindings
     identities = set()
     for card in document.cards:
         if not isinstance(card, SoundDirectionCard):
@@ -50,15 +50,12 @@ def validate_sound_relations(document, published, previous):
             identities.add(card.dialogue_id)
             if old and card.version < old['version']:
                 raise diagnostic('INVALID_DIALOGUE_VERSION', '对白版本不可倒退', {'card_id': card.id, 'path': ['version']})
-        candidates = resolve_outputs(document, card.id, published, allow_reference_drafts=True)
-        ids, speakers = set(), set()
-        for binding in card.input_bindings:
+        speakers = set()
+        for check in inspect_design_bindings(document, card, card.input_bindings, published):
+            binding, item = check.binding, check.output
             target = {'card_id': card.id, 'path': ['input_bindings', binding.id]}
-            item = next((item for item in candidates if identity_key(item.source) == identity_key(binding.source)), None)
-            connected = any(edge.target_card == card.id and edge.target_port == binding.input_port and edge.source_card == binding.source.card_id and edge.source_port == binding.source.port_id for edge in document.edges)
-            if binding.id in ids or binding.input_port not in card.input_ports or binding.input_port not in ('speaker', 'effect_object') or not connected or not item or not item.available or not isinstance(item.payload, ObjectReferencePayload):
+            if not check.binding_valid or binding.input_port not in ('speaker', 'effect_object') or not item or not isinstance(item.payload, ObjectReferencePayload):
                 raise diagnostic('INVALID_DESIGN_BINDING', '请选择直接候选中的具体对象', target)
-            ids.add(binding.id)
             if binding.input_port == 'speaker':
                 if item.payload.category not in ('character', 'prop'):
                     raise diagnostic('INVALID_DESIGN_CATEGORY', '说话对象须为人物或物件', target)

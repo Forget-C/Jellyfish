@@ -61,7 +61,7 @@ def publish_spatial(canvas_id, card, adopted_inputs):
 
 def validate_spatial_relations(document, published, previous):
     """关系只接受直接且类别匹配的身份，单对象端点按实际身份计数。"""
-    from app.services.generation_canvas.compiler import resolve_outputs, identity_key
+    from app.services.generation_canvas.design_bindings import inspect_design_bindings
     identities = set()
     for card in document.cards:
         if not isinstance(card, SpatialDirectionCard):
@@ -76,15 +76,12 @@ def validate_spatial_relations(document, published, previous):
                 raise diagnostic('DUPLICATE_SPATIAL_IDENTITY', '独立空间对象身份必须唯一', {'card_id': card.id, 'path': [field]})
             if value:
                 identities.add((field, value))
-        candidates = resolve_outputs(document, card.id, published, allow_reference_drafts=True)
-        ids, counts = set(), {}
-        for binding in card.input_bindings:
+        counts = {}
+        for check in inspect_design_bindings(document, card, card.input_bindings, published):
+            binding, item = check.binding, check.output
             target = {'card_id': card.id, 'path': ['input_bindings', binding.id]}
-            item = next((item for item in candidates if identity_key(item.source) == identity_key(binding.source)), None)
-            connected = any(edge.target_card == card.id and edge.target_port == binding.input_port and edge.source_card == binding.source.card_id and edge.source_port == binding.source.port_id for edge in document.edges)
-            if binding.id in ids or binding.input_port not in card.input_ports or binding.input_port in ('image_example', 'video_example') or not connected or not item or not item.available:
+            if not check.binding_valid or binding.input_port in ('image_example', 'video_example') or not item:
                 raise diagnostic('INVALID_SPATIAL_BINDING', '请选择直接候选中的明确空间关系', target)
-            ids.add(binding.id)
             payload = item.payload
             allowed = isinstance(payload, ObjectReferencePayload) and (binding.input_port == 'effect_object' or binding.input_port == 'space' and payload.category == 'place' or binding.input_port == 'participant' and payload.category in ('character', 'costume', 'prop'))
             allowed = allowed or isinstance(payload, SpatialReferencePayload) and payload.category == 'anchor' and binding.input_port in ('position_anchor', 'area_anchor')

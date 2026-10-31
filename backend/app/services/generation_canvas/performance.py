@@ -48,28 +48,25 @@ def publish_design(canvas_id, card, adopted_inputs):
 
 def validate_design_relations(document, published):
     """只允许直接明确对象；多人参考逐身份选取，主体按真实身份至多一个。"""
-    from app.services.generation_canvas.compiler import resolve_outputs, identity_key
+    from app.services.generation_canvas.design_bindings import inspect_design_bindings
     for card in document.cards:
         if not isinstance(card, PerformanceDirectionCard) or isinstance(card, (SoundDirectionCard, SpatialDirectionCard, NarrativeDirectionCard, GuidanceDirectionCard, ConstraintDirectionCard)):
             continue
-        candidates = resolve_outputs(document, card.id, published, allow_reference_drafts=True)
-        ids, participants, beats, shots = set(), set(), set(), set()
-        for binding in card.input_bindings:
+        participants, beats, shots = set(), set(), set()
+        for check in inspect_design_bindings(document, card, card.input_bindings, published):
+            binding, item = check.binding, check.output
             target = {'card_id': card.id, 'path': ['input_bindings', binding.id]}
-            if binding.id in ids or binding.input_port not in ('participant', 'effect_object', 'attention_object', 'focus_object', 'beat', 'received_event', 'dialogue_basis', 'shot', 'acceptance_basis') or binding.input_port not in card.input_ports:
+            if not check.binding_valid or binding.input_port not in ('participant', 'effect_object', 'attention_object', 'focus_object', 'beat', 'received_event', 'dialogue_basis', 'shot', 'acceptance_basis'):
                 raise diagnostic('INVALID_DESIGN_BINDING', '请选择已接入的明确关系用途', target)
-            ids.add(binding.id)
-            item = next((item for item in candidates if identity_key(item.source) == identity_key(binding.source)), None)
-            connected = any(edge.target_card == card.id and edge.target_port == binding.input_port and edge.source_card == binding.source.card_id and edge.source_port == binding.source.port_id for edge in document.edges)
             if binding.input_port == 'acceptance_basis':
-                if not connected or not item or not item.available or not isinstance(item.payload, CriterionReferencePayload):
+                if not item or not isinstance(item.payload, CriterionReferencePayload):
                     raise diagnostic('INVALID_REQUIREMENT_BINDING', '请选择直接候选中的验收要求', target)
                 continue
             if binding.input_port == 'dialogue_basis':
-                if not connected or not item or not item.available or not isinstance(item.payload, DialogueReferencePayload) or item.source.port_id != 'dialogue':
+                if not item or not isinstance(item.payload, DialogueReferencePayload) or item.source.port_id != 'dialogue':
                     raise diagnostic('INVALID_DESIGN_BINDING', '请选择直接候选中的具体对白', target)
                 continue
-            if not connected or not item or not item.available:
+            if not item:
                 raise diagnostic('INVALID_DESIGN_BINDING', '请选择直接候选中的具体对象', target)
             if binding.input_port in ('beat', 'received_event', 'shot'):
                 from app.services.generation_canvas.narrative import narrative_binding_allowed
