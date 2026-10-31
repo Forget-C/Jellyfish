@@ -1,4 +1,4 @@
-import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { closeCanvasDetails, openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -101,7 +101,7 @@ try {
   assert.equal(failedNode.result_set_id, null)
   assert.deepEqual(state.current_outputs.m, original)
   await preview.waitFor({ state: 'hidden' })
-  await page.getByRole('button', { name: '关闭详情', exact: true }).click()
+  await closeCanvasDetails(page)
   await page.getByRole('button', { name: '运行历史', exact: true }).click()
   const history = page.getByRole('region', { name: '画布运行历史', exact: true })
   const oldRecord = history.locator(`[data-history-run="${first.run_id}"]`)
@@ -137,7 +137,7 @@ try {
   await page.getByText('未完成成果副本', { exact: false }).waitFor()
   assert.deepEqual((await runtime()).current_outputs.m, original)
   assert.equal((await control()).calls.length, 2)
-  await page.getByRole('button', { name: '关闭详情', exact: true }).click()
+  await closeCanvasDetails(page)
   await page.setViewportSize({ width: 390, height: 844 })
   await open('consumer')
   await inputs.getByRole('button', { name: '取消采用 @图片3', exact: true }).waitFor()

@@ -1,92 +1,68 @@
-/* Generation-only C surface: one retained session, a shared surface and a fixed full-width toolbar. */
-.generation-card-editor.wb-details[data-material="true"] { width: min(700px, calc(100vw - 32px)); height: min(240px, calc(100dvh - 160px)); }
+/* 生成模型的 A 紧凑排版；基础内容和导演卡继续使用原编辑容器。 */
+.generation-card-editor.wb-details[data-material="true"] { width: min(700px, calc(100vw - 32px)); height: min(320px, calc(100dvh - 160px)); border-radius: 24px; }
 .generation-card-editor.wb-details[data-material="true"] .wb-details-body { padding: 0; overflow: hidden; display: flex; }
 .generation-card-editor.wb-details[data-material="true"] .generation-card-body { padding: 0; flex: 1; min-height: 0; display: flex; }
 .generation-card-editor.wb-details[data-material="true"] .generation-editor-actions { padding: 0; border: 0; background: transparent; }
 .generation-card-editor.wb-details[data-expanded="true"][data-material="true"] { height: min(760px, calc(100dvh - 32px)); }
-/* 正文逐层传递可用高度，长文本只在输入框内滚动，不撑开或裁切编辑卡。 */
-.generation-material-composer { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 3fr); grid-template-rows: minmax(0, 1fr); flex: 1; min-width: 0; min-height: 0; }
-.generation-material-basis { max-height: 260px; overflow-y: auto; box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--wb-primary) transparent; min-width: 0; padding: 12px; }
-.generation-material-basis h3 { display: flex; justify-content: space-between; font-size: 11px; color: var(--wb-muted); margin: 0 0 8px; font-weight: 500; }
-.generation-material-empty { color: var(--wb-muted); font-size: 11px; line-height: 1.6; }
-.generation-material-source { display: grid; grid-template-columns: 42px minmax(0, 1fr) 24px; align-items: start; column-gap: 6px; min-width: 0; padding-block: 6px; font-size: 11px; }
-.generation-material-source-copy { min-width: 0; }
-.generation-material-source-copy > strong, .generation-material-source-copy > small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 17px; }
-.generation-material-source-copy > small, .generation-material-source summary { color: var(--wb-muted); font-size: 10px; }
-.generation-material-basis .generation-material-source > img, .generation-material-basis .generation-material-source > video { width: 42px; height: 44px; object-fit: cover; border-radius: var(--wb-radius); }
-.generation-material-source-icon { height: 44px; display: grid; place-items: center; color: var(--wb-muted); font-size: 20px; }
-.generation-material-excerpt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0; line-height: 17px; font-size: 10px; color: var(--wb-muted); }
-.generation-material-source details { font-size: 10px; line-height: 18px; }
-.generation-material-source summary { cursor: pointer; }
-.generation-material-source details[open] { overflow-wrap: anywhere; }
-.generation-material-source .generation-material-remove.wb-action.ant-btn { width: 24px; min-width: 24px; height: 32px; padding: 0; }
-.generation-material-input { padding: 12px 16px; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
-.generation-material-prompt { min-width: 0; min-height: 0; flex: 1; display: flex; flex-direction: column; }
-.generation-material-prompt-label { display: block; color: var(--wb-muted); font-size: 11px; margin-bottom: 8px; }
-.generation-material-prompt .generation-prompt-editor { position: relative; border: 0; border-radius: 0; padding: 0; flex: 1; min-height: 0; font-size: 13px; line-height: 1.8; overflow-y: auto; outline-offset: 4px; overflow-wrap: anywhere; }
+.generation-card-editor.wb-details .generation-model-editor-chrome { position: absolute; top: 8px; right: 8px; padding: 0; border: 0; min-height: 0; z-index: 2; background: transparent; }
+/* 同一实例逐层传递高度，关联条横滚，只有长正文纵向滚动。 */
+.generation-material-composer { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
+.generation-material-basis { min-width: 0; flex: none; padding: 16px 56px 0 16px; }
+.generation-material-references { display: flex; gap: 12px; overflow-x: auto; padding: 2px; scrollbar-width: thin; scrollbar-color: var(--wb-primary) transparent; }
+.generation-material-reference { position: relative; flex: 0 0 64px; width: 64px; height: 64px; padding: 8px; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; border: 1px solid var(--wb-border); border-radius: 12px; color: var(--wb-text); background: var(--wb-raised); cursor: pointer; text-align: left; }
+.generation-material-reference:hover { border-color: var(--wb-strongBorder); }
+.generation-material-reference:focus-visible { outline: 1px solid var(--wb-focus); outline-offset: 1px; }
+.generation-material-reference > span:first-child { font-size: 20px; line-height: 1; }
+.generation-material-reference > small { z-index: 1; font-size: 10px; line-height: 1.4; max-width: 100%; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; background: var(--wb-surface); border-radius: 4px; padding: 0 2px; align-self: flex-start; }
+.generation-material-reference > img,.generation-material-reference > video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.generation-material-adopted { position: absolute; bottom: 4px; right: 4px; z-index: 1; background: var(--wb-surface); border-radius: 50%; box-shadow: 0 0 0 2px var(--wb-surface); font-size: 16px; }
+.generation-material-reference-issue { position: absolute; top: 4px; right: 4px; z-index: 1; background: var(--wb-surface); border-radius: 50%; }
+.generation-material-add { flex: none; }
+.generation-material-add .wb-icon-action.ant-btn { width: 64px; height: 64px; border: 1px solid var(--wb-border); border-radius: 12px; background: transparent; font-size: 24px; }
+.generation-material-input { padding: 16px; min-width: 0; min-height: 0; flex: 1; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
+.generation-material-input > .ant-alert { flex: none; }
+.generation-material-prompt { min-width: 0; min-height: 64px; flex: 1; display: flex; flex-direction: column; }
+.generation-material-prompt .generation-prompt-editor { position: relative; border: 0; border-radius: 0; padding: 0; flex: 1; min-height: 64px; font-size: 14px; line-height: 1.8; overflow-y: auto; outline-offset: 4px; overflow-wrap: anywhere; white-space: pre-wrap; }
 .generation-material-prompt .generation-prompt-editor[data-empty="true"]::before { content: attr(data-placeholder); color: var(--wb-muted); pointer-events: none; position: absolute; inset: 0; }
+/* 正文引用选择高于按需候选管理，固定在工具条上方，不挤压输入或拦住发送。 */
+.generation-material-prompt > [role="listbox"] { position: absolute; bottom: 56px; left: 16px; right: 16px; max-height: min(160px, var(--generation-candidate-height, 160px)); overflow-y: auto; z-index: 5; background: var(--wb-raised); border: 1px solid var(--wb-border); border-radius: var(--wb-radius); padding: 4px; }
+.generation-material-prompt > [role="listbox"] > button { display: block; width: 100%; padding: 8px; text-align: left; color: var(--wb-text); background: transparent; border: 0; border-radius: 4px; cursor: pointer; }
+.generation-material-prompt > [role="listbox"] > button[aria-selected="true"], .generation-material-prompt > [role="listbox"] > button:hover { background: var(--wb-selected); }
 .generation-material-reference-tools { font-size: 11px; color: var(--wb-muted); margin-bottom: 8px; }
 .generation-material-reference-tools > summary { cursor: pointer; }
-.generation-material-footer { position: relative; display: flex; align-items: center; gap: 8px; box-sizing: border-box; height: 44px; padding: 6px 12px; grid-column: 1 / -1; }
-.generation-material-parameters { display: flex; flex: none; max-width: calc(100% - 116px); min-width: 0; flex-wrap: nowrap; align-items: center; gap: 4px; overflow-x: auto; scrollbar-width: thin; }
+.generation-material-footer { position: relative; display: flex; align-items: center; gap: 8px; box-sizing: border-box; min-height: 48px; padding: 8px 16px; flex: none; }
+.generation-material-parameters { display: flex; flex: 1; min-width: 0; flex-wrap: nowrap; align-items: center; gap: 4px; overflow-x: auto; scrollbar-width: thin; }
 .generation-material-parameters > .ant-select { flex: none; width: auto; min-width: 64px; max-width: 180px; }
-.generation-material-parameters > .generation-material-model { min-width: 90px; max-width: 180px; }
-.generation-material-parameters .ant-select-selection-item { font-size: 11px; }
-.generation-material-parameters .ant-input-number { width: 56px; flex: 0 0 56px; }
-.generation-material-parameters .ant-input-number-input { font-size: 11px; }
+.generation-material-parameters > .generation-material-model { min-width: 100px; max-width: 180px; }
+.generation-material-parameters .ant-select-selection-item { font-size: 12px; }
+.generation-material-parameters .ant-input-number { width: 64px; flex: 0 0 64px; }
+.generation-material-parameters .ant-input-number-input { font-size: 12px; }
 .generation-material-parameters > span { color: var(--wb-muted); font-size: 11px; white-space: nowrap; }
 .generation-material-parameters > details { flex: none; font-size: 11px; }
-.generation-material-parameters > details[open] { position: absolute; bottom: 44px; background: var(--wb-surface); border: 1px solid var(--wb-border); border-radius: var(--wb-radius); padding: 12px; z-index: 3; }
+.generation-material-parameters > details[open] { position: absolute; bottom: 48px; background: var(--wb-surface); border: 1px solid var(--wb-border); border-radius: var(--wb-radius); padding: 12px; z-index: 3; }
 .generation-material-parameters > details summary { cursor: pointer; white-space: nowrap; }
-.generation-material-tools { margin-right: auto; display: flex; align-items: center; gap: 4px; flex: none; }
+.generation-material-divider { color: var(--wb-strongBorder); }
+.generation-material-tools { display: flex; align-items: center; gap: 8px; flex: none; font-size: 11px; color: var(--wb-muted); }
+.generation-material-runtime { max-width: 80px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .generation-material-candidates { font-size: 11px; }
-.generation-material-candidates > summary { cursor: pointer; color: var(--wb-muted); padding: 6px 4px; list-style: none; white-space: nowrap; }
-.generation-material-candidates[open] > :not(summary) { background: var(--wb-surface); }
-.generation-material-candidates[open] { position: static; }
-.generation-material-candidates[open] > section, .generation-material-candidates[open] > div { position: relative; padding: 8px 12px; }
+.generation-material-candidates > summary { cursor: pointer; color: var(--wb-muted); padding: 6px 0; list-style: none; white-space: nowrap; }
 .generation-material-candidates section { min-width: 0; overflow-wrap: anywhere; }
-.generation-material-candidates[open] { position: absolute; bottom: 44px; left: 12px; right: 12px; max-height: min(280px, var(--generation-candidate-height, 200px)); overflow-y: auto; background: var(--wb-surface); border: 1px solid var(--wb-border); border-radius: var(--wb-radius); z-index: 4; padding: 8px; }
-.generation-material-candidates[open] > summary { position: sticky; top: 0; background: var(--wb-surface); z-index: 1; }
+.generation-material-candidates[open] { position: absolute; bottom: 48px; left: 12px; right: 12px; max-height: min(360px, var(--generation-candidate-height, 200px)); overflow-y: auto; background: var(--wb-surface); border: 1px solid var(--wb-border); border-radius: var(--wb-radius); z-index: 4; padding: 12px; }
+.generation-material-candidates[open] > summary { position: sticky; top: -12px; background: var(--wb-surface); z-index: 1; }
 .generation-material-candidates [aria-label="已保存直接输入"] > div { padding: 8px 0; border-bottom: 1px solid var(--wb-border); }
-.canvas-workbench-dialog .generation-material-submit.wb-action.ant-btn[data-variant="primary"] { width: 32px; height: 32px; min-width: 32px; border-radius: 50%; padding: 0; flex: none; }
-.canvas-workbench-dialog .generation-material-submit.wb-action.ant-btn[data-variant="primary"]:not(:disabled) { background: var(--wb-text); color: var(--wb-canvas); border-color: var(--wb-text); }
-.canvas-workbench-dialog .generation-material-submit.wb-action.ant-btn[data-variant="primary"]:not(:disabled):hover { background: var(--wb-muted); border-color: var(--wb-muted); }
+.generation-material-candidates [data-reference-source] { scroll-margin-top: 36px; }
 .generation-material-submit svg { width: 18px; height: 18px; }
 .generation-material-results { font-size: 11px; min-width: 0; color: var(--wb-muted); }
 .generation-material-results > summary { cursor: pointer; }
 @media (max-width: 700px) {
   .generation-card-editor.wb-details[data-expanded="true"][data-material="true"] { height: calc(100dvh - 16px); }
   .generation-card-editor[data-expanded="true"][data-material="true"] .generation-card-body { height: 100%; box-sizing: border-box; }
-  .generation-material-composer { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); height: 100%; }
-  .generation-material-prompt { display: flex; flex-direction: column; min-height: 0; }
-  .generation-material-prompt .generation-prompt-editor { flex: 1; max-height: none; }
-  .generation-material-basis { max-height: 144px; padding: 8px 12px; }
-  .generation-material-basis h3 { margin-bottom: 4px; }
-  .generation-material-source { grid-template-columns: 36px minmax(0, 1fr) 32px; padding-block: 4px; }
-  .generation-material-basis .generation-material-source > img, .generation-material-basis .generation-material-source > video { width: 36px; height: 40px; }
-  .generation-material-source .generation-material-remove.wb-action.ant-btn { width: 32px; min-width: 32px; height: 36px; }
-  .generation-material-footer { height: 48px; padding: 6px 8px; gap: 4px; }
-  .canvas-workbench-dialog .generation-material-submit.wb-action.ant-btn[data-variant="primary"] { width: 36px; height: 36px; min-width: 36px; }
+  .generation-material-prompt .generation-prompt-editor { max-height: none; }
+  .generation-material-footer { flex-wrap: wrap; padding: 8px 12px; }
+  .generation-material-parameters { flex-basis: calc(100% - 1px); }
+  .generation-material-divider { margin-left: auto; }
   .generation-material-input { padding: 12px; }
+  .generation-material-basis { padding-left: 12px; }
+  .generation-material-prompt > [role="listbox"] { bottom: 96px; }
+  .generation-material-candidates[open] { bottom: 88px; max-height: min(360px, calc(100dvh - 180px)); }
 }
-
-/* Text-model cards share C's quiet preview density; generated text stays read-only here. */
-.generation-workbench .generation-card[data-card-type="model.text"] .generation-card-body { background: var(--wb-surface); border-color: var(--wb-border); padding: 12px 15px; min-height: 128px; max-height: 220px; }
-.generation-card[data-card-type="model.text"] .canvas-card-summary { -webkit-line-clamp: 4; font-size: 13px; line-height: 1.8; margin: 0; }
-.generation-card[data-card-type="model.text"] .generation-model-empty { min-height: 86px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--wb-muted); font-size: 12px; }
-.generation-model-empty > .anticon { font-size: 20px; }
-.generation-material-add .wb-action { width: auto; }
-
-/* Image results remain one local preview of the full published output set. */
-.generation-workbench .generation-card[data-card-type="model.image"] .generation-card-body { padding: 0; min-height: 0; max-height: none; overflow: hidden; }
-.generation-card[data-card-type="model.image"] .generation-card-footer { padding: 4px 10px; margin: 0; }
-.generation-card[data-card-type="model.image"] .generation-model-empty { height: 185px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--wb-muted); font-size: 12px; }
-.generation-image-result { position: relative; height: 185px; }
-.generation-image-result > img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.generation-image-result-actions { position: absolute; right: 4px; bottom: 4px; display: flex; gap: 4px; align-items: center; }
-.generation-image-result-actions .wb-action, .generation-image-result-switch { background: var(--wb-surface); border: 1px solid var(--wb-border); border-radius: var(--wb-radius); }
-.generation-image-result-switch { display: flex; align-items: center; gap: 2px; font-size: 10px; padding: 2px; }
-.generation-image-result-switch .wb-action.ant-btn { background: transparent; border: 0; min-width: 28px; width: 28px; height: 28px; padding: 0; }
-.generation-image-result-switch button:focus-visible { outline: 2px solid var(--wb-focus); outline-offset: 1px; }
-.generation-image-result-switch > span { padding: 0 4px; color: var(--wb-muted); white-space: nowrap; }
-@media (max-width: 700px) { .generation-image-result-actions .wb-action.ant-btn { min-width: 36px; width: 36px; height: 36px; } }

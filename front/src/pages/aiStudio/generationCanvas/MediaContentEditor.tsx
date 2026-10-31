@@ -13,6 +13,7 @@ export type MediaContentEditorProps = {
   projectId: string
   onChange: (card: MediaCard) => void
   disabled?: boolean
+  initialLibrary?: boolean
 }
 
 /** 固定文件的原生预览保留视频音轨，音频不走图片兜底。 */
@@ -24,10 +25,10 @@ export function MediaPreview({ fileId, type }: { fileId: string; type: string })
 }
 
 /** 上传与画布保存分别提交；回调只更新原卡，调用方须按现有 ID 合并编辑。 */
-export function MediaContentEditor({ card, projectId, onChange, disabled }: MediaContentEditorProps) {
+export function MediaContentEditor({ card, projectId, onChange, disabled, initialLibrary = false }: MediaContentEditorProps) {
   const input = useRef<HTMLInputElement>(null)
   const [error, setError] = useState('')
-  const [library, setLibrary] = useState(false)
+  const [library, setLibrary] = useState(initialLibrary)
   const [files, setFiles] = useState<FileRead[]>([])
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)

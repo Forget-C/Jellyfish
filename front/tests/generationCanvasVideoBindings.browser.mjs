@@ -1,4 +1,4 @@
-import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { closeCanvasDetails, openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { readFile, writeFile } from 'node:fs/promises'
@@ -87,7 +87,7 @@ try {
   await video.waitFor({ timeout: 20000 })
   await video.evaluate(async element => { element.muted = true; await element.play() })
   assert.equal(await video.evaluate(element => element.captureStream().getAudioTracks().length), 1, 'complete output retains original audio')
-  await details.getByRole('button', { name: '关闭详情', exact: true }).click()
+  await closeCanvasDetails(page)
   await page.getByRole('button', { name: '运行历史', exact: true }).click()
   const history = page.getByRole('region', { name: '画布运行历史', exact: true })
   await history.locator('summary').filter({ hasText: `运行 ${run.run_id}` }).click()

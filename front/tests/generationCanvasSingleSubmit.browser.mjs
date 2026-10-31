@@ -53,6 +53,7 @@ try {
   assert.equal(saved.edges.length,1)
   assert.equal(saved.cards.find(c=>c.id==='m').input_bindings?.length||0,0)
   await editor.getByRole('button',{name:'添加模型来源',exact:true}).click()
+  await page.locator('.ant-dropdown-menu-submenu-title').filter({hasText:'上传参考素材'}).hover()
   await page.getByRole('menuitem',{name:'上传参考图片素材',exact:true}).click()
   const upload=page.getByRole('dialog',{name:'上传模型来源',exact:true})
   await upload.getByLabel('上传媒体文件',{exact:true}).setInputFiles({name:'tiny.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64')})
@@ -79,5 +80,17 @@ try {
   await editor.getByRole('button',{name:'展开详情',exact:true}).click()
   await editor.getByRole('button',{name:'预检运行',exact:true}).waitFor()
   await page.screenshot({path:join(output,'expanded-submit.png')})
-  console.log('PASS single model editor sources and admission',output)
-} finally { await cleanup() }
+  await editor.getByRole('button',{name:'添加模型来源',exact:true}).click()
+  await page.locator('.ant-dropdown-menu-submenu-title').filter({hasText:'从素材库添加'}).hover()
+  await page.getByRole('menuitem',{name:'选择参考图片素材',exact:true}).click()
+  const library = page.getByRole('dialog',{name:'项目文件库',exact:true})
+  await library.getByRole('button',{name:'选用 tiny',exact:true}).click()
+  await upload.getByRole('img',{name:'图片预览',exact:true}).waitFor()
+  await upload.getByRole('button',{name:'Close',exact:true}).click()
+  await page.getByLabel('画布保存状态').getByText('已保存',{exact:true}).waitFor()
+  const afterLibrary=(await (await fetch(`${base}/${canvas.id}`)).json()).data.document
+  assert.equal(afterLibrary.edges.length,3)
+  assert.equal(afterLibrary.cards.find(c=>c.id==='m').input_bindings?.length||0,0,'library selection is a candidate, never automatic adoption')
+  assert.equal(afterLibrary.cards.filter(c=>c.type==='content.image'&&c.file_id).length,2)
+  console.log('PASS upload, canvas/library candidates and single model admission',output)
+} catch (error) { console.log(await page.locator('body').innerText()); await page.screenshot({path:join(output,'failure.png')}); throw error } finally { await cleanup() }

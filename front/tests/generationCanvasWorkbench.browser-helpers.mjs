@@ -18,7 +18,14 @@ export async function openCanvasCard(page, id) {
 export async function closeCanvasDetails(page) {
   const details = page.locator('.wb-details:visible')
   if (await details.count()) {
-    await details.getByRole('button', { name: '关闭详情', exact: true }).click()
+    const close = details.getByRole('button', { name: '关闭详情', exact: true })
+    if (await close.count()) await close.click()
+    else {
+      const candidates = details.locator('.generation-material-candidates[open] > summary')
+      if (await candidates.count()) await candidates.press('Escape')
+      await details.press('Escape')
+      if (await details.isVisible()) await details.press('Escape')
+    }
     await details.waitFor({ state: 'hidden' })
     await page.waitForFunction(() => !document.querySelector('.canvas-workbench')?.inert)
   }

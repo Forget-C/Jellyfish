@@ -1,0 +1,24 @@
+/* 只约束画布中的三类模型展示卡，不影响编辑浮层、基础内容卡与导演卡。 */
+.generation-workbench .generation-card[data-card-type^="model."] .generation-card-body { padding: 0; min-height: 0; max-height: none; overflow: hidden; }
+.generation-model-card { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.generation-model-preview { flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+.generation-model-card > .generation-card-footer { flex: none; box-sizing: border-box; margin-top: auto; padding: 0 10px; font-size: 11px; color: var(--wb-muted); overflow: hidden; }
+.generation-model-card .generation-card-status { height: 100%; min-height: 0; }
+.generation-model-card .generation-card-status > .wb-icon-trigger { flex: none; overflow: visible; }
+.generation-model-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--wb-muted); font-size: 12px; }
+.generation-model-empty > .anticon { font-size: 20px; }
+.generation-model-text { --generation-card-summary-lines: 4; padding: 12px 15px; }
+.generation-model-text .canvas-card-summary { font-size: 13px; line-height: 1.8; margin: 0; }
+.generation-model-text > section { margin-top: 8px; }
+.generation-model-text small { color: var(--wb-muted); font-size: 11px; }
+.generation-image-result, .generation-video-result { position: relative; height: 100%; overflow: hidden; }
+.generation-model-preview .generation-image-result > img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.generation-model-preview .generation-video-result > video { display: block; width: 100%; height: 100%; object-fit: contain; }
+.generation-image-result-actions { position: absolute; right: 4px; bottom: 4px; display: flex; gap: 4px; align-items: center; }
+.generation-image-result-actions .wb-action, .generation-image-result-switch { background: var(--wb-surface); border: 1px solid var(--wb-border); border-radius: var(--wb-radius); }
+.generation-image-result-switch { display: flex; align-items: center; gap: 2px; font-size: 10px; padding: 2px; }
+.generation-image-result-switch .wb-action.ant-btn { background: transparent; border: 0; min-width: 28px; width: 28px; height: 28px; padding: 0; }
+.generation-image-result-switch button:focus-visible { outline: 2px solid var(--wb-focus); outline-offset: 1px; }
+.generation-image-result-switch > span { padding: 0 4px; color: var(--wb-muted); white-space: nowrap; }
+.generation-video-result-switch { position: absolute; top: 4px; right: 4px; }
+@media (max-width: 700px) { .generation-image-result-actions .wb-action.ant-btn { min-width: 36px; width: 36px; height: 36px; } }

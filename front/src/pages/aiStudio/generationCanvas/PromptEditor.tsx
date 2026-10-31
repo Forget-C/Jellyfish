@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { createPortal, flushSync } from 'react-dom'
 import { Button, Input, Select, Space } from 'antd'
 import type { CanvasDocument, PromptText } from '../../../services/generated'
 import type { GenerationCard } from './graphRules'
@@ -29,10 +29,12 @@ function contentKey(document: PromptDocument) {
 }
 
 /** DOM 仅作为输入表面；持久值是有稳定身份的片段，组合输入期间不重建 DOM。 */
-export function PromptEditor({ compact = false, toolsHost, document, card, value, onChange, disabled, candidates = [] }: { compact?: boolean; toolsHost?: HTMLElement | null; document: CanvasDocument; card: GenerationCard; value: PromptDocument; onChange: (value: PromptDocument) => void; disabled?: boolean; candidates?: Candidate[] }) {
+export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsHost, document, card, value, onChange, disabled, candidates = [] }: { compact?: boolean; onSubmit?: () => void; submitDisabled?: boolean; toolsHost?: HTMLElement | null; document: CanvasDocument; card: GenerationCard; value: PromptDocument; onChange: (value: PromptDocument) => void; disabled?: boolean; candidates?: Candidate[] }) {
   const root = useRef<HTMLDivElement>(null), composing = useRef(false), local = useRef(value), renderedContent = useRef('')
   const [category, setCategory] = useState('text'), [query, setQuery] = useState(''), [activeIndex, setActiveIndex] = useState(0)
   local.current = value
+  const isMac = /Mac|iPhone|iPad/.test(navigator.platform)
+  const placeholder = `描述你想生成的内容，关联参考用于补充上下文。回车发送，${isMac ? 'Command' : 'Ctrl'}＋回车换行`
   const matches = candidates.filter(item => item.available && item.source.port_id === category && (query === '@' || item.token.startsWith(query)))
   const label = (reference: PromptReference) => candidates.find(item => sourceKey(item.source) === sourceKey(reference.source))?.token || `@缺失(${reference.source.card_id}:${reference.source.position + 1})`
   const draw = (next: PromptDocument) => {
@@ -70,6 +72,7 @@ export function PromptEditor({ compact = false, toolsHost, document, card, value
     const visit = (node: Node) => {
       if (node.nodeType === Node.TEXT_NODE) { appendText(node, node.textContent || ''); return }
       if (!(node instanceof HTMLElement) && !(node instanceof DocumentFragment)) return
+      if (node instanceof HTMLElement && node.dataset.promptCaret) return
       if (node instanceof HTMLElement && node.dataset.segment) { segments.push(JSON.parse(node.dataset.segment)); return }
       if (node instanceof HTMLElement && node.tagName === 'BR') { appendText(node, '\n'); return }
       if (node instanceof HTMLElement && ['DIV', 'P'].includes(node.tagName) && segments.length) appendText(node, '\n')
@@ -79,7 +82,13 @@ export function PromptEditor({ compact = false, toolsHost, document, card, value
     return { segments }
   }
   const read = () => root.current ? readNodes(root.current) : { segments: [] }
-  const publish = (next: PromptDocument, redraw = false) => { local.current = next; renderedContent.current = contentKey(next); onChange(next); if (redraw) draw(next) }
+  const publish = (next: PromptDocument, redraw = false) => {
+    const changed = contentKey(next) !== contentKey(local.current)
+    local.current = next; renderedContent.current = contentKey(next)
+    // 键盘打开预检后的失焦不应以相同正文再次触发保存／预检失效。
+    if (changed) onChange(next)
+    if (redraw) draw(next)
+  }
   const confirm = (finalize = false) => {
     if (composing.current) return false
     const selection = window.getSelection()
@@ -176,9 +185,10 @@ export function PromptEditor({ compact = false, toolsHost, document, card, value
       {matches.map((item, index) => <button type="button" key={sourceKey(item.source)} role="option" aria-selected={index === activeIndex % Math.max(1, matches.length)} onClick={() => insert({ id: crypto.randomUUID(), kind: 'reference', source: item.source })}>{item.token}</button>)}
       {!matches.length && <small>没有匹配的实际输出；可切换引用分类</small>}
     </div>}
-    <div ref={root} role="textbox" aria-label="模型正文" aria-multiline="true" contentEditable={!disabled} suppressContentEditableWarning className="generation-prompt-editor" aria-placeholder={compact ? '描述你想生成的内容，或通过引用与指令使用已连接的候选。' : undefined} data-placeholder="描述你想生成的内容，或通过引用与指令使用已连接的候选。" data-empty={!(value.segments || []).some(segment => segment.kind !== 'text' || segment.text?.trim())}
+    <div ref={root} role="textbox" aria-label="模型正文" aria-multiline="true" contentEditable={!disabled} suppressContentEditableWarning className="generation-prompt-editor" aria-placeholder={compact ? placeholder : undefined} data-placeholder={placeholder} data-empty={!(value.segments || []).some(segment => segment.kind !== 'text' || segment.text?.trim())}
       onCompositionStart={() => { composing.current = true }} onCompositionEnd={() => { composing.current = false; publish(read()); if (/[\s,;:()，。；：、（）!?！？]$/.test(root.current?.textContent || '')) confirm() }}
       onInput={() => {
+        root.current?.querySelectorAll('[data-prompt-caret]').forEach(node => node.remove())
         const next = read(); publish(next)
         if (composing.current) return
         const text = root.current?.textContent || '', nextQuery = text.match(/(?<!\\)@[^\s]*$/)?.[0] || ''
@@ -188,8 +198,35 @@ export function PromptEditor({ compact = false, toolsHost, document, card, value
         if (/[\s,;:()，。；：、（）!?！？]$/.test(text)) confirm()
       }}
       onKeyDown={event => {
-        if (composing.current || event.nativeEvent.isComposing) return
+        if (composing.current || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return
         if (query && ['ArrowDown', 'ArrowUp'].includes(event.key)) { event.preventDefault(); setActiveIndex(previous => Math.max(0, previous + (event.key === 'ArrowDown' ? 1 : -1))); return }
+        if (event.key === 'Enter' && (isMac ? event.metaKey : event.ctrlKey)) {
+          event.preventDefault()
+          const selection = window.getSelection(), range = selection?.rangeCount ? selection.getRangeAt(0) : undefined
+          if (range && root.current?.contains(range.commonAncestorContainer)) {
+            range.deleteContents()
+            const newline = window.document.createTextNode('\n')
+            range.insertNode(newline)
+            // 尾部换行需要可见行盒承载光标；占位 BR 不进入持久片段。
+            const caret = window.document.createElement('br'); caret.dataset.promptCaret = 'true'
+            newline.after(caret)
+            range.setStartAfter(newline); range.collapse(true)
+            selection?.removeAllRanges(); selection?.addRange(range)
+            publish(read()); setQuery('')
+          }
+          return
+        }
+        if (event.key === 'Enter' && onSubmit && !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey) {
+          event.preventDefault()
+          if (event.repeat) return
+          if (query && matches.length) { insert({ id: crypto.randomUUID(), kind: 'reference', source: matches[activeIndex % matches.length].source }); return }
+          // 引用／指令确认先消费回车；普通发送先同步最新正文，再由宿主保存并预检。
+          let changed = false
+          flushSync(() => { changed = confirm(true) })
+          if (changed) setQuery('')
+          else if (!submitDisabled) onSubmit()
+          return
+        }
         if (['Enter', 'Tab'].includes(event.key)) {
           if (query === '@' && matches.length) { event.preventDefault(); insert({ id: crypto.randomUUID(), kind: 'reference', source: matches[activeIndex % matches.length].source }); return }
           if (confirm(true)) { event.preventDefault(); setQuery('') }

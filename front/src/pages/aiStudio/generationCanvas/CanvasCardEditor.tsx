@@ -27,7 +27,7 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
   const close = useRef(onClose); close.current = onClose
   const opener = useRef(trigger); opener.current = trigger
   const modal = forceModal || expanded || !desktop
-  const anchoredHeightLimit = material ? 240 : 360
+  const anchoredHeightLimit = material ? 320 : 360
   const previousOpen = useRef(false)
   const fit = useRef(onFit); fit.current = onFit
   useEffect(() => { if (expandRequest) setExpanded(true) }, [expandRequest])
@@ -94,8 +94,11 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
     const node = panel.current
     const body = node?.querySelector<HTMLElement>('.wb-details-body')
     if (!visible || !material || !node || !body) return
-    // Candidate management may cover the composer body, never its title or fixed toolbar.
-    const measure = () => node.style.setProperty('--generation-candidate-height', `${Math.max(0, body.getBoundingClientRect().height - 8)}px`)
+    // 候选面板覆盖正文时，仍保留右上放大和底部固定操作可达。
+    const measure = () => {
+      const references = node.querySelector<HTMLElement>('.generation-material-basis')?.getBoundingClientRect().height || 0
+      node.style.setProperty('--generation-candidate-height', `${Math.max(0, body.getBoundingClientRect().height - references - 16)}px`)
+    }
     measure()
     const observer = new ResizeObserver(measure)
     observer.observe(body)
@@ -130,7 +133,7 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
         if (expanded && !forceModal) setExpanded(false); else close.current()
       }
       if (modal && event.key === 'Tab' && node) {
-        const items = [...node.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex="0"], summary, a[href]')].filter(item => item.getClientRects().length)
+        const items = [...node.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex="0"], [contenteditable="true"], summary, a[href]')].filter(item => item.getClientRects().length)
         const first = items[0], last = items[items.length-1]
         if (event.shiftKey && (document.activeElement === first || document.activeElement === node)) { event.preventDefault(); last?.focus() }
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
@@ -143,9 +146,9 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
     {visible && modal && <div className="generation-editor-mask" onClick={() => expanded && !forceModal ? setExpanded(false) : onClose()} />}
     <section ref={panel} hidden={!visible} tabIndex={-1} role={modal ? 'dialog' : 'complementary'} aria-modal={modal || undefined} aria-label={title}
       className="canvas-workbench-dialog wb-details generation-card-editor" data-expanded={modal} data-material={material} data-focus-layout={focusLayout} data-card-type={cardType} style={!modal ? {left:placement.left, top:placement.top, maxHeight:Math.min(anchoredHeightLimit, placement.maxHeight)} : undefined}>
-      <header className="wb-details-header"><div className="generation-editor-heading">{focusLayout && <span className="generation-editor-modality" aria-hidden="true">{modality === 'image' ? <PictureOutlined /> : <FileTextOutlined />}</span>}<h2 title={title}>{title}</h2>{status && <small role="status">{status}</small>}</div>
+      <header className={`wb-details-header${material ? ' generation-model-editor-chrome' : ''}`}>{!material && <div className="generation-editor-heading">{focusLayout && <span className="generation-editor-modality" aria-hidden="true">{modality === 'image' ? <PictureOutlined /> : <FileTextOutlined />}</span>}<h2 title={title}>{title}</h2>{status && <small role="status">{status}</small>}</div>}
         {!forceModal && <WorkbenchIconButton variant="quiet" label={expanded ? '收起详情' : '展开详情'} icon={expanded ? <ShrinkOutlined /> : <ExpandOutlined />} onClick={() => setExpanded(value=>!value)} />}
-        <WorkbenchIconButton variant="quiet" label="关闭详情" icon={<CloseOutlined />} onClick={() => expanded && !forceModal ? setExpanded(false) : onClose()} />
+        {!material && <WorkbenchIconButton variant="quiet" label="关闭详情" icon={<CloseOutlined />} onClick={() => expanded && !forceModal ? setExpanded(false) : onClose()} />}
       </header>
       <div className="wb-details-body"><CanvasEditorFooter.Provider value={visible ? footer : null}><WorkbenchReadingContext.Provider value>{children}</WorkbenchReadingContext.Provider></CanvasEditorFooter.Provider></div>
       <div ref={setFooter} className="generation-editor-actions" />

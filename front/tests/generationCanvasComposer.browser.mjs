@@ -48,6 +48,7 @@ try {
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: doc }) })
   assert.ok(seeded.ok, await seeded.text())
   await page.goto(`http://127.0.0.1:4275/projects/canvas-project?tab=generation&canvas=${canvas.id}`)
+  const save = () => page.getByLabel('画布保存状态').getByText('已保存', { exact: true }).waitFor()
   const detail = () => page.locator('.wb-details:not([hidden])')
   const open = async id => { const summary = page.locator(`[data-card-id="${id}"]`); await summary.focus(); await summary.press('Enter'); await detail().waitFor(); await openModelInspection(page) }
   await open('m')
@@ -58,7 +59,7 @@ try {
       const color = getComputedStyle(current).backgroundColor
       if (color !== 'rgba(0, 0, 0, 0)' && color !== 'transparent') return color
     }
-  }), 'rgb(27, 27, 27)', 'model composer inherits workbench surface instead of the default white experiment frame')
+  }), await detail().evaluate(element => getComputedStyle(element).backgroundColor), 'model composer inherits workbench surface instead of the default white experiment frame')
   await editor.fill('@图片10')
   await detail().getByRole('button', { name: '@图片10', exact: true }).waitFor()
   assert.equal(await editor.locator('[data-segment]').count(), 0, 'no prefix binding while typing')
@@ -76,7 +77,7 @@ try {
   await editor.press('Tab')
   await editor.locator('[data-segment]').first().waitFor()
   assert.equal(await editor.locator('[data-segment]').count(), 1)
-  await page.getByRole('button', { name: '保存画布', exact: true }).click()
+  await save()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   let saved = (await (await fetch(`${base}/${canvas.id}`)).json()).data
   const savedReference = saved.document.cards[0].prompt.segments.find(segment => segment.kind === 'reference')
@@ -84,13 +85,13 @@ try {
   assert.equal(savedReference.source, undefined, 'source has one persisted authority in input bindings')
   // Reordering changes display only; the bound source stays s10.
   await detail().getByRole('button', { name: '前移输入 e-s10', exact: true }).click()
-  await page.getByRole('button', { name: '保存画布', exact: true }).click()
+  await save()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   await page.waitForFunction(() => [...document.querySelectorAll('[data-segment]')].some(node => node.textContent === '@图片9'))
   assert.equal((await editor.locator('[data-segment]').textContent()).trim(), '@图片9')
   assert.equal(JSON.parse(await editor.locator('[data-segment]').getAttribute('data-segment')).source.card_id, 's10')
   await detail().getByRole('button', { name: '前移输入 e-s9', exact: true }).click()
-  await page.getByRole('button', { name: '保存画布', exact: true }).click()
+  await save()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   await page.waitForFunction(() => [...document.querySelectorAll('[data-segment]')].some(node => node.textContent === '@图片10'))
   assert.equal((await editor.locator('[data-segment]').textContent()).trim(), '@图片10')
@@ -176,8 +177,9 @@ try {
   assert.equal(JSON.parse(await editor.locator('[data-segment]').getAttribute('data-segment')).references[0].source.canvas_id, 'foreign-instruction')
   // Native multiline editing persists exact line boundaries through save/reopen.
   await editor.fill('第一行')
-  await editor.press('End'); await editor.press('Enter'); await editor.pressSequentially('second line')
-  await page.getByRole('button', { name: '保存画布', exact: true }).click()
+  const navigatorNewline = await page.evaluate(() => /Mac|iPhone|iPad/.test(navigator.platform) ? 'Meta+Enter' : 'Control+Enter')
+  await editor.press('End'); await editor.press(navigatorNewline); await editor.pressSequentially('second line')
+  await save()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   saved = (await (await fetch(`${base}/${canvas.id}`)).json()).data
   assert.equal(saved.document.cards[0].prompt.segments.map(segment => segment.text || '').join(''), '第一行\nsecond line')
@@ -186,7 +188,7 @@ try {
   await editor.fill(String.raw`\@图片10 \/首帧参考`)
   await editor.press('Tab')
   assert.equal(await editor.locator('[data-segment]').count(), 0, 'escaped reserved words stay literal')
-  await page.getByRole('button', { name: '保存画布', exact: true }).click()
+  await save()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   const escaped = (await (await fetch(`${base}/${canvas.id}/cards/m/compile`)).json()).data
   assert.equal(escaped.text, '@图片10 /首帧参考')
@@ -196,7 +198,7 @@ try {
   await page.getByRole('status').filter({ hasText: '请先取消引用' }).waitFor()
   await editor.fill('清理后只保留普通文字')
   await detail().getByRole('button', { name: '断开连接 e-s10', exact: true }).click()
-  await page.getByRole('button', { name: '保存画布', exact: true }).click()
+  await save()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   saved = (await (await fetch(`${base}/${canvas.id}`)).json()).data
   assert.ok(!saved.document.edges.some(edge => edge.id === 'e-s10'))
@@ -216,12 +218,12 @@ try {
   await basis.getByLabel('文本文件选择', { exact: true }).setInputFiles({ name: '剧本.txt', mimeType: 'text/plain', buffer: Buffer.from('张三望向门口。') })
   await page.waitForFunction(() => document.querySelector('[aria-label="创作依据正文"]')?.value === '张三望向门口。')
   assert.equal(await basis.getByRole('textbox', { name: '依据来源定位', exact: true }).inputValue(), '剧本.txt')
-  await page.getByRole('button', { name: '保存画布', exact: true }).click()
+  await save()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   await open('text-model')
   const textModel = detail()
   await textModel.getByRole('button', { name: '@文本1', exact: true }).click()
-  await page.getByRole('button', { name: '保存画布', exact: true }).click()
+  await save()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   const basisCompiled = (await (await fetch(base + '/' + canvas.id + '/cards/text-model/compile')).json()).data
   assert.equal(basisCompiled.text, '张三望向门口。 ')
