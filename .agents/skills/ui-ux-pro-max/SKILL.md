@@ -26,8 +26,8 @@ The commands below run from the Jellyfish repository root. If working elsewhere,
 Search the domain or stack that answers the current question:
 
 ```bash
-python3 .cursor/skills/ui-ux-pro-max/scripts/search.py "keyboard focus" --domain ux
-python3 .cursor/skills/ui-ux-pro-max/scripts/search.py "form state" --stack react
+python3 .agents/skills/ui-ux-pro-max/scripts/search.py "keyboard focus" --domain ux
+python3 .agents/skills/ui-ux-pro-max/scripts/search.py "form state" --stack react
 ```
 
 | Need | Domain |
@@ -50,7 +50,7 @@ Use `--help` only when the available options are unclear. Refine a query when it
 Use `--design-system` only when the requested scope needs a complete set of design recommendations:
 
 ```bash
-python3 .cursor/skills/ui-ux-pro-max/scripts/search.py "creative production dashboard" --design-system -p "Jellyfish"
+python3 .agents/skills/ui-ux-pro-max/scripts/search.py "creative production dashboard" --design-system -p "Jellyfish"
 ```
 
 This searches product, style, color, landing, and typography together. Add targeted searches only for gaps relevant to the requested design. Use `-f markdown` when Markdown output is useful.
@@ -60,7 +60,7 @@ This searches product, style, color, landing, and typography together. Add targe
 Add `--persist` when reusable design documentation is part of the user's task:
 
 ```bash
-python3 .cursor/skills/ui-ux-pro-max/scripts/search.py "creative production dashboard" --design-system --persist -p "Jellyfish" --page "dashboard"
+python3 .agents/skills/ui-ux-pro-max/scripts/search.py "creative production dashboard" --design-system --persist -p "Jellyfish" --page "dashboard"
 ```
 
 Use the paths returned by the script. The project name determines a directory under `design-system/`; its `MASTER.md` holds shared rules and `pages/<page>.md` holds overrides. Apply the relevant master rules together with any page overrides, with the page winning only where it specifies a difference. Persistence is optional and does not gate UI delivery.

@@ -36,7 +36,7 @@ import { referenceNameError, cleanReferenceImageSources } from './referenceCardR
 import { ReferenceCard } from './ReferenceCard'
 import { DescriptionCard, isDescriptionCard } from './DescriptionCard'
 import { ModelGenerationCard } from './ModelGenerationCard'
-import { GENERATION_CARD_SIZE } from './GenerationCardFrame'
+import { generationCardSize } from './GenerationCardFrame'
 import { rendererRegistry } from './rendererRegistry'
 import { connect, disconnect, findConnection } from './graphRules'
 import { CanvasCatalogProvider, useGraphRules } from './CanvasCatalogContext'
@@ -229,7 +229,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
     }
     return positions
   }
-  const nodes = useMemo(() => cards.map(card => ({ id: card.id, ...('model_id' in card || card.type?.startsWith('reference.') ? { size: GENERATION_CARD_SIZE } : {}) })), [cards])
+  const nodes = useMemo(() => cards.map(card => ({ id: card.id, ...(card.type?.startsWith('model.') || card.type?.startsWith('reference.') ? { size: generationCardSize(card.type) } : {}) })), [cards])
   const layout = useGraphLayout({ storageKey: `jellyfish:generation-layout:${document.project_id}:${document.id}`, viewId: 'canvas',
     initialTop: window.innerWidth > 700 ? 180 : 300, initialLeft: window.innerWidth > 700 ? 200 : 80, anchorId: cards[0]?.id || '', validIds: [...cards.map(card => card.id), ...groups.map(group => group.id)], arrange: arrangeGroups,
     onStorageError: setStorageError }, nodes, layoutMeasurements, container.current?.clientWidth || 1200)
@@ -777,7 +777,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
       onPointerCancel={event => { panGesture.current = undefined; blankPress.current = undefined; delete event.currentTarget.dataset.panning; selectionStart.current = undefined; setSelectionBox(undefined); viewport.surfaceProps.onPointerCancel?.(event) }}
       onLostPointerCapture={event => { panGesture.current = undefined; blankPress.current = undefined; delete event.currentTarget.dataset.panning; selectionStart.current = undefined; setSelectionBox(undefined); viewport.surfaceProps.onLostPointerCapture?.(event) }}>
       {selectionBox && <div className="generation-selection-box" aria-hidden="true" style={{ left: selectionBox.x, top: selectionBox.y, width: selectionBox.width, height: selectionBox.height }} />}
-      <div className="generation-world" style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }}>
+      <div className="generation-world" style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`, '--generation-canvas-scale': transform.scale } as CSSProperties}>
         <svg className="generation-edges" width={12000} height={12000}>
           {edges.filter(edge => !(stackFor(edge.source_card) && stackFor(edge.source_card)?.id === stackFor(edge.target_card)?.id) && (!hidden.has(edge.source_card) || stackFor(edge.source_card)) && (!hidden.has(edge.target_card) || stackFor(edge.target_card))).map(edge => {
             const sides = connectionLayout.sides[edge.id] || defaultSides(point(edge.source_card), point(edge.target_card))
@@ -889,9 +889,9 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
           const isDescription = isDescriptionCard(card)
           const outputs = runtime?.outputs[card.id] || []
           const node = runtime?.nodes[card.id]
-          const isModel = 'model_id' in card
+          const isModel = card.type?.startsWith('model.')
           return <CardShell key={`${document.id}:${card.id}`} id={card.id} type={card.type} name={'name' in card ? card.name : undefined} title={cardTitles[card.type || 'content.text']} contextKey={document.id} point={point(card.id)}
-            scale={transform.scale} width={isModel || isReference ? GENERATION_CARD_SIZE.width : size?.width || (focusCardTypes.includes(card.type || '') ? 300 : 400)} height={isModel || isReference ? GENERATION_CARD_SIZE.height : size?.height} selected={selected.includes(card.id)} filterMatch={matched.has(card.id)} readonly={readonly} removeDisabled={runtime?.busyCards.has(card.id)}
+            scale={transform.scale} width={isModel || isReference ? generationCardSize(card.type).width : size?.width || (focusCardTypes.includes(card.type || '') ? 300 : 400)} height={isModel || isReference ? generationCardSize(card.type).height : size?.height} selected={selected.includes(card.id)} filterMatch={matched.has(card.id)} readonly={readonly} removeDisabled={runtime?.busyCards.has(card.id)}
             onEdit={card.type?.startsWith('direction.') ? trigger => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailAllowPan(false); setDetailId(card.id) } : undefined}
             onExpand={trigger => { setDetailAllowPan(false); setDetailTrigger(trigger); setDetailId(card.id); setExpandRequest({id:card.id,serial:Date.now()}) }}
             onOpen={(trigger, dragged) => { setDetailAllowPan(!dragged); if (accessibleConnection) chooseAccessibleTarget(card.id); else { setMultiSelectMode(false); setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.type?.startsWith('direction.') ? undefined : card.id) } }} onSelect={checked => { setDetailId(undefined); setSelectedEdgeId(undefined); setSelected(previous => checked ? [...new Set([...previous, card.id])] : previous.filter(id => id !== card.id)) }}

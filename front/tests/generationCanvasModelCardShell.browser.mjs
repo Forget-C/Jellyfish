@@ -29,7 +29,7 @@ try {
   server = await createServer({ root, cacheDir: join(output, 'vite-cache'), server: { host: '127.0.0.1', port: 4610, strictPort: true, open: false, proxy: { '/api': api } } })
   await server.listen()
   browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL })
-  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
+  const context = await browser.newContext({ viewport: { width: 1440, height: 1200 } })
   page = await context.newPage()
   page.setDefaultTimeout(12000)
   page.on('console', message => { if (message.type() === 'error') console.log('BROWSER ERROR', message.text()) })
@@ -43,13 +43,13 @@ try {
   assert.ok(defaults.ok,await defaults.text())
   const canvas = await request('/api/v1/studio/generation-canvases/canvas-project', { name: '模型卡统一尺寸与底部状态' })
   const ids = ['short', 'long', 'empty', 'image', 'video']
-  const positions = Object.fromEntries([...ids, 'content'].map((id, index) => [id, { x: 120 + index % 3 * 400, y: 200 + Math.floor(index / 3) * 340 }]))
+  const positions = Object.fromEntries([...ids, 'content'].map((id, index) => [id, { x: 120 + index % 3 * 400, y: 200 + Math.floor(index / 3) * 500 }]))
   const sizes = { short: {width:560,height:400}, long:{width:420,height:380}, empty:{width:300,height:160}, image:{width:300,height:251}, video:{width:450,height:500}, content:{width:360,height:180} }
   const layoutKey = `jellyfish:generation-layout:canvas-project:${canvas.id}:view:canvas`
   const transform = {x:0,y:0,scale:1}
   const seeded = await fetch(`${base}/${canvas.id}`, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document:{...canvas.document,cards:[
     ...ids.map(id=>({id,type:`model.${['image','video'].includes(id)?id:'text'}`})), {id:'content',type:'content.text',text:'保留原布局与尺寸'}
-  ],edges:[],input_order:{}}})})
+  ],edges:[{id:'caption',source_card:'short',source_port:'text',target_card:'image',target_port:'text'}],input_order:{image:{text:['caption']}}}})})
   assert.ok(seeded.ok,await seeded.text())
   const upload = async (name, data, type) => {
     const form = new FormData(); form.append('file',new Blob([data],{type}),name); form.append('project_id','canvas-project'); form.append('usage_kind','generation_upload')
@@ -71,23 +71,30 @@ try {
   },{layoutKey,positions,sizes,transform})
   const url=`http://127.0.0.1:4610/projects/canvas-project/generation-canvas?canvas=${canvas.id}`
   const checkGeometry = async (scale=1) => {
-    const expected = await page.locator('[data-card-id="image"] > .generation-card-body').boundingBox()
     for (const id of ids) {
       const card = page.locator(`[data-card-id="${id}"]`), body = card.locator(':scope > .generation-card-body'), footer=card.locator('.generation-card-footer')
       const b=await body.boundingBox(),f=await footer.boundingBox()
-      assert.ok(Math.abs(b.width-300*scale)<1,`${id}: same image-model width`)
-      assert.ok(Math.abs(b.height-expected.height)<1,`${id}: same image-model body height`)
+      assert.ok(Math.abs(b.width-360*scale)<1,`${id}: shared model card width`)
+      assert.ok(Math.abs(b.height-392*scale)<1,`${id}: shared model card body height`)
       assert.ok(Math.abs(b.y+b.height-f.y-f.height-scale)<1,`${id}: footer is anchored above the bottom border`)
+      const font = await card.locator('header strong').evaluate(e=>parseFloat(getComputedStyle(e).fontSize))
+      const statusFont = await footer.evaluate(e=>parseFloat(getComputedStyle(e).fontSize))
+      assert.ok(font*scale>=11.99,`${id}: title remains readable when zoomed out`)
+      assert.ok(statusFont*scale>=10.99,`${id}: status remains readable when zoomed out`)
       assert.equal(await card.evaluate(e=>e.style.left),positions[id].x+'px');assert.equal(await card.evaluate(e=>e.style.top),positions[id].y+'px')
     }
+    const endpoint=await page.locator('[data-generation-edge-id="caption"] .canvas-edge-line').evaluate(path=>{const end=path.getPointAtLength(path.getTotalLength()).matrixTransform(path.getScreenCTM()),card=document.querySelector('[data-card-id="image"]').getBoundingClientRect();return {x:end.x,y:end.y,left:card.left,right:card.right,middle:card.top+card.height/2}})
+    assert.ok(Math.min(Math.abs(endpoint.x-endpoint.left),Math.abs(endpoint.x-endpoint.right))<1,'edge ends on the image card side')
+    assert.ok(Math.abs(endpoint.y-endpoint.middle)<1,'edge follows the resized image card center')
     const layout=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)),layoutKey)
     assert.deepEqual(layout.positions,positions);assert.deepEqual(layout.sizes.content,sizes.content);assert.deepEqual(layout.manuallyPlaced,['short','video'])
-    for(const id of ids) assert.deepEqual(layout.sizes[id],{width:300,height:251})
+    for(const id of ids) assert.deepEqual(layout.sizes[id],{width:360,height:424})
   }
   for (scenario of ['succeeded','empty','running','failed','cancelled']) {
     await page.goto(url);await page.locator('[data-card-id="video"] .generation-card-footer').waitFor()
     if(scenario!=='empty')await page.locator('[data-card-id="short"]').getByText(scenario==='succeeded'?'已完成':scenario==='running'?'运行中':scenario==='failed'?'失败 · 未完成':'已取消 · 未完成',{exact:true}).waitFor()
-    await page.waitForFunction(key=>JSON.parse(localStorage.getItem(key))?.sizes.short?.width===300,layoutKey,{timeout:2000}).catch(()=>{})
+    await page.waitForFunction(key=>JSON.parse(localStorage.getItem(key))?.sizes.short?.width===360,layoutKey,{timeout:2000}).catch(()=>{})
+    if(scenario!=='empty') assert.equal(await page.locator('[data-card-id="image"] .generation-image-result > img').evaluate(e=>getComputedStyle(e).objectFit),'contain','generated image remains fully visible')
     await checkGeometry()
     if(scenario==='succeeded') {
       const imageCard=page.locator('[data-card-id="image"]');await imageCard.getByRole('button',{name:'预览下一张图片',exact:true}).click();await imageCard.getByText('2 / 2',{exact:true}).waitFor()
@@ -106,7 +113,7 @@ try {
   await page.getByRole('button',{name:'缩小',exact:true}).click();await page.reload();await page.locator('[data-card-id="video"] .generation-card-footer').waitFor();await checkGeometry(.9)
   await page.setViewportSize({width:390,height:844});await checkGeometry(.9);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
   await page.screenshot({path:join(output,'model-cards-mobile.png')})
-  await page.setViewportSize({width:1440,height:1000})
+  await page.setViewportSize({width:1440,height:1200})
   const header=page.locator('[data-card-id="short"] > header')
   await header.hover()
   const box=await header.boundingBox()
@@ -117,5 +124,10 @@ try {
   await header.getByRole('button',{name:'移动布局：文本模型卡',exact:true}).press('ArrowRight')
   positions.short.x+=20;await checkGeometry(.9)
   await page.reload();await page.locator('[data-card-id="short"] .generation-card-footer').waitFor();await checkGeometry(.9)
-  console.log('PASS unified model card dimensions, fixed footer, cached positions/zoom, media interactions and states',output)
+  for(const scale of [.8,.7,.6,.5]) {
+    await page.getByRole('button',{name:'缩小',exact:true}).click()
+    await page.waitForFunction(value=>parseInt(document.querySelector('[aria-label="画布缩放比例"]').textContent)===Math.round(value*100),scale)
+    await checkGeometry(scale)
+  }
+  console.log('PASS unified model dimensions, full image preview, readable zoom, fixed footer and cached positions',output)
 } catch(error) { if(page)await page.screenshot({path:join(output,'failure.png'),fullPage:true});throw error } finally { await cleanup() }

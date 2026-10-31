@@ -275,3 +275,11 @@
 .generation-workbench .generation-card[data-card-type="content.text"] .generation-card-body { display: flex; flex-direction: column; box-sizing: border-box; min-height: 128px; max-height: 180px; padding: 12px 14px; font-size: 13px; line-height: 1.8; }
 .generation-card[data-card-type="content.text"] .canvas-card-summary { -webkit-line-clamp: 4; margin: 0; }
 .generation-card[data-card-type="content.text"] .generation-card-footer { margin-top: auto; padding-top: 4px; }
+
+/* 标题和状态补偿画布缩放；正文与媒体仍按原几何缩放。 */
+.generation-workbench .generation-card header strong { font-size: max(12px, calc(12px / var(--generation-canvas-scale, 1))); }
+.generation-workbench .generation-card header small { font-size: max(11px, calc(11px / var(--generation-canvas-scale, 1))); }
+.generation-workbench .generation-card .generation-card-footer,
+.generation-workbench .generation-card .generation-output-card > footer.generation-card-footer,
+.generation-workbench .generation-card .generation-card-status { font-size: max(11px, calc(11px / var(--generation-canvas-scale, 1))); }
+.generation-workbench .generation-card .generation-card-footer > .canvas-card-summary { font-size: inherit; }

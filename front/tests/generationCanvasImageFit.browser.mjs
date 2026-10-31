@@ -36,15 +36,17 @@ try {
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   const json=async(path,method='GET',body)=>{const response=await fetch(api+path,{method,headers:{'Content-Type':'application/json'},body:body&&JSON.stringify(body)});assert.ok(response.ok,await response.clone().text());return(await response.json()).data}
   const canvas=await json('/api/v1/studio/generation-canvases/canvas-project','POST',{name:'大图完整缩放'})
-  const cards=[]
+  const cards=[],modelOutputs={}
   for(const [shape,size] of [['landscape','3000x2000'],['portrait','2000x3000'],['panorama','6000x300']]){
     const file=join(output,shape+'.png')
     execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-f','lavfi','-i',`color=c=slategray:s=${size}`,'-vf','drawbox=x=0:y=0:w=iw:h=ih:color=yellow:t=20','-frames:v','1',file])
     const form=new FormData();form.set('file',new Blob([readFileSync(file)],{type:'image/png'}),shape+'.png');form.set('project_id','canvas-project');form.set('usage_kind','generation_upload')
     const response=await fetch(api+'/api/v1/studio/files/upload',{method:'POST',body:form});assert.ok(response.ok);const fileId=(await response.json()).data.id
-    cards.push({id:'image-'+shape,type:'content.image',file_id:fileId},{id:'reference-'+shape,type:'reference.place',title:shape,angle:'正面',objects:[{object_id:shape,name:shape,category:'place'}],image_binding:{file_id:fileId,source:{canvas_id:canvas.id,card_id:'image-'+shape,port_id:'image',position:0}}})
+    modelOutputs['model-'+shape]=[{source:{canvas_id:canvas.id,card_id:'model-'+shape,port_id:'image',position:0},modality:'image',available:true,basis_current:true,file_id:fileId}]
+    cards.push({id:'model-'+shape,type:'model.image',model_id:null},{id:'image-'+shape,type:'content.image',file_id:fileId},{id:'reference-'+shape,type:'reference.place',title:shape,angle:'正面',objects:[{object_id:shape,name:shape,category:'place'}],image_binding:{file_id:fileId,source:{canvas_id:canvas.id,card_id:'image-'+shape,port_id:'image',position:0}}})
   }
   await json(`/api/v1/studio/generation-canvases/canvas-project/${canvas.id}`,'PUT',{request_id:'seed',expected_revision:0,document:{...canvas.document,cards,edges:cards.filter(card=>card.type==='reference.place').map(card=>({id:card.id,source_card:card.id.replace('reference-','image-'),source_port:'image',target_card:card.id,target_port:'image_source'})),input_order:Object.fromEntries(cards.filter(card=>card.type==='reference.place').map(card=>[card.id,{image_source:[card.id]}]))}})
+  await page.route('**/runtime',route=>route.fulfill({json:{code:200,message:'success',data:{cursor:0,runs:[],current_outputs:modelOutputs},meta:null}}))
   const failures=[],measurements=[]
   const editor=page.locator('.generation-card-editor:visible')
   const close=async()=>{for(let i=0;i<3&&await editor.isVisible();i++){await page.keyboard.press('Escape');await delay(100)}assert.equal(await editor.isVisible(),false)}
@@ -63,6 +65,7 @@ try {
     for(const card of cards){
       const node=page.locator(`[data-card-id="${card.id}"]`)
       await check(node.locator('img').first(),node.locator('.generation-card-body'),`${card.id}/${width}/card`)
+      if(card.type==='model.image')continue
       await close();await page.getByRole('button',{name:'适应全部',exact:true}).click();await openCanvasCard(page,card.id)
       for(const mode of width===1440?['normal','expanded']:['mobile']){
         if(mode==='expanded')await editor.getByRole('button',{name:'展开详情',exact:true}).click()
@@ -77,5 +80,5 @@ try {
   for(const kind of ['image','reference'])for(const [width,modes]of [[1440,['normal','expanded']],[390,['mobile']]])for(const mode of modes){const heights=measurements.filter(item=>item.label.startsWith(kind+'-')&&item.label.endsWith(`/${width}/${mode}`)).map(item=>item.bounds.height);if(Math.max(...heights)-Math.min(...heights)>1)failures.push(`${kind}/${width}/${mode}: preview height depends on original aspect ratio`)}
   writeFileSync(join(output,'measurements.json'),JSON.stringify(measurements,null,2))
   assert.deepEqual(failures,[])
-  console.log('PASS large landscape, portrait and panorama images fit both card types and editor modes without body scrolling')
+  console.log('PASS landscape, portrait and panorama fit content/reference/model cards and image editors without cropping')
 } catch(error){if(page)await page.screenshot({path:join(output,'failure.png')});throw error}finally{await cleanup()}

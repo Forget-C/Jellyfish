@@ -1,7 +1,0 @@
----
-description: 修改 Jellyfish 前后端代码或对外接口契约时使用。
-globs: "backend/app/**/*.py,front/src/**/*"
-alwaysApply: false
----
-
-项目规则统一维护在 [AGENTS.md](../../AGENTS.md)。本规则适用时，仅定位其中的“代码规范、接口与文档同步”；当前上下文已包含相关内容时直接复用，不重复读取或执行检查。

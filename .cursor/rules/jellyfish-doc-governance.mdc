@@ -1,7 +1,0 @@
----
-description: 编写 Jellyfish 文档、调整已记录的架构或计划、编写发布说明时使用。
-globs: "site/content/**/*.md"
-alwaysApply: false
----
-
-项目规则统一维护在 [AGENTS.md](../../AGENTS.md)。本规则适用时，仅定位其中的“接口与文档同步；仅编写 release note 时再看 Release Note 规范”；当前上下文已包含相关内容时直接复用，不重复读取或执行检查。

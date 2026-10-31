@@ -2,7 +2,7 @@
 .generation-model-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--wb-muted); font-size: 12px; }
 .generation-model-empty > .anticon { font-size: 20px; }
 .generation-image-result, .generation-video-result { position: relative; height: 100%; overflow: hidden; }
-.generation-output-preview .generation-image-result > img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.generation-output-preview .generation-image-result > img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .generation-output-preview .generation-video-result > video { display: block; width: 100%; height: 100%; object-fit: contain; }
 .generation-image-result-actions { position: absolute; right: 4px; bottom: 4px; display: flex; gap: 4px; align-items: center; }
 .generation-image-result-actions .wb-action, .generation-image-result-switch { background: var(--wb-surface); border: 1px solid var(--wb-border); border-radius: var(--wb-radius); }
@@ -12,3 +12,8 @@
 .generation-image-result-switch > span { padding: 0 4px; color: var(--wb-muted); white-space: nowrap; }
 .generation-video-result-switch { position: absolute; top: 4px; right: 4px; }
 @media (max-width: 700px) { .generation-image-result-actions .wb-action.ant-btn { min-width: 36px; width: 36px; height: 36px; } }
+
+/* 放大后的图片卡在原布局中可能重叠；阅读时置前，不改写相邻卡坐标。 */
+.generation-workbench .generation-card[data-card-type="model.image"]:is(:hover, :focus-within, [data-selected="true"]) { z-index: 3; }
+
+.generation-model-image-action { display: flex; align-items: center; flex: none; margin-left: auto; }

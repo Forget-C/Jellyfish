@@ -1,6 +1,0 @@
----
-description: 检查本次 Jellyfish 变更是否完成时使用。
-alwaysApply: false
----
-
-项目规则统一维护在 [AGENTS.md](../../AGENTS.md)。本规则适用时，仅定位其中的“标准完成状态”；当前上下文已包含相关内容时直接复用，不重复读取或执行检查。
