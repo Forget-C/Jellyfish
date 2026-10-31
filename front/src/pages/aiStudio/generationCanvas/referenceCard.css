@@ -4,49 +4,36 @@
 .generation-reference-preview .anticon { font-size: 20px; }
 .generation-output-card .generation-card-footer > .canvas-card-summary { margin: 0; min-width: 0; flex: 1; font-size: 11px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; display: block; }
 .generation-output-card .generation-card-footer > span { flex: none; white-space: nowrap; }
-.generation-reference-editor, .generation-media-picker-layout { min-height: 0; height: 100%; width: 100%; display: flex; flex: 1; flex-direction: column; }
-.generation-media-picker-layout > .ant-space-item:first-child { display: flex; flex: 1; min-height: 0; }
-.generation-reference-parameters { display: flex; flex: none; align-items: center; gap: 8px; padding: 16px 52px 0 16px; min-width: 0; }
-.generation-reference-parameters > .ant-select:first-child { width: 180px; min-width: 0; }
-.generation-reference-parameters > .generation-reference-name { width: 180px; min-width: 0; }
-.generation-reference-parameters > .ant-select:nth-child(3) { width: 120px; min-width: 0; }
-.generation-reference-parameters > .wb-icon-trigger { margin-left: auto; }
+.generation-reference-editor { min-height: 0; height: 100%; width: 100%; display: flex; flex: 1; flex-direction: column; }
+.generation-composer-parameters > .ant-select:first-child { width: 180px; min-width: 0; }
+.generation-composer-parameters > .generation-reference-name { width: 180px; min-width: 0; }
+.generation-composer-parameters > .ant-select:nth-child(3) { width: 120px; min-width: 0; }
+.generation-composer-parameters > .wb-icon-trigger { margin-left: auto; }
 .generation-reference-editor .generation-material-input { padding: 12px 16px 8px; overflow: hidden; }
 .generation-reference-image { display: grid; place-items: center; position: relative; min-height: 0; flex: 1; overflow: hidden; border-radius: 12px; background: var(--wb-inset); }
 .generation-reference-image[data-empty="true"] { border-radius: 24px; padding: 6px; background: var(--wb-raised); }
 .generation-reference-image > img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; min-height: 0; object-fit: contain; }
 .generation-reference-image .generation-reference-image-actions { position: absolute; right: 8px; bottom: 8px; display: flex; gap: 4px; background: var(--wb-surface); border: 1px solid var(--wb-border); border-radius: var(--wb-radius); }
-.generation-reference-upload { width: 100%; height: 100%; min-height: 0; display: flex; flex-direction: column; border: 1px dashed var(--wb-border); border-radius: 20px; background: var(--wb-inset); }
-.generation-reference-upload[data-dragging="true"] { border-color: var(--wb-focus); background: var(--wb-selected); }
-.generation-reference-upload-target.wb-action.ant-btn { height: auto; white-space: normal; flex: 1; min-height: 0; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 12px; background: transparent; border: 0; border-radius: 20px; color: var(--wb-text); cursor: pointer; font: inherit; }
-.generation-reference-upload-target.wb-action.ant-btn:focus-visible { outline: 2px solid var(--wb-focus); outline-offset: -4px; }
-.generation-reference-upload-target.wb-action.ant-btn:disabled { cursor: default; color: var(--wb-muted); }
-.generation-reference-upload-icon { width: 44px; height: 44px; flex: none; display: grid; place-items: center; border-radius: 16px; background: var(--wb-surface); font-size: 24px; }
-.generation-reference-upload-target strong { font-size: 14px; font-weight: 600; }
-.generation-reference-upload-target small { font-size: 12px; color: var(--wb-muted); }
-.generation-reference-upload-sources { flex: none; display: flex; justify-content: center; padding-bottom: 4px; }
-.generation-reference-upload-sources .wb-action.ant-btn { font-size: 11px; color: var(--wb-muted); height: 32px; }
-.generation-card-editor[data-card-type^="reference."] .generation-material-footer { min-height: 32px; padding: 4px 16px 8px; justify-content: flex-end; }
-.generation-card-editor[data-card-type^="reference."] .generation-material-tools { font-size: 11px; }
 .generation-reference-picker { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .generation-reference-picker .wb-action.ant-btn { height: auto; min-height: 80px; white-space: normal; padding: 8px; }
 .generation-reference-picker img { display: block; max-width: 100%; height: 120px; object-fit: contain; margin: auto; }
 @media(max-width: 700px) {
- .generation-reference-parameters { padding: 12px 48px 0 12px; gap: 4px; flex-wrap: wrap; }
- .generation-reference-parameters > .ant-select:first-child { width: 100%; }
- .generation-reference-parameters > .generation-reference-name { width: 150px; }
- .generation-reference-parameters > .ant-select:nth-child(3) { width: 110px; }
- .generation-reference-parameters > .wb-icon-trigger { margin-left: 0; }
+ .generation-composer-parameters > .ant-select:first-child { width: 100%; }
+ .generation-composer-parameters > .generation-reference-name { width: 150px; }
+ .generation-composer-parameters > .ant-select:nth-child(3) { width: 110px; }
+ .generation-composer-parameters > .wb-icon-trigger { margin-left: 0; }
  .generation-reference-editor .generation-material-input { padding: 12px; }
- .generation-reference-upload-sources .wb-action.ant-btn { height: 36px; }
 }
 
-.generation-reference-source-trigger { display: inline-flex; }
 
 .generation-reference-option { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
 .generation-reference-option > img { flex: none; width: 24px; height: 24px; object-fit: contain; border-radius: 4px; background: var(--wb-inset); }
 .generation-reference-option > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.generation-reference-name { display: inline-flex; align-items: center; }
-.generation-reference-name > .ant-select, .generation-reference-name > .ant-input-affix-wrapper { width: 100%; }
-.generation-reference-name .ant-input-suffix .wb-action { width: 24px; min-width: 24px; height: 24px; padding: 0; }
+.generation-reference-name { display: inline-flex; align-items: center; gap: 4px; }
+.generation-reference-name > .ant-select { flex: 1; width: 100%; min-width: 0; }
+
+.generation-reference-empty.wb-action.ant-btn { flex: 1; min-height: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; border: 1px dashed var(--wb-border); border-radius: 20px; background: var(--wb-inset); color: var(--wb-text); white-space: normal; }
+.generation-reference-empty-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 16px; background: var(--wb-surface); font-size: 24px; }
+.generation-reference-empty strong { font-size: 14px; font-weight: 600; }
+.generation-reference-empty small { font-size: 12px; color: var(--wb-muted); }

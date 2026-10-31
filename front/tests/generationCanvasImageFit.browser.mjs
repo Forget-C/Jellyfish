@@ -42,9 +42,9 @@ try {
     execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-f','lavfi','-i',`color=c=slategray:s=${size}`,'-vf','drawbox=x=0:y=0:w=iw:h=ih:color=yellow:t=20','-frames:v','1',file])
     const form=new FormData();form.set('file',new Blob([readFileSync(file)],{type:'image/png'}),shape+'.png');form.set('project_id','canvas-project');form.set('usage_kind','generation_upload')
     const response=await fetch(api+'/api/v1/studio/files/upload',{method:'POST',body:form});assert.ok(response.ok);const fileId=(await response.json()).data.id
-    cards.push({id:'image-'+shape,type:'content.image',file_id:fileId},{id:'reference-'+shape,type:'reference.place',title:shape,angle:'正面',objects:[{object_id:shape,name:shape,category:'place'}],image_binding:{file_id:fileId}})
+    cards.push({id:'image-'+shape,type:'content.image',file_id:fileId},{id:'reference-'+shape,type:'reference.place',title:shape,angle:'正面',objects:[{object_id:shape,name:shape,category:'place'}],image_binding:{file_id:fileId,source:{canvas_id:canvas.id,card_id:'image-'+shape,port_id:'image',position:0}}})
   }
-  await json(`/api/v1/studio/generation-canvases/canvas-project/${canvas.id}`,'PUT',{request_id:'seed',expected_revision:0,document:{...canvas.document,cards,edges:[],input_order:{}}})
+  await json(`/api/v1/studio/generation-canvases/canvas-project/${canvas.id}`,'PUT',{request_id:'seed',expected_revision:0,document:{...canvas.document,cards,edges:cards.filter(card=>card.type==='reference.place').map(card=>({id:card.id,source_card:card.id.replace('reference-','image-'),source_port:'image',target_card:card.id,target_port:'image_source'})),input_order:Object.fromEntries(cards.filter(card=>card.type==='reference.place').map(card=>[card.id,{image_source:[card.id]}]))}})
   const failures=[],measurements=[]
   const editor=page.locator('.generation-card-editor:visible')
   const close=async()=>{for(let i=0;i<3&&await editor.isVisible();i++){await page.keyboard.press('Escape');await delay(100)}assert.equal(await editor.isVisible(),false)}

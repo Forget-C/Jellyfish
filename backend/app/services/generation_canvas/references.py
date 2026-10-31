@@ -4,7 +4,6 @@ from sqlalchemy import select
 from app.models.studio import FileUsage
 from app.schemas.generation_canvas import NamedImageReferenceCard, ModelCard, ObjectDescriptionCard
 from app.services.generation_canvas.compiler import identity_key, resolve_outputs
-from app.services.generation_canvas.outputs import card_outputs
 from app.services.generation_canvas.errors import diagnostic
 from app.services.studio.files import require_available_file
 
@@ -24,7 +23,6 @@ async def validate_references(db, document, previous, project_id):
     published = {card_id: outputs for card_id, outputs in published.items() if card_id in models}
     from app.schemas.generation_canvas import CanvasDocument
     old_cards = {card.id: card for card in CanvasDocument.model_validate(previous).cards}
-    old = {card['id']: card for card in previous.get('cards', [])}
     for card in references:
         target = {'card_id': card.id}
         prior = old_cards.get(card.id)
@@ -49,10 +47,13 @@ async def validate_references(db, document, previous, project_id):
                     or not any(edge.target_card == card.id and edge.target_port == 'name' and
                                edge.source_card == source.id and edge.source_port == 'object' for edge in document.edges)):
                 raise diagnostic('INVALID_NAME_BINDING', '请选择已连线的同类型描述名称', {**target, 'path': ['name_binding']})
-        candidates = resolve_outputs(document, card.id, published)
         image = card.image_binding
         if not image:
             continue
+        unchanged = isinstance(prior, NamedImageReferenceCard) and prior.image_binding == image
+        source = next((value for value in document.cards if image.source and value.id == image.source.card_id), None)
+        if not unchanged and (not image.source or not source or source.type != 'content.image'):
+            raise diagnostic('INVALID_REFERENCE_SOURCE', '新增参考图仅可从图片内容卡选择', {**target, 'path': ['image_binding']})
         try:
             await require_available_file(db, file_id=image.file_id, expected_type='image')
         except HTTPException as exc:
@@ -63,12 +64,8 @@ async def validate_references(db, document, previous, project_id):
             if not any(edge.target_card == card.id and edge.target_port == 'image_source' and
                        edge.source_card == image.source.card_id and edge.source_port == image.source.port_id for edge in document.edges):
                 raise diagnostic('INVALID_IMAGE_BINDING', '主图必须保留直接来源连接', target)
-            if old.get(card.id, {}).get('image_binding') != image.model_dump():
+            if not unchanged:
+                candidates = resolve_outputs(document, card.id, published)
                 item = next((item for item in candidates if identity_key(item.source) == identity_key(image.source)), None)
-                if item is None:
-                    source = next((value for value in document.cards if value.id == image.source.card_id), None)
-                    # 重名是可保存的草稿；固定图片核对自身文件身份，不借此发布重名来源。
-                    if isinstance(source, NamedImageReferenceCard) and source.name.strip():
-                        item = next((value for value in card_outputs(document.id, source) if identity_key(value.source) == identity_key(image.source)), None)
                 if not item or not item.available or item.file_id != image.file_id or item.result_set_id != image.result_set_id:
                     raise diagnostic('INVALID_IMAGE_BINDING', '请选择已发布的具体图片产物', target)

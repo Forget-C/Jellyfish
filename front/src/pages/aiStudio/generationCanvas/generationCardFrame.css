@@ -1,6 +1,11 @@
-.generation-workbench .generation-card:is([data-card-type^="model."], [data-card-type^="reference."]) .generation-card-body { padding: 0; min-height: 0; max-height: none; overflow: hidden; }
+.generation-workbench .generation-card:is([data-card-type^="model."], [data-card-type^="reference."], [data-card-type="content.character"], [data-card-type="content.prop"], [data-card-type="content.costume"], [data-card-type="content.place"]) .generation-card-body { padding: 0; min-height: 0; max-height: none; overflow: hidden; }
 .generation-output-card { height: 217px; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
 .generation-output-preview { flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
-.generation-output-card > .generation-card-footer { height: 32px; flex: none; box-sizing: border-box; margin-top: auto; padding: 0 10px; font-size: 11px; color: var(--wb-muted); overflow: hidden; display: flex; align-items: center; gap: 8px; }
+.generation-workbench .generation-card .generation-output-card > footer.generation-card-footer { height: 32px; flex: none; box-sizing: border-box; margin-top: auto; padding: 0 10px; font-size: 11px; color: var(--wb-muted); overflow: hidden; display: flex; align-items: center; gap: 8px; }
 .generation-output-card .generation-card-status { height: 100%; min-height: 0; }
 .generation-output-card .generation-card-status > .wb-icon-trigger { flex: none; overflow: visible; }
+
+.generation-output-text { --generation-card-summary-lines: 4; padding: 12px 15px; }
+.generation-output-text .canvas-card-summary { font-size: 13px; line-height: 1.8; margin: 0; }
+.generation-output-text > section { margin-top: 8px; }
+.generation-output-text small { color: var(--wb-muted); font-size: 11px; }

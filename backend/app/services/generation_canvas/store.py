@@ -77,8 +77,11 @@ class CanvasStore:
         if document.id != canvas_id or document.project_id != self.project_id:
             raise diagnostic('INVALID_IDENTITY', '画布身份不可修改', {'canvas_id': canvas_id})
         from app.services.generation_canvas.stacks import validate_stack_edit
-        validate_stack_edit(canvas.document, document)
         previous_document = CanvasDocument.model_validate(canvas.document)
+        from app.services.generation_canvas.reference_rules import clean_reference_image_sources
+        document = clean_reference_image_sources(document, previous_document)
+        previous_document = clean_reference_image_sources(previous_document)
+        validate_stack_edit(previous_document.model_dump(), document)
         previous_types = {card.id: card.type for card in previous_document.cards}
         identities = {key: previous_types.get(key, value) if value == 'content.object' else value for key, value in canvas.card_types.items()}
         seen = set()
@@ -126,7 +129,7 @@ class CanvasStore:
                     output['modality'] == 'text' and card.text != output.get('text')) or (
                     output['modality'] != 'text' and card.file_id != output.get('file_id')):
                     raise diagnostic('INVALID_ORIGIN', '另存内容须与固定成果及完成状态一致', {'card_id': card.id})
-        validate_graph(document)
+        validate_graph(document, previous_document)
         # 最终文档中的实际引用决定保护；同一次保存清理引用即可断线或删来源。
         from app.services.generation_canvas.compiler import prompt_references
         for receiver in document.cards:
@@ -164,7 +167,7 @@ class CanvasStore:
                     raise diagnostic('UNSUPPORTED_INPUT', '所选模型未接入该输入用途',
                                      {'edge_id': edge.id, 'card_id': card.id, 'port_id': edge.target_port})
         from app.services.generation_canvas.references import validate_references
-        await validate_references(self.db, document, canvas.document, self.project_id)
+        await validate_references(self.db, document, previous_document.model_dump(), self.project_id)
         if any(isinstance(card, (PerformanceDirectionCard, SoundDirectionCard)) for card in document.cards):
             from app.services.generation_canvas.runtime import CanvasRuntime
             from app.services.generation_canvas.performance import validate_design_relations, validate_design_examples

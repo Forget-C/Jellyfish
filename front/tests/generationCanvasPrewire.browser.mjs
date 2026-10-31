@@ -83,7 +83,7 @@ try {
   await connect('ref','image','图片来源')
   await poll(value=>value.document.edges.length===2)
   await details.getByRole('combobox',{name:'关联图片',exact:true}).press('ArrowDown')
-  await page.getByText('暂无已连线图片，请先连线或添加来源',{exact:true}).waitFor()
+  await page.getByText('暂无已连线图片内容卡，可从当前画布选择',{exact:true}).waitFor()
   await page.keyboard.press('Escape')
   assert.equal((await read()).document.cards.find(card=>card.id==='ref').image_binding ?? null,null)
   assert.equal((await controls()).calls.length,0)

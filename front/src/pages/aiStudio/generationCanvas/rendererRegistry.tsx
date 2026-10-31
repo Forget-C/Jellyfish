@@ -10,7 +10,8 @@ import type { CanvasDocument, CanvasModelCapability, CanvasNodeRead, CanvasResol
 import { SoundDirectionEditor } from './SoundDirectionEditor'
 import { PerformanceDirectionEditor } from './PerformanceDirectionEditor'
 import { NamedImageReferenceEditor } from './NamedImageReferenceEditor'
-import { ObjectDescriptionEditor, type DescriptionCard } from './ObjectDescriptionEditor'
+import { ObjectDescriptionEditor } from './ObjectDescriptionEditor'
+import { DESCRIPTION_CARD_TYPES, type DescriptionCardData } from './DescriptionCard'
 import { TextContentEditor } from './TextContentEditor'
 import { MediaContentEditor } from './MediaContentEditor'
 import type { MediaCard } from './MediaContentEditor'
@@ -40,7 +41,7 @@ export const rendererRegistry: Record<string, ComponentType<CardRendererProps>> 
   'reference.prop': NamedImageReferenceEditor,
   'reference.costume': NamedImageReferenceEditor,
   'content.text': ({ card, onChange, disabled }) => <TextContentEditor card={card as TextContentCard} onChange={onChange} disabled={disabled} />,
-  ...Object.fromEntries(['content.character', 'content.prop', 'content.costume', 'content.place'].map(type => [type, ({ card, onChange, disabled }: CardRendererProps) => <ObjectDescriptionEditor card={card as DescriptionCard} onChange={onChange} disabled={disabled} />])),
+  ...Object.fromEntries(DESCRIPTION_CARD_TYPES.map(type => [type, ({ card, onChange, disabled }: CardRendererProps) => <ObjectDescriptionEditor card={card as DescriptionCardData} onChange={onChange} disabled={disabled} />])),
   'content.basis': ({ card, onChange, disabled }) => <TextContentEditor card={card as CreativeBasisCard} onChange={onChange} disabled={disabled} />,
   'content.image': ({ card, onChange, projectId, disabled }) => <MediaContentEditor card={card as MediaCard} projectId={projectId} onChange={onChange} disabled={disabled} />,
   'content.video': ({ card, onChange, projectId, disabled }) => <MediaContentEditor card={card as MediaCard} projectId={projectId} onChange={onChange} disabled={disabled} />,

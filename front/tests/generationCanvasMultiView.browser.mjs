@@ -1,4 +1,4 @@
-import { openModelInspection, closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { openModelInspection, closeCanvasDetails, selectCanvasReferenceImage, openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -37,7 +37,7 @@ try {
   const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '多角度参考' }) })).json()).data
   const document = { ...canvas.document, cards: [
     { id: 'front', type: 'reference.character', type_version: 2, name: '小李正面', object_id: 'bob-front', angle: '正面' },
-    { id: 'side', type: 'reference.character', type_version: 2, name: '小李侧面', object_id: 'bob-side', angle: '正面' }], edges: [], input_order: {} }
+    { id: 'side', type: 'reference.character', type_version: 2, name: '小李侧面', object_id: 'bob-side', angle: '正面' }, { id: 'front-picture', type: 'content.image' }, { id: 'side-picture', type: 'content.image' }], edges: [], input_order: {} }
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
   assert.ok(seeded.ok, await seeded.text())
   await page.goto(`http://127.0.0.1:4283/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
@@ -45,42 +45,48 @@ try {
   const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
   const poll = async predicate => { for (let i = 0; i < 80; i++) { const state = await read(); if (predicate(state)) return state; await delay(150) } throw Error('save timed out') }
   const side = { id: 'side' }
-  await page.locator('[data-card-id="side"]').press('Enter')
+  const open = async id => { await closeCanvasDetails(page); await page.getByRole('button', { name: '适应全部', exact: true }).click(); await openCanvasCard(page, id) }
+  await open('side')
   assert.equal(await card.getByRole('button', { name: '更多参考设置', exact: true }).count(), 0)
   await card.getByRole('combobox', { name: '参考角度', exact: true }).fill('侧面'); await card.getByRole('combobox', { name: '参考角度', exact: true }).press('Enter')
   await poll(state => state.document.cards[1].angle === '侧面')
   await page.screenshot({ path: join(output, 'multi-view-desktop.png'), fullPage: true })
   await page.reload()
-  await page.locator('[data-card-id="side"]').press('Enter')
-  assert.equal(await card.getByLabel('参考名称', { exact: true }).inputValue(), '小李侧面')
+  await open('side')
+  assert.equal(await card.locator('.generation-reference-name .ant-select-selection-item').innerText(), '小李侧面')
   const outputs = (await (await fetch(`${base}/${canvas.id}/cards/side/outputs`)).json()).data.outputs
   assert.deepEqual(outputs.map(item => item.payload.object_id), ['bob-side'])
   await page.setViewportSize({ width: 390, height: 844 })
   await page.screenshot({ path: join(output, 'multi-view-narrow.png'), fullPage: true })
   await page.setViewportSize({ width: 1440, height: 1000 })
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jV4kAAAAASUVORK5CYII=', 'base64')
-  await card.getByLabel('上传媒体文件', { exact: true }).setInputFiles({ name: 'side.png', mimeType: 'image/png', buffer: Buffer.concat([png, Buffer.from('side')]) })
-  await poll(state => !!state.document.cards[1].image_binding)
-  await closeCanvasDetails(page)
-  await page.locator('[data-card-id="front"]').press('Enter')
-  await card.getByLabel('上传媒体文件', { exact: true }).setInputFiles({ name: 'front.png', mimeType: 'image/png', buffer: png })
-  const current = await poll(state => !!state.document.cards[0].image_binding)
+  for (const [id, bytes] of [['side', Buffer.concat([png, Buffer.from('side')])], ['front', png]]) {
+    await closeCanvasDetails(page)
+    await open(`${id}-picture`)
+    await card.getByLabel('上传媒体文件', { exact: true }).setInputFiles({ name: `${id}.png`, mimeType: 'image/png', buffer: bytes })
+    await poll(state => !!state.document.cards.find(item => item.id === `${id}-picture`).file_id)
+    await closeCanvasDetails(page)
+    await open(id)
+    await selectCanvasReferenceImage(page, `${id}-picture`)
+    await poll(state => !!state.document.cards.find(item => item.id === id).image_binding)
+  }
+  const current = await read()
   const doc = current.document
   doc.cards.push({ id: 'v', type: 'model.video', model_id: 'video-subjects', config: { ratio: '16:9', seconds: 5 }, prompt: { segments: [{ id: 'text', kind: 'text', text: '保持自由正文' }] } })
   doc.edges.push(...['front', side.id].map((id, index) => ({ id: `media${index}`, source_card: id, source_port: 'image', target_card: 'v', target_port: 'subject_image' })))
   doc.input_order.v = { subject_image: ['media0', 'media1'] }
   assert.ok((await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'video-fixture', expected_revision: current.revision, document: doc }) })).ok)
   await page.reload()
-  await page.locator('[data-card-id="v"]').press('Enter')
+  await open('v')
   await page.locator('.generation-material-composer').waitFor(); await openModelInspection(page)
   const inputs = card.getByRole('region', { name: '视频实际输入', exact: true })
   await inputs.getByRole('textbox', { name: '主体分组 @图片1', exact: true }).fill('小李组')
   await inputs.getByRole('button', { name: '采用 @图片1 为主体图片', exact: true }).click()
   await inputs.getByRole('textbox', { name: '主体分组 @图片2', exact: true }).fill('小李组')
   await inputs.getByRole('button', { name: '采用 @图片2 为主体图片', exact: true }).click()
-  await poll(state => state.document.cards[2].input_bindings?.length === 2)
+  await poll(state => state.document.cards.find(item => item.id === 'v').input_bindings?.length === 2)
   await inputs.getByRole('button', { name: '前移主体图片 @图片2', exact: true }).click()
-  await poll(state => state.document.cards[2].input_bindings[0].source.card_id === side.id)
+  await poll(state => state.document.cards.find(item => item.id === 'v').input_bindings[0].source.card_id === side.id)
   await card.getByRole('button', { name: '预检运行', exact: true }).click()
   const preview = page.getByRole('region', { name: '运行预检', exact: true })
   await preview.waitFor()
@@ -97,8 +103,8 @@ try {
   assert.equal(body.subjects[0].name, '小李组')
   assert.deepEqual(body.subjects[0].images, [Buffer.concat([png, Buffer.from('side')]), png].map(bytes => 'data:image/png;base64,' + bytes.toString('base64')))
   await inputs.getByRole('button', { name: '取消主体图片 @图片2', exact: true }).click()
-  await poll(state => state.document.cards[2].input_bindings?.length === 1)
-  await page.reload(); await page.locator('[data-card-id="v"]').press('Enter')
+  await poll(state => state.document.cards.find(item => item.id === 'v').input_bindings?.length === 1)
+  await page.reload(); await open('v')
   await page.locator('.generation-material-composer').waitFor(); await openModelInspection(page)
   assert.equal(await card.getByRole('textbox', { name: '已采用主体分组 @图片1', exact: true }).inputValue(), '小李组')
   writeFileSync(join(output, 'assertions.json'), JSON.stringify({ text, subjects: body.subjects.length, imageCount: body.subjects[0].images.length }, null, 2))

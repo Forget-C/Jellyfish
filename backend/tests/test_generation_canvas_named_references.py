@@ -1,5 +1,6 @@
 """Single-object reference cards exercised through the saved canvas HTTP contract."""
 import pytest
+from tests.generation_canvas_reference_fixtures import reference_image_sources
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
 
 
@@ -33,7 +34,7 @@ async def test_reference_name_drafts_and_unique_scope(canvas_client):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('kind', ['character', 'place', 'prop', 'costume'])
-async def test_four_categories_fixed_image_requires_connection_and_can_detach(canvas_client, kind):
+async def test_four_categories_fixed_image_requires_connection_and_can_rebind_to_copy(canvas_client, kind):
     client = canvas_client
     files = [(await client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'},
         files={'file': (f'{index}.png', b'image', 'image/png')})).json()['data']['id'] for index in range(2)]
@@ -55,24 +56,26 @@ async def test_four_categories_fixed_image_requires_connection_and_can_detach(ca
     doc.update(cards=doc['cards'][1:], edges=[], input_order={})
     rejected = await client.put(url, json={'request_id': 'remove', 'expected_revision': 2, 'document': doc})
     assert rejected.status_code == 422 and rejected.json()['detail']['code'] == 'REFERENCE_IN_USE'
-    doc['cards'][0]['image_binding'] = {'file_id': files[0]}
+    doc['cards'].append({'id': 'copy', 'type': 'content.image', 'file_id': files[0]})
+    doc['cards'][0]['image_binding'] = {'file_id': files[0], 'source': {'canvas_id': canvas['id'], 'card_id': 'copy', 'port_id': 'image', 'position': 0}}
+    doc.update(edges=[{'id': 'copy', 'source_card': 'copy', 'source_port': 'image', 'target_card': 'ref', 'target_port': 'image_source'}], input_order={'ref': {'image_source': ['copy']}})
     assert (await client.put(url, json={'request_id': 'detach', 'expected_revision': 2, 'document': doc})).status_code == 200
 
 
 @pytest.mark.asyncio
-async def test_reference_category_and_image_cycle_are_validated(canvas_client):
+async def test_new_reference_image_sources_are_rejected_for_same_or_other_category(canvas_client):
     client = canvas_client
     canvas = (await client.post('/canvases/p', json={'name': '图约束'})).json()['data']
     url, doc = f"/canvases/p/{canvas['id']}", canvas['document']
     doc.update(cards=[{'id': 'a', 'type': 'reference.character', 'name': '甲'}, {'id': 'b', 'type': 'reference.prop', 'name': '乙'}],
         edges=[{'id': 'e', 'source_card': 'a', 'source_port': 'image', 'target_card': 'b', 'target_port': 'image_source'}], input_order={'b': {'image_source': ['e']}})
     response = await client.put(url, json={'request_id': 'category', 'expected_revision': 0, 'document': doc})
-    assert response.status_code == 422 and response.json()['detail']['code'] == 'INVALID_REFERENCE_CATEGORY'
+    assert response.status_code == 422 and response.json()['detail']['code'] == 'INVALID_REFERENCE_SOURCE'
     doc['cards'][1]['type'] = 'reference.character'
     doc['edges'].append({'id': 'back', 'source_card': 'b', 'source_port': 'image', 'target_card': 'a', 'target_port': 'image_source'})
     doc['input_order']['a'] = {'image_source': ['back']}
     response = await client.put(url, json={'request_id': 'cycle', 'expected_revision': 0, 'document': doc})
-    assert response.status_code == 422 and response.json()['detail']['code'] == 'GRAPH_CYCLE'
+    assert response.status_code == 422 and response.json()['detail']['code'] == 'INVALID_REFERENCE_SOURCE'
 
 
 @pytest.mark.asyncio
@@ -88,6 +91,7 @@ async def test_reference_file_withdrawal_invalidates_image_but_keeps_object(canv
     doc.update(cards=[{'id': 'ref', 'type': 'reference.place', 'objects': [{'object_id': 'room', 'name': '空屋', 'category': 'place'}], 'image_binding': {'file_id': uploaded['id']}},
         {'id': 'model', 'type': 'model.image', 'input_bindings': [{'id': 'ref-input', 'input_port': 'image', 'source': source}]}],
         edges=[{'id': 'e', 'source_card': 'ref', 'source_port': 'image', 'target_card': 'model', 'target_port': 'image'}], input_order={'model': {'image': ['e']}})
+    reference_image_sources(doc)
     assert (await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': doc})).status_code == 200
     async with canvas_file_store['sessions'].begin() as db:
         file = await db.get(FileItem, uploaded['id'])
@@ -123,6 +127,7 @@ async def test_video_multiple_angles_map_actual_purposes_and_explicit_group(canv
         edges=[
             {'id': card + port, 'source_card': card, 'source_port': 'image', 'target_card': 'v', 'target_port': port} for card, port in [('front', 'first_frame'), ('front', 'subject_image'), ('side', 'subject_image')]],
         input_order={'v': {'first_frame': ['frontfirst_frame'], 'subject_image': ['frontsubject_image', 'sidesubject_image']}})
+    reference_image_sources(doc)
     response = await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': doc})
     assert response.status_code == 200, response.text
     compiled = (await client.get(url + '/cards/v/compile')).json()['data']
@@ -132,7 +137,8 @@ async def test_video_multiple_angles_map_actual_purposes_and_explicit_group(canv
         ('alice', 1, 'first_frame', None), ('alice', 1, 'subject_image', '人物组'), ('alice', 2, 'subject_image', '人物组')]
     assert len(compiled['video_media']['subjects']) == 1
     assert [item['file_id'] for item in compiled['video_media']['subjects'][0]['media']] == files
-    doc['cards'][-1]['input_bindings'] = doc['cards'][-1]['input_bindings'][:1]
+    video = next(card for card in doc['cards'] if card['id'] == 'v')
+    video['input_bindings'] = video['input_bindings'][:1]
     assert (await client.put(url, json={'request_id': 'cancel', 'expected_revision': 1, 'document': doc})).status_code == 200
     compiled = (await client.get(url + '/cards/v/compile')).json()['data']
     assert compiled['video_media']['subjects'] == []
@@ -162,6 +168,7 @@ async def test_subject_mapping_uses_group_image_order_instead_of_candidate_order
             {'id': name, 'input_port': 'subject_image', 'subject_name': '人物组', 'source': {'canvas_id': canvas['id'], 'card_id': name, 'port_id': 'image', 'position': 0}} for name in ['side', 'front']]}],
         edges=[{'id': name, 'source_card': name, 'source_port': 'image', 'target_card': 'v', 'target_port': 'subject_image'} for name in ['front', 'side']],
         input_order={'v': {'subject_image': ['front', 'side']}})
+    reference_image_sources(doc)
     assert (await client.put(url, json={'request_id': 'save', 'expected_revision': 0, 'document': doc})).status_code == 200
     compiled = (await client.get(url + '/cards/v/compile')).json()['data']
     assert [ref['file_id'] for ref in compiled['video_media']['subjects'][0]['media']] == files[::-1]

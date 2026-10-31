@@ -32,8 +32,9 @@ import { CardShell } from './CardShell'
 import { CandidateOutputStatus } from './CandidateOutputStatus'
 import { connectionSides, sideLabels, sidePoint, defaultSides, connectionPath, useConnectionSides, type ConnectionSide } from './connectionGeometry'
 import { MediaContentEditor, MediaPreview, type MediaCard } from './MediaContentEditor'
-import { referenceNameError } from './referenceCardRules'
+import { referenceNameError, cleanReferenceImageSources } from './referenceCardRules'
 import { ReferenceCard } from './ReferenceCard'
+import { DescriptionCard, isDescriptionCard } from './DescriptionCard'
 import { ModelGenerationCard } from './ModelGenerationCard'
 import { GENERATION_CARD_SIZE } from './GenerationCardFrame'
 import { rendererRegistry } from './rendererRegistry'
@@ -199,6 +200,11 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
     return () => cancelAnimationFrame(frame)
   }, [inspectSerial, inspectCardId, inspectSegmentId, detailId, document.id])
   const latest = useRef(document); latest.current = document
+  useEffect(() => {
+    if (readonly) return
+    const cleaned = cleanReferenceImageSources(document)
+    if (cleaned !== document) onChange(cleaned)
+  }, [document, readonly, onChange])
   const container = useRef<HTMLDivElement>(null)
   const hidden = useMemo(() => new Set(groups.filter(group => group.kind === 'stack' || group.collapsed).flatMap(group => group.card_ids || [])), [groups])
   const cardIdentity = cards.map(card => card.id).join('|')
@@ -880,6 +886,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
         {cards.filter(card => !hidden.has(card.id)).map(card => {
           const size = layout.view.sizes[card.id]
           const isReference = card.type?.startsWith('reference.')
+          const isDescription = isDescriptionCard(card)
           const outputs = runtime?.outputs[card.id] || []
           const node = runtime?.nodes[card.id]
           const isModel = 'model_id' in card
@@ -890,11 +897,12 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
             onOpen={(trigger, dragged) => { setDetailAllowPan(!dragged); if (accessibleConnection) chooseAccessibleTarget(card.id); else { setMultiSelectMode(false); setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.type?.startsWith('direction.') ? undefined : card.id) } }} onSelect={checked => { setDetailId(undefined); setSelectedEdgeId(undefined); setSelected(previous => checked ? [...new Set([...previous, card.id])] : previous.filter(id => id !== card.id)) }}
             multiSelectMode={multiSelectMode} onStartMultiSelect={() => { setMultiSelectMode(true); setSelected([card.id]); setDetailId(undefined); setSelectedEdgeId(undefined) }} onDragStart={() => { setMultiSelectMode(false); setSelected([card.id]); setSelectedEdgeId(undefined) }}
             onConnect={trigger => startAccessibleConnection(card.id, 'right', trigger)} onMove={position => { if (!accessibleConnection) layout.move(card.id, position) }} onRemove={() => removeCard(card.id)} connections={geometricPorts(card)}
-            footer={isModel || isReference || card.type === 'content.image' ? undefined : <CardStatusSummary card={card} node={node} outputs={outputs} readonly={readonly} missingImage={false} />}>
+            footer={isModel || isReference || isDescription || card.type === 'content.image' ? undefined : <CardStatusSummary card={card} node={node} outputs={outputs} readonly={readonly} missingImage={false} />}>
 
-            {!isModel && !isReference && <>            {card.type === 'content.image' ? <ImageContentCardSummary card={card as ImageContentCard} readonly={readonly} /> : card.type === 'direction.photography' ? <PhotographyCardSummary card={card as PhotographyCard} /> : <p className="canvas-card-summary">{['direction.creative_control', 'direction.guidance', 'direction.criterion'].includes(card.type || '') ? guidanceSummary(card as GuidanceCard) : card.type === 'direction.style' ? designSummary([], Object.values((card as VisualStyleCard).fields || {})) || '风格方向、视觉特征、材质与色彩待编辑' : ['direction.space_rule', 'direction.continuity', 'direction.fact'].includes(card.type || '') ? constraintSummary(card as ConstraintCard) : ['direction.dialogue', 'direction.sound'].includes(card.type || '') ? soundSummary(card as SoundCard) : ['direction.narrative', 'direction.beat', 'direction.event', 'direction.shot'].includes(card.type || '') ? narrativeSummary(card as NarrativeCard) : ['direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'].includes(card.type || '') ? spatialSummary(card as SpatialCard) : card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard)  : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '尚未生成' : 'file_id' in card && card.file_id ? '固定媒体' : '未选择媒体'}</p>}
+            {!isModel && !isReference && !isDescription && <>            {card.type === 'content.image' ? <ImageContentCardSummary card={card as ImageContentCard} readonly={readonly} /> : card.type === 'direction.photography' ? <PhotographyCardSummary card={card as PhotographyCard} /> : <p className="canvas-card-summary">{['direction.creative_control', 'direction.guidance', 'direction.criterion'].includes(card.type || '') ? guidanceSummary(card as GuidanceCard) : card.type === 'direction.style' ? designSummary([], Object.values((card as VisualStyleCard).fields || {})) || '风格方向、视觉特征、材质与色彩待编辑' : ['direction.space_rule', 'direction.continuity', 'direction.fact'].includes(card.type || '') ? constraintSummary(card as ConstraintCard) : ['direction.dialogue', 'direction.sound'].includes(card.type || '') ? soundSummary(card as SoundCard) : ['direction.narrative', 'direction.beat', 'direction.event', 'direction.shot'].includes(card.type || '') ? narrativeSummary(card as NarrativeCard) : ['direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'].includes(card.type || '') ? spatialSummary(card as SpatialCard) : card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard)  : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '尚未生成' : 'file_id' in card && card.file_id ? '固定媒体' : '未选择媒体'}</p>}
               {card.type !== 'content.image' && 'file_id' in card && card.file_id && <MediaPreview fileId={card.file_id} type={card.type?.split('.')[1] || 'image'} />}
             </>}
+            {isDescription && <DescriptionCard card={card} readonly={readonly} height={size?.height} />}
             {isReference && <ReferenceCard card={card as NamedImageReferenceCard} readonly={readonly} error={referenceNameError(card as NamedImageReferenceCard, cards)} />}
             {isModel && <ModelGenerationCard card={card} node={node} outputs={outputs} readonly={readonly} />}
           </CardShell>
@@ -924,8 +932,8 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
     {cards.filter(card => detailSessions.includes(card.id) || card.id === detailId).map(detailCard => {
       const EditorContainer = CanvasCardEditor
       const DetailRenderer = rendererRegistry[detailCard.type || 'content.text']
-      return <EditorContainer cardType={detailCard.type} focusLayout={detailCard.type?.startsWith('reference.') || detailCard.type?.startsWith('model.') || focusCardTypes.includes(detailCard.type || '')} modality={cardDefinitions[detailCard.type || '']?.modality} material={detailCard.type?.startsWith('model.') || detailCard.type?.startsWith('reference.')} forceModal={detailCard.type?.startsWith('direction.')} key={detailCard.id} anchor={window.document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(detailCard.id)}"]`)} layoutKey={`${transform.x}:${transform.y}:${transform.scale}:${JSON.stringify(point(detailCard.id))}`} allowPan={detailAllowPan} expandRequest={expandRequest?.id === detailCard.id ? expandRequest.serial : undefined} onFit={delta => layout.setView(previous => ({...previous,transform:{...previous.transform,x:previous.transform.x+delta.x,y:previous.transform.y+delta.y}}))} title={('name' in detailCard && detailCard.name) || cardTitles[detailCard.type || 'content.text'] || '卡片详情'} status={readonly ? '只读' : editingStatus} open={detailCard.id === detailId && !detailsSuppressed && !stackFor(detailCard.id)} onClose={() => setDetailId(current => current === detailCard.id ? undefined : current)} trigger={detailTrigger}>
-        {!desktop && !detailCard.type?.startsWith('model.') && !detailCard.type?.startsWith('reference.') && !focusCardTypes.includes(detailCard.type || '') && <Space wrap><Button onClick={() => setActiveCategory('基础卡')}>卡片</Button><Button disabled={readonly} onClick={event => startAccessibleConnection(detailCard.id, 'right', event.currentTarget)}>连接到…</Button></Space>}
+      return <EditorContainer cardType={detailCard.type} focusLayout={isDescriptionCard(detailCard) || detailCard.type?.startsWith('reference.') || detailCard.type?.startsWith('model.') || focusCardTypes.includes(detailCard.type || '')} modality={cardDefinitions[detailCard.type || '']?.modality} material={isDescriptionCard(detailCard) || detailCard.type?.startsWith('model.') || detailCard.type?.startsWith('reference.')} forceModal={detailCard.type?.startsWith('direction.')} key={detailCard.id} anchor={window.document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(detailCard.id)}"]`)} layoutKey={`${transform.x}:${transform.y}:${transform.scale}:${JSON.stringify(point(detailCard.id))}`} allowPan={detailAllowPan} expandRequest={expandRequest?.id === detailCard.id ? expandRequest.serial : undefined} onFit={delta => layout.setView(previous => ({...previous,transform:{...previous.transform,x:previous.transform.x+delta.x,y:previous.transform.y+delta.y}}))} title={('name' in detailCard && detailCard.name) || cardTitles[detailCard.type || 'content.text'] || '卡片详情'} status={readonly ? '只读' : editingStatus} open={detailCard.id === detailId && !detailsSuppressed && !stackFor(detailCard.id)} onClose={() => setDetailId(current => current === detailCard.id ? undefined : current)} trigger={detailTrigger}>
+        {!desktop && !isDescriptionCard(detailCard) && !detailCard.type?.startsWith('model.') && !detailCard.type?.startsWith('reference.') && !focusCardTypes.includes(detailCard.type || '') && <Space wrap><Button onClick={() => setActiveCategory('基础卡')}>卡片</Button><Button disabled={readonly} onClick={event => startAccessibleConnection(detailCard.id, 'right', event.currentTarget)}>连接到…</Button></Space>}
         {detailCard?.type?.startsWith('direction.') && <details className="generation-candidate-management"><summary>候选连接管理</summary>{references(detailCard)}</details>}
         {detailCard?.type === 'direction.photography' && <Button disabled={readonly} onClick={() => {
           const copy = { ...structuredClone(detailCard), id: crypto.randomUUID() }

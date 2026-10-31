@@ -1,5 +1,4 @@
-import { PictureOutlined, UploadOutlined } from '@ant-design/icons'
-import { useState } from 'react'
+import { PictureOutlined } from '@ant-design/icons'
 import type { ReactNode } from 'react'
 import type { NamedImageReferenceCard } from '../../../services/generated'
 import { buildFileDownloadUrl } from '../assets/utils'
@@ -23,20 +22,11 @@ export function ReferenceCardEditor({ parameters, children, status }: { paramete
   return <div className="generation-reference-editor"><CardComposer parametersPosition="top" parameters={parameters} status={status}>{children}</CardComposer></div>
 }
 
-/** 参考图空态共用拖放与可聚焦浏览入口；文件校验和上传仍交给既有媒体流程。 */
-export function ReferenceImageUpload({ onBrowse, onUpload, disabled, uploading, sources }: {
-  onBrowse: () => void; onUpload: (file: File) => void; disabled?: boolean; uploading: boolean; sources: ReactNode
-}) {
-  const [dragging, setDragging] = useState(false)
-  return <div className="generation-reference-upload" data-dragging={dragging && !disabled && !uploading}
-    onDragOver={event => { event.preventDefault(); event.stopPropagation(); if (!disabled && !uploading) setDragging(true) }}
-    onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false) }}
-    onDrop={event => { event.preventDefault(); event.stopPropagation(); setDragging(false); const file = event.dataTransfer.files[0]; if (file && !disabled && !uploading) onUpload(file) }}>
-    <WorkbenchButton variant="quiet" className="generation-reference-upload-target" disabled={disabled || uploading} onClick={onBrowse} aria-label="浏览并上传参考图">
-      <span className="generation-reference-upload-icon"><UploadOutlined aria-hidden /></span>
-      <strong>{uploading ? '正在上传参考图…' : '拖拽图片到此处，或浏览文件'}</strong>
-      <small>{disabled ? '只读，无法上传图片' : '支持图片文件'}</small>
-    </WorkbenchButton>
-    <div className="generation-reference-upload-sources">{sources}</div>
-  </div>
+/** 四类参考共用画布选择空态，不导入文件或承担素材库操作。 */
+export function ReferenceImagePlaceholder({ onChoose, disabled }: { onChoose: () => void; disabled?: boolean }) {
+  return <WorkbenchButton variant="quiet" className="generation-reference-empty" disabled={disabled} onClick={onChoose} onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = 'none' }} onDrop={event => event.preventDefault()} aria-label="从当前画布选择">
+    <span className="generation-reference-empty-icon"><PictureOutlined aria-hidden /></span>
+    <strong>从当前画布选择</strong>
+    <small>选择图片内容卡作为参考图</small>
+  </WorkbenchButton>
 }

@@ -1,13 +1,14 @@
 """候选图结构校验与目标端口语义；不将候选误当实际运行依赖。"""
-from app.schemas.generation_canvas import CanvasDocument, ObjectDescriptionCard
+from app.schemas.generation_canvas import CanvasDocument, ObjectDescriptionCard, NamedImageReferenceCard
 from app.services.generation_canvas.errors import diagnostic
 
 from app.services.generation_canvas.catalog import ports_compatible
 
 
-def validate_graph(document: CanvasDocument) -> None:
-    """损坏身份、端点、顺序和环阻止保存；配置和能力差异留给运行诊断。"""
+def validate_graph(document: CanvasDocument, previous: CanvasDocument | None = None) -> None:
+    """校验整图结构；仅保留端点未变且未采用的历史类别不兼容候选，新连线仍严格校验。"""
     cards = {card.id: card for card in document.cards}
+    previous_edges = {edge.id: edge for edge in previous.edges} if previous else {}
     edge_ids, endpoints = set(), set()
     successors = {card_id: set() for card_id in cards}
     expected = {}
@@ -25,10 +26,14 @@ def validate_graph(document: CanvasDocument) -> None:
             raise diagnostic('SELF_CONNECTION', '卡片不能连接自身', target)
         if not ports_compatible(edge.source_port, receiver.type, edge.target_port):
             raise diagnostic('INCOMPATIBLE_PORT', '端口值种类不匹配，不提供隐式转换', target)
-        if receiver.type.startswith('reference.') and source.type.startswith('reference.') and receiver.type != source.type:
-            raise diagnostic('INVALID_REFERENCE_CATEGORY', '参考图片类别与目标参考卡不匹配', target)
-        if receiver.type.startswith('reference.') and edge.target_port == 'name' and (not isinstance(source, ObjectDescriptionCard) or source.category != receiver.type.split('.')[1]):
-            raise diagnostic('INVALID_REFERENCE_CATEGORY', '名称候选必须来自同类型描述卡', target)
+        if isinstance(receiver, NamedImageReferenceCard):
+            binding = receiver.name_binding if edge.target_port == 'name' else receiver.image_binding.source if receiver.image_binding else None
+            adopted = binding and binding.card_id == edge.source_card and binding.port_id == edge.source_port
+            retained_candidate = previous_edges.get(edge.id) == edge and not adopted
+            if edge.target_port == 'image_source' and source.type != 'content.image':
+                raise diagnostic('INVALID_REFERENCE_SOURCE', '参考图仅支持图片内容卡，请先另存为图片内容卡', target)
+            if edge.target_port == 'name' and (not isinstance(source, ObjectDescriptionCard) or source.category != receiver.type.split('.')[1]) and not retained_candidate:
+                raise diagnostic('INVALID_REFERENCE_CATEGORY', '名称候选必须来自同类型描述卡', target)
         successors[edge.source_card].add(edge.target_card)
         expected.setdefault(edge.target_card, {}).setdefault(edge.target_port, []).append(edge.id)
     # Kahn 排序避免深图递归溢出；候选关系自身也不允许循环。

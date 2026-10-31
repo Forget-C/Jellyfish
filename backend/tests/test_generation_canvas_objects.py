@@ -1,5 +1,6 @@
 """人物、物件和场所经画布 HTTP 保存并发布明确出口。"""
 import pytest
+from tests.generation_canvas_reference_fixtures import reference_image_sources
 from tests.test_generation_canvas_api import canvas_client, canvas_file_store  # noqa: F401
 from tests.test_generation_canvas_runs import runtime  # noqa: F401
 from tests.test_generation_canvas_images import image_storage  # noqa: F401
@@ -184,6 +185,7 @@ async def test_named_descriptions_keep_identity_in_actual_image_request(runtime,
     text_bindings = [binding for binding in model['input_bindings'] if binding['input_port'] == 'text']
     image_bindings = [binding for binding in model['input_bindings'] if binding['input_port'] == 'image']
     model['input_bindings'] = (text_bindings[::-1] if reverse else text_bindings) + image_bindings
+    reference_image_sources(doc)
     saved = await runtime.client.put(runtime.url, json={'request_id': 'descriptions', 'expected_revision': 2, 'document': doc})
     assert saved.status_code == 200, saved.text
     _, preview = await accept(runtime)

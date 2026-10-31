@@ -45,15 +45,15 @@ async def test_fixed_model_image_and_named_performance_run_only_adopted_video(ru
             return {'id': id, 'source_card': src, 'source_port': port, 'target_card': dst, 'target_port': target}
         doc['cards'] += [
             {'id': 'person', 'type': 'content.object', 'object_id': 'alice', 'name': '小雪', 'text': '年龄二十岁'},
-            {'id': 'ref', 'type': 'reference.character', 'image_binding': {key: output[key] for key in ('source', 'file_id', 'result_set_id')},
+            {'id': 'ref', 'type': 'reference.character', 'image_binding': {'file_id': output['file_id'], 'source': source('fixed-picture', 'image')},
              'input_bindings': [{'id': 'name', 'input_port': 'name', 'source': source('person', 'object', object_id='alice')}]},
             {'id': 'act', 'type': 'direction.performance', 'physical_action': {'text': '伸手拿钥匙', 'state': 'fact'},
              'input_bindings': [{'id': 'actor', 'input_port': 'participant', 'source': source('ref', 'object', object_id='alice')}]},
             {'id': 'video', 'type': 'model.video', 'model_id': 'video-model', 'config': {'ratio': '16:9', 'seconds': 5},
              'input_bindings': [{'id': 'design', 'input_port': 'text', 'source': source('act', 'text')},
                                 {'id': 'frame', 'input_port': 'first_frame', 'source': source('ref', 'image')}]},
-            {'id': 'candidate', 'type': 'model.text'}]
-        doc['edges'] = [edge('image-ref', 'image', 'image', 'ref', 'image_source'), edge('name', 'person', 'object', 'ref', 'name'),
+            {'id': 'candidate', 'type': 'model.text'}, {'id': 'fixed-picture', 'type': 'content.image', 'file_id': output['file_id']}]
+        doc['edges'] = [edge('image-ref', 'fixed-picture', 'image', 'ref', 'image_source'), edge('name', 'person', 'object', 'ref', 'name'),
             edge('actor', 'ref', 'object', 'act', 'participant'), edge('design', 'act', 'text', 'video', 'text'),
             edge('frame', 'ref', 'image', 'video', 'first_frame'), edge('unused', 'candidate', 'text', 'video', 'text')]
         doc['input_order'] = {'ref': {'image_source': ['image-ref'], 'name': ['name']}, 'act': {'participant': ['actor']},
@@ -127,7 +127,7 @@ async def test_fixed_model_image_and_named_performance_run_only_adopted_video(ru
         assert reopened['cards'][2]['image_binding']['file_id'] == output['file_id']
         # Adopted fixed sources must be explicitly copied and rebound before deletion.
         deletion = deepcopy(doc)
-        deletion['cards'] = deletion['cards'][1:]
+        deletion['cards'] = [card for card in deletion['cards'] if card['id'] not in ('image', 'fixed-picture')]
         deletion['edges'] = [item for item in deletion['edges'] if item['id'] not in ('image-ref', 'current')]
         del deletion['input_order']['ref']['image_source']
         del deletion['input_order']['video']['key_frame']

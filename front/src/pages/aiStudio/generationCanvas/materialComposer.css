@@ -1,4 +1,4 @@
-/* 生成模型与参考卡复用 A 紧凑容器；基础内容和导演卡继续使用原编辑容器。 */
+/* 模型、参考与描述卡复用 A 紧凑容器；其他基础内容和导演卡继续使用原编辑容器。 */
 .generation-card-editor.wb-details[data-material="true"] { width: min(700px, calc(100vw - 32px)); height: min(320px, calc(100dvh - 160px)); border-radius: 24px; }
 .generation-card-editor.wb-details[data-material="true"] .wb-details-body { padding: 0; overflow: hidden; display: flex; }
 .generation-card-editor.wb-details[data-material="true"] .generation-card-body { padding: 0; flex: 1; min-height: 0; display: flex; }
@@ -19,6 +19,7 @@
 .generation-material-reference-issue { position: absolute; top: 4px; right: 4px; z-index: 1; background: var(--wb-surface); border-radius: 50%; }
 .generation-material-add { flex: none; }
 .generation-material-add .wb-icon-action.ant-btn { width: 64px; height: 64px; border: 1px solid var(--wb-border); border-radius: 12px; background: transparent; font-size: 24px; }
+.generation-composer-parameters { display: flex; flex: none; align-items: center; gap: 8px; padding: 16px 52px 0 16px; min-width: 0; }
 .generation-material-input { padding: 16px; min-width: 0; min-height: 0; flex: 1; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
 .generation-material-input > .ant-alert { flex: none; }
 .generation-material-prompt { min-width: 0; min-height: 64px; flex: 1; display: flex; flex-direction: column; }
@@ -31,6 +32,7 @@
 .generation-material-reference-tools { font-size: 11px; color: var(--wb-muted); margin-bottom: 8px; }
 .generation-material-reference-tools > summary { cursor: pointer; }
 .generation-material-footer { position: relative; display: flex; align-items: center; gap: 8px; box-sizing: border-box; min-height: 48px; padding: 8px 16px; flex: none; }
+.generation-material-footer[data-parameters-position="top"] { min-height: 32px; padding: 4px 16px 8px; justify-content: flex-end; }
 .generation-material-parameters { display: flex; flex: 1; min-width: 0; flex-wrap: nowrap; align-items: center; gap: 4px; overflow-x: auto; scrollbar-width: thin; }
 .generation-material-parameters > .ant-select { flex: none; width: auto; min-width: 64px; max-width: 180px; }
 .generation-material-parameters > .generation-material-model { min-width: 100px; max-width: 180px; }
@@ -55,6 +57,7 @@
 .generation-material-results { font-size: 11px; min-width: 0; color: var(--wb-muted); }
 .generation-material-results > summary { cursor: pointer; }
 @media (max-width: 700px) {
+  .generation-composer-parameters { padding: 12px 48px 0 12px; gap: 4px; flex-wrap: wrap; }
   .generation-card-editor.wb-details[data-expanded="true"][data-material="true"] { height: calc(100dvh - 16px); }
   .generation-card-editor[data-expanded="true"][data-material="true"] .generation-card-body { height: 100%; box-sizing: border-box; }
   .generation-material-prompt .generation-prompt-editor { max-height: none; }

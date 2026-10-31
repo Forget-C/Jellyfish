@@ -20,7 +20,7 @@ export function ModelGenerationCard({ card, node, outputs, readonly }: {
         <span>尚未生成</span>
       </div>}
       {media.length > 0 && <MediaResultsPreview outputs={media} showBasisStatus={false} cardPreview />}
-      {(text.length > 0 || temporary) && <div className="generation-model-text">
+      {(text.length > 0 || temporary) && <div className="generation-output-text">
         {text.map(output => <p key={output.source.position} className="canvas-card-summary">{output.text}</p>)}
         {temporary && <section aria-label="临时生成预览"><small>临时生成内容 · 未成为正式输出</small><p className="canvas-card-summary">{temporary}</p></section>}
       </div>}

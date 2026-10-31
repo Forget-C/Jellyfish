@@ -51,14 +51,14 @@ def test_cross_category_names_compile_with_namespaces_and_invalid_names_block_ru
     assert not compile_card(doc, 'model').can_run
 
 
-@pytest.mark.parametrize('category', ['place', 'prop', 'costume'])
+@pytest.mark.parametrize('category', ['character', 'place', 'prop', 'costume'])
 def test_reference_images_of_other_categories_cannot_be_connected(category):
     doc = document([reference('person'), reference('other', category)], [
         {'id': 'edge', 'source_card': 'other', 'source_port': 'image', 'target_card': 'person',
          'target_port': 'image_source'}], {'person': {'image_source': ['edge']}})
     with pytest.raises(HTTPException) as error:
         validate_graph(doc)
-    assert error.value.detail['code'] == 'INVALID_REFERENCE_CATEGORY'
+    assert error.value.detail['code'] == 'INVALID_REFERENCE_SOURCE'
 
 
 def test_legacy_reference_keeps_description_name_binding_without_mutation():

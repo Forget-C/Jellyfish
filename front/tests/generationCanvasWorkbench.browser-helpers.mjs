@@ -230,7 +230,8 @@ export async function captureCanvasRegion(page, region, path) {
 
 /** 参考名称独立于图片来源，不再建立名称候选边。 */
 export async function selectReferenceName(page, name) {
-  await page.locator('.wb-details:visible').getByLabel('参考名称', { exact: true }).fill(name)
+  const field = page.locator('.wb-details:visible').getByRole('combobox', { name: '参考名称', exact: true })
+  await field.fill(name); await field.press('Enter')
 }
 /** 参考卡候选关系通过已有画布连线交互建立。 */
 export async function connectCanvasCards(page, source, target, port) {
@@ -243,8 +244,7 @@ export async function connectCanvasCards(page, source, target, port) {
 }
 export async function selectCanvasReferenceImage(page, label) {
   const editor = page.locator('.wb-details:visible')
-  await editor.getByRole('button', { name: /^(添加参考图|更换参考图)$/ }).click()
-  await page.getByRole('menuitem', { name: '从当前画布选择', exact: true }).click()
+  await editor.getByRole('button', { name: /^(从当前画布选择|更换参考图)$/ }).click()
   const picker = page.getByRole('dialog', { name: '从当前画布选择参考图', exact: true })
   await (typeof label === 'string' ? picker.locator(`[data-reference-source-card=${JSON.stringify(label)}]`) : picker.getByRole('button', { name: label })).click()
   await picker.waitFor({ state: 'hidden' })

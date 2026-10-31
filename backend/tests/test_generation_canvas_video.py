@@ -84,6 +84,7 @@ import base64
 import json
 import httpx
 import pytest
+from tests.generation_canvas_reference_fixtures import reference_image_sources
 from app.models.llm import Model, Provider
 from tests.test_generation_canvas_runs import runtime  # noqa: F401
 from tests.test_generation_canvas_images import image_storage  # noqa: F401
@@ -119,6 +120,7 @@ async def setup_video(runtime, provider='volcengine', segments=None, can_run=Tru
     if named:
         doc['cards'][0] = {'id': 'a', 'type': 'reference.character', 'name': '小雪正面', 'object_id': 'alice', 'image_binding': {'file_id': files[0]}}
         doc['cards'][1] = {'id': 'b', 'type': 'reference.character', 'name': '小雪侧面', 'object_id': 'alice', 'angle': '侧面', 'image_binding': {'file_id': files[1]}}
+    reference_image_sources(doc)
     response = await runtime.client.put(runtime.url, json={'request_id': 'video', 'expected_revision': 1, 'document': doc})
     assert response.status_code == 200, response.text
     preview = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'v'})).json()['data']
