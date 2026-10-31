@@ -69,3 +69,21 @@
   .generation-material-prompt > [role="listbox"] { bottom: 96px; }
   .generation-material-candidates[open] { bottom: 88px; max-height: min(360px, calc(100dvh - 180px)); }
 }
+
+/* 图片模型的候选保持正文焦点，行内缩略图、名称与采用状态使用同一来源。 */
+.generation-prompt-candidates { max-height: min(280px, calc(100dvh - 160px)); overflow-y: auto; }
+.generation-prompt-candidates > button { width: 100%; border: 0; border-radius: 4px; padding: 8px; color: var(--wb-text); background: transparent; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 12px; min-height: 48px; }
+.generation-prompt-candidate-preview { display: grid; place-items: center; flex: 0 0 32px; width: 32px; height: 32px; overflow: hidden; border-radius: 4px; background: var(--wb-inset); font-size: 20px; }
+.generation-prompt-candidate-preview img { width: 100%; height: 100%; object-fit: contain; }
+.generation-prompt-candidate-text { display: flex; align-items: baseline; gap: 12px; flex: 1; min-width: 0; }
+.generation-prompt-candidate-text strong { flex: none; font-size: 13px; }
+.generation-prompt-candidate-text small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.generation-prompt-candidates > button[aria-selected="true"], .generation-prompt-candidates > button:hover:not(:disabled) { background: var(--wb-selected); }
+.generation-prompt-popup .ant-popover-inner { padding: 4px; background: var(--wb-raised); border: 1px solid var(--wb-border); }
+.generation-prompt-candidates small { color: var(--wb-muted); }
+.generation-prompt-candidates > button:disabled { cursor: default; opacity: .55; }
+.generation-card-editor[data-card-type="model.image"] .generation-prompt-token:not([data-invalid="true"]) { background: transparent; color: var(--wb-focus); text-decoration: underline; text-underline-offset: 3px; }
+@media (max-width: 700px) {
+ .generation-prompt-candidate-text { flex-direction: column; gap: 0; }
+ .generation-prompt-candidate-text small { max-width: 100%; }
+}

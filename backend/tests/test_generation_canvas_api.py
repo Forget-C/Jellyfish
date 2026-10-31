@@ -500,7 +500,8 @@ async def test_creative_basis_is_saved_and_exposes_only_its_declared_text(canvas
 
 
 @pytest.mark.asyncio
-async def test_input_binding_owns_source_and_prompt_only_references_binding(canvas_client):
+@pytest.mark.parametrize('prompt_owned', [None, True, False])
+async def test_input_binding_owns_source_and_prompt_only_references_binding(canvas_client, prompt_owned):
     """提示词与选择区共享同一采用记录，不再保存第二份来源。"""
     client = canvas_client
     canvas = (await client.post('/canvases/p', json={'name': '统一采用'})).json()['data']
@@ -509,7 +510,7 @@ async def test_input_binding_owns_source_and_prompt_only_references_binding(canv
     document['cards'] = [
         {'id': 'text', 'type': 'content.text', 'text': '直接上游正文'},
         {'id': 'model', 'type': 'model.text',
-         'input_bindings': [{'id': 'selected-text', 'source': source, 'input_port': 'text'}],
+         'input_bindings': [{'id': 'selected-text', 'source': source, 'input_port': 'text', **({'prompt_owned': prompt_owned} if prompt_owned is not None else {})}],
          'prompt': {'segments': [{'id': 'mention', 'kind': 'reference', 'binding_id': 'selected-text'}]}},
     ]
     document['edges'] = [{'id': 'edge', 'source_card': 'text', 'source_port': 'text',
@@ -521,6 +522,8 @@ async def test_input_binding_owns_source_and_prompt_only_references_binding(canv
     reopened = (await client.get(f"/canvases/p/{canvas['id']}")).json()['data']
     model = reopened['document']['cards'][1]
     assert model['input_bindings'][0]['source'] == source
+    assert model['input_bindings'][0].get('prompt_owned') is prompt_owned
+    assert ('prompt_owned' in model['input_bindings'][0]) == (prompt_owned is not None)
     assert model['prompt']['segments'][0] == {'id': 'mention', 'kind': 'reference', 'binding_id': 'selected-text'}
     compiled = (await client.get(f"/canvases/p/{canvas['id']}/cards/model/compile")).json()['data']
     assert compiled['text'] == '直接上游正文'

@@ -1,7 +1,10 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
+import type { Ref } from 'react'
+import { FileTextOutlined, PictureOutlined } from '@ant-design/icons'
+import { buildFileDownloadUrl } from '../assets/utils'
 import { createPortal, flushSync } from 'react-dom'
-import { Button, Input, Select, Space } from 'antd'
-import type { CanvasDocument, PromptText } from '../../../services/generated'
+import { Button, Input, Popover, Select, Space } from 'antd'
+import type { CanvasDocument, OutputIdentity, PromptText } from '../../../services/generated'
 import type { GenerationCard } from './graphRules'
 import type { EditorPromptDocument as PromptDocument, EditorPromptReference as PromptReference, EditorPromptInstruction as PromptInstruction } from './inputBindings'
 import { referenceIssue, sourceKey, referencesIn } from './promptRules'
@@ -28,14 +31,57 @@ function contentKey(document: PromptDocument) {
   return JSON.stringify((document.segments || []).map(segment => segment.kind === 'reference' ? reference(segment) : segment.kind === 'instruction' ? { ...segment, references: (segment.references || []).map(reference) } : segment))
 }
 
+/** 关联区与正文候选共用引用插入入口，持久来源仍只写入 input_bindings。 */
+export type PromptEditorHandle = { insertReference: (source: OutputIdentity) => void }
+
 /** DOM 仅作为输入表面；持久值是有稳定身份的片段，组合输入期间不重建 DOM。 */
-export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsHost, document, card, value, onChange, disabled, candidates = [] }: { compact?: boolean; onSubmit?: () => void; submitDisabled?: boolean; toolsHost?: HTMLElement | null; document: CanvasDocument; card: GenerationCard; value: PromptDocument; onChange: (value: PromptDocument) => void; disabled?: boolean; candidates?: Candidate[] }) {
+export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsHost, document, card, value, onChange, disabled, candidates = [], referenceActionsRef }: { referenceActionsRef?: Ref<PromptEditorHandle>; compact?: boolean; onSubmit?: () => void; submitDisabled?: boolean; toolsHost?: HTMLElement | null; document: CanvasDocument; card: GenerationCard; value: PromptDocument; onChange: (value: PromptDocument) => void; disabled?: boolean; candidates?: Candidate[] }) {
   const root = useRef<HTMLDivElement>(null), composing = useRef(false), local = useRef(value), renderedContent = useRef('')
   const [category, setCategory] = useState('text'), [query, setQuery] = useState(''), [activeIndex, setActiveIndex] = useState(0)
   local.current = value
+  const imageMentions = card.type === 'model.image'
+  const [popupAnchor, setPopupAnchor] = useState({ left: 0, top: 0, height: 24, width: 320 })
+  const listId = useId(), list = useRef<HTMLDivElement>(null), savedRange = useRef<Range>()
   const isMac = /Mac|iPhone|iPad/.test(navigator.platform)
   const placeholder = `描述你想生成的内容，关联参考用于补充上下文。回车发送，${isMac ? 'Command' : 'Ctrl'}＋回车换行`
-  const matches = candidates.filter(item => item.available && item.source.port_id === category && (query === '@' || item.token.startsWith(query)))
+  const matches = candidates.filter(item => imageMentions
+    ? query === '@' || item.token.startsWith(query) || item.name?.toLocaleLowerCase().includes(query.slice(1).toLocaleLowerCase())
+    : item.available && item.source.port_id === category && (query === '@' || item.token.startsWith(query)))
+  const selectable = matches.filter(item => item.available && !item.disabledReason)
+  const active = selectable[activeIndex % Math.max(1, selectable.length)]
+  useLayoutEffect(() => { if (query) list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' }) }, [query, activeIndex])
+  const positionPopup = () => {
+    if (!root.current) return
+    const field = root.current.getBoundingClientRect(), selection = window.getSelection()
+    const range = selection?.rangeCount ? selection.getRangeAt(0) : undefined
+    const caret = range && root.current.contains(range.commonAncestorContainer) ? range.getBoundingClientRect() : undefined
+    setPopupAnchor({ left: field.left, top: caret?.height ? caret.top : field.top, height: caret?.height || 24, width: Math.min(field.width, 480) })
+  }
+  useEffect(() => {
+    if (!imageMentions || !query || !root.current) return
+    const scroll = (event: Event) => { if (!(event.target instanceof Node) || !list.current?.contains(event.target)) positionPopup() }
+    const observer = new ResizeObserver(positionPopup); observer.observe(root.current)
+    window.addEventListener('resize', positionPopup); window.addEventListener('scroll', scroll, true)
+    return () => { observer.disconnect(); window.removeEventListener('resize', positionPopup); window.removeEventListener('scroll', scroll, true) }
+  }, [imageMentions, query])
+  const rememberSelection = () => {
+    const selection = window.getSelection()
+    if (selection?.rangeCount && root.current?.contains(selection.getRangeAt(0).commonAncestorContainer)) savedRange.current = selection.getRangeAt(0).cloneRange()
+  }
+  const textBeforeCaret = () => {
+    const selection = window.getSelection(), node = selection?.anchorNode
+    return node?.nodeType === Node.TEXT_NODE && root.current?.contains(node) && selection?.isCollapsed && node.parentElement?.contentEditable !== 'false' ? (node.textContent || '').slice(0, selection.anchorOffset) : ''
+  }
+  const updateQuery = () => {
+    rememberSelection()
+    if (composing.current) return
+    const text = textBeforeCaret()
+    const nextQuery = text.match(/(?<!\\)@[^@\s,;:()，。；：、（）!?！？]*$/)?.[0] || ''
+    setQuery(nextQuery); setActiveIndex(0)
+    if (imageMentions && nextQuery) positionPopup()
+    const label = nextQuery.match(/^@(文本|图片|视频|音频)/)?.[1]
+    if (label) setCategory(({ 文本: 'text', 图片: 'image', 视频: 'video', 音频: 'audio' } as Record<string, string>)[label])
+  }
   const label = (reference: PromptReference) => candidates.find(item => sourceKey(item.source) === sourceKey(reference.source))?.token || `@缺失(${reference.source.card_id}:${reference.source.position + 1})`
   const draw = (next: PromptDocument) => {
     if (!root.current) return
@@ -100,7 +146,7 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
       const text = segment.text || '', expression = /(?<!\\)@(?:文本|图片|视频|音频)\d+(?=$|[\s,;:()，。；：、（）!?！？])/g
       let start = 0
       for (const match of text.matchAll(expression)) {
-        const candidate = candidates.find(item => item.token === match[0] && item.available)
+        const candidate = candidates.find(item => item.token === match[0] && item.available && !item.disabledReason)
         if (!candidate) continue
         if (match.index! > start) segments.push({ ...segment, id: start ? crypto.randomUUID() : segment.id, text: text.slice(start, match.index) })
         segments.push({ id: crypto.randomUUID(), kind: 'reference', source: candidate.source }); start = match.index! + match[0].length; changed = true
@@ -153,23 +199,45 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
       if (!positioned) { range.selectNodeContents(root.current); range.collapse(false) } else range.collapse(true)
       selection?.removeAllRanges(); selection?.addRange(range)
     }
+    rememberSelection()
     return changed
   }
   const insert = (reference: PromptReference) => {
-    const selection = window.getSelection(), range = selection?.rangeCount ? selection.getRangeAt(0) : undefined
-    if (range && root.current?.contains(range.commonAncestorContainer)) {
-      if (query && range.startContainer.nodeType === Node.TEXT_NODE && (range.startContainer.textContent || '').slice(0, range.startOffset).endsWith(query)) range.setStart(range.startContainer, range.startOffset - query.length)
-      range.deleteContents(); setQuery(''); const node = window.document.createElement('span'); node.contentEditable = 'false'; node.dataset.segment = JSON.stringify(reference); node.className = 'generation-prompt-token'; node.textContent = label(reference)
-      range.insertNode(node); range.setStartAfter(node); range.collapse(true); selection?.removeAllRanges(); selection?.addRange(range); publish(read()); root.current?.focus()
-    } else { const next = read(); next.segments = [...(next.segments || []), reference, { id: crypto.randomUUID(), kind: 'text', text: ' ' }]; publish(next, true); root.current?.focus() }
+    if (disabled || composing.current) return
+    const selection = window.getSelection()
+    const current = selection?.rangeCount ? selection.getRangeAt(0) : undefined
+    let range = current && root.current?.contains(current.commonAncestorContainer) ? current.cloneRange() : savedRange.current?.cloneRange()
+    if (!root.current) return
+    const append = !range || !root.current.contains(range.commonAncestorContainer)
+    if (append) { range = window.document.createRange(); range.selectNodeContents(root.current); range.collapse(false) }
+    if (!range) return
+    if (query && range.startContainer.nodeType === Node.TEXT_NODE && (range.startContainer.textContent || '').slice(0, range.startOffset).endsWith(query)) range.setStart(range.startContainer, range.startOffset - query.length)
+    range.deleteContents(); setQuery('')
+    const node = window.document.createElement('span'); node.contentEditable = 'false'; node.dataset.segment = JSON.stringify(reference); node.className = 'generation-prompt-token'; node.textContent = label(reference)
+    range.insertNode(node)
+    const trailing = append && !imageMentions ? window.document.createTextNode(' ') : undefined
+    if (trailing) node.after(trailing)
+    range.setStartAfter(trailing || node); range.collapse(true)
+    root.current.focus(); selection?.removeAllRanges(); selection?.addRange(range)
+    publish(read()); rememberSelection()
   }
+  useImperativeHandle(referenceActionsRef, () => ({ insertReference: source => {
+    const candidate = candidates.find(item => sourceKey(item.source) === sourceKey(source))
+    if (candidate?.available && !candidate.disabledReason) insert({ id: crypto.randomUUID(), kind: 'reference', source: candidate.source })
+  } }))
   const tools = <Space wrap>
       {card.type === 'model.video' && <Select<string> disabled={disabled} aria-label="系统指令" placeholder="添加系统指令" value={undefined} options={['首帧参考', '尾帧参考', '关键帧参考', '主体参考'].map(command => ({ value: command, label: `/${command}` }))}
         onChange={command => { if (command) publish({ segments: [...(read().segments || []), { id: crypto.randomUUID(), kind: 'instruction', command, parameters: {}, references: [] }] }, true) }} />}
       <Select aria-label="引用分类" value={category} onChange={setCategory} options={Object.entries({ text: '文本', image: '图片', video: '视频', audio: '音频' }).map(([value, label]) => ({ value, label }))} />
-      {candidates.filter(item => item.source.port_id === category).map(item => <Button key={sourceKey(item.source)} size="small" disabled={disabled || !item.available} onClick={() => insert({ id: crypto.randomUUID(), kind: 'reference', source: item.source })}>{item.token}{!item.available && ' 缺失'}</Button>)}
+      {candidates.filter(item => item.source.port_id === category).map(item => <Button key={sourceKey(item.source)} size="small" disabled={disabled || !item.available || !!item.disabledReason} onClick={() => insert({ id: crypto.randomUUID(), kind: 'reference', source: item.source })}>{item.token}{!item.available && ' 缺失'}</Button>)}
       {query && <small role="status">匹配 {query}；完整代号确认后绑定</small>}
     </Space>
+  const candidateList = query && <div ref={list} id={listId} role="listbox" aria-label="引用候选" className={imageMentions ? 'generation-prompt-candidates' : undefined} onMouseDown={event => event.preventDefault()}>
+      {matches.map((item, index) => <button type="button" id={`${listId}-${index}`} key={sourceKey(item.source)} role="option" aria-label={item.token} aria-description={imageMentions ? [item.name, item.disabledReason || (!item.available ? '来源输出缺失' : item.adopted ? '已采用' : '候选')].filter(Boolean).join(' · ') : undefined} aria-selected={item === active} disabled={disabled || !item.available || !!item.disabledReason} onClick={() => insert({ id: crypto.randomUUID(), kind: 'reference', source: item.source })}>
+        {imageMentions ? <><span className="generation-prompt-candidate-preview">{item.fileId ? <img alt="" src={buildFileDownloadUrl(item.fileId)} /> : item.source.port_id === 'image' ? <PictureOutlined /> : <FileTextOutlined />}</span><span className="generation-prompt-candidate-text"><strong>{item.token}</strong><small>{item.name}</small></span><small>{item.disabledReason || (!item.available ? '来源输出缺失' : item.adopted ? '已采用' : '候选')}</small></> : item.token}
+      </button>)}
+      {!matches.length && <small>{imageMentions ? '没有匹配候选，将保留为普通文本' : '没有匹配的实际输出；可切换引用分类'}</small>}
+    </div>
   return <>
     {compact ? toolsHost && createPortal(<details className="generation-material-reference-tools"><summary>＠ 引用与指令</summary>{tools}</details>, toolsHost) : tools}
     {(value.segments || []).filter((segment): segment is PromptInstruction => segment.kind === 'instruction').map(instruction => <section key={instruction.id} aria-label={`指令 ${instruction.command}`} data-instruction-id={instruction.id} data-segment-id={instruction.id}>
@@ -181,25 +249,23 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
       <Button disabled={disabled} size="small" onClick={() => publish({ segments: (value.segments || []).filter(segment => segment.id !== instruction.id) }, true)}>删除指令</Button>
       {!instruction.references?.length && <small role="alert">指令缺少引用，可继续编辑保存</small>}
     </section>)}
-    {query && <div role="listbox" aria-label="引用候选" onMouseDown={event => event.preventDefault()}>
-      {matches.map((item, index) => <button type="button" key={sourceKey(item.source)} role="option" aria-selected={index === activeIndex % Math.max(1, matches.length)} onClick={() => insert({ id: crypto.randomUUID(), kind: 'reference', source: item.source })}>{item.token}</button>)}
-      {!matches.length && <small>没有匹配的实际输出；可切换引用分类</small>}
-    </div>}
-    <div ref={root} role="textbox" aria-label="模型正文" aria-multiline="true" contentEditable={!disabled} suppressContentEditableWarning className="generation-prompt-editor" aria-placeholder={compact ? placeholder : undefined} data-placeholder={placeholder} data-empty={!(value.segments || []).some(segment => segment.kind !== 'text' || segment.text?.trim())}
-      onCompositionStart={() => { composing.current = true }} onCompositionEnd={() => { composing.current = false; publish(read()); if (/[\s,;:()，。；：、（）!?！？]$/.test(root.current?.textContent || '')) confirm() }}
+    {!imageMentions && candidateList}
+    {imageMentions && query && createPortal(<Popover open placement="topLeft" arrow={false} trigger={[]} overlayClassName="canvas-workbench-dialog generation-prompt-popup" content={candidateList} overlayStyle={{ width: popupAnchor.width }}>
+      <span aria-hidden="true" style={{ position: 'fixed', pointerEvents: 'none', left: popupAnchor.left, top: popupAnchor.top, height: popupAnchor.height, width: 1 }} />
+    </Popover>, window.document.body)}
+    <div ref={root} role="textbox" aria-label="模型正文" aria-multiline="true" aria-autocomplete="list" aria-controls={query ? listId : undefined} aria-activedescendant={query && active ? `${listId}-${matches.indexOf(active)}` : undefined} contentEditable={!disabled} suppressContentEditableWarning className="generation-prompt-editor" aria-placeholder={compact ? placeholder : undefined} data-placeholder={placeholder} data-empty={!(value.segments || []).some(segment => segment.kind !== 'text' || segment.text?.trim())}
+      onCompositionStart={() => { composing.current = true }} onCompositionEnd={() => { composing.current = false; publish(read()); updateQuery(); if (/[\s,;:()，。；：、（）!?！？]$/.test(textBeforeCaret())) confirm() }}
       onInput={() => {
         root.current?.querySelectorAll('[data-prompt-caret]').forEach(node => node.remove())
         const next = read(); publish(next)
         if (composing.current) return
-        const text = root.current?.textContent || '', nextQuery = text.match(/(?<!\\)@[^\s]*$/)?.[0] || ''
-        setQuery(nextQuery); setActiveIndex(0)
-        const label = nextQuery.match(/^@(文本|图片|视频|音频)/)?.[1]
-        if (label) setCategory(({ 文本: 'text', 图片: 'image', 视频: 'video', 音频: 'audio' } as Record<string, string>)[label])
-        if (/[\s,;:()，。；：、（）!?！？]$/.test(text)) confirm()
-      }}
+        updateQuery()
+        if (/[\s,;:()，。；：、（）!?！？]$/.test(textBeforeCaret())) confirm()
+      }} onMouseUp={updateQuery} onKeyUp={event => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) updateQuery() }}
       onKeyDown={event => {
         if (composing.current || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return
-        if (query && ['ArrowDown', 'ArrowUp'].includes(event.key)) { event.preventDefault(); setActiveIndex(previous => Math.max(0, previous + (event.key === 'ArrowDown' ? 1 : -1))); return }
+        if (query && event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setQuery(''); return }
+        if (query && ['ArrowDown', 'ArrowUp'].includes(event.key)) { event.preventDefault(); setActiveIndex(previous => (previous + (event.key === 'ArrowDown' ? 1 : -1) + Math.max(1, selectable.length)) % Math.max(1, selectable.length)); return }
         if (event.key === 'Enter' && (isMac ? event.metaKey : event.ctrlKey)) {
           event.preventDefault()
           const selection = window.getSelection(), range = selection?.rangeCount ? selection.getRangeAt(0) : undefined
@@ -219,7 +285,7 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
         if (event.key === 'Enter' && onSubmit && !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey) {
           event.preventDefault()
           if (event.repeat) return
-          if (query && matches.length) { insert({ id: crypto.randomUUID(), kind: 'reference', source: matches[activeIndex % matches.length].source }); return }
+          if (query) { if (active) insert({ id: crypto.randomUUID(), kind: 'reference', source: active.source }); else { confirm(true); setQuery('') } return }
           // 引用／指令确认先消费回车；普通发送先同步最新正文，再由宿主保存并预检。
           let changed = false
           flushSync(() => { changed = confirm(true) })
@@ -228,7 +294,7 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
           return
         }
         if (['Enter', 'Tab'].includes(event.key)) {
-          if (query === '@' && matches.length) { event.preventDefault(); insert({ id: crypto.randomUUID(), kind: 'reference', source: matches[activeIndex % matches.length].source }); return }
+          if (query && active) { event.preventDefault(); insert({ id: crypto.randomUUID(), kind: 'reference', source: active.source }); return }
           if (confirm(true)) { event.preventDefault(); setQuery('') }
         }
       }} onBlur={() => { confirm(true); requestAnimationFrame(() => { if (!root.current?.contains(window.document.activeElement)) setQuery('') }) }}
@@ -253,7 +319,7 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
           range.insertNode(fragment); publish(read()); if (!segments) confirm()
         }
       }} />
-    {(value.segments || []).filter(segment => segment.kind === 'text' && /(?<!\\)@(?:文本|图片|视频|音频)\d*/.test(segment.text || '')).map(segment => <small role="alert" key={segment.id}>代号尚未确认或不存在；按完整代号选择实际输出</small>)}
+    {!imageMentions && (value.segments || []).filter(segment => segment.kind === 'text' && /(?<!\\)@(?:文本|图片|视频|音频)\d*/.test(segment.text || '')).map(segment => <small role="alert" key={segment.id}>代号尚未确认或不存在；按完整代号选择实际输出</small>)}
     {referencesIn(value).map(segment => referenceIssue(document, card, segment.source, candidates) && <small role="alert" key={segment.id} data-diagnostic-segment={segment.id}>{label(segment)}：{referenceIssue(document, card, segment.source, candidates)}</small>)}
   </>
 }

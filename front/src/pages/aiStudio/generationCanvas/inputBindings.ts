@@ -25,7 +25,8 @@ export function withEditorPrompt(card: GenerationCard, prompt: EditorPromptDocum
   const mentioned = new Set((card.prompt?.segments || []).flatMap(segment => segment.kind === 'reference' ? [segment.binding_id]
     : segment.kind === 'instruction' ? (segment.references || []).map(reference => reference.binding_id) : []))
   // 正文只移除它原先引用而本次取消的绑定，保留输入区独立采用的记录。
-  const bindings: InputBinding[] = (card.input_bindings || []).filter(binding => !mentioned.has(binding.id))
+  const bindings: InputBinding[] = (card.input_bindings || []).filter(binding => !mentioned.has(binding.id) || binding.prompt_owned === false)
+    .map(binding => card.type === 'model.image' && !mentioned.has(binding.id) ? { ...binding, prompt_owned: binding.prompt_owned ?? false } : binding)
   const bind = (reference: EditorPromptReference, command?: string, subject_name?: string): PromptReference => {
     let input_port = command ? commandPorts[command] || reference.source.port_id : reference.source.port_id
     if (card.type === 'model.video' && ['image', 'video'].includes(input_port)) input_port = 'subject_' + input_port
@@ -33,7 +34,7 @@ export function withEditorPrompt(card: GenerationCard, prompt: EditorPromptDocum
     let binding = bindings.find(value => key(value.source) === key(reference.source) && value.input_port === input_port && (value.subject_name || '') === (subject_name || ''))
     if (!binding) {
       const existing = card.input_bindings?.find(value => key(value.source) === key(reference.source) && value.input_port === input_port && (value.subject_name || '') === (subject_name || ''))
-      binding = { ...existing, id: existing?.id || crypto.randomUUID(), source: reference.source, input_port, subject_name }
+      binding = { ...existing, id: existing?.id || crypto.randomUUID(), source: reference.source, input_port, subject_name, ...(card.type === 'model.image' ? { prompt_owned: existing?.prompt_owned ?? (!existing || mentioned.has(existing.id)) } : {}) }
       bindings.push(binding)
     }
     return { id: reference.id, kind: 'reference', binding_id: binding.id }

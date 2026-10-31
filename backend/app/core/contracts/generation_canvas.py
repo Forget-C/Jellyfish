@@ -54,6 +54,8 @@ class InputBinding(BaseModel):
     source: OutputIdentity
     input_port: str
     subject_name: str | None = None
+    # 编辑来源不参与生成依据；正文独占的采用可随最后一处引用删除，独立采用仍保留。
+    prompt_owned: bool | None = Field(default=None, exclude_if=lambda value: value is None)
     photography_scope: list[str] | None = Field(default=None, exclude_if=lambda value: value is None)
 
 

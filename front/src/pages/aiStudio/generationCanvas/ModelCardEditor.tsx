@@ -6,7 +6,7 @@ import { useGraphRules } from './CanvasCatalogContext'
 import { PhotographyInputScope } from './PhotographyInputScope'
 import { NamedImageSummary } from './NamedImageSummary'
 import { VideoInputBindings } from './VideoInputBindings'
-import { PromptEditor } from './PromptEditor'
+import { PromptEditor, type PromptEditorHandle } from './PromptEditor'
 import { editorPrompt, withEditorPrompt, withoutInputBinding } from './inputBindings'
 import { useCardCandidates } from './useCardCandidates'
 import { MediaPreview } from './MediaContentEditor'
@@ -25,6 +25,7 @@ import './materialComposer.css'
 /** 模型卡共享受控 Composer 布局，参数由各模态组件表达。 */
 export function ModelRenderer({ card: raw, savedRevision, document, disabled, onChange, models, capability, capabilityError, references, modelOutputs, node, busy, checking, runDisabled, onPrecheck, sourceActions, defaultModelId }: CardRendererProps) {
   const { token } = theme.useToken()
+  const promptEditor = useRef<PromptEditorHandle>(null)
   const management = useRef<HTMLDetailsElement>(null)
   const [referenceTools, setReferenceTools] = useState<HTMLDivElement | null>(null)
   const card = raw as TextModelCard | ImageModelCard | VideoModelCard
@@ -71,6 +72,16 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
     const name = source && ('name' in source ? source.name : undefined)
     const named = output.payload?.kind === 'named_image' && 'objects' in output.payload ? output.payload.objects?.map(object => object.name).join('、') : ''
     return name || named || cardTitles[source?.type || ''] || output.token || '来源'
+  }
+  const candidateIssue = (output: CanvasResolvedOutput) => {
+    const source = document.cards?.find(item => item.id === output.source.card_id)
+    if (!source || !(document.edges || []).some(edge => edge.target_card === card.id && edge.source_card === source.id && edge.source_port === output.source.port_id)) return '来源未连接'
+    if (output.available === false) return '来源输出缺失'
+    if (!capability?.input_ports?.includes(output.modality)) return '当前模型不支持此输入'
+    if ('uploading' in source && source.uploading) return '上传中'
+    if ('file_id' in source && source.file_id !== output.file_id) return '正在更新候选'
+    if (output.basis_current === false) return '来源依据已变，需重新生成'
+    return undefined
   }
   // 保存刷新期间仍展示已采用但暂未解析的来源，不将缺失来源误报为新候选。
   const sources: CanvasResolvedOutput[] = [...resolved.candidates]
@@ -137,7 +148,9 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
     {sources.map(output => {
       const selected = adopted.some(binding => sourceKey(binding.source) === sourceKey(output.source))
       const name = labelFor(output)
-      return <button type="button" key={sourceKey(output.source)} className="generation-material-reference" aria-label={`${name} ${output.token || ''} · ${selected ? '已采用' : '候选'}`} title={name} onClick={() => inspectSource(output)}>
+      return <button type="button" key={sourceKey(output.source)} className="generation-material-reference" aria-label={`${name} ${output.token || ''} · ${selected ? '已采用' : '候选'}`} title={name} disabled={card.type === 'model.image' && output.modality === 'image' && (disabled || !!candidateIssue(output))}
+        onMouseDown={event => { if (card.type === 'model.image' && output.modality === 'image') event.preventDefault() }}
+        onClick={() => { if (card.type === 'model.image' && output.modality === 'image') promptEditor.current?.insertReference(output.source); else inspectSource(output) }}>
         {output.file_id && output.modality === 'image' ? <img alt="图片预览" src={buildFileDownloadUrl(output.file_id)} /> : output.file_id && output.modality === 'video' ? <video src={buildFileDownloadUrl(output.file_id)} muted playsInline preload="metadata" /> : <span aria-hidden="true">{output.modality === 'image' ? <PictureOutlined /> : output.modality === 'video' ? <VideoCameraOutlined /> : output.modality === 'audio' ? <SoundOutlined /> : <FileTextOutlined />}</span>}
         <small>{output.token || name}</small>
         {selected && <CheckCircleFilled style={{ color: token.colorSuccess }} className="generation-material-adopted" aria-label="已采用" />}
@@ -155,7 +168,7 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
 
     <div className="generation-material-prompt">
       {resolved.error && <Alert type="warning" message={resolved.error} />}
-      <PromptEditor compact onSubmit={submit} submitDisabled={submitDisabled} toolsHost={referenceTools} document={document} card={card} value={editorPrompt(card)} candidates={resolved.candidates.map(item => ({ source: item.source, token: item.token || '', available: item.available !== false }))} disabled={disabled} onChange={prompt => onChange(withEditorPrompt(card, prompt))} />
+      <PromptEditor referenceActionsRef={promptEditor} compact onSubmit={submit} submitDisabled={submitDisabled} toolsHost={referenceTools} document={document} card={card} value={editorPrompt(card)} candidates={resolved.candidates.map(item => ({ source: item.source, token: item.token || '', available: item.available !== false, ...(card.type === 'model.image' ? { name: labelFor(item), fileId: item.modality === 'image' ? item.file_id : undefined, adopted: adopted.some(binding => sourceKey(binding.source) === sourceKey(item.source)), disabledReason: candidateIssue(item) } : {}) }))} disabled={disabled} onChange={prompt => onChange(withEditorPrompt(card, prompt))} />
     </div>
     {(disabled || busy || runDisabled) && <small role="status">{busy ? '当前模型运行中' : '当前不可提交，请核对保存与运行状态'}</small>}
   </CardComposer>

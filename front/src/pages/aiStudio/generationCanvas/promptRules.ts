@@ -2,7 +2,7 @@ import type { CanvasDocument, OutputIdentity } from '../../../services/generated
 import type { GenerationCard } from './graphRules'
 import { editorPrompt } from './inputBindings'
 import type { EditorPromptDocument as PromptDocument, EditorPromptReference as PromptReference } from './inputBindings'
-export type Candidate = { source: OutputIdentity; token: string; available: boolean }
+export type Candidate = { source: OutputIdentity; token: string; available: boolean; name?: string; fileId?: string | null; adopted?: boolean; disabledReason?: string }
 export const sourceKey = (source: OutputIdentity) => JSON.stringify([source.canvas_id, source.card_id, source.port_id, source.object_id || source.position])
 export const referencesIn = (prompt?: PromptDocument): PromptReference[] => (prompt?.segments || []).flatMap(segment => segment.kind === 'reference' ? [segment] : segment.kind === 'instruction' ? segment.references || [] : [])
 export function referenceIssue(document: CanvasDocument, _receiver: GenerationCard, source: OutputIdentity, candidates: Candidate[] = []) {
