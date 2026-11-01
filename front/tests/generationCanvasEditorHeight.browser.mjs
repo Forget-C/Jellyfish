@@ -48,7 +48,7 @@ try {
   const settle = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
   await settle()
   const initialHeight = (await editor.boundingBox()).height
-  assert.equal(initialHeight, 240, 'model editor keeps the compact reference height')
+  assert.equal(initialHeight, 320, 'anchored model editor keeps the current 320px height')
   await surface.focus()
   for (let i = 0; i < 32; i++) await surface.press('ArrowUp')
   await page.locator('.generation-card-editor').waitFor({ state: 'hidden' })

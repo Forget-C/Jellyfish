@@ -26,6 +26,19 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
   const [footer, setFooter] = useState<HTMLDivElement | null>(null)
   const close = useRef(onClose); close.current = onClose
   const opener = useRef(trigger); opener.current = trigger
+  const dismiss = useRef<() => void>(() => {})
+  dismiss.current = () => {
+    const target = opener.current, node = panel.current
+    onClose()
+    // 隐藏节点会先失去焦点；等模态层解除 inert 后再恢复，避免焦点落到 body。
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (document.activeElement === document.body || node?.contains(document.activeElement)) {
+        const fallback = document.querySelector<HTMLElement>('.generation-surface')
+        const destination = target?.isConnected ? target : fallback
+        destination?.focus({ preventScroll: true })
+      }
+    }))
+  }
   const modal = forceModal || expanded || !desktop
   const anchoredHeightLimit = material ? 320 : 360
   const previousOpen = useRef(false)
@@ -127,7 +140,7 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
         // The material picker is the innermost editor surface once native menus have closed.
         const materials = node?.querySelector<HTMLDetailsElement>('.generation-material-candidates[open]')
         if (materials) { materials.open = false; materials.querySelector('summary')?.focus(); return }
-        if (expanded && !forceModal) { setExpanded(false); if (!anchorFits.current) close.current() } else close.current()
+        if (expanded && !forceModal) { setExpanded(false); if (!anchorFits.current) dismiss.current() } else dismiss.current()
       }
       if (modal && event.key === 'Tab' && node) {
         const items = [...node.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex="0"], [contenteditable="true"], summary, a[href]')].filter(item => item.getClientRects().length)
@@ -140,14 +153,14 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
     return () => { observer.disconnect(); if (node) node.inert = false; document.removeEventListener('keydown', keyboard); if (modal && workbench) workbench.inert = !!prior; if (node?.contains(document.activeElement)) opener.current?.focus({preventScroll:true}) }
   }, [visible, modal, expanded, forceModal])
   return createPortal(<>
-    {visible && modal && <div className="generation-editor-mask" onClick={() => expanded && !forceModal ? setExpanded(false) : onClose()} />}
+    {visible && modal && <div className="generation-editor-mask" onClick={() => expanded && !forceModal ? setExpanded(false) : dismiss.current()} />}
     <section ref={panel} hidden={!visible} tabIndex={-1} role={modal ? 'dialog' : 'complementary'} aria-modal={modal || undefined} aria-label={title}
       className="canvas-workbench-dialog wb-details generation-card-editor" data-expanded={modal} data-material={material} data-focus-layout={focusLayout} data-card-type={cardType} style={!modal ? {left:placement.left, top:placement.top, maxHeight:Math.min(anchoredHeightLimit, placement.maxHeight)} : undefined}>
       <header className={`wb-details-header${material ? ' generation-model-editor-chrome' : ''}`}>{!material && <div className="generation-editor-heading">{focusLayout && <span className="generation-editor-modality" aria-hidden="true">{modality === 'image' ? <PictureOutlined /> : <FileTextOutlined />}</span>}<h2 title={title}>{title}</h2>{status && <small role="status">{status}</small>}</div>}
-        {!forceModal && <WorkbenchIconButton variant="quiet" label={expanded ? '收起详情' : '展开详情'} icon={expanded ? <ShrinkOutlined /> : <ExpandOutlined />} onClick={() => { if (expanded && !anchorFits.current) close.current(); setExpanded(value=>!value) }} />}
-        {!material && <WorkbenchIconButton variant="quiet" label="关闭详情" icon={<CloseOutlined />} onClick={() => expanded && !forceModal ? setExpanded(false) : onClose()} />}
+        {!forceModal && <WorkbenchIconButton variant="quiet" label={expanded ? '收起详情' : '展开详情'} icon={expanded ? <ShrinkOutlined /> : <ExpandOutlined />} onClick={() => { if (expanded && !anchorFits.current) dismiss.current(); setExpanded(value=>!value) }} />}
+        {!material && <WorkbenchIconButton variant="quiet" label="关闭详情" icon={<CloseOutlined />} onClick={() => expanded && !forceModal ? setExpanded(false) : dismiss.current()} />}
       </header>
-      <div className="wb-details-body"><CanvasEditorFooter.Provider value={visible ? footer : null}><WorkbenchReadingContext.Provider value>{children}</WorkbenchReadingContext.Provider></CanvasEditorFooter.Provider></div>
+      <div className="wb-details-body">{/* 隐藏时保留页脚宿主，避免 portal 重建导致媒体选择状态丢失。 */}<CanvasEditorFooter.Provider value={footer}><WorkbenchReadingContext.Provider value>{children}</WorkbenchReadingContext.Provider></CanvasEditorFooter.Provider></div>
       <div ref={setFooter} className="generation-editor-actions" />
     </section>
   </>, document.body)

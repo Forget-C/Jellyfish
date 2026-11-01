@@ -1,3 +1,4 @@
+import { closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -48,7 +49,7 @@ try {
   assert.match(initialPreview.input.text,/未匹配但明确采用的内容/)
   await page.goto(`http://127.0.0.1:4421/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   await page.getByRole('navigation',{name:'生成画布位置',exact:true}).getByRole('button',{name:'总览',exact:true}).waitFor()
-  if(await page.getByRole('button',{name:'关闭详情',exact:true}).isVisible())await page.getByRole('button',{name:'关闭详情',exact:true}).click()
+  if(await page.getByRole('button',{name:'关闭详情',exact:true}).isVisible())await closeCanvasDetails(page)
   const world=()=>page.locator('.generation-world').getAttribute('style')
   const originalView=await world()
   const select=page.getByRole('combobox',{name:'卡片分类',exact:true})
@@ -67,7 +68,7 @@ try {
   assert.deepEqual(afterPreview.input,initialPreview.input)
   await page.locator('[data-card-id="model"]').press('Enter')
   await page.locator('.wb-details:not([hidden])').filter({has:page.getByText('未匹配但明确采用的内容',{exact:false})}).waitFor()
-  await page.getByRole('button',{name:'关闭详情',exact:true}).click()
+  await closeCanvasDetails(page)
   await page.screenshot({path:join(output,'filters-desktop.png'),animations:'disabled'})
   await page.getByRole('button',{name:'展开筛选',exact:true}).click()
   await select.press('ArrowDown')
@@ -88,7 +89,7 @@ try {
   await page.getByRole('button',{name:'收起筛选',exact:true}).click()
   await page.reload()
   await page.getByRole('button',{name:'展开筛选',exact:true}).waitFor()
-  if(await page.getByRole('button',{name:'关闭详情',exact:true}).isVisible())await page.getByRole('button',{name:'关闭详情',exact:true}).click()
+  if(await page.getByRole('button',{name:'关闭详情',exact:true}).isVisible())await closeCanvasDetails(page)
   await page.setViewportSize({width:390,height:844})
   await page.getByRole('button',{name:'展开筛选',exact:true}).click()
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true)

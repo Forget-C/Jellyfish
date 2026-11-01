@@ -1,6 +1,6 @@
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
-import { openCardList } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { openCardList, closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
@@ -55,36 +55,39 @@ try {
   await photo.getByRole('button',{name:'编辑卡片',exact:true}).click()
   assert.equal(await details.getByRole('textbox',{name:'光源内容',exact:true}).inputValue(),'保存后的夜间轮廓光')
   await page.screenshot({path:join(output,'director-modal-desktop.png')})
-  await details.getByRole('button',{name:'关闭详情',exact:true}).click()
+  await closeCanvasDetails(page)
   for (const type of types) {
     const card=page.locator(`[data-card-id="${type}"]`)
     await card.press('Enter')
     assert.equal(await page.locator('.wb-details:visible').count(),0)
-    await card.getByRole('button',{name:'编辑卡片',exact:true}).click()
+    await card.getByRole('button',{name:'编辑卡片',exact:true}).press('Enter')
     assert.equal(await details.getAttribute('role'),'dialog',type)
-    await details.getByRole('button',{name:'关闭详情',exact:true}).click()
+    assert.equal(await details.getByRole('button',{name:'关闭详情',exact:true}).count(),1,'complex card retains its close control')
+    await closeCanvasDetails(page)
   }
   await page.setViewportSize({width:390,height:844})
-  await photo.press('Enter');await photo.getByRole('button',{name:'编辑卡片',exact:true}).click()
+  await photo.press('Enter');await photo.getByRole('button',{name:'编辑卡片',exact:true}).press('Enter')
   assert.ok(await details.evaluate(e=>e.scrollWidth<=e.clientWidth),'mobile editor has no horizontal overflow')
   await page.screenshot({path:join(output,'director-modal-mobile.png')})
   await page.keyboard.press('Escape');await details.waitFor({state:'hidden'})
   await page.getByLabel('画布保存状态').getByText('已保存',{exact:true}).waitFor()
   const saved=(await (await fetch(`${base}/${id}`)).json()).data
   assert.equal(saved.document.cards.find(c=>c.id==='photography').fields.light_sources.text,'保存后的夜间轮廓光')
-  await page.reload();await photo.press('Enter');await photo.getByRole('button',{name:'编辑卡片',exact:true}).click()
+  await page.reload();await photo.press('Enter');await photo.getByRole('button',{name:'编辑卡片',exact:true}).press('Enter')
   await details.getByRole('button',{name:'编辑光影与色彩',exact:true}).click()
   assert.equal(await details.getByRole('textbox',{name:'光源内容',exact:true}).inputValue(),'保存后的夜间轮廓光')
-  await details.getByRole('button',{name:'关闭详情',exact:true}).click()
+  await closeCanvasDetails(page)
   await page.setViewportSize({width:1440,height:960})
   for (const entry of ['景别与构图','机位与视角','运镜','光影与色彩','焦点与成像']) {
     await openCardList(page,'画面设计')
     await page.getByRole('navigation',{name:'添加卡片',exact:true}).getByRole('button',{name:entry,exact:true}).click()
     assert.equal(await page.locator('.wb-details:visible').count(),0,'new director card is selected without opening modal')
-    const added=page.locator('[data-card-id][data-selected="true"]')
-    await added.getByRole('button',{name:'编辑卡片',exact:true}).click()
+    const addedId=await page.locator('[data-card-id][data-selected="true"]').getAttribute('data-card-id')
+    const added=page.locator(`[data-card-id="${addedId}"]`)
+    await added.press('Enter')
+    await added.getByRole('button',{name:'编辑卡片',exact:true}).press('Enter')
     assert.equal(await details.getByRole('button',{name:'编辑'+entry,exact:true}).getAttribute('aria-pressed'),'true','new photography entry locates its region')
-    await details.getByRole('button',{name:'关闭详情',exact:true}).click()
+    await closeCanvasDetails(page)
   }
   console.log('all director card modal entry, backdrop close, retained edits, autosave and reopen passed')
 } finally { await cleanup() }

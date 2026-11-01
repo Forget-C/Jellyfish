@@ -44,13 +44,13 @@ try {
   await page.getByRole('button', { name: '人物表演卡', exact: true }).waitFor()
   const catalog=(await (await fetch(`${base}/${canvas.id}/catalog`)).json()).data
   writeFileSync(join(output,'catalog.json'),JSON.stringify(catalog,null,2))
-  assert.equal(catalog.cards.reduce((count,card)=>count+(card.entries.length||1),0),39)
+  assert.equal(catalog.cards.reduce((count,card)=>count+(card.entries.length||1),0),41)
   let entryCount = 0
   for (const category of ['基础卡', '参考卡', '模型生成', '画面设计', '表演与调度', '叙事与镜头', '声音设计', '连续性与约束']) {
     await openCardList(page, category)
     entryCount += await page.getByRole('navigation', { name: '添加卡片', exact: true }).locator('button[draggable]').count()
   }
-  assert.equal(entryCount, 39)
+  assert.equal(entryCount, 41)
   await closeCardList(page)
   const source = {canvas_id:canvas.id,card_id:'person',port_id:'object',position:0,object_id:'alice'}
   const document = {...canvas.document,cards:[{id:'person',type:'content.object',object_id:'alice',name:'小雪',text:'仅模型直接采用的外貌'},
@@ -72,7 +72,7 @@ try {
   const current=(await (await fetch(`${base}/${canvas.id}`)).json()).data
   assert.ok(current.document.edges.some(edge=>edge.id==='actor-edge'))
   assert.equal(current.document.cards[1].input_bindings.length,1)
-  await page.getByRole('button',{name:'关闭详情',exact:true}).click()
+  await closeCanvasDetails(page)
   await page.getByRole('button',{name:'返回项目',exact:true}).click()
   await page.getByRole('tab',{name:/画布生成/}).click()
   await page.getByRole('button',{name:'画布管理',exact:true}).click()
@@ -238,7 +238,7 @@ try {
   assert.match(controls.calls[0].prompt,/小雨/)
   assert.equal(controls.calls[0].prompt.split('今天会是晴天。').length-1,1)
   assert.doesNotMatch(controls.calls[0].prompt,/未直接采用的外貌秘密/)
-  await detail.getByRole('button',{name:'关闭详情',exact:true}).click()
+  await closeCanvasDetails(page)
   await category.press('ArrowDown')
   await page.locator('.ant-select-dropdown:visible').getByText('全部分类',{exact:true}).click()
   const beforeVisual=await read()
@@ -252,16 +252,16 @@ try {
   await page.locator(`[data-card-id="${reference}"]`).click({modifiers:[modifier]})
   await page.getByRole('toolbar',{name:'所选卡片操作',exact:true}).getByRole('button',{name:'编组',exact:true}).click()
   await poll(state=>state.document.groups.some(group=>group.card_ids.includes(photo)&&group.card_ids.includes(reference)))
-  const plainOpen=async id=>{const current=page.locator('.wb-details:visible');if(await current.count())await current.getByRole('button',{name:'关闭详情',exact:true}).click();await page.locator(`[data-card-id="${id}"]`).press('Enter');if(id===photo)await page.locator(`[data-card-id="${id}"]`).getByRole('button',{name:'编辑卡片',exact:true}).click();await detail.waitFor()}
+  const plainOpen=async id=>{const current=page.locator('.wb-details:visible');if(await current.count())await closeCanvasDetails(page);await page.locator(`[data-card-id="${id}"]`).press('Enter');if(id===photo)await page.locator(`[data-card-id="${id}"]`).getByRole('button',{name:'编辑卡片',exact:true}).press('Enter');await detail.waitFor()}
   const stable=async()=>{await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));await delay(150)}
   for(const [width,height] of [[1440,960],[390,844],[3830,1688]]){
     await page.setViewportSize({width,height});await stable()
     await plainOpen(model)
-    await detail.getByRole('region',{name:'本次创作依据',exact:true}).getByRole('img',{name:'图片预览',exact:true}).waitFor()
+    await detail.locator('.generation-material-references').getByRole('img',{name:'图片预览',exact:true}).waitFor()
     assert.equal(await detail.getByRole('region',{name:'已保存直接输入',exact:true}).isVisible(),false)
     const submitBounds=await detail.getByRole('button',{name:'预检运行',exact:true}).boundingBox(), editorBody=await detail.boundingBox()
     assert.ok(submitBounds.y>=editorBody.y&&submitBounds.y+submitBounds.height<=editorBody.y+editorBody.height,'multi-source submit stays visible before any scrolling')
-    assert.doesNotMatch(await detail.getByRole('region',{name:'本次创作依据',exact:true}).innerText(),new RegExp(beforeVisual.document.cards.find(card=>card.id===person).object_id),'default design summary uses human fields')
+    assert.doesNotMatch(await detail.locator('.generation-material-references').innerText(),new RegExp(beforeVisual.document.cards.find(card=>card.id===person).object_id),'default design summary uses human fields')
     await page.screenshot({path:join(output,`b-canvas-${width}.png`),animations:'disabled'})
     await detail.screenshot({path:join(output,`b-composer-${width}.png`),animations:'disabled'})
     await detail.getByRole('button',{name:'预检运行',exact:true}).scrollIntoViewIfNeeded()
@@ -271,7 +271,7 @@ try {
     await detail.getByRole('button',{name:'编辑光影与色彩',exact:true}).click()
     await page.screenshot({path:join(output,`b-photography-${width}.png`),animations:'disabled'})
     await detail.screenshot({path:join(output,`b-photography-region-${width}.png`),animations:'disabled'})
-    await detail.getByRole('button',{name:'关闭详情',exact:true}).click()
+    await closeCanvasDetails(page)
   }
   await page.setViewportSize({width:1440,height:960});await stable()
   await page.getByRole('button',{name:/运行历史/}).click()
@@ -280,7 +280,7 @@ try {
   const copied=await poll(state=>state.document.cards.some(card=>card.type==='content.image'&&card.origin))
   const savedImage=copied.document.cards.find(card=>card.type==='content.image'&&card.origin)
   assert.equal(savedImage.file_id,runtime.current_outputs[model][0].file_id)
-  await page.getByRole('button',{name:'关闭详情',exact:true}).click()
+  await closeCanvasDetails(page)
   const downstream=await add('图片模型卡','model.image')
   await selectOption(detail.getByRole('combobox',{name:'选择模型',exact:true}),'image-model')
   await connectExisting(downstream,savedImage.id,'参考图片')

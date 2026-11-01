@@ -1,3 +1,4 @@
+import { closeCanvasDetails, expandCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -58,11 +59,10 @@ try {
       manifest.push({ id, width, height, state, page: `${id}-${width}-${state}-page.png`, editor: `${id}-${width}-${state}-editor.png`, card: `${id}-${width}-${state}-card.png` })
     }
     await capture('F01', 'default')
-    await editor.getByRole('button', { name: '展开详情', exact: true }).click()
+    await expandCanvasDetails(page)
     assert.equal(await body.inputValue(), sample)
     await capture('F02', 'expanded')
-    await editor.getByRole('button', { name: '收起详情', exact: true }).click()
-    await editor.getByRole('button', { name: '关闭详情', exact: true }).click()
+    await closeCanvasDetails(page)
     await card.screenshot({ path: join(output, `F01-${width}-default-card.png`) })
     await card.screenshot({ path: join(output, `F02-${width}-expanded-card.png`) })
     const cardWidth = (await card.boundingBox()).width
@@ -72,7 +72,7 @@ try {
     await editor.getByText('0 字', { exact: true }).waitFor()
     assert.ok(await body.getAttribute('placeholder'))
     await capture('F03', 'empty')
-    await editor.getByRole('button', { name: '关闭详情', exact: true }).click()
+    await closeCanvasDetails(page)
     await card.getByText('未填写正文', { exact: true }).waitFor()
     await card.screenshot({ path: join(output, `F03-${width}-empty-card.png`) })
     await card.press('Enter')
@@ -80,7 +80,7 @@ try {
       await body.fill(Array.from({ length: 60 }, (_, index) => `第${index + 1}行：长正文保持独立滚动与阅读。`).join('\n'))
       await body.press(process.platform === 'darwin' ? 'Meta+End' : 'Control+End')
       assert.ok(await body.evaluate(element => element.scrollHeight > element.clientHeight), 'long text scrolls inside the editor')
-      await editor.getByRole('button', { name: '展开详情', exact: true }).click()
+      await expandCanvasDetails(page)
       assert.match(await body.inputValue(), /第60行/)
       await editor.screenshot({ path: join(output, 'long-expanded-editor.png') })
       await editor.getByRole('button', { name: '收起详情', exact: true }).click()
@@ -100,7 +100,7 @@ try {
     assert.equal(await body.inputValue(), expected, 'HTTP saved import and edit survive reopening')
     await body.focus()
     await body.evaluate(element => { element.setSelectionRange(2, 5) })
-    await editor.getByRole('button', { name: '展开详情', exact: true }).click()
+    await expandCanvasDetails(page)
     assert.equal(await body.inputValue(), expected)
     assert.deepEqual(await body.evaluate(element => [element.selectionStart, element.selectionEnd]), [2, 5], 'expand retains selection and editor')
     await editor.getByRole('button', { name: '收起详情', exact: true }).click()

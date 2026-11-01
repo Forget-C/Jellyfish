@@ -1,3 +1,4 @@
+import { expandCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -77,7 +78,7 @@ try {
   const controls=await (await fetch(`${api}/test/image-controls`)).json()
   assert.equal(controls.calls.length,1)
   await page.screenshot({path:join(output,'single-model-result.png')})
-  await editor.getByRole('button',{name:'展开详情',exact:true}).click()
+  await expandCanvasDetails(page)
   await editor.getByRole('button',{name:'预检运行',exact:true}).waitFor()
   await page.screenshot({path:join(output,'expanded-submit.png')})
   await editor.getByRole('button',{name:'添加模型来源',exact:true}).click()

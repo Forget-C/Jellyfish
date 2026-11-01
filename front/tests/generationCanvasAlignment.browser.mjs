@@ -1,5 +1,4 @@
-import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
-import { openCardList } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { closeCanvasDetails, expandCanvasDetails, closePrecheck, openModelInspection, openCardList } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import { writeFile } from 'node:fs/promises'
 import assert from 'node:assert/strict'
@@ -80,18 +79,18 @@ try {
     await page.locator('[data-card-id="source"]').press('Enter')
     const details=page.locator('.wb-details:visible')
     await details.waitFor()
-    if(await details.getByRole('button',{name:'收起详情',exact:true}).isVisible())await details.getByRole('button',{name:'收起详情',exact:true}).click()
+
     await snapshot(`generation-details-${name}`)
     const field=details.getByRole('textbox',{name:'文本内容',exact:true})
     await field.fill(`连续编辑-${name}`)
     const editorView=await page.locator('.generation-world').getAttribute('style')
-    await details.getByRole('button',{name:'展开详情',exact:true}).click()
+    await expandCanvasDetails(page)
     await snapshot(`generation-expanded-${name}`)
     assert.equal(await field.inputValue(),`连续编辑-${name}`)
     await page.keyboard.press('Escape')
     assert.equal(await page.locator('.generation-world').getAttribute('style'),editorView)
-    if(await details.isVisible())await details.getByRole('button',{name:'关闭详情',exact:true}).click()
-    assert.equal(await page.locator('[data-card-id="source"]').evaluate(n=>n.contains(document.activeElement)),true)
+    await closeCanvasDetails(page)
+    await page.waitForFunction(() => document.querySelector('[data-card-id="source"]')?.contains(document.activeElement))
   }
   const beforeMapClose=await page.locator('.generation-world').getAttribute('style')
   await page.getByRole('button',{name:'关闭小地图',exact:true}).click()
@@ -111,16 +110,17 @@ try {
   await page.getByRole('button',{name:'确认执行',exact:true}).click()
   const waitStatus=async status=>{for(let i=0;i<80;i++){const runtime=(await(await fetch(`${base}/${canvas.id}/runtime`)).json()).data;if(runtime.runs.some(run=>run.nodes.some(node=>node.card_id==='model'&&node.status===status)))return;await delay(100)}throw Error(`runtime never reached ${status}`)}
   await waitStatus('running')
-  await page.keyboard.press('Escape')
+  await closePrecheck(page)
+  await closeCanvasDetails(page)
   await page.getByRole('button',{name:'任务中心',exact:true}).click()
   await snapshot('generation-task-desktop')
   await page.keyboard.press('Escape')
   for(const [name,width,height] of [['desktop',1440,960],['mobile',390,844],['wide',3830,1688]]){await page.setViewportSize({width,height});await snapshot(`generation-running-${name}`)}
   await fetch(`${api}/test/runtime-controls`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({release:2})})
   await waitStatus('failed')
-  await page.locator('[data-card-id="model"] [aria-label="模型状态摘要"]').getByText('controlled-text · 失败 · 未完成',{exact:true}).waitFor()
+  await page.locator('[data-card-id="model"] [aria-label="模型状态摘要"]').getByText('失败 · 未完成',{exact:true}).waitFor()
   await page.locator('[data-card-id="model"]').press('Enter')
   await page.locator('.generation-material-composer').waitFor(); await openModelInspection(page)
-  await details.getByText('失败 · 未完成',{exact:false}).waitFor()
+  await details.getByRole('region',{name:'本次运行',exact:true}).getByRole('status').filter({hasText:'失败 · 未完成'}).waitFor()
   for(const [name,width,height] of [['desktop',1440,960],['mobile',390,844],['wide',3830,1688]]){await page.setViewportSize({width,height});await snapshot(`generation-failed-${name}`)}
 } finally { await cleanup() }

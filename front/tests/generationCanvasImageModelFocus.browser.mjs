@@ -1,3 +1,4 @@
+import { closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn, execFileSync } from 'node:child_process'
@@ -27,12 +28,12 @@ try{
   const canvas=(await request(base,{name:'C图片模型逐类验收'})).data
   const prompt='清晨，林夏走过安静的街道，回头望向镜头。保持人物身份、自然步态与柔和侧光。'
   const model=(id,text='')=>({id,type:'model.image',model_id:'canvas-image-model',prompt:{segments:text?[{id:'p',kind:'text',text}]:[]},config:{count:3,target_ratio:'1:1',resolution_profile:'standard'}})
-  await request(`${base}/${canvas.id}`,{request_id:'seed',expected_revision:0,document:{...canvas.document,cards:[{id:'source-text',type:'content.text',text:'保持人物身份、自然步态与柔和侧光。'},{id:'source-image',type:'content.image',file_id:file.id},model('m',prompt),model('empty')],edges:[{id:'text-edge',source_card:'source-text',source_port:'text',target_card:'m',target_port:'text'},{id:'image-edge',source_card:'source-image',source_port:'image',target_card:'m',target_port:'image'}],input_order:{m:{text:['text-edge'],image:['image-edge']}}}},'PUT')
+  await request(`${base}/${canvas.id}`,{request_id:'seed',expected_revision:0,document:{...canvas.document,cards:[{id:'source-text',type:'content.text',text:'保持人物身份、自然步态与柔和侧光。'},{id:'source-image',type:'content.image',file_id:file.id},model('m',prompt),model('empty'),{...model('unselected'),model_id:null}],edges:[{id:'text-edge',source_card:'source-text',source_port:'text',target_card:'m',target_port:'text'},{id:'image-edge',source_card:'source-image',source_port:'image',target_card:'m',target_port:'image'}],input_order:{m:{text:['text-edge'],image:['image-edge']}}}},'PUT')
   const read=async()=>(await request(`${base}/${canvas.id}`)).data
   const runtime=async()=>(await request(`${base}/${canvas.id}/runtime`)).data
   await page.goto(`http://127.0.0.1:4459/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   const editor=page.locator('.wb-details:not([hidden])'), card=page.locator('[data-card-id="m"]')
-  const close=async()=>{if(await editor.isVisible()){if(await editor.getAttribute('data-expanded')==='true'&&await editor.getByRole('button',{name:'收起详情',exact:true}).count())await editor.getByRole('button',{name:'收起详情',exact:true}).click();await editor.getByRole('button',{name:'关闭详情',exact:true}).click()}}
+  const close=()=>closeCanvasDetails(page)
   const open=async id=>{await close();await page.locator(`[data-card-id="${id}"]`).press('Enter');await editor.waitFor();await delay(150)}
   await open('m')
   assert.match(await editor.getByRole('spinbutton',{name:'图片数量',exact:true}).inputValue(),/3\s*张/,'quantity carries its unit in compact toolbar')
@@ -52,7 +53,7 @@ try{
   assert.equal(await preview.locator(':scope > p').count(),0,'counter does not add a row above the image')
   assert.deepEqual((await runtime()).current_outputs.m,originals,'previewing a result preserves the complete published output')
   const revision=(await read()).revision
-  await preview.getByRole('button',{name:'打开完整图片',exact:true}).click()
+  await card.getByRole('button',{name:'打开完整图片',exact:true}).click()
   const full=page.getByRole('dialog',{name:'图片预览',exact:true});await full.waitFor();await full.getByRole('button',{name:'Close',exact:true}).click()
   assert.equal((await read()).revision,revision,'full preview does not modify document')
   const manifest=[]
@@ -66,7 +67,7 @@ try{
       if(width>700)await page.locator(`[data-card-id="${id}"]`).screenshot({path:join(output,`${prefix}-card.png`)})
       manifest.push({f,width,height,state,prefix})
       assert.ok(await editor.getByRole('button',{name:'预检运行',exact:true}).evaluate(e=>{const b=e.getBoundingClientRect();return b.right<=innerWidth&&b.bottom<=innerHeight&&b.width>=32}))
-      if(id==='empty'){assert.ok(await editor.getByRole('button',{name:'预检运行',exact:true}).isDisabled());await editor.getByText('创作描述',{exact:true}).waitFor()}
+      if(id==='empty'){assert.ok(await editor.getByRole('button',{name:'预检运行',exact:true}).isDisabled());assert.ok(await editor.getByRole('textbox',{name:'模型正文',exact:true}).getAttribute('aria-placeholder'))}
     }
   }
   await page.setViewportSize({width:1440,height:960});await open('m')
@@ -99,7 +100,7 @@ try{
   await page.setViewportSize({width:1440,height:960});await delay(200)
   const observer=await context.newPage();await observer.goto(page.url());await observer.getByText('此画布当前只读',{exact:true}).waitFor();await observer.locator('[data-card-id="m"]').press('Enter')
   const ro=observer.locator('.wb-details:not([hidden])');assert.ok(await ro.getByRole('button',{name:'预检运行',exact:true}).isDisabled());await observer.screenshot({path:join(output,'image-model-readonly.png'),fullPage:true});await observer.close()
-  await open('empty');const modelSelect=editor.locator('.generation-material-model');await modelSelect.hover();await modelSelect.locator('.ant-select-clear').click()
+  await open('unselected')
   await editor.getByRole('spinbutton',{name:'图片数量',exact:true}).waitFor({state:'hidden'})
   assert.equal(await editor.getByRole('combobox',{name:'图片画幅',exact:true}).count(),0,'no adapter capability does not fabricate parameter controls')
   assert.equal(await editor.getByRole('combobox',{name:'图片分辨率',exact:true}).count(),0)

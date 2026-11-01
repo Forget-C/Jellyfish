@@ -18,17 +18,36 @@ export async function openCanvasCard(page, id) {
 export async function closeCanvasDetails(page) {
   const details = page.locator('.wb-details:visible')
   if (await details.count()) {
-    const close = details.getByRole('button', { name: '关闭详情', exact: true })
-    if (await close.count()) await close.click()
-    else {
+    await page.waitForFunction(() => ![...document.querySelectorAll('.wb-details')].find(node => node.getClientRects().length)?.inert)
+    for (let attempt = 0; attempt < 4 && await details.isVisible(); attempt++) {
+      const expanded = { modal: await details.getAttribute('data-expanded'), collapsible: await details.getByRole('button', {name:'收起详情',exact:true}).count() > 0 }
       const candidates = details.locator('.generation-material-candidates[open] > summary')
-      if (await candidates.count()) await candidates.press('Escape')
-      if (await details.isVisible()) await page.keyboard.press('Escape')
-      if (await details.isVisible()) await page.keyboard.press('Escape')
+      const close = details.getByRole('button', { name: '关闭详情', exact: true })
+      if (await candidates.count()) {
+        await candidates.press('Escape')
+        await details.locator('.generation-material-candidates[open]').waitFor({ state: 'hidden' })
+      } else {
+        if (await close.count()) await close.click()
+        else await page.keyboard.press('Escape')
+        await page.waitForFunction(before => {
+          const node = [...document.querySelectorAll('.wb-details')].find(element => element.getClientRects().length)
+          return !node || node.getAttribute('data-expanded') !== before.modal || !!node.querySelector('[aria-label="收起详情"]') !== before.collapsible
+        }, expanded)
+      }
     }
     await details.waitFor({ state: 'hidden' })
     await page.waitForFunction(() => !document.querySelector('.canvas-workbench')?.inert)
   }
+}
+
+/** 当前尺寸入口在自动模态和手动展开时分别保留自己的可访问名称。 */
+export const canvasDetailsToggle = editor => editor.getByRole('button', { name: /^(展开|收起)详情$/ })
+export async function expandCanvasDetails(page) {
+  const expand = page.locator('.generation-card-editor:visible').getByRole('button', { name: '展开详情', exact: true })
+  if (await expand.count()) await expand.click()
+  const editor = page.locator('.generation-card-editor:visible')
+  await editor.getByRole('button', { name: '收起详情', exact: true }).waitFor()
+  assert.equal(await editor.getAttribute('data-expanded'), 'true', 'editor really entered expanded mode')
 }
 
 export async function closePrecheck(page) {
@@ -159,7 +178,8 @@ export async function moveCanvasCard(page, id, x, y) {
   for (let step = 0; step < 250; step++) {
     const box = await card.boundingBox()
     if (Math.abs(box.x - x) <= 10 && Math.abs(box.y - y) <= 10) return
-    await page.keyboard.press(Math.abs(box.x - x) > 10 ? box.x < x ? 'ArrowRight' : 'ArrowLeft' : box.y < y ? 'ArrowDown' : 'ArrowUp')
+    const key = Math.abs(box.x - x) > 10 ? box.x < x ? 'ArrowRight' : 'ArrowLeft' : box.y < y ? 'ArrowDown' : 'ArrowUp'
+    await page.keyboard.press(`${(Math.abs(box.x-x)>10?Math.abs(box.x-x):Math.abs(box.y-y))>100?'Shift+':''}${key}`)
   }
   throw new Error(`cannot move canvas card ${id} to ${x},${y}`)
 }
@@ -175,7 +195,7 @@ export async function clearCanvasNeighbors(page, id) {
       const b = await card.boundingBox(), occupied = await Promise.all(placed.map(item => item.boundingBox()))
       if (occupied.every(a => b.x >= a.x + a.width + 20 || b.x + b.width <= a.x - 20 || b.y >= a.y + a.height + 20 || b.y + b.height <= a.y - 20)) break
       assert.ok(step < 249, `cannot clear neighbor ${await card.getAttribute('data-card-id')}`)
-      await page.keyboard.press('ArrowRight')
+      await page.keyboard.press('Shift+ArrowRight')
     }
     placed.push(card)
   }
@@ -196,6 +216,11 @@ export async function prepareCanvasCard(page, id) {
     }
     return { x: left + 16, y: top + 24 }
   })
+  for(let attempt=0;attempt<16;attempt++){
+    const box=await page.locator(`[data-card-id="${id}"]`).boundingBox()
+    if(box.width <= page.viewportSize().width-bounds.x-24)break
+    await page.getByRole('button',{name:'缩小',exact:true}).click()
+  }
   await moveCanvasCard(page, id, bounds.x, bounds.y)
   await clearCanvasNeighbors(page, id)
   await assertControlReachable(page.locator(`[data-card-id="${id}"]`).getByRole('button', { name: /^移动布局：/ }), 'prepared')
@@ -204,6 +229,15 @@ export async function prepareCanvasCard(page, id) {
 /** Wait for fonts, actual media loading and stable geometry, then clip the page without locator auto-scroll. */
 export async function captureCanvasRegion(page, region, path) {
   await page.mouse.move(1, 1)
+  // 保留的编辑器可能保留旧 hover 状态；真实移入触发器再移出，不隐藏或删除浮层。
+  const hovered = await page.evaluate(() => [...document.querySelectorAll('[role="tooltip"]')].filter(tooltip => tooltip.getClientRects().length && getComputedStyle(tooltip).visibility !== 'hidden').flatMap(tooltip => {
+    const labelled = [...document.querySelectorAll('button[aria-label]')].filter(element => element.getAttribute('aria-label') === tooltip.textContent.trim() && element.getClientRects().length)
+    const trigger = tooltip.id && [...document.querySelectorAll('[aria-describedby]')].find(element => element.getAttribute('aria-describedby').split(' ').includes(tooltip.id)) || (labelled.length === 1 ? labelled[0] : undefined)
+    if (!trigger) return []
+    const box = trigger.getBoundingClientRect()
+    return box.width && box.height && box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight ? [{ x: box.x + box.width / 2, y: box.y + box.height / 2 }] : []
+  }))
+  for (const point of hovered) { await page.mouse.move(point.x, point.y); await page.mouse.move(1, 1) }
   await page.waitForFunction(() => [...document.querySelectorAll('[role="tooltip"]')].every(element => !element.getClientRects().length || getComputedStyle(element).visibility === 'hidden'), undefined, { timeout: 2000 })
   const handle = await region.elementHandle()
   await page.waitForFunction(element => document.fonts.status === 'loaded' && [...element.querySelectorAll('img')].every(image => image.complete && image.naturalWidth > 0), handle, { timeout: 5000 })

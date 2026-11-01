@@ -58,11 +58,11 @@ try {
     assert.ok(await list.locator('button[draggable]').evaluateAll(buttons => buttons.every(button => button.scrollWidth <= button.clientWidth)), 'menu fits complete option labels')
     for (const text of await list.getByRole('button').allTextContents()) represented.add(text)
   }
-  assert.equal(represented.size, 40, '39 entries plus close control cover the complete catalog')
+  assert.equal(represented.size, catalog.cards.length + 5, 'catalog entries, four extra photography variants and close control cover the complete menu')
   assert.ok(menuWidths.every(width => width < 280), `menus shrink from their previous fixed width: ${menuWidths}`)
   assert.ok(new Set(menuWidths).size > 1, 'menu width follows the option content of each category')
   assert.ok([...represented].every(title => !title.startsWith('添加')), 'card creation options show names without the add prefix')
-  assert.equal(catalog.cards.length, 35)
+  assert.equal(catalog.cards.length, 37, 'catalog includes all four named description types')
   await page.getByRole('searchbox', { name: '搜索卡片' }).fill('不存在的卡片')
   await list.getByText('没有匹配的卡片').waitFor()
   await page.screenshot({ path: join(output, 'two-level-empty.png') })

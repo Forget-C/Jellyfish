@@ -1,3 +1,4 @@
+import { closeCanvasDetails, expandCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -47,13 +48,13 @@ try {
     media.push({ id: `${type}-card`, type: `content.${type}`, file_id: file.id })
   }
   const cards = [{ id: 'text-one', type: 'content.object', name: '张三', category: 'character', object_id: 'character-one', text: '三十岁的人物描述' }, { id: 'text-two', type: 'content.text', text: '第二张正文' }, ...media, { id: 'model-card', type: 'model.text', model_id: null, prompt: { segments: [] }, config: {} }, { id: 'director-card', type: 'direction.fact', input_bindings: [], examples: [], scope: {} }]
-  cards.push({ id: 'reference-card', type: 'reference.character', title: '正面角色参考', angle: '正面', objects: [], image_binding: { file_id: media[0].file_id } })
-  const saved = await fetch(`${base}/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: created.revision, document: { ...created.document, cards } }) })
+  cards.push({ id: 'reference-card', type: 'reference.character', title: '正面角色参考', angle: '正面', objects: [], image_binding: { file_id: media[0].file_id, source:{canvas_id:id,card_id:media[0].id,port_id:'image',position:0} } })
+  const saved = await fetch(`${base}/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: crypto.randomUUID(), expected_revision: created.revision, document: { ...created.document, cards, edges:[{id:'reference-image',source_card:media[0].id,source_port:'image',target_card:'reference-card',target_port:'image_source'}],input_order:{'reference-card':{image_source:['reference-image']}} } }) })
   assert.ok(saved.ok, await saved.text())
   await page.goto(`http://127.0.0.1:4423/projects/canvas-project/generation-canvas?canvas=${id}`)
   const card = page.locator('[data-card-id="text-one"]')
   await card.waitFor()
-  if (await page.getByRole('button', { name: '关闭详情', exact: true }).isVisible()) await page.getByRole('button', { name: '关闭详情', exact: true }).click()
+  await closeCanvasDetails(page)
   assert.equal(await card.getByRole('button', { name: '删除卡片', exact: true }).count(), 0, 'danger action belongs in card menu')
   assert.equal(await card.getByRole('checkbox').count(), 0, 'selection is not a persistent checkbox')
   await card.getByText('张三', { exact: true }).waitFor()
@@ -62,10 +63,10 @@ try {
   const details = page.locator('.wb-details:visible')
   await details.waitFor()
   await details.getByRole('textbox', { name: '对象描述正文', exact: true }).fill('自动保存期间的连续输入')
-  await page.getByRole('button', { name: '展开详情', exact: true }).click()
+  await expandCanvasDetails(page)
   await page.waitForTimeout(1300)
   assert.equal(await details.getByRole('textbox', { name: '对象描述正文', exact: true }).inputValue(), '自动保存期间的连续输入')
-  await page.getByRole('button', { name: '关闭详情', exact: true }).click()
+  await closeCanvasDetails(page)
   assert.equal(await page.locator('.generation-world').getAttribute('style'), transform)
   await card.getByRole('button', { name: '卡片操作', exact: true }).click()
   await card.getByRole('button', { name: '取消选择卡片', exact: true }).click()
@@ -83,7 +84,7 @@ try {
   const audio = page.locator('[data-card-id="audio-card"] audio')
   await audio.evaluate(element => element.dispatchEvent(new MouseEvent('click', { bubbles: true })))
   assert.equal(await page.locator('.wb-details:visible').count(), 0, 'media click does not activate editing')
-  // Public gesture: hold the preview, move, then open its inspector only on release.
+  // Drag moves the preview without opening an inspector; explicit activation preserves the draft.
   const preview = card.locator('.canvas-card-summary').first()
   const box = await preview.boundingBox()
   const original = await card.boundingBox()
@@ -95,9 +96,10 @@ try {
   assert.ok(dragged.x > original.x + 30, 'holding the card body moves its layout')
   await page.screenshot({ path: join(output, 'cards-dragging.png'), animations: 'disabled' })
   await page.mouse.up()
-  await page.locator('.wb-details:visible').waitFor()
+  assert.equal(await page.locator('.wb-details:visible').count(),0,'release does not open an editor')
+  await card.press('Enter');await page.locator('.wb-details:visible').waitFor()
   assert.equal(await details.getByRole('textbox', { name: '对象描述正文', exact: true }).inputValue(), '自动保存期间的连续输入')
-  await page.getByRole('button', { name: '关闭详情', exact: true }).click()
+  await closeCanvasDetails(page)
   const pressPreview = async () => {
     const bounds = await preview.boundingBox()
     await page.mouse.move(bounds.x + 40, bounds.y + 10)
@@ -111,8 +113,8 @@ try {
   await page.waitForTimeout(260)
   await page.mouse.up()
   assert.notEqual(await card.getAttribute('style'), earlyStyle)
-  await page.locator('.wb-details:visible').waitFor()
-  await page.getByRole('button', { name: '关闭详情', exact: true }).click()
+  assert.equal(await page.locator('.wb-details:visible').count(),0)
+  await closeCanvasDetails(page)
   // A cancelled move restores layout and does not activate after release.
   const cancelledStyle = await card.getAttribute('style')
   const cancelled = await pressPreview()
@@ -122,15 +124,17 @@ try {
   await page.mouse.up()
   assert.equal(await card.getAttribute('style'), cancelledStyle)
   assert.equal(await page.locator('.wb-details:visible').count(), 0)
-  // Opening another inspector is allowed throughout the drag; switch only on release.
+  // Dragging an unselected card closes the unrelated inspector and does not switch on release.
   await page.locator('[data-card-id="text-two"]').press('Enter')
   const oldEditor = page.locator('.wb-details:visible [data-card-details]')
   assert.equal(await oldEditor.getAttribute('data-card-details'), 'text-two')
   const switchPoint = await pressPreview()
   await page.waitForTimeout(260)
   await page.mouse.move(switchPoint.x + 70, switchPoint.y + 35)
-  assert.equal(await oldEditor.getAttribute('data-card-details'), 'text-two')
+  assert.equal(await page.locator('.wb-details:visible').count(),0)
   await page.mouse.up()
+  assert.equal(await page.locator('.wb-details:visible').count(),0)
+  await card.press('Enter')
   assert.equal(await page.locator('.wb-details:visible [data-card-details]').getAttribute('data-card-details'), 'text-one')
   const editor = page.locator('.wb-details:visible textarea[aria-label="对象描述正文"]')
   const editorHandle = await editor.elementHandle()
@@ -139,8 +143,8 @@ try {
   await page.mouse.move(same.x + 55, same.y + 20)
   await page.mouse.up()
   assert.equal(await editorHandle.evaluate(element => element.isConnected), true, 'same-card drag preserves its editor session')
-  await page.getByRole('button', { name: '关闭详情', exact: true }).click()
-  // Chrome touch input exercises the real browser pointer conversion and 350ms hold.
+  await closeCanvasDetails(page)
+  // Chrome touch input exercises real pointer conversion and movement tolerance.
   const touch = await page.context().newCDPSession(page)
   await touch.send('Emulation.setTouchEmulationEnabled', { enabled: true })
   const touchBox = await preview.boundingBox(), touchBefore = await card.boundingBox()
@@ -151,8 +155,8 @@ try {
   assert.ok((await card.boundingBox()).x > touchBefore.x + 20, 'touch hold moves preview')
   assert.equal(await page.locator('.wb-details:visible').count(), 0)
   await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
-  await page.locator('.wb-details:visible').waitFor()
-  await page.getByRole('button', { name: '关闭详情', exact: true }).click()
+  assert.equal(await page.locator('.wb-details:visible').count(),0,'touch release only commits movement')
+  await closeCanvasDetails(page)
   await touch.send('Emulation.setTouchEmulationEnabled', { enabled: false })
   await touch.detach()
   const persisted = (await (await fetch(`${base}/${id}`)).json()).data.document
@@ -203,7 +207,7 @@ try {
   await page.waitForTimeout(150)
   assert.equal(await page.locator('.wb-details:visible').count(), 1)
   await page.screenshot({ path: join(output, 'cards-mobile.png'), animations: 'disabled' })
-  await page.getByRole('button', { name: '关闭详情', exact: true }).click()
+  await closeCanvasDetails(page)
   await page.getByRole('button', { name: '适应全部', exact: true }).click()
   await page.screenshot({ path: join(output, 'cards-mobile-overview.png'), animations: 'disabled' })
   console.log('named card, menu selection, continuous details editing and save/reopen verified')

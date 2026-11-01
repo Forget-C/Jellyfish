@@ -253,3 +253,5 @@ CI supplies the retained manifest explicitly to the existing browser runner and 
 ### 生成画布交互
 
 `PLAYWRIGHT_CHANNEL=chrome node front/tests/run-browser.mjs canvas-interaction` 覆盖生成画布拖动与编辑器锚定、多选、边缘自动平移、Escape、键盘移动和统一历史、滚轮缩放、输入／菜单隔离、整批删除引用保护、桌面及窄屏编辑器，并回归图片完整展示和既有卡片／编组流程。`generation-canvas-interaction` 可单独运行新交互用例；截图与日志保存在 runner 输出目录。
+
+完整生成画布布局回归使用 `PLAYWRIGHT_CHANNEL=chrome node front/tests/run-browser.mjs canvas-layout`。当前锚定模型编辑器高度为 320px；模型、参考和描述编辑器按无标题／无关闭按钮的约定验收，基础内容保留标题及关闭入口。关闭辅助器逐层执行真实按钮或 Escape，并等待隐藏及解除 inert；展开辅助器验证真实展开状态。窄屏截图准备通过公开缩放和键盘布局控件容纳 360px 模型卡，截图不替代来源、草稿、媒体选择及控件命中检查。

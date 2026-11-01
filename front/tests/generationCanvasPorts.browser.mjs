@@ -1,4 +1,4 @@
-import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { openModelInspection, closeCanvasDetails, closePrecheck } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -89,7 +89,7 @@ try {
   await openModelInspection(page)
   const details=page.locator('.wb-details:visible')
   await details.getByRole('button',{name:'@文本1',exact:true}).click()
-  await page.getByRole('button',{name:'关闭详情',exact:true}).click()
+  await closeCanvasDetails(page)
   await page.getByRole('button',{name:'保存画布',exact:true}).click()
   for(let i=0;i<40 && !(await read()).document.cards.find(card=>card.id==='model').input_bindings?.length;i++) await delay(100)
   assert.match((await precheck()).input.text,/被隐藏但明确采用的内容/)
@@ -101,7 +101,8 @@ try {
   await fetch(`${api}/test/runtime-controls`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({release:2})})
   await runPreview.getByRole('button',{name:'确认执行',exact:true}).click()
   for(let i=0;i<80;i++){const controls=await(await fetch(`${api}/test/runtime-controls`)).json();if(controls.calls.length){assert.match(controls.calls[0].text,/被隐藏但明确采用的内容/);break}await delay(100);if(i===79)throw Error('provider was not called')}
-  if(await page.getByRole('button',{name:'关闭详情',exact:true}).isVisible()) await page.getByRole('button',{name:'关闭详情',exact:true}).click()
+  await closePrecheck(page)
+  await closeCanvasDetails(page)
   await fitForConnecting()
   await page.screenshot({path:join(output,'ports-before-self.png')})
   await drag(modelCard,'right',modelCard,'left')

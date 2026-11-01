@@ -1,3 +1,4 @@
+import { closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -34,12 +35,12 @@ try {
   await request(`${base}/${canvas.id}`,{request_id:'seed',expected_revision:0,document},'PUT')
   await page.goto(`http://127.0.0.1:4558/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   const editor=page.locator('.wb-details:not([hidden])'), material=editor.getByLabel('管理候选与采用',{exact:true})
-  const close=async()=>{if(await editor.isVisible()){if(await editor.getAttribute('data-expanded')==='true'&&await editor.getByRole('button',{name:'收起详情',exact:true}).count())await editor.getByRole('button',{name:'收起详情',exact:true}).click();await editor.getByRole('button',{name:'关闭详情',exact:true}).click()}}
+  const close=()=>closeCanvasDetails(page)
   const open=async id=>{await close(); await page.locator(`[data-card-id="${id}"]`).press('Enter'); await editor.waitFor();await editor.getByRole('textbox',{name:'模型正文',exact:true}).waitFor();await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))))}
   await open('m')
   assert.equal(await editor.getByText('＠ 引用与指令',{exact:true}).isVisible(),false,'reference controls are on demand, not a permanent prompt row')
   assert.equal(await editor.getByText('运行状态与正式输出',{exact:true}).isVisible(),false,'output history does not occupy the default prompt')
-  assert.equal(await editor.getByRole('button',{name:'添加模型来源',exact:true}).isVisible(),false,'one material entry replaces the separate square add button')
+  assert.equal(await editor.getByRole('button',{name:'添加模型来源',exact:true}).isVisible(),true,'current input area exposes its direct add-source action')
   await material.click()
   await editor.getByRole('button',{name:'添加模型来源',exact:true}).waitFor()
   const refs=editor.locator('summary').filter({hasText:'＠ 引用与指令'})
@@ -67,15 +68,16 @@ try {
       if(width>700)await page.locator(`[data-card-id="${id}"]`).screenshot({path:join(output,`${prefix}-card.png`)})
       manifest.push({f,width,height,state,prefix})
       assert.ok(await editor.getByRole('button',{name:'预检运行',exact:true}).evaluate(e=>{const b=e.getBoundingClientRect();return b.width>=32&&b.right<=innerWidth&&b.bottom<=innerHeight}))
-      if(id==='empty'){assert.equal(await editor.getByRole('button',{name:'预检运行',exact:true}).isDisabled(),true);await editor.getByText('创作描述',{exact:true}).waitFor()}
+      if(id==='empty'){assert.equal(await editor.getByRole('button',{name:'预检运行',exact:true}).isDisabled(),true);assert.ok(await editor.getByRole('textbox',{name:'模型正文',exact:true}).getAttribute('aria-placeholder'))}
     }
   }
   await page.setViewportSize({width:1440,height:960})
   for(const id of ['adopted','unselected']){await open(id);await editor.screenshot({path:join(output,`${id}-distinct-editor.png`)})}
   await open('m')
-  await editor.getByRole('region',{name:'本次创作依据',exact:true}).getByText('查看来源',{exact:true}).click()
-  await editor.getByRole('region',{name:'本次创作依据',exact:true}).getByText('清晨，人物走过安静的街道。',{exact:true}).last().waitFor()
-  await material.click();await refs.click();await editor.getByRole('button',{name:'@文本1',exact:true}).click()
+  await editor.locator('.generation-material-reference').first().click()
+  await editor.getByRole('region',{name:'已保存直接输入',exact:true}).getByText('清晨，人物走过安静的街道。',{exact:true}).last().waitFor()
+  await material.press('Escape')
+  await material.click();if(await refs.locator('..').getAttribute('open')===null)await refs.click();await editor.getByRole('button',{name:'@文本1',exact:true}).click()
   await material.press('Escape')
   const body=editor.getByRole('textbox',{name:'模型正文',exact:true})
   await body.press('ControlOrMeta+End');await body.press('ArrowRight');await body.pressSequentially('编辑后保留中文正文与来源。')
@@ -94,13 +96,15 @@ try {
   assert.equal(await readonly.getByRole('textbox',{name:'模型正文',exact:true}).getAttribute('contenteditable'),'false')
   assert.equal(await readonly.getByRole('button',{name:'预检运行',exact:true}).isDisabled(),true)
   await observer.screenshot({path:join(output,'text-model-readonly.png'),fullPage:true});await observer.close()
-  await editor.getByRole('region',{name:'本次创作依据',exact:true}).getByRole('button',{name:/取消采用/}).click()
+  await editor.getByLabel('管理候选与采用',{exact:true}).click()
+  await editor.getByRole('region',{name:'已保存直接输入',exact:true}).getByRole('button',{name:/取消采用/}).click()
+  await material.press('Escape')
   await page.getByLabel('画布保存状态').getByText('已保存',{exact:true}).waitFor()
   assert.equal((await request(`${base}/${canvas.id}`)).data.document.cards.find(c=>c.id==='m').input_bindings.length,0)
-  const basisBefore=await editor.getByRole('region',{name:'本次创作依据',exact:true}).boundingBox()
+  const basisBefore=await editor.locator('.generation-material-references').boundingBox()
   await body.fill('长正文阅读。\n'.repeat(80));await body.press('ControlOrMeta+End')
   assert.ok(await body.evaluate(e=>e.scrollHeight>e.clientHeight),'long creation text scrolls inside its own editor')
-  const basisAfter=await editor.getByRole('region',{name:'本次创作依据',exact:true}).boundingBox()
+  const basisAfter=await editor.locator('.generation-material-references').boundingBox()
   assert.equal(basisAfter.y,basisBefore.y,'scrolling creation text does not move the independent basis')
   await page.screenshot({path:join(output,'text-model-long-independent-scroll.png'),fullPage:true})
   await close();await page.getByRole('button',{name:'运行历史',exact:true}).click();await page.getByRole('region',{name:'画布运行历史',exact:true}).waitFor()

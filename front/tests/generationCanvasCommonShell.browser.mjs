@@ -72,6 +72,8 @@ try {
   }
   writeFileSync(join(output, 'prepared-neighbors.json'), JSON.stringify(preparedBoxes, null, 2))
   const pressWithoutScroll = (control, key) => capture.pressCanvasControl(page, control, key)
+  const toggle = editor => editor.getByRole('button', {name:/^(展开|收起)详情$/})
+  const expand = async editor => { if(await editor.getByRole('button',{name:'展开详情',exact:true}).count())await editor.getByRole('button',{name:'展开详情',exact:true}).click() }
   const placeCardInView = async card => capture.prepareCanvasCard(page, await card.getAttribute('data-card-id'))
   for (const viewport of [{width:1440,height:960},{width:3830,height:1688},{width:390,height:844}]) {
     await page.setViewportSize(viewport)
@@ -82,11 +84,13 @@ try {
       const editor=page.locator('.generation-card-editor:visible')
       await editor.waitFor()
       const header=editor.locator('header').first()
-      assert.ok(await header.locator('[aria-hidden="true"]').count(), 'editor has modality icon')
+      const material=id.startsWith('model-')
+      assert.equal(await header.locator('.generation-editor-heading').count(),material?0:1,'only base content retains the editor heading')
+      assert.equal(await header.getByRole('button',{name:'关闭详情',exact:true}).count(),material?0:1,'model editor closes with Escape and has no legacy close button')
       assert.equal(await header.getByText('修改已同步',{exact:true}).count(),0,'normal saved state does not occupy header')
-      await capture.assertControlReachable(editor.getByRole('button',{name:'展开详情',exact:true}), 'initial')
-      await editor.getByRole('button',{name:'展开详情',exact:true}).click({trial:true})
-      await editor.getByRole('button',{name:'关闭详情',exact:true}).click({trial:true})
+      await capture.assertControlReachable(toggle(editor), 'initial')
+      await toggle(editor).click({trial:true})
+      if(await editor.getByRole('button',{name:'关闭详情',exact:true}).count())await editor.getByRole('button',{name:'关闭详情',exact:true}).click({trial:true})
       if(viewport.width>700){
         const rail=await page.getByRole('toolbar',{name:'卡片分类',exact:true}).boundingBox()
         const box=await editor.boundingBox()
@@ -95,15 +99,14 @@ try {
       await page.mouse.move(140,20)
       await capture.captureCanvasRegion(page, editor, join(output,`${id}-${viewport.width}-default-editor.png`))
       await page.screenshot({path:join(output,`${id}-${viewport.width}-default.png`)})
-      await editor.getByRole('button',{name:'展开详情',exact:true}).click()
+      await expand(editor)
       await page.waitForFunction(()=>document.querySelector('.generation-card-editor:not([hidden])')?.getAttribute('data-expanded')==='true')
       await editor.getByRole('button',{name:'收起详情',exact:true}).click({trial:true})
-      await editor.getByRole('button',{name:'关闭详情',exact:true}).click({trial:true})
+      if(await editor.getByRole('button',{name:'关闭详情',exact:true}).count())await editor.getByRole('button',{name:'关闭详情',exact:true}).click({trial:true})
       await page.mouse.move(140,20)
       await capture.captureCanvasRegion(page, editor, join(output,`${id}-${viewport.width}-expanded-editor.png`))
       await page.screenshot({path:join(output,`${id}-${viewport.width}-expanded.png`)})
-      await editor.getByRole('button',{name:'收起详情',exact:true}).click()
-      await editor.getByRole('button',{name:'关闭详情',exact:true}).click()
+      await capture.closeCanvasDetails(page)
       if(viewport.width===390 && id==='text') {
         await page.getByRole('toolbar',{name:'卡片分类',exact:true}).getByRole('button',{name:'基础卡',exact:true}).press('Enter')
         await page.getByRole('navigation',{name:'添加卡片',exact:true}).waitFor()
@@ -120,18 +123,13 @@ try {
     const card=page.locator(`[data-card-id="${id}"]`)
     const mover=card.getByRole('button',{name:/^移动布局：/})
     for(const edge of ['left','right','bottom']) {
-      for(let step=0;step<200;step++) {
-        const box=await card.boundingBox()
-        if(Math.abs(box.x-200)<=20 && Math.abs(box.y-250)<=20)break
-        const key=Math.abs(box.x-200)>20?(box.x<200?'ArrowRight':'ArrowLeft'):(box.y<250?'ArrowDown':'ArrowUp')
-        await pressWithoutScroll(mover, key)
-      }
+      await capture.moveCanvasCard(page,id,200,250)
       // Move through the public keyboard layout control, including positions under canvas chrome.
       for(let step=0;step<100;step++) {
         const box=await card.boundingBox()
         const done=edge==='left'?box.x<=24:edge==='right'?box.x>=1040:box.y+box.height>=900
         if(done)break
-        await pressWithoutScroll(mover, edge==='left'?'ArrowLeft':edge==='right'?'ArrowRight':'ArrowDown')
+        await pressWithoutScroll(mover, edge==='left'?'Shift+ArrowLeft':edge==='right'?'Shift+ArrowRight':'Shift+ArrowDown')
       }
       await pressWithoutScroll(card, 'Enter')
       const editor=page.locator('.generation-card-editor:visible')
@@ -139,24 +137,18 @@ try {
       const rail=await page.getByRole('toolbar',{name:'卡片分类',exact:true}).boundingBox()
       const box=await editor.boundingBox()
       assert.ok(box.x>=rail.x+rail.width+8 && box.x+box.width<=1440,'edge editor avoids rail and viewport')
-      await capture.assertControlReachable(editor.getByRole('button',{name:'展开详情',exact:true}), 'initial')
-      await editor.getByRole('button',{name:'展开详情',exact:true}).click({trial:true})
-      await editor.getByRole('button',{name:'关闭详情',exact:true}).click({trial:true})
+      await capture.assertControlReachable(toggle(editor), 'initial')
+      await toggle(editor).click({trial:true})
+      if(await editor.getByRole('button',{name:'关闭详情',exact:true}).count())await editor.getByRole('button',{name:'关闭详情',exact:true}).click({trial:true})
       await page.screenshot({path:join(output,`${id}-${edge}-avoidance.png`)})
-      await editor.getByRole('button',{name:'展开详情',exact:true}).click()
+      await expand(editor)
       await editor.getByRole('button',{name:'收起详情',exact:true}).click({trial:true})
       await page.screenshot({path:join(output,`${id}-${edge}-expanded.png`)})
-      await editor.getByRole('button',{name:'收起详情',exact:true}).click()
-      await editor.getByRole('button',{name:'关闭详情',exact:true}).click()
+      await capture.closeCanvasDetails(page)
     }
   }
   const textCard=page.locator('[data-card-id="text"]')
-  const textMover=textCard.getByRole('button',{name:/^移动布局：/})
-  for(let step=0;step<200;step++) {
-    const box=await textCard.boundingBox()
-    if(Math.abs(box.x-200)<=20 && Math.abs(box.y-250)<=20)break
-    await textMover.press(Math.abs(box.x-200)>20?(box.x<200?'ArrowRight':'ArrowLeft'):(box.y<250?'ArrowDown':'ArrowUp'))
-  }
+  await capture.moveCanvasCard(page,'text',200,250)
   await textCard.press('Enter')
   const input=page.getByRole('textbox',{name:'文本内容',exact:true})
   const beforeSave=await textCard.boundingBox()
@@ -199,7 +191,7 @@ try {
   const closed = JSON.parse(readFileSync(join(output, 'closed-diagnostics.json'), 'utf8'))
   assert.equal(closed.error.message, original.message)
   assert.ok(closed.diagnosticErrors.length > 0, 'closed page diagnostic errors are recorded without replacing original')
-  await page.getByRole('button', { name: '关闭详情', exact: true }).click()
+  await capture.closeCanvasDetails(page)
   await page.setViewportSize({ width: 390, height: 844 })
   const initialScroll = await page.evaluate(() => ({ x: scrollX, y: scrollY }))
   const offscreen = await page.locator('[data-card-id="text"]').boundingBox()
@@ -224,8 +216,8 @@ try {
   const scrolledReachability = await capture.assertControlReachable(longInput, 'after explicit ControlOrMeta+End')
   writeFileSync(join(output, 'scroll-reachability.json'), JSON.stringify({ initial: initialReachability, afterUserScroll: scrolledReachability }, null, 2))
   const beforeCapture = await panel.boundingBox()
-  await panel.getByRole('button', { name: '展开详情', exact: true }).hover()
-  await page.getByRole('tooltip').getByText('展开详情', { exact: true }).waitFor()
+  await toggle(panel).hover()
+  await page.getByRole('tooltip').getByText(/^(展开|收起)详情$/).waitFor()
   await capture.captureCanvasRegion(page, panel, join(output, 'native-region.png'))
   assert.equal(await page.locator('[role="tooltip"]:visible').count(), 0, 'capture clears real hover tooltips through pointer movement')
   assert.deepEqual(await panel.boundingBox(), beforeCapture, 'region screenshot keeps the demonstrated position')

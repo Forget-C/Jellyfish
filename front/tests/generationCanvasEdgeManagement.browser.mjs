@@ -1,3 +1,4 @@
+import { closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -150,9 +151,9 @@ try {
   assert.equal(compiled.video_media.frames.first.file_id, fileIds[0])
   assert.equal(compiled.video_media.frames.last.file_id, fileIds[0])
   await page.screenshot({path:join(output,'candidate-panel-close-overlap.png'),animations:'disabled'})
-  await writeFile(join(output,'candidate-panel-close-bounds.json'),JSON.stringify(await page.evaluate(()=>{const close=document.querySelector('.wb-details:not([hidden]) [aria-label="关闭详情"]'),panel=document.querySelector('.generation-material-candidates[open]');const rect=e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height}};return {close:rect(close),panel:rect(panel)}}),null,2))
+  await writeFile(join(output,'candidate-panel-close-bounds.json'),JSON.stringify(await page.evaluate(()=>{const close=document.querySelector('.wb-details:not([hidden]) [aria-label="展开详情"], .wb-details:not([hidden]) [aria-label="收起详情"]'),panel=document.querySelector('.generation-material-candidates[open]');const rect=e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height}};return {close:rect(close),panel:rect(panel)}}),null,2))
   await details.getByLabel('管理候选与采用',{exact:true}).click()
-  await details.getByRole('button', { name: '关闭详情', exact: true }).click()
+  await closeCanvasDetails(page)
   // Repeating a selected relation on other geometric sides preserves both uses.
   await drag('left', 'right')
   await page.getByRole('menuitem').filter({ hasText: '首帧' }).click()
@@ -168,7 +169,7 @@ try {
   await page.locator('.wb-details:visible').getByRole('button', { name: '取消首帧 @图片1', exact: true }).click()
   await page.getByLabel('画布保存状态').getByText('已保存', { exact: true }).waitFor()
   await page.locator('.wb-details:visible').getByLabel('管理候选与采用',{exact:true}).click()
-  await page.locator('.wb-details:visible').getByRole('button', { name: '关闭详情', exact: true }).click()
+  await closeCanvasDetails(page)
   await firstLine.press('Enter')
   assert.equal(await firstLine.evaluate(el => getComputedStyle(el).outlineStyle), 'none', 'keyboard focus follows the path without a box')
   await page.screenshot({path:join(output,'purposes-keyboard-focus.png'),animations:'disabled'})
@@ -193,7 +194,7 @@ try {
   assert.equal(calls.length, 1)
   assert.deepEqual(calls[0].body.content.filter(item => item.type === 'image_url').map(item => item.role), ['last_frame'])
   await page.locator('.wb-details:visible').getByLabel('管理候选与采用',{exact:true}).click()
-  await page.locator('.wb-details:visible').getByRole('button', { name: '关闭详情', exact: true }).click()
+  await closeCanvasDetails(page)
   // Re-add the cancelled first-frame candidate: the remaining last-frame binding stays adopted.
   await drag('right', 'left')
   await page.getByRole('menuitem').filter({ hasText: '首帧' }).click()

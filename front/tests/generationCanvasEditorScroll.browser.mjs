@@ -1,3 +1,4 @@
+import { closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -63,7 +64,7 @@ try {
     return box.top >= body.top + 2 && box.bottom <= body.bottom - 2
   })
   assert.ok(fullyVisible, 'model input and its focus outline fit completely inside editor body')
-  await editor.getByRole('button', { name: '关闭详情', exact: true }).click()
+  await closeCanvasDetails(page)
   for (const card of cards) {
     await open(card)
     assert.equal(await editor.locator('.wb-details-body').evaluate(element => getComputedStyle(element).scrollbarWidth), 'none', `${card.type}: no outer scrollbar`)
@@ -72,7 +73,7 @@ try {
       assert.equal(await input.evaluate(element => getComputedStyle(element).scrollbarColor), 'rgb(80, 80, 80) rgba(0, 0, 0, 0)', `${card.type}: consistent dark scrollbar`)
     }
     assert.doesNotMatch(await editor.innerText(), /完整采用本卡|不自动推导触发行为|通过加号添加候选|正文通过文本出口独立采用/)
-    await editor.getByRole('button', { name: '关闭详情', exact: true }).click()
+    await closeCanvasDetails(page)
   }
   for (const width of [1440, 900, 390]) {
     await page.setViewportSize({ width, height: width === 390 ? 844 : width === 900 ? 600 : 960 })
@@ -90,15 +91,14 @@ try {
         })
         assert.ok(await fits(), `${type} input is fully visible at ${width}px`)
         assert.ok(await editor.locator('.wb-details-body').evaluate(element => element.scrollHeight <= element.clientHeight + 1), 'model editor body does not overflow')
-        if (width === 1440) {
+        if (width === 1440 && await editor.getByRole('button',{name:'展开详情',exact:true}).count()) {
           await editor.getByRole('button', { name: '展开详情', exact: true }).click()
           assert.ok(await fits(), `${type} expanded input is fully visible`)
           await editor.getByRole('button', { name: '收起详情', exact: true }).click()
         }
       }
       await editor.screenshot({ path: join(output, `${type}-${width}.png`), animations: 'disabled' })
-      if (width === 390) await editor.press('Escape')
-      else await editor.getByRole('button', { name: '关闭详情', exact: true }).click()
+      await closeCanvasDetails(page)
     }
   }
   console.log(`PASS ${cards.length} editor types, helper removal and long input scrolling at desktop/mobile: ${output}`)

@@ -1,4 +1,4 @@
-import { openModelInspection } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { openCanvasCard, closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn, execFileSync } from 'node:child_process'
@@ -48,7 +48,7 @@ try {
   const seeded = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
   assert.ok(seeded.ok, await seeded.text())
   await page.goto(`http://127.0.0.1:4427/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
-  const open = async id => { await page.locator(`[data-card-id="${id}"]`).press('Enter'); await page.locator('.wb-details:not([hidden])').waitFor(); await openModelInspection(page) }
+  const open = id => openCanvasCard(page,id)
   await open('m')
   const card = page.locator('.wb-details:not([hidden])'), consumer = card
   const preview = page.getByRole('region', { name: '运行预检', exact: true })
@@ -67,7 +67,7 @@ try {
   assert.equal(original.length, 3)
   await formal.getByRole('button', { name: '预览输出 3', exact: true }).click()
   await formal.getByText('输出 3 / 3', { exact: true }).waitFor()
-  await card.getByRole('button', { name: '关闭详情', exact: true }).click()
+  await closeCanvasDetails(page)
   await open('m')
   await formal.getByText('输出 3 / 3', { exact: true }).waitFor()
   await open('text')
@@ -76,7 +76,7 @@ try {
   await open('audio')
   const audio = card.locator('audio')
   await audio.evaluate(async element => { if (element.readyState < 1) await new Promise(resolve => element.addEventListener('loadedmetadata',resolve,{once:true})); element.currentTime=3; await element.play() })
-  await card.getByRole('button', { name: '关闭详情', exact: true }).click()
+  await closeCanvasDetails(page)
   const retainedAudio = page.locator('[data-card-details="audio"] audio')
   assert.equal(await retainedAudio.evaluate(element => element.paused), true, 'hidden media is paused')
   await open('audio')
@@ -98,6 +98,7 @@ try {
   await page.getByLabel('画布保存状态').getByText('已保存', {exact:true}).waitFor()
   for(let i=0;i<40;i++){if((await runtime()).current_outputs.m[0].basis_current===false)break;await delay(100)}
   assert.equal((await runtime()).current_outputs.m[0].basis_current,false)
+  await closeCanvasDetails(page)
   await page.getByRole('switch',{name:'高亮问题卡片',exact:true}).click()
   await page.locator('[data-card-id="m"]').waitFor()
   assert.equal(await page.locator('[data-card-id="text"]').count(),1,'unproblematic content stays visible')
@@ -109,6 +110,7 @@ try {
   await page.evaluate(async()=>{await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame)})
   assert.equal(await page.locator('[data-card-id="m"]').count(),1,'late pre-save SSE snapshot cannot hide the stale model')
   await page.screenshot({path:join(output,'stale-model-session.png'),animations:'disabled'})
+  await open('m')
   await card.getByRole('textbox',{name:'模型正文',exact:true}).fill('三张完整图片')
   for(let i=0;i<40;i++){if((await runtime()).current_outputs.m[0].basis_current===true)break;await delay(100)}
   assert.equal((await runtime()).current_outputs.m[0].basis_current,true,'returning to the original basis is a legitimate same-cursor update')

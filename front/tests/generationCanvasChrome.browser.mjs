@@ -1,3 +1,4 @@
+import { closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { openCardList } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
@@ -56,12 +57,14 @@ try {
   await page.getByRole('button', { name: '关闭详情', exact: true }).click()
   await openCardList(page, '模型生成')
   await page.getByRole('button', { name: '文本模型卡', exact: true }).click()
+  assert.equal(await page.getByRole('button',{name:'预检运行',exact:true}).isDisabled(),true,'empty model input cannot submit')
+  await page.getByRole('textbox',{name:'模型正文',exact:true}).fill('画布外壳预检验证')
   await page.getByRole('button', { name: '预检运行', exact: true }).click()
   await page.getByRole('dialog', { name: '运行预检', exact: true }).waitFor()
   await page.getByRole('button', { name: '定位问题', exact: true }).first().click()
   await page.getByRole('dialog', { name: '运行预检', exact: true }).waitFor({ state: 'hidden' })
-  await page.getByRole('complementary', { name: '文本模型卡', exact: true }).waitFor()
-  await page.getByRole('button', { name: '关闭详情', exact: true }).click()
+  await page.locator('.generation-card-editor:visible').waitFor()
+  await closeCanvasDetails(page)
   await page.screenshot({ path: join(output, 'chrome-desktop.png'), animations: 'disabled' })
   await page.reload()
   await page.getByRole('button', { name: '画布管理', exact: true }).click()
