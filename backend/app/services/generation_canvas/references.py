@@ -2,7 +2,7 @@
 from fastapi import HTTPException
 from sqlalchemy import select
 from app.models.studio import FileUsage
-from app.schemas.generation_canvas import NamedImageReferenceCard, ModelCard, ObjectDescriptionCard
+from app.schemas.generation_canvas import NamedImageReferenceCard, ObjectDescriptionCard
 from app.services.generation_canvas.compiler import identity_key, resolve_outputs
 from app.services.generation_canvas.errors import diagnostic
 from app.services.studio.files import require_available_file
@@ -13,14 +13,6 @@ async def validate_references(db, document, previous, project_id):
     references = [card for card in document.cards if isinstance(card, NamedImageReferenceCard)]
     if not references:
         return
-    from app.services.generation_canvas.runtime import CanvasRuntime
-    # 用当前已发布产物核对首次选择；固定文件不会随下次运行替换。
-    from app.models.generation_canvas import GenerationCanvas
-    canvas = await db.get(GenerationCanvas, document.id)
-    published = await CanvasRuntime(db, project_id).current_outputs(canvas)
-    # 最终文档的新媒体选择由本卡出口形成；只注入既有模型产物，避免旧文件覆盖同次编辑。
-    models = {card.id for card in document.cards if isinstance(card, ModelCard)}
-    published = {card_id: outputs for card_id, outputs in published.items() if card_id in models}
     from app.schemas.generation_canvas import CanvasDocument
     old_cards = {card.id: card for card in CanvasDocument.model_validate(previous).cards}
     for card in references:
@@ -65,7 +57,8 @@ async def validate_references(db, document, previous, project_id):
                        edge.source_card == image.source.card_id and edge.source_port == image.source.port_id for edge in document.edges):
                 raise diagnostic('INVALID_IMAGE_BINDING', '主图必须保留直接来源连接', target)
             if not unchanged:
-                candidates = resolve_outputs(document, card.id, published)
+                # 新主图只来自图片内容卡；以最终文档核对同次换图，不读取整图运行成果。
+                candidates = resolve_outputs(document, card.id)
                 item = next((item for item in candidates if identity_key(item.source) == identity_key(image.source)), None)
                 if not item or not item.available or item.file_id != image.file_id or item.result_set_id != image.result_set_id:
                     raise diagnostic('INVALID_IMAGE_BINDING', '请选择已发布的具体图片产物', target)
