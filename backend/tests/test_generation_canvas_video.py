@@ -76,7 +76,11 @@ def test_frame_subject_combination_and_group_limits_locate_stable_instruction():
     cap = CanvasModelCapability(model_id='m', modality='video', input_ports=['text', 'first_frame', 'subject_image'], ratios=['16:9'], max_images_per_subject=1)
     compiled = compile_card(doc, 'v', capability=cap)
     assert not compiled.can_run
-    assert {(item.code, item.target['segment_id']) for item in compiled.diagnostics} >= {('UNSUPPORTED_REFERENCE_COMBINATION', '主体参考'), ('SUBJECT_LIMIT_EXCEEDED', '主体参考')}
+    assert [item.model_dump() for item in compiled.diagnostics] == [
+        {'code': code, 'message': message, 'severity': 'error',
+         'target': {'card_id': 'v', 'segment_id': '主体参考', 'path': ['prompt', 'segments', '主体参考']}, 'blocks': ['run']}
+        for code, message in [('UNSUPPORTED_REFERENCE_COMBINATION', '当前模型不支持主体与帧参考组合'),
+                              ('SUBJECT_LIMIT_EXCEEDED', '主体参考数量超出模型限制')]]
 
 
 import asyncio
@@ -368,10 +372,12 @@ async def test_duplicate_frame_bindings_and_subject_limits_locate_bindings(runti
     saved = await runtime.client.put(runtime.url, json={'request_id': 'duplicate-bindings', 'expected_revision': 2, 'document': doc})
     assert saved.status_code == 200, saved.text
     preview = (await runtime.client.post(runtime.url + '/precheck', json={'card_id': 'v'})).json()['data']
-    issues = {item['code']: item for item in preview['diagnostics']}
     assert not preview['can_run']
-    assert issues['FRAME_COUNT_EXCEEDED']['target']['path'] == ['input_bindings', 'duplicate']
-    assert issues['UNSUPPORTED_REFERENCE_COMBINATION']['target']['path'] == ['input_bindings', 'subject']
+    assert preview['diagnostics'] == [
+        {'code': code, 'message': message, 'severity': 'error',
+         'target': {'card_id': 'v', 'segment_id': binding, 'path': ['input_bindings', binding]}, 'blocks': ['run']}
+        for code, message, binding in [('FRAME_COUNT_EXCEEDED', '首尾帧各至多一项', 'duplicate'),
+                                       ('UNSUPPORTED_REFERENCE_COMBINATION', '当前模型不支持主体与帧参考组合', 'subject')]]
 
 
 @pytest.mark.asyncio
@@ -444,3 +450,71 @@ async def test_legacy_shared_subject_binding_preserves_multiple_explicit_groups(
     assert compiled['can_run'], compiled
     assert [group['name'] for group in compiled['video_media']['subjects']] == ['甲', '乙', 'media1']
     assert compiled['text'] == '@media1'
+
+
+def test_repeated_key_frames_keep_each_binding_position():
+    doc = document([instruction('关键帧参考', ['a', 'b'])])
+    bindings = doc.cards[-1].input_bindings
+    bindings.insert(1, bindings[0].model_copy(update={'id': 'repeat-a'}))
+    compiled = compile_card(doc, 'v')
+    assert [(item.file_id, item.ordinal) for item in compiled.video_media.frames.keys] == [('a', 0), ('a', 1), ('b', 2)]
+    assert [item.file_id for item in compiled.media] == ['b', 'a']
+    assert compiled.diagnostics == []
+
+
+def test_missing_subject_output_keeps_candidate_token_and_full_diagnostic():
+    doc = document([instruction('主体参考', ['b', 'a', 'unused'], '演员')])
+    card = doc.cards[-1]
+    missing = next(binding for binding in card.input_bindings if binding.source.card_id == 'a')
+    missing.source.position = 1
+    doc.input_order['v']['subject_image'] = ['unused', 'a', 'b']
+    compiled = compile_card(doc, 'v')
+    assert [(item.token, item.media_position) for item in compiled.mapping] == [('@图片1', 1), ('@图片4', 2)]
+    assert [(item.file_id, item.ordinal) for item in compiled.video_media.subjects[0].media] == [('b', 0), ('unused', 1)]
+    assert [item.model_dump() for item in compiled.diagnostics] == [
+        {'code': 'OUTPUT_MISSING', 'message': '引用的来源位置暂无实际输出', 'severity': 'error',
+         'target': {'card_id': 'v', 'segment_id': 'a主体参考', 'path': ['prompt', 'segments', '主体参考', 'references', 'a主体参考']}, 'blocks': ['run']}]
+    assert not compiled.can_run
+
+
+@pytest.mark.asyncio
+async def test_mixed_subject_media_keeps_image_mapping_and_dto_ordinals(runtime, image_storage):
+    await setup_video(runtime, 'vidu', [instruction('主体参考', ['a', 'b'], '演员')], named=True)
+    doc = (await runtime.client.get(runtime.url)).json()['data']['document']
+    video = next(card for card in doc['cards'] if card['id'] == 'v')
+    old = {binding['source']['card_id']: binding for binding in video['input_bindings']}
+    video['input_bindings'] = [old['a'], {'id': 'clip-subject', 'input_port': 'subject_video', 'subject_name': '演员',
+        'source': {'canvas_id': runtime.canvas_id, 'card_id': 'clip', 'port_id': 'video', 'position': 0}}, old['b']]
+    video['prompt'] = {'segments': [{'id': 'body', 'kind': 'reference', 'binding_id': old['b']['id']}]}
+    saved = await runtime.client.put(runtime.url, json={'request_id': 'mixed-subject', 'expected_revision': 2, 'document': doc})
+    assert saved.status_code == 200, saved.text
+    compiled = (await runtime.client.get(runtime.url + '/cards/v/compile')).json()['data']
+    files = {card['id']: card['image_binding']['file_id'] if 'image_binding' in card else card.get('file_id') for card in doc['cards']}
+    assert [(item['file_id'], item['ordinal']) for item in compiled['video_media']['subjects'][0]['media']] == [
+        (files['a'], 0), (files['clip'], 1), (files['b'], 2)]
+    mappings = compiled['mapping']
+    assert [(item['token'], item['media_position']) for item in mappings if 'token' in item] == [('@图片1', 1), ('@图片2', 2), ('@视频1', 3)]
+    assert [(item['media_position'], item['purpose_position']) for item in mappings if 'object_id' in item] == [(1, 2), (2, 1)]
+    assert compiled['text'] == '@演员\n人物·小雪侧面 = @演员 图片 2（侧面）\n人物·小雪正面 = @演员 图片 1（正面）'
+    assert compiled['diagnostics'] == []
+
+    video['input_bindings'][0]['input_port'] = 'subject_video'
+    saved = await runtime.client.put(runtime.url, json={'request_id': 'wrong-purpose', 'expected_revision': 3, 'document': doc})
+    assert saved.status_code == 200, saved.text
+    invalid = (await runtime.client.get(runtime.url + '/cards/v/compile')).json()['data']
+    assert [(item['input_port'], item['purpose_position']) for item in invalid['mapping'] if 'object_id' in item] == [('subject_image', 1), ('subject_video', 1)]
+    assert invalid['diagnostics'] == [{'code': 'INPUT_BINDING_TYPE', 'message': '输入用途与来源类型不匹配，不提供隐式转换',
+        'severity': 'error', 'target': {'card_id': 'v', 'segment_id': old['a']['id'], 'path': ['input_bindings', old['a']['id']]}, 'blocks': ['run']}]
+    assert not invalid['can_run']
+
+
+def test_automatic_subject_limit_keeps_body_fallback_diagnostic_order():
+    doc = document([ref('a', 'body'), instruction('主体参考', ['a'], '甲'), instruction('主体参考', ['a'], '乙', 'second')])
+    cap = CanvasModelCapability(model_id='m', modality='video', input_ports=['subject_image'], ratios=['16:9'], max_subjects=0)
+    compiled = compile_card(doc, 'v', capability=cap)
+    assert compiled.text == '@media1'
+    assert [item.model_dump() for item in compiled.diagnostics] == [
+        {'code': 'SUBJECT_LIMIT_EXCEEDED', 'message': '主体参考数量超出模型限制', 'severity': 'error',
+         'target': {'card_id': 'v', 'segment_id': segment, 'path': ['prompt', 'segments', segment]}, 'blocks': ['run']}
+        for segment in ['主体参考', '主体参考second', 'abody']]
+    assert not compiled.can_run
