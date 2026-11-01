@@ -4,21 +4,20 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.core.contracts.video_generation import VideoGenerationInput, _strip_optional_b64
+from app.core.integrations.video_adapter_usage import KLING_FRAME_ROLES, ordered_video_frames, resolve_video_adapter_usage
+from app.core.contracts.video_generation import VideoGenerationInput
 from app.core.integrations.kling.video_capabilities import validate_kling_video_options
-
-_OMNI_MODEL = "kling-3.0"
-_TURBO_MODEL = "kling-3.0-turbo"
 
 
 def build_create_video_request(input_: VideoGenerationInput) -> tuple[str, dict[str, Any]]:
     """根据模型与参考帧构建可灵 3.0 视频创建请求。"""
     validate_kling_video_options(input_)
     model = (input_.model or "").strip().lower()
-    if model not in {_OMNI_MODEL, _TURBO_MODEL}:
+    usage = resolve_video_adapter_usage(provider="kling", model=input_.model)
+    if not usage.model_supported:
         raise ValueError("Kling video model must be kling-3.0 or kling-3.0-turbo")
     references = _frame_contents(input_)
-    if references and model == _TURBO_MODEL:
+    if references and not usage.frame_roles:
         raise ValueError("Kling 3.0 Turbo only supports text-to-video")
     if references:
         path = "/image-to-video/kling-3.0"
@@ -42,17 +41,13 @@ def _text_content(input_: VideoGenerationInput) -> list[dict[str, str]]:
 
 
 def _frame_contents(input_: VideoGenerationInput) -> list[dict[str, Any]]:
-    """按首帧、尾帧、关键帧稳定顺序生成可灵内容项。"""
+    """拒绝关键帧，并按首帧、尾帧顺序生成可灵内容项。"""
     if input_.frame_references.key_frames:
         raise ValueError("Kling 3.0 Omni image-to-video does not support key_frame")
     contents: list[dict[str, Any]] = []
-    for name, raw in (
-        ("first_frame", input_.frame_references.first_frame),
-        ("last_frame", input_.frame_references.last_frame),
-    ):
-        value = _strip_optional_b64(raw)
-        if value:
-            contents.append({"type": name, "url": _to_image_data_url(value)})
+    # Turbo 也须先读取帧，保留关键帧及仅文生视频错误的原优先级。
+    for name, value in ordered_video_frames(input_.frame_references, roles=KLING_FRAME_ROLES):
+        contents.append({"type": name, "url": _to_image_data_url(value)})
     return contents
 
 

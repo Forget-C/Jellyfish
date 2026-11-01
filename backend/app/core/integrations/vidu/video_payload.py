@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import urlparse
 
+from app.core.integrations.video_adapter_usage import ordered_video_frames, resolve_video_adapter_usage
 from app.core.contracts.video_generation import VideoGenerationInput, _strip_optional_b64
 from app.core.integrations.openai.video_payload import to_image_data_url
 from app.core.integrations.vidu.video_capabilities import validate_vidu_video_options
@@ -13,7 +14,7 @@ from app.core.integrations.vidu.video_capabilities import validate_vidu_video_op
 def build_create_video_request(input_: VideoGenerationInput) -> tuple[str, dict[str, Any]]:
     """按主体或帧参考语义选择 Vidu 视频端点，二者不混用。"""
     model = (input_.model or "").strip()
-    if not model:
+    if not resolve_video_adapter_usage(provider="vidu", model=input_.model).model_supported:
         raise ValueError("Vidu video generation requires model")
     validate_vidu_video_options(input_)
     references = _ordered_references(input_)
@@ -61,9 +62,5 @@ def _validate_subject_media(values: list[str], *, media_kind: str) -> None:
 
 def _ordered_references(input_: VideoGenerationInput) -> list[str]:
     """保持首帧、尾帧、关键帧的稳定顺序，并统一为 Vidu 要求的 data URL。"""
-    refs: list[str] = []
-    for raw in (input_.frame_references.first_frame, input_.frame_references.last_frame, *input_.frame_references.key_frames):
-        value = _strip_optional_b64(raw)
-        if value:
-            refs.append(to_image_data_url(value))
-    return refs
+    usage = resolve_video_adapter_usage(provider="vidu", model=input_.model)
+    return [to_image_data_url(value) for _, value in ordered_video_frames(input_.frame_references, roles=usage.frame_roles)]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -23,6 +24,18 @@ def _strip_optional_b64(value: str | None) -> str | None:
 
 
 VideoRatio = Literal["16:9", "4:3", "1:1", "3:4", "9:16", "21:9"]
+
+
+VideoFrameRole = Literal["first_frame", "last_frame", "key_frame"]
+
+
+@dataclass(frozen=True, slots=True)
+class VideoAdapterUsage:
+    """内部请求映射事实；用途顺序为消费顺序，不表示远端模型可用性。"""
+
+    frame_roles: tuple[VideoFrameRole, ...]
+    subject_media_kinds: tuple[Literal["image", "video"], ...]
+    model_supported: bool
 
 
 class VideoReferenceCapabilities(BaseModel):

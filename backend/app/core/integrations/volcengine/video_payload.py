@@ -7,7 +7,8 @@ from typing import Any
 from app.core.integrations.openai.video_payload import to_image_data_url
 from app.core.integrations.video_capabilities import resolve_effective_ratio
 from app.core.integrations.volcengine.video_capabilities import validate_volcengine_video_options
-from app.core.contracts.video_generation import VideoGenerationInput, _strip_optional_b64
+from app.core.integrations.video_adapter_usage import ordered_video_frames, resolve_video_adapter_usage
+from app.core.contracts.video_generation import VideoGenerationInput
 
 
 def build_content(input_: VideoGenerationInput) -> list[dict[str, Any]]:
@@ -16,34 +17,9 @@ def build_content(input_: VideoGenerationInput) -> list[dict[str, Any]]:
     if prompt:
         items.append({"type": "text", "text": prompt})
 
-    ff = _strip_optional_b64(input_.frame_references.first_frame)
-    if ff:
-        items.append(
-            {
-                "type": "image_url",
-                "role": "first_frame",
-                "image_url": {"url": to_image_data_url(ff)},
-            }
-        )
-    lf = _strip_optional_b64(input_.frame_references.last_frame)
-    if lf:
-        items.append(
-            {
-                "type": "image_url",
-                "role": "last_frame",
-                "image_url": {"url": to_image_data_url(lf)},
-            }
-        )
-    for kf in (_strip_optional_b64(value) for value in input_.frame_references.key_frames):
-        if not kf:
-            continue
-        items.append(
-            {
-                "type": "image_url",
-                "role": "key_frame",
-                "image_url": {"url": to_image_data_url(kf)},
-            }
-        )
+    usage = resolve_video_adapter_usage(provider="volcengine", model=input_.model)
+    for role, value in ordered_video_frames(input_.frame_references, roles=usage.frame_roles):
+        items.append({"type": "image_url", "role": role, "image_url": {"url": to_image_data_url(value)}})
     return items
 
 

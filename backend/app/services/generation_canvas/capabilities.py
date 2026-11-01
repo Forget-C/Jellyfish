@@ -2,6 +2,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.integrations.image_capabilities import resolve_image_capability, DEFAULT_VIDEO_REFERENCE_RATIO_SIZE_MAP
 from app.core.integrations.video_capabilities import resolve_video_capability
+from app.core.integrations.video_adapter_usage import resolve_video_adapter_usage
 from app.services.llm.provider_registry import resolve_provider_key_from_name
 from app.models.llm import Model, Provider
 from app.schemas.generation_canvas import CanvasModelCapability, ModelCard
@@ -25,13 +26,14 @@ async def model_capability(db: AsyncSession, model_id: str) -> CanvasModelCapabi
         result.supports_duplicate_reference_images = cap.supports_duplicate_reference_images
     if model.category == 'video':
         cap = resolve_video_capability(provider=key, model=model.name)
-        roles = ['first_frame'] if key == 'openai' else ['first_frame', 'last_frame', 'key_frame']
-        if key == 'kling':
-            roles = ['first_frame', 'last_frame'] if model.name.strip().lower() == 'kling-3.0' else []
+        usage = resolve_video_adapter_usage(provider=key, model=model.name)
+        # 画布用途按原展示顺序投影；OpenAI 有意只开放首帧。
+        roles = [role for role in ('first_frame', 'last_frame', 'key_frame') if role in usage.frame_roles
+                 and (key != 'openai' or role == 'first_frame')]
         result.input_ports.extend(roles)
-        if key == 'vidu' and cap.supports_subject_image_reference:
+        if 'image' in usage.subject_media_kinds and cap.supports_subject_image_reference:
             result.input_ports.append('subject_image')
-        if key == 'vidu' and cap.supports_subject_video_reference:
+        if 'video' in usage.subject_media_kinds and cap.supports_subject_video_reference:
             result.input_ports.append('subject_video')
         result.ratios = sorted(cap.allowed_ratios or {'16:9'})
         result.min_seconds, result.max_seconds = cap.min_seconds, cap.max_seconds

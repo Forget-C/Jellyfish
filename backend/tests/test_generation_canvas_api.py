@@ -618,3 +618,36 @@ async def test_unavailable_saved_media_has_no_usable_output_and_locates_adopted_
     diagnostic = next(item for item in compiled['diagnostics'] if item['code'] == 'OUTPUT_MISSING')
     assert diagnostic['target']['card_id'] == 'model'
     assert diagnostic['target']['path'] == ['input_bindings', 'image-input']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(('provider_name', 'model_name', 'ports'), [
+    ('openai', 'sora-2', ['text', 'first_frame']),
+    ('kling', ' Kling-3.0 ', ['text', 'first_frame', 'last_frame']),
+    ('kling', 'kling-3.0-turbo', ['text']),
+    ('kling', 'unknown', ['text']),
+    ('vidu', 'viduq2-pro', ['text', 'first_frame', 'last_frame', 'key_frame', 'subject_image', 'subject_video']),
+    ('vidu', 'unknown', ['text', 'first_frame', 'last_frame', 'key_frame']),
+    ('volcengine', 'unknown', ['text', 'first_frame', 'last_frame', 'key_frame']),
+])
+async def test_video_usage_capability_keeps_canvas_policy(canvas_client, provider_name, model_name, ports):
+    from app.models.llm import Model, Provider
+    from app.dependencies import get_db
+    from app.core.integrations.video_capabilities import VideoModelCapability, register_video_model_capability, clear_video_model_capability_overrides
+    register_video_model_capability(provider=provider_name, model_prefix=model_name.strip(), capability=VideoModelCapability(
+        supports_subject_image_reference=True, supports_subject_video_reference=True,
+        supports_subject_reference_with_frame_reference=True))
+    try:
+        async for db in canvas_client._transport.app.dependency_overrides[get_db]():
+            (await db.get(Provider, 'canvas-provider')).name = provider_name
+            (await db.get(Model, 'canvas-video')).name = model_name
+            await db.commit()
+        canvas = (await canvas_client.post('/canvases/p', json={})).json()['data']
+        response = await canvas_client.get(f"/canvases/p/{canvas['id']}/models/canvas-video/capability")
+        assert response.status_code == 200
+        actual = response.json()['data']
+        expected = ports + (['subject_image', 'subject_video'] if provider_name == 'vidu' and model_name == 'unknown' else [])
+        assert actual['input_ports'] == expected
+        assert actual['supports_subject_reference_with_frame_reference'] is False
+    finally:
+        clear_video_model_capability_overrides(provider=provider_name)
