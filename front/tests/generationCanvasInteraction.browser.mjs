@@ -147,7 +147,9 @@ try {
   await card.focus();await page.keyboard.press('Delete')
   assert.equal(await page.getByRole('dialog').filter({hasText:'删除'}).count(),0,'protected batch has no delete confirmation')
   assert.equal(await card.count(),1);assert.equal(await note.count(),1,'protected batch preserves every selected card')
-  await page.keyboard.press('Escape')
+  // Reference protection opens its editor; finish that asynchronous navigation before leaving multi-select.
+  await page.locator('.generation-card-editor:visible').waitFor()
+  await closeCanvasDetails(page)
   const exitMulti=page.getByRole('button',{name:'退出多选',exact:true});if(await exitMulti.isVisible())await exitMulti.click()
   await page.screenshot({path:join(output,'interaction-desktop.png')})
   await page.setViewportSize({width:390,height:844});await card.press('Enter')

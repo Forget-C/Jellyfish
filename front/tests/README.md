@@ -272,3 +272,5 @@ CI supplies the retained manifest explicitly to the existing browser runner and 
 | Q9 撤销与隔离 | rules 验证文字原生撤销不消耗移动历史、内容与布局按时间顺序撤销／重做、长按方向键合并、Ctrl＋Y、IME／弹窗隔离；interaction 验证菜单删除键及编辑器滚轮隔离。普通浏览改变视口，不进入画布历史。 |
 
 规则用例输出 `rules.json`、定位截图和失败截图；失败立即终止，不以截图或用例总数代替行为断言。
+
+组合优先级回归：`generation-canvas-interaction-combinations`（包含在 `canvas-layout` / `canvas-interaction`）覆盖拖动混用方向键／撤销／缩放、最终位置重做、菜单关闭与 Escape、多选 Enter／Space、拖动中导演卡激活、组合输入信号和 Space 配对／中断。组合输入使用浏览器事件信号验证，不代替实体输入法测试。
