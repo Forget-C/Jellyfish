@@ -683,6 +683,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const point = (id: string) => layout.view.positions[id] || { x: 0, y: 0 }
   /** 显式适应全部按实际可见卡片及悬浮导航留白计算，不改保存或生成依据。 */
   const fitVisibleCards = () => {
+    if (moveSnapshot.current) return
     const surface = viewport.surface.current
     const visible = cards.filter(card => !hidden.has(card.id))
     if (!surface || !visible.length && !groups.length) { viewport.fit(); return }
@@ -1037,7 +1038,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
             viewportOffset={transform} scale={transform.scale} width={isModel || isReference ? generationCardSize(card.type).width : size?.width || (focusCardTypes.includes(card.type || '') ? 300 : 400)} height={isModel || isReference ? generationCardSize(card.type).height : size?.height} selected={selected.includes(card.id)} filterMatch={matched.has(card.id)} readonly={readonly} removeDisabled={runtime?.busyCards.has(card.id)}
             onEdit={card.type?.startsWith('direction.') ? trigger => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) } : undefined}
             onExpand={trigger => { setDetailTrigger(trigger); setDetailId(card.id); setExpandRequest({id:card.id,serial:Date.now()}) }}
-            onOpen={trigger => { if (accessibleConnection) chooseAccessibleTarget(card.id); else { setMultiSelectMode(false); setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.type?.startsWith('direction.') ? undefined : card.id) } }} onSelect={checked => { setDetailId(undefined); setSelectedEdgeId(undefined); setSelected(previous => checked ? [...new Set([...previous, card.id])] : previous.filter(id => id !== card.id)) }}
+            onOpen={(trigger, fromKeyboard) => { if (accessibleConnection) chooseAccessibleTarget(card.id); else { setMultiSelectMode(false); setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(!fromKeyboard && card.type?.startsWith('direction.') ? undefined : card.id) } }} onSelect={checked => { setDetailId(undefined); setSelectedEdgeId(undefined); setSelected(previous => checked ? [...new Set([...previous, card.id])] : previous.filter(id => id !== card.id)) }}
             multiSelectMode={multiSelectMode} onStartMultiSelect={() => { setMultiSelectMode(true); setSelected([card.id]); setDetailId(undefined); setSelectedEdgeId(undefined) }} onDragStart={() => beginMove(card.id, true)} onDragEnd={finishMove}
             onConnect={trigger => startAccessibleConnection(card.id, 'right', trigger)} onMove={position => { if (!accessibleConnection) moveCards(card.id, position) }} onRemove={() => removeCard(card.id)} connections={geometricPorts(card)}
             footer={isModel || isReference || isDescription || card.type === 'content.image' ? undefined : <CardStatusSummary card={card} node={node} outputs={outputs} readonly={readonly} missingImage={false} />}>

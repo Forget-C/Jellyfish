@@ -50,8 +50,6 @@ try {
     await page.getByRole('button', { name: '适应全部', exact: true }).click()
     const node = page.locator(`[data-card-id="${card.id}"]`)
     await node.press('Enter')
-    const edit = node.locator('button[aria-label="编辑卡片"]')
-    if (await edit.count()) { await edit.waitFor({ state: 'visible' }); await edit.press('Enter') }
     try { await editor.waitFor() }
     catch (error) { await page.screenshot({ path: join(output, 'failure.png') }); console.log('Screenshot:', output); throw error }
   }

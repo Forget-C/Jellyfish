@@ -255,3 +255,20 @@ CI supplies the retained manifest explicitly to the existing browser runner and 
 `PLAYWRIGHT_CHANNEL=chrome node front/tests/run-browser.mjs canvas-interaction` 覆盖生成画布拖动与编辑器锚定、多选、边缘自动平移、Escape、键盘移动和统一历史、滚轮缩放、输入／菜单隔离、整批删除引用保护、桌面及窄屏编辑器，并回归图片完整展示和既有卡片／编组流程。`generation-canvas-interaction` 可单独运行新交互用例；截图与日志保存在 runner 输出目录。
 
 完整生成画布布局回归使用 `PLAYWRIGHT_CHANNEL=chrome node front/tests/run-browser.mjs canvas-layout`。当前锚定模型编辑器高度为 320px；模型、参考和描述编辑器按无标题／无关闭按钮的约定验收，基础内容保留标题及关闭入口。关闭辅助器逐层执行真实按钮或 Escape，并等待隐藏及解除 inert；展开辅助器验证真实展开状态。窄屏截图准备通过公开缩放和键盘布局控件容纳 360px 模型卡，截图不替代来源、草稿、媒体选择及控件命中检查。
+
+
+九项交互规则的正式回归由 `generation-canvas-interaction` 与 `generation-canvas-interaction-rules` 共同覆盖，均包含在 `canvas-interaction` 和 `canvas-layout`。新增规则用例使用真实页面、公开 HTTP 及隔离 SQLite／媒体夹具；只在系统边界模拟供应商响应。窗口失焦和 IME 使用浏览器事件，指针捕获丢失通过浏览器 API 触发，触摸取消使用 Chrome 真实触摸输入；不代表已覆盖所有实体设备。
+
+| 规则 | 正式验收入口与关键断言 |
+| --- | --- |
+| Q1 编辑器空间 | rules 的五种初始布局验证下→上→右→左→展开，不自动平移／移动卡片；缩放保持编辑器字号。interaction 验证拖动保持相对间距。 |
+| Q2 边缘平移 | rules 验证悬停不触发、接近边缘加速、卡片保持指针锚点、编辑器同步、离开边缘／松手停止；interaction 验证 Escape 恢复卡片与原视口。 |
+| Q3 多选拖动 | interaction 验证整体平移及一次撤销／重做；rules 验证拖动未选卡切换为单选，不移动其他卡、不打开编辑器。cards／sessions 回归草稿与媒体会话保持。 |
+| Q4 删除 | interaction 验证引用保护整批拒绝；rules 验证堆叠、运行保护、确认期间状态变化后的重新检查、统一确认与取消，一次撤销恢复卡片／相关连线／输入顺序／分组／位置，上传及实际生成文件仍可下载。 |
+| Q5 选择与导航 | interaction 验证复杂导演卡 Enter／Space 激活；rules 验证 Shift 框选追加、框选取消与中键平移；interaction／cards 验证修饰键选择、Space 拖动及输入隔离。 |
+| Q6 缩放与移动 | rules 验证滚轮指针中心、加减键视口中心、0 适应全部、空白方向键平移、Shift 步长 50；interaction 验证普通步长 10、拖动滚轮冻结；rules 同时验证拖动期间 0 不缩放。 |
+| Q7 逐层 Escape | rules 验证展开→锚定→关闭编辑器→取消选择、空间不足直接收起、框选与删除确认取消；interaction／accessible-connections／common-shell 保留手势、菜单、连线与内层选择器覆盖。 |
+| Q8 中断 | rules 验证失焦、捕获丢失和真实触摸取消保留最后位置、结束拖动且一次可撤销；阈值内触摸中断不移动、不打开编辑器。 |
+| Q9 撤销与隔离 | rules 验证文字原生撤销不消耗移动历史、内容与布局按时间顺序撤销／重做、长按方向键合并、Ctrl＋Y、IME／弹窗隔离；interaction 验证菜单删除键及编辑器滚轮隔离。普通浏览改变视口，不进入画布历史。 |
+
+规则用例输出 `rules.json`、定位截图和失败截图；失败立即终止，不以截图或用例总数代替行为断言。

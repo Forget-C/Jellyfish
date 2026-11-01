@@ -41,7 +41,7 @@ try {
   const poll = async predicate => { for (let i=0;i<80;i++) {const state=await read(); if(predicate(state)) return state;await delay(100)} throw Error('preset save did not arrive') }
   await page.goto(`http://127.0.0.1:4297/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   const detail=page.locator('.wb-details:not([hidden])')
-  const open=async id=>{if(await detail.count()) await detail.getByRole('button',{name:'关闭详情',exact:true}).click();const card=page.locator(`[data-card-id="${id}"]`);await card.press('Enter');if(['style','photo'].includes(id)) await card.getByRole('button',{name:'编辑卡片',exact:true}).click();await detail.waitFor();await openModelInspection(page)}
+  const open=async id=>{if(await detail.count()) await detail.getByRole('button',{name:'关闭详情',exact:true}).click();const card=page.locator(`[data-card-id="${id}"]`);await card.press('Enter');await detail.waitFor();await openModelInspection(page)}
   await open('style')
   const effects=detail.getByRole('region',{name:'风格效果选择',exact:true})
   await effects.waitFor({timeout:2000})
@@ -141,7 +141,7 @@ try {
   await observer.goto(page.url())
   await observer.getByText('此画布当前只读',{exact:true}).waitFor()
   const readCard=observer.locator('[data-card-id="photo"]')
-  await readCard.press('Enter');await readCard.getByRole('button',{name:'编辑卡片',exact:true}).click()
+  await readCard.press('Enter')
   const readDetail=observer.locator('.wb-details:visible')
   assert.equal(await readDetail.getByRole('button',{name:'应用到当前卡片',exact:true}).isDisabled(),true,'portal footer inherits the existing readonly protection')
   const readonlyRevision=(await read()).revision

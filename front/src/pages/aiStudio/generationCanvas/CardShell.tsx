@@ -9,7 +9,7 @@ import type { CanvasPoint } from '../../../components/canvas/geometry'
 export function CardShell({ id, title, name, type, contextKey, point, scale, width, height, selected, filterMatch, readonly, removeDisabled, onSelect, onMove, onRemove, connections, children, footer, onOpen, onExpand, onEdit, onConnect, multiSelectMode, onStartMultiSelect, onDragStart, onDragEnd, viewportOffset }:
   { id: string; type?: string; title: string; name?: string; contextKey: string; point: CanvasPoint; scale: number; width: number; height?: number; selected: boolean; filterMatch?: boolean; readonly?: boolean; removeDisabled?: boolean;
     viewportOffset?: CanvasPoint; multiSelectMode?: boolean; onStartMultiSelect: () => void; onDragStart: () => void; onDragEnd?: (cancelled?: boolean) => void; onConnect: (trigger: HTMLElement) => void; onSelect: (selected: boolean) => void; onMove: (point: CanvasPoint) => void; onRemove: () => void;
-    connections: ReactNode; children: ReactNode; footer?: ReactNode; onExpand?: (trigger: HTMLElement) => void; onEdit?: (trigger: HTMLElement) => void; onOpen: (trigger: HTMLElement) => void }) {
+    connections: ReactNode; children: ReactNode; footer?: ReactNode; onExpand?: (trigger: HTMLElement) => void; onEdit?: (trigger: HTMLElement) => void; onOpen: (trigger: HTMLElement, fromKeyboard?: boolean) => void }) {
   const [menu, setMenu] = useState(false)
   const [holding, setHolding] = useState(false)
   const gesture = useRef<{ pointer: number; x: number; y: number; origin: CanvasPoint; viewport?: CanvasPoint; ready: boolean; tolerance: number; restore: () => void }>()
@@ -57,7 +57,7 @@ export function CardShell({ id, title, name, type, contextKey, point, scale, wid
     else if (!current.ready) onOpen(event.currentTarget)
     if (current.ready) onDragEnd?.()
   }} onPointerCancel={() => { if (gesture.current?.ready) onDragEnd?.(); gesture.current = undefined; setHolding(false) }} onLostPointerCapture={() => { if (gesture.current?.ready) onDragEnd?.(); gesture.current = undefined; setHolding(false) }} onKeyDown={event => {
-    if (!event.defaultPrevented && event.target === event.currentTarget && event.key === 'Enter') { event.preventDefault(); if (multiSelectMode) onSelect(!selected); else onOpen(event.currentTarget) }
+    if (!event.defaultPrevented && event.target === event.currentTarget && event.key === 'Enter') { event.preventDefault(); if (multiSelectMode) onSelect(!selected); else onOpen(event.currentTarget, true) }
     if (event.key === 'Escape' && menu) { event.preventDefault(); event.stopPropagation(); setMenu(false); event.currentTarget.querySelector<HTMLButtonElement>('[aria-expanded]')?.focus() }
   }} data-card-id={id} data-card-type={type} data-canvas-node={id} data-selected={selected} data-filter-match={filterMatch} aria-description={filterMatch ? '符合筛选' : undefined} className={`generation-card${holding ? ' generation-card-holding' : ''}`} style={{ left: point.x, top: point.y, width, minHeight: height }}>
     <header><button type="button" data-keyboard-move aria-label={`移动布局：${name || title}`} title="拖动卡片，或用方向键移动">{type?.startsWith('direction.') ? <CameraOutlined /> : type?.endsWith('image') || type?.startsWith('reference.') ? <PictureOutlined /> : type?.endsWith('video') ? <VideoCameraOutlined /> : type?.endsWith('audio') ? <AudioOutlined /> : <FileTextOutlined />}</button>

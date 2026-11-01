@@ -1,3 +1,4 @@
+import { closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -41,12 +42,20 @@ try {
   }
 
   const canvas = await request('/api/v1/studio/generation-canvases/canvas-project', {name:'画布交互回归'})
-  const seeded=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document:{...canvas.document,cards:[{id:'place',type:'reference.place',title:'',angle:'正面',objects:[]},{id:'other',type:'reference.place',title:'其他场所',angle:'正面',objects:[]},{id:'note',type:'content.text',text:'编辑输入测试'},{id:'dependent',type:'model.text',prompt:{segments:[{id:'ref',kind:'reference',source:{canvas_id:canvas.id,card_id:'note',port_id:'text',position:0}}]}}],edges:[{id:'note-input',source_card:'note',source_port:'text',target_card:'dependent',target_port:'text'}],input_order:{dependent:{text:['note-input']}}}})})
+  const seeded=await fetch(`${base}/${canvas.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:'seed',expected_revision:0,document:{...canvas.document,cards:[{id:'director',type:'direction.fact',input_bindings:[],examples:[],scope:{}},{id:'place',type:'reference.place',title:'',angle:'正面',objects:[]},{id:'other',type:'reference.place',title:'其他场所',angle:'正面',objects:[]},{id:'note',type:'content.text',text:'编辑输入测试'},{id:'dependent',type:'model.text',prompt:{segments:[{id:'ref',kind:'reference',source:{canvas_id:canvas.id,card_id:'note',port_id:'text',position:0}}]}}],edges:[{id:'note-input',source_card:'note',source_port:'text',target_card:'dependent',target_port:'text'}],input_order:{dependent:{text:['note-input']}}}})})
   assert.ok(seeded.ok,await seeded.text())
   const layoutKey=`jellyfish:generation-layout:canvas-project:${canvas.id}:view:canvas`
-  await page.addInitScript(({layoutKey})=>{if (!sessionStorage.getItem('interaction-seeded')) {sessionStorage.setItem('interaction-seeded','1');localStorage.setItem(layoutKey,JSON.stringify({schema:1,positions:{place:{x:400,y:250},other:{x:1000,y:250},note:{x:1500,y:250},dependent:{x:1800,y:700}},sizes:{place:{width:300,height:251}},transform:{x:0,y:0,scale:.8}}))}},{layoutKey})
+  await page.addInitScript(({layoutKey})=>{if (!sessionStorage.getItem('interaction-seeded')) {sessionStorage.setItem('interaction-seeded','1');localStorage.setItem(layoutKey,JSON.stringify({schema:1,positions:{director:{x:1800,y:250},place:{x:400,y:250},other:{x:1000,y:250},note:{x:1500,y:250},dependent:{x:1800,y:700}},sizes:{place:{width:300,height:251}},transform:{x:0,y:0,scale:.8}}))}},{layoutKey})
   await page.goto(`http://127.0.0.1:4610/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   const card=page.locator('[data-card-id="place"]');await card.waitFor()
+  const director=page.locator('[data-card-id="director"]')
+  // Q5: complex cards retain pointer selection, but keyboard activation opens their editor.
+  await director.press('Enter')
+  await page.getByRole('dialog',{name:'不可改事实卡',exact:true}).waitFor()
+  await closeCanvasDetails(page)
+  await director.press('Space')
+  await page.getByRole('dialog',{name:'不可改事实卡',exact:true}).waitFor()
+  await closeCanvasDetails(page)
   const sample=()=>card.evaluate(e=>({x:parseFloat(e.style.left),y:parseFloat(e.style.top),screenX:e.getBoundingClientRect().x,screenY:e.getBoundingClientRect().y,world:document.querySelector('.generation-world').style.transform}))
   const bounds=await card.locator('.generation-card-body').boundingBox()
   await page.mouse.move(bounds.x+100,bounds.y+60);await page.mouse.down()
@@ -67,6 +76,8 @@ try {
   await page.mouse.move(c0.x+100,c0.y+60);await page.mouse.down();await page.mouse.move(c0.x+160,c0.y+90,{steps:12});await page.mouse.up()
   const c1=await card.boundingBox(),o1=await other.boundingBox()
   assert.ok(Math.abs(c1.x-c0.x-60)<2 && Math.abs(o1.x-o0.x-60)<2,'multi-selection moves together')
+  assert.ok(Math.abs(c1.y-c0.y-30)<2 && Math.abs(o1.y-o0.y-30)<2,'multi-selection preserves relative position on both axes')
+  assert.equal(await card.getAttribute('data-selected'),'true');assert.equal(await other.getAttribute('data-selected'),'true')
   await card.focus();await page.keyboard.press('ControlOrMeta+z')
   assert.ok(Math.abs((await card.boundingBox()).x-c0.x)<2,'one undo restores complete group movement')
   await page.keyboard.press('ControlOrMeta+Shift+z')

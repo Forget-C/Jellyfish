@@ -70,7 +70,6 @@ try {
   }
   const photo=page.locator('[data-card-id="photo-light"]')
   await photo.press('Enter')
-  await photo.getByRole('button',{name:'编辑卡片',exact:true}).click()
   const details=page.locator('.wb-details:visible')
   await details.getByRole('button',{name:'编辑光影与色彩',exact:true}).click()
   await details.getByRole('textbox',{name:'光源内容',exact:true}).fill('即时改为夜间轮廓光')

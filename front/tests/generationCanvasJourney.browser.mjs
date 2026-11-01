@@ -252,7 +252,7 @@ try {
   await page.locator(`[data-card-id="${reference}"]`).click({modifiers:[modifier]})
   await page.getByRole('toolbar',{name:'所选卡片操作',exact:true}).getByRole('button',{name:'编组',exact:true}).click()
   await poll(state=>state.document.groups.some(group=>group.card_ids.includes(photo)&&group.card_ids.includes(reference)))
-  const plainOpen=async id=>{const current=page.locator('.wb-details:visible');if(await current.count())await closeCanvasDetails(page);await page.locator(`[data-card-id="${id}"]`).press('Enter');if(id===photo)await page.locator(`[data-card-id="${id}"]`).getByRole('button',{name:'编辑卡片',exact:true}).press('Enter');await detail.waitFor()}
+  const plainOpen=async id=>{const current=page.locator('.wb-details:visible');if(await current.count())await closeCanvasDetails(page);await page.locator(`[data-card-id="${id}"]`).press('Enter');await detail.waitFor()}
   const stable=async()=>{await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));await delay(150)}
   for(const [width,height] of [[1440,960],[390,844],[3830,1688]]){
     await page.setViewportSize({width,height});await stable()
