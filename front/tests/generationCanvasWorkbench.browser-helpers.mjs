@@ -40,9 +40,16 @@ export async function closeCanvasDetails(page) {
   }
 }
 
-/** 当前尺寸入口在自动模态和手动展开时分别保留自己的可访问名称。 */
-export const canvasDetailsToggle = editor => editor.getByRole('button', { name: /^(展开|收起)详情$/ })
+/** 窄屏自动全屏提供关闭，桌面保留展开／收起。 */
+export const canvasDetailsToggle = editor => editor.locator(':scope[data-narrow="true"] > header button[aria-label="关闭详情"], :scope:not([data-narrow="true"]) > header button:is([aria-label="展开详情"], [aria-label="收起详情"])')
 export async function expandCanvasDetails(page) {
+  const panel = page.locator('.generation-card-editor:visible')
+  if (await panel.getAttribute('data-narrow') === 'true') {
+    assert.equal(await panel.getAttribute('aria-modal'), 'true', 'narrow editor is already modal')
+    assert.equal(await panel.getAttribute('data-expanded'), 'true')
+    await panel.getByRole('button', { name: '关闭详情', exact: true }).waitFor()
+    return
+  }
   const expand = page.locator('.generation-card-editor:visible').getByRole('button', { name: '展开详情', exact: true })
   if (await expand.count()) await expand.click()
   const editor = page.locator('.generation-card-editor:visible')

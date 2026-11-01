@@ -3,6 +3,7 @@
 .generation-connection-reason { min-height: 28px; color: #475569; }
 .generation-surface { position: relative; height: 720px; overflow: hidden; border: 1px solid #cbd5e1; border-radius: 8px; background: #f1f5f9; touch-action: none; }
 .generation-surface:focus { outline: none; }
+.generation-surface:focus-visible { outline: 2px solid var(--wb-focus); outline-offset: -2px; }
 .generation-world { position: absolute; inset: 0; transform-origin: 0 0; }
 .generation-edges { position: absolute; overflow: visible; pointer-events: none; }
 .generation-card { position: absolute; z-index: 2; min-width: 300px; min-height: 240px; background: white; border: 1px solid #94a3b8; border-radius: 8px; box-sizing: border-box; resize: both; overflow: auto; }
@@ -288,3 +289,7 @@
 
 /* 视口只通过 transform 浏览，避免焦点变化触发容器原生滚动而绕过布局坐标。 */
 .generation-workbench .generation-surface { overflow: clip; }
+
+/* 自动全屏编辑只提供一步关闭；扩大窄屏热区并为顶部字段留出间距。 */
+.generation-card-editor[data-narrow="true"] .wb-details-header .wb-icon-action.ant-btn { width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
+.generation-card-editor[data-narrow="true"] :is(.generation-material-basis, .generation-composer-parameters) { padding-right: 64px; }

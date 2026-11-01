@@ -254,7 +254,7 @@ CI supplies the retained manifest explicitly to the existing browser runner and 
 
 `PLAYWRIGHT_CHANNEL=chrome node front/tests/run-browser.mjs canvas-interaction` 覆盖生成画布拖动与编辑器锚定、多选、边缘自动平移、Escape、键盘移动和统一历史、滚轮缩放、输入／菜单隔离、整批删除引用保护、桌面及窄屏编辑器，并回归图片完整展示和既有卡片／编组流程。`generation-canvas-interaction` 可单独运行新交互用例；截图与日志保存在 runner 输出目录。
 
-完整生成画布布局回归使用 `PLAYWRIGHT_CHANNEL=chrome node front/tests/run-browser.mjs canvas-layout`。当前锚定模型编辑器高度为 320px；模型、参考和描述编辑器按无标题／无关闭按钮的约定验收，基础内容保留标题及关闭入口。关闭辅助器逐层执行真实按钮或 Escape，并等待隐藏及解除 inert；展开辅助器验证真实展开状态。窄屏截图准备通过公开缩放和键盘布局控件容纳 360px 模型卡，截图不替代来源、草稿、媒体选择及控件命中检查。
+完整生成画布布局回归使用 `PLAYWRIGHT_CHANNEL=chrome node front/tests/run-browser.mjs canvas-layout`。当前锚定模型编辑器高度为 320px；桌面模型、参考和描述编辑器按无标题／无关闭按钮的约定验收，基础内容保留标题及关闭入口；小于 1280px 时所有编辑器提供一步关闭，不显示展开／收起。关闭辅助器逐层执行真实按钮或 Escape，并等待隐藏及解除 inert；展开辅助器验证真实展开状态。窄屏截图准备通过公开缩放和键盘布局控件容纳 360px 模型卡，截图不替代来源、草稿、媒体选择及控件命中检查。
 
 
 九项交互规则的正式回归由 `generation-canvas-interaction` 与 `generation-canvas-interaction-rules` 共同覆盖，均包含在 `canvas-interaction` 和 `canvas-layout`。新增规则用例使用真实页面、公开 HTTP 及隔离 SQLite／媒体夹具；只在系统边界模拟供应商响应。窗口失焦和 IME 使用浏览器事件，指针捕获丢失通过浏览器 API 触发，触摸取消使用 Chrome 真实触摸输入；不代表已覆盖所有实体设备。
@@ -287,3 +287,5 @@ CI supplies the retained manifest explicitly to the existing browser runner and 
 Q7／Q9 组合验收同时检查：菜单打开后的方向键、删除、缩放及历史命令隔离，空白焦点 Escape 关闭菜单并恢复焦点，筛选下拉先关闭再关闭旧卡菜单。编组手柄另验方向键松开不截断指针事务、失焦保留位置且不续拖，一次撤销／重做恢复最终结果。单个入口通过不代表其他入口已覆盖；IME 用例仅验证浏览器组合输入事件信号。
 
 Q7 叠层场景另覆盖四条直接回归：连线＋布局菜单、连线＋卡片菜单、模型候选面板＋较旧布局菜单、模型候选面板＋较旧卡片菜单。断言处理层关闭且外层状态保留，再连续 Escape 退出外层；同时验证原生选择器先于候选面板关闭、组合输入 Escape 不推进层级、焦点离开菜单后仍先关菜单，以及删除确认取消不取消后台连线。候选打开后将焦点移到模型正文或画布、编辑器展开再收起，仍先关闭候选并保留较旧菜单。
+
+UX 回归另覆盖画布键盘焦点描边与方向键平移、390／1024px 触摸关闭入口的 44×44px 热区和中心命中，以及桌面展开后切到窄屏的一步关闭／Escape、模型草稿保留、焦点约束、候选优先退出与回到桌面的入口恢复。

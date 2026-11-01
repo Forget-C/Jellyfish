@@ -146,7 +146,7 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
       if (menus.length) return
       if (event.key === 'Escape') {
         event.preventDefault(); event.stopPropagation()
-        if (expanded && !forceModal) { setExpanded(false); if (!anchorFits.current) dismiss.current() } else dismiss.current()
+        if (desktop && expanded && !forceModal) { setExpanded(false); if (!anchorFits.current) dismiss.current() } else dismiss.current()
       }
       if (modal && event.key === 'Tab' && node) {
         const items = [...node.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex="0"], [contenteditable="true"], summary, a[href]')].filter(item => item.getClientRects().length)
@@ -157,14 +157,14 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
     }
     document.addEventListener('keydown', keyboard)
     return () => { observer.disconnect(); if (node) node.inert = false; document.removeEventListener('keydown', keyboard); if (modal && workbench) workbench.inert = !!prior; if (node?.contains(document.activeElement)) opener.current?.focus({preventScroll:true}) }
-  }, [visible, modal, expanded, forceModal])
+  }, [visible, modal, expanded, forceModal, desktop])
   return createPortal(<>
-    {visible && modal && <div className="generation-editor-mask" onClick={() => expanded && !forceModal ? setExpanded(false) : dismiss.current()} />}
+    {visible && modal && <div className="generation-editor-mask" onClick={() => desktop && expanded && !forceModal ? setExpanded(false) : dismiss.current()} />}
     <section ref={panel} hidden={!visible} tabIndex={-1} role={modal ? 'dialog' : 'complementary'} aria-modal={modal || undefined} aria-label={title}
-      className="canvas-workbench-dialog wb-details generation-card-editor" data-expanded={modal} data-material={material} data-focus-layout={focusLayout} data-card-type={cardType} style={!modal ? {left:placement.left, top:placement.top, maxHeight:Math.min(anchoredHeightLimit, placement.maxHeight)} : undefined}>
+      className="canvas-workbench-dialog wb-details generation-card-editor" data-expanded={modal} data-narrow={!desktop} data-material={material} data-focus-layout={focusLayout} data-card-type={cardType} style={!modal ? {left:placement.left, top:placement.top, maxHeight:Math.min(anchoredHeightLimit, placement.maxHeight)} : undefined}>
       <header className={`wb-details-header${material ? ' generation-model-editor-chrome' : ''}`}>{!material && <div className="generation-editor-heading">{focusLayout && <span className="generation-editor-modality" aria-hidden="true">{modality === 'image' ? <PictureOutlined /> : <FileTextOutlined />}</span>}<h2 title={title}>{title}</h2>{status && <small role="status">{status}</small>}</div>}
-        {!forceModal && <WorkbenchIconButton variant="quiet" label={expanded ? '收起详情' : '展开详情'} icon={expanded ? <ShrinkOutlined /> : <ExpandOutlined />} onClick={() => { if (expanded && !anchorFits.current) dismiss.current(); setExpanded(value=>!value) }} />}
-        {!material && <WorkbenchIconButton variant="quiet" label="关闭详情" icon={<CloseOutlined />} onClick={() => expanded && !forceModal ? setExpanded(false) : dismiss.current()} />}
+        {desktop && !forceModal && <WorkbenchIconButton variant="quiet" label={expanded ? '收起详情' : '展开详情'} icon={expanded ? <ShrinkOutlined /> : <ExpandOutlined />} onClick={() => { if (expanded && !anchorFits.current) dismiss.current(); setExpanded(value=>!value) }} />}
+        {(!desktop || !material) && <WorkbenchIconButton variant="quiet" label="关闭详情" icon={<CloseOutlined />} onClick={() => desktop && expanded && !forceModal ? setExpanded(false) : dismiss.current()} />}
       </header>
       <div className="wb-details-body">{/* 隐藏时保留页脚宿主，避免 portal 重建导致媒体选择状态丢失。 */}<CanvasEditorFooter.Provider value={footer}><WorkbenchReadingContext.Provider value>{children}</WorkbenchReadingContext.Provider></CanvasEditorFooter.Provider></div>
       <div ref={setFooter} className="generation-editor-actions" />

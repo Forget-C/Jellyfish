@@ -70,7 +70,7 @@ try{
     await saved();await page.mouse.move(page.viewportSize().width-3,15)
     const {width,height}=page.viewportSize(),prefix=`${f}-${kind}-${state}-${width}x${height}`
     const closeButton=editor.getByRole('button',{name:'关闭详情',exact:true})
-    assert.equal(await closeButton.count(),kind.startsWith('model')?0:1,'current header close contract')
+    assert.equal(await closeButton.count(),kind.startsWith('model') && width >= 1280 ? 0 : 1,'desktop models stay compact; narrow editors expose close')
     if(await closeButton.count())await assertControlReachable(closeButton,'initial')
     await assertControlReachable(canvasDetailsToggle(editor),'initial')
     captureContexts[prefix]=await captureCanvasRegion(page,editor,join(output,`${prefix}-editor.png`))

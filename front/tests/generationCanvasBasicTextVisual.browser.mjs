@@ -1,4 +1,4 @@
-import { closeCanvasDetails, expandCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { canvasDetailsToggle, closeCanvasDetails, expandCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -103,7 +103,7 @@ try {
     await expandCanvasDetails(page)
     assert.equal(await body.inputValue(), expected)
     assert.deepEqual(await body.evaluate(element => [element.selectionStart, element.selectionEnd]), [2, 5], 'expand retains selection and editor')
-    await editor.getByRole('button', { name: '收起详情', exact: true }).click()
+    await canvasDetailsToggle(editor).click()
     const observer = await context.newPage()
     await observer.goto(url)
     await observer.getByText('此画布当前只读', { exact: true }).waitFor()
