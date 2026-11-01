@@ -194,10 +194,13 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   }, [desktop, detailId])
   useEffect(() => {
     const cancel = (event: KeyboardEvent) => {
-      if (!event.isComposing && event.key === 'Escape' && (drag || pendingConnection || accessibleConnection)) { event.preventDefault(); event.stopPropagation(); cancelConnection() }
+      if (event.defaultPrevented || event.isComposing || event.key !== 'Escape' || !(drag || pendingConnection || accessibleConnection)) return
+      // Menus consume Escape before connection cancellation, including when focus has left the menu.
+      if (container.current?.closest('[inert]') || container.current?.querySelector('.generation-card-menu, .canvas-toolbar-popover:not([hidden])') || window.document.querySelector('.ant-modal-wrap:not([style*="display: none"])')) return
+      event.preventDefault(); event.stopPropagation(); cancelConnection()
     }
-    window.addEventListener('keydown', cancel, true)
-    return () => window.removeEventListener('keydown', cancel, true)
+    window.addEventListener('keydown', cancel)
+    return () => window.removeEventListener('keydown', cancel)
   }, [drag, pendingConnection, accessibleConnection, cancelConnection])
   // 仅隐藏详情外壳，编辑器会话仍挂载；连接期间为所有目标让出空间。
   const detailsSuppressed = !!(drag || accessibleConnection || !desktop && activeCategory)
@@ -468,7 +471,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       const target = event.target as HTMLElement
       if (event.defaultPrevented || event.isComposing || !container.current?.contains(target)) return
       const toolbarMenuOpen = !!container.current?.querySelector('.canvas-toolbar-popover:not([hidden])')
-      if ((cardMenuId || toolbarMenuOpen) && event.key === 'Escape') return // Inner controls consume Escape before the window bubble listener.
+      if ((cardMenuId || toolbarMenuOpen || drag || pendingConnection || accessibleConnection) && event.key === 'Escape') return // Inner controls consume Escape before the window bubble listener.
       if (target.closest('input,textarea,select,[contenteditable],[role="dialog"],[role="menu"],[role="combobox"],.generation-card-menu') || window.document.querySelector('.ant-modal-wrap:not([style*="display: none"])')) return
       if (cardMenuId || toolbarMenuOpen) {
         const activation = ['Enter', ' '].includes(event.key) && !target.closest('button, a, summary, [role="button"], audio, video')
@@ -504,6 +507,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     }
     const menuEscape = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.isComposing || event.key !== 'Escape' || !cardMenuId || container.current?.closest('[inert]') || window.document.querySelector('.ant-modal-wrap:not([style*="display: none"])')) return
+      if (container.current?.querySelector('.canvas-toolbar-popover:not([hidden])')) return
       const target = event.target as Element
       if (!container.current?.contains(target) && !target.closest('.generation-card-editor')?.querySelector(`[data-canvas-details="${CSS.escape(document.id)}"]`)) return
       event.preventDefault(); setCardMenuId(undefined)

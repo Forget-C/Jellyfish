@@ -18,8 +18,9 @@ export function CanvasToolbarMenu({ label, children, icon, caption }: { label: s
       event.preventDefault(); event.stopPropagation(); setOpen(false); trigger.current?.focus({ preventScroll: true })
     }
     document.addEventListener('pointerdown', dismiss)
-    document.addEventListener('keydown', escape)
-    return () => { document.removeEventListener('pointerdown', dismiss); document.removeEventListener('keydown', escape) }
+    // Editor popups resolve at document before this outside-focus fallback.
+    window.addEventListener('keydown', escape)
+    return () => { document.removeEventListener('pointerdown', dismiss); window.removeEventListener('keydown', escape) }
   }, [open])
   return <div className="canvas-toolbar-menu" ref={root} onKeyDown={event => {
     if (!event.defaultPrevented && !event.nativeEvent.isComposing && event.key === 'Escape' && open) { event.stopPropagation(); setOpen(false); trigger.current?.focus({ preventScroll: true }) }

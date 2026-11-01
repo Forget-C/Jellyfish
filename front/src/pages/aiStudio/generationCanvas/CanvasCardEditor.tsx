@@ -134,12 +134,18 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
     observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['style', 'class'] })
     const keyboard = (event: KeyboardEvent) => {
       if (node?.inert || event.defaultPrevented || event.isComposing || document.querySelector('.ant-modal-wrap:not([style*="display: none"])')) return
-      if ([...document.querySelectorAll<HTMLElement>('[role="menu"], .generation-card-menu, .canvas-toolbar-popover')].some(menu => !menu.closest('[inert]') && menu.getClientRects().length && getComputedStyle(menu).visibility !== 'hidden') || node?.querySelector('[role="combobox"][aria-expanded="true"]')) return
+      const menus = [...document.querySelectorAll<HTMLElement>('[role="menu"], .generation-card-menu, .canvas-toolbar-popover')]
+        .filter(menu => !menu.closest('[inert]') && menu.getClientRects().length && getComputedStyle(menu).visibility !== 'hidden')
+      if (menus.some(menu => menu.matches('[role="menu"]')) || node?.querySelector('[role="combobox"][aria-expanded="true"]')) return
+      if (event.key === 'Escape') {
+        const materials = node?.querySelector<HTMLDetailsElement>('.generation-material-candidates[open]')
+        if (materials) {
+          event.preventDefault(); event.stopPropagation(); materials.open = false; materials.querySelector('summary')?.focus(); return
+        }
+      }
+      if (menus.length) return
       if (event.key === 'Escape') {
         event.preventDefault(); event.stopPropagation()
-        // The material picker is the innermost editor surface once native menus have closed.
-        const materials = node?.querySelector<HTMLDetailsElement>('.generation-material-candidates[open]')
-        if (materials) { materials.open = false; materials.querySelector('summary')?.focus(); return }
         if (expanded && !forceModal) { setExpanded(false); if (!anchorFits.current) dismiss.current() } else dismiss.current()
       }
       if (modal && event.key === 'Tab' && node) {

@@ -97,8 +97,7 @@ with sqlite3.connect(sys.argv[1]) as db:
     await open('r-'+kind)
     await nameField().fill('名称')
     const option=page.locator('.ant-select-dropdown:visible .ant-select-item-option')
-    await option.first().waitFor()
-    await option.first().click()
+    await option.filter({hasText:new RegExp('^名称-'+kind+'$')}).click()
     await poll(state=>state.document.cards.find(card=>card.id==='r-'+kind).name_binding?.card_id==='d-'+kind)
     assert.equal(await nameField().isDisabled(),true)
     const nameEdge=(await read()).document.edges.find(edge=>edge.source_card==='d-'+kind&&edge.target_card==='r-'+kind&&edge.target_port==='name')
@@ -110,7 +109,7 @@ with sqlite3.connect(sys.argv[1]) as db:
     assert.equal(result[0].payload.category,kind)
     assert.ok(!JSON.stringify(result).includes('保密正文'))
   }
-  await open('side');await nameField().fill('名称');await page.locator('.ant-select-dropdown:visible .ant-select-item-option').first().click()
+  await open('side');await nameField().fill('名称');await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({hasText:/^名称-character$/}).click()
   await poll(state=>state.document.cards.find(card=>card.id==='side').name_binding)
   await editor.getByText('同类型、同名称、同角度的参考已存在',{exact:false}).waitFor()
   assert.deepEqual(await outputs('r-character'),[])
