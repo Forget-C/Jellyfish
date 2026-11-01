@@ -15,8 +15,6 @@ from app.services.generation_canvas.graph import validate_graph
 from app.services.generation_canvas.capabilities import model_capability
 from app.models.studio import FileUsage
 from app.schemas.generation_canvas import MediaContentCard
-from app.services.studio.file_usages import upsert_file_usage
-from app.services.studio.files import require_available_file
 
 
 
@@ -166,8 +164,10 @@ class CanvasStore:
                 if edge.target_port not in cap.input_ports or card.type != 'model.' + cap.modality:
                     raise diagnostic('UNSUPPORTED_INPUT', '所选模型未接入该输入用途',
                                      {'edge_id': edge.id, 'card_id': card.id, 'port_id': edge.target_port})
+        from app.services.generation_canvas.saved_media import collect_media_references, validate_media_file, replace_canvas_content_usages
+        media_references = collect_media_references(document)
         from app.services.generation_canvas.references import validate_references
-        await validate_references(self.db, document, previous_document.model_dump(), self.project_id)
+        await validate_references(self.db, document, previous_document.model_dump(), self.project_id, media_references)
         if any(isinstance(card, (PerformanceDirectionCard, SoundDirectionCard)) for card in document.cards):
             from app.services.generation_canvas.runtime import CanvasRuntime
             from app.services.generation_canvas.performance import validate_design_relations, validate_design_examples
@@ -185,31 +185,12 @@ class CanvasStore:
             from app.services.generation_canvas.sound import validate_sound_relations
             validate_sound_relations(document, published, canvas.document)
             validate_design_relations(document, published)
-            await validate_design_examples(self.db, document, published, self.project_id, canvas.document)
+            await validate_design_examples(self.db, document, published, self.project_id, canvas.document, media_references)
         # Validate all replacements before releasing existing protection in this transaction.
         for card in document.cards:
             if isinstance(card, MediaContentCard) and card.file_id:
-                try:
-                    await require_available_file(self.db, file_id=card.file_id, expected_type=card.type.split('.')[1])
-                except HTTPException as exc:
-                    raise diagnostic('INVALID_MEDIA_FILE', str(exc.detail), {'card_id': card.id, 'path': ['file_id']}) from exc
-                if not await self.db.scalar(select(FileUsage.id).where(
-                        FileUsage.file_id == card.file_id, FileUsage.project_id == self.project_id).limit(1)):
-                    raise diagnostic('INVALID_MEDIA_FILE', '文件不属于当前项目', {'card_id': card.id, 'path': ['file_id']})
-        await self.db.execute(delete(FileUsage).where(
-            FileUsage.project_id == self.project_id, FileUsage.usage_kind == 'canvas_content',
-            FileUsage.source_ref.like(f'{canvas_id}:%')))
-        for card in document.cards:
-            if isinstance(card, (PerformanceDirectionCard, SoundDirectionCard)):
-                for example in card.examples:
-                    await upsert_file_usage(self.db, file_id=example.file_id, project_id=self.project_id,
-                                            chapter_id=None, usage_kind='canvas_content', source_ref=f'{canvas_id}:{card.id}:{example.id}')
-            if isinstance(card, NamedImageReferenceCard) and card.image_binding:
-                await upsert_file_usage(self.db, file_id=card.image_binding.file_id, project_id=self.project_id,
-                                        chapter_id=None, usage_kind='canvas_content', source_ref=f'{canvas_id}:{card.id}')
-            if isinstance(card, MediaContentCard) and card.file_id:
-                await upsert_file_usage(self.db, file_id=card.file_id, project_id=self.project_id,
-                                        chapter_id=None, usage_kind='canvas_content', source_ref=f'{canvas_id}:{card.id}')
+                await validate_media_file(self.db, self.project_id, media_references[card.id][0])
+        await replace_canvas_content_usages(self.db, self.project_id, canvas_id, media_references)
         result = await self.db.execute(update(GenerationCanvas).where(
             GenerationCanvas.id == canvas_id, GenerationCanvas.revision == command.expected_revision).values(
                 document=document.model_dump(), revision=command.expected_revision + 1, card_types=identities))

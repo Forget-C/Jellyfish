@@ -92,12 +92,9 @@ def validate_design_relations(document, published):
             raise diagnostic('PARTICIPANT_COUNT_EXCEEDED', '情境和表演主体至多一个对象', {'card_id': card.id, 'port_id': 'participant'})
 
 
-async def validate_design_examples(db, document, published, project_id, previous):
+async def validate_design_examples(db, document, published, project_id, previous, media_references):
     """示例必须是直接已发布媒体，固定文件保持项目归属和删除保护。"""
-    from fastapi import HTTPException
-    from sqlalchemy import select
-    from app.models.studio import FileUsage
-    from app.services.studio.files import require_available_file
+    from app.services.generation_canvas.saved_media import validate_media_file
     from app.services.generation_canvas.compiler import resolve_outputs, identity_key
     for card in document.cards:
         if not isinstance(card, (PerformanceDirectionCard, SoundDirectionCard)):
@@ -105,7 +102,7 @@ async def validate_design_examples(db, document, published, project_id, previous
         candidates = resolve_outputs(document, card.id, published, allow_reference_drafts=True)
         old_examples = next((row.get('examples', []) for row in previous.get('cards', []) if row['id'] == card.id), [])
         ids = set()
-        for example in card.examples:
+        for example, media_reference in zip(card.examples, media_references[card.id]):
             target = {'card_id': card.id, 'path': ['examples', example.id]}
             if example.field_id and not isinstance(getattr(card, example.field_id, getattr(getattr(card, 'fields', None), example.field_id, None)), DesignField):
                 raise diagnostic('INVALID_EXAMPLE_FIELD', '请选择本卡声明的设计字段', {**target, 'field': 'field_id'})
@@ -116,9 +113,4 @@ async def validate_design_examples(db, document, published, project_id, previous
             if example.id in ids or not connected or example.source.canvas_id != document.id or not port or (not fixed and (not item or not item.available or item.file_id != example.file_id)):
                 raise diagnostic('INVALID_DESIGN_EXAMPLE', '请选择直接候选中的具体图片、视频或音频示例', target)
             ids.add(example.id)
-            try:
-                await require_available_file(db, file_id=example.file_id, expected_type=example.source.port_id)
-            except HTTPException as exc:
-                raise diagnostic('INVALID_MEDIA_FILE', str(exc.detail), target) from exc
-            if not await db.scalar(select(FileUsage.id).where(FileUsage.file_id == example.file_id, FileUsage.project_id == project_id).limit(1)):
-                raise diagnostic('INVALID_MEDIA_FILE', '示例文件不属于当前项目', target)
+            await validate_media_file(db, project_id, media_reference)

@@ -1,14 +1,12 @@
 """命名参考的类别、对象身份与固定主图校验；不分析图片内容。"""
-from fastapi import HTTPException
-from sqlalchemy import select
-from app.models.studio import FileUsage
 from app.schemas.generation_canvas import NamedImageReferenceCard, ObjectDescriptionCard
 from app.services.generation_canvas.compiler import identity_key, resolve_outputs
 from app.services.generation_canvas.errors import diagnostic
-from app.services.studio.files import require_available_file
+
+from app.services.generation_canvas.saved_media import validate_media_file
 
 
-async def validate_references(db, document, previous, project_id):
+async def validate_references(db, document, previous, project_id, media_references):
     """保存允许未完成参考；已有绑定必须指向直接、类别适配的实际出口。"""
     references = [card for card in document.cards if isinstance(card, NamedImageReferenceCard)]
     if not references:
@@ -46,12 +44,7 @@ async def validate_references(db, document, previous, project_id):
         source = next((value for value in document.cards if image.source and value.id == image.source.card_id), None)
         if not unchanged and (not image.source or not source or source.type != 'content.image'):
             raise diagnostic('INVALID_REFERENCE_SOURCE', '新增参考图仅可从图片内容卡选择', {**target, 'path': ['image_binding']})
-        try:
-            await require_available_file(db, file_id=image.file_id, expected_type='image')
-        except HTTPException as exc:
-            raise diagnostic('INVALID_MEDIA_FILE', str(exc.detail), target) from exc
-        if not await db.scalar(select(FileUsage.id).where(FileUsage.file_id == image.file_id, FileUsage.project_id == project_id).limit(1)):
-            raise diagnostic('INVALID_MEDIA_FILE', '文件不属于当前项目', target)
+        await validate_media_file(db, project_id, media_references[card.id][0])
         if image.source:
             if not any(edge.target_card == card.id and edge.target_port == 'image_source' and
                        edge.source_card == image.source.card_id and edge.source_port == image.source.port_id for edge in document.edges):
