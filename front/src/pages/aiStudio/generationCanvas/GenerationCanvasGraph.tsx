@@ -18,6 +18,7 @@ import type { PerformanceCard } from './PerformanceDirectionEditor'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, PointerEvent, ReactNode } from 'react'
 import { AimOutlined, MinusOutlined, PlusOutlined, CloseOutlined, ScissorOutlined, GroupOutlined, MoreOutlined } from '@ant-design/icons'
+import { WorkbenchModal, WorkbenchDialogActions } from '../directing/ui/WorkbenchModal'
 import { WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
 import { CanvasToolbarMenu } from '../directing/CanvasToolbarMenu'
 import { ConfigProvider, Dropdown, Modal, Input, Select, Space, Tooltip, Image } from 'antd'
@@ -57,7 +58,8 @@ const arrange: GraphArrange = (nodes, _sizes, _width, _anchor, retained = {}) =>
   [node.id, retained[node.id] || { x: 200 + index % 3 * 440, y: Math.floor(index / 3) * 560 }]))
 
 /** 独立画布编辑适配：候选关系与文档持久化，几何沿用公共布局缓存。 */
-function GenerationCanvasGraphContent({ contentHistory, document, onChange, readonly = false, runtime, inspectTarget, editingStatus, savedRevision, savedDocument }: { primaryHost?: HTMLElement | null; contentHistory?: ReactNode; savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; inspectTarget?: { cardId: string; serial: number; segmentId?: string }; editingStatus?: string; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string) => void } }) {
+function GenerationCanvasGraphContent({ contentHistory, history, document, onChange, readonly = false, runtime, inspectTarget, editingStatus, savedRevision, savedDocument }: { history?: { record: (undo: () => void, redo: () => void) => void; undo: () => void; redo: () => void }; primaryHost?: HTMLElement | null; contentHistory?: ReactNode; savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; inspectTarget?: { cardId: string; serial: number; segmentId?: string }; editingStatus?: string; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string) => void } }) {
+  const [pendingDeletion, setPendingDeletion] = useState<string[]>()
   const { catalog, cardDefinitions, cardTitles, connectionReason, inputPorts, outputPorts, portLabels } = useGraphRules()
   const cards = document.cards || emptyCards, edges = document.edges || emptyEdges, groups = document.groups || emptyGroups
   const stacks = groups.filter(group => group.kind === 'stack')
@@ -80,10 +82,11 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
   const [displayFilter, setDisplayFilter] = useState<CanvasDisplayFilter>({ group: '', modality: '', problems: false })
   const [multiSelectMode, setMultiSelectMode] = useState(false)
   const stackMoved = useRef(false)
-  const groupDrag = useRef<{ pointer: number; x: number; y: number; positions: Record<string, { x: number; y: number }> }>()
+  const groupDrag = useRef<{ pointer: number; x: number; y: number; transform: { x: number; y: number }; positions: Record<string, { x: number; y: number }> }>()
+  const historicalPositions = useRef<Record<string, { x: number; y: number }>>({})
+  const completeMove = useRef<(cancelled?: boolean) => void>(() => {})
   const retainedPositions = useRef<Record<string, { x: number; y: number }>>({})
   const [selected, setSelected] = useState<string[]>([])
-  const [detailAllowPan, setDetailAllowPan] = useState(true)
   const [expandRequest, setExpandRequest] = useState<{id:string;serial:number}>()
   const [detailId, setDetailId] = useState<string | undefined>()
   const [newPhotographyEntry, setNewPhotographyEntry] = useState<{ cardId: string; entry: string }>()
@@ -111,6 +114,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
   const [groupPanel, setGroupPanel] = useState<'name' | 'members'>()
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string>()
   const [spaceHeld, setSpaceHeld] = useState(false)
+  const spacePanned = useRef(false)
   const blankPointer = useRef(false)
   const panGesture = useRef<{ surface: HTMLDivElement; pointer: number; x: number; y: number; left: number; top: number }>()
   const blankPress = useRef<{ x: number; y: number }>()
@@ -134,11 +138,17 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
     const keydown = (event: KeyboardEvent) => {
       const target = event.target as Element
       if (target.closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')) return
-      if (event.code === 'Space' && target.closest('button, [data-card-id], audio, video')) return
-      if (event.code === 'Space' && blankPointer.current) { event.preventDefault(); setSpaceHeld(true) }
-      if (event.key === 'Escape' && !event.defaultPrevented) clearSelection()
+      if (event.code === 'Space' && target.closest('button, audio, video')) return
+      if (event.code === 'Space' && container.current?.contains(target)) { event.preventDefault(); if (!event.repeat) spacePanned.current = false; setSpaceHeld(true) }
+
     }
-    const keyup = (event: KeyboardEvent) => { if (event.code === 'Space') setSpaceHeld(false) }
+    const keyup = (event: KeyboardEvent) => {
+      if (event.code !== 'Space') return
+      setSpaceHeld(false)
+      const target = event.target as HTMLElement
+      const card = target.matches('[data-card-id]') ? target : undefined
+      if (card && !spacePanned.current) { const id = card.dataset.cardId!; setSelected([id]); setDetailTrigger(card); setDetailId(id) }
+    }
     const blur = () => { setSpaceHeld(false); if (panGesture.current) delete panGesture.current.surface.dataset.panning; panGesture.current = undefined; blankPress.current = undefined }
     window.addEventListener('keydown', keydown); window.addEventListener('keyup', keyup); window.addEventListener('blur', blur)
     return () => { window.removeEventListener('keydown', keydown); window.removeEventListener('keyup', keyup); window.removeEventListener('blur', blur) }
@@ -213,7 +223,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
   const layoutMeasurements = useMemo(() => ({ ...Object.fromEntries([...hidden].map(id => [id, { width: 400, height: 350 }])), ...measured }), [measured, hidden])
   // 整理把编组当一个布局单元，成员仅平移，避免公共网格排布打散组内位置。
   const arrangeGroups: GraphArrange = (items, sizes, width, anchorId, retained) => {
-    if (retained || !groups.length) return arrange(items, sizes, width, anchorId, retained)
+    if (retained || !groups.length) return arrange(items, sizes, width, anchorId, retained ? { ...Object.fromEntries(items.filter(item => historicalPositions.current[item.id]).map(item => [item.id, historicalPositions.current[item.id]])), ...retained } : retained)
     const owned = new Set(groups.flatMap(group => group.card_ids || []))
     const units = [...groups.map(group => group.card_ids || []), ...items.filter(item => !owned.has(item.id)).map(item => [item.id])]
     const positions: Record<string, { x: number; y: number }> = {}
@@ -244,13 +254,15 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
         stack.focus({preventScroll:true})
       }); return
     }
-    { setSelected([cardId]); setSelectedEdgeId(undefined); setDetailAllowPan(false); setDetailId(cardId) }
+    { setSelected([cardId]); setSelectedEdgeId(undefined); setDetailId(cardId) }
   }
   /** 始终从手势起始位置平移成员，堆叠与编组共用同一位移语义。 */
   const moveGroupDrag = (clientX: number, clientY: number) => {
     const current = groupDrag.current
     if (!current) return
-    const delta = { x: (clientX - current.x) / transform.scale, y: (clientY - current.y) / transform.scale }
+    moveSnapshot.current ||= layout.view
+    movingIds.current = Object.keys(current.positions); autoPanning.current = true
+    const delta = { x: (clientX - current.x - transform.x + current.transform.x) / transform.scale, y: (clientY - current.y - transform.y + current.transform.y) / transform.scale }
     layout.setView(previous => ({ ...previous, positions: { ...previous.positions,
       ...Object.fromEntries(Object.entries(current.positions).map(([id, origin]) => [id, { x: origin.x + delta.x, y: origin.y + delta.y }])) } }))
   }
@@ -259,14 +271,17 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
     if (!current) return
     layout.setView(previous => ({ ...previous, positions: { ...previous.positions, ...current.positions } }))
     groupDrag.current = undefined
+    completeMove.current(true)
   }, [layout])
   useEffect(() => {
     const cancel = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && groupDrag.current) { event.preventDefault(); event.stopPropagation(); cancelGroupDrag() }
     }
-    window.addEventListener('keydown', cancel, true); window.addEventListener('blur', cancelGroupDrag)
-    return () => { window.removeEventListener('keydown', cancel, true); window.removeEventListener('blur', cancelGroupDrag) }
+    const blur = () => { if (groupDrag.current) { groupDrag.current = undefined; completeMove.current() } }
+    window.addEventListener('keydown', cancel, true); window.addEventListener('blur', blur)
+    return () => { window.removeEventListener('keydown', cancel, true); window.removeEventListener('blur', blur) }
   }, [cancelGroupDrag])
+  historicalPositions.current = { ...historicalPositions.current, ...layout.view.positions }
   retainedPositions.current = layout.view.positions
   const connectionLayout = useConnectionSides(`jellyfish:generation-connection-sides:${document.project_id}:${document.id}`, edges.map(edge => edge.id), Object.fromEntries(edges.map(edge => [edge.id, defaultSides(layout.view.positions[edge.source_card] || { x: 0, y: 0 }, layout.view.positions[edge.target_card] || { x: 0, y: 0 })])))
   const creationView = useRef<{ cardId: string; transform: typeof layout.view.transform }>()
@@ -285,6 +300,59 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
   const transform = layout.view.transform
   const viewport = useCanvasViewport(document.id, transform, update => layout.setView(previous => ({ ...previous,
     transform: typeof update === 'function' ? update(previous.transform) : update })), { x: 2000, y: 1800 })
+  const moveSnapshot = useRef<typeof layout.view>()
+  const edgePointer = useRef<{x:number;y:number}>()
+  const autoPanning = useRef(false)
+  const movingIds = useRef<string[]>([])
+  const beginMove = (id: string, pointer = false) => {
+    autoPanning.current = pointer
+    moveSnapshot.current ||= layout.view
+    const selection = selected.includes(id) ? selected : [id]
+    movingIds.current = selection
+    setSelected(selection); setSelectedEdgeId(undefined)
+    if (selection.length > 1 || detailId && detailId !== id) setDetailId(undefined)
+  }
+  const finishMove = (cancelled = false) => {
+    autoPanning.current = false
+    const before = moveSnapshot.current
+    moveSnapshot.current = undefined
+    if (!before) return
+    if (cancelled) { layout.setView(() => before); return }
+    const after = layout.view
+    if (JSON.stringify(before.positions) !== JSON.stringify(after.positions)) {
+      const restore = (view: typeof after) => layout.setView(current => ({ ...current, positions: view.positions, manuallyPlaced: view.manuallyPlaced }))
+      history?.record(() => restore(before), () => restore(after))
+    }
+  }
+  completeMove.current = finishMove
+  const moveCards = (id: string, position: { x: number; y: number }) => {
+    const origin = layout.view.positions[id] || { x: 0, y: 0 }
+    const ids = selected.includes(id) ? selected : [id]
+    layout.setView(previous => ({ ...previous, positions: { ...previous.positions, ...Object.fromEntries(ids.map(member => {
+      const point = previous.positions[member] || { x: 0, y: 0 }
+      return [member, { x: point.x + position.x - origin.x, y: point.y + position.y - origin.y }]
+    })) }, manuallyPlaced: [...new Set([...(previous.manuallyPlaced || []), ...ids])] }))
+  }
+  const panAtEdge = useRef(() => {})
+  panAtEdge.current = () => {
+    const pointer = edgePointer.current, surface = viewport.surface.current
+    if (!autoPanning.current || !pointer || !surface) return
+    const box = surface.getBoundingClientRect()
+    const speed = (value: number, min: number, max: number) => value < min + 40 ? Math.min(10, (min + 40 - value) / 4) : value > max - 40 ? -Math.min(10, (value - max + 40) / 4) : 0
+    const dx = speed(pointer.x, box.left + 80, box.right), dy = speed(pointer.y, box.top + 80, box.bottom - 48)
+    if (!dx && !dy) return
+    layout.setView(previous => ({ ...previous, transform: { ...previous.transform, x: previous.transform.x + dx, y: previous.transform.y + dy }, positions: { ...previous.positions, ...Object.fromEntries(movingIds.current.map(id => {
+      const point = previous.positions[id] || { x: 0, y: 0 }
+      return [id, { x: point.x - dx / previous.transform.scale, y: point.y - dy / previous.transform.scale }]
+    })) } }))
+  }
+  useEffect(() => {
+    let frame: number
+    const tick = () => { panAtEdge.current(); frame = requestAnimationFrame(tick) }
+    const pointer = (event: globalThis.PointerEvent) => { edgePointer.current = { x: event.clientX, y: event.clientY } }
+    frame = requestAnimationFrame(tick); window.addEventListener('pointermove', pointer)
+    return () => { cancelAnimationFrame(frame); window.removeEventListener('pointermove', pointer) }
+  }, [])
   const modelIds = cards.filter(card => 'model_id' in card).map(card => 'model_id' in card ? card.model_id : '').filter(Boolean).join('|')
   useEffect(() => {
     let active = true
@@ -342,17 +410,77 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
     const segment = card?.querySelector<HTMLElement>(`[data-segment-id="${CSS.escape(protection.segmentId)}"]`)
     if (segment) { segment.tabIndex = -1; segment.focus(); segment.scrollIntoView({ block: 'nearest', inline: 'nearest' }) }
   }
-  const removeCard = (id: string) => {
-    if (stackFor(id) || edges.some(edge => edge.source_card === id && stackFor(edge.target_card))) { setReason('请先解除相关堆叠后删除'); return }
-    if (runtime?.busyCards.has(id)) { setReason('卡片正在运行，结束前不可删除'); return }
-    const protection = referenceProtection(latest.current, id)
-    if (protection) { showProtection(protection); return }
-    let next = latest.current
-    for (const edge of next.edges || []) if (edge.source_card === id || edge.target_card === id) next = disconnect(next, edge.id)
-    const order = { ...next.input_order }; delete order[id]
-    edit({ ...next, cards: next.cards?.filter(card => card.id !== id), input_order: order,
-      groups: next.groups?.map(group => ({ ...group, card_ids: group.card_ids?.filter(card => card !== id) })) })
+  const removeCards = (ids: string[], confirmed = false) => {
+    if (readonly || !ids.length) return
+    const blocked = ids.find(id => stackFor(id) || edges.some(edge => edge.source_card === id && stackFor(edge.target_card)) || runtime?.busyCards.has(id))
+    if (blocked) { setReason(`${cardLabel(blocked)}：${runtime?.busyCards.has(blocked) ? '卡片正在运行，结束前不可删除' : '请先解除相关堆叠后删除'}`); return }
+    for (const id of ids) {
+      const protection = referenceProtection(latest.current, id)
+      if (protection) { showProtection(protection); return }
+    }
+    if (!confirmed) { setPendingDeletion(ids); return }
+      let next = latest.current
+      for (const edge of next.edges || []) if (ids.includes(edge.source_card) || ids.includes(edge.target_card)) next = disconnect(next, edge.id)
+      const order = { ...next.input_order }; ids.forEach(id => delete order[id])
+      edit({ ...next, cards: next.cards?.filter(card => !ids.includes(card.id)), input_order: order,
+        groups: next.groups?.map(group => ({ ...group, card_ids: group.card_ids?.filter(card => !ids.includes(card)) })) })
+      clearSelection(); viewport.surface.current?.focus({ preventScroll: true })
   }
+  const removeCard = (id: string) => removeCards([id])
+  const zoomAt = (scale: number, x: number, y: number) => {
+    if (moveSnapshot.current) return
+    layout.setView(previous => {
+      const before = previous.transform, next = Math.max(.15, Math.min(2, scale))
+      return { ...previous, transform: { scale: next, x: x - (x - before.x) * next / before.scale, y: y - (y - before.y) * next / before.scale } }
+    })
+  }
+  useEffect(() => {
+    const surface = viewport.surface.current
+    if (!surface) return
+    const wheel = (event: WheelEvent) => {
+      if ((event.target as Element).closest('input,textarea,select,[contenteditable],audio,video,[role="menu"]')) return
+      event.preventDefault()
+      const box = surface.getBoundingClientRect(), units = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? surface.clientHeight : 1
+      zoomAt(transform.scale * Math.exp(-event.deltaY * units * .002), event.clientX - box.left, event.clientY - box.top)
+    }
+    surface.addEventListener('wheel', wheel, { passive: false })
+    return () => surface.removeEventListener('wheel', wheel)
+  })
+  useEffect(() => {
+    const keyboard = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement
+      if (event.defaultPrevented || event.isComposing || !container.current?.contains(target) || target.closest('input,textarea,select,[contenteditable],[role="dialog"],[role="menu"],[role="combobox"],.generation-card-menu') || window.document.querySelector('.ant-modal-wrap:not([style*="display: none"])')) return
+      if (event.key === 'Escape' && container.current?.querySelector('.generation-card-menu')) return
+      if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); removeCards(selected); return }
+      if ((event.metaKey || event.ctrlKey) && ['z', 'y'].includes(event.key.toLowerCase())) {
+        event.preventDefault(); if (!readonly) { if (event.shiftKey || event.key.toLowerCase() === 'y') history?.redo(); else history?.undo() } return
+      }
+      if (event.key === 'Escape' && (selectionStart.current || panGesture.current)) {
+        event.preventDefault()
+        selectionStart.current = undefined; setSelectionBox(undefined); blankPress.current = undefined
+        const pan = panGesture.current
+        if (pan) { layout.setView(previous => ({ ...previous, transform: { ...previous.transform, x: pan.left, y: pan.top } })); delete pan.surface.dataset.panning; panGesture.current = undefined }
+        return
+      }
+      if (event.key === 'Escape' && !detailId) { event.preventDefault(); clearSelection(); return }
+      const box = viewport.surface.current?.getBoundingClientRect()
+      if (box && ['+', '=', '-'].includes(event.key)) { event.preventDefault(); zoomAt(transform.scale + (event.key === '-' ? -.1 : .1), box.width / 2, box.height / 2) }
+      if (event.key === '0') { event.preventDefault(); fitVisibleCards() }
+      const card = target.closest<HTMLElement>('[data-card-id]')
+      if (card && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)) {
+        event.preventDefault()
+        const id = card.dataset.cardId!, step = event.shiftKey ? 50 : 10
+        beginMove(id)
+        const origin = layout.view.positions[id] || { x: 0, y: 0 }
+        moveCards(id, { x: origin.x + (event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0), y: origin.y + (event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0) })
+      }
+    }
+    const up = (event: KeyboardEvent) => { if (event.key.startsWith('Arrow')) finishMove() }
+    const blur = () => finishMove()
+    window.addEventListener('blur', blur)
+    window.addEventListener('keydown', keyboard, true); window.addEventListener('keyup', up)
+    return () => { window.removeEventListener('blur', blur); window.removeEventListener('keydown', keyboard, true); window.removeEventListener('keyup', up) }
+  })
   const add = (type: string, position?: { x: number; y: number }, entry?: string) => {
     if (readonly || !catalog.cards.some(card => card.type === type)) return
     const card = (type === 'content.text' || type === 'content.basis') ? { id: crypto.randomUUID(), type, type_version: 1, text: '' }
@@ -550,7 +678,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
       const box = card.getBoundingClientRect()
       return box.left < right && box.right > left && box.top < bottom && box.bottom > top
     }).map(card => card.dataset.cardId!)
-    setSelected(ids); setDetailId(undefined); setSelectedEdgeId(undefined); selectionStart.current = undefined; setSelectionBox(undefined)
+    setSelected(previous => event.shiftKey ? [...new Set([...previous, ...ids])] : ids); setDetailId(undefined); setSelectedEdgeId(undefined); selectionStart.current = undefined; setSelectionBox(undefined)
   }
   const point = (id: string) => layout.view.positions[id] || { x: 0, y: 0 }
   /** 显式适应全部按实际可见卡片及悬浮导航留白计算，不改保存或生成依据。 */
@@ -628,6 +756,14 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
   const uploadTextCard = cards.find(card => card.id === uploadText) as TextContentCard | undefined
   const uploadSourceCard = cards.find(card => card.id === uploadSource) as MediaCard | undefined
   return <div className="generation-graph" ref={container} onPointerDownCapture={event => {
+    const surface = viewport.surface.current
+    if (surface?.contains(event.target as Node) && (event.button === 1 || spaceHeld && event.button === 0)) {
+      spacePanned.current = true
+      event.preventDefault(); event.stopPropagation(); surface.focus({ preventScroll: true }); surface.setPointerCapture(event.pointerId)
+      panGesture.current = { surface, pointer: event.pointerId, x: event.clientX, y: event.clientY, left: transform.x, top: transform.y }
+      surface.dataset.panning = 'true'; return
+    }
+    if (event.shiftKey || (event.target as Element).closest('.generation-surface')) return
     if (selected.length < 2 && !multiSelectMode) return
     const target = event.target as Element
     if (!event.currentTarget.contains(target)) return
@@ -635,6 +771,9 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
     if (target.closest('.generation-selection-actions, .generation-browse') || modifier || multiSelectMode && target.closest('[data-card-id]')) return
     clearSelection()
   }}>
+    <WorkbenchModal title={`删除 ${pendingDeletion?.length || 0} 张卡片？`} open={!!pendingDeletion} width={480} onCancel={() => setPendingDeletion(undefined)} footer={<WorkbenchDialogActions secondary={<Button onClick={() => setPendingDeletion(undefined)}>取消</Button>}><Button variant="danger" onClick={() => { const ids = pendingDeletion; setPendingDeletion(undefined); if (ids) removeCards(ids, true) }}>确认删除</Button></WorkbenchDialogActions>}>
+      相关连线将一并移除，可撤销恢复；已生成的媒体文件保留。
+    </WorkbenchModal>
     <Modal title="堆叠内容（只读）" open={!!stacks.find(group => group.id === viewStackId)} onCancel={() => setViewStackId(undefined)} footer={null} width={1100} maskClosable destroyOnClose>
       <div className="generation-stack-reading" onClick={event => { if (event.target === event.currentTarget) setViewStackId(undefined) }}>
         {(stacks.find(group => group.id === viewStackId)?.card_ids || []).map(id => {
@@ -683,9 +822,9 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
     <CardList catalog={catalog} readonly={readonly} active={activeCategory} onActiveChange={category => { cancelConnection(); setActiveCategory(category) }} onAdd={(type, entry) => add(type, undefined, entry)} />
     <nav className="director-canvas-bottom generation-view-tools" aria-label="画布视图工具">
       <WorkbenchIconButton label="定位所选" variant="quiet" icon={<AimOutlined />} disabled={!selected.length} onClick={() => { const p = point(selected[0]); layout.setView(previous => ({ ...previous, transform: { ...previous.transform, x: (container.current?.clientWidth || 1200) / 2 - p.x * previous.transform.scale, y: (container.current?.clientHeight || 800) / 2 - p.y * previous.transform.scale } })) }} />
-      <WorkbenchIconButton label="缩小" variant="quiet" icon={<MinusOutlined />} onClick={() => viewport.zoom(-.1)} />
+      <WorkbenchIconButton label="缩小" variant="quiet" icon={<MinusOutlined />} onClick={() => zoomAt(transform.scale - .1, (viewport.surface.current?.clientWidth || 0) / 2, (viewport.surface.current?.clientHeight || 0) / 2)} />
       <span aria-label="画布缩放比例">{Math.round(transform.scale * 100)}%</span>
-      <WorkbenchIconButton label="放大" variant="quiet" icon={<PlusOutlined />} onClick={() => viewport.zoom(.1)} />
+      <WorkbenchIconButton label="放大" variant="quiet" icon={<PlusOutlined />} onClick={() => zoomAt(transform.scale + .1, (viewport.surface.current?.clientWidth || 0) / 2, (viewport.surface.current?.clientHeight || 0) / 2)} />
       <Button variant="quiet" onClick={fitVisibleCards}>适应全部</Button>
       <CanvasToolbarMenu label="布局" caption="布局">
         <Button onClick={() => layout.rearrange()}>整理布局</Button>
@@ -810,7 +949,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
               if (event.button !== 0 || (event.target as Element).closest('button')) return
               event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId)
               stackMoved.current = false
-              groupDrag.current = {pointer:event.pointerId,x:event.clientX,y:event.clientY,positions:Object.fromEntries(members.map(id => [id,point(id)]))}
+              groupDrag.current = {pointer:event.pointerId,x:event.clientX,y:event.clientY,transform,positions:Object.fromEntries(members.map(id => [id,point(id)]))}
             }} onPointerMove={event => {
               const current=groupDrag.current
               if (!current || current.pointer!==event.pointerId) return
@@ -820,7 +959,8 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
             }} onPointerUp={event => {
               const current=groupDrag.current; groupDrag.current=undefined; event.stopPropagation()
               stackMoved.current = !!current && Math.hypot(event.clientX-current.x,event.clientY-current.y)>=6
-            }} onPointerCancel={cancelGroupDrag} onLostPointerCapture={cancelGroupDrag}>
+              finishMove()
+            }} onPointerCancel={() => { groupDrag.current = undefined; finishMove() }} onLostPointerCapture={() => { if (groupDrag.current) { groupDrag.current = undefined; finishMove() } }}>
             <div className="generation-stack-actions"><span>{members.length} 张卡片{filterActive && ` · 匹配 ${members.filter(id => matched.has(id)).length}`}</span><Button disabled={readonly} onClick={event => {
               event.stopPropagation(); edit({...document,groups:groups.filter(item=>item.id!==group.id)});setViewStackId(undefined);setSelected(members);setSelectedEdgeId(undefined);setDetailId(undefined)
             }}>解除堆叠</Button></div>
@@ -840,7 +980,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
             const modifier = navigator.platform.includes('Mac') ? event.metaKey : event.ctrlKey
             if (spaceHeld || modifier) return
             event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId)
-            groupDrag.current = { pointer: event.pointerId, x: event.clientX, y: event.clientY, positions: Object.fromEntries(members.map(id => [id, point(id)])) }
+            groupDrag.current = { pointer: event.pointerId, x: event.clientX, y: event.clientY, transform, positions: Object.fromEntries(members.map(id => [id, point(id)])) }
           }} onPointerMove={event => {
             const current = groupDrag.current
             if (!current || current.pointer !== event.pointerId) return
@@ -851,13 +991,16 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
             if (current) {
               event.stopPropagation(); groupDrag.current = undefined
               if (Math.hypot(event.clientX - current.x, event.clientY - current.y) < 6) selectGroup(group.id)
+              finishMove()
             }
-          }} onPointerCancel={cancelGroupDrag} onLostPointerCapture={cancelGroupDrag} style={{ left: origin.x, top: origin.y, width, height, '--generation-group-controls-scale': 1 / Math.min(transform.scale, 1) } as CSSProperties}>
+          }} onPointerCancel={() => { groupDrag.current = undefined; finishMove() }} onLostPointerCapture={() => { if (groupDrag.current) { groupDrag.current = undefined; finishMove() } }} style={{ left: origin.x, top: origin.y, width, height, '--generation-group-controls-scale': 1 / Math.min(transform.scale, 1) } as CSSProperties}>
             <div className="generation-group-header">
               <button type="button" className="generation-group-title" aria-label={`选择编组 ${group.name}`} aria-pressed={selectedGroupId === group.id} onClick={() => selectGroup(group.id)}><GroupOutlined aria-hidden /><span>{group.name}</span></button>
-              {selectedGroupId === group.id && <div className="generation-group-actions" role="toolbar" aria-label={`编组操作 ${group.name}`}>
-                <CanvasDragHandle className="generation-group-move" contextKey={document.id} label={`分组 ${group.name}`} offset={origin} scale={transform.scale} onMove={next => {
-                  const delta = { x: next.x - origin.x, y: next.y - origin.y }
+              {selectedGroupId === group.id && <div className="generation-group-actions" onLostPointerCaptureCapture={() => finishMove()} onPointerCancelCapture={() => finishMove()} onPointerDownCapture={event => { if ((event.target as Element).closest('.generation-group-move')) { moveSnapshot.current ||= layout.view; movingIds.current = members; autoPanning.current = true } }} onPointerUpCapture={() => finishMove()} onKeyUp={() => finishMove()} role="toolbar" aria-label={`编组操作 ${group.name}`}>
+                <CanvasDragHandle onCancel={() => finishMove(true)} className="generation-group-move" contextKey={document.id} label={`分组 ${group.name}`} offset={origin} scale={transform.scale} onMove={next => {
+                  moveSnapshot.current ||= layout.view; movingIds.current = members
+                  const start = moveSnapshot.current?.transform || transform
+                  const delta = { x: next.x - (transform.x - start.x) / transform.scale - origin.x, y: next.y - (transform.y - start.y) / transform.scale - origin.y }
                   layout.setView(previous => ({ ...previous, positions: { ...previous.positions, ...Object.fromEntries(members.map(id => [id,
                     { x: (previous.positions[id]?.x || 0) + delta.x, y: (previous.positions[id]?.y || 0) + delta.y }])) } }))
                 }} />
@@ -891,12 +1034,12 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
           const node = runtime?.nodes[card.id]
           const isModel = card.type?.startsWith('model.')
           return <CardShell key={`${document.id}:${card.id}`} id={card.id} type={card.type} name={'name' in card ? card.name : undefined} title={cardTitles[card.type || 'content.text']} contextKey={document.id} point={point(card.id)}
-            scale={transform.scale} width={isModel || isReference ? generationCardSize(card.type).width : size?.width || (focusCardTypes.includes(card.type || '') ? 300 : 400)} height={isModel || isReference ? generationCardSize(card.type).height : size?.height} selected={selected.includes(card.id)} filterMatch={matched.has(card.id)} readonly={readonly} removeDisabled={runtime?.busyCards.has(card.id)}
-            onEdit={card.type?.startsWith('direction.') ? trigger => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailAllowPan(false); setDetailId(card.id) } : undefined}
-            onExpand={trigger => { setDetailAllowPan(false); setDetailTrigger(trigger); setDetailId(card.id); setExpandRequest({id:card.id,serial:Date.now()}) }}
-            onOpen={(trigger, dragged) => { setDetailAllowPan(!dragged); if (accessibleConnection) chooseAccessibleTarget(card.id); else { setMultiSelectMode(false); setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.type?.startsWith('direction.') ? undefined : card.id) } }} onSelect={checked => { setDetailId(undefined); setSelectedEdgeId(undefined); setSelected(previous => checked ? [...new Set([...previous, card.id])] : previous.filter(id => id !== card.id)) }}
-            multiSelectMode={multiSelectMode} onStartMultiSelect={() => { setMultiSelectMode(true); setSelected([card.id]); setDetailId(undefined); setSelectedEdgeId(undefined) }} onDragStart={() => { setMultiSelectMode(false); setSelected([card.id]); setSelectedEdgeId(undefined) }}
-            onConnect={trigger => startAccessibleConnection(card.id, 'right', trigger)} onMove={position => { if (!accessibleConnection) layout.move(card.id, position) }} onRemove={() => removeCard(card.id)} connections={geometricPorts(card)}
+            viewportOffset={transform} scale={transform.scale} width={isModel || isReference ? generationCardSize(card.type).width : size?.width || (focusCardTypes.includes(card.type || '') ? 300 : 400)} height={isModel || isReference ? generationCardSize(card.type).height : size?.height} selected={selected.includes(card.id)} filterMatch={matched.has(card.id)} readonly={readonly} removeDisabled={runtime?.busyCards.has(card.id)}
+            onEdit={card.type?.startsWith('direction.') ? trigger => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) } : undefined}
+            onExpand={trigger => { setDetailTrigger(trigger); setDetailId(card.id); setExpandRequest({id:card.id,serial:Date.now()}) }}
+            onOpen={trigger => { if (accessibleConnection) chooseAccessibleTarget(card.id); else { setMultiSelectMode(false); setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.type?.startsWith('direction.') ? undefined : card.id) } }} onSelect={checked => { setDetailId(undefined); setSelectedEdgeId(undefined); setSelected(previous => checked ? [...new Set([...previous, card.id])] : previous.filter(id => id !== card.id)) }}
+            multiSelectMode={multiSelectMode} onStartMultiSelect={() => { setMultiSelectMode(true); setSelected([card.id]); setDetailId(undefined); setSelectedEdgeId(undefined) }} onDragStart={() => beginMove(card.id, true)} onDragEnd={finishMove}
+            onConnect={trigger => startAccessibleConnection(card.id, 'right', trigger)} onMove={position => { if (!accessibleConnection) moveCards(card.id, position) }} onRemove={() => removeCard(card.id)} connections={geometricPorts(card)}
             footer={isModel || isReference || isDescription || card.type === 'content.image' ? undefined : <CardStatusSummary card={card} node={node} outputs={outputs} readonly={readonly} missingImage={false} />}>
 
             {!isModel && !isReference && !isDescription && <>            {card.type === 'content.image' ? <ImageContentCardSummary card={card as ImageContentCard} readonly={readonly} /> : card.type === 'direction.photography' ? <PhotographyCardSummary card={card as PhotographyCard} /> : <p className="canvas-card-summary">{['direction.creative_control', 'direction.guidance', 'direction.criterion'].includes(card.type || '') ? guidanceSummary(card as GuidanceCard) : card.type === 'direction.style' ? designSummary([], Object.values((card as VisualStyleCard).fields || {})) || '风格方向、视觉特征、材质与色彩待编辑' : ['direction.space_rule', 'direction.continuity', 'direction.fact'].includes(card.type || '') ? constraintSummary(card as ConstraintCard) : ['direction.dialogue', 'direction.sound'].includes(card.type || '') ? soundSummary(card as SoundCard) : ['direction.narrative', 'direction.beat', 'direction.event', 'direction.shot'].includes(card.type || '') ? narrativeSummary(card as NarrativeCard) : ['direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment'].includes(card.type || '') ? spatialSummary(card as SpatialCard) : card.type?.startsWith('direction.') ? performanceSummary(card as PerformanceCard)  : 'text' in card ? card.text || '未填写正文' : 'model_id' in card ? '尚未生成' : 'file_id' in card && card.file_id ? '固定媒体' : '未选择媒体'}</p>}
@@ -932,7 +1075,7 @@ function GenerationCanvasGraphContent({ contentHistory, document, onChange, read
     {cards.filter(card => detailSessions.includes(card.id) || card.id === detailId).map(detailCard => {
       const EditorContainer = CanvasCardEditor
       const DetailRenderer = rendererRegistry[detailCard.type || 'content.text']
-      return <EditorContainer cardType={detailCard.type} focusLayout={isDescriptionCard(detailCard) || detailCard.type?.startsWith('reference.') || detailCard.type?.startsWith('model.') || focusCardTypes.includes(detailCard.type || '')} modality={cardDefinitions[detailCard.type || '']?.modality} material={isDescriptionCard(detailCard) || detailCard.type?.startsWith('model.') || detailCard.type?.startsWith('reference.')} forceModal={detailCard.type?.startsWith('direction.')} key={detailCard.id} anchor={window.document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(detailCard.id)}"]`)} layoutKey={`${transform.x}:${transform.y}:${transform.scale}:${JSON.stringify(point(detailCard.id))}`} allowPan={detailAllowPan} expandRequest={expandRequest?.id === detailCard.id ? expandRequest.serial : undefined} onFit={delta => layout.setView(previous => ({...previous,transform:{...previous.transform,x:previous.transform.x+delta.x,y:previous.transform.y+delta.y}}))} title={('name' in detailCard && detailCard.name) || cardTitles[detailCard.type || 'content.text'] || '卡片详情'} status={readonly ? '只读' : editingStatus} open={detailCard.id === detailId && !detailsSuppressed && !stackFor(detailCard.id)} onClose={() => setDetailId(current => current === detailCard.id ? undefined : current)} trigger={detailTrigger}>
+      return <EditorContainer cardType={detailCard.type} focusLayout={isDescriptionCard(detailCard) || detailCard.type?.startsWith('reference.') || detailCard.type?.startsWith('model.') || focusCardTypes.includes(detailCard.type || '')} modality={cardDefinitions[detailCard.type || '']?.modality} material={isDescriptionCard(detailCard) || detailCard.type?.startsWith('model.') || detailCard.type?.startsWith('reference.')} forceModal={detailCard.type?.startsWith('direction.')} key={detailCard.id} anchor={window.document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(detailCard.id)}"]`)} layoutKey={`${transform.x}:${transform.y}:${transform.scale}:${JSON.stringify(point(detailCard.id))}`} expandRequest={expandRequest?.id === detailCard.id ? expandRequest.serial : undefined} title={('name' in detailCard && detailCard.name) || cardTitles[detailCard.type || 'content.text'] || '卡片详情'} status={readonly ? '只读' : editingStatus} open={detailCard.id === detailId && !detailsSuppressed && !stackFor(detailCard.id)} onClose={() => setDetailId(current => current === detailCard.id ? undefined : current)} trigger={detailTrigger}>
         {!desktop && !isDescriptionCard(detailCard) && !detailCard.type?.startsWith('model.') && !detailCard.type?.startsWith('reference.') && !focusCardTypes.includes(detailCard.type || '') && <Space wrap><Button onClick={() => setActiveCategory('基础卡')}>卡片</Button><Button disabled={readonly} onClick={event => startAccessibleConnection(detailCard.id, 'right', event.currentTarget)}>连接到…</Button></Space>}
         {detailCard?.type?.startsWith('direction.') && <details className="generation-candidate-management"><summary>候选连接管理</summary>{references(detailCard)}</details>}
         {detailCard?.type === 'direction.photography' && <Button disabled={readonly} onClick={() => {

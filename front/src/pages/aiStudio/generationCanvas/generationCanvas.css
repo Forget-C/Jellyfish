@@ -283,3 +283,8 @@
 .generation-workbench .generation-card .generation-output-card > footer.generation-card-footer,
 .generation-workbench .generation-card .generation-card-status { font-size: max(11px, calc(11px / var(--generation-canvas-scale, 1))); }
 .generation-workbench .generation-card .generation-card-footer > .canvas-card-summary { font-size: inherit; }
+
+.generation-workbench .generation-card:focus-visible > .generation-card-body { outline: 2px solid var(--wb-focus); outline-offset: 2px; }
+
+/* 视口只通过 transform 浏览，避免焦点变化触发容器原生滚动而绕过布局坐标。 */
+.generation-workbench .generation-surface { overflow: clip; }

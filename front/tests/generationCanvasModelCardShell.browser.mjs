@@ -122,7 +122,7 @@ try {
   await page.waitForFunction(point=>Math.abs(parseFloat(document.querySelector('[data-card-id="short"]').style.left)-point.x)<.1,positions.short)
   await checkGeometry(.9)
   await header.getByRole('button',{name:'移动布局：文本模型卡',exact:true}).press('ArrowRight')
-  positions.short.x+=20;await checkGeometry(.9)
+  positions.short.x+=10;await checkGeometry(.9)
   await page.reload();await page.locator('[data-card-id="short"] .generation-card-footer').waitFor();await checkGeometry(.9)
   for(const scale of [.8,.7,.6,.5]) {
     await page.getByRole('button',{name:'缩小',exact:true}).click()

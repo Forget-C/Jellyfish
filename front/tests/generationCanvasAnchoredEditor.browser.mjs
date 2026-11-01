@@ -1,3 +1,4 @@
+import { closeCanvasDetails } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -55,13 +56,17 @@ try {
   await editor.getByRole('button', {name:'收起详情',exact:true}).click()
   assert.equal(await input.inputValue(), '保留会话及保存内容')
   await page.getByLabel('画布保存状态').getByText('已保存',{exact:true}).waitFor()
-  for (const id of ['image','ref','m', ...Array.from({length:10},(_,index)=>`kind-${index}`), 'text']) { await page.locator(`[data-card-id="${id}"]`).press('Enter'); await editor.waitFor() }
+  for (const id of ['image','ref','m', ...Array.from({length:10},(_,index)=>`kind-${index}`), 'text']) {
+    for(let attempt=0;attempt<2 && await editor.isVisible();attempt++){await page.keyboard.press('Escape');await delay(100)}
+    await page.locator(`[data-card-id="${id}"]`).press('Enter'); await editor.waitFor()
+  }
   assert.equal(await input.inputValue(), '保留会话及保存内容')
+  await closeCanvasDetails(page)
   await page.locator('[data-card-id="image"]').press('Enter')
-  await editor.getByRole('button', {name:'添加媒体',exact:true}).click()
-  await page.getByRole('menuitem', {name:'从项目文件选择',exact:true}).click()
+  await editor.getByRole('button', {name:'从素材中选择',exact:true}).click()
   await page.getByRole('dialog', {name:'项目文件库',exact:true}).waitFor()
   await page.getByRole('dialog', {name:'项目文件库',exact:true}).getByRole('button',{name:'Close',exact:true}).click()
+  await closeCanvasDetails(page)
   await page.locator('[data-card-id="text"]').press('Enter')
   const originalEditorWidth = (await editor.boundingBox()).width
   await page.getByRole('button', {name:'缩小',exact:true}).click()

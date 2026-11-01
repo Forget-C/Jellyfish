@@ -100,10 +100,20 @@ export function CanvasNodeButton({ nodeId, nodeType, tone = 'neutral', selected,
   return <button {...props} type="button" data-canvas-node={nodeId} data-canvas-type={nodeType} data-canvas-tone={tone} aria-pressed={!!selected} className={nodeClass({ nodeId, nodeType, selected, muted, missing, stale }, className)} />
 }
 
-/** 布局移动有键盘替代；位移以内容坐标回传，不改对象顺序或引用。 */
-export function CanvasDragHandle({ contextKey, label, offset, scale, onMove, className }: { contextKey: string; label: string; offset: CanvasPoint; scale: number; onMove: (point: CanvasPoint) => void; className?: string }) {
+/** 布局移动有键盘替代；位移以内容坐标回传。onCancel 由调用方恢复整次手势，未提供时沿用原有取消行为。 */
+export function CanvasDragHandle({ contextKey, label, offset, scale, onMove, className, onCancel }: { contextKey: string; label: string; offset: CanvasPoint; scale: number; onMove: (point: CanvasPoint) => void; className?: string; onCancel?: () => void }) {
   const drag = useRef<{ x: number; y: number; left: number; top: number }>()
   useEffect(() => { drag.current = undefined }, [contextKey])
+  const cancel = useRef(onCancel); cancel.current = onCancel
+  useEffect(() => {
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && drag.current && cancel.current) {
+        event.preventDefault(); event.stopPropagation(); drag.current = undefined; cancel.current()
+      }
+    }
+    window.addEventListener('keydown', escape, true)
+    return () => window.removeEventListener('keydown', escape, true)
+  }, [])
   return <button type="button" className={className} aria-label={`移动布局：${label}`} title="拖动调整布局，或用方向键移动" onPointerDown={event => {
     if (event.button !== 0) return
     event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId)

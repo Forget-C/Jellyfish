@@ -11,9 +11,9 @@ import { useWorkbenchDesktop } from '../directing/useWorkbenchDesktop'
 export const CanvasEditorFooter = createContext<HTMLElement | null>(null)
 
 /** A single retained editor moves between its card anchor and a modal without remounting fields. */
-export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor, layoutKey, allowPan, onFit, expandRequest, forceModal = false, material = false, focusLayout = false, modality, cardType, children }: {
+export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor, layoutKey, expandRequest, forceModal = false, material = false, focusLayout = false, modality, cardType, children }: {
   title: string; status?: ReactNode; open: boolean; onClose: () => void; trigger?: HTMLElement;
-  anchor?: HTMLElement | null; layoutKey: string; allowPan: boolean; onFit: (delta: {x:number;y:number}) => void;
+  anchor?: HTMLElement | null; layoutKey: string;
   expandRequest?: number; forceModal?: boolean; material?: boolean; focusLayout?: boolean; modality?: string; cardType?: string; children: ReactNode;
 }) {
   const desktop = useWorkbenchDesktop()
@@ -29,7 +29,8 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
   const modal = forceModal || expanded || !desktop
   const anchoredHeightLimit = material ? 320 : 360
   const previousOpen = useRef(false)
-  const fit = useRef(onFit); fit.current = onFit
+  const anchorFits = useRef(true)
+  const anchorSide = useRef<'bottom' | 'top' | 'right' | 'left'>()
   useEffect(() => { if (expandRequest) setExpanded(true) }, [expandRequest])
   useLayoutEffect(() => {
     const node = panel.current
@@ -47,34 +48,30 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
       }
       return bounds
     }
-    // Measure the bounded image preview and metadata rather than intrinsic image dimensions.
-    const imageHeight = () => (node.querySelector<HTMLElement>('.wb-details-header')?.offsetHeight || 0)
-      + (node.querySelector<HTMLElement>('.wb-details-body')?.scrollHeight || 0)
-      + (node.querySelector<HTMLElement>('.generation-editor-actions')?.offsetHeight || 0) + 2
     const position = () => {
       const box = anchor.getBoundingClientRect(), bounds = available()
       const visible = box.bottom > 64 && box.top < window.innerHeight && box.right > 0 && box.left < window.innerWidth
       const width = Math.min(focusLayout || material ? 700 : 680, bounds.right - bounds.left)
-      const height = Math.min(Math.max(cardType === 'content.image' ? imageHeight() : node.getBoundingClientRect().height, 240), anchoredHeightLimit, bounds.bottom - bounds.top)
-      const top = Math.max(bounds.top, Math.min(box.bottom + 16, bounds.bottom - height))
-      // 高度上限只取工作区总高度；不能随锚点位置变化，否则移出后返回会逐步撑高。
-      setPlacement({ left: Math.max(bounds.left, Math.min(box.left, bounds.right - width)), top, maxHeight: Math.max(100, bounds.bottom - bounds.top), visible })
-      return box
+      const height = Math.min(anchoredHeightLimit, anchoredHeightLimit, bounds.bottom - bounds.top)
+      if (!previousOpen.current || !anchorSide.current) {
+        const candidates = [
+          { x: box.left, y: box.bottom + 16 },
+          { x: box.left, y: box.top - height - 16 },
+          { x: box.right + 16, y: box.top },
+          { x: box.left - width - 16, y: box.top },
+        ]
+        const placement = candidates.find(point => point.x >= bounds.left && point.x + width <= bounds.right && point.y >= bounds.top && point.y + height <= bounds.bottom)
+        anchorFits.current = !!placement
+        if (placement) anchorSide.current = (['bottom', 'top', 'right', 'left'] as const)[candidates.indexOf(placement)]
+        else { anchorSide.current = 'bottom'; if (desktop && !expanded) setExpanded(true) }
+      }
+      const side = anchorSide.current
+      const left = side === 'right' ? box.right + 16 : side === 'left' ? box.left - width - 16 : box.left
+      const top = side === 'top' ? box.top - height - 16 : side === 'bottom' ? box.bottom + 16 : box.top
+      setPlacement({ left, top, maxHeight: Math.max(100, bounds.bottom - bounds.top), visible })
     }
-    const box = position()
-    // Fit once on deliberate activation, never on typing, saving, dragging or media resize.
-    let activationFrame: number | undefined
-    if (!previousOpen.current && allowPan && desktop && !expanded && !node.hidden) {
-      activationFrame = requestAnimationFrame(() => {
-        const bounds = available()
-        const height = Math.min(Math.max(cardType === 'content.image' ? imageHeight() : node.scrollHeight, 240), anchoredHeightLimit, bounds.bottom - bounds.top)
-        let y = Math.min(0, bounds.bottom - (box.bottom + 16 + height))
-        if (box.height + height + 16 <= bounds.bottom - bounds.top) y = Math.max(y, bounds.top - box.top)
-        const x = box.left < bounds.left ? bounds.left - box.left : box.right > bounds.right ? bounds.right - box.right : 0
-        if (x || y) fit.current({x,y})
-      })
-    }
-    previousOpen.current = !node.hidden
+    position()
+    previousOpen.current = true
     const observer = new ResizeObserver(position)
     observer.observe(anchor)
     observer.observe(node)
@@ -82,8 +79,8 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
     if (imageContent) observer.observe(imageContent)
     chrome.forEach(element => observer.observe(element))
     window.addEventListener('resize', position)
-    return () => { if (activationFrame !== undefined) cancelAnimationFrame(activationFrame); observer.disconnect(); window.removeEventListener('resize', position) }
-  }, [open, anchor, layoutKey, allowPan, desktop, expanded, material, focusLayout, cardType, slot?.active, anchoredHeightLimit])
+    return () => { observer.disconnect(); window.removeEventListener('resize', position) }
+  }, [open, anchor, layoutKey, desktop, expanded, material, focusLayout, cardType, slot?.active, anchoredHeightLimit])
   useEffect(() => {
     if (!open) { activated.current = false; return }
     if (slot?.active === slotId) activated.current = true
@@ -130,7 +127,7 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
         // The material picker is the innermost editor surface once native menus have closed.
         const materials = node?.querySelector<HTMLDetailsElement>('.generation-material-candidates[open]')
         if (materials) { materials.open = false; materials.querySelector('summary')?.focus(); return }
-        if (expanded && !forceModal) setExpanded(false); else close.current()
+        if (expanded && !forceModal) { setExpanded(false); if (!anchorFits.current) close.current() } else close.current()
       }
       if (modal && event.key === 'Tab' && node) {
         const items = [...node.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex="0"], [contenteditable="true"], summary, a[href]')].filter(item => item.getClientRects().length)
@@ -147,7 +144,7 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
     <section ref={panel} hidden={!visible} tabIndex={-1} role={modal ? 'dialog' : 'complementary'} aria-modal={modal || undefined} aria-label={title}
       className="canvas-workbench-dialog wb-details generation-card-editor" data-expanded={modal} data-material={material} data-focus-layout={focusLayout} data-card-type={cardType} style={!modal ? {left:placement.left, top:placement.top, maxHeight:Math.min(anchoredHeightLimit, placement.maxHeight)} : undefined}>
       <header className={`wb-details-header${material ? ' generation-model-editor-chrome' : ''}`}>{!material && <div className="generation-editor-heading">{focusLayout && <span className="generation-editor-modality" aria-hidden="true">{modality === 'image' ? <PictureOutlined /> : <FileTextOutlined />}</span>}<h2 title={title}>{title}</h2>{status && <small role="status">{status}</small>}</div>}
-        {!forceModal && <WorkbenchIconButton variant="quiet" label={expanded ? '收起详情' : '展开详情'} icon={expanded ? <ShrinkOutlined /> : <ExpandOutlined />} onClick={() => setExpanded(value=>!value)} />}
+        {!forceModal && <WorkbenchIconButton variant="quiet" label={expanded ? '收起详情' : '展开详情'} icon={expanded ? <ShrinkOutlined /> : <ExpandOutlined />} onClick={() => { if (expanded && !anchorFits.current) close.current(); setExpanded(value=>!value) }} />}
         {!material && <WorkbenchIconButton variant="quiet" label="关闭详情" icon={<CloseOutlined />} onClick={() => expanded && !forceModal ? setExpanded(false) : onClose()} />}
       </header>
       <div className="wb-details-body"><CanvasEditorFooter.Provider value={visible ? footer : null}><WorkbenchReadingContext.Provider value>{children}</WorkbenchReadingContext.Provider></CanvasEditorFooter.Provider></div>

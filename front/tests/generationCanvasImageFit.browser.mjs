@@ -68,9 +68,10 @@ try {
       if(card.type==='model.image')continue
       await close();await page.getByRole('button',{name:'适应全部',exact:true}).click();await openCanvasCard(page,card.id)
       for(const mode of width===1440?['normal','expanded']:['mobile']){
-        if(mode==='expanded')await editor.getByRole('button',{name:'展开详情',exact:true}).click()
+        if(mode==='expanded' && await editor.getAttribute('role') !== 'dialog')await editor.getByRole('button',{name:'展开详情',exact:true}).click()
+        const actualMode = width === 1440 && await editor.getAttribute('role') === 'dialog' ? 'expanded' : mode
         const preview=editor.locator(card.type==='content.image'?'.generation-image-preview':'.generation-reference-image')
-        await check(preview.locator('img'),preview,`${card.id}/${width}/${mode}`)
+        await check(preview.locator('img'),preview,`${card.id}/${width}/${actualMode}`)
         const scroll=await editor.locator('.wb-details-body').evaluate(e=>({height:e.clientHeight,scroll:e.scrollHeight,width:e.clientWidth,scrollWidth:e.scrollWidth}))
         if(scroll.scroll>scroll.height+1||scroll.scrollWidth>scroll.width+1)failures.push(`${card.id}/${width}/${mode}: image editor scrolls ${JSON.stringify(scroll)}`)
         await page.screenshot({path:join(output,`${card.id}-${width}-${mode}.png`)})

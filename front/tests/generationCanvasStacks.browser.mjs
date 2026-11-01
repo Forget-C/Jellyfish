@@ -1,4 +1,4 @@
-import { closeCardList, openCardMenu, openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { closeCardList, closePrecheck, closeCanvasDetails, openCardMenu, openCanvasCard } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -54,13 +54,15 @@ try {
   await preview.waitFor()
   await preview.getByRole('button',{name:'确认执行',exact:true}).click()
   await page.locator('[data-card-id="b"]').getByText('第一段',{exact:true}).waitFor()
-  await page.keyboard.press('Escape')
+  await closePrecheck(page)
+  await page.waitForFunction(() => !document.querySelector('.generation-card-editor:not([hidden])')?.inert)
+  await closeCanvasDetails(page)
   const originCard = await card('a').boundingBox()
   await page.mouse.move(originCard.x+80,originCard.y+40)
   await page.mouse.down(); await page.mouse.move(originCard.x+80,originCard.y+220,{steps:5}); await page.mouse.up()
   await page.keyboard.press('Escape')
   const representativeBox = await card('a').boundingBox()
-  await card('a').click()
+  await card('a').click({modifiers:['Control']})
   await card('b').click({ modifiers: ['Control'] })
   assert.equal(await selected().count(), 2)
   const menu = page.getByRole('toolbar', { name: '所选卡片操作', exact: true })
@@ -72,7 +74,8 @@ try {
   await page.screenshot({path:join(output,'stack-default.png'),fullPage:true})
   const stack = page.locator('[data-stack-id]')
   const stackBox = await stack.boundingBox()
-  assert.ok(Math.abs(stackBox.x-representativeBox.x)<2 && Math.abs(stackBox.y-representativeBox.y)<2, 'cross-row stack uses its representative member position rather than an empty bounding-box corner')
+  assert.deepEqual(await page.locator('.generation-surface').evaluate(e=>({left:e.scrollLeft,top:e.scrollTop})),{left:0,top:0},'focus and stack creation do not natively scroll the canvas')
+  assert.ok(Math.abs(stackBox.x-representativeBox.x)<2 && Math.abs(stackBox.y-representativeBox.y)<2, `cross-row representative position: ${JSON.stringify({stackBox,representativeBox})}`)
   assert.equal(await card('a').count(), 0)
   assert.equal(await card('b').count(), 0)
   assert.equal(await page.locator('[data-edge-active]').count(), 1, 'internal edge hidden, external edge retained')

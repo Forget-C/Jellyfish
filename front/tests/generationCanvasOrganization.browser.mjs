@@ -202,7 +202,7 @@ try {
   await page.getByRole('menuitem', { name: '管理成员', exact: true }).tap()
   await page.getByRole('menu').waitFor({ state: 'hidden' })
   const touchMove = await group.getByRole('button', { name: '移动布局：分组 新编组', exact: true }).boundingBox()
-  assert.ok(touchMove.width >= 32 && touchMove.height >= 32, 'group controls retain usable touch size when canvas is zoomed out')
+  assert.ok(touchMove.width >= 31.5 && touchMove.height >= 31.5, `group controls retain 32px touch size within subpixel rounding: ${JSON.stringify(touchMove)}`)
   await page.screenshot({ path: join(output, 'group-mobile-management.png'), fullPage: true })
   await page.keyboard.press('Escape')
   await page.keyboard.press('Escape')

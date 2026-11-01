@@ -249,3 +249,7 @@ Content changes to the contract, target or actual originals invalidate prior sig
 Public regressions: `node --test front/tests/visualReview.test.mjs front/tests/visualEvidence.test.mjs`. Their controlled review declarations test CLI validation only and are never product visual signoffs.
 
 CI supplies the retained manifest explicitly to the existing browser runner and reruns the public evidence verifier against its fixed `front/test-results/ci-browser/generation-canvas-four-card-acceptance` output. The browser job still depends on the lint/unit/typecheck job and propagates every nonzero exit. Its always-run artifact upload includes the complete target directory and browser output, including original actual PNGs, JSON identities, Markdown comparison index, logs and any externally completed review files present there. CI does not create visual approval; a fresh run remains `not-reviewed` until originals receive an explicit review.
+
+### 生成画布交互
+
+`PLAYWRIGHT_CHANNEL=chrome node front/tests/run-browser.mjs canvas-interaction` 覆盖生成画布拖动与编辑器锚定、多选、边缘自动平移、Escape、键盘移动和统一历史、滚轮缩放、输入／菜单隔离、整批删除引用保护、桌面及窄屏编辑器，并回归图片完整展示和既有卡片／编组流程。`generation-canvas-interaction` 可单独运行新交互用例；截图与日志保存在 runner 输出目录。

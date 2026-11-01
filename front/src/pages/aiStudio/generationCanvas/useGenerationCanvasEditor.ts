@@ -4,6 +4,8 @@ import { ApiError, StudioGenerationCanvasesService as Canvases } from '../../../
 import type { CanvasDocument, CanvasRead, CanvasSave } from '../../../services/generated'
 import { useSceneEditOwnership } from '../directing/useSceneEditOwnership'
 
+type HistoryEntry = { document: CanvasDocument } | { apply: () => void; reverse: () => void }
+
 type Recovery = { schema: 1; baseline: CanvasRead; document: CanvasDocument; pending?: CanvasSave }
 const validDocument = (value: CanvasDocument, projectId: string, canvasId: string) => value && value.id === canvasId && value.project_id === projectId && typeof value.name === 'string' && Array.isArray(value.cards) && value.cards.every(card => card && typeof card.id === 'string' && typeof card.type === 'string')
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
@@ -23,7 +25,7 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   const [conflict, setConflict] = useState(false)
   const state = useRef<{ scope: string; current?: CanvasRead; document?: CanvasDocument; pending?: CanvasSave; blocked?: CanvasDocument; recovery?: Recovery; conflict: boolean }>({ scope: key, conflict: false })
   const inFlight = useRef<Promise<boolean>>()
-  const history = useRef<{ scope: string; past: CanvasDocument[]; future: CanvasDocument[] }>({ scope: key, past: [], future: [] })
+  const history = useRef<{ scope: string; past: HistoryEntry[]; future: HistoryEntry[] }>({ scope: key, past: [], future: [] })
   const dirty = !!document && !!current && !same(document, current.document)
   const persist = () => {
     const s = state.current
@@ -60,18 +62,29 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
     if (!ownership.canEdit() || !s.document || s.recovery || s.scope !== key) return
     const value = typeof next === 'function' ? next(s.document) : next
     if (same(value, s.document)) return
-    history.current = { scope: key, past: [...history.current.past.slice(-49), s.document], future: [] }
+    history.current = { scope: key, past: [...history.current.past.slice(-49), { document: s.document }], future: [] }
     s.document = value
     setDocument(s.document); persist()
   }
-  // 内容历史只存文档编辑，不包含视口、布局或运行状态。
+  const [, refreshHistory] = useState(0)
+  const recordAction = (undo: () => void, redo: () => void) => {
+    if (!ownership.canEdit() || state.current.scope !== key || state.current.recovery) return
+    history.current = { scope: key, past: [...history.current.past.slice(-49), { apply: undo, reverse: redo }], future: [] }
+    refreshHistory(value => value + 1)
+  }
+  // 文档和布局按操作顺序撤销；普通视口浏览不进入历史。
   const travel = (direction: 'past' | 'future') => {
     const s = state.current, h = history.current
     if (!ownership.canEdit() || !s.document || s.recovery || s.scope !== key || h.scope !== key) return
     const next = h[direction].pop()
     if (!next) return
-    h[direction === 'past' ? 'future' : 'past'].push(s.document)
-    s.document = next; setDocument(next); persist()
+    if ('apply' in next) {
+      h[direction === 'past' ? 'future' : 'past'].push({ apply: next.reverse, reverse: next.apply })
+      next.apply(); refreshHistory(value => value + 1); return 'layout' as const
+    } else {
+      h[direction === 'past' ? 'future' : 'past'].push({ document: s.document })
+      s.document = next.document; setDocument(s.document); persist(); return 'document' as const
+    }
   }
   const save = (): Promise<boolean> => {
     if (inFlight.current) return inFlight.current
@@ -173,6 +186,6 @@ export function useGenerationCanvasEditor(projectId: string, canvasId: string | 
   }, [key])
   const blocker = useBlocker(({ currentLocation, nextLocation }) => currentLocation.key !== nextLocation.key && (!!state.current.pending || !!state.current.recovery || (!!state.current.current && !same(state.current.document, state.current.current.document))))
   useEffect(() => { if (blocker.state === 'blocked') void latest.current.requestLeave().then(ok => { if (ok) blocker.proceed(); else blocker.reset() }) }, [blocker])
-  return { current, document, edit, save, saving, dirty, error, storageError, recovery, conflict, restore, reload, ownership, requestLeave,
+  return { current, document, edit, recordAction, save, saving, dirty, error, storageError, recovery, conflict, restore, reload, ownership, requestLeave,
     undo: () => travel('past'), redo: () => travel('future'), canUndo: history.current.scope === key && !!history.current.past.length, canRedo: history.current.scope === key && !!history.current.future.length }
 }
