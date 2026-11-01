@@ -1,10 +1,10 @@
 """六岗设计到单元执行方案的组织；提交与预览均不改写场次。"""
 import re
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import UTC
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import select, or_
 
 from app.core.contracts.directing.common import Note, Source
 from app.core.contracts.directing.scene_version import EditableGenerationUnit, UnitOrganization, SceneVersionContent
@@ -267,6 +267,13 @@ def organized_unit_content(content, result, args):
         'units': [updates.get(unit.id, unit) for unit in content.units if unit.id not in removed] + additions})
 
 
+@dataclass
+class UnitDesignCheck:
+    """单次内容核验结果；不同还原内容必须重新核验，不能按任务身份复用。"""
+    preview: SceneUnitDesignPreview
+    organized_content: SceneVersionContent | None
+
+
 class SceneUnitDesignService(SceneDesignService):
     """复用场次归属、内容校验和统一任务；只读结果与正式单元隔离。"""
 
@@ -351,11 +358,21 @@ class SceneUnitDesignService(SceneDesignService):
             snapshot={'scene_unit_design': {'version_id': version_id, 'request': body.model_dump(mode='json')},
                       'model_id': model.id, 'model_name': model.name, 'provider_key': config.provider_key, 'run_args': args})
 
-    async def _tasks(self, sequence_id, version_id):
-        return await self.db.scalars(select(Task).where(Task.project_id == self.project_id,
+    def _unit_design_task_query(self, sequence_id, version_id):
+        """列表和指定任务读取共享项目、场次、种类与版本作用域。"""
+        return select(Task).where(Task.project_id == self.project_id,
             Task.target_id == sequence_id, Task.kind == 'directing_unit_design',
-            Task.input_snapshot['scene_unit_design']['version_id'].as_string() == version_id)
-            .order_by(Task.created_at.desc(), Task.id.desc()))
+            Task.input_snapshot['scene_unit_design']['version_id'].as_string() == version_id).order_by(Task.created_at.desc(), Task.id.desc())
+
+    async def _tasks(self, sequence_id, version_id):
+        return await self.db.scalars(self._unit_design_task_query(sequence_id, version_id))
+
+    async def _read_unit_design_tasks(self, sequence_id, version_id, *, task_ids, source_references):
+        """只读取本次所需身份；先取降序首个匹配再判断状态，不能过滤失败记录。"""
+        if not task_ids and not source_references:
+            return []
+        return list(await self.db.scalars(self._unit_design_task_query(sequence_id, version_id).where(or_(
+            Task.id.in_(task_ids), Task.input_snapshot['run_args']['task_identity'].as_string().in_(source_references)))))
 
     async def list_unit_design(self, sequence_id, version_id):
         """按项目、场次和版本列出固定任务；结果读取仍校验完整结构与范围。"""
@@ -372,9 +389,21 @@ class SceneUnitDesignService(SceneDesignService):
         return result
 
     async def preview_unit_design(self, sequence_id, version_id, task_id, content):
-        """预览核对固定输入和当前适用内容，不写入正式单元或媒体事实。"""
+        """预览只返回方案及阻断，不写入正式单元或媒体事实。"""
+        return (await self._preview_unit_design(sequence_id, version_id, task_id, content)).preview
+
+    async def _preview_unit_design(self, sequence_id, version_id, task_id, content):
         sequence, current = await self._version(sequence_id, version_id)
-        task = next((row for row in await self._tasks(sequence_id, version_id) if row.id == task_id), None)
+        tasks = await self._read_unit_design_tasks(sequence_id, version_id, task_ids=[task_id], source_references=[])
+        task = next((row for row in tasks if row.id == task_id), None)
+        return await self._check_unit_design(sequence, current, task, content)
+
+    async def _check_unit_design(self, sequence, current_version, task, content):
+        """按原顺序重验固定输入、当前能力及历史身份，返回已校验的组合内容。
+
+        每次从任务重新解析结果；首次保存的不同还原内容不得共用核验结论。
+        """
+        sequence_id, version_id = sequence.id, current_version.id
         if task is None or task.status != 'succeeded':
             raise ValueError('建议不属于当前版本或尚未成功完成')
         request = SceneUnitDesignRequest.model_validate(task.input_snapshot['scene_unit_design']['request'])
@@ -392,21 +421,21 @@ class SceneUnitDesignService(SceneDesignService):
         args = task.input_snapshot['run_args']
         used_ids = await self._historical_unit_ids(sequence_id, version_id, organization_reference=args['task_identity'])
         used_ids.update(args.get('retired_unit_ids', []))
-        used_ids.update(unit.id for unit in current.content.units)
+        used_ids.update(unit.id for unit in current_version.content.units)
         result = validate_unit_design({**args, 'retired_unit_ids': sorted(used_ids)}, SceneUnitDesignResult.model_validate(task.result))
         blockers = unit_design_blockers(content, result)
+        organized = None
         if not blockers:
-            await self._validate_content(sequence, version_id, organized_unit_content(content, result, task.input_snapshot['run_args']))
-        return SceneUnitDesignPreview(task_id=task.id, result=result, blockers=blockers)
+            organized = organized_unit_content(content, result, args)
+            await self._validate_content(sequence, version_id, organized)
+        return UnitDesignCheck(SceneUnitDesignPreview(task_id=task.id, result=result, blockers=blockers), organized)
 
     async def apply_unit_design(self, sequence_id, version_id, task_id, content):
         """一次确认从当前编辑组合；只修改明确目标，保留原顺序、独立与跨镜头单元。"""
-        preview = await self.preview_unit_design(sequence_id, version_id, task_id, content)
-        if preview.blockers:
-            raise ValueError('请先处理单元移除的设计或实际覆盖引用：' + '；'.join(row.path for row in preview.blockers))
-        task = next(row for row in await self._tasks(sequence_id, version_id) if row.id == task_id)
-        args = task.input_snapshot['run_args']
-        return organized_unit_content(content, preview.result, args).model_copy(update={'unit_design_task_id': task.id})
+        checked = await self._preview_unit_design(sequence_id, version_id, task_id, content)
+        if checked.preview.blockers:
+            raise ValueError('请先处理单元移除的设计或实际覆盖引用：' + '；'.join(row.path for row in checked.preview.blockers))
+        return checked.organized_content.model_copy(update={'unit_design_task_id': checked.preview.task_id})
 
     async def validate_organized_save(self, sequence_id, version_id, content, previous):
         """人工要求明确记来源；AI 来源首次保存时仍重验真实任务和固定依据。"""
@@ -417,7 +446,9 @@ class SceneUnitDesignService(SceneDesignService):
             raise ValueError('单元组织要求必须明确记录人工或真实 AI 任务来源')
         introduced = [unit for unit in introduced if unit.organization.source.kind == 'model']
         new_application = content.unit_design_task_id and content.unit_design_task_id != previous.unit_design_task_id
-        tasks = list(await self._tasks(sequence_id, version_id)) if introduced or new_application else []
+        tasks = await self._read_unit_design_tasks(sequence_id, version_id,
+            task_ids=[content.unit_design_task_id] if new_application else [],
+            source_references={unit.organization.source.reference for unit in introduced})
         for reference in {unit.organization.source.reference for unit in introduced}:
             task = next((row for row in tasks if row.input_snapshot['run_args']['task_identity'] == reference), None)
             if task is None or task.status != 'succeeded':
@@ -438,8 +469,9 @@ class SceneUnitDesignService(SceneDesignService):
                 *[unit for unit in current.values() if any(item.shot_id == request.shot_id for item in unit.coverage)
                   and unit.id not in {row.id for row in original}],
             ]})
-            checked = await self.preview_unit_design(sequence_id, version_id, task.id, restored)
-            if checked.blockers:
+            sequence, version = await self._version(sequence_id, version_id)
+            checked = await self._check_unit_design(sequence, version, task, restored)
+            if checked.preview.blockers:
                 raise ValueError('请先处理单元移除的设计或实际覆盖引用')
         if new_application:
             application = next((row for row in tasks if row.id == content.unit_design_task_id), None)
@@ -457,6 +489,7 @@ class SceneUnitDesignService(SceneDesignService):
                 *[unit for unit in content.units if unit.id not in proposal_ids and unit.id not in original],
                 *[unit if unit.id in modified else current.get(unit.id, unit) for unit in original.values()],
             ]})
-            checked = await self.preview_unit_design(sequence_id, version_id, application.id, restored)
-            if checked.blockers:
+            sequence, version = await self._version(sequence_id, version_id)
+            checked = await self._check_unit_design(sequence, version, application, restored)
+            if checked.preview.blockers:
                 raise ValueError('请先处理单元移除的设计或实际覆盖引用')
