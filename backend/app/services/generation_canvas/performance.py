@@ -46,14 +46,14 @@ def publish_design(canvas_id, card, adopted_inputs):
     return [CanvasResolvedOutput(source=OutputIdentity(canvas_id=canvas_id, card_id=card.id, port_id='text', position=0), modality='text', payload=payload)]
 
 
-def validate_design_relations(document, published):
+def validate_design_relations(document, published, *, context=None):
     """只允许直接明确对象；多人参考逐身份选取，主体按真实身份至多一个。"""
     from app.services.generation_canvas.design_bindings import inspect_design_bindings
     for card in document.cards:
         if not isinstance(card, PerformanceDirectionCard) or isinstance(card, (SoundDirectionCard, SpatialDirectionCard, NarrativeDirectionCard, GuidanceDirectionCard, ConstraintDirectionCard)):
             continue
         participants, beats, shots = set(), set(), set()
-        for check in inspect_design_bindings(document, card, card.input_bindings, published):
+        for check in inspect_design_bindings(document, card, card.input_bindings, published, context=context):
             binding, item = check.binding, check.output
             target = {'card_id': card.id, 'path': ['input_bindings', binding.id]}
             if not check.binding_valid or binding.input_port not in ('participant', 'effect_object', 'attention_object', 'focus_object', 'beat', 'received_event', 'dialogue_basis', 'shot', 'acceptance_basis'):
@@ -92,14 +92,15 @@ def validate_design_relations(document, published):
             raise diagnostic('PARTICIPANT_COUNT_EXCEEDED', '情境和表演主体至多一个对象', {'card_id': card.id, 'port_id': 'participant'})
 
 
-async def validate_design_examples(db, document, published, project_id, previous, media_references):
+async def validate_design_examples(db, document, published, project_id, previous, media_references, *, context=None):
     """示例必须是直接已发布媒体，固定文件保持项目归属和删除保护。"""
     from app.services.generation_canvas.saved_media import validate_media_file
-    from app.services.generation_canvas.compiler import resolve_outputs, identity_key
+    from app.services.generation_canvas.output_resolution import CanvasOutputContext, identity_key
+    context = context or CanvasOutputContext(document)
     for card in document.cards:
         if not isinstance(card, (PerformanceDirectionCard, SoundDirectionCard)):
             continue
-        candidates = resolve_outputs(document, card.id, published, allow_reference_drafts=True)
+        candidates = context.resolve_outputs(card.id, model_outputs=published, allow_reference_drafts=True)
         old_examples = next((row.get('examples', []) for row in previous.get('cards', []) if row['id'] == card.id), [])
         ids = set()
         for example, media_reference in zip(card.examples, media_references[card.id]):

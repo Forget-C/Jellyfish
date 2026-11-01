@@ -164,10 +164,12 @@ class CanvasStore:
                 if edge.target_port not in cap.input_ports or card.type != 'model.' + cap.modality:
                     raise diagnostic('UNSUPPORTED_INPUT', '所选模型未接入该输入用途',
                                      {'edge_id': edge.id, 'card_id': card.id, 'port_id': edge.target_port})
+        from app.services.generation_canvas.output_resolution import CanvasOutputContext
+        context = CanvasOutputContext(document)
         from app.services.generation_canvas.saved_media import collect_media_references, validate_media_file, replace_canvas_content_usages
         media_references = collect_media_references(document)
         from app.services.generation_canvas.references import validate_references
-        await validate_references(self.db, document, previous_document.model_dump(), self.project_id, media_references)
+        await validate_references(self.db, document, previous_document.model_dump(), self.project_id, media_references, context=context)
         if any(isinstance(card, (PerformanceDirectionCard, SoundDirectionCard)) for card in document.cards):
             from app.services.generation_canvas.runtime import CanvasRuntime
             from app.services.generation_canvas.performance import validate_design_relations, validate_design_examples
@@ -177,15 +179,15 @@ class CanvasStore:
             from app.services.generation_canvas.spatial import validate_spatial_relations
             from app.services.generation_canvas.narrative import validate_narrative_relations
             from app.services.generation_canvas.guidance import validate_guidance_relations
-            validate_guidance_relations(document, published, canvas.document)
+            validate_guidance_relations(document, published, canvas.document, context=context)
             from app.services.generation_canvas.continuity import validate_constraint_relations
-            validate_constraint_relations(document, published)
-            validate_narrative_relations(document, published, canvas.document)
-            validate_spatial_relations(document, published, canvas.document)
+            validate_constraint_relations(document, published, context=context)
+            validate_narrative_relations(document, published, canvas.document, context=context)
+            validate_spatial_relations(document, published, canvas.document, context=context)
             from app.services.generation_canvas.sound import validate_sound_relations
-            validate_sound_relations(document, published, canvas.document)
-            validate_design_relations(document, published)
-            await validate_design_examples(self.db, document, published, self.project_id, canvas.document, media_references)
+            validate_sound_relations(document, published, canvas.document, context=context)
+            validate_design_relations(document, published, context=context)
+            await validate_design_examples(self.db, document, published, self.project_id, canvas.document, media_references, context=context)
         # Validate all replacements before releasing existing protection in this transaction.
         for card in document.cards:
             if isinstance(card, MediaContentCard) and card.file_id:
@@ -204,21 +206,23 @@ class CanvasStore:
     async def card_outputs(self, canvas_id: str, card_id: str):
         """返回已保存修订的单卡出口和直接候选，不形成实际采用。"""
         from app.schemas.generation_canvas import CanvasCardOutputs
-        from app.services.generation_canvas.compiler import resolve_outputs, published_card_outputs
+        from app.services.generation_canvas.output_resolution import CanvasOutputContext
         from app.services.generation_canvas.runtime import CanvasRuntime
         canvas = await self.get(canvas_id)
         document = CanvasDocument.model_validate(canvas.document)
         card = next((item for item in document.cards if item.id == card_id), None)
         if card is None:
             raise HTTPException(404, 'Card not found')
-        published = await CanvasRuntime(self.db, self.project_id).current_outputs(canvas)
+        context = CanvasOutputContext(document)
+        published = await CanvasRuntime(self.db, self.project_id).current_outputs(canvas, context=context)
         return CanvasCardOutputs(revision=canvas.revision, card_id=card_id,
-            outputs=published_card_outputs(document, card.id, published),
-            candidates=resolve_outputs(document, card_id, published))
+            outputs=context.published_outputs(card.id, model_outputs=published),
+            candidates=context.resolve_outputs(card_id, model_outputs=published))
 
     async def compile_input(self, canvas_id: str, card_id: str) -> CanvasCompiledInput:
         """编译已保存内容；不受理任务，不发布尚未存在的模型输出。"""
         from app.services.generation_canvas.compiler import compile_card
+        from app.services.generation_canvas.output_resolution import CanvasOutputContext
         canvas = await self.get(canvas_id)
         document = CanvasDocument.model_validate(canvas.document)
         card = next((card for card in document.cards if card.id == card_id), None)
@@ -226,8 +230,9 @@ class CanvasStore:
             raise HTTPException(404, 'Model card not found')
         capability = await model_capability(self.db, card.model_id) if card.model_id else None
         from app.services.generation_canvas.runtime import CanvasRuntime
-        outputs = await CanvasRuntime(self.db, self.project_id).current_outputs(canvas)
-        result = compile_card(document, card_id, model_outputs=outputs, capability=capability)
+        context = CanvasOutputContext(document)
+        outputs = await CanvasRuntime(self.db, self.project_id).current_outputs(canvas, context=context)
+        result = compile_card(document, card_id, model_outputs=outputs, capability=capability, context=context)
         result.revision = canvas.revision
         if not card.model_id:
             result.diagnostics = list(result.diagnostics) + [CanvasDiagnostic(code='MODEL_REQUIRED', message='请选择模型',

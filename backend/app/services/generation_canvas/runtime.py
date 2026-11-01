@@ -18,6 +18,7 @@ from app.schemas.generation_canvas import (
     CanvasResolvedOutput, CanvasRunRead, CanvasRunSubmit, CanvasSnapshot, MediaContentCard, ModelCard, OutputIdentity,
 )
 from app.services.generation_canvas.capabilities import model_capability
+from app.services.generation_canvas.output_resolution import CanvasOutputContext
 from app.services.generation_canvas.execution_basis import CanvasModelContext, build_basis, digest
 from app.services.generation_canvas.errors import diagnostic
 from app.services.generation_canvas.store import CanvasStore
@@ -51,10 +52,11 @@ class CanvasRuntime:
     def __init__(self, db: AsyncSession, project_id: str):
         self.db, self.project_id = db, project_id
 
-    async def _current_basis(self, canvas, card_id, outputs, *, lock_config=False):
+    async def _current_basis(self, canvas, card_id, outputs, *, lock_config=False, context=None):
         """读取当前配置及原有锁，再交给纯依据模块；已受理恢复不经过此入口。"""
-        document = CanvasDocument.model_validate(canvas.document)
-        card = next((card for card in document.cards if card.id == card_id), None)
+        context = context or CanvasOutputContext(CanvasDocument.model_validate(canvas.document))
+        document = context.document
+        card = context.cards.get(card_id)
         if not isinstance(card, ModelCard):
             raise HTTPException(404, 'Model card not found')
         cap = None
@@ -79,20 +81,21 @@ class CanvasRuntime:
         if config and model and provider:
             frozen = {'model_name': model.name, 'model_params': model.params or {}, 'provider_key': config.provider_key,
                       'provider_id': provider.id, 'api_key': config.api_key, 'base_url': config.base_url}
-        context = CanvasModelContext(
+        model_context = CanvasModelContext(
             model={'id': model.id, 'name': model.name, 'params': model.params} if model else None,
             execution_config=frozen, capability=cap, diagnostics=issues)
-        return build_basis(document, card_id, outputs, revision=canvas.revision, model_context=context)
+        return build_basis(document, card_id, outputs, revision=canvas.revision, model_context=model_context, context=context)
 
-    async def current_outputs(self, canvas) -> dict[str, list[CanvasResolvedOutput]]:
+    async def current_outputs(self, canvas, *, context=None) -> dict[str, list[CanvasResolvedOutput]]:
         """保留当前正式结果指向，同时递归标明依据是否仍有效。"""
         rows = list((await self.db.execute(select(CanvasCurrentOutput, CanvasResultSet).join(
             CanvasResultSet, CanvasCurrentOutput.result_set_id == CanvasResultSet.id).where(
             CanvasCurrentOutput.canvas_id == canvas.id))).all())
         stored = {pointer.card_id: result for pointer, result in rows}
         result, visiting = {}, set()
-        document = CanvasDocument.model_validate(canvas.document)
-        cards = {card.id: card for card in document.cards}
+        context = context or CanvasOutputContext(CanvasDocument.model_validate(canvas.document))
+        document = context.document
+        cards = context.cards
         # 文件可在保存后失效；读取和编译统一使用已核验的媒体出口。
         from app.services.generation_canvas.outputs import card_outputs
         from app.services.studio.files import require_available_file
@@ -122,10 +125,10 @@ class CanvasRuntime:
             if card_id in result or card_id in visiting or card_id not in stored or card_id not in cards:
                 return
             visiting.add(card_id)
-            for edge in document.edges:
-                if edge.target_card == card_id and edge.source_card in stored:
+            for edge in context.incoming.get(card_id, ()):
+                if edge.source_card in stored:
                     await resolve(edge.source_card)
-            basis = await self._current_basis(canvas, card_id, result)
+            basis = await self._current_basis(canvas, card_id, result, context=context)
             result[card_id] = [CanvasResolvedOutput.model_validate(item).model_copy(update={
                 "basis_current": basis.compiled.can_run and basis.basis_hash == stored[card_id].basis_hash, "result_set_id": stored[card_id].id}) for item in stored[card_id].outputs]
             # 正式位置保留身份，但文件撤回后不能继续作为可用输入，也不以重跑承诺放行。
@@ -355,7 +358,9 @@ async def sync_task_fact(db: AsyncSession, task, *, delta: str | None = None):
             canvas = await db.get(GenerationCanvas, node.canvas_id, populate_existing=True)
             runtime = CanvasRuntime(db, canvas.project_id)
             try:
-                basis = await runtime._current_basis(canvas, node.card_id, await runtime.current_outputs(canvas))
+                context = CanvasOutputContext(CanvasDocument.model_validate(canvas.document))
+                basis = await runtime._current_basis(canvas, node.card_id,
+                    await runtime.current_outputs(canvas, context=context), context=context)
                 can_publish = basis.compiled.can_run and basis.basis_hash == node.basis_hash
             except HTTPException:
                 can_publish = False

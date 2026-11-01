@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 from app.models.generation_canvas import CanvasRun, CanvasRunNode, CanvasScopeOccupancy
 from app.schemas.generation_canvas import CanvasDocument, CanvasNodeRead
+from app.services.generation_canvas.output_resolution import CanvasOutputContext
 from app.services.generation_canvas.execution_basis import digest, restore_basis
 
 
@@ -19,9 +20,10 @@ async def plan(runtime, canvas, command, *, lock_config=False):
             from app.services.generation_canvas.errors import diagnostic
             raise diagnostic('STACK_READ_ONLY', '请先解除堆叠，再提交模型',
                              {'group_id': group.id, 'card_id': command.card_id}, blocks=['run'])
-    outputs = await runtime.current_outputs(canvas)
+    context = CanvasOutputContext(document)
+    outputs = await runtime.current_outputs(canvas, context=context)
     card_id = command.card_id
-    basis = await runtime._current_basis(canvas, card_id, outputs, lock_config=lock_config)
+    basis = await runtime._current_basis(canvas, card_id, outputs, lock_config=lock_config, context=context)
     compiled = basis.compiled
     nodes = {card_id: {'compiled': compiled, 'basis': basis.public_basis, 'hash': basis.basis_hash,
         'dependencies': [], 'private': basis.to_snapshot()}}

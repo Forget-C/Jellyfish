@@ -59,7 +59,7 @@ def publish_spatial(canvas_id, card, adopted_inputs):
     return outputs
 
 
-def validate_spatial_relations(document, published, previous):
+def validate_spatial_relations(document, published, previous, *, context=None):
     """关系只接受直接且类别匹配的身份，单对象端点按实际身份计数。"""
     from app.services.generation_canvas.design_bindings import inspect_design_bindings
     identities = set()
@@ -77,7 +77,7 @@ def validate_spatial_relations(document, published, previous):
             if value:
                 identities.add((field, value))
         counts = {}
-        for check in inspect_design_bindings(document, card, card.input_bindings, published):
+        for check in inspect_design_bindings(document, card, card.input_bindings, published, context=context):
             binding, item = check.binding, check.output
             target = {'card_id': card.id, 'path': ['input_bindings', binding.id]}
             if not check.binding_valid or binding.input_port in ('image_example', 'video_example') or not item:

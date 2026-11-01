@@ -8,6 +8,7 @@ from app.schemas.generation_canvas import (
     CanvasResolvedOutput, ModelCard,
 )
 from app.services.generation_canvas.compiler import compile_card, prompt_references
+from app.services.generation_canvas.output_resolution import CanvasOutputContext
 
 
 def digest(value) -> str:
@@ -66,10 +67,13 @@ def _model_card(document, card_id) -> ModelCard:
 
 
 def build_basis(document: CanvasDocument, card_id: str, outputs: dict[str, list[CanvasResolvedOutput]],
-                *, revision: int, model_context: CanvasModelContext) -> CanvasBasis:
+                *, revision: int, model_context: CanvasModelContext, context: CanvasOutputContext | None = None) -> CanvasBasis:
     """使用已取得的配置编译，并以同一输入产生公开依据和私有配置参与的哈希。"""
-    card = _model_card(document, card_id)
-    compiled = compile_card(document, card_id, model_outputs=outputs, capability=model_context.capability)
+    context = context or CanvasOutputContext(document)
+    card = context.cards.get(card_id)
+    if not isinstance(card, ModelCard):
+        raise HTTPException(404, 'Model card not found')
+    compiled = compile_card(document, card_id, model_outputs=outputs, capability=model_context.capability, context=context)
     compiled.revision = revision
     issues = list(model_context.diagnostics)
     if not compiled.text.strip() and not (card.type == 'model.video' and compiled.media):

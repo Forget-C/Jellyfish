@@ -1,13 +1,15 @@
 """命名参考的类别、对象身份与固定主图校验；不分析图片内容。"""
 from app.schemas.generation_canvas import NamedImageReferenceCard, ObjectDescriptionCard
-from app.services.generation_canvas.compiler import identity_key, resolve_outputs
+from app.services.generation_canvas.compiler import identity_key
 from app.services.generation_canvas.errors import diagnostic
 
 from app.services.generation_canvas.saved_media import validate_media_file
 
 
-async def validate_references(db, document, previous, project_id, media_references):
+async def validate_references(db, document, previous, project_id, media_references, *, context=None):
     """保存允许未完成参考；已有绑定必须指向直接、类别适配的实际出口。"""
+    from app.services.generation_canvas.output_resolution import CanvasOutputContext
+    context = context or CanvasOutputContext(document)
     references = [card for card in document.cards if isinstance(card, NamedImageReferenceCard)]
     if not references:
         return
@@ -51,7 +53,7 @@ async def validate_references(db, document, previous, project_id, media_referenc
                 raise diagnostic('INVALID_IMAGE_BINDING', '主图必须保留直接来源连接', target)
             if not unchanged:
                 # 新主图只来自图片内容卡；以最终文档核对同次换图，不读取整图运行成果。
-                candidates = resolve_outputs(document, card.id)
+                candidates = context.resolve_outputs(card.id, model_outputs=None)
                 item = next((item for item in candidates if identity_key(item.source) == identity_key(image.source)), None)
                 if not item or not item.available or item.file_id != image.file_id or item.result_set_id != image.result_set_id:
                     raise diagnostic('INVALID_IMAGE_BINDING', '请选择已发布的具体图片产物', target)

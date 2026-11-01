@@ -43,7 +43,7 @@ def constraint_binding_allowed(port, payload):
     return port == 'effect_object' and isinstance(payload, SpatialReferencePayload)
 
 
-def validate_constraint_relations(document, published):
+def validate_constraint_relations(document, published, *, context=None):
     """关系与示例独立校验，候选未采用时不要求绑定完整。"""
     from app.schemas.generation_canvas import ConstraintDirectionCard
     from app.services.generation_canvas.design_bindings import inspect_design_bindings
@@ -52,7 +52,7 @@ def validate_constraint_relations(document, published):
         if not isinstance(card, ConstraintDirectionCard):
             continue
         counts = {}
-        for check in inspect_design_bindings(document, card, card.input_bindings, published):
+        for check in inspect_design_bindings(document, card, card.input_bindings, published, context=context):
             binding, item = check.binding, check.output
             target = {'card_id': card.id, 'path': ['input_bindings', binding.id]}
             if not check.binding_valid or not item:

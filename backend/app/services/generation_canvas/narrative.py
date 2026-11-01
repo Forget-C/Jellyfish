@@ -78,7 +78,7 @@ def narrative_binding_allowed(port, payload):
     return False
 
 
-def validate_narrative_relations(document, published, previous):
+def validate_narrative_relations(document, published, previous, *, context=None):
     """稳定身份及直接关系校验；所有候选仍由统一 DAG 检查。"""
     from app.services.generation_canvas.design_bindings import inspect_design_bindings
     identities, names = set(), set()
@@ -101,7 +101,7 @@ def validate_narrative_relations(document, published, previous):
             if key in names:
                 raise diagnostic('DUPLICATE_NARRATIVE_NAME', '同类故事对象名称必须唯一', {'card_id': card.id, 'path': ['name']})
             names.add(key)
-        for check in inspect_design_bindings(document, card, card.input_bindings, published):
+        for check in inspect_design_bindings(document, card, card.input_bindings, published, context=context):
             binding, item = check.binding, check.output
             if not check.binding_valid or not item:
                 raise diagnostic('INVALID_NARRATIVE_BINDING', '请选择直接候选中的明确关系', {'card_id': card.id, 'path': ['input_bindings', binding.id]})

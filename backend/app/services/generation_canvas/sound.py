@@ -36,7 +36,7 @@ def publish_sound(canvas_id, card, adopted_inputs):
     return outputs
 
 
-def validate_sound_relations(document, published, previous):
+def validate_sound_relations(document, published, previous, *, context=None):
     """对白身份不可替换；说话对象至多一个，声源允许直接明确对象。"""
     from app.services.generation_canvas.design_bindings import inspect_design_bindings
     identities = set()
@@ -51,7 +51,7 @@ def validate_sound_relations(document, published, previous):
             if old and card.version < old['version']:
                 raise diagnostic('INVALID_DIALOGUE_VERSION', '对白版本不可倒退', {'card_id': card.id, 'path': ['version']})
         speakers = set()
-        for check in inspect_design_bindings(document, card, card.input_bindings, published):
+        for check in inspect_design_bindings(document, card, card.input_bindings, published, context=context):
             binding, item = check.binding, check.output
             target = {'card_id': card.id, 'path': ['input_bindings', binding.id]}
             if not check.binding_valid or binding.input_port not in ('speaker', 'effect_object') or not item or not isinstance(item.payload, ObjectReferencePayload):

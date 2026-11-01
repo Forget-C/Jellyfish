@@ -15,18 +15,19 @@ class DesignBindingCheck:
 
 def inspect_design_bindings(document: CanvasDocument, card: CardDefinition,
                             bindings: Sequence[InputBinding],
-                            published: dict[str, list[CanvasResolvedOutput]]) -> Iterator[DesignBindingCheck]:
+                            published: dict[str, list[CanvasResolvedOutput]], *, context=None) -> Iterator[DesignBindingCheck]:
     """按传入顺序检查直接绑定，不产生业务诊断。
 
     保存沿用草稿身份解析；ID 去重只覆盖本次传入集合。输出须同时满足
     直接连线、稳定身份匹配和可用性，重复候选仍取原先的首个匹配项。
     """
-    from app.services.generation_canvas.compiler import resolve_outputs, identity_key
+    from app.services.generation_canvas.output_resolution import CanvasOutputContext, identity_key
+    context = context or CanvasOutputContext(document)
     candidates = {}
-    for item in resolve_outputs(document, card.id, published, allow_reference_drafts=True):
+    for item in context.resolve_outputs(card.id, model_outputs=published, allow_reference_drafts=True):
         candidates.setdefault(identity_key(item.source), item)
     connections = {(edge.source_card, edge.source_port, edge.target_port)
-                   for edge in document.edges if edge.target_card == card.id}
+                   for edge in context.incoming.get(card.id, ())}
     ids = set()
     for binding in bindings:
         binding_valid = binding.id not in ids and binding.input_port in card.input_ports

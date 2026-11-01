@@ -6,100 +6,47 @@ from app.core.contracts.media import MediaReference, VideoMediaInput, VideoSubje
 from app.schemas.generation_canvas import (
     CanvasDocument, CanvasResolvedOutput, CanvasCompiledInput, CanvasDiagnostic,
     DesignTextPayload, ModelCard, SoundDirectionCard, PerformanceDirectionCard, NamedImageReferenceCard, NamedImagePayload, CanvasSourceMapping, NamedImageMapping, PromptReference, PromptInstruction,
-    CanvasModelCapability, OutputIdentity, ObjectDescriptionCard,
+    CanvasModelCapability,
 )
 from app.services.generation_canvas.capabilities import parameter_diagnostics
-from app.services.generation_canvas.outputs import card_outputs
+from app.services.generation_canvas.output_resolution import CanvasOutputContext, identity_key, prompt_references
 from app.services.generation_canvas.reference_rules import reference_name_issue
 
 COMMAND_PORTS = {'首帧参考': 'first_frame', '尾帧参考': 'last_frame', '关键帧参考': 'key_frame', '主体参考': 'subject_image'}
 
-LABELS = {'text': '文本', 'image': '图片', 'video': '视频', 'audio': '音频'}
-
-
-def identity_key(source: OutputIdentity) -> tuple:
-    """身份包含来源卡和结果位置，文件 ID 不参与身份。"""
-    return source.canvas_id, source.card_id, source.port_id, source.object_id or source.position
-
-
-def prompt_references(card: ModelCard):
-    """正文和指令共享实际引用遍历，返回稳定字段路径。"""
-    mentioned = set()
-    for segment in card.prompt.segments:
-        if isinstance(segment, PromptReference):
-            mentioned.add(segment.binding_id)
-            yield segment, ['prompt', 'segments', segment.id]
-        elif isinstance(segment, PromptInstruction):
-            for reference in segment.references:
-                mentioned.add(reference.binding_id)
-                yield reference, ['prompt', 'segments', segment.id, 'references', reference.id]
-    for binding in card.input_bindings:
-        if binding.id not in mentioned:
-            yield PromptReference(id=binding.id, kind='reference', binding_id=binding.id, source=binding.source), ['input_bindings', binding.id]
-
-
 def published_card_outputs(document, card_id, model_outputs=None, *, allow_reference_drafts=False):
-    """仅把已采用的直接对象出口交给本卡处理器，按 DAG 逐层解析。"""
-    card = next(card for card in document.cards if card.id == card_id)
-    if isinstance(card, NamedImageReferenceCard) and (issue := reference_name_issue(document, card)):
-        if not allow_reference_drafts or issue[0] not in ('DUPLICATE_REFERENCE_NAME', 'REFERENCE_NAME_REQUIRED'):
-            return []
-    adopted = []
-    if isinstance(card, (PerformanceDirectionCard, SoundDirectionCard)):
-        for binding in card.input_bindings:
-            if any(edge.source_card == binding.source.card_id and edge.source_port == binding.source.port_id
-                   and edge.target_card == card_id and edge.target_port == binding.input_port for edge in document.edges):
-                adopted.extend(item for item in published_card_outputs(document, binding.source.card_id, model_outputs, allow_reference_drafts=allow_reference_drafts)
-                    if identity_key(item.source) == identity_key(binding.source))
-    outputs = card_outputs(document.id, card, adopted_inputs=tuple(adopted),
-                           published_results=tuple((model_outputs or {}).get(card_id, [])))
-    if isinstance(card, ObjectDescriptionCard) and not card.name.strip() and not allow_reference_drafts:
-        return [item for item in outputs if item.source.port_id != 'object']
-    return outputs
+    """独立解析入口；操作内复用时直接使用 CanvasOutputContext。"""
+    return CanvasOutputContext(document).published_outputs(card_id, model_outputs=model_outputs,
+                                                         allow_reference_drafts=allow_reference_drafts)
 
 
 def resolve_outputs(document: CanvasDocument, card_id: str,
                     model_outputs: dict[str, list[CanvasResolvedOutput]] | None = None, *, allow_reference_drafts=False) -> list[CanvasResolvedOutput]:
-    """按端口顺序解析候选；保存校验可核对草稿的稳定对象身份；公开候选和运行仍要求名称就绪。"""
-    cards = {card.id: card for card in document.cards}
-    receiver = cards.get(card_id)
-    retained = [ref.source for ref, _ in prompt_references(receiver)] if isinstance(receiver, ModelCard) else []
-    result, seen, counts = [], set(), {}
-    edges = {edge.id: edge for edge in document.edges}
-    for order in document.input_order.get(card_id, {}).values():
-        for edge_id in order:
-            edge = edges[edge_id]
-            source = cards[edge.source_card]
-            outputs = [item for item in published_card_outputs(document, source.id, model_outputs, allow_reference_drafts=allow_reference_drafts) if item.source.port_id == edge.source_port]
-            positions = {item.source.position for item in outputs}
-            outputs = list(outputs) + [CanvasResolvedOutput(source=ref, modality=edge.source_port if edge.source_port in ('image', 'video', 'audio') else 'text', available=False)
-                for ref in retained if ref.canvas_id == document.id and ref.card_id == source.id and ref.port_id == edge.source_port and ref.position not in positions]
-            for item in sorted(outputs, key=lambda value: value.source.position):
-                key = identity_key(item.source)
-                if key in seen:
-                    continue
-                seen.add(key)
-                counts[item.modality] = counts.get(item.modality, 0) + 1
-                result.append(item.model_copy(update={'token': '@' + LABELS[item.modality] + str(counts[item.modality])}))
-    return result
+    """独立候选入口，保留原调用契约及草稿模式。"""
+    return CanvasOutputContext(document).resolve_outputs(card_id, model_outputs=model_outputs,
+                                                       allow_reference_drafts=allow_reference_drafts)
 
 
 def compile_card(document: CanvasDocument, card_id: str, *,
                  model_outputs: dict[str, list[CanvasResolvedOutput]] | None = None,
-                 capability: CanvasModelCapability | None = None) -> CanvasCompiledInput:
-    """只遍历本地结构化片段一次，展开内容永不重新解释；保存不要求编译通过。"""
-    card = next(card for card in document.cards if card.id == card_id)
+                 capability: CanvasModelCapability | None = None,
+                 context: CanvasOutputContext | None = None) -> CanvasCompiledInput:
+    """只遍历本地结构化片段一次，展开内容永不重新解释；保存不要求编译通过。
+
+    显式 context 须绑定传入的同一份 document，且操作期间文档不再修改。"""
+    context = context or CanvasOutputContext(document)
+    card = context.cards[card_id]
     if not isinstance(card, ModelCard):
         return CanvasCompiledInput(card_id=card_id)
-    result = compile_inputs(document.id, card, resolve_outputs(document, card_id, model_outputs), capability)
+    result = compile_inputs(document.id, card, context.resolve_outputs(card_id, model_outputs=model_outputs), capability)
     for binding in card.input_bindings:
-        source = next((item for item in document.cards if item.id == binding.source.card_id), None)
+        source = context.cards.get(binding.source.card_id)
         if isinstance(source, NamedImageReferenceCard) and (problem := reference_name_issue(document, source)):
             result.diagnostics.append(CanvasDiagnostic(code=problem[0], message=problem[1], severity='error', target={'card_id': source.id, 'path': ['name']}, blocks=['run']))
     if capability:
         used_ports = {(binding.source.card_id, binding.source.port_id, binding.input_port) for binding in card.input_bindings}
-        for edge in document.edges:
-            if edge.target_card == card_id and edge.target_port not in capability.input_ports:
+        for edge in context.incoming.get(card_id, ()):
+            if edge.target_port not in capability.input_ports:
                 used = (edge.source_card, edge.source_port, edge.target_port) in used_ports
                 result.diagnostics.append(CanvasDiagnostic(code='UNSUPPORTED_INPUT' if used else 'UNUSED_INCOMPATIBLE_INPUT',
                     message='当前模型不支持此输入用途', severity='error' if used else 'warning',

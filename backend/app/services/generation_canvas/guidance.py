@@ -47,7 +47,7 @@ def acceptance_lines(references):
     return [f'验收依据：{row.name}（{row.criterion_id}；仅关联要求，未作验收）' for row in references]
 
 
-def validate_guidance_relations(document, published, previous):
+def validate_guidance_relations(document, published, previous, *, context=None):
     """要求身份稳定；采用和对象资格由明确直接候选决定。"""
     from app.services.generation_canvas.design_bindings import inspect_design_bindings
     identities, names = set(), set()
@@ -69,7 +69,7 @@ def validate_guidance_relations(document, published, previous):
         relevant = [binding for binding in bindings if isinstance(card, GuidanceDirectionCard) or binding.input_port == 'acceptance_basis']
         if not relevant:
             continue
-        for check in inspect_design_bindings(document, card, relevant, published):
+        for check in inspect_design_bindings(document, card, relevant, published, context=context):
             binding, item = check.binding, check.output
             valid = isinstance(item.payload, CriterionReferencePayload) if item and binding.input_port == 'acceptance_basis' else bool(item and binding.input_port == 'effect_object' and isinstance(item.payload, (ObjectReferencePayload, SpatialReferencePayload, NarrativeReferencePayload)) and not (card.type == 'direction.criterion' and isinstance(item.payload, NarrativeReferencePayload) and item.payload.category == 'shot'))
             if not check.binding_valid or not item or not valid:
