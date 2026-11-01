@@ -13,11 +13,16 @@ export function CanvasToolbarMenu({ label, children, icon, caption }: { label: s
     const dismiss = (event: PointerEvent) => {
       if (event.target instanceof Node && !root.current?.contains(event.target)) setOpen(false)
     }
+    const escape = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing || event.key !== 'Escape' || root.current?.closest('[inert]')) return
+      event.preventDefault(); event.stopPropagation(); setOpen(false); trigger.current?.focus({ preventScroll: true })
+    }
     document.addEventListener('pointerdown', dismiss)
-    return () => document.removeEventListener('pointerdown', dismiss)
+    document.addEventListener('keydown', escape)
+    return () => { document.removeEventListener('pointerdown', dismiss); document.removeEventListener('keydown', escape) }
   }, [open])
   return <div className="canvas-toolbar-menu" ref={root} onKeyDown={event => {
-    if (event.key === 'Escape' && open) { event.stopPropagation(); setOpen(false); trigger.current?.focus({ preventScroll: true }) }
+    if (!event.defaultPrevented && !event.nativeEvent.isComposing && event.key === 'Escape' && open) { event.stopPropagation(); setOpen(false); trigger.current?.focus({ preventScroll: true }) }
   }}>
     <WorkbenchButton ref={trigger} variant="quiet" icon={icon} aria-label={label} title={label} aria-expanded={open} aria-controls={id}
       onClick={() => setOpen(value => !value)}>{caption}</WorkbenchButton>

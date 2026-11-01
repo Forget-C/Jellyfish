@@ -68,7 +68,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   useEffect(() => {
     if (!viewStackId) return
     const escape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !(event.target as Element).closest('.ant-image-preview')) { event.preventDefault(); event.stopPropagation(); setViewStackId(undefined) }
+      if (!event.isComposing && event.key === 'Escape' && !(event.target as Element).closest('.ant-image-preview')) { event.preventDefault(); event.stopPropagation(); setViewStackId(undefined) }
     }
     window.addEventListener('keydown', escape, true)
     return () => window.removeEventListener('keydown', escape, true)
@@ -160,7 +160,11 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
         else { setSelected([id]); setDetailTrigger(card); setDetailId(id) }
       }
     }
-    const focus = () => { spaceTarget.current = null; setSpaceHeld(false) }
+    const focus = (event: FocusEvent) => {
+      spaceTarget.current = null
+      // Moving focus into the viewport during a pan must retain the physical Space hold.
+      if ((event.target as Element).closest('input, textarea, select, [contenteditable], [role="dialog"]')) setSpaceHeld(false)
+    }
     const blur = () => { spaceTarget.current = null; setSpaceHeld(false); if (panGesture.current) delete panGesture.current.surface.dataset.panning; panGesture.current = undefined; blankPress.current = undefined }
     window.addEventListener('focusin', focus); window.addEventListener('keydown', keydown); window.addEventListener('keyup', keyup); window.addEventListener('blur', blur)
     return () => { window.removeEventListener('focusin', focus); window.removeEventListener('keydown', keydown); window.removeEventListener('keyup', keyup); window.removeEventListener('blur', blur) }
@@ -190,7 +194,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   }, [desktop, detailId])
   useEffect(() => {
     const cancel = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && (drag || pendingConnection || accessibleConnection)) { event.preventDefault(); event.stopPropagation(); cancelConnection() }
+      if (!event.isComposing && event.key === 'Escape' && (drag || pendingConnection || accessibleConnection)) { event.preventDefault(); event.stopPropagation(); cancelConnection() }
     }
     window.addEventListener('keydown', cancel, true)
     return () => window.removeEventListener('keydown', cancel, true)
@@ -288,7 +292,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   }, [layout])
   useEffect(() => {
     const cancel = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && groupDrag.current) { event.preventDefault(); event.stopPropagation(); cancelGroupDrag() }
+      if (!event.isComposing && event.key === 'Escape' && groupDrag.current) { event.preventDefault(); event.stopPropagation(); cancelGroupDrag() }
     }
     const blur = () => { if (groupDrag.current) { groupDrag.current = undefined; completeMove.current() } }
     window.addEventListener('keydown', cancel, true); window.addEventListener('blur', blur)
@@ -462,8 +466,17 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   useEffect(() => {
     const keyboard = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement
-      if (event.defaultPrevented || event.isComposing || !container.current?.contains(target) || target.closest('input,textarea,select,[contenteditable],[role="dialog"],[role="menu"],[role="combobox"],.generation-card-menu') || window.document.querySelector('.ant-modal-wrap:not([style*="display: none"])')) return
-      if (event.key === 'Escape' && container.current?.querySelector('.generation-card-menu')) return
+      if (event.defaultPrevented || event.isComposing || !container.current?.contains(target)) return
+      const toolbarMenuOpen = !!container.current?.querySelector('.canvas-toolbar-popover:not([hidden])')
+      if ((cardMenuId || toolbarMenuOpen) && event.key === 'Escape') return // Inner controls consume Escape before the window bubble listener.
+      if (target.closest('input,textarea,select,[contenteditable],[role="dialog"],[role="menu"],[role="combobox"],.generation-card-menu') || window.document.querySelector('.ant-modal-wrap:not([style*="display: none"])')) return
+      if (cardMenuId || toolbarMenuOpen) {
+        const activation = ['Enter', ' '].includes(event.key) && !target.closest('button, a, summary, [role="button"], audio, video')
+        if (activation || ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Delete', 'Backspace', '+', '=', '-', '0'].includes(event.key) || (event.metaKey || event.ctrlKey) && ['z', 'y'].includes(event.key.toLowerCase())) {
+          event.preventDefault(); event.stopPropagation()
+        }
+        return
+      }
       if (autoPanning.current && event.key !== 'Escape') { event.preventDefault(); event.stopPropagation(); return }
       if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); removeCards(selected); return }
       if ((event.metaKey || event.ctrlKey) && ['z', 'y'].includes(event.key.toLowerCase())) {
@@ -489,11 +502,18 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
         moveCards(id, { x: origin.x + (event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0), y: origin.y + (event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0) })
       }
     }
+    const menuEscape = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing || event.key !== 'Escape' || !cardMenuId || container.current?.closest('[inert]') || window.document.querySelector('.ant-modal-wrap:not([style*="display: none"])')) return
+      const target = event.target as Element
+      if (!container.current?.contains(target) && !target.closest('.generation-card-editor')?.querySelector(`[data-canvas-details="${CSS.escape(document.id)}"]`)) return
+      event.preventDefault(); setCardMenuId(undefined)
+      container.current?.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(cardMenuId)}"] [aria-label="卡片操作"]`)?.focus({ preventScroll: true })
+    }
     const up = (event: KeyboardEvent) => { if (event.key.startsWith('Arrow') && !autoPanning.current) finishMove() }
     const blur = () => finishMove()
     window.addEventListener('blur', blur)
-    window.addEventListener('keydown', keyboard, true); window.addEventListener('keyup', up)
-    return () => { window.removeEventListener('blur', blur); window.removeEventListener('keydown', keyboard, true); window.removeEventListener('keyup', up) }
+    window.addEventListener('keydown', menuEscape); window.addEventListener('keydown', keyboard, true); window.addEventListener('keyup', up)
+    return () => { window.removeEventListener('blur', blur); window.removeEventListener('keydown', menuEscape); window.removeEventListener('keydown', keyboard, true); window.removeEventListener('keyup', up) }
   })
   const add = (type: string, position?: { x: number; y: number }, entry?: string) => {
     if (readonly || !catalog.cards.some(card => card.type === type)) return
@@ -614,7 +634,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       })
       return <Tooltip key={side} title={summary} trigger={['hover', 'focus']} open={drag ? !!hoveredPoint && hoveredPoint.dataset.card === card.id && hoveredPoint.dataset.connectionSide === side : undefined}>
         <button type="button" disabled={readonly} className="generation-connection-point" data-card={card.id} data-connection-side={side} data-connected={connected} data-connecting={!!drag || !!accessibleConnection} data-compatible={sourceConnection ? options.length > 0 : undefined} aria-label={`${sideLabels[side]}侧连接点`} onKeyDown={event => {
-          if (event.key !== 'Enter' && event.key !== ' ') return
+          if (event.defaultPrevented || event.nativeEvent.isComposing || event.key !== 'Enter' && event.key !== ' ') return
           event.preventDefault(); event.stopPropagation()
           if (accessibleConnection) chooseAccessibleTarget(card.id, side)
           else startAccessibleConnection(card.id, side, event.currentTarget)
@@ -959,7 +979,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           const coverText = 'text' in cover ? cover.text : runtime?.outputs[cover.id]?.find(output => output.text)?.text
           return <section key={group.id} data-stack-id={group.id} data-filter-match={members.some(id => matched.has(id))} className="generation-stack" tabIndex={0} role="button" aria-label={`查看堆叠 ${group.name}`} style={{left:origin.x,top:origin.y}}
             onClick={event => { if ((event.target as Element).closest('button')) return; event.stopPropagation(); if (!stackMoved.current) { clearSelection(); setViewStackId(group.id) } stackMoved.current = false }}
-            onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); clearSelection(); setViewStackId(group.id) } }}
+            onKeyDown={event => { if (!event.defaultPrevented && !event.nativeEvent.isComposing && event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); clearSelection(); setViewStackId(group.id) } }}
             onPointerDown={event => {
               if (event.button !== 0 || (event.target as Element).closest('button')) return
               event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId)
@@ -1011,7 +1031,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           }} onPointerCancel={() => { groupDrag.current = undefined; finishMove() }} onLostPointerCapture={() => { if (groupDrag.current) { groupDrag.current = undefined; finishMove() } }} style={{ left: origin.x, top: origin.y, width, height, '--generation-group-controls-scale': 1 / Math.min(transform.scale, 1) } as CSSProperties}>
             <div className="generation-group-header">
               <button type="button" className="generation-group-title" aria-label={`选择编组 ${group.name}`} aria-pressed={selectedGroupId === group.id} onClick={() => selectGroup(group.id)}><GroupOutlined aria-hidden /><span>{group.name}</span></button>
-              {selectedGroupId === group.id && <div className="generation-group-actions" onLostPointerCaptureCapture={() => finishMove()} onPointerCancelCapture={() => finishMove()} onPointerDownCapture={event => { if ((event.target as Element).closest('.generation-group-move')) { setCardMenuId(undefined); moveSnapshot.current ||= layout.view; movingIds.current = members; autoPanning.current = true } }} onPointerUpCapture={() => finishMove()} onKeyUp={() => finishMove()} role="toolbar" aria-label={`编组操作 ${group.name}`}>
+              {selectedGroupId === group.id && <div className="generation-group-actions" onLostPointerCaptureCapture={() => finishMove()} onPointerCancelCapture={() => finishMove()} onPointerDownCapture={event => { if ((event.target as Element).closest('.generation-group-move')) { setCardMenuId(undefined); moveSnapshot.current ||= layout.view; movingIds.current = members; autoPanning.current = true } }} onPointerUpCapture={() => finishMove()} role="toolbar" aria-label={`编组操作 ${group.name}`}>
                 <CanvasDragHandle onCancel={() => finishMove(true)} className="generation-group-move" contextKey={document.id} label={`分组 ${group.name}`} offset={origin} scale={transform.scale} onMove={next => {
                   moveSnapshot.current ||= layout.view; movingIds.current = members
                   const start = moveSnapshot.current?.transform || transform
@@ -1082,7 +1102,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
       onPointerDown={event => { event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); panMap(event) }}
       onPointerMove={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) panMap(event) }}
       onPointerUp={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId) }}
-      onKeyDown={event => { if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) { event.preventDefault(); layout.setView(previous => ({ ...previous, transform: { ...previous.transform, x: previous.transform.x + (event.key === 'ArrowLeft' ? 40 : event.key === 'ArrowRight' ? -40 : 0), y: previous.transform.y + (event.key === 'ArrowUp' ? 40 : event.key === 'ArrowDown' ? -40 : 0) } })) } }}>
+      onKeyDown={event => { if (!event.defaultPrevented && !event.nativeEvent.isComposing && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) { event.preventDefault(); layout.setView(previous => ({ ...previous, transform: { ...previous.transform, x: previous.transform.x + (event.key === 'ArrowLeft' ? 40 : event.key === 'ArrowRight' ? -40 : 0), y: previous.transform.y + (event.key === 'ArrowUp' ? 40 : event.key === 'ArrowDown' ? -40 : 0) } })) } }}>
       <title>小地图导航；方向键平移画布</title>
       {cards.filter(card => !hidden.has(card.id)).map(card => <rect key={card.id} data-minimap-node={card.id} x={point(card.id).x} y={point(card.id).y} width={layout.view.sizes[card.id]?.width || 400} height={layout.view.sizes[card.id]?.height || 160} />)}
       <rect className="director-minimap-viewport generation-minimap-viewport" x={visibleWorld.x} y={visibleWorld.y} width={visibleWorld.width} height={visibleWorld.height} />

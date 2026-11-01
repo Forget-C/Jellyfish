@@ -54,7 +54,7 @@ export function useCanvasViewport(contextKey: string, transform: CanvasTransform
   const surfaceProps: HTMLAttributes<HTMLDivElement> = {
     tabIndex: 0,
     onKeyDown: event => {
-      if (event.target !== event.currentTarget || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
+      if (event.defaultPrevented || event.nativeEvent.isComposing || event.target !== event.currentTarget || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
       event.preventDefault()
       onChange(previous => ({ ...previous, x: previous.x + (event.key === 'ArrowLeft' ? 30 : event.key === 'ArrowRight' ? -30 : 0), y: previous.y + (event.key === 'ArrowUp' ? 30 : event.key === 'ArrowDown' ? -30 : 0) }))
     },
@@ -103,11 +103,16 @@ export function CanvasNodeButton({ nodeId, nodeType, tone = 'neutral', selected,
 /** 布局移动有键盘替代；位移以内容坐标回传。onCancel 由调用方恢复整次手势，未提供时沿用原有取消行为。 */
 export function CanvasDragHandle({ contextKey, label, offset, scale, onMove, className, onCancel }: { contextKey: string; label: string; offset: CanvasPoint; scale: number; onMove: (point: CanvasPoint) => void; className?: string; onCancel?: () => void }) {
   const drag = useRef<{ x: number; y: number; left: number; top: number }>()
-  useEffect(() => { drag.current = undefined }, [contextKey])
+  useEffect(() => {
+    drag.current = undefined
+    const blur = () => { drag.current = undefined }
+    window.addEventListener('blur', blur)
+    return () => window.removeEventListener('blur', blur)
+  }, [contextKey])
   const cancel = useRef(onCancel); cancel.current = onCancel
   useEffect(() => {
     const escape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && drag.current && cancel.current) {
+      if (!event.isComposing && event.key === 'Escape' && drag.current && cancel.current) {
         event.preventDefault(); event.stopPropagation(); drag.current = undefined; cancel.current()
       }
     }
@@ -122,7 +127,7 @@ export function CanvasDragHandle({ contextKey, label, offset, scale, onMove, cla
     const current = drag.current
     if (current && event.currentTarget.hasPointerCapture(event.pointerId)) onMove({ x: current.left + (event.clientX - current.x) / scale, y: current.top + (event.clientY - current.y) / scale })
   }} onPointerUp={() => { drag.current = undefined }} onPointerCancel={() => { drag.current = undefined }} onLostPointerCapture={() => { drag.current = undefined }} onKeyDown={event => {
-    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
+    if (event.defaultPrevented || event.nativeEvent.isComposing || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
     event.preventDefault(); event.stopPropagation()
     onMove({ x: offset.x + (event.key === 'ArrowLeft' ? -20 : event.key === 'ArrowRight' ? 20 : 0), y: offset.y + (event.key === 'ArrowUp' ? -20 : event.key === 'ArrowDown' ? 20 : 0) })
   }}>⠿</button>
@@ -133,7 +138,7 @@ export function CanvasEdge({ d, label, indirect = false, selected = false, muted
   const markerId = useId().replace(/:/g, '')
   return <g className={`canvas-edge ${className || ''}`} data-canvas-tone={tone} data-selected={selected} opacity={muted ? .35 : 1} data-canvas-relation={indirect ? 'indirect' : 'direct'}>
     <path className="canvas-edge-line" d={d} fill="none" stroke="var(--canvas-edge-color)" strokeWidth={selected ? 2.5 : 1.5} strokeDasharray={indirect ? '5 4' : undefined} markerEnd={`url(#${markerId})`} />
-    {onInspect && <path d={d} fill="none" stroke="transparent" strokeWidth={12} className="canvas-edge-hit" role="button" tabIndex={0} aria-label={label} onClick={onInspect} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onInspect() } }} />}
+    {onInspect && <path d={d} fill="none" stroke="transparent" strokeWidth={12} className="canvas-edge-hit" role="button" tabIndex={0} aria-label={label} onClick={onInspect} onKeyDown={event => { if (!event.defaultPrevented && !event.nativeEvent.isComposing && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onInspect() } }} />}
     <defs><marker id={markerId} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" style={{ fill: 'var(--canvas-edge-color)', stroke: 'none' }} /></marker></defs>
     {caption && <text x={caption.x} y={caption.y} textAnchor="middle" fill="#667085" fontSize={12}>{caption.text}{indirect ? ' · 间接' : ''}</text>}
   </g>

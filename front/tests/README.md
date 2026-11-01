@@ -274,3 +274,14 @@ CI supplies the retained manifest explicitly to the existing browser runner and 
 规则用例输出 `rules.json`、定位截图和失败截图；失败立即终止，不以截图或用例总数代替行为断言。
 
 组合优先级回归：`generation-canvas-interaction-combinations`（包含在 `canvas-layout` / `canvas-interaction`）覆盖拖动混用方向键／撤销／缩放、最终位置重做、菜单关闭与 Escape、多选 Enter／Space、拖动中导演卡激活、组合输入信号和 Space 配对／中断。组合输入使用浏览器事件信号验证，不代替实体输入法测试。
+
+组合规则逐项验收（`generation-canvas-interaction-combinations`）：
+
+| 补充规则 | 验收内容 |
+| --- | --- |
+| S1 拖动独占 | 拖动混用方向键、Enter、Space、撤销／重做及 0；最终释放位置可一次撤销／重做。 |
+| S2 起拖关闭菜单 | 阈值内按下保留菜单，起拖关闭当前或其他卡菜单，Escape 恢复原位置。 |
+| S3 多选键盘一致 | Enter／Space 切换相同选择，不打开编辑器；多选 Space 拖动只平移视口且保留选择；普通菜单按钮仍可键盘激活。 |
+| S4 输入与 Space 隔离 | 连续按住 Space 多次平移；焦点切换、进入输入区、失焦和 Escape 取消待执行激活；视口、编辑器及独立键盘入口隔离组合输入信号。 |
+
+Q7／Q9 组合验收同时检查：菜单打开后的方向键、删除、缩放及历史命令隔离，空白焦点 Escape 关闭菜单并恢复焦点，筛选下拉先关闭再关闭旧卡菜单。编组手柄另验方向键松开不截断指针事务、失焦保留位置且不续拖，一次撤销／重做恢复最终结果。单个入口通过不代表其他入口已覆盖；IME 用例仅验证浏览器组合输入事件信号。

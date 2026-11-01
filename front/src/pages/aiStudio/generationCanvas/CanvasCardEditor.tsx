@@ -133,8 +133,8 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
     const observer = new MutationObserver(syncBlocked)
     observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['style', 'class'] })
     const keyboard = (event: KeyboardEvent) => {
-      if (node?.inert || event.defaultPrevented || document.querySelector('.ant-modal-wrap:not([style*="display: none"])')) return
-      if ([...document.querySelectorAll<HTMLElement>('[role="menu"]')].some(menu => menu.getClientRects().length && getComputedStyle(menu).visibility !== 'hidden') || node?.querySelector('[role="combobox"][aria-expanded="true"]')) return
+      if (node?.inert || event.defaultPrevented || event.isComposing || document.querySelector('.ant-modal-wrap:not([style*="display: none"])')) return
+      if ([...document.querySelectorAll<HTMLElement>('[role="menu"], .generation-card-menu, .canvas-toolbar-popover')].some(menu => !menu.closest('[inert]') && menu.getClientRects().length && getComputedStyle(menu).visibility !== 'hidden') || node?.querySelector('[role="combobox"][aria-expanded="true"]')) return
       if (event.key === 'Escape') {
         event.preventDefault(); event.stopPropagation()
         // The material picker is the innermost editor surface once native menus have closed.
