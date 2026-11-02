@@ -1,4 +1,5 @@
-/* generated using openapi-typescript-codegen -- do not edit */
+/* Maintained fetch transport for openapi-typescript-codegen 0.30.x.
+ * --request copies this template into generated/core/request.ts; edit this source. */
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
@@ -232,6 +233,11 @@ export const getResponseHeader = (response: Response, responseHeader?: string): 
 export const getResponseBody = async (response: Response): Promise<any> => {
     if (response.status !== 204) {
         try {
+            // Successful attachments retain exact bytes, including text/JSON files.
+            // Error responses still use the normal JSON decoding and ApiError path.
+            if (response.ok && /^attachment(?:;|$)/i.test(response.headers.get('Content-Disposition') || '')) {
+                return await response.blob();
+            }
             const contentType = response.headers.get('Content-Type');
             if (contentType) {
                 const jsonTypes = ['application/json', 'application/problem+json']

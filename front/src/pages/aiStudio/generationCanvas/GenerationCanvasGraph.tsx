@@ -324,6 +324,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     connectionLayout.setSides(previous => ({ ...previous, ...Object.fromEntries(missing.map(edge => [edge.id, defaultSides(layout.view.positions[edge.source_card] || { x: 0, y: 0 }, layout.view.positions[edge.target_card] || { x: 0, y: 0 })])) }))
   }, [edges, layout, connectionLayout])
   const transform = layout.view.transform
+  const currentTransform = useRef(transform); currentTransform.current = transform
   const viewport = useCanvasViewport(document.id, transform, update => layout.setView(previous => ({ ...previous,
     transform: typeof update === 'function' ? update(previous.transform) : update })), { x: 2000, y: 1800 })
   const revealEditor = useCanvasEditorReveal(transform, offset => layout.setView(previous => ({ ...previous, transform: { ...previous.transform, ...offset } })))
@@ -607,8 +608,10 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     } catch {setReason('无法粘贴：媒体不可用或项目归属不匹配');pastePending.current=false;return}
     pastePending.current=false
     if(!mounted.current || currentReadonly.current)return
+    // 校验期间允许浏览；提交落点及可见性必须使用此刻视口，而非调用时闭包。
+    const pasteTransform = currentTransform.current
     const box=viewport.surface.current?.getBoundingClientRect()
-    const origin=position || {x:((box?.width || 1200)/2-transform.x)/transform.scale,y:((box?.height || 800)/2-transform.y)/transform.scale}
+    const origin=position || {x:((box?.width || 1200)/2-pasteTransform.x)/pasteTransform.scale,y:((box?.height || 800)/2-pasteTransform.y)/pasteTransform.scale}
     if(position){const last=lastPaste.current;lastPaste.current={...position,count:last?.x===position.x && last.y===position.y ? last.count+1 : 0}}
     const offset=position ? (lastPaste.current?.count || 0)*32 : pasteCount.current++*32
     origin.x+=offset;origin.y+=offset
@@ -618,8 +621,8 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     layout.setView(previous=>({...previous,positions:{...previous.positions,...positions}}))
     edit({...latest.current,cards:[...(latest.current.cards || []),...copies]})
     setSelected(copies.map(card=>card.id));setDetailId(undefined);setSelectedEdgeId(undefined)
-    const screenX=origin.x*transform.scale+transform.x,screenY=origin.y*transform.scale+transform.y
-    if(box && (screenX>box.width || screenY>box.height || screenX+300*transform.scale<0 || screenY+250*transform.scale<0))layout.setView(previous=>({...previous,transform:{...previous.transform,x:previous.transform.x+Math.max(16,Math.min(screenX,box.width-80))-screenX,y:previous.transform.y+Math.max(16,Math.min(screenY,box.height-80))-screenY}}))
+    const screenX=origin.x*pasteTransform.scale+pasteTransform.x,screenY=origin.y*pasteTransform.scale+pasteTransform.y
+    if(box && (screenX>box.width || screenY>box.height || screenX+300*pasteTransform.scale<0 || screenY+250*pasteTransform.scale<0))layout.setView(previous=>({...previous,transform:{...previous.transform,x:previous.transform.x+Math.max(16,Math.min(screenX,box.width-80))-screenX,y:previous.transform.y+Math.max(16,Math.min(screenY,box.height-80))-screenY}}))
   }
   const copyReason = (ids: string[]) => ids.map(id => {
     const card=latest.current.cards?.find(card=>card.id===id)
@@ -633,10 +636,13 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     if(duplicate) pasteCards(value,{x:Math.min(...value.positions.map(point=>point.x))+32,y:Math.min(...value.positions.map(point=>point.y))+32})
     else try {writeCardClipboard(value);setReason('已复制，可在画布粘贴')} catch {setReason('卡片剪贴板保存失败，请重试')}
   }
+  // 容器后代不等于画布焦点；编组、堆叠、连线及独立控件保留各自键盘行为。
+  const ownsCardShortcut = (target: Element) => target === viewport.surface.current
+    || target.matches('[data-card-id], [data-keyboard-move]') && !!target.closest('[data-card-id]')
   const clipboardKey = useRef<(event: KeyboardEvent)=>void>();clipboardKey.current=event=>{
     if(!contextMenu && !autoPanning.current && !drag && !pendingConnection && !accessibleConnection && !selectionStart.current && !panGesture.current && !event.isComposing && (event.key==='ContextMenu'||event.shiftKey&&event.key==='F10')){
       const target=event.target as Element
-      if(!container.current?.contains(target)||!target.closest('[data-card-id],.generation-surface')||target.closest('input,textarea,[contenteditable],[data-card-details],[role="dialog"]'))return
+      if(!container.current?.contains(target)||!ownsCardShortcut(target)||target.closest('input,textarea,[contenteditable],[data-card-details],[role="dialog"]'))return
       event.preventDefault();event.stopImmediatePropagation()
       const card=target.closest<HTMLElement>('[data-card-id]'),box=(card||viewport.surface.current)?.getBoundingClientRect()
       if(box){const ids=card?.dataset.cardId ? selected.includes(card.dataset.cardId)?selected:[card.dataset.cardId] : [];if(ids.length)setSelected(ids);setContextMenu({x:box.left+24,y:box.top+24,ids})}return
@@ -644,7 +650,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
 
     if(contextMenu || readonly && event.key.toLowerCase()!=='c' || !(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey || event.isComposing || event.defaultPrevented || autoPanning.current) return
     const target=event.target as Element
-    if(!container.current?.contains(target) || !target.closest('[data-card-id],.generation-surface') || target.closest('input,textarea,select,[contenteditable],[data-card-details],[role="dialog"],[role="menu"],.generation-card-menu') || window.document.querySelector('.ant-modal-wrap:not([style*="display: none"])')) return
+    if(!container.current?.contains(target) || !ownsCardShortcut(target) || target.closest('input,textarea,select,[contenteditable],[data-card-details],[role="dialog"],[role="menu"],.generation-card-menu') || window.document.querySelector('.ant-modal-wrap:not([style*="display: none"])')) return
     const key=event.key.toLowerCase()
     if(!['c','v','d'].includes(key))return
     event.preventDefault();event.stopImmediatePropagation()

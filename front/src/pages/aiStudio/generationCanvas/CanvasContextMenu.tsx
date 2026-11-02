@@ -22,9 +22,12 @@ export function CanvasContextMenu({ x, y, card, actions, catalog, onAdd, onClose
     const wheel = (event: WheelEvent) => { if(host.current?.contains(event.target as Node)) { event.stopPropagation();return } close(event) }
     const outside = (event: PointerEvent) => {
       if (host.current?.contains(event.target as Node)) return
-      const consumeClick = (click: MouseEvent) => { click.preventDefault(); click.stopImmediatePropagation() }
-      window.addEventListener('click', consumeClick, { capture: true, once: true })
-      window.setTimeout(() => window.removeEventListener('click', consumeClick, true), 1000)
+      // 右键没有后续 click；只消费本次主键点击，避免误吞新菜单的首次操作。
+      if (event.button === 0) {
+        const consumeClick = (click: MouseEvent) => { click.preventDefault(); click.stopImmediatePropagation() }
+        window.addEventListener('click', consumeClick, { capture: true, once: true })
+        window.setTimeout(() => window.removeEventListener('click', consumeClick, true), 1000)
+      }
       close(event)
     }
     const keyboard = (event: KeyboardEvent) => {

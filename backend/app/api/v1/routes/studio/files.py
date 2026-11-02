@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db
@@ -105,6 +106,8 @@ async def upload_file_api(
 @router.get(
     "/{file_id}/download",
     summary="下载文件二进制内容",
+    response_class=StreamingResponse,
+    responses={200: {"content": {"application/octet-stream": {"schema": {"type": "string", "format": "binary"}}}}},
 )
 async def download_file_api(
     file_id: str,

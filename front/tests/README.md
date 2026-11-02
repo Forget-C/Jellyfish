@@ -324,3 +324,7 @@ UX 回归另覆盖画布局部键盘焦点提示与方向键平移、输入后�
 `generation-canvas-context-menu` 使用隔离 HTTP/DB/TaskWorker 与真实画布，覆盖右键创建、复制后手动粘贴、副本配置、候选连线不复制、真实引用保护、跨画布及刷新剪贴板、统一撤销重做、编辑区右键屏蔽、键盘菜单与逐层取消、图片封面持久化及原卡删除后的文件保护、单文本下载与多图片ZIP。入口已加入 `generation` 和 `canvas-layout`，证据包含菜单截图及后端日志。
 
 堆叠与编组的真实指针多选使用宿主平台的 Command／Control；不通过伪造 `navigator.platform` 在 macOS 上发送 Control+点击，避免原生右键手势与多选测试混淆。
+
+右键专项同时覆盖连续右键切换后的首次操作、编组／堆叠焦点的菜单及复制粘贴快捷键隔离、媒体校验延迟期间平移和缩放后的最新视口落点，以及 generated client 二进制下载失败后保留选择并重试。
+
+附件下载另以独立后端 origin 验证 CORS 响应头暴露及 generated client 的真实 PNG 字节，防止仅同源代理通过。
