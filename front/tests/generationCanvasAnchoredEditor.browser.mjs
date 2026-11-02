@@ -75,7 +75,9 @@ try {
   await surface.focus()
   const pan = async delta => { await page.mouse.move(1380,delta<0?600:100); await page.keyboard.down('Space'); await page.mouse.down(); await page.mouse.move(1380,delta<0?100:600,{steps:8}); await page.keyboard.up('Space'); await page.mouse.up() }
   await pan(-500); await pan(-500)
-  await editor.waitFor({state:'hidden'})
+  assert.equal(await editor.isVisible(),true,'manual panning keeps the retained editor mounted and visible')
+  const offscreenCard=await text.boundingBox(),offscreenEditor=await editor.boundingBox()
+  assert.ok(Math.abs(offscreenEditor.y-offscreenCard.y-offscreenCard.height-16)<1,'offscreen editor remains below its card')
   await pan(500); await pan(500)
   await editor.waitFor()
   assert.equal(await input.inputValue(), '保留会话及保存内容')

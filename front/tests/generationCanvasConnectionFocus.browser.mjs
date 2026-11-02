@@ -53,7 +53,7 @@ try {
   const beforePan = await page.locator('.generation-world').getAttribute('style')
   await surface.press('ArrowRight')
   assert.notEqual(await page.locator('.generation-world').getAttribute('style'), beforePan, 'canvas retains keyboard panning')
-  assert.equal(await surface.evaluate(element => element.matches(':focus-visible') && getComputedStyle(element).outlineStyle === 'solid'), true, 'keyboard canvas focus is visibly outlined')
+  assert.equal(await surface.evaluate(element => element.matches(':focus-visible') && getComputedStyle(element).outlineStyle === 'none' && getComputedStyle(element, '::after').content.includes('画布键盘焦点')), true, 'keyboard canvas focus has a local indicator without a canvas frame')
   const connectionPoint = source.getByRole('button', { name: '左侧连接点', exact: true })
   await connectionPoint.hover()
   await connectionPoint.focus()

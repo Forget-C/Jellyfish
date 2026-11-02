@@ -56,7 +56,7 @@ try {
     if (await editor.isVisible()) { if (await editor.locator('.generation-material-candidates[open]').count()) await editor.getByLabel('管理候选与采用', { exact: true }).press('Escape'); await editor.press('Escape') }
     // 连续编辑会按需平移画布；先把下一张卡带回视口，再从真实可见入口打开。
     await page.getByRole('button', { name: '适应全部', exact: true }).click()
-    await page.locator(`[data-card-id="${kind}"]`).press('Enter'); await input.waitFor()
+    await page.locator(`[data-card-id="${kind}"]`).press('Enter'); await input.waitFor(); await delay(220)
   }
   await page.addInitScript(() => Object.defineProperty(navigator, 'platform', { get: () => sessionStorage.getItem('test-platform') || 'MacIntel' }))
   await page.goto(url)

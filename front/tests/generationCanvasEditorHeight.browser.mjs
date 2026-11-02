@@ -51,7 +51,7 @@ try {
   assert.equal(initialHeight, 320, 'anchored model editor keeps the current 320px height')
   await surface.focus()
   for (let i = 0; i < 32; i++) await surface.press('ArrowUp')
-  await page.locator('.generation-card-editor').waitFor({ state: 'hidden' })
+  assert.equal(await editor.isVisible(),true,'manual browsing does not hide the retained editor')
   const heights = []
   for (let i = 0; i < 32; i++) {
     await surface.press('ArrowDown')

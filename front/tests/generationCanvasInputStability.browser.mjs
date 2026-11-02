@@ -63,6 +63,7 @@ try {
     const input = editor.getByRole('textbox', { name: '模型正文', exact: true })
     await input.waitFor()
     await Promise.all([initialReady, initialCompile])
+    await delay(220)
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
     const geometry = () => input.evaluate(element => { const b = element.getBoundingClientRect(); return { top: b.top, height: b.height } })
     const before = await geometry()

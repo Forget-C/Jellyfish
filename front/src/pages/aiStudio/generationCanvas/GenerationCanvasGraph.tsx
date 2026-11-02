@@ -25,6 +25,7 @@ import { ConfigProvider, Dropdown, Modal, Input, Select, Space, Tooltip, Image }
 import { StudioGenerationCanvasesService as Canvases, LlmService } from '../../../services/generated'
 import type { CanvasDocument, NamedImageReferenceCard, CanvasModelCapability, CanvasNodeRead, CanvasResolvedOutput, ModelRead, ModelSettingsRead, TextContentCard } from '../../../services/generated'
 import { CanvasDragHandle, CanvasEdge, useCanvasViewport } from '../../../components/canvas/Canvas'
+import { useCanvasEditorReveal } from './useCanvasEditorReveal'
 import { useGraphLayout } from '../directing/useGraphLayout'
 import type { GraphArrange, GraphSize } from '../directing/graphLayout'
 import { referenceProtection } from './promptRules'
@@ -320,6 +321,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const transform = layout.view.transform
   const viewport = useCanvasViewport(document.id, transform, update => layout.setView(previous => ({ ...previous,
     transform: typeof update === 'function' ? update(previous.transform) : update })), { x: 2000, y: 1800 })
+  const revealEditor = useCanvasEditorReveal(transform, offset => layout.setView(previous => ({ ...previous, transform: { ...previous.transform, ...offset } })))
   const moveSnapshot = useRef<typeof layout.view>()
   const edgePointer = useRef<{x:number;y:number}>()
   const autoPanning = useRef(false)
@@ -468,6 +470,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   })
   useEffect(() => {
     const keyboard = (event: KeyboardEvent) => {
+      if (!event.isComposing && viewport.surface.current) viewport.surface.current.dataset.keyboardFocus = 'true'
       const target = event.target as HTMLElement
       if (event.defaultPrevented || event.isComposing || !container.current?.contains(target)) return
       const toolbarMenuOpen = !!container.current?.querySelector('.canvas-toolbar-popover:not([hidden])')
@@ -796,6 +799,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const uploadSourceCard = cards.find(card => card.id === uploadSource) as MediaCard | undefined
   return <div className="generation-graph" ref={container} onPointerDownCapture={event => {
     const surface = viewport.surface.current
+    if (surface) surface.dataset.keyboardFocus = 'false'
     if (surface?.contains(event.target as Node) && (event.button === 1 || spaceHeld && event.button === 0)) {
       spacePanned.current = true
       event.preventDefault(); event.stopPropagation(); surface.focus({ preventScroll: true }); surface.setPointerCapture(event.pointerId)
@@ -1114,7 +1118,8 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     {cards.filter(card => detailSessions.includes(card.id) || card.id === detailId).map(detailCard => {
       const EditorContainer = CanvasCardEditor
       const DetailRenderer = rendererRegistry[detailCard.type || 'content.text']
-      return <EditorContainer cardType={detailCard.type} focusLayout={isDescriptionCard(detailCard) || detailCard.type?.startsWith('reference.') || detailCard.type?.startsWith('model.') || focusCardTypes.includes(detailCard.type || '')} modality={cardDefinitions[detailCard.type || '']?.modality} material={isDescriptionCard(detailCard) || detailCard.type?.startsWith('model.') || detailCard.type?.startsWith('reference.')} forceModal={detailCard.type?.startsWith('direction.')} key={detailCard.id} anchor={window.document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(detailCard.id)}"]`)} layoutKey={`${transform.x}:${transform.y}:${transform.scale}:${JSON.stringify(point(detailCard.id))}`} expandRequest={expandRequest?.id === detailCard.id ? expandRequest.serial : undefined} title={('name' in detailCard && detailCard.name) || cardTitles[detailCard.type || 'content.text'] || '卡片详情'} status={readonly ? '只读' : editingStatus} open={detailCard.id === detailId && !detailsSuppressed && !stackFor(detailCard.id)} onClose={() => setDetailId(current => current === detailCard.id ? undefined : current)} trigger={detailTrigger}>
+      // 新卡先完成测量和创建视口恢复，避免覆盖首次让位（尤其是减少动态效果模式）。
+      return <EditorContainer onReveal={revealEditor} suppressed={detailsSuppressed || creationView.current?.cardId === detailCard.id} cardType={detailCard.type} focusLayout={isDescriptionCard(detailCard) || detailCard.type?.startsWith('reference.') || detailCard.type?.startsWith('model.') || focusCardTypes.includes(detailCard.type || '')} modality={cardDefinitions[detailCard.type || '']?.modality} material={isDescriptionCard(detailCard) || detailCard.type?.startsWith('model.') || detailCard.type?.startsWith('reference.')} forceModal={detailCard.type?.startsWith('direction.')} key={detailCard.id} anchor={window.document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(detailCard.id)}"]`)} layoutKey={`${transform.x}:${transform.y}:${transform.scale}:${JSON.stringify(point(detailCard.id))}`} expandRequest={expandRequest?.id === detailCard.id ? expandRequest.serial : undefined} title={('name' in detailCard && detailCard.name) || cardTitles[detailCard.type || 'content.text'] || '卡片详情'} status={readonly ? '只读' : editingStatus} open={detailCard.id === detailId && !stackFor(detailCard.id)} onClose={() => setDetailId(current => current === detailCard.id ? undefined : current)} trigger={detailTrigger}>
         {!desktop && !isDescriptionCard(detailCard) && !detailCard.type?.startsWith('model.') && !detailCard.type?.startsWith('reference.') && !focusCardTypes.includes(detailCard.type || '') && <Space wrap><Button onClick={() => setActiveCategory('基础卡')}>卡片</Button><Button disabled={readonly} onClick={event => startAccessibleConnection(detailCard.id, 'right', event.currentTarget)}>连接到…</Button></Space>}
         {detailCard?.type?.startsWith('direction.') && <details className="generation-candidate-management"><summary>候选连接管理</summary>{references(detailCard)}</details>}
         {detailCard?.type === 'direction.photography' && <Button disabled={readonly} onClick={() => {

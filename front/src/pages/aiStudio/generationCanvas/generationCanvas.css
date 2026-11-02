@@ -3,7 +3,9 @@
 .generation-connection-reason { min-height: 28px; color: #475569; }
 .generation-surface { position: relative; height: 720px; overflow: hidden; border: 1px solid #cbd5e1; border-radius: 8px; background: #f1f5f9; touch-action: none; }
 .generation-surface:focus { outline: none; }
-.generation-surface:focus-visible { outline: 2px solid var(--wb-focus); outline-offset: -2px; }
+/* 视口焦点使用局部提示，避免把整张画布描成选中对象。 */
+.generation-surface[data-keyboard-focus="true"]:focus-visible::after { content: '画布键盘焦点 · 方向键平移'; position: absolute; z-index: 60; bottom: 88px; left: 50%; transform: translateX(-50%); padding: 4px 8px; border: 1px solid var(--wb-border); border-left: 2px solid var(--wb-focus); border-radius: var(--wb-radius); background: var(--wb-surface); color: var(--wb-muted); font-size: 12px; white-space: nowrap; pointer-events: none; }
+.generation-card:focus { outline: none; }
 .generation-world { position: absolute; inset: 0; transform-origin: 0 0; }
 .generation-edges { position: absolute; overflow: visible; pointer-events: none; }
 .generation-card { position: absolute; z-index: 2; min-width: 300px; min-height: 240px; background: white; border: 1px solid #94a3b8; border-radius: 8px; box-sizing: border-box; resize: both; overflow: auto; }

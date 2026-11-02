@@ -59,13 +59,13 @@ try {
   const pageErrors = []
   page.on('pageerror', error => pageErrors.push(error.message))
   const mainPage = page
-  for (const [side, x, y, width, height] of [['bottom', 200, 180, 1920, 1100], ['top', 200, 650, 1920, 1100], ['right', 200, 300, 1920, 850], ['left', 1300, 300, 1920, 850], ['modal', 200, 250, 900, 650]]) {
+  for (const [side, x, y, width, height] of [['bottom', 200, 180, 1920, 1100], ['lower-edge', 200, 650, 1920, 1100], ['short-desktop', 200, 300, 1920, 850], ['right-edge', 1300, 300, 1920, 850], ['narrow', 200, 250, 900, 650]]) {
     const fixture = await request('/api/v1/studio/generation-canvases/canvas-project', { name: `Q1 ${side}` })
     const seeded = await fetch(`${base}/${fixture.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document: { ...fixture.document, cards: [
             { id: 'anchor', type: 'reference.place', name: '场所', angle: '正面' }
           ], edges: [] } }) })
     assert.ok(seeded.ok, await seeded.text())
-    const isolated = await browser.newContext({ viewport: { width, height } })
+    const isolated = await browser.newContext({ viewport: { width, height }, reducedMotion: 'reduce' })
     page = await isolated.newPage()
     page.setDefaultTimeout(8000)
     page.on('pageerror', error => pageErrors.push(error.message))
@@ -80,19 +80,19 @@ try {
     await anchor.press('Enter')
     const panel = page.locator('.generation-card-editor:visible')
     await panel.waitFor()
-    assert.equal(await page.locator('.generation-world').getAttribute('style'), view, `${side}: opening does not pan or zoom`)
-    assert.deepEqual(await anchor.boundingBox(), initial, `${side}: opening does not move card`)
-    const editor = await panel.boundingBox()
-    assert.equal(await panel.getAttribute('data-expanded'), String(side === 'modal'))
-    if (side === 'bottom')
-      assert.ok(Math.abs(editor.y - initial.y - initial.height - 16) < 1, 'prefer bottom when it fits')
-    if (side === 'top')
-      assert.ok(Math.abs(initial.y - editor.y - editor.height - 16) < 1, 'top before either side')
-    if (side === 'right')
-      assert.ok(Math.abs(editor.x - initial.x - initial.width - 16) < 1, 'right when vertical placements cannot fit')
-    if (side === 'left')
-      assert.ok(Math.abs(initial.x - editor.x - editor.width - 16) < 1, 'left when right cannot fit')
-    if (side !== 'modal') {
+    await delay(50)
+    const settled = await anchor.boundingBox(), editor = await panel.boundingBox()
+    assert.equal(await panel.getAttribute('data-expanded'), String(side === 'narrow'))
+    assert.deepEqual(await anchor.evaluate(node=>({x:parseFloat(node.style.left),y:parseFloat(node.style.top)})),{x,y},'opening changes viewport, not card coordinates')
+    if(side!=='narrow') {
+      assert.ok(Math.abs(editor.y-settled.y-settled.height-16)<1,'editor always stays below the card')
+      assert.ok(Math.abs(editor.x-settled.x)<1,'editor shares the card left edge')
+      assert.ok(editor.x>=16 && editor.x+editor.width<=width-16 && editor.y>=80,'editor is inside usable viewport')
+      assert.ok(editor.y+editor.height<=(await page.locator('.generation-view-tools').boundingBox()).y-9,'editor avoids bottom controls')
+      if(side==='bottom')assert.equal(await page.locator('.generation-world').getAttribute('style'),view,'enough space does not move canvas')
+      else assert.notEqual(await page.locator('.generation-world').getAttribute('style'),view,'insufficient space pans canvas')
+    }
+    if (side !== 'narrow') {
       const font = await panel.locator('input').first().evaluate(e => getComputedStyle(e).fontSize)
       await page.getByRole('button', { name: '放大', exact: true }).click()
       assert.equal(await panel.locator('input').first().evaluate(e => getComputedStyle(e).fontSize), font, 'canvas zoom preserves editor font size')
@@ -155,7 +155,7 @@ try {
       results.push({ name: 'Q2 edge speed, hover isolation, editor following and immediate stop', status: 'passed' })
     }
     await page.screenshot({ path: join(output, `q1-${side}.png`) })
-    if (side === 'top') {
+    if (side === 'lower-edge') {
       await panel.getByRole('button', { name: '展开详情', exact: true }).click()
       await page.getByRole('dialog').waitFor()
       await page.keyboard.press('Escape')
@@ -166,7 +166,7 @@ try {
       await page.keyboard.press('Escape')
       assert.equal(await anchor.getAttribute('data-selected'), 'false', 'Q7 final Escape clears selection')
     }
-    if (side === 'modal') {
+    if (side === 'narrow') {
       await page.keyboard.press('Escape')
       await panel.waitFor({ state: 'hidden' })
       assert.equal(await anchor.getAttribute('data-selected'), 'true', 'Q7 insufficient room closes expanded editor without clearing selection')
@@ -542,6 +542,7 @@ try {
     await closeCanvasDetails(page)
     await page.mouse.click(1850,150)
     assert.equal(await page.locator('[data-card-id][data-selected="true"]').count(),0,'blank click clears previous editor selection')
+    await page.getByRole('button',{name:'适应全部',exact:true}).click()
     await spare.click({ modifiers: ['ControlOrMeta'] })
     await card.click({ modifiers: ['ControlOrMeta'] })
     assert.equal(await page.locator('[data-card-id][data-selected="true"]').count(),2)
