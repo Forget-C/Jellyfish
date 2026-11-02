@@ -1,5 +1,5 @@
 import { openSummaryMenu } from './generationCanvasWorkbench.browser-helpers.mjs'
-import { openCanvasCard, closeCanvasDetails, closePrecheck } from './generationCanvasWorkbench.browser-helpers.mjs'
+import { openCanvasCard, openModelInspection, closeCanvasDetails, closePrecheck } from './generationCanvasWorkbench.browser-helpers.mjs'
 import { browserOutput, browserCleanup, captureBackend } from './browser-runtime.mjs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
@@ -129,6 +129,7 @@ try {
   await record.getByRole('status').filter({ hasText: '已取消 · 未完成' }).waitFor()
   assert.equal((await control()).calls.length, 3)
   await openCanvasCard(page, 'm')
+  await openModelInspection(page)
   await waitText(card.getByRole('region', { name: '当前正式输出', exact: true }), '第一段第二段第三段')
   // Save a validated independent copy while editing continues during DTO loading.
   record = await showRun(second)

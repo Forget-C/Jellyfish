@@ -8,13 +8,14 @@ import { MediaPreview } from './MediaContentEditor'
 import { activeNode, canvasNodeStatusLabels } from './useGenerationCanvasRuntime'
 
 /** Canvas-level records remain accessible even after the editable source card is removed. */
-export function RunHistory({ runs, targetRun, targetNode, disabled, onSave, onCancel, cancelling }: {
+export function RunHistory({ runs, targetRun, targetNode, disabled, onSave, onCancel, cancelling, onClose }: {
   runs: CanvasRunRead[]; targetRun?: string | null; targetNode?: string | null; disabled: boolean;
   onSave: (node: CanvasNodeRead, position: number) => Promise<boolean>;
-  onCancel: (runId: string, nodeId?: string) => Promise<void>; cancelling: Set<string>;
+  onCancel: (runId: string, nodeId?: string) => Promise<void>; cancelling: Set<string>; onClose: () => void;
 }) {
   const [open, setOpen] = useState(false), [saving, setSaving] = useState(''), [message, setMessage] = useState(''), [error, setError] = useState('')
   const root = useRef<HTMLElement>(null)
+  const close = () => { setOpen(false); onClose() }
   const targetExists = runs.some(run => run.id === targetRun)
   useEffect(() => { if (targetRun) setOpen(true) }, [targetRun])
   useEffect(() => {
@@ -38,8 +39,8 @@ export function RunHistory({ runs, targetRun, targetNode, disabled, onSave, onCa
     finally { setSaving('') }
   }
   return <>
-    <Button aria-expanded={open} onClick={() => setOpen(previous => !previous)}>运行历史</Button>
-    <WorkbenchDetails title="运行历史" open={open} onClose={() => setOpen(false)}><section ref={root} aria-label="画布运行历史" className="generation-run-history">
+    <Button aria-expanded={open} onClick={open ? close : () => setOpen(true)}>运行历史</Button>
+    <WorkbenchDetails title="运行历史" open={open} onClose={close}><section ref={root} aria-label="画布运行历史" className="generation-run-history">
       {message && <p role="status">{message}</p>}{error && <Alert type="error" message={error} />}
       {!runs.length && <Empty description="尚无运行记录" />}
       {targetRun && !targetExists && <p role="status">正在恢复目标运行记录；若记录不存在，请核实画布来源</p>}

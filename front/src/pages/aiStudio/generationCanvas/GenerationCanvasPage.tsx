@@ -66,6 +66,15 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
     else next.delete('canvas')
     return next
   })
+  const closeRunHistory = () => {
+    if (!search.has('run') && !search.has('node')) return
+    // 关闭即撤销本次历史定位意图，替换当前地址，避免刷新重开或新增无效回退步骤。
+    setSearch(previous => {
+      const next = new URLSearchParams(previous)
+      next.delete('run'); next.delete('node')
+      return next
+    }, { replace: true })
+  }
   useEffect(() => {
     let active = true
     Canvases.canvasList({ projectId }).then(response => { if (active) setCanvases(response.data || []) }).catch(fail)
@@ -143,7 +152,7 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
       <div className="generation-toolbar-center" />
       <div className="canvas-toolbar-actions">
         <div ref={setPrimaryHost} className="generation-primary-host" />
-        {document && <RunHistory key={document.id} runs={runtime.snapshot.runs} targetRun={search.get('run')} targetNode={search.get('node')}
+        {document && <RunHistory onClose={closeRunHistory} key={document.id} runs={runtime.snapshot.runs} targetRun={search.get('run')} targetNode={search.get('node')}
           disabled={!ownership.editable || !!editor.recovery || editor.conflict} onSave={saveOutput} onCancel={runtime.cancel} cancelling={runtime.cancelling} />}
         <TaskCenter workbench />
         <CanvasToolbarMenu label="更多操作" icon={<MoreOutlined />}>
