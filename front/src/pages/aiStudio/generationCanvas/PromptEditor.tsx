@@ -155,19 +155,40 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
     let caret: number | undefined
     if (root.current && selection?.rangeCount && root.current.contains(selection.anchorNode)) { const before = selection.getRangeAt(0).cloneRange(); before.selectNodeContents(root.current); before.setEnd(selection.anchorNode!, selection.anchorOffset); caret = before.toString().length }
     const next = read(), segments: NonNullable<PromptDocument['segments']> = []; let changed = false
-    for (const segment of next.segments || []) {
+    const inputSegments = next.segments || []
+    let textRun = '', offset = 0, nameRanges: [number, number][] = []
+    for (const [index, segment] of inputSegments.entries()) {
       if (segment.kind !== 'text') { segments.push(segment); continue }
+      // 连续文字可分布在多个 DOM 节点中；只合并读取，不重建片段或跨过结构化引用。
+      if (!index || inputSegments[index - 1].kind !== 'text') {
+        textRun = ''; offset = 0; nameRanges = []
+        for (const following of inputSegments.slice(index)) {
+          if (following.kind !== 'text') break
+          textRun += following.text || ''
+        }
+        for (const item of currentCandidates) {
+          const name = item.displayLabel
+          if (!name || name === item.token) continue
+          for (let start = textRun.indexOf('@'); start >= 0; start = textRun.indexOf('@', start + 1)) {
+            const remaining = textRun.slice(start)
+            if (remaining.startsWith(name)) nameRanges.push([start, start + name.length])
+            else if (name.startsWith(remaining) && !/^@(?:文本|图片|视频|音频)\d+\s*$/.test(remaining)) nameRanges.push([start, textRun.length])
+          }
+        }
+      }
       const text = segment.text || '', expression = /(?<!\\)@(?:文本|图片|视频|音频)\d+(?=$|[\s,;:()，。；：、（）!?！？])/g
       let start = 0
       for (const match of text.matchAll(expression)) {
-        // 粘贴完整名称标签只保留文字，不将编号式名称的前缀误解释成实际编号。
-        if (currentCandidates.some(item => item.displayLabel && item.displayLabel !== item.token && text.slice(match.index!).startsWith(item.displayLabel))) continue
+        // 全角限定括号属于名称标签语法；即使当前候选中没有该名称，也不解释其编号前缀。
+        const position = offset + match.index!
+        if (textRun[position + match[0].length] === '（' || nameRanges.some(([from, to]) => position >= from && position < to)) continue
         const candidate = currentCandidates.find(item => item.token === match[0] && item.available && !item.disabledReason)
         if (!candidate) continue
         if (match.index! > start) segments.push({ ...segment, id: start ? crypto.randomUUID() : segment.id, text: text.slice(start, match.index) })
         segments.push({ id: crypto.randomUUID(), kind: 'reference', source: candidate.source }); start = match.index! + match[0].length; changed = true
       }
       if (start < text.length) segments.push({ ...segment, id: start ? crypto.randomUUID() : segment.id, text: text.slice(start) })
+      offset += text.length
     }
     // 仅解释本地显式指令，连续结构化引用构成参数；遇到正文结束。
     if (finalize) {

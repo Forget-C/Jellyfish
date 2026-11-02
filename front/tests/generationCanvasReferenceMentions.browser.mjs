@@ -263,6 +263,86 @@ try {
     assert.equal(await f.input.locator('.generation-prompt-token').innerText(),'@'+name)
     assert.equal(await f.input.evaluate(element=>element.scrollWidth<=element.clientWidth+1),true,'chip must not widen the text editor')
   })
+  const paste=async(input,text,payload)=>input.evaluate((element,{text,payload})=>{
+    element.focus();const selection=getSelection(),range=document.createRange();range.selectNodeContents(element);range.collapse(false);selection.removeAllRanges();selection.addRange(range)
+    const clipboardData=new DataTransfer();clipboardData.setData('text/plain',text)
+    if(payload)clipboardData.setData('application/x-jellyfish-prompt+json',JSON.stringify(payload))
+    element.dispatchEvent(new ClipboardEvent('paste',{bubbles:true,clipboardData}))
+  },{text,payload})
+  await probe('plain pasted names containing canonical numbers never adopt the numbered image',async()=>{
+    const f=await fixture('名称内含编号',{refs:[{id:'ref',type:'reference.character',name:'背景 @图片2',angle:'正面',image_binding:{file_id:files[0]}}]})
+    const literal='前缀 @背景 @图片2 后缀'
+    await paste(f.input,literal);await f.input.blur()
+    assert.equal(await f.input.locator('.generation-prompt-token').count(),0)
+    await saved(async()=>{const model=(await f.read()).document.cards.find(c=>c.id==='model');return !model.input_bindings.length&&model.prompt.segments.every(s=>s.kind==='text')&&model.prompt.segments.map(s=>s.text).join('')===literal})
+    await page.reload();await f.card.press('Enter');await f.input.waitFor()
+    assert.equal(await f.input.innerText(),literal);assert.equal(await f.input.locator('.generation-prompt-token').count(),0)
+  })
+  await probe('qualified names from other models stay literal while independent numbers still bind',async()=>{
+    const f=await fixture('未关联限定名称'),literal='@图片2（人物·正面）'
+    await paste(f.input,literal);await f.input.blur()
+    assert.equal(await f.input.locator('.generation-prompt-token').count(),0)
+    await saved(async()=>{const model=(await f.read()).document.cards.find(c=>c.id==='model');return !model.input_bindings.length&&model.prompt.segments.map(s=>s.text||'').join('')===literal})
+    await f.input.fill('');await f.input.pressSequentially(literal+' ',{delay:1})
+    assert.equal(await f.input.locator('.generation-prompt-token').count(),0)
+    await f.input.fill('');await paste(f.input,'独立 @图片2 (说明)');await f.input.blur()
+    await saved(async()=>(await f.read()).document.cards.find(c=>c.id==='model').input_bindings?.[0]?.source.card_id==='plain')
+    assert.equal(await f.input.locator('.generation-prompt-token').innerText(),'@图片2')
+  })
+  await probe('typing and split-node paste preserve names containing numbered text',async()=>{
+    const f=await fixture('名称连续输入',{refs:[{id:'ref',type:'reference.character',name:'背景 @图片2 补充',angle:'正面',image_binding:{file_id:files[0]}}]})
+    await f.input.pressSequentially('@背景 @图片2 补充 ',{delay:1})
+    assert.equal(await f.input.locator('.generation-prompt-token').count(),0)
+    await f.input.fill('');await f.input.pressSequentially('@背景 ',{delay:1});await paste(f.input,'@图片2 补充');await f.input.blur()
+    assert.equal(await f.input.locator('.generation-prompt-token').count(),0)
+    await saved(async()=>{const model=(await f.read()).document.cards.find(c=>c.id==='model');return !model.input_bindings.length&&model.prompt.segments.map(s=>s.text||'').join('')==='@背景 @图片2 补充'})
+    await f.input.press('End');await f.input.pressSequentially('，独立 @图片2 ',{delay:1});await f.input.blur()
+    assert.equal(await f.input.locator('.generation-prompt-token').count(),1)
+    await saved(async()=>(await f.read()).document.cards.find(c=>c.id==='model').input_bindings?.[0]?.source.card_id==='plain')
+  })
+  await probe('real cross-canvas copy keeps foreign identity without borrowing local names or disambiguation',async()=>{
+    const copy=async input=>input.evaluate(element=>{const selection=getSelection(),range=document.createRange();range.selectNodeContents(element);selection.removeAllRanges();selection.addRange(range);const clipboardData=new DataTransfer();element.dispatchEvent(new ClipboardEvent('copy',{bubbles:true,clipboardData}));return {text:clipboardData.getData('text/plain'),payload:JSON.parse(clipboardData.getData('application/x-jellyfish-prompt+json'))}})
+    const origin=await fixture('原画布李四',{refs:[{id:'ref',type:'reference.character',name:'李四',angle:'正面',image_binding:{file_id:files[0]}}]})
+    await origin.input.fill('@李');await origin.input.press('Enter')
+    const copied=await copy(origin.input);assert.equal(copied.text,'@李四')
+    const f=await fixture('目标画布张三');await paste(f.input,copied.text,copied.payload)
+    await saved(async()=>await f.input.locator('.generation-prompt-token').innerText()!=='@李四')
+    assert.equal(await f.input.locator('.generation-prompt-token').innerText(),'@缺失(ref:1)')
+    assert.deepEqual(await f.editor.locator('.generation-material-reference > small').allTextContents(),['@张三','@图片2','@缺失(ref:1)'])
+    const foreign=f.editor.locator('.generation-material-reference').filter({hasText:'@缺失(ref:1)'})
+    assert.doesNotMatch(await foreign.getAttribute('aria-label'),/张三/)
+    assert.match(await f.editor.getByRole('alert').last().innerText(),/来源属于其他画布/)
+    assert.deepEqual((await copy(f.input)).payload.segments[0].source,copied.payload.segments[0].source)
+    await f.input.fill('');await f.input.fill('@张');await f.input.press('Enter')
+    await saved(async()=>{const bindings=(await f.read()).document.cards.find(c=>c.id==='model').input_bindings;return bindings.length===1&&bindings[0].source.canvas_id===f.canvas.id&&bindings[0].source.card_id==='ref'})
+    await page.reload();await f.card.press('Enter');await f.input.waitFor()
+    assert.equal(await f.input.locator('.generation-prompt-token').innerText(),'@张三')
+  })
+  await probe('association hover exposes complete disambiguation for truncated long names at desktop and narrow widths',async()=>{
+    const name='同名参考卡可读性测试',f=await fixture('同名长名称悬停',{refs:[{id:'front',type:'reference.character',name,angle:'正面',image_binding:{file_id:files[0]}},{id:'side',type:'reference.character',name,angle:'侧面',image_binding:{file_id:files[0]}}]})
+    const revision=(await f.read()).revision
+    for(const width of [1920,390]){
+      await page.setViewportSize({width,height:1000})
+      for(const label of ['@同名参考卡可读性测试（正面）','@同名参考卡可读性测试（侧面）']){
+        const button=f.editor.getByRole('button',{name:`${name} ${label} · 候选`,exact:true})
+        await button.hover();assert.equal(await button.getAttribute('title'),label)
+        assert.equal(await button.locator('small').evaluate(element=>element.scrollWidth>element.clientWidth),true)
+      }
+      assert.equal(await f.editor.getByTitle('图片内容卡',{exact:true}).count(),1,'ordinary media keeps its existing name tooltip')
+    }
+    assert.equal((await f.read()).revision,revision,'viewing full display labels must not save canvas content')
+  })
+  await probe('bare canonical numbers retain priority over complete and unfinished reserved names',async()=>{
+    for(const name of ['图片2','图片20','图片2 背景']){
+      const f=await fixture('裸编号优先 '+name,{refs:[{id:'ref',type:'reference.character',name,angle:'正面',image_binding:{file_id:files[0]}}]})
+      for(const literal of ['@图片2','@图片2 ']){
+        await f.input.fill('');await paste(f.input,literal);await f.input.blur()
+        assert.equal(await f.input.locator('.generation-prompt-token').count(),1)
+        assert.equal(await f.input.locator('.generation-prompt-token').innerText(),'@图片2')
+        await saved(async()=>{const bindings=(await f.read()).document.cards.find(c=>c.id==='model').input_bindings;return bindings.length===1&&bindings[0].source.card_id==='plain'})
+      }
+    }
+  })
   writeFileSync(join(output,'audit.json'),JSON.stringify({results},null,2))
   assert.equal(results.filter(result=>result.status==='failed').length,0,JSON.stringify(results))
 }finally{await cleanup()}

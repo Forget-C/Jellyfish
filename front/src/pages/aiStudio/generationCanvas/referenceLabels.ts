@@ -9,7 +9,7 @@ export function referenceLabels(document: CanvasDocument, sources: Pick<CanvasRe
   const labels = new Map(sources.map(output => [sourceKey(output.source), output.token || `@缺失(${output.source.card_id}:${output.source.position + 1})`]))
   const groups = new Map<string, { key: string; type: string; angle: string; token: string }[]>()
   // 尚未产出或暂不可用的关联参考同样占据名称；不为它们伪造媒体编号。
-  const associated = [...sources]
+  const associated = sources.filter(output => output.source.canvas_id === document.id)
   for (const edge of document.edges || []) {
     if (edge.target_card !== receiverId || associated.some(output => output.source.card_id === edge.source_card)) continue
     const source: OutputIdentity = { canvas_id: document.id, card_id: edge.source_card, port_id: edge.source_port, position: 0 }
@@ -19,7 +19,7 @@ export function referenceLabels(document: CanvasDocument, sources: Pick<CanvasRe
     const card = cards.get(output.source.card_id)
     if (!card || !referenceTypes[card.type || '']) continue
     const reference = card as NamedImageReferenceCard
-    const linked = reference.name_binding && cards.get(reference.name_binding.card_id)
+    const linked = reference.name_binding?.canvas_id === document.id ? cards.get(reference.name_binding.card_id) : undefined
     const name = ((linked && 'name' in linked ? linked.name : reference.name) || '').trim()
     if (!name) continue
     const key = sourceKey(output.source), group = groups.get(name) || []

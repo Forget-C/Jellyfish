@@ -69,12 +69,13 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
     if ('seed' in config && config.seed !== undefined && config.seed !== null && !capability.supports_seed) diagnostics.push('当前模型不支持已有随机种子，配置已保留')
   }
   const labelFor = (output: CanvasResolvedOutput) => {
-    const source = document.cards?.find(item => item.id === output.source.card_id)
+    const source = output.source.canvas_id === document.id ? document.cards?.find(item => item.id === output.source.card_id) : undefined
     const name = source && ('name' in source ? source.name : undefined)
     const named = output.payload?.kind === 'named_image' && 'objects' in output.payload ? output.payload.objects?.map(object => object.name).join('、') : ''
     return name || named || cardTitles[source?.type || ''] || output.token || '来源'
   }
   const candidateIssue = (output: CanvasResolvedOutput) => {
+    if (output.source.canvas_id !== document.id) return '来源属于其他画布'
     const source = document.cards?.find(item => item.id === output.source.card_id)
     if (!source || !(document.edges || []).some(edge => edge.target_card === card.id && edge.source_card === source.id && edge.source_port === output.source.port_id)) return '来源未连接'
     if (output.available === false) return '来源输出缺失'
@@ -151,7 +152,7 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
     {sources.map(output => {
       const selected = adopted.some(binding => sourceKey(binding.source) === sourceKey(output.source))
       const name = labelFor(output)
-      return <button type="button" key={sourceKey(output.source)} className="generation-material-reference" aria-label={`${name} ${displayLabel(output)} · ${selected ? '已采用' : '候选'}`} title={name} disabled={card.type === 'model.image' && output.modality === 'image' && (disabled || !!candidateIssue(output))}
+      return <button type="button" key={sourceKey(output.source)} className="generation-material-reference" aria-label={`${name} ${displayLabel(output)} · ${selected ? '已采用' : '候选'}`} title={displayLabel(output) !== output.token ? displayLabel(output) : name} disabled={card.type === 'model.image' && output.modality === 'image' && (disabled || !!candidateIssue(output))}
         onMouseDown={event => { if (card.type === 'model.image' && output.modality === 'image') event.preventDefault() }}
         onClick={() => { if (card.type === 'model.image' && output.modality === 'image') promptEditor.current?.insertReference(output.source); else inspectSource(output) }}>
         {output.file_id && output.modality === 'image' ? <img alt="图片预览" src={buildFileDownloadUrl(output.file_id)} /> : output.file_id && output.modality === 'video' ? <video src={buildFileDownloadUrl(output.file_id)} muted playsInline preload="metadata" /> : <span aria-hidden="true">{output.modality === 'image' ? <PictureOutlined /> : output.modality === 'video' ? <VideoCameraOutlined /> : output.modality === 'audio' ? <SoundOutlined /> : <FileTextOutlined />}</span>}
