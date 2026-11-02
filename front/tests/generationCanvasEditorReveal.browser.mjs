@@ -170,6 +170,32 @@ try {
     assert.ok(box.x>=16&&box.x+box.width<=1920-16,'new editor fits horizontal viewport')
     assert.ok(box.y>=80&&box.y+box.height<=(await page.locator('.generation-view-tools').boundingBox()).y-9,'new editor fits vertical viewport')
   },{}, {reducedMotion:'reduce'})
+  const p2TextModel=await request('/api/v1/llm/models',{id:'p2-text-model',name:'text-model',category:'text',provider_id:'canvas-image-provider'})
+  for(const motion of ['reduce','no-preference']) for(const kind of ['reference','text-model']) await probe(`${kind} ${motion} editor compressed close grow move reopen reveals its restored final height`,async({card,position,view,facts})=>{
+    await page.setViewportSize({width:1920,height:450});await card.press('Enter')
+    const panel=page.locator('.generation-card-editor:visible');await panel.waitFor();await delay(220)
+    facts.compressed=await panel.boundingBox();assert.ok(facts.compressed.height<320,'initial window really constrains editor')
+    await page.keyboard.press('Escape');await panel.waitFor({state:'hidden'})
+    await page.setViewportSize({width:1920,height:900});await card.focus()
+    for(let i=0;i<30&&(await card.boundingBox()).y<480;i++)await page.keyboard.press('Shift+ArrowDown')
+    const worldPosition=await position();await card.press('Enter');await panel.waitFor();await delay(220)
+    const a=await card.boundingBox(),b=await panel.boundingBox(),tools=await page.locator('.generation-view-tools').boundingBox()
+    facts.reopened=b;facts.tools=tools
+    assert.equal(b.height,320,'reopening restores the normal editor height')
+    assert.ok(b.y>=80&&b.y+b.height<=tools.y-9,'final restored editor fits the usable viewport')
+    assert.ok(Math.abs(b.x-a.x)<1&&Math.abs(b.y-a.y-a.height-16)<1,'reopened editor retains the left edge and gap')
+    assert.deepEqual(await position(),worldPosition,'revealing does not move card world coordinates')
+    if(kind==='text-model') {
+      assert.match(await panel.getByRole('textbox',{name:'模型正文',exact:true}).innerText(),/重开后保持预检可用/)
+      const precheck=panel.getByRole('button',{name:'预检运行',exact:true})
+      const action=await precheck.boundingBox();facts.precheck=action
+      assert.ok(action.y>=b.y&&action.y+action.height<=tools.y-9,'precheck action is fully inside the usable viewport')
+      await precheck.click()
+      const dialog=page.getByRole('dialog',{name:'运行预检',exact:true});await dialog.waitFor()
+      await dialog.getByRole('button',{name:'Close',exact:true}).click();await dialog.waitFor({state:'hidden'})
+    }
+    const revealed=await view();await delay(220);assert.equal(await view(),revealed,'final size does not trigger repeated fitting')
+  },kind==='text-model'?{cards:[{id:'place',type:'model.text',model_id:p2TextModel.id,prompt:{segments:[{id:'p2-prompt',kind:'text',text:'重开后保持预检可用'}]},config:{}}]}:{}, {reducedMotion:motion})
   writeFileSync(join(output,'audit.json'),JSON.stringify({results},null,2))
   assert.equal(results.filter(result=>result.status==='failed').length,0,JSON.stringify(results))
 }finally{await cleanup()}

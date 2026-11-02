@@ -71,7 +71,13 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
     const position = () => {
       const box = anchor.getBoundingClientRect(), bounds = available()
       const width = Math.min(focusLayout || material ? 700 : 680, Math.max(100, bounds.right - bounds.left))
-      const height = Math.min(node.getBoundingClientRect().height || anchoredHeightLimit, anchoredHeightLimit, Math.max(100, bounds.bottom - bounds.top))
+      const maxHeight = Math.max(100, bounds.bottom - bounds.top)
+      // 先应用本次尺寸再测量，避免重开时沿用上次受限高度，恢复高度后底部越界。
+      if (!modal) {
+        node.style.width = `${width}px`
+        node.style.maxHeight = `${Math.min(anchoredHeightLimit, maxHeight)}px`
+      }
+      const height = Math.min(node.getBoundingClientRect().height || anchoredHeightLimit, anchoredHeightLimit, maxHeight)
       const left = box.left, top = box.bottom + 16
       const shrinking = window.innerWidth < lastViewport.current.width || window.innerHeight < lastViewport.current.height
       if (!modal && (!previousOpen.current || lastModal.current || shrinking)) {
@@ -87,7 +93,7 @@ export function CanvasCardEditor({ title, status, open, onClose, trigger, anchor
       previousOpen.current = true
       lastModal.current = modal
       lastViewport.current = { width: window.innerWidth, height: window.innerHeight }
-      setPlacement({ left, top, width, maxHeight: Math.max(100, bounds.bottom - bounds.top) })
+      setPlacement({ left, top, width, maxHeight })
     }
 
     position()
