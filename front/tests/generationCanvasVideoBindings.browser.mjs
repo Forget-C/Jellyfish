@@ -130,5 +130,10 @@ try {
   assert.equal(subjectPreview.video_media.subjects[0].media[0].media_kind, 'video')
   assert.equal((await (await fetch(`${api}/test/video-controls`)).json()).calls.filter(call => call.method === 'POST').length, 1, 'adoption does not run upstream or downstream')
   await page.screenshot({ path: join(output, 'subject-video-adoption.png'), fullPage: true })
+  await page.getByRole('button', { name: '预检运行', exact: true }).click()
+  const mapping = page.getByRole('dialog', { name: '运行预检', exact: true }).getByLabel('引用与实际媒体映射', { exact: true })
+  await mapping.waitFor()
+  assert.match(await mapping.textContent(), /@视频1 → video 1/)
+  assert.doesNotMatch(await mapping.textContent(), /image 1/)
   console.log(`video binding adoption passed: ${output}`)
 } finally { await cleanup() }

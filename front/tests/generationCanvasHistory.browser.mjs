@@ -89,7 +89,7 @@ try {
   await control({ expire_events: true })
   blockedReconnect = false
   await page.unroute(`**/generation-canvases/canvas-project/${canvas.id}/events/connection`)
-  await card.getByRole('status').filter({ hasText: '已完成' }).waitFor()
+  await card.getByRole('region', { name: '本次运行', exact: true }).getByRole('status').filter({ hasText: '已完成' }).waitFor()
   await waitText(card.getByRole('region', { name: '运行正文', exact: true }), '第一段第二段第三段')
   assert.equal((await control()).calls.length, 1)
   assert.ok((await control()).stream_connections >= 2)
@@ -165,6 +165,8 @@ try {
   // Removed editable source cards do not remove history or the task's historical target.
   await openSummaryMenu(sourceSummary)
   await sourceSummary.getByRole('button', { name: '删除卡片', exact: true }).press('Enter')
+  await page.getByRole('button', { name: '确认删除', exact: true }).click()
+  await sourceSummary.waitFor({ state: 'detached' })
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
   await page.getByRole('status').filter({ hasText: '已保存' }).waitFor()
   assert.equal(await sourceSummary.count(), 0)

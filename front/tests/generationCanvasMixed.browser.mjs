@@ -67,7 +67,7 @@ try {
   const open = id => openCanvasCard(page, id)
   await open('consumer')
   await card.getByRole('button', { name: '采用 @文本1', exact: true }).click()
-  await card.getByRole('button', { name: '采用 @图片1', exact: true }).click()
+  await card.getByRole('button', { name: '采用 @小雪', exact: true }).click()
   await card.getByRole('button', { name: '预检运行', exact: true }).click()
   const preview = page.getByRole('region', { name: '运行预检', exact: true })
   await preview.waitFor()

@@ -76,7 +76,7 @@
 .generation-prompt-candidate-preview { display: grid; place-items: center; flex: 0 0 32px; width: 32px; height: 32px; overflow: hidden; border-radius: 4px; background: var(--wb-inset); font-size: 20px; }
 .generation-prompt-candidate-preview img { width: 100%; height: 100%; object-fit: contain; }
 .generation-prompt-candidate-text { display: flex; align-items: baseline; gap: 12px; flex: 1; min-width: 0; }
-.generation-prompt-candidate-text strong { flex: none; font-size: 13px; }
+.generation-prompt-candidate-text strong { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .generation-prompt-candidate-text small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .generation-prompt-candidates > button[aria-selected="true"], .generation-prompt-candidates > button:hover:not(:disabled) { background: var(--wb-selected); }
 .generation-prompt-popup .ant-popover-inner { padding: 4px; background: var(--wb-raised); border: 1px solid var(--wb-border); }
@@ -87,3 +87,6 @@
  .generation-prompt-candidate-text { flex-direction: column; gap: 0; }
  .generation-prompt-candidate-text small { max-width: 100%; }
 }
+
+.generation-prompt-option { max-width: 100%; overflow-wrap: anywhere; }
+.generation-material-prompt .generation-prompt-token { max-width: calc(100% - 4px); box-sizing: border-box; }

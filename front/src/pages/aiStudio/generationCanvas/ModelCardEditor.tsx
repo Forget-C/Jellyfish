@@ -14,6 +14,7 @@ import { MediaResultsPreview } from './MediaResultsPreview'
 import { ImageModelParameters, VideoModelParameters } from './ModelParameters'
 import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 import { sourceKey } from './promptRules'
+import { referenceLabels } from './referenceLabels'
 import { WorkbenchButton, WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
 import { activeNode, canvasNodeStatusLabels } from './useGenerationCanvasRuntime'
 import { useEffect, useRef, useState } from 'react'
@@ -86,6 +87,8 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
   // 保存刷新期间仍展示已采用但暂未解析的来源，不将缺失来源误报为新候选。
   const sources: CanvasResolvedOutput[] = [...resolved.candidates]
   for (const binding of adopted) if (!sources.some(output => sourceKey(output.source) === sourceKey(binding.source))) sources.push({ source: binding.source, modality: 'text', available: false })
+  const labels = referenceLabels(document, sources, card.id)
+  const displayLabel = (output: CanvasResolvedOutput) => labels.get(sourceKey(output.source)) || output.token || '来源'
   const inspectSource = (output: CanvasResolvedOutput) => {
     if (!management.current) return
     management.current.open = true
@@ -107,21 +110,21 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
         const binding = bindings.find(value => sourceKey(value.source) === sourceKey(output.source))
         const index = binding ? bindings.indexOf(binding) : -1
         return <div key={sourceKey(output.source)} data-reference-source={sourceKey(output.source)}>
-          <strong>{output.token} · {binding ? '已采用' : '候选'}</strong>
+          <strong>{displayLabel(output)} · {binding ? '已采用' : '候选'}</strong>
           {output.available === false ? <small>来源输出缺失</small> : output.modality === 'text'
             ? <CanvasTextPreview text={output.text || ''} label="已保存来源" /> : <small>{output.modality} · {output.file_id}</small>}
-          <NamedImageSummary output={output} />
+          <NamedImageSummary output={output} displayLabel={displayLabel(output)} />
           <PhotographyInputScope card={card} output={output} binding={binding} onChange={onChange} disabled={disabled} />
           {output.basis_current === false && <small>依据已变，需重新生成来源</small>}
-          {card.type === 'model.image' && output.modality === 'image' && output.available !== false && output.file_id && <details><summary>预览 {output.token}</summary><MediaPreview fileId={output.file_id} type="image" /></details>}
+          {card.type === 'model.image' && output.modality === 'image' && output.available !== false && output.file_id && <details><summary>预览 {displayLabel(output)}</summary><MediaPreview fileId={output.file_id} type="image" /></details>}
           {card.type !== 'model.video' && ['text', 'image'].includes(output.modality) && <Space wrap>
             <WorkbenchButton disabled={disabled || !binding && (resolved.loading || output.available === false || !capability?.input_ports?.includes(output.modality))}
               onClick={() => onChange(binding ? withoutInputBinding(card, binding.id) : { ...card, input_bindings: [...bindings, { id: crypto.randomUUID(), input_port: output.modality, source: output.source }] })}>
-              {`${binding ? '取消采用' : '采用'} ${output.token}`}
+              {`${binding ? '取消采用' : '采用'} ${displayLabel(output)}`}
             </WorkbenchButton>
             {binding && <><span>采用顺序 {index + 1}</span>
-              <WorkbenchButton aria-label={`前移 ${output.token}`} disabled={disabled || index === 0} onClick={() => move(binding.id, -1)}>前移</WorkbenchButton>
-              <WorkbenchButton aria-label={`后移 ${output.token}`} disabled={disabled || index === bindings.length - 1} onClick={() => move(binding.id, 1)}>后移</WorkbenchButton></>}
+              <WorkbenchButton aria-label={`前移 ${displayLabel(output)}`} disabled={disabled || index === 0} onClick={() => move(binding.id, -1)}>前移</WorkbenchButton>
+              <WorkbenchButton aria-label={`后移 ${displayLabel(output)}`} disabled={disabled || index === bindings.length - 1} onClick={() => move(binding.id, 1)}>后移</WorkbenchButton></>}
           </Space>}
         </div>
       })}
@@ -129,7 +132,7 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
         message={`${diagnostic.code}: ${diagnostic.message}`} />)}
     </section>
     {card.type !== 'model.image' && resolved.candidates.map(output => <PhotographyInputScope key={sourceKey(output.source)} card={card} output={output} binding={bindings.find(value => sourceKey(value.source) === sourceKey(output.source))} onChange={onChange} disabled={disabled} />)}
-    {card.type === 'model.video' && <VideoInputBindings card={card as VideoModelCard} candidates={resolved.candidates} loading={resolved.loading} capability={capability} disabled={disabled} onChange={onChange} />}
+    {card.type === 'model.video' && <VideoInputBindings labels={labels} card={card as VideoModelCard} candidates={resolved.candidates} loading={resolved.loading} capability={capability} disabled={disabled} onChange={onChange} />}
     <details className="generation-material-results"><summary>运行状态与正式输出</summary>
 
     {node && <section aria-label="本次运行" data-run-id={node.run_id}>
@@ -148,11 +151,11 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
     {sources.map(output => {
       const selected = adopted.some(binding => sourceKey(binding.source) === sourceKey(output.source))
       const name = labelFor(output)
-      return <button type="button" key={sourceKey(output.source)} className="generation-material-reference" aria-label={`${name} ${output.token || ''} · ${selected ? '已采用' : '候选'}`} title={name} disabled={card.type === 'model.image' && output.modality === 'image' && (disabled || !!candidateIssue(output))}
+      return <button type="button" key={sourceKey(output.source)} className="generation-material-reference" aria-label={`${name} ${displayLabel(output)} · ${selected ? '已采用' : '候选'}`} title={name} disabled={card.type === 'model.image' && output.modality === 'image' && (disabled || !!candidateIssue(output))}
         onMouseDown={event => { if (card.type === 'model.image' && output.modality === 'image') event.preventDefault() }}
         onClick={() => { if (card.type === 'model.image' && output.modality === 'image') promptEditor.current?.insertReference(output.source); else inspectSource(output) }}>
         {output.file_id && output.modality === 'image' ? <img alt="图片预览" src={buildFileDownloadUrl(output.file_id)} /> : output.file_id && output.modality === 'video' ? <video src={buildFileDownloadUrl(output.file_id)} muted playsInline preload="metadata" /> : <span aria-hidden="true">{output.modality === 'image' ? <PictureOutlined /> : output.modality === 'video' ? <VideoCameraOutlined /> : output.modality === 'audio' ? <SoundOutlined /> : <FileTextOutlined />}</span>}
-        <small>{output.token || name}</small>
+        <small>{displayLabel(output)}</small>
         {selected && <CheckCircleFilled style={{ color: token.colorSuccess }} className="generation-material-adopted" aria-label="已采用" />}
         {(output.available === false || output.basis_current === false) && <ExclamationCircleOutlined style={{ color: token.colorWarning }} className="generation-material-reference-issue" aria-label={output.available === false ? '来源输出缺失' : '依据已变'} />}
       </button>
@@ -168,7 +171,7 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
 
     <div className="generation-material-prompt">
       {resolved.error && <Alert type="warning" message={resolved.error} />}
-      <PromptEditor referenceActionsRef={promptEditor} compact onSubmit={submit} submitDisabled={submitDisabled} toolsHost={referenceTools} document={document} card={card} value={editorPrompt(card)} candidates={resolved.candidates.map(item => ({ source: item.source, token: item.token || '', available: item.available !== false, ...(card.type === 'model.image' ? { name: labelFor(item), fileId: item.modality === 'image' ? item.file_id : undefined, adopted: adopted.some(binding => sourceKey(binding.source) === sourceKey(item.source)), disabledReason: candidateIssue(item) } : {}) }))} disabled={disabled} onChange={prompt => onChange(withEditorPrompt(card, prompt))} />
+      <PromptEditor referenceActionsRef={promptEditor} compact onSubmit={submit} submitDisabled={submitDisabled} toolsHost={referenceTools} document={document} card={card} value={editorPrompt(card)} candidates={sources.map(item => ({ source: item.source, token: item.token || '', displayLabel: displayLabel(item), available: item.available !== false, ...(card.type === 'model.image' ? { name: labelFor(item), fileId: item.modality === 'image' ? item.file_id : undefined, adopted: adopted.some(binding => sourceKey(binding.source) === sourceKey(item.source)), disabledReason: candidateIssue(item) } : {}) }))} disabled={disabled} onChange={prompt => onChange(withEditorPrompt(card, prompt))} />
     </div>
     {(disabled || busy || runDisabled) && <small role="status">{busy ? '当前模型运行中' : '当前不可提交，请核对保存与运行状态'}</small>}
   </CardComposer>

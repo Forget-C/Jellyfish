@@ -62,8 +62,7 @@ try {
   })
   await page.getByRole('button', { name: '保存画布', exact: true }).click()
   await page.getByText(/TEST_SAVE_FAILURE/).waitFor()
-  await detail.getByRole('button', { name: '添加媒体', exact: true }).click()
-  await page.getByRole('menuitem', { name: '从项目文件选择', exact: true }).click()
+  await detail.getByRole('button', { name: '选择素材', exact: true }).click()
   await page.getByRole('button', { name: '选用 first', exact: true }).click()
   assert.equal(await detail.locator('img[alt="图片预览"]').getAttribute('src'), original)
   await page.unroute('**/api/v1/studio/generation-canvases/**')
@@ -81,6 +80,8 @@ try {
   await reached
   await openSummaryMenu(card)
   await card.getByRole('button', { name: '删除卡片', exact: true }).press('Enter')
+  await page.getByRole('button', { name: '确认删除', exact: true }).click()
+  await card.waitFor({ state: 'detached' })
   release()
   await delay(250)
   assert.equal(await page.locator('[data-card-id]').count(), 0, 'late upload cannot revive removed card')

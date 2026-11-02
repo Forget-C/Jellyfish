@@ -35,21 +35,30 @@ function contentKey(document: PromptDocument) {
 export type PromptEditorHandle = { insertReference: (source: OutputIdentity) => void }
 
 /** DOM 仅作为输入表面；持久值是有稳定身份的片段，组合输入期间不重建 DOM。 */
-export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsHost, document, card, value, onChange, disabled, candidates = [], referenceActionsRef }: { referenceActionsRef?: Ref<PromptEditorHandle>; compact?: boolean; onSubmit?: () => void; submitDisabled?: boolean; toolsHost?: HTMLElement | null; document: CanvasDocument; card: GenerationCard; value: PromptDocument; onChange: (value: PromptDocument) => void; disabled?: boolean; candidates?: Candidate[] }) {
+export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsHost, document, card, value, onChange, disabled, candidates: incomingCandidates = [], referenceActionsRef }: { referenceActionsRef?: Ref<PromptEditorHandle>; compact?: boolean; onSubmit?: () => void; submitDisabled?: boolean; toolsHost?: HTMLElement | null; document: CanvasDocument; card: GenerationCard; value: PromptDocument; onChange: (value: PromptDocument) => void; disabled?: boolean; candidates?: Candidate[] }) {
   const root = useRef<HTMLDivElement>(null), composing = useRef(false), local = useRef(value), renderedContent = useRef('')
-  const [category, setCategory] = useState('text'), [query, setQuery] = useState(''), [activeIndex, setActiveIndex] = useState(0)
+  const [category, setCategory] = useState('text'), [query, setQuery] = useState(''), [activeKey, setActiveKey] = useState<string | null>()
+  const stableCandidates = useRef(incomingCandidates)
+  if (!composing.current) stableCandidates.current = incomingCandidates
+  const candidates = stableCandidates.current
+  const [, refreshLabels] = useState(0)
   local.current = value
   const imageMentions = card.type === 'model.image'
   const [popupAnchor, setPopupAnchor] = useState({ left: 0, top: 0, height: 24, width: 320 })
   const listId = useId(), list = useRef<HTMLDivElement>(null), savedRange = useRef<Range>()
   const isMac = /Mac|iPhone|iPad/.test(navigator.platform)
   const placeholder = `描述你想生成的内容，关联参考用于补充上下文。回车发送，${isMac ? 'Command' : 'Ctrl'}＋回车换行`
-  const matches = candidates.filter(item => imageMentions
-    ? query === '@' || item.token.startsWith(query) || item.name?.toLocaleLowerCase().includes(query.slice(1).toLocaleLowerCase())
-    : item.available && item.source.port_id === category && (query === '@' || item.token.startsWith(query)))
+  const matching = (text: string) => candidates.filter(item => (imageMentions || item.available && (item.source.port_id === category || !!item.displayLabel && item.displayLabel !== item.token)) &&
+    (text === '@' || item.token.startsWith(text) || item.displayLabel?.toLocaleLowerCase().includes(text.slice(1).toLocaleLowerCase()) || imageMentions && item.name?.toLocaleLowerCase().includes(text.slice(1).toLocaleLowerCase())))
+  const matches = matching(query).sort((left, right) => Number(right.token === query) - Number(left.token === query))
   const selectable = matches.filter(item => item.available && !item.disabledReason)
-  const active = selectable[activeIndex % Math.max(1, selectable.length)]
-  useLayoutEffect(() => { if (query) list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' }) }, [query, activeIndex])
+  const active = activeKey === undefined ? selectable[0] : selectable.find(item => sourceKey(item.source) === activeKey)
+  useLayoutEffect(() => {
+    if (!query) return
+    if (activeKey === undefined) setActiveKey(selectable[0] ? sourceKey(selectable[0].source) : null)
+    else if (activeKey !== null && !active) setActiveKey(null)
+    list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' })
+  }, [query, activeKey, selectable, active])
   const positionPopup = () => {
     if (!root.current) return
     const field = root.current.getBoundingClientRect(), selection = window.getSelection()
@@ -77,12 +86,15 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
     if (composing.current) return
     const text = textBeforeCaret()
     const nextQuery = text.match(/(?<!\\)@[^@\s,;:()，。；：、（）!?！？]*$/)?.[0] || ''
-    setQuery(nextQuery); setActiveIndex(0)
+    setQuery(nextQuery); if (nextQuery !== query) setActiveKey(undefined)
     if (imageMentions && nextQuery) positionPopup()
     const label = nextQuery.match(/^@(文本|图片|视频|音频)/)?.[1]
     if (label) setCategory(({ 文本: 'text', 图片: 'image', 视频: 'video', 音频: 'audio' } as Record<string, string>)[label])
   }
-  const label = (reference: PromptReference) => candidates.find(item => sourceKey(item.source) === sourceKey(reference.source))?.token || `@缺失(${reference.source.card_id}:${reference.source.position + 1})`
+  const label = (reference: PromptReference) => {
+    const candidate = candidates.find(item => sourceKey(item.source) === sourceKey(reference.source))
+    return candidate?.displayLabel || candidate?.token || `@缺失(${reference.source.card_id}:${reference.source.position + 1})`
+  }
   const draw = (next: PromptDocument) => {
     if (!root.current) return
     root.current.replaceChildren(...(next.segments || []).map(segment => {
@@ -96,7 +108,8 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
     renderedContent.current = contentKey(next)
   }
   useLayoutEffect(() => {
-    if (!composing.current && contentKey(value) !== renderedContent.current) draw(value)
+    if (composing.current) return
+    if (contentKey(value) !== renderedContent.current) draw(value)
     const segments = new Map((value.segments || []).map(segment => [segment.id, segment]))
     root.current?.querySelectorAll<HTMLElement>('[data-segment]').forEach(node => {
       const previous = JSON.parse(node.dataset.segment!)
@@ -135,7 +148,8 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
     if (changed) onChange(next)
     if (redraw) draw(next)
   }
-  const confirm = (finalize = false) => {
+  // 组合输入结束时用最新候选确认；冻结快照仅用于输入期间的展示。
+  const confirm = (finalize = false, currentCandidates = candidates) => {
     if (composing.current) return false
     const selection = window.getSelection()
     let caret: number | undefined
@@ -146,7 +160,9 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
       const text = segment.text || '', expression = /(?<!\\)@(?:文本|图片|视频|音频)\d+(?=$|[\s,;:()，。；：、（）!?！？])/g
       let start = 0
       for (const match of text.matchAll(expression)) {
-        const candidate = candidates.find(item => item.token === match[0] && item.available && !item.disabledReason)
+        // 粘贴完整名称标签只保留文字，不将编号式名称的前缀误解释成实际编号。
+        if (currentCandidates.some(item => item.displayLabel && item.displayLabel !== item.token && text.slice(match.index!).startsWith(item.displayLabel))) continue
+        const candidate = currentCandidates.find(item => item.token === match[0] && item.available && !item.disabledReason)
         if (!candidate) continue
         if (match.index! > start) segments.push({ ...segment, id: start ? crypto.randomUUID() : segment.id, text: text.slice(start, match.index) })
         segments.push({ id: crypto.randomUUID(), kind: 'reference', source: candidate.source }); start = match.index! + match[0].length; changed = true
@@ -229,12 +245,12 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
       {card.type === 'model.video' && <Select<string> disabled={disabled} aria-label="系统指令" placeholder="添加系统指令" value={undefined} options={['首帧参考', '尾帧参考', '关键帧参考', '主体参考'].map(command => ({ value: command, label: `/${command}` }))}
         onChange={command => { if (command) publish({ segments: [...(read().segments || []), { id: crypto.randomUUID(), kind: 'instruction', command, parameters: {}, references: [] }] }, true) }} />}
       <Select aria-label="引用分类" value={category} onChange={setCategory} options={Object.entries({ text: '文本', image: '图片', video: '视频', audio: '音频' }).map(([value, label]) => ({ value, label }))} />
-      {candidates.filter(item => item.source.port_id === category).map(item => <Button key={sourceKey(item.source)} size="small" disabled={disabled || !item.available || !!item.disabledReason} onClick={() => insert({ id: crypto.randomUUID(), kind: 'reference', source: item.source })}>{item.token}{!item.available && ' 缺失'}</Button>)}
+      {candidates.filter(item => item.source.port_id === category).map(item => <Button key={sourceKey(item.source)} size="small" disabled={disabled || !item.available || !!item.disabledReason} onClick={() => insert({ id: crypto.randomUUID(), kind: 'reference', source: item.source })}>{item.displayLabel || item.token}{!item.available && ' 缺失'}</Button>)}
       {query && <small role="status">匹配 {query}；完整代号确认后绑定</small>}
     </Space>
   const candidateList = query && <div ref={list} id={listId} role="listbox" aria-label="引用候选" className={imageMentions ? 'generation-prompt-candidates' : undefined} onMouseDown={event => event.preventDefault()}>
-      {matches.map((item, index) => <button type="button" id={`${listId}-${index}`} key={sourceKey(item.source)} role="option" aria-label={item.token} aria-description={imageMentions ? [item.name, item.disabledReason || (!item.available ? '来源输出缺失' : item.adopted ? '已采用' : '候选')].filter(Boolean).join(' · ') : undefined} aria-selected={item === active} disabled={disabled || !item.available || !!item.disabledReason} onClick={() => insert({ id: crypto.randomUUID(), kind: 'reference', source: item.source })}>
-        {imageMentions ? <><span className="generation-prompt-candidate-preview">{item.fileId ? <img alt="" src={buildFileDownloadUrl(item.fileId)} /> : item.source.port_id === 'image' ? <PictureOutlined /> : <FileTextOutlined />}</span><span className="generation-prompt-candidate-text"><strong>{item.token}</strong><small>{item.name}</small></span><small>{item.disabledReason || (!item.available ? '来源输出缺失' : item.adopted ? '已采用' : '候选')}</small></> : item.token}
+      {matches.map((item, index) => <button type="button" id={`${listId}-${index}`} key={sourceKey(item.source)} className="generation-prompt-option" role="option" aria-label={item.displayLabel || item.token} aria-description={imageMentions ? [item.name, item.disabledReason || (!item.available ? '来源输出缺失' : item.adopted ? '已采用' : '候选')].filter(Boolean).join(' · ') : undefined} aria-selected={item === active} disabled={disabled || !item.available || !!item.disabledReason} onClick={() => insert({ id: crypto.randomUUID(), kind: 'reference', source: item.source })}>
+        {imageMentions ? <><span className="generation-prompt-candidate-preview">{item.fileId ? <img alt="" src={buildFileDownloadUrl(item.fileId)} /> : item.source.port_id === 'image' ? <PictureOutlined /> : <FileTextOutlined />}</span><span className="generation-prompt-candidate-text"><strong title={item.displayLabel || item.token}>{item.displayLabel || item.token}</strong><small>{item.name}</small></span><small>{item.disabledReason || (!item.available ? '来源输出缺失' : item.adopted ? '已采用' : '候选')}</small></> : item.displayLabel || item.token}
       </button>)}
       {!matches.length && <small>{imageMentions ? '没有匹配候选，将保留为普通文本' : '没有匹配的实际输出；可切换引用分类'}</small>}
     </div>
@@ -244,7 +260,7 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
       <strong>/{instruction.command}</strong>
       {instruction.command === '主体参考' && <Input disabled={disabled} aria-label="主体名称" value={instruction.parameters?.name || ''} onChange={event => publish({ segments: (value.segments || []).map(segment => segment.id === instruction.id ? { ...instruction, parameters: { ...instruction.parameters, name: event.target.value } } : segment) }, true)} />}
       <Select<string[]> disabled={disabled} aria-label={`指令引用 ${instruction.command}`} mode="multiple" value={(instruction.references || []).map(reference => sourceKey(reference.source))}
-        options={candidates.filter(candidate => candidate.available).map(candidate => ({ value: sourceKey(candidate.source), label: candidate.token }))}
+        options={candidates.filter(candidate => candidate.available).map(candidate => ({ value: sourceKey(candidate.source), label: candidate.displayLabel || candidate.token }))}
         onChange={keys => publish({ segments: (value.segments || []).map(segment => segment.id === instruction.id ? { ...instruction, references: keys.map(key => instruction.references?.find(reference => sourceKey(reference.source) === key) || { id: crypto.randomUUID(), kind: 'reference', source: candidates.find(candidate => sourceKey(candidate.source) === key)!.source }) } : segment) }, true)} />
       <Button disabled={disabled} size="small" onClick={() => publish({ segments: (value.segments || []).filter(segment => segment.id !== instruction.id) }, true)}>删除指令</Button>
       {!instruction.references?.length && <small role="alert">指令缺少引用，可继续编辑保存</small>}
@@ -254,7 +270,7 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
       <span aria-hidden="true" style={{ position: 'fixed', pointerEvents: 'none', left: popupAnchor.left, top: popupAnchor.top, height: popupAnchor.height, width: 1 }} />
     </Popover>, window.document.body)}
     <div ref={root} role="textbox" aria-label="模型正文" aria-multiline="true" aria-autocomplete="list" aria-controls={query ? listId : undefined} aria-activedescendant={query && active ? `${listId}-${matches.indexOf(active)}` : undefined} contentEditable={!disabled} suppressContentEditableWarning className="generation-prompt-editor" aria-placeholder={compact ? placeholder : undefined} data-placeholder={placeholder} data-empty={!(value.segments || []).some(segment => segment.kind !== 'text' || segment.text?.trim())}
-      onCompositionStart={() => { composing.current = true }} onCompositionEnd={() => { composing.current = false; publish(read()); updateQuery(); if (/[\s,;:()，。；：、（）!?！？]$/.test(textBeforeCaret())) confirm() }}
+      onCompositionStart={() => { composing.current = true }} onCompositionEnd={() => { composing.current = false; publish(read()); refreshLabels(previous => previous + 1); updateQuery(); if (/[\s,;:()，。；：、（）!?！？]$/.test(textBeforeCaret())) confirm(false, incomingCandidates) }}
       onInput={() => {
         root.current?.querySelectorAll('[data-prompt-caret]').forEach(node => node.remove())
         const next = read(); publish(next)
@@ -265,7 +281,7 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
       onKeyDown={event => {
         if (composing.current || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return
         if (query && event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setQuery(''); return }
-        if (query && ['ArrowDown', 'ArrowUp'].includes(event.key)) { event.preventDefault(); setActiveIndex(previous => (previous + (event.key === 'ArrowDown' ? 1 : -1) + Math.max(1, selectable.length)) % Math.max(1, selectable.length)); return }
+        if (query && ['ArrowDown', 'ArrowUp'].includes(event.key)) { event.preventDefault(); const index = active ? selectable.indexOf(active) : event.key === 'ArrowDown' ? -1 : 0; const next = selectable[(index + (event.key === 'ArrowDown' ? 1 : -1) + Math.max(1, selectable.length)) % Math.max(1, selectable.length)]; setActiveKey(next ? sourceKey(next.source) : null); return }
         if (event.key === 'Enter' && (isMac ? event.metaKey : event.ctrlKey)) {
           event.preventDefault()
           const selection = window.getSelection(), range = selection?.rangeCount ? selection.getRangeAt(0) : undefined
@@ -285,7 +301,7 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
         if (event.key === 'Enter' && onSubmit && !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey) {
           event.preventDefault()
           if (event.repeat) return
-          if (query) { if (active) insert({ id: crypto.randomUUID(), kind: 'reference', source: active.source }); else { confirm(true); setQuery('') } return }
+          if (query) { if (active) insert({ id: crypto.randomUUID(), kind: 'reference', source: active.source }); return }
           // 引用／指令确认先消费回车；普通发送先同步最新正文，再由宿主保存并预检。
           let changed = false
           flushSync(() => { changed = confirm(true) })
@@ -293,6 +309,7 @@ export function PromptEditor({ compact = false, onSubmit, submitDisabled, toolsH
           else if (!submitDisabled) onSubmit()
           return
         }
+        if (query && event.key === 'Enter' && !active) { event.preventDefault(); return }
         if (['Enter', 'Tab'].includes(event.key)) {
           if (query && active) { event.preventDefault(); insert({ id: crypto.randomUUID(), kind: 'reference', source: active.source }); return }
           if (confirm(true)) { event.preventDefault(); setQuery('') }

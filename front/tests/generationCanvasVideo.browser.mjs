@@ -56,6 +56,11 @@ try {
   const preview = page.getByRole('region', { name: '运行预检', exact: true })
   const save = async () => { await page.getByRole('button', { name: '保存画布', exact: true }).click(); await page.getByRole('status').filter({ hasText: '已保存' }).waitFor(); return (await (await fetch(`${base}/${canvas.id}`)).json()).data.document.cards[0] }
   const closePreview = () => closePrecheck(page)
+  const clearInstructions = async () => {
+    const management = card.getByLabel('管理候选与采用', { exact: true })
+    if (await management.locator('..').getAttribute('open') !== null) await management.click()
+    while (await card.getByRole('button', { name: '删除指令', exact: true }).count()) await card.getByRole('button', { name: '删除指令', exact: true }).first().click()
+  }
   const check = async () => { await card.getByRole('button', { name: '预检运行', exact: true }).click(); await preview.waitFor() }
   await editor.pressSequentially('开头 @图片1 结尾', { delay: 1 })
   writeFileSync(join(output,'reference-caret-dom.txt'),await editor.innerText())
@@ -91,19 +96,19 @@ try {
   await preview.getByRole('alert').filter({ hasText: 'INSTRUCTION_PARAMETER_REQUIRED' }).first().waitFor()
   assert.deepEqual(persisted.prompt.segments.filter(segment => segment.kind === 'instruction').slice(4).map(item => item.command), instructions.map(item => item.command))
   await closePreview()
-  while (await card.getByRole('button', { name: '删除指令', exact: true }).count()) await card.getByRole('button', { name: '删除指令', exact: true }).first().click()
+  await clearInstructions()
   await editor.fill('/首帧参考 @图片1 /首帧参考 @图片2')
   await editor.press('Tab'); await check()
   await preview.getByRole('alert').filter({ hasText: 'INSTRUCTION_COUNT_EXCEEDED' }).waitFor()
   await closePreview()
-  while (await card.getByRole('button', { name: '删除指令', exact: true }).count()) await card.getByRole('button', { name: '删除指令', exact: true }).first().click()
+  await clearInstructions()
   await editor.fill('/首帧参考 @文本1 同行正文'); await editor.press('Tab'); await check()
   await preview.getByRole('alert').filter({ hasText: 'INSTRUCTION_REFERENCE_TYPE' }).getByRole('button', { name: '定位问题' }).click()
   await preview.waitFor({state:'hidden'})
   await card.locator('[data-segment-id]:focus').waitFor()
   assert.ok(await card.locator('[data-segment-id]:focus').count())
   // Actual subject modes through the public page; surrounding prose survives all cases.
-  while (await card.getByRole('button', { name: '删除指令', exact: true }).count()) await card.getByRole('button', { name: '删除指令', exact: true }).first().click()
+  await clearInstructions()
   await card.getByRole('combobox', { name: '选择模型', exact: true }).locator('..').locator('..').click()
   await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText('viduq2-pro', { exact: true }).click()
   for (const [body, expected] of [
@@ -112,7 +117,7 @@ try {
     ['让 @图片1 中的人物转身 /主体参考 "张三" @图片1 /主体参考 "李四" @图片1', '让 @media1 中的人物转身  '],
   ]) {
     await closePreview()
-    while (await card.getByRole('button', { name: '删除指令', exact: true }).count()) await card.getByRole('button', { name: '删除指令', exact: true }).first().click()
+    await clearInstructions()
     await editor.fill(body); await editor.press('Tab'); await check()
     assert.equal(await preview.getByRole('region', { name: '实际提交文本', exact: true }).textContent(), expected)
     assert.equal(await preview.getByRole('button', { name: '确认执行', exact: true }).isDisabled(), false)
@@ -121,6 +126,7 @@ try {
   await preview.getByRole('button', { name: '确认执行', exact: true }).click()
   const run = (await (await accepted).json()).data
   await fetch(`${api}/test/video-controls`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ release: true }) })
+  await closePreview(); await openModelInspection(page)
   const formal = card.getByRole('region', { name: '当前正式输出', exact: true }), video = formal.locator('video')
   await video.waitFor({ timeout: 20000 })
   await video.evaluate(async element => { element.muted = true; await element.play() })

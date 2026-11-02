@@ -8,8 +8,8 @@ import { sourceKey } from './promptRules'
 import { useGraphRules } from './CanvasCatalogContext'
 
 /** 直接候选只在明确选择用途和主体后采用；所有实际顺序及分组保存在绑定中。 */
-export function VideoInputBindings({ card, candidates, capability, loading, disabled, onChange }: {
-  card: VideoModelCard; candidates: CanvasResolvedOutput[]; capability?: CanvasModelCapability; loading?: boolean; disabled?: boolean; onChange: (card: VideoModelCard) => void
+export function VideoInputBindings({ card, candidates, labels, capability, loading, disabled, onChange }: {
+  card: VideoModelCard; candidates: CanvasResolvedOutput[]; labels: Map<string, string>; capability?: CanvasModelCapability; loading?: boolean; disabled?: boolean; onChange: (card: VideoModelCard) => void
 }) {
   const { portLabels } = useGraphRules()
   const [names, setNames] = useState<Record<string, string>>({})
@@ -27,25 +27,26 @@ export function VideoInputBindings({ card, candidates, capability, loading, disa
     {!capability && <p>选择模型并加载能力后可采用输入</p>}
     {candidates.map(output => {
       const key = sourceKey(output.source)
+      const label = labels.get(key) || output.token
       const ports = output.modality === 'text' ? ['text'] : output.modality === 'image' ? ['first_frame', 'last_frame', 'key_frame', 'subject_image'] : output.modality === 'video' ? ['subject_video'] : []
       const supported = ports.filter(port => capability?.input_ports.includes(port))
       return <div key={key}>
-        <strong>{output.token} · {output.available ? '候选' : '来源输出缺失'}</strong>
-        <NamedImageSummary output={output} />
-        {supported.some(port => port.startsWith('subject_')) && <Input aria-label={`主体分组 ${output.token}`} placeholder="明确填写主体分组名称" value={names[key] || ''}
+        <strong>{label} · {output.available ? '候选' : '来源输出缺失'}</strong>
+        <NamedImageSummary output={output} displayLabel={label} />
+        {supported.some(port => port.startsWith('subject_')) && <Input aria-label={`主体分组 ${label}`} placeholder="明确填写主体分组名称" value={names[key] || ''}
           disabled={disabled} onChange={event => setNames({ ...names, [key]: event.target.value })} />}
         <Space wrap>{supported.map(port => {
           const subject_name = port.startsWith('subject_') ? (names[key] || '').trim() : undefined
           const selected = bindings.some(binding => sourceKey(binding.source) === key && binding.input_port === port && (binding.subject_name || '') === (subject_name || ''))
           return <WorkbenchButton key={port} size="small" disabled={disabled || loading || !output.available || selected || port.startsWith('subject_') && !subject_name}
-            onClick={() => change([...bindings, { id: crypto.randomUUID(), source: output.source, input_port: port, subject_name }])}>采用 {output.token} 为{portLabels[port]}</WorkbenchButton>
+            onClick={() => change([...bindings, { id: crypto.randomUUID(), source: output.source, input_port: port, subject_name }])}>采用 {label} 为{portLabels[port]}</WorkbenchButton>
         })}</Space>
         {!supported.length && <small>当前模型不支持此候选用途</small>}
       </div>
     })}
     {bindings.map((binding, index) => {
       const output = candidates.find(candidate => sourceKey(candidate.source) === sourceKey(binding.source))
-      const label = output?.token || binding.source.card_id
+      const label = labels.get(sourceKey(binding.source)) || output?.token || binding.source.card_id
       const move = (offset: number) => { const next = [...bindings]; [next[index], next[index + offset]] = [next[index + offset], next[index]]; change(next) }
       return <div key={binding.id} data-input-binding-id={binding.id} tabIndex={-1}>
         <strong>{portLabels[binding.input_port]} · {label}</strong>

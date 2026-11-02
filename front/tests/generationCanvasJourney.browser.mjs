@@ -118,7 +118,7 @@ try {
     const candidates=(await (await fetch(`${base}/${journeyId}/cards/${model}/outputs`)).json()).data.candidates
     const candidate=candidates.find(item=>item.source.card_id===sourceId)
     assert.ok(candidate)
-    await detail.getByRole('button',{name:`采用 ${candidate.token}`,exact:true}).click()
+    await detail.getByRole('button',{name:`采用 ${sourceId===reference?'@小雨':candidate.token}`,exact:true}).click()
     await poll(state=>state.document.cards.find(card=>card.id===model).input_bindings?.some(binding=>binding.source.card_id===sourceId))
   }
   await openCanvasManagement(page)

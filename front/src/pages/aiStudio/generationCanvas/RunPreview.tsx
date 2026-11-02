@@ -1,11 +1,15 @@
 import { Alert, Space } from 'antd'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
-import type { CanvasPrecheck } from '../../../services/generated'
+import type { CanvasDocument, CanvasPrecheck } from '../../../services/generated'
+import { referenceLabels } from './referenceLabels'
+import { sourceKey } from './promptRules'
 import { MediaPreview } from './MediaContentEditor'
 import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 
 /** Preview is bound to the current edit generation; diagnostics use stable targets. */
-export function RunPreview({ preview, submitting, disabled, onSubmit, onLocate }: { preview: CanvasPrecheck; submitting: boolean; disabled: boolean; onSubmit: () => void; onLocate?: (target: Record<string, unknown>) => void }) {
+export function RunPreview({ preview, canvas, submitting, disabled, onSubmit, onLocate }: { preview: CanvasPrecheck; canvas?: CanvasDocument; submitting: boolean; disabled: boolean; onSubmit: () => void; onLocate?: (target: Record<string, unknown>) => void }) {
+  const labels = canvas ? referenceLabels(canvas, preview.input.used || [], preview.card_id) : new Map<string, string>()
+  const mediaKinds = new Map((preview.input.used || []).map(output => [sourceKey(output.source), output.modality]))
   const awaitingUpstream = preview.input.used?.some(item => preview.execution_nodes.includes(item.source.card_id))
   const inputLabel = awaitingUpstream ? '受理时输入预览' : '实际提交文本'
   const locate = (target: Record<string, unknown>) => {
@@ -23,13 +27,14 @@ export function RunPreview({ preview, submitting, disabled, onSubmit, onLocate }
     <section aria-label={inputLabel}><CanvasTextPreview text={preview.input.text || ''} label={inputLabel} /></section>
     {!preview.input.video_media && !!preview.input.media?.length && <section aria-label="实际参考图片">
       {preview.input.media.filter(output => output.modality === 'image').map((output, index) => <div key={`${output.source.card_id}:${output.source.position}`}>
-        <p>参考图片 {index + 1} · {output.token} · 来源 {output.source.card_id} / 输出 {output.source.position + 1}</p>
+        <p>参考图片 {index + 1} · {labels.get(sourceKey(output.source)) || output.token} → image {index + 1} · 来源 {output.source.card_id} / 输出 {output.source.position + 1}</p>
         {output.file_id && <MediaPreview fileId={output.file_id} type="image" />}
       </div>)}
     </section>}
     <p>模型：{preview.model?.name || preview.model?.id || '未选择'}</p>
     <details><summary>有效模型参数</summary><pre>{JSON.stringify(preview.model?.params || {}, null, 2)}</pre></details>
     {preview.input.video_media && <details open><summary>实际视频用途</summary><pre>{JSON.stringify(preview.input.video_media, null, 2)}</pre></details>}
+    {!!preview.input.mapping?.length && <section aria-label="引用与实际媒体映射">{preview.input.mapping.filter(item => 'source' in item).map(item => 'source' in item && <p key={sourceKey(item.source)}>{labels.get(sourceKey(item.source)) || item.token} → {item.media_position ? `${mediaKinds.get(sourceKey(item.source)) || 'media'} ${item.media_position}` : '文本输入'} · {item.token}</p>)}</section>}
     {!!preview.input.mapping?.length && <details><summary>实际使用来源及媒体对应关系</summary><pre>{JSON.stringify(preview.input.mapping, null, 2)}</pre></details>}
     {(preview.diagnostics || []).map((diagnostic, index) => <Alert key={`${diagnostic.code}:${index}`} type={diagnostic.severity === 'warning' ? 'warning' : 'error'}
       message={`${diagnostic.code}: ${diagnostic.message}`} description={`阻止：${diagnostic.blocks.map(action => ({ run: '运行', save: '保存' }[action] || action)).join('、') || '无'}`}
