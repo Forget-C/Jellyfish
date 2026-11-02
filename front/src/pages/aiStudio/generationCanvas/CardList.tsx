@@ -8,32 +8,39 @@ type CardEntry = { type: string; title: string; entry?: string; modality: string
 
 export const cardDragType = 'application/x-jellyfish-card-type'
 export const cardDragEntry = 'application/x-jellyfish-card-entry'
-const categories = [
+export const cardCategories = [
   { title: '基础卡', icon: <AppstoreOutlined /> }, { title: '参考卡', icon: <IdcardOutlined /> },
   { title: '模型生成', icon: <ThunderboltOutlined /> }, { title: '画面设计', icon: <CameraOutlined /> },
   { title: '表演与调度', icon: <NodeIndexOutlined /> }, { title: '叙事与镜头', icon: <VideoCameraOutlined /> },
   { title: '声音设计', icon: <SoundOutlined /> }, { title: '连续性与约束', icon: <SafetyCertificateOutlined /> },
 ]
 
+/** 左侧添加与右键菜单共用目录投影，包括摄影的独立创建入口。 */
+export function cardCategoryEntries(catalog: CanvasCatalog, category?: string): CardEntry[] {
+  const cards = catalog.cards.filter(card => category === '基础卡' ? card.type.startsWith('content.') : category === '参考卡' ? card.type.startsWith('reference.') : category === '模型生成' ? card.group === category : card.category === category)
+  const entries = cards.flatMap<CardEntry>(card => card.type === 'direction.photography'
+    ? card.entries.map(entry => ({ type: card.type, title: entry.label, entry: entry.id, modality: card.modality }))
+    : [{ type: card.type, title: card.title, entry: undefined, modality: card.modality }])
+  return category === '基础卡' ? [...entries.filter(entry => entry.modality === 'text'), ...entries.filter(entry => entry.modality !== 'text')] : entries
+}
+export const cardEntryIcon = (modality: string) => modality === 'image' ? <PictureOutlined /> : modality === 'video' ? <PlaySquareOutlined /> : modality === 'audio' ? <SoundOutlined /> : <FileTextOutlined />
+
 /** 八组只组织添加导航；摄影的五入口创建独立设计而非五种内容类型。 */
 export function CardList({ catalog, readonly, onAdd, active, onActiveChange: setActive }: { catalog: CanvasCatalog; readonly: boolean; onAdd: (type: string, entry?: string) => void; active?: string; onActiveChange: (category?: string) => void }) {
   const [query, setQuery] = useState('')
   const triggers = useRef<Record<string, HTMLElement | null>>({})
   const close = () => { setActive(undefined); if (active) triggers.current[active]?.focus() }
-  const cards = catalog.cards.filter(card => active === '基础卡' ? card.type.startsWith('content.') : active === '参考卡' ? card.type.startsWith('reference.') : active === '模型生成' ? card.group === active : card.category === active)
-  const entries = cards.flatMap<CardEntry>(card => card.type === 'direction.photography'
-    ? card.entries.map(entry => ({ type: card.type, title: entry.label, entry: entry.id, modality: card.modality }))
-    : [{ type: card.type, title: card.title, entry: undefined, modality: card.modality }])
+  const entries = cardCategoryEntries(catalog, active)
   const visible = entries.filter(entry => entry.title.includes(query.trim()))
   const add = (type: string, entry?: string) => { onAdd(type, entry); setActive(undefined) }
-  const renderEntry = (entry: CardEntry) => <WorkbenchButton key={`${entry.type}:${entry.entry || ''}`} variant="quiet" icon={<span aria-hidden>{entry.modality === 'image' ? <PictureOutlined /> : entry.modality === 'video' ? <PlaySquareOutlined /> : entry.modality === 'audio' ? <SoundOutlined /> : <FileTextOutlined />}</span>} disabled={readonly} draggable={!readonly} onDragStart={event => {
+  const renderEntry = (entry: CardEntry) => <WorkbenchButton key={`${entry.type}:${entry.entry || ''}`} variant="quiet" icon={<span aria-hidden>{cardEntryIcon(entry.modality)}</span>} disabled={readonly} draggable={!readonly} onDragStart={event => {
     event.dataTransfer.setData(cardDragType, entry.type)
     if (entry.entry) event.dataTransfer.setData(cardDragEntry, entry.entry)
     event.dataTransfer.effectAllowed = 'copy'
   }} onDragEnd={event => { if (event.dataTransfer.dropEffect !== 'none') setActive(undefined) }} onClick={() => add(entry.type, entry.entry)}>{entry.title.replace('内容', '')}</WorkbenchButton>
   return <div className="generation-card-list-host" onKeyDown={event => { if (event.key === 'Escape' && active) { event.stopPropagation(); close() } }}>
     <div className="generation-card-categories" role="toolbar" aria-label="卡片分类">
-      {categories.map((category, index) => <WorkbenchIconButton key={category.title} ref={element => { triggers.current[category.title] = element }} variant="quiet" label={category.title} icon={category.icon} className={index === 3 ? 'generation-director-category' : undefined} aria-pressed={active === category.title} aria-expanded={active === category.title} onClick={() => { if (active === category.title) close(); else { setActive(category.title); setQuery('') } }} />)}
+      {cardCategories.map((category, index) => <WorkbenchIconButton key={category.title} ref={element => { triggers.current[category.title] = element }} variant="quiet" label={category.title} icon={category.icon} className={index === 3 ? 'generation-director-category' : undefined} aria-pressed={active === category.title} aria-expanded={active === category.title} onClick={() => { if (active === category.title) close(); else { setActive(category.title); setQuery('') } }} />)}
     </div>
     {active && <nav className="generation-card-list" aria-label="添加卡片">
       <header><h2>{active}</h2><WorkbenchIconButton label="关闭卡片列表" icon={<CloseOutlined />} onClick={close} /></header>
