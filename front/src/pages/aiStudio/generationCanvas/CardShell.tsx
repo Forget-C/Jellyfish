@@ -6,9 +6,9 @@ import { WorkbenchButton, WorkbenchIconButton } from '../directing/ui/WorkbenchB
 import type { CanvasPoint } from '../../../components/canvas/geometry'
 
 /** 卡片仅管理阅读、布局和选择；编辑及采用仍由业务详情负责。 */
-export function CardShell({ id, title, name, type, contextKey, point, scale, width, height, selected, filterMatch, readonly, removeDisabled, onSelect, onMove, onRemove, connections, children, footer, onOpen, onExpand, onEdit, onConnect, multiSelectMode, onStartMultiSelect, onDragStart, onDragEnd, viewportOffset, menu, onMenuChange: setMenu }:
+export function CardShell({ id, title, name, type, contextKey, point, scale, width, height, selected, filterMatch, readonly, removeDisabled, onSelect, onMove, onRemove, connections, children, footer, onOpen, onExpand, onEdit, onConnect, multiSelectMode, onStartMultiSelect, onDragStart, onDragEnd, viewportOffset, menu, onMenuChange: setMenu, onContextActions }:
   { id: string; type?: string; title: string; name?: string; contextKey: string; point: CanvasPoint; scale: number; width: number; height?: number; selected: boolean; filterMatch?: boolean; readonly?: boolean; removeDisabled?: boolean;
-    menu: boolean; onMenuChange: (open: boolean) => void; viewportOffset?: CanvasPoint; multiSelectMode?: boolean; onStartMultiSelect: () => void; onDragStart: () => void; onDragEnd?: (cancelled?: boolean) => void; onConnect: (trigger: HTMLElement) => void; onSelect: (selected: boolean) => void; onMove: (point: CanvasPoint) => void; onRemove: () => void;
+    onContextActions: (trigger: HTMLElement) => void; menu: boolean; onMenuChange: (open: boolean) => void; viewportOffset?: CanvasPoint; multiSelectMode?: boolean; onStartMultiSelect: () => void; onDragStart: () => void; onDragEnd?: (cancelled?: boolean) => void; onConnect: (trigger: HTMLElement) => void; onSelect: (selected: boolean) => void; onMove: (point: CanvasPoint) => void; onRemove: () => void;
     connections: ReactNode; children: ReactNode; footer?: ReactNode; onExpand?: (trigger: HTMLElement) => void; onEdit?: (trigger: HTMLElement) => void; onOpen: (trigger: HTMLElement, fromKeyboard?: boolean) => void }) {
   const [holding, setHolding] = useState(false)
   const gesture = useRef<{ pointer: number; x: number; y: number; origin: CanvasPoint; viewport?: CanvasPoint; ready: boolean; tolerance: number; restore: () => void }>()
@@ -64,6 +64,7 @@ export function CardShell({ id, title, name, type, contextKey, point, scale, wid
       <strong title={name || title}>{name || title}</strong>{name && <small>{title}</small>}
       <WorkbenchIconButton label="卡片操作" icon={<MoreOutlined />} variant="quiet" aria-expanded={menu} onClick={() => setMenu(!menu)} />
       {menu && <div className="generation-card-menu" onPointerDown={event => event.stopPropagation()}>
+        <WorkbenchButton onClick={event=>onContextActions(event.currentTarget)}>复制、封面与下载…</WorkbenchButton>
         <WorkbenchButton onClick={() => { onStartMultiSelect(); setMenu(false) }}>选择多个</WorkbenchButton>
         <WorkbenchButton aria-pressed={selected} onClick={() => { onSelect(!selected); setMenu(false) }}>{selected ? '取消选择卡片' : '选择卡片'}</WorkbenchButton>
         {onExpand && <WorkbenchButton onClick={event => { onExpand(event.currentTarget.closest('article')!); setMenu(false) }}>展开编辑</WorkbenchButton>}

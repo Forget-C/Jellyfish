@@ -35,6 +35,9 @@ def collect_media_references(document: CanvasDocument) -> dict[str, list[SavedMe
             refs.append(SavedMediaReference(card.file_id, card.type.split('.')[1], source_ref,
                 {'card_id': card.id, 'path': ['file_id']}, '文件不属于当前项目'))
         result[card.id] = refs
+    if document.cover_file_id:
+        result[''] = [SavedMediaReference(document.cover_file_id, 'image', f'{document.id}:cover',
+            {'path': ['cover_file_id']}, '封面文件不属于当前项目')]
     return result
 
 

@@ -34,7 +34,8 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 960 }, hasTouch: true })
   page.setDefaultTimeout(12000)
   page.on('pageerror', error => console.log('PAGE ERROR', error.message))
-  await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin }; Object.defineProperty(navigator, 'platform', { value: 'Linux x86_64', configurable: true }) })
+  // Navigator overrides cannot change Chrome's native macOS Control-click gesture.
+  await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '类型化画布' }) })).json()).data
   const doc = { ...canvas.document, cards: [
     { id: 'a', type: 'content.text', text: '第一份来源' },
@@ -48,8 +49,8 @@ try {
   const selected = () => page.locator('[data-card-id][data-selected="true"]')
   await card('a').waitFor()
   await closeCardList(page)
-  await card('a').click({ modifiers: ['Control'] })
-  await card('b').click({ modifiers: ['Control'] })
+  await card('a').click({ modifiers: [process.platform==='darwin'?'Meta':'Control'] })
+  await card('b').click({ modifiers: [process.platform==='darwin'?'Meta':'Control'] })
   assert.equal(await selected().count(), 2)
   const menu = page.getByRole('toolbar', { name: '所选卡片操作', exact: true })
   await menu.waitFor()
@@ -124,12 +125,12 @@ try {
   // A plain canvas drag selects a new collection, without the former Shift shortcut.
   const boundsA = await card('a').boundingBox(), boundsB = await card('b').boundingBox()
   const frame = await group.boundingBox()
-  await page.keyboard.down('Control')
+  await page.keyboard.down(process.platform==='darwin'?'Meta':'Control')
   await page.mouse.move(frame.x + 6, frame.y + frame.height - 6)
   await page.mouse.down()
   await page.mouse.move(Math.max(boundsA.x + boundsA.width / 2, boundsB.x + boundsB.width / 2), Math.min(boundsA.y, boundsB.y) + 6, { steps: 6 })
   await page.mouse.up()
-  await page.keyboard.up('Control')
+  await page.keyboard.up(process.platform==='darwin'?'Meta':'Control')
   assert.equal(await selected().count(), 2, 'modifier inside group starts marquee rather than group move')
   await page.keyboard.press('Escape')
   assert.equal(await selected().count(), 0)

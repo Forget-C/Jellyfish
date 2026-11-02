@@ -22,7 +22,7 @@ import { WorkbenchModal, WorkbenchDialogActions } from '../directing/ui/Workbenc
 import { WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
 import { CanvasToolbarMenu } from '../directing/CanvasToolbarMenu'
 import { ConfigProvider, Dropdown, Modal, Input, Select, Space, Tooltip, Image } from 'antd'
-import { StudioGenerationCanvasesService as Canvases, LlmService } from '../../../services/generated'
+import { StudioGenerationCanvasesService as Canvases, StudioFilesService, LlmService } from '../../../services/generated'
 import type { CanvasDocument, NamedImageReferenceCard, CanvasModelCapability, CanvasNodeRead, CanvasResolvedOutput, ModelRead, ModelSettingsRead, TextContentCard } from '../../../services/generated'
 import { CanvasDragHandle, CanvasEdge, useCanvasViewport } from '../../../components/canvas/Canvas'
 import { useCanvasEditorReveal } from './useCanvasEditorReveal'
@@ -30,6 +30,9 @@ import { useGraphLayout } from '../directing/useGraphLayout'
 import type { GraphArrange, GraphSize } from '../directing/graphLayout'
 import { referenceProtection } from './promptRules'
 import { CardList, cardDragType, cardDragEntry } from './CardList'
+import { CanvasOutputActions, downloadOutputs, type DownloadOutput } from './CanvasOutputActions'
+import { cloneCard, copyRestriction, readCardClipboard, writeCardClipboard, type CardClipboard } from './cardClipboard'
+import { CanvasContextMenu } from './CanvasContextMenu'
 import { CardShell } from './CardShell'
 import { CandidateOutputStatus } from './CandidateOutputStatus'
 import { connectionSides, sideLabels, sidePoint, defaultSides, connectionPath, useConnectionSides, type ConnectionSide } from './connectionGeometry'
@@ -59,7 +62,9 @@ const arrange: GraphArrange = (nodes, _sizes, _width, _anchor, retained = {}) =>
   [node.id, retained[node.id] || { x: 200 + index % 3 * 440, y: Math.floor(index / 3) * 560 }]))
 
 /** 独立画布编辑适配：候选关系与文档持久化，几何沿用公共布局缓存。 */
-function GenerationCanvasGraphContent({ contentHistory, history, document, onChange, readonly = false, runtime, inspectTarget, editingStatus, savedRevision, savedDocument }: { history?: { record: (undo: () => void, redo: () => void) => void; undo: () => void; redo: () => void }; primaryHost?: HTMLElement | null; contentHistory?: ReactNode; savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; inspectTarget?: { cardId: string; serial: number; segmentId?: string }; editingStatus?: string; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string) => void } }) {
+function GenerationCanvasGraphContent({ contentHistory, history, document, onChange, readonly = false, runtime, inspectTarget, editingStatus, savedRevision, savedDocument }: { history?: { canUndo?: boolean; record: (undo: () => void, redo: () => void) => void; undo: () => void; redo: () => void }; primaryHost?: HTMLElement | null; contentHistory?: ReactNode; savedDocument?: CanvasDocument; savedRevision?: number; document: CanvasDocument; onChange: (next: CanvasDocument) => void; readonly?: boolean; inspectTarget?: { cardId: string; serial: number; segmentId?: string }; editingStatus?: string; runtime?: { outputs: Record<string, CanvasResolvedOutput[]>; nodes: Record<string, CanvasNodeRead>; busyCards: Set<string>; checking?: string; disabled: boolean; precheck: (id: string) => void } }) {
+  const [outputAction,setOutputAction] = useState<{mode:'cover'|'download';outputs:DownloadOutput[]}>()
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; ids: string[] }>()
   const [pendingDeletion, setPendingDeletion] = useState<string[]>()
   const { catalog, cardDefinitions, cardTitles, connectionReason, inputPorts, outputPorts, portLabels } = useGraphRules()
   const cards = document.cards || emptyCards, edges = document.edges || emptyEdges, groups = document.groups || emptyGroups
@@ -472,7 +477,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const keyboard = (event: KeyboardEvent) => {
       if (!event.isComposing && viewport.surface.current) viewport.surface.current.dataset.keyboardFocus = 'true'
       const target = event.target as HTMLElement
-      if (event.defaultPrevented || event.isComposing || !container.current?.contains(target)) return
+      if (contextMenu || event.defaultPrevented || event.isComposing || !container.current?.contains(target)) return
       const toolbarMenuOpen = !!container.current?.querySelector('.canvas-toolbar-popover:not([hidden])')
       if ((cardMenuId || toolbarMenuOpen || drag || pendingConnection || accessibleConnection) && event.key === 'Escape') return // Inner controls consume Escape before the window bubble listener.
       if (target.closest('input,textarea,select,[contenteditable],[role="dialog"],[role="menu"],[role="combobox"],.generation-card-menu') || window.document.querySelector('.ant-modal-wrap:not([style*="display: none"])')) return
@@ -522,7 +527,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     window.addEventListener('keydown', menuEscape); window.addEventListener('keydown', keyboard, true); window.addEventListener('keyup', up)
     return () => { window.removeEventListener('blur', blur); window.removeEventListener('keydown', menuEscape); window.removeEventListener('keydown', keyboard, true); window.removeEventListener('keyup', up) }
   })
-  const add = (type: string, position?: { x: number; y: number }, entry?: string) => {
+  const add = (type: string, position?: { x: number; y: number }, entry?: string, selectOnly = false) => {
     if (readonly || !catalog.cards.some(card => card.type === type)) return
     const card = (type === 'content.text' || type === 'content.basis') ? { id: crypto.randomUUID(), type, type_version: 1, text: '' }
       : ['content.character', 'content.prop', 'content.costume', 'content.place'].includes(type) ? { id: crypto.randomUUID(), type, type_version: 1, object_id: null, name: '', category: type.split('.')[1], text: '', source_locator: '' }
@@ -562,8 +567,90 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     if (point) layout.move(card.id, point)
     setSelected([card.id])
     if (entry) setNewPhotographyEntry({ cardId: card.id, entry })
-    setDetailId(card.type?.startsWith('direction.') ? undefined : card.id)
+    setDetailId(selectOnly || card.type?.startsWith('direction.') ? undefined : card.id)
   }
+  const cardOutputs = (ids:string[]):DownloadOutput[] => ids.flatMap<DownloadOutput>(id=>{
+    const card=cards.find(card=>card.id===id)
+    if(!card)return []
+    const values=runtime?.outputs[id] || []
+    if(values.length)return values.filter(output=>output.available && (output.file_id || output.text)).map((output,index)=>({key:`${id}:${index}`,name:cardLabel(id),fileId:output.file_id || undefined,text:output.text || undefined,modality:output.modality,stale:output.basis_current===false}))
+    const fileId='file_id' in card ? card.file_id : 'image_binding' in card ? card.image_binding?.file_id : undefined
+    if(fileId)return [{key:id,name:cardLabel(id),fileId,modality:card.type?.startsWith('reference.')?'image':card.type?.split('.')[1] || 'image'}]
+    if('text' in card && card.text)return [{key:id,name:cardLabel(id),text:card.text,modality:'text'}]
+    return []
+  })
+  const setCover=(fileId:string)=>{if(!readonly){edit({...latest.current,cover_file_id:fileId});setReason('画布封面已设置')}}
+  const openOutputAction=(mode:'cover'|'download',ids:string[])=>{
+    if(mode==='cover' && (readonly || ids.length!==1))return
+    const outputs=cardOutputs(ids).filter(output=>mode==='download'||output.modality==='image')
+    if(!outputs.length){setReason('没有可用输出');return}
+    if(outputs.length>1)setOutputAction({mode,outputs:structuredClone(outputs)})
+    else if(mode==='cover')setCover(outputs[0].fileId!)
+    else void downloadOutputs(outputs).catch(()=>{setOutputAction({mode,outputs});setReason('下载失败，请重试')})
+  }
+  const pasteCount=useRef(0)
+  const pastePending=useRef(false)
+  const currentReadonly=useRef(readonly);currentReadonly.current=readonly
+  const lastPaste=useRef<{x:number;y:number;count:number}>()
+  const mounted=useRef(true)
+  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false}},[])
+  const pasteCards = async (clipboard: CardClipboard | undefined, position?: { x:number; y:number }) => {
+    if (readonly || !clipboard || clipboard.projectId !== document.project_id || clipboard.cards.some(card => copyRestriction(card))) return
+    if(pastePending.current)return
+    pastePending.current=true
+    try {
+      const fileIds=clipboard.cards.flatMap(card=>'file_id' in card && card.file_id ? [card.file_id] : 'image_binding' in card && card.image_binding?.file_id ? [card.image_binding.file_id] : [])
+      await Promise.all([...new Set(fileIds)].map(async fileId=>{
+        const {data}=await StudioFilesService.getFileDetailApiV1StudioFilesFileIdGet({fileId})
+        if(!data || data.deleted || !data.usages?.some(usage=>usage.project_id===document.project_id))throw new Error('文件不可用或不属于当前项目')
+      }))
+    } catch {setReason('无法粘贴：媒体不可用或项目归属不匹配');pastePending.current=false;return}
+    pastePending.current=false
+    if(!mounted.current || currentReadonly.current)return
+    const box=viewport.surface.current?.getBoundingClientRect()
+    const origin=position || {x:((box?.width || 1200)/2-transform.x)/transform.scale,y:((box?.height || 800)/2-transform.y)/transform.scale}
+    if(position){const last=lastPaste.current;lastPaste.current={...position,count:last?.x===position.x && last.y===position.y ? last.count+1 : 0}}
+    const offset=position ? (lastPaste.current?.count || 0)*32 : pasteCount.current++*32
+    origin.x+=offset;origin.y+=offset
+    const left=Math.min(...clipboard.positions.map(point=>point.x)), top=Math.min(...clipboard.positions.map(point=>point.y))
+    const copies=clipboard.cards.map(cloneCard)
+    const positions=Object.fromEntries(copies.map((card,index)=>[card.id,{x:origin.x+clipboard.positions[index].x-left,y:origin.y+clipboard.positions[index].y-top}]))
+    layout.setView(previous=>({...previous,positions:{...previous.positions,...positions}}))
+    edit({...latest.current,cards:[...(latest.current.cards || []),...copies]})
+    setSelected(copies.map(card=>card.id));setDetailId(undefined);setSelectedEdgeId(undefined)
+    const screenX=origin.x*transform.scale+transform.x,screenY=origin.y*transform.scale+transform.y
+    if(box && (screenX>box.width || screenY>box.height || screenX+300*transform.scale<0 || screenY+250*transform.scale<0))layout.setView(previous=>({...previous,transform:{...previous.transform,x:previous.transform.x+Math.max(16,Math.min(screenX,box.width-80))-screenX,y:previous.transform.y+Math.max(16,Math.min(screenY,box.height-80))-screenY}}))
+  }
+  const copyReason = (ids: string[]) => ids.map(id => {
+    const card=latest.current.cards?.find(card=>card.id===id)
+    return !card ? '卡片已不存在' : stackFor(id) ? '请先解除堆叠' : copyRestriction(card)
+  }).find(Boolean)
+  const copyCards = (ids: string[], duplicate=false) => {
+    const targets=ids.map(id=>latest.current.cards?.find(card=>card.id===id)).filter((card):card is GenerationCard=>!!card)
+    const reason=copyReason(ids)
+    if (!targets.length || reason) {setReason(reason || '请选择卡片');return}
+    const value:CardClipboard={schema:1,projectId:document.project_id,cards:structuredClone(targets),positions:targets.map(card=>point(card.id))}
+    if(duplicate) pasteCards(value,{x:Math.min(...value.positions.map(point=>point.x))+32,y:Math.min(...value.positions.map(point=>point.y))+32})
+    else try {writeCardClipboard(value);setReason('已复制，可在画布粘贴')} catch {setReason('卡片剪贴板保存失败，请重试')}
+  }
+  const clipboardKey = useRef<(event: KeyboardEvent)=>void>();clipboardKey.current=event=>{
+    if(!contextMenu && !autoPanning.current && !drag && !pendingConnection && !accessibleConnection && !selectionStart.current && !panGesture.current && !event.isComposing && (event.key==='ContextMenu'||event.shiftKey&&event.key==='F10')){
+      const target=event.target as Element
+      if(!container.current?.contains(target)||!target.closest('[data-card-id],.generation-surface')||target.closest('input,textarea,[contenteditable],[data-card-details],[role="dialog"]'))return
+      event.preventDefault();event.stopImmediatePropagation()
+      const card=target.closest<HTMLElement>('[data-card-id]'),box=(card||viewport.surface.current)?.getBoundingClientRect()
+      if(box){const ids=card?.dataset.cardId ? selected.includes(card.dataset.cardId)?selected:[card.dataset.cardId] : [];if(ids.length)setSelected(ids);setContextMenu({x:box.left+24,y:box.top+24,ids})}return
+    }
+
+    if(contextMenu || readonly && event.key.toLowerCase()!=='c' || !(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey || event.isComposing || event.defaultPrevented || autoPanning.current) return
+    const target=event.target as Element
+    if(!container.current?.contains(target) || !target.closest('[data-card-id],.generation-surface') || target.closest('input,textarea,select,[contenteditable],[data-card-details],[role="dialog"],[role="menu"],.generation-card-menu') || window.document.querySelector('.ant-modal-wrap:not([style*="display: none"])')) return
+    const key=event.key.toLowerCase()
+    if(!['c','v','d'].includes(key))return
+    event.preventDefault();event.stopImmediatePropagation()
+    if(key==='v')void pasteCards(readCardClipboard(document.project_id));else copyCards(selected,key==='d')
+  }
+  useEffect(()=>{const handler=(event:KeyboardEvent)=>clipboardKey.current?.(event);window.addEventListener('keydown',handler,true);return()=>window.removeEventListener('keydown',handler,true)},[])
   const capability = (card: GenerationCard) => 'model_id' in card && card.model_id ? capabilities[card.model_id] : undefined
   const check = (edge: GenerationEdge) => {
     // 重复拖线只定位已存关系，不创建新输入，也不因能力切换改变原绑定。
@@ -797,7 +884,18 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const sourceTargetCard = cards.find(card => card.id === sourceTarget)
   const uploadTextCard = cards.find(card => card.id === uploadText) as TextContentCard | undefined
   const uploadSourceCard = cards.find(card => card.id === uploadSource) as MediaCard | undefined
-  return <div className="generation-graph" ref={container} onPointerDownCapture={event => {
+  return <div className="generation-graph" ref={container} onContextMenu={event => {
+    event.preventDefault()
+    const target = event.target as Element
+    if (autoPanning.current || drag || pendingConnection || accessibleConnection || selectionStart.current || panGesture.current || target.closest('input,textarea,[contenteditable],.generation-card-menu,[data-card-details],[role="dialog"],.generation-group,.generation-stack,.canvas-edge-hit,button:not([data-keyboard-move])')) return
+    if (!viewport.surface.current?.contains(target)) return
+    const id = target.closest<HTMLElement>('[data-card-id]')?.dataset.cardId
+    const ids = id ? selected.includes(id) ? selected : [id] : []
+    if (id) setSelected(ids)
+    setCardMenuId(undefined); setActiveCategory(undefined)
+    setContextMenu({ x: event.clientX, y: event.clientY, ids })
+  }} onPointerDownCapture={event => {
+    if(event.button===2)return
     const surface = viewport.surface.current
     if (surface) surface.dataset.keyboardFocus = 'false'
     if (surface?.contains(event.target as Node) && (event.button === 1 || spaceHeld && event.button === 0)) {
@@ -814,6 +912,22 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     if (target.closest('.generation-selection-actions, .generation-browse') || modifier || multiSelectMode && target.closest('[data-card-id]')) return
     clearSelection()
   }}>
+    {outputAction && <CanvasOutputActions {...outputAction} onCover={setCover} onClose={()=>setOutputAction(undefined)} />}
+    {contextMenu && <CanvasContextMenu {...contextMenu} card={!!contextMenu.ids.length} catalog={catalog} onClose={() => { const target=contextMenu.ids[0] ? container.current?.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(contextMenu.ids[0])}"]`) : viewport.surface.current;setContextMenu(undefined);target?.focus({preventScroll:true}) }} actions={contextMenu.ids.length ? [
+      {label:`复制${contextMenu.ids.length>1 ? ` ${contextMenu.ids.length} 张卡片` : ''}`,shortcut:`${navigator.platform.includes('Mac')?'⌘':'Ctrl'} C`,reason:copyReason(contextMenu.ids),run:()=>copyCards(contextMenu.ids)},
+      {label:'复制副本',shortcut:`${navigator.platform.includes('Mac')?'⌘':'Ctrl'} D`,reason:readonly ? '当前只读' : copyReason(contextMenu.ids),run:()=>copyCards(contextMenu.ids,true)},
+      {label:'设置为封面',reason:readonly ? '当前只读' : contextMenu.ids.length!==1 ? '请选择一张卡片' : !cardOutputs(contextMenu.ids).some(output=>output.modality==='image') ? '没有可用图片' : undefined,run:()=>openOutputAction('cover',contextMenu.ids)},
+      {label:'下载',reason:!cardOutputs(contextMenu.ids).length ? '没有可下载输出' : undefined,run:()=>openOutputAction('download',contextMenu.ids)},
+      {label:'删除',danger:true,reason:readonly ? '当前只读' : undefined,run:()=>removeCards(contextMenu.ids)},
+    ] : [
+      {label:'新建节点', reason:readonly ? '当前只读' : undefined, run:()=>{}},
+      {label:'粘贴', reason:readonly ? '当前只读' : !readCardClipboard(document.project_id) ? '剪贴板没有卡片' : undefined, run:()=>{const box=viewport.surface.current!.getBoundingClientRect();pasteCards(readCardClipboard(document.project_id),{x:(contextMenu.x-box.left-transform.x)/transform.scale,y:(contextMenu.y-box.top-transform.y)/transform.scale})}},
+      {label:'撤销',reason:readonly ? '当前只读' : !history?.canUndo ? '没有可撤销操作' : undefined, run:()=>history?.undo()},
+    ]} onAdd={(type, entry) => {
+      const box=viewport.surface.current!.getBoundingClientRect()
+      add(type,{x:(contextMenu.x-box.left-transform.x)/transform.scale,y:(contextMenu.y-box.top-transform.y)/transform.scale},entry,true)
+      setContextMenu(undefined)
+    }} />}
     <WorkbenchModal title={`删除 ${pendingDeletion?.length || 0} 张卡片？`} open={!!pendingDeletion} width={480} onCancel={() => setPendingDeletion(undefined)} footer={<WorkbenchDialogActions secondary={<Button onClick={() => setPendingDeletion(undefined)}>取消</Button>}><Button variant="danger" onClick={() => { const ids = pendingDeletion; setPendingDeletion(undefined); if (ids) removeCards(ids, true) }}>确认删除</Button></WorkbenchDialogActions>}>
       相关连线将一并移除，可撤销恢复；已生成的媒体文件保留。
     </WorkbenchModal>
@@ -1076,7 +1190,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
           const outputs = runtime?.outputs[card.id] || []
           const node = runtime?.nodes[card.id]
           const isModel = card.type?.startsWith('model.')
-          return <CardShell menu={cardMenuId === card.id} onMenuChange={open => setCardMenuId(open ? card.id : undefined)} key={`${document.id}:${card.id}`} id={card.id} type={card.type} name={'name' in card ? card.name : undefined} title={cardTitles[card.type || 'content.text']} contextKey={document.id} point={point(card.id)}
+          return <CardShell menu={cardMenuId === card.id} onMenuChange={open => setCardMenuId(open ? card.id : undefined)} onContextActions={trigger=>{const box=trigger.getBoundingClientRect();setCardMenuId(undefined);const ids=selected.includes(card.id)?selected:[card.id];setSelected(ids);setContextMenu({x:box.left,y:box.bottom,ids})}} key={`${document.id}:${card.id}`} id={card.id} type={card.type} name={'name' in card ? card.name : undefined} title={cardTitles[card.type || 'content.text']} contextKey={document.id} point={point(card.id)}
             viewportOffset={transform} scale={transform.scale} width={isModel || isReference ? generationCardSize(card.type).width : size?.width || (focusCardTypes.includes(card.type || '') ? 300 : 400)} height={isModel || isReference ? generationCardSize(card.type).height : size?.height} selected={selected.includes(card.id)} filterMatch={matched.has(card.id)} readonly={readonly} removeDisabled={runtime?.busyCards.has(card.id)}
             onEdit={card.type?.startsWith('direction.') ? trigger => { setSelected([card.id]); setSelectedEdgeId(undefined); setDetailTrigger(trigger); setDetailId(card.id) } : undefined}
             onExpand={trigger => { setDetailTrigger(trigger); setDetailId(card.id); setExpandRequest({id:card.id,serial:Date.now()}) }}

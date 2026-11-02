@@ -192,6 +192,8 @@ class CanvasStore:
         for card in document.cards:
             if isinstance(card, MediaContentCard) and card.file_id:
                 await validate_media_file(self.db, self.project_id, media_references[card.id][0])
+        if document.cover_file_id:
+            await validate_media_file(self.db, self.project_id, media_references[''][0])
         await replace_canvas_content_usages(self.db, self.project_id, canvas_id, media_references)
         result = await self.db.execute(update(GenerationCanvas).where(
             GenerationCanvas.id == canvas_id, GenerationCanvas.revision == command.expected_revision).values(

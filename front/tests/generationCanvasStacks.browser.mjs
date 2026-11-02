@@ -34,7 +34,8 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 960 }, hasTouch: true })
   page.setDefaultTimeout(12000)
   page.on('pageerror', error => console.log('PAGE ERROR', error.message))
-  await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin }; Object.defineProperty(navigator, 'platform', { value: 'Linux x86_64', configurable: true }) })
+  // Navigator overrides cannot change Chrome's native macOS Control-click gesture.
+  await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '类型化画布' }) })).json()).data
   const doc = { ...canvas.document, cards: [
     { id: 'a', type: 'content.text', text: '第一份来源' },
@@ -62,8 +63,8 @@ try {
   await page.mouse.down(); await page.mouse.move(originCard.x+80,originCard.y+220,{steps:5}); await page.mouse.up()
   await page.keyboard.press('Escape')
   const representativeBox = await card('a').boundingBox()
-  await card('a').click({modifiers:['Control']})
-  await card('b').click({ modifiers: ['Control'] })
+  await card('a').click({modifiers:[process.platform==='darwin'?'Meta':'Control']})
+  await card('b').click({ modifiers: [process.platform==='darwin'?'Meta':'Control'] })
   assert.equal(await selected().count(), 2)
   const menu = page.getByRole('toolbar', { name: '所选卡片操作', exact: true })
   await menu.waitFor()

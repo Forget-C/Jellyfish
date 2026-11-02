@@ -7,6 +7,7 @@ import { useGenerationCanvasEditor } from './useGenerationCanvasEditor'
 import { GenerationCanvasGraph } from './GenerationCanvasGraph'
 import { useGenerationCanvasRuntime } from './useGenerationCanvasRuntime'
 import { RunPreview } from './RunPreview'
+import { buildFileDownloadUrl } from '../assets/utils'
 import { RunHistory } from './RunHistory'
 import { WorkbenchTheme } from '../directing/ui/WorkbenchTheme'
 import { WorkbenchButton as Button } from '../directing/ui/WorkbenchButton'
@@ -15,7 +16,7 @@ import { WorkbenchModal } from '../directing/ui/WorkbenchModal'
 import { useGraphBrowse } from '../directing/useGraphBrowse'
 import { CanvasToolbarMenu } from '../directing/CanvasToolbarMenu'
 import { WorkbenchIconButton } from '../directing/ui/WorkbenchButton'
-import { ArrowLeftOutlined, ArrowRightOutlined, DownOutlined, SaveOutlined, MoreOutlined, UndoOutlined, RedoOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, ArrowRightOutlined, DownOutlined, SaveOutlined, MoreOutlined, UndoOutlined, RedoOutlined, PictureOutlined } from '@ant-design/icons'
 import '../directing/canvasWorkbench.css'
 import { TaskCenter } from '../components/TaskCenter'
 import './generationCanvas.css'
@@ -132,14 +133,14 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
     return saved
   }
 
-  return <WorkbenchTheme><WorkbenchDetailsProvider><section className="canvas-workbench generation-workbench" aria-label="生成画布工作台">
+  return <WorkbenchTheme><WorkbenchDetailsProvider><section className="canvas-workbench generation-workbench" aria-label="生成画布工作台" onContextMenu={event => event.preventDefault()}>
     <header className="canvas-workbench-toolbar generation-workbench-header">
       <div className="canvas-toolbar-identity">
         <WorkbenchIconButton label="返回项目" variant="quiet" icon={<ArrowLeftOutlined />} onClick={async () => { if (await editor.requestLeave()) navigate(`/projects/${encodeURIComponent(projectId)}`) }} />
         <strong className="canvas-sequence-name">{document?.name || '画布生成'}</strong>
         <CanvasToolbarMenu label="画布管理" caption={<span className="canvas-menu-caption">画布<DownOutlined className="canvas-menu-chevron" /></span>}>
           <Select aria-label="选择画布" placeholder="选择画布" value={canvasId || undefined}
-            disabled={saving || deleting || !!deletePending} options={canvases.map(item => ({ value: item.id, label: item.document.name }))} onChange={async id => { if (await editor.requestLeave()) select(id) }} />
+            disabled={saving || deleting || !!deletePending} options={canvases.map(item => ({ value: item.id, label: <span className="generation-canvas-option">{item.document.cover_file_id && <span className="generation-canvas-cover"><PictureOutlined aria-hidden /><img alt="画布封面" src={buildFileDownloadUrl(item.document.cover_file_id)} onError={event=>{event.currentTarget.style.visibility='hidden'}} /></span>}{item.document.name}</span> }))} onChange={async id => { if (await editor.requestLeave()) select(id) }} />
           <Button data-menu-close onClick={create} disabled={saving || deleting || !!deletePending}>新建画布</Button>
           {document && <Input aria-label="画布名称" value={document.name} maxLength={255} disabled={!ownership.editable || !!editor.recovery}
             onChange={event => change({ ...document, name: event.target.value })} />}
@@ -179,7 +180,7 @@ export function GenerationCanvasPage({ projectId }: { projectId: string }) {
         {runtime.preview && <RunPreview canvas={document || undefined} preview={runtime.preview} submitting={runtime.submitting} disabled={!ownership.editable || !!runtime.pending || runtime.busyCards.has(runtime.preview.card_id)} onSubmit={() => void runtime.submit()} onLocate={target => { pendingInspect.current = { cardId: String(target.card_id || runtime.preview!.card_id), segmentId: target.segment_id || target.reference_id ? String(target.segment_id || target.reference_id) : undefined, serial: Date.now() }; setPreviewOpen(false) }} />}
       </WorkbenchModal>
     {!document || !current ? <Empty className="generation-empty" description="创建或选择一张画布" /> : <div className="generation-stage">
-      <GenerationCanvasGraph history={{ record: editor.recordAction, undo: () => { if (editor.undo() === 'document') runtime.invalidate() }, redo: () => { if (editor.redo() === 'document') runtime.invalidate() } }} contentHistory={<div className="canvas-history-controls" aria-label="画布操作历史">
+      <GenerationCanvasGraph history={{ canUndo: editor.canUndo, record: editor.recordAction, undo: () => { if (editor.undo() === 'document') runtime.invalidate() }, redo: () => { if (editor.redo() === 'document') runtime.invalidate() } }} contentHistory={<div className="canvas-history-controls" aria-label="画布操作历史">
         <WorkbenchIconButton label="撤销操作" variant="quiet" icon={<UndoOutlined />} disabled={!ownership.editable || !!editor.recovery || !editor.canUndo} onClick={() => { if (editor.undo() === 'document') runtime.invalidate() }} />
         <WorkbenchIconButton label="重做操作" variant="quiet" icon={<RedoOutlined />} disabled={!ownership.editable || !!editor.recovery || !editor.canRedo} onClick={() => { if (editor.redo() === 'document') runtime.invalidate() }} />
       </div>} primaryHost={primaryHost} savedDocument={current.document} savedRevision={current.revision} key={document.id} document={document} onChange={next => change(next)} inspectTarget={inspectTarget} editingStatus={editor.conflict ? '修订冲突，请关闭详情处理' : saving ? '正在保存修改' : dirty ? '修改尚未保存' : undefined} readonly={!ownership.editable || !!editor.recovery}

@@ -317,3 +317,10 @@ UX 回归另覆盖画布局部键盘焦点提示与方向键平移、输入后�
 ### 运行历史刷新
 
 `generation-canvas-history-refresh` 使用一个真实运行验证任务深链接首次定位；关闭按钮、顶部开关、Escape、窄屏关闭或切换到卡片详情后刷新均保持关闭，只清理 `run/node` 并保留其他地址参数。另验证手动重新打开、后退不回到已关闭的定位地址，以及刷新不重新生成。纳入 `generation` 和 `canvas-layout`。
+
+
+### 生成画布右键菜单
+
+`generation-canvas-context-menu` 使用隔离 HTTP/DB/TaskWorker 与真实画布，覆盖右键创建、复制后手动粘贴、副本配置、候选连线不复制、真实引用保护、跨画布及刷新剪贴板、统一撤销重做、编辑区右键屏蔽、键盘菜单与逐层取消、图片封面持久化及原卡删除后的文件保护、单文本下载与多图片ZIP。入口已加入 `generation` 和 `canvas-layout`，证据包含菜单截图及后端日志。
+
+堆叠与编组的真实指针多选使用宿主平台的 Command／Control；不通过伪造 `navigator.platform` 在 macOS 上发送 Control+点击，避免原生右键手势与多选测试混淆。

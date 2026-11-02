@@ -295,3 +295,28 @@
 /* 自动全屏编辑只提供一步关闭；扩大窄屏热区并为顶部字段留出间距。 */
 .generation-card-editor[data-narrow="true"] .wb-details-header .wb-icon-action.ant-btn { width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
 .generation-card-editor[data-narrow="true"] :is(.generation-material-basis, .generation-composer-parameters) { padding-right: 64px; }
+
+.generation-context-menu { position: fixed; z-index: 1100; width: 248px; padding: 6px; border: 1px solid var(--wb-border); border-radius: var(--wb-radius); background: var(--wb-raised); box-shadow: 0 8px 32px #0008; max-height: calc(100dvh - 16px); overflow-y: auto; }
+.generation-context-menu > button { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; width: 100%; min-height: 38px; padding: 8px 12px; text-align: left; height: auto; white-space: normal; }
+.generation-context-menu > button:focus-visible { outline: 1px solid var(--wb-focus); outline-offset: -1px; }
+.generation-context-menu > button[data-danger=true] { border-top: 1px solid var(--wb-border); }
+.generation-context-menu small, .generation-context-reason { color: var(--wb-muted); font-size: 12px; }
+.generation-context-reason { width: 100%; padding-top: 4px; }
+.generation-context-add { position: relative; min-height: 380px; }
+.generation-context-add .generation-card-list-host { position: static; }
+.generation-context-add .generation-card-categories { position: static; display: flex; flex-wrap: wrap; width: auto; border-radius: 0; }
+.generation-context-add .generation-card-list { position: static; width: auto; max-height: 340px; overflow-y: auto; border: 0; padding: 8px; }
+@media (pointer: coarse) { .generation-context-menu > button { min-height: 44px; } }
+.generation-output-choice { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
+.generation-output-choice img { width: 80px; height: 80px; object-fit: contain; }
+.generation-canvas-option { display: inline-flex; align-items: center; gap: 8px; }
+.generation-canvas-option img { width: 32px; height: 24px; object-fit: cover; background: var(--wb-inset); border-radius: 4px; }
+.generation-context-add .generation-card-list-host { width: 100%; display: block; }
+.generation-context-add .generation-card-categories { flex-direction: row; max-width: 100%; }
+@media (min-width: 640px) {
+  .generation-context-menu[data-adding=true] { display: grid; grid-template-columns: 240px minmax(0, 1fr); grid-template-rows: 44px 44px minmax(44px, auto); width: 568px; align-items: start; }
+  .generation-context-menu[data-adding=true] > button { grid-column: 1; }
+  .generation-context-menu[data-adding=true] .generation-context-add { grid-column: 2; grid-row: 1 / span 3; margin-left: 8px; border-left: 1px solid var(--wb-border); padding-left: 8px; }
+}
+.generation-canvas-cover { position: relative; display: inline-grid; place-items: center; width: 32px; height: 24px; border-radius: 4px; background: var(--wb-inset); color: var(--wb-muted); }
+.generation-canvas-cover img { position: absolute; inset: 0; }
