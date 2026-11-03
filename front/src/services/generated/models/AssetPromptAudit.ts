@@ -13,4 +13,3 @@ export type AssetPromptAudit = {
     execution_prompt: string;
     reference_file_ids: Array<string>;
 };
-

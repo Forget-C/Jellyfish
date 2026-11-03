@@ -21,4 +21,3 @@ export type ApiResponse_ModelRead_ = {
      */
     meta?: (Record<string, any> | null);
 };
-

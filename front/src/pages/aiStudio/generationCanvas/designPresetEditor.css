@@ -69,3 +69,6 @@
 .static-design-scope { margin-top: 16px; }
 .static-design-scope label { display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: var(--wb-muted); }
 .static-design-relations { margin-top: 16px; }
+
+.movement-design-phase { margin-top: 12px; padding: 12px; border-radius: 8px; background: var(--wb-inset); }
+.movement-design-phase > div { display: flex; gap: 8px; margin: 8px 0; flex-wrap: wrap; }

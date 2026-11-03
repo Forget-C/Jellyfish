@@ -10,4 +10,3 @@ export type Criterion_Output = {
     id: string;
     requirement: Note_Output;
 };
-

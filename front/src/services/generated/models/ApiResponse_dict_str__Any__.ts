@@ -20,4 +20,3 @@ export type ApiResponse_dict_str__Any__ = {
      */
     meta?: (Record<string, any> | null);
 };
-

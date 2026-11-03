@@ -17,4 +17,3 @@ export type BlockingState_Output = {
     path: Note_Output;
     transition_reason: Note_Output;
 };
-

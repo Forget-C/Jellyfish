@@ -9,4 +9,3 @@ import type { DivisionSuggestion } from './DivisionSuggestion';
 export type DivisionResult = {
     scenes: Array<DivisionSuggestion>;
 };
-

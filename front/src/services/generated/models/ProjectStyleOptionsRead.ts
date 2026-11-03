@@ -20,4 +20,3 @@ export type ProjectStyleOptionsRead = {
      */
     default_style_by_visual_style?: Record<string, string>;
 };
-

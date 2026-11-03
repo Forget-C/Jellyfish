@@ -21,4 +21,3 @@ export type ApiResponse_SceneVersionContent_ = {
      */
     meta?: (Record<string, any> | null);
 };
-

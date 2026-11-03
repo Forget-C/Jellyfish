@@ -24,4 +24,3 @@ export type TakeSnapshot = {
     display_number?: (number | null);
     annotation: TakeAnnotation_Output;
 };
-

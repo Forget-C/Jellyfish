@@ -22,4 +22,3 @@ export type ReferenceBinding_Input = {
      */
     asset_origin?: (AssetOrigin | null);
 };
-

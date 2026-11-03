@@ -14,4 +14,3 @@ export type SoundDesign_Output = {
     music_constraints: Note_Output;
     execution: string;
 };
-

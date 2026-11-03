@@ -19,4 +19,3 @@ export type CameraCard = {
     type?: 'direction.camera';
     fields?: CameraDesignFields;
 };
-

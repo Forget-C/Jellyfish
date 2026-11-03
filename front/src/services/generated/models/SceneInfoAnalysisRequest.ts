@@ -27,4 +27,3 @@ export type SceneInfoAnalysisRequest = {
      */
     scene_description: string;
 };
-

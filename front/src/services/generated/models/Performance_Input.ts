@@ -13,4 +13,3 @@ export type Performance_Input = {
     beats: Array<PerformanceBeat_Input>;
     applicability: Note_Input;
 };
-

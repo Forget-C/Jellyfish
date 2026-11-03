@@ -15,4 +15,3 @@ export type TakeAnnotation_Input = {
     rationale: Note_Input;
     retained_ranges: Array<MediaRange>;
 };
-

@@ -19,4 +19,3 @@ export type LightingCard = {
     type?: 'direction.lighting';
     fields?: LightingDesignFields;
 };
-

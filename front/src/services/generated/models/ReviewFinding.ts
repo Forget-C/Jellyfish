@@ -12,4 +12,3 @@ export type ReviewFinding = {
     suggestion: Note_Output;
     acceptance: Note_Output;
 };
-

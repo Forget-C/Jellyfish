@@ -16,4 +16,3 @@ export type ContinuityState_Output = {
     after: Note_Output;
     following_constraint: Note_Output;
 };
-

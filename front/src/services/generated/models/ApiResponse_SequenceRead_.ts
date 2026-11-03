@@ -21,4 +21,3 @@ export type ApiResponse_SequenceRead_ = {
      */
     meta?: (Record<string, any> | null);
 };
-

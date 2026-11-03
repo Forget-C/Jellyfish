@@ -15,4 +15,3 @@ export type FocusDesignFields = {
     adjacent_requirements?: DesignField;
     prohibitions?: DesignField;
 };
-

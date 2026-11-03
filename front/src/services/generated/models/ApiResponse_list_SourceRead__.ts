@@ -21,4 +21,3 @@ export type ApiResponse_list_SourceRead__ = {
      */
     meta?: (Record<string, any> | null);
 };
-

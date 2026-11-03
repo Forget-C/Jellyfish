@@ -21,4 +21,3 @@ export type ApiResponse_RenderedPromptSnapshot_ = {
      */
     meta?: (Record<string, any> | null);
 };
-

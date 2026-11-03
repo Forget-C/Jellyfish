@@ -20,4 +20,3 @@ export type PromptCategoryOptionRead = {
      */
     description?: string;
 };
-

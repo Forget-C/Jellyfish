@@ -13,4 +13,3 @@ export type LightingDesignFields = {
     exposure_color?: DesignField;
     color_relationship?: DesignField;
 };
-

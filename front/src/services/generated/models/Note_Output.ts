@@ -12,4 +12,3 @@ export type Note_Output = {
     reason?: (string | null);
     sources?: Array<Source>;
 };
-

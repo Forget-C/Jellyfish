@@ -19,4 +19,3 @@ export type FocusCard = {
     type?: 'direction.focus';
     fields?: FocusDesignFields;
 };
-

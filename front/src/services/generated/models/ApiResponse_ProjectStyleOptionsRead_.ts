@@ -21,4 +21,3 @@ export type ApiResponse_ProjectStyleOptionsRead_ = {
      */
     meta?: (Record<string, any> | null);
 };
-

@@ -1,5 +1,5 @@
 """首个画布消费者使用的轻量类型契约，不包含布局或运行状态。"""
-from app.core.contracts.generation_canvas import StyleDesignFields, CameraDesignFields, LightingDesignFields, FocusDesignFields
+from app.core.contracts.generation_canvas import StyleDesignFields, CameraDesignFields, LightingDesignFields, FocusDesignFields, MovementDesignFields, MovementPhase
 from typing import Annotated, Any, ClassVar, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.schemas.common import ApiResponse
@@ -572,6 +572,19 @@ class CompositionCard(PerformanceDirectionCard):
     type: Literal['direction.composition'] = Field(default='direction.composition', json_schema_extra={'enum': ['direction.composition']})
     fields: CompositionDesignFields = Field(default_factory=CompositionDesignFields)
     input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'shot', 'acceptance_basis', 'image_example', 'video_example')
+class MovementCard(PerformanceDirectionCard):
+    """独立运镜及稳定阶段，只有整卡设计出口。"""
+    type: Literal['direction.movement'] = Field(default='direction.movement', json_schema_extra={'enum': ['direction.movement']})
+    fields: MovementDesignFields = Field(default_factory=MovementDesignFields)
+    phases: list[MovementPhase] = Field(default_factory=list)
+    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'attention_object', 'shot', 'acceptance_basis', 'image_example', 'video_example')
+
+    @model_validator(mode='after')
+    def validate_phase_ids(self):
+        """阶段重复身份无法可靠定位，保存时拒绝。"""
+        if len({phase.id for phase in self.phases}) != len(self.phases):
+            raise ValueError('运镜阶段身份必须唯一')
+        return self
 
 
 class NarrativeDirectionCard(PerformanceDirectionCard):
@@ -691,7 +704,7 @@ class CanvasDocument(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     schema_version: Literal[2] = 2
     cover_file_id: str | None = Field(default=None, min_length=1, max_length=36)
-    cards: list[CompositionCard | CameraCard | LightingCard | FocusCard | VisualStyleCard | SpaceRuleCard | ContinuityCard | ImmutableFactCard | CreativeControlCard | GenerationGuidanceCard | AcceptanceCriterionCard | PhotographyCard | DialogueCard | SoundArrangementCard | NarrativeOverviewCard | NarrativeBeatCard | NarrativeEventCard | ShotDesignCard | SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | CharacterDescriptionCard | PropDescriptionCard | CostumeDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard] = Field(default_factory=list)
+    cards: list[MovementCard | CompositionCard | CameraCard | LightingCard | FocusCard | VisualStyleCard | SpaceRuleCard | ContinuityCard | ImmutableFactCard | CreativeControlCard | GenerationGuidanceCard | AcceptanceCriterionCard | PhotographyCard | DialogueCard | SoundArrangementCard | NarrativeOverviewCard | NarrativeBeatCard | NarrativeEventCard | ShotDesignCard | SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | CharacterDescriptionCard | PropDescriptionCard | CostumeDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard] = Field(default_factory=list)
     edges: list[GenerationCanvasEdge] = Field(default_factory=list)
     input_order: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
     groups: list[GenerationCanvasGroup] = Field(default_factory=list)

@@ -21,4 +21,3 @@ export type ApiResponse_ScriptConsistencyCheckResult_ = {
      */
     meta?: (Record<string, any> | null);
 };
-

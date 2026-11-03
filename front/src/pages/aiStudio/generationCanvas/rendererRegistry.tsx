@@ -6,6 +6,7 @@ import { CompositionEditor } from './CompositionEditor'
 import { VisualStyleEditor } from './VisualStyleEditor'
 import { NarrativeDirectionEditor } from './NarrativeDirectionEditor'
 import { SpatialDirectionEditor } from './SpatialDirectionEditor'
+import { MovementEditor } from './MovementEditor'
 import { PhotographyEditor } from './PhotographyEditor'
 import type { ComponentType, ReactNode } from 'react'
 import type { CanvasDocument, CanvasModelCapability, CanvasNodeRead, CanvasResolvedOutput, CreativeBasisCard, ModelRead, TextContentCard } from '../../../services/generated'
@@ -34,6 +35,7 @@ export const rendererRegistry: Record<string, ComponentType<CardRendererProps>> 
   'direction.style': VisualStyleEditor,
   'direction.camera': StaticVisualDesignEditor, 'direction.lighting': StaticVisualDesignEditor, 'direction.focus': StaticVisualDesignEditor,
   'direction.composition': CompositionEditor,
+  'direction.movement': MovementEditor,
   'direction.photography': PhotographyEditor,
   'direction.situation': PerformanceDirectionEditor,
   'direction.dialogue': SoundDirectionEditor,

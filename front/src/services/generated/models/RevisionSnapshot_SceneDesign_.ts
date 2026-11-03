@@ -23,4 +23,3 @@ export type RevisionSnapshot_SceneDesign_ = {
     source_current?: boolean;
     content: SceneDesign_Output;
 };
-

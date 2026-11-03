@@ -15,4 +15,3 @@ export type GenerationDeliveryResult = {
     error_code?: (string | null);
     error_message?: (string | null);
 };
-

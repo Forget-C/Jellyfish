@@ -13,4 +13,3 @@ export type CameraDesignFields = {
     lens_effect?: DesignField;
     support?: DesignField;
 };
-

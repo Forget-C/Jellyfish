@@ -14,4 +14,3 @@ export type ReviewOccurrence = {
     shot_id: string;
     local_number: number;
 };
-

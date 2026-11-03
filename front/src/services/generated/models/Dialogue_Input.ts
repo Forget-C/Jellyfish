@@ -12,4 +12,3 @@ export type Dialogue_Input = {
     version: string;
     content: Note_Input;
 };
-

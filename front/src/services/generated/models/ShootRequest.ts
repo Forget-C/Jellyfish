@@ -10,4 +10,3 @@ export type ShootRequest = {
     review_revision_id: string;
     request_id: string;
 };
-

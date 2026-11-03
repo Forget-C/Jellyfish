@@ -21,4 +21,3 @@ export type ApiResponse_ProjectActorLinkRead_ = {
      */
     meta?: (Record<string, any> | null);
 };
-

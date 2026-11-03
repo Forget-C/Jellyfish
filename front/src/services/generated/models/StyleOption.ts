@@ -15,4 +15,3 @@ export type StyleOption = {
      */
     label: string;
 };
-
