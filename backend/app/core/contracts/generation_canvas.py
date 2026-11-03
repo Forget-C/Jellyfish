@@ -140,6 +140,64 @@ class DesignField(BaseModel):
     source_locator: str = ''
 
 
+class DesignFieldText(BaseModel):
+    """Literal field text, never parsed again after reference expansion."""
+    model_config = ConfigDict(extra='forbid')
+    id: str = Field(min_length=1)
+    kind: Literal['text'] = Field(json_schema_extra={'enum': ['text']})
+    text: str = ''
+
+
+class DesignFieldReference(BaseModel):
+    """A field owns its stable source, independently of model adoption bindings."""
+    model_config = ConfigDict(extra='forbid')
+    id: str = Field(min_length=1)
+    kind: Literal['reference'] = Field(json_schema_extra={'enum': ['reference']})
+    source: OutputIdentity
+
+
+class DesignFieldDocument(BaseModel):
+    """Editor-independent field segments with unique diagnostic identities."""
+    model_config = ConfigDict(extra='forbid')
+    segments: list[DesignFieldText | DesignFieldReference] = Field(default_factory=list)
+
+    @model_validator(mode='after')
+    def validate_identities(self):
+        """Repeated fragment identities cannot locate a reference unambiguously."""
+        if len({segment.id for segment in self.segments}) != len(self.segments):
+            raise ValueError('设计参数片段身份必须唯一')
+        return self
+
+
+class ReferenceDesignField(DesignField):
+    """Only the six visual designs expose reference-aware parameter documents."""
+    document: DesignFieldDocument | None = Field(default=None, exclude_if=lambda value: value is None)
+
+
+class DesignMediaReference(BaseModel):
+    """Actual active field media, with stable provenance and resolved availability."""
+    model_config = ConfigDict(extra='forbid')
+    source: OutputIdentity
+    field_id: str
+    modality: Literal['image', 'video', 'audio']
+    token: str
+    file_id: str | None = None
+    result_set_id: str | None = None
+    available: bool
+    basis_current: bool = True
+    payload: MediaOutputPayload | NamedImagePayload | None = None
+
+
+class DesignReferenceIssue(BaseModel):
+    """An active field problem follows adopted design output to model diagnostics."""
+    model_config = ConfigDict(extra='forbid')
+    source: OutputIdentity | None = None
+    field_id: str
+    reference_id: str
+    code: str
+    message: str
+
+
 class DesignScope(BaseModel):
     """创作者声明的范围与制作阶段，不自动推断镜头适用性。"""
     model_config = ConfigDict(extra='forbid')
@@ -379,11 +437,11 @@ class FrameState(BaseModel):
 class StyleDesignFields(BaseModel):
     """风格只保留可编辑创作意图；示例文件不属于设计输出。"""
     model_config = ConfigDict(extra='forbid')
-    direction: DesignField = Field(default_factory=DesignField)
-    visual_features: DesignField = Field(default_factory=DesignField)
-    materials: DesignField = Field(default_factory=DesignField)
-    colors: DesignField = Field(default_factory=DesignField)
-    notes: DesignField = Field(default_factory=DesignField)
+    direction: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    visual_features: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    materials: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    colors: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    notes: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
 
 
 class DesignFrameTarget(BaseModel):
@@ -405,35 +463,35 @@ class ResolvedDesignFrameTarget(BaseModel):
 class CameraDesignFields(BaseModel):
     """Camera owns only its declared design parameters."""
     model_config = ConfigDict(extra='forbid')
-    viewpoint: DesignField = Field(default_factory=DesignField)
-    position: DesignField = Field(default_factory=DesignField)
-    height_angle: DesignField = Field(default_factory=DesignField)
-    lens_effect: DesignField = Field(default_factory=DesignField)
-    support: DesignField = Field(default_factory=DesignField)
+    viewpoint: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    position: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    height_angle: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    lens_effect: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    support: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
 
 
 class LightingDesignFields(BaseModel):
     """Lighting owns only its declared design parameters."""
     model_config = ConfigDict(extra='forbid')
-    light_sources: DesignField = Field(default_factory=DesignField)
-    light_direction: DesignField = Field(default_factory=DesignField)
-    light_regions: DesignField = Field(default_factory=DesignField)
-    exposure_color: DesignField = Field(default_factory=DesignField)
-    color_relationship: DesignField = Field(default_factory=DesignField)
+    light_sources: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    light_direction: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    light_regions: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    exposure_color: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    color_relationship: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
 
 
 class FocusDesignFields(BaseModel):
     """Focus owns only its declared design parameters."""
     model_config = ConfigDict(extra='forbid')
-    depth_focus: DesignField = Field(default_factory=DesignField)
-    focus_change: DesignField = Field(default_factory=DesignField)
-    optical_effects: DesignField = Field(default_factory=DesignField)
-    motion_texture: DesignField = Field(default_factory=DesignField)
-    technical_parameters: DesignField = Field(default_factory=DesignField)
-    adjacent_requirements: DesignField = Field(default_factory=DesignField)
-    prohibitions: DesignField = Field(default_factory=DesignField)
+    depth_focus: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    focus_change: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    optical_effects: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    motion_texture: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    technical_parameters: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    adjacent_requirements: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    prohibitions: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
 
-class CompositionFramingField(DesignField):
+class CompositionFramingField(ReferenceDesignField):
     """构图的结构化景别；跨卡画面定位另由显式关系表达。"""
     size: Literal['extreme_close_up', 'close_up', 'medium', 'full', 'wide', 'extreme_wide'] | None = None
     target_id: str = ''
@@ -444,20 +502,20 @@ class CompositionDesignFields(BaseModel):
     """构图独立拥有所属字段，不包含其他摄影分区。"""
     model_config = ConfigDict(extra='forbid')
     shot_size: CompositionFramingField = Field(default_factory=CompositionFramingField)
-    composition: DesignField = Field(default_factory=DesignField)
-    frame_position: DesignField = Field(default_factory=DesignField)
-    depth_layers: DesignField = Field(default_factory=DesignField)
-    negative_space: DesignField = Field(default_factory=DesignField)
-    composition_requirements: DesignField = Field(default_factory=DesignField)
+    composition: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    frame_position: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    depth_layers: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    negative_space: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    composition_requirements: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
 class MovementDesignFields(BaseModel):
     """独立运镜字段；其他摄影区域不属于本卡。"""
     model_config = ConfigDict(extra='forbid')
-    movement_type: DesignField = Field(default_factory=DesignField)
-    movement_start: DesignField = Field(default_factory=DesignField)
-    movement_trigger: DesignField = Field(default_factory=DesignField)
-    movement_path: DesignField = Field(default_factory=DesignField)
-    movement_speed: DesignField = Field(default_factory=DesignField)
-    end_frame: DesignField = Field(default_factory=DesignField)
+    movement_type: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    movement_start: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    movement_trigger: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    movement_path: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    movement_speed: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
+    end_frame: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
 
 
 class MovementPhase(BaseModel):
@@ -465,7 +523,7 @@ class MovementPhase(BaseModel):
     model_config = ConfigDict(extra='forbid')
     id: str = Field(min_length=1, max_length=64, pattern=r'^[A-Za-z0-9_-]+$')
     name: str = ''
-    frame: DesignField = Field(default_factory=DesignField)
+    frame: ReferenceDesignField = Field(default_factory=ReferenceDesignField)
 
 
 class DesignTextPayload(BaseModel):
@@ -473,6 +531,8 @@ class DesignTextPayload(BaseModel):
     model_config = ConfigDict(extra='forbid')
     kind: Literal['design'] = Field(default='design', json_schema_extra={'enum': ['design']})
     design_type: Literal['direction.movement', 'direction.composition', 'direction.camera', 'direction.lighting', 'direction.focus', 'direction.style', 'direction.space_rule', 'direction.continuity', 'direction.fact', 'direction.creative_control', 'direction.guidance', 'direction.criterion', 'direction.situation', 'direction.performance', 'direction.performance_rule', 'direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment', 'direction.narrative', 'direction.beat', 'direction.event', 'direction.shot', 'direction.dialogue', 'direction.sound']
+    material_references: list[DesignMediaReference] = Field(default_factory=list, exclude_if=lambda value: not value)
+    reference_issues: list[DesignReferenceIssue] = Field(default_factory=list, exclude_if=lambda value: not value)
     adoption: Literal['whole_card'] = Field(default='whole_card', json_schema_extra={'enum': ['whole_card']})
     text: str
     frame_target_state: ResolvedDesignFrameTarget | None = Field(default=None, exclude_if=lambda value: value is None)

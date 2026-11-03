@@ -31,5 +31,5 @@ export const photographyPresets: Record<string, VisualPreset[]> = {
 }
 /** 只修改预设所声明的字段；关系、示例、其他区域与自定义说明保持原值。 */
 export function applyPreset<T extends VisualPresetFields>(fields: T, preset: VisualPreset): T {
-  return { ...fields, ...Object.fromEntries(Object.entries(preset.fields).map(([key, value]) => [key, { ...fields[key as keyof T], ...value }])) }
+  return { ...fields, ...Object.fromEntries(Object.entries(preset.fields).map(([key, value]) => [key, { ...fields[key as keyof T], ...value, ...('document' in (fields[key as keyof T] || {}) ? { document: null } : {}) }])) }
 }

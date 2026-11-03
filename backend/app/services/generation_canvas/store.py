@@ -135,6 +135,8 @@ class CanvasStore:
                 continue
             references = [(reference.source, reference.id, path) for reference, path in prompt_references(receiver)] if isinstance(receiver, ModelCard) else [
                 (binding.source, binding.id, ['input_bindings', binding.id]) for binding in getattr(receiver, 'input_bindings', [])]
+            from app.services.generation_canvas.design_references import design_field_references
+            references.extend((ref.source, ref.id, path) for ref, _, path in design_field_references(receiver))
             if isinstance(receiver, NamedImageReferenceCard) and receiver.name_binding:
                 references.append((receiver.name_binding, 'name', ['name_binding']))
             if isinstance(receiver, NamedImageReferenceCard) and receiver.image_binding and receiver.image_binding.source:

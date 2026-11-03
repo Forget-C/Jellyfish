@@ -87,7 +87,7 @@ try {
   })
   await detail.getByRole('textbox',{name:'风格方向内容',exact:true}).fill(long+'保留失败输入')
   await detail.getByRole('status').filter({hasText:'SAVE_FAILURE'}).waitFor()
-  assert.equal(await detail.getByRole('textbox',{name:'风格方向内容',exact:true}).inputValue(),long+'保留失败输入')
+  assert.equal(await detail.getByRole('textbox',{name:'风格方向内容',exact:true}).innerText(),long+'保留失败输入')
   await close();await page.getByRole('button',{name:'保存画布',exact:true}).click()
   await poll(s=>s.document.cards.find(c=>c.id==='style').fields.direction.text===long+'保留失败输入')
   await open('style');await detail.getByRole('button',{name:'高级设置',exact:true}).click()
@@ -116,7 +116,7 @@ try {
   }
   await close();await page.reload();await open('style')
   await detail.getByRole('button',{name:'高级设置',exact:true}).click()
-  assert.equal(await detail.getByRole('textbox',{name:'风格方向内容',exact:true}).inputValue(),long)
+  assert.equal(await detail.getByRole('textbox',{name:'风格方向内容',exact:true}).innerText(),long)
   await close()
   const observer=await context.newPage();await observer.addInitScript(()=>{window.__ENV={BACKEND_URL:window.location.origin}})
   await observer.goto(page.url());await observer.getByText('此画布当前只读',{exact:true}).waitFor()

@@ -1,3 +1,4 @@
+import { designReferences } from './designFieldReferences'
 import type { CanvasDocument, OutputIdentity } from '../../../services/generated'
 import type { GenerationCard } from './graphRules'
 import { editorPrompt } from './inputBindings'
@@ -8,11 +9,12 @@ export const referencesIn = (prompt?: PromptDocument): PromptReference[] => (pro
 export function referenceIssue(document: CanvasDocument, _receiver: GenerationCard, source: OutputIdentity, candidates: Candidate[] = []) {
   if (source.canvas_id !== document.id) return '来源属于其他画布'
   const item = candidates.find(candidate => sourceKey(candidate.source) === sourceKey(source))
-  return !item ? '来源未连接' : !item.available ? '来源输出缺失' : ''
+  return !item ? '来源未连接' : !item.available ? item.disabledReason || '来源输出缺失' : ''
 }
 /** 清理引用与删边/来源可以在同一份最终编辑文档里完成。 */
 export function referenceProtection(document: CanvasDocument, sourceCard: string, receiverId?: string, sourcePort?: string, targetPort?: string) {
   for (const card of document.cards || []) if (('input_bindings' in card || 'image_binding' in card || 'name_binding' in card) && (!receiverId || card.id === receiverId)) {
+    for (const { reference, field } of designReferences(card)) if (reference.source.canvas_id === document.id && reference.source.card_id === sourceCard && (!sourcePort || reference.source.port_id === sourcePort) && (!targetPort || document.edges?.some(edge => edge.target_card === card.id && edge.target_port === targetPort && edge.source_card === sourceCard && edge.source_port === reference.source.port_id))) return { message: `请先清理 ${card.id} 的参数引用 ${field}`, cardId: card.id, segmentId: reference.id, referenceId: reference.id }
     if ((!targetPort || targetPort === 'name') && 'name_binding' in card && card.name_binding?.card_id === sourceCard && (!sourcePort || card.name_binding.port_id === sourcePort))
       return { message: '请先取消已采用的名称关联', cardId: card.id, segmentId: 'name', referenceId: 'name' }
     if ((!targetPort || targetPort === 'image_source') && 'image_binding' in card && card.image_binding?.source?.card_id === sourceCard && (!sourcePort || card.image_binding.source.port_id === sourcePort))

@@ -11,6 +11,8 @@ import type { CompositionDesignFields } from './CompositionDesignFields';
 import type { ContinuityFields } from './ContinuityFields';
 import type { CreativeControlFields } from './CreativeControlFields';
 import type { CriterionReferencePayload } from './CriterionReferencePayload';
+import type { DesignMediaReference } from './DesignMediaReference';
+import type { DesignReferenceIssue } from './DesignReferenceIssue';
 import type { DesignScope } from './DesignScope';
 import type { DialogueBasis } from './DialogueBasis';
 import type { EnvironmentDesignFields } from './EnvironmentDesignFields';
@@ -41,6 +43,8 @@ import type { StyleDesignFields } from './StyleDesignFields';
 export type DesignTextPayload = {
     kind?: 'design';
     design_type: 'direction.movement' | 'direction.composition' | 'direction.camera' | 'direction.lighting' | 'direction.focus' | 'direction.style' | 'direction.space_rule' | 'direction.continuity' | 'direction.fact' | 'direction.creative_control' | 'direction.guidance' | 'direction.criterion' | 'direction.situation' | 'direction.performance' | 'direction.performance_rule' | 'direction.anchor' | 'direction.blocking' | 'direction.activity' | 'direction.environment' | 'direction.narrative' | 'direction.beat' | 'direction.event' | 'direction.shot' | 'direction.dialogue' | 'direction.sound';
+    material_references?: Array<DesignMediaReference>;
+    reference_issues?: Array<DesignReferenceIssue>;
     adoption?: 'whole_card';
     text: string;
     frame_target_state?: (ResolvedDesignFrameTarget | null);

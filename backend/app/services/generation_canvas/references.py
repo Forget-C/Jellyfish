@@ -24,6 +24,8 @@ async def validate_references(db, document, previous, project_id, media_referenc
             for receiver in document.cards:
                 sources = [binding.source for binding in getattr(receiver, 'input_bindings', [])]
                 sources += [example.source for example in getattr(receiver, 'examples', [])]
+                from app.services.generation_canvas.design_references import design_field_references
+                sources += [ref.source for ref, _, _ in design_field_references(receiver)]
                 image = getattr(receiver, 'image_binding', None)
                 if image and image.source:
                     sources.append(image.source)

@@ -1,6 +1,6 @@
 import type { VisualStyleCard } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
-import { DesignFieldEditor } from './DesignFieldEditor'
+import { ReferencedDesignFieldEditor as DesignFieldEditor } from './DesignReferenceEditor'
 import { DesignPresetEditor } from './DesignPresetEditor'
 import { applyPreset, styleLabels, stylePresets } from './visualPresets'
 import { designSummary } from './designSummary'

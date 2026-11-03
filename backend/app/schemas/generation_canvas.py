@@ -542,7 +542,7 @@ class VisualStyleCard(PerformanceDirectionCard):
     """独立风格整卡采用，内置预设应用后成为本卡普通字段。"""
     type: Literal['direction.style'] = Field(default='direction.style', json_schema_extra={'enum': ['direction.style']})
     fields: StyleDesignFields = Field(default_factory=StyleDesignFields)
-    input_ports: ClassVar[tuple[str, ...]] = ('image_example', 'video_example')
+    input_ports: ClassVar[tuple[str, ...]] = ('image_example', 'video_example', 'text', 'image', 'video', 'audio', 'object')
 
 
 class CameraCard(PerformanceDirectionCard):
@@ -550,7 +550,7 @@ class CameraCard(PerformanceDirectionCard):
     type: Literal['direction.camera'] = Field(default='direction.camera', json_schema_extra={'enum': ['direction.camera']})
     fields: CameraDesignFields = Field(default_factory=CameraDesignFields)
     examples: list[DesignMediaExample] = Field(default_factory=list, max_length=0)
-    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'shot', 'acceptance_basis')
+    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'shot', 'acceptance_basis', 'text', 'image', 'video', 'audio', 'object')
 
 
 class LightingCard(PerformanceDirectionCard):
@@ -558,7 +558,7 @@ class LightingCard(PerformanceDirectionCard):
     type: Literal['direction.lighting'] = Field(default='direction.lighting', json_schema_extra={'enum': ['direction.lighting']})
     fields: LightingDesignFields = Field(default_factory=LightingDesignFields)
     examples: list[DesignMediaExample] = Field(default_factory=list, max_length=0)
-    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'shot', 'acceptance_basis')
+    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'shot', 'acceptance_basis', 'text', 'image', 'video', 'audio', 'object')
 
 
 class FocusCard(PerformanceDirectionCard):
@@ -566,20 +566,20 @@ class FocusCard(PerformanceDirectionCard):
     type: Literal['direction.focus'] = Field(default='direction.focus', json_schema_extra={'enum': ['direction.focus']})
     fields: FocusDesignFields = Field(default_factory=FocusDesignFields)
     examples: list[DesignMediaExample] = Field(default_factory=list, max_length=0)
-    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'attention_object', 'focus_object', 'shot', 'acceptance_basis')
+    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'attention_object', 'focus_object', 'shot', 'acceptance_basis', 'text', 'image', 'video', 'audio', 'object')
 
 class CompositionCard(PerformanceDirectionCard):
     """独立景别与构图，仅整卡采用。"""
     type: Literal['direction.composition'] = Field(default='direction.composition', json_schema_extra={'enum': ['direction.composition']})
     fields: CompositionDesignFields = Field(default_factory=CompositionDesignFields)
     frame_target: DesignFrameTarget | None = Field(default=None, exclude_if=lambda value: value is None)
-    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'shot', 'acceptance_basis', 'image_example', 'video_example')
+    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'shot', 'acceptance_basis', 'image_example', 'video_example', 'text', 'image', 'video', 'audio', 'object')
 class MovementCard(PerformanceDirectionCard):
     """独立运镜及稳定阶段，只有整卡设计出口。"""
     type: Literal['direction.movement'] = Field(default='direction.movement', json_schema_extra={'enum': ['direction.movement']})
     fields: MovementDesignFields = Field(default_factory=MovementDesignFields)
     phases: list[MovementPhase] = Field(default_factory=list)
-    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'attention_object', 'shot', 'acceptance_basis', 'image_example', 'video_example')
+    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'attention_object', 'shot', 'acceptance_basis', 'image_example', 'video_example', 'text', 'image', 'video', 'audio', 'object')
 
     @model_validator(mode='after')
     def validate_phase_ids(self):

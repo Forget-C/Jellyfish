@@ -1,7 +1,7 @@
 import { Alert, Select } from 'antd'
 import type { CompositionCard, DesignField, MovementCard } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
-import { DesignFieldEditor } from './DesignFieldEditor'
+import { ReferencedDesignFieldEditor as DesignFieldEditor } from './DesignReferenceEditor'
 import { DesignPresetEditor } from './DesignPresetEditor'
 import { applyPreset, photographyPresets } from './visualPresets'
 import { photographyRegions, shotSizeLabels } from './photographyDesign'

@@ -1,7 +1,7 @@
 import { Input, Select } from 'antd'
 import type { MovementCard } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
-import { DesignFieldEditor } from './DesignFieldEditor'
+import { ReferencedDesignFieldEditor as DesignFieldEditor } from './DesignReferenceEditor'
 import { DesignPresetEditor } from './DesignPresetEditor'
 import { applyPreset, photographyPresets } from './visualPresets'
 import { photographyRegions } from './photographyDesign'

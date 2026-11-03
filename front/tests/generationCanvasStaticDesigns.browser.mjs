@@ -75,7 +75,7 @@ try {
     await page.reload()
     await page.locator(`[data-card-id="${card.id}"]`).getByRole('button',{name:'编辑设计',exact:true}).click()
     await detail.getByRole('button',{name:'高级设置',exact:true}).click()
-    assert.equal(await detail.getByRole('textbox',{name:extra+'内容',exact:true}).inputValue(),'独立的'+kind+'说明')
+    assert.equal(await detail.getByRole('textbox',{name:extra+'内容',exact:true}).innerText(),'独立的'+kind+'说明')
     await detail.getByRole('button',{name:'关闭详情',exact:true}).click()
   }
   const saved=(await read()).document
