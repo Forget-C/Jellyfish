@@ -8,4 +8,3 @@
 export type VersionRequest = {
     expected_version: number;
 };
-

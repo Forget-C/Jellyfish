@@ -21,4 +21,3 @@ export type ApiResponse_ProviderRead_ = {
      */
     meta?: (Record<string, any> | null);
 };
-

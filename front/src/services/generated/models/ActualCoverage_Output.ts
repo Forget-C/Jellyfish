@@ -14,4 +14,3 @@ export type ActualCoverage_Output = {
     observation: string;
     source: Source;
 };
-

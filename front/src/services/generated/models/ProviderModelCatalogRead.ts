@@ -24,4 +24,3 @@ export type ProviderModelCatalogRead = {
      */
     models?: Array<ProviderModelCandidate>;
 };
-

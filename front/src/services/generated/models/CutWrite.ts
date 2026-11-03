@@ -10,4 +10,3 @@ export type CutWrite = {
     kind: string;
     content: SequenceCut_Input;
 };
-

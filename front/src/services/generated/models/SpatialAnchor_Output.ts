@@ -10,4 +10,3 @@ export type SpatialAnchor_Output = {
     id: string;
     description: Note_Output;
 };
-

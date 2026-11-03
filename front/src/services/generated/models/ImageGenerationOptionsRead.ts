@@ -31,4 +31,3 @@ export type ImageGenerationOptionsRead = {
      */
     ratio_size_profiles?: Record<string, Record<string, string>>;
 };
-

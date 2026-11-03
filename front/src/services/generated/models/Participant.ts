@@ -17,4 +17,3 @@ export type Participant = {
      */
     prop_id?: (string | null);
 };
-

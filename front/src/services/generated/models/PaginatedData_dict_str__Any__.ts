@@ -13,4 +13,3 @@ export type PaginatedData_dict_str__Any__ = {
      */
     pagination: Pagination;
 };
-

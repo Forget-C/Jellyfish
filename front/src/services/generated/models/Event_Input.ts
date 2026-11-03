@@ -10,4 +10,3 @@ export type Event_Input = {
     id: string;
     description: Note_Input;
 };
-

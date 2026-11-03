@@ -21,4 +21,3 @@ export type ApiResponse_TaskResultRead_ = {
      */
     meta?: (Record<string, any> | null);
 };
-

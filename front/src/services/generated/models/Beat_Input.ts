@@ -14,4 +14,3 @@ export type Beat_Input = {
     expected_change: Note_Input;
     must_show: Note_Input;
 };
-

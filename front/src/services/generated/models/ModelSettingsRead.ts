@@ -32,4 +32,3 @@ export type ModelSettingsRead = {
      */
     id: number;
 };
-

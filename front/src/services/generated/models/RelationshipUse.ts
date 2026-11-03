@@ -18,4 +18,3 @@ export type RelationshipUse = {
     reason: string;
     has_content?: boolean;
 };
-

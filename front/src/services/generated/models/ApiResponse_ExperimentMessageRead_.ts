@@ -21,4 +21,3 @@ export type ApiResponse_ExperimentMessageRead_ = {
      */
     meta?: (Record<string, any> | null);
 };
-

@@ -23,4 +23,3 @@ export type RevisionSnapshot_Prompt_ = {
     source_current?: boolean;
     content: Prompt;
 };
-

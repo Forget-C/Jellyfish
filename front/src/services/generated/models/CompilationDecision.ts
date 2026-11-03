@@ -12,4 +12,3 @@ export type CompilationDecision = {
     text_excerpt?: (string | null);
     reference_id?: (string | null);
 };
-

@@ -59,4 +59,3 @@ export type VideoGenerationOptionsRead = {
      */
     max_total_subject_videos?: (number | null);
 };
-

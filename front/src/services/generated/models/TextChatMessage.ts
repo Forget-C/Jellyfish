@@ -10,4 +10,3 @@ export type TextChatMessage = {
     content: string;
     sequence: number;
 };
-

@@ -11,4 +11,3 @@ export type ModelCapability_Output = {
     reference_kinds?: Array<'image' | 'video' | 'audio'>;
     evidence?: (Source | null);
 };
-

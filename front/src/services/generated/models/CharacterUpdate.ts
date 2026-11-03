@@ -16,4 +16,3 @@ export type CharacterUpdate = {
     actor_id?: (string | null);
     costume_id?: (string | null);
 };
-

@@ -10,4 +10,3 @@ export type DesignWrite = {
     kind: string;
     content: SceneDesign_Input;
 };
-

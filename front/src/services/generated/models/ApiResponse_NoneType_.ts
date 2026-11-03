@@ -20,4 +20,3 @@ export type ApiResponse_NoneType_ = {
      */
     meta?: (Record<string, any> | null);
 };
-

@@ -10,4 +10,3 @@ export type SpatialAnchor_Input = {
     id: string;
     description: Note_Input;
 };
-

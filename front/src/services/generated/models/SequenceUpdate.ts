@@ -13,4 +13,3 @@ export type SequenceUpdate = {
     span?: (SourceSpan | null);
     expected_version: number;
 };
-

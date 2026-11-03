@@ -13,4 +13,3 @@ export type MediaCutItem = {
     media_range: MediaRange;
     timeline_start_ms: number;
 };
-

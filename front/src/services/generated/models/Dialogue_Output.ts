@@ -12,4 +12,3 @@ export type Dialogue_Output = {
     version: string;
     content: Note_Output;
 };
-

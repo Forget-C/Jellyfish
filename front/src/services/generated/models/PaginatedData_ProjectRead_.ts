@@ -14,4 +14,3 @@ export type PaginatedData_ProjectRead_ = {
      */
     pagination: Pagination;
 };
-

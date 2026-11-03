@@ -22,4 +22,3 @@ export type WorkspaceRead = {
     takes: Array<TakeSnapshot>;
     task_ids: Array<string>;
 };
-

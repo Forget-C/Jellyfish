@@ -19,4 +19,3 @@ export type ScriptConsistencyCheckRequest = {
      */
     script_text: string;
 };
-

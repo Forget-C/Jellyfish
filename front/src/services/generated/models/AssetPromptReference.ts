@@ -9,4 +9,3 @@ export type AssetPromptReference = {
     file_id: string;
     role: 'identity' | 'costume' | 'prop' | 'layout' | 'style' | 'design';
 };
-

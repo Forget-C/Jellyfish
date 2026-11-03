@@ -40,4 +40,3 @@ export type ProviderSupportedRead = {
      */
     is_experimental?: boolean;
 };
-
