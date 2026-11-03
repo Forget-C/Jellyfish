@@ -12,6 +12,10 @@ export type VideoModelCard = {
     id: string;
     type_version?: number;
     model_id?: (string | null);
+    /**
+     * 已移除设计的稳定身份，补充或明确处理前阻塞运行
+     */
+    missing_designs?: Array<string>;
     prompt?: PromptDocument;
     input_bindings?: Array<InputBinding>;
     type?: string;

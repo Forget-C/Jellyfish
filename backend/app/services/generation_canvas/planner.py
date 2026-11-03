@@ -99,7 +99,8 @@ async def advance(db, run_id, head, *, interrupted=False):
                     await start_node(db, node, producers)
             except (HTTPException, ValidationError) as exc:
                 await db.refresh(node)
-                await stop_waiting(db, node, head, 'failed', 'INPUT_VALIDATION_FAILED', str(exc))
+                code = 'LEGACY_DESIGN_SNAPSHOT' if isinstance(exc, HTTPException) and isinstance(exc.detail, dict) and exc.detail.get('code') == 'LEGACY_DESIGN_SNAPSHOT' else 'INPUT_VALIDATION_FAILED'
+                await stop_waiting(db, node, head, 'failed', code, str(exc))
             else:
                 await append_event(db, head, 'node.updated', node=node, payload={'node': CanvasNodeRead.model_validate(node).model_dump()})
     # Failure may have occurred after a follower was visited; cascade to a fixed point.

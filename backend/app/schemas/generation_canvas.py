@@ -7,7 +7,7 @@ from app.core.contracts.media import VideoMediaInput
 from app.core.contracts.generation_canvas import CompositionDesignFields, DesignFrameTarget, BasisTextOutputPayload, DialogueReferencePayload, OutputIdentity, InputBinding, TextOutputPayload, MediaOutputPayload, ObjectReferencePayload, DescriptionTextPayload, ReferenceImageBinding, NamedImagePayload, CanvasSourceMapping, NamedImageMapping, DesignField, DesignScope, CriterionReferencePayload, DesignTextPayload, SpatialReferencePayload, NarrativeReferencePayload
 
 
-from app.core.contracts.photography import PhotographyFieldKey, PhotographyFields, PhotographyPhase, PhotographyTextPayload, ImageFrameTarget
+from app.core.contracts.photography import PhotographyTextPayload, ImageFrameTarget
 
 
 class CardDefinition(BaseModel):
@@ -131,6 +131,7 @@ class PromptDocument(BaseModel):
 class ModelCard(CardDefinition):
     """模型切换只替换模型身份；未完成配置也可持久保存。"""
     model_id: str | None = None
+    missing_designs: list[str] = Field(default_factory=list, description='已移除设计的稳定身份，补充或明确处理前阻塞运行')
     prompt: PromptDocument = Field(default_factory=PromptDocument)
     input_bindings: list[InputBinding] = Field(default_factory=list)
 
@@ -676,27 +677,6 @@ class ImmutableFactCard(ConstraintDirectionCard):
     input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'image_example', 'video_example', 'audio_example')
 
 
-class PhotographyMediaExample(DesignMediaExample):
-    """摄影示例可定位明确声明的字段，文件仍不随文本采用。"""
-    field_id: PhotographyFieldKey | None = None
-
-
-class PhotographyCard(PerformanceDirectionCard):
-    """五个区域共同维护一张摄影设计；所属镜头不成为使用前置条件。"""
-    type: Literal['direction.photography'] = Field(default='direction.photography', json_schema_extra={'enum': ['direction.photography']})
-    fields: PhotographyFields = Field(default_factory=PhotographyFields)
-    examples: list[PhotographyMediaExample] = Field(default_factory=list)
-    phases: list[PhotographyPhase] = Field(default_factory=list)
-    input_ports: ClassVar[tuple[str, ...]] = ('effect_object', 'attention_object', 'focus_object', 'shot', 'acceptance_basis', 'image_example', 'video_example')
-
-    @model_validator(mode='after')
-    def validate_phase_ids(self):
-        """阶段必须有唯一稳定身份，不以名称或数组位置绑定。"""
-        if len({phase.id for phase in self.phases}) != len(self.phases):
-            raise ValueError('摄影阶段身份必须唯一')
-        return self
-
-
 class CanvasDocument(BaseModel):
     """完整编辑文档；位置、尺寸和视角由浏览器另存。"""
     model_config = ConfigDict(extra='forbid')
@@ -705,7 +685,7 @@ class CanvasDocument(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     schema_version: Literal[2] = 2
     cover_file_id: str | None = Field(default=None, min_length=1, max_length=36)
-    cards: list[MovementCard | CompositionCard | CameraCard | LightingCard | FocusCard | VisualStyleCard | SpaceRuleCard | ContinuityCard | ImmutableFactCard | CreativeControlCard | GenerationGuidanceCard | AcceptanceCriterionCard | PhotographyCard | DialogueCard | SoundArrangementCard | NarrativeOverviewCard | NarrativeBeatCard | NarrativeEventCard | ShotDesignCard | SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | CharacterDescriptionCard | PropDescriptionCard | CostumeDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard] = Field(default_factory=list)
+    cards: list[MovementCard | CompositionCard | CameraCard | LightingCard | FocusCard | VisualStyleCard | SpaceRuleCard | ContinuityCard | ImmutableFactCard | CreativeControlCard | GenerationGuidanceCard | AcceptanceCriterionCard | DialogueCard | SoundArrangementCard | NarrativeOverviewCard | NarrativeBeatCard | NarrativeEventCard | ShotDesignCard | SpatialAnchorCard | BlockingDirectionCard | InFrameActivityCard | EnvironmentActivityCard | CharacterSituationCard | CharacterPerformanceCard | PerformanceRuleCard | NamedImageReferenceCard | TextContentCard | CreativeBasisCard | CharacterDescriptionCard | PropDescriptionCard | CostumeDescriptionCard | PlaceDescriptionCard | ImageContentCard | VideoContentCard | AudioContentCard | TextModelCard | ImageModelCard | VideoModelCard] = Field(default_factory=list)
     edges: list[GenerationCanvasEdge] = Field(default_factory=list)
     input_order: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
     groups: list[GenerationCanvasGroup] = Field(default_factory=list)
@@ -717,6 +697,8 @@ class CanvasDocument(BaseModel):
         """只读解析旧格式；不原地重写原始幂等正文或历史快照。"""
         if not isinstance(value, dict):
             return value
+        from app.services.generation_canvas.retirement import retire_photography
+        value = retire_photography(value)
         cards = value.get('cards', [])
         if not isinstance(cards, list) or any(not isinstance(card, dict) for card in cards):
             return value

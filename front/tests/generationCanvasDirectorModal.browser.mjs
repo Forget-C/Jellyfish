@@ -37,22 +37,23 @@ try {
   const created = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '导演输出与键盘提示' }) })).json()).data
   const id = created.id
   const field = (text, state = 'proposal') => ({ text, state, purpose: 'design' })
-  const types = ['photography','style','situation','performance','performance_rule','anchor','blocking','activity','environment','narrative','beat','event','shot','dialogue','sound','space_rule','continuity','fact','creative_control','guidance','criterion']
+  const types = ['lighting','composition','camera','movement','focus','style','situation','performance','performance_rule','anchor','blocking','activity','environment','narrative','beat','event','shot','dialogue','sound','space_rule','continuity','fact','creative_control','guidance','criterion']
   const cards = types.map(type => ({id:type,type:'direction.'+type,input_bindings:[],examples:[],scope:{},...(type==='dialogue'?{dialogue_id:'dialogue-one',version:1}:{})}))
   const save = await fetch(`${base}/${id}`, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:crypto.randomUUID(),expected_revision:created.revision,document:{...created.document,cards}})})
   assert.ok(save.ok,await save.clone().text())
   await page.goto(`http://127.0.0.1:4437/projects/canvas-project/generation-canvas?canvas=${id}`)
-  const photo = page.locator('[data-card-id="photography"]')
+  const photo = page.locator('[data-card-id="lighting"]')
   await photo.click()
   assert.equal(await page.locator('.wb-details:visible').count(),0,'pointer release selects complex card without opening its editor')
-  await photo.getByRole('button',{name:/^(开始摄影设计|编辑设计)$/}).click()
+  await photo.getByRole('button',{name:/^(开始设计|编辑设计)$/}).click()
   const details=page.locator('.wb-details:visible')
   assert.equal(await details.getAttribute('role'),'dialog','complex editor is a modal')
-  await details.getByRole('button',{name:'光影与色彩',exact:true}).click()
+  await details.getByRole('button',{name:'高级设置',exact:true}).click()
   await details.getByRole('textbox',{name:'光源内容',exact:true}).fill('保存后的夜间轮廓光')
   await page.locator('.generation-editor-mask').click({position:{x:10,y:10}})
   await details.waitFor({state:'hidden'})
-  await photo.getByRole('button',{name:/^(开始摄影设计|编辑设计)$/}).click()
+  await photo.getByRole('button',{name:/^(开始设计|编辑设计)$/}).click()
+  await details.getByRole('button',{name:'高级设置',exact:true}).click()
   assert.equal(await details.getByRole('textbox',{name:'光源内容',exact:true}).inputValue(),'保存后的夜间轮廓光')
   await page.screenshot({path:join(output,'director-modal-desktop.png')})
   await closeCanvasDetails(page)
@@ -72,20 +73,23 @@ try {
   await page.keyboard.press('Escape');await details.waitFor({state:'hidden'})
   await page.getByLabel('画布保存状态').getByText('已保存',{exact:true}).waitFor()
   const saved=(await (await fetch(`${base}/${id}`)).json()).data
-  assert.equal(saved.document.cards.find(c=>c.id==='photography').fields.light_sources.text,'保存后的夜间轮廓光')
+  assert.equal(saved.document.cards.find(c=>c.id==='lighting').fields.light_sources.text,'保存后的夜间轮廓光')
   await page.reload();await photo.press('Enter')
-  await details.getByRole('button',{name:'光影与色彩',exact:true}).click()
+  await details.getByRole('button',{name:'高级设置',exact:true}).click()
   assert.equal(await details.getByRole('textbox',{name:'光源内容',exact:true}).inputValue(),'保存后的夜间轮廓光')
   await closeCanvasDetails(page)
   await page.setViewportSize({width:1440,height:960})
-  for (const entry of ['景别与构图','机位与视角','运镜','光影与色彩','焦点与成像']) {
+  for (const [entry,kind] of [['景别与构图卡','composition'],['机位与视角卡','camera'],['运镜卡','movement'],['光影与色彩卡','lighting'],['焦点与成像卡','focus']]) {
     await openCardList(page,'画面设计')
     await page.getByRole('navigation',{name:'添加卡片',exact:true}).getByRole('button',{name:entry,exact:true}).click()
     assert.equal(await page.locator('.wb-details:visible').count(),0,'new director card is selected without opening modal')
     const addedId=await page.locator('[data-card-id][data-selected="true"]').getAttribute('data-card-id')
     const added=page.locator(`[data-card-id="${addedId}"]`)
     await added.press('Enter')
-    assert.equal(await details.getByRole('button',{name:entry,exact:true}).getAttribute('aria-pressed'),'true','new photography entry locates its region')
+    assert.equal(await details.getByRole('button',{name:'高级设置',exact:true}).isVisible(),true,'new design opens its own preset gallery')
+    await page.getByLabel('画布保存状态').getByText('已保存',{exact:true}).waitFor()
+    const latest=(await (await fetch(`${base}/${id}`)).json()).data
+    assert.equal(latest.document.cards.find(c=>c.id===addedId).type,'direction.'+kind)
     await closeCanvasDetails(page)
   }
   console.log('all director card modal entry, backdrop close, retained edits, autosave and reopen passed')

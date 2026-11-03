@@ -18,9 +18,7 @@ async def test_canvas_catalog_exposes_real_ports_groups_and_adoption(canvas_clie
     assert movement['category'] == '画面设计' and movement['entries'] == []
     assert [field['id'] for field in movement['fields']] == ['movement_type', 'movement_start', 'movement_trigger', 'movement_path', 'movement_speed', 'end_frame']
     assert movement['outputs'][0]['adoption'] == 'whole_card'
-    photo = cards['direction.photography']
-    assert photo['category'] == '画面设计' and len(photo['entries']) == 5
-    assert photo['outputs'][0]['adoption'] == 'declared_scope'
+    assert 'direction.photography' not in cards
     assert cards['direction.performance']['outputs'][0]['adoption'] == 'whole_card'
     for kind, field in [('camera', 'viewpoint'), ('lighting', 'light_sources'), ('focus', 'depth_focus')]:
         design = cards['direction.' + kind]
