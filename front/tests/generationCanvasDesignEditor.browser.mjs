@@ -129,7 +129,7 @@ try {
   }
   await page.setViewportSize({width:1440,height:960})
   await detail.getByRole('button',{name:'关闭详情',exact:true}).click()
-  await open('style');await detail.getByRole('switch',{name:'显示状态与来源',exact:true}).click()
+  await open('style');await detail.getByRole('button',{name:'高级设置',exact:true}).click();await detail.getByRole('switch',{name:'显示状态与来源',exact:true}).click()
   await detail.getByRole('combobox',{name:'风格方向状态',exact:true}).waitFor()
   await detail.getByRole('button',{name:'关闭详情',exact:true}).click()
   await page.getByLabel('画布保存状态').getByText('已保存',{exact:true}).waitFor()

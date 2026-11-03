@@ -13,7 +13,7 @@ import type { VisualPreset } from './visualPresets'
 import './visualPresets.css'
 
 /** 原创几何示意展示设计差异，不是可采用的项目素材或模型效果承诺。 */
-function PresetIllustration({ preset }: {preset: VisualPreset}) {
+export function PresetIllustration({ preset }: {preset: VisualPreset}) {
   const look=preset.look, mono=look==='noir', painted=look==='watercolor', animated=look==='animation', side=look==='side'
   const id='scene-'+useId().replace(/:/g,'')
   const sky=mono?'#8e9295':painted?'#d9e3d6':animated?'#adcddd':'#aabdc7'

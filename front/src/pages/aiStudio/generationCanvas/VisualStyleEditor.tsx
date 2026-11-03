@@ -1,28 +1,15 @@
-import { DesignCardPreview } from './PhotographyCardSummary'
-import { DesignEditorFrame } from './DesignEditorFrame'
-import { designSummary } from './designSummary'
 import type { VisualStyleCard } from '../../../services/generated'
 import type { CardRendererProps } from './rendererRegistry'
-import { DesignFieldEditor, DesignMoreSummary } from './DesignFieldEditor'
-import { useGraphRules } from './CanvasCatalogContext'
-import { DesignMediaExamples } from './DesignMediaExamples'
-import { VisualPresetPicker } from './VisualPresetPicker'
+import { DesignFieldEditor } from './DesignFieldEditor'
+import { DesignPresetEditor } from './DesignPresetEditor'
 import { applyPreset, styleLabels, stylePresets } from './visualPresets'
-import { useCardCandidates } from './useCardCandidates'
-import { CanvasTextPreview } from '../directing/CanvasTextPreview'
+import { designSummary } from './designSummary'
 
-/** 风格拥有自己的设计字段；预设只填入本卡，不创建第二份数据。 */
-export function VisualStyleEditor({card:raw,document,savedRevision,modelOutputs,onChange,disabled,references,editorOpen}:CardRendererProps) {
-  const { cardDefinitions } = useGraphRules()
-  const card=raw as VisualStyleCard,fields=card.fields||{}
-  const resolved=useCardCandidates(document.project_id,document.id,card.id,savedRevision,modelOutputs,false)
-  return <DesignEditorFrame editorOpen={editorOpen} disabled={disabled} references={<><details><summary>候选连接管理</summary>{references}</details>    <DesignMediaExamples fieldOptions={cardDefinitions[card.type!].fields.map(field => ({value:field.id,label:field.label}))} ports={['image_example','video_example']} examples={card.examples||[]} candidates={resolved.candidates} disabled={disabled} onChange={examples=>onChange({...card,examples})}/>
-    <section aria-label="已保存风格输出">{resolved.outputs.map(item=><CanvasTextPreview key={item.source.card_id} text={item.text||''} label="完整风格设计"/>)}</section>
-</>}><VisualPresetPicker currentPreview={<DesignCardPreview examples={card.examples} style />} editorOpen={editorOpen} fields={{...fields}} fieldLabels={styleLabels} label="风格" presets={stylePresets} currentName={designSummary([],Object.values(fields))} disabled={disabled} onApply={preset=>onChange({...card,fields:applyPreset(fields,preset)})}>
-      <section className="canvas-effect-key-settings" aria-label="关键设置">{(["direction","colors"] as const).map(key=><DesignFieldEditor compact key={key} label={styleLabels[key]} value={fields[key]} onChange={value=>onChange({...card,fields:{...fields,[key]:value}})}/>)}</section>
-    <details className="canvas-effect-professional"><DesignMoreSummary fields={[fields.visual_features, fields.materials, fields.notes]} />
-    {Object.entries(styleLabels).filter(([key])=>key!=='direction'&&key!=='colors').map(([key,label])=><DesignFieldEditor compact key={key} label={label} value={fields[key as keyof typeof fields]} onChange={value=>onChange({...card,fields:{...fields,[key]:value}})}/>)}
-    </details>
-    </VisualPresetPicker>
-  </DesignEditorFrame>
+/** 风格预设与高级参数修改同一份卡片；保存、修订和撤销由画布管理。 */
+export function VisualStyleEditor({ card: raw, onChange, disabled, editorOpen, onUndoDesign }: CardRendererProps) {
+  const card = raw as VisualStyleCard, fields = card.fields || {}
+  const labels = { direction: styleLabels.direction, colors: styleLabels.colors, visual_features: styleLabels.visual_features, materials: styleLabels.materials, notes: styleLabels.notes }
+  return <DesignPresetEditor fields={{ ...fields }} labels={labels} presets={stylePresets} current={designSummary([], Object.values(fields))} disabled={disabled} editorOpen={editorOpen} onUndo={onUndoDesign} onApply={preset => onChange({ ...card, fields: applyPreset(fields, preset) })}>
+    <div className="design-preset-fields">{Object.entries(labels).map(([key, label]) => <DesignFieldEditor compact key={key} label={label} value={fields[key as keyof typeof fields]} onChange={value => onChange({ ...card, fields: { ...fields, [key]: value } })} />)}</div>
+  </DesignPresetEditor>
 }
