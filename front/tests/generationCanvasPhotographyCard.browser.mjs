@@ -31,27 +31,47 @@ try {
   page.setDefaultTimeout(12000)
   await page.addInitScript(() => { window.__ENV = { BACKEND_URL: window.location.origin } })
   const canvas = (await (await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '摄影设计' }) })).json()).data
+  const form=new FormData();form.set('project_id','canvas-project');form.set('usage_kind','generation_upload');form.set('file',new Blob([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64')],{type:'image/png'}),'design-reference.png')
+  const upload=await fetch(api+'/api/v1/studio/files/upload',{method:'POST',body:form});assert.ok(upload.ok);const file=(await upload.json()).data.id
   const field = text => ({ text, state: 'proposal', purpose: 'design' })
   const fields = { composition: field('主体居右，留出行进空间'), viewpoint: field('平视中景'), light_sources: field('窗边柔和侧光'), depth_focus: field('浅景深，焦点落在人物眼睛'), movement_path: field('沿街道缓慢平移') }
   const document = { ...canvas.document, cards: [
-    { id: 'photo', type: 'direction.photography', fields },
+    { id: 'photo', type: 'direction.photography', fields, phases:[{id:'combined-phase',name:'靠近',frame:field('明确的靠近阶段')}] },
     { id: 'empty', type: 'direction.photography' },
+    { id: 'style-empty', type: 'direction.style' },
+    { id: 'image-source', type: 'content.image', file_id:file },
+    { id: 'style-adopted', type: 'direction.style', examples:[{id:'adopted-image',purpose:'positive',file_id:file,source:{canvas_id:canvas.id,card_id:'image-source',port_id:'image',position:0}}] },
+    { id: 'special', type: 'direction.photography', fields: { composition: {state:'absent',text:''}, depth_focus:{state:'undecided',text:'需试拍'} } },
+    { id: 'phase-only', type: 'direction.photography', phases:[{id:'phase1',name:'移动',frame:field('从全景移动到人物面前')}] },
     { id: 'long', type: 'direction.photography', fields: { composition: field('保留人物所在方向与前景之间的空间关系。'.repeat(28)) } },
     { id: 'consumer', type: 'model.image', model_id: 'canvas-image-model', config: { count: 1 } },
-  ], edges: [{ id: 'design', source_card: 'photo', source_port: 'text', target_card: 'consumer', target_port: 'text' }], input_order: { consumer: { text: ['design'] } } }
+  ], edges: [{id:'image-example',source_card:'image-source',source_port:'image',target_card:'style-adopted',target_port:'image_example'},{ id: 'design', source_card: 'photo', source_port: 'text', target_card: 'consumer', target_port: 'text' }], input_order: { 'style-adopted':{image_example:['image-example']}, consumer: { text: ['design'] } } }
   const seed = await fetch(`${base}/${canvas.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ request_id: 'seed', expected_revision: 0, document }) })
   assert.ok(seed.ok, await seed.text())
   await page.goto(`http://127.0.0.1:4494/projects/canvas-project/generation-canvas?canvas=${canvas.id}`)
   const photo = page.locator('[data-card-id="photo"]')
   await photo.waitFor()
   await page.getByRole('button', { name: '适应全部', exact: true }).click()
-  await photo.getByRole('img', { name: '摄影光学示意', exact: true }).waitFor()
+  await photo.getByRole('button', { name: '编辑设计', exact: true }).waitFor()
   assert.ok((await photo.innerText()).includes('主体居右，留出行进空间'))
-  assert.ok((await photo.innerText()).includes('窗边柔和侧光'))
+  assert.ok((await photo.innerText()).includes('平视中景'))
+  assert.ok((await photo.innerText()).includes('另有 3 项设计'))
+  assert.ok((await photo.innerText()).includes('1 个运镜阶段'),'mixed fields and stages remain discoverable even below the first two regions')
   const empty = page.locator('[data-card-id="empty"]'), long = page.locator('[data-card-id="long"]')
   await empty.getByText('尚未填写摄影设计', { exact: true }).waitFor()
+  const styleEmpty=page.locator('[data-card-id="style-empty"]')
+  await styleEmpty.getByRole('button',{name:'设计画面风格',exact:true}).waitFor()
+  const adoptedPreview=page.locator('[data-card-id="style-adopted"]').getByRole('img',{name:'图片预览',exact:true})
+  await adoptedPreview.waitFor();assert.ok((await adoptedPreview.getAttribute('src')).includes(file),'explicitly associated image replaces the purpose diagram')
+  assert.ok((await page.locator('[data-card-id="special"]').innerText()).includes('明确没有'))
+  assert.ok((await page.locator('[data-card-id="special"]').innerText()).includes('待确定'))
+  assert.ok((await page.locator('[data-card-id="phase-only"]').innerText()).includes('从全景移动到人物面前'))
+  const longText='保留人物所在方向与前景之间的空间关系。'.repeat(28)
+  await long.locator('dd').first().focus()
+  await page.getByRole('tooltip').filter({hasText:longText}).waitFor()
+  await photo.focus()
   assert.ok((await long.boundingBox()).height <= (await photo.boundingBox()).height + 2, 'long fields stay within the same finite card size')
-  assert.equal(await photo.getByRole('button', { name: '编辑卡片', exact: true }).isVisible(), false)
+  assert.equal(await photo.getByRole('button', { name: '编辑设计', exact: true }).isVisible(), true)
   await page.screenshot({ path: join(output, 'photography-cards-default.png'), animations: 'disabled' })
   await photo.screenshot({ path: join(output, 'photography-default-region.png'), animations: 'disabled' })
   await empty.screenshot({ path: join(output, 'photography-empty-region.png'), animations: 'disabled' })
@@ -60,16 +80,16 @@ try {
   await page.screenshot({ path: join(output, 'photography-hover.png'), animations: 'disabled' })
   await photo.focus()
   await page.waitForFunction(() => document.querySelector('[data-card-id="photo"]')?.matches(':focus-within'))
-  await photo.getByRole('button', { name: '编辑卡片', exact: true }).waitFor({ state: 'visible' })
+  await photo.getByRole('button', { name: '编辑设计', exact: true }).waitFor({ state: 'visible' })
   await photo.screenshot({ path: join(output, 'photography-focus-region.png'), animations: 'disabled' })
   await photo.click()
   assert.equal(await page.locator('.wb-details:visible').count(), 0, 'pointer selection of a complex card does not open its Modal')
   await photo.screenshot({ path: join(output, 'photography-selected-region.png'), animations: 'disabled' })
-  await photo.getByRole('button', { name: '编辑卡片', exact: true }).click()
+  await photo.getByRole('button', { name: '编辑设计', exact: true }).click()
   const detail = page.locator('.wb-details:visible')
-  await detail.getByRole('button', { name: '编辑光影与色彩', exact: true }).click()
+  await detail.getByRole('button', { name: '光影与色彩', exact: true }).click()
   await detail.getByRole('textbox', { name: '光源内容', exact: true }).fill('夜间窗边轮廓光')
-  assert.ok((await photo.innerText()).includes('夜间窗边轮廓光'), 'card reflects the real field edit immediately')
+  assert.ok((await photo.innerText()).includes('另有 3 项设计'), 'later regions do not reorder the fixed summary')
   const read = async () => (await (await fetch(`${base}/${canvas.id}`)).json()).data
   let saved
   for (let attempt = 0; attempt < 80; attempt++) {
@@ -77,11 +97,11 @@ try {
     if (saved.document.cards.find(item => item.id === 'photo').fields.light_sources.text === '夜间窗边轮廓光') break
     await delay(100)
   }
-  assert.equal(saved.document.cards.filter(item => item.type === 'direction.photography').length, 3, 'editing regions keeps the existing photographic identities')
+  assert.equal(saved.document.cards.filter(item => item.type === 'direction.photography').length, 5, 'editing regions keeps the existing photographic identities')
   assert.equal(saved.document.cards.find(item => item.id === 'photo').fields.light_sources.text, '夜间窗边轮廓光')
   await page.getByRole('button', { name: '关闭详情', exact: true }).click()
   await page.reload(); await photo.waitFor()
-  assert.ok((await photo.innerText()).includes('夜间窗边轮廓光'), 'saved values survive reopening')
+  assert.ok((await photo.innerText()).includes('平视中景'), 'summary keeps fixed priority after reload')
   const published = (await (await fetch(`${base}/${canvas.id}/cards/photo/outputs`)).json()).data.outputs[0]
   assert.match(published.text, /夜间窗边轮廓光/)
   assert.match(published.text, /沿街道缓慢平移/, 'fifth region remains in the full output even when the card has only four visible groups')
@@ -104,7 +124,7 @@ try {
     await page.screenshot({ path: join(output, `photography-cards-${viewport.width}.png`), animations: 'disabled' })
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
     await photo.focus(); await photo.press('Enter')
-    await photo.getByRole('button', { name: '编辑卡片', exact: true }).press('Enter')
+    await photo.getByRole('button', { name: '编辑设计', exact: true }).press('Enter')
     await page.locator('.wb-details:visible').waitFor()
     await page.getByRole('button', { name: '关闭详情', exact: true }).click()
     await page.keyboard.press('Escape')

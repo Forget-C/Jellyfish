@@ -330,3 +330,5 @@ UX 回归另覆盖画布局部键盘焦点提示与方向键平移、输入后�
 附件下载另以独立后端 origin 验证 CORS 响应头暴露及 generated client 的真实 PNG 字节，防止仅同源代理通过。
 
 右键菜单的七条视觉与多级规则由同一专项覆盖：首次帧尺寸和无溢出、单行禁用背景、三级目录与图标文字完整显示、父菜单锚点稳定、左右边缘及短屏独立避让／滚动、指针跨越、逐层Escape与Tab、窄屏单浮层返回、44px触屏热区、各级滚动与焦点恢复。左侧搜索继续由原添加面板用例覆盖，右键菜单不嵌入搜索框。
+
+`canvas-design` 覆盖画面设计 A 方案：类型专属卡面、常驻编辑入口、固定摘要优先级与特殊状态／运镜阶段、长摘要键盘全文、参数／关联与摄影分区切换、预设预览／覆盖清单／一次撤销、关闭会话清理、只读预览和桌面／窄屏固定操作区。运行 `PLAYWRIGHT_CHANNEL=chrome node front/tests/run-browser.mjs canvas-design --output /tmp/jellyfish-canvas-design`；仍使用隔离后端与真实画布页面，不使用视觉原型替代业务验收。原型对比保存在 `codex-prototype-design-cards` 分支（`da20a493`），生产路由已移除原型入口。

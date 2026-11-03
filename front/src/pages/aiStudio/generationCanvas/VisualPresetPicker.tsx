@@ -1,8 +1,14 @@
-import { useState, useId, useContext, type ReactNode } from 'react'
+import { shotSizeLabels } from './photographyDesign'
+import { CanvasTextPreview } from '../directing/CanvasTextPreview'
+import { useState, useId, useContext, useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { CanvasEditorFooter } from './CanvasCardEditor'
 import { WorkbenchDialogActions } from '../directing/ui/WorkbenchModal'
 import { WorkbenchButton } from '../directing/ui/WorkbenchButton'
+import type { DesignField } from '../../../services/generated'
+import { ConfigProvider } from 'antd'
+import { DesignEditorActive } from './DesignEditorFrame'
+import { DesignPurposeIllustration } from './DesignPurposeIllustration'
 import type { VisualPreset } from './visualPresets'
 import './visualPresets.css'
 
@@ -59,30 +65,53 @@ function PresetIllustration({ preset }: {preset: VisualPreset}) {
   </svg>
 }
 
-/** 选择仅为本地预览；应用才写入当前卡片，取消不撤销已自动保存的专业字段。 */
-export function VisualPresetPicker({label,presets,disabled,onApply,children,currentName}:{label:string;presets:VisualPreset[];disabled?:boolean;onApply:(preset:VisualPreset)=>void;children?:ReactNode;currentName?:string}) {
-  const [selected,setSelected]=useState(presets[0]),[compare,setCompare]=useState<VisualPreset>(),[pending,setPending]=useState(false)
-  const footer=useContext(CanvasEditorFooter)
-  const reset=()=>{setSelected(presets[0]);setCompare(undefined);setPending(false)}
-  const actions=<WorkbenchDialogActions className="canvas-effect-apply" secondary={<WorkbenchButton variant="quiet" onClick={reset}>暂不应用</WorkbenchButton>}><WorkbenchButton variant="primary" disabled={disabled} onClick={()=>{onApply(selected);setPending(false)}}>应用到当前卡片</WorkbenchButton></WorkbenchDialogActions>
-  return <section className="canvas-effect-editor" aria-label={label+'效果选择'}>
-    <div className="canvas-effect-preview">
-      <div className="canvas-effect-heading"><span>{pending?'待应用方案':'方案示意'}</span><h3>{selected.name}</h3><p className="canvas-effect-caption">当前设计：{currentName||'尚未填写'}</p></div>
-      <div className="canvas-preset-comparison">{[selected,compare].filter((value):value is VisualPreset=>!!value).map(preset=><section key={preset.id}>
-        {preset.video?<video src={preset.video} controls loop muted playsInline preload="metadata" aria-label={preset.name+'运镜示意'}/>:<PresetIllustration preset={preset}/>}
-        <h4>{preset.name} · 示意</h4><p>{preset.explanation}</p>
-        {preset.video&&<section className="canvas-motion-endpoints" aria-label="运镜起止对照"><figure><PresetIllustration preset={{...preset,id:preset.id+'-start',look:'wide'}}/><figcaption>起始示意</figcaption></figure><figure><PresetIllustration preset={{...preset,id:preset.id+'-end',look:preset.look==='push'?'close':'thirds'}}/><figcaption>结束示意</figcaption></figure></section>}
-      </section>)}</div>
-      <p className="canvas-effect-caption">原创几何示意 · 仅解释设计意图，不是已采用素材或模型效果承诺。</p>
+/** 预览会话不写入文档；显式应用仅合并声明字段，由调用方一次记录撤销。 */
+export function VisualPresetPicker({ label, presets, disabled, onApply, children, currentName, fields, fieldLabels, editorOpen = true, active = true, currentPreview }: {
+  label: string; presets: VisualPreset[]; disabled?: boolean; onApply: (preset: VisualPreset) => void | boolean; children?: ReactNode; currentName?: string;
+  fields: Record<string, DesignField | null | undefined>; fieldLabels: Record<string, string>; editorOpen?: boolean; active?: boolean; currentPreview?: ReactNode;
+}) {
+  const [selected, setSelected] = useState<VisualPreset>(), [compare, setCompare] = useState<VisualPreset>()
+  const [gallery, setGallery] = useState(false)
+  const footer = useContext(CanvasEditorFooter)
+  const designActive = useContext(DesignEditorActive)
+  const root = useRef<HTMLElement>(null), scroll = useRef(0)
+  const selectedRef = useRef<HTMLButtonElement | null>(null)
+  useEffect(() => { if (!editorOpen) { setGallery(false); setSelected(undefined); setCompare(undefined) } }, [editorOpen])
+  useLayoutEffect(() => { const body = root.current?.closest('.wb-details-body'); if (body) body.scrollTop = gallery ? 0 : scroll.current }, [gallery])
+  const browse = (open: boolean) => {
+    const body = root.current?.closest('.wb-details-body')
+    if (body && open) scroll.current = body.scrollTop
+    setGallery(open)
+    requestAnimationFrame(() => { if (!open) selectedRef.current?.focus({ preventScroll: true }) })
+  }
+  const changes = selected ? Object.entries(selected.fields).flatMap(([key, value]) => {
+    const before = fields[key], after = { ...before, ...value }
+    if (JSON.stringify(before || {}) === JSON.stringify(after)) return []
+    const populated = !!before && (!!before.state && before.state !== 'empty' || !!before.text?.trim() || !!before.source_locator || before.purpose === 'constraint' || before.purpose === 'background')
+    return [{ key, before, after, populated }]
+  }) : []
+  const conflicts = changes.filter(item => item.populated).length
+  const describe = (field?: DesignField | null) => field ? `${field.text || '无正文'} · 状态：${({ empty: '未填写', proposal: '提议', fact: '事实', undecided: '待确定', absent: '明确没有', not_applicable: '不适用' } as Record<string, string>)[field.state || 'empty']} · 用途：${({ background: '背景', design: '设计', constraint: '约束' } as Record<string, string>)[field.purpose || ''] || '未指定'} · 来源：${field.source_locator || '未指定'}${Object.entries(field).filter(([key]) => !['text', 'state', 'purpose', 'source_locator'].includes(key)).map(([key, value]) => ` · ${{ size: '景别', target_id: '目标身份', state_id: '画面状态' }[key] || '附加设置'}：${key === 'size' ? shotSizeLabels[value as keyof typeof shotSizeLabels] || '未指定' : value ?? '未指定'}`).join('')}` : '未填写'
+  const actions = <ConfigProvider componentDisabled={false}><WorkbenchDialogActions className="canvas-effect-apply" secondary={<><WorkbenchButton style={{ minHeight: 'var(--design-action-height, var(--wb-control))' }} variant="quiet" onClick={() => browse(false)}>返回参数</WorkbenchButton>{disabled && <span className="canvas-effect-readonly">只读 · 可预览与对比，不能应用</span>}</>}><WorkbenchButton style={{ minHeight: 'var(--design-action-height, var(--wb-control))' }} variant="primary" disabled={disabled || !selected || !changes.length} onClick={() => { if (selected && !disabled) { if (onApply(selected) !== false) browse(false) } }}>{conflicts ? `覆盖 ${conflicts} 项并应用` : '应用此预设'}</WorkbenchButton></WorkbenchDialogActions></ConfigProvider>
+  return <section ref={root} className="canvas-effect-editor" aria-label={label + '效果选择'}>
+    <div className="canvas-effect-parameters" hidden={gallery}>{children}</div>
+    <aside className="canvas-effect-preview" hidden={gallery}>
+      <details className="canvas-effect-current" open={window.innerWidth > 700}><summary>设计预览与预设</summary>{currentPreview || <DesignPurposeIllustration style={label === '风格'} />}<h3>当前设计</h3><ConfigProvider componentDisabled={false}><CanvasTextPreview text={currentName || '尚未填写设计；可填写参数或选择预设。'} label="当前设计" lines={4} /></ConfigProvider>
+      <ConfigProvider componentDisabled={false}><WorkbenchButton ref={node => { selectedRef.current = node as HTMLButtonElement }} onClick={() => browse(true)}>选择预设</WorkbenchButton><WorkbenchButton variant="quiet" onClick={() => browse(true)}>查看大图／对比</WorkbenchButton></ConfigProvider>
+      </details>
+    </aside>
+    <div className="canvas-effect-browser" hidden={!gallery}>
+      <div><h3>{label}预设</h3><p className="canvas-effect-caption">选择仅为预览，应用才更新卡片。</p><ConfigProvider componentDisabled={false}><div className="canvas-preset-gallery">{presets.map(preset => <section key={preset.id} data-previewed={selected?.id === preset.id}>
+        <button type="button" className="canvas-preset-choice" aria-label={'预览 ' + preset.name} aria-pressed={selected?.id === preset.id} onClick={() => setSelected(preset)}><PresetIllustration preset={preset} /><span>{preset.name}</span><span aria-hidden="true">{selected?.id === preset.id ? '✓' : ''}</span></button>
+        <WorkbenchButton variant="quiet" aria-label={'对比 ' + preset.name} aria-pressed={compare?.id === preset.id} onClick={() => setCompare(compare?.id === preset.id ? undefined : preset)}>对比</WorkbenchButton>
+      </section>)}</div></ConfigProvider></div>
+      <div className="canvas-effect-comparison"><h3>{selected ? '待应用方案' : '请选择预设'}</h3><div className="canvas-preset-comparison">{[selected, compare && compare.id !== selected?.id ? compare : undefined].filter((value): value is VisualPreset => !!value).map(preset => <section key={preset.id}>
+        {preset.video ? <video src={preset.video} controls loop muted playsInline preload="metadata" aria-label={preset.name + '运镜示意'} /> : <PresetIllustration preset={preset} />}<h4>{preset.name} · 示意</h4><p>{preset.explanation}</p>
+        {preset.video && <section className="canvas-motion-endpoints" aria-label="运镜起止对照"><figure><PresetIllustration preset={{ ...preset, look: 'wide' }} /><figcaption>起始示意</figcaption></figure><figure><PresetIllustration preset={{ ...preset, look: preset.look === 'push' ? 'close' : 'thirds' }} /><figcaption>结束示意</figcaption></figure></section>}
+      </section>)}</div><p className="canvas-effect-caption">原创示意仅解释设计意图，不代表已采用素材或模型效果。</p>
+      {selected && <section aria-label="预设变更清单"><h3>将填写／将覆盖</h3>{!changes.length && <p>当前字段与预设相同，无需应用。</p>}{changes.map(item => <details key={item.key}><summary>{item.populated ? '将覆盖' : '将填写'} · {fieldLabels[item.key] || item.key}</summary><p>原值：{describe(item.before)}</p><p>新值：{describe(item.after)}</p></details>)}</section>}
+      </div>
     </div>
-    <div className="canvas-effect-settings">
-      <h3>{label}方案</h3>
-      <div className="canvas-preset-gallery">{presets.map(preset=><section key={preset.id} data-previewed={selected.id===preset.id}>
-        <button type="button" className="canvas-preset-choice" aria-label={'预览 '+preset.name} aria-pressed={selected.id===preset.id} onClick={()=>{setSelected(preset);setPending(true)}}><PresetIllustration preset={preset}/><span>{preset.name}</span><span aria-hidden="true">{selected.id===preset.id?'✓':''}</span></button>
-        <WorkbenchButton variant="quiet" aria-label={'对比 '+preset.name} aria-pressed={compare?.id===preset.id} onClick={()=>setCompare(compare?.id===preset.id?undefined:preset)}>对比</WorkbenchButton>
-      </section>)}</div>
-      {footer ? createPortal(actions,footer) : actions}
-      {children}
-    </div>
+    {gallery && editorOpen && active && designActive && (footer ? createPortal(actions, footer) : actions)}
   </section>
 }

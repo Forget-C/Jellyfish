@@ -13,6 +13,6 @@ export function DesignFieldEditor({ label, value, purpose = 'design', compact = 
   const source = <Input aria-label={`${label}来源`} placeholder="来源定位（可选）" value={field.source_locator} onChange={event => onChange({ ...field, source_locator: event.target.value })} />
   return <section aria-label={label}><strong>{label}</strong>{!compact && controls}
     <Input.TextArea aria-label={`${label}内容`} value={field.text} autoSize={{ minRows: 2, maxRows: 7 }} onChange={event => onChange({ ...field, text: event.target.value, state: field.state === 'empty' ? 'proposal' : field.state })} />
-    {compact ? <details><summary>{label}状态与来源</summary>{controls}{source}</details> : source}
+    {compact ? <details><summary>{label}状态与来源{field.state && !['empty', 'proposal'].includes(field.state) ? ` · ${states.find(item => item.value === field.state)?.label}` : ''}</summary>{controls}{source}</details> : source}
   </section>
 }
