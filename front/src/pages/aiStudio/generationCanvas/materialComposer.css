@@ -90,3 +90,7 @@
 
 .generation-prompt-option { max-width: 100%; overflow-wrap: anywhere; }
 .generation-material-prompt .generation-prompt-token { max-width: calc(100% - 4px); box-sizing: border-box; }
+
+.generation-design-carried { padding: 10px 0; display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.generation-design-carried > small { color: var(--wb-muted); }
+.generation-design-carried > div { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }

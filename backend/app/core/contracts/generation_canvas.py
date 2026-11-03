@@ -188,6 +188,13 @@ class DesignMediaReference(BaseModel):
     payload: MediaOutputPayload | NamedImagePayload | None = None
 
 
+class DesignMediaOrigin(BaseModel):
+    """One actual media source can be required by several adopted design fields."""
+    model_config = ConfigDict(extra='forbid')
+    source: OutputIdentity
+    field_id: str
+
+
 class DesignReferenceIssue(BaseModel):
     """An active field problem follows adopted design output to model diagnostics."""
     model_config = ConfigDict(extra='forbid')

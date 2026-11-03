@@ -37,7 +37,7 @@ async def test_field_documents_expand_once_and_keep_retained_references(canvas_c
 
 
 @pytest.mark.asyncio
-async def test_only_active_media_is_declared_and_unsupported_consumption_is_blocked(canvas_client):
+async def test_only_active_media_is_declared_and_image_consumption_uses_it(canvas_client):
     client = canvas_client
     file_id = (await client.post('/files/upload', data={'project_id': 'p', 'usage_kind': 'generation_upload'}, files={'file': ('reference.png', b'image', 'image/png')})).json()['data']['id']
     canvas = (await client.post('/canvases/p', json={'name': '素材依赖'})).json()['data']
@@ -56,7 +56,8 @@ async def test_only_active_media_is_declared_and_unsupported_consumption_is_bloc
     document['cards'][3]['input_bindings'] = [{'id': 'adopt', 'input_port': 'text', 'source': output['source']}]
     assert (await client.put(url, json={'request_id': 'adopt', 'expected_revision': 1, 'document': document})).status_code == 200
     compiled = (await client.get(url + '/cards/model/compile')).json()['data']
-    assert any(issue['code'] == 'DESIGN_MEDIA_CARRY_NOT_READY' for issue in compiled['diagnostics'])
+    assert not any(issue['code'] == 'DESIGN_MEDIA_CARRY_NOT_READY' for issue in compiled['diagnostics'])
+    assert [item['file_id'] for item in compiled['media']] == [file_id]
     document['cards'][2]['fields']['direction']['state'] = 'not_applicable'
     document['cards'][2]['fields']['colors'] = {'text': '保留有效文字', 'state': 'proposal'}
     assert (await client.put(url, json={'request_id': 'inactive', 'expected_revision': 2, 'document': document})).status_code == 200

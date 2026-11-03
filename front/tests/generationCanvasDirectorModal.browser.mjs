@@ -54,7 +54,7 @@ try {
   await details.waitFor({state:'hidden'})
   await photo.getByRole('button',{name:/^(开始设计|编辑设计)$/}).click()
   await details.getByRole('button',{name:'高级设置',exact:true}).click()
-  assert.equal(await details.getByRole('textbox',{name:'光源内容',exact:true}).inputValue(),'保存后的夜间轮廓光')
+  assert.equal(await details.getByRole('textbox',{name:'光源内容',exact:true}).evaluate(element => 'value' in element ? element.value : element.innerText),'保存后的夜间轮廓光')
   await page.screenshot({path:join(output,'director-modal-desktop.png')})
   await closeCanvasDetails(page)
   for (const type of types) {
@@ -76,7 +76,7 @@ try {
   assert.equal(saved.document.cards.find(c=>c.id==='lighting').fields.light_sources.text,'保存后的夜间轮廓光')
   await page.reload();await photo.press('Enter')
   await details.getByRole('button',{name:'高级设置',exact:true}).click()
-  assert.equal(await details.getByRole('textbox',{name:'光源内容',exact:true}).inputValue(),'保存后的夜间轮廓光')
+  assert.equal(await details.getByRole('textbox',{name:'光源内容',exact:true}).evaluate(element => 'value' in element ? element.value : element.innerText),'保存后的夜间轮廓光')
   await closeCanvasDetails(page)
   await page.setViewportSize({width:1440,height:960})
   for (const [entry,kind] of [['景别与构图卡','composition'],['机位与视角卡','camera'],['运镜卡','movement'],['光影与色彩卡','lighting'],['焦点与成像卡','focus']]) {
@@ -86,7 +86,7 @@ try {
     const addedId=await page.locator('[data-card-id][data-selected="true"]').getAttribute('data-card-id')
     const added=page.locator(`[data-card-id="${addedId}"]`)
     await added.press('Enter')
-    assert.equal(await details.getByRole('button',{name:'高级设置',exact:true}).isVisible(),true,'new design opens its own preset gallery')
+    await details.getByRole('button',{name:'高级设置',exact:true}).waitFor({state:'visible'})
     await page.getByLabel('画布保存状态').getByText('已保存',{exact:true}).waitFor()
     const latest=(await (await fetch(`${base}/${id}`)).json()).data
     assert.equal(latest.document.cards.find(c=>c.id===addedId).type,'direction.'+kind)

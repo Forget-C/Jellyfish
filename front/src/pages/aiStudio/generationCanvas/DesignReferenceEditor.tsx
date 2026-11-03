@@ -13,7 +13,9 @@ import { MaterialReferenceButton } from './MaterialReferenceButton'
 import { MediaPreview } from './MediaContentEditor'
 import { CanvasTextPreview } from '../directing/CanvasTextPreview'
 
+type TargetField = { fieldId: string; serial: number }
 interface ReferenceContext {
+  targetField?: TargetField;
   document: CanvasDocument; card: GenerationCard; candidates: Candidate[]; disabled?: boolean;
   focus: (handle: React.RefObject<PromptEditorHandle>) => void;
   changeMode: () => void;
@@ -22,7 +24,7 @@ interface ReferenceContext {
 export const DesignReferenceContext = createContext<ReferenceContext | undefined>(undefined)
 
 /** Reference session belongs to one retained design card, not a model prompt binding set. */
-export function DesignReferenceEditor({ card, document, savedRevision, modelOutputs, sourceActions, disabled, editorOpen, children }: { card: GenerationCard; document: CanvasDocument; savedRevision?: number; modelOutputs?: Record<string, CanvasResolvedOutput[]>; sourceActions?: ReactNode; disabled?: boolean; editorOpen?: boolean; children: ReactNode }) {
+export function DesignReferenceEditor({ card, document, savedRevision, modelOutputs, sourceActions, disabled, editorOpen, children, targetField }: { targetField?: TargetField; card: GenerationCard; document: CanvasDocument; savedRevision?: number; modelOutputs?: Record<string, CanvasResolvedOutput[]>; sourceActions?: ReactNode; disabled?: boolean; editorOpen?: boolean; children: ReactNode }) {
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs, false)
   const focused = useRef<React.RefObject<PromptEditorHandle>>(), owner = useRef<HTMLDivElement>(null)
   const [inspect, setInspect] = useState<string>()
@@ -54,7 +56,7 @@ export function DesignReferenceEditor({ card, document, savedRevision, modelOutp
     <div className="generation-material-add">{sourceActions}</div>
     <small className="design-reference-hint">{advanced ? '输入 @ 或点击素材引用当前编辑字段' : `${sources.length} 个候选 · ${used.size} 个使用中`}</small>
   </div>
-  return <DesignReferenceContext.Provider value={{ card, document, candidates, disabled, focus: handle => { focused.current = handle }, changeMode, renderCandidates }}><div className="design-reference-owner" ref={owner} onKeyDownCapture={event => {
+  return <DesignReferenceContext.Provider value={{ card, document, candidates, disabled, targetField, focus: handle => { focused.current = handle }, changeMode, renderCandidates }}><div className="design-reference-owner" ref={owner} onKeyDownCapture={event => {
     if (event.key !== 'Escape' || !inspect) return
     event.preventDefault(); event.stopPropagation()
     owner.current?.querySelector<HTMLButtonElement>(`[data-design-source="${CSS.escape(inspect)}"]`)?.focus({ preventScroll: true })
@@ -74,5 +76,7 @@ export function ReferencedDesignFieldEditor(props: ComponentProps<typeof DesignF
     const text = segments.map(segment => segment.kind === 'text' ? segment.text : context.candidates.find(item => sourceKey(item.source) === sourceKey(segment.source))?.displayLabel || '@缺失来源').join('')
     props.onChange({ ...value, document: { segments }, text, state: value?.state === 'empty' || !value?.state ? 'proposal' : value.state } as ReferenceDesignField)
   }
-  return <div onFocusCapture={event => { if ((event.target as HTMLElement).isContentEditable) context.focus(handle) }}><DesignFieldEditor {...props} editor={<PromptEditor referenceActionsRef={handle} compact allReferences fieldLabel={`${props.label}内容`} fieldPlaceholder="输入设计参数，使用 @ 引用候选内容" document={context.document} card={context.card} value={prompt} candidates={context.candidates} disabled={context.disabled} onChange={onChange} />} /></div>
+  const phase = 'phases' in context.card ? context.card.phases?.find(item => item.frame === props.value) : undefined
+  const fieldId = Object.entries('fields' in context.card ? context.card.fields || {} : {}).find(([, value]) => value === props.value)?.[0] || (phase ? 'phase:' + phase.id : undefined)
+  return <div data-design-field={fieldId} onFocusCapture={event => { if ((event.target as HTMLElement).isContentEditable) context.focus(handle) }}><DesignFieldEditor {...props} editor={<PromptEditor referenceActionsRef={handle} compact allReferences fieldLabel={`${props.label}内容`} fieldPlaceholder="输入设计参数，使用 @ 引用候选内容" document={context.document} card={context.card} value={prompt} candidates={context.candidates} disabled={context.disabled} onChange={onChange} />} /></div>
 }

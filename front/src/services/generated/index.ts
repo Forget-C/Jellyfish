@@ -274,6 +274,7 @@ export type { DesignFieldReference } from './models/DesignFieldReference';
 export type { DesignFieldText } from './models/DesignFieldText';
 export type { DesignFrameTarget } from './models/DesignFrameTarget';
 export type { DesignMediaExample } from './models/DesignMediaExample';
+export type { DesignMediaOrigin } from './models/DesignMediaOrigin';
 export type { DesignMediaReference } from './models/DesignMediaReference';
 export type { DesignNote_Input } from './models/DesignNote_Input';
 export type { DesignNote_Output } from './models/DesignNote_Output';

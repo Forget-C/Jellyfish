@@ -42,7 +42,7 @@ class CanvasOutputContext:
         for edge in document.edges:
             self.incoming.setdefault(edge.target_card, []).append(edge)
 
-    def published_outputs(self, card_id, *, model_outputs, allow_reference_drafts=False):
+    def published_outputs(self, card_id, *, model_outputs, allow_reference_drafts=False, reference_tokens=None):
         """仅把已采用的直接对象出口交给本卡处理器，按 DAG 逐层解析。"""
         document = self.document
         card = self.cards[card_id]
@@ -57,13 +57,14 @@ class CanvasOutputContext:
                     adopted.extend(item for item in self.published_outputs(binding.source.card_id, model_outputs=model_outputs, allow_reference_drafts=allow_reference_drafts)
                         if identity_key(item.source) == identity_key(binding.source))
         from app.services.generation_canvas.design_references import VISUAL_DESIGN_TYPES, resolve_design_card
-        media, issues = [], []
+        media, issues, reference_current = [], [], True
         if card.type in VISUAL_DESIGN_TYPES:
-            card, media, issues = resolve_design_card(self, card, model_outputs=model_outputs, allow_reference_drafts=allow_reference_drafts)
+            card, media, issues, reference_current = resolve_design_card(self, card, model_outputs=model_outputs, allow_reference_drafts=allow_reference_drafts, reference_tokens=reference_tokens)
         outputs = card_outputs(document.id, card, adopted_inputs=tuple(adopted),
                                published_results=tuple((model_outputs or {}).get(card_id, [])))
         for output in outputs:
             if output.payload and output.payload.kind == 'design':
+                output.basis_current = reference_current
                 output.payload.material_references = media
                 output.payload.reference_issues = issues
         from app.schemas.generation_canvas import CompositionCard

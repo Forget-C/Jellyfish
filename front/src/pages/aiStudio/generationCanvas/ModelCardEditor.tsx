@@ -24,13 +24,13 @@ import { CardComposer } from './CardComposer'
 import './materialComposer.css'
 
 /** 模型卡共享受控 Composer 布局，参数由各模态组件表达。 */
-export function ModelRenderer({ card: raw, savedRevision, document, disabled, onChange, models, capability, capabilityError, references, modelOutputs, node, busy, checking, runDisabled, onPrecheck, sourceActions, defaultModelId }: CardRendererProps) {
+export function ModelRenderer({ card: raw, savedRevision, document, disabled, onChange, models, capability, capabilityError, references, modelOutputs, node, busy, checking, runDisabled, onPrecheck, sourceActions, defaultModelId, onLocateDesign }: CardRendererProps) {
   const promptEditor = useRef<PromptEditorHandle>(null)
   const management = useRef<HTMLDetailsElement>(null)
   const [referenceTools, setReferenceTools] = useState<HTMLDivElement | null>(null)
   const card = raw as TextModelCard | ImageModelCard | VideoModelCard
   const resolved = useCardCandidates(document.project_id, document.id, card.id, savedRevision, modelOutputs)
-  const { cardTitles } = useGraphRules()
+  const { cardTitles, cardDefinitions } = useGraphRules()
   const adopted = card.input_bindings || []
   const formalOutputs = resolved.loading ? modelOutputs?.[card.id] || [] : resolved.outputs
   const category = card.type?.split('.')[1]
@@ -100,7 +100,18 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
   const modelParameters = <><Select className="generation-material-model" title={models?.find(model => model.id === card.model_id)?.name} size="small" bordered={false} aria-label="选择模型" placeholder="选择模型" disabled={disabled} value={card.model_id || undefined}
       options={models?.filter(model => model.category === category).map(model => ({ value: model.id, label: model.name }))}
       onChange={id => onChange({ ...card, model_id: id })} />{parameters}</>
-  const status = <><details ref={management} className="generation-material-candidates"><summary aria-label="管理候选与采用" title="管理候选与采用">关联 {sources.length} · 已采用 {adopted.length}</summary>
+  const carriedInputs = !!resolved.compiled?.media?.some(item => item.design_sources?.length) && <section className="generation-design-carried" aria-label="随设计携带的素材"><strong>随设计携带的素材</strong><small>来源由设计中的有效引用决定，无需补连素材</small>
+      {resolved.compiled.media.filter(item => item.design_sources?.length).map(item => <div key={sourceKey(item.source)}><strong>{labelFor(item)}</strong>{item.modality === 'image' && item.file_id && <details><summary>查看携带图片</summary><MediaPreview fileId={item.file_id} type="image" /></details>}
+        {item.design_sources?.map(origin => {
+          const design = document.cards?.find(value => value.id === origin.source.card_id)
+          const phase = design && 'phases' in design ? design.phases?.find(value => 'phase:' + value.id === origin.field_id) : undefined
+          const field = cardDefinitions[design?.type || '']?.fields?.find(value => value.id === origin.field_id)?.label || phase?.name || '设计参数'
+          return <WorkbenchButton variant="quiet" key={origin.source.card_id + ':' + origin.field_id} onClick={() => onLocateDesign?.(origin.source.card_id, origin.field_id)}>查看 {cardTitles[design?.type || ''] || '设计卡'} · {field}</WorkbenchButton>
+        })}
+        {item.available === false && <small>来源已失效，请返回设计卡处理引用</small>}{item.basis_current === false && <small>来源依据已变，需重新生成</small>}
+      </div>)}
+    </section>
+  const status = <><details ref={management} className="generation-material-candidates"><summary aria-label="管理候选与采用" title="管理候选与采用">关联 {sources.length} · 已采用 {adopted.length}{resolved.compiled?.media?.some(item => item.design_sources?.length) && ` · 携带 ${resolved.compiled.media.filter(item => item.design_sources?.length).length}`}</summary>
     <div ref={setReferenceTools} />
     <section aria-label="候选参考区">{references}</section>
     <section role="region" aria-label="已保存直接输入">
@@ -128,6 +139,7 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
           </Space>}
         </div>
       })}
+      {carriedInputs}
       {(resolved.compiled?.diagnostics || []).map((diagnostic, index) => <Alert key={`${diagnostic.code}:${index}`} type={diagnostic.severity === 'warning' ? 'warning' : 'error'}
         message={`${diagnostic.code}: ${diagnostic.message}`} />)}
     </section>
@@ -165,6 +177,7 @@ export function ModelRenderer({ card: raw, savedRevision, document, disabled, on
     {capabilityError && <Alert type="warning" message={capabilityError} />}
     {card.model_id && !models?.some(model => model.id === card.model_id) && <Alert type="warning" message="已选模型当前不可用，原配置和连线已保留" />}
     {node?.error_message && <Alert type="error" message={`${node.error_message} · 可在素材管理或运行历史查看详情`} />}
+
 
     <div className="generation-material-prompt">
       {resolved.error && <Alert type="warning" message={resolved.error} />}

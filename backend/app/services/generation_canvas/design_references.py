@@ -26,11 +26,12 @@ def design_field_references(card, *, effective=False):
                 yield segment, key, path + ['document', 'segments', segment.id]
 
 
-def resolve_design_card(context, card, *, model_outputs, allow_reference_drafts=False):
+def resolve_design_card(context, card, *, model_outputs, allow_reference_drafts=False, reference_tokens=None):
     """Render each active field once; missing sources remain attributable placeholders."""
     candidates = context.resolve_outputs(card.id, model_outputs=model_outputs, allow_reference_drafts=allow_reference_drafts)
     by_source = {identity_key(item.source): item for item in candidates}
     media, issues, fields, phases, seen_media = [], [], {}, {}, set()
+    basis_current = True
     for key, value, _ in design_fields(card):
         if not value.document:
             continue
@@ -43,6 +44,8 @@ def resolve_design_card(context, card, *, model_outputs, allow_reference_drafts=
                 text += re.sub(r'\\(?=[@/])', '', segment.text)
                 continue
             item = by_source.get(identity_key(segment.source))
+            if effective and item and not item.basis_current:
+                basis_current = False
             source = context.cards.get(segment.source.card_id)
             code = 'REFERENCE_CANVAS_MISMATCH' if segment.source.canvas_id != context.document.id else 'DESIGN_BODY_REFERENCE_FORBIDDEN' if source and source.type.startswith('direction.') and segment.source.port_id == 'text' else 'REFERENCE_NOT_CONNECTED' if item is None else 'OUTPUT_MISSING' if not item.available else None
             if code:
@@ -52,7 +55,7 @@ def resolve_design_card(context, card, *, model_outputs, allow_reference_drafts=
             elif item.modality == 'text':
                 text += item.text or ''
             else:
-                text += item.token
+                text += (reference_tokens or {}).get(identity_key(item.source), item.token)
             media_key = (key, identity_key(item.source)) if item else None
             if effective and item and item.modality != 'text' and media_key not in seen_media:
                 seen_media.add(media_key)
@@ -65,4 +68,4 @@ def resolve_design_card(context, card, *, model_outputs, allow_reference_drafts=
     updated = card.model_copy(update={'fields': card.fields.model_copy(update=fields)})
     if phases:
         updated = updated.model_copy(update={'phases': [phase.model_copy(update={'frame': phases.get(phase.id, phase.frame)}) for phase in card.phases]})
-    return updated, media, issues
+    return updated, media, issues, basis_current
