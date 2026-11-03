@@ -13,4 +13,3 @@ export type ResolvedDesignFrameTarget = {
     label?: string;
     frame?: (DesignField | null);
 };
-

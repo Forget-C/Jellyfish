@@ -21,4 +21,3 @@ export type CompositionCard = {
     fields?: CompositionDesignFields;
     frame_target?: (DesignFrameTarget | null);
 };
-

@@ -9,4 +9,3 @@ export type DesignFrameTarget = {
     card_id: string;
     state_id?: string;
 };
-

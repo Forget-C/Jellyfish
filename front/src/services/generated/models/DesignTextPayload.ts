@@ -60,4 +60,3 @@ export type DesignTextPayload = {
     acceptance_basis?: Array<CriterionReferencePayload>;
     dialogue_basis?: Array<DialogueBasis>;
 };
-
