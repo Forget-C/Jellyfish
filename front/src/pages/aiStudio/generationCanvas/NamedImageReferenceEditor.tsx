@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { EditorAttribute } from './EditorAttribute'
+import { useEffect, useId, useRef, useState } from 'react'
 import { Select } from 'antd'
 import { DisconnectOutlined, DeleteOutlined, SwapOutlined } from '@ant-design/icons'
 import { StudioFilesService } from '../../../services/generated'
@@ -16,11 +17,12 @@ import type { CardRendererProps } from './rendererRegistry'
 const angles = ['正面', '侧面', '背面', '俯视', '仰视', '三分之四侧面']
 
 function ImageOption({ fileId, name }: { fileId: string; name: string }) {
-  return <span className="generation-reference-option"><img alt="" src={buildFileDownloadUrl(fileId)} /><span>{name}</span></span>
+  return <span className="generation-reference-option"><img alt="" src={buildFileDownloadUrl(fileId)} /><span title={name}>{name}</span></span>
 }
 
 /** 四类共用名称与单图选择；新图片只从图片内容卡采用，旧的固定图片继续展示。 */
 export function NamedImageReferenceEditor({ card: raw, document, projectId, savedRevision, modelOutputs, onChange, disabled }: CardRendererProps) {
+  const fieldId = useId()
   const card = raw as NamedImageReferenceCard
   const resolved = useCardCandidates(projectId, document.id, card.id, savedRevision, modelOutputs, false)
   const [canvasPicker, setCanvasPicker] = useState(false)
@@ -58,7 +60,10 @@ export function NamedImageReferenceEditor({ card: raw, document, projectId, save
     setSelectionError('')
     onChange({ ...card, name: candidate?.payload && 'name' in candidate.payload ? candidate.payload.name || '' : name, name_binding: candidate?.source || null })
   }
-  const caption = (image: CanvasResolvedOutput) => fileInfo && fileInfo.id === image.file_id ? fileInfo.name : image.token || `图片 ${image.source.position + 1}`
+  const caption = (image: CanvasResolvedOutput) => {
+    const owner = source(image)
+    return (owner && 'title' in owner && typeof owner.title === 'string' && owner.title.trim()) || image.token || `图片 ${image.source.position + 1}`
+  }
   const chooseCandidate = (image: CanvasResolvedOutput) => {
     if (disabled || !usable(image)) return
     const current = latest.current.card
@@ -76,16 +81,14 @@ export function NamedImageReferenceEditor({ card: raw, document, projectId, save
   const unconnected = [...allImages.values()].filter(image => !(document.edges || []).some(edge => edge.target_card === card.id && edge.target_port === 'image_source' && edge.source_card === image.source.card_id && edge.source_port === image.source.port_id))
   const selected = card.image_binding
   const selectedImage = selected && connected.find(image => referenceImageKey(image) === referenceImageKey(selected))
-  const selectedName = selectedImage ? caption(selectedImage) : fileInfo?.id === selected?.file_id ? fileInfo?.name : '已保留图片'
+  const selectedName = selectedImage ? caption(selectedImage) : '已保留图片'
   const boundNameKey = card.name_binding && sourceKey(card.name_binding)
   const nameOptions = nameCandidates.filter(item => sourceKey(item.source) !== boundNameKey).map(item => ({ value: sourceKey(item.source), label: item.payload && 'name' in item.payload ? item.payload.name || '' : '' }))
   if (boundNameKey) nameOptions.unshift({ value: boundNameKey, label: name || '未命名描述' })
   const parameters = <>
-    <Select labelInValue showSearch={false} aria-label="关联图片" placeholder="选择已连线图片" disabled={disabled} value={selected ? { value: referenceImageKey(selected), label: <ImageOption fileId={selected.file_id} name={selectedName || '已保留图片'} /> } : undefined}
-      notFoundContent="暂无已连线图片内容卡，可从当前画布选择" options={connected.map(image => ({ value: referenceImageKey(image), label: <ImageOption fileId={image.file_id!} name={caption(image)} /> }))}
-      onSelect={value => { const image = connected.find(item => referenceImageKey(item) === value.value); if (image) chooseCandidate(image) }} />
+    <EditorAttribute id={`${fieldId}-name`} label="参考名称" required value={card.name_binding ? `来源：${name}` : name} locked={!!card.name_binding} help="可输入名称，也可选择已有描述" error={selectionError || nameError}>
     <span className="generation-reference-name">
-      <CustomValueSelect label="参考名称" value={boundNameKey || name} options={nameOptions} disabled={disabled || !!card.name_binding} required allowClear={!card.name_binding} maxLength={255} status={nameError ? 'error' : undefined}
+      <CustomValueSelect id={`${fieldId}-name`} describedBy={`${fieldId}-name-hint`} placeholder="输入参考名称" label="参考名称" value={boundNameKey || name} options={nameOptions} disabled={disabled || !!card.name_binding} required allowClear={!card.name_binding} maxLength={255} status={nameError ? 'error' : undefined}
         onChange={(value, custom) => {
           if (disabled || card.name_binding) return
           if (!custom) {
@@ -96,11 +99,17 @@ export function NamedImageReferenceEditor({ card: raw, document, projectId, save
           setSelectionError('')
           onChange({ ...card, name: value })
         }} />
+      {card.name_binding && <span className="generation-reference-linked">已关联</span>}
       {card.name_binding && <WorkbenchIconButton label="取消名称关联" icon={<DisconnectOutlined />} variant="quiet" disabled={disabled} onClick={() => changeNameBinding()} />}
-    </span>
-    <CustomValueSelect label="参考角度" value={card.angle || '正面'} options={[...new Set([...angles, card.angle || '正面'])].map(value => ({ value, label: value }))} disabled={disabled} onChange={angle => onChange({ ...card, angle })} />
+    </span></EditorAttribute>
+    <EditorAttribute id={`${fieldId}-angle`} label="角度"><CustomValueSelect id={`${fieldId}-angle`} label="参考角度" value={card.angle || '正面'} options={[...new Set([...angles, card.angle || '正面'])].map(value => ({ value, label: value }))} disabled={disabled} onChange={angle => onChange({ ...card, angle })} /></EditorAttribute>
+    <EditorAttribute id={`${fieldId}-image`} label="关联图片" value={selected ? fileInfo?.id === selected.file_id ? fileInfo.name : selectedName : undefined} error={resolved.error}>
+    <Select popupClassName="generation-attribute-image-options" id={`${fieldId}-image`} aria-describedby={`${fieldId}-image-hint`} labelInValue showSearch={false} aria-label="关联图片" placeholder="选择已连线图片" disabled={disabled} value={selected ? { value: referenceImageKey(selected), label: <ImageOption fileId={selected.file_id} name={selectedName || '已保留图片'} /> } : undefined}
+      notFoundContent="暂无已连线图片内容卡，可从当前画布选择" options={connected.map(image => ({ value: referenceImageKey(image), label: <ImageOption fileId={image.file_id!} name={caption(image)} /> }))}
+      onSelect={value => { const image = connected.find(item => referenceImageKey(item) === value.value); if (image) chooseCandidate(image) }} />
+    </EditorAttribute>
   </>
-  const status = [disabled && '只读', selected ? '1 张参考图' : '未选择图片', selectionError || nameError || (card.name_binding ? '名称已关联描述' : '') || resolved.error].filter(Boolean).join(' · ')
+  const status = [disabled && '只读', selected ? '1 张参考图' : '未选择图片', ''].filter(Boolean).join(' · ')
   return <ReferenceCardEditor parameters={parameters} status={<span>{status}</span>}>
     <div className="generation-reference-image" data-empty={!selected}>
       {selected ? <><img alt="当前参考图" src={buildFileDownloadUrl(selected.file_id)} /><div className="generation-reference-image-actions">

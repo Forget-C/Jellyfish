@@ -31,7 +31,7 @@
 .canvas-workbench-dialog .design-field { margin-top: 12px; }
 .canvas-workbench-dialog .design-field-label { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
 .canvas-workbench-dialog .design-field-array > section { border: 1px solid #383838; border-radius: 8px; padding: 12px; margin: 12px 0; }
-.canvas-workbench-dialog .ant-input, .canvas-workbench-dialog .ant-input-number:not(.ant-input-number-borderless), .canvas-workbench-dialog .ant-select:not(.ant-select-borderless) .ant-select-selector { color: var(--wb-text) !important; background: var(--wb-inset) !important; border-color: #383838 !important; }
+.canvas-workbench-dialog .ant-input:not(.generation-attribute *), .canvas-workbench-dialog .ant-input-number:not(.ant-input-number-borderless), .canvas-workbench-dialog .ant-select:not(.ant-select-borderless) .ant-select-selector:not(.generation-attribute *) { color: var(--wb-text) !important; background: var(--wb-inset) !important; border-color: #383838 !important; }
 .canvas-workbench-dialog .ant-typography { color: var(--wb-muted); }
 .canvas-workbench .ant-select-dropdown, .canvas-workbench-dialog .ant-select-dropdown { background: var(--wb-surface) !important; }
 .canvas-workbench .ant-select-item, .canvas-workbench-dialog .ant-select-item { color: var(--wb-text) !important; }

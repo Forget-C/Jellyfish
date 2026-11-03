@@ -131,3 +131,5 @@ PLAYWRIGHT_CHANNEL=chrome pnpm --dir front run test:workbench-ui
 
 
 生成画布右键菜单使用 AntD Menu／Menu.Item／SubMenu 的菜单语义，作为普通 WorkbenchButton 的局部例外：菜单需要多级悬停、键盘导航和独立浮层，不能继承动作按钮的固定高度及禁用背景。颜色仍消费 WorkbenchTheme tokens。桌面独立三级浮层、窄屏逐级返回及单行禁用样式通过 `generation-canvas-context-menu` 的真实画布用例和截图验收；不改变其他工作台按钮。
+
+生成画布参考卡与描述卡的顶部参数使用可见字段标签和固定提示位，名称优先，参考角度与图片选择随后排列；按编辑器实际宽度换行。名称错误就近关联控件，底部仅保留状态。已关联名称作为局部例外保持可读文字，并明确显示“已关联”及取消关联入口；普通只读控件保留禁用表达。长名称静态省略，悬停／聚焦可读全文，实际保存值不截断。
