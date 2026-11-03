@@ -28,7 +28,7 @@ import { CanvasDragHandle, CanvasEdge, useCanvasViewport } from '../../../compon
 import { useCanvasEditorReveal } from './useCanvasEditorReveal'
 import { useGraphLayout } from '../directing/useGraphLayout'
 import type { GraphArrange, GraphSize } from '../directing/graphLayout'
-import { referenceProtection } from './promptRules'
+import type { referenceProtection } from './promptRules'
 import { CardList, cardDragType, cardDragEntry } from './CardList'
 import { CanvasOutputActions, downloadOutputs, type DownloadOutput } from './CanvasOutputActions'
 import { cloneCard, copyRestriction, readCardClipboard, writeCardClipboard, type CardClipboard } from './cardClipboard'
@@ -37,13 +37,14 @@ import { CardShell } from './CardShell'
 import { CandidateOutputStatus } from './CandidateOutputStatus'
 import { connectionSides, sideLabels, sidePoint, defaultSides, connectionPath, useConnectionSides, type ConnectionSide } from './connectionGeometry'
 import { MediaContentEditor, MediaPreview, type MediaCard } from './MediaContentEditor'
-import { referenceNameError, cleanReferenceImageSources } from './referenceCardRules'
+import { referenceNameError } from './referenceCardRules'
 import { ReferenceCard } from './ReferenceCard'
 import { DescriptionCard, isDescriptionCard } from './DescriptionCard'
 import { ModelGenerationCard } from './ModelGenerationCard'
 import { generationCardSize } from './GenerationCardFrame'
 import { rendererRegistry } from './rendererRegistry'
-import { connect, disconnect, findConnection } from './graphRules'
+import { findConnection } from './graphRules'
+import { createCanvasOperations } from './canvasOperations'
 import { CanvasCatalogProvider, useGraphRules } from './CanvasCatalogContext'
 import type { ComponentProps } from 'react'
 import type { GenerationCard, GenerationEdge } from './graphRules'
@@ -67,6 +68,8 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; ids: string[] }>()
   const [pendingDeletion, setPendingDeletion] = useState<string[]>()
   const { catalog, cardDefinitions, cardTitles, connectionReason, inputPorts, outputPorts, portLabels } = useGraphRules()
+  const operations = createCanvasOperations({ connectionReason })
+  const clean = operations.clean
   const cards = document.cards || emptyCards, edges = document.edges || emptyEdges, groups = document.groups || emptyGroups
   const stacks = groups.filter(group => group.kind === 'stack')
   const stackFor = (id: string) => stacks.find(group => group.card_ids?.includes(id))
@@ -237,9 +240,9 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   const latest = useRef(document); latest.current = document
   useEffect(() => {
     if (readonly) return
-    const cleaned = cleanReferenceImageSources(document)
+    const cleaned = clean(document)
     if (cleaned !== document) onChange(cleaned)
-  }, [document, readonly, onChange])
+  }, [document, readonly, onChange, clean])
   const container = useRef<HTMLDivElement>(null)
   const hidden = useMemo(() => new Set(groups.filter(group => group.kind === 'stack' || group.collapsed).flatMap(group => group.card_ids || [])), [groups])
   const cardIdentity = cards.map(card => card.id).join('|')
@@ -415,22 +418,9 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   }, [cardIdentity, groupIdentity])
   const edit = (next: CanvasDocument) => { if (!readonly) onChange(next) }
   const updateCard = (next: GenerationCard) => {
-    if (stackFor(next.id)) { setReason('请先解除堆叠后编辑'); return }
-    let changed: CanvasDocument = { ...latest.current, cards: latest.current.cards?.map(card => card.id === next.id ? next : card) }
-    if ('name' in next) changed.cards = changed.cards?.map(card => card.type?.startsWith('reference.') && 'name_binding' in card && card.name_binding?.card_id === next.id ? { ...card, name: next.name } : card)
-    // 名称选择或画布选图同次保存直接来源边；既有候选、几何与采用身份不改写。
-    if (next.type?.startsWith('reference.')) {
-      const reference = next as NamedImageReferenceCard
-      const sources = [...(reference.name_binding ? [{ source: reference.name_binding, port: 'name' }] : []), ...(reference.image_binding?.source ? [{ source: reference.image_binding.source, port: 'image_source' }] : [])]
-      for (const { source, port } of sources) {
-        const edge = { id: crypto.randomUUID(), source_card: source.card_id, source_port: source.port_id, target_card: next.id, target_port: port }
-        if (findConnection(changed, edge)) continue
-        const reason = connectionReason(changed, edge)
-        if (reason) { setReason(reason); return }
-        changed = connect(changed, edge)
-      }
-    }
-    edit(changed)
+    const result = operations.update(latest.current, next)
+    if (result.document) edit(result.document)
+    else setReason(result.reason)
   }
   const showProtection = (protection: NonNullable<ReturnType<typeof referenceProtection>>) => {
     setReason(protection.message); setDetailId(protection.cardId)
@@ -440,18 +430,14 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   }
   const removeCards = (ids: string[], confirmed = false) => {
     if (readonly || !ids.length) return
-    const blocked = ids.find(id => stackFor(id) || edges.some(edge => edge.source_card === id && stackFor(edge.target_card)) || runtime?.busyCards.has(id))
-    if (blocked) { setReason(`${cardLabel(blocked)}：${runtime?.busyCards.has(blocked) ? '卡片正在运行，结束前不可删除' : '请先解除相关堆叠后删除'}`); return }
-    for (const id of ids) {
-      const protection = referenceProtection(latest.current, id)
-      if (protection) { showProtection(protection); return }
+    const result = operations.remove(latest.current, ids, runtime?.busyCards || new Set(), cardLabel)
+    if (!result.document) {
+      if (result.protection) showProtection(result.protection)
+      else setReason(result.reason)
+      return
     }
     if (!confirmed) { setPendingDeletion(ids); return }
-      let next = latest.current
-      for (const edge of next.edges || []) if (ids.includes(edge.source_card) || ids.includes(edge.target_card)) next = disconnect(next, edge.id)
-      const order = { ...next.input_order }; ids.forEach(id => delete order[id])
-      edit({ ...next, cards: next.cards?.filter(card => !ids.includes(card.id)), input_order: order,
-        groups: next.groups?.map(group => ({ ...group, card_ids: group.card_ids?.filter(card => !ids.includes(card)) })) })
+    edit(result.document)
       clearSelection(); viewport.surface.current?.focus({ preventScroll: true })
   }
   const removeCard = (id: string) => removeCards([id])
@@ -659,11 +645,14 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
   useEffect(()=>{const handler=(event:KeyboardEvent)=>clipboardKey.current?.(event);window.addEventListener('keydown',handler,true);return()=>window.removeEventListener('keydown',handler,true)},[])
   const capability = (card: GenerationCard) => 'model_id' in card && card.model_id ? capabilities[card.model_id] : undefined
   const check = (edge: GenerationEdge) => {
-    // 重复拖线只定位已存关系，不创建新输入，也不因能力切换改变原绑定。
-    if (findConnection(latest.current, edge)) return undefined
-    const target = cards.find(card => card.id === edge.target_card)
-    if (target && 'model_id' in target && !capability(target)) return '模型能力尚未核实，暂不能新建连接'
-    return connectionReason(latest.current, edge, target ? capability(target) : undefined)
+    const target = latest.current.cards?.find(card => card.id === edge.target_card)
+    return operations.check(latest.current, edge, target ? capability(target) : undefined)
+  }
+  // Composite creation keeps its card and connection in one document history entry.
+  const connectDocument = (next: CanvasDocument, edge: GenerationEdge, modelCapability?: CanvasModelCapability) => {
+    const result = operations.connect(next, edge, modelCapability)
+    if (!result.document) { setReason(result.reason); return false }
+    edit(result.document); return true
   }
   const connectionOptions = (sourceId: string, targetId: string) => {
     const source = cards.find(card => card.id === sourceId), target = cards.find(card => card.id === targetId)
@@ -686,7 +675,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const edge = { ...option, id: crypto.randomUUID() }
     const sourceSide = drag?.side || accessibleConnection?.side
     if (sourceSide) connectionLayout.setSides(previous => ({ ...previous, [edge.id]: { source: sourceSide, target: targetSide } }))
-    edit(connect(latest.current, edge)); setReason('已连接候选输入；接收端明确选择后才实际使用')
+    connectDocument(latest.current, edge); setReason('已连接候选输入；接收端明确选择后才实际使用')
     cancelConnection()
   }
   const finishDrag = (event: PointerEvent) => {
@@ -749,10 +738,9 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     })
   }
   const removeEdge = (edge: GenerationEdge) => {
-    if (stackFor(edge.target_card)) { setReason('请先解除堆叠后删除输入连线'); return }
-    const protection = referenceProtection(latest.current, edge.source_card, edge.target_card, edge.source_port, edge.target_port)
-    if (protection) { setReason('此连线仍有输入被引用，请先取消引用后再删除'); return }
-    edit(disconnect(latest.current, edge.id))
+    const result = operations.disconnect(latest.current, edge)
+    if (!result.document) { setReason(result.reason); return }
+    edit(result.document)
     if (selectedEdgeId === edge.id) setSelectedEdgeId(undefined)
     requestAnimationFrame(() => container.current?.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(edge.target_card)}"]`)?.focus({ preventScroll: true }))
   }
@@ -767,7 +755,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     <Space wrap>{card.type?.startsWith('model.') && <><Button disabled={readonly} size="small" onClick={() => {
       const source = { id: crypto.randomUUID(), type: 'content.text' as const, type_version: 1 as const, text: '' }
       const next = { ...latest.current, cards: [...(latest.current.cards || []), source] }
-      edit(connect(next, { id: crypto.randomUUID(), source_card: source.id, source_port: 'text', target_card: card.id, target_port: 'text' }))
+      connectDocument(next, { id: crypto.randomUUID(), source_card: source.id, source_port: 'text', target_card: card.id, target_port: 'text' })
     }}>添加文本参考</Button>
     <Select<string> aria-label="添加媒体参考" placeholder="添加媒体参考" value={undefined} disabled={readonly} style={{ width: 150 }}
       options={inputPorts(card).filter(port => port !== 'text').map(port => ({ value: port, label: `新建${inputLabel(card, port)}内容卡` }))}
@@ -775,7 +763,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
         if (!targetPort) return
         const sourcePort = ['first_frame', 'last_frame', 'key_frame', 'subject_image'].includes(targetPort) ? 'image' : targetPort === 'subject_video' ? 'video' : targetPort
         const source = { id: crypto.randomUUID(), type: `content.${sourcePort}`, type_version: 1, file_id: null, uploading: false }
-        edit(connect({ ...latest.current, cards: [...(latest.current.cards || []), source] }, { id: crypto.randomUUID(), source_card: source.id, source_port: sourcePort, target_card: card.id, target_port: targetPort }))
+        connectDocument({ ...latest.current, cards: [...(latest.current.cards || []), source] }, { id: crypto.randomUUID(), source_card: source.id, source_port: sourcePort, target_card: card.id, target_port: targetPort })
       }} />
     </>}<Select<string> aria-label="连接已有卡" placeholder="选择已有卡" value={null} disabled={readonly} style={{ width: 160 }}
       options={cards.flatMap(source => outputPorts(source).flatMap(sourcePort => inputPorts(card).filter(targetPort => !check({ id: 'candidate', source_card: source.id, source_port: sourcePort, target_card: card.id, target_port: targetPort })).map(targetPort => ({ value: `${source.id}|${sourcePort}|${targetPort}`, label: `${cardLabel(source.id)} → ${inputLabel(card, targetPort)}` }))))}
@@ -875,7 +863,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const [mode, key] = action.split(':')
     if (key === 'text') {
       const source = { id: crypto.randomUUID(), type: 'content.text' as const, text: '' }
-      edit(connect({ ...latest.current, cards: [...(latest.current.cards || []), source] }, { id: crypto.randomUUID(), source_card: source.id, source_port: 'text', target_card: card.id, target_port: 'text' }))
+      connectDocument({ ...latest.current, cards: [...(latest.current.cards || []), source] }, { id: crypto.randomUUID(), source_card: source.id, source_port: 'text', target_card: card.id, target_port: 'text' })
       setUploadText(source.id); return
     }
     setUploadLibrary(mode === 'library')
@@ -883,9 +871,7 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
     const source = { id: crypto.randomUUID(), type: `content.${sourcePort}`, type_version: 1, file_id: null, uploading: false } as MediaCard
     const next = { ...latest.current, cards: [...(latest.current.cards || []), source] }
     const edge = { id: crypto.randomUUID(), source_card: source.id, source_port: sourcePort, target_card: card.id, target_port: key }
-    const issue = connectionReason(next, edge, capability(card))
-    if (issue) { setReason(issue); return }
-    edit(connect(next, edge)); setUploadSource(source.id)
+    if (connectDocument(next, edge, capability(card))) setUploadSource(source.id)
   } }}><WorkbenchIconButton label="添加模型来源" icon={<PlusOutlined />} disabled={readonly} /></Dropdown>
   const sourceTargetCard = cards.find(card => card.id === sourceTarget)
   const uploadTextCard = cards.find(card => card.id === uploadText) as TextContentCard | undefined
@@ -1244,10 +1230,9 @@ function GenerationCanvasGraphContent({ contentHistory, history, document, onCha
         {detailCard?.type?.startsWith('direction.') && <details className="generation-candidate-management"><summary>候选连接管理</summary>{references(detailCard)}</details>}
         {detailCard?.type === 'direction.photography' && <Button disabled={readonly} onClick={() => {
           const copy = { ...structuredClone(detailCard), id: crypto.randomUUID() }
-          const incoming = (document.edges || []).filter(edge => edge.target_card === detailCard.id)
-          const edgeIds = new Map(incoming.map(edge => [edge.id, crypto.randomUUID()]))
-          edit({ ...latest.current, cards: [...(latest.current.cards || []), copy], edges: [...(latest.current.edges || []), ...incoming.map(edge => ({ ...edge, id: edgeIds.get(edge.id)!, target_card: copy.id }))],
-            input_order: { ...latest.current.input_order, [copy.id]: Object.fromEntries(Object.entries(document.input_order?.[detailCard.id] || {}).map(([port, ids]) => [port, ids.map(id => edgeIds.get(id)!)])) } })
+          const result = operations.copyIncoming(latest.current, detailCard.id, copy)
+          if (!result.document) { setReason(result.reason); return }
+          edit(result.document)
           setDetailId(copy.id)
         }}>复制为独立摄影方案</Button>}
         {/* 只读文本仍可聚焦选取；写入由正文readOnly和导入禁用保护。 */}
