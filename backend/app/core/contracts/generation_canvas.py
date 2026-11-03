@@ -387,6 +387,22 @@ class StyleDesignFields(BaseModel):
     notes: DesignField = Field(default_factory=DesignField)
 
 
+class DesignFrameTarget(BaseModel):
+    """构图显式定位同画布运镜的画面，不构成正文或媒体采用。"""
+    model_config = ConfigDict(extra='forbid')
+    card_id: str = Field(min_length=1, max_length=64)
+    state_id: str = Field(default='', max_length=128)
+
+
+class ResolvedDesignFrameTarget(BaseModel):
+    """只解析目标画面元信息，用于诊断和固定执行依据。"""
+    model_config = ConfigDict(extra='forbid')
+    target: DesignFrameTarget
+    available: bool
+    label: str = ''
+    frame: DesignField | None = None
+
+
 class CompositionFramingField(DesignField):
     """构图的结构化景别；跨卡画面定位另由显式关系表达。"""
     size: Literal['extreme_close_up', 'close_up', 'medium', 'full', 'wide', 'extreme_wide'] | None = None
@@ -429,6 +445,7 @@ class DesignTextPayload(BaseModel):
     design_type: Literal['direction.movement', 'direction.composition', 'direction.style', 'direction.space_rule', 'direction.continuity', 'direction.fact', 'direction.creative_control', 'direction.guidance', 'direction.criterion', 'direction.situation', 'direction.performance', 'direction.performance_rule', 'direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment', 'direction.narrative', 'direction.beat', 'direction.event', 'direction.shot', 'direction.dialogue', 'direction.sound']
     adoption: Literal['whole_card'] = Field(default='whole_card', json_schema_extra={'enum': ['whole_card']})
     text: str
+    frame_target_state: ResolvedDesignFrameTarget | None = Field(default=None, exclude_if=lambda value: value is None)
     movement_phases: list[MovementPhase] = Field(default_factory=list, exclude_if=lambda value: not value)
     frame_states: list[FrameState] = Field(default_factory=list, exclude_if=lambda value: not value)
     requires_frame_target: bool = Field(default=False, exclude_if=lambda value: not value)

@@ -23,7 +23,7 @@ def publish_movement(canvas_id, card, adopted_inputs):
         lines.append(f'所属镜头：{shots[0].name}（{shots[0].reference_id}）')
     frames = [FrameState(id=key, label=label) for key, label, value in fields
               if (key in ('field:movement_start', 'field:end_frame') or key.startswith('phase:'))
-              and value.state not in ('empty', 'not_applicable') and value.text]
+              and value.state not in ('empty', 'not_applicable') and value.text.strip()]
     if card.scope.description:
         lines.append('适用范围：' + card.scope.description)
     if card.scope.phase:

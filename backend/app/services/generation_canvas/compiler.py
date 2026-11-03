@@ -103,6 +103,9 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
             return item.text + ('\n' + note if note else '')
         return item.text
     for item in result.used:
+        target = getattr(item.payload, 'frame_target_state', None)
+        if target and not target.available:
+            result.diagnostics.append(CanvasDiagnostic(code='DESIGN_FRAME_TARGET_MISSING', message='构图定位的运镜画面已失效，请替换或取消定位', target={'card_id': item.source.card_id, 'path': ['frame_target']}, blocks=['run']))
         if card.type in ('model.image', 'model.video') and isinstance(item.payload, DesignTextPayload):
             design = item.payload
             # 明确没有对白无需虚构说话对象；文本分析允许不完整设计。
@@ -228,6 +231,8 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
         result.diagnostics.extend(CanvasDiagnostic.model_validate(item) for item in parameter_diagnostics(card, capability))
     from app.services.generation_canvas.photography import validate_frame_requirements
     validate_frame_requirements(card, result, issue)
+    from app.services.generation_canvas.composition import validate_composition_requirements
+    validate_composition_requirements(card, result, issue)
     result.can_run = not any('run' in item.blocks for item in result.diagnostics)
     return result
 

@@ -25,6 +25,7 @@ import type { NarrativeOverviewFields } from './NarrativeOverviewFields';
 import type { NarrativeReferencePayload } from './NarrativeReferencePayload';
 import type { ObjectReferencePayload } from './ObjectReferencePayload';
 import type { PerformanceDesignFields } from './PerformanceDesignFields';
+import type { ResolvedDesignFrameTarget } from './ResolvedDesignFrameTarget';
 import type { ShotDesignFields } from './ShotDesignFields';
 import type { SoundDesignFields } from './SoundDesignFields';
 import type { SpaceRuleFields } from './SpaceRuleFields';
@@ -39,6 +40,7 @@ export type DesignTextPayload = {
     design_type: 'direction.movement' | 'direction.composition' | 'direction.style' | 'direction.space_rule' | 'direction.continuity' | 'direction.fact' | 'direction.creative_control' | 'direction.guidance' | 'direction.criterion' | 'direction.situation' | 'direction.performance' | 'direction.performance_rule' | 'direction.anchor' | 'direction.blocking' | 'direction.activity' | 'direction.environment' | 'direction.narrative' | 'direction.beat' | 'direction.event' | 'direction.shot' | 'direction.dialogue' | 'direction.sound';
     adoption?: 'whole_card';
     text: string;
+    frame_target_state?: (ResolvedDesignFrameTarget | null);
     movement_phases?: Array<MovementPhase>;
     frame_states?: Array<FrameState>;
     requires_frame_target?: boolean;
@@ -55,3 +57,4 @@ export type DesignTextPayload = {
     acceptance_basis?: Array<CriterionReferencePayload>;
     dialogue_basis?: Array<DialogueBasis>;
 };
+

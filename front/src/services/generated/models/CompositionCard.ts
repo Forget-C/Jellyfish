@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { CompositionDesignFields } from './CompositionDesignFields';
+import type { DesignFrameTarget } from './DesignFrameTarget';
 import type { DesignMediaExample } from './DesignMediaExample';
 import type { DesignScope } from './DesignScope';
 import type { InputBinding } from './InputBinding';
@@ -18,4 +19,6 @@ export type CompositionCard = {
     examples?: Array<DesignMediaExample>;
     type?: 'direction.composition';
     fields?: CompositionDesignFields;
+    frame_target?: (DesignFrameTarget | null);
 };
+
