@@ -10,8 +10,12 @@ async def test_canvas_catalog_exposes_real_ports_groups_and_adoption(canvas_clie
     response = await client.get(f"/canvases/p/{canvas['id']}/catalog")
     assert response.status_code == 200, response.text
     cards = {item['type']: item for item in response.json()['data']['cards']}
-    assert len(cards) == 37
+    assert len(cards) == 38
     assert cards['reference.character']['group'] == '基础内容' and cards['reference.character']['modality'] == 'image'
+    movement = cards['direction.movement']
+    assert movement['category'] == '画面设计' and movement['entries'] == []
+    assert [field['id'] for field in movement['fields']] == ['movement_type', 'movement_start', 'movement_trigger', 'movement_path', 'movement_speed', 'end_frame']
+    assert movement['outputs'][0]['adoption'] == 'whole_card'
     photo = cards['direction.photography']
     assert photo['category'] == '画面设计' and len(photo['entries']) == 5
     assert photo['outputs'][0]['adoption'] == 'declared_scope'

@@ -387,16 +387,36 @@ class StyleDesignFields(BaseModel):
     notes: DesignField = Field(default_factory=DesignField)
 
 
+class MovementDesignFields(BaseModel):
+    """独立运镜字段；其他摄影区域不属于本卡。"""
+    model_config = ConfigDict(extra='forbid')
+    movement_type: DesignField = Field(default_factory=DesignField)
+    movement_start: DesignField = Field(default_factory=DesignField)
+    movement_trigger: DesignField = Field(default_factory=DesignField)
+    movement_path: DesignField = Field(default_factory=DesignField)
+    movement_speed: DesignField = Field(default_factory=DesignField)
+    end_frame: DesignField = Field(default_factory=DesignField)
+
+
+class MovementPhase(BaseModel):
+    """明确画面阶段的稳定身份，不随名称和排序改变。"""
+    model_config = ConfigDict(extra='forbid')
+    id: str = Field(min_length=1, max_length=64, pattern=r'^[A-Za-z0-9_-]+$')
+    name: str = ''
+    frame: DesignField = Field(default_factory=DesignField)
+
+
 class DesignTextPayload(BaseModel):
     """本卡完整设计及直接采用的必要对象，不包含祖先正文或示例媒体。"""
     model_config = ConfigDict(extra='forbid')
     kind: Literal['design'] = Field(default='design', json_schema_extra={'enum': ['design']})
-    design_type: Literal['direction.style', 'direction.space_rule', 'direction.continuity', 'direction.fact', 'direction.creative_control', 'direction.guidance', 'direction.criterion', 'direction.situation', 'direction.performance', 'direction.performance_rule', 'direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment', 'direction.narrative', 'direction.beat', 'direction.event', 'direction.shot', 'direction.dialogue', 'direction.sound']
+    design_type: Literal['direction.movement', 'direction.style', 'direction.space_rule', 'direction.continuity', 'direction.fact', 'direction.creative_control', 'direction.guidance', 'direction.criterion', 'direction.situation', 'direction.performance', 'direction.performance_rule', 'direction.anchor', 'direction.blocking', 'direction.activity', 'direction.environment', 'direction.narrative', 'direction.beat', 'direction.event', 'direction.shot', 'direction.dialogue', 'direction.sound']
     adoption: Literal['whole_card'] = Field(default='whole_card', json_schema_extra={'enum': ['whole_card']})
     text: str
+    movement_phases: list[MovementPhase] = Field(default_factory=list, exclude_if=lambda value: not value)
     frame_states: list[FrameState] = Field(default_factory=list, exclude_if=lambda value: not value)
     requires_frame_target: bool = Field(default=False, exclude_if=lambda value: not value)
-    fields: StyleDesignFields | SpaceRuleFields | ContinuityFields | ImmutableFactFields | CreativeControlFields | GenerationGuidanceFields | AcceptanceCriterionFields | NarrativeOverviewFields | NarrativeBeatFields | NarrativeEventFields | ShotDesignFields | PerformanceDesignFields | AnchorDesignFields | BlockingDesignFields | ActivityDesignFields | EnvironmentDesignFields | SoundDesignFields
+    fields: MovementDesignFields | StyleDesignFields | SpaceRuleFields | ContinuityFields | ImmutableFactFields | CreativeControlFields | GenerationGuidanceFields | AcceptanceCriterionFields | NarrativeOverviewFields | NarrativeBeatFields | NarrativeEventFields | ShotDesignFields | PerformanceDesignFields | AnchorDesignFields | BlockingDesignFields | ActivityDesignFields | EnvironmentDesignFields | SoundDesignFields
     scope: DesignScope
     objects: list[ObjectReferencePayload] = Field(default_factory=list)
     spatial_relations: SpatialDesignRelations | None = Field(default=None, exclude_if=lambda value: value is None)

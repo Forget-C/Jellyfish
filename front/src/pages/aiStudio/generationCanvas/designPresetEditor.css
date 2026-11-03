@@ -61,3 +61,5 @@
   .design-preset-status { max-width: 110px; font-size: 10px; }
   .design-preset-editor .wb-action { min-height: 36px; }
 }
+.movement-design-phase { margin-top: 12px; padding: 12px; border-radius: 8px; background: var(--wb-inset); }
+.movement-design-phase > div { display: flex; gap: 8px; margin: 8px 0; flex-wrap: wrap; }

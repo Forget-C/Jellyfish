@@ -2,7 +2,7 @@
 from typing import Protocol
 from app.core.contracts.generation_canvas import BasisTextOutputPayload, NamedImageObject
 from app.schemas.generation_canvas import (
-    VisualStyleCard, PhotographyCard, SoundDirectionCard, SpatialDirectionCard, PerformanceDirectionCard, CardDefinition, CanvasResolvedOutput, CreativeBasisCard, MediaContentCard,
+    MovementCard, VisualStyleCard, PhotographyCard, SoundDirectionCard, SpatialDirectionCard, PerformanceDirectionCard, CardDefinition, CanvasResolvedOutput, CreativeBasisCard, MediaContentCard,
     NamedImageReferenceCard, NamedImagePayload, ObjectDescriptionCard, ObjectReferencePayload, DescriptionTextPayload, ModelCard, OutputIdentity, TextContentCard, TextOutputPayload, MediaOutputPayload,
 )
 
@@ -20,6 +20,9 @@ class ContentOutputHandler:
     def publish(self, canvas_id, card, adopted_inputs, published_results):
         """内容卡没有持续输入，描述来源只随明确描述出口提供。"""
         from app.schemas.generation_canvas import NarrativeDirectionCard, GuidanceDirectionCard
+        if isinstance(card, MovementCard):
+            from app.services.generation_canvas.movement import publish_movement
+            return publish_movement(canvas_id, card, adopted_inputs)
         if isinstance(card, VisualStyleCard):
             from app.services.generation_canvas.visual_style import publish_style
             return publish_style(canvas_id, card)
