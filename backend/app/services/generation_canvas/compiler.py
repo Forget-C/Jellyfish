@@ -38,7 +38,9 @@ def compile_card(document: CanvasDocument, card_id: str, *,
     card = context.cards[card_id]
     if not isinstance(card, ModelCard):
         return CanvasCompiledInput(card_id=card_id)
-    result = compile_inputs(document.id, card, context.resolve_outputs(card_id, model_outputs=model_outputs), capability)
+    from app.services.generation_canvas.design_media import image_design_inputs
+    candidates, carried = image_design_inputs(context, card, context.resolve_outputs(card_id, model_outputs=model_outputs), model_outputs)
+    result = compile_inputs(document.id, card, candidates, capability, carried=carried)
     for binding in card.input_bindings:
         source = context.cards.get(binding.source.card_id)
         if isinstance(source, NamedImageReferenceCard) and (problem := reference_name_issue(document, source)):
@@ -56,7 +58,7 @@ def compile_card(document: CanvasDocument, card_id: str, *,
 
 
 def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResolvedOutput],
-                   capability: CanvasModelCapability | None = None) -> CanvasCompiledInput:
+                   capability: CanvasModelCapability | None = None, *, carried=()) -> CanvasCompiledInput:
     """模型编译只接收本卡配置、直接输出与能力，不获得整张画布。"""
     card_id = card.id
     result = CanvasCompiledInput(card_id=card_id)
@@ -68,6 +70,7 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
         # 图片接收端采用顺序独立于候选连线顺序；同一输出身份仅提交一次。
         order = list(dict.fromkeys(identity_key(binding.source) for binding in card.input_bindings))
         result.used.sort(key=lambda item: order.index(identity_key(item.source)))
+    result.used.extend(carried)
     result.media = [item for item in result.used if item.modality != 'text']
     video = build_video_inputs(card, result.media) if card.type == 'model.video' else None
     def issue(code, message, segment_id, path=None, warning=False):
@@ -86,7 +89,11 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
             issue('SOURCE_NOT_CONNECTED', '引用来源未连接，请手动连接或替换', ref.id, path)
         elif not source.available:
             issue('OUTPUT_MISSING', '引用的来源位置暂无实际输出', ref.id, path)
+    from app.services.generation_canvas.design_references import VISUAL_DESIGN_TYPES
+    primary_designs = [item for item in result.used if isinstance(item.payload, DesignTextPayload) and item.payload.design_type in VISUAL_DESIGN_TYPES]
     def design_text(item):
+        if item in primary_designs:
+            return ''
         # 描述归属只取本次直接采用的载荷，不从命名图片或同名卡片反查正文。
         if isinstance(item.payload, DescriptionTextPayload) and item.payload.name:
             description = item.payload
@@ -100,12 +107,17 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
         if isinstance(item.payload, DesignTextPayload):
             for problem in item.payload.reference_issues:
                 result.diagnostics.append(CanvasDiagnostic(code=problem.code, message=problem.message, target={'card_id': item.source.card_id, 'segment_id': problem.reference_id, 'path': (['phases', problem.field_id[6:], 'frame', 'document'] if problem.field_id.startswith('phase:') else ['fields', problem.field_id, 'document'])}, blocks=['run']))
-            if item.payload.material_references:
+            if item.payload.material_references and card.type != 'model.image':
                 issue('DESIGN_MEDIA_CARRY_NOT_READY', '该设计引用了媒体，接收模型尚未配置素材携带，请处理设计引用后再生成', item.source.card_id)
         target = getattr(item.payload, 'frame_target_state', None)
         if target and not target.available:
             result.diagnostics.append(CanvasDiagnostic(code='DESIGN_FRAME_TARGET_MISSING', message='构图定位的运镜画面已失效，请替换或取消定位', target={'card_id': item.source.card_id, 'path': ['frame_target']}, blocks=['run']))
     for item in result.used:
+        if card.type == 'model.image' and item.design_sources:
+            if item.modality != 'image' or capability and 'image' not in capability.input_ports:
+                issue('UNSUPPORTED_DESIGN_MEDIA', '当前图片模型不支持设计携带的素材类型', item.source.card_id, ['input_bindings'])
+            if not item.available or not item.file_id:
+                issue('OUTPUT_MISSING', '设计引用的素材不可用，请处理来源', item.source.card_id, ['input_bindings'])
         if card.type in ('model.image', 'model.video') and isinstance(item.payload, DesignTextPayload):
             design = item.payload
             # 明确没有对白无需虚构说话对象；文本分析允许不完整设计。
@@ -185,6 +197,12 @@ def compile_inputs(canvas_id: str, card: ModelCard, candidates: list[CanvasResol
             issue('SUBJECT_NAME_REQUIRED', '请选择主体分组名称，不自动归组', binding.id, ['input_bindings', binding.id])
         if binding.id not in mentioned and item and item.available and item.modality == 'text':
             result.text += ('\n' if result.text else '') + design_text(item)
+
+    if primary_designs:
+        supplementary = result.text.strip()
+        result.text = '导演设计 · 主要依据\n' + '\n'.join(item.text for item in primary_designs)
+        if supplementary:
+            result.text += '\n\n模型正文 · 补充说明\n' + supplementary
 
     if card.type in ('model.image', 'model.video'):
         def mapping_line(entry):

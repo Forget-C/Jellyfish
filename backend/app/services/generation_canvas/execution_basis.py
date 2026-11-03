@@ -50,8 +50,13 @@ class CanvasBasis:
     _model_context: CanvasModelContext = field(repr=False)
 
     def to_snapshot(self) -> dict:
-        """保持既有快照字段，只固定直接引用的来源；依赖和受理游标由编排层添加。"""
+        """固定直接来源及所采用六类设计的有效字段来源，不遍历任意祖先。"""
         used_sources = {ref.source.card_id for ref, _ in prompt_references(self.card)}
+        from app.services.generation_canvas.design_references import design_field_references
+        cards = {card.id: card for card in self._document.cards}
+        for source_id in tuple(used_sources):
+            if source_id in cards:
+                used_sources.update(ref.source.card_id for ref, _, _ in design_field_references(cards[source_id], effective=True))
         context = self._model_context
         return {'document': self._document.model_dump(), 'revision': self.compiled.revision,
             'outputs': {key: [item.model_dump() for item in values] for key, values in self._outputs.items() if key in used_sources},

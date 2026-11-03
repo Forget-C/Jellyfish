@@ -5,6 +5,7 @@
 import type { BasisTextOutputPayload } from './BasisTextOutputPayload';
 import type { CriterionReferencePayload } from './CriterionReferencePayload';
 import type { DescriptionTextPayload } from './DescriptionTextPayload';
+import type { DesignMediaOrigin } from './DesignMediaOrigin';
 import type { DesignTextPayload } from './DesignTextPayload';
 import type { DialogueReferencePayload } from './DialogueReferencePayload';
 import type { MediaOutputPayload } from './MediaOutputPayload';
@@ -28,4 +29,5 @@ export type CanvasResolvedOutput = {
     available?: boolean;
     basis_current?: boolean;
     result_set_id?: (string | null);
+    design_sources?: Array<DesignMediaOrigin>;
 };

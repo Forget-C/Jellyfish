@@ -25,12 +25,32 @@ const describe = (value?: ReferenceDesignField | null) => value ? `${value.text 
 /** Shared preset-first session; only explicit application changes the caller's saved card. */
 export function DesignPresetEditor({ fields, labels, presets, children, candidates, current, disabled, editorOpen = true, onApply, onUndo }: Props) {
   const references = useContext(DesignReferenceContext)
+  const owner = useRef<HTMLDivElement>(null)
   const header = useContext(CanvasEditorHeader), footer = useContext(CanvasEditorFooter)
   const [advanced, setAdvanced] = useState(false), [metadata, setMetadata] = useState(false)
   const [selected, setSelected] = useState<VisualPreset>(), [compare, setCompare] = useState<VisualPreset>()
   const [notice, setNotice] = useState('')
   const modeButton = useRef<HTMLElement>(null)
   useEffect(() => { if (!editorOpen) { setAdvanced(false); setMetadata(false); setSelected(undefined); setCompare(undefined); setNotice('') } }, [editorOpen])
+  useEffect(() => {
+    if (!references?.targetField || !editorOpen) return
+    setAdvanced(true)
+    let frame = 0, attempts = 0, settled = 0, scrolled = false
+    const focusField = () => {
+      const field = owner.current?.querySelector<HTMLElement>(`[data-design-field="${CSS.escape(references.targetField!.fieldId)}"]`)
+      if (field && !field.closest('[inert]') && field.getClientRects().length) {
+        if (!scrolled) { field.scrollIntoView({ block: 'nearest' }); scrolled = true }
+        field.tabIndex = -1
+        const input = field.querySelector<HTMLElement>('[role="textbox"]:not([aria-readonly="true"])') || field
+        if (document.activeElement === input) settled += 1
+        else { input.focus({ preventScroll: true }); settled = 0 }
+        if (settled >= 3) return
+      }
+      if (++attempts < 90) frame = requestAnimationFrame(focusField)
+    }
+    frame = requestAnimationFrame(focusField)
+    return () => cancelAnimationFrame(frame)
+  }, [references?.targetField, editorOpen])
   const savedFields = JSON.stringify(fields)
   useEffect(() => { setNotice('') }, [savedFields])
   const changes = selected ? Object.entries(selected.fields).flatMap(([key, value]) => {
@@ -48,7 +68,7 @@ export function DesignPresetEditor({ fields, labels, presets, children, candidat
   const actions = <ConfigProvider componentDisabled={false}><WorkbenchDialogActions secondary={<><Button variant="quiet" icon={<UndoOutlined />} disabled={disabled || !onUndo} onClick={() => { onUndo?.(); setNotice('已撤销上一次修改') }}>撤销</Button><span role="status" className="design-preset-status">{disabled ? '只读 · 可以预览与对比' : notice || (advanced ? '编辑沿用画布自动保存' : matched ? `已应用 · ${matched.name}` : current ? '自定义配置' : '选择一个预设开始')}</span></>}>
     {!advanced && <Button variant="primary" disabled={disabled || !selected || !changes.length} onClick={() => { if (selected && onApply(selected) !== false) setNotice(`已应用「${selected.name}」`) }}>{overwritten ? `覆盖 ${overwritten} 项并应用` : '应用此预设'}</Button>}
   </WorkbenchDialogActions></ConfigProvider>
-  return <div className="design-preset-editor">
+  return <div ref={owner} className="design-preset-editor">
     {header ? editorOpen && createPortal(mode, header) : mode}
     {(references || candidates) && <div className="design-preset-candidates">{references ? references.renderCandidates(advanced) : candidates}</div>}
     <div className="design-preset-layout" hidden={advanced}>
