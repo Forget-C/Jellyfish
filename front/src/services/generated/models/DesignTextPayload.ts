@@ -7,6 +7,7 @@ import type { ActivityDesignFields } from './ActivityDesignFields';
 import type { AnchorDesignFields } from './AnchorDesignFields';
 import type { BlockingDesignFields } from './BlockingDesignFields';
 import type { CameraDesignFields } from './CameraDesignFields';
+import type { CompositionDesignFields } from './CompositionDesignFields';
 import type { ContinuityFields } from './ContinuityFields';
 import type { CreativeControlFields } from './CreativeControlFields';
 import type { CriterionReferencePayload } from './CriterionReferencePayload';
@@ -36,12 +37,12 @@ import type { StyleDesignFields } from './StyleDesignFields';
  */
 export type DesignTextPayload = {
     kind?: 'design';
-    design_type: 'direction.camera' | 'direction.lighting' | 'direction.focus' | 'direction.style' | 'direction.space_rule' | 'direction.continuity' | 'direction.fact' | 'direction.creative_control' | 'direction.guidance' | 'direction.criterion' | 'direction.situation' | 'direction.performance' | 'direction.performance_rule' | 'direction.anchor' | 'direction.blocking' | 'direction.activity' | 'direction.environment' | 'direction.narrative' | 'direction.beat' | 'direction.event' | 'direction.shot' | 'direction.dialogue' | 'direction.sound';
+    design_type: 'direction.composition', 'direction.camera' | 'direction.lighting' | 'direction.focus' | 'direction.style' | 'direction.space_rule' | 'direction.continuity' | 'direction.fact' | 'direction.creative_control' | 'direction.guidance' | 'direction.criterion' | 'direction.situation' | 'direction.performance' | 'direction.performance_rule' | 'direction.anchor' | 'direction.blocking' | 'direction.activity' | 'direction.environment' | 'direction.narrative' | 'direction.beat' | 'direction.event' | 'direction.shot' | 'direction.dialogue' | 'direction.sound';
     adoption?: 'whole_card';
     text: string;
     frame_states?: Array<FrameState>;
     requires_frame_target?: boolean;
-    fields: (CameraDesignFields | LightingDesignFields | FocusDesignFields | StyleDesignFields | SpaceRuleFields | ContinuityFields | ImmutableFactFields | CreativeControlFields | GenerationGuidanceFields | AcceptanceCriterionFields | NarrativeOverviewFields | NarrativeBeatFields | NarrativeEventFields | ShotDesignFields | PerformanceDesignFields | AnchorDesignFields | BlockingDesignFields | ActivityDesignFields | EnvironmentDesignFields | SoundDesignFields);
+    fields: (CompositionDesignFields | CameraDesignFields | LightingDesignFields | FocusDesignFields | StyleDesignFields | SpaceRuleFields | ContinuityFields | ImmutableFactFields | CreativeControlFields | GenerationGuidanceFields | AcceptanceCriterionFields | NarrativeOverviewFields | NarrativeBeatFields | NarrativeEventFields | ShotDesignFields | PerformanceDesignFields | AnchorDesignFields | BlockingDesignFields | ActivityDesignFields | EnvironmentDesignFields | SoundDesignFields);
     scope: DesignScope;
     objects?: Array<ObjectReferencePayload>;
     spatial_relations?: (SpatialDesignRelations | null);

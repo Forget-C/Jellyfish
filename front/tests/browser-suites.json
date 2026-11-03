@@ -1,6 +1,7 @@
 {
   "preflight": "preflight.mjs",
   "cases": {
+    "generation-canvas-composition": { "file": "generationCanvasComposition.browser.mjs", "ports": [18044, 4404], "timeoutMs": 120000 },
     "generation-canvas-design-editor": { "file": "generationCanvasDesignEditor.browser.mjs", "ports": [4641, 8641], "timeoutMs": 120000 },
     "generation-canvas-layout-convergence": { "file": "generationCanvasLayoutConvergence.browser.mjs", "ports": [4638, 8638], "timeoutMs": 120000 },
     "generation-canvas-context-menu": {"file":"generationCanvasContextMenu.browser.mjs","ports":[4637,8637],"timeoutMs":180000},
@@ -112,7 +113,7 @@
     "periodic-save": { "file": "scenePeriodicSave.browser.mjs", "ports": [4193, 8193], "timeoutMs": 180000 }
   },
   "suites": {
-    "canvas-design": ["generation-canvas-static-designs", "generation-canvas-design-editor", "generation-canvas-visual-presets", "generation-canvas-photography", "generation-canvas-photography-card", "generation-canvas-director-modal"],
+    "canvas-design": ["generation-canvas-composition", "generation-canvas-static-designs", "generation-canvas-design-editor", "generation-canvas-visual-presets", "generation-canvas-photography", "generation-canvas-photography-card", "generation-canvas-director-modal"],
     "canvas-interaction": [
       "generation-canvas-editor-reveal",
       "generation-canvas-interaction-combinations","generation-canvas-interaction", "generation-canvas-interaction-rules", "generation-canvas-image-fit", "generation-canvas-model-card-shell", "generation-canvas-anchored-editor", "generation-canvas-stacks", "generation-canvas-organization", "generation-canvas-tools"],

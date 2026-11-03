@@ -10,7 +10,10 @@ async def test_canvas_catalog_exposes_real_ports_groups_and_adoption(canvas_clie
     response = await client.get(f"/canvases/p/{canvas['id']}/catalog")
     assert response.status_code == 200, response.text
     cards = {item['type']: item for item in response.json()['data']['cards']}
-    assert len(cards) == 40
+    assert len(cards) == 41
+    assert cards['direction.composition']['title'] == '景别与构图卡'
+    assert {field['id'] for field in cards['direction.composition']['fields']} == {'shot_size', 'composition', 'frame_position', 'depth_layers', 'negative_space', 'composition_requirements'}
+    assert cards['direction.composition']['outputs'][0]['adoption'] == 'whole_card'
     assert cards['reference.character']['group'] == '基础内容' and cards['reference.character']['modality'] == 'image'
     photo = cards['direction.photography']
     assert photo['category'] == '画面设计' and len(photo['entries']) == 5
